@@ -10,7 +10,7 @@ package boxlite
 
 #cgo darwin LDFLAGS: ${SRCDIR}/libboxlite.a
 #cgo darwin LDFLAGS: -framework CoreFoundation -framework Security -framework IOKit
-#cgo darwin LDFLAGS: -framework Hypervisor -framework vmnet -lresolv
+#cgo darwin LDFLAGS: -framework Hypervisor -framework vmnet
 
 #cgo linux LDFLAGS: ${SRCDIR}/libboxlite.a
 #cgo linux LDFLAGS: -lresolv -lpthread -ldl -lrt -lm

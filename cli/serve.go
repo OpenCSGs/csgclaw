@@ -92,6 +92,7 @@ func (a *App) runInternalServe(ctx context.Context, args []string, globals Globa
 		cfg.Server.AdvertiseBaseURL = strings.TrimRight(globals.Endpoint, "/")
 	}
 
+	a.printEffectiveConfig(cfg)
 	svc, err := newAgentServiceFn(cfg)
 	if err != nil {
 		return err
@@ -100,16 +101,7 @@ func (a *App) runInternalServe(ctx context.Context, args []string, globals Globa
 	if err != nil {
 		return err
 	}
-	imBus := im.NewBus()
-
-	return runServer(server.Options{
-		ListenAddr: cfg.Server.ListenAddr,
-		Service:    svc,
-		IM:         imSvc,
-		IMBus:      imBus,
-		PicoClaw:   im.NewPicoClawBridge(cfg.Server.AccessToken),
-		Context:    ctx,
-	})
+	return a.startServer(ctx, cfg, svc, imSvc)
 }
 
 func (a *App) serveForeground(ctx context.Context, cfg config.Config) error {
@@ -121,21 +113,14 @@ func (a *App) serveForeground(ctx context.Context, cfg config.Config) error {
 	if err != nil {
 		return err
 	}
-	imBus := im.NewBus()
 	apiURL := apiBaseURL(cfg.Server)
 	imURL := imOpenURL(apiURL)
 
+	a.printEffectiveConfig(cfg)
 	fmt.Fprintf(a.stdout, "CSGClaw IM is available at: %s\n", imURL)
 	fmt.Fprintln(a.stdout, "Open this URL in your browser after startup.")
 
-	return runServer(server.Options{
-		ListenAddr: cfg.Server.ListenAddr,
-		Service:    svc,
-		IM:         imSvc,
-		IMBus:      imBus,
-		PicoClaw:   im.NewPicoClawBridge(cfg.Server.AccessToken),
-		Context:    ctx,
-	})
+	return a.startServer(ctx, cfg, svc, imSvc)
 }
 
 func (a *App) serveBackground(cfg config.Config, globals GlobalOptions, logPath, pidPath string) error {
@@ -301,6 +286,45 @@ func apiBaseURL(server config.ServerConfig) string {
 		}
 	}
 	return fmt.Sprintf("http://%s:%s", host, port)
+}
+
+func (a *App) startServer(ctx context.Context, cfg config.Config, svc *agent.Service, imSvc *im.Service) error {
+	imBus := im.NewBus()
+	return runServer(server.Options{
+		ListenAddr: cfg.Server.ListenAddr,
+		Service:    svc,
+		IM:         imSvc,
+		IMBus:      imBus,
+		PicoClaw:   im.NewPicoClawBridge(cfg.Server.AccessToken),
+		Context:    ctx,
+	})
+}
+
+func (a *App) printEffectiveConfig(cfg config.Config) {
+	fmt.Fprintf(a.stdout, "effective config:\n%s", formatEffectiveConfig(cfg))
+}
+
+func formatEffectiveConfig(cfg config.Config) string {
+	return fmt.Sprintf(`[server]
+listen_addr = %q
+advertise_base_url = %q
+access_token = %q
+
+[model]
+base_url = %q
+api_key = %q
+model_id = %q
+
+[bootstrap]
+manager_image = %q
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, redactSecret(cfg.Server.AccessToken), cfg.Model.BaseURL, redactSecret(cfg.Model.APIKey), cfg.Model.ModelID, cfg.Bootstrap.ManagerImage)
+}
+
+func redactSecret(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	return "<redacted>"
 }
 
 func loadConfig(path string) (config.Config, error) {
