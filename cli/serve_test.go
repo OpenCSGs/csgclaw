@@ -72,8 +72,8 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		"effective config:\n",
 		`listen_addr = "127.0.0.1:18080"`,
 		`advertise_base_url = "http://example.test"`,
-		`api_key = "<redacted>"`,
-		`access_token = "<redacted>"`,
+		`api_key = "sk*****et"`,
+		`access_token = "pc*****et"`,
 		"CSGClaw IM is available at: http://example.test/",
 	} {
 		if !strings.Contains(got, want) {
@@ -85,6 +85,23 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	}
 	if strings.Contains(got, "pc-secret") {
 		t.Fatalf("stdout leaked server access token:\n%s", got)
+	}
+}
+
+func TestPartiallyMaskSecret(t *testing.T) {
+	cases := map[string]string{
+		"":          "",
+		"abc":       "***",
+		"abcd":      "****",
+		"abcde":     "ab*de",
+		"abcdef":    "ab**ef",
+		"sk-secret": "sk*****et",
+	}
+
+	for input, want := range cases {
+		if got := partiallyMaskSecret(input); got != want {
+			t.Fatalf("partiallyMaskSecret(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 

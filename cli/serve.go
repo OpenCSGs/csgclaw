@@ -317,14 +317,18 @@ model_id = %q
 
 [bootstrap]
 manager_image = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, redactSecret(cfg.Server.AccessToken), cfg.Model.BaseURL, redactSecret(cfg.Model.APIKey), cfg.Model.ModelID, cfg.Bootstrap.ManagerImage)
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Model.BaseURL, partiallyMaskSecret(cfg.Model.APIKey), cfg.Model.ModelID, cfg.Bootstrap.ManagerImage)
 }
 
-func redactSecret(value string) string {
-	if strings.TrimSpace(value) == "" {
+func partiallyMaskSecret(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
 		return ""
 	}
-	return "<redacted>"
+	if len(value) <= 4 {
+		return strings.Repeat("*", len(value))
+	}
+	return value[:2] + strings.Repeat("*", len(value)-4) + value[len(value)-2:]
 }
 
 func loadConfig(path string) (config.Config, error) {

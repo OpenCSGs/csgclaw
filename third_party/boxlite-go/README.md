@@ -9,7 +9,7 @@ go get github.com/RussellLuo/boxlite/sdks/go@v0.7.6
 go run github.com/RussellLuo/boxlite/sdks/go/cmd/setup@v0.7.6
 ```
 
-Requires Go 1.24+ with CGO enabled. The setup step downloads the prebuilt native library from GitHub Releases (one-time). Currently supported platforms are macOS arm64 and Linux amd64. Set `GITHUB_TOKEN` to avoid API rate limits.
+Requires Go 1.26+ with CGO enabled. The setup step downloads the prebuilt native library from GitHub Releases (one-time). Currently supported platforms are macOS arm64 and Linux amd64. Set `GITHUB_TOKEN` to avoid API rate limits.
 
 ## Usage
 

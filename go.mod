@@ -1,6 +1,6 @@
 module csgclaw
 
-go 1.24.12
+go 1.26.2
 
 require github.com/RussellLuo/boxlite/sdks/go v0.7.6
 
