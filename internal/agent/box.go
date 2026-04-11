@@ -12,14 +12,15 @@ import (
 	"csgclaw/internal/config"
 )
 
-func (s *Service) createGatewayBox(ctx context.Context, rt *boxlite.Runtime, image, name, botID, modelID string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+func (s *Service) createGatewayBox(ctx context.Context, rt *boxlite.Runtime, image, name, botID string, modelCfg config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
+	// step 8.2.2 Create and start one PicoClaw gateway box, then capture its Boxlite metadata for persistence.
 	if testCreateGatewayBoxHook != nil {
-		return testCreateGatewayBoxHook(s, ctx, rt, image, name, botID, modelID)
+		return testCreateGatewayBoxHook(s, ctx, rt, image, name, botID, modelCfg)
 	}
 	if !runtimeValid(rt) {
 		return nil, nil, fmt.Errorf("invalid boxlite runtime")
 	}
-	boxOpts, err := s.gatewayBoxOptions(name, botID, modelID)
+	boxOpts, err := s.gatewayBoxOptions(name, botID, modelCfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -49,11 +50,16 @@ func (s *Service) forceRemoveBox(ctx context.Context, rt *boxlite.Runtime, idOrN
 	return rt.ForceRemove(ctx, idOrName)
 }
 
-func (s *Service) gatewayBoxOptions(name, botID, modelID string) ([]boxlite.BoxOption, error) {
-	if strings.TrimSpace(modelID) == "" {
-		modelID = s.model.ModelID
+func (s *Service) gatewayBoxOptions(name, botID string, modelCfg config.ModelConfig) ([]boxlite.BoxOption, error) {
+	// step 8.2.2.1 The box environment carries both model config and CSGClaw channel config into PicoClaw.
+	modelCfg = modelCfg.Resolved()
+	if strings.TrimSpace(modelCfg.ModelID) == "" {
+		modelCfg = s.model.Resolved()
 	}
-	envVars := picoclawBoxEnvVars(resolveManagerBaseURL(s.server), s.server.AccessToken, botID, s.model)
+	modelID := modelCfg.ModelID
+	managerBaseURL := resolveManagerBaseURL(s.server)
+	llmBaseURL := llmBridgeBaseURL(managerBaseURL, botID)
+	envVars := picoclawBoxEnvVars(managerBaseURL, s.server.AccessToken, botID, llmBaseURL, modelID)
 	addFeishuBoxEnvVars(envVars, botID, s.channels)
 	opts := []boxlite.BoxOption{
 		boxlite.WithName(name),
@@ -61,16 +67,11 @@ func (s *Service) gatewayBoxOptions(name, botID, modelID string) ([]boxlite.BoxO
 		boxlite.WithAutoRemove(false),
 		//boxlite.WithPort(managerHostPort, managerGuestPort),
 		boxlite.WithEnv("HOME", "/home/picoclaw"),
-		boxlite.WithEnv("CSGCLAW_LLM_BASE_URL", s.model.BaseURL),
-		boxlite.WithEnv("CSGCLAW_LLM_API_KEY", s.model.APIKey),
-		boxlite.WithEnv("CSGCLAW_LLM_MODEL_ID", modelID),
-		boxlite.WithEnv("OPENAI_BASE_URL", s.model.BaseURL),
-		boxlite.WithEnv("OPENAI_API_KEY", s.model.APIKey),
-		boxlite.WithEnv("OPENAI_MODEL", modelID),
 	}
 	for key, value := range envVars {
 		opts = append(opts, boxlite.WithEnv(key, value))
 	}
+	// step 8.2.2.2 The worker process is the PicoClaw gateway itself, writing logs to ~/.picoclaw/gateway.log.
 	//entrypoint, cmd := gatewayStartCommand(managerDebugMode)
 	opts = append(opts,
 		//boxlite.WithEntrypoint(entrypoint...),
@@ -79,18 +80,38 @@ func (s *Service) gatewayBoxOptions(name, botID, modelID string) ([]boxlite.BoxO
 		//boxlite.WithCmd("sleep", "infinity"),
 	)
 
-	//hostPicoClawRoot, err := ensureAgentPicoClawConfig(name, botID, s.server, s.model)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//opts = append(opts, boxlite.WithVolume(hostPicoClawRoot, boxPicoClawDir))
+	hostPicoClawRoot, err := ensureAgentPicoClawConfig(name, botID, s.server, modelCfg)
+	if err != nil {
+		return nil, err
+	}
+	// step 8.2.2.3 Project files are shared through one host mount so workers can work on the same workspace tree.
 	projectsRoot, err := ensureAgentProjectsRoot()
 	if err != nil {
 		return nil, err
 	}
-	opts = append(opts, boxlite.WithVolume(projectsRoot, boxProjectsDir))
+	for _, mount := range gatewayVolumeMounts(hostPicoClawRoot, projectsRoot) {
+		opts = append(opts, boxlite.WithVolume(mount.hostPath, mount.guestPath))
+	}
 
 	return opts, nil
+}
+
+type gatewayVolumeMount struct {
+	hostPath  string
+	guestPath string
+}
+
+func gatewayVolumeMounts(hostPicoClawRoot, projectsRoot string) []gatewayVolumeMount {
+	return []gatewayVolumeMount{
+		{
+			hostPath:  hostPicoClawRoot,
+			guestPath: boxPicoClawDir,
+		},
+		{
+			hostPath:  projectsRoot,
+			guestPath: boxProjectsDir,
+		},
+	}
 }
 
 func gatewayStartCommand(debug bool) ([]string, []string) {
@@ -112,19 +133,39 @@ func ensureAgentProjectsRoot() (string, error) {
 	return hostProjectsRoot, nil
 }
 
-func picoclawBoxEnvVars(baseURL, accessToken, botID string, model config.ModelConfig) map[string]string {
+func ProjectsRoot() (string, error) {
+	return ensureAgentProjectsRoot()
+}
+
+func llmBridgeBaseURL(managerBaseURL, botID string) string {
+	managerBaseURL = strings.TrimRight(strings.TrimSpace(managerBaseURL), "/")
+	return managerBaseURL + "/api/bots/" + strings.TrimSpace(botID) + "/llm"
+}
+
+func bridgeLLMEnvVars(llmBaseURL, accessToken, modelID string) map[string]string {
 	return map[string]string{
-		"CSGCLAW_BASE_URL":                       baseURL,
-		"CSGCLAW_ACCESS_TOKEN":                   accessToken,
-		"PICOCLAW_CHANNELS_CSGCLAW_BASE_URL":     baseURL,
-		"PICOCLAW_CHANNELS_CSGCLAW_ACCESS_TOKEN": accessToken,
-		"PICOCLAW_CHANNELS_CSGCLAW_BOT_ID":       botID,
-		"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME":    model.ModelID,
-		"PICOCLAW_CUSTOM_MODEL_NAME":             model.ModelID,
-		"PICOCLAW_CUSTOM_MODEL_ID":               model.ModelID,
-		"PICOCLAW_CUSTOM_MODEL_API_KEY":          model.APIKey,
-		"PICOCLAW_CUSTOM_MODEL_BASE_URL":         model.BaseURL,
+		"CSGCLAW_LLM_BASE_URL": llmBaseURL,
+		"CSGCLAW_LLM_API_KEY":  accessToken,
+		"CSGCLAW_LLM_MODEL_ID": modelID,
+		"OPENAI_BASE_URL":      llmBaseURL,
+		"OPENAI_API_KEY":       accessToken,
+		"OPENAI_MODEL":         modelID,
 	}
+}
+
+func picoclawBoxEnvVars(baseURL, accessToken, botID, llmBaseURL, modelID string) map[string]string {
+	env := bridgeLLMEnvVars(llmBaseURL, accessToken, modelID)
+	env["CSGCLAW_BASE_URL"] = baseURL
+	env["CSGCLAW_ACCESS_TOKEN"] = accessToken
+	env["PICOCLAW_CHANNELS_CSGCLAW_BASE_URL"] = baseURL
+	env["PICOCLAW_CHANNELS_CSGCLAW_ACCESS_TOKEN"] = accessToken
+	env["PICOCLAW_CHANNELS_CSGCLAW_BOT_ID"] = botID
+	env["PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME"] = modelID
+	env["PICOCLAW_CUSTOM_MODEL_NAME"] = modelID
+	env["PICOCLAW_CUSTOM_MODEL_ID"] = modelID
+	env["PICOCLAW_CUSTOM_MODEL_API_KEY"] = accessToken
+	env["PICOCLAW_CUSTOM_MODEL_BASE_URL"] = llmBaseURL
+	return env
 }
 
 func addFeishuBoxEnvVars(envVars map[string]string, botID string, channels config.ChannelsConfig) {

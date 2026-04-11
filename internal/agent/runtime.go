@@ -15,6 +15,7 @@ import (
 )
 
 func (s *Service) ensureRuntime(agentName string) (*boxlite.Runtime, error) {
+	// step 8.2.1 Each agent name maps to its own Boxlite runtime home under ~/.csgclaw/agents/<name>/boxlite.
 	if testEnsureRuntimeHook != nil {
 		return testEnsureRuntimeHook(s, agentName)
 	}
@@ -58,6 +59,7 @@ func (s *Service) ensureRuntimeAtHome(homeDir string) (*boxlite.Runtime, error) 
 }
 
 func (s *Service) lookupBootstrapManager(ctx context.Context) (*boxlite.Runtime, *boxlite.Box, error) {
+	// step 8.1.0 When bootstrapping the manager, try the saved BoxID first and fall back to the fixed name.
 	homeDir, err := boxRuntimeHome(ManagerName)
 	if err != nil {
 		return nil, nil, err

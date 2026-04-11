@@ -33,7 +33,11 @@ ok
   "role": "worker",
   "status": "running",
   "created_at": "2026-03-28T12:00:03Z",
-  "model_id": "gpt-4o-mini"
+  "profile": "cliproxy-codex",
+  "provider": "llm-api",
+  "model_id": "gpt-5.4",
+  "reasoning_effort": "medium",
+  "image": "ghcr.io/russellluo/picoclaw:2026.4.8.1"
 }
 ```
 
@@ -58,7 +62,7 @@ ok
   "id": "u-alice",
   "name": "alice",
   "description": "frontend dev",
-  "model_id": "gpt-4o-mini",
+  "profile": "cliproxy-codex",
   "role": "worker"
 }
 ```
@@ -73,7 +77,10 @@ ok
   "role": "worker",
   "status": "running",
   "created_at": "2026-03-28T12:00:03Z",
-  "model_id": "gpt-4o-mini",
+  "profile": "cliproxy-codex",
+  "provider": "llm-api",
+  "model_id": "gpt-5.4",
+  "reasoning_effort": "medium",
   "image": "ghcr.io/russellluo/picoclaw:2026.4.8.1"
 }
 ```
@@ -83,6 +90,8 @@ ok
 - `name` 必填
 - `name` 不能是 `manager`
 - `id` 可选；未传时服务端会自动生成
+- `profile` 可选；它引用配置中的 `llm.profiles.<name>`，未传时使用 `llm.default_profile`
+- `provider`、`model_id`、`reasoning_effort` 是服务端解析后的快照字段，便于调试
 - `status`、`created_at` 以实际 box 启动结果为准
 - `manager` 嵌套字段已不再支持
 - 若 IM 服务可用，会自动创建对应 IM 用户，并创建 `Admin & <Worker>` 私聊
@@ -335,7 +344,7 @@ data: {"type":"message.created","room_id":"oc_f778","message":{"id":"om_x100","s
 
 ## 7. PicoClaw Bot 接口
 
-这组接口用于 PicoClaw 与 IM 的双向通信。
+这组接口用于 PicoClaw 与 IM 的双向通信，以及 Worker 访问服务端暴露的 OpenAI 兼容 LLM bridge。
 
 认证要求：
 
@@ -389,3 +398,78 @@ bot 向指定会话发送消息。
 - 消息发送者固定为路径中的 `bot_id`
 - `room_id` 必须是已存在会话
 - `text` 不能为空
+
+### `GET /api/bots/{bot_id}/llm/v1/models`
+
+返回 bot 当前可见的模型列表，格式兼容 OpenAI `GET /v1/models`。
+
+响应示例：
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "gpt-5.4",
+      "object": "model",
+      "created": 0,
+      "owned_by": "csgclaw"
+    }
+  ]
+}
+```
+
+说明：
+
+- 服务端会根据 `bot_id` 对应 agent 的 `profile` 解析实际模型配置，并在响应中保留已解析快照字段
+- box 内看到的是统一的 OpenAI 兼容接口；不会拿到宿主机上的真实上游 `api_key`
+
+### `POST /api/bots/{bot_id}/llm/v1/chat/completions`
+
+OpenAI 兼容的聊天补全入口。
+
+请求体示例：
+
+```json
+{
+  "model": "ignored-by-server",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Review this patch."
+    }
+  ]
+}
+```
+
+响应示例：
+
+```json
+{
+  "id": "chatcmpl-1",
+  "object": "chat.completion",
+  "created": 1743139200,
+  "model": "gpt-5.4",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "..."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  }
+}
+```
+
+说明：
+
+- 请求会由服务端转发到对应 profile 配置中的 `base_url + /chat/completions`
+- `model` 字段会被服务端强制改写为该 agent 解析出的 `model_id`
+- 若 profile 配置了 `reasoning_effort`，且请求体没有显式提供 `reasoning_effort`，服务端会把该默认值注入转发请求

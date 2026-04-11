@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"text/tabwriter"
 
 	"csgclaw/cli/command"
@@ -88,15 +89,23 @@ func writeJSON(w io.Writer, v any) error {
 
 func renderAgentsTable(w io.Writer, agents []agent.Agent) error {
 	tw := newTableWriter(w)
-	fmt.Fprintln(tw, "ID\tNAME\tROLE\tSTATUS")
+	fmt.Fprintln(tw, "ID\tNAME\tROLE\tSTATUS\tPROFILE")
 	for _, a := range agents {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", a.ID, a.Name, a.Role, a.Status)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", a.ID, a.Name, a.Role, a.Status, displayAgentProfile(a.Profile))
 	}
 	return tw.Flush()
 }
 
 func renderBotsTable(w io.Writer, bots []apitypes.Bot) error {
 	return command.RenderBotsTable(w, bots)
+}
+
+func displayAgentProfile(profile string) string {
+	profile = strings.TrimSpace(profile)
+	if profile == "" {
+		return "-"
+	}
+	return profile
 }
 
 func renderRoomsTable(w io.Writer, rooms []apitypes.Room) error {

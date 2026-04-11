@@ -93,7 +93,7 @@ func TestNewServiceRequiresStore(t *testing.T) {
 func TestServiceCreateCSGClawWorkerCreatesAgentUserAndBot(t *testing.T) {
 	agent.SetTestHooks(
 		func(_ *agent.Service, _ string) (*boxlite.Runtime, error) { return nil, nil },
-		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, botID, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, botID string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			if name != "alice" {
 				t.Fatalf("create gateway name = %q, want alice", name)
 			}
@@ -159,7 +159,7 @@ func TestServiceCreateCSGClawWorkerCreatesAgentUserAndBot(t *testing.T) {
 func TestServiceCreateFeishuWorkerCreatesAgentUserAndBot(t *testing.T) {
 	agent.SetTestHooks(
 		func(_ *agent.Service, _ string) (*boxlite.Runtime, error) { return nil, nil },
-		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, botID, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, botID string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			if name != "alice" {
 				t.Fatalf("create gateway name = %q, want alice", name)
 			}
@@ -349,7 +349,7 @@ func TestServiceCreateFeishuManagerEnsuresExistingUser(t *testing.T) {
 func TestServiceCreateManagerBootstrapsMissingAgent(t *testing.T) {
 	agent.SetTestHooks(
 		func(_ *agent.Service, _ string) (*boxlite.Runtime, error) { return &boxlite.Runtime{}, nil },
-		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, botID, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, botID string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			if name != agent.ManagerName {
 				t.Fatalf("create gateway name = %q, want manager", name)
 			}

@@ -52,14 +52,14 @@ func TestExecuteAgentListUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/agents" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z"}]`), nil
+			return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}]`), nil
 		}),
 	}
 
 	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "agent", "list"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "worker", "running")
+	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "worker", "running", "codex-main")
 }
 
 func TestExecuteBotListUsesDefaultChannel(t *testing.T) {
@@ -253,8 +253,8 @@ func TestExecuteMessageSendsToFeishuChannel(t *testing.T) {
 func TestRenderAgentsTableAlignsLongColumns(t *testing.T) {
 	var buf bytes.Buffer
 	agents := []agent.Agent{
-		{ID: "u-manager", Name: "manager", Role: "manager", Status: "running"},
-		{ID: "u-dev", Name: "dev", Role: "worker", Status: "running"},
+		{ID: "u-manager", Name: "manager", Role: "manager", Status: "running", Profile: "codex-main"},
+		{ID: "u-dev", Name: "dev", Role: "worker", Status: "running", Profile: "claude-main"},
 		{ID: "u-alex", Name: "alex", Role: "worker", Status: "running"},
 	}
 
@@ -267,7 +267,7 @@ func TestRenderAgentsTableAlignsLongColumns(t *testing.T) {
 		t.Fatalf("line count = %d, want 4; output=%q", len(lines), buf.String())
 	}
 
-	re := regexp.MustCompile(`^(\S+)(\s{2,})(\S+)(\s{2,})(\S+)(\s{2,})(\S+)$`)
+	re := regexp.MustCompile(`^(\S+)(\s{2,})(\S+)(\s{2,})(\S+)(\s{2,})(\S+)(\s{2,})(\S+)$`)
 	if re.FindStringSubmatchIndex(lines[0]) == nil {
 		t.Fatalf("header not aligned: %q", lines[0])
 	}
@@ -280,6 +280,16 @@ func TestRenderAgentsTableAlignsLongColumns(t *testing.T) {
 			t.Fatalf("row %d columns not aligned with header:\nheader=%q\nrow=%q", i+1, lines[0], line)
 		}
 	}
+}
+
+func TestRenderAgentsTableUsesDashForMissingProfile(t *testing.T) {
+	var buf bytes.Buffer
+
+	if err := renderAgentsTable(&buf, []agent.Agent{{ID: "u-alice", Name: "alice", Role: "worker", Status: "running"}}); err != nil {
+		t.Fatalf("renderAgentsTable() error = %v", err)
+	}
+
+	assertTableHasRow(t, buf.String(), "u-alice", "alice", "worker", "running", "-")
 }
 
 func TestExecuteAgentCreateUsesHTTPClient(t *testing.T) {
@@ -308,19 +318,19 @@ func TestExecuteAgentCreateUsesHTTPClient(t *testing.T) {
 			if payload["description"] != "worker" {
 				t.Fatalf("payload[description] = %#v, want %q", payload["description"], "worker")
 			}
-			if payload["model_id"] != "gpt-test" {
-				t.Fatalf("payload[model_id] = %#v, want %q", payload["model_id"], "gpt-test")
+			if payload["profile"] != "cliproxy-codex" {
+				t.Fatalf("payload[profile] = %#v, want %q", payload["profile"], "cliproxy-codex")
 			}
 
-			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z"}`), nil
+			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
 		}),
 	}
 
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--token", "secret-token", "agent", "create", "--name", "alice", "--description", "worker", "--model-id", "gpt-test"})
+	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--token", "secret-token", "agent", "create", "--name", "alice", "--description", "worker", "--profile", "cliproxy-codex"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "worker", "running")
+	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "worker", "running", "codex-main")
 }
 
 func TestExecuteAgentDeleteUsesHTTPClient(t *testing.T) {
@@ -357,14 +367,14 @@ func TestExecuteAgentStatusByIDUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/agents/u-alice" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-alice")
 			}
-			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z"}`), nil
+			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
 		}),
 	}
 
 	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "agent", "status", "u-alice"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "worker", "running")
+	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "worker", "running", "codex-main")
 }
 
 func TestExecuteAgentLogsUsesHTTPClient(t *testing.T) {

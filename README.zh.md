@@ -34,11 +34,69 @@ go build ./cmd/csgclaw
 ## 快速开始
 
 ```bash
-csgclaw onboard --base-url <url> --api-key <key> --model-id <model>
+csgclaw onboard --profile default --default-profile default --base-url <url> --api-key <key> --model-id <model> [--reasoning-effort <effort>]
 csgclaw serve
 ```
 
 执行后 CLI 会打印访问地址（例如 `http://127.0.0.1:18080/`），在浏览器中打开即可进入 IM 工作区。
+
+## LLM Profile 配置示例
+
+### 远程 LLM API
+
+```toml
+[server]
+listen_addr = "0.0.0.0:18080"
+advertise_base_url = "http://127.0.0.1:18080"
+access_token = "your_access_token"
+
+[llm]
+default_profile = "remote-main"
+
+[llm.profiles.remote-main]
+provider = "llm-api"
+base_url = "https://api.openai.com/v1"
+api_key = "sk-your-api-key"
+model_id = "gpt-5.4"
+reasoning_effort = "medium"
+
+[bootstrap]
+manager_image = "ghcr.io/russellluo/picoclaw:2026.4.8.1"
+```
+
+### 通过 CLIProxyAPI 接入本地 Codex
+
+```toml
+[server]
+listen_addr = "0.0.0.0:18080"
+advertise_base_url = "http://127.0.0.1:18080"
+access_token = "your_access_token"
+
+[llm]
+default_profile = "codex-main"
+
+[llm.profiles.codex-main]
+provider = "llm-api"
+base_url = "http://127.0.0.1:8317/v1"
+api_key = "local"
+model_id = "gpt-5.4"
+reasoning_effort = "medium"
+
+[bootstrap]
+manager_image = "ghcr.io/russellluo/picoclaw:2026.4.8.1"
+```
+
+### Worker 覆盖示例
+
+```json
+{
+  "id": "u-reviewer",
+  "name": "reviewer",
+  "description": "code review worker",
+  "profile": "codex-main",
+  "role": "worker"
+}
+```
 
 ## 功能特性
 

@@ -12,6 +12,7 @@ import (
 	"csgclaw/internal/channel"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
+	"csgclaw/internal/llm"
 	"csgclaw/internal/server"
 )
 
@@ -21,18 +22,23 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	origNewBotService := NewBotService
 	origNewIMService := NewIMService
 	origNewFeishuService := NewFeishuService
+	origNewLLMService := NewLLMService
+	origEnsureBootstrapManager := EnsureBootstrapManager
 	t.Cleanup(func() {
 		RunServer = origRunServer
 		NewAgentService = origNewAgentService
 		NewBotService = origNewBotService
 		NewIMService = origNewIMService
 		NewFeishuService = origNewFeishuService
+		NewLLMService = origNewLLMService
+		EnsureBootstrapManager = origEnsureBootstrapManager
 	})
 
 	ctx := context.WithValue(context.Background(), struct{}{}, "serve-context")
+	svc := &agent.Service{}
 
 	NewAgentService = func(config.Config) (*agent.Service, error) {
-		return nil, nil
+		return svc, nil
 	}
 	NewIMService = func() (*im.Service, error) {
 		return nil, nil
@@ -47,8 +53,25 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		}
 		return nil, nil
 	}
+	NewLLMService = func(config.Config, *agent.Service) (*llm.Service, error) {
+		return nil, nil
+	}
 
 	called := false
+	bootstrapped := false
+	EnsureBootstrapManager = func(gotCtx context.Context, gotSvc *agent.Service, forceRecreate bool) error {
+		bootstrapped = true
+		if gotCtx != ctx {
+			t.Fatalf("EnsureBootstrapManager context = %v, want %v", gotCtx, ctx)
+		}
+		if gotSvc != svc {
+			t.Fatalf("EnsureBootstrapManager service = %p, want %p", gotSvc, svc)
+		}
+		if forceRecreate {
+			t.Fatal("EnsureBootstrapManager forceRecreate = true, want false")
+		}
+		return nil
+	}
 	RunServer = func(opts server.Options) error {
 		called = true
 		if opts.Context != ctx {
@@ -68,9 +91,10 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 			AccessToken:      "pc-secret",
 		},
 		Model: config.ModelConfig{
-			BaseURL: "http://llm.test",
-			APIKey:  "sk-secret",
-			ModelID: "model-test",
+			Provider: "llm-api",
+			BaseURL:  "http://llm.test",
+			APIKey:   "sk-secret",
+			ModelID:  "model-test",
 		},
 		Bootstrap: config.BootstrapConfig{
 			ManagerImage: "ghcr.io/example/manager:latest",
@@ -92,6 +116,9 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	if !called {
 		t.Fatal("RunServer was not called")
 	}
+	if !bootstrapped {
+		t.Fatal("EnsureBootstrapManager was not called")
+	}
 
 	got := run.Stdout.(*bytes.Buffer).String()
 	for _, want := range []string{
@@ -105,6 +132,7 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		`[channels.feishu.manager]`,
 		`app_id = "cli_manager"`,
 		`app_secret = "ma**********et"`,
+		`provider = "llm-api"`,
 		"CSGClaw IM is available at: http://example.test/",
 	} {
 		if !strings.Contains(got, want) {

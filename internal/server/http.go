@@ -10,6 +10,7 @@ import (
 	"csgclaw/internal/bot"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/im"
+	"csgclaw/internal/llm"
 )
 
 type Options struct {
@@ -20,6 +21,7 @@ type Options struct {
 	IMBus       *im.Bus
 	PicoClaw    *im.PicoClawBridge
 	Feishu      *channel.FeishuService
+	LLM         *llm.Service
 	AccessToken string
 	Context     context.Context
 }
@@ -29,7 +31,7 @@ func Run(opts Options) error {
 		opts.Context = context.Background()
 	}
 
-	handler := api.NewHandlerWithBotAndAccessToken(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.PicoClaw, opts.Feishu, opts.AccessToken)
+	handler := api.NewHandlerWithBotAndAccessToken(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.PicoClaw, opts.Feishu, opts.LLM, opts.AccessToken)
 	mux := handler.Routes()
 	mux.Handle("/", uiHandler())
 
@@ -40,6 +42,7 @@ func Run(opts Options) error {
 	}
 
 	if opts.IMBus != nil && opts.PicoClaw != nil {
+		// step 5.1 Bridge internal IM events to PicoClaw subscribers so bots can receive SSE message events.
 		events, cancel := opts.IMBus.Subscribe()
 		defer cancel()
 
@@ -60,6 +63,7 @@ func Run(opts Options) error {
 
 	errCh := make(chan error, 1)
 	go func() {
+		// step 5.2 Use the shared context for graceful shutdown across CLI signal handling and HTTP serve loops.
 		<-opts.Context.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

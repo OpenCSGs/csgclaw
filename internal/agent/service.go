@@ -40,7 +40,7 @@ var (
 	testCloseBoxHook            func(*Service, *boxlite.Box) error
 	testCloseRuntimeHook        func(*Service, string, *boxlite.Runtime) error
 	testCreateBoxHook           func(*Service, context.Context, *boxlite.Runtime, string, ...boxlite.BoxOption) (*boxlite.Box, error)
-	testCreateGatewayBoxHook    func(*Service, context.Context, *boxlite.Runtime, string, string, string, string) (*boxlite.Box, *boxlite.BoxInfo, error)
+	testCreateGatewayBoxHook    func(*Service, context.Context, *boxlite.Runtime, string, string, string, config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error)
 	testForceRemoveBoxHook      func(*Service, context.Context, *boxlite.Runtime, string) error
 	testRunBoxCommandHook       func(*Service, context.Context, *boxlite.Box, string, []string, io.Writer) (int, error)
 )
@@ -48,7 +48,7 @@ var (
 // SetTestHooks installs lightweight hooks for tests that need to bypass runtime/box creation.
 func SetTestHooks(
 	ensureRuntime func(*Service, string) (*boxlite.Runtime, error),
-	createGatewayBox func(*Service, context.Context, *boxlite.Runtime, string, string, string, string) (*boxlite.Box, *boxlite.BoxInfo, error),
+	createGatewayBox func(*Service, context.Context, *boxlite.Runtime, string, string, string, config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error),
 ) {
 	testEnsureRuntimeHook = ensureRuntime
 	if ensureRuntime != nil {
@@ -88,6 +88,7 @@ func TestOnlySetRunBoxCommandHook(hook func(*Service, context.Context, *boxlite.
 
 type Service struct {
 	model        config.ModelConfig
+	llm          config.LLMConfig
 	server       config.ServerConfig
 	channels     config.ChannelsConfig
 	managerImage string
@@ -98,21 +99,41 @@ type Service struct {
 }
 
 func NewService(model config.ModelConfig, server config.ServerConfig, managerImage, statePath string) (*Service, error) {
-	return NewServiceWithChannels(model, server, config.ChannelsConfig{}, managerImage, statePath)
+	return NewServiceWithLLM(config.SingleProfileLLM(model), server, managerImage, statePath)
 }
 
 func NewServiceWithChannels(model config.ModelConfig, server config.ServerConfig, channels config.ChannelsConfig, managerImage, statePath string) (*Service, error) {
+	return NewServiceWithLLMAndChannels(config.SingleProfileLLM(model), server, channels, managerImage, statePath)
+}
+
+func NewServiceWithLLM(llmCfg config.LLMConfig, server config.ServerConfig, managerImage, statePath string) (*Service, error) {
+	return NewServiceWithLLMAndChannels(llmCfg, server, config.ChannelsConfig{}, managerImage, statePath)
+}
+
+func NewServiceWithLLMAndChannels(llmCfg config.LLMConfig, server config.ServerConfig, channels config.ChannelsConfig, managerImage, statePath string) (*Service, error) {
+	// step 8.0 agent.Service owns two things together:
+	// step 8.0.1 the persisted registry of manager/worker metadata
+	// step 8.0.2 the live Boxlite runtime/box lifecycle.
 	if managerImage == "" {
 		managerImage = config.DefaultManagerImage
 	}
+	defaultProfile, model, err := llmCfg.Resolve("")
+	if err != nil {
+		defaultProfile = llmCfg.EffectiveDefaultProfile()
+		model = config.ModelConfig{}.Resolved()
+	}
 	svc := &Service{
 		model:        model,
+		llm:          llmCfg.Normalized(),
 		server:       server,
 		channels:     cloneChannelsConfig(channels),
 		managerImage: managerImage,
 		state:        statePath,
 		runtimes:     make(map[string]*boxlite.Runtime),
 		agents:       make(map[string]Agent),
+	}
+	if strings.TrimSpace(svc.llm.DefaultProfile) == "" {
+		svc.llm.DefaultProfile = defaultProfile
 	}
 	if err := svc.load(); err != nil {
 		return nil, err
@@ -134,13 +155,31 @@ func cloneChannelsConfig(channels config.ChannelsConfig) config.ChannelsConfig {
 }
 
 func EnsureBootstrapState(ctx context.Context, statePath string, server config.ServerConfig, model config.ModelConfig, managerImage string, forceRecreate bool) error {
-	svc, err := NewService(model, server, managerImage, statePath)
+	return EnsureBootstrapStateWithLLM(ctx, statePath, server, config.SingleProfileLLM(model), managerImage, forceRecreate)
+}
+
+func EnsureBootstrapStateWithLLM(ctx context.Context, statePath string, server config.ServerConfig, llmCfg config.LLMConfig, managerImage string, forceRecreate bool) error {
+	svc, err := NewServiceWithLLM(llmCfg, server, managerImage, statePath)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		_ = svc.Close()
 	}()
+	return svc.EnsureBootstrapManager(ctx, forceRecreate)
+}
+
+func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bool) error {
+	if svc == nil {
+		return nil
+	}
+	_, defaultModel, err := svc.llm.Resolve("")
+	if err != nil {
+		return err
+	}
+	if _, err := ensureAgentPicoClawConfig(ManagerName, ManagerUserID, svc.server, defaultModel); err != nil {
+		return err
+	}
 
 	_, err = svc.EnsureManager(ctx, forceRecreate)
 	return err
@@ -149,6 +188,10 @@ func EnsureBootstrapState(ctx context.Context, statePath string, server config.S
 func (s *Service) EnsureManager(ctx context.Context, forceRecreate bool) (Agent, error) {
 	if s == nil {
 		return Agent{}, fmt.Errorf("agent service is required")
+	}
+	defaultProfile, defaultModel, err := s.llm.Resolve("")
+	if err != nil {
+		return Agent{}, err
 	}
 
 	rt, box, err := s.lookupBootstrapManager(ctx)
@@ -174,6 +217,21 @@ func (s *Service) EnsureManager(ctx context.Context, forceRecreate bool) (Agent,
 		} else {
 			log.Printf("bootstrap manager box %q (%q) removed", ManagerName, managerBoxIDOrName)
 		}
+		if err := s.closeRuntime(runtimeHome, rt); err != nil {
+			return Agent{}, fmt.Errorf("close bootstrap manager runtime before recreate: %w", err)
+		}
+		rt = nil
+		managerHome, err := agentHomeDir(ManagerName)
+		if err != nil {
+			return Agent{}, err
+		}
+		if err := os.RemoveAll(managerHome); err != nil {
+			return Agent{}, fmt.Errorf("remove bootstrap manager home: %w", err)
+		}
+		rt, err = s.ensureRuntimeAtHome(runtimeHome)
+		if err != nil {
+			return Agent{}, err
+		}
 		box = nil
 	}
 	var info *boxlite.BoxInfo
@@ -193,7 +251,7 @@ func (s *Service) EnsureManager(ctx context.Context, forceRecreate bool) (Agent,
 				}
 			}
 		}()
-		box, info, err = s.createGatewayBox(ctx, rt, s.managerImage, ManagerName, ManagerUserID, s.model.ModelID)
+		box, info, err = s.createGatewayBox(ctx, rt, s.managerImage, ManagerName, ManagerUserID, defaultModel)
 		close(progressDone)
 		if err != nil {
 			return Agent{}, fmt.Errorf("create bootstrap manager box: %w", err)
@@ -216,14 +274,17 @@ func (s *Service) EnsureManager(ctx context.Context, forceRecreate bool) (Agent,
 	defer s.mu.Unlock()
 
 	manager := Agent{
-		ID:        ManagerUserID,
-		Name:      ManagerName,
-		Image:     s.managerImage,
-		BoxID:     info.ID,
-		Status:    string(info.State),
-		CreatedAt: info.CreatedAt.UTC(),
-		ModelID:   s.model.ModelID,
-		Role:      RoleManager,
+		ID:              ManagerUserID,
+		Name:            ManagerName,
+		Image:           s.managerImage,
+		BoxID:           info.ID,
+		Status:          string(info.State),
+		CreatedAt:       info.CreatedAt.UTC(),
+		Profile:         defaultProfile,
+		Provider:        defaultModel.Resolved().Provider,
+		ModelID:         defaultModel.Resolved().ModelID,
+		ReasoningEffort: defaultModel.Resolved().ReasoningEffort,
+		Role:            RoleManager,
 	}
 	for id, a := range s.agents {
 		if isManagerAgent(a) && id != manager.ID {
@@ -258,7 +319,6 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Agent, error) 
 	description := strings.TrimSpace(req.Description)
 	image := strings.TrimSpace(req.Image)
 	role := normalizeRole(req.Role)
-	modelID := strings.TrimSpace(req.ModelID)
 	if name == "" {
 		return Agent{}, fmt.Errorf("name is required")
 	}
@@ -298,25 +358,34 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Agent, error) 
 		_ = s.closeRuntime(runtimeHome, rt)
 	}()
 
-	if modelID == "" {
-		modelID = s.model.ModelID
+	requestedProfile := strings.TrimSpace(req.Profile)
+	if requestedProfile == "" && strings.TrimSpace(req.ModelID) != "" {
+		matchedProfile, _, ok := s.llm.MatchProfile(config.ModelConfig{ModelID: req.ModelID})
+		if !ok {
+			return Agent{}, fmt.Errorf("no llm profile matches model %q", strings.TrimSpace(req.ModelID))
+		}
+		requestedProfile = matchedProfile
+	}
+
+	profileName, resolvedModel, err := s.resolveModelProfile(requestedProfile)
+	if err != nil {
+		return Agent{}, err
 	}
 
 	projectsRoot, err := ensureAgentProjectsRoot()
 	if err != nil {
 		return Agent{}, err
 	}
+	managerBaseURL := resolveManagerBaseURL(s.server)
+	llmBaseURL := llmBridgeBaseURL(managerBaseURL, id)
 	boxOpts := []boxlite.BoxOption{
 		boxlite.WithName(name),
 		boxlite.WithDetach(true),
 		boxlite.WithAutoRemove(false),
-		boxlite.WithEnv("CSGCLAW_LLM_BASE_URL", s.model.BaseURL),
-		boxlite.WithEnv("CSGCLAW_LLM_API_KEY", s.model.APIKey),
-		boxlite.WithEnv("CSGCLAW_LLM_MODEL_ID", modelID),
-		boxlite.WithEnv("OPENAI_BASE_URL", s.model.BaseURL),
-		boxlite.WithEnv("OPENAI_API_KEY", s.model.APIKey),
-		boxlite.WithEnv("OPENAI_MODEL", modelID),
 		boxlite.WithVolume(projectsRoot, boxProjectsDir),
+	}
+	for key, value := range bridgeLLMEnvVars(llmBaseURL, s.server.AccessToken, resolvedModel.ModelID) {
+		boxOpts = append(boxOpts, boxlite.WithEnv(key, value))
 	}
 	box, err := s.createBox(ctx, rt, image, boxOpts...)
 	if err != nil {
@@ -335,14 +404,17 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Agent, error) 
 		status = "running"
 	}
 	agent := Agent{
-		ID:          id,
-		Name:        name,
-		Description: description,
-		Image:       image,
-		Role:        role,
-		Status:      status,
-		CreatedAt:   createdAt,
-		ModelID:     modelID,
+		ID:              id,
+		Name:            name,
+		Description:     description,
+		Image:           image,
+		Role:            role,
+		Status:          status,
+		CreatedAt:       createdAt,
+		Profile:         profileName,
+		Provider:        resolvedModel.Provider,
+		ModelID:         resolvedModel.ModelID,
+		ReasoningEffort: resolvedModel.ReasoningEffort,
 	}
 
 	s.mu.Lock()
@@ -427,6 +499,9 @@ func (s *Service) refreshAgentBoxID(id string, got Agent, resolvedKey string, bo
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
+	// step 8.4 Deletion removes both layers:
+	// step 8.4.1 the Boxlite box/runtime home
+	// step 8.4.2 the persisted agent registry entry.
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return fmt.Errorf("agent id is required")
@@ -497,11 +572,13 @@ func (s *Service) List() []Agent {
 }
 
 func (s *Service) CreateWorker(ctx context.Context, req CreateRequest) (Agent, error) {
+	// step 8.2 Create the current worker form of an agent:
+	// step 8.2.1 reserve a unique id/name
+	// step 8.2.2 create a gateway box
+	// step 8.2.3 persist the worker metadata.
 	id := strings.TrimSpace(req.ID)
 	name := strings.TrimSpace(req.Name)
 	description := strings.TrimSpace(req.Description)
-	modelID := strings.TrimSpace(req.ModelID)
-
 	switch {
 	case name == "":
 		return Agent{}, fmt.Errorf("name is required")
@@ -538,11 +615,13 @@ func (s *Service) CreateWorker(ctx context.Context, req CreateRequest) (Agent, e
 	defer func() {
 		_ = s.closeRuntime(runtimeHome, rt)
 	}()
-	if modelID == "" {
-		modelID = s.model.ModelID
+	profileName, resolvedModel, err := s.resolveModelProfile(req.Profile)
+	if err != nil {
+		return Agent{}, err
 	}
 
-	box, info, err := s.createGatewayBox(ctx, rt, s.managerImage, name, id, modelID)
+	// step 8.2.2 Workers currently reuse the manager image and run the same gateway-style runtime.
+	box, info, err := s.createGatewayBox(ctx, rt, s.managerImage, name, id, resolvedModel)
 	if err != nil {
 		return Agent{}, fmt.Errorf("create worker box: %w", err)
 	}
@@ -561,15 +640,18 @@ func (s *Service) CreateWorker(ctx context.Context, req CreateRequest) (Agent, e
 	}
 
 	worker := Agent{
-		ID:          id,
-		Name:        name,
-		Image:       s.managerImage,
-		BoxID:       info.ID,
-		Description: description,
-		Status:      string(info.State),
-		CreatedAt:   info.CreatedAt.UTC(),
-		ModelID:     modelID,
-		Role:        RoleWorker,
+		ID:              id,
+		Name:            name,
+		Image:           s.managerImage,
+		BoxID:           info.ID,
+		Description:     description,
+		Status:          string(info.State),
+		CreatedAt:       info.CreatedAt.UTC(),
+		Profile:         profileName,
+		Provider:        resolvedModel.Provider,
+		ModelID:         resolvedModel.ModelID,
+		ReasoningEffort: resolvedModel.ReasoningEffort,
+		Role:            RoleWorker,
 	}
 	s.agents[worker.ID] = worker
 	if err := s.saveLocked(); err != nil {
@@ -593,6 +675,7 @@ func (s *Service) ListWorkers() []Agent {
 }
 
 func (s *Service) StreamLogs(ctx context.Context, id string, follow bool, lines int, w io.Writer) error {
+	// step 8.3 Agent logs are not stored separately by CSGClaw; we tail the gateway log from inside the box.
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return fmt.Errorf("agent id is required")

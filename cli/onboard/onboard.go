@@ -2,6 +2,7 @@ package onboard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -110,7 +111,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 }
 
 func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg config.Config, forceRecreateManager bool) (bot.Bot, error) {
-	agentSvc, err := agent.NewServiceWithChannels(cfg.Model, cfg.Server, cfg.Channels, cfg.Bootstrap.ManagerImage, agentsPath)
+	agentSvc, err := agent.NewServiceWithLLMAndChannels(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap.ManagerImage, agentsPath)
 	if err != nil {
 		return bot.Bot{}, err
 	}
@@ -160,14 +161,17 @@ func configPath(path string) (string, error) {
 }
 
 func validateModelConfig(cfg config.Config) error {
-	missing := cfg.Model.MissingFields()
-	if len(missing) == 0 {
-		return nil
+	if err := effectiveLLMConfig(cfg).Validate(); err != nil {
+		var validationErr *config.ModelValidationError
+		if errors.As(err, &validationErr) && len(validationErr.MissingFields) > 0 {
+			return fmt.Errorf(
+				"llm config is incomplete (%s); run `csgclaw onboard --base-url <url> --api-key <key> --model-id <model>`",
+				strings.Join(missingModelFlags(validationErr.MissingFields), ", "),
+			)
+		}
+		return fmt.Errorf("llm config is invalid: %w", err)
 	}
-	return fmt.Errorf(
-		"model config is incomplete (%s); run `csgclaw onboard --base-url <url> --api-key <key> --model-id <model>`",
-		strings.Join(missingModelFlags(missing), ", "),
-	)
+	return nil
 }
 
 func missingModelFlags(fields []string) []string {
@@ -185,4 +189,11 @@ func missingModelFlags(fields []string) []string {
 		}
 	}
 	return flags
+}
+
+func effectiveLLMConfig(cfg config.Config) config.LLMConfig {
+	if len(cfg.LLM.Profiles) != 0 || strings.TrimSpace(cfg.LLM.DefaultProfile) != "" {
+		return cfg.LLM.Normalized()
+	}
+	return config.SingleProfileLLM(cfg.Model)
 }

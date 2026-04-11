@@ -85,11 +85,28 @@ When available, load the CSGClaw API settings from `~/.picoclaw/config.json`:
 }
 ```
 
+### Read IM bootstrap
+
+- Method: `GET`
+- Path: `/api/v1/im/bootstrap`
+- Purpose: resolve room participants and assignee handles for tracker sequencing
+
+### Read room message history
+
+- Method: `GET`
+- Path: `/api/v1/messages?room_id={room_id}`
+- Purpose: inspect prior tracker dispatches and assignee room replies
+
 ## Notes
 
 - There is no dedicated task-assignment API.
 - Dispatch still means sending a normal bot message in the target room and mentioning the worker.
 - Each task in `todo.json` should carry an `id` task number, increasing in dispatch order such as `1`, `2`, `3`.
-- `start-tracking` watches `todo.json`, finds the first task whose `passes` is not `true`, and sends that task to its `@assignee`.
-- After a worker finishes, they are expected to update that task's `passes` to `true` and write the summary into `progress_note`; the tracker then advances to the next unfinished task.
+- `start-tracking` watches `todo.json`, room history, and IM bootstrap data.
+- The first task dispatches immediately. Later tasks dispatch only after the previous task both:
+  updates `passes` to `true`, and
+  receives a normal in-room reply from that assignee after the tracker dispatch message.
+- Tool trace messages that start with `🔧` do not count as completion replies.
+- The tracker resolves each gated assignee against real room participant handles; unresolved assignees are treated as tracker errors, not silent skips.
+- While tracking is active, the tracker is the only sequencer. Manager/worker prose should not manually assign the next worker.
 - Worker provisioning and room membership remain explicit steps through `list-workers`, `create-worker`, and `join-worker`.

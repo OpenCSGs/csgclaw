@@ -12,9 +12,10 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib import error, request
+from urllib import error, parse, request
 
 
 DEFAULT_BASE_URL = "http://127.0.0.1:18080"
@@ -125,6 +126,238 @@ def is_process_alive(pid: int) -> bool:
     return True
 
 
+class TrackingError(RuntimeError):
+    """Raised when task tracking cannot make a safe sequencing decision."""
+
+
+def normalize_handle(value: Any) -> str:
+    return str(value or "").strip().lower().removeprefix("@")
+
+
+def parse_created_at(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        created_at = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return created_at.astimezone(timezone.utc)
+
+
+def get_pending_task_index(tasks: list[dict[str, Any]]) -> int | None:
+    for index, task in enumerate(tasks):
+        if not get_task_passes(task):
+            return index
+    return None
+
+
+def is_human_room_reply(message: dict[str, Any]) -> bool:
+    content = str(message.get("content") or "").strip()
+    if not content:
+        return False
+    return not content.startswith("🔧")
+
+
+def find_task_dispatch_message(
+    messages: list[dict[str, Any]],
+    bot_id: str,
+    dispatch_text: str,
+) -> dict[str, Any] | None:
+    expected_sender_id = str(bot_id).strip()
+    expected_content = dispatch_text.strip()
+    for message in messages:
+        sender_id = str(message.get("sender_id") or "").strip()
+        content = str(message.get("content") or "").strip()
+        if sender_id != expected_sender_id or content != expected_content:
+            continue
+        return message
+    return None
+
+
+def has_assignee_reply_after(
+    messages: list[dict[str, Any]],
+    assignee_user_id: str,
+    dispatched_at: datetime,
+) -> bool:
+    for message in messages:
+        sender_id = str(message.get("sender_id") or "").strip()
+        if sender_id != assignee_user_id:
+            continue
+        if not is_human_room_reply(message):
+            continue
+        created_at = parse_created_at(message.get("created_at"))
+        if created_at is None or created_at <= dispatched_at:
+            continue
+        return True
+    return False
+
+
+def get_room_participant_index(bootstrap: dict[str, Any], room_id: str) -> dict[str, dict[str, Any]]:
+    if not isinstance(bootstrap, dict):
+        raise TrackingError("Unexpected bootstrap response while resolving room participants")
+
+    rooms = bootstrap.get("rooms")
+    users = bootstrap.get("users")
+    if not isinstance(rooms, list) or not isinstance(users, list):
+        raise TrackingError("Bootstrap response is missing rooms/users data required for task tracking")
+
+    room: dict[str, Any] | None = None
+    for candidate in rooms:
+        if not isinstance(candidate, dict):
+            continue
+        if str(candidate.get("id") or "").strip() == room_id:
+            room = candidate
+            break
+    if room is None:
+        raise TrackingError(f'Room "{room_id}" was not found in IM bootstrap data')
+
+    participants = room.get("participants")
+    if not isinstance(participants, list):
+        raise TrackingError(f'Room "{room_id}" is missing participant data in IM bootstrap response')
+
+    participant_ids = {str(participant_id).strip() for participant_id in participants if str(participant_id).strip()}
+    index: dict[str, dict[str, Any]] = {}
+    for user in users:
+        if not isinstance(user, dict):
+            continue
+        user_id = str(user.get("id") or "").strip()
+        handle = normalize_handle(user.get("handle"))
+        if user_id in participant_ids and handle:
+            index[handle] = user
+    return index
+
+
+def resolve_room_assignee(bootstrap: dict[str, Any], room_id: str, assignee: Any) -> dict[str, Any]:
+    handle = normalize_handle(assignee)
+    if not handle:
+        raise TrackingError(f'Room "{room_id}" contains a task with an empty assignee handle')
+
+    participants_by_handle = get_room_participant_index(bootstrap, room_id)
+    user = participants_by_handle.get(handle)
+    if user is None:
+        raise TrackingError(
+            f'Task assignee "{assignee}" is not a known participant handle in room "{room_id}"'
+        )
+    return user
+
+
+def build_wait_event(
+    event: str,
+    *,
+    todo_path: str,
+    room_id: str,
+    retry_in_seconds: float,
+    task_id: Any,
+    assignee: Any,
+    pending_task_id: Any | None = None,
+    dispatched_at: Any | None = None,
+) -> dict[str, Any]:
+    output: dict[str, Any] = {
+        "event": event,
+        "todo_path": todo_path,
+        "room_id": room_id,
+        "task_id": task_id,
+        "assignee": assignee,
+        "retry_in_seconds": retry_in_seconds,
+    }
+    if pending_task_id is not None:
+        output["pending_task_id"] = pending_task_id
+    if dispatched_at is not None:
+        output["dispatched_at"] = dispatched_at
+    return output
+
+
+def decide_tracking_action(
+    tasks: list[dict[str, Any]],
+    messages: list[dict[str, Any]],
+    bootstrap: dict[str, Any],
+    *,
+    bot_id: str,
+    room_id: str,
+    mention: str | None,
+    todo_path: str,
+    retry_in_seconds: float,
+) -> dict[str, Any]:
+    pending_index = get_pending_task_index(tasks)
+    if pending_index is None:
+        return {"kind": "complete"}
+
+    pending_task = tasks[pending_index]
+    pending_task_id = pending_task["id"]
+    pending_dispatch_text = build_tracking_message(pending_task, mention, todo_path)
+    pending_dispatch_message = find_task_dispatch_message(messages, bot_id, pending_dispatch_text)
+    if pending_dispatch_message is not None:
+        return {
+            "kind": "wait",
+            "wait_key": f"waiting-for-task-passes:{pending_task_id}",
+            "output": build_wait_event(
+                "waiting-for-task-passes",
+                todo_path=todo_path,
+                room_id=room_id,
+                retry_in_seconds=retry_in_seconds,
+                task_id=pending_task_id,
+                assignee=pending_task.get("assignee"),
+                dispatched_at=pending_dispatch_message.get("created_at"),
+            ),
+        }
+
+    if pending_index == 0:
+        return {
+            "kind": "dispatch",
+            "task": pending_task,
+            "text": pending_dispatch_text,
+        }
+
+    completed_task = tasks[pending_index - 1]
+    completed_task_id = completed_task["id"]
+    completed_dispatch_text = build_tracking_message(completed_task, mention, todo_path)
+    completed_dispatch_message = find_task_dispatch_message(messages, bot_id, completed_dispatch_text)
+    if completed_dispatch_message is None:
+        raise TrackingError(
+            f'Task {completed_task_id} is already marked passed, but no tracker dispatch message was found in room "{room_id}"'
+        )
+
+    completed_dispatch_at = parse_created_at(completed_dispatch_message.get("created_at"))
+    if completed_dispatch_at is None:
+        raise TrackingError(
+            f'Task {completed_task_id} has a tracker dispatch message with an invalid created_at timestamp'
+        )
+
+    assignee_user = resolve_room_assignee(bootstrap, room_id, completed_task.get("assignee"))
+    assignee_user_id = str(assignee_user.get("id") or "").strip()
+    if not assignee_user_id:
+        raise TrackingError(
+            f'Task assignee "{completed_task.get("assignee")}" in room "{room_id}" is missing a user id'
+        )
+
+    if not has_assignee_reply_after(messages, assignee_user_id, completed_dispatch_at):
+        return {
+            "kind": "wait",
+            "wait_key": f"waiting-for-assignee-reply:{completed_task_id}",
+            "output": build_wait_event(
+                "waiting-for-assignee-reply",
+                todo_path=todo_path,
+                room_id=room_id,
+                retry_in_seconds=retry_in_seconds,
+                task_id=completed_task_id,
+                assignee=completed_task.get("assignee"),
+                pending_task_id=pending_task_id,
+                dispatched_at=completed_dispatch_message.get("created_at"),
+            ),
+        }
+
+    return {
+        "kind": "dispatch",
+        "task": pending_task,
+        "text": pending_dispatch_text,
+    }
+
+
 class CSGClawAPI:
     def __init__(self, base_url: str, token: str | None, timeout: float, dry_run: bool) -> None:
         self.base_url = base_url.rstrip("/")
@@ -138,7 +371,7 @@ class CSGClawAPI:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
 
-    def request_json(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    def request_json(self, method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
         url = build_url(self.base_url, path)
         body = None if payload is None else json.dumps(payload).encode("utf-8")
 
@@ -171,6 +404,12 @@ class CSGClawAPI:
         payload: dict[str, Any] | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         if method == "GET" and path == "/api/v1/workers":
+            return []
+
+        if method == "GET" and path == "/api/v1/im/bootstrap":
+            return {"current_user_id": "u-admin", "users": [], "rooms": []}
+
+        if method == "GET" and path.startswith("/api/v1/messages?"):
             return []
 
         result: dict[str, Any] = {
@@ -253,6 +492,19 @@ class CSGClawAPI:
             {"room_id": room_id, "text": text},
         )
 
+    def get_bootstrap(self) -> dict[str, Any]:
+        data = self.request_json("GET", "/api/v1/im/bootstrap")
+        if isinstance(data, dict):
+            return data
+        raise SystemExit(f"Unexpected bootstrap response: {json.dumps(data, ensure_ascii=False)}")
+
+    def list_messages(self, room_id: str) -> list[dict[str, Any]]:
+        query = parse.urlencode({"room_id": room_id})
+        data = self.request_json("GET", f"/api/v1/messages?{query}")
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        raise SystemExit(f"Unexpected message list response: {json.dumps(data, ensure_ascii=False)}")
+
 
 def build_assignment_text(worker_name: str, task: str, mention: str | None) -> str:
     custom_mention = (mention or "").strip()
@@ -321,7 +573,8 @@ def summarize_task(task: dict[str, Any]) -> str:
         lines.append(f"Progress note: {progress_note}")
     if isinstance(passes, bool):
         lines.append(f"Passes: {'true' if passes else 'false'}")
-    lines.append("完成后请用 @manager 回复结果、阻塞或交接信息。")
+    lines.append("完成后请在房间内用 @manager 回复结果、阻塞或交接信息。")
+    lines.append("不要手动通知下一位执行者，tracker 会在你回复且 todo.json 更新后自动继续。")
     return "\n".join(lines)
 
 
@@ -333,6 +586,8 @@ def build_tracking_message(task: dict[str, Any], mention: str | None, todo_path:
     task_message = (
         f"请根据{todo_path}处理任务{task_id}。"
         "完成后请将对应任务的passes更新为true，并将进展备注写到progress_note字段。"
+        "同时请在当前房间回复 @manager 结果或阻塞说明。"
+        "不要手动通知下一位执行者；tracker 会在你回复且 todo.json 更新后自动分派后续任务。"
     )
     return build_assignment_text(assignee, task_message, mention)
 
@@ -454,9 +709,9 @@ def cmd_start_tracking(args: argparse.Namespace) -> int:
 
 def cmd_run_tracking(args: argparse.Namespace) -> int:
     api = load_api(args)
-    last_sent_task_id: str | None = None
     read_error_streak = 0
     last_read_error: str | None = None
+    last_wait_key: str | None = None
     terminated = False
 
     def handle_termination(signum: int, _frame: Any) -> None:
@@ -513,9 +768,18 @@ def cmd_run_tracking(args: argparse.Namespace) -> int:
                 read_error_streak = 0
                 last_read_error = None
 
-            pending_task = get_pending_task(tasks)
+            decision = decide_tracking_action(
+                tasks,
+                api.list_messages(args.room_id),
+                api.get_bootstrap(),
+                bot_id=args.bot_id,
+                room_id=args.room_id,
+                mention=args.mention,
+                todo_path=args.todo_path,
+                retry_in_seconds=args.interval,
+            )
 
-            if pending_task is None:
+            if decision["kind"] == "complete":
                 output = {
                     "event": "all-complete",
                     "todo_path": args.todo_path,
@@ -530,25 +794,38 @@ def cmd_run_tracking(args: argparse.Namespace) -> int:
                 print(json.dumps(output, ensure_ascii=False, indent=2), flush=True)
                 return 0
 
-            pending_task_id = str(pending_task["id"])
-            should_dispatch = pending_task_id != last_sent_task_id
-            if should_dispatch:
-                text = build_tracking_message(pending_task, args.mention, args.todo_path)
-                result = api.send_bot_message(args.bot_id, args.room_id, text)
-                output = {
-                    "event": "dispatched",
-                    "task_id": pending_task["id"],
-                    "assignee": pending_task["assignee"],
-                    "todo_path": args.todo_path,
-                    "message": result,
-                    "text": text,
-                }
-                print(json.dumps(output, ensure_ascii=False, indent=2), flush=True)
-                last_sent_task_id = pending_task_id
+            if decision["kind"] == "wait":
+                wait_key = str(decision["wait_key"])
+                if wait_key != last_wait_key:
+                    print(json.dumps(decision["output"], ensure_ascii=False, indent=2), flush=True)
+                    last_wait_key = wait_key
                 if args.once:
                     return 0
+                time.sleep(args.interval)
+                continue
+
+            if decision["kind"] != "dispatch":
+                raise SystemExit(f'Unexpected tracking decision: {decision["kind"]}')
+
+            pending_task = decision["task"]
+            text = str(decision["text"])
+            result = api.send_bot_message(args.bot_id, args.room_id, text)
+            output = {
+                "event": "dispatched",
+                "task_id": pending_task["id"],
+                "assignee": pending_task["assignee"],
+                "todo_path": args.todo_path,
+                "message": result,
+                "text": text,
+            }
+            print(json.dumps(output, ensure_ascii=False, indent=2), flush=True)
+            last_wait_key = None
+            if args.once:
+                return 0
 
             time.sleep(args.interval)
+    except TrackingError as exc:
+        raise SystemExit(str(exc)) from exc
     finally:
         remove_tracking_state(args.todo_path)
 

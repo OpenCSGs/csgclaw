@@ -89,7 +89,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	id := fs.String("id", "", "agent id")
 	name := fs.String("name", "", "agent name")
 	description := fs.String("description", "", "agent description")
-	modelID := fs.String("model-id", "", "agent model identifier")
+	profile := fs.String("profile", "", "agent llm profile")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		ID:          *id,
 		Name:        *name,
 		Description: *description,
-		ModelID:     *modelID,
+		Profile:     *profile,
 	})
 	if err != nil {
 		return err

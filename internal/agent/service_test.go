@@ -16,8 +16,17 @@ import (
 	"csgclaw/internal/config"
 )
 
+func testModelConfig() config.ModelConfig {
+	return config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  "http://127.0.0.1:4000",
+		APIKey:   "sk-test",
+		ModelID:  "model-1",
+	}
+}
+
 func TestCreateWorkerRejectsReservedManagerName(t *testing.T) {
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -35,7 +44,7 @@ func TestCreateWorkerRejectsReservedManagerName(t *testing.T) {
 }
 
 func TestCreateWorkerRejectsDuplicateName(t *testing.T) {
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -67,7 +76,7 @@ func TestCreateWorkerRejectsInvalidRuntime(t *testing.T) {
 	)
 	defer ResetTestHooks()
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -92,7 +101,7 @@ func TestRuntimeValidRejectsNilAndZeroValue(t *testing.T) {
 }
 
 func TestListWorkersFiltersUnifiedAgents(t *testing.T) {
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -142,7 +151,7 @@ func TestLoadMigratesLegacyWorkersIntoAgents(t *testing.T) {
 }
 
 func TestDeleteRejectsManagerAgent(t *testing.T) {
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -214,7 +223,7 @@ func TestDeleteRemovesAgentHomeDirectory(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -271,7 +280,7 @@ func TestDeletePrefersBoxIDOverName(t *testing.T) {
 		testForceRemoveBoxHook = nil
 	}()
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -320,7 +329,7 @@ func TestDeleteFallsBackToNameWhenStoredBoxIDIsStale(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -377,7 +386,7 @@ func TestDeleteRemovesRuntimeCacheByHomeDir(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -409,7 +418,7 @@ func TestDeleteRemovesRuntimeCacheByHomeDir(t *testing.T) {
 func TestCreateWorkerStoresBoxID(t *testing.T) {
 	SetTestHooks(
 		func(_ *Service, _ string) (*boxlite.Runtime, error) { return nil, nil },
-		func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			return nil, &boxlite.BoxInfo{
 				ID:        "box-" + name,
 				Name:      name,
@@ -421,7 +430,7 @@ func TestCreateWorkerStoresBoxID(t *testing.T) {
 	)
 	defer ResetTestHooks()
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -435,11 +444,63 @@ func TestCreateWorkerStoresBoxID(t *testing.T) {
 	}
 }
 
+func TestCreateWorkerStoresResolvedProfileSnapshot(t *testing.T) {
+	SetTestHooks(
+		func(_ *Service, _ string) (*boxlite.Runtime, error) { return nil, nil },
+		func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
+			return nil, &boxlite.BoxInfo{
+				ID:        "box-" + name,
+				Name:      name,
+				State:     boxlite.StateRunning,
+				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+				Image:     "test-image",
+			}, nil
+		},
+	)
+	defer ResetTestHooks()
+
+	svc, err := NewServiceWithLLM(config.LLMConfig{
+		DefaultProfile: "remote-main",
+		Profiles: map[string]config.ModelConfig{
+			"remote-main": {
+				Provider:        config.ProviderLLMAPI,
+				BaseURL:         "https://example.test/v1",
+				APIKey:          "sk-test",
+				ModelID:         "gpt-5.4",
+				ReasoningEffort: "medium",
+			},
+		},
+	}, config.ServerConfig{}, "", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.CreateWorker(context.Background(), CreateRequest{
+		Name:    "alice",
+		Profile: "remote-main",
+	})
+	if err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
+	}
+	if got.Profile != "remote-main" {
+		t.Fatalf("CreateWorker().Profile = %q, want %q", got.Profile, "remote-main")
+	}
+	if got.Provider != config.ProviderLLMAPI {
+		t.Fatalf("CreateWorker().Provider = %q, want %q", got.Provider, config.ProviderLLMAPI)
+	}
+	if got.ModelID != "gpt-5.4" {
+		t.Fatalf("CreateWorker().ModelID = %q, want %q", got.ModelID, "gpt-5.4")
+	}
+	if got.ReasoningEffort != "medium" {
+		t.Fatalf("CreateWorker().ReasoningEffort = %q, want %q", got.ReasoningEffort, "medium")
+	}
+}
+
 func TestCreateWorkerClosesBoxHandleAfterCreate(t *testing.T) {
 	rt := &boxlite.Runtime{}
 	SetTestHooks(
 		func(_ *Service, _ string) (*boxlite.Runtime, error) { return rt, nil },
-		func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			return &boxlite.Box{}, &boxlite.BoxInfo{
 				ID:        "box-" + name,
 				Name:      name,
@@ -465,7 +526,7 @@ func TestCreateWorkerClosesBoxHandleAfterCreate(t *testing.T) {
 		return nil
 	}
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -508,7 +569,7 @@ func TestStreamLogsUsesStoredBoxIDAndTailArgs(t *testing.T) {
 		testRunBoxCommandHook = nil
 	}()
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -654,7 +715,7 @@ func TestCreateClosesBoxHandleAfterCreate(t *testing.T) {
 func TestEnsureBootstrapStateForceRecreatePrefersStoredManagerBoxID(t *testing.T) {
 	SetTestHooks(
 		func(_ *Service, _ string) (*boxlite.Runtime, error) { return &boxlite.Runtime{}, nil },
-		func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			return &boxlite.Box{}, &boxlite.BoxInfo{
 				ID:        "box-new",
 				Name:      name,
@@ -719,11 +780,101 @@ func TestEnsureBootstrapStateForceRecreatePrefersStoredManagerBoxID(t *testing.T
 	}
 }
 
+func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	runtimeHome, err := boxRuntimeHome(ManagerName)
+	if err != nil {
+		t.Fatalf("boxRuntimeHome() error = %v", err)
+	}
+	managerHome, err := agentHomeDir(ManagerName)
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
+	stalePath := filepath.Join(managerHome, "stale.txt")
+	if err := os.MkdirAll(managerHome, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(stalePath, []byte("stale"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var ensuredHomes []string
+	var closeRuntimeCalls int
+	testEnsureRuntimeAtHomeHook = func(_ *Service, home string) (*boxlite.Runtime, error) {
+		ensuredHomes = append(ensuredHomes, home)
+		return &boxlite.Runtime{}, nil
+	}
+	testGetBoxHook = func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string) (*boxlite.Box, error) {
+		return nil, &boxlite.Error{Code: boxlite.ErrNotFound, Message: "missing"}
+	}
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string) error {
+		return nil
+	}
+	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+			t.Fatalf("stale manager file still exists before recreate: err=%v", err)
+		}
+		return &boxlite.Box{}, &boxlite.BoxInfo{
+			ID:        "box-new",
+			Name:      name,
+			State:     boxlite.StateRunning,
+			CreatedAt: time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
+			Image:     "test-image",
+		}, nil
+	}
+	testCloseRuntimeHook = func(_ *Service, gotHome string, _ *boxlite.Runtime) error {
+		closeRuntimeCalls++
+		if gotHome != runtimeHome {
+			t.Fatalf("closeRuntime() home = %q, want %q", gotHome, runtimeHome)
+		}
+		return nil
+	}
+	defer ResetTestHooks()
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agents.json")
+	data, err := json.Marshal(persistedState{
+		Agents: []Agent{
+			{
+				ID:        ManagerUserID,
+				Name:      ManagerName,
+				Role:      RoleManager,
+				BoxID:     "box-old",
+				Status:    "running",
+				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(statePath, data, 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	if err := EnsureBootstrapState(context.Background(), statePath, config.ServerConfig{}, config.ModelConfig{}, "", true); err != nil {
+		t.Fatalf("EnsureBootstrapState() error = %v", err)
+	}
+	if got, want := len(ensuredHomes), 2; got != want {
+		t.Fatalf("ensureRuntimeAtHome() calls = %d, want %d", got, want)
+	}
+	for _, gotHome := range ensuredHomes {
+		if gotHome != runtimeHome {
+			t.Fatalf("ensureRuntimeAtHome() home = %q, want %q", gotHome, runtimeHome)
+		}
+	}
+	if closeRuntimeCalls != 2 {
+		t.Fatalf("closeRuntime() calls = %d, want %d", closeRuntimeCalls, 2)
+	}
+}
+
 func TestEnsureBootstrapStateClosesManagerBoxHandleAfterCreate(t *testing.T) {
 	rt := &boxlite.Runtime{}
 	SetTestHooks(
 		func(_ *Service, _ string) (*boxlite.Runtime, error) { return rt, nil },
-		func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			return &boxlite.Box{}, &boxlite.BoxInfo{
 				ID:        "box-" + name,
 				Name:      name,
@@ -788,7 +939,7 @@ func TestEnsureBootstrapStateReusesStoredManagerBoxIDWithoutForce(t *testing.T) 
 	}
 
 	var created bool
-	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, _ string, _, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ *boxlite.Runtime, _ string, _ string, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 		created = true
 		return nil, nil, nil
 	}
@@ -951,11 +1102,8 @@ func TestPicoclawBoxEnvVars(t *testing.T) {
 		"http://10.0.0.8:18080",
 		"shared-token",
 		"u-worker-1",
-		config.ModelConfig{
-			BaseURL: "http://127.0.0.1:4000",
-			APIKey:  "sk-test",
-			ModelID: "minimax-m2.7",
-		},
+		"http://10.0.0.8:18080/api/bots/u-worker-1/llm",
+		"minimax-m2.7",
 	)
 
 	wants := map[string]string{
@@ -964,11 +1112,17 @@ func TestPicoclawBoxEnvVars(t *testing.T) {
 		"PICOCLAW_CHANNELS_CSGCLAW_BASE_URL":     "http://10.0.0.8:18080",
 		"PICOCLAW_CHANNELS_CSGCLAW_ACCESS_TOKEN": "shared-token",
 		"PICOCLAW_CHANNELS_CSGCLAW_BOT_ID":       "u-worker-1",
+		"CSGCLAW_LLM_BASE_URL":                   "http://10.0.0.8:18080/api/bots/u-worker-1/llm",
+		"CSGCLAW_LLM_API_KEY":                    "shared-token",
+		"CSGCLAW_LLM_MODEL_ID":                   "minimax-m2.7",
+		"OPENAI_BASE_URL":                        "http://10.0.0.8:18080/api/bots/u-worker-1/llm",
+		"OPENAI_API_KEY":                         "shared-token",
+		"OPENAI_MODEL":                           "minimax-m2.7",
 		"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME":    "minimax-m2.7",
 		"PICOCLAW_CUSTOM_MODEL_NAME":             "minimax-m2.7",
 		"PICOCLAW_CUSTOM_MODEL_ID":               "minimax-m2.7",
-		"PICOCLAW_CUSTOM_MODEL_API_KEY":          "sk-test",
-		"PICOCLAW_CUSTOM_MODEL_BASE_URL":         "http://127.0.0.1:4000",
+		"PICOCLAW_CUSTOM_MODEL_API_KEY":          "shared-token",
+		"PICOCLAW_CUSTOM_MODEL_BASE_URL":         "http://10.0.0.8:18080/api/bots/u-worker-1/llm",
 	}
 	for key, want := range wants {
 		if got[key] != want {

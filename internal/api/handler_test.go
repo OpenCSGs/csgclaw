@@ -19,6 +19,7 @@ import (
 	"csgclaw/internal/channel"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
+	"csgclaw/internal/llm"
 )
 
 func TestParsePicoClawBotPath(t *testing.T) {
@@ -30,6 +31,10 @@ func TestParsePicoClawBotPath(t *testing.T) {
 	}{
 		{path: "/api/bots/u-manager/events", wantBotID: "u-manager", wantAction: "events", wantOK: true},
 		{path: "/api/bots/u-manager/messages/send", wantBotID: "u-manager", wantAction: "messages/send", wantOK: true},
+		{path: "/api/bots/u-manager/llm/models", wantBotID: "u-manager", wantAction: "llm/models", wantOK: true},
+		{path: "/api/bots/u-manager/llm/v1/models", wantBotID: "u-manager", wantAction: "llm/v1/models", wantOK: true},
+		{path: "/api/bots/u-manager/llm/chat/completions", wantBotID: "u-manager", wantAction: "llm/chat/completions", wantOK: true},
+		{path: "/api/bots/u-manager/llm/v1/chat/completions", wantBotID: "u-manager", wantAction: "llm/v1/chat/completions", wantOK: true},
 		{path: "/api/bots/u-manager", wantOK: false},
 		{path: "/api/v1/bots/u-manager/events", wantOK: false},
 		{path: "/api/bots//events", wantOK: false},
@@ -325,7 +330,7 @@ func TestHandleBotsListRequiresService(t *testing.T) {
 func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 	agent.SetTestHooks(
 		func(_ *agent.Service, _ string) (*boxlite.Runtime, error) { return nil, nil },
-		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			return nil, &boxlite.BoxInfo{
 				ID:        "box-" + name,
 				State:     boxlite.StateRunning,
@@ -412,7 +417,7 @@ func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 func TestHandleBotsCreateFeishuWorker(t *testing.T) {
 	agent.SetTestHooks(
 		func(_ *agent.Service, _ string) (*boxlite.Runtime, error) { return nil, nil },
-		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			return nil, &boxlite.BoxInfo{
 				ID:        "box-" + name,
 				State:     boxlite.StateRunning,
@@ -527,7 +532,7 @@ func TestHandleBotsCreateCSGClawManagerBindsBootstrappedAgent(t *testing.T) {
 func TestHandleBotsCreateManagerBootstrapsMissingAgent(t *testing.T) {
 	agent.SetTestHooks(
 		func(_ *agent.Service, _ string) (*boxlite.Runtime, error) { return &boxlite.Runtime{}, nil },
-		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, botID, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, botID string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			if name != agent.ManagerName {
 				t.Fatalf("create gateway name = %q, want manager", name)
 			}
@@ -824,7 +829,7 @@ func TestHandleAgentsDeleteNotFound(t *testing.T) {
 func TestHandleAgentsCreateUsesWorkerCompatibilityFlow(t *testing.T) {
 	agent.SetTestHooks(
 		func(_ *agent.Service, _ string) (*boxlite.Runtime, error) { return nil, nil },
-		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			return nil, &boxlite.BoxInfo{
 				State:     boxlite.StateRunning,
 				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
@@ -1012,7 +1017,7 @@ func TestHandleRoomsInviteRequiresRoomID(t *testing.T) {
 func TestHandleWorkersPostRemainsCreateAlias(t *testing.T) {
 	agent.SetTestHooks(
 		func(_ *agent.Service, _ string) (*boxlite.Runtime, error) { return nil, nil },
-		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _, _ string) (*boxlite.Box, *boxlite.BoxInfo, error) {
+		func(_ *agent.Service, _ context.Context, _ *boxlite.Runtime, _ string, name, _ string, _ config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
 			return nil, &boxlite.BoxInfo{
 				State:     boxlite.StateRunning,
 				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
@@ -1545,10 +1550,119 @@ func TestHandlePicoClawSendMessageRequiresIMService(t *testing.T) {
 	}
 }
 
+func TestHandlePicoClawModelsReturnsBridgeCatalog(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agents.json")
+	agents := []agent.Agent{
+		{
+			ID:        agent.ManagerUserID,
+			Name:      agent.ManagerName,
+			Role:      agent.RoleManager,
+			Profile:   config.DefaultLLMProfile,
+			Provider:  config.ProviderLLMAPI,
+			ModelID:   "gpt-5.4",
+			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	}
+	if err := writeSeededAgents(statePath, agents); err != nil {
+		t.Fatalf("writeSeededAgents() error = %v", err)
+	}
+	svc, err := agent.NewServiceWithLLM(config.SingleProfileLLM(config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  "http://127.0.0.1:4000",
+		APIKey:   "sk-test",
+		ModelID:  "gpt-5.4",
+	}), config.ServerConfig{}, "", statePath)
+	if err != nil {
+		t.Fatalf("NewServiceWithLLM() error = %v", err)
+	}
+	bridge := llm.NewService(config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  "http://127.0.0.1:4000",
+		APIKey:   "sk-test",
+		ModelID:  "gpt-5.4",
+	}, svc)
+
+	srv := &Handler{
+		svc:      svc,
+		picoclaw: im.NewPicoClawBridge("secret"),
+		llm:      bridge,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/bots/u-manager/llm/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"id":"gpt-5.4"`) {
+		t.Fatalf("body = %s, want model catalog", rec.Body.String())
+	}
+}
+
+func TestHandlePicoClawModelsLegacyRouteReturnsBridgeCatalog(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agents.json")
+	agents := []agent.Agent{
+		{
+			ID:        agent.ManagerUserID,
+			Name:      agent.ManagerName,
+			Role:      agent.RoleManager,
+			Profile:   config.DefaultLLMProfile,
+			Provider:  config.ProviderLLMAPI,
+			ModelID:   "gpt-5.4",
+			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	}
+	if err := writeSeededAgents(statePath, agents); err != nil {
+		t.Fatalf("writeSeededAgents() error = %v", err)
+	}
+	svc, err := agent.NewServiceWithLLM(config.SingleProfileLLM(config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  "http://127.0.0.1:4000",
+		APIKey:   "sk-test",
+		ModelID:  "gpt-5.4",
+	}), config.ServerConfig{}, "", statePath)
+	if err != nil {
+		t.Fatalf("NewServiceWithLLM() error = %v", err)
+	}
+	bridge := llm.NewService(config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  "http://127.0.0.1:4000",
+		APIKey:   "sk-test",
+		ModelID:  "gpt-5.4",
+	}, svc)
+
+	srv := &Handler{
+		svc:      svc,
+		picoclaw: im.NewPicoClawBridge("secret"),
+		llm:      bridge,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/bots/u-manager/llm/models", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"id":"gpt-5.4"`) {
+		t.Fatalf("body = %s, want model catalog", rec.Body.String())
+	}
+}
+
 func mustNewService(t *testing.T) *agent.Service {
 	t.Helper()
 
-	svc, err := agent.NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := agent.NewService(config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  "http://127.0.0.1:4000",
+		APIKey:   "sk-test",
+		ModelID:  "model-1",
+	}, config.ServerConfig{}, "", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
