@@ -34,13 +34,13 @@ go build ./cmd/csgclaw
 ## 快速开始
 
 ```bash
-csgclaw onboard --profile default --default-profile default --base-url <url> --api-key <key> --model-id <model> [--reasoning-effort <effort>]
+csgclaw onboard --provider default --model-id <model> --base-url <url> --api-key <key> [--default <provider.model>]
 csgclaw serve
 ```
 
 执行后 CLI 会打印访问地址（例如 `http://127.0.0.1:18080/`），在浏览器中打开即可进入 IM 工作区。
 
-## LLM Profile 配置示例
+## Model Provider 配置示例
 
 ### 远程 LLM API
 
@@ -50,15 +50,13 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
 
-[llm]
-default_profile = "remote-main"
+[models]
+default = "remote.gpt-5.4"
 
-[llm.profiles.remote-main]
-provider = "llm-api"
+[models.providers.remote]
 base_url = "https://api.openai.com/v1"
 api_key = "sk-your-api-key"
-model_id = "gpt-5.4"
-reasoning_effort = "medium"
+models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image = "ghcr.io/russellluo/picoclaw:2026.4.8.1"
@@ -72,15 +70,13 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
 
-[llm]
-default_profile = "codex-main"
+[models]
+default = "codex.gpt-5.4"
 
-[llm.profiles.codex-main]
-provider = "llm-api"
+[models.providers.codex]
 base_url = "http://127.0.0.1:8317/v1"
 api_key = "local"
-model_id = "gpt-5.4"
-reasoning_effort = "medium"
+models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image = "ghcr.io/russellluo/picoclaw:2026.4.8.1"
@@ -93,7 +89,7 @@ manager_image = "ghcr.io/russellluo/picoclaw:2026.4.8.1"
   "id": "u-reviewer",
   "name": "reviewer",
   "description": "code review worker",
-  "profile": "codex-main",
+  "profile": "codex.gpt-5.4",
   "role": "worker"
 }
 ```

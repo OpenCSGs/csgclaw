@@ -3,7 +3,6 @@ package api
 import "net/http"
 
 func (h *Handler) Routes() *http.ServeMux {
-	// step 6.0 Register one route tree for the browser/UI API and a second route tree for PicoClaw bot callbacks.
 	mux := http.NewServeMux()
 	h.registerCoreRoutes(mux)
 	h.registerChannelRoutes(mux)
@@ -12,10 +11,6 @@ func (h *Handler) Routes() *http.ServeMux {
 }
 
 func (h *Handler) registerCoreRoutes(mux *http.ServeMux) {
-	// step 6.1 Core routes serve three clients:
-	// step 6.1.1 CLI commands under /api/v1/agents, /rooms, /users
-	// step 6.1.2 browser bootstrap/SSE under /api/v1/bootstrap and /api/v1/events
-	// step 6.1.3 compatibility aliases under /api/v1/im/*.
 	mux.HandleFunc("/healthz", h.handleHealthz)
 	mux.HandleFunc("/api/v1/bots", h.handleBots)
 	mux.HandleFunc("/api/v1/agents", h.handleAgents)

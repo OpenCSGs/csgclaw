@@ -119,7 +119,10 @@ func NewServiceWithLLMAndChannels(llmCfg config.LLMConfig, server config.ServerC
 	}
 	defaultProfile, model, err := llmCfg.Resolve("")
 	if err != nil {
-		defaultProfile = llmCfg.EffectiveDefaultProfile()
+		defaultProfile = strings.TrimSpace(llmCfg.Normalized().Default)
+		if defaultProfile == "" {
+			defaultProfile = strings.TrimSpace(llmCfg.Normalized().DefaultProfile)
+		}
 		model = config.ModelConfig{}.Resolved()
 	}
 	svc := &Service{
@@ -499,9 +502,6 @@ func (s *Service) refreshAgentBoxID(id string, got Agent, resolvedKey string, bo
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
-	// step 8.4 Deletion removes both layers:
-	// step 8.4.1 the Boxlite box/runtime home
-	// step 8.4.2 the persisted agent registry entry.
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return fmt.Errorf("agent id is required")
@@ -572,10 +572,6 @@ func (s *Service) List() []Agent {
 }
 
 func (s *Service) CreateWorker(ctx context.Context, req CreateRequest) (Agent, error) {
-	// step 8.2 Create the current worker form of an agent:
-	// step 8.2.1 reserve a unique id/name
-	// step 8.2.2 create a gateway box
-	// step 8.2.3 persist the worker metadata.
 	id := strings.TrimSpace(req.ID)
 	name := strings.TrimSpace(req.Name)
 	description := strings.TrimSpace(req.Description)
@@ -619,8 +615,6 @@ func (s *Service) CreateWorker(ctx context.Context, req CreateRequest) (Agent, e
 	if err != nil {
 		return Agent{}, err
 	}
-
-	// step 8.2.2 Workers currently reuse the manager image and run the same gateway-style runtime.
 	box, info, err := s.createGatewayBox(ctx, rt, s.managerImage, name, id, resolvedModel)
 	if err != nil {
 		return Agent{}, fmt.Errorf("create worker box: %w", err)
@@ -675,7 +669,6 @@ func (s *Service) ListWorkers() []Agent {
 }
 
 func (s *Service) StreamLogs(ctx context.Context, id string, follow bool, lines int, w io.Writer) error {
-	// step 8.3 Agent logs are not stored separately by CSGClaw; we tail the gateway log from inside the box.
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return fmt.Errorf("agent id is required")

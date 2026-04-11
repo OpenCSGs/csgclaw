@@ -399,12 +399,12 @@ listen_addr = %q
 advertise_base_url = %q
 access_token = %q
 
-[llm]
-default_profile = %q
-
 [bootstrap]
 manager_image = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), llmCfg.EffectiveDefaultProfile(), cfg.Bootstrap.ManagerImage) + formatEffectiveProfiles(llmCfg)
+
+[models]
+default = %q
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Bootstrap.ManagerImage, llmCfg.DefaultSelector()) + formatEffectiveProviders(llmCfg)
 
 	if strings.TrimSpace(cfg.Channels.FeishuAdminOpenID) != "" {
 		content += fmt.Sprintf(`
@@ -454,11 +454,11 @@ func validateModelConfig(cfg config.Config) error {
 		var validationErr *config.ModelValidationError
 		if errors.As(err, &validationErr) && len(validationErr.MissingFields) > 0 {
 			return fmt.Errorf(
-				"llm config is incomplete (%s); run `csgclaw onboard --profile <name> --model-id <model> [--base-url <url>] [--api-key <key>] [--reasoning-effort <effort>] [--default-profile <name>]`",
+				"models config is incomplete (%s); run `csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]`",
 				strings.Join(missingModelFlags(validationErr.MissingFields), ", "),
 			)
 		}
-		return fmt.Errorf("llm config is invalid: %w", err)
+		return fmt.Errorf("models config is invalid: %w", err)
 	}
 	return nil
 }
@@ -472,11 +472,9 @@ func missingModelFlags(fields []string) []string {
 		case "api_key":
 			flags = append(flags, "--api-key")
 		case "model_id":
-			flags = append(flags, "--model-id")
-		case "provider":
-			flags = append(flags, "--provider")
-		case "default_profile":
-			flags = append(flags, "--default-profile")
+			flags = append(flags, "--models")
+		case "default", "default_profile":
+			flags = append(flags, "models.default")
 		default:
 			flags = append(flags, field)
 		}
@@ -532,38 +530,64 @@ func newLLMService(cfg config.Config, svc *agent.Service) (*llm.Service, error) 
 	if svc == nil {
 		return nil, nil
 	}
-	return llm.NewService(cfg.Model, svc), nil
+	_, modelCfg, err := effectiveLLMConfig(cfg).Resolve("")
+	if err != nil {
+		return nil, err
+	}
+	return llm.NewService(modelCfg, svc), nil
 }
 
 func effectiveLLMConfig(cfg config.Config) config.LLMConfig {
-	if len(cfg.LLM.Profiles) != 0 || strings.TrimSpace(cfg.LLM.DefaultProfile) != "" {
+	if !cfg.Models.IsZero() {
+		return cfg.Models.Normalized()
+	}
+	if !cfg.LLM.IsZero() {
 		return cfg.LLM.Normalized()
 	}
 	return config.SingleProfileLLM(cfg.Model)
 }
 
-func formatEffectiveProfiles(llmCfg config.LLMConfig) string {
+func formatEffectiveProviders(llmCfg config.LLMConfig) string {
 	llmCfg = llmCfg.Normalized()
 	var b strings.Builder
-	for _, name := range sortedProfileNames(llmCfg.Profiles) {
-		profile := llmCfg.Profiles[name].Resolved()
+	for _, name := range sortedProviderNames(llmCfg.Providers) {
+		provider := llmCfg.Providers[name].Resolved()
 		fmt.Fprintf(&b, `
-[llm.profiles.%s]
-provider = %q
+[models.providers.%s]
 base_url = %q
 api_key = %q
-model_id = %q
-reasoning_effort = %q
-`, name, profile.EffectiveProvider(), profile.BaseURL, partiallyMaskSecret(profile.APIKey), profile.ModelID, profile.ReasoningEffort)
+models = %s
+`, name, provider.BaseURL, partiallyMaskSecret(provider.APIKey), formatModelList(provider.Models))
+		if provider.ReasoningEffort != "" {
+			fmt.Fprintf(&b, "reasoning_effort = %q\n", provider.ReasoningEffort)
+		}
 	}
 	return b.String()
 }
 
-func sortedProfileNames(profiles map[string]config.ModelConfig) []string {
-	names := make([]string, 0, len(profiles))
-	for name := range profiles {
+func sortedProviderNames(providers map[string]config.ProviderConfig) []string {
+	names := make([]string, 0, len(providers))
+	for name := range providers {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	return names
+}
+
+func formatModelList(models []string) string {
+	if len(models) == 0 {
+		return "[]"
+	}
+	quoted := make([]string, 0, len(models))
+	for _, modelID := range models {
+		modelID = strings.TrimSpace(modelID)
+		if modelID == "" {
+			continue
+		}
+		quoted = append(quoted, strconv.Quote(modelID))
+	}
+	if len(quoted) == 0 {
+		return "[]"
+	}
+	return "[" + strings.Join(quoted, ", ") + "]"
 }

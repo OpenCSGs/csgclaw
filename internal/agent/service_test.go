@@ -482,8 +482,8 @@ func TestCreateWorkerStoresResolvedProfileSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWorker() error = %v", err)
 	}
-	if got.Profile != "remote-main" {
-		t.Fatalf("CreateWorker().Profile = %q, want %q", got.Profile, "remote-main")
+	if got.Profile != "remote-main.gpt-5.4" {
+		t.Fatalf("CreateWorker().Profile = %q, want %q", got.Profile, "remote-main.gpt-5.4")
 	}
 	if got.Provider != config.ProviderLLMAPI {
 		t.Fatalf("CreateWorker().Provider = %q, want %q", got.Provider, config.ProviderLLMAPI)

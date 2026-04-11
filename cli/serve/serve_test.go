@@ -96,6 +96,11 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 			APIKey:   "sk-secret",
 			ModelID:  "model-test",
 		},
+		Models: config.SingleProfileLLM(config.ModelConfig{
+			BaseURL: "http://llm.test",
+			APIKey:  "sk-secret",
+			ModelID: "model-test",
+		}),
 		Bootstrap: config.BootstrapConfig{
 			ManagerImage: "ghcr.io/example/manager:latest",
 		},
@@ -127,12 +132,14 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		`advertise_base_url = "http://example.test"`,
 		`api_key = "sk*****et"`,
 		`access_token = "pc*****et"`,
+		`[models]`,
+		`default = "default.model-test"`,
+		`[models.providers.default]`,
 		`[channels.feishu]`,
 		`admin_open_id = "ou_admin"`,
 		`[channels.feishu.manager]`,
 		`app_id = "cli_manager"`,
 		`app_secret = "ma**********et"`,
-		`provider = "llm-api"`,
 		"CSGClaw IM is available at: http://example.test/",
 	} {
 		if !strings.Contains(got, want) {
@@ -201,7 +208,7 @@ func TestValidateModelConfigRequiresOnboardWhenIncomplete(t *testing.T) {
 	if !strings.Contains(err.Error(), "csgclaw onboard") {
 		t.Fatalf("validateModelConfig() error = %q, want onboard guidance", err)
 	}
-	if !strings.Contains(err.Error(), "--base-url") || !strings.Contains(err.Error(), "--api-key") || !strings.Contains(err.Error(), "--model-id") {
+	if !strings.Contains(err.Error(), "--base-url") || !strings.Contains(err.Error(), "--api-key") || !strings.Contains(err.Error(), "--models") {
 		t.Fatalf("validateModelConfig() error = %q, want missing model flags", err)
 	}
 }

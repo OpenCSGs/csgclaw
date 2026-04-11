@@ -13,7 +13,6 @@ import (
 )
 
 func (s *Service) createGatewayBox(ctx context.Context, rt *boxlite.Runtime, image, name, botID string, modelCfg config.ModelConfig) (*boxlite.Box, *boxlite.BoxInfo, error) {
-	// step 8.2.2 Create and start one PicoClaw gateway box, then capture its Boxlite metadata for persistence.
 	if testCreateGatewayBoxHook != nil {
 		return testCreateGatewayBoxHook(s, ctx, rt, image, name, botID, modelCfg)
 	}
@@ -51,7 +50,6 @@ func (s *Service) forceRemoveBox(ctx context.Context, rt *boxlite.Runtime, idOrN
 }
 
 func (s *Service) gatewayBoxOptions(name, botID string, modelCfg config.ModelConfig) ([]boxlite.BoxOption, error) {
-	// step 8.2.2.1 The box environment carries both model config and CSGClaw channel config into PicoClaw.
 	modelCfg = modelCfg.Resolved()
 	if strings.TrimSpace(modelCfg.ModelID) == "" {
 		modelCfg = s.model.Resolved()
@@ -71,7 +69,6 @@ func (s *Service) gatewayBoxOptions(name, botID string, modelCfg config.ModelCon
 	for key, value := range envVars {
 		opts = append(opts, boxlite.WithEnv(key, value))
 	}
-	// step 8.2.2.2 The worker process is the PicoClaw gateway itself, writing logs to ~/.picoclaw/gateway.log.
 	//entrypoint, cmd := gatewayStartCommand(managerDebugMode)
 	opts = append(opts,
 		//boxlite.WithEntrypoint(entrypoint...),
@@ -84,7 +81,6 @@ func (s *Service) gatewayBoxOptions(name, botID string, modelCfg config.ModelCon
 	if err != nil {
 		return nil, err
 	}
-	// step 8.2.2.3 Project files are shared through one host mount so workers can work on the same workspace tree.
 	projectsRoot, err := ensureAgentProjectsRoot()
 	if err != nil {
 		return nil, err

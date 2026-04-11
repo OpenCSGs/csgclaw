@@ -105,8 +105,6 @@ func (h *Handler) handleWorkers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-
-	// step 7.0 /api/v1/workers is the worker-focused HTTP branch used by current integrations.
 	switch r.Method {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, h.svc.ListWorkers())
@@ -153,8 +151,6 @@ func (h *Handler) handleAgents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-
-	// step 7.1 /api/v1/agents currently shares the same create path as /workers, so creation means "create a worker".
 	switch r.Method {
 	case http.MethodGet:
 		if err := h.svc.Reload(); err != nil {
@@ -413,7 +409,6 @@ func (h *Handler) handleIMBootstrap(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	// step 7.3 The browser starts here: one snapshot gives it current user, users, rooms, and initial messages.
 	writeJSON(w, http.StatusOK, presentBootstrap(h.im.Bootstrap()))
 }
 
@@ -635,8 +630,6 @@ func (h *Handler) handleIMEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-
-	// step 7.4 The browser keeps itself fresh through SSE by subscribing to the shared IM event bus.
 	events, cancel := h.imBus.Subscribe()
 	defer cancel()
 
@@ -782,8 +775,6 @@ func (h *Handler) ensureWorkerIMState(created agent.Agent) error {
 	if h.im == nil {
 		return nil
 	}
-
-	// step 7.2.2 Create or reuse the IM identity for this worker, then create its admin-worker bootstrap room.
 	user, room, err := h.im.EnsureAgentUser(im.EnsureAgentUserRequest{
 		ID:     created.ID,
 		Name:   created.Name,
@@ -795,7 +786,6 @@ func (h *Handler) ensureWorkerIMState(created agent.Agent) error {
 	}
 	h.publishUserEvent(im.EventTypeUserCreated, user)
 	if room != nil {
-		// step 7.2.3 After the room exists, post a delayed bootstrap instruction so the worker gets its role prompt.
 		h.publishRoomEvent(im.EventTypeRoomCreated, *room)
 		imSvc := h.im
 		roomID := room.ID
@@ -831,7 +821,6 @@ func (h *Handler) publishMessageCreated(conversationID, senderID string, message
 	if h.imBus == nil {
 		return
 	}
-	// step 7.5 Every persisted IM message becomes an in-memory event so UI clients and PicoClaw can react.
 	sender, ok := h.im.User(senderID)
 	if !ok {
 		return

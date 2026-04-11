@@ -11,7 +11,6 @@ import (
 )
 
 func (h *Handler) registerPicoClawRoutes(mux *http.ServeMux) {
-	// step 7.6 Bot-facing PicoClaw routes live outside /api/v1 because they follow PicoClaw's callback contract.
 	mux.HandleFunc("/api/bots/", h.handlePicoClawBotRoutes)
 }
 
@@ -27,15 +26,10 @@ func (h *Handler) PublishPicoClawEvent(evt im.Event) {
 	if !ok {
 		return
 	}
-	// step 7.6.1 Only message.created events flow through this branch; room/user events stay browser-only.
 	h.picoclaw.PublishMessageEvent(room, *evt.Sender, *evt.Message)
 }
 
 func (h *Handler) handlePicoClawBotRoutes(w http.ResponseWriter, r *http.Request) {
-	// step 7.6.2 A bot can do two things here:
-	// step 7.6.2.1 subscribe to its message event stream
-	// step 7.6.2.2 send a reply back into an IM room.
-	// step 7.6.2.3 reach the host-side LLM bridge through an OpenAI-compatible endpoint.
 	botID, action, ok := parsePicoClawBotPath(r.URL.Path)
 	if !ok {
 		http.NotFound(w, r)
@@ -65,7 +59,6 @@ func (h *Handler) handlePicoClawBotRoutes(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) handlePicoClawEvents(w http.ResponseWriter, r *http.Request, botID string) {
-	// step 7.6.2.1 Bots receive SSE here instead of the server actively calling out to them.
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming is not supported", http.StatusInternalServerError)
@@ -102,8 +95,6 @@ func (h *Handler) handlePicoClawSendMessage(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-
-	// step 7.6.2.2 Bot replies are written back into IM as normal messages authored by that bot's user ID.
 	var req im.PicoClawSendMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)

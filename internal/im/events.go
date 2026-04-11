@@ -33,7 +33,6 @@ func NewBus() *Bus {
 }
 
 func (b *Bus) Subscribe() (<-chan Event, func()) {
-	// step 9.4 IM events are fanned out in-memory to browsers and the PicoClaw bridge without touching disk again.
 	ch := make(chan Event, 16)
 
 	b.mu.Lock()
@@ -58,8 +57,6 @@ func (b *Bus) Publish(evt Event) {
 	if b == nil {
 		return
 	}
-
-	// step 9.4.1 Slow subscribers do not block the system; events are dropped when a subscriber channel is full.
 	b.mu.Lock()
 	targets := make([]chan Event, 0, len(b.subscribers))
 	for _, ch := range b.subscribers {

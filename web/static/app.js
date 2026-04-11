@@ -406,7 +406,6 @@ function App() {
   const messageListRef = useRef(null);
 
   useEffect(() => {
-    // step 10.0 Browser bootstrap branch: fetch one full IM snapshot before subscribing to live updates.
     fetch("/api/v1/bootstrap")
       .then((resp) => resp.json())
       .then((payload) => {
@@ -421,7 +420,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // step 10.1 Live-update branch: keep the UI synchronized by applying SSE events from the shared IM bus.
     const source = new EventSource("/api/v1/events");
 
     source.onmessage = (event) => {
@@ -534,7 +532,6 @@ function App() {
   }, [activeConversationId, visibleMessages.length]);
 
   async function sendMessage() {
-    // step 10.2 Send branch 1: write a user message through HTTP, then merge it into local state immediately.
     if (!data || !activeConversation || !draft.trim()) {
       return;
     }
@@ -559,7 +556,6 @@ function App() {
   }
 
   async function createRoom() {
-    // step 10.3 Send branch 2: create a room through HTTP, then switch the UI to that room.
     if (!data || !roomTitle.trim()) {
       return;
     }
@@ -589,7 +585,6 @@ function App() {
   }
 
   async function inviteUsers() {
-    // step 10.4 Send branch 3: invite more users into the active room through HTTP.
     if (!data || !activeConversation || inviteUserIDs.length === 0) {
       return;
     }
@@ -1320,7 +1315,6 @@ function latestAt(conversation) {
 }
 
 function applyIMEvent(current, event) {
-  // step 10.5 Merge live events into the browser model by event type instead of refetching the whole workspace.
   if (!current || !event?.type) {
     return current;
   }
@@ -1393,7 +1387,6 @@ function sortConversations(conversations) {
 }
 
 function normalizeIMData(payload) {
-  // step 10.0.1 The backend returns rooms; the frontend also aliases them as conversations for chat-oriented UI code.
   if (!payload) {
     return payload;
   }

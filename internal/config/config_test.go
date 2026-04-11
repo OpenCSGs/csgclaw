@@ -53,10 +53,13 @@ func TestLoadAppliesDefaultManagerImage(t *testing.T) {
 listen_addr = "127.0.0.1:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 
-[model]
+[models]
+default = "default.minimax-m2.7"
+
+[models.providers.default]
 base_url = "http://127.0.0.1:4000"
 api_key = "sk"
-model_id = "minimax-m2.7"
+models = ["minimax-m2.7"]
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -75,12 +78,52 @@ model_id = "minimax-m2.7"
 	if got, want := cfg.Model.Provider, ProviderLLMAPI; got != want {
 		t.Fatalf("cfg.Model.Provider = %q, want %q", got, want)
 	}
-	if got, want := cfg.LLM.DefaultProfile, DefaultLLMProfile; got != want {
-		t.Fatalf("cfg.LLM.DefaultProfile = %q, want %q", got, want)
+	if got, want := cfg.Models.Default, "default.minimax-m2.7"; got != want {
+		t.Fatalf("cfg.Models.Default = %q, want %q", got, want)
 	}
 }
 
-func TestLoadReadsLLMProfilePool(t *testing.T) {
+func TestLoadReadsModelsProviderPool(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[models]
+default = "remote.gpt-5.4"
+
+[models.providers.remote]
+base_url = "https://example.test/v1"
+api_key = "sk-test"
+models = ["gpt-5.4", "gpt-5.4-mini"]
+reasoning_effort = "medium"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := cfg.Models.Default, "remote.gpt-5.4"; got != want {
+		t.Fatalf("cfg.Models.Default = %q, want %q", got, want)
+	}
+	if got, want := cfg.Model.ModelID, "gpt-5.4"; got != want {
+		t.Fatalf("cfg.Model.ModelID = %q, want %q", got, want)
+	}
+	if got, want := cfg.Models.Providers["remote"].BaseURL, "https://example.test/v1"; got != want {
+		t.Fatalf("cfg.Models.Providers[remote].BaseURL = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(cfg.Models.Providers["remote"].Models, ","), "gpt-5.4,gpt-5.4-mini"; got != want {
+		t.Fatalf("cfg.Models.Providers[remote].Models = %q, want %q", got, want)
+	}
+	if got, want := cfg.Models.Providers["remote"].ReasoningEffort, "medium"; got != want {
+		t.Fatalf("cfg.Models.Providers[remote].ReasoningEffort = %q, want %q", got, want)
+	}
+}
+
+func TestLoadRejectsLegacyLLMSections(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `[server]
@@ -100,24 +143,12 @@ reasoning_effort = "medium"
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load() error = nil, want legacy [llm] rejection")
 	}
-	if got, want := cfg.LLM.DefaultProfile, "remote-main"; got != want {
-		t.Fatalf("cfg.LLM.DefaultProfile = %q, want %q", got, want)
-	}
-	if got, want := cfg.Model.Provider, ProviderLLMAPI; got != want {
-		t.Fatalf("cfg.Model.Provider = %q, want %q", got, want)
-	}
-	if got, want := cfg.Model.ModelID, "gpt-5.4"; got != want {
-		t.Fatalf("cfg.Model.ModelID = %q, want %q", got, want)
-	}
-	if got, want := cfg.LLM.Profiles["remote-main"].BaseURL, "https://example.test/v1"; got != want {
-		t.Fatalf("cfg.LLM.Profiles[remote-main].BaseURL = %q, want %q", got, want)
-	}
-	if got, want := cfg.LLM.Profiles["remote-main"].ReasoningEffort, "medium"; got != want {
-		t.Fatalf("cfg.LLM.Profiles[remote-main].ReasoningEffort = %q, want %q", got, want)
+	if !strings.Contains(err.Error(), "legacy config section [llm] is no longer supported") {
+		t.Fatalf("Load() error = %q, want legacy [llm] rejection", err)
 	}
 }
 
@@ -128,10 +159,13 @@ func TestLoadSupportsNamedFeishuChannelConfigs(t *testing.T) {
 listen_addr = "127.0.0.1:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 
-[model]
+[models]
+default = "default.minimax-m2.7"
+
+[models.providers.default]
 base_url = "http://127.0.0.1:4000"
 api_key = "sk"
-model_id = "minimax-m2.7"
+models = ["minimax-m2.7"]
 
 [channels.feishu]
 admin_open_id = "ou_admin"
@@ -170,21 +204,22 @@ app_secret = "dev-secret"
 	}
 }
 
-func TestSaveWritesAccessTokenUnderServerSection(t *testing.T) {
+func TestSaveWritesModelsSection(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
+	models := SingleProfileLLM(ModelConfig{
+		BaseURL: "http://127.0.0.1:4000",
+		APIKey:  "sk",
+		ModelID: "minimax-m2.7",
+	})
 	cfg := Config{
 		Server: ServerConfig{
 			ListenAddr:       "127.0.0.1:18080",
 			AdvertiseBaseURL: "http://127.0.0.1:18080",
 			AccessToken:      "shared-token",
 		},
-		LLM: SingleProfileLLM(ModelConfig{
-			BaseURL:         "http://127.0.0.1:4000",
-			APIKey:          "sk",
-			ModelID:         "minimax-m2.7",
-			ReasoningEffort: "medium",
-		}),
+		Models: models,
+		LLM:    models,
 		Bootstrap: BootstrapConfig{
 			ManagerImage: "img",
 		},
@@ -215,14 +250,17 @@ func TestSaveWritesAccessTokenUnderServerSection(t *testing.T) {
 	if !strings.Contains(content, "access_token = \"shared-token\"") {
 		t.Fatalf("saved config missing server access token:\n%s", content)
 	}
-	if !strings.Contains(content, "[llm]") || !strings.Contains(content, "[llm.profiles.default]") {
-		t.Fatalf("saved config missing llm profile sections:\n%s", content)
+	if !strings.Contains(content, "[models]") || !strings.Contains(content, "[models.providers.default]") {
+		t.Fatalf("saved config missing models sections:\n%s", content)
 	}
-	if !strings.Contains(content, `reasoning_effort = "medium"`) {
-		t.Fatalf("saved config missing reasoning_effort:\n%s", content)
+	if !strings.Contains(content, `default = "default.minimax-m2.7"`) {
+		t.Fatalf("saved config missing canonical models.default:\n%s", content)
 	}
-	if strings.Contains(content, "[picoclaw]") {
-		t.Fatalf("saved config should not contain [picoclaw] section:\n%s", content)
+	if !strings.Contains(content, `models = ["minimax-m2.7"]`) {
+		t.Fatalf("saved config missing models array:\n%s", content)
+	}
+	if strings.Contains(content, "[llm]") || strings.Contains(content, "model_id = ") {
+		t.Fatalf("saved config should not contain legacy llm/profile keys:\n%s", content)
 	}
 	for _, want := range []string{
 		"[channels.feishu.dev]",

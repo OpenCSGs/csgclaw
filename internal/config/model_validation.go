@@ -7,8 +7,17 @@ import (
 )
 
 const (
-	ProviderLLMAPI = "llm-api"
+	ProviderLLMAPI     = "llm-api"
+	DefaultLLMProfile  = "default"
+	DefaultModelFormat = "%s.%s"
 )
+
+type ProviderConfig struct {
+	BaseURL         string
+	APIKey          string
+	Models          []string
+	ReasoningEffort string
+}
 
 type ModelValidationError struct {
 	MissingFields []string
@@ -35,6 +44,15 @@ func NormalizeProvider(provider string) string {
 	default:
 		return strings.ToLower(strings.TrimSpace(provider))
 	}
+}
+
+func ModelSelector(providerName, modelID string) string {
+	providerName = strings.TrimSpace(providerName)
+	modelID = strings.TrimSpace(modelID)
+	if providerName == "" || modelID == "" {
+		return ""
+	}
+	return fmt.Sprintf(DefaultModelFormat, providerName, modelID)
 }
 
 func (c ModelConfig) EffectiveProvider() string {
@@ -80,35 +98,152 @@ func (c ModelConfig) Validate() error {
 	return nil
 }
 
+func (c ProviderConfig) Resolved() ProviderConfig {
+	out := c
+	out.BaseURL = strings.TrimRight(strings.TrimSpace(out.BaseURL), "/")
+	out.APIKey = strings.TrimSpace(out.APIKey)
+	out.ReasoningEffort = strings.ToLower(strings.TrimSpace(out.ReasoningEffort))
+	out.Models = normalizeModelIDs(out.Models)
+	return out
+}
+
+func (c ProviderConfig) MissingFields() []string {
+	cfg := c.Resolved()
+	var missing []string
+	if cfg.BaseURL == "" {
+		missing = append(missing, "base_url")
+	}
+	if cfg.APIKey == "" {
+		missing = append(missing, "api_key")
+	}
+	if len(cfg.Models) == 0 {
+		missing = append(missing, "model_id")
+	}
+	return missing
+}
+
+func (c ProviderConfig) Validate() error {
+	cfg := c.Resolved()
+	if missing := cfg.MissingFields(); len(missing) > 0 {
+		return &ModelValidationError{
+			MissingFields: missing,
+			Message:       fmt.Sprintf("provider %q is missing required fields: %s", ProviderLLMAPI, strings.Join(missing, ", ")),
+		}
+	}
+	return nil
+}
+
+func (c ProviderConfig) modelConfig(modelID string) ModelConfig {
+	cfg := c.Resolved()
+	return ModelConfig{
+		Provider:        ProviderLLMAPI,
+		BaseURL:         cfg.BaseURL,
+		APIKey:          cfg.APIKey,
+		ModelID:         strings.TrimSpace(modelID),
+		ReasoningEffort: cfg.ReasoningEffort,
+	}.Resolved()
+}
+
+func (c LLMConfig) IsZero() bool {
+	return len(c.Providers) == 0 && len(c.Profiles) == 0 && strings.TrimSpace(c.Default) == "" && strings.TrimSpace(c.DefaultProfile) == ""
+}
+
 func (c LLMConfig) Normalized() LLMConfig {
 	out := LLMConfig{
+		Default:        strings.TrimSpace(c.Default),
+		Providers:      make(map[string]ProviderConfig),
 		DefaultProfile: strings.TrimSpace(c.DefaultProfile),
-		Profiles:       make(map[string]ModelConfig, len(c.Profiles)),
+		Profiles:       make(map[string]ModelConfig),
+	}
+
+	for name, provider := range c.Providers {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		out.Providers[name] = provider.Resolved()
 	}
 	for name, profile := range c.Profiles {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
+		provider := out.Providers[name]
+		if provider.BaseURL == "" {
+			provider.BaseURL = strings.TrimRight(strings.TrimSpace(profile.BaseURL), "/")
+		}
+		if provider.APIKey == "" {
+			provider.APIKey = strings.TrimSpace(profile.APIKey)
+		}
+		if provider.ReasoningEffort == "" {
+			provider.ReasoningEffort = strings.ToLower(strings.TrimSpace(profile.ReasoningEffort))
+		}
+		if modelID := strings.TrimSpace(profile.ModelID); modelID != "" {
+			provider.Models = append(provider.Models, modelID)
+		}
+		out.Providers[name] = provider.Resolved()
 		out.Profiles[name] = profile.Resolved()
 	}
+
+	if out.Default == "" {
+		out.Default = out.DefaultProfile
+	}
 	if out.DefaultProfile == "" {
-		out.DefaultProfile = out.EffectiveDefaultProfile()
+		out.DefaultProfile = out.Default
+	}
+
+	for name, provider := range out.Providers {
+		if _, ok := out.Profiles[name]; ok {
+			continue
+		}
+		if len(provider.Models) == 1 {
+			out.Profiles[name] = provider.modelConfig(provider.Models[0])
+		}
+	}
+
+	if out.Default == "" && out.DefaultProfile != "" {
+		out.Default = out.DefaultProfile
+	}
+	if out.DefaultProfile == "" && out.Default != "" {
+		out.DefaultProfile = out.Default
 	}
 	return out
 }
 
-func (c LLMConfig) EffectiveDefaultProfile() string {
-	defaultProfile := strings.TrimSpace(c.DefaultProfile)
-	if defaultProfile != "" {
-		return defaultProfile
+func (c LLMConfig) DefaultSelector() string {
+	name, _, err := c.Resolve("")
+	if err != nil {
+		return ""
 	}
-	if len(c.Profiles) == 1 {
-		for name := range c.Profiles {
-			return strings.TrimSpace(name)
+	return name
+}
+
+func (c LLMConfig) EffectiveDefaultProvider() string {
+	cfg := c.Normalized()
+	if selector := cfg.DefaultSelector(); selector != "" {
+		providerName, _, ok := splitModelSelector(selector)
+		if ok {
+			return providerName
 		}
 	}
-	if _, ok := c.Profiles[DefaultLLMProfile]; ok {
+	defaultValue := strings.TrimSpace(cfg.Default)
+	if defaultValue == "" {
+		defaultValue = strings.TrimSpace(cfg.DefaultProfile)
+	}
+	if defaultValue != "" {
+		if providerName, _, ok := splitModelSelector(defaultValue); ok {
+			return providerName
+		}
+		if _, ok := cfg.Providers[defaultValue]; ok {
+			return defaultValue
+		}
+	}
+	if len(cfg.Providers) == 1 {
+		for name := range cfg.Providers {
+			return name
+		}
+	}
+	if _, ok := cfg.Providers[DefaultLLMProfile]; ok {
 		return DefaultLLMProfile
 	}
 	return ""
@@ -116,41 +251,104 @@ func (c LLMConfig) EffectiveDefaultProfile() string {
 
 func (c LLMConfig) Resolve(profile string) (string, ModelConfig, error) {
 	cfg := c.Normalized()
-	name := strings.TrimSpace(profile)
-	if name == "" {
-		name = cfg.EffectiveDefaultProfile()
+	requested := strings.TrimSpace(profile)
+	if requested == "" {
+		requested = strings.TrimSpace(cfg.Default)
+		if requested == "" {
+			requested = strings.TrimSpace(cfg.DefaultProfile)
+		}
+		if requested == "" && len(cfg.Providers) == 1 {
+			for name := range cfg.Providers {
+				requested = name
+			}
+		}
 	}
-	if name == "" {
-		return "", ModelConfig{}, &ModelValidationError{Message: "llm default_profile is not configured"}
+	if requested == "" {
+		return "", ModelConfig{}, &ModelValidationError{
+			MissingFields: []string{"default"},
+			Message:       "models default is not configured",
+		}
 	}
-	model, ok := cfg.Profiles[name]
+	return cfg.resolveSelector(requested)
+}
+
+func (c LLMConfig) resolveSelector(selector string) (string, ModelConfig, error) {
+	cfg := c.Normalized()
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		return "", ModelConfig{}, &ModelValidationError{
+			MissingFields: []string{"default"},
+			Message:       "models default is not configured",
+		}
+	}
+
+	providerName, modelID, hasModelID := splitModelSelector(selector)
+	if !hasModelID {
+		providerName = selector
+	}
+	provider, ok := cfg.Providers[providerName]
 	if !ok {
-		return "", ModelConfig{}, &ModelValidationError{Message: fmt.Sprintf("llm profile %q was not found", name)}
+		return "", ModelConfig{}, &ModelValidationError{
+			MissingFields: []string{"default"},
+			Message:       fmt.Sprintf("models provider %q was not found", providerName),
+		}
 	}
-	return name, model.Resolved(), nil
+	provider = provider.Resolved()
+	if !hasModelID {
+		switch len(provider.Models) {
+		case 0:
+			modelID = ""
+		case 1:
+			modelID = provider.Models[0]
+		default:
+			return "", ModelConfig{}, &ModelValidationError{
+				MissingFields: []string{"default"},
+				Message:       fmt.Sprintf("models provider %q has multiple models; set models.default to %q", providerName, ModelSelector(providerName, provider.Models[0])),
+			}
+		}
+	} else if !containsString(provider.Models, modelID) {
+		return "", ModelConfig{}, &ModelValidationError{
+			MissingFields: []string{"default"},
+			Message:       fmt.Sprintf("models default %q does not match any models.providers entry", selector),
+		}
+	}
+
+	model := provider.modelConfig(modelID)
+	name := providerName
+	if modelID != "" {
+		name = ModelSelector(providerName, modelID)
+	}
+	return name, model, nil
 }
 
 func (c LLMConfig) MatchProfile(candidate ModelConfig) (string, ModelConfig, bool) {
 	cfg := c.Normalized()
 	candidate = candidate.Resolved()
-	for _, name := range sortedProfileNames(cfg.Profiles) {
-		profile := cfg.Profiles[name].Resolved()
-		if !strings.EqualFold(profile.EffectiveProvider(), candidate.EffectiveProvider()) {
+	for _, name := range sortedProviderNames(cfg.Providers) {
+		provider := cfg.Providers[name].Resolved()
+		if !strings.EqualFold(ProviderLLMAPI, candidate.EffectiveProvider()) {
 			continue
 		}
-		if strings.TrimSpace(profile.ModelID) != strings.TrimSpace(candidate.ModelID) {
+		if candidate.ReasoningEffort != "" && strings.TrimSpace(provider.ReasoningEffort) != strings.TrimSpace(candidate.ReasoningEffort) {
 			continue
 		}
-		if candidate.ReasoningEffort != "" && strings.TrimSpace(profile.ReasoningEffort) != strings.TrimSpace(candidate.ReasoningEffort) {
-			continue
+		for _, modelID := range provider.Models {
+			if strings.TrimSpace(modelID) != strings.TrimSpace(candidate.ModelID) {
+				continue
+			}
+			model := provider.modelConfig(modelID)
+			return ModelSelector(name, modelID), model, true
 		}
-		return name, profile, true
 	}
 	return "", ModelConfig{}, false
 }
 
 func (c LLMConfig) MissingFields() []string {
-	_, model, err := c.Resolve("")
+	cfg := c.Normalized()
+	if len(cfg.Providers) == 0 {
+		return ProviderConfig{}.MissingFields()
+	}
+	_, model, err := cfg.Resolve("")
 	if err != nil {
 		var validationErr *ModelValidationError
 		if errors.As(err, &validationErr) {
@@ -163,29 +361,23 @@ func (c LLMConfig) MissingFields() []string {
 
 func (c LLMConfig) Validate() error {
 	cfg := c.Normalized()
-	if len(cfg.Profiles) == 0 {
+	if len(cfg.Providers) == 0 {
 		return SingleProfileLLM(ModelConfig{}).Validate()
 	}
-	defaultProfile := cfg.EffectiveDefaultProfile()
-	if defaultProfile == "" {
+	_, model, err := cfg.Resolve("")
+	if err != nil {
+		return err
+	}
+	if missing := model.MissingFields(); len(missing) > 0 {
 		return &ModelValidationError{
-			MissingFields: []string{"default_profile"},
-			Message:       "llm default_profile is required",
+			MissingFields: missing,
+			Message:       fmt.Sprintf("models default is missing required fields: %s", strings.Join(missing, ", ")),
 		}
 	}
-	if _, ok := cfg.Profiles[defaultProfile]; !ok {
-		return &ModelValidationError{
-			MissingFields: []string{"default_profile"},
-			Message:       fmt.Sprintf("llm default_profile %q does not match any llm.profiles entry", defaultProfile),
-		}
-	}
-	for _, name := range sortedProfileNames(cfg.Profiles) {
-		profile := cfg.Profiles[name]
-		if err := profile.Validate(); err != nil {
-			if name == defaultProfile {
-				return err
-			}
-			return fmt.Errorf("llm profile %q is invalid: %w", name, err)
+	for _, name := range sortedProviderNames(cfg.Providers) {
+		provider := cfg.Providers[name]
+		if err := provider.Validate(); err != nil {
+			return fmt.Errorf("models provider %q is invalid: %w", name, err)
 		}
 	}
 	return nil
@@ -202,4 +394,56 @@ func (c ModelConfig) validateProvider() error {
 			ProviderLLMAPI,
 		),
 	}
+}
+
+func splitModelSelector(selector string) (string, string, bool) {
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		return "", "", false
+	}
+	dot := strings.Index(selector, ".")
+	colon := strings.Index(selector, ":")
+	switch {
+	case dot == -1 && colon == -1:
+		return "", "", false
+	case dot == -1:
+		providerName, modelID, ok := strings.Cut(selector, ":")
+		return strings.TrimSpace(providerName), strings.TrimSpace(modelID), ok && strings.TrimSpace(providerName) != "" && strings.TrimSpace(modelID) != ""
+	case colon == -1 || dot < colon:
+		providerName, modelID, ok := strings.Cut(selector, ".")
+		return strings.TrimSpace(providerName), strings.TrimSpace(modelID), ok && strings.TrimSpace(providerName) != "" && strings.TrimSpace(modelID) != ""
+	default:
+		providerName, modelID, ok := strings.Cut(selector, ":")
+		return strings.TrimSpace(providerName), strings.TrimSpace(modelID), ok && strings.TrimSpace(providerName) != "" && strings.TrimSpace(modelID) != ""
+	}
+}
+
+func normalizeModelIDs(models []string) []string {
+	if len(models) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(models))
+	out := make([]string, 0, len(models))
+	for _, modelID := range models {
+		modelID = strings.TrimSpace(modelID)
+		if modelID == "" {
+			continue
+		}
+		if _, ok := seen[modelID]; ok {
+			continue
+		}
+		seen[modelID] = struct{}{}
+		out = append(out, modelID)
+	}
+	return out
+}
+
+func containsString(values []string, want string) bool {
+	want = strings.TrimSpace(want)
+	for _, value := range values {
+		if strings.TrimSpace(value) == want {
+			return true
+		}
+	}
+	return false
 }

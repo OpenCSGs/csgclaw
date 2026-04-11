@@ -33,7 +33,7 @@ ok
   "role": "worker",
   "status": "running",
   "created_at": "2026-03-28T12:00:03Z",
-  "profile": "cliproxy-codex",
+  "profile": "codex.gpt-5.4",
   "provider": "llm-api",
   "model_id": "gpt-5.4",
   "reasoning_effort": "medium",
@@ -62,7 +62,7 @@ ok
   "id": "u-alice",
   "name": "alice",
   "description": "frontend dev",
-  "profile": "cliproxy-codex",
+  "profile": "codex.gpt-5.4",
   "role": "worker"
 }
 ```
@@ -77,7 +77,7 @@ ok
   "role": "worker",
   "status": "running",
   "created_at": "2026-03-28T12:00:03Z",
-  "profile": "cliproxy-codex",
+  "profile": "codex.gpt-5.4",
   "provider": "llm-api",
   "model_id": "gpt-5.4",
   "reasoning_effort": "medium",
@@ -90,7 +90,7 @@ ok
 - `name` 必填
 - `name` 不能是 `manager`
 - `id` 可选；未传时服务端会自动生成
-- `profile` 可选；它引用配置中的 `llm.profiles.<name>`，未传时使用 `llm.default_profile`
+- `profile` 可选；它引用配置中的 `models.default` 或显式 selector（例如 `codex.gpt-5.4`）
 - `provider`、`model_id`、`reasoning_effort` 是服务端解析后的快照字段，便于调试
 - `status`、`created_at` 以实际 box 启动结果为准
 - `manager` 嵌套字段已不再支持

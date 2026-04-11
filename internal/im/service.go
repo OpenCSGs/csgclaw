@@ -111,10 +111,6 @@ func NewServiceFromPath(path string) (*Service, error) {
 }
 
 func NewServiceFromBootstrap(state Bootstrap) *Service {
-	// step 9.0 IM owns the collaboration model:
-	// step 9.0.1 users
-	// step 9.0.2 rooms/conversations
-	// step 9.0.3 persisted messages inside each room.
 	state = normalizeBootstrap(state)
 
 	users := state.Users
@@ -373,7 +369,6 @@ func sessionRelativePath(roomID string) string {
 }
 
 func EnsureBootstrapState(path string) error {
-	// step 9.1 First-run IM state always guarantees admin, manager, and their bootstrap room.
 	state, err := LoadBootstrap(path)
 	if err != nil {
 		return err
@@ -542,7 +537,6 @@ func containsUserIDInConversation(conv Conversation, userID string) bool {
 }
 
 func (s *Service) Bootstrap() Bootstrap {
-	// step 9.2 The browser bootstrap snapshot is just a presentation of current in-memory IM state.
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -678,7 +672,6 @@ func (s *Service) KickUser(userID string) error {
 }
 
 func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, error) {
-	// step 9.3 Mirror an agent into IM as a user and ensure it has a direct bootstrap room with admin.
 	id := strings.TrimSpace(req.ID)
 	name := strings.ToLower(strings.TrimSpace(req.Name))
 	handle := strings.ToLower(strings.TrimSpace(req.Handle))
@@ -737,7 +730,6 @@ func (s *Service) EnsureWorkerUser(req EnsureWorkerUserRequest) (User, *Room, er
 }
 
 func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
-	// step 9.5 User-originated messages enter IM here, are persisted, and later become SSE/PicoClaw events upstream.
 	content := strings.TrimSpace(req.Content)
 	roomID := strings.TrimSpace(req.RoomID)
 	if roomID == "" {
@@ -771,7 +763,6 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 }
 
 func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
-	// step 9.5.1 Bot-originated replies use a parallel branch that defaults sender_id when the bridge omits it.
 	roomID := strings.TrimSpace(req.RoomID)
 	senderID := strings.TrimSpace(req.SenderID)
 	content := strings.TrimSpace(req.Content)
@@ -805,7 +796,6 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 }
 
 func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
-	// step 9.6 New rooms are created with an initial event message so the UI can explain how the room started.
 	title := strings.TrimSpace(req.Title)
 	description := strings.TrimSpace(req.Description)
 	if title == "" {
@@ -860,7 +850,6 @@ func (s *Service) CreateConversation(req CreateConversationRequest) (Conversatio
 }
 
 func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
-	// step 9.7 Member invites mutate participants and append an event message describing who was added.
 	roomID := strings.TrimSpace(req.RoomID)
 	if roomID == "" {
 		return Room{}, fmt.Errorf("room_id is required")
@@ -977,7 +966,6 @@ func (s *Service) User(userID string) (User, bool) {
 }
 
 func (s *Service) extractMentions(content string) []string {
-	// step 9.5.2 Mentions are resolved from @handle text into user IDs so group-room bot delivery can be selective.
 	matches := mentionPattern.FindAllStringSubmatch(content, -1)
 	if len(matches) == 0 {
 		return nil
@@ -1082,7 +1070,6 @@ func formatConversationSubtitle(count int) string {
 }
 
 func (s *Service) presentRoomLocked(room Room) Room {
-	// step 9.2.1 Direct rooms are presented using the "other participant" name to feel like a chat app.
 	cloned := cloneRoom(room)
 	if len(cloned.Participants) != 2 {
 		return cloned
@@ -1160,7 +1147,6 @@ func (s *Service) bootstrapLocked() Bootstrap {
 }
 
 func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, bool) {
-	// step 9.3.1 Every worker gets one admin-worker bootstrap direct room, created lazily the first time it appears.
 	for _, room := range s.rooms {
 		if len(room.Participants) != 2 {
 			continue
