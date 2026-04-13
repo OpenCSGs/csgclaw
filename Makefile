@@ -22,7 +22,7 @@ IMAGE ?= ghcr.io/russellluo/picoclaw
 TAG ?= 2025.3.25
 LOCAL_IMAGE ?= picoclaw:local
 
-.DEFAULT_GOAL := build
+.DEFAULT_GOAL := build-all
 
 .PHONY: help fmt test build build-csgclaw build-csgclaw-cli build-all run onboard clean package package-all release tag push publish boxlite-setup
 
