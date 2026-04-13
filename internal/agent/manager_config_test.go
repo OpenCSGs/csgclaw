@@ -69,20 +69,6 @@ func TestRenderAgentPicoClawConfigUsesBridgeModelEndpoint(t *testing.T) {
 func TestEnsureAgentPicoClawConfigUsesDirectoryMountRoot(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
-	managerSkillSourceDirResolver = func() (string, error) {
-		src := filepath.Join(t.TempDir(), "skills", "manager-worker-dispatch")
-		if err := os.MkdirAll(filepath.Join(src, "scripts"), 0o755); err != nil {
-			t.Fatalf("os.MkdirAll(skill source) error = %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("name: test\n"), 0o644); err != nil {
-			t.Fatalf("os.WriteFile(SKILL.md) error = %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(src, "scripts", "manager_worker_api.py"), []byte("print('ok')\n"), 0o755); err != nil {
-			t.Fatalf("os.WriteFile(manager_worker_api.py) error = %v", err)
-		}
-		return src, nil
-	}
-	defer func() { managerSkillSourceDirResolver = bundledManagerSkillSourceDir }()
 
 	root, err := ensureAgentPicoClawConfig("ux", "u-ux", config.ServerConfig{
 		ListenAddr:  "0.0.0.0:18080",
@@ -119,66 +105,6 @@ func TestEnsureAgentPicoClawConfigUsesDirectoryMountRoot(t *testing.T) {
 	}
 	if strings.HasSuffix(mounts[0].hostPath, hostPicoClawConfig) || strings.HasSuffix(mounts[0].hostPath, ".security.yml") {
 		t.Fatalf("gatewayVolumeMounts()[0].hostPath = %q, want directory mount root", mounts[0].hostPath)
-	}
-}
-
-func TestEnsureAgentPicoClawConfigSeedsManagerSkill(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-
-	src := filepath.Join(t.TempDir(), "skills", "manager-worker-dispatch")
-	for _, dir := range []string{
-		src,
-		filepath.Join(src, "scripts"),
-		filepath.Join(src, "agents"),
-	} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatalf("os.MkdirAll(%q) error = %v", dir, err)
-		}
-	}
-	for path, content := range map[string]string{
-		filepath.Join(src, "SKILL.md"):                         "name: manager-worker-dispatch\n",
-		filepath.Join(src, "scripts", "manager_worker_api.py"): "#!/usr/bin/env python\nprint('ok')\n",
-		filepath.Join(src, "agents", "openai.yaml"):            "interface: {}\n",
-	} {
-		mode := os.FileMode(0o644)
-		if strings.HasSuffix(path, ".py") {
-			mode = 0o755
-		}
-		if err := os.WriteFile(path, []byte(content), mode); err != nil {
-			t.Fatalf("os.WriteFile(%q) error = %v", path, err)
-		}
-	}
-
-	managerSkillSourceDirResolver = func() (string, error) { return src, nil }
-	defer func() { managerSkillSourceDirResolver = bundledManagerSkillSourceDir }()
-
-	root, err := ensureAgentPicoClawConfig("manager", "u-manager", config.ServerConfig{
-		ListenAddr:  "0.0.0.0:18080",
-		AccessToken: "shared-token",
-	}, config.ModelConfig{
-		ModelID: "gpt-5.4",
-	})
-	if err != nil {
-		t.Fatalf("ensureAgentPicoClawConfig() error = %v", err)
-	}
-
-	for _, rel := range []string{
-		filepath.Join("workspace", "memory", "MEMORY.md"),
-		filepath.Join("workspace", "skills", "manager-worker-dispatch", "SKILL.md"),
-		filepath.Join("workspace", "skills", "manager-worker-dispatch", "scripts", "manager_worker_api.py"),
-		filepath.Join("workspace", "skills", "manager-worker-dispatch", "agents", "openai.yaml"),
-	} {
-		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
-			t.Fatalf("os.Stat(%q) error = %v", filepath.Join(root, rel), err)
-		}
-	}
-	data, err := os.ReadFile(filepath.Join(root, "workspace", "memory", "MEMORY.md"))
-	if err != nil {
-		t.Fatalf("os.ReadFile(MEMORY.md) error = %v", err)
-	}
-	if !strings.Contains(string(data), "python scripts/manager_worker_api.py list-workers") {
-		t.Fatalf("MEMORY.md = %q, want dispatch fast path", string(data))
 	}
 }
 
