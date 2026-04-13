@@ -34,11 +34,12 @@ go build ./cmd/csgclaw
 ## 快速开始
 
 ```bash
-csgclaw onboard --provider default --model-id <model> --base-url <url> --api-key <key> [--default <provider.model>]
+csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]
 csgclaw serve
 ```
 
 执行后 CLI 会打印访问地址（例如 `http://127.0.0.1:18080/`），在浏览器中打开即可进入 IM 工作区。
+对于全新配置，`onboard` 会创建一个名为 `default` 的 provider，并把 `models.default` 设为 `default.<第一个模型>`。
 
 ## Model Provider 配置示例
 

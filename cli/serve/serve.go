@@ -474,7 +474,7 @@ func missingModelFlags(fields []string) []string {
 		case "model_id":
 			flags = append(flags, "--models")
 		case "default", "default_profile":
-			flags = append(flags, "models.default")
+			flags = append(flags, "--models")
 		default:
 			flags = append(flags, field)
 		}

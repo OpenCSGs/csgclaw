@@ -34,11 +34,12 @@ go build ./cmd/csgclaw
 ## Quick Start
 
 ```bash
-csgclaw onboard --provider default --model-id <model> --base-url <url> --api-key <key> [--default <provider.model>]
+csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]
 csgclaw serve
 ```
 
 Open the printed URL (e.g. `http://127.0.0.1:18080/`) in your browser to enter the IM workspace.
+For a fresh config, `onboard` creates a single `default` provider and sets `models.default` to `default.<first-model>`.
 
 ## Model Provider Examples
 
