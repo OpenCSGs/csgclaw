@@ -27,6 +27,7 @@ const (
 )
 
 type App struct {
+	stdin      io.Reader
 	stdout     io.Writer
 	stderr     io.Writer
 	httpClient HTTPClient
@@ -44,6 +45,7 @@ type GlobalOptions struct {
 
 func New() *App {
 	app := &App{
+		stdin:      os.Stdin,
 		stdout:     os.Stdout,
 		stderr:     os.Stderr,
 		httpClient: &http.Client{},
@@ -278,8 +280,13 @@ func (g GlobalOptions) commandOptions() command.GlobalOptions {
 }
 
 func (a *App) commandContext() *command.Context {
+	stdin := a.stdin
+	if stdin == nil {
+		stdin = os.Stdin
+	}
 	return &command.Context{
 		Program:    "csgclaw",
+		Stdin:      stdin,
 		Stdout:     a.stdout,
 		Stderr:     a.stderr,
 		HTTPClient: a.httpClient,

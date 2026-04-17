@@ -34,14 +34,45 @@ go build ./cmd/csgclaw
 ## Quick Start
 
 ```bash
-csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]
+csgclaw onboard
 csgclaw serve
 ```
 
 Open the printed URL (e.g. `http://127.0.0.1:18080/`) in your browser to enter the IM workspace.
-For a fresh config, `onboard` creates a single `default` provider and sets `models.default` to `default.<first-model>`.
+For a fresh interactive setup, `onboard` defaults to `csghub-lite` at `http://127.0.0.1:11435/v1`, lets you override that URL, and imports models from its OpenAI-compatible `/v1/models` endpoint. Start CSGHub-lite first, for example:
+
+```bash
+csghub-lite run Qwen/Qwen3-0.6B-GGUF
+```
+
+For scripts or non-interactive environments, pass model flags explicitly:
+
+```bash
+csgclaw onboard --provider csghub-lite --models Qwen/Qwen3-0.6B-GGUF
+csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]
+```
 
 ## Model Provider Examples
+
+### Local CSGHub-lite
+
+```toml
+[server]
+listen_addr = "0.0.0.0:18080"
+advertise_base_url = "http://127.0.0.1:18080"
+access_token = "your_access_token"
+
+[models]
+default = "csghub-lite.Qwen/Qwen3-0.6B-GGUF"
+
+[models.providers.csghub-lite]
+base_url = "http://127.0.0.1:11435/v1"
+api_key = "local"
+models = ["Qwen/Qwen3-0.6B-GGUF"]
+
+[bootstrap]
+manager_image = "ghcr.io/russellluo/picoclaw:2026.4.15.3"
+```
 
 ### Remote LLM API
 

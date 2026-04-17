@@ -3,6 +3,8 @@ package serve
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -15,6 +17,52 @@ import (
 	"csgclaw/internal/llm"
 	"csgclaw/internal/server"
 )
+
+func TestServeForegroundPreflightsCSGHubLiteProvider(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+
+	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			t.Fatalf("path = %q, want /v1/models", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer local" {
+			t.Fatalf("Authorization = %q, want Bearer local", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"Qwen/Qwen3-0.6B-GGUF"}]}`))
+	}))
+	defer modelServer.Close()
+
+	cfg := csgHubLiteServeConfig(modelServer.URL + "/v1")
+	if err := serveForeground(context.Background(), testContext(), cfg, "json"); err != nil {
+		t.Fatalf("serveForeground() error = %v", err)
+	}
+}
+
+func TestServeForegroundFailsBeforeManagerWhenCSGHubLiteUnavailable(t *testing.T) {
+	origNewAgentService := NewAgentService
+	t.Cleanup(func() {
+		NewAgentService = origNewAgentService
+	})
+	NewAgentService = func(config.Config) (*agent.Service, error) {
+		t.Fatal("NewAgentService should not run when csghub-lite preflight fails")
+		return nil, nil
+	}
+
+	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusBadGateway)
+	}))
+	defer modelServer.Close()
+
+	err := serveForeground(context.Background(), testContext(), csgHubLiteServeConfig(modelServer.URL+"/v1"), "json")
+	if err == nil {
+		t.Fatal("serveForeground() error = nil, want preflight error")
+	}
+	if !strings.Contains(err.Error(), "csghub-lite provider is not reachable") || !strings.Contains(err.Error(), "csghub-lite run <model>") {
+		t.Fatalf("serveForeground() error = %q, want csghub-lite start hint", err)
+	}
+}
 
 func TestServeForegroundPassesContextToServer(t *testing.T) {
 	origRunServer := RunServer
@@ -154,6 +202,56 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	}
 	if strings.Contains(got, "manager-secret") {
 		t.Fatalf("stdout leaked feishu app secret:\n%s", got)
+	}
+}
+
+func csgHubLiteServeConfig(baseURL string) config.Config {
+	return config.Config{
+		Server: config.ServerConfig{
+			ListenAddr:  "127.0.0.1:18080",
+			AccessToken: "pc-secret",
+		},
+		Models: config.LLMConfig{
+			Default:        "csghub-lite.Qwen/Qwen3-0.6B-GGUF",
+			DefaultProfile: "csghub-lite.Qwen/Qwen3-0.6B-GGUF",
+			Providers: map[string]config.ProviderConfig{
+				"csghub-lite": {
+					BaseURL: baseURL,
+					APIKey:  "local",
+					Models:  []string{"Qwen/Qwen3-0.6B-GGUF"},
+				},
+			},
+		},
+		Bootstrap: config.BootstrapConfig{
+			ManagerImage: "ghcr.io/example/manager:latest",
+		},
+	}
+}
+
+func stubServeDependencies(t *testing.T) func() {
+	t.Helper()
+	origRunServer := RunServer
+	origNewAgentService := NewAgentService
+	origNewBotService := NewBotService
+	origNewIMService := NewIMService
+	origNewFeishuService := NewFeishuService
+	origNewLLMService := NewLLMService
+	origEnsureBootstrapManager := EnsureBootstrapManager
+	RunServer = func(server.Options) error { return nil }
+	NewAgentService = func(config.Config) (*agent.Service, error) { return &agent.Service{}, nil }
+	NewBotService = func() (*bot.Service, error) { return &bot.Service{}, nil }
+	NewIMService = func() (*im.Service, error) { return nil, nil }
+	NewFeishuService = func(config.Config) (*channel.FeishuService, error) { return nil, nil }
+	NewLLMService = func(config.Config, *agent.Service) (*llm.Service, error) { return nil, nil }
+	EnsureBootstrapManager = func(context.Context, *agent.Service, bool) error { return nil }
+	return func() {
+		RunServer = origRunServer
+		NewAgentService = origNewAgentService
+		NewBotService = origNewBotService
+		NewIMService = origNewIMService
+		NewFeishuService = origNewFeishuService
+		NewLLMService = origNewLLMService
+		EnsureBootstrapManager = origEnsureBootstrapManager
 	}
 }
 

@@ -87,7 +87,7 @@ onboard: boxlite-setup
 	env GOCACHE=$(GOCACHE) $(GO) run -ldflags "$(LDFLAGS)" ./cmd/csgclaw onboard \
 		--base-url $(ONBOARD_BASE_URL) \
 		--api-key $(ONBOARD_API_KEY) \
-		--model-id $(ONBOARD_MODEL_ID) \
+		--models $(ONBOARD_MODEL_ID) \
 		--manager-image $(ONBOARD_MANAGER_IMAGE)
 
 package: boxlite-setup sync-agent-runtimes

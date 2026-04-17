@@ -52,6 +52,7 @@ type ActionResult struct {
 
 type Context struct {
 	Program    string
+	Stdin      io.Reader
 	Stdout     io.Writer
 	Stderr     io.Writer
 	HTTPClient apiclient.HTTPClient

@@ -34,14 +34,45 @@ go build ./cmd/csgclaw
 ## 快速开始
 
 ```bash
-csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]
+csgclaw onboard
 csgclaw serve
 ```
 
 执行后 CLI 会打印访问地址（例如 `http://127.0.0.1:18080/`），在浏览器中打开即可进入 IM 工作区。
-对于全新配置，`onboard` 会创建一个名为 `default` 的 provider，并把 `models.default` 设为 `default.<第一个模型>`。
+全新交互式配置会默认选择 `csghub-lite`，访问 `http://127.0.0.1:11435/v1`，也可以在提示中覆盖这个 URL，并从 OpenAI 兼容的 `/v1/models` 自动导入模型。请先启动 CSGHub-lite，例如：
+
+```bash
+csghub-lite run Qwen/Qwen3-0.6B-GGUF
+```
+
+脚本或非交互环境请显式传入模型参数：
+
+```bash
+csgclaw onboard --provider csghub-lite --models Qwen/Qwen3-0.6B-GGUF
+csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]
+```
 
 ## Model Provider 配置示例
+
+### 本地 CSGHub-lite
+
+```toml
+[server]
+listen_addr = "0.0.0.0:18080"
+advertise_base_url = "http://127.0.0.1:18080"
+access_token = "your_access_token"
+
+[models]
+default = "csghub-lite.Qwen/Qwen3-0.6B-GGUF"
+
+[models.providers.csghub-lite]
+base_url = "http://127.0.0.1:11435/v1"
+api_key = "local"
+models = ["Qwen/Qwen3-0.6B-GGUF"]
+
+[bootstrap]
+manager_image = "ghcr.io/russellluo/picoclaw:2026.4.15.3"
+```
 
 ### 远程 LLM API
 

@@ -123,6 +123,45 @@ reasoning_effort = "medium"
 	}
 }
 
+func TestLoadReadsCSGHubLiteProvider(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[models]
+default = "csghub-lite.Qwen/Qwen3-0.6B-GGUF"
+
+[models.providers.csghub-lite]
+base_url = "http://127.0.0.1:11435/v1"
+api_key = "local"
+models = ["Qwen/Qwen3-0.6B-GGUF", "Qwen/Qwen3-1.7B-GGUF"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := cfg.Models.Default, "csghub-lite.Qwen/Qwen3-0.6B-GGUF"; got != want {
+		t.Fatalf("cfg.Models.Default = %q, want %q", got, want)
+	}
+	if got, want := cfg.Model.BaseURL, "http://127.0.0.1:11435/v1"; got != want {
+		t.Fatalf("cfg.Model.BaseURL = %q, want %q", got, want)
+	}
+	if got, want := cfg.Model.APIKey, "local"; got != want {
+		t.Fatalf("cfg.Model.APIKey = %q, want %q", got, want)
+	}
+	if got, want := cfg.Model.ModelID, "Qwen/Qwen3-0.6B-GGUF"; got != want {
+		t.Fatalf("cfg.Model.ModelID = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(cfg.Models.Providers["csghub-lite"].Models, ","), "Qwen/Qwen3-0.6B-GGUF,Qwen/Qwen3-1.7B-GGUF"; got != want {
+		t.Fatalf("csghub-lite models = %q, want %q", got, want)
+	}
+}
+
 func TestLoadRejectsLegacyLLMSections(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -270,6 +309,54 @@ func TestSaveWritesModelsSection(t *testing.T) {
 		"[channels.feishu.manager]",
 		`app_id = "cli_manager"`,
 		`app_secret = "manager-secret"`,
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("saved config missing %q:\n%s", want, content)
+		}
+	}
+}
+
+func TestSaveWritesCSGHubLiteProvider(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	models := LLMConfig{
+		Default:        "csghub-lite.Qwen/Qwen3-0.6B-GGUF",
+		DefaultProfile: "csghub-lite.Qwen/Qwen3-0.6B-GGUF",
+		Providers: map[string]ProviderConfig{
+			"csghub-lite": {
+				BaseURL: "http://127.0.0.1:11435/v1",
+				APIKey:  "local",
+				Models:  []string{"Qwen/Qwen3-0.6B-GGUF", "Qwen/Qwen3-1.7B-GGUF"},
+			},
+		},
+	}
+	cfg := Config{
+		Server: ServerConfig{
+			ListenAddr:  "127.0.0.1:18080",
+			AccessToken: "shared-token",
+		},
+		Models: models,
+		LLM:    models,
+		Bootstrap: BootstrapConfig{
+			ManagerImage: "img",
+		},
+	}
+
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	content := string(data)
+	for _, want := range []string{
+		`default = "csghub-lite.Qwen/Qwen3-0.6B-GGUF"`,
+		`[models.providers.csghub-lite]`,
+		`base_url = "http://127.0.0.1:11435/v1"`,
+		`api_key = "local"`,
+		`models = ["Qwen/Qwen3-0.6B-GGUF", "Qwen/Qwen3-1.7B-GGUF"]`,
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("saved config missing %q:\n%s", want, content)

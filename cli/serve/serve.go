@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -23,6 +24,7 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/server"
 )
 
@@ -33,6 +35,7 @@ var (
 	NewIMService           = newIMService
 	NewFeishuService       = newFeishuService
 	NewLLMService          = newLLMService
+	CheckModelProvider     = checkModelProvider
 	EnsureBootstrapManager = func(ctx context.Context, svc *agent.Service, forceRecreate bool) error {
 		if svc == nil {
 			return nil
@@ -192,6 +195,9 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	if globals.Endpoint != "" {
 		cfg.Server.AdvertiseBaseURL = strings.TrimRight(globals.Endpoint, "/")
 	}
+	if err := preflightDefaultModelProvider(ctx, cfg); err != nil {
+		return err
+	}
 
 	printEffectiveConfig(run, cfg, globals.Output)
 	svc, err := NewAgentService(cfg)
@@ -214,6 +220,9 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 }
 
 func serveForeground(ctx context.Context, run *command.Context, cfg config.Config, output string) error {
+	if err := preflightDefaultModelProvider(ctx, cfg); err != nil {
+		return err
+	}
 	svc, err := NewAgentService(cfg)
 	if err != nil {
 		return err
@@ -332,6 +341,40 @@ func startServer(ctx context.Context, cfg config.Config, svc *agent.Service, bot
 		AccessToken: cfg.Server.AccessToken,
 		Context:     ctx,
 	})
+}
+
+func preflightDefaultModelProvider(ctx context.Context, cfg config.Config) error {
+	llmCfg := effectiveLLMConfig(cfg)
+	providerName := llmCfg.EffectiveDefaultProvider()
+	_, modelCfg, err := llmCfg.Resolve("")
+	if err != nil {
+		return err
+	}
+	if !requiresCSGHubLitePreflight(providerName, modelCfg.BaseURL) {
+		return nil
+	}
+	if err := CheckModelProvider(ctx, modelCfg); err != nil {
+		return fmt.Errorf("csghub-lite provider is not reachable at %s (%w); start it with `csghub-lite run <model>` or `csghub-lite serve`, then retry", strings.TrimRight(modelCfg.BaseURL, "/"), err)
+	}
+	return nil
+}
+
+func checkModelProvider(ctx context.Context, modelCfg config.ModelConfig) error {
+	_, err := modelprovider.ListOpenAIModels(ctx, modelCfg.BaseURL, modelCfg.APIKey)
+	return err
+}
+
+func requiresCSGHubLitePreflight(providerName, baseURL string) bool {
+	if strings.TrimSpace(providerName) == modelprovider.CSGHubLiteProviderName {
+		return true
+	}
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	port := parsed.Port()
+	return port == "11435" && (host == "127.0.0.1" || host == "localhost")
 }
 
 func defaultServerLogPath() (string, error) {
