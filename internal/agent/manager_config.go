@@ -102,7 +102,6 @@ func updateModelList(cfg map[string]any, botID string, server config.ServerConfi
 		if defaults, ok := agents["defaults"].(map[string]any); ok {
 			if modelID := strings.TrimSpace(modelCfg.ModelID); modelID != "" {
 				defaults["model_name"] = modelID
-				defaults["model"] = modelID
 			}
 		}
 	}

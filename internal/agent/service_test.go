@@ -1118,7 +1118,6 @@ func TestPicoclawBoxEnvVars(t *testing.T) {
 		"OPENAI_BASE_URL":                        "http://10.0.0.8:18080/api/bots/u-worker-1/llm",
 		"OPENAI_API_KEY":                         "shared-token",
 		"OPENAI_MODEL":                           "minimax-m2.7",
-		"PICOCLAW_AGENTS_DEFAULTS_MODEL":         "minimax-m2.7",
 		"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME":    "minimax-m2.7",
 		"PICOCLAW_CUSTOM_MODEL_NAME":             "minimax-m2.7",
 		"PICOCLAW_CUSTOM_MODEL_ID":               "openai/minimax-m2.7",

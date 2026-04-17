@@ -157,7 +157,6 @@ func picoclawBoxEnvVars(baseURL, accessToken, botID, llmBaseURL, modelID string)
 	env["PICOCLAW_CHANNELS_CSGCLAW_BASE_URL"] = baseURL
 	env["PICOCLAW_CHANNELS_CSGCLAW_ACCESS_TOKEN"] = accessToken
 	env["PICOCLAW_CHANNELS_CSGCLAW_BOT_ID"] = botID
-	env["PICOCLAW_AGENTS_DEFAULTS_MODEL"] = modelID
 	env["PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME"] = modelID
 	env["PICOCLAW_CUSTOM_MODEL_NAME"] = modelID
 	env["PICOCLAW_CUSTOM_MODEL_ID"] = picoclawModelID

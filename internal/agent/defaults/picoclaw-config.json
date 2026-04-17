@@ -9,7 +9,6 @@
       "restrict_to_workspace": false,
       "allow_read_outside_workspace": true,
       "provider": "",
-      "model": "minimax-m2.7",
       "model_name": "minimax-m2.7",
       "max_tokens": 32768,
       "max_tool_iterations": 50,
