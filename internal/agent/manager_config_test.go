@@ -52,7 +52,9 @@ func TestRenderAgentPicoClawConfigUsesBridgeModelEndpoint(t *testing.T) {
 
 	text := string(data)
 	for _, want := range []string{
+		`"model": "gpt-5.4"`,
 		`"model_name": "gpt-5.4"`,
+		`"model": "openai/gpt-5.4"`,
 		`"api_base": "http://10.0.0.8:18080/api/bots/u-ux/llm"`,
 		`"api_key": "shared-token"`,
 		`"bot_id": "u-ux"`,
@@ -66,7 +68,16 @@ func TestRenderAgentPicoClawConfigUsesBridgeModelEndpoint(t *testing.T) {
 	}
 }
 
-func TestEnsureAgentPicoClawConfigWritesConfigFiles(t *testing.T) {
+func TestPicoclawBridgeModelIDPrefixesOpenAIForSlashModelNames(t *testing.T) {
+	if got, want := picoclawBridgeModelID("Qwen/Qwen3-0.6B-GGUF"), "openai/Qwen/Qwen3-0.6B-GGUF"; got != want {
+		t.Fatalf("picoclawBridgeModelID() = %q, want %q", got, want)
+	}
+	if got, want := picoclawBridgeModelID("openai/gpt-5.4"), "openai/gpt-5.4"; got != want {
+		t.Fatalf("picoclawBridgeModelID() = %q, want %q", got, want)
+	}
+}
+
+func TestEnsureAgentPicoClawConfigUsesDirectoryMountRoot(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 

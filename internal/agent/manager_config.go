@@ -94,13 +94,16 @@ func updateModelList(cfg map[string]any, botID string, server config.ServerConfi
 	if !ok {
 		return fmt.Errorf("embedded manager picoclaw config has invalid model_list[0]")
 	}
-	if modelCfg.ModelID != "" {
-		model["model_name"] = modelCfg.ModelID
-		model["model"] = modelCfg.ModelID
+	if modelID := strings.TrimSpace(modelCfg.ModelID); modelID != "" {
+		model["model_name"] = modelID
+		model["model"] = picoclawBridgeModelID(modelID)
 	}
 	if agents, ok := cfg["agents"].(map[string]any); ok {
-		if defaults, ok := agents["defaults"].(map[string]any); ok && modelCfg.ModelID != "" {
-			defaults["model_name"] = modelCfg.ModelID
+		if defaults, ok := agents["defaults"].(map[string]any); ok {
+			if modelID := strings.TrimSpace(modelCfg.ModelID); modelID != "" {
+				defaults["model_name"] = modelID
+				defaults["model"] = modelID
+			}
 		}
 	}
 
@@ -111,6 +114,23 @@ func updateModelList(cfg map[string]any, botID string, server config.ServerConfi
 		model["api_key"] = server.AccessToken
 	}
 	return nil
+}
+
+func picoclawBridgeModelID(modelID string) string {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(modelID), "openai/") {
+		return modelID
+	}
+	if prefix, rest, ok := strings.Cut(modelID, ":"); ok && strings.EqualFold(strings.TrimSpace(prefix), "openai") && strings.TrimSpace(rest) != "" {
+		return "openai/" + strings.TrimSpace(rest)
+	}
+	// The local bridge always exposes an OpenAI-compatible endpoint, so the
+	// PicoClaw model entry must use the OpenAI protocol even if the upstream
+	// model identifier itself contains slashes.
+	return "openai/" + modelID
 }
 
 func updateCSGClawChannel(cfg map[string]any, botID string, server config.ServerConfig) error {

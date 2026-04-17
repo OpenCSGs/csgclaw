@@ -1118,9 +1118,10 @@ func TestPicoclawBoxEnvVars(t *testing.T) {
 		"OPENAI_BASE_URL":                        "http://10.0.0.8:18080/api/bots/u-worker-1/llm",
 		"OPENAI_API_KEY":                         "shared-token",
 		"OPENAI_MODEL":                           "minimax-m2.7",
+		"PICOCLAW_AGENTS_DEFAULTS_MODEL":         "minimax-m2.7",
 		"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME":    "minimax-m2.7",
 		"PICOCLAW_CUSTOM_MODEL_NAME":             "minimax-m2.7",
-		"PICOCLAW_CUSTOM_MODEL_ID":               "minimax-m2.7",
+		"PICOCLAW_CUSTOM_MODEL_ID":               "openai/minimax-m2.7",
 		"PICOCLAW_CUSTOM_MODEL_API_KEY":          "shared-token",
 		"PICOCLAW_CUSTOM_MODEL_BASE_URL":         "http://10.0.0.8:18080/api/bots/u-worker-1/llm",
 	}
@@ -1128,6 +1129,23 @@ func TestPicoclawBoxEnvVars(t *testing.T) {
 		if got[key] != want {
 			t.Fatalf("%s = %q, want %q", key, got[key], want)
 		}
+	}
+}
+
+func TestPicoclawBoxEnvVarsPrefixesCustomModelIDForSlashNames(t *testing.T) {
+	got := picoclawBoxEnvVars(
+		"http://10.0.0.8:18080",
+		"shared-token",
+		"u-worker-1",
+		"http://10.0.0.8:18080/api/bots/u-worker-1/llm",
+		"Qwen/Qwen3-0.6B-GGUF",
+	)
+
+	if got["PICOCLAW_CUSTOM_MODEL_ID"] != "openai/Qwen/Qwen3-0.6B-GGUF" {
+		t.Fatalf("PICOCLAW_CUSTOM_MODEL_ID = %q, want %q", got["PICOCLAW_CUSTOM_MODEL_ID"], "openai/Qwen/Qwen3-0.6B-GGUF")
+	}
+	if got["PICOCLAW_CUSTOM_MODEL_NAME"] != "Qwen/Qwen3-0.6B-GGUF" {
+		t.Fatalf("PICOCLAW_CUSTOM_MODEL_NAME = %q, want %q", got["PICOCLAW_CUSTOM_MODEL_NAME"], "Qwen/Qwen3-0.6B-GGUF")
 	}
 }
 

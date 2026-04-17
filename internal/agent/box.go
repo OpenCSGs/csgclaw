@@ -151,14 +151,16 @@ func bridgeLLMEnvVars(llmBaseURL, accessToken, modelID string) map[string]string
 
 func picoclawBoxEnvVars(baseURL, accessToken, botID, llmBaseURL, modelID string) map[string]string {
 	env := bridgeLLMEnvVars(llmBaseURL, accessToken, modelID)
+	picoclawModelID := picoclawBridgeModelID(modelID)
 	env["CSGCLAW_BASE_URL"] = baseURL
 	env["CSGCLAW_ACCESS_TOKEN"] = accessToken
 	env["PICOCLAW_CHANNELS_CSGCLAW_BASE_URL"] = baseURL
 	env["PICOCLAW_CHANNELS_CSGCLAW_ACCESS_TOKEN"] = accessToken
 	env["PICOCLAW_CHANNELS_CSGCLAW_BOT_ID"] = botID
+	env["PICOCLAW_AGENTS_DEFAULTS_MODEL"] = modelID
 	env["PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME"] = modelID
 	env["PICOCLAW_CUSTOM_MODEL_NAME"] = modelID
-	env["PICOCLAW_CUSTOM_MODEL_ID"] = modelID
+	env["PICOCLAW_CUSTOM_MODEL_ID"] = picoclawModelID
 	env["PICOCLAW_CUSTOM_MODEL_API_KEY"] = accessToken
 	env["PICOCLAW_CUSTOM_MODEL_BASE_URL"] = llmBaseURL
 	return env
