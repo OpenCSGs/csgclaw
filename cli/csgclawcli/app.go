@@ -248,13 +248,9 @@ func (g GlobalOptions) commandOptions() command.GlobalOptions {
 }
 
 func (a *App) commandContext() *command.Context {
-	stdin := a.stdin
-	if stdin == nil {
-		stdin = os.Stdin
-	}
 	return &command.Context{
 		Program:    "csgclaw-cli",
-		Stdin:      stdin,
+		Stdin:      a.stdin,
 		Stdout:     a.stdout,
 		Stderr:     a.stderr,
 		HTTPClient: a.httpClient,
