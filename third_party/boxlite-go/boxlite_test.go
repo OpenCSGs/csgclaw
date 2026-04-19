@@ -191,6 +191,21 @@ func TestBuildOptionsJSON_Defaults(t *testing.T) {
 	}
 }
 
+func TestBuildOptionsJSON_UsesRootfsPathWhenProvided(t *testing.T) {
+	cfg := &boxConfig{}
+	WithRootfsPath("/tmp/picoclaw-oci")(cfg)
+
+	wire := buildOptionsJSON("ignored:image", cfg)
+
+	rootfs, ok := wire.Rootfs.(wireRootfsPath)
+	if !ok {
+		t.Fatalf("Rootfs type: got %T", wire.Rootfs)
+	}
+	if got, want := rootfs.RootfsPath, "/tmp/picoclaw-oci"; got != want {
+		t.Fatalf("Rootfs.RootfsPath = %q, want %q", got, want)
+	}
+}
+
 func TestBoxInfoWire_ToBoxInfo(t *testing.T) {
 	pid := 42
 	info := boxInfoWire{

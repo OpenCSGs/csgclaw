@@ -23,6 +23,7 @@ type BoxOption func(*boxConfig)
 
 type boxConfig struct {
 	name       string
+	rootfsPath string
 	cpus       int
 	memoryMiB  int
 	env        [][2]string
@@ -50,6 +51,11 @@ type portEntry struct {
 // WithName sets a human-readable name for the box.
 func WithName(name string) BoxOption {
 	return func(c *boxConfig) { c.name = name }
+}
+
+// WithRootfsPath uses a prepared local rootfs path instead of a registry image.
+func WithRootfsPath(path string) BoxOption {
+	return func(c *boxConfig) { c.rootfsPath = path }
 }
 
 // WithCPUs sets the number of virtual CPUs.

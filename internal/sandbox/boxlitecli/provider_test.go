@@ -84,11 +84,13 @@ func TestCreateRejectsUnsupportedOptions(t *testing.T) {
 		spec sandbox.CreateSpec
 		want string
 	}{
-		{name: "image", spec: sandbox.CreateSpec{}, want: "image is required"},
+		{name: "image", spec: sandbox.CreateSpec{}, want: "image or rootfs path is required"},
 		{name: "entrypoint", spec: sandbox.CreateSpec{Image: "alpine", Entrypoint: []string{"sh"}}, want: "entrypoint"},
+		{name: "rootfs path", spec: sandbox.CreateSpec{RootfsPath: "/tmp/picoclaw-oci"}, want: "rootfs path"},
 		{name: "env", spec: sandbox.CreateSpec{Image: "alpine", Env: map[string]string{"": "x"}}, want: "env"},
 		{name: "mount host", spec: sandbox.CreateSpec{Image: "alpine", Mounts: []sandbox.Mount{{GuestPath: "/guest"}}}, want: "host path"},
 		{name: "mount guest", spec: sandbox.CreateSpec{Image: "alpine", Mounts: []sandbox.Mount{{HostPath: "/host"}}}, want: "guest path"},
+		{name: "conflicting rootfs", spec: sandbox.CreateSpec{Image: "alpine", RootfsPath: "/tmp/picoclaw-oci"}, want: "mutually exclusive"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

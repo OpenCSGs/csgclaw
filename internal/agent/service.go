@@ -114,17 +114,18 @@ func TestOnlySetRunBoxCommandHook(hook func(*Service, context.Context, sandbox.I
 }
 
 type Service struct {
-	model        config.ModelConfig
-	llm          config.LLMConfig
-	server       config.ServerConfig
-	channels     config.ChannelsConfig
-	managerImage string
-	state        string
-	sandbox      sandbox.Provider
-	sandboxHome  string
-	mu           sync.RWMutex
-	runtimes     map[string]sandbox.Runtime
-	agents       map[string]Agent
+	model             config.ModelConfig
+	llm               config.LLMConfig
+	server            config.ServerConfig
+	channels          config.ChannelsConfig
+	managerImage      string
+	managerRootfsPath string
+	state             string
+	sandbox           sandbox.Provider
+	sandboxHome       string
+	mu                sync.RWMutex
+	runtimes          map[string]sandbox.Runtime
+	agents            map[string]Agent
 }
 
 type ServiceOption func(*Service) error
@@ -163,9 +164,14 @@ func NewServiceWithLLM(llmCfg config.LLMConfig, server config.ServerConfig, mana
 }
 
 func NewServiceWithLLMAndChannels(llmCfg config.LLMConfig, server config.ServerConfig, channels config.ChannelsConfig, managerImage, statePath string, opts ...ServiceOption) (*Service, error) {
+	return NewServiceWithLLMAndChannelsAndBootstrap(llmCfg, server, channels, config.BootstrapConfig{ManagerImage: managerImage}, statePath, opts...)
+}
+
+func NewServiceWithLLMAndChannelsAndBootstrap(llmCfg config.LLMConfig, server config.ServerConfig, channels config.ChannelsConfig, bootstrap config.BootstrapConfig, statePath string, opts ...ServiceOption) (*Service, error) {
 	// agent.Service owns the persisted registry and the live sandbox lifecycle.
-	if managerImage == "" {
-		managerImage = config.DefaultManagerImage
+	bootstrap = bootstrap.Resolved()
+	if err := bootstrap.Validate(); err != nil {
+		return nil, err
 	}
 	defaultProfile, model, err := llmCfg.Resolve("")
 	if err != nil {
@@ -176,16 +182,17 @@ func NewServiceWithLLMAndChannels(llmCfg config.LLMConfig, server config.ServerC
 		model = config.ModelConfig{}.Resolved()
 	}
 	svc := &Service{
-		model:        model,
-		llm:          llmCfg.Normalized(),
-		server:       server,
-		channels:     cloneChannelsConfig(channels),
-		managerImage: managerImage,
-		state:        statePath,
-		sandbox:      defaultSandboxProvider,
-		sandboxHome:  config.DefaultSandboxHomeDirName,
-		runtimes:     make(map[string]sandbox.Runtime),
-		agents:       make(map[string]Agent),
+		model:             model,
+		llm:               llmCfg.Normalized(),
+		server:            server,
+		channels:          cloneChannelsConfig(channels),
+		managerImage:      bootstrap.ManagerImage,
+		managerRootfsPath: bootstrap.ManagerRootfsPath,
+		state:             statePath,
+		sandbox:           defaultSandboxProvider,
+		sandboxHome:       config.DefaultSandboxHomeDirName,
+		runtimes:          make(map[string]sandbox.Runtime),
+		agents:            make(map[string]Agent),
 	}
 	for _, opt := range opts {
 		if opt == nil {
@@ -222,7 +229,11 @@ func EnsureBootstrapState(ctx context.Context, statePath string, server config.S
 }
 
 func EnsureBootstrapStateWithLLM(ctx context.Context, statePath string, server config.ServerConfig, llmCfg config.LLMConfig, managerImage string, forceRecreate bool) error {
-	svc, err := NewServiceWithLLM(llmCfg, server, managerImage, statePath)
+	return EnsureBootstrapStateWithLLMAndBootstrap(ctx, statePath, server, llmCfg, config.BootstrapConfig{ManagerImage: managerImage}, forceRecreate)
+}
+
+func EnsureBootstrapStateWithLLMAndBootstrap(ctx context.Context, statePath string, server config.ServerConfig, llmCfg config.LLMConfig, bootstrap config.BootstrapConfig, forceRecreate bool) error {
+	svc, err := NewServiceWithLLMAndChannelsAndBootstrap(llmCfg, server, config.ChannelsConfig{}, bootstrap, statePath)
 	if err != nil {
 		return err
 	}

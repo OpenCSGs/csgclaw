@@ -36,6 +36,7 @@ func TestBoxOptionsValidateSpec(t *testing.T) {
 
 func TestBoxOptionsAcceptSupportedSpec(t *testing.T) {
 	opts, err := boxOptions(sandbox.CreateSpec{
+		Image:      "alpine",
 		Name:       "agent",
 		Detach:     true,
 		AutoRemove: false,
@@ -52,6 +53,20 @@ func TestBoxOptionsAcceptSupportedSpec(t *testing.T) {
 	}
 	if len(opts) == 0 {
 		t.Fatal("boxOptions() returned no options")
+	}
+}
+
+func TestBoxOptionsAcceptsRootfsPath(t *testing.T) {
+	opts, err := boxOptions(sandbox.CreateSpec{
+		RootfsPath: "/tmp/picoclaw-oci",
+		Name:       "agent",
+		Detach:     true,
+	})
+	if err != nil {
+		t.Fatalf("boxOptions() error = %v", err)
+	}
+	if len(opts) == 0 {
+		t.Fatal("boxOptions() returned no options for rootfs path")
 	}
 }
 

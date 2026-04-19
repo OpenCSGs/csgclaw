@@ -56,7 +56,6 @@ func (s *Service) gatewayCreateSpec(image, name, botID string, modelCfg config.M
 	addFeishuBoxEnvVars(envVars, botID, s.channels)
 	envVars["HOME"] = "/home/picoclaw"
 	spec := sandbox.CreateSpec{
-		Image:      image,
 		Name:       name,
 		Detach:     true,
 		AutoRemove: false,
@@ -66,6 +65,11 @@ func (s *Service) gatewayCreateSpec(image, name, botID string, modelCfg config.M
 			"-c",
 			"/usr/local/bin/picoclaw gateway -d 1>~/.picoclaw/gateway.log 2>/dev/null",
 		},
+	}
+	if strings.TrimSpace(s.managerRootfsPath) != "" {
+		spec.RootfsPath = s.managerRootfsPath
+	} else {
+		spec.Image = image
 	}
 
 	hostWorkspaceRoot, err := ensureAgentWorkspace(name, workspaceTemplateForAgent(name, botID))

@@ -4,6 +4,14 @@ English | [中文](config.zh.md)
 
 `csgclaw onboard` writes the local config file used by `csgclaw serve`. The config covers server access, model providers, bootstrap image selection, sandbox isolation, and optional channels.
 
+## Bootstrap Source
+
+By default, CSGClaw starts manager and worker boxes from `manager_image`, which is a normal OCI image reference.
+
+You can also point bootstrap to a preloaded local rootfs bundle by setting `manager_rootfs_path` instead. This is useful for mirrored or air-gapped deployments where PicoClaw is prepared locally ahead of time.
+
+`manager_image` and `manager_rootfs_path` are mutually exclusive.
+
 ## Server Address
 
 `listen_addr` is the address that the local HTTP server binds to.
@@ -107,6 +115,8 @@ boxlite_cli_path = "boxlite"
 CSGClaw passes an explicit `--home` to the BoxLite CLI for each agent, using the agent directory plus `home_dir_name` such as `~/.csgclaw/agents/<agent-id>/boxlite`. That explicit home takes precedence over `BOXLITE_HOME` for CSGClaw-managed sandboxes, while `BOXLITE_HOME` still applies when you run `boxlite` manually without `--home`.
 
 The `boxlite-cli` provider does not need the vendored Go SDK at runtime. Source builds and the current default `boxlite` provider still use the SDK path, so commands such as `make test` may fetch or link the vendored BoxLite native library.
+
+`manager_rootfs_path` currently works with the default `boxlite` provider. The `boxlite-cli` provider still expects an image reference.
 
 ## Worker Override Example
 

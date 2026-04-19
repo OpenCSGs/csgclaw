@@ -1403,6 +1403,44 @@ func TestGatewayStartCommandUsesTiniForNormalMode(t *testing.T) {
 	}
 }
 
+func TestGatewayCreateSpecUsesManagerRootfsPath(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	svc, err := NewServiceWithLLMAndChannelsAndBootstrap(
+		config.SingleProfileLLM(config.ModelConfig{
+			BaseURL: "http://127.0.0.1:4000",
+			APIKey:  "shared-token",
+			ModelID: "minimax-m2.7",
+		}),
+		config.ServerConfig{
+			ListenAddr:  "0.0.0.0:18080",
+			AccessToken: "shared-token",
+		},
+		config.ChannelsConfig{},
+		config.BootstrapConfig{
+			ManagerRootfsPath: "/tmp/picoclaw-oci",
+		},
+		"",
+	)
+	if err != nil {
+		t.Fatalf("NewServiceWithLLMAndChannelsAndBootstrap() error = %v", err)
+	}
+
+	spec, err := svc.gatewayCreateSpec("ignored:image", "alice", "u-worker-1", config.ModelConfig{
+		ModelID: "minimax-m2.7",
+	})
+	if err != nil {
+		t.Fatalf("gatewayCreateSpec() error = %v", err)
+	}
+	if got := spec.Image; got != "" {
+		t.Fatalf("gatewayCreateSpec() image = %q, want empty", got)
+	}
+	if got, want := spec.RootfsPath, "/tmp/picoclaw-oci"; got != want {
+		t.Fatalf("gatewayCreateSpec() rootfs_path = %q, want %q", got, want)
+	}
+}
+
 func TestGatewayStartCommandKeepsDebugSleepMode(t *testing.T) {
 	entrypoint, cmd := gatewayStartCommand(true)
 

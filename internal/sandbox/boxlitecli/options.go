@@ -39,8 +39,11 @@ func WithRunner(runner Runner) ProviderOption {
 }
 
 func runArgs(spec sandbox.CreateSpec) ([]string, error) {
-	if strings.TrimSpace(spec.Image) == "" {
-		return nil, fmt.Errorf("invalid sandbox image: image is required")
+	if err := spec.ValidateRootfsSource(); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(spec.RootfsPath) != "" {
+		return nil, fmt.Errorf("unsupported sandbox option: rootfs path")
 	}
 	if len(spec.Entrypoint) > 0 {
 		return nil, fmt.Errorf("unsupported sandbox option: entrypoint")

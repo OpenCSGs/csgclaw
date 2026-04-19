@@ -130,6 +130,67 @@ models = ["minimax-m2.7"]
 	}
 }
 
+func TestLoadReadsManagerRootfsPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[bootstrap]
+manager_rootfs_path = "/tmp/picoclaw-oci"
+
+[models]
+default = "default.minimax-m2.7"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["minimax-m2.7"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := cfg.Bootstrap.ManagerRootfsPath, "/tmp/picoclaw-oci"; got != want {
+		t.Fatalf("cfg.Bootstrap.ManagerRootfsPath = %q, want %q", got, want)
+	}
+	if got := cfg.Bootstrap.ManagerImage; got != "" {
+		t.Fatalf("cfg.Bootstrap.ManagerImage = %q, want empty", got)
+	}
+}
+
+func TestLoadRejectsConflictingBootstrapSources(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[bootstrap]
+manager_image = "ghcr.io/russellluo/picoclaw:latest"
+manager_rootfs_path = "/tmp/picoclaw-oci"
+
+[models]
+default = "default.minimax-m2.7"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["minimax-m2.7"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("Load() error = %v, want mutually exclusive bootstrap source error", err)
+	}
+}
+
 func TestLoadReadsModelsProviderPool(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -416,6 +477,43 @@ func TestSaveWritesCSGHubLiteProvider(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Fatalf("saved config missing %q:\n%s", want, content)
 		}
+	}
+}
+
+func TestSaveWritesManagerRootfsPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	models := SingleProfileLLM(ModelConfig{
+		BaseURL: "http://127.0.0.1:4000",
+		APIKey:  "sk",
+		ModelID: "minimax-m2.7",
+	})
+	cfg := Config{
+		Server: ServerConfig{
+			ListenAddr:  "127.0.0.1:18080",
+			AccessToken: "shared-token",
+		},
+		Models: models,
+		LLM:    models,
+		Bootstrap: BootstrapConfig{
+			ManagerRootfsPath: "/tmp/picoclaw-oci",
+		},
+	}
+
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `manager_rootfs_path = "/tmp/picoclaw-oci"`) {
+		t.Fatalf("saved config missing manager_rootfs_path:\n%s", content)
+	}
+	if strings.Contains(content, "manager_image = ") {
+		t.Fatalf("saved config should not contain manager_image when rootfs path is used:\n%s", content)
 	}
 }
 

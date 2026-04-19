@@ -10,9 +10,15 @@ import (
 )
 
 func boxOptions(spec sandbox.CreateSpec) ([]boxlitesdk.BoxOption, error) {
+	if err := spec.ValidateRootfsSource(); err != nil {
+		return nil, err
+	}
 	var opts []boxlitesdk.BoxOption
 	if strings.TrimSpace(spec.Name) != "" {
 		opts = append(opts, boxlitesdk.WithName(spec.Name))
+	}
+	if strings.TrimSpace(spec.RootfsPath) != "" {
+		opts = append(opts, boxlitesdk.WithRootfsPath(spec.RootfsPath))
 	}
 	opts = append(opts,
 		boxlitesdk.WithDetach(spec.Detach),

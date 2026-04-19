@@ -4,6 +4,14 @@
 
 `csgclaw onboard` 会写入 `csgclaw serve` 使用的本地配置文件。配置内容包括 server 访问方式、模型 provider、bootstrap 镜像、sandbox 隔离方式和可选通信通道。
 
+## Bootstrap 来源
+
+默认情况下，CSGClaw 会通过 `manager_image` 指定的 OCI 镜像引用启动 manager 和 worker box。
+
+如果你已经提前准备好了本地 rootfs bundle，也可以改用 `manager_rootfs_path`。这适合使用镜像镜像站、离线包或 air-gapped 环境的部署场景。
+
+`manager_image` 和 `manager_rootfs_path` 互斥，不能同时配置。
+
 ## Server 地址
 
 `listen_addr` 是本地 HTTP server 监听的地址。
@@ -107,6 +115,8 @@ boxlite_cli_path = "boxlite"
 CSGClaw 会为每个 agent 调用 BoxLite CLI 时显式传入 `--home`，目录由 agent 目录和 `home_dir_name` 组成，例如 `~/.csgclaw/agents/<agent-id>/boxlite`。这个显式 home 对 CSGClaw 管理的 sandbox 生效，优先于 `BOXLITE_HOME`；你手动运行 `boxlite` 且不传 `--home` 时，`BOXLITE_HOME` 仍按 BoxLite 自身规则生效。
 
 `boxlite-cli` provider 运行时不需要 vendored Go SDK。不过源码编译和当前默认的 `boxlite` provider 仍会走 SDK 路径，所以 `make test` 等命令仍可能触发 BoxLite native library 的下载或链接。
+
+目前 `manager_rootfs_path` 只支持默认的 `boxlite` provider；`boxlite-cli` provider 仍然要求传入镜像引用。
 
 ## Worker 覆盖示例
 

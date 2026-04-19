@@ -5,7 +5,9 @@ package sandbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -64,6 +66,7 @@ const (
 // CreateSpec describes a sandbox instance to create and start.
 type CreateSpec struct {
 	Image      string
+	RootfsPath string
 	Name       string
 	Detach     bool
 	AutoRemove bool
@@ -71,6 +74,19 @@ type CreateSpec struct {
 	Mounts     []Mount
 	Entrypoint []string
 	Cmd        []string
+}
+
+func (s CreateSpec) ValidateRootfsSource() error {
+	image := strings.TrimSpace(s.Image)
+	rootfsPath := strings.TrimSpace(s.RootfsPath)
+	switch {
+	case image != "" && rootfsPath != "":
+		return fmt.Errorf("invalid sandbox rootfs: image and rootfs path are mutually exclusive")
+	case image == "" && rootfsPath == "":
+		return fmt.Errorf("invalid sandbox rootfs: image or rootfs path is required")
+	default:
+		return nil
+	}
 }
 
 // Mount describes a host path mounted into a sandbox instance.

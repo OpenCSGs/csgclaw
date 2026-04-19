@@ -494,7 +494,15 @@ advertise_base_url = %q
 access_token = %q
 
 [bootstrap]
-manager_image = %q
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken))
+	bootstrap := cfg.Bootstrap.Resolved()
+	if bootstrap.ManagerImage != "" {
+		content += fmt.Sprintf("manager_image = %q\n", bootstrap.ManagerImage)
+	}
+	if bootstrap.ManagerRootfsPath != "" {
+		content += fmt.Sprintf("manager_rootfs_path = %q\n", bootstrap.ManagerRootfsPath)
+	}
+	content += fmt.Sprintf(`
 
 [sandbox]
 provider = %q
@@ -503,7 +511,7 @@ boxlite_cli_path = %q
 
 [models]
 default = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Bootstrap.ManagerImage, cfg.Sandbox.Resolved().Provider, cfg.Sandbox.Resolved().HomeDirName, cfg.Sandbox.Resolved().BoxLiteCLIPath, llmCfg.DefaultSelector()) + formatEffectiveProviders(llmCfg)
+`, cfg.Sandbox.Resolved().Provider, cfg.Sandbox.Resolved().HomeDirName, cfg.Sandbox.Resolved().BoxLiteCLIPath, llmCfg.DefaultSelector()) + formatEffectiveProviders(llmCfg)
 
 	if strings.TrimSpace(cfg.Channels.FeishuAdminOpenID) != "" {
 		content += fmt.Sprintf(`
@@ -590,7 +598,7 @@ func newAgentService(cfg config.Config) (*agent.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return agent.NewServiceWithLLMAndChannels(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap.ManagerImage, agentsPath, opts...)
+	return agent.NewServiceWithLLMAndChannelsAndBootstrap(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap, agentsPath, opts...)
 }
 
 func sandboxServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {

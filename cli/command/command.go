@@ -29,25 +29,26 @@ type GlobalOptions struct {
 }
 
 type ActionResult struct {
-	Command         string   `json:"command,omitempty"`
-	Action          string   `json:"action,omitempty"`
-	Status          string   `json:"status"`
-	ID              string   `json:"id,omitempty"`
-	Channel         string   `json:"channel,omitempty"`
-	Message         string   `json:"message,omitempty"`
-	PID             int      `json:"pid,omitempty"`
-	IMURL           string   `json:"im_url,omitempty"`
-	APIURL          string   `json:"api_url,omitempty"`
-	LogPath         string   `json:"log_path,omitempty"`
-	PIDPath         string   `json:"pid_path,omitempty"`
-	ConfigPath      string   `json:"config_path,omitempty"`
-	ManagerImage    string   `json:"manager_image,omitempty"`
-	Users           []string `json:"users,omitempty"`
-	ForceRecreated  bool     `json:"force_recreated,omitempty"`
-	Logs            string   `json:"logs,omitempty"`
-	Lines           int      `json:"lines,omitempty"`
-	Follow          bool     `json:"follow,omitempty"`
-	EffectiveConfig string   `json:"effective_config,omitempty"`
+	Command           string   `json:"command,omitempty"`
+	Action            string   `json:"action,omitempty"`
+	Status            string   `json:"status"`
+	ID                string   `json:"id,omitempty"`
+	Channel           string   `json:"channel,omitempty"`
+	Message           string   `json:"message,omitempty"`
+	PID               int      `json:"pid,omitempty"`
+	IMURL             string   `json:"im_url,omitempty"`
+	APIURL            string   `json:"api_url,omitempty"`
+	LogPath           string   `json:"log_path,omitempty"`
+	PIDPath           string   `json:"pid_path,omitempty"`
+	ConfigPath        string   `json:"config_path,omitempty"`
+	ManagerImage      string   `json:"manager_image,omitempty"`
+	ManagerRootfsPath string   `json:"manager_rootfs_path,omitempty"`
+	Users             []string `json:"users,omitempty"`
+	ForceRecreated    bool     `json:"force_recreated,omitempty"`
+	Logs              string   `json:"logs,omitempty"`
+	Lines             int      `json:"lines,omitempty"`
+	Follow            bool     `json:"follow,omitempty"`
+	EffectiveConfig   string   `json:"effective_config,omitempty"`
 }
 
 type Context struct {

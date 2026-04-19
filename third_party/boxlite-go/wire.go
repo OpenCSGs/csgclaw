@@ -38,6 +38,11 @@ type wireRootfsImage struct {
 	Image string `json:"Image"`
 }
 
+// wireRootfsPath matches Rust RootfsSpec::RootfsPath serialization.
+type wireRootfsPath struct {
+	RootfsPath string `json:"RootfsPath"`
+}
+
 // boxInfoWire matches the JSON from box_info_to_json() in ffi/src/json.rs.
 type boxInfoWire struct {
 	ID        string        `json:"id"`
@@ -75,8 +80,12 @@ func (w *boxInfoWire) toBoxInfo() BoxInfo {
 
 // buildOptionsJSON creates the JSON wire representation from boxConfig.
 func buildOptionsJSON(image string, cfg *boxConfig) boxOptionsWire {
+	rootfs := any(wireRootfsImage{Image: image})
+	if cfg.rootfsPath != "" {
+		rootfs = wireRootfsPath{RootfsPath: cfg.rootfsPath}
+	}
 	w := boxOptionsWire{
-		Rootfs:  wireRootfsImage{Image: image},
+		Rootfs:  rootfs,
 		Env:     cfg.env,
 		Network: "Isolated",
 	}

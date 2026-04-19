@@ -59,6 +59,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	modelsValue := fs.String("models", "", "comma-separated LLM model identifiers")
 	reasoningEffort := fs.String("reasoning-effort", "", "optional upstream reasoning_effort default")
 	managerImage := fs.String("manager-image", "", "bootstrap manager image")
+	managerRootfsPath := fs.String("manager-rootfs-path", "", "bootstrap manager local rootfs path")
 	forceRecreateManager := fs.Bool("force-recreate-manager", false, "remove and recreate the bootstrap manager box")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -107,8 +108,21 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	}
 
 	syncConfigWithLLM(&cfg, llmCfg)
-	if *managerImage != "" {
-		cfg.Bootstrap.ManagerImage = *managerImage
+	if visited["manager-image"] {
+		cfg.Bootstrap.ManagerImage = strings.TrimSpace(*managerImage)
+		if cfg.Bootstrap.ManagerImage != "" {
+			cfg.Bootstrap.ManagerRootfsPath = ""
+		}
+	}
+	if visited["manager-rootfs-path"] {
+		cfg.Bootstrap.ManagerRootfsPath = strings.TrimSpace(*managerRootfsPath)
+		if cfg.Bootstrap.ManagerRootfsPath != "" {
+			cfg.Bootstrap.ManagerImage = ""
+		}
+	}
+	cfg.Bootstrap = cfg.Bootstrap.Resolved()
+	if err := cfg.Bootstrap.Validate(); err != nil {
+		return err
 	}
 	if err := validateModelConfig(cfg); err != nil {
 		return err
@@ -134,20 +148,21 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	}
 
 	result := command.ActionResult{
-		Command:        "onboard",
-		Action:         "initialize",
-		Status:         "initialized",
-		ConfigPath:     path,
-		ManagerImage:   cfg.Bootstrap.ManagerImage,
-		Users:          []string{"admin", "manager"},
-		ForceRecreated: *forceRecreateManager,
-		Message:        fmt.Sprintf("initialized config at %s", path),
+		Command:           "onboard",
+		Action:            "initialize",
+		Status:            "initialized",
+		ConfigPath:        path,
+		ManagerImage:      cfg.Bootstrap.ManagerImage,
+		ManagerRootfsPath: cfg.Bootstrap.ManagerRootfsPath,
+		Users:             []string{"admin", "manager"},
+		ForceRecreated:    *forceRecreateManager,
+		Message:           fmt.Sprintf("initialized config at %s", path),
 	}
 	if globals.Output == "json" {
 		return command.RenderAction(globals.Output, run.Stdout, result)
 	}
 	fmt.Fprintln(run.Stdout, result.Message)
-	fmt.Fprintf(run.Stdout, "ensured bootstrap agent %q with image %q\n", agent.ManagerName, cfg.Bootstrap.ManagerImage)
+	fmt.Fprintf(run.Stdout, "ensured bootstrap agent %q with %s\n", agent.ManagerName, cfg.Bootstrap.DisplaySource())
 	fmt.Fprintf(run.Stdout, "ensured IM members %q and %q\n", "admin", "manager")
 	fmt.Fprintln(run.Stdout, "cleared IM invite draft data")
 	if *forceRecreateManager {
@@ -546,7 +561,7 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 	if err != nil {
 		return bot.Bot{}, err
 	}
-	agentSvc, err := agent.NewServiceWithLLMAndChannels(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap.ManagerImage, agentsPath, opts...)
+	agentSvc, err := agent.NewServiceWithLLMAndChannelsAndBootstrap(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap, agentsPath, opts...)
 	if err != nil {
 		return bot.Bot{}, err
 	}
