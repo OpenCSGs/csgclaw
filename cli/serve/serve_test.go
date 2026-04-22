@@ -210,9 +210,9 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	}
 }
 
-func TestSandboxServiceOptionsSupportsBoxLiteCLI(t *testing.T) {
+func TestSandboxServiceOptionsSupportsConfiguredProvider(t *testing.T) {
 	opts, err := sandboxServiceOptions(config.SandboxConfig{
-		Provider:       config.BoxLiteCLIProvider,
+		Provider:       config.DefaultSandboxProvider,
 		HomeDirName:    "sandbox-home",
 		BoxLiteCLIPath: "/opt/boxlite/bin/boxlite",
 	})

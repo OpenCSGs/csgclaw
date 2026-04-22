@@ -1,3 +1,5 @@
+//go:build !csghub
+
 package sandboxproviders
 
 import (

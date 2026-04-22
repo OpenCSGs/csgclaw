@@ -1,0 +1,113 @@
+# syntax=docker/dockerfile:1.7
+#
+# CSGClaw base image for the CSGHub Sandbox SaaS deployment.
+#
+# Scope: this image ONLY contains csgclaw-specific assets — the Go
+# server, the CLI, and the picoclaw OS base. It is intentionally
+# a *base layer* used by ONE downstream image, the csgclaw-server
+# sandbox:
+#
+#   sandbox-runtime/csgclaw-server/Dockerfile
+#     └─ FROM csgclaw:<tag>            (this image)
+#        + supervisor + python-sandbox
+#        → csgclaw-server-sandbox:<tag>   (runs in the server pod)
+#
+# Manager / worker pods use a separate `csgclaw-agent-sandbox` image
+# layered directly on upstream picoclaw and do NOT depend on this
+# base image at all. There is no longer a single unified sandbox
+# image and no CSGCLAW_ROLE runtime switch.
+#
+# CSGCLAW_SANDBOX_IMAGE in the SaaS env contract must point at the
+# csgclaw-agent-sandbox tag (used for manager/worker sandboxes); the
+# server pod image is set directly by csgbot in its Deployment.
+#
+# Responsibilities split (see docker/README.md for the long form):
+#   csgclaw repo     → csgclaw Go binaries + picoclaw base
+#   sandbox-runtime  → python-sandbox scripts + supervisor + two
+#                      role-specific images (server, agent).
+#
+# Build context: repo root.
+#
+# Build args:
+#   PICOCLAW_IMAGE    upstream picoclaw image (Alpine 3.23 + python3 + picoclaw).
+#                     Provides the base OS, picoclaw gateway binary, the picoclaw
+#                     user (uid=1000) and the default /home/picoclaw layout.
+#   GO_IMAGE          go toolchain used for cross-compiling csgclaw with the
+#                     csghub build tag.
+#
+# Example:
+#   docker build -f docker/Dockerfile.unified \
+#     --build-arg PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsg_public/picoclaw:2026041901 \
+#     -t csgclaw:csghub .
+#
+# ---------------------------------------------------------------------------
+
+ARG PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsg_public/picoclaw:2026041901
+ARG GO_IMAGE=golang:1.26-alpine
+
+# ============================================================
+# Stage 1: build csgclaw + csgclaw-cli with -tags csghub.
+# ============================================================
+FROM ${GO_IMAGE} AS csgclaw-builder
+
+RUN apk add --no-cache git make bash
+
+WORKDIR /src
+
+# The go.mod replace directive points at ./third_party/boxlite-go which
+# only exists after the full source tree is copied, so defer `go mod
+# download` until then. Build cache still gets reused via the go-build /
+# mod cache mounts below.
+COPY . .
+
+ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    ./scripts/sync-agent-runtimes.sh && \
+    go build -tags csghub -ldflags "-s -w" -o /out/csgclaw      ./cmd/csgclaw && \
+    go build -tags csghub -ldflags "-s -w" -o /out/csgclaw-cli  ./cmd/csgclaw-cli
+
+# ============================================================
+# Stage 2: base runtime image, based on picoclaw.
+#
+# Intentionally minimal: no supervisor, no python-sandbox, no pip
+# install. The downstream csgclaw-server-sandbox image (built in the
+# sandbox-runtime repo under csgclaw/) layers those on top.
+#
+# The picoclaw upstream image already provides:
+#   - Alpine 3.23
+#   - python3.12 + /usr/local/bin/picoclaw
+#   - picoclaw user (uid=1000) with /home/picoclaw/{.picoclaw,workspace}
+#   - /usr/local/bin/csgclaw-cli (superseded by our build below)
+# ============================================================
+FROM ${PICOCLAW_IMAGE}
+
+ARG CSGCLAW_STATE_DIR_DEFAULT=/opt/csgclaw
+
+USER root
+
+# Minimal runtime tools for the csgclaw binary itself (TLS roots, curl
+# for the healthz probes called by downstream layers, bash for debug
+# shells, tzdata for log timestamps). supervisor / python / pip are
+# intentionally NOT pulled in here — they belong to csgclaw-server-sandbox.
+RUN apk add --no-cache ca-certificates curl bash tzdata
+
+# csgclaw server + CLI (overrides the csgclaw-cli shipped by upstream
+# picoclaw image).
+COPY --from=csgclaw-builder /out/csgclaw      /usr/local/bin/csgclaw
+COPY --from=csgclaw-builder /out/csgclaw-cli  /usr/local/bin/csgclaw-cli
+
+# Server state dir and PVC mount point (csgbot will typically bind/mount
+# the real PVC on top of these).
+RUN mkdir -p ${CSGCLAW_STATE_DIR_DEFAULT}/server-state && \
+    chown -R picoclaw:picoclaw ${CSGCLAW_STATE_DIR_DEFAULT} || true
+
+ENV CSGCLAW_PVC_MOUNT_PATH=${CSGCLAW_STATE_DIR_DEFAULT}
+
+EXPOSE 18080
+
+# Default CMD runs the csgclaw HTTP server directly (no supervisor).
+# The downstream csgclaw-server-sandbox image overrides both ENTRYPOINT and
+# CMD to start supervisord, so this default only takes effect when
+# the base image is used standalone (debug / ad-hoc runs).
+CMD ["/usr/local/bin/csgclaw", "serve"]
