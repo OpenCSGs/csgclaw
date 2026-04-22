@@ -1,4 +1,4 @@
-//go:build boxlite_sdk && !csghub
+//go:build boxlite_sdk
 
 package sandboxproviders
 

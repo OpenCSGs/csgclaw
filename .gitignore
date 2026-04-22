@@ -3,6 +3,7 @@
 # Go build/test artifacts
 .gocache/
 bin/
+bin-csghub/
 dist/
 *.test
 *.out

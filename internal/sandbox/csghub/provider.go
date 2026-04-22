@@ -38,7 +38,7 @@ type runtimeConfig struct {
 	pollInterval time.Duration
 }
 
-// Provider is the sandbox.Provider entry for csghub-tagged builds.
+// Provider is the sandbox.Provider implementation for [sandbox].provider = csghub.
 type Provider struct{}
 
 func NewProvider() Provider {

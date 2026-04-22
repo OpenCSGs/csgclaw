@@ -2,16 +2,26 @@
 
 This document is the source of truth for the environment variables that
 flow between **csgbot → csgclaw-server → manager-sandbox → worker-sandbox**
-in the CSGHub Sandbox deployment (build tag `csghub`).
+in the **CSGHub Sandbox SaaS** layout (server and agents run as Hub
+sandboxes; csgclaw is configured with `[sandbox].provider = csghub`).
+
+**Compile-time variants:** this repo supports only:
+
+- **`go build`** — default binary (BoxLite **CLI** backend plus CSGHub
+  provider; pick the active backend in `config.toml` / deployment).
+- **`go build -tags boxlite_sdk`** — same surface area, but BoxLite is
+  linked via the **SDK** (CGO + native library) instead of the CLI.
+
+There is **no** separate `csghub` build tag. Variables in §2–§6 matter
+when the deployment uses the CSGHub sandbox provider and this PVC/API
+layout; pure local BoxLite (`provider = boxlite-cli` or `boxlite-sdk`)
+does not need them.
 
 It has two audiences:
 
 - **csgbot** operators, who must populate the server sandbox's env.
 - **csgclaw** maintainers, who must keep the manager / worker env
   injection code in sync when a new variable is added.
-
-> Local BoxLite builds (default tag) ignore every variable in this
-> document. The contract applies only to `-tags csghub` builds.
 
 ## 1. Flow overview
 
@@ -58,11 +68,12 @@ Both images are built in the `sandbox-runtime` repo under
 
 Manager vs worker are both the same `csgclaw-agent-sandbox` image
 and differ only by sandbox name. The Hub name is always
-`csgclaw-<tid>-<agent_id>` where `<agent_id>` is the persisted agent id
-(see `sandboxParams.sandboxName` in `internal/agent/env_csghub.go`): for
-example `csgclaw-<tid>-u-manager` for the bootstrap manager
+`csgclaw-<tid>-<agent_id>` where `<agent_id>` is the persisted agent id;
+for example `csgclaw-<tid>-u-manager` for the bootstrap manager
 (`ManagerUserID`) and `csgclaw-<tid>-u-<name>` for a typical worker
-created via `CreateWorker`, or any other non-empty agent id string.
+created via `CreateWorker`, or any other non-empty agent id string
+(convention enforced where the CSGHub provider and agent service agree
+on sandbox naming).
 
 ## 2. Server sandbox env (injected by csgbot)
 
@@ -126,7 +137,7 @@ subsequent startup reads the env and overrides the in-memory config
    docker bridge when running locally — not reachable from a
    remote CSGHub cluster).
 
-There is **no `localhost` fallback** for the csghub build. If none
+There is **no `localhost` fallback** in this SaaS layout. If none
 of these yields a URL the server fails fast at bot provisioning.
 
 ### 2.5 Auto-onboard (replaces the pre-run `csgclaw onboard` step)

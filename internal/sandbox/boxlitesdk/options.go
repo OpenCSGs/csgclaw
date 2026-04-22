@@ -1,4 +1,4 @@
-//go:build !csghub
+//go:build boxlite_sdk
 
 package boxlitesdk
 
