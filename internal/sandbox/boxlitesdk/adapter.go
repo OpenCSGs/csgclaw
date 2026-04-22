@@ -1,5 +1,3 @@
-//go:build boxlite_sdk
-
 // Package boxlitesdk adapts the BoxLite SDK to the generic sandbox interfaces.
 package boxlitesdk
 

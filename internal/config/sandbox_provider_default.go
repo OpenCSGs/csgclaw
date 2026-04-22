@@ -1,5 +1,7 @@
+//go:build !boxlite_sdk
+
 package config
 
-// DefaultSandboxProvider defaults to the CLI-backed provider in common builds.
-// SDK-tagged builds override this value from sandbox_provider_boxlite_sdk.go.
-var DefaultSandboxProvider = BoxLiteCLIProvider
+// DefaultSandboxProvider varies by build shape so that binaries compiled
+// without the BoxLite SDK still have a usable sandbox backend by default.
+const DefaultSandboxProvider = BoxLiteCLIProvider

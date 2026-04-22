@@ -1,5 +1,3 @@
-//go:build boxlite_sdk
-
 package boxlitesdk
 
 import (
