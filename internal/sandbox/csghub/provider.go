@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"csgclaw/internal/sandbox"
-	"csgclaw/internal/sandbox/csghubsdk"
+	"csgclaw/internal/sandbox/csghub/csghubsdk"
 )
 
 const providerName = "csghub"
