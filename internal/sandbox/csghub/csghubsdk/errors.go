@@ -3,6 +3,7 @@ package csghubsdk
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // HTTPError wraps a non-2xx response from a lifecycle or runtime call.
@@ -71,11 +72,20 @@ func IsConflict(err error) bool {
 	return false
 }
 
-// IsNotFound returns true when err is an HTTPError with status 404.
+// IsNotFound returns true when err semantically means "sandbox missing".
+//
+// Some CSGHub clusters return HTTP 400 with a "not found" detail instead of
+// HTTP 404 for missing sandboxes, so we treat both shapes as not-found.
 func IsNotFound(err error) bool {
 	var httpErr *HTTPError
 	if errors.As(err, &httpErr) {
-		return httpErr.StatusCode == 404
+		if httpErr.StatusCode == 404 {
+			return true
+		}
+		if httpErr.StatusCode == 400 {
+			detail := strings.ToLower(strings.TrimSpace(httpErr.Detail))
+			return strings.Contains(detail, "not found")
+		}
 	}
 	return false
 }

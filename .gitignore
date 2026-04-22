@@ -12,13 +12,16 @@ dist/
 
 # Local runtime data
 manager-data/
+docker/
 
 # Generated embedded runtime workspaces
 /internal/agent/embed/
 
-# Editor directories
+# Editor / tool directories
+.cursor/
 .idea/
 .vscode/
 
-# Vendored native libraries fetched on demand
+# Vendored native libraries / SDK dist fetched on demand
 third_party/boxlite-go/libboxlite.a
+third_party/boxlite-go/boxlite-c*/

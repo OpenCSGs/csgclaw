@@ -118,6 +118,21 @@ func TestGetNotFoundMapsToIsNotFound(t *testing.T) {
 	}
 }
 
+func TestGetBadRequestNotFoundAlsoMapsToIsNotFound(t *testing.T) {
+	cli, _ := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"code":400,"message":"not found"}`))
+	}))
+
+	_, err := cli.Get(context.Background(), "missing")
+	if err == nil {
+		t.Fatal("Get() error = nil, want HTTPError")
+	}
+	if !IsNotFound(err) {
+		t.Fatalf("IsNotFound(%v) = false", err)
+	}
+}
+
 func TestStartPutsToStatusStart(t *testing.T) {
 	var gotMethod, gotPath string
 	cli, _ := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
