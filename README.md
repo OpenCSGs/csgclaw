@@ -88,7 +88,7 @@ CSGClaw gives you one **Manager** and a set of specialized **Workers**, so inste
 
 **Workers** — role-specific executors (frontend, backend, testing, docs, research…). Specialization keeps context clean and reduces role confusion.
 
-**Sandbox** — Worker execution is isolated through the configured sandbox provider. The default provider is **Boxlite**, with an optional `boxlite-cli` provider for installations that prefer an external BoxLite binary.
+**Sandbox** — Worker execution is isolated by the configured sandbox provider. The default is **BoxLite**, with support for `boxlite-cli` and custom providers.
 
 **Interface** — WebUI out of the box; Feishu, WeChat, Matrix, and other channels available as integrations.
 
@@ -115,11 +115,11 @@ The key isn't that multiple agents exist — it's that **their collaboration is 
 
 ## Design Principles
 
-**A lighter Manager built on PicoClaw.**
-Most orchestration layers are built for scale. For individuals and small teams running locally, that weight is a liability. PicoClaw keeps the Manager fast to start and cheap to run — without sacrificing coordination capability.
+**PicoClaw by default, extensible by design.**
+CSGClaw uses PicoClaw as its lightweight default Agent Runtime, keeping the Manager fast to start and cheap to run. The runtime remains pluggable, so deployments can integrate alternatives such as OpenClaw when needed.
 
-**A lighter sandbox built on Boxlite, not Docker.**
-Isolation is non-negotiable, but Docker is overkill for local-first use. Boxlite gives Workers meaningful security boundaries without asking users to install and manage a container runtime. Safety should not come bundled with unnecessary setup burden.
+**BoxLite by default, sandbox provider as an extension point.**
+Isolation is non-negotiable, but Docker is often overkill for local-first use. BoxLite gives Workers meaningful security boundaries without a container runtime. Teams that need a different isolation model can add a custom sandbox provider.
 
 **WebUI first, channel-agnostic by design.**
 Many multi-agent systems are tightly coupled to one messaging protocol. CSGClaw ships with a built-in WebUI so you can start immediately, while keeping other channels (Feishu, WeChat, Matrix) as optional integrations — not assumptions.

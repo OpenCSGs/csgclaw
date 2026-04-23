@@ -24,78 +24,9 @@ This keeps execution concerns in `agent`, messaging concerns in `im` / `channel`
 
 ---
 
-## System Diagram
+## Architecture
 
-```mermaid
-graph TD
-    %% User Interfaces & Clients
-    subgraph Clients ["User Interfaces & Clients (CLI/Web)"]
-        CLI["csgclaw CLI<br/>(cmd/csgclaw)"]
-        LiteCLI["csgclaw-cli (Lite)<br/>(cmd/csgclaw-cli)"]
-        WebUI["Web UI Assets<br/>(web/static)"]
-    end
-
-    %% Local Server Boundary
-    subgraph LocalServer ["CSGClaw Local HTTP Server (Go)"]
-        
-        APIServer["API Gateway: HTTP/SSE/WS<br/>(internal/api & internal/server)"]
-        
-        %% Core Services
-        subgraph Services ["Core Service Layer"]
-            BotService["Bot Service (internal/bot)<br/>(Lifecycle & Binding)"]
-            AgentService["Agent Service (internal/agent)<br/>(Runtime & Log Mgmt)"]
-            IMChannelAPI["IM / Channel Dispatcher<br/>(Routing & Interfaces)"]
-        end
-        
-        %% Messaging Backends
-        subgraph Messaging ["Messaging Backends (IM & Channel)"]
-            BuiltInIM["Built-in csgclaw IM<br/>(internal/im)"]
-            FeishuAdapter["Feishu Integration<br/>(internal/channel)"]
-        end
-
-        %% Infrastructure Adapters
-        SandboxInterface["Sandbox Interface<br/>(internal/sandbox)"]
-        Storage["Storage Layer<br/>(Persistence)"]
-        ConfigLoad["Config Mgmt<br/>(internal/config)"]
-    end
-
-    %% External Dependencies / Runtime
-    subgraph RuntimeEnv ["Execution Environment"]
-        subgraph SandboxProvider ["Sandbox Provider"]
-            BoxLiteAdapter["BoxLite Adapter<br/>(internal/sandbox/boxlitesdk)"]
-            BoxLiteSDK["BoxLite SDK<br/>(third_party/boxlite-go)"]
-        end
-    end
-
-    %% Connections - Clients to Server
-    CLI -->|HTTP| APIServer
-    LiteCLI -->|HTTP| APIServer
-    WebUI -.->|Static Serving| APIServer
-    WebUI -->|REST/SSE/WS| APIServer
-
-    %% Connections - Internal Server Flow
-    APIServer --> BotService
-    APIServer --> IMChannelAPI
-    
-    %% Bot coordination
-    BotService -->|Orchestrate| AgentService
-    BotService -->|Bind Identity| IMChannelAPI
-
-    %% Agent execution flow
-    AgentService --> SandboxInterface
-    SandboxInterface --> BoxLiteAdapter
-    BoxLiteAdapter --> BoxLiteSDK
-
-    %% Messaging flow
-    IMChannelAPI --> BuiltInIM
-    IMChannelAPI --> FeishuAdapter
-
-    %% Cross-cutting
-    Services -.-> Storage
-    Messaging -.-> Storage
-    Services -.-> ConfigLoad
-    Messaging -.-> ConfigLoad
-```
+![CSGClaw architecture](../assets/architecture.png)
 
 The Web UI is served by the local HTTP server and uses the same API surface as the CLIs. At the implementation level, `internal/server` owns server lifecycle and static UI wiring, while `internal/api` owns route registration and request/response handling.
 
