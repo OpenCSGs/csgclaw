@@ -12,7 +12,7 @@ import (
 // build tag because it pulls in CGO, the native BoxLite archive, and the larger
 // embedded runtime payload. Other sandbox providers should remain always-on.
 func init() {
-	Register(config.BoxLiteSDKProvider, func(_ config.SandboxConfig, bootstrapCfg config.BootstrapConfig) (agent.ServiceOption, error) {
-		return agent.WithSandboxProvider(boxlitesdk.NewProvider(boxlitesdk.WithRegistries(bootstrapCfg.DebianRegistries...))), nil
+	Register(config.BoxLiteSDKProvider, func(cfg config.SandboxConfig) (agent.ServiceOption, error) {
+		return agent.WithSandboxProvider(boxlitesdk.NewProvider(boxlitesdk.WithRegistries(cfg.DebianRegistries...))), nil
 	})
 }

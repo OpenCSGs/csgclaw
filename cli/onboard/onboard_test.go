@@ -103,7 +103,8 @@ func TestSandboxServiceOptionsSupportsConfiguredProvider(t *testing.T) {
 		Provider:          config.BoxLiteCLIProvider,
 		HomeDirName:       "sandbox-home",
 		BoxLiteCLIPath:    "/opt/boxlite/bin/boxlite",
-	}, config.BootstrapConfig{DebianRegistries: []string{"registry.a"}})
+		DebianRegistries:  []string{"registry.a"},
+	})
 	if err != nil {
 		t.Fatalf("sandboxServiceOptions() error = %v", err)
 	}
@@ -423,8 +424,8 @@ func TestRunReusesExistingLLMConfig(t *testing.T) {
 
 func TestRunDebianRegistriesFlagPersistsToConfig(t *testing.T) {
 	restore := stubBootstrap(t, func(_ context.Context, _, _ string, cfg config.Config, _ bool) (bot.Bot, error) {
-		if got, want := strings.Join(cfg.Bootstrap.DebianRegistries, ","), "registry.a,docker.io"; got != want {
-			t.Fatalf("bootstrap cfg.Bootstrap.DebianRegistries = %q, want %q", got, want)
+		if got, want := strings.Join(cfg.Sandbox.DebianRegistries, ","), "registry.a,docker.io"; got != want {
+			t.Fatalf("bootstrap cfg.Sandbox.DebianRegistries = %q, want %q", got, want)
 		}
 		return bot.Bot{}, nil
 	})
@@ -448,6 +449,9 @@ func TestRunDebianRegistriesFlagPersistsToConfig(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `debian_registries = ["registry.a", "docker.io"]`) {
 		t.Fatalf("saved config should persist onboard --debian-registries:\n%s", string(data))
+	}
+	if !strings.Contains(string(data), "[sandbox]") {
+		t.Fatalf("saved config missing [sandbox] section:\n%s", string(data))
 	}
 }
 

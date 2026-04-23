@@ -11,7 +11,7 @@ import (
 
 // serviceOptionFactory converts config into the agent service option that wires
 // a concrete sandbox provider. Providers register themselves from init funcs.
-type serviceOptionFactory func(config.SandboxConfig, config.BootstrapConfig) (agent.ServiceOption, error)
+type serviceOptionFactory func(config.SandboxConfig) (agent.ServiceOption, error)
 
 var factories = map[string]serviceOptionFactory{}
 
@@ -34,13 +34,13 @@ func Register(name string, factory serviceOptionFactory) {
 
 // ServiceOptions resolves the configured sandbox provider against the set of
 // providers compiled into the current binary.
-func ServiceOptions(sandboxCfg config.SandboxConfig, bootstrapCfg config.BootstrapConfig) ([]agent.ServiceOption, error) {
+func ServiceOptions(sandboxCfg config.SandboxConfig) ([]agent.ServiceOption, error) {
 	sandboxCfg = sandboxCfg.Resolved()
 	factory, ok := factories[sandboxCfg.Provider]
 	if !ok {
 		return nil, fmt.Errorf("unsupported sandbox provider %q; supported values are %s", sandboxCfg.Provider, SupportedProvidersText())
 	}
-	provider, err := factory(sandboxCfg, bootstrapCfg)
+	provider, err := factory(sandboxCfg)
 	if err != nil {
 		return nil, err
 	}

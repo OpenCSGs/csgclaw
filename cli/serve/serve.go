@@ -500,8 +500,8 @@ provider = %q
 home_dir_name = %q
 boxlite_cli_path = %q
 `, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Bootstrap.ManagerImage, cfg.Sandbox.Resolved().Provider, cfg.Sandbox.Resolved().HomeDirName, cfg.Sandbox.Resolved().BoxLiteCLIPath)
-	if len(cfg.Bootstrap.DebianRegistries) > 0 {
-		content = strings.Replace(content, "\n[sandbox]\n", fmt.Sprintf("debian_registries = %s\n\n[sandbox]\n", formatModelList(cfg.Bootstrap.DebianRegistries)), 1)
+	if len(cfg.Sandbox.Resolved().DebianRegistries) > 0 {
+		content = strings.Replace(content, "\n[sandbox]\n", fmt.Sprintf("debian_registries = %s\n\n[sandbox]\n", formatModelList(cfg.Sandbox.Resolved().DebianRegistries)), 1)
 	}
 	content += fmt.Sprintf(`
 
@@ -590,15 +590,15 @@ func newAgentService(cfg config.Config) (*agent.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	opts, err := sandboxServiceOptions(cfg.Sandbox, cfg.Bootstrap)
+	opts, err := sandboxServiceOptions(cfg.Sandbox)
 	if err != nil {
 		return nil, err
 	}
 	return agent.NewServiceWithLLMAndChannels(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap.ManagerImage, agentsPath, opts...)
 }
 
-func sandboxServiceOptions(sandboxCfg config.SandboxConfig, bootstrapCfg config.BootstrapConfig) ([]agent.ServiceOption, error) {
-	return sandboxproviders.ServiceOptions(sandboxCfg, bootstrapCfg)
+func sandboxServiceOptions(sandboxCfg config.SandboxConfig) ([]agent.ServiceOption, error) {
+	return sandboxproviders.ServiceOptions(sandboxCfg)
 }
 
 func newIMService() (*im.Service, error) {

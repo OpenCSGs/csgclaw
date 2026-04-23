@@ -43,12 +43,12 @@ models = ["Qwen/Qwen3-0.6B-GGUF"]
 
 [bootstrap]
 manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
-debian_registries = ["harbor.opencsg.com", "docker.io"]
 
 [sandbox]
 provider = "boxlite-sdk"
 home_dir_name = "boxlite"
 boxlite_cli_path = "boxlite"
+debian_registries = ["harbor.opencsg.com", "docker.io"]
 ```
 
 ### 远程 LLM API
@@ -69,12 +69,12 @@ models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
-debian_registries = ["harbor.opencsg.com", "docker.io"]
 
 [sandbox]
 provider = "boxlite-sdk"
 home_dir_name = "boxlite"
 boxlite_cli_path = "boxlite"
+debian_registries = ["harbor.opencsg.com", "docker.io"]
 ```
 
 ### 通过 CLIProxyAPI 接入本地 Codex
@@ -95,12 +95,12 @@ models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
-debian_registries = ["harbor.opencsg.com", "docker.io"]
 
 [sandbox]
 provider = "boxlite-sdk"
 home_dir_name = "boxlite"
 boxlite_cli_path = "boxlite"
+debian_registries = ["harbor.opencsg.com", "docker.io"]
 ```
 
 ## Sandbox Provider
@@ -114,9 +114,16 @@ CSGClaw 通过配置的 sandbox provider 隔离 Worker 执行环境。默认 pro
 provider = "boxlite-cli"
 home_dir_name = "boxlite"
 boxlite_cli_path = "boxlite"
+debian_registries = ["harbor.opencsg.com", "docker.io"]
 ```
 
 `boxlite_cli_path` 只在 `provider = "boxlite-cli"` 时使用。默认值 `boxlite` 会从 `PATH` 中查找；如果二进制安装在其他位置，可以配置为绝对路径。
+
+`debian_registries` 用于控制 BoxLite 拉取 `debian:bookworm-slim` 时的仓库顺序。可通过 `onboard` 持久化：
+
+```bash
+csgclaw onboard --debian-registries "harbor.opencsg.com,docker.io"
+```
 
 CSGClaw 会为每个 agent 调用 BoxLite CLI 时显式传入 `--home`，目录由 agent 目录和 `home_dir_name` 组成，例如 `~/.csgclaw/agents/<agent-id>/boxlite`。这个显式 home 对 CSGClaw 管理的 sandbox 生效，优先于 `BOXLITE_HOME`；你手动运行 `boxlite` 且不传 `--home` 时，`BOXLITE_HOME` 仍按 BoxLite 自身规则生效。
 

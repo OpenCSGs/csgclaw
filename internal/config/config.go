@@ -47,14 +47,14 @@ type LLMConfig struct {
 }
 
 type BootstrapConfig struct {
-	ManagerImage      string
-	DebianRegistries []string
+	ManagerImage string
 }
 
 type SandboxConfig struct {
 	Provider          string
 	HomeDirName       string
 	BoxLiteCLIPath    string
+	DebianRegistries []string
 }
 
 func (c SandboxConfig) Resolved() SandboxConfig {
@@ -67,6 +67,7 @@ func (c SandboxConfig) Resolved() SandboxConfig {
 	if strings.TrimSpace(c.BoxLiteCLIPath) == "" {
 		c.BoxLiteCLIPath = DefaultBoxLiteCLIPath
 	}
+	c.DebianRegistries = normalizeStringList(c.DebianRegistries)
 	return c
 }
 
@@ -274,12 +275,6 @@ func Load(path string) (Config, error) {
 			case "manager_image":
 				cfg.raw.bootstrap.ManagerImage = parseRawStringValue(rawValue)
 				cfg.Bootstrap.ManagerImage = value
-			case "debian_registries":
-				registries, parseErr := parseStringArray(rawValue)
-				if parseErr != nil {
-					return Config{}, fmt.Errorf("parse bootstrap.debian_registries: %w", parseErr)
-				}
-				cfg.Bootstrap.DebianRegistries = registries
 			}
 		case section == "sandbox":
 			switch key {
@@ -292,6 +287,12 @@ func Load(path string) (Config, error) {
 			case "boxlite_cli_path":
 				cfg.raw.sandbox.BoxLiteCLIPath = parseRawStringValue(rawValue)
 				cfg.Sandbox.BoxLiteCLIPath = value
+			case "debian_registries":
+				registries, parseErr := parseStringArray(rawValue)
+				if parseErr != nil {
+					return Config{}, fmt.Errorf("parse sandbox.debian_registries: %w", parseErr)
+				}
+				cfg.Sandbox.DebianRegistries = registries
 			}
 		case section == "channels.feishu":
 			switch key {
@@ -359,7 +360,6 @@ func Load(path string) (Config, error) {
 	if cfg.Server.AccessToken == "" {
 		cfg.Server.AccessToken = DefaultAccessToken
 	}
-	cfg.Bootstrap.DebianRegistries = normalizeStringList(cfg.Bootstrap.DebianRegistries)
 	cfg.Sandbox = cfg.Sandbox.Resolved()
 
 	if !modelsCfg.IsZero() {
@@ -396,18 +396,20 @@ access_token = %q
 [bootstrap]
 manager_image = %q
 `, cfg.rawOrResolvedString(cfg.raw.server.ListenAddr, loadedRaw.server.ListenAddr, cfg.Server.ListenAddr), cfg.rawOrResolvedString(cfg.raw.server.AdvertiseBaseURL, loadedRaw.server.AdvertiseBaseURL, cfg.Server.AdvertiseBaseURL), cfg.rawOrResolvedString(cfg.raw.server.AccessToken, loadedRaw.server.AccessToken, cfg.Server.AccessToken), cfg.rawOrResolvedString(cfg.raw.bootstrap.ManagerImage, loadedRaw.bootstrap.ManagerImage, cfg.Bootstrap.ManagerImage))
-	if len(cfg.Bootstrap.DebianRegistries) > 0 {
-		fmt.Fprintf(&b, "debian_registries = %s\n", formatStringArray(cfg.Bootstrap.DebianRegistries))
-	}
 	fmt.Fprintf(&b, `
 
 [sandbox]
 provider = %q
 home_dir_name = %q
 boxlite_cli_path = %q
+`, cfg.rawOrResolvedString(cfg.raw.sandbox.Provider, loadedRaw.sandbox.Provider, resolvedSandbox.Provider), cfg.rawOrResolvedString(cfg.raw.sandbox.HomeDirName, loadedRaw.sandbox.HomeDirName, resolvedSandbox.HomeDirName), cfg.rawOrResolvedString(cfg.raw.sandbox.BoxLiteCLIPath, loadedRaw.sandbox.BoxLiteCLIPath, resolvedSandbox.BoxLiteCLIPath))
+	if len(resolvedSandbox.DebianRegistries) > 0 {
+		fmt.Fprintf(&b, "debian_registries = %s\n", formatStringArray(resolvedSandbox.DebianRegistries))
+	}
+	fmt.Fprintf(&b, `
 [models]
 default = %q
-`, cfg.rawOrResolvedString(cfg.raw.sandbox.Provider, loadedRaw.sandbox.Provider, resolvedSandbox.Provider), cfg.rawOrResolvedString(cfg.raw.sandbox.HomeDirName, loadedRaw.sandbox.HomeDirName, resolvedSandbox.HomeDirName), cfg.rawOrResolvedString(cfg.raw.sandbox.BoxLiteCLIPath, loadedRaw.sandbox.BoxLiteCLIPath, resolvedSandbox.BoxLiteCLIPath), cfg.rawOrResolvedString(cfg.raw.modelsDefault, loadedRaw.modelsDefault, defaultSelector))
+`, cfg.rawOrResolvedString(cfg.raw.modelsDefault, loadedRaw.modelsDefault, defaultSelector))
 
 	for _, name := range sortedProviderNames(llmCfg.Providers) {
 		provider := llmCfg.Providers[name].Resolved()

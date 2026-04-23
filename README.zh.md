@@ -52,20 +52,6 @@ csgclaw onboard --provider csghub-lite --models Qwen/Qwen3-0.6B-GGUF
 csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]
 ```
 
-BoxLite 默认会从 `docker.io` 拉取 `debian:bookworm-slim`。
-`harbor.opencsg.com` 已配置相同镜像，建议在 `onboard` 时通过 `--debian-registries` 写入配置：
-
-```bash
-# 在 onboard 时写入 config.toml
-csgclaw onboard --force-recreate-manager --debian-registries "harbor.opencsg.com,docker.io"
-```
-
-说明：
-
-- `--debian-registries` 使用逗号分隔，按顺序依次尝试仓库。
-- `onboard --debian-registries` 会写入 `config.toml` 的 `[bootstrap].debian_registries`。
-- `serve` 启动时从配置读取 Debian 仓库，不需要额外参数。
-
 ## 配置
 
 `csgclaw onboard` 会写入本地配置，包含 server、model、bootstrap、sandbox 和 channel 设置。模型 provider 示例、sandbox provider 选项和 Worker 覆盖示例见 [docs/config.zh.md](docs/config.zh.md)。

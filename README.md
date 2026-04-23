@@ -52,20 +52,6 @@ csgclaw onboard --provider csghub-lite --models Qwen/Qwen3-0.6B-GGUF
 csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]
 ```
 
-By default, BoxLite pulls `debian:bookworm-slim` from `docker.io`.
-`harbor.opencsg.com` already mirrors it. Configure Debian registries during `onboard`:
-
-```bash
-# Persist registries to config.toml during onboarding
-csgclaw onboard --force-recreate-manager --debian-registries "harbor.opencsg.com,docker.io"
-```
-
-Notes:
-
-- `--debian-registries` accepts a comma-separated list and tries registries in order.
-- `onboard --debian-registries` persists to `config.toml` under `[bootstrap].debian_registries`.
-- `serve` reads Debian registries from config; no extra runtime flag is required.
-
 ## Configuration
 
 `csgclaw onboard` writes a local config with server, model, bootstrap, sandbox, and channel settings. See [docs/config.md](docs/config.md) for model provider examples, sandbox provider options, and Worker override examples.

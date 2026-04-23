@@ -111,7 +111,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		cfg.Bootstrap.ManagerImage = *managerImage
 	}
 	if strings.TrimSpace(*debianRegistries) != "" {
-		cfg.Bootstrap.DebianRegistries = parseRegistriesFlag(*debianRegistries)
+		cfg.Sandbox.DebianRegistries = parseRegistriesFlag(*debianRegistries)
 	}
 	if err := validateModelConfig(cfg); err != nil {
 		return err
@@ -545,7 +545,7 @@ func isTerminal(value any) bool {
 }
 
 func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg config.Config, forceRecreateManager bool) (bot.Bot, error) {
-	opts, err := sandboxServiceOptions(cfg.Sandbox, cfg.Bootstrap)
+	opts, err := sandboxServiceOptions(cfg.Sandbox)
 	if err != nil {
 		return bot.Bot{}, err
 	}
@@ -576,8 +576,8 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 	}, forceRecreateManager)
 }
 
-func sandboxServiceOptions(sandboxCfg config.SandboxConfig, bootstrapCfg config.BootstrapConfig) ([]agent.ServiceOption, error) {
-	return sandboxproviders.ServiceOptions(sandboxCfg, bootstrapCfg)
+func sandboxServiceOptions(sandboxCfg config.SandboxConfig) ([]agent.ServiceOption, error) {
+	return sandboxproviders.ServiceOptions(sandboxCfg)
 }
 
 func loadOnboardConfig(path string) (config.Config, bool, error) {

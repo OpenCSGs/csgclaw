@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	Register(config.CSGHubProvider, func(config.SandboxConfig, config.BootstrapConfig) (agent.ServiceOption, error) {
+	Register(config.CSGHubProvider, func(config.SandboxConfig) (agent.ServiceOption, error) {
 		return agent.WithSandboxProvider(csghub.NewProvider()), nil
 	})
 }

@@ -286,7 +286,8 @@ func TestSandboxServiceOptionsSupportsConfiguredProvider(t *testing.T) {
 		Provider:          config.BoxLiteCLIProvider,
 		HomeDirName:       "sandbox-home",
 		BoxLiteCLIPath:    "/opt/boxlite/bin/boxlite",
-	}, config.BootstrapConfig{DebianRegistries: []string{"registry.a"}})
+		DebianRegistries:  []string{"registry.a"},
+	})
 	if err != nil {
 		t.Fatalf("sandboxServiceOptions() error = %v", err)
 	}
