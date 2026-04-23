@@ -34,19 +34,19 @@ func Register(name string, factory serviceOptionFactory) {
 
 // ServiceOptions resolves the configured sandbox provider against the set of
 // providers compiled into the current binary.
-func ServiceOptions(sandboxCfg config.SandboxConfig) ([]agent.ServiceOption, error) {
-	sandboxCfg = sandboxCfg.Resolved()
-	factory, ok := factories[sandboxCfg.Provider]
+func ServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {
+	cfg := cfg.Resolved()
+	factory, ok := factories[cfg.Provider]
 	if !ok {
-		return nil, fmt.Errorf("unsupported sandbox provider %q; supported values are %s", sandboxCfg.Provider, SupportedProvidersText())
+		return nil, fmt.Errorf("unsupported sandbox provider %q; supported values are %s", cfg.Provider, SupportedProvidersText())
 	}
-	provider, err := factory(sandboxCfg)
+	provider, err := factory(cfg)
 	if err != nil {
 		return nil, err
 	}
 	return []agent.ServiceOption{
 		provider,
-		agent.WithSandboxHomeDirName(sandboxCfg.HomeDirName),
+		agent.WithSandboxHomeDirName(cfg.HomeDirName),
 	}, nil
 }
 

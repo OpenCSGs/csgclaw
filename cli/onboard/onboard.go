@@ -577,8 +577,8 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 	}, forceRecreateManager)
 }
 
-func sandboxServiceOptions(sandboxCfg config.SandboxConfig) ([]agent.ServiceOption, error) {
-	return sandboxproviders.ServiceOptions(sandboxCfg)
+func sandboxServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {
+	return sandboxproviders.ServiceOptions(cfg)
 }
 
 func loadOnboardConfig(path string) (config.Config, bool, error) {
