@@ -4,6 +4,7 @@ package boxlitesdk
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	boxlitesdk "github.com/RussellLuo/boxlite/sdks/go"
 
@@ -13,11 +14,17 @@ import (
 const providerName = "boxlite-sdk"
 
 // Provider opens BoxLite-backed sandbox runtimes.
-type Provider struct{}
+type Provider struct {
+	registries []string
+}
 
 // NewProvider returns a BoxLite sandbox provider.
-func NewProvider() Provider {
-	return Provider{}
+func NewProvider(opts ...ProviderOption) Provider {
+	p := Provider{}
+	for _, opt := range opts {
+		opt(&p)
+	}
+	return p
 }
 
 // Name returns the provider name.
@@ -26,8 +33,12 @@ func (Provider) Name() string {
 }
 
 // Open creates a BoxLite runtime rooted at homeDir.
-func (Provider) Open(_ context.Context, homeDir string) (sandbox.Runtime, error) {
-	rt, err := boxlitesdk.NewRuntime(boxlitesdk.WithHomeDir(homeDir))
+func (p Provider) Open(_ context.Context, homeDir string) (sandbox.Runtime, error) {
+	opts := []boxlitesdk.RuntimeOption{boxlitesdk.WithHomeDir(homeDir)}
+	if len(p.registries) > 0 {
+		opts = append(opts, boxlitesdk.WithRegistries(p.registries...))
+	}
+	rt, err := boxlitesdk.NewRuntime(opts...)
 	if err != nil {
 		return nil, wrapError("open boxlite runtime", err)
 	}
@@ -196,4 +207,27 @@ func wrapError(op string, err error) error {
 		return fmt.Errorf("%s: %w: %w", op, sandbox.ErrNotFound, err)
 	}
 	return fmt.Errorf("%s: %w", op, err)
+}
+
+func normalizeRegistries(registries []string) []string {
+	if len(registries) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(registries))
+	out := make([]string, 0, len(registries))
+	for _, registry := range registries {
+		registry = strings.TrimSpace(registry)
+		if registry == "" {
+			continue
+		}
+		if _, ok := seen[registry]; ok {
+			continue
+		}
+		seen[registry] = struct{}{}
+		out = append(out, registry)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

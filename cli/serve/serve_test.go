@@ -283,10 +283,10 @@ app_secret = "${FEISHU_APP_SECRET}"
 
 func TestSandboxServiceOptionsSupportsConfiguredProvider(t *testing.T) {
 	opts, err := sandboxServiceOptions(config.SandboxConfig{
-		Provider:       config.DefaultSandboxProvider,
-		HomeDirName:    "sandbox-home",
-		BoxLiteCLIPath: "/opt/boxlite/bin/boxlite",
-	})
+		Provider:          config.BoxLiteCLIProvider,
+		HomeDirName:       "sandbox-home",
+		BoxLiteCLIPath:    "/opt/boxlite/bin/boxlite",
+	}, config.BootstrapConfig{DebianRegistries: []string{"registry.a"}})
 	if err != nil {
 		t.Fatalf("sandboxServiceOptions() error = %v", err)
 	}

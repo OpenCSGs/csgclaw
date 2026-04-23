@@ -43,6 +43,7 @@ models = ["Qwen/Qwen3-0.6B-GGUF"]
 
 [bootstrap]
 manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
+debian_registries = ["harbor.opencsg.com", "docker.io"]
 
 [sandbox]
 provider = "boxlite-sdk"
@@ -68,6 +69,7 @@ models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
+debian_registries = ["harbor.opencsg.com", "docker.io"]
 
 [sandbox]
 provider = "boxlite-sdk"
@@ -93,6 +95,7 @@ models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
+debian_registries = ["harbor.opencsg.com", "docker.io"]
 
 [sandbox]
 provider = "boxlite-sdk"

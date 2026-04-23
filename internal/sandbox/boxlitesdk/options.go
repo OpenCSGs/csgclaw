@@ -9,6 +9,17 @@ import (
 	"csgclaw/internal/sandbox"
 )
 
+type ProviderOption func(*Provider)
+
+func WithRegistries(registries ...string) ProviderOption {
+	return func(p *Provider) {
+		if p == nil {
+			return
+		}
+		p.registries = normalizeRegistries(registries)
+	}
+}
+
 func boxOptions(spec sandbox.CreateSpec) ([]boxlitesdk.BoxOption, error) {
 	var opts []boxlitesdk.BoxOption
 	if strings.TrimSpace(spec.Name) != "" {

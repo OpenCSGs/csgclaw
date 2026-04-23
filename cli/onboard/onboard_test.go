@@ -100,10 +100,10 @@ func TestRunInteractiveDefaultUsesCSGHubLiteModels(t *testing.T) {
 
 func TestSandboxServiceOptionsSupportsConfiguredProvider(t *testing.T) {
 	opts, err := sandboxServiceOptions(config.SandboxConfig{
-		Provider:       config.DefaultSandboxProvider,
-		HomeDirName:    "sandbox-home",
-		BoxLiteCLIPath: "/opt/boxlite/bin/boxlite",
-	})
+		Provider:          config.BoxLiteCLIProvider,
+		HomeDirName:       "sandbox-home",
+		BoxLiteCLIPath:    "/opt/boxlite/bin/boxlite",
+	}, config.BootstrapConfig{DebianRegistries: []string{"registry.a"}})
 	if err != nil {
 		t.Fatalf("sandboxServiceOptions() error = %v", err)
 	}
@@ -418,6 +418,36 @@ func TestRunReusesExistingLLMConfig(t *testing.T) {
 
 	if callCount != 2 {
 		t.Fatalf("agent bootstrap call count = %d, want 2", callCount)
+	}
+}
+
+func TestRunDebianRegistriesFlagPersistsToConfig(t *testing.T) {
+	restore := stubBootstrap(t, func(_ context.Context, _, _ string, cfg config.Config, _ bool) (bot.Bot, error) {
+		if got, want := strings.Join(cfg.Bootstrap.DebianRegistries, ","), "registry.a,docker.io"; got != want {
+			t.Fatalf("bootstrap cfg.Bootstrap.DebianRegistries = %q, want %q", got, want)
+		}
+		return bot.Bot{}, nil
+	})
+	defer restore()
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	run := testContext()
+	err := NewCmd().Run(context.Background(), run, []string{
+		"--base-url", "http://llm.test",
+		"--api-key", "secret",
+		"--models", "gpt-test",
+		"--debian-registries", "registry.a,docker.io",
+	}, command.GlobalOptions{Config: configPath})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(data), `debian_registries = ["registry.a", "docker.io"]`) {
+		t.Fatalf("saved config should persist onboard --debian-registries:\n%s", string(data))
 	}
 }
 

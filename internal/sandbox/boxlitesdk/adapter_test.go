@@ -18,6 +18,19 @@ func TestProviderImplementsSandboxProvider(t *testing.T) {
 	}
 }
 
+func TestWithRegistriesNormalizesValues(t *testing.T) {
+	p := NewProvider(WithRegistries("registry.a", " docker.io ", "registry.a", ""))
+	if got, want := len(p.registries), 2; got != want {
+		t.Fatalf("len(registries) = %d, want %d", got, want)
+	}
+	if got, want := p.registries[0], "registry.a"; got != want {
+		t.Fatalf("registries[0] = %q, want %q", got, want)
+	}
+	if got, want := p.registries[1], "docker.io"; got != want {
+		t.Fatalf("registries[1] = %q, want %q", got, want)
+	}
+}
+
 func TestBoxOptionsValidateSpec(t *testing.T) {
 	_, err := boxOptions(sandbox.CreateSpec{
 		Env: map[string]string{"": "value"},
