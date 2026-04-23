@@ -26,6 +26,7 @@ type Handler struct {
 	feishu            *channel.FeishuService
 	llm               *llm.Service
 	serverAccessToken string
+	serverNoAuth      bool
 }
 
 type imBootstrapResponse struct {
@@ -73,6 +74,10 @@ func NewHandlerWithBot(svc *agent.Service, botSvc *bot.Service, imSvc *im.Servic
 }
 
 func NewHandlerWithBotAndAccessToken(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, picoclaw *im.PicoClawBridge, feishu *channel.FeishuService, llmSvc *llm.Service, serverAccessToken string) *Handler {
+	return NewHandlerWithBotAndAuth(svc, botSvc, imSvc, imBus, picoclaw, feishu, llmSvc, serverAccessToken, false)
+}
+
+func NewHandlerWithBotAndAuth(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, picoclaw *im.PicoClawBridge, feishu *channel.FeishuService, llmSvc *llm.Service, serverAccessToken string, serverNoAuth bool) *Handler {
 	if botSvc != nil {
 		botSvc.SetDependencies(svc, imSvc, feishu)
 	}
@@ -85,14 +90,15 @@ func NewHandlerWithBotAndAccessToken(svc *agent.Service, botSvc *bot.Service, im
 		feishu:            feishu,
 		llm:               llmSvc,
 		serverAccessToken: serverAccessToken,
+		serverNoAuth:      serverNoAuth,
 	}
 }
 
 func (h *Handler) validateServerAccessToken(authHeader string) bool {
-	token := strings.TrimSpace(h.serverAccessToken)
-	if token == "" {
+	if h.serverNoAuth {
 		return true
 	}
+	token := strings.TrimSpace(h.serverAccessToken)
 	return authHeader == "Bearer "+token
 }
 

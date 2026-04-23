@@ -12,7 +12,9 @@
 
 当自动推断出的地址无法从 BoxLite box 内访问时，可以设置 `advertise_base_url`，例如使用局域网地址、隧道地址或 host alias。
 
-`access_token` 用来保护需要认证的 API 路由，包括 PicoClaw bot 路由。设置后，客户端必须发送 `Authorization: Bearer <access_token>`。如果去掉首尾空白后为空，CSGClaw 会跳过这个 bearer token 检查。
+`access_token` 用来保护需要认证的 API 路由，包括 PicoClaw bot 路由。启用鉴权时，客户端必须发送 `Authorization: Bearer <access_token>`。
+
+`no_auth` 控制 CSGClaw 是否跳过 bearer token 检查，默认值是 `false`。仅建议在可信的本地或开发环境中设置为 `true`。
 
 `config.toml` 中的字符串值可以通过 `${NAME}` 或 `$NAME` 引用环境变量。CSGClaw 读取配置时会展开这些变量；后续重写同一个值时，会尽量保留占位符形式。如果环境变量未设置，会展开为空字符串。
 
@@ -21,6 +23,7 @@
 listen_addr = "0.0.0.0:${PORT}"
 advertise_base_url = "http://${IP}:${PORT}"
 access_token = "${ACCESS_TOKEN}"
+no_auth = false
 ```
 
 ## Model Provider 配置示例
@@ -32,6 +35,7 @@ access_token = "${ACCESS_TOKEN}"
 listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
+no_auth = false
 
 [models]
 default = "csghub-lite.Qwen/Qwen3-0.6B-GGUF"
@@ -58,6 +62,7 @@ debian_registries = ["harbor.opencsg.com", "docker.io"]
 listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
+no_auth = false
 
 [models]
 default = "remote.gpt-5.4"
@@ -84,6 +89,7 @@ debian_registries = ["harbor.opencsg.com", "docker.io"]
 listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
+no_auth = false
 
 [models]
 default = "codex.gpt-5.4"

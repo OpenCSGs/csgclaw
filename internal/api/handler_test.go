@@ -1526,15 +1526,27 @@ func TestHandleFeishuEventsRequiresAuthorization(t *testing.T) {
 	}
 }
 
-func TestHandleFeishuEventsSkipsAuthorizationWhenServerAccessTokenEmpty(t *testing.T) {
+func TestHandleFeishuEventsRequiresAuthorizationWhenServerAccessTokenEmpty(t *testing.T) {
 	srv := &Handler{}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/bots/u-manager/events", nil)
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandleFeishuEventsSkipsAuthorizationWhenNoAuth(t *testing.T) {
+	srv := &Handler{serverNoAuth: true}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/bots/u-manager/events", nil)
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
 	if rec.Code == http.StatusUnauthorized {
-		t.Fatalf("status = %d, want non-unauthorized when server access token is empty", rec.Code)
+		t.Fatalf("status = %d, want non-unauthorized when no_auth is true", rec.Code)
 	}
 }
 
@@ -1750,7 +1762,7 @@ func TestHandlePicoClawRoutesRequireAuthorization(t *testing.T) {
 	}
 }
 
-func TestHandlePicoClawRoutesSkipAuthorizationWhenServerAccessTokenEmpty(t *testing.T) {
+func TestHandlePicoClawRoutesRequireAuthorizationWhenServerAccessTokenEmpty(t *testing.T) {
 	srv := &Handler{
 		picoclaw: im.NewPicoClawBridge("secret"),
 	}
@@ -1759,14 +1771,30 @@ func TestHandlePicoClawRoutesSkipAuthorizationWhenServerAccessTokenEmpty(t *test
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandlePicoClawRoutesSkipAuthorizationWhenNoAuth(t *testing.T) {
+	srv := &Handler{
+		picoclaw:     im.NewPicoClawBridge("secret"),
+		serverNoAuth: true,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
 	if rec.Code == http.StatusUnauthorized {
-		t.Fatalf("status = %d, want non-unauthorized when server access token is empty", rec.Code)
+		t.Fatalf("status = %d, want non-unauthorized when no_auth is true", rec.Code)
 	}
 }
 
 func TestHandlePicoClawSendMessageRequiresIMService(t *testing.T) {
 	srv := &Handler{
-		picoclaw: im.NewPicoClawBridge(""),
+		picoclaw:     im.NewPicoClawBridge(""),
+		serverNoAuth: true,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
@@ -1812,9 +1840,10 @@ func TestHandlePicoClawModelsReturnsBridgeCatalog(t *testing.T) {
 	}, svc)
 
 	srv := &Handler{
-		svc:      svc,
-		picoclaw: im.NewPicoClawBridge("secret"),
-		llm:      bridge,
+		svc:               svc,
+		picoclaw:          im.NewPicoClawBridge("secret"),
+		llm:               bridge,
+		serverAccessToken: "secret",
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/bots/u-manager/llm/v1/models", nil)
@@ -1864,9 +1893,10 @@ func TestHandlePicoClawModelsLegacyRouteReturnsBridgeCatalog(t *testing.T) {
 	}, svc)
 
 	srv := &Handler{
-		svc:      svc,
-		picoclaw: im.NewPicoClawBridge("secret"),
-		llm:      bridge,
+		svc:               svc,
+		picoclaw:          im.NewPicoClawBridge("secret"),
+		llm:               bridge,
+		serverAccessToken: "secret",
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/bots/u-manager/llm/models", nil)

@@ -75,6 +75,9 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Server.AccessToken, DefaultAccessToken; got != want {
 		t.Fatalf("cfg.Server.AccessToken = %q, want %q", got, want)
 	}
+	if cfg.Server.NoAuth {
+		t.Fatal("cfg.Server.NoAuth = true, want false")
+	}
 	if got, want := cfg.Sandbox.Provider, DefaultSandboxProvider; got != want {
 		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
 	}
@@ -346,6 +349,9 @@ func TestSaveWritesModelsSection(t *testing.T) {
 	if !strings.Contains(content, "access_token = \"shared-token\"") {
 		t.Fatalf("saved config missing server access token:\n%s", content)
 	}
+	if !strings.Contains(content, "no_auth = false") {
+		t.Fatalf("saved config missing server no_auth:\n%s", content)
+	}
 	if !strings.Contains(content, "[models]") || !strings.Contains(content, "[models.providers.default]") {
 		t.Fatalf("saved config missing models sections:\n%s", content)
 	}
@@ -431,6 +437,7 @@ func TestLoadExpandsServerEnvValues(t *testing.T) {
 	t.Setenv("IP", "1.2.3.4")
 	t.Setenv("PORT", "18080")
 	t.Setenv("ACCESS_TOKEN", "your_access_token")
+	t.Setenv("NO_AUTH", "true")
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -438,6 +445,7 @@ func TestLoadExpandsServerEnvValues(t *testing.T) {
 listen_addr = "0.0.0.0:${PORT}"
 advertise_base_url = "http://${IP}:${PORT}"
 access_token = "${ACCESS_TOKEN}"
+no_auth = "${NO_AUTH}"
 
 [models]
 default = "default.gpt-test"
@@ -464,6 +472,9 @@ models = ["gpt-test"]
 	}
 	if got, want := cfg.Server.AccessToken, "your_access_token"; got != want {
 		t.Fatalf("cfg.Server.AccessToken = %q, want %q", got, want)
+	}
+	if !cfg.Server.NoAuth {
+		t.Fatal("cfg.Server.NoAuth = false, want true")
 	}
 }
 

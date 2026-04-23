@@ -131,6 +131,9 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		if opts.Bot != wantBotSvc {
 			t.Fatalf("Bot = %v, want injected bot service", opts.Bot)
 		}
+		if !opts.NoAuth {
+			t.Fatal("NoAuth = false, want true")
+		}
 		return nil
 	}
 
@@ -140,6 +143,7 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 			ListenAddr:       "127.0.0.1:18080",
 			AdvertiseBaseURL: "http://example.test",
 			AccessToken:      "pc-secret",
+			NoAuth:           true,
 		},
 		Model: config.ModelConfig{
 			Provider: "llm-api",
@@ -183,6 +187,7 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		`advertise_base_url = "http://example.test"`,
 		`api_key = "sk*****et"`,
 		`access_token = "pc*****et"`,
+		`no_auth = true`,
 		`[sandbox]`,
 		fmt.Sprintf(`provider = %q`, config.DefaultSandboxProvider),
 		fmt.Sprintf(`home_dir_name = %q`, config.DefaultSandboxHomeDirName),
@@ -229,6 +234,7 @@ func TestFormatEffectiveConfigPrintsExpandedMaskedEnvValues(t *testing.T) {
 listen_addr = "0.0.0.0:${PORT}"
 advertise_base_url = "http://${IP}:${PORT}"
 access_token = "${ACCESS_TOKEN}"
+no_auth = true
 
 [models]
 default = "${MODEL_SELECTOR}"
@@ -255,6 +261,7 @@ app_secret = "${FEISHU_APP_SECRET}"
 		`listen_addr = "0.0.0.0:18080"`,
 		`advertise_base_url = "http://1.2.3.4:18080"`,
 		`access_token = "pc*********et"`,
+		`no_auth = true`,
 		`default = "remote.gpt-env"`,
 		`base_url = "https://models.example.test/v1"`,
 		`api_key = "sk*********et"`,

@@ -340,6 +340,7 @@ func startServer(ctx context.Context, cfg config.Config, svc *agent.Service, bot
 		Feishu:      feishuSvc,
 		LLM:         llmSvc,
 		AccessToken: cfg.Server.AccessToken,
+		NoAuth:      cfg.Server.NoAuth,
 		Context:     ctx,
 	})
 }
@@ -491,6 +492,7 @@ func formatEffectiveConfig(cfg config.Config) string {
 listen_addr = %q
 advertise_base_url = %q
 access_token = %q
+no_auth = %t
 
 [bootstrap]
 manager_image = %q
@@ -499,7 +501,7 @@ manager_image = %q
 provider = %q
 home_dir_name = %q
 boxlite_cli_path = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Bootstrap.ManagerImage, cfg.Sandbox.Resolved().Provider, cfg.Sandbox.Resolved().HomeDirName, cfg.Sandbox.Resolved().BoxLiteCLIPath)
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Bootstrap.ManagerImage, cfg.Sandbox.Resolved().Provider, cfg.Sandbox.Resolved().HomeDirName, cfg.Sandbox.Resolved().BoxLiteCLIPath)
 	if len(cfg.Sandbox.Resolved().DebianRegistries) > 0 {
 		content = strings.Replace(content, "\n[sandbox]\n", fmt.Sprintf("debian_registries = %s\n\n[sandbox]\n", formatModelList(cfg.Sandbox.Resolved().DebianRegistries)), 1)
 	}

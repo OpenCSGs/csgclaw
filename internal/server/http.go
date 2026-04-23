@@ -23,6 +23,7 @@ type Options struct {
 	Feishu      *channel.FeishuService
 	LLM         *llm.Service
 	AccessToken string
+	NoAuth      bool
 	Context     context.Context
 }
 
@@ -30,7 +31,7 @@ func Run(opts Options) error {
 	if opts.Context == nil {
 		opts.Context = context.Background()
 	}
-	handler := api.NewHandlerWithBotAndAccessToken(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.PicoClaw, opts.Feishu, opts.LLM, opts.AccessToken)
+	handler := api.NewHandlerWithBotAndAuth(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.PicoClaw, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
 	mux := handler.Routes()
 	mux.Handle("/", uiHandler())
 

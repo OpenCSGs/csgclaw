@@ -79,6 +79,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 			Server: config.ServerConfig{
 				ListenAddr:  config.DefaultListenAddr(),
 				AccessToken: config.DefaultAccessToken,
+				NoAuth:      false,
 			},
 			Bootstrap: config.BootstrapConfig{
 				ManagerImage: config.DefaultManagerImage,

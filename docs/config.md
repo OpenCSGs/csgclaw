@@ -12,7 +12,9 @@ English | [中文](config.zh.md)
 
 Use `advertise_base_url` when the automatically inferred address is not reachable from BoxLite boxes, such as when you need a LAN address, a tunnel URL, or a host alias.
 
-`access_token` protects authenticated API routes, including the PicoClaw bot routes. When it is set, clients must send `Authorization: Bearer <access_token>`. When it is empty after trimming whitespace, CSGClaw skips this bearer-token check.
+`access_token` protects authenticated API routes, including the PicoClaw bot routes. When authentication is enabled, clients must send `Authorization: Bearer <access_token>`.
+
+`no_auth` controls whether CSGClaw skips the bearer-token check. The default is `false`. Set it to `true` only for trusted local or development environments.
 
 String values in `config.toml` can reference environment variables with `${NAME}` or `$NAME`. CSGClaw expands them when loading the config and keeps the placeholder form when it later rewrites the same value. If an environment variable is not set, it expands to an empty string.
 
@@ -21,6 +23,7 @@ String values in `config.toml` can reference environment variables with `${NAME}
 listen_addr = "0.0.0.0:${PORT}"
 advertise_base_url = "http://${IP}:${PORT}"
 access_token = "${ACCESS_TOKEN}"
+no_auth = false
 ```
 
 ## Model Provider Examples
@@ -32,6 +35,7 @@ access_token = "${ACCESS_TOKEN}"
 listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
+no_auth = false
 
 [models]
 default = "csghub-lite.Qwen/Qwen3-0.6B-GGUF"
@@ -58,6 +62,7 @@ debian_registries = ["harbor.opencsg.com", "docker.io"]
 listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
+no_auth = false
 
 [models]
 default = "remote.gpt-5.4"
@@ -84,6 +89,7 @@ debian_registries = ["harbor.opencsg.com", "docker.io"]
 listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
+no_auth = false
 
 [models]
 default = "codex.gpt-5.4"

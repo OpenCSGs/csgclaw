@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"csgclaw/internal/apiclient"
@@ -29,6 +30,7 @@ type ServerConfig struct {
 	ListenAddr       string
 	AdvertiseBaseURL string
 	AccessToken      string
+	NoAuth           bool
 }
 
 type ModelConfig struct {
@@ -263,6 +265,12 @@ func Load(path string) (Config, error) {
 			case "access_token":
 				cfg.raw.server.AccessToken = parseRawStringValue(rawValue)
 				cfg.Server.AccessToken = value
+			case "no_auth":
+				noAuth, err := parseBoolValue(rawValue)
+				if err != nil {
+					return Config{}, fmt.Errorf("parse server.no_auth: %w", err)
+				}
+				cfg.Server.NoAuth = noAuth
 			}
 		case section == "models":
 			switch key {
@@ -392,10 +400,11 @@ func (c Config) Save(path string) error {
 listen_addr = %q
 advertise_base_url = %q
 access_token = %q
+no_auth = %t
 
 [bootstrap]
 manager_image = %q
-`, cfg.rawOrResolvedString(cfg.raw.server.ListenAddr, loadedRaw.server.ListenAddr, cfg.Server.ListenAddr), cfg.rawOrResolvedString(cfg.raw.server.AdvertiseBaseURL, loadedRaw.server.AdvertiseBaseURL, cfg.Server.AdvertiseBaseURL), cfg.rawOrResolvedString(cfg.raw.server.AccessToken, loadedRaw.server.AccessToken, cfg.Server.AccessToken), cfg.rawOrResolvedString(cfg.raw.bootstrap.ManagerImage, loadedRaw.bootstrap.ManagerImage, cfg.Bootstrap.ManagerImage))
+`, cfg.rawOrResolvedString(cfg.raw.server.ListenAddr, loadedRaw.server.ListenAddr, cfg.Server.ListenAddr), cfg.rawOrResolvedString(cfg.raw.server.AdvertiseBaseURL, loadedRaw.server.AdvertiseBaseURL, cfg.Server.AdvertiseBaseURL), cfg.rawOrResolvedString(cfg.raw.server.AccessToken, loadedRaw.server.AccessToken, cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.rawOrResolvedString(cfg.raw.bootstrap.ManagerImage, loadedRaw.bootstrap.ManagerImage, cfg.Bootstrap.ManagerImage))
 	fmt.Fprintf(&b, `
 
 [sandbox]
@@ -542,6 +551,14 @@ func isLegacyConfigSection(section string) bool {
 
 func parseStringValue(raw string) string {
 	return expandEnv(parseRawStringValue(raw))
+}
+
+func parseBoolValue(raw string) (bool, error) {
+	value := strings.TrimSpace(expandEnv(parseRawStringValue(raw)))
+	if value == "" {
+		return false, nil
+	}
+	return strconv.ParseBool(value)
 }
 
 func parseRawStringValue(raw string) string {
