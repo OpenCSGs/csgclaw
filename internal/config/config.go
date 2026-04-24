@@ -69,6 +69,10 @@ func (c SandboxConfig) Resolved() SandboxConfig {
 	if strings.TrimSpace(c.BoxLiteCLIPath) == "" {
 		c.BoxLiteCLIPath = DefaultBoxLiteCLIPath
 	}
+	c.DebianRegistries = normalizeStringList(c.DebianRegistries)
+	if len(c.DebianRegistries) == 0 {
+		c.DebianRegistries = append([]string(nil), DefaultDebianRegistries...)
+	}
 	return c
 }
 
@@ -114,7 +118,7 @@ const (
 
 	DefaultHTTPPort           = apiclient.DefaultHTTPPort
 	DefaultAccessToken        = "your_access_token"
-	DefaultManagerImage       = "ghcr.io/russellluo/picoclaw:2026.4.18"
+	DefaultManagerImage       = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.24.0"
 	CSGHubProvider            = "csghub"
 	BoxLiteSDKProvider        = "boxlite-sdk"
 	BoxLiteCLIProvider        = "boxlite-cli"
@@ -122,6 +126,10 @@ const (
 	DefaultSandboxHomeDirName = "boxlite"
 	RuntimeHomeDirName        = DefaultSandboxHomeDirName
 )
+
+// DefaultDebianRegistries is the default BoxLite Debian registry lookup order when
+// [sandbox].debian_registries is unset or empty after normalization.
+var DefaultDebianRegistries = []string{"harbor.opencsg.com", "docker.io"}
 
 func DefaultListenAddr() string {
 	return net.JoinHostPort("0.0.0.0", DefaultHTTPPort)
@@ -367,7 +375,6 @@ func Load(path string) (Config, error) {
 	if cfg.Server.AccessToken == "" {
 		cfg.Server.AccessToken = DefaultAccessToken
 	}
-	cfg.Sandbox.DebianRegistries = normalizeStringList(cfg.Sandbox.DebianRegistries)
 	cfg.Sandbox = cfg.Sandbox.Resolved()
 
 	if !modelsCfg.IsZero() {

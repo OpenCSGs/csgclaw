@@ -46,7 +46,7 @@ api_key = "local"
 models = ["Qwen/Qwen3-0.6B-GGUF"]
 
 [bootstrap]
-manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
+manager_image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.24.0"
 
 [sandbox]
 provider = "boxlite-sdk"
@@ -73,7 +73,7 @@ api_key = "sk-your-api-key"
 models = ["gpt-5.4"]
 
 [bootstrap]
-manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
+manager_image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.24.0"
 
 [sandbox]
 provider = "boxlite-sdk"
@@ -100,7 +100,7 @@ api_key = "local"
 models = ["gpt-5.4"]
 
 [bootstrap]
-manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
+manager_image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.24.0"
 
 [sandbox]
 provider = "boxlite-sdk"
@@ -125,7 +125,7 @@ debian_registries = ["harbor.opencsg.com", "docker.io"]
 
 `boxlite_cli_path` 只在 `provider = "boxlite-cli"` 时使用。默认值 `boxlite` 会从 `PATH` 中查找；如果二进制安装在其他位置，可以配置为绝对路径。
 
-`debian_registries` 用于控制 BoxLite 拉取 `debian:bookworm-slim` 时的仓库顺序。可通过 `onboard` 持久化：
+`debian_registries` 用于控制 BoxLite 拉取 `debian:bookworm-slim` 时的仓库顺序。若省略或为空，默认顺序为 `harbor.opencsg.com`、`docker.io`。可通过 `onboard` 持久化自定义列表：
 
 ```bash
 csgclaw onboard --debian-registries "harbor.opencsg.com,docker.io"

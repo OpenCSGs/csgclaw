@@ -87,6 +87,9 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Sandbox.BoxLiteCLIPath, DefaultBoxLiteCLIPath; got != want {
 		t.Fatalf("cfg.Sandbox.BoxLiteCLIPath = %q, want %q", got, want)
 	}
+	if got, want := strings.Join(cfg.Sandbox.DebianRegistries, ","), strings.Join(DefaultDebianRegistries, ","); got != want {
+		t.Fatalf("cfg.Sandbox.DebianRegistries = %q, want %q", got, want)
+	}
 	if got, want := cfg.Model.Provider, ProviderLLMAPI; got != want {
 		t.Fatalf("cfg.Model.Provider = %q, want %q", got, want)
 	}

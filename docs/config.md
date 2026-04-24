@@ -46,7 +46,7 @@ api_key = "local"
 models = ["Qwen/Qwen3-0.6B-GGUF"]
 
 [bootstrap]
-manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
+manager_image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.24.0"
 
 [sandbox]
 provider = "boxlite-sdk"
@@ -73,7 +73,7 @@ api_key = "sk-your-api-key"
 models = ["gpt-5.4"]
 
 [bootstrap]
-manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
+manager_image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.24.0"
 
 [sandbox]
 provider = "boxlite-sdk"
@@ -100,7 +100,7 @@ api_key = "local"
 models = ["gpt-5.4"]
 
 [bootstrap]
-manager_image = "ghcr.io/russellluo/picoclaw:2026.4.18"
+manager_image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.24.0"
 
 [sandbox]
 provider = "boxlite-sdk"
@@ -125,7 +125,7 @@ debian_registries = ["harbor.opencsg.com", "docker.io"]
 
 `boxlite_cli_path` is the executable path used only by `provider = "boxlite-cli"`. The default value, `boxlite`, resolves from `PATH`; set an absolute path if the binary is installed elsewhere.
 
-`debian_registries` controls where BoxLite pulls `debian:bookworm-slim`. Use `onboard` to persist it:
+`debian_registries` controls where BoxLite pulls `debian:bookworm-slim`. If omitted or empty, CSGClaw defaults to `harbor.opencsg.com` then `docker.io`. Use `onboard` to persist a custom list:
 
 ```bash
 csgclaw onboard --debian-registries "harbor.opencsg.com,docker.io"
