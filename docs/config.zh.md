@@ -80,7 +80,7 @@ home_dir_name = "boxlite"
 debian_registries = ["harbor.opencsg.com", "docker.io"]
 ```
 
-### 通过 CLIProxyAPI 接入本地 Codex
+### 动态 Codex 或 Claude Code Profile
 
 ```toml
 [server]
@@ -88,14 +88,6 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
 no_auth = false
-
-[models]
-default = "codex.gpt-5.4"
-
-[models.providers.codex]
-base_url = "http://127.0.0.1:8317/v1"
-api_key = "local"
-models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.27.0"
@@ -105,6 +97,8 @@ provider = "boxlite-cli"
 home_dir_name = "boxlite"
 debian_registries = ["harbor.opencsg.com", "docker.io"]
 ```
+
+Codex 和 Claude Code Profile 通过 Web UI 写入 agent state。CSGClaw 在 `serve` 时会嵌入启动 CLIProxyAPI，并绑定到私有 localhost 端口，因此不再需要配置固定的 CLIProxy base URL。
 
 ## Sandbox Provider
 

@@ -56,6 +56,15 @@ func (f *fakeInstance) Close() error {
 	return nil
 }
 
+type fakeInfoInstance struct {
+	fakeInstance
+	info sandbox.Info
+}
+
+func (f *fakeInfoInstance) Info(context.Context) (sandbox.Info, error) {
+	return f.info, nil
+}
+
 type agentBoxliteCLIRunner struct {
 	requests []boxlitecli.CommandRequest
 	boxes    map[string]agentBoxliteCLIBox
@@ -380,6 +389,81 @@ func TestBoxLiteCLIProviderGatewayLifecycle(t *testing.T) {
 	}
 }
 
+func TestEnsureBootstrapManagerStartsAfterSingleSuccessfulDetection(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	origLocalIPv4 := localIPv4Resolver
+	localIPv4Resolver = func() string { return "10.0.0.8" }
+	origCSGHubLiteURL := defaultCSGHubLiteBaseURL
+	defaultCSGHubLiteBaseURL = "http://127.0.0.1:1/v1"
+	origListCLIProxyModels := listCLIProxyModels
+	var codexDetections int
+	listCLIProxyModels = func(_ context.Context, provider string) ([]string, error) {
+		if provider == ProviderCodex {
+			codexDetections++
+			if codexDetections == 1 {
+				return []string{"gpt-auto"}, nil
+			}
+		}
+		return nil, fmt.Errorf("%s unavailable", provider)
+	}
+	t.Cleanup(func() {
+		localIPv4Resolver = origLocalIPv4
+		defaultCSGHubLiteBaseURL = origCSGHubLiteURL
+		listCLIProxyModels = origListCLIProxyModels
+		ResetTestHooks()
+	})
+
+	var created bool
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, botID string, profile AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			created = true
+			if image != "picoclaw:latest" || name != ManagerName || botID != ManagerUserID {
+				t.Fatalf("createGatewayBox() got image=%q name=%q botID=%q", image, name, botID)
+			}
+			if profile.Provider != ProviderCodex || profile.ModelID != "gpt-auto" || !profile.ProfileComplete {
+				t.Fatalf("createGatewayBox() profile = %+v, want complete codex gpt-auto", profile)
+			}
+			return &fakeInstance{}, sandbox.Info{
+				ID:        "box-manager",
+				Name:      name,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	)
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
+		if created {
+			return &fakeInfoInstance{info: sandbox.Info{
+				ID:        "box-manager",
+				Name:      ManagerName,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			}}, nil
+		}
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{ListenAddr: ":18080", AccessToken: "token"}, "picoclaw:latest", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if err := svc.EnsureBootstrapManager(context.Background(), false); err != nil {
+		t.Fatalf("EnsureBootstrapManager() error = %v", err)
+	}
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("manager agent not saved")
+	}
+	if got.Status != string(sandbox.StateRunning) || got.ModelID != "gpt-auto" || !got.ProfileComplete {
+		t.Fatalf("manager = %+v, want running with detected model", got)
+	}
+	if codexDetections != 1 {
+		t.Fatalf("codex detections = %d, want exactly one detection before manager start", codexDetections)
+	}
+}
+
 func TestCreateReplaceWorkerRecreatesExistingAgent(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -516,7 +600,7 @@ func TestCreateReplaceManagerUsesRequestedImage(t *testing.T) {
 	var gotImages []string
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
-		func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, _ string, _ config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 			gotImages = append(gotImages, image)
 			return &fakeInstance{}, sandbox.Info{
 				ID:        "box-" + name,
@@ -577,7 +661,7 @@ func TestCreateReplaceManagerWithoutRequestedImageUsesManagerDefault(t *testing.
 	var gotImages []string
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
-		func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, _ string, _ config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 			gotImages = append(gotImages, image)
 			return &fakeInstance{}, sandbox.Info{
 				ID:        "box-" + name,
@@ -977,7 +1061,7 @@ func TestDeleteRemovesRuntimeCacheByHomeDir(t *testing.T) {
 func TestCreateWorkerStoresBoxID(t *testing.T) {
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) { return nil, nil },
-		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 			return nil, sandbox.Info{
 				ID:        "box-" + name,
 				Name:      name,
@@ -1017,7 +1101,7 @@ func TestCreateWorkerUsesRequestedImageOrManagerFallback(t *testing.T) {
 			var gotImage string
 			SetTestHooks(
 				func(_ *Service, _ string) (sandbox.Runtime, error) { return nil, nil },
-				func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, _ string, _ config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+				func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 					gotImage = image
 					return nil, sandbox.Info{
 						ID:        "box-" + name,
@@ -1051,7 +1135,7 @@ func TestCreateWorkerUsesRequestedImageOrManagerFallback(t *testing.T) {
 func TestCreateWorkerStoresResolvedProfileSnapshot(t *testing.T) {
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) { return nil, nil },
-		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 			return nil, sandbox.Info{
 				ID:        "box-" + name,
 				Name:      name,
@@ -1085,11 +1169,11 @@ func TestCreateWorkerStoresResolvedProfileSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWorker() error = %v", err)
 	}
-	if got.Profile != "remote-main.gpt-5.4" {
-		t.Fatalf("CreateWorker().Profile = %q, want %q", got.Profile, "remote-main.gpt-5.4")
+	if got.Profile != "api.gpt-5.4" {
+		t.Fatalf("CreateWorker().Profile = %q, want %q", got.Profile, "api.gpt-5.4")
 	}
-	if got.Provider != config.ProviderLLMAPI {
-		t.Fatalf("CreateWorker().Provider = %q, want %q", got.Provider, config.ProviderLLMAPI)
+	if got.Provider != ProviderAPI {
+		t.Fatalf("CreateWorker().Provider = %q, want %q", got.Provider, ProviderAPI)
 	}
 	if got.ModelID != "gpt-5.4" {
 		t.Fatalf("CreateWorker().ModelID = %q, want %q", got.ModelID, "gpt-5.4")
@@ -1103,7 +1187,7 @@ func TestCreateWorkerClosesBoxHandleAfterCreate(t *testing.T) {
 	rt := &fakeRuntime{}
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil },
-		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 			return &fakeInstance{}, sandbox.Info{
 				ID:        "box-" + name,
 				Name:      name,
@@ -1331,6 +1415,110 @@ func TestStartFallsBackToNameAndRefreshesStoredAgentState(t *testing.T) {
 	}
 }
 
+func TestStartConfiguredAgentsStartsStoppedCompleteWorkers(t *testing.T) {
+	rt := &fakeRuntime{}
+	SetTestHooks(func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil }, nil)
+	defer ResetTestHooks()
+
+	states := map[string]sandbox.State{
+		"box-alice": sandbox.StateStopped,
+		"box-carol": sandbox.StateRunning,
+	}
+	names := map[string]string{
+		"box-alice": "alice",
+		"box-carol": "carol",
+	}
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		state, ok := states[idOrName]
+		if !ok {
+			return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+		}
+		return &fakeInfoInstance{info: sandbox.Info{
+			ID:        idOrName,
+			Name:      names[idOrName],
+			State:     state,
+			CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+		}}, nil
+	}
+	var started []string
+	testStartBoxHook = func(_ *Service, _ context.Context, box sandbox.Instance) error {
+		info, err := box.Info(context.Background())
+		if err != nil {
+			return err
+		}
+		started = append(started, info.ID)
+		states[info.ID] = sandbox.StateRunning
+		return nil
+	}
+	testBoxInfoHook = func(_ *Service, _ context.Context, box sandbox.Instance) (sandbox.Info, error) {
+		info, err := box.Info(context.Background())
+		if err != nil {
+			return sandbox.Info{}, err
+		}
+		info.State = states[info.ID]
+		return info, nil
+	}
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	completeManager := AgentProfile{Name: ManagerName, Provider: ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true}
+	completeAlice := AgentProfile{Name: "alice", Provider: ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true}
+	completeCarol := AgentProfile{Name: "carol", Provider: ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true}
+	incompleteBob := AgentProfile{Name: "bob"}
+	svc.agents[ManagerUserID] = Agent{
+		ID:              ManagerUserID,
+		Name:            ManagerName,
+		Role:            RoleManager,
+		BoxID:           "box-manager",
+		AgentProfile:    completeManager,
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC),
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:              "u-alice",
+		Name:            "alice",
+		Role:            RoleWorker,
+		BoxID:           "box-alice",
+		AgentProfile:    completeAlice,
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+	}
+	svc.agents["u-bob"] = Agent{
+		ID:              "u-bob",
+		Name:            "bob",
+		Role:            RoleWorker,
+		BoxID:           "box-bob",
+		AgentProfile:    incompleteBob,
+		ProfileComplete: false,
+		CreatedAt:       time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+	}
+	svc.agents["u-carol"] = Agent{
+		ID:              "u-carol",
+		Name:            "carol",
+		Role:            RoleWorker,
+		BoxID:           "box-carol",
+		AgentProfile:    completeCarol,
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 4, 1, 13, 0, 0, 0, time.UTC),
+	}
+
+	if err := svc.StartConfiguredAgents(context.Background()); err != nil {
+		t.Fatalf("StartConfiguredAgents() error = %v", err)
+	}
+	if strings.Join(started, ",") != "box-alice" {
+		t.Fatalf("started boxes = %q, want only box-alice", started)
+	}
+	got, ok := svc.Agent("u-alice")
+	if !ok {
+		t.Fatal("Agent() missing u-alice")
+	}
+	if got.Status != string(sandbox.StateRunning) {
+		t.Fatalf("Agent().Status = %q, want running", got.Status)
+	}
+}
+
 func TestStopFallsBackToNameAndRefreshesStoredAgentState(t *testing.T) {
 	rt := &fakeRuntime{}
 	SetTestHooks(func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil }, nil)
@@ -1527,7 +1715,7 @@ func TestEnsureBootstrapStateForceRecreatePrefersStoredManagerBoxID(t *testing.T
 
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
-		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 			return &fakeInstance{}, sandbox.Info{
 				ID:        "box-new",
 				Name:      name,
@@ -1622,7 +1810,7 @@ func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testi
 	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) error {
 		return nil
 	}
-	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 		if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
 			t.Fatalf("stale manager file still exists before recreate: err=%v", err)
 		}
@@ -1684,7 +1872,7 @@ func TestEnsureBootstrapStateClosesManagerBoxHandleAfterCreate(t *testing.T) {
 	rt := &fakeRuntime{}
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil },
-		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 			return &fakeInstance{}, sandbox.Info{
 				ID:        "box-" + name,
 				Name:      name,
@@ -1746,7 +1934,7 @@ func TestEnsureBootstrapStateReusesStoredManagerBoxIDWithoutForce(t *testing.T) 
 	}
 
 	var created bool
-	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, _ string, _ string, _ config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, _ string, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 		created = true
 		return nil, sandbox.Info{}, nil
 	}
@@ -1993,8 +2181,10 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 		t.Fatalf("NewServiceWithChannels() error = %v", err)
 	}
 
-	spec, err := svc.gatewayCreateSpec("picoclaw:latest", "alice", "u-worker-1", config.ModelConfig{
-		ModelID: "minimax-m2.7",
+	spec, err := svc.gatewayCreateSpec("picoclaw:latest", "alice", "u-worker-1", AgentProfile{
+		Name:     "alice",
+		Provider: ProviderAPI,
+		ModelID:  "minimax-m2.7",
 	})
 	if err != nil {
 		t.Fatalf("gatewayCreateSpec() error = %v", err)

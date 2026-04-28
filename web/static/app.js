@@ -10,6 +10,9 @@ const LOCALE_STORAGE_KEY = "csgclaw.im.locale";
 const TOOL_CALLS_STORAGE_KEY = "csgclaw.im.showToolCalls";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "csgclaw.im.sidebarCollapsed";
 const MESSAGE_LIST_BOTTOM_THRESHOLD = 24;
+const AGENT_STATUS_REFRESH_INTERVAL_MS = 2000;
+const PROVIDERS = ["csghub_lite", "codex", "claude_code", "api"];
+const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 
 marked.setOptions({
   gfm: true,
@@ -27,41 +30,110 @@ const messages = {
     pageTitle: "CSGClaw IM",
     loading: "正在加载 IM 工作区...",
     loadingFailed: "加载失败，请稍后重试。",
-    emptyConversation: "请选择一个房间",
-    conversationSection: "房间",
+    emptyConversation: "请选择一个频道或私信",
+    conversationSection: "频道",
+    computerSection: "电脑",
+    computerAgentsSection: "电脑 Agent",
+    channelsSection: "频道",
+    directMessagesSection: "私信",
+    localComputer: "本机",
+    computerOverview: "电脑概览",
+    agentOverview: "Agent 概览",
     yourView: "你的视图",
     activeNow: "当前在线",
-    totalThreads: "房间总数",
+    totalThreads: "频道总数",
     teamMembers: "团队成员",
     membersTitle: "成员",
-    conversationOverview: "房间概览",
+    conversationOverview: "频道概览",
     sendFailed: "消息发送失败，请重试。",
-    roomCreatedToast: "Room 已创建",
+    roomCreatedToast: "频道已创建",
     inviteSentToast: "邀请已发送",
     noMessages: "还没有消息，发一条开始吧。",
     noVisibleMessages: "工具调用已隐藏，当前没有可显示的消息。",
-    createRoom: "创建房间",
-    deleteRoom: "删除房间",
-    conversationLabel: "房间",
+    createRoom: "创建频道",
+    deleteRoom: "删除频道",
+    conversationLabel: "频道",
     members: "成员",
     mentionBadge: "@ 提及",
     inviteMembers: "添加成员",
     inputPlaceholder: "输入消息，使用 @ 选择成员",
     send: "发送",
-    composerTip: "Enter 发送，Shift + Enter 换行。支持多人房间、双人房间和 @ 提及。",
-    createRoomTitle: "创建房间",
-    createRoomSubtitle: "为一个新主题建立房间，并预先邀请成员。",
-    createRoomFromDM: "创建房间",
+    composerTip: "Enter 发送，Shift + Enter 换行。支持频道、私信和 @ 提及。",
+    profileSetupTitle: "配置 Manager Profile",
+    profileSetupSubtitle: "自动检测没有找到可用模型。请完成 Manager 的运行配置后再开始对话。",
+    profileProvider: "Provider",
+    profileModel: "Model",
+    profileBaseURL: "Base URL",
+    profileAPIKey: "API Key",
+    profileHeaders: "Headers JSON",
+    profileRequestOptions: "请求选项（JSON，合并到请求顶层）",
+    profileEnv: "环境变量",
+    profileEnvKey: "键",
+    profileEnvValue: "值",
+    profileEnvAdd: "添加变量",
+    profileEnvRemove: "移除变量",
+    profileReasoning: "Reasoning",
+    profileFastMode: "Fast mode",
+    profileBasics: "基础信息",
+    profileRuntime: "运行时",
+    profileAPIProvider: "API Provider",
+    profileAdvanced: "高级选项",
+    profilePreview: "Profile 预览",
+    openProfile: "打开 Profile",
+    openDM: "打开私信",
+    personProfile: "成员资料",
+    roleLabel: "角色",
+    handleLabel: "Handle",
+    userIDLabel: "用户 ID",
+    status: "状态",
+    profileSelectModel: "选择模型",
+    profileLoadingModels: "正在加载模型...",
+    profileSave: "保存并启动",
+    profileIncomplete: "Manager profile incomplete. Complete setup before sending messages.",
+    profileSavedToast: "Profile 已保存",
+    agentsSection: "Agents",
+    createAgent: "创建 Agent",
+    createAgentTitle: "创建 Agent",
+    createAgentSubtitle: "创建一个 Worker，并使用最新 Profile 默认值。",
+    editAgentTitle: "编辑 Agent Profile",
+    editAgentSubtitle: "修改运行配置。Env 变更需要重新创建沙箱。",
+    agentName: "名称",
+    agentNamePlaceholder: "例如：dev",
+    agentDescription: "说明",
+    agentImage: "镜像",
+    agentImagePlaceholder: "默认使用 Manager 镜像",
+    agentStart: "启动",
+    agentStop: "停止",
+    agentRecreate: "重建",
+    agentDelete: "删除",
+    editProfile: "编辑",
+    inviteToRoom: "加入当前频道",
+    agentCreateSave: "创建并启动",
+    agentUpdateSave: "保存",
+    agentCreated: "Agent 已创建",
+    agentUpdated: "Agent 已更新",
+    agentActionFailed: "Agent 操作失败",
+    profileRestartRequired: "需要重建",
+    profileCompleteBadge: "已配置",
+    profileIncompleteBadge: "未配置",
+    noAgents: "还没有 Worker。",
+    noChannels: "还没有频道。",
+    noDirectMessages: "还没有私信。",
+    modelLoadFailed: "模型加载失败",
+    detectionResults: "自动检测结果",
+    createRoomTitle: "创建频道",
+    createRoomSubtitle: "为一个新主题建立频道，并预先邀请成员。",
+    createRoomFromDM: "创建频道",
     close: "关闭",
-    roomName: "标题",
-    roomNamePlaceholder: "例如：Launch War Room",
+    roomName: "频道名",
+    roomNamePlaceholder: "例如：Launch",
     roomDescription: "说明",
-    roomDescriptionPlaceholder: "简单说明这个房间的用途",
+    roomDescriptionPlaceholder: "简单说明这个频道的用途",
     initialMembers: "初始成员",
     cancel: "取消",
     create: "创建",
     inviteTitle: "添加成员",
-    inviteSubtitle: "将更多成员加入当前房间。",
+    inviteSubtitle: "将更多成员加入当前频道。",
     inviteCandidates: "可选成员",
     noInviteCandidates: "当前没有可新增的成员。",
     sendInvite: "发送邀请",
@@ -70,6 +142,9 @@ const messages = {
     languageOptionEn: "English",
     toggleToolCallsShow: "显示工具调用",
     toggleToolCallsHide: "隐藏工具调用",
+    channelTools: "频道工具",
+    enabled: "开启",
+    disabled: "关闭",
     collapseSidebar: "收起侧边栏",
     expandSidebar: "展开侧边栏",
     online: "在线",
@@ -86,11 +161,11 @@ const messages = {
       "creator_id is required": "缺少创建者",
       "creator not found": "创建者不存在",
       "user not found": "用户不存在",
-      "room_id is required": "缺少房间 ID",
-      "room not found": "房间不存在",
+      "room_id is required": "缺少频道 ID",
+      "room not found": "频道不存在",
       "inviter_id is required": "缺少邀请者",
       "inviter not found": "邀请者不存在",
-      "inviter is not a room member": "邀请者不在当前房间中",
+      "inviter is not a room member": "邀请者不在当前频道中",
       "user_ids is required": "请选择至少一位成员",
       "no new users to invite": "没有可新增的成员",
     },
@@ -99,41 +174,110 @@ const messages = {
     pageTitle: "CSGClaw IM",
     loading: "Loading IM workspace...",
     loadingFailed: "Failed to load the workspace. Please try again.",
-    emptyConversation: "Select a room",
-    conversationSection: "Rooms",
+    emptyConversation: "Select a channel or DM",
+    conversationSection: "Channels",
+    computerSection: "Computer",
+    computerAgentsSection: "Computer Agents",
+    channelsSection: "Channels",
+    directMessagesSection: "Direct Messages",
+    localComputer: "Local computer",
+    computerOverview: "Computer overview",
+    agentOverview: "Agent overview",
     yourView: "Your view",
     activeNow: "Active now",
-    totalThreads: "Threads",
+    totalThreads: "Channels",
     teamMembers: "Members",
     membersTitle: "Members",
-    conversationOverview: "Room overview",
+    conversationOverview: "Channel overview",
     sendFailed: "Failed to send the message. Please retry.",
-    roomCreatedToast: "Room created",
+    roomCreatedToast: "Channel created",
     inviteSentToast: "Invite sent",
-    noMessages: "No messages yet. Start this room.",
-    noVisibleMessages: "Tool calls are hidden, and there are no visible messages in this room.",
-    createRoom: "New Room",
-    deleteRoom: "Delete Room",
-    conversationLabel: "Room",
+    noMessages: "No messages yet. Start the conversation.",
+    noVisibleMessages: "Tool calls are hidden, and there are no visible messages in this conversation.",
+    createRoom: "New Channel",
+    deleteRoom: "Delete Channel",
+    conversationLabel: "Channel",
     members: "members",
     mentionBadge: "@ mention",
     inviteMembers: "Add Members",
     inputPlaceholder: "Type a message and use @ to mention members",
     send: "Send",
-    composerTip: "Press Enter to send and Shift + Enter for a new line. Supports group chats, 1:1 rooms, and @ mentions.",
-    createRoomTitle: "New Room",
-    createRoomSubtitle: "Create a new room and invite members in advance.",
-    createRoomFromDM: "New Room",
+    composerTip: "Press Enter to send and Shift + Enter for a new line. Supports channels, DMs, and @ mentions.",
+    profileSetupTitle: "Manager Profile",
+    profileSetupSubtitle: "Auto-detection did not find a usable model. Complete the manager runtime profile before chatting.",
+    profileProvider: "Provider",
+    profileModel: "Model",
+    profileBaseURL: "Base URL",
+    profileAPIKey: "API Key",
+    profileHeaders: "Headers JSON",
+    profileRequestOptions: "Request options (JSON, merged into top-level request)",
+    profileEnv: "Environment variables",
+    profileEnvKey: "Key",
+    profileEnvValue: "Value",
+    profileEnvAdd: "Add variable",
+    profileEnvRemove: "Remove variable",
+    profileReasoning: "Reasoning",
+    profileFastMode: "Fast mode",
+    profileBasics: "Basics",
+    profileRuntime: "Runtime",
+    profileAPIProvider: "API Provider",
+    profileAdvanced: "Advanced",
+    profilePreview: "Profile preview",
+    openProfile: "Open profile",
+    openDM: "Open DM",
+    personProfile: "Person profile",
+    roleLabel: "Role",
+    handleLabel: "Handle",
+    userIDLabel: "User ID",
+    status: "Status",
+    profileSelectModel: "Select model",
+    profileLoadingModels: "Loading models...",
+    profileSave: "Save and start",
+    profileIncomplete: "Manager profile incomplete. Complete setup before sending messages.",
+    profileSavedToast: "Profile saved",
+    agentsSection: "Agents",
+    createAgent: "Create Agent",
+    createAgentTitle: "Create Agent",
+    createAgentSubtitle: "Create a worker with the latest profile defaults.",
+    editAgentTitle: "Edit Agent Profile",
+    editAgentSubtitle: "Change runtime settings. Env changes need a sandbox recreate.",
+    agentName: "Name",
+    agentNamePlaceholder: "For example: dev",
+    agentDescription: "Description",
+    agentImage: "Image",
+    agentImagePlaceholder: "Uses the manager image by default",
+    agentStart: "Start",
+    agentStop: "Stop",
+    agentRecreate: "Recreate",
+    agentDelete: "Delete",
+    editProfile: "Edit",
+    inviteToRoom: "Add to current channel",
+    agentCreateSave: "Create and start",
+    agentUpdateSave: "Save",
+    agentCreated: "Agent created",
+    agentUpdated: "Agent updated",
+    agentActionFailed: "Agent action failed",
+    profileRestartRequired: "Restart needed",
+    profileCompleteBadge: "Configured",
+    profileIncompleteBadge: "Incomplete",
+    noAgents: "No workers yet.",
+    noChannels: "No channels yet.",
+    noDirectMessages: "No direct messages yet.",
+    modelLoadFailed: "Failed to load models",
+    detectionResults: "Auto-detection",
+    createRoomTitle: "New Channel",
+    createRoomSubtitle: "Create a new channel and invite members in advance.",
+    createRoomFromDM: "New Channel",
     close: "Close",
-    roomName: "Title",
-    roomNamePlaceholder: "For example: Launch War Room",
+    roomName: "Channel name",
+    roomNamePlaceholder: "For example: Launch",
     roomDescription: "Details",
-    roomDescriptionPlaceholder: "Briefly describe what this room is for",
+    roomDescriptionPlaceholder: "Briefly describe what this channel is for",
     initialMembers: "Initial Members",
     cancel: "Cancel",
     create: "Create",
     inviteTitle: "Add Members",
-    inviteSubtitle: "Add more members to the current room.",
+    inviteSubtitle: "Add more members to the current channel.",
     inviteCandidates: "Available Members",
     noInviteCandidates: "There are no additional members to invite.",
     sendInvite: "Send Invite",
@@ -142,6 +286,9 @@ const messages = {
     languageOptionEn: "English",
     toggleToolCallsShow: "Show tool calls",
     toggleToolCallsHide: "Hide tool calls",
+    channelTools: "Channel tools",
+    enabled: "On",
+    disabled: "Off",
     collapseSidebar: "Collapse sidebar",
     expandSidebar: "Expand sidebar",
     online: "online",
@@ -158,11 +305,11 @@ const messages = {
       "creator_id is required": "Creator is required",
       "creator not found": "Creator not found",
       "user not found": "User not found",
-      "room_id is required": "Room ID is required",
-      "room not found": "Room not found",
+      "room_id is required": "Channel ID is required",
+      "room not found": "Channel not found",
       "inviter_id is required": "Inviter is required",
       "inviter not found": "Inviter not found",
-      "inviter is not a room member": "Inviter is not a room member",
+      "inviter is not a room member": "Inviter is not a channel member",
       "user_ids is required": "Select at least one member",
       "no new users to invite": "There are no new users to invite",
     },
@@ -379,7 +526,106 @@ function RoomsIcon() {
   `;
 }
 
+function AgentIcon() {
+  return html`
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M8.5 4.75a3.5 3.5 0 0 1 7 0v1.1h1.3a2.7 2.7 0 0 1 2.7 2.7v6.95a2.7 2.7 0 0 1-2.7 2.7H7.2a2.7 2.7 0 0 1-2.7-2.7V8.55a2.7 2.7 0 0 1 2.7-2.7h1.3v-1.1Zm1.5 1.1h4v-1.1a2 2 0 1 0-4 0v1.1Zm-2.8 1.5a1.2 1.2 0 0 0-1.2 1.2v6.95c0 .66.54 1.2 1.2 1.2h9.6a1.2 1.2 0 0 0 1.2-1.2V8.55a1.2 1.2 0 0 0-1.2-1.2H7.2Zm2.1 4.15a1.05 1.05 0 1 1 2.1 0a1.05 1.05 0 0 1-2.1 0Zm4.25 0a1.05 1.05 0 1 1 2.1 0a1.05 1.05 0 0 1-2.1 0Zm-4.22 3.1h5.34v1.35H9.33V14.6Z"
+        fill="currentColor"
+      />
+    </svg>
+  `;
+}
+
+function ComputerIcon() {
+  return html`
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M4.5 5.75h15a1.75 1.75 0 0 1 1.75 1.75v8.25a1.75 1.75 0 0 1-1.75 1.75h-15a1.75 1.75 0 0 1-1.75-1.75V7.5A1.75 1.75 0 0 1 4.5 5.75Zm0 1.5a.25.25 0 0 0-.25.25v8.25c0 .14.11.25.25.25h15a.25.25 0 0 0 .25-.25V7.5a.25.25 0 0 0-.25-.25h-15ZM9 19h6v1.5H9V19Z"
+        fill="currentColor"
+      />
+    </svg>
+  `;
+}
+
+function PlayIcon() {
+  return html`
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M8.3 5.7v12.6c0 .74.8 1.2 1.44.83l9.7-6.3a.98.98 0 0 0 0-1.66l-9.7-6.3a.97.97 0 0 0-1.44.83Z" fill="currentColor" />
+    </svg>
+  `;
+}
+
+function StopIcon() {
+  return html`
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M7.4 6.4h9.2c.55 0 1 .45 1 1v9.2c0 .55-.45 1-1 1H7.4c-.55 0-1-.45-1-1V7.4c0-.55.45-1 1-1Z" fill="currentColor" />
+    </svg>
+  `;
+}
+
+function paneFromLocation(pathname = window.location.pathname) {
+  const parts = String(pathname || "/").split("/").filter(Boolean).map(decodePathSegment);
+  const section = parts[0] || "";
+  const id = parts[1] || "";
+  switch (section) {
+    case "computer":
+      return { type: "computer", id: "local" };
+    case "agents":
+    case "agent":
+      return id ? { type: "agent", id } : { type: "computer", id: "local" };
+    case "channels":
+    case "channel":
+    case "dms":
+    case "dm":
+    case "rooms":
+    case "room":
+    case "conversations":
+    case "conversation":
+      return id ? { type: "conversation", id } : { type: "conversation", id: "" };
+    default:
+      return { type: "conversation", id: "" };
+  }
+}
+
+function pathForPane(pane, rooms = []) {
+  if (!pane || pane.type === "computer") {
+    return "/computer";
+  }
+  if (pane.type === "agent" && pane.id) {
+    return `/agents/${encodeURIComponent(pane.id)}`;
+  }
+  if (pane.type === "conversation" && pane.id) {
+    const room = rooms.find((item) => item.id === pane.id);
+    const prefix = room && isDirectConversation(room) ? "/dms/" : "/channels/";
+    return `${prefix}${encodeURIComponent(pane.id)}`;
+  }
+  return "/";
+}
+
+function syncBrowserPath(pane, rooms, mode = "push") {
+  const nextPath = pathForPane(pane, rooms);
+  if (!nextPath || window.location.pathname === nextPath) {
+    return;
+  }
+  const state = { pane };
+  if (mode === "replace") {
+    window.history.replaceState(state, "", nextPath);
+    return;
+  }
+  window.history.pushState(state, "", nextPath);
+}
+
+function decodePathSegment(value) {
+  try {
+    return decodeURIComponent(value || "");
+  } catch (_) {
+    return value || "";
+  }
+}
+
 function App() {
+  const initialPane = useMemo(() => paneFromLocation(), []);
   const [locale, setLocale] = useState(() => detectInitialLocale());
   const [showToolCalls, setShowToolCalls] = useState(() => {
     const value = window.localStorage.getItem(TOOL_CALLS_STORAGE_KEY);
@@ -390,39 +636,76 @@ function App() {
     return value === "true";
   });
   const [data, setData] = useState(null);
-  const [activeConversationId, setActiveConversationId] = useState("");
+  const [activeConversationId, setActiveConversationId] = useState(() => initialPane.type === "conversation" ? initialPane.id : "");
+  const [activePane, setActivePane] = useState(initialPane);
   const [draftsByConversationId, setDraftsByConversationId] = useState({});
   const [composerMentionState, setComposerMentionState] = useState(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
+  const [showChannelTools, setShowChannelTools] = useState(false);
   const [roomTitle, setRoomTitle] = useState("");
   const [roomDescription, setRoomDescription] = useState("");
   const [roomMemberIDs, setRoomMemberIDs] = useState([]);
   const [lockedRoomMemberIDs, setLockedRoomMemberIDs] = useState([]);
-  const [createRoomMode, setCreateRoomMode] = useState("default");
   const [inviteUserIDs, setInviteUserIDs] = useState([]);
   const [submitError, setSubmitError] = useState("");
   const [composerError, setComposerError] = useState("");
   const [loadingError, setLoadingError] = useState("");
+  const [managerProfile, setManagerProfile] = useState(null);
+  const [profileDraft, setProfileDraft] = useState(null);
+  const [profileModels, setProfileModels] = useState([]);
+  const [profileError, setProfileError] = useState("");
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileModelBusy, setProfileModelBusy] = useState(false);
+  const [agents, setAgents] = useState([]);
+  const [agentsLoaded, setAgentsLoaded] = useState(false);
+  const [agentsError, setAgentsError] = useState("");
+  const [showAgentModal, setShowAgentModal] = useState(false);
+  const [agentModalMode, setAgentModalMode] = useState("create");
+  const [editingAgent, setEditingAgent] = useState(null);
+  const [agentDraft, setAgentDraft] = useState(null);
+  const [agentModels, setAgentModels] = useState([]);
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [agentModelBusy, setAgentModelBusy] = useState(false);
+  const [agentError, setAgentError] = useState("");
+  const [agentActionBusy, setAgentActionBusy] = useState("");
+  const [agentPageDraft, setAgentPageDraft] = useState(null);
+  const [agentPageModels, setAgentPageModels] = useState([]);
+  const [agentPageBusy, setAgentPageBusy] = useState(false);
+  const [agentPageModelBusy, setAgentPageModelBusy] = useState(false);
+  const [agentPageError, setAgentPageError] = useState("");
+  const [profilePreview, setProfilePreview] = useState(null);
   const editorRef = useRef(null);
   const messageListRef = useRef(null);
   const memberMenuRef = useRef(null);
+  const channelToolsRef = useRef(null);
+  const agentRefreshTimerRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
 
   useEffect(() => {
-    fetch("api/v1/bootstrap")
-      .then((resp) => resp.json())
-      .then((payload) => {
-        setData(normalizeIMData(payload));
-        setLoadingError("");
-        setInviteUserIDs([]);
-        if (payload.rooms.length > 0) {
-          setActiveConversationId(payload.rooms[0].id);
-        }
-      })
-      .catch(() => setLoadingError(messages[locale].loadingFailed));
+    refreshBootstrap();
+  }, []);
+
+  useEffect(() => {
+    refreshManagerProfile();
+    refreshAgents();
+  }, []);
+
+  useEffect(() => {
+    function refreshVisibleAgents() {
+      if (document.visibilityState === "visible") {
+        refreshAgents({ silent: true });
+      }
+    }
+
+    const intervalID = window.setInterval(refreshVisibleAgents, AGENT_STATUS_REFRESH_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refreshVisibleAgents);
+    return () => {
+      window.clearInterval(intervalID);
+      document.removeEventListener("visibilitychange", refreshVisibleAgents);
+    };
   }, []);
 
   useEffect(() => {
@@ -431,9 +714,18 @@ function App() {
     source.onmessage = (event) => {
       const payload = JSON.parse(event.data);
       setData((current) => applyIMEvent(current, payload));
+      if (isAgentRosterEvent(payload)) {
+        scheduleAgentsRefresh();
+      }
     };
 
-    return () => source.close();
+    return () => {
+      source.close();
+      if (agentRefreshTimerRef.current) {
+        window.clearTimeout(agentRefreshTimerRef.current);
+        agentRefreshTimerRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -450,7 +742,23 @@ function App() {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
 
+  useEffect(() => {
+    function handlePopState() {
+      const next = paneFromLocation();
+      setActivePane(next);
+      if (next.type === "conversation") {
+        setActiveConversationId(next.id);
+      }
+      setShowMemberList(false);
+    }
+
+    window.history.replaceState({ pane: activePane }, "", window.location.pathname);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const t = useMemo(() => createTranslator(locale), [locale]);
+  const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
 
   const usersById = useMemo(() => {
     const result = new Map();
@@ -478,6 +786,22 @@ function App() {
     [data],
   );
   const roomCount = rooms.length;
+  const channels = useMemo(
+    () => rooms.filter((room) => !isDirectConversation(room)),
+    [rooms],
+  );
+  const directMessages = useMemo(
+    () => rooms.filter((room) => isDirectConversation(room)),
+    [rooms],
+  );
+  const selectedAgentForPage = useMemo(() => {
+    if (activePane.type !== "agent") {
+      return null;
+    }
+    const managerAgent = agents.find((item) => item.role === "manager" || item.id === "u-manager");
+    const workerAgents = agents.filter((item) => item.id !== managerAgent?.id);
+    return [managerAgent, ...workerAgents].filter(Boolean).find((item) => item.id === activePane.id) ?? null;
+  }, [agents, activePane]);
 
   const mentionCandidates = useMemo(() => {
     if (!data || !composerMentionState) {
@@ -506,7 +830,6 @@ function App() {
       setRoomDescription("");
       setRoomMemberIDs([]);
       setLockedRoomMemberIDs([]);
-      setCreateRoomMode("default");
       setSubmitError("");
     }
   }, [showCreateRoom]);
@@ -520,6 +843,7 @@ function App() {
 
   useEffect(() => {
     setShowMemberList(false);
+    setShowChannelTools(false);
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -540,19 +864,110 @@ function App() {
   }, [showMemberList]);
 
   useEffect(() => {
+    if (!showChannelTools) {
+      return undefined;
+    }
+
+    function handlePointerDown(event) {
+      const menu = channelToolsRef.current;
+      if (!menu || menu.contains(event.target)) {
+        return;
+      }
+      setShowChannelTools(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [showChannelTools]);
+
+  useEffect(() => {
     if (!data) {
       return;
     }
     if (!activeConversationId) {
       if (data.rooms.length > 0) {
         setActiveConversationId(data.rooms[0].id);
+        if (!activePane.id) {
+          const next = { type: "conversation", id: data.rooms[0].id };
+          setActivePane(next);
+          syncBrowserPath(next, data.rooms, "replace");
+        }
+      } else {
+        if (!activePane.id) {
+          const next = { type: "computer", id: "local" };
+          setActivePane(next);
+          syncBrowserPath(next, data.rooms, "replace");
+        }
       }
       return;
     }
     if (!data.rooms.some((room) => room.id === activeConversationId)) {
-      setActiveConversationId(data.rooms[0]?.id ?? "");
+      const nextID = data.rooms[0]?.id ?? "";
+      if (nextID) {
+        selectConversation(nextID, { replace: true });
+      } else {
+        setActiveConversationId("");
+        selectComputer({ replace: true });
+      }
     }
-  }, [data, activeConversationId]);
+  }, [data, activeConversationId, activePane.id]);
+
+  useEffect(() => {
+    if (!activePane || activePane.type !== "agent") {
+      return;
+    }
+    if (!agentsLoaded) {
+      return;
+    }
+    if (!agents.some((item) => item.id === activePane.id)) {
+      if (activeConversationId) {
+        selectConversation(activeConversationId, { replace: true });
+      } else {
+        selectComputer({ replace: true });
+      }
+    }
+  }, [agents, agentsLoaded, activePane, activeConversationId]);
+
+  useEffect(() => {
+    if (!data || !activePane?.id) {
+      return;
+    }
+    syncBrowserPath(activePane, rooms, "replace");
+  }, [data, activePane?.type, activePane?.id, rooms]);
+
+  useEffect(() => {
+    if (!showAgentModal || !agentDraft?.provider) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => loadAgentModels(agentDraft, { silent: true }), agentDraft.provider === "api" ? 420 : 0);
+    return () => window.clearTimeout(timer);
+  }, [showAgentModal, agentDraft?.provider, agentDraft?.base_url, agentDraft?.api_key, agentDraft?.headersText]);
+
+  useEffect(() => {
+    if (!selectedAgentForPage) {
+      setAgentPageDraft(null);
+      setAgentPageModels([]);
+      setAgentPageError("");
+      return;
+    }
+    loadAgentPageDraft(selectedAgentForPage);
+  }, [selectedAgentForPage?.id]);
+
+  useEffect(() => {
+    if (activePane.type !== "agent" || !agentPageDraft?.provider) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => loadAgentPageModels(agentPageDraft, { silent: true }), agentPageDraft.provider === "api" ? 420 : 0);
+    return () => window.clearTimeout(timer);
+  }, [activePane.type, activePane.id, agentPageDraft?.provider, agentPageDraft?.base_url, agentPageDraft?.api_key, agentPageDraft?.headersText]);
+
+  useEffect(() => {
+    if (!managerProfileIncomplete || !profileDraft?.provider) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => loadProfileModels(profileDraft, { silent: true }), profileDraft.provider === "api" ? 420 : 0);
+    return () => window.clearTimeout(timer);
+  }, [managerProfileIncomplete, profileDraft?.provider, profileDraft?.base_url, profileDraft?.api_key, profileDraft?.headersText]);
 
   useEffect(() => {
     const el = messageListRef.current;
@@ -613,7 +1028,36 @@ function App() {
     });
   }, [activeConversationId, showCreateRoom, showInvite]);
 
+  async function refreshBootstrap() {
+    try {
+      const resp = await fetch("api/v1/bootstrap");
+      if (!resp.ok) {
+        throw new Error("bootstrap failed");
+      }
+      const payload = await resp.json();
+      const normalized = normalizeIMData(payload);
+      setData(normalized);
+      setLoadingError("");
+      setInviteUserIDs([]);
+      if (!activeConversationId && payload.rooms.length > 0) {
+        if (activePane.id && activePane.type !== "conversation") {
+          setActiveConversationId(payload.rooms[0].id);
+        } else {
+          selectConversation(payload.rooms[0].id, { replace: true, rooms: normalized.rooms });
+        }
+      }
+      return normalized;
+    } catch (_) {
+      setLoadingError(messages[locale].loadingFailed);
+      return null;
+    }
+  }
+
   async function sendMessage() {
+    if (managerProfileIncomplete) {
+      setComposerError(t("profileIncomplete"));
+      return;
+    }
     if (!data || !activeConversation || !draftText.trim()) {
       return;
     }
@@ -662,9 +1106,43 @@ function App() {
 
     const created = await resp.json();
     setData((current) => upsertConversationInData(current, created));
-    setActiveConversationId(created.id);
+    selectConversation(created.id);
     setComposerError("");
     setShowCreateRoom(false);
+  }
+
+  function selectConversation(id, options = {}) {
+    setActiveConversationId(id);
+    const next = { type: "conversation", id };
+    setActivePane(next);
+    setShowMemberList(false);
+    setShowChannelTools(false);
+    if (options.updateURL !== false) {
+      syncBrowserPath(next, options.rooms ?? rooms, options.replace ? "replace" : "push");
+    }
+  }
+
+  function selectAgent(item, options = {}) {
+    if (!item?.id) {
+      return;
+    }
+    const next = { type: "agent", id: item.id };
+    setActivePane(next);
+    setShowMemberList(false);
+    setShowChannelTools(false);
+    if (options.updateURL !== false) {
+      syncBrowserPath(next, rooms, options.replace ? "replace" : "push");
+    }
+  }
+
+  function selectComputer(options = {}) {
+    const next = { type: "computer", id: "local" };
+    setActivePane(next);
+    setShowMemberList(false);
+    setShowChannelTools(false);
+    if (options.updateURL !== false) {
+      syncBrowserPath(next, rooms, options.replace ? "replace" : "push");
+    }
   }
 
   function openCreateRoomModal(options = {}) {
@@ -677,7 +1155,6 @@ function App() {
     setRoomDescription(options.description ?? "");
     setRoomMemberIDs(selectedIDs);
     setLockedRoomMemberIDs(lockedIDs);
-    setCreateRoomMode(options.mode ?? "default");
     setSubmitError("");
     setShowInvite(false);
     setShowCreateRoom(true);
@@ -689,7 +1166,6 @@ function App() {
     }
     if (isDirectConversation(activeConversation)) {
       openCreateRoomModal({
-        mode: "from-direct",
         preselectedMemberIDs: activeConversation.members,
         lockedMemberIDs: activeConversation.members,
       });
@@ -752,7 +1228,13 @@ function App() {
     setComposerError("");
     setSubmitError("");
     if (activeConversationId === roomID) {
-      setActiveConversationId(remainingRooms[0]?.id ?? "");
+      const nextID = remainingRooms[0]?.id ?? "";
+      if (nextID) {
+        selectConversation(nextID, { replace: true });
+      } else {
+        setActiveConversationId("");
+        selectComputer({ replace: true });
+      }
     }
   }
 
@@ -848,6 +1330,477 @@ function App() {
   const inviteActionLabel = activeConversation && isDirectConversation(activeConversation)
     ? t("createRoomFromDM")
     : t("inviteMembers");
+
+  const managerAgent = agents.find((item) => item.role === "manager" || item.id === "u-manager");
+  const workerAgents = agents.filter((item) => item.id !== managerAgent?.id);
+  const agentItems = [managerAgent, ...workerAgents].filter(Boolean);
+  const selectedAgent = selectedAgentForPage;
+  const selectedConversation = activePane.type === "conversation" ? activeConversation : null;
+  const activeChannel = selectedConversation && !isDirectConversation(selectedConversation) ? selectedConversation : null;
+  const previewUser = profilePreview?.type === "user"
+    ? usersById.get(profilePreview.id) ?? null
+    : profilePreview?.type === "agent"
+      ? usersById.get(profilePreview.id) ?? null
+      : null;
+  const previewAgent = profilePreview
+    ? agentItems.find((item) => item.id === profilePreview.id || agentMatchesUser(item, previewUser)) ?? null
+    : null;
+
+  async function refreshManagerProfile() {
+    try {
+      const resp = await fetch("api/v1/agents/u-manager/profile");
+      if (!resp.ok) {
+        return;
+      }
+      const profile = await resp.json();
+      setManagerProfile(profile);
+      setProfileDraft(profileToDraft(profile));
+    } catch (_) {
+      // The manager may not exist during the first bootstrap milliseconds.
+    }
+  }
+
+  async function loadProfileModels(draft = profileDraft, options = {}) {
+    if (!draft?.provider) {
+      return;
+    }
+    if (!options.silent) {
+      setProfileError("");
+    }
+    setProfileModelBusy(true);
+    try {
+      const resp = await fetch("api/v1/agent-profiles/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: draft.provider,
+          base_url: draft.base_url,
+          api_key: draft.api_key,
+          headers: parseJSONMap(draft.headersText),
+        }),
+      });
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim() || t("modelLoadFailed"));
+      }
+      const payload = await resp.json();
+      setProfileModels(payload.models ?? []);
+      if (!draft.model_id && payload.models?.length > 0) {
+        setProfileDraft((current) => ({ ...current, model_id: payload.models[0] }));
+      }
+    } catch (err) {
+      if (!options.silent) {
+        setProfileError(err.message || t("modelLoadFailed"));
+      }
+      setProfileModels([]);
+    } finally {
+      setProfileModelBusy(false);
+    }
+  }
+
+  async function saveManagerProfile() {
+    if (!profileDraft) {
+      return;
+    }
+    setProfileBusy(true);
+    setProfileError("");
+    try {
+      const payload = draftToProfile(profileDraft);
+      const resp = await fetch("api/v1/agents/u-manager/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim());
+      }
+      const saved = await resp.json();
+      setManagerProfile(saved);
+      setProfileDraft(profileToDraft(saved));
+      if (saved.profile_complete) {
+        await fetch("api/v1/agents/u-manager/recreate", { method: "POST" });
+      }
+      await refreshManagerProfile();
+      setComposerError("");
+    } catch (err) {
+      setProfileError(err.message || t("sendFailed"));
+    } finally {
+      setProfileBusy(false);
+    }
+  }
+
+  async function refreshAgents(options = {}) {
+    try {
+      const resp = await fetch(options.silent ? "api/v1/agents?poll=1" : "api/v1/agents");
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim());
+      }
+      setAgents(await resp.json());
+      setAgentsLoaded(true);
+      setAgentsError("");
+    } catch (err) {
+      if (!options.silent) {
+        setAgentsError(err.message || t("agentActionFailed"));
+      }
+    }
+  }
+
+  function scheduleAgentsRefresh() {
+    if (agentRefreshTimerRef.current) {
+      window.clearTimeout(agentRefreshTimerRef.current);
+    }
+    agentRefreshTimerRef.current = window.setTimeout(() => {
+      agentRefreshTimerRef.current = null;
+      refreshAgents({ silent: true });
+    }, 120);
+  }
+
+  async function openCreateAgentModal() {
+    setAgentModalMode("create");
+    setEditingAgent(null);
+    setAgentError("");
+    setAgentModels([]);
+    const managerAgent = agents.find((item) => item.role === "manager" || item.id === "u-manager");
+    try {
+      const resp = await fetch("api/v1/agent-profile-defaults");
+      const defaults = resp.ok ? await resp.json() : managerProfile;
+      const draft = agentToDraft({ image: managerAgent?.image || "", agent_profile: defaults });
+      setAgentDraft(draft);
+      setShowAgentModal(true);
+      loadAgentModels(draft, { silent: true });
+    } catch (_) {
+      const draft = agentToDraft({ image: managerAgent?.image || "", agent_profile: managerProfile });
+      setAgentDraft(draft);
+      setShowAgentModal(true);
+      loadAgentModels(draft, { silent: true });
+    }
+  }
+
+  async function openEditAgentModal(item) {
+    setAgentModalMode("edit");
+    setEditingAgent(item);
+    setAgentError("");
+    setAgentModels([]);
+    try {
+      const resp = await fetch(`api/v1/agents/${encodeURIComponent(item.id)}/profile`);
+      const profile = resp.ok ? await resp.json() : item.agent_profile;
+      const draft = agentToDraft({ ...item, agent_profile: profile });
+      setAgentDraft(draft);
+      setShowAgentModal(true);
+      loadAgentModels(draft, { silent: true });
+    } catch (err) {
+      setAgentError(err.message || t("agentActionFailed"));
+    }
+  }
+
+  async function loadAgentPageDraft(item) {
+    if (!item?.id) {
+      return;
+    }
+    setAgentPageError("");
+    setAgentPageModels([]);
+    try {
+      const resp = await fetch(`api/v1/agents/${encodeURIComponent(item.id)}/profile`);
+      const profile = resp.ok ? await resp.json() : item.agent_profile;
+      const draft = agentToDraft({ ...item, agent_profile: profile });
+      setAgentPageDraft(draft);
+      loadAgentPageModels(draft, { silent: true });
+    } catch (err) {
+      setAgentPageError(err.message || t("agentActionFailed"));
+      const draft = agentToDraft(item);
+      setAgentPageDraft(draft);
+      loadAgentPageModels(draft, { silent: true });
+    }
+  }
+
+  async function loadAgentPageModels(draft = agentPageDraft, options = {}) {
+    if (!draft?.provider) {
+      return;
+    }
+    if (!options.silent) {
+      setAgentPageError("");
+    }
+    setAgentPageModelBusy(true);
+    try {
+      const resp = await fetch("api/v1/agent-profiles/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: draft.provider,
+          base_url: draft.base_url,
+          api_key: draft.api_key,
+          headers: parseJSONMap(draft.headersText),
+        }),
+      });
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim() || t("modelLoadFailed"));
+      }
+      const payload = await resp.json();
+      setAgentPageModels(payload.models ?? []);
+      if (!draft.model_id && payload.models?.length > 0) {
+        setAgentPageDraft((current) => ({ ...current, model_id: payload.models[0] }));
+      }
+    } catch (err) {
+      if (!options.silent) {
+        setAgentPageError(err.message || t("modelLoadFailed"));
+      }
+      setAgentPageModels([]);
+    } finally {
+      setAgentPageModelBusy(false);
+    }
+  }
+
+  async function loadAgentModels(draft = agentDraft, options = {}) {
+    if (!draft?.provider) {
+      return;
+    }
+    if (!options.silent) {
+      setAgentError("");
+    }
+    setAgentModelBusy(true);
+    try {
+      const resp = await fetch("api/v1/agent-profiles/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: draft.provider,
+          base_url: draft.base_url,
+          api_key: draft.api_key,
+          headers: parseJSONMap(draft.headersText),
+        }),
+      });
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim() || t("modelLoadFailed"));
+      }
+      const payload = await resp.json();
+      setAgentModels(payload.models ?? []);
+      if (!draft.model_id && payload.models?.length > 0) {
+        setAgentDraft((current) => ({ ...current, model_id: payload.models[0] }));
+      }
+    } catch (err) {
+      if (!options.silent) {
+        setAgentError(err.message || t("modelLoadFailed"));
+      }
+      setAgentModels([]);
+    } finally {
+      setAgentModelBusy(false);
+    }
+  }
+
+  async function saveAgentPage() {
+    if (!agentPageDraft || !selectedAgentForPage?.id) {
+      return;
+    }
+    setAgentPageBusy(true);
+    setAgentPageError("");
+    try {
+      const profile = draftToProfile(agentPageDraft, {
+        name: agentPageDraft.name,
+        description: agentPageDraft.description,
+      });
+      const payload = {
+        name: agentPageDraft.name,
+        description: agentPageDraft.description,
+        image: agentPageDraft.image,
+        agent_profile: profile,
+      };
+      const resp = await fetch(`api/v1/agents/${encodeURIComponent(selectedAgentForPage.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim());
+      }
+      const saved = await resp.json();
+      await refreshAgents();
+      if (saved.id === "u-manager") {
+        await refreshManagerProfile();
+      }
+      setAgentPageDraft(agentToDraft(saved));
+    } catch (err) {
+      setAgentPageError(err.message || t("agentActionFailed"));
+    } finally {
+      setAgentPageBusy(false);
+    }
+  }
+
+  async function saveAgent() {
+    if (!agentDraft) {
+      return;
+    }
+    setAgentBusy(true);
+    setAgentError("");
+    try {
+      const profile = draftToProfile(agentDraft, {
+        name: agentDraft.name,
+        description: agentDraft.description,
+      });
+      const payload = {
+        name: agentDraft.name,
+        description: agentDraft.description,
+        image: agentDraft.image,
+        agent_profile: profile,
+      };
+      const isCreate = agentModalMode === "create";
+      const url = isCreate ? "api/v1/agents" : `api/v1/agents/${encodeURIComponent(editingAgent.id)}`;
+      const resp = await fetch(url, {
+        method: isCreate ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim());
+      }
+      const saved = await resp.json();
+      await refreshAgents();
+      if (isCreate) {
+        await refreshBootstrap();
+      }
+      if (saved.id === "u-manager") {
+        await refreshManagerProfile();
+      }
+      setShowAgentModal(false);
+      setAgentDraft(null);
+    } catch (err) {
+      setAgentError(err.message || t("agentActionFailed"));
+    } finally {
+      setAgentBusy(false);
+    }
+  }
+
+  async function runAgentAction(item, action) {
+    if (!item?.id || agentActionBusy) {
+      return;
+    }
+    if (action === "delete" && !window.confirm(`${t("agentDelete")} ${item.name}?`)) {
+      return;
+    }
+    setAgentActionBusy(`${item.id}:${action}`);
+    setAgentsError("");
+    try {
+      const url = action === "delete"
+        ? `api/v1/agents/${encodeURIComponent(item.id)}`
+        : `api/v1/agents/${encodeURIComponent(item.id)}/${action}`;
+      const resp = await fetch(url, { method: action === "delete" ? "DELETE" : "POST" });
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim());
+      }
+      await refreshAgents();
+      if (item.id === "u-manager") {
+        await refreshManagerProfile();
+      }
+    } catch (err) {
+      setAgentsError(err.message || t("agentActionFailed"));
+    } finally {
+      setAgentActionBusy("");
+    }
+  }
+
+  async function inviteAgentToRoom(item, options = {}) {
+    if (!activeConversation || isDirectConversation(activeConversation) || !data?.current_user_id || !item?.id) {
+      return;
+    }
+    if (!options.silent) {
+      setAgentsError("");
+    }
+    try {
+      const resp = await fetch("api/v1/im/agents/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agent_id: item.id,
+          room_id: activeConversation.id,
+          inviter_id: data.current_user_id,
+          locale,
+        }),
+      });
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim());
+      }
+      await refreshBootstrap();
+    } catch (err) {
+      if (!options.silent) {
+        setAgentsError(err.message || t("agentActionFailed"));
+      }
+    }
+  }
+
+  function directConversationForUser(userID, roomList = rooms, currentUserID = data?.current_user_id) {
+    if (!userID || !currentUserID) {
+      return null;
+    }
+    return roomList.find((room) => (
+      isDirectConversation(room) &&
+      room.members.includes(currentUserID) &&
+      room.members.includes(userID)
+    )) ?? null;
+  }
+
+  async function openAgentDirectMessage(item) {
+    if (!item?.id || !data?.current_user_id) {
+      return;
+    }
+
+    setAgentsError("");
+    try {
+      let nextData = null;
+      let direct = directConversationForUser(item.id);
+      if (!direct) {
+        const resp = await fetch("api/v1/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: item.id,
+            name: item.name,
+            handle: item.handle || item.id.replace(/^u-/, "") || item.name,
+            role: item.role || "worker",
+          }),
+        });
+        if (!resp.ok) {
+          setAgentsError(localizeError(await resp.text(), t));
+          return;
+        }
+        nextData = await refreshBootstrap();
+        direct = directConversationForUser(
+          item.id,
+          nextData?.rooms ?? rooms,
+          nextData?.current_user_id ?? data.current_user_id,
+        );
+      }
+
+      if (!direct) {
+        setAgentsError(t("agentActionFailed"));
+        return;
+      }
+      selectConversation(direct.id, { rooms: nextData?.rooms ?? rooms });
+      closeProfilePreview();
+    } catch (err) {
+      setAgentsError(err.message || t("agentActionFailed"));
+    }
+  }
+
+  function openParticipantPreview(user) {
+    if (!user?.id) {
+      return;
+    }
+    const agent = agents.find((item) => agentMatchesUser(item, user));
+    setProfilePreview(agent ? { type: "agent", id: agent.id } : { type: "user", id: user.id });
+    setShowMemberList(false);
+    setShowChannelTools(false);
+  }
+
+  function openAgentPreview(item) {
+    if (!item?.id) {
+      return;
+    }
+    setProfilePreview({ type: "agent", id: item.id });
+    setShowChannelTools(false);
+  }
+
+  function closeProfilePreview() {
+    setProfilePreview(null);
+  }
+
   return html`
     <${React.Fragment}>
       <div className=${`app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -857,79 +1810,86 @@ function App() {
             aria-hidden=${isSidebarCollapsed}
             inert=${isSidebarCollapsed}
           >
-            <div className="sidebar-header">
+            <div className="sidebar-header workspace-header">
               <div className="sidebar-brand-row">
                 <div className="sidebar-brand">CSGClaw</div>
                 <div className="language-switch sidebar-language-switch" role="group" aria-label=${t("languageSwitcher")}>
                   <span className="language-switch-icon" aria-hidden="true"><${GlobeIcon} /></span>
                   <div className=${`language-switch-track ${locale === "en" ? "is-en" : "is-zh"}`}>
                     <span className="language-switch-thumb" aria-hidden="true"></span>
-                    <button
-                      className=${`language-toggle ${locale === "zh" ? "active" : ""}`}
-                      aria-pressed=${locale === "zh"}
-                      title=${t("languageOptionZh")}
-                      onClick=${() => setLocale("zh")}
-                    >
-                      中
-                    </button>
-                    <button
-                      className=${`language-toggle ${locale === "en" ? "active" : ""}`}
-                      aria-pressed=${locale === "en"}
-                      title=${t("languageOptionEn")}
-                      onClick=${() => setLocale("en")}
-                    >
-                      EN
-                    </button>
+                    <button className=${`language-toggle ${locale === "zh" ? "active" : ""}`} aria-pressed=${locale === "zh"} title=${t("languageOptionZh")} onClick=${() => setLocale("zh")}>中</button>
+                    <button className=${`language-toggle ${locale === "en" ? "active" : ""}`} aria-pressed=${locale === "en"} title=${t("languageOptionEn")} onClick=${() => setLocale("en")}>EN</button>
                   </div>
                 </div>
                 <button
                   className="sidebar-toggle-button"
                   aria-label=${t("collapseSidebar")}
-                  aria-pressed=${false}
                   title=${t("collapseSidebar")}
                   onClick=${() => setIsSidebarCollapsed(true)}
                 >
                   <span className="sidebar-toggle-mark"><${SidebarToggleIcon} /></span>
                 </button>
               </div>
-              <div className="sidebar-header-row">
-                <nav className="sidebar-nav" aria-label=${t("conversationSection")}>
-                  <button
-                    className="sidebar-nav-button"
-                    aria-label=${t("createRoom")}
-                    title=${t("createRoom")}
-                    onClick=${() => openCreateRoomModal()}
-                  >
-                    <span className="sidebar-nav-icon" aria-hidden="true"><${RoomPlusIcon} /></span>
-                    <span className="sidebar-nav-label">${t("createRoom")}</span>
-                  </button>
-                  <button
-                    className="sidebar-nav-button active"
-                    aria-current="page"
-                    aria-label=${`${t("conversationSection")} (${roomCount})`}
-                    title=${t("conversationSection")}
-                    onClick=${() => setIsSidebarCollapsed(false)}
-                  >
-                    <span className="sidebar-nav-icon" aria-hidden="true"><${RoomsIcon} /></span>
-                    <span className="sidebar-nav-label">${t("conversationSection")}</span>
-                    <span className="sidebar-nav-count" aria-hidden="true">${roomCount}</span>
-                  </button>
-                </nav>
-              </div>
             </div>
-            <div className="conversation-list">
-              <${ConversationSection}
-                title=${t("conversationSection")}
-                items=${rooms}
-                activeConversationId=${activeConversationId}
-                currentUserID=${data.current_user_id}
-                usersById=${usersById}
-                locale=${locale}
-                t=${t}
-                onSelect=${setActiveConversationId}
-                onDelete=${deleteRoom}
-              />
-            </div>
+            <nav className="workspace-nav" aria-label="Workspace">
+              <${WorkspaceGroup} title=${t("computerSection")} count=${1}>
+                <${WorkspaceComputerRow}
+                  title=${t("localComputer")}
+                  active=${activePane.type === "computer"}
+                  subtitle=${`${agentItems.length} ${t("computerAgentsSection")}`}
+                  onSelect=${selectComputer}
+                />
+              <//>
+              <${WorkspaceGroup} title=${t("computerAgentsSection")} count=${agentItems.length} onAdd=${openCreateAgentModal} addLabel=${t("createAgent")}>
+                ${agentItems.length
+                  ? agentItems.map((item) => html`
+                      <${WorkspaceAgentRow}
+                        key=${item.id}
+                        item=${item}
+                        active=${activePane.type === "agent" && activePane.id === item.id}
+                        t=${t}
+                        onSelect=${selectAgent}
+                        onPreview=${openAgentPreview}
+                      />
+                    `)
+                  : html`<div className="workspace-empty">${t("noAgents")}</div>`}
+              <//>
+              <${WorkspaceGroup} title=${t("channelsSection")} count=${channels.length} onAdd=${() => openCreateRoomModal()} addLabel=${t("createRoom")}>
+                ${channels.length
+                  ? channels.map((conversation) => html`
+                      <${WorkspaceConversationRow}
+                        key=${conversation.id}
+                        conversation=${conversation}
+                        active=${activePane.type === "conversation" && activePane.id === conversation.id}
+                        currentUserID=${data.current_user_id}
+                        usersById=${usersById}
+                        locale=${locale}
+                        t=${t}
+                        onSelect=${selectConversation}
+                        onPreviewUser=${openParticipantPreview}
+                      />
+                    `)
+                  : html`<div className="workspace-empty">${t("noChannels")}</div>`}
+              <//>
+              <${WorkspaceGroup} title=${t("directMessagesSection")} count=${directMessages.length}>
+                ${directMessages.length
+                  ? directMessages.map((conversation) => html`
+                      <${WorkspaceConversationRow}
+                        key=${conversation.id}
+                        conversation=${conversation}
+                        active=${activePane.type === "conversation" && activePane.id === conversation.id}
+                        currentUserID=${data.current_user_id}
+                        usersById=${usersById}
+                        locale=${locale}
+                        t=${t}
+                        onSelect=${selectConversation}
+                        onPreviewUser=${openParticipantPreview}
+                      />
+                    `)
+                  : html`<div className="workspace-empty">${t("noDirectMessages")}</div>`}
+              <//>
+              ${agentsError ? html`<div className="form-error agent-error">${agentsError}</div>` : null}
+            </nav>
           </aside>
 
           <div
@@ -937,39 +1897,62 @@ function App() {
             aria-hidden=${!isSidebarCollapsed}
             inert=${!isSidebarCollapsed}
           >
-            <button
-              className="sidebar-expand-button"
-              aria-label=${t("expandSidebar")}
-              aria-pressed=${true}
-              title=${t("expandSidebar")}
-              onClick=${() => setIsSidebarCollapsed(false)}
-            >
+            <button className="sidebar-expand-button" aria-label=${t("expandSidebar")} title=${t("expandSidebar")} onClick=${() => setIsSidebarCollapsed(false)}>
               <span className="sidebar-toggle-mark"><${SidebarToggleIcon} /></span>
             </button>
-            <nav className="sidebar-rail-nav" aria-label=${t("conversationSection")}>
-              <button
-                className="sidebar-rail-button"
-                aria-label=${t("createRoom")}
-                title=${t("createRoom")}
-                onClick=${() => openCreateRoomModal()}
-              >
-                <span className="sidebar-rail-icon" aria-hidden="true"><${RoomPlusIcon} /></span>
-              </button>
-              <button
-                className="sidebar-rail-button active"
-                aria-current="page"
-                aria-label=${t("conversationSection")}
-                title=${t("conversationSection")}
-                onClick=${() => setIsSidebarCollapsed(false)}
-              >
+            <nav className="sidebar-rail-nav" aria-label="Workspace">
+              <button className=${`sidebar-rail-button ${activePane.type === "computer" ? "active" : ""}`} aria-label=${t("localComputer")} title=${t("localComputer")} onClick=${selectComputer}>
                 <span className="sidebar-rail-icon" aria-hidden="true"><${RoomsIcon} /></span>
+              </button>
+              <button className="sidebar-rail-button" aria-label=${t("createAgent")} title=${t("createAgent")} onClick=${openCreateAgentModal}>
+                <span className="sidebar-rail-icon" aria-hidden="true"><${AgentIcon} /></span>
+              </button>
+              <button className="sidebar-rail-button" aria-label=${t("createRoom")} title=${t("createRoom")} onClick=${() => openCreateRoomModal()}>
+                <span className="sidebar-rail-icon" aria-hidden="true"><${RoomPlusIcon} /></span>
               </button>
             </nav>
           </div>
         </div>
 
         <main className="chat-panel">
-          ${activeConversation
+          ${activePane.type === "agent" && selectedAgent
+            ? html`
+                <${AgentDetailPane}
+                  item=${selectedAgent}
+                  t=${t}
+                  activeRoom=${activeChannel}
+                  busyKey=${agentActionBusy}
+                  error=${agentsError}
+                  draft=${agentPageDraft}
+                  models=${agentPageModels}
+                  modelBusy=${agentPageModelBusy}
+                  saving=${agentPageBusy}
+                  saveError=${agentPageError}
+                  onDraftChange=${setAgentPageDraft}
+                  onSave=${saveAgentPage}
+                  onStart=${(item) => runAgentAction(item, "start")}
+                  onStop=${(item) => runAgentAction(item, "stop")}
+                  onRecreate=${(item) => runAgentAction(item, "recreate")}
+                  onDelete=${(item) => runAgentAction(item, "delete")}
+                  onInvite=${inviteAgentToRoom}
+                  onOpenDM=${openAgentDirectMessage}
+                />
+              `
+            : activePane.type === "computer"
+              ? html`
+                  <${ComputerDetailPane}
+                    t=${t}
+                    agents=${agentItems}
+                    channels=${channels}
+                    directMessages=${directMessages}
+                    activeAgentID=${activePane.type === "agent" ? activePane.id : ""}
+                    busyKey=${agentActionBusy}
+                    onSelectAgent=${selectAgent}
+                    onCreateAgent=${openCreateAgentModal}
+                    onStartAgent=${(item) => runAgentAction(item, "start")}
+                  />
+                `
+              : selectedConversation
             ? html`
                 <header className="chat-header">
                   <div className="chat-header-main">
@@ -983,7 +1966,10 @@ function App() {
                               aria-label=${t("membersTitle")}
                               aria-pressed=${showMemberList}
                               title=${t("membersTitle")}
-                              onClick=${() => setShowMemberList((value) => !value)}
+                              onClick=${() => {
+                                setShowMemberList((value) => !value);
+                                setShowChannelTools(false);
+                              }}
                             >
                               <span className="icon-button-mark" aria-hidden="true"><${UsersIcon} /></span>
                               <span className="member-badge-count">${activeConversationMembers.length}</span>
@@ -995,7 +1981,13 @@ function App() {
                                     <div className="members-popover-list">
                                       ${activeConversationMembers.map((user) => html`
                                         <div key=${user.id} className="member-row">
-                                          <div className="avatar" style=${{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}>${user.avatar}</div>
+                                          <button
+                                            type="button"
+                                            className="avatar avatar-button"
+                                            style=${{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}
+                                            aria-label=${`${t("profilePreview")} ${user.name}`}
+                                            onClick=${() => openParticipantPreview(user)}
+                                          >${user.avatar}</button>
                                           <div className="member-row-main">
                                             <div className="member-row-name">${user.name}</div>
                                             <div className="member-row-meta">@${user.handle} · ${localizeRole(user.role, t)}</div>
@@ -1010,15 +2002,45 @@ function App() {
                         </div>
                       </div>
                       <div className="chat-title-actions">
-                        <button
-                          className=${`icon-button ${showToolCalls ? "active" : ""}`}
-                          aria-label=${showToolCalls ? t("toggleToolCallsHide") : t("toggleToolCallsShow")}
-                          aria-pressed=${showToolCalls}
-                          title=${showToolCalls ? t("toggleToolCallsHide") : t("toggleToolCallsShow")}
-                          onClick=${() => setShowToolCalls((value) => !value)}
-                        >
-                          <span className="icon-button-mark"><${WrenchIcon} /></span>
-                        </button>
+                        <div ref=${channelToolsRef} className="header-menu tools-menu">
+                          <button
+                            className=${`icon-button ${showChannelTools ? "active" : ""}`}
+                            aria-label=${t("channelTools")}
+                            aria-expanded=${showChannelTools}
+                            title=${t("channelTools")}
+                            onClick=${() => {
+                              setShowChannelTools((value) => !value);
+                              setShowMemberList(false);
+                            }}
+                          >
+                            <span className="icon-button-mark"><${WrenchIcon} /></span>
+                          </button>
+                          ${showChannelTools
+                            ? html`
+                                <div className="header-popover tools-popover">
+                                  <div className="header-popover-title">${t("channelTools")}</div>
+                                  <button className="tool-menu-row" onClick=${() => setShowToolCalls((value) => !value)}>
+                                    <span>${showToolCalls ? t("toggleToolCallsHide") : t("toggleToolCallsShow")}</span>
+                                    <strong>${showToolCalls ? t("enabled") : t("disabled")}</strong>
+                                  </button>
+                                  ${!isDirectConversation(activeConversation)
+                                    ? html`
+                                        <button
+                                          className="tool-menu-row danger"
+                                          onClick=${() => {
+                                            setShowChannelTools(false);
+                                            deleteRoom(activeConversation.id);
+                                          }}
+                                        >
+                                          <span>${t("deleteRoom")}</span>
+                                          <span className="tool-menu-icon" aria-hidden="true"><${TrashIcon} /></span>
+                                        </button>
+                                      `
+                                    : null}
+                                </div>
+                              `
+                            : null}
+                        </div>
                         <button
                           className="icon-button"
                           aria-label=${inviteActionLabel}
@@ -1050,11 +2072,20 @@ function App() {
                       `;
                     }
                     const user = usersById.get(message.sender_id);
+                    if (!user) {
+                      return null;
+                    }
                     const own = message.sender_id === data.current_user_id;
                     const isAdmin = user?.role === "admin";
                     return html`
                       <div key=${message.id} className=${`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""}`.trim()}>
-                        <div className="avatar" style=${{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}>${user.avatar}</div>
+                        <button
+                          type="button"
+                          className="avatar avatar-button"
+                          style=${{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}
+                          aria-label=${`${t("profilePreview")} ${user.name}`}
+                          onClick=${() => openParticipantPreview(user)}
+                        >${user.avatar}</button>
                         <div className="message-card">
                           <div className="message-meta">
                             <span className="message-author">${user.name}</span>
@@ -1080,7 +2111,7 @@ function App() {
                                 applyMention(user);
                               }}
                             >
-                              <div className="avatar" style=${{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}>${user.avatar}</div>
+                              <span className="avatar" style=${{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}>${user.avatar}</span>
                               <div>
                                 <div className="message-author">${user.name}</div>
                                 <div className="conversation-preview">@${user.handle} · ${localizeRole(user.role, t)}</div>
@@ -1093,12 +2124,12 @@ function App() {
                   <div className="composer-box">
                     <div className="composer-input-wrap">
                       ${draftSegments.length === 0
-                        ? html`<div className="composer-placeholder" aria-hidden="true">${t("inputPlaceholder")}</div>`
+                        ? html`<div className="composer-placeholder" aria-hidden="true">${managerProfileIncomplete ? t("profileIncomplete") : t("inputPlaceholder")}</div>`
                         : null}
                       <div
                         ref=${editorRef}
-                        className="composer-editor"
-                        contentEditable="true"
+                        className=${`composer-editor ${managerProfileIncomplete ? "disabled" : ""}`}
+                        contentEditable=${managerProfileIncomplete ? "false" : "true"}
                         suppressContentEditableWarning=${true}
                         aria-label=${t("inputPlaceholder")}
                         onInput=${syncComposerFromEditor}
@@ -1116,7 +2147,7 @@ function App() {
                         className="composer-send-button"
                         aria-label=${t("send")}
                         title=${t("send")}
-                        disabled=${!draftText.trim()}
+                        disabled=${managerProfileIncomplete || !draftText.trim()}
                         onClick=${sendMessage}
                       >
                         <span className="composer-send-main" aria-hidden="true">
@@ -1136,6 +2167,24 @@ function App() {
             : html`<div className="empty-state">${t("emptyConversation")}</div>`}
         </main>
       </div>
+
+      ${profilePreview && (previewAgent || previewUser)
+        ? html`
+            <${ProfilePreviewDrawer}
+              agent=${previewAgent}
+              user=${previewUser}
+              t=${t}
+              activeRoom=${activeChannel}
+              onClose=${closeProfilePreview}
+              onOpenAgent=${(item) => {
+                selectAgent(item);
+                closeProfilePreview();
+              }}
+              onInvite=${inviteAgentToRoom}
+              onOpenDM=${openAgentDirectMessage}
+            />
+          `
+        : null}
 
       ${showCreateRoom
         ? html`
@@ -1221,6 +2270,258 @@ function App() {
             </div>
           `
         : null}
+
+      ${showAgentModal && agentDraft
+        ? html`
+            <div className="modal-backdrop" onClick=${() => setShowAgentModal(false)}>
+              <div className="modal-card profile-modal agent-modal" onClick=${(event) => event.stopPropagation()}>
+                <div className="modal-header">
+                  <div>
+                    <div className="modal-title">${agentModalMode === "create" ? t("createAgentTitle") : t("editAgentTitle")}</div>
+                    <div className="modal-subtitle">${agentModalMode === "create" ? t("createAgentSubtitle") : t("editAgentSubtitle")}</div>
+                  </div>
+                  <button className="modal-close" onClick=${() => setShowAgentModal(false)}>${t("close")}</button>
+                </div>
+                <div className="profile-editor-shell">
+                  <section className="profile-section">
+                    <div className="profile-section-title">${t("profileBasics")}</div>
+                    <div className="profile-grid profile-grid-compact">
+                      <label className="field">
+                        <span>${t("agentName")}</span>
+                        <input
+                          value=${agentDraft.name}
+                          disabled=${agentModalMode === "edit" && editingAgent?.id === "u-manager"}
+                          onInput=${(event) => setAgentDraft({ ...agentDraft, name: event.target.value })}
+                          placeholder=${t("agentNamePlaceholder")}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>${t("agentImage")}</span>
+                        <input value=${agentDraft.image} onInput=${(event) => setAgentDraft({ ...agentDraft, image: event.target.value })} placeholder=${t("agentImagePlaceholder")} />
+                      </label>
+                      <label className="field span-2">
+                        <span>${t("agentDescription")}</span>
+                        <textarea className="compact-textarea" value=${agentDraft.description} onInput=${(event) => setAgentDraft({ ...agentDraft, description: event.target.value })} />
+                      </label>
+                    </div>
+                  </section>
+                  <section className="profile-section">
+                    <div className="profile-section-title">${t("profileRuntime")}</div>
+                    <div className="profile-runtime-grid">
+                      <label className="field">
+                        <span>${t("profileProvider")}</span>
+                        <select
+                          value=${agentDraft.provider}
+                          onChange=${(event) => {
+                            const next = { ...agentDraft, provider: event.target.value, model_id: "" };
+                            setAgentDraft(next);
+                            setAgentModels([]);
+                          }}
+                        >
+                          ${["csghub_lite", "codex", "claude_code", "api"].map((provider) => html`
+                            <option key=${provider} value=${provider}>${formatProviderLabel(provider)}</option>
+                          `)}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>${t("profileModel")}</span>
+                        <select value=${agentDraft.model_id} onChange=${(event) => setAgentDraft({ ...agentDraft, model_id: event.target.value })}>
+                          <option value="">${agentModelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
+                          ${agentModels.map((model) => html`<option key=${model} value=${model}>${model}</option>`)}
+                          ${agentDraft.model_id && !agentModels.includes(agentDraft.model_id)
+                            ? html`<option value=${agentDraft.model_id}>${agentDraft.model_id}</option>`
+                            : null}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>${t("profileReasoning")}</span>
+                        <select
+                          value=${agentDraft.reasoning_effort}
+                          onChange=${(event) => setAgentDraft({ ...agentDraft, reasoning_effort: event.target.value })}
+                        >
+                          ${["low", "medium", "high", "xhigh"].map((effort) => html`<option key=${effort} value=${effort}>${effort}</option>`)}
+                        </select>
+                      </label>
+                      <label className="selection-item compact-toggle-row">
+                        <input type="checkbox" checked=${agentDraft.enable_fast_mode} onChange=${() => setAgentDraft({ ...agentDraft, enable_fast_mode: !agentDraft.enable_fast_mode })} />
+                        <span>${t("profileFastMode")}</span>
+                      </label>
+                    </div>
+                  </section>
+                  ${agentDraft.provider === "api"
+                    ? html`
+                        <section className="profile-section">
+                          <div className="profile-section-title">${t("profileAPIProvider")}</div>
+                          <div className="profile-api-grid">
+                            <label className="field">
+                              <span>${t("profileBaseURL")}</span>
+                              <input value=${agentDraft.base_url} onInput=${(event) => setAgentDraft({ ...agentDraft, base_url: event.target.value })} placeholder="https://api.openai.com/v1" />
+                            </label>
+                            <label className="field">
+                              <span>${t("profileAPIKey")}</span>
+                              <input value=${agentDraft.api_key} onInput=${(event) => setAgentDraft({ ...agentDraft, api_key: event.target.value })} placeholder=${editingAgent?.agent_profile?.api_key_set ? "Stored key will be kept if blank" : "sk-..."} />
+                            </label>
+                            <label className="field span-2">
+                              <span>${t("profileHeaders")}</span>
+                              <textarea className="compact-textarea" value=${agentDraft.headersText} onInput=${(event) => setAgentDraft({ ...agentDraft, headersText: event.target.value })} />
+                            </label>
+                          </div>
+                        </section>
+                      `
+                    : null}
+                  <section className="profile-section">
+                    <div className="profile-section-title">${t("profileAdvanced")}</div>
+                    <div className="profile-advanced-grid">
+                      <label className="field">
+                        <span>${t("profileRequestOptions")}</span>
+                        <textarea className="compact-json" value=${agentDraft.requestOptionsText} onInput=${(event) => setAgentDraft({ ...agentDraft, requestOptionsText: event.target.value })} />
+                      </label>
+                      <div className="field">
+                        <span>${t("profileEnv")}</span>
+                        <${EnvKeyValueEditor}
+                          rows=${agentDraft.envRows}
+                          t=${t}
+                          onChange=${(rows) => setAgentDraft({ ...agentDraft, envRows: rows })}
+                        />
+                      </div>
+                    </div>
+                  </section>
+                </div>
+                ${agentError ? html`<div className="form-error">${agentError}</div>` : null}
+                <div className="modal-actions">
+                  <button className="secondary-button" onClick=${() => setShowAgentModal(false)}>${t("cancel")}</button>
+                  <button className="send-button" disabled=${agentBusy || !agentDraft.name.trim() || !agentDraft.model_id} onClick=${saveAgent}>
+                    ${agentBusy ? "..." : agentModalMode === "create" ? t("agentCreateSave") : t("agentUpdateSave")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          `
+        : null}
+
+      ${managerProfileIncomplete && profileDraft
+        ? html`
+            <div className="modal-backdrop profile-backdrop nonblocking">
+              <div className="modal-card profile-modal" onClick=${(event) => event.stopPropagation()}>
+                <div className="modal-header">
+                  <div>
+                    <div className="modal-title">${t("profileSetupTitle")}</div>
+                    <div className="modal-subtitle">${t("profileSetupSubtitle")}</div>
+                  </div>
+                </div>
+                ${managerProfile?.detection_results?.length
+                  ? html`
+                      <div className="detection-list">
+                        <div className="section-label">${t("detectionResults")}</div>
+                        ${managerProfile.detection_results.map((item) => html`
+                          <div key=${item.provider} className=${`detection-row ${item.status === "ok" ? "ok" : "failed"}`}>
+                            <span>${formatProviderLabel(item.provider)}</span>
+                            <small>${item.status === "ok" ? item.model_id : item.error}</small>
+                          </div>
+                        `)}
+                      </div>
+                    `
+                  : null}
+                <div className="profile-editor-shell">
+                  <section className="profile-section">
+                    <div className="profile-section-title">${t("profileRuntime")}</div>
+                    <div className="profile-runtime-grid">
+                      <label className="field">
+                        <span>${t("profileProvider")}</span>
+                        <select
+                          value=${profileDraft.provider}
+                          onChange=${(event) => {
+                            const next = { ...profileDraft, provider: event.target.value, model_id: "" };
+                            setProfileDraft(next);
+                            setProfileModels([]);
+                          }}
+                        >
+                          ${["csghub_lite", "codex", "claude_code", "api"].map((provider) => html`
+                            <option key=${provider} value=${provider}>${formatProviderLabel(provider)}</option>
+                          `)}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>${t("profileModel")}</span>
+                        <select
+                          value=${profileDraft.model_id}
+                          onChange=${(event) => setProfileDraft({ ...profileDraft, model_id: event.target.value })}
+                        >
+                          <option value="">${profileModelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
+                          ${profileModels.map((model) => html`<option key=${model} value=${model}>${model}</option>`)}
+                          ${profileDraft.model_id && !profileModels.includes(profileDraft.model_id)
+                            ? html`<option value=${profileDraft.model_id}>${profileDraft.model_id}</option>`
+                            : null}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>${t("profileReasoning")}</span>
+                        <select
+                          value=${profileDraft.reasoning_effort}
+                          onChange=${(event) => setProfileDraft({ ...profileDraft, reasoning_effort: event.target.value })}
+                        >
+                          ${["low", "medium", "high", "xhigh"].map((effort) => html`<option key=${effort} value=${effort}>${effort}</option>`)}
+                        </select>
+                      </label>
+                      <label className="selection-item compact-toggle-row">
+                        <input
+                          type="checkbox"
+                          checked=${profileDraft.enable_fast_mode}
+                          onChange=${() => setProfileDraft({ ...profileDraft, enable_fast_mode: !profileDraft.enable_fast_mode })}
+                        />
+                        <span>${t("profileFastMode")}</span>
+                      </label>
+                    </div>
+                  </section>
+                  ${profileDraft.provider === "api"
+                    ? html`
+                        <section className="profile-section">
+                          <div className="profile-section-title">${t("profileAPIProvider")}</div>
+                          <div className="profile-api-grid">
+                            <label className="field">
+                              <span>${t("profileBaseURL")}</span>
+                              <input value=${profileDraft.base_url} onInput=${(event) => setProfileDraft({ ...profileDraft, base_url: event.target.value })} placeholder="https://api.openai.com/v1" />
+                            </label>
+                            <label className="field">
+                              <span>${t("profileAPIKey")}</span>
+                              <input value=${profileDraft.api_key} onInput=${(event) => setProfileDraft({ ...profileDraft, api_key: event.target.value })} placeholder=${managerProfile.api_key_set ? "Stored key will be kept if blank" : "sk-..."} />
+                            </label>
+                            <label className="field span-2">
+                              <span>${t("profileHeaders")}</span>
+                              <textarea className="compact-textarea" value=${profileDraft.headersText} onInput=${(event) => setProfileDraft({ ...profileDraft, headersText: event.target.value })} />
+                            </label>
+                          </div>
+                        </section>
+                      `
+                    : null}
+                  <section className="profile-section">
+                    <div className="profile-section-title">${t("profileAdvanced")}</div>
+                    <div className="profile-advanced-grid">
+                      <label className="field">
+                        <span>${t("profileRequestOptions")}</span>
+                        <textarea className="compact-json" value=${profileDraft.requestOptionsText} onInput=${(event) => setProfileDraft({ ...profileDraft, requestOptionsText: event.target.value })} />
+                      </label>
+                      <div className="field">
+                        <span>${t("profileEnv")}</span>
+                        <${EnvKeyValueEditor}
+                          rows=${profileDraft.envRows}
+                          t=${t}
+                          onChange=${(rows) => setProfileDraft({ ...profileDraft, envRows: rows })}
+                        />
+                      </div>
+                    </div>
+                  </section>
+                </div>
+                ${profileError ? html`<div className="form-error">${profileError}</div>` : null}
+                <div className="modal-actions">
+                  <button className="send-button" disabled=${profileBusy || !profileDraft.model_id} onClick=${saveManagerProfile}>
+                    ${profileBusy ? "..." : t("profileSave")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          `
+        : null}
     <//>
   `;
 }
@@ -1235,10 +2536,11 @@ function ConversationSection({ title, items, activeConversationId, currentUserID
       ${items.map((conversation) => {
         const lastMessage = conversation.messages[conversation.messages.length - 1];
         const displayUser = resolveConversationUser(conversation, currentUserID, usersById);
-        const avatar = isTwoPersonConversation(conversation) && displayUser
+        const isDirect = isDirectConversation(conversation);
+        const avatar = isDirect && displayUser
           ? displayUser.avatar
           : conversation.title.slice(0, 2).toUpperCase();
-        const color = isTwoPersonConversation(conversation) && displayUser
+        const color = isDirect && displayUser
           ? displayUser.accent_hex
           : "#2563eb";
         return html`
@@ -1276,6 +2578,532 @@ function ConversationSection({ title, items, activeConversationId, currentUserID
         `;
       })}
     </section>
+  `;
+}
+
+function AgentSection({ title, manager, workers, t, activeRoom, busyKey, error, onCreate, onEdit, onStart, onStop, onRecreate, onDelete, onInvite }) {
+  const items = [manager, ...workers].filter(Boolean);
+  return html`
+    <section className="agent-section">
+      <div className="agent-section-head">
+        <div>
+          <div className="section-label">${title} ${items.length}</div>
+        </div>
+        <button className="agent-add-button" aria-label=${t("createAgent")} title=${t("createAgent")} onClick=${onCreate}>
+          <span aria-hidden="true"><${AgentIcon} /></span>
+        </button>
+      </div>
+      <div className="agent-list">
+        ${items.length
+          ? items.map((item) => html`
+              <${AgentRow}
+                key=${item.id}
+                item=${item}
+                t=${t}
+                activeRoom=${activeRoom}
+                busyKey=${busyKey}
+                onEdit=${onEdit}
+                onStart=${onStart}
+                onStop=${onStop}
+                onRecreate=${onRecreate}
+                onDelete=${onDelete}
+                onInvite=${onInvite}
+              />
+            `)
+          : html`<div className="agent-empty">${t("noAgents")}</div>`}
+      </div>
+      ${error ? html`<div className="form-error agent-error">${error}</div>` : null}
+    </section>
+  `;
+}
+
+function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop, onRecreate, onDelete, onInvite }) {
+  const isManager = item.role === "manager" || item.id === "u-manager";
+  const status = String(item.status || "").toLowerCase();
+  const running = status === "running" || status === "online";
+  const incomplete = item.profile_complete === false || item.agent_profile?.profile_complete === false;
+  const restartNeeded = Boolean(item.agent_profile?.env_restart_required);
+  const busyPrefix = `${item.id}:`;
+  return html`
+    <div className=${`agent-row ${isManager ? "manager" : ""} ${incomplete ? "incomplete" : ""}`.trim()}>
+      <div className="agent-avatar" aria-hidden="true"><${AgentIcon} /></div>
+      <div className="agent-row-main">
+        <div className="agent-row-top">
+          <span className="agent-name truncate">${item.name}</span>
+          <span className=${`agent-status ${running ? "running" : ""}`}>${item.status || "unknown"}</span>
+        </div>
+        <div className="agent-meta truncate">${formatProviderLabel(item.provider)} · ${item.model_id || item.agent_profile?.model_id || "no model"}</div>
+        <div className="agent-badges">
+          <span className=${`agent-badge ${incomplete ? "warn" : ""}`}>${incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}</span>
+          ${restartNeeded ? html`<span className="agent-badge warn">${t("profileRestartRequired")}</span>` : null}
+        </div>
+      </div>
+      <div className="agent-actions">
+        <button className="agent-icon-button" aria-label=${t("editProfile")} title=${t("editProfile")} onClick=${() => onEdit(item)}>
+          <span aria-hidden="true"><${WrenchIcon} /></span>
+        </button>
+        <button className="agent-icon-button" aria-label=${running ? t("agentStop") : t("agentStart")} title=${running ? t("agentStop") : t("agentStart")} disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => running ? onStop(item) : onStart(item)}>
+          <span aria-hidden="true">${running ? html`<${StopIcon} />` : html`<${PlayIcon} />`}</span>
+        </button>
+        <button className="agent-action-text" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>
+        ${activeRoom && !isManager
+          ? html`<button className="agent-action-text" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onInvite(item)}>${t("inviteToRoom")}</button>`
+          : null}
+        ${!isManager
+          ? html`
+              <button className="agent-icon-button danger" aria-label=${t("agentDelete")} title=${t("agentDelete")} disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onDelete(item)}>
+                <span aria-hidden="true"><${TrashIcon} /></span>
+              </button>
+            `
+          : null}
+      </div>
+    </div>
+  `;
+}
+
+function WorkspaceGroup({ title, count, onAdd, addLabel, children }) {
+  return html`
+    <section className="workspace-group">
+      <div className="workspace-group-head">
+        <div className="workspace-group-title">
+          <span>${title}</span>
+          <small>${count}</small>
+        </div>
+        ${onAdd
+          ? html`
+              <button className="workspace-add-button" aria-label=${addLabel || title} title=${addLabel || title} onClick=${onAdd}>
+                <span aria-hidden="true">+</span>
+              </button>
+            `
+          : null}
+      </div>
+      <div className="workspace-group-items">${children}</div>
+    </section>
+  `;
+}
+
+function WorkspaceComputerRow({ title, active, subtitle, onSelect }) {
+  return html`
+    <button className=${`workspace-row computer-row ${active ? "active" : ""}`} onClick=${onSelect}>
+      <span className="workspace-row-icon"><${ComputerIcon} /></span>
+      <span className="workspace-row-main">
+        <span className="workspace-row-title truncate">${title}</span>
+        <span className="workspace-row-meta truncate">${subtitle}</span>
+      </span>
+      <span className="workspace-status-dot online" aria-hidden="true"></span>
+    </button>
+  `;
+}
+
+function WorkspaceAgentRow({ item, active, t, onSelect, onPreview }) {
+  const incomplete = isAgentIncomplete(item);
+  const restartNeeded = isAgentRestartNeeded(item);
+  const running = isAgentRunning(item);
+  return html`
+    <button className=${`workspace-row agent-nav-row ${active ? "active" : ""} ${incomplete ? "warn" : ""}`.trim()} onClick=${() => onSelect(item)}>
+      <span
+        className="workspace-row-icon workspace-row-icon-clickable"
+        role="button"
+        tabIndex="0"
+        aria-label=${`${t("profilePreview")} ${item.name}`}
+        onClick=${(event) => {
+          event.stopPropagation();
+          onPreview?.(item);
+        }}
+        onKeyDown=${(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            onPreview?.(item);
+          }
+        }}
+      ><${AgentIcon} /></span>
+      <span className="workspace-row-main">
+        <span className="workspace-row-title-line">
+          <span className="workspace-row-title truncate">${item.name}</span>
+          <span className=${`workspace-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
+        </span>
+        <span className="workspace-row-meta truncate">${formatProviderLabel(item.provider || item.agent_profile?.provider)} · ${agentModelID(item)}</span>
+      </span>
+      <span className="workspace-row-badges">
+        ${incomplete ? html`<span className="mini-badge warn">${t("profileIncompleteBadge")}</span>` : null}
+        ${restartNeeded ? html`<span className="mini-badge warn">${t("profileRestartRequired")}</span>` : null}
+      </span>
+    </button>
+  `;
+}
+
+function WorkspaceConversationRow({ conversation, active, currentUserID, usersById, locale, t, onSelect, onPreviewUser }) {
+  const lastMessage = conversation.messages[conversation.messages.length - 1];
+  const isDirect = isDirectConversation(conversation);
+  const displayUser = isDirect ? resolveConversationUser(conversation, currentUserID, usersById) : null;
+  const title = isDirect && displayUser ? displayUser.name : conversation.title;
+  const icon = isDirect && displayUser ? displayUser.avatar : "#";
+  return html`
+    <button className=${`workspace-row conversation-nav-row ${active ? "active" : ""}`} onClick=${() => onSelect(conversation.id)}>
+      <span
+        className=${`workspace-row-icon ${isDirect ? "avatar-icon workspace-row-icon-clickable" : ""}`}
+        role=${isDirect ? "button" : undefined}
+        tabIndex=${isDirect ? "0" : undefined}
+        aria-label=${isDirect && displayUser ? `${t("profilePreview")} ${displayUser.name}` : undefined}
+        onClick=${isDirect && displayUser
+          ? (event) => {
+              event.stopPropagation();
+              onPreviewUser?.(displayUser);
+            }
+          : undefined}
+        onKeyDown=${isDirect && displayUser
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.stopPropagation();
+                onPreviewUser?.(displayUser);
+              }
+            }
+          : undefined}
+      >${icon}</span>
+      <span className="workspace-row-main">
+        <span className="workspace-row-title truncate">${title}</span>
+        <span className="workspace-row-meta truncate">${formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t)}</span>
+      </span>
+      <span className="workspace-row-time">${formatTime(lastMessage?.created_at, locale)}</span>
+    </button>
+  `;
+}
+
+function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, modelBusy, saving, saveError, onDraftChange, onSave, onStart, onStop, onRecreate, onDelete, onInvite, onOpenDM }) {
+  const isManager = item.role === "manager" || item.id === "u-manager";
+  const running = isAgentRunning(item);
+  const incomplete = isAgentIncomplete(item);
+  const restartNeeded = isAgentRestartNeeded(item);
+  const busyPrefix = `${item.id}:`;
+  const provider = item.provider || item.agent_profile?.provider;
+  const updateDraft = (patch) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
+  return html`
+    <section className="entity-pane agent-detail-pane">
+      <header className="entity-header">
+        <div className="entity-avatar"><${AgentIcon} /></div>
+        <div className="entity-heading">
+          <div className="entity-title-row">
+            <h1>${item.name}</h1>
+            <span className=${`status-pill ${running ? "online" : ""}`}>${item.status || "unknown"}</span>
+          </div>
+          <p>${item.description || item.agent_profile?.description || ""}</p>
+        </div>
+      </header>
+      <div className="entity-toolbar">
+        <button className="send-button compact" disabled=${saving || !draft?.name?.trim() || !draft?.model_id} onClick=${onSave}>${saving ? t("profileLoadingModels") : t("agentUpdateSave")}</button>
+        <button className="secondary-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => running ? onStop(item) : onStart(item)}>
+          ${running ? t("agentStop") : t("agentStart")}
+        </button>
+        <button className="secondary-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>
+        ${activeRoom && !isManager
+          ? html`<button className="secondary-button" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onInvite(item)}>${t("inviteToRoom")}</button>`
+          : null}
+        ${!isManager
+          ? html`<button className="secondary-button" onClick=${() => onOpenDM(item)}>${t("openDM")}</button>`
+          : null}
+        ${!isManager
+          ? html`<button className="danger-button" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onDelete(item)}>${t("agentDelete")}</button>`
+          : null}
+      </div>
+      ${error ? html`<div className="form-error">${error}</div>` : null}
+      ${saveError ? html`<div className="form-error">${saveError}</div>` : null}
+      ${!draft
+        ? html`
+            <div className="entity-grid">
+              <div className="entity-field">
+                <span>${t("profileProvider")}</span>
+                <strong>${formatProviderLabel(provider)}</strong>
+              </div>
+              <div className="entity-field">
+                <span>${t("profileModel")}</span>
+                <strong>${agentModelID(item)}</strong>
+              </div>
+              <div className="entity-field">
+                <span>${t("profileReasoning")}</span>
+                <strong>${item.reasoning_effort || item.agent_profile?.reasoning_effort || "medium"}</strong>
+              </div>
+              <div className="entity-field">
+                <span>${t("profileFastMode")}</span>
+                <strong>${item.enable_fast_mode || item.agent_profile?.enable_fast_mode ? "on" : "off"}</strong>
+              </div>
+            </div>
+          `
+        : null}
+      <div className="entity-badge-row">
+        <span className=${`agent-badge ${incomplete ? "warn" : ""}`}>${incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}</span>
+        ${restartNeeded ? html`<span className="agent-badge warn">${t("profileRestartRequired")}</span>` : null}
+      </div>
+      ${draft
+        ? html`
+            <div className="profile-editor-shell agent-page-editor">
+              <section className="profile-section">
+                <div className="profile-section-title">${t("profileBasics")}</div>
+                <div className="profile-grid-compact">
+                  <label className="field">
+                    <span>${t("agentName")}</span>
+                    <input value=${draft.name} onInput=${(event) => updateDraft({ name: event.target.value })} placeholder=${t("agentNamePlaceholder")} />
+                  </label>
+                  <label className="field">
+                    <span>${t("agentImage")}</span>
+                    <input value=${draft.image} onInput=${(event) => updateDraft({ image: event.target.value })} placeholder=${t("agentImagePlaceholder")} />
+                  </label>
+                  <label className="field span-2">
+                    <span>${t("agentDescription")}</span>
+                    <textarea className="compact-textarea" value=${draft.description} onInput=${(event) => updateDraft({ description: event.target.value })} />
+                  </label>
+                </div>
+              </section>
+
+              <section className="profile-section">
+                <div className="profile-section-title">${t("profileRuntime")}</div>
+                <div className="profile-runtime-grid">
+                  <label className="field">
+                    <span>${t("profileProvider")}</span>
+                    <select
+                      value=${draft.provider}
+                      onChange=${(event) => updateDraft({ provider: event.target.value, model_id: "" })}
+                    >
+                      ${PROVIDERS.map((provider) => html`<option key=${provider} value=${provider}>${formatProviderLabel(provider)}</option>`)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>${t("profileModel")}</span>
+                    <select value=${draft.model_id} onChange=${(event) => updateDraft({ model_id: event.target.value })}>
+                      <option value="">${modelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
+                      ${models.map((model) => html`<option key=${model} value=${model}>${model}</option>`)}
+                      ${draft.model_id && !models.includes(draft.model_id)
+                        ? html`<option value=${draft.model_id}>${draft.model_id}</option>`
+                        : null}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>${t("profileReasoning")}</span>
+                    <select value=${draft.reasoning_effort} onChange=${(event) => updateDraft({ reasoning_effort: event.target.value })}>
+                      ${REASONING_EFFORTS.map((effort) => html`<option key=${effort} value=${effort}>${effort}</option>`)}
+                    </select>
+                  </label>
+                  <label className="selection-item compact-toggle-row">
+                    <input type="checkbox" checked=${draft.enable_fast_mode} onChange=${() => updateDraft({ enable_fast_mode: !draft.enable_fast_mode })} />
+                    <span>${t("profileFastMode")}</span>
+                  </label>
+                </div>
+              </section>
+
+              ${draft.provider === "api"
+                ? html`
+                    <section className="profile-section">
+                      <div className="profile-section-title">${t("profileAPIProvider")}</div>
+                      <div className="profile-api-grid">
+                        <label className="field">
+                          <span>${t("profileBaseURL")}</span>
+                          <input value=${draft.base_url} onInput=${(event) => updateDraft({ base_url: event.target.value })} placeholder="https://api.openai.com/v1" />
+                        </label>
+                        <label className="field">
+                          <span>${t("profileAPIKey")}</span>
+                          <input value=${draft.api_key} onInput=${(event) => updateDraft({ api_key: event.target.value })} placeholder=${item.agent_profile?.api_key_set ? "Stored key will be kept if blank" : "sk-..."} />
+                        </label>
+                        <label className="field span-2">
+                          <span>${t("profileHeaders")}</span>
+                          <textarea className="compact-textarea" value=${draft.headersText} onInput=${(event) => updateDraft({ headersText: event.target.value })} />
+                        </label>
+                      </div>
+                    </section>
+                  `
+                : null}
+
+              <section className="profile-section">
+                <div className="profile-section-title">${t("profileAdvanced")}</div>
+                <div className="profile-advanced-grid">
+                  <label className="field">
+                    <span>${t("profileRequestOptions")}</span>
+                    <textarea className="compact-json" value=${draft.requestOptionsText} onInput=${(event) => updateDraft({ requestOptionsText: event.target.value })} />
+                  </label>
+                  <div className="field">
+                    <span>${t("profileEnv")}</span>
+                    <${EnvKeyValueEditor}
+                      rows=${draft.envRows}
+                      t=${t}
+                      onChange=${(rows) => updateDraft({ envRows: rows })}
+                    />
+                  </div>
+                </div>
+              </section>
+            </div>
+          `
+        : null}
+    </section>
+  `;
+}
+
+function ProfilePreviewDrawer({ agent, user, t, activeRoom, onClose, onOpenAgent, onInvite, onOpenDM }) {
+  const running = agent ? isAgentRunning(agent) : false;
+  const incomplete = agent ? isAgentIncomplete(agent) : false;
+  const restartNeeded = agent ? isAgentRestartNeeded(agent) : false;
+  const provider = agent?.provider || agent?.agent_profile?.provider;
+  const displayName = agent?.name || user?.name || "";
+  const displayRole = agent ? (agent.role || "worker") : user?.role;
+  return html`
+    <aside className="profile-preview-drawer" aria-label=${t("profilePreview")}>
+      <div className="preview-header">
+        <div className="preview-title">${agent ? t("profilePreview") : t("personProfile")}</div>
+        <button className="modal-close" aria-label=${t("close")} onClick=${onClose}>
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+      <div className="preview-hero">
+        ${agent
+          ? html`<div className="entity-avatar preview-avatar"><${AgentIcon} /></div>`
+          : html`<div className="avatar preview-avatar" style=${{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}>${user.avatar}</div>`}
+        <div className="preview-identity">
+          <div className="preview-name">${displayName}</div>
+          <div className="preview-meta">@${user?.handle || agent?.id || ""} · ${localizeRole(displayRole, t)}</div>
+        </div>
+      </div>
+      ${agent?.description || user?.name
+        ? html`<p className="preview-description">${agent?.description || ""}</p>`
+        : null}
+      ${agent
+        ? html`
+            <div className="preview-fields">
+              <div className="entity-field">
+                <span>${t("status")}</span>
+                <strong>${agent.status || "unknown"}</strong>
+              </div>
+              <div className="entity-field">
+                <span>${t("profileProvider")}</span>
+                <strong>${formatProviderLabel(provider)}</strong>
+              </div>
+              <div className="entity-field">
+                <span>${t("profileModel")}</span>
+                <strong>${agentModelID(agent)}</strong>
+              </div>
+              <div className="entity-field">
+                <span>${t("profileReasoning")}</span>
+                <strong>${agent.reasoning_effort || agent.agent_profile?.reasoning_effort || "medium"}</strong>
+              </div>
+            </div>
+            <div className="entity-badge-row">
+              <span className=${`agent-badge ${running ? "" : "warn"}`}>${running ? t("online") : t("offline")}</span>
+              <span className=${`agent-badge ${incomplete ? "warn" : ""}`}>${incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}</span>
+              ${restartNeeded ? html`<span className="agent-badge warn">${t("profileRestartRequired")}</span>` : null}
+            </div>
+            <div className="preview-actions">
+              <button className="send-button compact" onClick=${() => onOpenAgent(agent)}>${t("openProfile")}</button>
+              <button className="secondary-button" onClick=${() => onOpenDM(agent)}>${t("openDM")}</button>
+              ${activeRoom && agent.role !== "manager" && agent.id !== "u-manager"
+                ? html`<button className="secondary-button" onClick=${() => onInvite(agent)}>${t("inviteToRoom")}</button>`
+                : null}
+            </div>
+          `
+        : html`
+            <div className="preview-fields">
+              <div className="entity-field">
+                <span>${t("status")}</span>
+                <strong>${t("online")}</strong>
+              </div>
+              <div className="entity-field">
+                <span>${t("roleLabel")}</span>
+                <strong>${localizeRole(user?.role, t)}</strong>
+              </div>
+              <div className="entity-field">
+                <span>${t("handleLabel")}</span>
+                <strong>${user?.handle ? `@${user.handle}` : "-"}</strong>
+              </div>
+              <div className="entity-field">
+                <span>${t("userIDLabel")}</span>
+                <strong>${user?.id || ""}</strong>
+              </div>
+            </div>
+          `}
+    </aside>
+  `;
+}
+
+function ComputerDetailPane({ t, agents, channels, directMessages, busyKey, onSelectAgent, onCreateAgent, onStartAgent }) {
+  const runningAgents = agents.filter(isAgentRunning);
+  return html`
+    <section className="entity-pane computer-detail-pane">
+      <header className="entity-header">
+        <div className="entity-avatar"><${ComputerIcon} /></div>
+        <div className="entity-heading">
+          <div className="entity-title-row">
+            <h1>${t("localComputer")}</h1>
+            <span className="status-pill online">${t("online")}</span>
+          </div>
+          <p>${t("computerOverview")}</p>
+        </div>
+      </header>
+      <div className="metric-row">
+        <div className="metric"><span>${t("computerAgentsSection")}</span><strong>${agents.length}</strong></div>
+        <div className="metric"><span>${t("activeNow")}</span><strong>${runningAgents.length}</strong></div>
+        <div className="metric"><span>${t("channelsSection")}</span><strong>${channels.length}</strong></div>
+        <div className="metric"><span>${t("directMessagesSection")}</span><strong>${directMessages.length}</strong></div>
+      </div>
+      <div className="section-header-inline">
+        <div className="section-label">${t("computerAgentsSection")}</div>
+        <button className="send-button compact" onClick=${onCreateAgent}>${t("createAgent")}</button>
+      </div>
+      <div className="entity-list">
+        ${agents.length
+          ? agents.map((item) => html`
+              <div key=${item.id} className="entity-list-row">
+                <button className="entity-list-main-button" onClick=${() => onSelectAgent(item)}>
+                  <span className="entity-list-icon"><${AgentIcon} /></span>
+                  <span className="entity-list-main">
+                    <strong>${item.name}</strong>
+                    <small>${formatProviderLabel(item.provider || item.agent_profile?.provider)} · ${agentModelID(item)}</small>
+                  </span>
+                  <span className=${`workspace-status-dot ${isAgentRunning(item) ? "online" : ""}`}></span>
+                </button>
+                <button
+                  className="agent-icon-button"
+                  disabled=${busyKey.startsWith(`${item.id}:`) || isAgentIncomplete(item)}
+                  onClick=${() => onStartAgent(item)}
+                >
+                  <span aria-hidden="true"><${PlayIcon} /></span>
+                </button>
+              </div>
+            `)
+          : html`<div className="agent-empty">${t("noAgents")}</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function EnvKeyValueEditor({ rows = [], t, onChange }) {
+  const items = rows.length ? rows : [{ key: "", value: "" }];
+  function update(index, patch) {
+    onChange(items.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
+  }
+  function remove(index) {
+    const next = items.filter((_, rowIndex) => rowIndex !== index);
+    onChange(next.length ? next : [{ key: "", value: "" }]);
+  }
+  return html`
+    <div className="env-editor">
+      ${items.map((row, index) => html`
+        <div key=${index} className="env-row">
+          <input
+            value=${row.key}
+            placeholder=${t("profileEnvKey")}
+            onInput=${(event) => update(index, { key: event.target.value })}
+          />
+          <input
+            value=${row.value}
+            placeholder=${t("profileEnvValue")}
+            onInput=${(event) => update(index, { value: event.target.value })}
+          />
+          <button type="button" className="env-remove-button" aria-label=${t("profileEnvRemove")} title=${t("profileEnvRemove")} onClick=${() => remove(index)}>
+            ×
+          </button>
+        </div>
+      `)}
+      <button type="button" className="secondary-button env-add-button" onClick=${() => onChange([...items, { key: "", value: "" }])}>
+        ${t("profileEnvAdd")}
+      </button>
+    </div>
   `;
 }
 
@@ -1375,15 +3203,15 @@ function formatEventMessage(message, usersById, locale) {
   if (message.event?.key === "room_created") {
     const actor = userDisplayName(message.event.actor_id || message.sender_id, usersById);
     const title = message.event.title || message.content || "";
-    return locale === "zh" ? `${actor} 创建了房间“${title}”` : `${actor} created the room "${title}"`;
+    return locale === "zh" ? `${actor} 创建了频道“${title}”` : `${actor} created the channel "${title}"`;
   }
   if (message.event?.key === "room_members_added") {
     const actor = userDisplayName(message.event.actor_id || message.sender_id, usersById);
     const targets = (message.event.target_ids || mentionIDs(message.mentions) || []).map((id) => userDisplayName(id, usersById)).filter(Boolean);
     if (targets.length > 0) {
       return locale === "zh"
-        ? `${actor} 邀请 ${targets.join("、")} 加入了房间`
-        : `${actor} invited ${targets.join(", ")} to join the room`;
+        ? `${actor} 邀请 ${targets.join("、")} 加入了频道`
+        : `${actor} invited ${targets.join(", ")} to join the channel`;
     }
   }
   return message.content || "";
@@ -1405,9 +3233,13 @@ function isLegacySystemEventContent(content) {
   }
   return [
     /^.+ invited .+ to join the room\.?$/,
+    /^.+ invited .+ to join the channel\.?$/,
     /^.+ created the room ".+"\.?$/,
+    /^.+ created the channel ".+"\.?$/,
     /^.+ 邀请 .+ 加入了房间。?$/,
+    /^.+ 邀请 .+ 加入了频道。?$/,
     /^.+ 创建了房间“.+”。?$/,
+    /^.+ 创建了频道“.+”。?$/,
   ].some((pattern) => pattern.test(text));
 }
 
@@ -1427,12 +3259,26 @@ function resolveConversationUser(conversation, currentUserID, usersById) {
   return usersById.get(otherID);
 }
 
-function isDirectConversation(conversation) {
-  return Boolean(conversation?.is_direct) || isTwoPersonConversation(conversation);
+function agentMatchesUser(agent, user) {
+  if (!agent || !user) {
+    return false;
+  }
+  const agentHandle = normalizeComparable(agent.handle);
+  const userHandle = normalizeComparable(user.handle);
+  const agentName = normalizeComparable(agent.name);
+  const userName = normalizeComparable(user.name);
+  return agent.id === user.id ||
+    agent.user_id === user.id ||
+    Boolean(agentHandle && userHandle && agentHandle === userHandle) ||
+    Boolean(agentName && userName && agentName === userName);
 }
 
-function isTwoPersonConversation(conversation) {
-  return (conversation?.members?.length ?? 0) === 2;
+function normalizeComparable(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isDirectConversation(conversation) {
+  return Boolean(conversation?.is_direct);
 }
 
 function getConversationSubtitle(conversation, currentUserID, usersById, locale, t) {
@@ -1440,10 +3286,10 @@ function getConversationSubtitle(conversation, currentUserID, usersById, locale,
 }
 
 function getConversationDescription(conversation, currentUserID, usersById, locale, t) {
-  if (!isTwoPersonConversation(conversation)) {
-    return conversation.description || "";
+  if (isDirectConversation(conversation)) {
+    return "";
   }
-  return "";
+  return conversation.description || "";
 }
 
 function formatTime(value, locale) {
@@ -1478,6 +3324,19 @@ function applyIMEvent(current, event) {
     return upsertConversationInData(current, event.room);
   }
   return current;
+}
+
+function isAgentRosterEvent(event) {
+  if (!event?.type) {
+    return false;
+  }
+  if (event.type === "user.created" || event.type === "user.deleted") {
+    return true;
+  }
+  if (event.type === "conversation.created" || event.type === "room.created") {
+    return Boolean(event.room?.is_direct);
+  }
+  return false;
 }
 
 function appendMessageToData(current, conversationID, message) {
@@ -1564,6 +3423,126 @@ function normalizeIMData(payload) {
     return payload;
   }
   return { ...payload, rooms: payload.rooms ?? [] };
+}
+
+function profileToDraft(profile) {
+  return {
+    provider: profile?.provider || "csghub_lite",
+    base_url: profile?.base_url || "",
+    api_key: "",
+    model_id: profile?.model_id || "",
+    reasoning_effort: profile?.reasoning_effort || "medium",
+    enable_fast_mode: Boolean(profile?.enable_fast_mode),
+    headersText: stringifyJSON(profile?.headers || {}),
+    requestOptionsText: stringifyJSON(profile?.request_options || {}),
+    envRows: mapToEnvRows(profile?.env || {}),
+  };
+}
+
+function agentToDraft(agent) {
+  const profile = agent?.agent_profile || agent || {};
+  return {
+    name: agent?.name || "",
+    description: agent?.description || profile.description || "",
+    image: agent?.image || "",
+    ...profileToDraft(profile),
+  };
+}
+
+function draftToProfile(draft, options = {}) {
+  return {
+    name: options.name || draft.name || "manager",
+    description: options.description || draft.description || "Manager Worker Dispatch",
+    provider: draft.provider,
+    base_url: draft.base_url,
+    api_key: draft.api_key,
+    model_id: draft.model_id,
+    reasoning_effort: draft.reasoning_effort || "medium",
+    enable_fast_mode: Boolean(draft.enable_fast_mode),
+    headers: parseJSONMap(draft.headersText),
+    request_options: parseJSONMap(draft.requestOptionsText),
+    env: envRowsToMap(draft.envRows),
+  };
+}
+
+function mapToEnvRows(value) {
+  const object = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const entries = Object.entries(object).sort(([left], [right]) => left.localeCompare(right));
+  if (entries.length === 0) {
+    return [{ key: "", value: "" }];
+  }
+  return entries.map(([key, val]) => ({ key, value: String(val ?? "") }));
+}
+
+function envRowsToMap(rows) {
+  const result = {};
+  const seen = new Set();
+  for (const row of rows ?? []) {
+    const key = String(row?.key ?? "").trim();
+    const value = String(row?.value ?? "");
+    if (!key && !value.trim()) {
+      continue;
+    }
+    if (!key) {
+      throw new Error("Environment variable key is required");
+    }
+    const normalized = key.toUpperCase();
+    if (seen.has(normalized)) {
+      throw new Error(`Duplicate environment variable: ${key}`);
+    }
+    seen.add(normalized);
+    result[key] = value;
+  }
+  return result;
+}
+
+function isAgentRunning(item) {
+  const status = String(item?.status || "").toLowerCase();
+  return status === "running" || status === "online";
+}
+
+function isAgentIncomplete(item) {
+  return item?.profile_complete === false || item?.agent_profile?.profile_complete === false;
+}
+
+function isAgentRestartNeeded(item) {
+  return Boolean(item?.env_restart_required || item?.agent_profile?.env_restart_required);
+}
+
+function agentModelID(item) {
+  return item?.model_id || item?.agent_profile?.model_id || "no model";
+}
+
+function stringifyJSON(value) {
+  const object = value && typeof value === "object" ? value : {};
+  return JSON.stringify(object, null, 2);
+}
+
+function parseJSONMap(text) {
+  const cleaned = String(text ?? "").trim();
+  if (!cleaned) {
+    return {};
+  }
+  const parsed = JSON.parse(cleaned);
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+    throw new Error("Expected a JSON object");
+  }
+  return parsed;
+}
+
+function formatProviderLabel(provider) {
+  switch (provider) {
+    case "csghub_lite":
+      return "CSGHub Lite";
+    case "codex":
+      return "Codex";
+    case "claude_code":
+      return "Claude Code";
+    case "api":
+      return "OpenAI API";
+    default:
+      return provider || "";
+  }
 }
 
 function toggleSelection(current, id) {
@@ -2086,4 +4065,32 @@ function firstNonEmptyString(...values) {
   return "";
 }
 
-createRoot(document.getElementById("root")).render(html`<${App} />`);
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error) {
+    console.error(error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return html`
+        <div className="empty-state app-error-state">
+          <strong>CSGClaw UI crashed</strong>
+          <span>${this.state.error?.message || "Unknown frontend error"}</span>
+          <button className="secondary-button" onClick=${() => window.location.reload()}>Reload</button>
+        </div>
+      `;
+    }
+    return this.props.children;
+  }
+}
+
+createRoot(document.getElementById("root")).render(html`<${AppErrorBoundary}><${App} /><//>`);

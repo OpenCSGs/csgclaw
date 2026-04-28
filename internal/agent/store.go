@@ -10,12 +10,14 @@ import (
 )
 
 type persistedState struct {
-	Agents  []persistedAgent `json:"agents"`
-	Workers []legacyWorker   `json:"workers,omitempty"`
+	ProfileDefaults  AgentProfile             `json:"profile_defaults,omitempty"`
+	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
+	Agents           []persistedAgent         `json:"agents"`
+	Workers          []legacyWorker           `json:"workers,omitempty"`
 }
 
 func (s persistedState) isObject() bool {
-	return s.Agents != nil || s.Workers != nil
+	return s.Agents != nil || s.Workers != nil || s.ProfileDefaults.Provider != "" || len(s.DetectionResults) > 0
 }
 
 type legacyWorker struct {
@@ -28,48 +30,57 @@ type legacyWorker struct {
 }
 
 type persistedAgent struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description,omitempty"`
-	Image           string    `json:"image,omitempty"`
-	BoxID           string    `json:"box_id,omitempty"`
-	Role            string    `json:"role"`
-	CreatedAt       time.Time `json:"created_at"`
-	Profile         string    `json:"profile,omitempty"`
-	Provider        string    `json:"provider,omitempty"`
-	ModelID         string    `json:"model_id,omitempty"`
-	ReasoningEffort string    `json:"reasoning_effort,omitempty"`
+	ID               string                   `json:"id"`
+	Name             string                   `json:"name"`
+	Description      string                   `json:"description,omitempty"`
+	Image            string                   `json:"image,omitempty"`
+	BoxID            string                   `json:"box_id,omitempty"`
+	Role             string                   `json:"role"`
+	CreatedAt        time.Time                `json:"created_at"`
+	Profile          string                   `json:"profile,omitempty"`
+	Provider         string                   `json:"provider,omitempty"`
+	ModelID          string                   `json:"model_id,omitempty"`
+	ReasoningEffort  string                   `json:"reasoning_effort,omitempty"`
+	AgentProfile     AgentProfile             `json:"agent_profile,omitempty"`
+	ProfileComplete  bool                     `json:"profile_complete"`
+	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
 func newPersistedAgent(a Agent) persistedAgent {
 	return persistedAgent{
-		ID:              a.ID,
-		Name:            a.Name,
-		Description:     a.Description,
-		Image:           a.Image,
-		BoxID:           a.BoxID,
-		Role:            a.Role,
-		CreatedAt:       a.CreatedAt,
-		Profile:         a.Profile,
-		Provider:        a.Provider,
-		ModelID:         a.ModelID,
-		ReasoningEffort: a.ReasoningEffort,
+		ID:               a.ID,
+		Name:             a.Name,
+		Description:      a.Description,
+		Image:            a.Image,
+		BoxID:            a.BoxID,
+		Role:             a.Role,
+		CreatedAt:        a.CreatedAt,
+		Profile:          a.Profile,
+		Provider:         a.Provider,
+		ModelID:          a.ModelID,
+		ReasoningEffort:  a.ReasoningEffort,
+		AgentProfile:     cloneProfile(a.AgentProfile),
+		ProfileComplete:  a.ProfileComplete,
+		DetectionResults: append([]ProfileDetectionResult(nil), a.DetectionResults...),
 	}
 }
 
 func (a persistedAgent) toAgent() Agent {
 	return Agent{
-		ID:              a.ID,
-		Name:            a.Name,
-		Description:     a.Description,
-		Image:           a.Image,
-		BoxID:           a.BoxID,
-		Role:            a.Role,
-		CreatedAt:       a.CreatedAt,
-		Profile:         a.Profile,
-		Provider:        a.Provider,
-		ModelID:         a.ModelID,
-		ReasoningEffort: a.ReasoningEffort,
+		ID:               a.ID,
+		Name:             a.Name,
+		Description:      a.Description,
+		Image:            a.Image,
+		BoxID:            a.BoxID,
+		Role:             a.Role,
+		CreatedAt:        a.CreatedAt,
+		Profile:          a.Profile,
+		Provider:         a.Provider,
+		ModelID:          a.ModelID,
+		ReasoningEffort:  a.ReasoningEffort,
+		AgentProfile:     cloneProfile(a.AgentProfile),
+		ProfileComplete:  a.ProfileComplete,
+		DetectionResults: append([]ProfileDetectionResult(nil), a.DetectionResults...),
 	}
 }
 
@@ -125,6 +136,10 @@ func (s *Service) readState() (map[string]Agent, error) {
 
 	var state persistedState
 	if err := json.Unmarshal(data, &state); err == nil && state.isObject() {
+		if strings.TrimSpace(state.ProfileDefaults.Provider) != "" || strings.TrimSpace(state.ProfileDefaults.ModelID) != "" || strings.TrimSpace(state.ProfileDefaults.BaseURL) != "" {
+			s.profileDefaults = normalizeProfile(state.ProfileDefaults, "", "")
+		}
+		s.detectionResults = append([]ProfileDetectionResult(nil), state.DetectionResults...)
 		for _, a := range state.Agents {
 			normalized := s.normalizeLoadedAgent(a.toAgent())
 			agents[normalized.ID] = normalized
@@ -153,7 +168,9 @@ func (s *Service) saveLocked() error {
 	}
 
 	data, err := json.MarshalIndent(persistedState{
-		Agents: persistedAgentsFromMap(s.agents),
+		ProfileDefaults:  cloneProfile(s.profileDefaults),
+		DetectionResults: append([]ProfileDetectionResult(nil), s.detectionResults...),
+		Agents:           persistedAgentsFromMap(s.agents),
 	}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode agent state: %w", err)
@@ -170,9 +187,25 @@ func (s *Service) saveLocked() error {
 func (s *Service) normalizeLoadedAgent(a Agent) Agent {
 	a = *cloneAgent(&a)
 	a.Role = normalizeRole(a.Role)
-	if strings.TrimSpace(a.Profile) == "" {
-		a.Profile = s.inferProfileForAgent(a)
+	a.AgentProfile = normalizeProfile(a.AgentProfile, a.Name, a.Description)
+	if !a.AgentProfile.ProfileComplete && (strings.TrimSpace(a.Provider) != "" || strings.TrimSpace(a.ModelID) != "") {
+		legacyProfile := profileFromLegacy(a.Name, a.Description, a.Provider, a.ModelID, a.ReasoningEffort)
+		if strings.TrimSpace(legacyProfile.BaseURL) == "" {
+			legacyProfile.BaseURL = s.profileDefaults.BaseURL
+		}
+		if strings.TrimSpace(legacyProfile.APIKey) == "" {
+			legacyProfile.APIKey = s.profileDefaults.APIKey
+		}
+		if len(legacyProfile.Headers) == 0 {
+			legacyProfile.Headers = s.profileDefaults.Headers
+		}
+		a.AgentProfile = normalizeProfile(legacyProfile, a.Name, a.Description)
 	}
+	a.ProfileComplete = a.AgentProfile.ProfileComplete
+	a.Provider = a.AgentProfile.Provider
+	a.ModelID = a.AgentProfile.ModelID
+	a.ReasoningEffort = a.AgentProfile.ReasoningEffort
+	a.Profile = profileSelector(a.AgentProfile)
 	if isManagerAgent(a) {
 		a.ID = ManagerUserID
 		a.Name = ManagerName

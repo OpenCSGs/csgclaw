@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 )
 
@@ -23,6 +24,10 @@ type Service struct {
 type HTTPError struct {
 	Status  int
 	Message string
+}
+
+var embeddedCLIProxyProviderBaseURL = func(ctx context.Context, provider string) (string, error) {
+	return cliproxy.Default().ProviderBaseURL(ctx, provider)
 }
 
 func (e *HTTPError) Error() string {
@@ -41,7 +46,7 @@ func NewService(defaults config.ModelConfig, agents *agent.Service) *Service {
 }
 
 func (s *Service) Models(_ context.Context, botID string) ([]byte, int, string, error) {
-	cfg, err := s.resolveModelConfig(botID)
+	profile, err := s.resolveProfile(botID)
 	if err != nil {
 		return nil, 0, "", err
 	}
@@ -49,7 +54,7 @@ func (s *Service) Models(_ context.Context, botID string) ([]byte, int, string, 
 		"object": "list",
 		"data": []map[string]any{
 			{
-				"id":       cfg.ModelID,
+				"id":       profile.ModelID,
 				"object":   "model",
 				"created":  0,
 				"owned_by": "csgclaw",
@@ -64,43 +69,62 @@ func (s *Service) Models(_ context.Context, botID string) ([]byte, int, string, 
 }
 
 func (s *Service) ChatCompletions(ctx context.Context, botID string, body []byte) ([]byte, int, string, error) {
-	cfg, err := s.resolveModelConfig(botID)
+	profile, err := s.resolveProfile(botID)
 	if err != nil {
 		return nil, 0, "", err
 	}
-	return s.forwardRemoteChat(ctx, cfg, body)
+	return s.forwardRemoteChat(ctx, profile, body)
 }
 
-func (s *Service) resolveModelConfig(botID string) (config.ModelConfig, error) {
+func (s *Service) resolveProfile(botID string) (agent.AgentProfile, error) {
 	if s.agents == nil {
-		return config.ModelConfig{}, &HTTPError{Status: http.StatusServiceUnavailable, Message: "agent service is not configured"}
+		return agent.AgentProfile{}, &HTTPError{Status: http.StatusServiceUnavailable, Message: "agent service is not configured"}
 	}
-	cfg, err := s.agents.ResolvedModelConfig(botID)
+	profile, err := s.agents.ResolvedAgentProfile(botID)
 	if err != nil {
-		return config.ModelConfig{}, &HTTPError{Status: http.StatusNotFound, Message: err.Error()}
+		status := http.StatusNotFound
+		if strings.Contains(err.Error(), "profile is incomplete") {
+			status = http.StatusConflict
+		}
+		return agent.AgentProfile{}, &HTTPError{Status: status, Message: err.Error()}
 	}
-	return cfg.Resolved(), nil
+	return profile, nil
 }
 
-func (s *Service) forwardRemoteChat(ctx context.Context, cfg config.ModelConfig, body []byte) ([]byte, int, string, error) {
+func (s *Service) forwardRemoteChat(ctx context.Context, profile agent.AgentProfile, body []byte) ([]byte, int, string, error) {
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, 0, "", &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
 	}
-	payload["model"] = cfg.ModelID
-	applyReasoningEffortDefault(payload, cfg.ReasoningEffort)
+	mergeProfilePayload(payload, profile)
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return nil, 0, "", &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
 	}
 
-	upstreamURL := strings.TrimRight(cfg.BaseURL, "/") + "/chat/completions"
+	baseURL, apiKey, err := s.agentProfileTarget(ctx, profile)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	if baseURL == "" {
+		return nil, 0, "", &HTTPError{Status: http.StatusBadRequest, Message: "profile base_url is required"}
+	}
+	upstreamURL := strings.TrimRight(baseURL, "/") + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, bytes.NewReader(encoded))
 	if err != nil {
 		return nil, 0, "", &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build upstream request: %v", err)}
 	}
-	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
+	for key, value := range profile.Headers {
+		key = strings.TrimSpace(key)
+		if key == "" || strings.EqualFold(key, "authorization") || strings.EqualFold(key, "content-type") {
+			continue
+		}
+		req.Header.Set(key, value)
+	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -133,4 +157,53 @@ func applyReasoningEffortDefault(payload map[string]any, defaultEffort string) {
 		}
 	}
 	payload["reasoning_effort"] = defaultEffort
+}
+
+func mergeProfilePayload(payload map[string]any, profile agent.AgentProfile) {
+	payload["model"] = strings.TrimSpace(profile.ModelID)
+	applyReasoningEffortDefault(payload, profile.ReasoningEffort)
+	for key, value := range profile.RequestOptions {
+		key = strings.TrimSpace(key)
+		if key == "" || strings.EqualFold(key, "model") {
+			continue
+		}
+		if _, exists := payload[key]; exists {
+			continue
+		}
+		payload[key] = value
+	}
+	applyProviderPayloadConstraints(payload, profile)
+	if !profile.EnableFastMode {
+		return
+	}
+	switch profile.Provider {
+	case agent.ProviderClaudeCode:
+		if _, exists := payload["speed"]; !exists {
+			payload["speed"] = "fast"
+		}
+	default:
+		if _, exists := payload["service_tier"]; !exists {
+			payload["service_tier"] = "priority"
+		}
+	}
+}
+
+func applyProviderPayloadConstraints(payload map[string]any, profile agent.AgentProfile) {
+	switch profile.Provider {
+	case agent.ProviderCodex:
+		payload["store"] = false
+	}
+}
+
+func (s *Service) agentProfileTarget(ctx context.Context, profile agent.AgentProfile) (string, string, error) {
+	switch profile.Provider {
+	case agent.ProviderCodex, agent.ProviderClaudeCode:
+		baseURL, err := embeddedCLIProxyProviderBaseURL(ctx, profile.Provider)
+		if err != nil {
+			return "", "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("embedded cliproxy unavailable: %v", err)}
+		}
+		return baseURL, cliproxy.LocalAPIKey, nil
+	default:
+		return agent.ProfileBaseURL(profile), agent.ProfileAPIKey(profile), nil
+	}
 }

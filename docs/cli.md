@@ -95,29 +95,23 @@ csgclaw onboard [flags]
 
 Flags:
 
-- `--provider string`: LLM provider preset. Supported values: `csghub-lite`, `custom`.
-- `--base-url string`: LLM provider base URL.
-- `--api-key string`: LLM provider API key.
-- `--models string`: comma-separated model IDs.
-- `--reasoning-effort string`: optional upstream `reasoning_effort` default.
+- `--manager-image string`: bootstrap manager image.
+- `--force-recreate-manager`: remove and recreate the bootstrap manager box.
 - `--debian-registries string`: comma-separated OCI registries for `debian:bookworm-slim` pulls. Persisted to config.
 - `--log-level string`: log level for onboarding logs. Supported values: `debug`, `info`, `warn`, `error`. Default `info`.
 
 Behavior:
 
-- If no config exists and no explicit model flags are provided, `onboard` can prompt interactively.
-- In non-interactive usage, pass model settings explicitly.
 - It writes config, ensures bootstrap IM state, and ensures the bootstrap manager bot.
+- It does not prompt for model provider settings. Manager and worker LLM profiles are detected at startup and managed in the Web UI.
 - If `--debian-registries` is set, it updates `sandbox.debian_registries` in config.
-- If model config is incomplete, later `serve` commands fail with a remediation hint.
+- If profile auto-detection fails, `serve` still starts and the Web UI asks an admin to complete the Manager profile.
 
 Examples:
 
 ```bash
 csgclaw onboard
-csgclaw onboard --provider csghub-lite --models Qwen/Qwen3-0.6B-GGUF
-csgclaw onboard --base-url https://api.openai.com/v1 --api-key "$OPENAI_API_KEY" --models gpt-5.4-mini
-csgclaw agent create --replace --force --id manager --image ghcr.io/example/manager:latest
+csgclaw onboard --manager-image ghcr.io/example/manager:latest --force-recreate-manager
 ```
 
 ### `csgclaw serve`

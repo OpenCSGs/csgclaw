@@ -22,18 +22,31 @@ type openAIModelsResponse struct {
 }
 
 func ListOpenAIModels(ctx context.Context, baseURL, apiKey string) ([]string, error) {
+	return ListOpenAIModelsWithClient(ctx, &http.Client{Timeout: 2 * time.Second}, baseURL, apiKey, nil)
+}
+
+func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseURL, apiKey string, headers map[string]string) ([]string, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
 		return nil, fmt.Errorf("base URL is required")
 	}
+	if client == nil {
+		client = &http.Client{Timeout: 2 * time.Second}
+	}
 
-	client := &http.Client{Timeout: 2 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
 	if err != nil {
 		return nil, fmt.Errorf("build models request: %w", err)
 	}
 	if apiKey = strings.TrimSpace(apiKey); apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	for key, value := range headers {
+		key = strings.TrimSpace(key)
+		if key == "" || strings.EqualFold(key, "authorization") || strings.EqualFold(key, "content-type") {
+			continue
+		}
+		req.Header.Set(key, value)
 	}
 
 	resp, err := client.Do(req)

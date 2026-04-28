@@ -23,6 +23,7 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/bot"
 	"csgclaw/internal/channel"
+	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
@@ -32,18 +33,30 @@ import (
 )
 
 var (
-	RunServer              = server.Run
-	NewAgentService        = newAgentService
-	NewBotService          = newBotService
-	NewIMService           = newIMService
-	NewFeishuService       = newFeishuService
-	NewLLMService          = newLLMService
-	CheckModelProvider     = checkModelProvider
+	RunServer          = server.Run
+	NewAgentService    = newAgentService
+	NewBotService      = newBotService
+	NewIMService       = newIMService
+	NewFeishuService   = newFeishuService
+	NewLLMService      = newLLMService
+	CheckModelProvider = checkModelProvider
+	EnsureCLIProxy     = func(ctx context.Context) error {
+		return cliproxy.Default().EnsureStarted(ctx)
+	}
+	ShutdownCLIProxy = func(ctx context.Context) error {
+		return cliproxy.Default().Shutdown(ctx)
+	}
 	EnsureBootstrapManager = func(ctx context.Context, svc *agent.Service, forceRecreate bool) error {
 		if svc == nil {
 			return nil
 		}
 		return svc.EnsureBootstrapManager(ctx, forceRecreate)
+	}
+	StartConfiguredAgents = func(ctx context.Context, svc *agent.Service) error {
+		if svc == nil {
+			return nil
+		}
+		return svc.StartConfiguredAgents(ctx)
 	}
 )
 
@@ -96,9 +109,6 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 		return err
 	}
 	enforceDefaultManagerImage(&cfg)
-	if err := validateModelConfig(cfg); err != nil {
-		return err
-	}
 	if globals.Endpoint != "" {
 		cfg.Server.AdvertiseBaseURL = strings.TrimRight(globals.Endpoint, "/")
 	}
@@ -201,9 +211,6 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 		return err
 	}
 	enforceDefaultManagerImage(&cfg)
-	if err := validateModelConfig(cfg); err != nil {
-		return err
-	}
 	if globals.Endpoint != "" {
 		cfg.Server.AdvertiseBaseURL = strings.TrimRight(globals.Endpoint, "/")
 	}
@@ -212,9 +219,7 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 		return err
 	}
 	defer restore()
-	if err := preflightDefaultModelProvider(ctx, cfg); err != nil {
-		return err
-	}
+	_ = preflightDefaultModelProvider(ctx, cfg)
 
 	printEffectiveConfig(run, cfg, globals.Output)
 	imBus := im.NewBus()
@@ -239,9 +244,7 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 
 func serveForeground(ctx context.Context, run *command.Context, cfg config.Config, output string) error {
 	enforceDefaultManagerImage(&cfg)
-	if err := preflightDefaultModelProvider(ctx, cfg); err != nil {
-		return err
-	}
+	_ = preflightDefaultModelProvider(ctx, cfg)
 	imBus := im.NewBus()
 	svc, err := NewAgentService(cfg)
 	if err != nil {
@@ -373,9 +376,20 @@ func parseServeLogLevel(level string) (slog.Level, error) {
 }
 
 func startServer(ctx context.Context, cfg config.Config, svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, feishuSvc *channel.FeishuService) error {
+	_ = EnsureCLIProxy(ctx)
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = ShutdownCLIProxy(shutdownCtx)
+	}()
 	if err := EnsureBootstrapManager(ctx, svc, false); err != nil {
 		return err
 	}
+	go func() {
+		if err := StartConfiguredAgents(ctx, svc); err != nil {
+			slog.Warn("some configured agents failed to start", "error", err)
+		}
+	}()
 	if botSvc != nil {
 		botSvc.SetDependencies(svc, imSvc, feishuSvc)
 	}
@@ -399,11 +413,14 @@ func startServer(ctx context.Context, cfg config.Config, svc *agent.Service, bot
 }
 
 func preflightDefaultModelProvider(ctx context.Context, cfg config.Config) error {
+	if effectiveLLMConfig(cfg).IsZero() {
+		return nil
+	}
 	llmCfg := effectiveLLMConfig(cfg)
 	providerName := llmCfg.EffectiveDefaultProvider()
 	_, modelCfg, err := llmCfg.Resolve("")
 	if err != nil {
-		return err
+		return nil
 	}
 	if !requiresCSGHubLitePreflight(providerName, modelCfg.BaseURL) {
 		return nil
@@ -606,15 +623,16 @@ func loadConfig(path string) (config.Config, error) {
 }
 
 func validateModelConfig(cfg config.Config) error {
+	if effectiveLLMConfig(cfg).IsZero() {
+		return nil
+	}
 	if err := effectiveLLMConfig(cfg).Validate(); err != nil {
 		var validationErr *config.ModelValidationError
 		if errors.As(err, &validationErr) && len(validationErr.MissingFields) > 0 {
-			return fmt.Errorf(
-				"models config is incomplete (%s); run `csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]`",
-				strings.Join(missingModelFlags(validationErr.MissingFields), ", "),
-			)
+			_ = validationErr
+			return nil
 		}
-		return fmt.Errorf("models config is invalid: %w", err)
+		return nil
 	}
 	return nil
 }
@@ -705,7 +723,7 @@ func newLLMService(cfg config.Config, svc *agent.Service) (*llm.Service, error) 
 	}
 	_, modelCfg, err := effectiveLLMConfig(cfg).Resolve("")
 	if err != nil {
-		return nil, err
+		modelCfg = config.ModelConfig{}
 	}
 	return llm.NewService(modelCfg, svc), nil
 }

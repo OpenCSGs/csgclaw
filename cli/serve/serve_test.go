@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"csgclaw/cli/command"
 	"csgclaw/internal/agent"
@@ -44,27 +45,17 @@ func TestServeForegroundPreflightsCSGHubLiteProvider(t *testing.T) {
 	}
 }
 
-func TestServeForegroundFailsBeforeManagerWhenCSGHubLiteUnavailable(t *testing.T) {
-	origNewAgentService := NewAgentService
-	t.Cleanup(func() {
-		NewAgentService = origNewAgentService
-	})
-	NewAgentService = func(config.Config) (*agent.Service, error) {
-		t.Fatal("NewAgentService should not run when csghub-lite preflight fails")
-		return nil, nil
-	}
-
+func TestServeForegroundContinuesWhenCSGHubLiteUnavailable(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "down", http.StatusBadGateway)
 	}))
 	defer modelServer.Close()
 
 	err := serveForeground(context.Background(), testContext(), csgHubLiteServeConfig(modelServer.URL+"/v1"), "json")
-	if err == nil {
-		t.Fatal("serveForeground() error = nil, want preflight error")
-	}
-	if !strings.Contains(err.Error(), "csghub-lite provider is not reachable") || !strings.Contains(err.Error(), "csghub-lite run <model>") {
-		t.Fatalf("serveForeground() error = %q, want csghub-lite start hint", err)
+	if err != nil {
+		t.Fatalf("serveForeground() error = %v, want startup to continue with dynamic profile setup", err)
 	}
 }
 
@@ -76,6 +67,9 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	origNewFeishuService := NewFeishuService
 	origNewLLMService := NewLLMService
 	origEnsureBootstrapManager := EnsureBootstrapManager
+	origStartConfiguredAgents := StartConfiguredAgents
+	origEnsureCLIProxy := EnsureCLIProxy
+	origShutdownCLIProxy := ShutdownCLIProxy
 	t.Cleanup(func() {
 		RunServer = origRunServer
 		NewAgentService = origNewAgentService
@@ -84,6 +78,9 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		NewFeishuService = origNewFeishuService
 		NewLLMService = origNewLLMService
 		EnsureBootstrapManager = origEnsureBootstrapManager
+		StartConfiguredAgents = origStartConfiguredAgents
+		EnsureCLIProxy = origEnsureCLIProxy
+		ShutdownCLIProxy = origShutdownCLIProxy
 	})
 
 	ctx := context.WithValue(context.Background(), struct{}{}, "serve-context")
@@ -101,41 +98,72 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	}
 	NewFeishuService = func(cfg config.Config) (*channel.FeishuService, error) {
 		if got, want := cfg.Channels.Feishu["manager"].AppID, "cli_manager"; got != want {
-			t.Fatalf("manager app_id = %q, want %q", got, want)
+			return nil, fmt.Errorf("manager app_id = %q, want %q", got, want)
 		}
 		return nil, nil
 	}
 	NewLLMService = func(config.Config, *agent.Service) (*llm.Service, error) {
 		return nil, nil
 	}
+	EnsureCLIProxy = func(context.Context) error { return nil }
+	ShutdownCLIProxy = func(context.Context) error { return nil }
 
 	called := false
 	bootstrapped := false
+	startCalled := make(chan struct{})
+	releaseStart := make(chan struct{})
+	startReturned := make(chan struct{})
+	startErrors := make(chan string, 4)
 	EnsureBootstrapManager = func(gotCtx context.Context, gotSvc *agent.Service, forceRecreate bool) error {
 		bootstrapped = true
 		if gotCtx != ctx {
-			t.Fatalf("EnsureBootstrapManager context = %v, want %v", gotCtx, ctx)
+			return fmt.Errorf("EnsureBootstrapManager context = %v, want %v", gotCtx, ctx)
 		}
 		if gotSvc != svc {
-			t.Fatalf("EnsureBootstrapManager service = %p, want %p", gotSvc, svc)
+			return fmt.Errorf("EnsureBootstrapManager service = %p, want %p", gotSvc, svc)
 		}
 		if forceRecreate {
-			t.Fatal("EnsureBootstrapManager forceRecreate = true, want false")
+			return fmt.Errorf("EnsureBootstrapManager forceRecreate = true, want false")
 		}
+		return nil
+	}
+	StartConfiguredAgents = func(gotCtx context.Context, gotSvc *agent.Service) error {
+		defer close(startReturned)
+		if !bootstrapped {
+			startErrors <- "StartConfiguredAgents called before EnsureBootstrapManager"
+		}
+		if gotCtx != ctx {
+			startErrors <- fmt.Sprintf("StartConfiguredAgents context = %v, want %v", gotCtx, ctx)
+		}
+		if gotSvc != svc {
+			startErrors <- fmt.Sprintf("StartConfiguredAgents service = %p, want %p", gotSvc, svc)
+		}
+		close(startCalled)
+		<-releaseStart
 		return nil
 	}
 	RunServer = func(opts server.Options) error {
 		called = true
+		if !bootstrapped {
+			return fmt.Errorf("RunServer called before EnsureBootstrapManager")
+		}
 		if opts.Context != ctx {
-			t.Fatalf("Context = %v, want %v", opts.Context, ctx)
+			return fmt.Errorf("Context = %v, want %v", opts.Context, ctx)
 		}
 		if opts.Bot != wantBotSvc {
-			t.Fatalf("Bot = %v, want injected bot service", opts.Bot)
+			return fmt.Errorf("Bot = %v, want injected bot service", opts.Bot)
 		}
 		if !opts.NoAuth {
-			t.Fatal("NoAuth = false, want true")
+			return fmt.Errorf("NoAuth = false, want true")
 		}
 		return nil
+	}
+	releasedStart := false
+	releaseConfiguredAgentStart := func() {
+		if !releasedStart {
+			close(releaseStart)
+			releasedStart = true
+		}
 	}
 
 	run := testContext()
@@ -171,8 +199,36 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		},
 	}
 
-	if err := serveForeground(ctx, run, cfg, "table"); err != nil {
-		t.Fatalf("serveForeground() error = %v", err)
+	done := make(chan error, 1)
+	go func() {
+		done <- serveForeground(ctx, run, cfg, "table")
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			releaseConfiguredAgentStart()
+			t.Fatalf("serveForeground() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		releaseConfiguredAgentStart()
+		t.Fatal("serveForeground blocked on StartConfiguredAgents; want async agent startup")
+	}
+	select {
+	case <-startCalled:
+	case <-time.After(time.Second):
+		releaseConfiguredAgentStart()
+		t.Fatal("StartConfiguredAgents was not called")
+	}
+	releaseConfiguredAgentStart()
+	select {
+	case <-startReturned:
+	case <-time.After(time.Second):
+		t.Fatal("StartConfiguredAgents did not return after release")
+	}
+	close(startErrors)
+	for msg := range startErrors {
+		t.Error(msg)
 	}
 	if !called {
 		t.Fatal("RunServer was not called")
@@ -248,13 +304,16 @@ func TestServeForegroundEnforcesDefaultManagerImage(t *testing.T) {
 	origRunServer := RunServer
 	origNewAgentService := NewAgentService
 	origEnsureBootstrapManager := EnsureBootstrapManager
+	origStartConfiguredAgents := StartConfiguredAgents
 	t.Cleanup(func() {
 		RunServer = origRunServer
 		NewAgentService = origNewAgentService
 		EnsureBootstrapManager = origEnsureBootstrapManager
+		StartConfiguredAgents = origStartConfiguredAgents
 	})
 	RunServer = func(server.Options) error { return nil }
 	EnsureBootstrapManager = func(context.Context, *agent.Service, bool) error { return nil }
+	StartConfiguredAgents = func(context.Context, *agent.Service) error { return nil }
 
 	cfg := config.Config{
 		Server: config.ServerConfig{
@@ -464,6 +523,9 @@ func stubServeDependencies(t *testing.T) func() {
 	origNewFeishuService := NewFeishuService
 	origNewLLMService := NewLLMService
 	origEnsureBootstrapManager := EnsureBootstrapManager
+	origStartConfiguredAgents := StartConfiguredAgents
+	origEnsureCLIProxy := EnsureCLIProxy
+	origShutdownCLIProxy := ShutdownCLIProxy
 	RunServer = func(server.Options) error { return nil }
 	NewAgentService = func(config.Config) (*agent.Service, error) { return &agent.Service{}, nil }
 	NewBotService = func() (*bot.Service, error) { return &bot.Service{}, nil }
@@ -471,6 +533,9 @@ func stubServeDependencies(t *testing.T) func() {
 	NewFeishuService = func(config.Config) (*channel.FeishuService, error) { return nil, nil }
 	NewLLMService = func(config.Config, *agent.Service) (*llm.Service, error) { return nil, nil }
 	EnsureBootstrapManager = func(context.Context, *agent.Service, bool) error { return nil }
+	StartConfiguredAgents = func(context.Context, *agent.Service) error { return nil }
+	EnsureCLIProxy = func(context.Context) error { return nil }
+	ShutdownCLIProxy = func(context.Context) error { return nil }
 	return func() {
 		RunServer = origRunServer
 		NewAgentService = origNewAgentService
@@ -479,6 +544,9 @@ func stubServeDependencies(t *testing.T) func() {
 		NewFeishuService = origNewFeishuService
 		NewLLMService = origNewLLMService
 		EnsureBootstrapManager = origEnsureBootstrapManager
+		StartConfiguredAgents = origStartConfiguredAgents
+		EnsureCLIProxy = origEnsureCLIProxy
+		ShutdownCLIProxy = origShutdownCLIProxy
 	}
 }
 
@@ -546,16 +614,10 @@ func TestParseServeLogLevel(t *testing.T) {
 	}
 }
 
-func TestValidateModelConfigRequiresOnboardWhenIncomplete(t *testing.T) {
+func TestValidateModelConfigAllowsDynamicProfileSetupWhenIncomplete(t *testing.T) {
 	err := validateModelConfig(config.Config{})
-	if err == nil {
-		t.Fatal("validateModelConfig() error = nil, want error")
-	}
-	if !strings.Contains(err.Error(), "csgclaw onboard") {
-		t.Fatalf("validateModelConfig() error = %q, want onboard guidance", err)
-	}
-	if !strings.Contains(err.Error(), "--base-url") || !strings.Contains(err.Error(), "--api-key") || !strings.Contains(err.Error(), "--models") {
-		t.Fatalf("validateModelConfig() error = %q, want missing model flags", err)
+	if err != nil {
+		t.Fatalf("validateModelConfig() error = %v, want nil for UI-driven dynamic setup", err)
 	}
 }
 

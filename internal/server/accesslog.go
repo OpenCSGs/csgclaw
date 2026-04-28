@@ -26,6 +26,11 @@ func accessLog(logger *slog.Logger, next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if accessLogShouldSkip(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		start := time.Now()
 		lw := &loggingResponseWriter{
 			ResponseWriter: w,
@@ -44,6 +49,19 @@ func accessLog(logger *slog.Logger, next http.Handler) http.Handler {
 			"user_agent", r.UserAgent(),
 		)
 	})
+}
+
+func accessLogShouldSkip(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	if r.Method != http.MethodGet {
+		return false
+	}
+	if r.URL.Path == "/healthz" {
+		return true
+	}
+	return r.URL.Path == "/api/v1/agents" && r.URL.Query().Get("poll") == "1"
 }
 
 const (

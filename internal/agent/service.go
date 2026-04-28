@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -54,7 +55,7 @@ var (
 	testCloseBoxHook            func(*Service, sandbox.Instance) error
 	testCloseRuntimeHook        func(*Service, string, sandbox.Runtime) error
 	testCreateBoxHook           func(*Service, context.Context, sandbox.Runtime, sandbox.CreateSpec) (sandbox.Instance, error)
-	testCreateGatewayBoxHook    func(*Service, context.Context, sandbox.Runtime, string, string, string, config.ModelConfig) (sandbox.Instance, sandbox.Info, error)
+	testCreateGatewayBoxHook    func(*Service, context.Context, sandbox.Runtime, string, string, string, AgentProfile) (sandbox.Instance, sandbox.Info, error)
 	testForceRemoveBoxHook      func(*Service, context.Context, sandbox.Runtime, string) error
 	testRunBoxCommandHook       func(*Service, context.Context, sandbox.Instance, string, []string, io.Writer) (int, error)
 )
@@ -62,7 +63,7 @@ var (
 // SetTestHooks installs lightweight hooks for tests that need to bypass runtime/box creation.
 func SetTestHooks(
 	ensureRuntime func(*Service, string) (sandbox.Runtime, error),
-	createGatewayBox func(*Service, context.Context, sandbox.Runtime, string, string, string, config.ModelConfig) (sandbox.Instance, sandbox.Info, error),
+	createGatewayBox func(*Service, context.Context, sandbox.Runtime, string, string, string, AgentProfile) (sandbox.Instance, sandbox.Info, error),
 ) {
 	testEnsureRuntimeHook = ensureRuntime
 	if ensureRuntime != nil {
@@ -131,17 +132,19 @@ func TestOnlySetRunBoxCommandHook(hook func(*Service, context.Context, sandbox.I
 }
 
 type Service struct {
-	model        config.ModelConfig
-	llm          config.LLMConfig
-	server       config.ServerConfig
-	channels     config.ChannelsConfig
-	managerImage string
-	state        string
-	sandbox      sandbox.Provider
-	sandboxHome  string
-	mu           sync.RWMutex
-	runtimes     map[string]sandbox.Runtime
-	agents       map[string]Agent
+	model            config.ModelConfig
+	llm              config.LLMConfig
+	server           config.ServerConfig
+	channels         config.ChannelsConfig
+	managerImage     string
+	state            string
+	sandbox          sandbox.Provider
+	sandboxHome      string
+	mu               sync.RWMutex
+	runtimes         map[string]sandbox.Runtime
+	agents           map[string]Agent
+	profileDefaults  AgentProfile
+	detectionResults []ProfileDetectionResult
 }
 
 type ServiceOption func(*Service) error
@@ -193,16 +196,17 @@ func NewServiceWithLLMAndChannels(llmCfg config.LLMConfig, server config.ServerC
 		model = config.ModelConfig{}.Resolved()
 	}
 	svc := &Service{
-		model:        model,
-		llm:          llmCfg.Normalized(),
-		server:       server,
-		channels:     cloneChannelsConfig(channels),
-		managerImage: managerImage,
-		state:        statePath,
-		sandbox:      defaultSandboxProvider,
-		sandboxHome:  config.DefaultSandboxHomeDirName,
-		runtimes:     make(map[string]sandbox.Runtime),
-		agents:       make(map[string]Agent),
+		model:           model,
+		llm:             llmCfg.Normalized(),
+		server:          server,
+		channels:        cloneChannelsConfig(channels),
+		managerImage:    managerImage,
+		state:           statePath,
+		sandbox:         defaultSandboxProvider,
+		sandboxHome:     config.DefaultSandboxHomeDirName,
+		runtimes:        make(map[string]sandbox.Runtime),
+		agents:          make(map[string]Agent),
+		profileDefaults: profileFromConfigModel("", "", model),
 	}
 	for _, opt := range opts {
 		if opt == nil {
@@ -253,15 +257,7 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	if svc == nil {
 		return nil
 	}
-	_, defaultModel, err := svc.llm.Resolve("")
-	if err != nil {
-		return err
-	}
-	if _, err := ensureAgentPicoClawConfig(ManagerName, ManagerUserID, svc.server, defaultModel); err != nil {
-		return err
-	}
-
-	_, err = svc.EnsureManager(ctx, forceRecreate)
+	_, err := svc.EnsureManager(ctx, forceRecreate)
 	return err
 }
 
@@ -277,9 +273,11 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 	if managerImage == "" {
 		managerImage = s.managerImage
 	}
-	defaultProfile, defaultModel, err := s.llm.Resolve("")
-	if err != nil {
-		return Agent{}, err
+	startProfile, detectionResults := s.managerStartupProfile(ctx)
+	if startProfile.ProfileComplete {
+		if _, err := ensureAgentPicoClawConfig(ManagerName, ManagerUserID, s.server, config.ModelConfig{ModelID: startProfile.ModelID}); err != nil {
+			return Agent{}, err
+		}
 	}
 
 	rt, box, err := s.lookupBootstrapManager(ctx)
@@ -328,6 +326,37 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		}
 		box = nil
 	}
+	if !startProfile.ProfileComplete {
+		now := time.Now().UTC()
+		s.mu.Lock()
+		manager := s.agents[ManagerUserID]
+		if manager.ID == "" || forceRecreate {
+			manager = Agent{
+				ID:        ManagerUserID,
+				Name:      ManagerName,
+				Image:     managerImage,
+				Status:    "profile_incomplete",
+				CreatedAt: now,
+				Role:      RoleManager,
+			}
+		}
+		manager.AgentProfile = startProfile
+		manager.ProfileComplete = false
+		manager.DetectionResults = detectionResults
+		manager.Profile = profileSelector(startProfile)
+		manager.Provider = startProfile.Provider
+		manager.ModelID = startProfile.ModelID
+		manager.ReasoningEffort = startProfile.ReasoningEffort
+		s.agents[ManagerUserID] = manager
+		s.detectionResults = detectionResults
+		err := s.saveLocked()
+		s.mu.Unlock()
+		if err != nil {
+			return Agent{}, err
+		}
+		return *cloneAgent(&manager), nil
+	}
+
 	var info sandbox.Info
 	if box == nil {
 		log.Printf("bootstrap manager box %q not found, creating it with image %q", ManagerName, managerImage)
@@ -345,7 +374,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 				}
 			}
 		}()
-		box, info, err = s.createGatewayBox(ctx, rt, managerImage, ManagerName, ManagerUserID, defaultModel)
+		box, info, err = s.createGatewayBox(ctx, rt, managerImage, ManagerName, ManagerUserID, startProfile)
 		close(progressDone)
 		if err != nil {
 			return Agent{}, fmt.Errorf("create bootstrap manager box: %w", err)
@@ -368,17 +397,20 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 	defer s.mu.Unlock()
 
 	manager := Agent{
-		ID:              ManagerUserID,
-		Name:            ManagerName,
-		Image:           managerImage,
-		BoxID:           info.ID,
-		Status:          string(info.State),
-		CreatedAt:       info.CreatedAt.UTC(),
-		Profile:         defaultProfile,
-		Provider:        defaultModel.Resolved().Provider,
-		ModelID:         defaultModel.Resolved().ModelID,
-		ReasoningEffort: defaultModel.Resolved().ReasoningEffort,
-		Role:            RoleManager,
+		ID:               ManagerUserID,
+		Name:             ManagerName,
+		Image:            managerImage,
+		BoxID:            info.ID,
+		Status:           string(info.State),
+		CreatedAt:        info.CreatedAt.UTC(),
+		Profile:          profileSelector(startProfile),
+		Provider:         startProfile.Provider,
+		ModelID:          startProfile.ModelID,
+		ReasoningEffort:  startProfile.ReasoningEffort,
+		AgentProfile:     startProfile,
+		ProfileComplete:  true,
+		DetectionResults: detectionResults,
+		Role:             RoleManager,
 	}
 	for id, a := range s.agents {
 		if isManagerAgent(a) && id != manager.ID {
@@ -386,10 +418,24 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		}
 	}
 	s.agents[manager.ID] = manager
+	s.profileDefaults = cloneProfile(startProfile)
+	s.detectionResults = detectionResults
 	if err := s.saveLocked(); err != nil {
 		return Agent{}, err
 	}
 	return *cloneAgent(&manager), nil
+}
+
+func (s *Service) managerStartupProfile(ctx context.Context) (AgentProfile, []ProfileDetectionResult) {
+	s.mu.RLock()
+	if existing, ok := s.agents[ManagerUserID]; ok && existing.AgentProfile.ProfileComplete {
+		profile := cloneProfile(existing.AgentProfile)
+		results := append([]ProfileDetectionResult(nil), existing.DetectionResults...)
+		s.mu.RUnlock()
+		return normalizeProfile(profile, ManagerName, existing.Description), results
+	}
+	s.mu.RUnlock()
+	return s.DetectDefaultProfile(ctx)
 }
 
 func (s *Service) bootstrapManagerBoxIDOrName() string {
@@ -476,16 +522,7 @@ func (s *Service) createNew(ctx context.Context, spec CreateAgentSpec) (Agent, e
 		_ = s.closeRuntime(runtimeHome, rt)
 	}()
 
-	requestedProfile := strings.TrimSpace(spec.Profile)
-	if requestedProfile == "" && strings.TrimSpace(spec.ModelID) != "" {
-		matchedProfile, _, ok := s.llm.MatchProfile(config.ModelConfig{ModelID: spec.ModelID})
-		if !ok {
-			return Agent{}, fmt.Errorf("no llm profile matches model %q", strings.TrimSpace(spec.ModelID))
-		}
-		requestedProfile = matchedProfile
-	}
-
-	profileName, resolvedModel, err := s.resolveModelProfile(requestedProfile)
+	resolvedProfile, err := s.profileForCreateRequest(ctx, spec)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -506,9 +543,10 @@ func (s *Service) createNew(ctx context.Context, spec CreateAgentSpec) (Agent, e
 		},
 		Env: make(map[string]string),
 	}
-	for key, value := range bridgeLLMEnvVars(llmBaseURL, s.server.AccessToken, resolvedModel.ModelID) {
+	for key, value := range bridgeLLMEnvVars(llmBaseURL, s.server.AccessToken, resolvedProfile.ModelID) {
 		boxSpec.Env[key] = value
 	}
+	addProfileEnvVars(boxSpec.Env, resolvedProfile.Env)
 	box, err := s.createBox(ctx, rt, boxSpec)
 	if err != nil {
 		return Agent{}, fmt.Errorf("create sandbox agent: %w", err)
@@ -533,14 +571,19 @@ func (s *Service) createNew(ctx context.Context, spec CreateAgentSpec) (Agent, e
 		Role:            role,
 		Status:          status,
 		CreatedAt:       createdAt,
-		Profile:         profileName,
-		Provider:        resolvedModel.Provider,
-		ModelID:         resolvedModel.ModelID,
-		ReasoningEffort: resolvedModel.ReasoningEffort,
+		Profile:         profileSelector(resolvedProfile),
+		Provider:        resolvedProfile.Provider,
+		ModelID:         resolvedProfile.ModelID,
+		ReasoningEffort: resolvedProfile.ReasoningEffort,
+		AgentProfile:    resolvedProfile,
+		ProfileComplete: resolvedProfile.ProfileComplete,
 	}
 
 	s.mu.Lock()
 	s.agents[id] = agent
+	if resolvedProfile.ProfileComplete {
+		s.profileDefaults = cloneProfile(resolvedProfile)
+	}
 	err = s.saveLocked()
 	s.mu.Unlock()
 	if err != nil {
@@ -608,15 +651,16 @@ func replaceImageOverride(req CreateRequest) string {
 
 func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) (CreateAgentSpec, error) {
 	merged := CreateAgentSpec{
-		ID:          existing.ID,
-		Name:        existing.Name,
-		Description: existing.Description,
-		Image:       existing.Image,
-		Role:        existing.Role,
-		Status:      existing.Status,
-		CreatedAt:   existing.CreatedAt,
-		Profile:     existing.Profile,
-		ModelID:     existing.ModelID,
+		ID:           existing.ID,
+		Name:         existing.Name,
+		Description:  existing.Description,
+		Image:        existing.Image,
+		Role:         existing.Role,
+		Status:       existing.Status,
+		CreatedAt:    existing.CreatedAt,
+		Profile:      existing.Profile,
+		ModelID:      existing.ModelID,
+		AgentProfile: cloneProfile(existing.AgentProfile),
 	}
 	for _, field := range fieldMask {
 		switch strings.ToLower(strings.TrimSpace(field)) {
@@ -643,6 +687,11 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 		case "model_id":
 			merged.ModelID = next.ModelID
 			merged.Profile = ""
+			merged.AgentProfile = AgentProfile{}
+		case "agent_profile":
+			merged.AgentProfile = cloneProfile(next.AgentProfile)
+			merged.Profile = ""
+			merged.ModelID = ""
 		default:
 			return CreateAgentSpec{}, fmt.Errorf("unsupported agent field mask path %q", field)
 		}
@@ -751,6 +800,9 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 	got, ok := s.Agent(id)
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
+	}
+	if got.AgentProfile.EnvRestartRequired {
+		return s.Recreate(ctx, id)
 	}
 
 	rt, err := s.ensureRuntime(got.Name)
@@ -957,6 +1009,50 @@ func (s *Service) List() []Agent {
 	return agents
 }
 
+func (s *Service) StartConfiguredAgents(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	agents := s.startupAgentCandidates()
+	var startErr error
+	for _, a := range agents {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		live := s.hydrateAgentStatus(ctx, a)
+		if isAgentRuntimeRunning(live) {
+			continue
+		}
+		if _, err := s.Start(ctx, live.ID); err != nil {
+			startErr = errors.Join(startErr, fmt.Errorf("%s: %w", live.Name, err))
+		}
+	}
+	return startErr
+}
+
+func (s *Service) startupAgentCandidates() []Agent {
+	s.mu.RLock()
+	agents := sortedAgentsFromMap(s.agents)
+	s.mu.RUnlock()
+
+	candidates := agents[:0]
+	for _, a := range agents {
+		if isManagerAgent(a) || !isAgentProfileComplete(a) {
+			continue
+		}
+		candidates = append(candidates, a)
+	}
+	return candidates
+}
+
+func isAgentProfileComplete(a Agent) bool {
+	return a.ProfileComplete || a.AgentProfile.ProfileComplete
+}
+
+func isAgentRuntimeRunning(a Agent) bool {
+	return strings.EqualFold(strings.TrimSpace(a.Status), string(sandbox.StateRunning))
+}
+
 func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent, error) {
 	id := strings.TrimSpace(spec.ID)
 	name := strings.TrimSpace(spec.Name)
@@ -1001,11 +1097,11 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	defer func() {
 		_ = s.closeRuntime(runtimeHome, rt)
 	}()
-	profileName, resolvedModel, err := s.resolveModelProfile(spec.Profile)
+	resolvedProfile, err := s.profileForCreateRequest(ctx, spec)
 	if err != nil {
 		return Agent{}, err
 	}
-	box, info, err := s.createGatewayBox(ctx, rt, image, name, id, resolvedModel)
+	box, info, err := s.createGatewayBox(ctx, rt, image, name, id, resolvedProfile)
 	if err != nil {
 		return Agent{}, fmt.Errorf("create worker box: %w", err)
 	}
@@ -1031,13 +1127,18 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		Description:     description,
 		Status:          string(info.State),
 		CreatedAt:       info.CreatedAt.UTC(),
-		Profile:         profileName,
-		Provider:        resolvedModel.Provider,
-		ModelID:         resolvedModel.ModelID,
-		ReasoningEffort: resolvedModel.ReasoningEffort,
+		Profile:         profileSelector(resolvedProfile),
+		Provider:        resolvedProfile.Provider,
+		ModelID:         resolvedProfile.ModelID,
+		ReasoningEffort: resolvedProfile.ReasoningEffort,
+		AgentProfile:    resolvedProfile,
+		ProfileComplete: resolvedProfile.ProfileComplete,
 		Role:            RoleWorker,
 	}
 	s.agents[worker.ID] = worker
+	if resolvedProfile.ProfileComplete {
+		s.profileDefaults = cloneProfile(resolvedProfile)
+	}
 	if err := s.saveLocked(); err != nil {
 		delete(s.agents, worker.ID)
 		return Agent{}, err

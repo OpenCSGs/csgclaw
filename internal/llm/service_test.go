@@ -120,6 +120,133 @@ func TestChatCompletionsLLMAPIDoesNotOverrideRequestReasoningEffort(t *testing.T
 	}
 }
 
+func TestChatCompletionsMergesProfileRequestOptionsWithoutOverridingExplicitFields(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var payload map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		_, _ = w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer upstream.Close()
+
+	agentSvc := mustSeededAgentService(t, config.SingleProfileLLM(config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  upstream.URL + "/v1",
+		APIKey:   "sk-test",
+		ModelID:  "gpt-5.4",
+	}), []agent.Agent{
+		{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+			Role: agent.RoleManager,
+			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
+				Provider:        agent.ProviderAPI,
+				BaseURL:         upstream.URL + "/v1",
+				APIKey:          "sk-test",
+				ModelID:         "gpt-5.4",
+				ReasoningEffort: "medium",
+				EnableFastMode:  true,
+				RequestOptions: map[string]any{
+					"temperature": 0.2,
+					"metadata":    map[string]any{"source": "profile"},
+				},
+				ProfileComplete: true,
+			},
+			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	})
+
+	svc := NewService(config.ModelConfig{}, agentSvc)
+	_, status, _, err := svc.ChatCompletions(context.Background(), agent.ManagerUserID, []byte(`{"model":"client","messages":[],"temperature":0.7}`))
+	if err != nil {
+		t.Fatalf("ChatCompletions() error = %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", status, http.StatusOK)
+	}
+	if payload["model"] != "gpt-5.4" {
+		t.Fatalf("model = %#v, want gpt-5.4", payload["model"])
+	}
+	if payload["temperature"] != 0.7 {
+		t.Fatalf("temperature = %#v, want explicit 0.7", payload["temperature"])
+	}
+	if payload["service_tier"] != "priority" {
+		t.Fatalf("service_tier = %#v, want priority", payload["service_tier"])
+	}
+	if _, ok := payload["metadata"].(map[string]any); !ok {
+		t.Fatalf("metadata = %#v, want profile metadata object", payload["metadata"])
+	}
+}
+
+func TestChatCompletionsCodexRoutesThroughEmbeddedCLIProxy(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	previous := embeddedCLIProxyProviderBaseURL
+	defer func() { embeddedCLIProxyProviderBaseURL = previous }()
+
+	var payload map[string]any
+	var gotAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/provider/codex/v1/chat/completions" {
+			t.Fatalf("path = %q, want embedded codex provider route", r.URL.Path)
+		}
+		gotAuth = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		_, _ = w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer upstream.Close()
+	embeddedCLIProxyProviderBaseURL = func(_ context.Context, provider string) (string, error) {
+		if provider != agent.ProviderCodex {
+			t.Fatalf("provider = %q, want codex", provider)
+		}
+		return upstream.URL + "/api/provider/codex/v1", nil
+	}
+
+	agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
+		{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+			Role: agent.RoleManager,
+			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
+				Provider:        agent.ProviderCodex,
+				ModelID:         "gpt-5.4",
+				ReasoningEffort: "medium",
+				EnableFastMode:  true,
+				ProfileComplete: true,
+			},
+			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	})
+
+	svc := NewService(config.ModelConfig{}, agentSvc)
+	_, status, _, err := svc.ChatCompletions(context.Background(), agent.ManagerUserID, []byte(`{"model":"client","messages":[],"store":true}`))
+	if err != nil {
+		t.Fatalf("ChatCompletions() error = %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", status, http.StatusOK)
+	}
+	if gotAuth != "Bearer local" {
+		t.Fatalf("Authorization = %q, want Bearer local", gotAuth)
+	}
+	if payload["model"] != "gpt-5.4" {
+		t.Fatalf("model = %#v, want gpt-5.4", payload["model"])
+	}
+	if payload["service_tier"] != "priority" {
+		t.Fatalf("service_tier = %#v, want priority", payload["service_tier"])
+	}
+	if payload["store"] != false {
+		t.Fatalf("store = %#v, want false", payload["store"])
+	}
+}
+
 func TestModelsReturnsResolvedAgentModel(t *testing.T) {
 	agentSvc := mustSeededAgentService(t, config.SingleProfileLLM(config.ModelConfig{
 		Provider:        config.ProviderLLMAPI,

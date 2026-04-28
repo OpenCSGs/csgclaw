@@ -11,14 +11,14 @@ import (
 	"csgclaw/internal/sandbox"
 )
 
-func (s *Service) createGatewayBox(ctx context.Context, rt sandbox.Runtime, image, name, botID string, modelCfg config.ModelConfig) (sandbox.Instance, sandbox.Info, error) {
+func (s *Service) createGatewayBox(ctx context.Context, rt sandbox.Runtime, image, name, botID string, profile AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 	if testCreateGatewayBoxHook != nil {
-		return testCreateGatewayBoxHook(s, ctx, rt, image, name, botID, modelCfg)
+		return testCreateGatewayBoxHook(s, ctx, rt, image, name, botID, profile)
 	}
 	if rt == nil {
 		return nil, sandbox.Info{}, fmt.Errorf("invalid sandbox runtime")
 	}
-	spec, err := s.gatewayCreateSpec(image, name, botID, modelCfg)
+	spec, err := s.gatewayCreateSpec(image, name, botID, profile)
 	if err != nil {
 		return nil, sandbox.Info{}, err
 	}
@@ -44,16 +44,18 @@ func (s *Service) forceRemoveBox(ctx context.Context, rt sandbox.Runtime, idOrNa
 	return rt.Remove(ctx, idOrName, sandbox.RemoveOptions{Force: true})
 }
 
-func (s *Service) gatewayCreateSpec(image, name, botID string, modelCfg config.ModelConfig) (sandbox.CreateSpec, error) {
-	modelCfg = modelCfg.Resolved()
-	if strings.TrimSpace(modelCfg.ModelID) == "" {
-		modelCfg = s.model.Resolved()
+func (s *Service) gatewayCreateSpec(image, name, botID string, profile AgentProfile) (sandbox.CreateSpec, error) {
+	profile = normalizeProfile(profile, name, "")
+	if strings.TrimSpace(profile.ModelID) == "" {
+		fallback := s.model.Resolved()
+		profile.ModelID = fallback.ModelID
 	}
-	modelID := modelCfg.ModelID
+	modelID := profile.ModelID
 	managerBaseURL := resolveManagerBaseURL(s.server)
 	llmBaseURL := llmBridgeBaseURL(managerBaseURL, botID)
 	envVars := picoclawBoxEnvVars(managerBaseURL, s.server.AccessToken, botID, llmBaseURL, modelID)
 	addFeishuBoxEnvVars(envVars, botID, s.channels)
+	addProfileEnvVars(envVars, profile.Env)
 	envVars["HOME"] = "/home/picoclaw"
 	spec := sandbox.CreateSpec{
 		Image:      image,
@@ -84,6 +86,27 @@ func (s *Service) gatewayCreateSpec(image, name, botID string, modelCfg config.M
 	}
 
 	return spec, nil
+}
+
+func addProfileEnvVars(envVars map[string]string, profileEnv map[string]string) {
+	if len(profileEnv) == 0 {
+		return
+	}
+	for key, value := range profileEnv {
+		key = strings.TrimSpace(key)
+		if key == "" || isReservedSandboxEnvKey(key) {
+			continue
+		}
+		envVars[key] = value
+	}
+}
+
+func isReservedSandboxEnvKey(key string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(key))
+	if upper == "HOME" || upper == "OPENAI_BASE_URL" || upper == "OPENAI_API_KEY" || upper == "OPENAI_MODEL" {
+		return true
+	}
+	return strings.HasPrefix(upper, "CSGCLAW_") || strings.HasPrefix(upper, "PICOCLAW_")
 }
 
 type gatewayVolumeMount struct {

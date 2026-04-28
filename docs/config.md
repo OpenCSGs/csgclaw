@@ -2,7 +2,7 @@
 
 English | [中文](config.zh.md)
 
-`csgclaw onboard` writes the local config file used by `csgclaw serve`. The config covers server access, model providers, bootstrap image selection, sandbox isolation, and optional channels.
+`csgclaw onboard` writes the local config file used by `csgclaw serve`. The config covers server access, bootstrap image selection, sandbox isolation, and optional channels. Agent LLM provider profiles are stored in agent state and managed from the Web UI.
 
 ## Server Address
 
@@ -80,7 +80,7 @@ home_dir_name = "boxlite"
 debian_registries = ["harbor.opencsg.com", "docker.io"]
 ```
 
-### Local Codex via CLIProxyAPI
+### Dynamic Codex or Claude Code profiles
 
 ```toml
 [server]
@@ -88,14 +88,6 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
 no_auth = false
-
-[models]
-default = "codex.gpt-5.4"
-
-[models.providers.codex]
-base_url = "http://127.0.0.1:8317/v1"
-api_key = "local"
-models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.27.0"
@@ -105,6 +97,8 @@ provider = "boxlite-cli"
 home_dir_name = "boxlite"
 debian_registries = ["harbor.opencsg.com", "docker.io"]
 ```
+
+Codex and Claude Code profiles are configured in agent state through the Web UI. CSGClaw starts an embedded CLIProxyAPI on a private localhost port at serve time, so static CLIProxy base URLs are not required.
 
 ## Sandbox Providers
 

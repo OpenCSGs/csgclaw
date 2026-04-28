@@ -38,22 +38,11 @@ csgclaw serve
 ```
 
 Open the printed URL (e.g. `http://127.0.0.1:18080/`) in your browser to enter the IM workspace.
-For a fresh interactive setup, `onboard` defaults to `csghub-lite` at `http://127.0.0.1:11435/v1`, lets you override that URL, and imports models from its OpenAI-compatible `/v1/models` endpoint. Start CSGHub-lite first, for example:
-
-```bash
-csghub-lite run Qwen/Qwen3-0.6B-GGUF
-```
-
-For scripts or non-interactive environments, pass model flags explicitly:
-
-```bash
-csgclaw onboard --provider csghub-lite --models Qwen/Qwen3-0.6B-GGUF
-csgclaw onboard --base-url <url> --api-key <key> --models <model[,model...]> [--reasoning-effort <effort>]
-```
+On first start, CSGClaw auto-detects an agent profile for the Manager from CSGHub Lite, Codex, or Claude Code. If detection fails, the Web UI stays available and opens the Manager profile setup panel so you can choose a provider and model there.
 
 ## Configuration
 
-`csgclaw onboard` writes a local config with server, model, bootstrap, sandbox, and channel settings. See [docs/config.md](docs/config.md) for model provider examples, sandbox provider options, and Worker override examples.
+`csgclaw onboard` writes a local config with server, bootstrap, sandbox, and channel settings. Agent model/provider profiles are stored in agent state and managed from the Web UI. See [docs/config.md](docs/config.md) for sandbox provider options, Worker override examples, and agent profile details.
 For the official release bundles and the default source build, `boxlite-cli` resolves the bundled sibling `boxlite` binary first and falls back to `PATH` only when that bundled binary is missing.
 
 ## Features

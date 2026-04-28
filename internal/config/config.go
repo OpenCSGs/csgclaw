@@ -376,11 +376,9 @@ func Load(path string) (Config, error) {
 
 	if !modelsCfg.IsZero() {
 		cfg.Models = modelsCfg.Normalized()
-	} else {
-		cfg.Models = SingleProfileLLM(ModelConfig{})
+		cfg.LLM = cfg.Models
+		cfg.syncModelFromLLM()
 	}
-	cfg.LLM = cfg.Models
-	cfg.syncModelFromLLM()
 	cfg.raw.resolved = cfg.resolvedRawValues()
 	return cfg, nil
 }
@@ -391,9 +389,10 @@ func (c Config) Save(path string) error {
 	}
 
 	cfg := c
-	cfg.syncModelFromLLM()
-	llmCfg := cfg.effectiveLLMConfig()
-	defaultSelector := llmCfg.DefaultSelector()
+	writeModels := cfg.hasStaticLLMConfig()
+	if writeModels {
+		cfg.syncModelFromLLM()
+	}
 	resolvedSandbox := cfg.Sandbox.Resolved()
 	loadedRaw := cfg.raw.resolvedOrZero()
 
@@ -421,23 +420,27 @@ home_dir_name = %q
 		sandboxSection = strings.Replace(sandboxSection, "[sandbox]\n", fmt.Sprintf("[sandbox]\ndebian_registries = %s\n", formatStringArray(resolvedSandbox.DebianRegistries)), 1)
 	}
 	b.WriteString(sandboxSection)
-	fmt.Fprintf(&b, `
+	if writeModels {
+		llmCfg := cfg.effectiveLLMConfig()
+		defaultSelector := llmCfg.DefaultSelector()
+		fmt.Fprintf(&b, `
 [models]
 default = %q
 `, cfg.rawOrResolvedString(cfg.raw.modelsDefault, loadedRaw.modelsDefault, defaultSelector))
 
-	for _, name := range sortedProviderNames(llmCfg.Providers) {
-		provider := llmCfg.Providers[name].Resolved()
-		rawProvider := cfg.raw.models[name]
-		loadedProvider := loadedRaw.models[name]
-		fmt.Fprintf(&b, `
+		for _, name := range sortedProviderNames(llmCfg.Providers) {
+			provider := llmCfg.Providers[name].Resolved()
+			rawProvider := cfg.raw.models[name]
+			loadedProvider := loadedRaw.models[name]
+			fmt.Fprintf(&b, `
 [models.providers.%s]
 base_url = %q
 api_key = %q
 models = %s
 `, name, cfg.rawOrResolvedString(rawProvider.BaseURL, loadedProvider.BaseURL, provider.BaseURL), cfg.rawOrResolvedString(rawProvider.APIKey, loadedProvider.APIKey, provider.APIKey), formatStringArray(cfg.rawOrResolvedStringArray(rawProvider.Models, loadedProvider.Models, provider.Models)))
-		if provider.ReasoningEffort != "" {
-			fmt.Fprintf(&b, "reasoning_effort = %q\n", cfg.rawOrResolvedString(rawProvider.ReasoningEffort, loadedProvider.ReasoningEffort, provider.ReasoningEffort))
+			if provider.ReasoningEffort != "" {
+				fmt.Fprintf(&b, "reasoning_effort = %q\n", cfg.rawOrResolvedString(rawProvider.ReasoningEffort, loadedProvider.ReasoningEffort, provider.ReasoningEffort))
+			}
 		}
 	}
 
@@ -470,6 +473,18 @@ app_secret = %q
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
+}
+
+func (c Config) hasStaticLLMConfig() bool {
+	if !c.Models.IsZero() || !c.LLM.IsZero() {
+		return true
+	}
+	model := c.Model
+	return strings.TrimSpace(model.Provider) != "" ||
+		strings.TrimSpace(model.BaseURL) != "" ||
+		strings.TrimSpace(model.APIKey) != "" ||
+		strings.TrimSpace(model.ModelID) != "" ||
+		strings.TrimSpace(model.ReasoningEffort) != ""
 }
 
 func modelsProviderSectionName(section string) (string, bool) {

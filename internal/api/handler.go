@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
@@ -49,6 +50,24 @@ type imAgentJoinResponse struct {
 	Message string `json:"message"`
 	RoomID  string `json:"room_id,omitempty"`
 	AgentID string `json:"agent_id,omitempty"`
+}
+
+type agentResponse struct {
+	ID               string                         `json:"id"`
+	Name             string                         `json:"name"`
+	Description      string                         `json:"description,omitempty"`
+	Image            string                         `json:"image,omitempty"`
+	BoxID            string                         `json:"box_id,omitempty"`
+	Role             string                         `json:"role"`
+	Status           string                         `json:"status"`
+	CreatedAt        time.Time                      `json:"created_at"`
+	Profile          string                         `json:"profile,omitempty"`
+	Provider         string                         `json:"provider,omitempty"`
+	ModelID          string                         `json:"model_id,omitempty"`
+	ReasoningEffort  string                         `json:"reasoning_effort,omitempty"`
+	AgentProfile     agent.AgentProfileView         `json:"agent_profile,omitempty"`
+	ProfileComplete  bool                           `json:"profile_complete"`
+	DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
 type createMessageRequest struct {
@@ -176,7 +195,7 @@ func (h *Handler) handleAgents(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, h.svc.List())
+		writeJSON(w, http.StatusOK, presentAgents(h.svc.List()))
 	case http.MethodPost:
 		h.handleCreateAgentWorker(w, r)
 	default:
@@ -222,6 +241,24 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		h.handleAgentLogs(w, r, id)
 		return
 	}
+	if id, ok := strings.CutSuffix(path, "/profile"); ok {
+		id = strings.TrimSpace(id)
+		if id == "" || strings.Contains(id, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		h.handleAgentProfile(w, r, id)
+		return
+	}
+	if id, ok := strings.CutSuffix(path, "/recreate"); ok {
+		id = strings.TrimSpace(id)
+		if id == "" || strings.Contains(id, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		h.handleAgentRecreate(w, r, id)
+		return
+	}
 
 	id := path
 	if strings.Contains(id, "/") {
@@ -240,7 +277,23 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "agent not found", http.StatusNotFound)
 			return
 		}
-		writeJSON(w, http.StatusOK, a)
+		writeJSON(w, http.StatusOK, presentAgent(a))
+	case http.MethodPatch:
+		var req agent.UpdateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+			return
+		}
+		updated, err := h.svc.Update(r.Context(), id, req)
+		if err != nil {
+			status := http.StatusBadRequest
+			if strings.Contains(err.Error(), "not found") {
+				status = http.StatusNotFound
+			}
+			http.Error(w, err.Error(), status)
+			return
+		}
+		writeJSON(w, http.StatusOK, presentAgent(updated))
 	case http.MethodDelete:
 		if err := h.svc.Delete(r.Context(), id); err != nil {
 			if strings.Contains(err.Error(), "not found") {
@@ -254,6 +307,102 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (h *Handler) handleAgentProfile(w http.ResponseWriter, r *http.Request, id string) {
+	if h.svc == nil {
+		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		if err := h.svc.Reload(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		profile, err := h.svc.AgentProfileView(id)
+		if err != nil {
+			http.Error(w, "agent not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, profile)
+	case http.MethodPut:
+		var req agent.AgentProfile
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+			return
+		}
+		profile, err := h.svc.UpdateAgentProfile(id, req)
+		if err != nil {
+			status := http.StatusBadRequest
+			if strings.Contains(err.Error(), "not found") {
+				status = http.StatusNotFound
+			}
+			http.Error(w, err.Error(), status)
+			return
+		}
+		writeJSON(w, http.StatusOK, profile)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) handleAgentRecreate(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.svc == nil {
+		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	recreated, err := h.svc.Recreate(r.Context(), id)
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	writeJSON(w, http.StatusOK, presentAgent(recreated))
+}
+
+func (h *Handler) handleAgentProfileModels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.svc == nil {
+		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	var req agent.ProfileModelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	models, err := h.svc.ListModelsForRequest(r.Context(), req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, http.StatusOK, agent.ProfileModelsResponse{
+		Provider: req.Provider,
+		Models:   models,
+	})
+}
+
+func (h *Handler) handleAgentProfileDefaults(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.svc == nil {
+		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, http.StatusOK, h.svc.ProfileDefaultsView())
 }
 
 func (h *Handler) handleAgentStart(w http.ResponseWriter, r *http.Request, id string) {
@@ -274,7 +423,7 @@ func (h *Handler) handleAgentStart(w http.ResponseWriter, r *http.Request, id st
 		http.Error(w, err.Error(), status)
 		return
 	}
-	writeJSON(w, http.StatusOK, started)
+	writeJSON(w, http.StatusOK, presentAgent(started))
 }
 
 func (h *Handler) handleAgentStop(w http.ResponseWriter, r *http.Request, id string) {
@@ -295,7 +444,7 @@ func (h *Handler) handleAgentStop(w http.ResponseWriter, r *http.Request, id str
 		http.Error(w, err.Error(), status)
 		return
 	}
-	writeJSON(w, http.StatusOK, stopped)
+	writeJSON(w, http.StatusOK, presentAgent(stopped))
 }
 
 func (h *Handler) handleAgentLogs(w http.ResponseWriter, r *http.Request, id string) {
@@ -379,24 +528,55 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, created)
+	if provisioner := h.workerIMProvisioner(); provisioner != nil {
+		if _, err := provisioner.EnsureAgentUser(r.Context(), im.AgentIdentity{
+			ID:          created.ID,
+			Name:        created.Name,
+			Description: created.Description,
+			Handle:      deriveAgentHandle(created),
+			Role:        displayRole(created.Role),
+		}); err != nil {
+			http.Error(w, fmt.Sprintf("ensure agent im user: %v", err), http.StatusBadGateway)
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, presentAgent(created))
 }
 
 func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequest {
 	return agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
-			ID:          req.ID,
-			Name:        req.Name,
-			Description: req.Description,
-			Image:       req.Image,
-			Role:        req.Role,
-			Status:      req.Status,
-			CreatedAt:   req.CreatedAt,
-			Profile:     req.Profile,
-			ModelID:     req.ModelID,
+			ID:           req.ID,
+			Name:         req.Name,
+			Description:  req.Description,
+			Image:        req.Image,
+			Role:         req.Role,
+			Status:       req.Status,
+			CreatedAt:    req.CreatedAt,
+			Profile:      req.Profile,
+			ModelID:      req.ModelID,
+			AgentProfile: agentProfileFromAPI(req.AgentProfile),
 		},
 		Replace:   req.Replace,
 		FieldMask: req.FieldMask,
+	}
+}
+
+func agentProfileFromAPI(req apitypes.CreateAgentProfile) agent.AgentProfile {
+	return agent.AgentProfile{
+		Name:            req.Name,
+		Description:     req.Description,
+		Provider:        req.Provider,
+		BaseURL:         req.BaseURL,
+		APIKey:          req.APIKey,
+		Headers:         req.Headers,
+		ModelID:         req.ModelID,
+		ReasoningEffort: req.ReasoningEffort,
+		EnableFastMode:  req.EnableFastMode,
+		RequestOptions:  req.RequestOptions,
+		Env:             req.Env,
+		ProfileComplete: req.ProfileComplete,
 	}
 }
 
@@ -668,6 +848,27 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		handle = name
 	}
 
+	if h.botSvc != nil && h.svc != nil && shouldCreateWorkerForUser(id, role) {
+		h.botSvc.SetDependencies(h.svc, h.im, h.feishu)
+		h.botSvc.SetIMBus(h.imBus)
+		created, err := h.botSvc.Create(r.Context(), apitypes.CreateBotRequest{
+			ID:      id,
+			Name:    name,
+			Role:    string(bot.RoleWorker),
+			Channel: string(bot.ChannelCSGClaw),
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if user, ok := h.im.User(created.UserID); ok {
+			writeJSON(w, http.StatusCreated, user)
+			return
+		}
+		http.Error(w, "created worker user not found", http.StatusInternalServerError)
+		return
+	}
+
 	result, err := provisioner.EnsureAgentUser(r.Context(), im.AgentIdentity{
 		ID:     id,
 		Name:   name,
@@ -680,6 +881,23 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, result.User)
+}
+
+func shouldCreateWorkerForUser(id, role string) bool {
+	id = strings.TrimSpace(id)
+	switch strings.ToLower(id) {
+	case "", "u-admin", agent.ManagerUserID:
+		return false
+	}
+
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "", agent.RoleWorker, agent.RoleAgent:
+		return true
+	case agent.RoleManager, "admin":
+		return false
+	default:
+		return true
+	}
 }
 
 func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
@@ -893,6 +1111,34 @@ func presentBootstrap(state im.Bootstrap) imBootstrapResponse {
 		Users:              state.Users,
 		Rooms:              state.Rooms,
 		InviteDraftUserIDs: state.InviteDraftUserIDs,
+	}
+}
+
+func presentAgents(items []agent.Agent) []agentResponse {
+	out := make([]agentResponse, 0, len(items))
+	for _, item := range items {
+		out = append(out, presentAgent(item))
+	}
+	return out
+}
+
+func presentAgent(item agent.Agent) agentResponse {
+	return agentResponse{
+		ID:               item.ID,
+		Name:             item.Name,
+		Description:      item.Description,
+		Image:            item.Image,
+		BoxID:            item.BoxID,
+		Role:             item.Role,
+		Status:           item.Status,
+		CreatedAt:        item.CreatedAt,
+		Profile:          item.Profile,
+		Provider:         item.Provider,
+		ModelID:          item.ModelID,
+		ReasoningEffort:  item.ReasoningEffort,
+		AgentProfile:     agent.RedactedProfileView(item.AgentProfile, item.DetectionResults),
+		ProfileComplete:  item.ProfileComplete,
+		DetectionResults: append([]agent.ProfileDetectionResult(nil), item.DetectionResults...),
 	}
 }
 

@@ -13,30 +13,41 @@ const (
 )
 
 type Agent struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description,omitempty"`
-	Image           string    `json:"image,omitempty"`
-	BoxID           string    `json:"box_id,omitempty"`
-	Role            string    `json:"role"`
-	Status          string    `json:"status"`
-	CreatedAt       time.Time `json:"created_at"`
-	Profile         string    `json:"profile,omitempty"`
-	Provider        string    `json:"provider,omitempty"`
-	ModelID         string    `json:"model_id,omitempty"`
-	ReasoningEffort string    `json:"reasoning_effort,omitempty"`
+	ID               string                   `json:"id"`
+	Name             string                   `json:"name"`
+	Description      string                   `json:"description,omitempty"`
+	Image            string                   `json:"image,omitempty"`
+	BoxID            string                   `json:"box_id,omitempty"`
+	Role             string                   `json:"role"`
+	Status           string                   `json:"status"`
+	CreatedAt        time.Time                `json:"created_at"`
+	Profile          string                   `json:"profile,omitempty"`
+	Provider         string                   `json:"provider,omitempty"`
+	ModelID          string                   `json:"model_id,omitempty"`
+	ReasoningEffort  string                   `json:"reasoning_effort,omitempty"`
+	AgentProfile     AgentProfile             `json:"agent_profile,omitempty"`
+	ProfileComplete  bool                     `json:"profile_complete"`
+	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
 type CreateAgentSpec struct {
-	ID          string    `json:"id,omitempty"`
-	Name        string    `json:"name"`
-	Description string    `json:"description,omitempty"`
-	Image       string    `json:"image,omitempty"`
-	Role        string    `json:"role,omitempty"`
-	Status      string    `json:"status,omitempty"`
-	CreatedAt   time.Time `json:"created_at,omitempty"`
-	Profile     string    `json:"profile,omitempty"`
-	ModelID     string    `json:"model_id,omitempty"`
+	ID           string       `json:"id,omitempty"`
+	Name         string       `json:"name"`
+	Description  string       `json:"description,omitempty"`
+	Image        string       `json:"image,omitempty"`
+	Role         string       `json:"role,omitempty"`
+	Status       string       `json:"status,omitempty"`
+	CreatedAt    time.Time    `json:"created_at,omitempty"`
+	Profile      string       `json:"profile,omitempty"`
+	ModelID      string       `json:"model_id,omitempty"`
+	AgentProfile AgentProfile `json:"agent_profile,omitempty"`
+}
+
+type UpdateRequest struct {
+	Name         *string       `json:"name,omitempty"`
+	Description  *string       `json:"description,omitempty"`
+	Image        *string       `json:"image,omitempty"`
+	AgentProfile *AgentProfile `json:"agent_profile,omitempty"`
 }
 
 type CreateRequest struct {
@@ -102,5 +113,7 @@ func cloneAgent(src *Agent) *Agent {
 		return nil
 	}
 	dst := *src
+	dst.AgentProfile = cloneProfile(src.AgentProfile)
+	dst.DetectionResults = append([]ProfileDetectionResult(nil), src.DetectionResults...)
 	return &dst
 }

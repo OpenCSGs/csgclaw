@@ -822,6 +822,92 @@ func TestHandleAgentsGetByIDReturnsAgent(t *testing.T) {
 	}
 }
 
+func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
+	svc := mustNewSeededService(t, []agent.Agent{
+		{
+			ID:   "u-alice",
+			Name: "alice",
+			Role: agent.RoleWorker,
+			AgentProfile: agent.AgentProfile{
+				Name:            "alice",
+				Provider:        agent.ProviderAPI,
+				BaseURL:         "https://api.example.test/v1",
+				APIKey:          "secret-token",
+				ModelID:         "gpt-test",
+				ReasoningEffort: agent.DefaultReasoningEffort,
+				ProfileComplete: true,
+			},
+			ProfileComplete: true,
+			CreatedAt:       time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC),
+		},
+	})
+
+	srv := &Handler{svc: svc}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "secret-token") {
+		t.Fatalf("response leaked API key: %s", rec.Body.String())
+	}
+	var got []map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	profile, ok := got[0]["agent_profile"].(map[string]any)
+	if !ok || profile["api_key_set"] != true {
+		t.Fatalf("agent_profile = %#v, want api_key_set true", got[0]["agent_profile"])
+	}
+	if _, ok := profile["api_key"]; ok {
+		t.Fatalf("agent_profile includes api_key: %#v", profile)
+	}
+}
+
+func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
+	svc := mustNewSeededService(t, []agent.Agent{
+		{
+			ID:   "u-alice",
+			Name: "alice",
+			Role: agent.RoleWorker,
+			AgentProfile: agent.AgentProfile{
+				Name:            "alice",
+				Provider:        agent.ProviderCSGHubLite,
+				ModelID:         "old-model",
+				ReasoningEffort: agent.DefaultReasoningEffort,
+				ProfileComplete: true,
+			},
+			ProfileComplete: true,
+			CreatedAt:       time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC),
+		},
+	})
+
+	srv := &Handler{svc: svc}
+	body := `{"description":"new role","agent_profile":{"name":"alice","provider":"csghub_lite","model_id":"new-model","env":{"A":"B"}}}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-alice", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got["description"] != "new role" || got["model_id"] != "new-model" {
+		t.Fatalf("agent = %#v, want updated description/model", got)
+	}
+	profile, ok := got["agent_profile"].(map[string]any)
+	if !ok || profile["env_restart_required"] != true {
+		t.Fatalf("agent_profile = %#v, want env_restart_required true", got["agent_profile"])
+	}
+}
+
 func TestHandleAgentsGetByIDReloadsStateBeforeLookup(t *testing.T) {
 	svc, statePath := mustNewSeededServiceWithPath(t, []agent.Agent{
 		{ID: "u-alice", Name: "alice", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
@@ -1102,7 +1188,7 @@ func TestHandleAgentsDeleteNotFound(t *testing.T) {
 	}
 }
 
-func TestHandleAgentsCreateDoesNotProvisionIMState(t *testing.T) {
+func TestHandleAgentsCreateProvisionsIMDirectMessage(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
@@ -1131,16 +1217,49 @@ func TestHandleAgentsCreateDoesNotProvisionIMState(t *testing.T) {
 	if got.ID != "u-alice" || got.Role != agent.RoleWorker {
 		t.Fatalf("agent = %+v, want worker alias result", got)
 	}
-	if _, ok := srv.im.User("u-alice"); ok {
-		t.Fatal("User(u-alice) ok = true, want false after agent create")
+	user, ok := srv.im.User("u-alice")
+	if !ok {
+		t.Fatal("User(u-alice) ok = false, want provisioned IM user after agent create")
 	}
-	if rooms := srv.im.ListRooms(); len(rooms) != 0 {
-		t.Fatalf("rooms = %+v, want no IM rooms after agent create", rooms)
+	if user.Handle != "alice" || user.Role != "worker" {
+		t.Fatalf("User(u-alice) = %+v, want worker handle alice", user)
 	}
+	rooms := srv.im.ListRooms()
+	if len(rooms) != 1 {
+		t.Fatalf("rooms = %+v, want one direct room after agent create", rooms)
+	}
+	room := rooms[0]
+	if !room.IsDirect || !roomHasMember(room, "u-admin") || !roomHasMember(room, "u-alice") {
+		t.Fatalf("room = %+v, want admin/agent direct room", room)
+	}
+
+	first := mustReceiveAPIEvent(t, events)
+	if first.Type != im.EventTypeUserCreated || first.User == nil || first.User.ID != "u-alice" {
+		t.Fatalf("first event = %+v, want user-created for u-alice", first)
+	}
+	second := mustReceiveAPIEvent(t, events)
+	if second.Type != im.EventTypeRoomCreated || second.Room == nil || second.Room.ID != room.ID {
+		t.Fatalf("second event = %+v, want room-created for %s", second, room.ID)
+	}
+}
+
+func roomHasMember(room im.Room, userID string) bool {
+	for _, memberID := range room.Members {
+		if memberID == userID {
+			return true
+		}
+	}
+	return false
+}
+
+func mustReceiveAPIEvent(t *testing.T, events <-chan im.Event) im.Event {
+	t.Helper()
 	select {
 	case evt := <-events:
-		t.Fatalf("unexpected IM event after agent create: %+v", evt)
-	case <-time.After(200 * time.Millisecond):
+		return evt
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for IM event")
+		return im.Event{}
 	}
 }
 
@@ -1603,6 +1722,72 @@ func TestHandleUsersCreateProvisionsIMUser(t *testing.T) {
 	second := mustReceiveIMEvent(t, events)
 	if second.Type != im.EventTypeRoomCreated || second.Room == nil || second.Room.ID == "" {
 		t.Fatalf("second event = %+v, want room_created for bootstrap room", second)
+	}
+}
+
+func TestHandleUsersCreateWithBotServiceCreatesWorkerAgent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	agentSvc := mustNewService(t)
+	imSvc := im.NewService()
+	bus := im.NewBus()
+	events, cancel := bus.Subscribe()
+	defer cancel()
+
+	store, err := bot.NewMemoryStore(nil)
+	if err != nil {
+		t.Fatalf("bot.NewMemoryStore() error = %v", err)
+	}
+	botSvc, err := bot.NewServiceWithDependencies(store, agentSvc, imSvc)
+	if err != nil {
+		t.Fatalf("bot.NewServiceWithDependencies() error = %v", err)
+	}
+	srv := &Handler{
+		svc:    agentSvc,
+		botSvc: botSvc,
+		im:     imSvc,
+		imBus:  bus,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"id":"u-qa","name":"qa","handle":"qa","role":"qa"}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var got im.User
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.ID != "u-qa" || got.Name != "qa" || got.Handle != "qa" || got.Role != "worker" {
+		t.Fatalf("user = %+v, want qa worker user", got)
+	}
+
+	created, ok := agentSvc.Agent("u-qa")
+	if !ok {
+		t.Fatal("Agent(u-qa) ok = false, want worker agent created with IM user")
+	}
+	if created.Name != "qa" || created.Role != agent.RoleWorker {
+		t.Fatalf("agent = %+v, want qa worker", created)
+	}
+
+	bots, err := botSvc.List(string(bot.ChannelCSGClaw), string(bot.RoleWorker))
+	if err != nil {
+		t.Fatalf("List(worker) error = %v", err)
+	}
+	if len(bots) != 1 || bots[0].ID != "u-qa" || bots[0].AgentID != "u-qa" || bots[0].UserID != "u-qa" {
+		t.Fatalf("bots = %+v, want one qa worker bot", bots)
+	}
+
+	first := mustReceiveIMEvent(t, events)
+	if first.Type != im.EventTypeUserCreated || first.User == nil || first.User.ID != "u-qa" {
+		t.Fatalf("first event = %+v, want user_created for u-qa", first)
+	}
+	second := mustReceiveIMEvent(t, events)
+	if second.Type != im.EventTypeRoomCreated || second.Room == nil || !containsMember(second.Room.Members, "u-qa") {
+		t.Fatalf("second event = %+v, want qa direct room", second)
 	}
 }
 

@@ -17,7 +17,7 @@ func TestAccessLogCapturesImplicitOK(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/healthz?ready=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/users?ready=1", nil)
 	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("User-Agent", "test-agent")
 	rec := httptest.NewRecorder()
@@ -31,7 +31,7 @@ func TestAccessLogCapturesImplicitOK(t *testing.T) {
 	if !strings.Contains(logLine, "method=GET") {
 		t.Fatalf("expected method in log, got %q", logLine)
 	}
-	if !strings.Contains(logLine, "uri=\"/healthz?ready=1\"") {
+	if !strings.Contains(logLine, "uri=\"/api/v1/users?ready=1\"") {
 		t.Fatalf("expected uri in log, got %q", logLine)
 	}
 	if !strings.Contains(logLine, "status=200") {
@@ -58,6 +58,42 @@ func TestAccessLogCapturesExplicitStatus(t *testing.T) {
 	}
 	if !strings.Contains(logLine, "bytes=0") {
 		t.Fatalf("expected zero bytes in log, got %q", logLine)
+	}
+}
+
+func TestAccessLogSkipsAgentPolling(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	handler := accessLog(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("[]"))
+	}))
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents?poll=1", nil))
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "[]" {
+		t.Fatalf("response = %d %q, want 200 []", rec.Code, rec.Body.String())
+	}
+	if got := buf.String(); got != "" {
+		t.Fatalf("polling request was logged: %q", got)
+	}
+}
+
+func TestAccessLogSkipsHealthzPolling(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	handler := accessLog(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz?ready=1", nil))
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "ok" {
+		t.Fatalf("response = %d %q, want 200 ok", rec.Code, rec.Body.String())
+	}
+	if got := buf.String(); got != "" {
+		t.Fatalf("healthz request was logged: %q", got)
 	}
 }
 
