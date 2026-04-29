@@ -16,7 +16,7 @@ import (
 )
 
 func TestRunInteractiveFreshSkipsModelProviderPrompt(t *testing.T) {
-	restore := stubBootstrap(t, func(_ context.Context, _, _ string, cfg config.Config, _ bool) (bot.Bot, error) {
+	restore := stubBootstrap(t, func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
 		if !cfg.Models.IsZero() || !cfg.LLM.IsZero() {
 			t.Fatalf("cfg should not include static LLM models: models=%+v llm=%+v", cfg.Models, cfg.LLM)
 		}
@@ -70,7 +70,7 @@ func TestRunInteractiveFreshSkipsModelProviderPrompt(t *testing.T) {
 
 func TestRunFreshNonInteractiveAllowsMissingLLMConfig(t *testing.T) {
 	callCount := 0
-	restore := stubBootstrap(t, func(_ context.Context, _, _ string, cfg config.Config, _ bool) (bot.Bot, error) {
+	restore := stubBootstrap(t, func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
 		callCount++
 		if !cfg.Models.IsZero() || !cfg.LLM.IsZero() {
 			t.Fatalf("cfg should not include static LLM models: models=%+v llm=%+v", cfg.Models, cfg.LLM)
@@ -90,7 +90,7 @@ func TestRunFreshNonInteractiveAllowsMissingLLMConfig(t *testing.T) {
 }
 
 func TestRunPreservesExistingStaticLLMConfigWithoutPrompting(t *testing.T) {
-	restore := stubBootstrap(t, func(_ context.Context, _, _ string, cfg config.Config, _ bool) (bot.Bot, error) {
+	restore := stubBootstrap(t, func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
 		if got, want := cfg.Models.Default, "default.gpt-test"; got != want {
 			t.Fatalf("cfg.Models.Default = %q, want %q", got, want)
 		}
@@ -204,7 +204,7 @@ func TestSandboxServiceOptionsSupportsConfiguredProvider(t *testing.T) {
 }
 
 func TestRunDebianRegistriesFlagPersistsToConfig(t *testing.T) {
-	restore := stubBootstrap(t, func(_ context.Context, _, _ string, cfg config.Config, _ bool) (bot.Bot, error) {
+	restore := stubBootstrap(t, func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
 		if got, want := strings.Join(cfg.Sandbox.DebianRegistries, ","), "registry.a,docker.io"; got != want {
 			t.Fatalf("bootstrap cfg.Sandbox.DebianRegistries = %q, want %q", got, want)
 		}
@@ -266,7 +266,7 @@ func (*fakeTerminalBuffer) Fd() uintptr {
 	return 1
 }
 
-func stubBootstrap(t *testing.T, create func(context.Context, string, string, config.Config, bool) (bot.Bot, error)) func() {
+func stubBootstrap(t *testing.T, create func(context.Context, string, string, config.Config) (bot.Bot, error)) func() {
 	t.Helper()
 	origCreateManager := CreateManagerBot
 	origEnsureIMBootstrapState := EnsureIMBootstrapState

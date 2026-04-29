@@ -95,8 +95,6 @@ csgclaw onboard [flags]
 
 Flags:
 
-- `--manager-image string`: bootstrap manager image.
-- `--force-recreate-manager`: remove and recreate the bootstrap manager box.
 - `--debian-registries string`: comma-separated OCI registries for `debian:bookworm-slim` pulls. Persisted to config.
 - `--log-level string`: log level for onboarding logs. Supported values: `debug`, `info`, `warn`, `error`. Default `info`.
 
@@ -111,7 +109,7 @@ Examples:
 
 ```bash
 csgclaw onboard
-csgclaw onboard --manager-image ghcr.io/example/manager:latest --force-recreate-manager
+csgclaw onboard --debian-registries "harbor.opencsg.com,docker.io"
 ```
 
 ### `csgclaw serve`

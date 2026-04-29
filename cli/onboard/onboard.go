@@ -41,9 +41,7 @@ func (cmd) Summary() string {
 
 func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
 	fs := run.NewFlagSet("onboard", run.Program+" onboard [flags]", c.Summary())
-	managerImage := fs.String("manager-image", "", "bootstrap manager image")
 	debianRegistries := fs.String("debian-registries", "", "comma-separated OCI registries used for debian:bookworm-slim pulls (persisted to config)")
-	forceRecreateManager := fs.Bool("force-recreate-manager", false, "remove and recreate the bootstrap manager box")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -81,9 +79,6 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		}
 	}
 
-	if *managerImage != "" {
-		cfg.Bootstrap.ManagerImage = *managerImage
-	}
 	if strings.TrimSpace(*debianRegistries) != "" {
 		cfg.Sandbox.DebianRegistries = parseRegistriesFlag(*debianRegistries)
 	}
@@ -103,19 +98,18 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	if err := EnsureIMBootstrapState(imStatePath); err != nil {
 		return err
 	}
-	if _, err := CreateManagerBot(ctx, agentsPath, imStatePath, cfg, *forceRecreateManager); err != nil {
+	if _, err := CreateManagerBot(ctx, agentsPath, imStatePath, cfg); err != nil {
 		return err
 	}
 
 	result := command.ActionResult{
-		Command:        "onboard",
-		Action:         "initialize",
-		Status:         "initialized",
-		ConfigPath:     path,
-		ManagerImage:   cfg.Bootstrap.ManagerImage,
-		Users:          []string{"admin", "manager"},
-		ForceRecreated: *forceRecreateManager,
-		Message:        fmt.Sprintf("initialized config at %s", path),
+		Command:      "onboard",
+		Action:       "initialize",
+		Status:       "initialized",
+		ConfigPath:   path,
+		ManagerImage: cfg.Bootstrap.ManagerImage,
+		Users:        []string{"admin", "manager"},
+		Message:      fmt.Sprintf("initialized config at %s", path),
 	}
 	if globals.Output == "json" {
 		return command.RenderAction(globals.Output, run.Stdout, result)
@@ -124,13 +118,10 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	fmt.Fprintf(run.Stdout, "ensured bootstrap agent %q with image %q\n", agent.ManagerName, cfg.Bootstrap.ManagerImage)
 	fmt.Fprintf(run.Stdout, "ensured IM members %q and %q\n", "admin", "manager")
 	fmt.Fprintln(run.Stdout, "cleared IM invite draft data")
-	if *forceRecreateManager {
-		fmt.Fprintln(run.Stdout, "manager box was force-recreated")
-	}
 	return nil
 }
 
-func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg config.Config, forceRecreateManager bool) (bot.Bot, error) {
+func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg config.Config) (bot.Bot, error) {
 	opts, err := sandboxServiceOptions(cfg.Sandbox)
 	if err != nil {
 		return bot.Bot{}, err
@@ -159,7 +150,7 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 		Name:    agent.ManagerName,
 		Role:    string(bot.RoleManager),
 		Channel: string(bot.ChannelCSGClaw),
-	}, forceRecreateManager)
+	}, false)
 }
 
 func sandboxServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {

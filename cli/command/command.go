@@ -42,7 +42,6 @@ type ActionResult struct {
 	PIDPath         string   `json:"pid_path,omitempty"`
 	ConfigPath      string   `json:"config_path,omitempty"`
 	ManagerImage    string   `json:"manager_image,omitempty"`
-	ForceRecreated  bool     `json:"force_recreated,omitempty"`
 	Users           []string `json:"users,omitempty"`
 	Logs            string   `json:"logs,omitempty"`
 	Lines           int      `json:"lines,omitempty"`

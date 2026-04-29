@@ -9,7 +9,7 @@ import (
 
 func TestHandlerServesIndexForSPARoutes(t *testing.T) {
 	handler := Handler()
-	for _, route := range []string{"/", "/computer", "/agents/u-manager", "/channels/room-1", "/dms/dm-1"} {
+	for _, route := range []string{"/", "/computer", "/agents/u-manager", "/rooms/room-1", "/channels/room-1", "/dms/dm-1"} {
 		t.Run(route, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, route, nil))

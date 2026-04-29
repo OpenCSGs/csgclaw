@@ -7,6 +7,7 @@ import mermaid from "https://esm.sh/mermaid@11.4.1";
 
 const html = htm.bind(React.createElement);
 const LOCALE_STORAGE_KEY = "csgclaw.im.locale";
+const THEME_STORAGE_KEY = "csgclaw.im.theme";
 const TOOL_CALLS_STORAGE_KEY = "csgclaw.im.showToolCalls";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "csgclaw.im.sidebarCollapsed";
 const MESSAGE_LIST_BOTTOM_THRESHOLD = 24;
@@ -30,35 +31,35 @@ const messages = {
     pageTitle: "CSGClaw IM",
     loading: "正在加载 IM 工作区...",
     loadingFailed: "加载失败，请稍后重试。",
-    emptyConversation: "请选择一个频道或私信",
-    conversationSection: "频道",
+    emptyConversation: "请选择一个房间或私信",
+    conversationSection: "房间",
     computerSection: "电脑",
-    computerAgentsSection: "电脑 Agent",
-    channelsSection: "频道",
+    computerAgentsSection: "Agents",
+    channelsSection: "房间",
     directMessagesSection: "私信",
     localComputer: "本机",
     computerOverview: "电脑概览",
     agentOverview: "Agent 概览",
     yourView: "你的视图",
     activeNow: "当前在线",
-    totalThreads: "频道总数",
+    totalThreads: "房间总数",
     teamMembers: "团队成员",
     membersTitle: "成员",
-    conversationOverview: "频道概览",
+    conversationOverview: "房间概览",
     sendFailed: "消息发送失败，请重试。",
-    roomCreatedToast: "频道已创建",
+    roomCreatedToast: "房间已创建",
     inviteSentToast: "邀请已发送",
     noMessages: "还没有消息，发一条开始吧。",
     noVisibleMessages: "工具调用已隐藏，当前没有可显示的消息。",
-    createRoom: "创建频道",
-    deleteRoom: "删除频道",
-    conversationLabel: "频道",
+    createRoom: "创建房间",
+    deleteRoom: "删除房间",
+    conversationLabel: "房间",
     members: "成员",
     mentionBadge: "@ 提及",
     inviteMembers: "添加成员",
     inputPlaceholder: "输入消息，使用 @ 选择成员",
     send: "发送",
-    composerTip: "Enter 发送，Shift + Enter 换行。支持频道、私信和 @ 提及。",
+    composerTip: "Enter 发送，Shift + Enter 换行。支持房间、私信和 @ 提及。",
     profileSetupTitle: "配置 Manager Profile",
     profileSetupSubtitle: "自动检测没有找到可用模型。请完成 Manager 的运行配置后再开始对话。",
     profileProvider: "Provider",
@@ -107,7 +108,7 @@ const messages = {
     agentRecreate: "重建",
     agentDelete: "删除",
     editProfile: "编辑",
-    inviteToRoom: "加入当前频道",
+    inviteToRoom: "加入当前房间",
     agentCreateSave: "创建并启动",
     agentUpdateSave: "保存",
     agentCreated: "Agent 已创建",
@@ -117,32 +118,35 @@ const messages = {
     profileCompleteBadge: "已配置",
     profileIncompleteBadge: "未配置",
     noAgents: "还没有 Worker。",
-    noChannels: "还没有频道。",
+    noChannels: "还没有房间。",
     noDirectMessages: "还没有私信。",
     modelLoadFailed: "模型加载失败",
     detectionResults: "自动检测结果",
-    createRoomTitle: "创建频道",
-    createRoomSubtitle: "为一个新主题建立频道，并预先邀请成员。",
-    createRoomFromDM: "创建频道",
+    createRoomTitle: "创建房间",
+    createRoomSubtitle: "为一个新主题建立房间，并预先邀请成员。",
+    createRoomFromDM: "创建房间",
     close: "关闭",
-    roomName: "频道名",
+    roomName: "房间名",
     roomNamePlaceholder: "例如：Launch",
     roomDescription: "说明",
-    roomDescriptionPlaceholder: "简单说明这个频道的用途",
+    roomDescriptionPlaceholder: "简单说明这个房间的用途",
     initialMembers: "初始成员",
     cancel: "取消",
     create: "创建",
     inviteTitle: "添加成员",
-    inviteSubtitle: "将更多成员加入当前频道。",
+    inviteSubtitle: "将更多成员加入当前房间。",
     inviteCandidates: "可选成员",
     noInviteCandidates: "当前没有可新增的成员。",
     sendInvite: "发送邀请",
     languageSwitcher: "切换语言",
     languageOptionZh: "简体中文",
     languageOptionEn: "English",
+    themeSwitcher: "切换外观",
+    themeLight: "浅色",
+    themeDark: "深色",
     toggleToolCallsShow: "显示工具调用",
     toggleToolCallsHide: "隐藏工具调用",
-    channelTools: "频道工具",
+    channelTools: "房间工具",
     enabled: "开启",
     disabled: "关闭",
     collapseSidebar: "收起侧边栏",
@@ -161,11 +165,11 @@ const messages = {
       "creator_id is required": "缺少创建者",
       "creator not found": "创建者不存在",
       "user not found": "用户不存在",
-      "room_id is required": "缺少频道 ID",
-      "room not found": "频道不存在",
+      "room_id is required": "缺少房间 ID",
+      "room not found": "房间不存在",
       "inviter_id is required": "缺少邀请者",
       "inviter not found": "邀请者不存在",
-      "inviter is not a room member": "邀请者不在当前频道中",
+      "inviter is not a room member": "邀请者不在当前房间中",
       "user_ids is required": "请选择至少一位成员",
       "no new users to invite": "没有可新增的成员",
     },
@@ -174,35 +178,35 @@ const messages = {
     pageTitle: "CSGClaw IM",
     loading: "Loading IM workspace...",
     loadingFailed: "Failed to load the workspace. Please try again.",
-    emptyConversation: "Select a channel or DM",
-    conversationSection: "Channels",
+    emptyConversation: "Select a room or DM",
+    conversationSection: "Rooms",
     computerSection: "Computer",
-    computerAgentsSection: "Computer Agents",
-    channelsSection: "Channels",
+    computerAgentsSection: "Agents",
+    channelsSection: "Rooms",
     directMessagesSection: "Direct Messages",
     localComputer: "Local computer",
     computerOverview: "Computer overview",
     agentOverview: "Agent overview",
     yourView: "Your view",
     activeNow: "Active now",
-    totalThreads: "Channels",
+    totalThreads: "Rooms",
     teamMembers: "Members",
     membersTitle: "Members",
-    conversationOverview: "Channel overview",
+    conversationOverview: "Room overview",
     sendFailed: "Failed to send the message. Please retry.",
-    roomCreatedToast: "Channel created",
+    roomCreatedToast: "Room created",
     inviteSentToast: "Invite sent",
     noMessages: "No messages yet. Start the conversation.",
     noVisibleMessages: "Tool calls are hidden, and there are no visible messages in this conversation.",
-    createRoom: "New Channel",
-    deleteRoom: "Delete Channel",
-    conversationLabel: "Channel",
+    createRoom: "New Room",
+    deleteRoom: "Delete Room",
+    conversationLabel: "Room",
     members: "members",
     mentionBadge: "@ mention",
     inviteMembers: "Add Members",
     inputPlaceholder: "Type a message and use @ to mention members",
     send: "Send",
-    composerTip: "Press Enter to send and Shift + Enter for a new line. Supports channels, DMs, and @ mentions.",
+    composerTip: "Press Enter to send and Shift + Enter for a new line. Supports rooms, DMs, and @ mentions.",
     profileSetupTitle: "Manager Profile",
     profileSetupSubtitle: "Auto-detection did not find a usable model. Complete the manager runtime profile before chatting.",
     profileProvider: "Provider",
@@ -251,7 +255,7 @@ const messages = {
     agentRecreate: "Recreate",
     agentDelete: "Delete",
     editProfile: "Edit",
-    inviteToRoom: "Add to current channel",
+    inviteToRoom: "Add to current room",
     agentCreateSave: "Create and start",
     agentUpdateSave: "Save",
     agentCreated: "Agent created",
@@ -261,32 +265,35 @@ const messages = {
     profileCompleteBadge: "Configured",
     profileIncompleteBadge: "Incomplete",
     noAgents: "No workers yet.",
-    noChannels: "No channels yet.",
+    noChannels: "No rooms yet.",
     noDirectMessages: "No direct messages yet.",
     modelLoadFailed: "Failed to load models",
     detectionResults: "Auto-detection",
-    createRoomTitle: "New Channel",
-    createRoomSubtitle: "Create a new channel and invite members in advance.",
-    createRoomFromDM: "New Channel",
+    createRoomTitle: "New Room",
+    createRoomSubtitle: "Create a new room and invite members in advance.",
+    createRoomFromDM: "New Room",
     close: "Close",
-    roomName: "Channel name",
+    roomName: "Room name",
     roomNamePlaceholder: "For example: Launch",
     roomDescription: "Details",
-    roomDescriptionPlaceholder: "Briefly describe what this channel is for",
+    roomDescriptionPlaceholder: "Briefly describe what this room is for",
     initialMembers: "Initial Members",
     cancel: "Cancel",
     create: "Create",
     inviteTitle: "Add Members",
-    inviteSubtitle: "Add more members to the current channel.",
+    inviteSubtitle: "Add more members to the current room.",
     inviteCandidates: "Available Members",
     noInviteCandidates: "There are no additional members to invite.",
     sendInvite: "Send Invite",
     languageSwitcher: "Switch language",
     languageOptionZh: "简体中文",
     languageOptionEn: "English",
+    themeSwitcher: "Switch theme",
+    themeLight: "Light",
+    themeDark: "Dark",
     toggleToolCallsShow: "Show tool calls",
     toggleToolCallsHide: "Hide tool calls",
-    channelTools: "Channel tools",
+    channelTools: "Room tools",
     enabled: "On",
     disabled: "Off",
     collapseSidebar: "Collapse sidebar",
@@ -305,11 +312,11 @@ const messages = {
       "creator_id is required": "Creator is required",
       "creator not found": "Creator not found",
       "user not found": "User not found",
-      "room_id is required": "Channel ID is required",
-      "room not found": "Channel not found",
+      "room_id is required": "Room ID is required",
+      "room not found": "Room not found",
       "inviter_id is required": "Inviter is required",
       "inviter not found": "Inviter not found",
-      "inviter is not a room member": "Inviter is not a channel member",
+      "inviter is not a room member": "Inviter is not a room member",
       "user_ids is required": "Select at least one member",
       "no new users to invite": "There are no new users to invite",
     },
@@ -322,6 +329,36 @@ function GlobeIcon() {
       <path
         d="M12 3.25a8.75 8.75 0 1 0 0 17.5a8.75 8.75 0 0 0 0-17.5Zm5.99 7.97h-2.56a14.57 14.57 0 0 0-1.13-4.01a7.28 7.28 0 0 1 3.69 4.01Zm-5.24-4.47c.52.76 1.16 2.28 1.51 4.47h-4.52c.35-2.19.99-3.71 1.51-4.47c.22-.32.42-.5.5-.5s.28.18.5.5Zm-4.05.46a14.57 14.57 0 0 0-1.13 4.01H4.01A7.28 7.28 0 0 1 7.7 7.21Zm-4.19 5.51h2.81c.03 1.48.24 2.88.57 4.01H5.37a7.22 7.22 0 0 1-.86-4.01Zm3.89 0h4.72c-.04 1.4-.24 2.79-.62 4.01H9.02a17.18 17.18 0 0 1-.62-4.01Zm.87 5.51h3.46c-.27.69-.59 1.3-.95 1.83c-.29.42-.54.69-.68.69s-.39-.27-.68-.69a9.65 9.65 0 0 1-.95-1.83Zm4.95-1.5c.33-1.13.54-2.53.57-4.01h2.81a7.22 7.22 0 0 1-.86 4.01h-2.52Z"
         fill="currentColor"
+      />
+    </svg>
+  `;
+}
+
+function SunIcon() {
+  return html`
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="3.8" fill="none" stroke="currentColor" stroke-width="1.8" />
+      <path
+        d="M12 3.25v2.1M12 18.65v2.1M4.25 12h2.1M17.65 12h2.1M6.52 6.52l1.48 1.48M16 16l1.48 1.48M17.48 6.52L16 8M8 16l-1.48 1.48"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-width="1.8"
+      />
+    </svg>
+  `;
+}
+
+function MoonIcon() {
+  return html`
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M19.2 14.6A7.3 7.3 0 0 1 9.4 4.8a7.6 7.6 0 1 0 9.8 9.8Z"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="1.8"
       />
     </svg>
   `;
@@ -468,8 +505,8 @@ function SidebarToggleIcon() {
 function RoomPlusIcon() {
   return html`
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="10" fill="#e6ebf3" />
-      <path d="M12 7.5v9M7.5 12h9" fill="none" stroke="#586274" stroke-linecap="round" stroke-width="1.9" />
+      <circle cx="12" cy="12" r="10" fill="var(--panel-soft)" />
+      <path d="M12 7.5v9M7.5 12h9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9" />
     </svg>
   `;
 }
@@ -513,11 +550,11 @@ function TrashIcon() {
 function RoomsIcon() {
   return html`
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="10" fill="#e6ebf3" />
+      <circle cx="12" cy="12" r="10" fill="var(--panel-soft)" />
       <path
         d="M9.25 7.75c-2.35 0-4.25 1.64-4.25 3.67c0 1.01.47 1.93 1.23 2.59L5.5 16.25l2.91-.46c.27.04.55.05.84.05c2.35 0 4.25-1.64 4.25-3.67S11.6 7.75 9.25 7.75Zm5.3 2.92c2.04.21 3.65 1.65 3.65 3.42c0 .88-.4 1.69-1.08 2.29l.58 1.88l-2.35-.43c-.25.03-.52.04-.8.04c-1.75 0-3.25-.78-4-1.95"
         fill="none"
-        stroke="#1f2937"
+        stroke="currentColor"
         stroke-linecap="round"
         stroke-linejoin="round"
         stroke-width="1.7"
@@ -597,7 +634,7 @@ function pathForPane(pane, rooms = []) {
   }
   if (pane.type === "conversation" && pane.id) {
     const room = rooms.find((item) => item.id === pane.id);
-    const prefix = room && isDirectConversation(room) ? "/dms/" : "/channels/";
+    const prefix = room && isDirectConversation(room) ? "/dms/" : "/rooms/";
     return `${prefix}${encodeURIComponent(pane.id)}`;
   }
   return "/";
@@ -627,6 +664,7 @@ function decodePathSegment(value) {
 function App() {
   const initialPane = useMemo(() => paneFromLocation(), []);
   const [locale, setLocale] = useState(() => detectInitialLocale());
+  const [theme, setTheme] = useState(() => detectInitialTheme());
   const [showToolCalls, setShowToolCalls] = useState(() => {
     const value = window.localStorage.getItem(TOOL_CALLS_STORAGE_KEY);
     return value === "true";
@@ -733,6 +771,17 @@ function App() {
     document.title = messages[locale].pageTitle;
     window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
   }, [locale]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: theme === "dark" ? "dark" : "neutral",
+    });
+  }, [theme]);
 
   useEffect(() => {
     window.localStorage.setItem(TOOL_CALLS_STORAGE_KEY, String(showToolCalls));
@@ -1813,22 +1862,47 @@ function App() {
             <div className="sidebar-header workspace-header">
               <div className="sidebar-brand-row">
                 <div className="sidebar-brand">CSGClaw</div>
-                <div className="language-switch sidebar-language-switch" role="group" aria-label=${t("languageSwitcher")}>
-                  <span className="language-switch-icon" aria-hidden="true"><${GlobeIcon} /></span>
-                  <div className=${`language-switch-track ${locale === "en" ? "is-en" : "is-zh"}`}>
-                    <span className="language-switch-thumb" aria-hidden="true"></span>
-                    <button className=${`language-toggle ${locale === "zh" ? "active" : ""}`} aria-pressed=${locale === "zh"} title=${t("languageOptionZh")} onClick=${() => setLocale("zh")}>中</button>
-                    <button className=${`language-toggle ${locale === "en" ? "active" : ""}`} aria-pressed=${locale === "en"} title=${t("languageOptionEn")} onClick=${() => setLocale("en")}>EN</button>
+                <div className="sidebar-controls">
+                  <div className="theme-switch" role="group" aria-label=${t("themeSwitcher")}>
+                    <div className=${`theme-switch-track ${theme === "dark" ? "is-dark" : "is-light"}`}>
+                      <span className="theme-switch-thumb" aria-hidden="true"></span>
+                      <button
+                        className=${`theme-toggle ${theme === "light" ? "active" : ""}`}
+                        aria-label=${t("themeLight")}
+                        aria-pressed=${theme === "light"}
+                        title=${t("themeLight")}
+                        onClick=${() => setTheme("light")}
+                      >
+                        <span aria-hidden="true"><${SunIcon} /></span>
+                      </button>
+                      <button
+                        className=${`theme-toggle ${theme === "dark" ? "active" : ""}`}
+                        aria-label=${t("themeDark")}
+                        aria-pressed=${theme === "dark"}
+                        title=${t("themeDark")}
+                        onClick=${() => setTheme("dark")}
+                      >
+                        <span aria-hidden="true"><${MoonIcon} /></span>
+                      </button>
+                    </div>
                   </div>
+                  <div className="language-switch sidebar-language-switch" role="group" aria-label=${t("languageSwitcher")}>
+                    <span className="language-switch-icon" aria-hidden="true"><${GlobeIcon} /></span>
+                    <div className=${`language-switch-track ${locale === "en" ? "is-en" : "is-zh"}`}>
+                      <span className="language-switch-thumb" aria-hidden="true"></span>
+                      <button className=${`language-toggle ${locale === "zh" ? "active" : ""}`} aria-pressed=${locale === "zh"} title=${t("languageOptionZh")} onClick=${() => setLocale("zh")}>中</button>
+                      <button className=${`language-toggle ${locale === "en" ? "active" : ""}`} aria-pressed=${locale === "en"} title=${t("languageOptionEn")} onClick=${() => setLocale("en")}>EN</button>
+                    </div>
+                  </div>
+                  <button
+                    className="sidebar-toggle-button"
+                    aria-label=${t("collapseSidebar")}
+                    title=${t("collapseSidebar")}
+                    onClick=${() => setIsSidebarCollapsed(true)}
+                  >
+                    <span className="sidebar-toggle-mark"><${SidebarToggleIcon} /></span>
+                  </button>
                 </div>
-                <button
-                  className="sidebar-toggle-button"
-                  aria-label=${t("collapseSidebar")}
-                  title=${t("collapseSidebar")}
-                  onClick=${() => setIsSidebarCollapsed(true)}
-                >
-                  <span className="sidebar-toggle-mark"><${SidebarToggleIcon} /></span>
-                </button>
               </div>
             </div>
             <nav className="workspace-nav" aria-label="Workspace">
@@ -1902,7 +1976,7 @@ function App() {
             </button>
             <nav className="sidebar-rail-nav" aria-label="Workspace">
               <button className=${`sidebar-rail-button ${activePane.type === "computer" ? "active" : ""}`} aria-label=${t("localComputer")} title=${t("localComputer")} onClick=${selectComputer}>
-                <span className="sidebar-rail-icon" aria-hidden="true"><${RoomsIcon} /></span>
+                <span className="sidebar-rail-icon" aria-hidden="true"><${ComputerIcon} /></span>
               </button>
               <button className="sidebar-rail-button" aria-label=${t("createAgent")} title=${t("createAgent")} onClick=${openCreateAgentModal}>
                 <span className="sidebar-rail-icon" aria-hidden="true"><${AgentIcon} /></span>
@@ -2091,7 +2165,7 @@ function App() {
                             <span className="message-author">${user.name}</span>
                             <span>${formatTime(message.created_at, locale)}</span>
                           </div>
-                          <div className="message-bubble"><${MessageContent} content=${message.content} /></div>
+                          <div className="message-bubble"><${MessageContent} key=${`${message.id}:${theme}`} content=${message.content} /></div>
                         </div>
                       </div>
                     `;
@@ -3115,6 +3189,14 @@ function detectInitialLocale() {
   return navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
 
+function detectInitialTheme() {
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === "light" || stored === "dark") {
+    return stored;
+  }
+  return "dark";
+}
+
 function createTranslator(locale) {
   return (key, params = {}) => {
     const value = resolveTranslation(locale, key);
@@ -3203,15 +3285,15 @@ function formatEventMessage(message, usersById, locale) {
   if (message.event?.key === "room_created") {
     const actor = userDisplayName(message.event.actor_id || message.sender_id, usersById);
     const title = message.event.title || message.content || "";
-    return locale === "zh" ? `${actor} 创建了频道“${title}”` : `${actor} created the channel "${title}"`;
+    return locale === "zh" ? `${actor} 创建了房间“${title}”` : `${actor} created the room "${title}"`;
   }
   if (message.event?.key === "room_members_added") {
     const actor = userDisplayName(message.event.actor_id || message.sender_id, usersById);
     const targets = (message.event.target_ids || mentionIDs(message.mentions) || []).map((id) => userDisplayName(id, usersById)).filter(Boolean);
     if (targets.length > 0) {
       return locale === "zh"
-        ? `${actor} 邀请 ${targets.join("、")} 加入了频道`
-        : `${actor} invited ${targets.join(", ")} to join the channel`;
+        ? `${actor} 邀请 ${targets.join("、")} 加入了房间`
+        : `${actor} invited ${targets.join(", ")} to join the room`;
     }
   }
   return message.content || "";

@@ -3,8 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
     <title>CSGClaw IM</title>
     <base href="/" />
+    <script>
+      (() => {
+        try {
+          const theme = localStorage.getItem("csgclaw.im.theme");
+          const next = theme === "light" || theme === "dark" ? theme : "dark";
+          document.documentElement.dataset.theme = next;
+          document.documentElement.style.colorScheme = next;
+        } catch (_) {
+          document.documentElement.dataset.theme = "dark";
+          document.documentElement.style.colorScheme = "dark";
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
