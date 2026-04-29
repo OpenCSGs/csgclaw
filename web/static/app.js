@@ -343,6 +343,23 @@ const messages = {
   },
 };
 
+function requiredFieldLabel(label) {
+  return html`
+    <span className="field-label">
+      ${label}
+      <span className="field-required-star" aria-hidden="true">*</span>
+    </span>
+  `;
+}
+
+function isBlank(value) {
+  return !String(value ?? "").trim();
+}
+
+function profileBaseURLMissing(draft) {
+  return draft?.provider === "api" && isBlank(draft.base_url);
+}
+
 function GlobeIcon() {
   return html`
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2615,8 +2632,14 @@ function App() {
                   <button className="modal-close" onClick=${() => setShowCreateRoom(false)}>${t("close")}</button>
                 </div>
                 <label className="field">
-                  <span>${t("roomName")}</span>
-                  <input value=${roomTitle} onInput=${(event) => setRoomTitle(event.target.value)} placeholder=${t("roomNamePlaceholder")} />
+                  ${requiredFieldLabel(t("roomName"))}
+                  <input
+                    value=${roomTitle}
+                    required
+                    aria-required="true"
+                    onInput=${(event) => setRoomTitle(event.target.value)}
+                    placeholder=${t("roomNamePlaceholder")}
+                  />
                 </label>
                 <label className="field">
                   <span>${t("roomDescription")}</span>
@@ -2642,7 +2665,7 @@ function App() {
                 ${submitError ? html`<div className="form-error">${submitError}</div>` : null}
                 <div className="modal-actions">
                   <button className="secondary-button" onClick=${() => setShowCreateRoom(false)}>${t("cancel")}</button>
-                  <button className="send-button" disabled=${!roomTitle.trim()} onClick=${createRoom}>${t("create")}</button>
+                  <button className="send-button" disabled=${isBlank(roomTitle)} onClick=${createRoom}>${t("create")}</button>
                 </div>
               </div>
             </div>
@@ -2704,10 +2727,12 @@ function App() {
                     <div className="profile-section-title">${t("profileBasics")}</div>
                     <div className="profile-grid profile-grid-compact">
                       <label className="field">
-                        <span>${t("agentName")}</span>
+                        ${requiredFieldLabel(t("agentName"))}
                         <input
                           value=${agentDraft.name}
                           disabled=${agentModalMode === "edit" && editingAgent?.id === "u-manager"}
+                          required
+                          aria-required="true"
                           onInput=${(event) => setAgentDraft({ ...agentDraft, name: event.target.value })}
                           placeholder=${t("agentNamePlaceholder")}
                         />
@@ -2741,8 +2766,13 @@ function App() {
                         </select>
                       </label>
                       <label className="field">
-                        <span>${t("profileModel")}</span>
-                        <select value=${agentDraft.model_id} onChange=${(event) => setAgentDraft({ ...agentDraft, model_id: event.target.value })}>
+                        ${requiredFieldLabel(t("profileModel"))}
+                        <select
+                          value=${agentDraft.model_id}
+                          required
+                          aria-required="true"
+                          onChange=${(event) => setAgentDraft({ ...agentDraft, model_id: event.target.value })}
+                        >
                           <option value="">${agentModelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
                           ${agentModels.map((model) => html`<option key=${model} value=${model}>${model}</option>`)}
                           ${agentDraft.model_id && !agentModels.includes(agentDraft.model_id)
@@ -2778,8 +2808,14 @@ function App() {
                           <div className="profile-section-title">${t("profileAPIProvider")}</div>
                           <div className="profile-api-grid">
                             <label className="field">
-                              <span>${t("profileBaseURL")}</span>
-                              <input value=${agentDraft.base_url} onInput=${(event) => setAgentDraft({ ...agentDraft, base_url: event.target.value })} placeholder="https://api.openai.com/v1" />
+                              ${requiredFieldLabel(t("profileBaseURL"))}
+                              <input
+                                value=${agentDraft.base_url}
+                                required
+                                aria-required="true"
+                                onInput=${(event) => setAgentDraft({ ...agentDraft, base_url: event.target.value })}
+                                placeholder="https://api.openai.com/v1"
+                              />
                             </label>
                             <label className="field">
                               <span>${t("profileAPIKey")}</span>
@@ -2814,7 +2850,7 @@ function App() {
                 ${agentError ? html`<div className="form-error">${agentError}</div>` : null}
                 <div className="modal-actions">
                   <button className="secondary-button" onClick=${() => setShowAgentModal(false)}>${t("cancel")}</button>
-                  <button className="send-button" disabled=${agentBusy || !agentDraft.name.trim() || !agentDraft.model_id} onClick=${saveAgent}>
+                  <button className="send-button" disabled=${agentBusy || isBlank(agentDraft.name) || !agentDraft.model_id || profileBaseURLMissing(agentDraft)} onClick=${saveAgent}>
                     ${agentBusy ? "..." : agentModalMode === "create" ? t("agentCreateSave") : t("agentUpdateSave")}
                   </button>
                 </div>
@@ -2866,9 +2902,11 @@ function App() {
                         </select>
                       </label>
                       <label className="field">
-                        <span>${t("profileModel")}</span>
+                        ${requiredFieldLabel(t("profileModel"))}
                         <select
                           value=${profileDraft.model_id}
+                          required
+                          aria-required="true"
                           onChange=${(event) => setProfileDraft({ ...profileDraft, model_id: event.target.value })}
                         >
                           <option value="">${profileModelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
@@ -2910,8 +2948,14 @@ function App() {
                           <div className="profile-section-title">${t("profileAPIProvider")}</div>
                           <div className="profile-api-grid">
                             <label className="field">
-                              <span>${t("profileBaseURL")}</span>
-                              <input value=${profileDraft.base_url} onInput=${(event) => setProfileDraft({ ...profileDraft, base_url: event.target.value })} placeholder="https://api.openai.com/v1" />
+                              ${requiredFieldLabel(t("profileBaseURL"))}
+                              <input
+                                value=${profileDraft.base_url}
+                                required
+                                aria-required="true"
+                                onInput=${(event) => setProfileDraft({ ...profileDraft, base_url: event.target.value })}
+                                placeholder="https://api.openai.com/v1"
+                              />
                             </label>
                             <label className="field">
                               <span>${t("profileAPIKey")}</span>
@@ -2945,7 +2989,7 @@ function App() {
                 </div>
                 ${profileError ? html`<div className="form-error">${profileError}</div>` : null}
                 <div className="modal-actions">
-                  <button className="send-button" disabled=${profileBusy || !profileDraft.model_id} onClick=${saveManagerProfile}>
+                  <button className="send-button" disabled=${profileBusy || !profileDraft.model_id || profileBaseURLMissing(profileDraft)} onClick=${saveManagerProfile}>
                     ${profileBusy ? "..." : t("profileSave")}
                   </button>
                 </div>
@@ -3233,7 +3277,13 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
         </div>
       </header>
       <div className="entity-toolbar">
-        <button className="preview-action-button preview-action-button-primary" disabled=${saving || !draft?.name?.trim() || !draft?.model_id} onClick=${onSave}>${saving ? t("profileLoadingModels") : t("agentUpdateSave")}</button>
+        <button
+          className="preview-action-button preview-action-button-primary"
+          disabled=${saving || isBlank(draft?.name) || !draft?.model_id || profileBaseURLMissing(draft)}
+          onClick=${onSave}
+        >
+          ${saving ? t("profileLoadingModels") : t("agentUpdateSave")}
+        </button>
         <button className="preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => running ? onStop(item) : onStart(item)}>
           ${running ? t("agentStop") : t("agentStart")}
         </button>
@@ -3281,8 +3331,14 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
                 <div className="profile-section-title">${t("profileBasics")}</div>
                 <div className="profile-grid-compact">
                   <label className="field">
-                    <span>${t("agentName")}</span>
-                    <input value=${draft.name} onInput=${(event) => updateDraft({ name: event.target.value })} placeholder=${t("agentNamePlaceholder")} />
+                    ${requiredFieldLabel(t("agentName"))}
+                    <input
+                      value=${draft.name}
+                      required
+                      aria-required="true"
+                      onInput=${(event) => updateDraft({ name: event.target.value })}
+                      placeholder=${t("agentNamePlaceholder")}
+                    />
                   </label>
                   <label className="field">
                     <span>${t("agentImage")}</span>
@@ -3308,8 +3364,13 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
                     </select>
                   </label>
                   <label className="field">
-                    <span>${t("profileModel")}</span>
-                    <select value=${draft.model_id} onChange=${(event) => updateDraft({ model_id: event.target.value })}>
+                    ${requiredFieldLabel(t("profileModel"))}
+                    <select
+                      value=${draft.model_id}
+                      required
+                      aria-required="true"
+                      onChange=${(event) => updateDraft({ model_id: event.target.value })}
+                    >
                       <option value="">${modelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
                       ${models.map((model) => html`<option key=${model} value=${model}>${model}</option>`)}
                       ${draft.model_id && !models.includes(draft.model_id)
@@ -3343,8 +3404,14 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
                       <div className="profile-section-title">${t("profileAPIProvider")}</div>
                       <div className="profile-api-grid">
                         <label className="field">
-                          <span>${t("profileBaseURL")}</span>
-                          <input value=${draft.base_url} onInput=${(event) => updateDraft({ base_url: event.target.value })} placeholder="https://api.openai.com/v1" />
+                          ${requiredFieldLabel(t("profileBaseURL"))}
+                          <input
+                            value=${draft.base_url}
+                            required
+                            aria-required="true"
+                            onInput=${(event) => updateDraft({ base_url: event.target.value })}
+                            placeholder="https://api.openai.com/v1"
+                          />
                         </label>
                         <label className="field">
                           <span>${t("profileAPIKey")}</span>

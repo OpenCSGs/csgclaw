@@ -1842,6 +1842,21 @@ body::after {
   font-weight: 650;
 }
 
+.field .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  width: fit-content;
+}
+
+.field .field-required-star,
+.profile-section .field .field-required-star {
+  color: var(--danger);
+  font-weight: 800;
+  line-height: 1;
+}
+
 .field input,
 .field textarea,
 .field select {
