@@ -10,10 +10,13 @@ const LOCALE_STORAGE_KEY = "csgclaw.im.locale";
 const THEME_STORAGE_KEY = "csgclaw.im.theme";
 const TOOL_CALLS_STORAGE_KEY = "csgclaw.im.showToolCalls";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "csgclaw.im.sidebarCollapsed";
+const WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY = "csgclaw.im.workspaceGroupsCollapsed";
 const MESSAGE_LIST_BOTTOM_THRESHOLD = 24;
 const AGENT_STATUS_REFRESH_INTERVAL_MS = 2000;
 const PROVIDERS = ["csghub_lite", "codex", "claude_code", "api"];
 const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
+const WORKSPACE_TAB_MESSAGES = "messages";
+const WORKSPACE_TAB_AGENTS = "agents";
 
 marked.setOptions({
   gfm: true,
@@ -37,6 +40,9 @@ const messages = {
     computerAgentsSection: "Agents",
     channelsSection: "房间",
     directMessagesSection: "私信",
+    messagesTab: "消息",
+    agentsTab: "Agents",
+    computersSection: "电脑",
     localComputer: "本机",
     computerOverview: "电脑概览",
     agentOverview: "Agent 概览",
@@ -184,6 +190,9 @@ const messages = {
     computerAgentsSection: "Agents",
     channelsSection: "Rooms",
     directMessagesSection: "Direct Messages",
+    messagesTab: "Messages",
+    agentsTab: "Agents",
+    computersSection: "Computers",
     localComputer: "Local computer",
     computerOverview: "Computer overview",
     agentOverview: "Agent overview",
@@ -502,6 +511,21 @@ function SidebarToggleIcon() {
   `;
 }
 
+function ChevronIcon() {
+  return html`
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M8 9.5l4 4l4-4"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+      />
+    </svg>
+  `;
+}
+
 function RoomPlusIcon() {
   return html`
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -661,6 +685,25 @@ function decodePathSegment(value) {
   }
 }
 
+function workspaceTabForPane(pane) {
+  if (pane?.type === "agent" || pane?.type === "computer") {
+    return WORKSPACE_TAB_AGENTS;
+  }
+  return WORKSPACE_TAB_MESSAGES;
+}
+
+function readCollapsedWorkspaceGroups() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY) || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed;
+  } catch (_) {
+    return {};
+  }
+}
+
 function App() {
   const initialPane = useMemo(() => paneFromLocation(), []);
   const [locale, setLocale] = useState(() => detectInitialLocale());
@@ -673,6 +716,8 @@ function App() {
     const value = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
     return value === "true";
   });
+  const [workspaceTab, setWorkspaceTab] = useState(() => workspaceTabForPane(initialPane));
+  const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState(() => readCollapsedWorkspaceGroups());
   const [data, setData] = useState(null);
   const [activeConversationId, setActiveConversationId] = useState(() => initialPane.type === "conversation" ? initialPane.id : "");
   const [activePane, setActivePane] = useState(initialPane);
@@ -790,6 +835,14 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
+
+  useEffect(() => {
+    window.localStorage.setItem(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY, JSON.stringify(collapsedWorkspaceGroups));
+  }, [collapsedWorkspaceGroups]);
+
+  useEffect(() => {
+    setWorkspaceTab(workspaceTabForPane(activePane));
+  }, [activePane?.type]);
 
   useEffect(() => {
     function handlePopState() {
@@ -1164,6 +1217,7 @@ function App() {
     setActiveConversationId(id);
     const next = { type: "conversation", id };
     setActivePane(next);
+    setWorkspaceTab(WORKSPACE_TAB_MESSAGES);
     setShowMemberList(false);
     setShowChannelTools(false);
     if (options.updateURL !== false) {
@@ -1177,6 +1231,7 @@ function App() {
     }
     const next = { type: "agent", id: item.id };
     setActivePane(next);
+    setWorkspaceTab(WORKSPACE_TAB_AGENTS);
     setShowMemberList(false);
     setShowChannelTools(false);
     if (options.updateURL !== false) {
@@ -1187,11 +1242,19 @@ function App() {
   function selectComputer(options = {}) {
     const next = { type: "computer", id: "local" };
     setActivePane(next);
+    setWorkspaceTab(WORKSPACE_TAB_AGENTS);
     setShowMemberList(false);
     setShowChannelTools(false);
     if (options.updateURL !== false) {
       syncBrowserPath(next, rooms, options.replace ? "replace" : "push");
     }
+  }
+
+  function toggleWorkspaceGroup(id) {
+    setCollapsedWorkspaceGroups((current) => ({
+      ...current,
+      [id]: !current[id],
+    }));
   }
 
   function openCreateRoomModal(options = {}) {
@@ -1933,62 +1996,121 @@ function App() {
               </div>
             </div>
             <nav className="workspace-nav" aria-label="Workspace">
-              <${WorkspaceGroup} title=${t("computerSection")} count=${1}>
-                <${WorkspaceComputerRow}
-                  title=${t("localComputer")}
-                  active=${activePane.type === "computer"}
-                  subtitle=${`${agentItems.length} ${t("computerAgentsSection")}`}
-                  onSelect=${selectComputer}
-                />
-              <//>
-              <${WorkspaceGroup} title=${t("computerAgentsSection")} count=${agentItems.length} onAdd=${openCreateAgentModal} addLabel=${t("createAgent")}>
-                ${agentItems.length
-                  ? agentItems.map((item) => html`
-                      <${WorkspaceAgentRow}
-                        key=${item.id}
-                        item=${item}
-                        active=${activePane.type === "agent" && activePane.id === item.id}
-                        t=${t}
-                        onSelect=${selectAgent}
-                        onPreview=${openAgentPreview}
-                      />
-                    `)
-                  : html`<div className="workspace-empty">${t("noAgents")}</div>`}
-              <//>
-              <${WorkspaceGroup} title=${t("channelsSection")} count=${channels.length} onAdd=${() => openCreateRoomModal()} addLabel=${t("createRoom")}>
-                ${channels.length
-                  ? channels.map((conversation) => html`
-                      <${WorkspaceConversationRow}
-                        key=${conversation.id}
-                        conversation=${conversation}
-                        active=${activePane.type === "conversation" && activePane.id === conversation.id}
-                        currentUserID=${data.current_user_id}
-                        usersById=${usersById}
-                        locale=${locale}
-                        t=${t}
-                        onSelect=${selectConversation}
-                        onPreviewUser=${openParticipantPreview}
-                      />
-                    `)
-                  : html`<div className="workspace-empty">${t("noChannels")}</div>`}
-              <//>
-              <${WorkspaceGroup} title=${t("directMessagesSection")} count=${directMessages.length}>
-                ${directMessages.length
-                  ? directMessages.map((conversation) => html`
-                      <${WorkspaceConversationRow}
-                        key=${conversation.id}
-                        conversation=${conversation}
-                        active=${activePane.type === "conversation" && activePane.id === conversation.id}
-                        currentUserID=${data.current_user_id}
-                        usersById=${usersById}
-                        locale=${locale}
-                        t=${t}
-                        onSelect=${selectConversation}
-                        onPreviewUser=${openParticipantPreview}
-                      />
-                    `)
-                  : html`<div className="workspace-empty">${t("noDirectMessages")}</div>`}
-              <//>
+              <div className="workspace-tabbar" role="tablist" aria-label="Workspace sections">
+                <button
+                  className=${`workspace-tab ${workspaceTab === WORKSPACE_TAB_MESSAGES ? "active" : ""}`}
+                  role="tab"
+                  aria-selected=${workspaceTab === WORKSPACE_TAB_MESSAGES}
+                  aria-label=${t("messagesTab")}
+                  title=${t("messagesTab")}
+                  onClick=${() => setWorkspaceTab(WORKSPACE_TAB_MESSAGES)}
+                >
+                  <span className="workspace-tab-icon" aria-hidden="true"><${RoomsIcon} /></span>
+                </button>
+                <button
+                  className=${`workspace-tab ${workspaceTab === WORKSPACE_TAB_AGENTS ? "active" : ""}`}
+                  role="tab"
+                  aria-selected=${workspaceTab === WORKSPACE_TAB_AGENTS}
+                  aria-label=${t("agentsTab")}
+                  title=${t("agentsTab")}
+                  onClick=${() => setWorkspaceTab(WORKSPACE_TAB_AGENTS)}
+                >
+                  <span className="workspace-tab-icon" aria-hidden="true"><${UsersIcon} /></span>
+                </button>
+              </div>
+              ${workspaceTab === WORKSPACE_TAB_MESSAGES
+                ? html`
+                    <div className="workspace-tab-panel" role="tabpanel" aria-label=${t("messagesTab")}>
+                      <${WorkspaceGroup}
+                        id="rooms"
+                        title=${t("channelsSection")}
+                        count=${channels.length}
+                        collapsed=${Boolean(collapsedWorkspaceGroups.rooms)}
+                        onToggle=${() => toggleWorkspaceGroup("rooms")}
+                        onAdd=${() => openCreateRoomModal()}
+                        addLabel=${t("createRoom")}
+                      >
+                        ${channels.length
+                          ? channels.map((conversation) => html`
+                              <${WorkspaceConversationRow}
+                                key=${conversation.id}
+                                conversation=${conversation}
+                                active=${activePane.type === "conversation" && activePane.id === conversation.id}
+                                currentUserID=${data.current_user_id}
+                                usersById=${usersById}
+                                locale=${locale}
+                                t=${t}
+                                onSelect=${selectConversation}
+                                onPreviewUser=${openParticipantPreview}
+                              />
+                            `)
+                          : html`<div className="workspace-empty">${t("noChannels")}</div>`}
+                      <//>
+                      <${WorkspaceGroup}
+                        id="direct-messages"
+                        title=${t("directMessagesSection")}
+                        count=${directMessages.length}
+                        collapsed=${Boolean(collapsedWorkspaceGroups["direct-messages"])}
+                        onToggle=${() => toggleWorkspaceGroup("direct-messages")}
+                      >
+                        ${directMessages.length
+                          ? directMessages.map((conversation) => html`
+                              <${WorkspaceConversationRow}
+                                key=${conversation.id}
+                                conversation=${conversation}
+                                active=${activePane.type === "conversation" && activePane.id === conversation.id}
+                                currentUserID=${data.current_user_id}
+                                usersById=${usersById}
+                                locale=${locale}
+                                t=${t}
+                                onSelect=${selectConversation}
+                                onPreviewUser=${openParticipantPreview}
+                              />
+                            `)
+                          : html`<div className="workspace-empty">${t("noDirectMessages")}</div>`}
+                      <//>
+                    </div>
+                  `
+                : html`
+                    <div className="workspace-tab-panel" role="tabpanel" aria-label=${t("agentsTab")}>
+                      <${WorkspaceGroup}
+                        id="agents"
+                        title=${t("computerAgentsSection")}
+                        count=${agentItems.length}
+                        collapsed=${Boolean(collapsedWorkspaceGroups.agents)}
+                        onToggle=${() => toggleWorkspaceGroup("agents")}
+                        onAdd=${openCreateAgentModal}
+                        addLabel=${t("createAgent")}
+                      >
+                        ${agentItems.length
+                          ? agentItems.map((item) => html`
+                              <${WorkspaceAgentRow}
+                                key=${item.id}
+                                item=${item}
+                                active=${activePane.type === "agent" && activePane.id === item.id}
+                                t=${t}
+                                onSelect=${selectAgent}
+                                onPreview=${openAgentPreview}
+                              />
+                            `)
+                          : html`<div className="workspace-empty">${t("noAgents")}</div>`}
+                      <//>
+                      <${WorkspaceGroup}
+                        id="computers"
+                        title=${t("computersSection")}
+                        count=${1}
+                        collapsed=${Boolean(collapsedWorkspaceGroups.computers)}
+                        onToggle=${() => toggleWorkspaceGroup("computers")}
+                      >
+                        <${WorkspaceComputerRow}
+                          title=${t("localComputer")}
+                          active=${activePane.type === "computer"}
+                          subtitle=${`${agentItems.length} ${t("computerAgentsSection")}`}
+                          onSelect=${selectComputer}
+                        />
+                      <//>
+                    </div>
+                  `}
               ${agentsError ? html`<div className="form-error agent-error">${agentsError}</div>` : null}
             </nav>
           </aside>
@@ -2764,14 +2886,24 @@ function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop, onRec
   `;
 }
 
-function WorkspaceGroup({ title, count, onAdd, addLabel, children }) {
+function WorkspaceGroup({ id, title, count, collapsed, onToggle, onAdd, addLabel, children }) {
+  const itemsID = `workspace-group-items-${id || String(title).toLowerCase().replace(/\s+/g, "-")}`;
   return html`
-    <section className="workspace-group">
+    <section className=${`workspace-group ${collapsed ? "collapsed" : ""}`}>
       <div className="workspace-group-head">
-        <div className="workspace-group-title">
-          <span>${title}</span>
-          <small>${count}</small>
-        </div>
+        <button
+          className="workspace-group-toggle"
+          type="button"
+          aria-expanded=${!collapsed}
+          aria-controls=${itemsID}
+          onClick=${onToggle}
+        >
+          <span className="workspace-group-arrow" aria-hidden="true"><${ChevronIcon} /></span>
+          <span className="workspace-group-title">
+            <span>${title}</span>
+            <small>${count}</small>
+          </span>
+        </button>
         ${onAdd
           ? html`
               <button className="workspace-add-button" aria-label=${addLabel || title} title=${addLabel || title} onClick=${onAdd}>
@@ -2780,7 +2912,7 @@ function WorkspaceGroup({ title, count, onAdd, addLabel, children }) {
             `
           : null}
       </div>
-      <div className="workspace-group-items">${children}</div>
+      ${collapsed ? null : html`<div id=${itemsID} className="workspace-group-items">${children}</div>`}
     </section>
   `;
 }
