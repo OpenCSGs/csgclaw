@@ -1258,9 +1258,15 @@ body::after {
 }
 
 .message-card {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: min(720px, 100%);
   display: grid;
+  justify-items: start;
+}
+
+.message-row.own .message-card {
+  justify-items: end;
 }
 
 .message-meta {
@@ -1276,6 +1282,7 @@ body::after {
 }
 
 .message-bubble {
+  width: fit-content;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -1701,6 +1708,12 @@ body::after {
   background: var(--field);
 }
 
+.secondary-button.compact {
+  min-height: 32px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
 .modal-actions .send-button {
   height: 34px;
   padding: 0 14px;
@@ -1955,6 +1968,37 @@ body::after {
   grid-template-columns: minmax(150px, 0.9fr) minmax(220px, 1.3fr) minmax(116px, 0.7fr) minmax(120px, 0.6fr);
   gap: 10px;
   align-items: end;
+}
+
+.auth-status-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+}
+
+.auth-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #d69321;
+}
+
+.auth-status-row.connected .auth-status-dot {
+  background: #2f9e60;
+}
+
+.auth-status-message {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
 }
 
 .span-2 {

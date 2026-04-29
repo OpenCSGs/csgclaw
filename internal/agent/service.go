@@ -826,7 +826,9 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 	box, resolvedKey, err := s.resolveAgentBox(ctx, rt, got)
 	if err != nil {
 		if sandbox.IsNotFound(err) {
-			return Agent{}, fmt.Errorf("agent %q not found", id)
+			_ = s.closeRuntime(runtimeHome, rt)
+			rt = nil
+			return s.Recreate(ctx, id)
 		}
 		return Agent{}, err
 	}
@@ -1056,6 +1058,12 @@ func (s *Service) StartConfiguredAgents(ctx context.Context) error {
 		}
 		live := s.hydrateAgentStatus(ctx, a)
 		if isAgentRuntimeRunning(live) {
+			// A running sandbox can still hold a stale PicoClaw event stream after
+			// csgclaw serve restarts. Recreate the worker gateway so it subscribes
+			// to the current server instance.
+			if _, err := s.Recreate(ctx, live.ID); err != nil {
+				startErr = errors.Join(startErr, fmt.Errorf("%s: %w", live.Name, err))
+			}
 			continue
 		}
 		if _, err := s.Start(ctx, live.ID); err != nil {

@@ -66,6 +66,41 @@ func (f *fakeInfoInstance) Info(context.Context) (sandbox.Info, error) {
 	return f.info, nil
 }
 
+type transientInfoInstance struct {
+	fakeInstance
+	failures int
+	calls    int
+	info     sandbox.Info
+}
+
+func (f *transientInfoInstance) Info(context.Context) (sandbox.Info, error) {
+	f.calls++
+	if f.calls <= f.failures {
+		return sandbox.Info{}, fmt.Errorf("inspect boxlite cli box: boxlite cli exited with code 1: Failed to acquire runtime lock: Another BoxliteRuntime is already using directory")
+	}
+	return f.info, nil
+}
+
+type singleInstanceRuntime struct {
+	instance sandbox.Instance
+}
+
+func (r *singleInstanceRuntime) Create(context.Context, sandbox.CreateSpec) (sandbox.Instance, error) {
+	return r.instance, nil
+}
+
+func (r *singleInstanceRuntime) Get(context.Context, string) (sandbox.Instance, error) {
+	return r.instance, nil
+}
+
+func (r *singleInstanceRuntime) Remove(context.Context, string, sandbox.RemoveOptions) error {
+	return nil
+}
+
+func (r *singleInstanceRuntime) Close() error {
+	return nil
+}
+
 type agentBoxliteCLIRunner struct {
 	requests []boxlitecli.CommandRequest
 	boxes    map[string]agentBoxliteCLIBox
@@ -387,6 +422,47 @@ func TestBoxLiteCLIProviderGatewayLifecycle(t *testing.T) {
 		if len(req.Args) > 2 && req.Args[2] == "run" && !containsAny(req.Args, "/bin/sh", "/usr/local/bin/picoclaw") {
 			t.Fatalf("boxlite-cli run args missing gateway command: %q", req.Args)
 		}
+	}
+}
+
+func TestCreateGatewayBoxRetriesTransientRuntimeLockInfo(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	origDelay := sandboxRuntimeLockRetryDelay
+	sandboxRuntimeLockRetryDelay = time.Millisecond
+	t.Cleanup(func() {
+		sandboxRuntimeLockRetryDelay = origDelay
+	})
+
+	inst := &transientInfoInstance{
+		failures: 2,
+		info: sandbox.Info{
+			ID:        "box-alice",
+			Name:      "alice",
+			State:     sandbox.StateRunning,
+			CreatedAt: time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC),
+		},
+	}
+	svc, err := NewService(testModelConfig(), config.ServerConfig{ListenAddr: ":18080", AccessToken: "token"}, "picoclaw:latest", filepath.Join(homeDir, "agents.json"))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	box, info, err := svc.createGatewayBox(context.Background(), &singleInstanceRuntime{instance: inst}, "picoclaw:latest", "alice", "u-alice", AgentProfile{
+		Provider:        ProviderCodex,
+		ModelID:         "gpt-5.5",
+		ProfileComplete: true,
+	})
+	if err != nil {
+		t.Fatalf("createGatewayBox() error = %v", err)
+	}
+	if box != inst {
+		t.Fatalf("createGatewayBox() box = %T, want transientInfoInstance", box)
+	}
+	if info.ID != "box-alice" || info.State != sandbox.StateRunning {
+		t.Fatalf("createGatewayBox() info = %+v, want running box-alice", info)
+	}
+	if inst.calls != 3 {
+		t.Fatalf("Info() calls = %d, want 3", inst.calls)
 	}
 }
 
@@ -1477,30 +1553,154 @@ func TestStartFallsBackToNameAndRefreshesStoredAgentState(t *testing.T) {
 	}
 }
 
-func TestStartConfiguredAgentsStartsStoppedCompleteWorkers(t *testing.T) {
+func TestStartConfiguredAgentsRecreatesMissingCompleteWorkerBoxes(t *testing.T) {
 	rt := &fakeRuntime{}
-	SetTestHooks(func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil }, nil)
+	boxes := map[string]sandbox.Info{}
+	var created []string
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil },
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, botID string, profile AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			if image != "worker-image:1" {
+				t.Fatalf("createGatewayBox() image = %q, want %q", image, "worker-image:1")
+			}
+			if botID != "u-alice" {
+				t.Fatalf("createGatewayBox() botID = %q, want %q", botID, "u-alice")
+			}
+			if !profile.ProfileComplete || profile.Provider != ProviderCodex || profile.ModelID != "gpt-5.5" {
+				t.Fatalf("createGatewayBox() profile = %+v, want complete codex gpt-5.5", profile)
+			}
+			created = append(created, name)
+			info := sandbox.Info{
+				ID:        "box-alice-new",
+				Name:      name,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			}
+			boxes[info.ID] = info
+			boxes[name] = info
+			return &fakeInfoInstance{info: info}, info, nil
+		},
+	)
 	defer ResetTestHooks()
 
-	states := map[string]sandbox.State{
-		"box-alice": sandbox.StateStopped,
-		"box-carol": sandbox.StateRunning,
-	}
-	names := map[string]string{
-		"box-alice": "alice",
-		"box-carol": "carol",
-	}
+	var gotKeys []string
 	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
-		state, ok := states[idOrName]
+		gotKeys = append(gotKeys, idOrName)
+		info, ok := boxes[idOrName]
 		if !ok {
 			return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
 		}
-		return &fakeInfoInstance{info: sandbox.Info{
-			ID:        idOrName,
-			Name:      names[idOrName],
-			State:     state,
+		return &fakeInfoInstance{info: info}, nil
+	}
+	testBoxInfoHook = func(_ *Service, _ context.Context, box sandbox.Instance) (sandbox.Info, error) {
+		return box.Info(context.Background())
+	}
+	var removed []string
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		removed = append(removed, idOrName)
+		return fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agents.json")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:1", statePath)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	completeAlice := AgentProfile{Name: "alice", Provider: ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true}
+	svc.agents["u-alice"] = Agent{
+		ID:              "u-alice",
+		Name:            "alice",
+		Role:            RoleWorker,
+		Image:           "worker-image:1",
+		BoxID:           "box-alice-stale",
+		Status:          string(sandbox.StateRunning),
+		AgentProfile:    completeAlice,
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+	}
+
+	if err := svc.StartConfiguredAgents(context.Background()); err != nil {
+		t.Fatalf("StartConfiguredAgents() error = %v", err)
+	}
+	if strings.Join(created, ",") != "alice" {
+		t.Fatalf("created boxes = %q, want alice", created)
+	}
+	if strings.Join(removed, ",") != "box-alice-stale" {
+		t.Fatalf("removed boxes = %q, want stale box id", removed)
+	}
+	if len(gotKeys) < 2 || gotKeys[0] != "box-alice-stale" || gotKeys[1] != "alice" {
+		t.Fatalf("getBox() leading keys = %q, want stale box id then name", gotKeys)
+	}
+	got, ok := svc.Agent("u-alice")
+	if !ok {
+		t.Fatal("Agent() missing u-alice")
+	}
+	if got.BoxID != "box-alice-new" {
+		t.Fatalf("Agent().BoxID = %q, want %q", got.BoxID, "box-alice-new")
+	}
+	if got.Status != string(sandbox.StateRunning) {
+		t.Fatalf("Agent().Status = %q, want running", got.Status)
+	}
+
+	reloaded, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:1", statePath)
+	if err != nil {
+		t.Fatalf("NewService(reload) error = %v", err)
+	}
+	persisted, ok := reloaded.Agent("u-alice")
+	if !ok {
+		t.Fatal("reloaded Agent() missing u-alice")
+	}
+	if persisted.BoxID != "box-alice-new" {
+		t.Fatalf("reloaded Agent().BoxID = %q, want %q", persisted.BoxID, "box-alice-new")
+	}
+}
+
+func TestStartConfiguredAgentsStartsStoppedAndRecreatesRunningCompleteWorkers(t *testing.T) {
+	rt := &fakeRuntime{}
+	infos := map[string]sandbox.Info{
+		"box-alice": {
+			ID:        "box-alice",
+			Name:      "alice",
+			State:     sandbox.StateStopped,
 			CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
-		}}, nil
+		},
+		"box-carol": {
+			ID:        "box-carol",
+			Name:      "carol",
+			State:     sandbox.StateRunning,
+			CreatedAt: time.Date(2026, 4, 1, 13, 0, 0, 0, time.UTC),
+		},
+	}
+	var recreated []string
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil },
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, botID string, profile AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			recreated = append(recreated, name)
+			if name != "carol" || botID != "u-carol" {
+				t.Fatalf("createGatewayBox() got name=%q botID=%q, want carol/u-carol", name, botID)
+			}
+			if !profile.ProfileComplete || profile.Provider != ProviderCodex || profile.ModelID != "gpt-5.5" {
+				t.Fatalf("createGatewayBox() profile = %+v, want complete codex gpt-5.5", profile)
+			}
+			info := sandbox.Info{
+				ID:        "box-carol-new",
+				Name:      name,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 1, 14, 0, 0, 0, time.UTC),
+			}
+			infos[info.ID] = info
+			infos[name] = info
+			return &fakeInfoInstance{info: info}, info, nil
+		},
+	)
+	defer ResetTestHooks()
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		info, ok := infos[idOrName]
+		if !ok {
+			return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+		}
+		return &fakeInfoInstance{info: info}, nil
 	}
 	var started []string
 	testStartBoxHook = func(_ *Service, _ context.Context, box sandbox.Instance) error {
@@ -1509,7 +1709,9 @@ func TestStartConfiguredAgentsStartsStoppedCompleteWorkers(t *testing.T) {
 			return err
 		}
 		started = append(started, info.ID)
-		states[info.ID] = sandbox.StateRunning
+		info.State = sandbox.StateRunning
+		infos[info.ID] = info
+		infos[info.Name] = info
 		return nil
 	}
 	testBoxInfoHook = func(_ *Service, _ context.Context, box sandbox.Instance) (sandbox.Info, error) {
@@ -1517,8 +1719,20 @@ func TestStartConfiguredAgentsStartsStoppedCompleteWorkers(t *testing.T) {
 		if err != nil {
 			return sandbox.Info{}, err
 		}
-		info.State = states[info.ID]
+		if current, ok := infos[info.ID]; ok {
+			return current, nil
+		}
 		return info, nil
+	}
+	var removed []string
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		removed = append(removed, idOrName)
+		if info, ok := infos[idOrName]; ok {
+			delete(infos, info.ID)
+			delete(infos, info.Name)
+			return nil
+		}
+		return fmt.Errorf("%w: missing", sandbox.ErrNotFound)
 	}
 
 	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
@@ -1572,12 +1786,28 @@ func TestStartConfiguredAgentsStartsStoppedCompleteWorkers(t *testing.T) {
 	if strings.Join(started, ",") != "box-alice" {
 		t.Fatalf("started boxes = %q, want only box-alice", started)
 	}
+	if strings.Join(recreated, ",") != "carol" {
+		t.Fatalf("recreated boxes = %q, want carol", recreated)
+	}
+	if strings.Join(removed, ",") != "box-carol" {
+		t.Fatalf("removed boxes = %q, want box-carol", removed)
+	}
 	got, ok := svc.Agent("u-alice")
 	if !ok {
 		t.Fatal("Agent() missing u-alice")
 	}
 	if got.Status != string(sandbox.StateRunning) {
 		t.Fatalf("Agent().Status = %q, want running", got.Status)
+	}
+	carol, ok := svc.Agent("u-carol")
+	if !ok {
+		t.Fatal("Agent() missing u-carol")
+	}
+	if carol.BoxID != "box-carol-new" {
+		t.Fatalf("Agent(u-carol).BoxID = %q, want box-carol-new", carol.BoxID)
+	}
+	if carol.Status != string(sandbox.StateRunning) {
+		t.Fatalf("Agent(u-carol).Status = %q, want running", carol.Status)
 	}
 }
 

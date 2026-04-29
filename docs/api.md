@@ -7,7 +7,7 @@
 - 内容类型：除 SSE 接口外，请求和响应均为 `application/json`
 - 时间格式：使用 RFC3339 / ISO8601，例如 `2026-03-28T12:00:00Z`
 - 认证：大部分接口当前不需要认证；`/api/bots/*` 和 `GET /api/v1/channels/feishu/bots/{id}/events` 需要 `Authorization: Bearer <token>`
-- 错误返回：失败时通常返回纯文本错误信息，不是统一 JSON 结构
+- 错误返回：失败时通常返回纯文本错误信息；LLM 鉴权缺失等少量场景会返回 JSON error payload
 
 ## 1. 基础接口
 
@@ -21,7 +21,55 @@
 ok
 ```
 
-## 2. Agent 接口
+## 2. CLIProxy Auth 接口
+
+Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状态可通过以下接口查询和触发登录。
+
+### `GET /api/v1/cliproxy/auth/status?provider=codex|claude_code`
+
+查询本地鉴权状态。服务端会在安全可读的情况下自动导入现有凭据：Codex 来自 `~/.codex/auth.json`，Claude Code 在 macOS 上来自 Keychain。
+
+响应示例：
+
+```json
+{
+  "provider": "codex",
+  "authenticated": true,
+  "login_required": false,
+  "source": "codex-home",
+  "supports_login": true
+}
+```
+
+未登录时：
+
+```json
+{
+  "provider": "claude_code",
+  "authenticated": false,
+  "login_required": true,
+  "message": "Auth required. Run csgclaw auth login claude-code or connect this provider in the CSGClaw UI.",
+  "supports_login": true,
+  "supports_keychain": true
+}
+```
+
+### `POST /api/v1/cliproxy/auth/login`
+
+触发 Provider 登录。Claude Code 会先尝试 macOS Keychain 导入，再进入 OAuth。
+
+请求体：
+
+```json
+{
+  "provider": "claude_code",
+  "no_browser": true
+}
+```
+
+响应同 status 接口。
+
+## 3. Agent 接口
 
 统一后的 `worker` 对象字段如下。除 PicoClaw Bot 兼容接口外，`bot / worker / agent` 在 API 和内部结构里都按这一套字段表达：
 
@@ -111,7 +159,7 @@ ok
 - 若 IM 服务可用，会自动创建对应 IM 用户，并创建 `Admin & <Worker>` 私聊
 - 校验失败通常返回 `400 Bad Request`
 
-## 3. IM 接口
+## 4. IM 接口
 
 ### `GET /api/v1/im/bootstrap`
 

@@ -9,7 +9,11 @@ import (
 type PicoClawBridge struct {
 	mu          sync.Mutex
 	subscribers map[string]map[chan PicoClawEvent]struct{}
+	pending     map[string][]PicoClawEvent
+	seen        map[string]map[string]struct{}
 }
+
+const maxPendingPicoClawEventsPerBot = 64
 
 type PicoClawEvent struct {
 	MessageID string         `json:"message_id"`
@@ -35,6 +39,8 @@ type PicoClawSendMessageRequest struct {
 func NewPicoClawBridge(string) *PicoClawBridge {
 	return &PicoClawBridge{
 		subscribers: make(map[string]map[chan PicoClawEvent]struct{}),
+		pending:     make(map[string][]PicoClawEvent),
+		seen:        make(map[string]map[string]struct{}),
 	}
 }
 
@@ -46,7 +52,30 @@ func (b *PicoClawBridge) Subscribe(botID string) (<-chan PicoClawEvent, func()) 
 		b.subscribers[botID] = make(map[chan PicoClawEvent]struct{})
 	}
 	b.subscribers[botID][ch] = struct{}{}
+	pending := append([]PicoClawEvent(nil), b.pending[botID]...)
+	delete(b.pending, botID)
 	b.mu.Unlock()
+
+	var unsent []PicoClawEvent
+	var sent []PicoClawEvent
+	for _, evt := range pending {
+		select {
+		case ch <- evt:
+			sent = append(sent, evt)
+		default:
+			unsent = append(unsent, evt)
+		}
+	}
+	if len(sent) > 0 || len(unsent) > 0 {
+		b.mu.Lock()
+		for _, evt := range sent {
+			b.markSeenLocked(botID, evt.MessageID)
+		}
+		for _, evt := range unsent {
+			b.addPendingLocked(botID, evt)
+		}
+		b.mu.Unlock()
+	}
 
 	cancel := func() {
 		b.mu.Lock()
@@ -62,39 +91,109 @@ func (b *PicoClawBridge) Subscribe(botID string) (<-chan PicoClawEvent, func()) 
 	return ch, cancel
 }
 
-func (b *PicoClawBridge) PublishMessageEvent(room Room, sender User, message Message) {
+func (b *PicoClawBridge) SubscriberCount(botID string) int {
 	b.mu.Lock()
-	targets := make(map[string][]chan PicoClawEvent, len(b.subscribers))
-	for botID, subs := range b.subscribers {
+	defer b.mu.Unlock()
+	return len(b.subscribers[botID])
+}
+
+func (b *PicoClawBridge) PublishMessageEvent(room Room, sender User, message Message) []string {
+	var missed []string
+	for _, botID := range room.Members {
 		if !shouldNotifyBot(room, message, botID) {
 			continue
 		}
-		for ch := range subs {
-			targets[botID] = append(targets[botID], ch)
+		if !b.EnqueueMessageEvent(room, sender, message, botID) {
+			missed = append(missed, botID)
 		}
+	}
+	return missed
+}
+
+func (b *PicoClawBridge) EnqueueMessageEvent(room Room, sender User, message Message, botID string) bool {
+	if !shouldNotifyBot(room, message, botID) {
+		return true
+	}
+	return b.enqueue(botID, messageEventForBot(room, sender, message, botID))
+}
+
+func (b *PicoClawBridge) enqueue(botID string, evt PicoClawEvent) bool {
+	b.mu.Lock()
+	if b.hasSeenLocked(botID, evt.MessageID) {
+		b.mu.Unlock()
+		return true
+	}
+	subs := make([]chan PicoClawEvent, 0, len(b.subscribers[botID]))
+	for ch := range b.subscribers[botID] {
+		subs = append(subs, ch)
+	}
+	if len(subs) == 0 {
+		b.addPendingLocked(botID, evt)
+		b.mu.Unlock()
+		return false
 	}
 	b.mu.Unlock()
 
-	for botID, subs := range targets {
-		evt := PicoClawEvent{
-			MessageID: message.ID,
-			RoomID:    room.ID,
-			ChatType:  chatTypeForRoom(room),
-			Sender: PicoClawSender{
-				ID:          sender.ID,
-				Username:    sender.Handle,
-				DisplayName: sender.Name,
-			},
-			Text:      message.Content,
-			Timestamp: fmt.Sprintf("%d", message.CreatedAt.UnixMilli()),
-			Mentions:  mentionsForBot(message.Mentions, botID),
+	sent := false
+	for _, ch := range subs {
+		select {
+		case ch <- evt:
+			sent = true
+		default:
 		}
-		for _, ch := range subs {
-			select {
-			case ch <- evt:
-			default:
-			}
-		}
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if sent {
+		b.markSeenLocked(botID, evt.MessageID)
+		return true
+	}
+	b.addPendingLocked(botID, evt)
+	return false
+}
+
+func (b *PicoClawBridge) addPendingLocked(botID string, evt PicoClawEvent) {
+	if b.hasSeenLocked(botID, evt.MessageID) {
+		return
+	}
+	pending := append(b.pending[botID], evt)
+	if len(pending) > maxPendingPicoClawEventsPerBot {
+		pending = pending[len(pending)-maxPendingPicoClawEventsPerBot:]
+	}
+	b.pending[botID] = pending
+}
+
+func (b *PicoClawBridge) hasSeenLocked(botID, messageID string) bool {
+	if messageID == "" {
+		return false
+	}
+	_, ok := b.seen[botID][messageID]
+	return ok
+}
+
+func (b *PicoClawBridge) markSeenLocked(botID, messageID string) {
+	if messageID == "" {
+		return
+	}
+	if b.seen[botID] == nil {
+		b.seen[botID] = make(map[string]struct{})
+	}
+	b.seen[botID][messageID] = struct{}{}
+}
+
+func messageEventForBot(room Room, sender User, message Message, botID string) PicoClawEvent {
+	return PicoClawEvent{
+		MessageID: message.ID,
+		RoomID:    room.ID,
+		ChatType:  chatTypeForRoom(room),
+		Sender: PicoClawSender{
+			ID:          sender.ID,
+			Username:    sender.Handle,
+			DisplayName: sender.Name,
+		},
+		Text:      message.Content,
+		Timestamp: fmt.Sprintf("%d", message.CreatedAt.UnixMilli()),
+		Mentions:  mentionsForBot(message.Mentions, botID),
 	}
 }
 

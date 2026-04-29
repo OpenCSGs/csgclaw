@@ -102,6 +102,16 @@ Codex 和 Claude Code Profile 通过 Web UI 写入 agent state。CSGClaw 在 `se
 
 `[bootstrap].manager_image_override` 留空时会使用代码内置的默认 manager image；只有在需要覆盖默认值时才设置它。
 
+本地鉴权由 CSGClaw 统一管理：
+
+- Codex 会优先从 `~/.codex/auth.json` 自动导入。
+- Claude Code 会在 macOS 上优先探测 Keychain，未找到时再走 OAuth。
+- 手动登录命令是 `csgclaw auth login codex` 和 `csgclaw auth login claude-code`。
+- `CSGCLAW_CLIPROXY_AUTH_DIR` 可覆盖 CLIProxy auth 目录，默认是 `~/.cli-proxy-api`。
+- `CSGCLAW_CLIPROXY_AUTO_LOGIN=0` 可关闭自动导入和探测。
+- `CSGCLAW_CLIPROXY_NO_BROWSER=1` 会打印 OAuth URL，而不是自动打开浏览器。
+- `CSGCLAW_CLIPROXY_DISABLE_KEYCHAIN=1` 可关闭 Claude Keychain 探测。
+
 ## Sandbox Provider
 
 CSGClaw 通过配置的 sandbox provider 隔离 Worker 执行环境。默认构建形态使用 `boxlite-cli`，通过外部 CLI 进程运行 BoxLite；启用 SDK 的构建形态仍默认使用 `boxlite-sdk`，对应仓库内 vendored BoxLite Go SDK。

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 )
 
@@ -186,7 +187,11 @@ func TestChatCompletionsCodexRoutesThroughEmbeddedCLIProxy(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	previous := embeddedCLIProxyProviderBaseURL
-	defer func() { embeddedCLIProxyProviderBaseURL = previous }()
+	previousAuthStatus := embeddedCLIProxyAuthStatus
+	defer func() {
+		embeddedCLIProxyProviderBaseURL = previous
+		embeddedCLIProxyAuthStatus = previousAuthStatus
+	}()
 
 	var payload map[string]any
 	var gotAuth string
@@ -206,6 +211,12 @@ func TestChatCompletionsCodexRoutesThroughEmbeddedCLIProxy(t *testing.T) {
 			t.Fatalf("provider = %q, want codex", provider)
 		}
 		return upstream.URL + "/api/provider/codex/v1", nil
+	}
+	embeddedCLIProxyAuthStatus = func(_ context.Context, provider string) (cliproxy.AuthStatus, error) {
+		if provider != agent.ProviderCodex {
+			t.Fatalf("auth provider = %q, want codex", provider)
+		}
+		return cliproxy.AuthStatus{Provider: "codex", Authenticated: true}, nil
 	}
 
 	agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
@@ -244,6 +255,49 @@ func TestChatCompletionsCodexRoutesThroughEmbeddedCLIProxy(t *testing.T) {
 	}
 	if payload["store"] != false {
 		t.Fatalf("store = %#v, want false", payload["store"])
+	}
+}
+
+func TestChatCompletionsCodexRequiresAuth(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	previousAuthStatus := embeddedCLIProxyAuthStatus
+	defer func() { embeddedCLIProxyAuthStatus = previousAuthStatus }()
+	embeddedCLIProxyAuthStatus = func(_ context.Context, provider string) (cliproxy.AuthStatus, error) {
+		if provider != agent.ProviderCodex {
+			t.Fatalf("auth provider = %q, want codex", provider)
+		}
+		return cliproxy.AuthStatus{
+			Provider:      "codex",
+			LoginRequired: true,
+			Message:       "Auth required. Run csgclaw auth login codex.",
+		}, nil
+	}
+
+	agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
+		{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+			Role: agent.RoleManager,
+			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
+				Provider:        agent.ProviderCodex,
+				ModelID:         "gpt-5.4",
+				ReasoningEffort: "medium",
+				ProfileComplete: true,
+			},
+			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	})
+
+	svc := NewService(config.ModelConfig{}, agentSvc)
+	_, _, _, err := svc.ChatCompletions(context.Background(), agent.ManagerUserID, []byte(`{"messages":[]}`))
+	httpErr, ok := err.(*HTTPError)
+	if !ok {
+		t.Fatalf("error = %T %v, want *HTTPError", err, err)
+	}
+	if httpErr.Status != http.StatusConflict || httpErr.Code != "auth_required" || httpErr.Provider != agent.ProviderCodex {
+		t.Fatalf("HTTPError = %+v, want auth_required conflict", httpErr)
 	}
 }
 

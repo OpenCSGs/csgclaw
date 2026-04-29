@@ -77,6 +77,7 @@ csgclaw [global-flags] <command> [args]
 - `serve`
 - `stop`
 - `agent`
+- `auth`
 - `user`
 - `bot`
 - `room`
@@ -172,6 +173,39 @@ csgclaw stop [flags]
 
 - 从 PID 文件读取进程号并发送 `SIGTERM`。
 - 如果进程已经不存在，会删除失效的 PID 文件并返回对应状态。
+
+### `csgclaw auth`
+
+管理嵌入式 CLIProxyAPI 使用的本地 Codex 和 Claude Code 鉴权。
+
+用法：
+
+```bash
+csgclaw auth login <provider> [flags]
+```
+
+Provider：
+
+- `codex`
+- `claude-code`
+
+参数：
+
+- `--no-browser`：打印 OAuth URL，而不是自动打开浏览器。
+
+行为说明：
+
+- `codex` 会优先复用 `~/.codex/auth.json`，没有可用 token 时再启动 OAuth。
+- `claude-code` 会在 macOS 上优先探测 Keychain，没有可用 token 时再启动 OAuth。
+- 鉴权文件会写入 CLIProxy auth 目录，默认是 `~/.cli-proxy-api`。
+- 不注册 `csgclaw codex-login` 或 `csgclaw claude-login` 这类顶层别名。
+
+示例：
+
+```bash
+csgclaw auth login codex
+csgclaw auth login claude-code --no-browser
+```
 
 ### `csgclaw agent`
 

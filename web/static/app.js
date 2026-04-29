@@ -14,6 +14,7 @@ const WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY = "csgclaw.im.workspaceGroupsCollap
 const MESSAGE_LIST_BOTTOM_THRESHOLD = 24;
 const AGENT_STATUS_REFRESH_INTERVAL_MS = 2000;
 const PROVIDERS = ["csghub_lite", "codex", "claude_code", "api"];
+const CLIPROXY_AUTH_PROVIDERS = new Set(["codex", "claude_code"]);
 const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 const WORKSPACE_TAB_MESSAGES = "messages";
 const WORKSPACE_TAB_AGENTS = "agents";
@@ -127,6 +128,11 @@ const messages = {
     noChannels: "还没有房间。",
     noDirectMessages: "还没有私信。",
     modelLoadFailed: "模型加载失败",
+    authConnected: "已连接",
+    authMissing: "需要登录",
+    authConnect: "连接",
+    authConnecting: "连接中...",
+    authRequired: "请先连接当前 Provider 后再发送消息。",
     detectionResults: "自动检测结果",
     createRoomTitle: "创建房间",
     createRoomSubtitle: "为一个新主题建立房间，并预先邀请成员。",
@@ -277,6 +283,11 @@ const messages = {
     noChannels: "No rooms yet.",
     noDirectMessages: "No direct messages yet.",
     modelLoadFailed: "Failed to load models",
+    authConnected: "Connected",
+    authMissing: "Login required",
+    authConnect: "Connect",
+    authConnecting: "Connecting...",
+    authRequired: "Connect the current provider before sending messages.",
     detectionResults: "Auto-detection",
     createRoomTitle: "New Room",
     createRoomSubtitle: "Create a new room and invite members in advance.",
@@ -742,6 +753,8 @@ function App() {
   const [profileError, setProfileError] = useState("");
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileModelBusy, setProfileModelBusy] = useState(false);
+  const [cliproxyAuthStatuses, setCLIProxyAuthStatuses] = useState({});
+  const [cliproxyAuthBusy, setCLIProxyAuthBusy] = useState("");
   const [agents, setAgents] = useState([]);
   const [agentsLoaded, setAgentsLoaded] = useState(false);
   const [agentsError, setAgentsError] = useState("");
@@ -767,6 +780,7 @@ function App() {
   const profilePreviewRef = useRef(null);
   const agentRefreshTimerRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
+  const autoScrollConversationRef = useRef(activeConversationId);
 
   useEffect(() => {
     refreshBootstrap();
@@ -1101,6 +1115,22 @@ function App() {
   }, [managerProfileIncomplete, profileDraft?.provider, profileDraft?.base_url, profileDraft?.api_key, profileDraft?.headersText]);
 
   useEffect(() => {
+    refreshCLIProxyAuthStatus(managerProfile?.provider);
+  }, [managerProfile?.provider]);
+
+  useEffect(() => {
+    refreshCLIProxyAuthStatus(profileDraft?.provider);
+  }, [profileDraft?.provider]);
+
+  useEffect(() => {
+    refreshCLIProxyAuthStatus(agentDraft?.provider);
+  }, [agentDraft?.provider]);
+
+  useEffect(() => {
+    refreshCLIProxyAuthStatus(agentPageDraft?.provider);
+  }, [agentPageDraft?.provider]);
+
+  useEffect(() => {
     const el = messageListRef.current;
     if (!el) {
       return;
@@ -1114,17 +1144,26 @@ function App() {
     return () => el.removeEventListener("scroll", updateAutoScrollState);
   }, [activeConversationId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (activePane.type !== "conversation") {
+      return;
+    }
     const el = messageListRef.current;
     if (!el) {
       return;
     }
-    shouldAutoScrollRef.current = true;
+    autoScrollConversationRef.current = activeConversationId;
     el.scrollTop = el.scrollHeight;
-  }, [activeConversationId]);
+    shouldAutoScrollRef.current = true;
+  }, [activePane.type, activeConversationId]);
 
   useEffect(() => {
     const el = messageListRef.current;
+    if (autoScrollConversationRef.current !== activeConversationId) {
+      autoScrollConversationRef.current = activeConversationId;
+      shouldAutoScrollRef.current = false;
+      return;
+    }
     if (!el || !shouldAutoScrollRef.current) {
       return;
     }
@@ -1187,6 +1226,11 @@ function App() {
   async function sendMessage() {
     if (managerProfileIncomplete) {
       setComposerError(t("profileIncomplete"));
+      return;
+    }
+    const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
+    if (providerNeedsAuth(managerProvider) && cliproxyAuthStatuses[managerProvider]?.authenticated === false) {
+      setComposerError(t("authRequired"));
       return;
     }
     if (!data || !activeConversation || !draftText.trim()) {
@@ -1498,6 +1542,72 @@ function App() {
       setProfileDraft(profileToDraft(profile));
     } catch (_) {
       // The manager may not exist during the first bootstrap milliseconds.
+    }
+  }
+
+  async function refreshCLIProxyAuthStatus(provider) {
+    const normalized = normalizeAuthProviderName(provider);
+    if (!providerNeedsAuth(normalized)) {
+      return;
+    }
+    try {
+      const resp = await fetch(`api/v1/cliproxy/auth/status?provider=${encodeURIComponent(normalized)}`);
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim() || t("authMissing"));
+      }
+      const status = await resp.json();
+      setCLIProxyAuthStatuses((current) => ({ ...current, [normalized]: status }));
+      setComposerError("");
+    } catch (err) {
+      setCLIProxyAuthStatuses((current) => ({
+        ...current,
+        [normalized]: {
+          provider: normalized,
+          authenticated: false,
+          login_required: true,
+          message: err.message || t("authMissing"),
+        },
+      }));
+    }
+  }
+
+  async function loginCLIProxyProvider(provider) {
+    const normalized = normalizeAuthProviderName(provider);
+    if (!providerNeedsAuth(normalized) || cliproxyAuthBusy) {
+      return;
+    }
+    setCLIProxyAuthBusy(normalized);
+    setCLIProxyAuthStatuses((current) => ({
+      ...current,
+      [normalized]: {
+        ...(current[normalized] || {}),
+        provider: normalized,
+        message: t("authConnecting"),
+      },
+    }));
+    try {
+      const resp = await fetch("api/v1/cliproxy/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: normalized }),
+      });
+      if (!resp.ok) {
+        throw new Error((await resp.text()).trim() || t("authMissing"));
+      }
+      const status = await resp.json();
+      setCLIProxyAuthStatuses((current) => ({ ...current, [normalized]: status }));
+    } catch (err) {
+      setCLIProxyAuthStatuses((current) => ({
+        ...current,
+        [normalized]: {
+          provider: normalized,
+          authenticated: false,
+          login_required: true,
+          message: err.message || t("authMissing"),
+        },
+      }));
+    } finally {
+      setCLIProxyAuthBusy("");
     }
   }
 
@@ -2220,8 +2330,11 @@ function App() {
                   modelBusy=${agentPageModelBusy}
                   saving=${agentPageBusy}
                   saveError=${agentPageError}
+                  authStatuses=${cliproxyAuthStatuses}
+                  authBusyProvider=${cliproxyAuthBusy}
                   onDraftChange=${setAgentPageDraft}
                   onSave=${saveAgentPage}
+                  onProviderLogin=${loginCLIProxyProvider}
                   onStart=${(item) => runAgentAction(item, "start")}
                   onStop=${(item) => runAgentAction(item, "stop")}
                   onRecreate=${(item) => runAgentAction(item, "recreate")}
@@ -2412,6 +2525,15 @@ function App() {
                           `)}
                         </div>
                       `
+                    : null}
+                  ${managerProfile && providerNeedsAuth(managerProfile.provider) && cliproxyAuthStatuses[normalizeAuthProviderName(managerProfile.provider)]?.authenticated === false
+                    ? html`<${CLIProxyAuthControl}
+                        provider=${managerProfile.provider}
+                        t=${t}
+                        status=${cliproxyAuthStatuses[normalizeAuthProviderName(managerProfile.provider)]}
+                        busy=${cliproxyAuthBusy === normalizeAuthProviderName(managerProfile.provider)}
+                        onLogin=${loginCLIProxyProvider}
+                      />`
                     : null}
                   <div className="composer-box">
                     <div className="composer-input-wrap">
@@ -2642,6 +2764,13 @@ function App() {
                         <span>${t("profileFastMode")}</span>
                       </label>
                     </div>
+                    <${CLIProxyAuthControl}
+                      provider=${agentDraft.provider}
+                      t=${t}
+                      status=${cliproxyAuthStatuses[normalizeAuthProviderName(agentDraft.provider)]}
+                      busy=${cliproxyAuthBusy === normalizeAuthProviderName(agentDraft.provider)}
+                      onLogin=${loginCLIProxyProvider}
+                    />
                   </section>
                   ${agentDraft.provider === "api"
                     ? html`
@@ -2767,6 +2896,13 @@ function App() {
                         <span>${t("profileFastMode")}</span>
                       </label>
                     </div>
+                    <${CLIProxyAuthControl}
+                      provider=${profileDraft.provider}
+                      t=${t}
+                      status=${cliproxyAuthStatuses[normalizeAuthProviderName(profileDraft.provider)]}
+                      busy=${cliproxyAuthBusy === normalizeAuthProviderName(profileDraft.provider)}
+                      onLogin=${loginCLIProxyProvider}
+                    />
                   </section>
                   ${profileDraft.provider === "api"
                     ? html`
@@ -3076,7 +3212,7 @@ function WorkspaceConversationRow({ conversation, active, currentUserID, usersBy
   `;
 }
 
-function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, modelBusy, saving, saveError, onDraftChange, onSave, onStart, onStop, onRecreate, onDelete, onInvite, onOpenDM }) {
+function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, modelBusy, saving, saveError, authStatuses, authBusyProvider, onDraftChange, onSave, onProviderLogin, onStart, onStop, onRecreate, onDelete, onInvite, onOpenDM }) {
   const isManager = item.role === "manager" || item.id === "u-manager";
   const running = isAgentRunning(item);
   const incomplete = isAgentIncomplete(item);
@@ -3105,9 +3241,7 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
         ${activeRoom && !isManager
           ? html`<button className="preview-action-button" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onInvite(item)}>${t("inviteToRoom")}</button>`
           : null}
-        ${!isManager
-          ? html`<button className="preview-action-button" onClick=${() => onOpenDM(item)}>${t("openDM")}</button>`
-          : null}
+        <button className="preview-action-button" onClick=${() => onOpenDM(item)}>${t("openDM")}</button>
         ${!isManager
           ? html`<button className="preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onDelete(item)}>${t("agentDelete")}</button>`
           : null}
@@ -3194,6 +3328,13 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
                     <span>${t("profileFastMode")}</span>
                   </label>
                 </div>
+                <${CLIProxyAuthControl}
+                  provider=${draft.provider}
+                  t=${t}
+                  status=${authStatuses?.[normalizeAuthProviderName(draft.provider)]}
+                  busy=${authBusyProvider === normalizeAuthProviderName(draft.provider)}
+                  onLogin=${onProviderLogin}
+                />
               </section>
 
               ${draft.provider === "api"
@@ -3880,6 +4021,42 @@ function parseJSONMap(text) {
     throw new Error("Expected a JSON object");
   }
   return parsed;
+}
+
+function normalizeAuthProviderName(provider) {
+  const value = String(provider ?? "").trim().toLowerCase();
+  if (value === "claude" || value === "claude-code") {
+    return "claude_code";
+  }
+  return value;
+}
+
+function providerNeedsAuth(provider) {
+  return CLIPROXY_AUTH_PROVIDERS.has(normalizeAuthProviderName(provider));
+}
+
+function CLIProxyAuthControl({ provider, t, status, busy, onLogin }) {
+  const normalized = normalizeAuthProviderName(provider);
+  if (!providerNeedsAuth(normalized)) {
+    return null;
+  }
+  const connected = Boolean(status?.authenticated);
+  const message = connected
+    ? `${formatProviderLabel(normalized)} ${t("authConnected")}`
+    : (status?.message || `${formatProviderLabel(normalized)} ${t("authMissing")}`);
+  return html`
+    <div className=${`auth-status-row ${connected ? "connected" : "missing"}`}>
+      <span className="auth-status-dot" aria-hidden="true"></span>
+      <span className="auth-status-message">${message}</span>
+      ${connected
+        ? null
+        : html`
+            <button type="button" className="secondary-button compact" disabled=${busy || !onLogin} onClick=${() => onLogin?.(normalized)}>
+              ${busy ? t("authConnecting") : `${t("authConnect")} ${formatProviderLabel(normalized)}`}
+            </button>
+          `}
+    </div>
+  `;
 }
 
 function formatProviderLabel(provider) {

@@ -2394,6 +2394,91 @@ func TestHandlePicoClawSendMessageRequiresIMService(t *testing.T) {
 	}
 }
 
+func TestReplayRecentPicoClawMessagesReplaysUnansweredHumanMessage(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-manager", Name: "manager", Handle: "manager"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-1",
+				IsDirect: true,
+				Members:  []string{"u-admin", "u-manager"},
+				Messages: []im.Message{
+					{
+						ID:        "msg-missed",
+						SenderID:  "u-admin",
+						Content:   "please reply",
+						CreatedAt: now,
+					},
+				},
+			},
+		},
+	})
+	bridge := im.NewPicoClawBridge("")
+	events, cancel := bridge.Subscribe("u-manager")
+	defer cancel()
+
+	srv := &Handler{im: imSvc, picoclaw: bridge}
+	srv.replayRecentPicoClawMessages("u-manager")
+
+	select {
+	case evt := <-events:
+		if evt.MessageID != "msg-missed" || evt.Text != "please reply" {
+			t.Fatalf("replayed event = %+v, want msg-missed please reply", evt)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("replayRecentPicoClawMessages() timed out waiting for event")
+	}
+}
+
+func TestReplayRecentPicoClawMessagesSkipsAnsweredMessage(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-manager", Name: "manager", Handle: "manager"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-1",
+				IsDirect: true,
+				Members:  []string{"u-admin", "u-manager"},
+				Messages: []im.Message{
+					{
+						ID:        "msg-answered",
+						SenderID:  "u-admin",
+						Content:   "please reply",
+						CreatedAt: now,
+					},
+					{
+						ID:        "msg-reply",
+						SenderID:  "u-manager",
+						Content:   "done",
+						CreatedAt: now.Add(time.Second),
+					},
+				},
+			},
+		},
+	})
+	bridge := im.NewPicoClawBridge("")
+	events, cancel := bridge.Subscribe("u-manager")
+	defer cancel()
+
+	srv := &Handler{im: imSvc, picoclaw: bridge}
+	srv.replayRecentPicoClawMessages("u-manager")
+
+	select {
+	case evt := <-events:
+		t.Fatalf("replayed event = %+v, want no replay for answered message", evt)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 func TestHandlePicoClawModelsReturnsBridgeCatalog(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "agents.json")

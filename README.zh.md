@@ -39,6 +39,7 @@ csgclaw serve
 
 执行后 CLI 会打印访问地址（例如 `http://127.0.0.1:18080/`），在浏览器中打开即可进入 IM 工作区。
 首次启动时，CSGClaw 会从 CSGHub Lite、Codex 或 Claude Code 自动检测 Manager 的 agent profile。如果检测失败，Web UI 仍然可用，并会打开 Manager profile 设置面板，让你在那里选择 provider 和模型。
+对于 Codex 和 Claude Code，CSGClaw 会尽量复用本地 CLI 鉴权：Codex 来自 `~/.codex/auth.json`，Claude Code 来自 macOS Keychain；需要手动 OAuth 时可运行 `csgclaw auth login codex|claude-code`。
 
 ## 配置
 

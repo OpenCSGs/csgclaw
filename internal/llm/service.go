@@ -22,12 +22,18 @@ type Service struct {
 }
 
 type HTTPError struct {
-	Status  int
-	Message string
+	Status   int
+	Message  string
+	Code     string
+	Provider string
 }
 
 var embeddedCLIProxyProviderBaseURL = func(ctx context.Context, provider string) (string, error) {
 	return cliproxy.Default().ProviderBaseURL(ctx, provider)
+}
+
+var embeddedCLIProxyAuthStatus = func(ctx context.Context, provider string) (cliproxy.AuthStatus, error) {
+	return cliproxy.Default().AuthStatus(ctx, provider)
 }
 
 func (e *HTTPError) Error() string {
@@ -198,6 +204,22 @@ func applyProviderPayloadConstraints(payload map[string]any, profile agent.Agent
 func (s *Service) agentProfileTarget(ctx context.Context, profile agent.AgentProfile) (string, string, error) {
 	switch profile.Provider {
 	case agent.ProviderCodex, agent.ProviderClaudeCode:
+		status, err := embeddedCLIProxyAuthStatus(ctx, profile.Provider)
+		if err != nil {
+			return "", "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("embedded cliproxy auth unavailable: %v", err)}
+		}
+		if !status.Authenticated {
+			message := strings.TrimSpace(status.Message)
+			if message == "" {
+				message = fmt.Sprintf("%s auth is required. Connect this provider in the CSGClaw UI.", profile.Provider)
+			}
+			return "", "", &HTTPError{
+				Status:   http.StatusConflict,
+				Code:     "auth_required",
+				Provider: profile.Provider,
+				Message:  message,
+			}
+		}
 		baseURL, err := embeddedCLIProxyProviderBaseURL(ctx, profile.Provider)
 		if err != nil {
 			return "", "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("embedded cliproxy unavailable: %v", err)}

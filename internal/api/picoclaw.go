@@ -1,14 +1,19 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"csgclaw/internal/im"
 )
+
+const picoClawReplayWindow = 30 * time.Minute
 
 func (h *Handler) registerPicoClawRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/bots/", h.handlePicoClawBotRoutes)
@@ -26,7 +31,8 @@ func (h *Handler) PublishPicoClawEvent(evt im.Event) {
 	if !ok {
 		return
 	}
-	h.picoclaw.PublishMessageEvent(room, *evt.Sender, *evt.Message)
+	missed := h.picoclaw.PublishMessageEvent(room, *evt.Sender, *evt.Message)
+	h.reconnectMissedPicoClawAgents(evt.Sender.ID, missed)
 }
 
 func (h *Handler) handlePicoClawBotRoutes(w http.ResponseWriter, r *http.Request) {
@@ -74,6 +80,7 @@ func (h *Handler) handlePicoClawEvents(w http.ResponseWriter, r *http.Request, b
 
 	_, _ = io.WriteString(w, ": connected\n\n")
 	flusher.Flush()
+	h.replayRecentPicoClawMessages(botID)
 
 	for {
 		select {
@@ -88,6 +95,79 @@ func (h *Handler) handlePicoClawEvents(w http.ResponseWriter, r *http.Request, b
 			flusher.Flush()
 		}
 	}
+}
+
+func (h *Handler) replayRecentPicoClawMessages(botID string) {
+	if h == nil || h.im == nil || h.picoclaw == nil {
+		return
+	}
+	cutoff := time.Now().UTC().Add(-picoClawReplayWindow)
+	for _, room := range h.im.ListRooms() {
+		for idx, message := range room.Messages {
+			if !message.CreatedAt.IsZero() && message.CreatedAt.Before(cutoff) {
+				continue
+			}
+			if h.isAgentSender(message.SenderID) {
+				continue
+			}
+			if hasLaterMessageFrom(room.Messages[idx+1:], botID) {
+				continue
+			}
+			sender, ok := h.im.User(message.SenderID)
+			if !ok {
+				continue
+			}
+			h.picoclaw.EnqueueMessageEvent(room, sender, message, botID)
+		}
+	}
+}
+
+func (h *Handler) reconnectMissedPicoClawAgents(senderID string, botIDs []string) {
+	if h == nil || h.svc == nil || h.isAgentSender(senderID) || len(botIDs) == 0 {
+		return
+	}
+	seen := make(map[string]struct{}, len(botIDs))
+	for _, botID := range botIDs {
+		botID = strings.TrimSpace(botID)
+		if botID == "" {
+			continue
+		}
+		if _, ok := seen[botID]; ok {
+			continue
+		}
+		seen[botID] = struct{}{}
+		if _, ok := h.svc.Agent(botID); !ok {
+			continue
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			if _, err := h.svc.Recreate(ctx, botID); err != nil {
+				slog.Warn("picoclaw agent reconnect failed", "agent_id", botID, "error", err)
+			}
+		}()
+	}
+}
+
+func (h *Handler) isAgentSender(senderID string) bool {
+	if h == nil || h.svc == nil {
+		return false
+	}
+	_, ok := h.svc.Agent(senderID)
+	return ok
+}
+
+func hasLaterMessageFrom(messages []im.Message, senderID string) bool {
+	senderID = strings.TrimSpace(senderID)
+	if senderID == "" {
+		return false
+	}
+	for _, message := range messages {
+		if message.SenderID == senderID {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Handler) handlePicoClawSendMessage(w http.ResponseWriter, r *http.Request, botID string) {

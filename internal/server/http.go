@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -26,6 +27,7 @@ type Options struct {
 	AccessToken string
 	NoAuth      bool
 	Context     context.Context
+	OnReady     func()
 }
 
 func Run(opts Options) error {
@@ -69,7 +71,15 @@ func Run(opts Options) error {
 		_ = httpServer.Shutdown(shutdownCtx)
 	}()
 
-	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	listener, err := net.Listen("tcp", opts.ListenAddr)
+	if err != nil {
+		return err
+	}
+	if opts.OnReady != nil {
+		go opts.OnReady()
+	}
+
+	if err := httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
 		errCh <- err
 	}
 

@@ -44,6 +44,16 @@ func (h *Handler) handlePicoClawChatCompletions(w http.ResponseWriter, r *http.R
 
 func writeLLMError(w http.ResponseWriter, err error) {
 	if httpErr, ok := err.(*llm.HTTPError); ok {
+		if httpErr.Code != "" {
+			writeJSON(w, httpErr.Status, map[string]any{
+				"error": map[string]any{
+					"code":     httpErr.Code,
+					"message":  httpErr.Message,
+					"provider": httpErr.Provider,
+				},
+			})
+			return
+		}
 		http.Error(w, httpErr.Message, httpErr.Status)
 		return
 	}

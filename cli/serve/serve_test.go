@@ -144,9 +144,6 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	}
 	RunServer = func(opts server.Options) error {
 		called = true
-		if !bootstrapped {
-			return fmt.Errorf("RunServer called before EnsureBootstrapManager")
-		}
 		if opts.Context != ctx {
 			return fmt.Errorf("Context = %v, want %v", opts.Context, ctx)
 		}
@@ -156,6 +153,10 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		if !opts.NoAuth {
 			return fmt.Errorf("NoAuth = false, want true")
 		}
+		if opts.OnReady == nil {
+			return fmt.Errorf("OnReady is nil")
+		}
+		go opts.OnReady()
 		return nil
 	}
 	releasedStart := false
@@ -297,6 +298,36 @@ func TestConfigureServeLoggerSetsDebugLevel(t *testing.T) {
 
 	if !slog.Default().Enabled(context.Background(), slog.LevelDebug) {
 		t.Fatal("default logger debug level is disabled, want enabled")
+	}
+}
+
+func TestServeForegroundStartsConfiguredAgentsWhenBootstrapFails(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+
+	started := make(chan struct{})
+	EnsureBootstrapManager = func(context.Context, *agent.Service, bool) error {
+		return fmt.Errorf("runtime lock")
+	}
+	StartConfiguredAgents = func(context.Context, *agent.Service) error {
+		close(started)
+		return nil
+	}
+	RunServer = func(opts server.Options) error {
+		if opts.OnReady == nil {
+			return fmt.Errorf("OnReady is nil")
+		}
+		opts.OnReady()
+		return nil
+	}
+
+	if err := serveForeground(context.Background(), testContext(), config.Config{Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"}}, "json"); err != nil {
+		t.Fatalf("serveForeground() error = %v", err)
+	}
+	select {
+	case <-started:
+	default:
+		t.Fatal("StartConfiguredAgents was not called after bootstrap failure")
 	}
 }
 

@@ -88,3 +88,36 @@ func TestPublishMessageEventUsesGroupChatTypeForTwoMemberGroup(t *testing.T) {
 		t.Fatal("PublishMessageEvent() timed out waiting for event")
 	}
 }
+
+func TestPublishMessageEventQueuesUntilBotSubscribes(t *testing.T) {
+	bridge := NewPicoClawBridge("")
+	room := Room{
+		ID:       "room-direct",
+		IsDirect: true,
+		Members:  []string{"u-admin", "u-bot"},
+	}
+	sender := User{ID: "u-admin", Name: "Admin", Handle: "admin"}
+	message := Message{
+		ID:        "msg-queued",
+		SenderID:  "u-admin",
+		Content:   "queued hello",
+		CreatedAt: time.Now().UTC(),
+	}
+
+	missed := bridge.PublishMessageEvent(room, sender, message)
+	if len(missed) != 1 || missed[0] != "u-bot" {
+		t.Fatalf("PublishMessageEvent() missed = %v, want [u-bot]", missed)
+	}
+
+	events, cancel := bridge.Subscribe("u-bot")
+	defer cancel()
+
+	select {
+	case evt := <-events:
+		if evt.MessageID != "msg-queued" || evt.Text != "queued hello" {
+			t.Fatalf("queued event = %+v, want msg-queued queued hello", evt)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Subscribe() timed out waiting for queued event")
+	}
+}

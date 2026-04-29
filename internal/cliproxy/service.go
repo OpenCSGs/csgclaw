@@ -77,6 +77,7 @@ func (s *Service) EnsureStarted(ctx context.Context) error {
 		s.mu.Unlock()
 		return err
 	}
+	importExistingAuth(ctx, cfg.AuthDir)
 
 	svc, err := cliproxysdk.NewBuilder().
 		WithConfig(cfg).

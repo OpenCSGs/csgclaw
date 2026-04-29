@@ -379,14 +379,6 @@ func startServer(ctx context.Context, cfg config.Config, svc *agent.Service, bot
 		defer cancel()
 		_ = ShutdownCLIProxy(shutdownCtx)
 	}()
-	if err := EnsureBootstrapManager(ctx, svc, false); err != nil {
-		return err
-	}
-	go func() {
-		if err := StartConfiguredAgents(ctx, svc); err != nil {
-			slog.Warn("some configured agents failed to start", "error", err)
-		}
-	}()
 	if botSvc != nil {
 		botSvc.SetDependencies(svc, imSvc, feishuSvc)
 	}
@@ -406,7 +398,31 @@ func startServer(ctx context.Context, cfg config.Config, svc *agent.Service, bot
 		AccessToken: cfg.Server.AccessToken,
 		NoAuth:      cfg.Server.NoAuth,
 		Context:     ctx,
+		OnReady: func() {
+			recreateManager := shouldRecreateBootstrapManagerOnServeStart(svc)
+			if recreateManager {
+				if _, err := svc.Recreate(ctx, agent.ManagerUserID); err != nil {
+					slog.Warn("bootstrap manager failed to reconnect", "error", err)
+				}
+			} else if err := EnsureBootstrapManager(ctx, svc, false); err != nil {
+				slog.Warn("bootstrap manager failed to start", "error", err)
+			}
+			if err := StartConfiguredAgents(ctx, svc); err != nil {
+				slog.Warn("some configured agents failed to start", "error", err)
+			}
+		},
 	})
+}
+
+func shouldRecreateBootstrapManagerOnServeStart(svc *agent.Service) bool {
+	if svc == nil {
+		return false
+	}
+	manager, ok := svc.Agent(agent.ManagerUserID)
+	if !ok {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(manager.Status), "running")
 }
 
 func preflightDefaultModelProvider(ctx context.Context, cfg config.Config) error {

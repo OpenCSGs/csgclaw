@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	agentcmd "csgclaw/cli/agent"
+	authcmd "csgclaw/cli/auth"
 	"csgclaw/cli/bot"
 	"csgclaw/cli/command"
 	"csgclaw/cli/member"
@@ -72,6 +73,7 @@ func (a *App) registerDefaultCommands() {
 		servecmd.NewServeCmd(),
 		servecmd.NewStopCmd(),
 		agentcmd.NewCmd(),
+		authcmd.NewCmd(),
 		usercmd.NewCmd(),
 		bot.NewCmd(),
 		room.NewCmd(),

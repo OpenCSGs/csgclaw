@@ -102,6 +102,16 @@ Codex and Claude Code profiles are configured in agent state through the Web UI.
 
 Leave `[bootstrap].manager_image_override` empty to use the built-in default manager image. Set it only when you need to override that default.
 
+Auth is also managed locally:
+
+- Codex auth is imported from `~/.codex/auth.json` when available.
+- Claude Code auth is probed from macOS Keychain when available, then falls back to OAuth.
+- Manual login commands are `csgclaw auth login codex` and `csgclaw auth login claude-code`.
+- `CSGCLAW_CLIPROXY_AUTH_DIR` overrides the CLIProxy auth directory; the default is `~/.cli-proxy-api`.
+- `CSGCLAW_CLIPROXY_AUTO_LOGIN=0` disables automatic import/probing.
+- `CSGCLAW_CLIPROXY_NO_BROWSER=1` prints OAuth URLs instead of opening a browser.
+- `CSGCLAW_CLIPROXY_DISABLE_KEYCHAIN=1` disables Claude Keychain probing.
+
 ## Sandbox Providers
 
 CSGClaw runs Workers through the configured sandbox provider. The default build shape uses `boxlite-cli`, which runs BoxLite through the external CLI process. SDK-enabled builds still default to `boxlite-sdk`, which uses the vendored BoxLite Go SDK.

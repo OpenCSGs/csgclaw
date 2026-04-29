@@ -1698,6 +1698,7 @@ func TestUsageIncludesTopLevelCommandIndex(t *testing.T) {
 	for _, want := range []string{
 		"Available Commands:",
 		"agent    Manage agents",
+		"auth     Manage local provider authentication.",
 		"bot      Manage bots",
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
@@ -1726,6 +1727,7 @@ func TestRootHelpIncludesAvailableCommands(t *testing.T) {
 	for _, want := range []string{
 		"Available Commands:",
 		"agent    Manage agents",
+		"auth     Manage local provider authentication.",
 		"bot      Manage bots",
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
@@ -1733,6 +1735,21 @@ func TestRootHelpIncludesAvailableCommands(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("help = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestExecuteDoesNotRegisterTopLevelAuthAliases(t *testing.T) {
+	for _, args := range [][]string{{"codex-login"}, {"claude-login"}} {
+		var stderr bytes.Buffer
+		app := &App{
+			stdout:     &bytes.Buffer{},
+			stderr:     &stderr,
+			httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) { return nil, nil }),
+		}
+		err := app.Execute(context.Background(), args)
+		if err == nil || !strings.Contains(err.Error(), "unknown command") {
+			t.Fatalf("Execute(%v) error = %v, want unknown command", args, err)
 		}
 	}
 }

@@ -22,11 +22,11 @@ func (s *Service) createGatewayBox(ctx context.Context, rt sandbox.Runtime, imag
 	if err != nil {
 		return nil, sandbox.Info{}, err
 	}
-	box, err := rt.Create(ctx, spec)
+	box, err := s.createBox(ctx, rt, spec)
 	if err != nil {
 		return nil, sandbox.Info{}, fmt.Errorf("create gateway box: %w", err)
 	}
-	info, err := box.Info(ctx)
+	info, err := s.boxInfo(ctx, box)
 	if err != nil {
 		_ = s.closeBox(box)
 		return nil, sandbox.Info{}, fmt.Errorf("read gateway box info: %w", err)
@@ -41,7 +41,17 @@ func (s *Service) forceRemoveBox(ctx context.Context, rt sandbox.Runtime, idOrNa
 	if rt == nil {
 		return fmt.Errorf("invalid sandbox runtime")
 	}
-	return rt.Remove(ctx, idOrName, sandbox.RemoveOptions{Force: true})
+	var err error
+	for attempt := 0; attempt < sandboxRuntimeLockRetryAttempts; attempt++ {
+		err = rt.Remove(ctx, idOrName, sandbox.RemoveOptions{Force: true})
+		if err == nil || sandbox.IsNotFound(err) || !isSandboxRuntimeLockError(err) || attempt == sandboxRuntimeLockRetryAttempts-1 {
+			return err
+		}
+		if !shouldRetrySandboxRuntimeLock(ctx, err, attempt) {
+			return err
+		}
+	}
+	return err
 }
 
 func (s *Service) gatewayCreateSpec(image, name, botID string, profile AgentProfile) (sandbox.CreateSpec, error) {
