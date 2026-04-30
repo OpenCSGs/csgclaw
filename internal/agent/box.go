@@ -53,7 +53,10 @@ func (s *Service) gatewayCreateSpec(image, name, botID string, profile AgentProf
 	modelID := profile.ModelID
 	managerBaseURL := resolveManagerBaseURL(s.server)
 	llmBaseURL := llmBridgeBaseURL(managerBaseURL, botID)
-	hostConfigRoot, err := ensureAgentPicoClawConfig(name, botID, s.server, config.ModelConfig{ModelID: modelID})
+	if _, err := ensureAgentPicoClawConfig(name, botID, s.server, config.ModelConfig{ModelID: modelID}); err != nil {
+		return sandbox.CreateSpec{}, err
+	}
+	hostWorkspaceRoot, err := ensureAgentWorkspace(name, workspaceTemplateForAgent(name, botID))
 	if err != nil {
 		return sandbox.CreateSpec{}, err
 	}
@@ -70,18 +73,11 @@ func (s *Service) gatewayCreateSpec(image, name, botID string, profile AgentProf
 		Cmd: []string{
 			"/bin/sh",
 			"-c",
-			"/usr/local/bin/picoclaw gateway -d 1>" + boxGatewayLogPath + " 2>/dev/null",
+			gatewayRunCommand(),
 		},
 	}
 
-	if _, err := ensureAgentWorkspace(name, workspaceTemplateForAgent(name, botID)); err != nil {
-		return sandbox.CreateSpec{}, err
-	}
-	projectsRoot, err := ensureAgentProjectsRoot()
-	if err != nil {
-		return sandbox.CreateSpec{}, err
-	}
-	for _, mount := range gatewayVolumeMounts(hostConfigRoot, projectsRoot) {
+	for _, mount := range gatewayVolumeMounts(hostWorkspaceRoot) {
 		spec.Mounts = append(spec.Mounts, sandbox.Mount{
 			HostPath:  mount.hostPath,
 			GuestPath: mount.guestPath,
@@ -117,17 +113,26 @@ type gatewayVolumeMount struct {
 	guestPath string
 }
 
-func gatewayVolumeMounts(hostConfigRoot, projectsRoot string) []gatewayVolumeMount {
+func gatewayVolumeMounts(hostWorkspaceRoot string) []gatewayVolumeMount {
 	return []gatewayVolumeMount{
 		{
-			hostPath:  hostConfigRoot,
-			guestPath: boxPicoClawDir,
-		},
-		{
-			hostPath:  projectsRoot,
-			guestPath: boxProjectsDir,
+			hostPath:  hostWorkspaceRoot,
+			guestPath: boxWorkspaceDir,
 		},
 	}
+}
+
+func gatewayRunCommand() string {
+	configPath := boxWorkspaceConfigPath(hostPicoClawConfig)
+	securityPath := boxWorkspaceConfigPath(hostPicoClawSecurity)
+	return "mkdir -p " + boxPicoClawDir +
+		" && cp " + configPath + " " + filepath.Join(boxPicoClawDir, hostPicoClawConfig) +
+		" && cp " + securityPath + " " + filepath.Join(boxPicoClawDir, hostPicoClawSecurity) +
+		" && /usr/local/bin/picoclaw gateway -d 1>" + boxGatewayLogPath + " 2>/dev/null"
+}
+
+func boxWorkspaceConfigPath(name string) string {
+	return filepath.Join(boxWorkspaceDir, filepath.FromSlash(hostPicoClawStateDir), name)
 }
 
 func gatewayStartCommand(debug bool) ([]string, []string) {

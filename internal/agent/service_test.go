@@ -397,7 +397,7 @@ func TestBoxLiteCLIProviderGatewayLifecycle(t *testing.T) {
 	if got, want := countBoxliteCLICommand(runner.requests, "start"), 0; got != want {
 		t.Fatalf("start command count = %d, want %d", got, want)
 	}
-	if !hasBoxliteCLICommandArgs(runner.requests, "run", "/bin/sh", "-c", "/usr/local/bin/picoclaw gateway -d 1>"+boxGatewayLogPath+" 2>/dev/null") {
+	if !hasBoxliteCLICommandArgs(runner.requests, "run", "/bin/sh", "-c", gatewayRunCommand()) {
 		t.Fatalf("boxlite-cli gateway run command not found in requests: %#v", requestArgs(runner.requests))
 	}
 	if hasBoxliteCLIExec(runner.requests, "tail", "-n", "1", "-f", boxGatewayLogPath) {
@@ -1706,7 +1706,7 @@ func TestStartRefreshesCompleteWorkerGatewayConfig(t *testing.T) {
 	if _, err := svc.Start(context.Background(), "u-alice"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostPicoClawDir, hostPicoClawConfig)
+	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostWorkspaceDir, filepath.FromSlash(hostPicoClawStateDir), hostPicoClawConfig)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("ReadFile(worker config) error = %v", err)
@@ -2663,7 +2663,7 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	if spec.AutoRemove {
 		t.Fatal("gatewayCreateSpec() auto_remove = true, want false")
 	}
-	wantCmd := "/bin/sh -c /usr/local/bin/picoclaw gateway -d 1>" + boxGatewayLogPath + " 2>/dev/null"
+	wantCmd := "/bin/sh -c " + gatewayRunCommand()
 	if strings.Join(spec.Cmd, " ") != wantCmd {
 		t.Fatalf("gatewayCreateSpec() cmd = %q, want %q", spec.Cmd, wantCmd)
 	}
@@ -2680,30 +2680,27 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 		t.Fatalf("PICOCLAW_CHANNELS_FEISHU_APP_ID = %q, want %q", got, want)
 	}
 
-	wantConfigRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostPicoClawDir)
-	wantWorkspaceRoot := filepath.Join(wantConfigRoot, hostWorkspaceDir)
-	wantProjectsRoot := filepath.Join(homeDir, config.AppDirName, hostProjectsDir)
-	if len(spec.Mounts) != 2 {
-		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 2 mounts", spec.Mounts)
+	wantAgentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")
+	wantWorkspaceRoot := filepath.Join(wantAgentHome, hostWorkspaceDir)
+	wantConfigRoot := filepath.Join(wantWorkspaceRoot, filepath.FromSlash(hostPicoClawStateDir))
+	if len(spec.Mounts) != 1 {
+		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 1 mount", spec.Mounts)
 	}
-	if spec.Mounts[0].HostPath != wantConfigRoot || spec.Mounts[0].GuestPath != boxPicoClawDir {
-		t.Fatalf("config mount = %+v, want host %q guest %q", spec.Mounts[0], wantConfigRoot, boxPicoClawDir)
-	}
-	if spec.Mounts[1].HostPath != wantProjectsRoot || spec.Mounts[1].GuestPath != boxProjectsDir {
-		t.Fatalf("projects mount = %+v, want host %q guest %q", spec.Mounts[1], wantProjectsRoot, boxProjectsDir)
+	if spec.Mounts[0].HostPath != wantWorkspaceRoot || spec.Mounts[0].GuestPath != boxWorkspaceDir {
+		t.Fatalf("workspace mount = %+v, want host %q guest %q", spec.Mounts[0], wantWorkspaceRoot, boxWorkspaceDir)
 	}
 	if _, err := os.Stat(filepath.Join(wantConfigRoot, hostPicoClawConfig)); err != nil {
 		t.Fatalf("worker PicoClaw config was not written: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(wantWorkspaceRoot, "AGENT.md")); err != nil {
-		t.Fatalf("worker workspace was not written under .picoclaw: %v", err)
+		t.Fatalf("worker workspace was not written: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostWorkspaceDir)); !os.IsNotExist(err) {
-		t.Fatalf("legacy workspace stat error = %v, want not exist", err)
+	if _, err := os.Stat(filepath.Join(wantAgentHome, hostPicoClawDir)); !os.IsNotExist(err) {
+		t.Fatalf("picoclaw host dir stat error = %v, want not exist", err)
 	}
 }
 
-func TestGatewayCreateSpecMigratesLegacyWorkspaceDir(t *testing.T) {
+func TestGatewayCreateSpecMigratesNestedPicoClawWorkspaceDir(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -2711,11 +2708,12 @@ func TestGatewayCreateSpecMigratesLegacyWorkspaceDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	workspaceRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostWorkspaceDir)
-	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
-		t.Fatalf("os.MkdirAll(workspaceRoot) error = %v", err)
+	agentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")
+	nestedWorkspaceRoot := filepath.Join(agentHome, hostPicoClawDir, hostWorkspaceDir)
+	if err := os.MkdirAll(nestedWorkspaceRoot, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(nestedWorkspaceRoot) error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workspaceRoot, "local.txt"), []byte("keep"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(nestedWorkspaceRoot, "local.txt"), []byte("keep"), 0o600); err != nil {
 		t.Fatalf("os.WriteFile(local workspace file) error = %v", err)
 	}
 
@@ -2728,23 +2726,22 @@ func TestGatewayCreateSpecMigratesLegacyWorkspaceDir(t *testing.T) {
 		t.Fatalf("gatewayCreateSpec() error = %v", err)
 	}
 
-	wantProjectsRoot := filepath.Join(homeDir, config.AppDirName, hostProjectsDir)
-	if len(spec.Mounts) != 2 {
-		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 2 mounts", spec.Mounts)
+	if len(spec.Mounts) != 1 {
+		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 1 mount", spec.Mounts)
 	}
-	if spec.Mounts[1].HostPath != wantProjectsRoot || spec.Mounts[1].GuestPath != boxProjectsDir {
-		t.Fatalf("projects mount = %+v, want host %q guest %q", spec.Mounts[1], wantProjectsRoot, boxProjectsDir)
+	workspaceRoot := filepath.Join(agentHome, hostWorkspaceDir)
+	if spec.Mounts[0].HostPath != workspaceRoot || spec.Mounts[0].GuestPath != boxWorkspaceDir {
+		t.Fatalf("workspace mount = %+v, want host %q guest %q", spec.Mounts[0], workspaceRoot, boxWorkspaceDir)
 	}
-	if _, err := os.Stat(workspaceRoot); !os.IsNotExist(err) {
-		t.Fatalf("legacy workspace stat error = %v, want not exist", err)
+	if _, err := os.Stat(nestedWorkspaceRoot); !os.IsNotExist(err) {
+		t.Fatalf("nested workspace stat error = %v, want not exist", err)
 	}
-	newWorkspaceRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostPicoClawDir, hostWorkspaceDir)
-	if data, err := os.ReadFile(filepath.Join(newWorkspaceRoot, "local.txt")); err != nil {
+	if data, err := os.ReadFile(filepath.Join(workspaceRoot, "local.txt")); err != nil {
 		t.Fatalf("read migrated workspace file: %v", err)
 	} else if string(data) != "keep" {
 		t.Fatalf("migrated workspace file = %q, want keep", data)
 	}
-	if _, err := os.Stat(filepath.Join(newWorkspaceRoot, "AGENT.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(workspaceRoot, "AGENT.md")); err != nil {
 		t.Fatalf("worker workspace template was not written after migration: %v", err)
 	}
 }

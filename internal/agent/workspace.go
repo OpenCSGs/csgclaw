@@ -28,7 +28,7 @@ func ensureAgentWorkspace(agentName, template string) (string, error) {
 	if strings.TrimSpace(template) == "" {
 		return "", fmt.Errorf("workspace template is required")
 	}
-	if err := migrateLegacyAgentWorkspace(agentName, hostRoot); err != nil {
+	if err := migrateNestedPicoClawWorkspace(agentName, hostRoot); err != nil {
 		return "", err
 	}
 	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
@@ -41,14 +41,6 @@ func ensureAgentWorkspace(agentName, template string) (string, error) {
 }
 
 func agentWorkspaceRoot(agentName string) (string, error) {
-	picoClawRoot, err := agentPicoClawRoot(agentName)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(picoClawRoot, hostWorkspaceDir), nil
-}
-
-func legacyAgentWorkspaceRoot(agentName string) (string, error) {
 	agentHome, err := agentHomeDir(agentName)
 	if err != nil {
 		return "", err
@@ -56,8 +48,16 @@ func legacyAgentWorkspaceRoot(agentName string) (string, error) {
 	return filepath.Join(agentHome, hostWorkspaceDir), nil
 }
 
-func migrateLegacyAgentWorkspace(agentName, dstRoot string) error {
-	srcRoot, err := legacyAgentWorkspaceRoot(agentName)
+func nestedPicoClawWorkspaceRoot(agentName string) (string, error) {
+	picoClawRoot, err := agentPicoClawRoot(agentName)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(picoClawRoot, hostWorkspaceDir), nil
+}
+
+func migrateNestedPicoClawWorkspace(agentName, dstRoot string) error {
+	srcRoot, err := nestedPicoClawWorkspaceRoot(agentName)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func migrateLegacyAgentWorkspace(agentName, dstRoot string) error {
 			return fmt.Errorf("create agent workspace parent: %w", err)
 		}
 		if err := os.Rename(srcRoot, dstRoot); err != nil {
-			return fmt.Errorf("move legacy agent workspace: %w", err)
+			return fmt.Errorf("move nested picoclaw workspace: %w", err)
 		}
 		return nil
 	}

@@ -25,12 +25,19 @@ func ensureManagerPicoClawConfig(server config.ServerConfig, model config.ModelC
 }
 
 func ensureAgentPicoClawConfig(agentName, botID string, server config.ServerConfig, model config.ModelConfig) (string, error) {
-	hostRoot, err := agentPicoClawRoot(agentName)
+	workspaceRoot, err := agentWorkspaceRoot(agentName)
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Join(hostRoot, hostPicoClawLogs), 0o755); err != nil {
-		return "", fmt.Errorf("create manager picoclaw logs dir: %w", err)
+	if err := migrateNestedPicoClawWorkspace(agentName, workspaceRoot); err != nil {
+		return "", err
+	}
+	hostRoot, err := agentWorkspacePicoClawConfigRoot(agentName)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
+		return "", fmt.Errorf("create picoclaw config dir: %w", err)
 	}
 
 	data, err := renderAgentPicoClawConfig(botID, server, model)
@@ -42,7 +49,7 @@ func ensureAgentPicoClawConfig(agentName, botID string, server config.ServerConf
 		return "", fmt.Errorf("write manager picoclaw config: %w", err)
 	}
 	securityData := renderManagerSecurityConfig(server, model)
-	securityPath := filepath.Join(hostRoot, ".security.yml")
+	securityPath := filepath.Join(hostRoot, hostPicoClawSecurity)
 	if err := os.WriteFile(securityPath, []byte(securityData), 0o600); err != nil {
 		return "", fmt.Errorf("write manager security config: %w", err)
 	}
@@ -51,6 +58,14 @@ func ensureAgentPicoClawConfig(agentName, botID string, server config.ServerConf
 
 func managerPicoClawRoot() (string, error) {
 	return agentPicoClawRoot(ManagerName)
+}
+
+func agentWorkspacePicoClawConfigRoot(agentName string) (string, error) {
+	workspaceRoot, err := agentWorkspaceRoot(agentName)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(workspaceRoot, filepath.FromSlash(hostPicoClawStateDir)), nil
 }
 
 func agentPicoClawRoot(agentName string) (string, error) {

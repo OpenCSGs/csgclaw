@@ -20,21 +20,22 @@ import (
 )
 
 const (
-	ManagerName        = "manager"
-	ManagerUserID      = "u-manager"
-	managerHostPort    = 18790
-	managerGuestPort   = 18790
-	managerDebugMode   = true
-	hostPicoClawDir    = ".picoclaw"
-	hostWorkspaceDir   = "workspace"
-	hostProjectsDir    = "projects"
-	hostPicoClawConfig = "config.json"
-	hostPicoClawLogs   = "logs"
-	boxPicoClawDir     = "/home/picoclaw/.picoclaw"
-	boxWorkspaceDir    = boxPicoClawDir + "/workspace"
-	boxProjectsDir     = "/home/picoclaw/.picoclaw/workspace/projects"
-	boxGatewayLogPath  = boxWorkspaceDir + "/gateway.log"
-	gatewayLogPoll     = 200 * time.Millisecond
+	ManagerName          = "manager"
+	ManagerUserID        = "u-manager"
+	managerHostPort      = 18790
+	managerGuestPort     = 18790
+	managerDebugMode     = true
+	hostPicoClawDir      = ".picoclaw"
+	hostWorkspaceDir     = "workspace"
+	hostProjectsDir      = "projects"
+	hostPicoClawConfig   = "config.json"
+	hostPicoClawSecurity = ".security.yml"
+	hostPicoClawStateDir = ".csgclaw/picoclaw"
+	boxPicoClawDir       = "/home/picoclaw/.picoclaw"
+	boxWorkspaceDir      = boxPicoClawDir + "/workspace"
+	boxProjectsDir       = "/home/picoclaw/.picoclaw/workspace/projects"
+	boxGatewayLogPath    = boxWorkspaceDir + "/gateway.log"
+	gatewayLogPoll       = 200 * time.Millisecond
 )
 
 var localIPv4Resolver = localIPv4

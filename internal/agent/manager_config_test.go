@@ -76,7 +76,7 @@ func TestPicoclawBridgeModelIDPrefixesOpenAIForSlashModelNames(t *testing.T) {
 	}
 }
 
-func TestEnsureAgentPicoClawConfigUsesDirectoryMountRoot(t *testing.T) {
+func TestEnsureAgentPicoClawConfigUsesWorkspaceStateDir(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -90,6 +90,10 @@ func TestEnsureAgentPicoClawConfigUsesDirectoryMountRoot(t *testing.T) {
 		t.Fatalf("ensureAgentPicoClawConfig() error = %v", err)
 	}
 
+	wantRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "ux", hostWorkspaceDir, filepath.FromSlash(hostPicoClawStateDir))
+	if root != wantRoot {
+		t.Fatalf("ensureAgentPicoClawConfig() = %q, want %q", root, wantRoot)
+	}
 	if info, err := os.Stat(root); err != nil {
 		t.Fatalf("os.Stat(root) error = %v", err)
 	} else if !info.IsDir() {
@@ -97,7 +101,7 @@ func TestEnsureAgentPicoClawConfigUsesDirectoryMountRoot(t *testing.T) {
 	}
 	for _, path := range []string{
 		filepath.Join(root, hostPicoClawConfig),
-		filepath.Join(root, ".security.yml"),
+		filepath.Join(root, hostPicoClawSecurity),
 	} {
 		if info, err := os.Stat(path); err != nil {
 			t.Fatalf("os.Stat(%q) error = %v", path, err)
