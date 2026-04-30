@@ -80,7 +80,7 @@ func (h *Handler) handlePicoClawEvents(w http.ResponseWriter, r *http.Request, b
 
 	_, _ = io.WriteString(w, ": connected\n\n")
 	flusher.Flush()
-	h.replayRecentPicoClawMessages(botID)
+	h.replayRecentPicoClawMessages(botID, r.Header.Get("Last-Event-ID"))
 
 	for {
 		select {
@@ -91,20 +91,28 @@ func (h *Handler) handlePicoClawEvents(w http.ResponseWriter, r *http.Request, b
 			if err != nil {
 				return
 			}
+			if id := picoClawSSEID(evt.MessageID); id != "" {
+				_, _ = fmt.Fprintf(w, "id: %s\n", id)
+			}
 			_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", data)
 			flusher.Flush()
 		}
 	}
 }
 
-func (h *Handler) replayRecentPicoClawMessages(botID string) {
+func (h *Handler) replayRecentPicoClawMessages(botID, lastEventID string) {
 	if h == nil || h.im == nil || h.picoclaw == nil {
 		return
 	}
+	rooms := h.im.ListRooms()
 	cutoff := time.Now().UTC().Add(-picoClawReplayWindow)
-	for _, room := range h.im.ListRooms() {
+	replayAfter, hasReplayCursor := replayCursor(rooms, lastEventID)
+	for _, room := range rooms {
 		for idx, message := range room.Messages {
 			if !message.CreatedAt.IsZero() && message.CreatedAt.Before(cutoff) {
+				continue
+			}
+			if hasReplayCursor && isAtOrBeforeReplayCursor(message, lastEventID, replayAfter) {
 				continue
 			}
 			if h.isAgentSender(message.SenderID) {
@@ -117,9 +125,43 @@ func (h *Handler) replayRecentPicoClawMessages(botID string) {
 			if !ok {
 				continue
 			}
+			// Route replay through the bridge so the stable message ID remains the
+			// dedupe key for events already delivered live or drained from pending.
 			h.picoclaw.EnqueueMessageEvent(room, sender, message, botID)
 		}
 	}
+}
+
+func replayCursor(rooms []im.Room, lastEventID string) (time.Time, bool) {
+	lastEventID = strings.TrimSpace(lastEventID)
+	if lastEventID == "" {
+		return time.Time{}, false
+	}
+	for _, room := range rooms {
+		for _, message := range room.Messages {
+			if message.ID == lastEventID {
+				return message.CreatedAt, true
+			}
+		}
+	}
+	return time.Time{}, false
+}
+
+func isAtOrBeforeReplayCursor(message im.Message, lastEventID string, replayAfter time.Time) bool {
+	if message.ID == strings.TrimSpace(lastEventID) {
+		return true
+	}
+	if replayAfter.IsZero() || message.CreatedAt.IsZero() {
+		return false
+	}
+	return !message.CreatedAt.After(replayAfter)
+}
+
+func picoClawSSEID(messageID string) string {
+	messageID = strings.TrimSpace(messageID)
+	messageID = strings.ReplaceAll(messageID, "\r", "")
+	messageID = strings.ReplaceAll(messageID, "\n", "")
+	return messageID
 }
 
 func (h *Handler) reconnectMissedPicoClawAgents(senderID string, botIDs []string) {

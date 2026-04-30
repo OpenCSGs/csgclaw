@@ -106,7 +106,7 @@ Codex 和 Claude Code Profile 通过 Web UI 写入 agent state。CSGClaw 在 `se
 
 - Codex 会优先从 `~/.codex/auth.json` 自动导入。
 - Claude Code 会在 macOS 上优先探测 Keychain，未找到时再走 OAuth。
-- 手动登录命令是 `csgclaw auth login codex` 和 `csgclaw auth login claude-code`。
+- 手动登录命令是 `csgclaw model auth login codex` 和 `csgclaw model auth login claude-code`。
 - `CSGCLAW_CLIPROXY_AUTH_DIR` 可覆盖 CLIProxy auth 目录，默认是 `~/.cli-proxy-api`。
 - `CSGCLAW_CLIPROXY_AUTO_LOGIN=0` 可关闭自动导入和探测。
 - `CSGCLAW_CLIPROXY_NO_BROWSER=1` 会打印 OAuth URL，而不是自动打开浏览器。

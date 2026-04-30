@@ -1698,7 +1698,7 @@ func TestUsageIncludesTopLevelCommandIndex(t *testing.T) {
 	for _, want := range []string{
 		"Available Commands:",
 		"agent    Manage agents",
-		"auth     Manage local provider authentication.",
+		"model    Manage model providers.",
 		"bot      Manage bots",
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
@@ -1727,7 +1727,7 @@ func TestRootHelpIncludesAvailableCommands(t *testing.T) {
 	for _, want := range []string{
 		"Available Commands:",
 		"agent    Manage agents",
-		"auth     Manage local provider authentication.",
+		"model    Manage model providers.",
 		"bot      Manage bots",
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
@@ -1740,7 +1740,7 @@ func TestRootHelpIncludesAvailableCommands(t *testing.T) {
 }
 
 func TestExecuteDoesNotRegisterTopLevelAuthAliases(t *testing.T) {
-	for _, args := range [][]string{{"codex-login"}, {"claude-login"}} {
+	for _, args := range [][]string{{"auth", "login", "codex"}, {"codex-login"}, {"claude-login"}} {
 		var stderr bytes.Buffer
 		app := &App{
 			stdout:     &bytes.Buffer{},

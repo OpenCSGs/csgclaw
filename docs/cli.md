@@ -77,7 +77,7 @@ Top-level commands:
 - `serve`
 - `stop`
 - `agent`
-- `auth`
+- `model`
 - `user`
 - `bot`
 - `room`
@@ -166,14 +166,14 @@ Behavior:
 - Sends `SIGTERM` to the PID stored in the PID file.
 - If the process is already gone, it removes the stale PID file and reports that state.
 
-### `csgclaw auth`
+### `csgclaw model auth`
 
-Manages local Codex and Claude Code authentication for the embedded CLIProxyAPI.
+Manages local Codex and Claude Code authentication for model providers through the embedded CLIProxyAPI.
 
 Usage:
 
 ```bash
-csgclaw auth login <provider> [flags]
+csgclaw model auth login <provider> [flags]
 ```
 
 Providers:
@@ -190,13 +190,13 @@ Behavior:
 - `codex` first reuses `~/.codex/auth.json` when available, then starts OAuth if needed.
 - `claude-code` first probes macOS Keychain when available, then starts OAuth if needed.
 - Auth is stored in the CLIProxy auth directory, defaulting to `~/.cli-proxy-api`.
-- No top-level aliases such as `csgclaw codex-login` or `csgclaw claude-login` are registered.
+- Model provider auth is scoped under `csgclaw model auth`, not the server's own API authentication.
 
 Examples:
 
 ```bash
-csgclaw auth login codex
-csgclaw auth login claude-code --no-browser
+csgclaw model auth login codex
+csgclaw model auth login claude-code --no-browser
 ```
 
 ### `csgclaw agent`

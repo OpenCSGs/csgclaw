@@ -2423,7 +2423,7 @@ func TestReplayRecentPicoClawMessagesReplaysUnansweredHumanMessage(t *testing.T)
 	defer cancel()
 
 	srv := &Handler{im: imSvc, picoclaw: bridge}
-	srv.replayRecentPicoClawMessages("u-manager")
+	srv.replayRecentPicoClawMessages("u-manager", "")
 
 	select {
 	case evt := <-events:
@@ -2470,11 +2470,121 @@ func TestReplayRecentPicoClawMessagesSkipsAnsweredMessage(t *testing.T) {
 	defer cancel()
 
 	srv := &Handler{im: imSvc, picoclaw: bridge}
-	srv.replayRecentPicoClawMessages("u-manager")
+	srv.replayRecentPicoClawMessages("u-manager", "")
 
 	select {
 	case evt := <-events:
 		t.Fatalf("replayed event = %+v, want no replay for answered message", evt)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestReplayRecentPicoClawMessagesDoesNotDuplicateDeliveredMessage(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-manager", Name: "manager", Handle: "manager"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-1",
+				IsDirect: true,
+				Members:  []string{"u-admin", "u-manager"},
+				Messages: []im.Message{
+					{
+						ID:        "msg-delivered",
+						SenderID:  "u-admin",
+						Content:   "please reply",
+						CreatedAt: now,
+					},
+				},
+			},
+		},
+	})
+	bridge := im.NewPicoClawBridge("")
+	events, cancel := bridge.Subscribe("u-manager")
+	defer cancel()
+
+	room, ok := imSvc.Room("room-1")
+	if !ok {
+		t.Fatal("Room(room-1) = false, want room")
+	}
+	sender, ok := imSvc.User("u-admin")
+	if !ok {
+		t.Fatal("User(u-admin) = false, want user")
+	}
+	bridge.PublishMessageEvent(room, sender, room.Messages[0])
+
+	select {
+	case evt := <-events:
+		if evt.MessageID != "msg-delivered" {
+			t.Fatalf("live event = %+v, want msg-delivered", evt)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("PublishMessageEvent() timed out waiting for event")
+	}
+
+	srv := &Handler{im: imSvc, picoclaw: bridge}
+	srv.replayRecentPicoClawMessages("u-manager", "")
+
+	select {
+	case evt := <-events:
+		t.Fatalf("replayed event = %+v, want no duplicate for delivered message", evt)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestReplayRecentPicoClawMessagesHonorsLastEventID(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-manager", Name: "manager", Handle: "manager"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-1",
+				IsDirect: true,
+				Members:  []string{"u-admin", "u-manager"},
+				Messages: []im.Message{
+					{
+						ID:        "msg-seen",
+						SenderID:  "u-admin",
+						Content:   "already delivered",
+						CreatedAt: now,
+					},
+					{
+						ID:        "msg-new",
+						SenderID:  "u-admin",
+						Content:   "new after reconnect",
+						CreatedAt: now.Add(time.Second),
+					},
+				},
+			},
+		},
+	})
+	bridge := im.NewPicoClawBridge("")
+	events, cancel := bridge.Subscribe("u-manager")
+	defer cancel()
+
+	srv := &Handler{im: imSvc, picoclaw: bridge}
+	srv.replayRecentPicoClawMessages("u-manager", "msg-seen")
+
+	select {
+	case evt := <-events:
+		if evt.MessageID != "msg-new" || evt.Text != "new after reconnect" {
+			t.Fatalf("replayed event = %+v, want msg-new new after reconnect", evt)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("replayRecentPicoClawMessages() timed out waiting for event")
+	}
+
+	select {
+	case evt := <-events:
+		t.Fatalf("extra replayed event = %+v, want only messages after Last-Event-ID", evt)
 	case <-time.After(50 * time.Millisecond):
 	}
 }

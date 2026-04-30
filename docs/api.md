@@ -48,7 +48,7 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
   "provider": "claude_code",
   "authenticated": false,
   "login_required": true,
-  "message": "Auth required. Run csgclaw auth login claude-code or connect this provider in the CSGClaw UI.",
+  "message": "Auth required. Run csgclaw model auth login claude-code or connect this provider in the CSGClaw UI.",
   "supports_login": true,
   "supports_keychain": true
 }

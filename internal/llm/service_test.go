@@ -270,7 +270,7 @@ func TestChatCompletionsCodexRequiresAuth(t *testing.T) {
 		return cliproxy.AuthStatus{
 			Provider:      "codex",
 			LoginRequired: true,
-			Message:       "Auth required. Run csgclaw auth login codex.",
+			Message:       "Auth required. Run csgclaw model auth login codex.",
 		}, nil
 	}
 

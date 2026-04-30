@@ -184,18 +184,18 @@ func importExternalAuth(ctx context.Context, authDir, provider string) (authImpo
 func importCodexHomeAuth(ctx context.Context, authDir string) (authImportResult, error) {
 	path, err := codexHomeAuthPath()
 	if err != nil {
-		return authImportResult{message: "Codex auth was not found. Run csgclaw auth login codex."}, nil
+		return authImportResult{message: "Codex auth was not found. Run csgclaw model auth login codex."}, nil
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return authImportResult{message: "Codex auth was not found. Run csgclaw auth login codex."}, nil
+			return authImportResult{message: "Codex auth was not found. Run csgclaw model auth login codex."}, nil
 		}
-		return authImportResult{message: "Codex auth could not be read. Run csgclaw auth login codex."}, nil
+		return authImportResult{message: "Codex auth could not be read. Run csgclaw model auth login codex."}, nil
 	}
 	metadata, err := codexMetadataFromAuthJSON(raw)
 	if err != nil {
-		return authImportResult{message: "Codex auth is not importable. Run csgclaw auth login codex."}, nil
+		return authImportResult{message: "Codex auth is not importable. Run csgclaw model auth login codex."}, nil
 	}
 	fileName := authFileName(ProviderCodex, metadata, "codex-imported")
 	if _, err = saveMetadataAuth(ctx, authDir, ProviderCodex, fileName, metadata); err != nil {
@@ -206,10 +206,10 @@ func importCodexHomeAuth(ctx context.Context, authDir string) (authImportResult,
 
 func importClaudeKeychainAuth(ctx context.Context, authDir string) (authImportResult, error) {
 	if currentGOOS != "darwin" {
-		return authImportResult{message: "Claude Code auth is required. Run csgclaw auth login claude-code."}, nil
+		return authImportResult{message: "Claude Code auth is required. Run csgclaw model auth login claude-code."}, nil
 	}
 	if !keychainImportEnabled() {
-		return authImportResult{message: "Claude Keychain probing is disabled. Run csgclaw auth login claude-code."}, nil
+		return authImportResult{message: "Claude Keychain probing is disabled. Run csgclaw model auth login claude-code."}, nil
 	}
 	for _, candidate := range claudeKeychainCandidates {
 		raw, err := claudeKeychainReader(ctx, candidate.service, candidate.account)
@@ -226,7 +226,7 @@ func importClaudeKeychainAuth(ctx context.Context, authDir string) (authImportRe
 		}
 		return authImportResult{imported: true, source: "macos-keychain"}, nil
 	}
-	return authImportResult{message: "Claude Code auth was not found in macOS Keychain. Run csgclaw auth login claude-code."}, nil
+	return authImportResult{message: "Claude Code auth was not found in macOS Keychain. Run csgclaw model auth login claude-code."}, nil
 }
 
 func securityFindGenericPassword(ctx context.Context, service, account string) ([]byte, error) {
@@ -385,9 +385,9 @@ func authenticatedStatus(statusProvider, source, authProvider string) AuthStatus
 }
 
 func unauthenticatedStatus(statusProvider, authProvider string) AuthStatus {
-	command := "csgclaw auth login " + statusProvider
+	command := "csgclaw model auth login " + statusProvider
 	if statusProvider == "claude_code" {
-		command = "csgclaw auth login claude-code"
+		command = "csgclaw model auth login claude-code"
 	}
 	status := AuthStatus{
 		Provider:      statusProvider,
