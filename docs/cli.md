@@ -83,6 +83,19 @@ Top-level commands:
 - `room`
 - `member`
 - `message`
+- `completion`
+
+### Shell completion
+
+Both CLIs can generate shell completion scripts for `bash`, `zsh`, and `fish`.
+
+Examples:
+
+```bash
+csgclaw completion bash
+csgclaw completion zsh
+csgclaw completion fish
+```
 
 ### `csgclaw onboard`
 
@@ -570,6 +583,17 @@ Top-level commands:
 - `room`
 - `member`
 - `message`
+- `completion`
+
+### Shell completion
+
+Examples:
+
+```bash
+csgclaw-cli completion bash
+csgclaw-cli completion zsh
+csgclaw-cli completion fish
+```
 
 ### Command groups
 

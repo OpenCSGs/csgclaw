@@ -83,6 +83,19 @@ csgclaw [global-flags] <command> [args]
 - `room`
 - `member`
 - `message`
+- `completion`
+
+### Shell 补全
+
+两个 CLI 都可以生成 `bash`、`zsh` 和 `fish` 的 shell 补全脚本。
+
+示例：
+
+```bash
+csgclaw completion bash
+csgclaw completion zsh
+csgclaw completion fish
+```
 
 ### `csgclaw onboard`
 
@@ -578,6 +591,17 @@ csgclaw-cli [global-flags] <command> [args]
 - `room`
 - `member`
 - `message`
+- `completion`
+
+### Shell 补全
+
+示例：
+
+```bash
+csgclaw-cli completion bash
+csgclaw-cli completion zsh
+csgclaw-cli completion fish
+```
 
 ### 命令组
 

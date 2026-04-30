@@ -1,4 +1,4 @@
-package auth
+package model
 
 import (
 	"bytes"

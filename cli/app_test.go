@@ -1703,6 +1703,7 @@ func TestUsageIncludesTopLevelCommandIndex(t *testing.T) {
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
 		"user     Manage IM users",
+		"completion Generate shell completion scripts.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("usage = %q, want substring %q", got, want)
@@ -1732,6 +1733,7 @@ func TestRootHelpIncludesAvailableCommands(t *testing.T) {
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
 		"user     Manage IM users",
+		"completion Generate shell completion scripts.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("help = %q, want substring %q", got, want)
@@ -1750,6 +1752,48 @@ func TestExecuteDoesNotRegisterTopLevelAuthAliases(t *testing.T) {
 		err := app.Execute(context.Background(), args)
 		if err == nil || !strings.Contains(err.Error(), "unknown command") {
 			t.Fatalf("Execute(%v) error = %v, want unknown command", args, err)
+		}
+	}
+}
+
+func TestExecuteCompletionBash(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := &App{
+		stdout:     &stdout,
+		stderr:     &stderr,
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) { return nil, nil }),
+	}
+
+	if err := app.Execute(context.Background(), []string{"completion", "bash"}); err != nil {
+		t.Fatalf("Execute() error = %v; stderr=%s", err, stderr.String())
+	}
+	for _, want := range []string{`"${COMP_WORDS[0]}" __complete`, "complete -F _csgclaw_completion csgclaw"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want substring %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestExecuteHiddenCompleteUsesFullCommandSet(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout:     &stdout,
+		stderr:     &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) { return nil, nil }),
+	}
+
+	if err := app.Execute(context.Background(), []string{"__complete", "csgclaw", ""}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	got := stdout.String()
+	for _, want := range []string{"agent\n", "model\n", "completion\n"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout = %q, want substring %q", got, want)
+		}
+	}
+	for _, notWant := range []string{"_serve\n", "__complete\n"} {
+		if strings.Contains(got, notWant) {
+			t.Fatalf("stdout = %q, should not include %q", got, notWant)
 		}
 	}
 }

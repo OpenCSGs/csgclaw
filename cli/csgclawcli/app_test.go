@@ -34,6 +34,7 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
 		"message  Manage IM messages.",
+		"completion Generate shell completion scripts.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("usage = %q, want substring %q", got, want)
@@ -42,6 +43,48 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 	for _, notWant := range []string{"  agent", "  serve", "  onboard", "  user"} {
 		if strings.Contains(got, notWant) {
 			t.Fatalf("usage = %q, should not include %q", got, notWant)
+		}
+	}
+}
+
+func TestExecuteCompletionFish(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := &App{
+		stdout:     &stdout,
+		stderr:     &stderr,
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) { return nil, nil }),
+	}
+
+	if err := app.Execute(context.Background(), []string{"completion", "fish"}); err != nil {
+		t.Fatalf("Execute() error = %v; stderr=%s", err, stderr.String())
+	}
+	for _, want := range []string{"command csgclaw-cli __complete", "complete -c csgclaw-cli"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want substring %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestExecuteHiddenCompleteUsesLiteCommandSet(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout:     &stdout,
+		stderr:     &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) { return nil, nil }),
+	}
+
+	if err := app.Execute(context.Background(), []string{"__complete", "csgclaw-cli", ""}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	got := stdout.String()
+	for _, want := range []string{"bot\n", "room\n", "member\n", "message\n", "completion\n"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout = %q, want substring %q", got, want)
+		}
+	}
+	for _, notWant := range []string{"agent\n", "serve\n", "onboard\n", "user\n", "__complete\n"} {
+		if strings.Contains(got, notWant) {
+			t.Fatalf("stdout = %q, should not include %q", got, notWant)
 		}
 	}
 }
