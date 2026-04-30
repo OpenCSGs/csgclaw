@@ -70,19 +70,18 @@ func (s *Service) gatewayCreateSpec(image, name, botID string, profile AgentProf
 		Cmd: []string{
 			"/bin/sh",
 			"-c",
-			"/usr/local/bin/picoclaw gateway -d 1>~/.picoclaw/gateway.log 2>/dev/null",
+			"/usr/local/bin/picoclaw gateway -d 1>" + boxGatewayLogPath + " 2>/dev/null",
 		},
 	}
 
-	hostWorkspaceRoot, err := ensureAgentWorkspace(name, workspaceTemplateForAgent(name, botID))
-	if err != nil {
+	if _, err := ensureAgentWorkspace(name, workspaceTemplateForAgent(name, botID)); err != nil {
 		return sandbox.CreateSpec{}, err
 	}
 	projectsRoot, err := ensureAgentProjectsRoot()
 	if err != nil {
 		return sandbox.CreateSpec{}, err
 	}
-	for _, mount := range gatewayVolumeMounts(hostConfigRoot, hostWorkspaceRoot, projectsRoot) {
+	for _, mount := range gatewayVolumeMounts(hostConfigRoot, projectsRoot) {
 		spec.Mounts = append(spec.Mounts, sandbox.Mount{
 			HostPath:  mount.hostPath,
 			GuestPath: mount.guestPath,
@@ -118,15 +117,11 @@ type gatewayVolumeMount struct {
 	guestPath string
 }
 
-func gatewayVolumeMounts(hostConfigRoot, hostWorkspaceRoot, projectsRoot string) []gatewayVolumeMount {
+func gatewayVolumeMounts(hostConfigRoot, projectsRoot string) []gatewayVolumeMount {
 	return []gatewayVolumeMount{
 		{
 			hostPath:  hostConfigRoot,
 			guestPath: boxPicoClawDir,
-		},
-		{
-			hostPath:  hostWorkspaceRoot,
-			guestPath: boxWorkspaceDir,
 		},
 		{
 			hostPath:  projectsRoot,

@@ -33,6 +33,7 @@ const (
 	boxPicoClawDir     = "/home/picoclaw/.picoclaw"
 	boxWorkspaceDir    = boxPicoClawDir + "/workspace"
 	boxProjectsDir     = "/home/picoclaw/.picoclaw/workspace/projects"
+	boxGatewayLogPath  = boxWorkspaceDir + "/gateway.log"
 	gatewayLogPoll     = 200 * time.Millisecond
 )
 
@@ -1283,7 +1284,7 @@ func (s *Service) StreamLogs(ctx context.Context, id string, follow bool, lines 
 	if follow {
 		args = append(args, "-f")
 	}
-	args = append(args, boxPicoClawDir+"/gateway.log")
+	args = append(args, boxGatewayLogPath)
 
 	exitCode, err := s.runBoxCommand(ctx, box, "tail", args, w)
 	if err != nil {
@@ -1296,14 +1297,14 @@ func (s *Service) StreamLogs(ctx context.Context, id string, follow bool, lines 
 }
 
 func streamHostGatewayLog(ctx context.Context, agentName string, follow bool, lines int, w io.Writer) error {
-	logPath, err := agentGatewayLogPath(agentName)
+	logPaths, err := agentGatewayLogPaths(agentName)
 	if err != nil {
 		return err
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := streamGatewayLogFile(ctx, logPath, follow, lines, w); err != nil {
+	if err := streamGatewayLogFile(ctx, logPaths, follow, lines, w); err != nil {
 		if follow && errors.Is(err, context.Canceled) {
 			return nil
 		}
@@ -1313,6 +1314,29 @@ func streamHostGatewayLog(ctx context.Context, agentName string, follow bool, li
 }
 
 func agentGatewayLogPath(agentName string) (string, error) {
+	root, err := agentWorkspaceRoot(agentName)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "gateway.log"), nil
+}
+
+func agentGatewayLogPaths(agentName string) ([]string, error) {
+	primary, err := agentGatewayLogPath(agentName)
+	if err != nil {
+		return nil, err
+	}
+	legacy, err := legacyAgentGatewayLogPath(agentName)
+	if err != nil {
+		return nil, err
+	}
+	if legacy == primary {
+		return []string{primary}, nil
+	}
+	return []string{primary, legacy}, nil
+}
+
+func legacyAgentGatewayLogPath(agentName string) (string, error) {
 	root, err := agentPicoClawRoot(agentName)
 	if err != nil {
 		return "", err
@@ -1320,8 +1344,8 @@ func agentGatewayLogPath(agentName string) (string, error) {
 	return filepath.Join(root, "gateway.log"), nil
 }
 
-func streamGatewayLogFile(ctx context.Context, logPath string, follow bool, lines int, w io.Writer) error {
-	file, err := openGatewayLogFile(ctx, logPath, follow)
+func streamGatewayLogFile(ctx context.Context, logPaths []string, follow bool, lines int, w io.Writer) error {
+	file, err := openGatewayLogFile(ctx, logPaths, follow)
 	if err != nil {
 		return err
 	}
@@ -1336,14 +1360,29 @@ func streamGatewayLogFile(ctx context.Context, logPath string, follow bool, line
 	return followGatewayLogFile(ctx, file, offset, w)
 }
 
-func openGatewayLogFile(ctx context.Context, logPath string, follow bool) (*os.File, error) {
+func openGatewayLogFile(ctx context.Context, logPaths []string, follow bool) (*os.File, error) {
+	if len(logPaths) == 0 {
+		return nil, os.ErrNotExist
+	}
 	for {
-		file, err := os.Open(logPath)
-		if err == nil {
-			return file, nil
+		var notFound error
+		for _, logPath := range logPaths {
+			file, err := os.Open(logPath)
+			if err == nil {
+				return file, nil
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				return nil, err
+			}
+			if notFound == nil {
+				notFound = err
+			}
 		}
-		if !follow || !errors.Is(err, os.ErrNotExist) {
-			return nil, err
+		if !follow {
+			if notFound != nil {
+				return nil, notFound
+			}
+			return nil, os.ErrNotExist
 		}
 		select {
 		case <-ctx.Done():

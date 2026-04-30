@@ -993,7 +993,7 @@ func TestHandleAgentLogsStreamsGatewayLog(t *testing.T) {
 	if gotCmd != "tail" {
 		t.Fatalf("command = %q, want %q", gotCmd, "tail")
 	}
-	if strings.Join(gotArgs, " ") != "-n 80 /home/picoclaw/.picoclaw/gateway.log" {
+	if strings.Join(gotArgs, " ") != "-n 80 /home/picoclaw/.picoclaw/workspace/gateway.log" {
 		t.Fatalf("args = %q", gotArgs)
 	}
 	if rec.Body.String() != "hello\nworld\n" {
