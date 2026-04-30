@@ -53,6 +53,10 @@ func (s *Service) gatewayCreateSpec(image, name, botID string, profile AgentProf
 	modelID := profile.ModelID
 	managerBaseURL := resolveManagerBaseURL(s.server)
 	llmBaseURL := llmBridgeBaseURL(managerBaseURL, botID)
+	hostConfigRoot, err := ensureAgentPicoClawConfig(name, botID, s.server, config.ModelConfig{ModelID: modelID})
+	if err != nil {
+		return sandbox.CreateSpec{}, err
+	}
 	envVars := picoclawBoxEnvVars(managerBaseURL, s.server.AccessToken, botID, llmBaseURL, modelID)
 	addFeishuBoxEnvVars(envVars, botID, s.channels)
 	addProfileEnvVars(envVars, profile.Env)
@@ -78,7 +82,7 @@ func (s *Service) gatewayCreateSpec(image, name, botID string, profile AgentProf
 	if err != nil {
 		return sandbox.CreateSpec{}, err
 	}
-	for _, mount := range gatewayVolumeMounts(hostWorkspaceRoot, projectsRoot) {
+	for _, mount := range gatewayVolumeMounts(hostConfigRoot, hostWorkspaceRoot, projectsRoot) {
 		spec.Mounts = append(spec.Mounts, sandbox.Mount{
 			HostPath:  mount.hostPath,
 			GuestPath: mount.guestPath,
@@ -114,8 +118,12 @@ type gatewayVolumeMount struct {
 	guestPath string
 }
 
-func gatewayVolumeMounts(hostWorkspaceRoot, projectsRoot string) []gatewayVolumeMount {
+func gatewayVolumeMounts(hostConfigRoot, hostWorkspaceRoot, projectsRoot string) []gatewayVolumeMount {
 	return []gatewayVolumeMount{
+		{
+			hostPath:  hostConfigRoot,
+			guestPath: boxPicoClawDir,
+		},
 		{
 			hostPath:  hostWorkspaceRoot,
 			guestPath: boxWorkspaceDir,

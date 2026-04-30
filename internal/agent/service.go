@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -31,6 +33,7 @@ const (
 	boxPicoClawDir     = "/home/picoclaw/.picoclaw"
 	boxWorkspaceDir    = boxPicoClawDir + "/workspace"
 	boxProjectsDir     = "/home/picoclaw/.picoclaw/workspace/projects"
+	gatewayLogPoll     = 200 * time.Millisecond
 )
 
 var localIPv4Resolver = localIPv4
@@ -728,13 +731,24 @@ func normalizeCreateID(id string) string {
 }
 
 func (s *Service) Agent(id string) (Agent, bool) {
+	a, ok := s.agentSnapshot(id)
+	if !ok {
+		return Agent{}, false
+	}
+	return s.hydrateAgentStatus(context.Background(), a), true
+}
+
+func (s *Service) agentSnapshot(id string) (Agent, bool) {
+	if s == nil {
+		return Agent{}, false
+	}
 	s.mu.RLock()
 	a, ok := s.agents[strings.TrimSpace(id)]
 	s.mu.RUnlock()
 	if !ok {
 		return Agent{}, false
 	}
-	return s.hydrateAgentStatus(context.Background(), a), true
+	return *cloneAgent(&a), true
 }
 
 func (s *Service) resolveAgentBox(ctx context.Context, rt sandbox.Runtime, got Agent) (sandbox.Instance, string, error) {
@@ -810,6 +824,9 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 	if got.AgentProfile.EnvRestartRequired {
 		return s.Recreate(ctx, id)
 	}
+	if err := s.ensureWorkerGatewayConfig(got); err != nil {
+		return Agent{}, err
+	}
 
 	rt, err := s.ensureRuntime(got.Name)
 	if err != nil {
@@ -872,6 +889,27 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
 	return started, nil
+}
+
+func (s *Service) ensureWorkerGatewayConfig(got Agent) error {
+	if s == nil || !strings.EqualFold(strings.TrimSpace(got.Role), RoleWorker) || !isAgentProfileComplete(got) {
+		return nil
+	}
+	name := strings.TrimSpace(got.Name)
+	botID := strings.TrimSpace(got.ID)
+	if name == "" || botID == "" {
+		return fmt.Errorf("agent name and id are required")
+	}
+	profile := normalizeProfile(got.AgentProfile, name, got.Description)
+	modelID := strings.TrimSpace(profile.ModelID)
+	if modelID == "" {
+		modelID = strings.TrimSpace(got.ModelID)
+	}
+	if modelID == "" {
+		modelID = s.model.Resolved().ModelID
+	}
+	_, err := ensureAgentPicoClawConfig(name, botID, s.server, config.ModelConfig{ModelID: modelID})
+	return err
 }
 
 func (s *Service) Stop(ctx context.Context, id string) (Agent, error) {
@@ -1201,9 +1239,14 @@ func (s *Service) StreamLogs(ctx context.Context, id string, follow bool, lines 
 		lines = 20
 	}
 
-	got, ok := s.Agent(id)
+	got, ok := s.agentSnapshot(id)
 	if !ok {
 		return fmt.Errorf("agent %q not found", id)
+	}
+	if err := streamHostGatewayLog(ctx, got.Name, follow, lines, w); err == nil {
+		return nil
+	} else if follow || !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 
 	rt, err := s.ensureRuntime(got.Name)
@@ -1252,6 +1295,159 @@ func (s *Service) StreamLogs(ctx context.Context, id string, follow bool, lines 
 	return nil
 }
 
+func streamHostGatewayLog(ctx context.Context, agentName string, follow bool, lines int, w io.Writer) error {
+	logPath, err := agentGatewayLogPath(agentName)
+	if err != nil {
+		return err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := streamGatewayLogFile(ctx, logPath, follow, lines, w); err != nil {
+		if follow && errors.Is(err, context.Canceled) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func agentGatewayLogPath(agentName string) (string, error) {
+	root, err := agentPicoClawRoot(agentName)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "gateway.log"), nil
+}
+
+func streamGatewayLogFile(ctx context.Context, logPath string, follow bool, lines int, w io.Writer) error {
+	file, err := openGatewayLogFile(ctx, logPath, follow)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	offset, err := writeLastGatewayLogLines(file, lines, w)
+	if err != nil || !follow {
+		return err
+	}
+	return followGatewayLogFile(ctx, file, offset, w)
+}
+
+func openGatewayLogFile(ctx context.Context, logPath string, follow bool) (*os.File, error) {
+	for {
+		file, err := os.Open(logPath)
+		if err == nil {
+			return file, nil
+		}
+		if !follow || !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(gatewayLogPoll):
+		}
+	}
+}
+
+func writeLastGatewayLogLines(file *os.File, lines int, w io.Writer) (int64, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return 0, err
+	}
+	size := info.Size()
+	if size <= 0 {
+		return 0, nil
+	}
+	data, err := readLastGatewayLogLines(file, size, lines)
+	if err != nil {
+		return 0, err
+	}
+	if len(data) > 0 {
+		if _, err := w.Write(data); err != nil {
+			return 0, err
+		}
+	}
+	return size, nil
+}
+
+func readLastGatewayLogLines(file *os.File, size int64, lines int) ([]byte, error) {
+	const chunkSize int64 = 4096
+
+	var data []byte
+	var newlineCount int
+	pos := size
+	for pos > 0 && (lines <= 0 || newlineCount <= lines) {
+		readSize := chunkSize
+		if pos < readSize {
+			readSize = pos
+		}
+		pos -= readSize
+		chunk := make([]byte, int(readSize))
+		if _, err := file.ReadAt(chunk, pos); err != nil && !errors.Is(err, io.EOF) {
+			return nil, err
+		}
+		data = append(chunk, data...)
+		newlineCount += bytes.Count(chunk, []byte{'\n'})
+	}
+	return trimLastGatewayLogLines(data, lines), nil
+}
+
+func trimLastGatewayLogLines(data []byte, lines int) []byte {
+	if lines <= 0 || len(data) == 0 {
+		return data
+	}
+	seen := 0
+	for idx := len(data) - 1; idx >= 0; idx-- {
+		if data[idx] != '\n' {
+			continue
+		}
+		if idx == len(data)-1 {
+			continue
+		}
+		seen++
+		if seen == lines {
+			return data[idx+1:]
+		}
+	}
+	return data
+}
+
+func followGatewayLogFile(ctx context.Context, file *os.File, offset int64, w io.Writer) error {
+	ticker := time.NewTicker(gatewayLogPoll)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+
+		info, err := file.Stat()
+		if err != nil {
+			return err
+		}
+		size := info.Size()
+		if size < offset {
+			offset = 0
+		}
+		if size == offset {
+			continue
+		}
+		if _, err := file.Seek(offset, io.SeekStart); err != nil {
+			return err
+		}
+		n, err := io.CopyN(w, file, size-offset)
+		offset += n
+		if err != nil && !errors.Is(err, io.EOF) {
+			return err
+		}
+	}
+}
+
 func (s *Service) hydrateAgentStatus(ctx context.Context, a Agent) Agent {
 	a = *cloneAgent(&a)
 	if strings.TrimSpace(a.Name) == "" {
@@ -1262,15 +1458,11 @@ func (s *Service) hydrateAgentStatus(ctx context.Context, a Agent) Agent {
 
 	rt, err := s.ensureRuntime(a.Name)
 	if err != nil {
-		logHydrateUnknownStatus(a, "ensure_runtime", err)
-		a.Status = string(sandbox.StateUnknown)
-		return a
+		return statusAfterHydrateFailure(a, "ensure_runtime", err)
 	}
 	runtimeHome, err := s.sandboxRuntimeHome(a.Name)
 	if err != nil {
-		logHydrateUnknownStatus(a, "resolve_runtime_home", err)
-		a.Status = string(sandbox.StateUnknown)
-		return a
+		return statusAfterHydrateFailure(a, "resolve_runtime_home", err)
 	}
 	defer func() {
 		_ = s.closeRuntime(runtimeHome, rt)
@@ -1278,9 +1470,7 @@ func (s *Service) hydrateAgentStatus(ctx context.Context, a Agent) Agent {
 
 	box, _, err := s.resolveAgentBox(ctx, rt, a)
 	if err != nil {
-		logHydrateUnknownStatus(a, "resolve_agent_box", err)
-		a.Status = string(sandbox.StateUnknown)
-		return a
+		return statusAfterHydrateFailure(a, "resolve_agent_box", err)
 	}
 	defer func() {
 		_ = s.closeBox(box)
@@ -1288,15 +1478,53 @@ func (s *Service) hydrateAgentStatus(ctx context.Context, a Agent) Agent {
 
 	info, err := s.boxInfo(ctx, box)
 	if err != nil {
-		logHydrateUnknownStatus(a, "read_box_info", err)
-		a.Status = string(sandbox.StateUnknown)
-		return a
+		return statusAfterHydrateFailure(a, "read_box_info", err)
 	}
 	if strings.TrimSpace(info.ID) != "" {
 		a.BoxID = info.ID
 	}
 	a.Status = string(info.State)
 	return a
+}
+
+func statusAfterHydrateFailure(a Agent, stage string, err error) Agent {
+	if strings.TrimSpace(a.Status) != "" && !sandbox.IsNotFound(err) {
+		logHydrateStaleStatus(a, stage, err)
+		return a
+	}
+	logHydrateUnknownStatus(a, stage, err)
+	a.Status = string(sandbox.StateUnknown)
+	return a
+}
+
+func logHydrateStaleStatus(a Agent, stage string, err error) {
+	if strings.TrimSpace(stage) == "" {
+		stage = "unknown_stage"
+	}
+	attrs := []any{
+		"agent_id", strings.TrimSpace(a.ID),
+		"agent_name", strings.TrimSpace(a.Name),
+		"agent_box_id", strings.TrimSpace(a.BoxID),
+		"agent_status", strings.TrimSpace(a.Status),
+		"stage", stage,
+		"error", err,
+	}
+	if isSandboxRuntimeContention(err) {
+		slog.Debug("agent status refresh skipped; sandbox runtime is busy", attrs...)
+		return
+	}
+	slog.Warn("agent status refresh failed; keeping last known status",
+		attrs...,
+	)
+}
+
+func isSandboxRuntimeContention(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "failed to acquire runtime lock") ||
+		strings.Contains(msg, "another boxliteruntime is already using directory")
 }
 
 func logHydrateUnknownStatus(a Agent, stage string, err error) {

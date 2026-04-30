@@ -1896,6 +1896,13 @@ body::after {
   border: 1px solid var(--line);
 }
 
+.selection-all-item {
+  border-color: color-mix(in oklab, var(--primary) 34%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--primary) 13%, transparent), transparent 72%),
+    var(--field);
+}
+
 .selection-empty,
 .form-error {
   margin-top: 14px;
@@ -3962,6 +3969,13 @@ body::after {
   border-color: var(--line);
   border-radius: 8px;
   background: var(--field);
+}
+
+.selection-item.selection-all-item {
+  border-color: color-mix(in oklab, var(--primary) 34%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--primary) 13%, transparent), transparent 72%),
+    var(--field);
 }
 
 .selection-item.compact-toggle-row {

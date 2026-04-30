@@ -121,3 +121,76 @@ func TestPublishMessageEventQueuesUntilBotSubscribes(t *testing.T) {
 		t.Fatal("Subscribe() timed out waiting for queued event")
 	}
 }
+
+func TestPicoClawBridgeAckPreventsDuplicateReplay(t *testing.T) {
+	bridge := NewPicoClawBridge("")
+	events, cancel := bridge.Subscribe("u-bot")
+	defer cancel()
+
+	room := Room{
+		ID:       "room-direct",
+		IsDirect: true,
+		Members:  []string{"u-admin", "u-bot"},
+	}
+	sender := User{ID: "u-admin", Name: "Admin", Handle: "admin"}
+	message := Message{
+		ID:        "msg-acked",
+		SenderID:  "u-admin",
+		Content:   "acked hello",
+		CreatedAt: time.Now().UTC(),
+	}
+
+	bridge.PublishMessageEvent(room, sender, message)
+	select {
+	case evt := <-events:
+		bridge.Ack("u-bot", evt.MessageID)
+	case <-time.After(time.Second):
+		t.Fatal("PublishMessageEvent() timed out waiting for event")
+	}
+
+	bridge.EnqueueMessageEvent(room, sender, message, "u-bot")
+	select {
+	case evt := <-events:
+		t.Fatalf("duplicate event = %+v, want none after ack", evt)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestPicoClawBridgeRequeueDeliversUnackedEventAgain(t *testing.T) {
+	bridge := NewPicoClawBridge("")
+	events, cancel := bridge.Subscribe("u-bot")
+
+	room := Room{
+		ID:       "room-direct",
+		IsDirect: true,
+		Members:  []string{"u-admin", "u-bot"},
+	}
+	sender := User{ID: "u-admin", Name: "Admin", Handle: "admin"}
+	message := Message{
+		ID:        "msg-requeue",
+		SenderID:  "u-admin",
+		Content:   "retry hello",
+		CreatedAt: time.Now().UTC(),
+	}
+
+	bridge.PublishMessageEvent(room, sender, message)
+	var got PicoClawEvent
+	select {
+	case got = <-events:
+	case <-time.After(time.Second):
+		t.Fatal("PublishMessageEvent() timed out waiting for event")
+	}
+	bridge.Requeue("u-bot", got)
+	cancel()
+
+	events, cancel = bridge.Subscribe("u-bot")
+	defer cancel()
+	select {
+	case evt := <-events:
+		if evt.MessageID != "msg-requeue" || evt.Text != "retry hello" {
+			t.Fatalf("requeued event = %+v, want msg-requeue retry hello", evt)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Subscribe() timed out waiting for requeued event")
+	}
+}

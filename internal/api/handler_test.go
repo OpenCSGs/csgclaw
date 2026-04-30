@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -977,7 +979,7 @@ func TestHandleAgentLogsStreamsGatewayLog(t *testing.T) {
 	}()
 
 	srv := &Handler{svc: agentSvc}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice/logs?follow=true&lines=80", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice/logs?lines=80", nil)
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -991,14 +993,11 @@ func TestHandleAgentLogsStreamsGatewayLog(t *testing.T) {
 	if gotCmd != "tail" {
 		t.Fatalf("command = %q, want %q", gotCmd, "tail")
 	}
-	if strings.Join(gotArgs, " ") != "-n 80 -f /home/picoclaw/.picoclaw/gateway.log" {
+	if strings.Join(gotArgs, " ") != "-n 80 /home/picoclaw/.picoclaw/gateway.log" {
 		t.Fatalf("args = %q", gotArgs)
 	}
 	if rec.Body.String() != "hello\nworld\n" {
 		t.Fatalf("body = %q, want streamed logs", rec.Body.String())
-	}
-	if !rec.Flushed {
-		t.Fatal("response was not flushed for follow=true")
 	}
 }
 
@@ -2394,6 +2393,225 @@ func TestHandlePicoClawSendMessageRequiresIMService(t *testing.T) {
 	}
 }
 
+func TestPublishPicoClawEventQueuesUntilBotSubscribes(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-manager", Name: "manager", Handle: "manager"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-1",
+				IsDirect: true,
+				Members:  []string{"u-admin", "u-manager"},
+				Messages: []im.Message{
+					{
+						ID:        "msg-pending",
+						SenderID:  "u-admin",
+						Content:   "queued while disconnected",
+						CreatedAt: now,
+					},
+				},
+			},
+		},
+	})
+	bridge := im.NewPicoClawBridge("")
+	srv := &Handler{im: imSvc, picoclaw: bridge}
+
+	sender, ok := imSvc.User("u-admin")
+	if !ok {
+		t.Fatal("missing sender")
+	}
+	room, ok := imSvc.Room("room-1")
+	if !ok || len(room.Messages) != 1 {
+		t.Fatalf("room = %+v, want one message", room)
+	}
+
+	srv.PublishPicoClawEvent(im.Event{
+		Type:    im.EventTypeMessageCreated,
+		RoomID:  "room-1",
+		Sender:  &sender,
+		Message: &room.Messages[0],
+	})
+
+	events, cancel := bridge.Subscribe("u-manager")
+	defer cancel()
+
+	select {
+	case evt := <-events:
+		if evt.MessageID != "msg-pending" || evt.Text != "queued while disconnected" {
+			t.Fatalf("queued event = %+v, want msg-pending queued while disconnected", evt)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Subscribe() timed out waiting for queued PicoClaw event")
+	}
+}
+
+func TestPublishPicoClawEventReconnectsMissedWorker(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	created := make(chan sandbox.CreateSpec, 1)
+	provider := &sandboxtest.Provider{
+		NameValue: "fake",
+		OpenFunc: func(context.Context, string) (sandbox.Runtime, error) {
+			return &sandboxtest.Runtime{
+				GetFunc: func(context.Context, string) (sandbox.Instance, error) {
+					return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+				},
+				RemoveFunc: func(context.Context, string, sandbox.RemoveOptions) error {
+					return fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+				},
+				CreateFunc: func(_ context.Context, spec sandbox.CreateSpec) (sandbox.Instance, error) {
+					created <- spec
+					return sandboxtest.NewInstance(sandbox.Info{
+						ID:        "box-" + spec.Name,
+						Name:      spec.Name,
+						State:     sandbox.StateRunning,
+						CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+					}), nil
+				},
+			}, nil
+		},
+	}
+	t.Cleanup(agent.TestOnlySetSandboxProvider(provider))
+
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	if err := writeSeededAgents(statePath, []agent.Agent{
+		{
+			ID:              "u-worker",
+			Name:            "worker",
+			Role:            agent.RoleWorker,
+			BoxID:           "box-stale",
+			Status:          string(sandbox.StateRunning),
+			AgentProfile:    agent.AgentProfile{Name: "worker", Provider: agent.ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
+			ProfileComplete: true,
+			CreatedAt:       time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+		},
+	}); err != nil {
+		t.Fatalf("writeSeededAgents() error = %v", err)
+	}
+	svc, err := agent.NewService(
+		config.ModelConfig{ModelID: "gpt-5.5"},
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "token"},
+		"",
+		statePath,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-worker", Name: "worker", Handle: "worker"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-1",
+				Members:  []string{"u-admin", "u-worker"},
+				Messages: []im.Message{{ID: "msg-1", SenderID: "u-admin", Content: "please handle this", CreatedAt: time.Now().UTC()}},
+			},
+		},
+	})
+	sender, ok := imSvc.User("u-admin")
+	if !ok {
+		t.Fatal("missing sender")
+	}
+	room, ok := imSvc.Room("room-1")
+	if !ok || len(room.Messages) != 1 {
+		t.Fatalf("room = %+v, want one message", room)
+	}
+
+	srv := &Handler{svc: svc, im: imSvc, picoclaw: im.NewPicoClawBridge("")}
+	srv.PublishPicoClawEvent(im.Event{
+		Type:    im.EventTypeMessageCreated,
+		RoomID:  "room-1",
+		Sender:  &sender,
+		Message: &room.Messages[0],
+	})
+
+	select {
+	case spec := <-created:
+		if spec.Name != "worker" {
+			t.Fatalf("recreated spec.Name = %q, want worker", spec.Name)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for missed worker reconnect")
+	}
+}
+
+func TestHandlePicoClawEventsRequeuesWhenSSEWriteFails(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-manager", Name: "manager", Handle: "manager"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-1",
+				IsDirect: true,
+				Members:  []string{"u-admin", "u-manager"},
+				Messages: []im.Message{
+					{
+						ID:        "msg-retry",
+						SenderID:  "u-admin",
+						Content:   "retry after broken stream",
+						CreatedAt: now,
+					},
+				},
+			},
+		},
+	})
+	bridge := im.NewPicoClawBridge("")
+	room, ok := imSvc.Room("room-1")
+	if !ok {
+		t.Fatal("Room(room-1) = false, want room")
+	}
+	sender, ok := imSvc.User("u-admin")
+	if !ok {
+		t.Fatal("User(u-admin) = false, want user")
+	}
+	bridge.PublishMessageEvent(room, sender, room.Messages[0])
+
+	srv := &Handler{im: imSvc, picoclaw: bridge}
+	req := httptest.NewRequest(http.MethodGet, "/api/bots/u-manager/events", nil)
+	srv.handlePicoClawEvents(&failingPicoClawEventWriter{header: make(http.Header)}, req, "u-manager")
+
+	events, cancel := bridge.Subscribe("u-manager")
+	defer cancel()
+	select {
+	case evt := <-events:
+		if evt.MessageID != "msg-retry" || evt.Text != "retry after broken stream" {
+			t.Fatalf("requeued event = %+v, want msg-retry retry after broken stream", evt)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Subscribe() timed out waiting for requeued event")
+	}
+}
+
+type failingPicoClawEventWriter struct {
+	header http.Header
+}
+
+func (w *failingPicoClawEventWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *failingPicoClawEventWriter) Write(data []byte) (int, error) {
+	text := string(data)
+	if strings.HasPrefix(text, "id: ") || strings.HasPrefix(text, "event: message") {
+		return 0, errors.New("broken stream")
+	}
+	return len(data), nil
+}
+
+func (w *failingPicoClawEventWriter) WriteHeader(int) {}
+
+func (w *failingPicoClawEventWriter) Flush() {}
+
 func TestReplayRecentPicoClawMessagesReplaysUnansweredHumanMessage(t *testing.T) {
 	now := time.Now().UTC()
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
@@ -2522,6 +2740,7 @@ func TestReplayRecentPicoClawMessagesDoesNotDuplicateDeliveredMessage(t *testing
 		if evt.MessageID != "msg-delivered" {
 			t.Fatalf("live event = %+v, want msg-delivered", evt)
 		}
+		bridge.Ack("u-manager", evt.MessageID)
 	case <-time.After(time.Second):
 		t.Fatal("PublishMessageEvent() timed out waiting for event")
 	}

@@ -144,6 +144,7 @@ const messages = {
     roomDescription: "说明",
     roomDescriptionPlaceholder: "简单说明这个房间的用途",
     initialMembers: "初始成员",
+    allMembers: "全部成员",
     cancel: "取消",
     create: "创建",
     inviteTitle: "添加成员",
@@ -300,6 +301,7 @@ const messages = {
     roomDescription: "Details",
     roomDescriptionPlaceholder: "Briefly describe what this room is for",
     initialMembers: "Initial Members",
+    allMembers: "All members",
     cancel: "Cancel",
     create: "Create",
     inviteTitle: "Add Members",
@@ -1376,6 +1378,7 @@ function App() {
       return;
     }
     setSubmitError("");
+    setInviteUserIDs([]);
     setShowInvite(true);
   }
 
@@ -1525,9 +1528,16 @@ function App() {
   }
 
   const createRoomCandidates = data.users;
+  const createRoomCandidateIDs = createRoomCandidates.map((user) => user.id).filter(Boolean);
+  const createRoomSelectableMemberIDs = createRoomCandidateIDs.filter((id) => !lockedRoomMemberIDs.includes(id));
+  const allCreateRoomMembersSelected = createRoomCandidateIDs.length > 0 && createRoomCandidateIDs.every((id) => roomMemberIDs.includes(id));
+  const createRoomSelectedMemberCount = createRoomCandidateIDs.filter((id) => roomMemberIDs.includes(id)).length;
   const inviteCandidates = activeConversation
     ? data.users.filter((user) => !activeConversation.members.includes(user.id))
     : [];
+  const inviteCandidateIDs = inviteCandidates.map((user) => user.id).filter(Boolean);
+  const allInviteCandidatesSelected = inviteCandidateIDs.length > 0 && inviteCandidateIDs.every((id) => inviteUserIDs.includes(id));
+  const inviteSelectedMemberCount = inviteCandidateIDs.filter((id) => inviteUserIDs.includes(id)).length;
   const activeConversationMembers = activeConversation
     ? activeConversation.members.map((id) => usersById.get(id)).filter(Boolean)
     : [];
@@ -2702,6 +2712,24 @@ function App() {
                 <div className="field">
                   <span>${t("initialMembers")}</span>
                   <div className="selection-list">
+                    <label className="selection-item selection-all-item">
+                      <input
+                        type="checkbox"
+                        checked=${allCreateRoomMembersSelected}
+                        disabled=${createRoomSelectableMemberIDs.length === 0}
+                        onChange=${() => {
+                          setRoomMemberIDs((current) => {
+                            const allSelected = createRoomCandidateIDs.length > 0 && createRoomCandidateIDs.every((id) => current.includes(id));
+                            if (allSelected) {
+                              return current.filter((id) => !createRoomSelectableMemberIDs.includes(id));
+                            }
+                            return Array.from(new Set([...current, ...createRoomSelectableMemberIDs]));
+                          });
+                        }}
+                      />
+                      <span>${t("allMembers")}</span>
+                      <small>${createRoomSelectedMemberCount}/${createRoomCandidateIDs.length}</small>
+                    </label>
                     ${createRoomCandidates.map((user) => html`
                       <label key=${user.id} className="selection-item">
                         <input
@@ -2741,17 +2769,36 @@ function App() {
                   <span>${t("inviteCandidates")}</span>
                   <div className="selection-list">
                     ${inviteCandidates.length > 0
-                      ? inviteCandidates.map((user) => html`
-                          <label key=${user.id} className="selection-item">
+                      ? html`
+                          <label className="selection-item selection-all-item">
                             <input
                               type="checkbox"
-                              checked=${inviteUserIDs.includes(user.id)}
-                              onChange=${() => setInviteUserIDs((current) => toggleSelection(current, user.id))}
+                              checked=${allInviteCandidatesSelected}
+                              onChange=${() => {
+                                setInviteUserIDs((current) => {
+                                  const allSelected = inviteCandidateIDs.length > 0 && inviteCandidateIDs.every((id) => current.includes(id));
+                                  if (allSelected) {
+                                    return current.filter((id) => !inviteCandidateIDs.includes(id));
+                                  }
+                                  return Array.from(new Set([...current, ...inviteCandidateIDs]));
+                                });
+                              }}
                             />
-                            <span>${user.name}</span>
-                            <small>@${user.handle}</small>
+                            <span>${t("allMembers")}</span>
+                            <small>${inviteSelectedMemberCount}/${inviteCandidateIDs.length}</small>
                           </label>
-                        `)
+                          ${inviteCandidates.map((user) => html`
+                            <label key=${user.id} className="selection-item">
+                              <input
+                                type="checkbox"
+                                checked=${inviteUserIDs.includes(user.id)}
+                                onChange=${() => setInviteUserIDs((current) => toggleSelection(current, user.id))}
+                              />
+                              <span>${user.name}</span>
+                              <small>@${user.handle}</small>
+                            </label>
+                          `)}
+                        `
                       : html`<div className="selection-empty">${t("noInviteCandidates")}</div>`}
                   </div>
                 </div>

@@ -86,14 +86,17 @@ func TestAccessLogSkipsHealthzPolling(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	}))
 
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz?ready=1", nil))
+	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost} {
+		buf.Reset()
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(method, "/healthz?ready=1", nil))
 
-	if rec.Code != http.StatusOK || rec.Body.String() != "ok" {
-		t.Fatalf("response = %d %q, want 200 ok", rec.Code, rec.Body.String())
-	}
-	if got := buf.String(); got != "" {
-		t.Fatalf("healthz request was logged: %q", got)
+		if rec.Code != http.StatusOK || rec.Body.String() != "ok" {
+			t.Fatalf("%s response = %d %q, want 200 ok", method, rec.Code, rec.Body.String())
+		}
+		if got := buf.String(); got != "" {
+			t.Fatalf("%s healthz request was logged: %q", method, got)
+		}
 	}
 }
 

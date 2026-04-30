@@ -66,6 +66,19 @@ func (f *fakeInfoInstance) Info(context.Context) (sandbox.Info, error) {
 	return f.info, nil
 }
 
+type cancelOnWrite struct {
+	writer io.Writer
+	cancel context.CancelFunc
+}
+
+func (w cancelOnWrite) Write(p []byte) (int, error) {
+	n, err := w.writer.Write(p)
+	if n > 0 && w.cancel != nil {
+		w.cancel()
+	}
+	return n, err
+}
+
 type agentBoxliteCLIRunner struct {
 	requests []boxlitecli.CommandRequest
 	boxes    map[string]agentBoxliteCLIBox
@@ -356,8 +369,18 @@ func TestBoxLiteCLIProviderGatewayLifecycle(t *testing.T) {
 		t.Fatalf("CreateWorker() = %+v, want running box-alice", worker)
 	}
 
+	logPath, err := agentGatewayLogPath("alice")
+	if err != nil {
+		t.Fatalf("agentGatewayLogPath() error = %v", err)
+	}
+	if err := os.WriteFile(logPath, []byte("old line\nnew line\ngateway line\n"), 0o600); err != nil {
+		t.Fatalf("write gateway log: %v", err)
+	}
+
 	var logs strings.Builder
-	if err := svc.StreamLogs(context.Background(), worker.ID, true, 3, &logs); err != nil {
+	logCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StreamLogs(logCtx, worker.ID, true, 1, cancelOnWrite{writer: &logs, cancel: cancel}); err != nil {
 		t.Fatalf("StreamLogs() error = %v", err)
 	}
 	if got := logs.String(); got != "gateway line\n" {
@@ -377,8 +400,8 @@ func TestBoxLiteCLIProviderGatewayLifecycle(t *testing.T) {
 	if !hasBoxliteCLICommandArgs(runner.requests, "run", "/bin/sh", "-c", "/usr/local/bin/picoclaw gateway -d 1>~/.picoclaw/gateway.log 2>/dev/null") {
 		t.Fatalf("boxlite-cli gateway run command not found in requests: %#v", requestArgs(runner.requests))
 	}
-	if !hasBoxliteCLIExec(runner.requests, "tail", "-n", "3", "-f", boxPicoClawDir+"/gateway.log") {
-		t.Fatalf("boxlite-cli tail exec not found in requests: %#v", requestArgs(runner.requests))
+	if hasBoxliteCLIExec(runner.requests, "tail", "-n", "1", "-f", boxPicoClawDir+"/gateway.log") {
+		t.Fatalf("boxlite-cli tail exec should not be used for mounted gateway logs: %#v", requestArgs(runner.requests))
 	}
 	if !hasBoxliteCLICommandArgs(runner.requests, "rm", "-f", "box-alice") {
 		t.Fatalf("boxlite-cli remove command not found in requests: %#v", requestArgs(runner.requests))
@@ -827,7 +850,7 @@ func TestDeleteRemovesAgentFromState(t *testing.T) {
 	}
 }
 
-func TestSaveLockedOmitsPersistedAgentStatus(t *testing.T) {
+func TestSaveLockedPersistsLastKnownAgentStatus(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "agents.json")
 
@@ -852,8 +875,118 @@ func TestSaveLockedOmitsPersistedAgentStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if strings.Contains(string(data), `"status"`) {
-		t.Fatalf("saved state should not contain status: %s", data)
+	if !strings.Contains(string(data), `"status": "running"`) {
+		t.Fatalf("saved state should contain last known status: %s", data)
+	}
+}
+
+func TestListKeepsLastKnownStatusWhenHydrationFails(t *testing.T) {
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) {
+			return nil, fmt.Errorf("runtime lock")
+		},
+		nil,
+	)
+	defer ResetTestHooks()
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:        "u-alice",
+		Name:      "alice",
+		Role:      RoleWorker,
+		BoxID:     "box-alice",
+		Status:    string(sandbox.StateRunning),
+		CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+	}
+
+	got := svc.List()
+	if len(got) != 1 {
+		t.Fatalf("List() len = %d, want 1", len(got))
+	}
+	if got[0].Status != string(sandbox.StateRunning) {
+		t.Fatalf("List()[0].Status = %q, want running", got[0].Status)
+	}
+}
+
+func TestIsSandboxRuntimeContentionRecognizesBoxLiteLockErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "failed acquire runtime lock",
+			err:  fmt.Errorf("inspect boxlite cli box: Error: internal error: Failed to acquire runtime lock at /tmp/boxlite"),
+			want: true,
+		},
+		{
+			name: "runtime already using directory",
+			err:  fmt.Errorf("get agent box: internal error: Another BoxliteRuntime is already using directory: /tmp/boxlite"),
+			want: true,
+		},
+		{
+			name: "unrelated error",
+			err:  fmt.Errorf("network down"),
+			want: false,
+		},
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isSandboxRuntimeContention(tc.err); got != tc.want {
+				t.Fatalf("isSandboxRuntimeContention(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadLegacyAgentWithBoxIDInfersRunningUntilHydrated(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agents.json")
+	data, err := json.Marshal(persistedState{
+		Agents: []persistedAgent{
+			{
+				ID:        "u-alice",
+				Name:      "alice",
+				Role:      RoleWorker,
+				BoxID:     "box-alice",
+				CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(statePath, data, 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) {
+			return nil, fmt.Errorf("runtime lock")
+		},
+		nil,
+	)
+	defer ResetTestHooks()
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", statePath)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	got, ok := svc.Agent("u-alice")
+	if !ok {
+		t.Fatal("Agent() ok = false, want true")
+	}
+	if got.Status != string(sandbox.StateRunning) {
+		t.Fatalf("Agent().Status = %q, want running fallback", got.Status)
 	}
 }
 
@@ -1294,7 +1427,7 @@ func TestCreateWorkerClosesBoxHandleAfterCreate(t *testing.T) {
 	}
 }
 
-func TestStreamLogsUsesStoredBoxIDAndTailArgs(t *testing.T) {
+func TestStreamLogsFallsBackToSandboxTailWhenHostLogIsMissing(t *testing.T) {
 	rt := &fakeRuntime{}
 	SetTestHooks(func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil }, nil)
 	defer ResetTestHooks()
@@ -1331,7 +1464,7 @@ func TestStreamLogsUsesStoredBoxIDAndTailArgs(t *testing.T) {
 	}
 
 	var out strings.Builder
-	if err := svc.StreamLogs(context.Background(), "u-alice", true, 50, &out); err != nil {
+	if err := svc.StreamLogs(context.Background(), "u-alice", false, 50, &out); err != nil {
 		t.Fatalf("StreamLogs() error = %v", err)
 	}
 	if gotBoxID != "box-123" {
@@ -1340,11 +1473,55 @@ func TestStreamLogsUsesStoredBoxIDAndTailArgs(t *testing.T) {
 	if gotName != "tail" {
 		t.Fatalf("runBoxCommand() name = %q, want %q", gotName, "tail")
 	}
-	if strings.Join(gotArgs, " ") != "-n 50 -f /home/picoclaw/.picoclaw/gateway.log" {
+	if strings.Join(gotArgs, " ") != "-n 50 /home/picoclaw/.picoclaw/gateway.log" {
 		t.Fatalf("runBoxCommand() args = %q", gotArgs)
 	}
 	if out.String() != "line-1\n" {
 		t.Fatalf("output = %q, want streamed log line", out.String())
+	}
+}
+
+func TestStreamLogsFollowUsesHostGatewayLogWithoutSandboxRuntime(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:        "u-alice",
+		Name:      "alice",
+		BoxID:     "box-123",
+		Role:      RoleWorker,
+		Status:    "running",
+		CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+	}
+	logPath, err := agentGatewayLogPath("alice")
+	if err != nil {
+		t.Fatalf("agentGatewayLogPath() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		t.Fatalf("create log dir: %v", err)
+	}
+	if err := os.WriteFile(logPath, []byte("older\nready\n"), 0o600); err != nil {
+		t.Fatalf("write gateway log: %v", err)
+	}
+
+	testEnsureRuntimeHook = func(*Service, string) (sandbox.Runtime, error) {
+		t.Fatal("StreamLogs follow opened sandbox runtime; want host log streaming")
+		return nil, nil
+	}
+	defer func() { testEnsureRuntimeHook = nil }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var out strings.Builder
+	if err := svc.StreamLogs(ctx, "u-alice", true, 1, cancelOnWrite{writer: &out, cancel: cancel}); err != nil {
+		t.Fatalf("StreamLogs() error = %v", err)
+	}
+	if out.String() != "ready\n" {
+		t.Fatalf("output = %q, want last host log line", out.String())
 	}
 }
 
@@ -1477,7 +1654,73 @@ func TestStartFallsBackToNameAndRefreshesStoredAgentState(t *testing.T) {
 	}
 }
 
+func TestStartRefreshesCompleteWorkerGatewayConfig(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	orig := localIPv4Resolver
+	localIPv4Resolver = func() string { return "10.0.0.8" }
+	defer func() { localIPv4Resolver = orig }()
+
+	rt := &fakeRuntime{}
+	SetTestHooks(func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil }, nil)
+	defer ResetTestHooks()
+
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		if idOrName != "box-alice" {
+			t.Fatalf("getBox() idOrName = %q, want box-alice", idOrName)
+		}
+		return &fakeInfoInstance{info: sandbox.Info{
+			ID:        "box-alice",
+			Name:      "alice",
+			State:     sandbox.StateRunning,
+			CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+		}}, nil
+	}
+	testStartBoxHook = func(_ *Service, _ context.Context, _ sandbox.Instance) error {
+		return nil
+	}
+	testBoxInfoHook = func(_ *Service, _ context.Context, box sandbox.Instance) (sandbox.Info, error) {
+		return box.Info(context.Background())
+	}
+	defer func() {
+		testGetBoxHook = nil
+		testStartBoxHook = nil
+		testBoxInfoHook = nil
+	}()
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{ListenAddr: ":18080", AccessToken: "token"}, "", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:              "u-alice",
+		Name:            "alice",
+		Role:            RoleWorker,
+		BoxID:           "box-alice",
+		Status:          string(sandbox.StateRunning),
+		AgentProfile:    AgentProfile{Name: "alice", Provider: ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+	}
+
+	if _, err := svc.Start(context.Background(), "u-alice"); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostPicoClawDir, hostPicoClawConfig)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(worker config) error = %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{`"bot_id": "u-alice"`, `"model_name": "gpt-5.5"`, `"api_base": "http://10.0.0.8:18080/api/bots/u-alice/llm"`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("worker config missing %q in:\n%s", want, text)
+		}
+	}
+}
+
 func TestStartConfiguredAgentsRecreatesMissingCompleteWorkerBoxes(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	rt := &fakeRuntime{}
 	boxes := map[string]sandbox.Info{}
 	var created []string
@@ -1581,6 +1824,7 @@ func TestStartConfiguredAgentsRecreatesMissingCompleteWorkerBoxes(t *testing.T) 
 }
 
 func TestStartConfiguredAgentsStartsStoppedAndRecreatesRunningCompleteWorkers(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	rt := &fakeRuntime{}
 	infos := map[string]sandbox.Info{
 		"box-alice": {
@@ -1699,6 +1943,7 @@ func TestStartConfiguredAgentsStartsStoppedAndRecreatesRunningCompleteWorkers(t 
 		Name:            "carol",
 		Role:            RoleWorker,
 		BoxID:           "box-carol",
+		Status:          string(sandbox.StateRunning),
 		AgentProfile:    completeCarol,
 		ProfileComplete: true,
 		CreatedAt:       time.Date(2026, 4, 1, 13, 0, 0, 0, time.UTC),
@@ -2435,16 +2680,23 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 		t.Fatalf("PICOCLAW_CHANNELS_FEISHU_APP_ID = %q, want %q", got, want)
 	}
 
+	wantConfigRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostPicoClawDir)
 	wantWorkspaceRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostWorkspaceDir)
 	wantProjectsRoot := filepath.Join(homeDir, config.AppDirName, hostProjectsDir)
-	if len(spec.Mounts) != 2 {
-		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 2 mounts", spec.Mounts)
+	if len(spec.Mounts) != 3 {
+		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 3 mounts", spec.Mounts)
 	}
-	if spec.Mounts[0].HostPath != wantWorkspaceRoot || spec.Mounts[0].GuestPath != boxWorkspaceDir {
-		t.Fatalf("workspace mount = %+v, want host %q guest %q", spec.Mounts[0], wantWorkspaceRoot, boxWorkspaceDir)
+	if spec.Mounts[0].HostPath != wantConfigRoot || spec.Mounts[0].GuestPath != boxPicoClawDir {
+		t.Fatalf("config mount = %+v, want host %q guest %q", spec.Mounts[0], wantConfigRoot, boxPicoClawDir)
 	}
-	if spec.Mounts[1].HostPath != wantProjectsRoot || spec.Mounts[1].GuestPath != boxProjectsDir {
-		t.Fatalf("projects mount = %+v, want host %q guest %q", spec.Mounts[1], wantProjectsRoot, boxProjectsDir)
+	if spec.Mounts[1].HostPath != wantWorkspaceRoot || spec.Mounts[1].GuestPath != boxWorkspaceDir {
+		t.Fatalf("workspace mount = %+v, want host %q guest %q", spec.Mounts[1], wantWorkspaceRoot, boxWorkspaceDir)
+	}
+	if spec.Mounts[2].HostPath != wantProjectsRoot || spec.Mounts[2].GuestPath != boxProjectsDir {
+		t.Fatalf("projects mount = %+v, want host %q guest %q", spec.Mounts[2], wantProjectsRoot, boxProjectsDir)
+	}
+	if _, err := os.Stat(filepath.Join(wantConfigRoot, hostPicoClawConfig)); err != nil {
+		t.Fatalf("worker PicoClaw config was not written: %v", err)
 	}
 }
 

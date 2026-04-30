@@ -16,6 +16,8 @@ import (
 
 	"csgclaw/internal/config"
 
+	"github.com/gin-gonic/gin"
+	cliproxyapi "github.com/router-for-me/CLIProxyAPI/v6/sdk/api"
 	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy"
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v6/sdk/config"
 	_ "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator/builtin"
@@ -33,6 +35,8 @@ const (
 
 	configDirEnv = "CSGCLAW_CLIPROXY_CONFIG_DIR"
 	authDirEnv   = "CSGCLAW_CLIPROXY_AUTH_DIR"
+
+	embeddedCLIProxySkipGinLogKey = "__gin_skip_request_logging__"
 )
 
 type Service struct {
@@ -82,6 +86,7 @@ func (s *Service) EnsureStarted(ctx context.Context) error {
 	svc, err := cliproxysdk.NewBuilder().
 		WithConfig(cfg).
 		WithConfigPath(cfgPath).
+		WithServerOptions(cliproxyapi.WithMiddleware(skipEmbeddedHealthzAccessLog())).
 		Build()
 	if err != nil {
 		s.mu.Unlock()
@@ -240,6 +245,15 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		return err
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+func skipEmbeddedHealthzAccessLog() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c != nil && c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/healthz" {
+			c.Set(embeddedCLIProxySkipGinLogKey, true)
+		}
+		c.Next()
 	}
 }
 

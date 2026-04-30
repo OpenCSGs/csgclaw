@@ -7,6 +7,7 @@ require github.com/RussellLuo/boxlite/sdks/go v0.7.6
 require github.com/larksuite/oapi-sdk-go/v3 v3.5.3
 
 require (
+	github.com/gin-gonic/gin v1.10.1
 	github.com/router-for-me/CLIProxyAPI/v6 v6.9.40
 	golang.org/x/term v0.37.0
 )
@@ -22,7 +23,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
-	github.com/gin-gonic/gin v1.10.1 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.20.0 // indirect

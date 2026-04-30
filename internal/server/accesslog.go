@@ -55,11 +55,11 @@ func accessLogShouldSkip(r *http.Request) bool {
 	if r == nil || r.URL == nil {
 		return false
 	}
-	if r.Method != http.MethodGet {
-		return false
-	}
 	if r.URL.Path == "/healthz" {
 		return true
+	}
+	if r.Method != http.MethodGet {
+		return false
 	}
 	return r.URL.Path == "/api/v1/agents" && r.URL.Query().Get("poll") == "1"
 }

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,7 +14,10 @@ import (
 	"csgclaw/internal/im"
 )
 
-const picoClawReplayWindow = 30 * time.Minute
+const (
+	picoClawReplayWindow      = 30 * time.Minute
+	picoClawHeartbeatInterval = 15 * time.Second
+)
 
 func (h *Handler) registerPicoClawRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/bots/", h.handlePicoClawBotRoutes)
@@ -76,27 +80,87 @@ func (h *Handler) handlePicoClawEvents(w http.ResponseWriter, r *http.Request, b
 	w.Header().Set("Connection", "keep-alive")
 
 	events, cancel := h.picoclaw.Subscribe(botID)
-	defer cancel()
+	defer func() {
+		cancel()
+		h.requeuePicoClawBufferedEvents(botID, events)
+	}()
+	controller := http.NewResponseController(w)
 
-	_, _ = io.WriteString(w, ": connected\n\n")
-	flusher.Flush()
+	if _, err := io.WriteString(w, ": connected\n\n"); err != nil {
+		return
+	}
+	if err := flushPicoClawSSE(controller, flusher); err != nil {
+		return
+	}
 	h.replayRecentPicoClawMessages(botID, r.Header.Get("Last-Event-ID"))
+	heartbeat := time.NewTicker(picoClawHeartbeatInterval)
+	defer heartbeat.Stop()
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case evt := <-events:
-			data, err := evt.MarshalJSONLine()
-			if err != nil {
+		case <-heartbeat.C:
+			if err := writePicoClawSSEComment(w, controller, flusher, "heartbeat"); err != nil {
 				return
 			}
-			if id := picoClawSSEID(evt.MessageID); id != "" {
-				_, _ = fmt.Fprintf(w, "id: %s\n", id)
+		case evt, ok := <-events:
+			if !ok {
+				return
 			}
-			_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", data)
-			flusher.Flush()
+			if err := writePicoClawSSEEvent(w, controller, flusher, evt); err != nil {
+				h.picoclaw.Requeue(botID, evt)
+				return
+			}
+			h.picoclaw.Ack(botID, evt.MessageID)
 		}
+	}
+}
+
+func writePicoClawSSEEvent(w http.ResponseWriter, controller *http.ResponseController, fallback http.Flusher, evt im.PicoClawEvent) error {
+	data, err := evt.MarshalJSONLine()
+	if err != nil {
+		return err
+	}
+	if id := picoClawSSEID(evt.MessageID); id != "" {
+		if _, err := fmt.Fprintf(w, "id: %s\n", id); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(w, "event: message\ndata: %s\n\n", data); err != nil {
+		return err
+	}
+	return flushPicoClawSSE(controller, fallback)
+}
+
+func writePicoClawSSEComment(w http.ResponseWriter, controller *http.ResponseController, fallback http.Flusher, comment string) error {
+	if _, err := fmt.Fprintf(w, ": %s\n\n", comment); err != nil {
+		return err
+	}
+	return flushPicoClawSSE(controller, fallback)
+}
+
+func flushPicoClawSSE(controller *http.ResponseController, fallback http.Flusher) error {
+	if controller != nil {
+		if err := controller.Flush(); err == nil {
+			return nil
+		} else if !errors.Is(err, http.ErrNotSupported) {
+			return err
+		}
+	}
+	if fallback == nil {
+		return nil
+	}
+	fallback.Flush()
+	return nil
+}
+
+func (h *Handler) requeuePicoClawBufferedEvents(botID string, events <-chan im.PicoClawEvent) {
+	if h == nil || h.picoclaw == nil {
+		return
+	}
+	for evt := range events {
+		h.picoclaw.Requeue(botID, evt)
 	}
 }
 

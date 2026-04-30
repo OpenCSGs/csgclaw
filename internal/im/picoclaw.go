@@ -3,6 +3,7 @@ package im
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -10,6 +11,7 @@ type PicoClawBridge struct {
 	mu          sync.Mutex
 	subscribers map[string]map[chan PicoClawEvent]struct{}
 	pending     map[string][]PicoClawEvent
+	inflight    map[string]map[string]PicoClawEvent
 	seen        map[string]map[string]struct{}
 }
 
@@ -40,6 +42,7 @@ func NewPicoClawBridge(string) *PicoClawBridge {
 	return &PicoClawBridge{
 		subscribers: make(map[string]map[chan PicoClawEvent]struct{}),
 		pending:     make(map[string][]PicoClawEvent),
+		inflight:    make(map[string]map[string]PicoClawEvent),
 		seen:        make(map[string]map[string]struct{}),
 	}
 }
@@ -54,39 +57,30 @@ func (b *PicoClawBridge) Subscribe(botID string) (<-chan PicoClawEvent, func()) 
 	b.subscribers[botID][ch] = struct{}{}
 	pending := append([]PicoClawEvent(nil), b.pending[botID]...)
 	delete(b.pending, botID)
-	b.mu.Unlock()
 
-	var unsent []PicoClawEvent
-	var sent []PicoClawEvent
 	for _, evt := range pending {
 		select {
 		case ch <- evt:
-			sent = append(sent, evt)
+			b.markInflightLocked(botID, evt)
 		default:
-			unsent = append(unsent, evt)
-		}
-	}
-	if len(sent) > 0 || len(unsent) > 0 {
-		b.mu.Lock()
-		for _, evt := range sent {
-			b.markSeenLocked(botID, evt.MessageID)
-		}
-		for _, evt := range unsent {
 			b.addPendingLocked(botID, evt)
 		}
-		b.mu.Unlock()
 	}
+	b.mu.Unlock()
 
+	var cancelOnce sync.Once
 	cancel := func() {
-		b.mu.Lock()
-		if subs, ok := b.subscribers[botID]; ok {
-			delete(subs, ch)
-			if len(subs) == 0 {
-				delete(b.subscribers, botID)
+		cancelOnce.Do(func() {
+			b.mu.Lock()
+			if subs, ok := b.subscribers[botID]; ok {
+				delete(subs, ch)
+				if len(subs) == 0 {
+					delete(b.subscribers, botID)
+				}
 			}
-		}
-		b.mu.Unlock()
-		close(ch)
+			b.mu.Unlock()
+			close(ch)
+		})
 	}
 	return ch, cancel
 }
@@ -119,46 +113,132 @@ func (b *PicoClawBridge) EnqueueMessageEvent(room Room, sender User, message Mes
 
 func (b *PicoClawBridge) enqueue(botID string, evt PicoClawEvent) bool {
 	b.mu.Lock()
-	if b.hasSeenLocked(botID, evt.MessageID) {
-		b.mu.Unlock()
+	defer b.mu.Unlock()
+	if b.hasSeenOrInflightLocked(botID, evt.MessageID) {
 		return true
 	}
-	subs := make([]chan PicoClawEvent, 0, len(b.subscribers[botID]))
-	for ch := range b.subscribers[botID] {
-		subs = append(subs, ch)
-	}
+	subs := b.subscribers[botID]
 	if len(subs) == 0 {
 		b.addPendingLocked(botID, evt)
-		b.mu.Unlock()
 		return false
 	}
-	b.mu.Unlock()
 
 	sent := false
-	for _, ch := range subs {
+	for ch := range subs {
 		select {
 		case ch <- evt:
 			sent = true
 		default:
 		}
 	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	if sent {
-		b.markSeenLocked(botID, evt.MessageID)
+		b.markInflightLocked(botID, evt)
 		return true
 	}
 	b.addPendingLocked(botID, evt)
 	return false
 }
 
+func (b *PicoClawBridge) Ack(botID, messageID string) {
+	botID = strings.TrimSpace(botID)
+	messageID = strings.TrimSpace(messageID)
+	if botID == "" || messageID == "" {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if inflight := b.inflight[botID]; inflight != nil {
+		delete(inflight, messageID)
+		if len(inflight) == 0 {
+			delete(b.inflight, botID)
+		}
+	}
+	b.removePendingLocked(botID, messageID)
+	b.markSeenLocked(botID, messageID)
+}
+
+func (b *PicoClawBridge) Requeue(botID string, evt PicoClawEvent) {
+	botID = strings.TrimSpace(botID)
+	if botID == "" {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if messageID := strings.TrimSpace(evt.MessageID); messageID != "" {
+		if inflight := b.inflight[botID]; inflight != nil {
+			delete(inflight, messageID)
+			if len(inflight) == 0 {
+				delete(b.inflight, botID)
+			}
+		}
+	}
+	b.addPendingLocked(botID, evt)
+}
+
 func (b *PicoClawBridge) addPendingLocked(botID string, evt PicoClawEvent) {
-	if b.hasSeenLocked(botID, evt.MessageID) {
+	if b.hasSeenOrInflightLocked(botID, evt.MessageID) || b.hasPendingLocked(botID, evt.MessageID) {
 		return
 	}
 	pending := append(b.pending[botID], evt)
 	if len(pending) > maxPendingPicoClawEventsPerBot {
 		pending = pending[len(pending)-maxPendingPicoClawEventsPerBot:]
+	}
+	b.pending[botID] = pending
+}
+
+func (b *PicoClawBridge) markInflightLocked(botID string, evt PicoClawEvent) {
+	messageID := strings.TrimSpace(evt.MessageID)
+	if messageID == "" || b.hasSeenLocked(botID, messageID) {
+		return
+	}
+	if b.inflight[botID] == nil {
+		b.inflight[botID] = make(map[string]PicoClawEvent)
+	}
+	b.inflight[botID][messageID] = evt
+	b.removePendingLocked(botID, messageID)
+}
+
+func (b *PicoClawBridge) hasSeenOrInflightLocked(botID, messageID string) bool {
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return false
+	}
+	if b.hasSeenLocked(botID, messageID) {
+		return true
+	}
+	_, ok := b.inflight[botID][messageID]
+	return ok
+}
+
+func (b *PicoClawBridge) hasPendingLocked(botID, messageID string) bool {
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return false
+	}
+	for _, evt := range b.pending[botID] {
+		if strings.TrimSpace(evt.MessageID) == messageID {
+			return true
+		}
+	}
+	return false
+}
+
+func (b *PicoClawBridge) removePendingLocked(botID, messageID string) {
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return
+	}
+	pending := b.pending[botID]
+	for idx := 0; idx < len(pending); {
+		if strings.TrimSpace(pending[idx].MessageID) == messageID {
+			pending = append(pending[:idx], pending[idx+1:]...)
+			continue
+		}
+		idx++
+	}
+	if len(pending) == 0 {
+		delete(b.pending, botID)
+		return
 	}
 	b.pending[botID] = pending
 }

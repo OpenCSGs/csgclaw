@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"csgclaw/internal/sandbox"
 )
 
 type persistedState struct {
@@ -36,6 +38,7 @@ type persistedAgent struct {
 	Image            string                   `json:"image,omitempty"`
 	BoxID            string                   `json:"box_id,omitempty"`
 	Role             string                   `json:"role"`
+	Status           string                   `json:"status,omitempty"`
 	CreatedAt        time.Time                `json:"created_at"`
 	Profile          string                   `json:"profile,omitempty"`
 	Provider         string                   `json:"provider,omitempty"`
@@ -54,6 +57,7 @@ func newPersistedAgent(a Agent) persistedAgent {
 		Image:            a.Image,
 		BoxID:            a.BoxID,
 		Role:             a.Role,
+		Status:           a.Status,
 		CreatedAt:        a.CreatedAt,
 		Profile:          a.Profile,
 		Provider:         a.Provider,
@@ -73,6 +77,7 @@ func (a persistedAgent) toAgent() Agent {
 		Image:            a.Image,
 		BoxID:            a.BoxID,
 		Role:             a.Role,
+		Status:           a.Status,
 		CreatedAt:        a.CreatedAt,
 		Profile:          a.Profile,
 		Provider:         a.Provider,
@@ -213,6 +218,9 @@ func (s *Service) normalizeLoadedAgent(a Agent) Agent {
 		if strings.TrimSpace(a.Image) == "" {
 			a.Image = s.managerImage
 		}
+	}
+	if strings.TrimSpace(a.Status) == "" && strings.TrimSpace(a.BoxID) != "" {
+		a.Status = string(sandbox.StateRunning)
 	}
 	return a
 }

@@ -1,12 +1,15 @@
 package cliproxy
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
 )
@@ -133,6 +136,42 @@ func TestBuildConfigUsesPrivateNonReservedPortAndWritesConfig(t *testing.T) {
 	if strings.Contains(text, strconv.Itoa(reservedLegacyCLIProxyPort)) {
 		t.Fatalf("generated config contains reserved fixed port:\n%s", text)
 	}
+}
+
+func TestSkipEmbeddedHealthzAccessLogMarksOnlyHealthz(t *testing.T) {
+	mode := gin.Mode()
+	gin.SetMode(gin.TestMode)
+	t.Cleanup(func() { gin.SetMode(mode) })
+
+	router := gin.New()
+	router.Use(skipEmbeddedHealthzAccessLog())
+	router.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"skip": ginContextBool(c, embeddedCLIProxySkipGinLogKey)})
+	})
+	router.GET("/v1/models", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"skip": ginContextBool(c, embeddedCLIProxySkipGinLogKey)})
+	})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"skip":true}` {
+		t.Fatalf("healthz skip response = %s, want true", got)
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"skip":false}` {
+		t.Fatalf("api skip response = %s, want false", got)
+	}
+}
+
+func ginContextBool(c *gin.Context, key string) bool {
+	value, ok := c.Get(key)
+	if !ok {
+		return false
+	}
+	flag, ok := value.(bool)
+	return ok && flag
 }
 
 func TestConfiguredAuthDirExpandsHome(t *testing.T) {
