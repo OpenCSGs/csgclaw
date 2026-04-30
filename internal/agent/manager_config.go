@@ -25,13 +25,6 @@ func ensureManagerPicoClawConfig(server config.ServerConfig, model config.ModelC
 }
 
 func ensureAgentPicoClawConfig(agentName, botID string, server config.ServerConfig, model config.ModelConfig) (string, error) {
-	workspaceRoot, err := agentWorkspaceRoot(agentName)
-	if err != nil {
-		return "", err
-	}
-	if err := migrateNestedPicoClawWorkspace(agentName, workspaceRoot); err != nil {
-		return "", err
-	}
 	hostRoot, err := agentWorkspacePicoClawConfigRoot(agentName)
 	if err != nil {
 		return "", err

@@ -2704,56 +2704,6 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	}
 }
 
-func TestGatewayCreateSpecMigratesNestedPicoClawWorkspaceDir(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-
-	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	agentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")
-	nestedWorkspaceRoot := filepath.Join(agentHome, hostPicoClawDir, hostWorkspaceDir)
-	if err := os.MkdirAll(nestedWorkspaceRoot, 0o755); err != nil {
-		t.Fatalf("os.MkdirAll(nestedWorkspaceRoot) error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(nestedWorkspaceRoot, "local.txt"), []byte("keep"), 0o600); err != nil {
-		t.Fatalf("os.WriteFile(local workspace file) error = %v", err)
-	}
-
-	spec, err := svc.gatewayCreateSpec("picoclaw:latest", "alice", "u-worker-1", AgentProfile{
-		Name:     "alice",
-		Provider: ProviderAPI,
-		ModelID:  "gpt-5.5",
-	})
-	if err != nil {
-		t.Fatalf("gatewayCreateSpec() error = %v", err)
-	}
-
-	if len(spec.Mounts) != 2 {
-		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 2 mounts", spec.Mounts)
-	}
-	workspaceRoot := filepath.Join(agentHome, hostWorkspaceDir)
-	if spec.Mounts[0].HostPath != workspaceRoot || spec.Mounts[0].GuestPath != boxWorkspaceDir {
-		t.Fatalf("workspace mount = %+v, want host %q guest %q", spec.Mounts[0], workspaceRoot, boxWorkspaceDir)
-	}
-	wantProjectsRoot := filepath.Join(homeDir, config.AppDirName, hostProjectsDir)
-	if spec.Mounts[1].HostPath != wantProjectsRoot || spec.Mounts[1].GuestPath != boxProjectsDir {
-		t.Fatalf("projects mount = %+v, want host %q guest %q", spec.Mounts[1], wantProjectsRoot, boxProjectsDir)
-	}
-	if _, err := os.Stat(nestedWorkspaceRoot); !os.IsNotExist(err) {
-		t.Fatalf("nested workspace stat error = %v, want not exist", err)
-	}
-	if data, err := os.ReadFile(filepath.Join(workspaceRoot, "local.txt")); err != nil {
-		t.Fatalf("read migrated workspace file: %v", err)
-	} else if string(data) != "keep" {
-		t.Fatalf("migrated workspace file = %q, want keep", data)
-	}
-	if _, err := os.Stat(filepath.Join(workspaceRoot, "AGENT.md")); err != nil {
-		t.Fatalf("worker workspace template was not written after migration: %v", err)
-	}
-}
-
 func TestGatewayStartCommandUsesTiniForNormalMode(t *testing.T) {
 	entrypoint, cmd := gatewayStartCommand(false)
 

@@ -28,9 +28,6 @@ func ensureAgentWorkspace(agentName, template string) (string, error) {
 	if strings.TrimSpace(template) == "" {
 		return "", fmt.Errorf("workspace template is required")
 	}
-	if err := migrateNestedPicoClawWorkspace(agentName, hostRoot); err != nil {
-		return "", err
-	}
 	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create agent workspace dir: %w", err)
 	}
@@ -46,87 +43,6 @@ func agentWorkspaceRoot(agentName string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(agentHome, hostWorkspaceDir), nil
-}
-
-func nestedPicoClawWorkspaceRoot(agentName string) (string, error) {
-	picoClawRoot, err := agentPicoClawRoot(agentName)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(picoClawRoot, hostWorkspaceDir), nil
-}
-
-func migrateNestedPicoClawWorkspace(agentName, dstRoot string) error {
-	srcRoot, err := nestedPicoClawWorkspaceRoot(agentName)
-	if err != nil {
-		return err
-	}
-	if srcRoot == dstRoot {
-		return nil
-	}
-	if _, err := os.Lstat(srcRoot); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("inspect legacy agent workspace: %w", err)
-	}
-	if _, err := os.Lstat(dstRoot); err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("inspect agent workspace: %w", err)
-		}
-		if err := os.MkdirAll(filepath.Dir(dstRoot), 0o755); err != nil {
-			return fmt.Errorf("create agent workspace parent: %w", err)
-		}
-		if err := os.Rename(srcRoot, dstRoot); err != nil {
-			return fmt.Errorf("move nested picoclaw workspace: %w", err)
-		}
-		return nil
-	}
-	if err := mergeLegacyWorkspace(srcRoot, dstRoot); err != nil {
-		return err
-	}
-	return nil
-}
-
-func mergeLegacyWorkspace(srcRoot, dstRoot string) error {
-	entries, err := os.ReadDir(srcRoot)
-	if err != nil {
-		return fmt.Errorf("read legacy workspace: %w", err)
-	}
-	if err := os.MkdirAll(dstRoot, 0o755); err != nil {
-		return fmt.Errorf("create merged workspace: %w", err)
-	}
-	for _, entry := range entries {
-		srcPath := filepath.Join(srcRoot, entry.Name())
-		dstPath := filepath.Join(dstRoot, entry.Name())
-		dstInfo, err := os.Lstat(dstPath)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return fmt.Errorf("inspect merged workspace path: %w", err)
-			}
-			if err := os.Rename(srcPath, dstPath); err != nil {
-				return fmt.Errorf("move legacy workspace path: %w", err)
-			}
-			continue
-		}
-		if entry.IsDir() && dstInfo.IsDir() {
-			if err := mergeLegacyWorkspace(srcPath, dstPath); err != nil {
-				return err
-			}
-			continue
-		}
-		legacyPath := filepath.Join(dstRoot, ".legacy-workspace", entry.Name())
-		if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
-			return fmt.Errorf("create legacy workspace archive: %w", err)
-		}
-		if err := os.Rename(srcPath, legacyPath); err != nil {
-			return fmt.Errorf("archive legacy workspace path: %w", err)
-		}
-	}
-	if err := os.Remove(srcRoot); err != nil {
-		return fmt.Errorf("remove legacy workspace dir: %w", err)
-	}
-	return nil
 }
 
 func copyEmbeddedWorkspace(template, dstRoot string) error {
