@@ -33,6 +33,7 @@ mermaid.initialize({
 const messages = {
   zh: {
     pageTitle: "CSGClaw IM",
+    localAgentConsole: "本地 Agent 控制台",
     loading: "正在加载 IM 工作区...",
     loadingFailed: "加载失败，请稍后重试。",
     emptyConversation: "请选择一个房间或私信",
@@ -188,6 +189,7 @@ const messages = {
   },
   en: {
     pageTitle: "CSGClaw IM",
+    localAgentConsole: "Local agent console",
     loading: "Loading IM workspace...",
     loadingFailed: "Failed to load the workspace. Please try again.",
     emptyConversation: "Select a room or DM",
@@ -1536,9 +1538,16 @@ function App() {
   const managerAgent = agents.find((item) => item.role === "manager" || item.id === "u-manager");
   const workerAgents = agents.filter((item) => item.id !== managerAgent?.id);
   const agentItems = [managerAgent, ...workerAgents].filter(Boolean);
+  const runningAgentCount = agentItems.filter(isAgentRunning).length;
   const selectedAgent = selectedAgentForPage;
   const selectedConversation = activePane.type === "conversation" ? activeConversation : null;
   const activeChannel = selectedConversation && !isDirectConversation(selectedConversation) ? selectedConversation : null;
+  const selectedMessageCount = selectedConversation?.messages?.length ?? 0;
+  const currentWorkspaceLabel = activePane.type === "agent"
+    ? t("agentOverview")
+    : activePane.type === "computer"
+      ? t("computerOverview")
+      : t("conversationOverview");
   const previewUser = profilePreview?.type === "user"
     ? usersById.get(profilePreview.id) ?? null
     : profilePreview?.type === "agent"
@@ -2147,7 +2156,9 @@ function App() {
           >
             <div className="sidebar-header workspace-header">
               <div className="sidebar-brand-row">
-                <div className="sidebar-brand">CSGClaw</div>
+                <div className="sidebar-brand-lockup" aria-label="CSGClaw">
+                  <div className="sidebar-brand-mark sidebar-brand-wordmark" aria-hidden="true">CSGClaw</div>
+                </div>
                 <div className="sidebar-controls">
                   <div className="theme-switch" role="group" aria-label=${t("themeSwitcher")}>
                     <div className=${`theme-switch-track ${theme === "dark" ? "is-dark" : "is-light"}`}>
@@ -2190,6 +2201,17 @@ function App() {
                   </button>
                 </div>
               </div>
+              <div className="workspace-signal-panel" aria-label=${currentWorkspaceLabel}>
+                <div className="workspace-signal-copy">
+                  <span>${currentWorkspaceLabel}</span>
+                  <strong>${runningAgentCount}/${agentItems.length || 0} ${t("activeNow")}</strong>
+                </div>
+                <div className="workspace-signal-meter" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
             </div>
             <nav className="workspace-nav" aria-label="Workspace">
               <div className="workspace-tabbar" role="tablist" aria-label="Workspace sections">
@@ -2202,6 +2224,10 @@ function App() {
                   onClick=${() => setWorkspaceTab(WORKSPACE_TAB_MESSAGES)}
                 >
                   <span className="workspace-tab-icon" aria-hidden="true"><${RoomsIcon} /></span>
+                  <span className="workspace-tab-copy">
+                    <strong>${t("messagesTab")}</strong>
+                    <small>${roomCount}</small>
+                  </span>
                 </button>
                 <button
                   className=${`workspace-tab ${workspaceTab === WORKSPACE_TAB_AGENTS ? "active" : ""}`}
@@ -2212,6 +2238,10 @@ function App() {
                   onClick=${() => setWorkspaceTab(WORKSPACE_TAB_AGENTS)}
                 >
                   <span className="workspace-tab-icon" aria-hidden="true"><${UsersIcon} /></span>
+                  <span className="workspace-tab-copy">
+                    <strong>${t("agentsTab")}</strong>
+                    <small>${agentItems.length}</small>
+                  </span>
                 </button>
               </div>
               ${workspaceTab === WORKSPACE_TAB_MESSAGES
@@ -2323,10 +2353,10 @@ function App() {
               <button className=${`sidebar-rail-button ${activePane.type === "computer" ? "active" : ""}`} aria-label=${t("localComputer")} title=${t("localComputer")} onClick=${selectComputer}>
                 <span className="sidebar-rail-icon" aria-hidden="true"><${ComputerIcon} /></span>
               </button>
-              <button className="sidebar-rail-button" aria-label=${t("createAgent")} title=${t("createAgent")} onClick=${openCreateAgentModal}>
+              <button type="button" className="sidebar-rail-button" aria-label=${t("createAgent")} title=${t("createAgent")} onClick=${openCreateAgentModal}>
                 <span className="sidebar-rail-icon" aria-hidden="true"><${AgentIcon} /></span>
               </button>
-              <button className="sidebar-rail-button" aria-label=${t("createRoom")} title=${t("createRoom")} onClick=${() => openCreateRoomModal()}>
+              <button type="button" className="sidebar-rail-button" aria-label=${t("createRoom")} title=${t("createRoom")} onClick=${() => openCreateRoomModal()}>
                 <span className="sidebar-rail-icon" aria-hidden="true"><${RoomPlusIcon} /></span>
               </button>
             </nav>
@@ -2381,6 +2411,10 @@ function App() {
                     <div className="chat-title-bar">
                       <div className="chat-title-row">
                         <div className="chat-title-group">
+                          <div className="chat-kicker">
+                            <span>${isDirectConversation(activeConversation) ? t("directMessagesSection") : t("conversationLabel")}</span>
+                            <strong>${selectedMessageCount}</strong>
+                          </div>
                           <div className="chat-title truncate">${activeConversation.title}</div>
                           <div ref=${memberMenuRef} className="header-menu">
                             <button
@@ -2464,10 +2498,15 @@ function App() {
                             : null}
                         </div>
                         <button
+                          type="button"
                           className="icon-button"
                           aria-label=${inviteActionLabel}
                           title=${inviteActionLabel}
-                          onClick=${handleInviteAction}
+                          onClick=${(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            handleInviteAction();
+                          }}
                         >
                           <span className="icon-button-mark"><${AddUserIcon} /></span>
                         </button>
@@ -2481,9 +2520,19 @@ function App() {
 
                 <section ref=${messageListRef} className="messages">
                   ${activeConversation.messages.length === 0
-                    ? html`<div className="messages-empty">${t("noMessages")}</div>`
+                    ? html`
+                        <div className="messages-empty rich-empty">
+                          <span aria-hidden="true" className="rich-empty-mark">></span>
+                          <strong>${t("noMessages")}</strong>
+                        </div>
+                      `
                     : visibleMessages.length === 0
-                      ? html`<div className="messages-empty">${t("noVisibleMessages")}</div>`
+                      ? html`
+                          <div className="messages-empty rich-empty">
+                            <span aria-hidden="true" className="rich-empty-mark">#</span>
+                            <strong>${t("noVisibleMessages")}</strong>
+                          </div>
+                        `
                       : null}
                   ${visibleMessages.map((message) => {
                     if (isEventMessage(message)) {
@@ -2595,7 +2644,12 @@ function App() {
                   <div className="composer-tip">${t("composerTip")}</div>
                 </footer>
               `
-            : html`<div className="empty-state">${t("emptyConversation")}</div>`}
+            : html`
+                <div className="empty-state shell-empty-state">
+                  <span className="rich-empty-mark" aria-hidden="true">></span>
+                  <strong>${t("emptyConversation")}</strong>
+                </div>
+              `}
         </main>
       </div>
 
@@ -3156,7 +3210,17 @@ function WorkspaceGroup({ id, title, count, collapsed, onToggle, onAdd, addLabel
         </button>
         ${onAdd
           ? html`
-              <button className="workspace-add-button" aria-label=${addLabel || title} title=${addLabel || title} onClick=${onAdd}>
+              <button
+                type="button"
+                className="workspace-add-button"
+                aria-label=${addLabel || title}
+                title=${addLabel || title}
+                onClick=${(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onAdd?.();
+                }}
+              >
                 <span aria-hidden="true">+</span>
               </button>
             `
