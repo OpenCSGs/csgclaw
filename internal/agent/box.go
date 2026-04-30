@@ -41,17 +41,7 @@ func (s *Service) forceRemoveBox(ctx context.Context, rt sandbox.Runtime, idOrNa
 	if rt == nil {
 		return fmt.Errorf("invalid sandbox runtime")
 	}
-	var err error
-	for attempt := 0; attempt < sandboxRuntimeLockRetryAttempts; attempt++ {
-		err = rt.Remove(ctx, idOrName, sandbox.RemoveOptions{Force: true})
-		if err == nil || sandbox.IsNotFound(err) || !isSandboxRuntimeLockError(err) || attempt == sandboxRuntimeLockRetryAttempts-1 {
-			return err
-		}
-		if !shouldRetrySandboxRuntimeLock(ctx, err, attempt) {
-			return err
-		}
-	}
-	return err
+	return rt.Remove(ctx, idOrName, sandbox.RemoveOptions{Force: true})
 }
 
 func (s *Service) gatewayCreateSpec(image, name, botID string, profile AgentProfile) (sandbox.CreateSpec, error) {

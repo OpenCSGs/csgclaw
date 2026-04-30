@@ -7,15 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"csgclaw/internal/config"
 	"csgclaw/internal/sandbox"
 )
-
-const sandboxRuntimeLockRetryAttempts = 8
-
-var sandboxRuntimeLockRetryDelay = 50 * time.Millisecond
 
 func (s *Service) ensureRuntime(agentName string) (sandbox.Runtime, error) {
 	if testEnsureRuntimeHook != nil {
@@ -81,114 +76,38 @@ func (s *Service) lookupBootstrapManager(ctx context.Context) (sandbox.Runtime, 
 }
 
 func (s *Service) getBox(ctx context.Context, rt sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
-	var box sandbox.Instance
-	var err error
-	for attempt := 0; attempt < sandboxRuntimeLockRetryAttempts; attempt++ {
-		if testGetBoxHook != nil {
-			box, err = testGetBoxHook(s, ctx, rt, idOrName)
-		} else {
-			box, err = rt.Get(ctx, idOrName)
-		}
-		if !shouldRetrySandboxRuntimeLock(ctx, err, attempt) {
-			return box, err
-		}
+	if testGetBoxHook != nil {
+		return testGetBoxHook(s, ctx, rt, idOrName)
 	}
-	return box, err
+	return rt.Get(ctx, idOrName)
 }
 
 func (s *Service) startBox(ctx context.Context, box sandbox.Instance) error {
-	var err error
-	for attempt := 0; attempt < sandboxRuntimeLockRetryAttempts; attempt++ {
-		if testStartBoxHook != nil {
-			err = testStartBoxHook(s, ctx, box)
-		} else {
-			err = box.Start(ctx)
-		}
-		if !shouldRetrySandboxRuntimeLock(ctx, err, attempt) {
-			return err
-		}
+	if testStartBoxHook != nil {
+		return testStartBoxHook(s, ctx, box)
 	}
-	return err
+	return box.Start(ctx)
 }
 
 func (s *Service) stopBox(ctx context.Context, box sandbox.Instance, opts sandbox.StopOptions) error {
-	var err error
-	for attempt := 0; attempt < sandboxRuntimeLockRetryAttempts; attempt++ {
-		if testStopBoxHook != nil {
-			err = testStopBoxHook(s, ctx, box, opts)
-		} else {
-			err = box.Stop(ctx, opts)
-		}
-		if !shouldRetrySandboxRuntimeLock(ctx, err, attempt) {
-			return err
-		}
+	if testStopBoxHook != nil {
+		return testStopBoxHook(s, ctx, box, opts)
 	}
-	return err
+	return box.Stop(ctx, opts)
 }
 
 func (s *Service) boxInfo(ctx context.Context, box sandbox.Instance) (sandbox.Info, error) {
-	var info sandbox.Info
-	var err error
-	for attempt := 0; attempt < sandboxRuntimeLockRetryAttempts; attempt++ {
-		if testBoxInfoHook != nil {
-			info, err = testBoxInfoHook(s, ctx, box)
-		} else {
-			info, err = box.Info(ctx)
-		}
-		if !shouldRetrySandboxRuntimeLock(ctx, err, attempt) {
-			return info, err
-		}
+	if testBoxInfoHook != nil {
+		return testBoxInfoHook(s, ctx, box)
 	}
-	return info, err
-}
-
-func isSandboxRuntimeLockError(err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "runtime lock") || strings.Contains(text, "another boxliteruntime")
-}
-
-func shouldRetrySandboxRuntimeLock(ctx context.Context, err error, attempt int) bool {
-	if err == nil || !isSandboxRuntimeLockError(err) || attempt == sandboxRuntimeLockRetryAttempts-1 {
-		return false
-	}
-	return waitSandboxRuntimeLockRetry(ctx, attempt) == nil
-}
-
-func waitSandboxRuntimeLockRetry(ctx context.Context, attempt int) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	delay := sandboxRuntimeLockRetryDelay * time.Duration(attempt+1)
-	if delay <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
+	return box.Info(ctx)
 }
 
 func (s *Service) createBox(ctx context.Context, rt sandbox.Runtime, spec sandbox.CreateSpec) (sandbox.Instance, error) {
-	var box sandbox.Instance
-	var err error
-	for attempt := 0; attempt < sandboxRuntimeLockRetryAttempts; attempt++ {
-		if testCreateBoxHook != nil {
-			box, err = testCreateBoxHook(s, ctx, rt, spec)
-		} else {
-			box, err = rt.Create(ctx, spec)
-		}
-		if !shouldRetrySandboxRuntimeLock(ctx, err, attempt) {
-			return box, err
-		}
+	if testCreateBoxHook != nil {
+		return testCreateBoxHook(s, ctx, rt, spec)
 	}
-	return box, err
+	return rt.Create(ctx, spec)
 }
 
 func (s *Service) runBoxCommand(ctx context.Context, box sandbox.Instance, name string, args []string, w io.Writer) (int, error) {

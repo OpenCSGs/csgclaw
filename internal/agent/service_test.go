@@ -66,41 +66,6 @@ func (f *fakeInfoInstance) Info(context.Context) (sandbox.Info, error) {
 	return f.info, nil
 }
 
-type transientInfoInstance struct {
-	fakeInstance
-	failures int
-	calls    int
-	info     sandbox.Info
-}
-
-func (f *transientInfoInstance) Info(context.Context) (sandbox.Info, error) {
-	f.calls++
-	if f.calls <= f.failures {
-		return sandbox.Info{}, fmt.Errorf("inspect boxlite cli box: boxlite cli exited with code 1: Failed to acquire runtime lock: Another BoxliteRuntime is already using directory")
-	}
-	return f.info, nil
-}
-
-type singleInstanceRuntime struct {
-	instance sandbox.Instance
-}
-
-func (r *singleInstanceRuntime) Create(context.Context, sandbox.CreateSpec) (sandbox.Instance, error) {
-	return r.instance, nil
-}
-
-func (r *singleInstanceRuntime) Get(context.Context, string) (sandbox.Instance, error) {
-	return r.instance, nil
-}
-
-func (r *singleInstanceRuntime) Remove(context.Context, string, sandbox.RemoveOptions) error {
-	return nil
-}
-
-func (r *singleInstanceRuntime) Close() error {
-	return nil
-}
-
 type agentBoxliteCLIRunner struct {
 	requests []boxlitecli.CommandRequest
 	boxes    map[string]agentBoxliteCLIBox
@@ -422,47 +387,6 @@ func TestBoxLiteCLIProviderGatewayLifecycle(t *testing.T) {
 		if len(req.Args) > 2 && req.Args[2] == "run" && !containsAny(req.Args, "/bin/sh", "/usr/local/bin/picoclaw") {
 			t.Fatalf("boxlite-cli run args missing gateway command: %q", req.Args)
 		}
-	}
-}
-
-func TestCreateGatewayBoxRetriesTransientRuntimeLockInfo(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	origDelay := sandboxRuntimeLockRetryDelay
-	sandboxRuntimeLockRetryDelay = time.Millisecond
-	t.Cleanup(func() {
-		sandboxRuntimeLockRetryDelay = origDelay
-	})
-
-	inst := &transientInfoInstance{
-		failures: 2,
-		info: sandbox.Info{
-			ID:        "box-alice",
-			Name:      "alice",
-			State:     sandbox.StateRunning,
-			CreatedAt: time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC),
-		},
-	}
-	svc, err := NewService(testModelConfig(), config.ServerConfig{ListenAddr: ":18080", AccessToken: "token"}, "picoclaw:latest", filepath.Join(homeDir, "agents.json"))
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	box, info, err := svc.createGatewayBox(context.Background(), &singleInstanceRuntime{instance: inst}, "picoclaw:latest", "alice", "u-alice", AgentProfile{
-		Provider:        ProviderCodex,
-		ModelID:         "gpt-5.5",
-		ProfileComplete: true,
-	})
-	if err != nil {
-		t.Fatalf("createGatewayBox() error = %v", err)
-	}
-	if box != inst {
-		t.Fatalf("createGatewayBox() box = %T, want transientInfoInstance", box)
-	}
-	if info.ID != "box-alice" || info.State != sandbox.StateRunning {
-		t.Fatalf("createGatewayBox() info = %+v, want running box-alice", info)
-	}
-	if inst.calls != 3 {
-		t.Fatalf("Info() calls = %d, want 3", inst.calls)
 	}
 }
 
