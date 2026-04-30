@@ -2683,11 +2683,15 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	wantAgentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")
 	wantWorkspaceRoot := filepath.Join(wantAgentHome, hostWorkspaceDir)
 	wantConfigRoot := filepath.Join(wantWorkspaceRoot, filepath.FromSlash(hostPicoClawStateDir))
-	if len(spec.Mounts) != 1 {
-		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 1 mount", spec.Mounts)
+	wantProjectsRoot := filepath.Join(homeDir, config.AppDirName, hostProjectsDir)
+	if len(spec.Mounts) != 2 {
+		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 2 mounts", spec.Mounts)
 	}
 	if spec.Mounts[0].HostPath != wantWorkspaceRoot || spec.Mounts[0].GuestPath != boxWorkspaceDir {
 		t.Fatalf("workspace mount = %+v, want host %q guest %q", spec.Mounts[0], wantWorkspaceRoot, boxWorkspaceDir)
+	}
+	if spec.Mounts[1].HostPath != wantProjectsRoot || spec.Mounts[1].GuestPath != boxProjectsDir {
+		t.Fatalf("projects mount = %+v, want host %q guest %q", spec.Mounts[1], wantProjectsRoot, boxProjectsDir)
 	}
 	if _, err := os.Stat(filepath.Join(wantConfigRoot, hostPicoClawConfig)); err != nil {
 		t.Fatalf("worker PicoClaw config was not written: %v", err)
@@ -2726,12 +2730,16 @@ func TestGatewayCreateSpecMigratesNestedPicoClawWorkspaceDir(t *testing.T) {
 		t.Fatalf("gatewayCreateSpec() error = %v", err)
 	}
 
-	if len(spec.Mounts) != 1 {
-		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 1 mount", spec.Mounts)
+	if len(spec.Mounts) != 2 {
+		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 2 mounts", spec.Mounts)
 	}
 	workspaceRoot := filepath.Join(agentHome, hostWorkspaceDir)
 	if spec.Mounts[0].HostPath != workspaceRoot || spec.Mounts[0].GuestPath != boxWorkspaceDir {
 		t.Fatalf("workspace mount = %+v, want host %q guest %q", spec.Mounts[0], workspaceRoot, boxWorkspaceDir)
+	}
+	wantProjectsRoot := filepath.Join(homeDir, config.AppDirName, hostProjectsDir)
+	if spec.Mounts[1].HostPath != wantProjectsRoot || spec.Mounts[1].GuestPath != boxProjectsDir {
+		t.Fatalf("projects mount = %+v, want host %q guest %q", spec.Mounts[1], wantProjectsRoot, boxProjectsDir)
 	}
 	if _, err := os.Stat(nestedWorkspaceRoot); !os.IsNotExist(err) {
 		t.Fatalf("nested workspace stat error = %v, want not exist", err)
