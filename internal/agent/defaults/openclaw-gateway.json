@@ -1,0 +1,99 @@
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "csgclaw-llm": {
+        "baseUrl": "https://llm.example.invalid/v1",
+        "apiKey": "REPLACE_WITH_LLM_API_KEY",
+        "api": "openai-completions",
+        "auth": "token",
+        "authHeader": true,
+        "models": [
+          {
+            "id": "REPLACE_WITH_MODEL_ID",
+            "name": "REPLACE_WITH_MODEL_ID",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 128000
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "csgclaw-llm/REPLACE_WITH_MODEL_ID"
+      },
+      "workspace": "~/.openclaw/workspace",
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      },
+      "verboseDefault": "on"
+    }
+  },
+  "tools": {
+    "profile": "full",
+    "exec": {
+      "host": "gateway",
+      "security": "full",
+      "ask": "off"
+    }
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "channels": {
+    "csgclaw": {
+      "enabled": true,
+      "baseUrl": "http://csgclaw.example.invalid",
+      "botId": "REPLACE_WITH_BOT_ID",
+      "accessToken": "REPLACE_WITH_CSGCLAW_ACCESS_TOKEN",
+      "groupTrigger": {
+        "mentionOnly": true
+      },
+      "groups": {
+        "*": {
+          "requireMention": true
+        }
+      }
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "token": "REPLACE_WITH_CSGCLAW_ACCESS_TOKEN"
+    },
+    "controlUi": {
+      "enabled": true,
+      "basePath": "/",
+      "dangerouslyDisableDeviceAuth": true,
+      "allowedOrigins": ["*"],
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    }
+  },
+  "plugins": {
+    "load": {
+      "paths": ["/home/node/openclaw-plugins/csgclaw-extension"]
+    },
+    "entries": {
+      "csgclaw": {
+        "enabled": true
+      }
+    }
+  }
+}

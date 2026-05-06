@@ -52,7 +52,8 @@ func LoadWithChannelFiles(path string) (Config, error) {
 		return Config{}, err
 	}
 	if ok {
-		cfg.Channels = channels
+		cfg.Channels.FeishuAdminOpenID = channels.FeishuAdminOpenID
+		cfg.Channels.Feishu = channels.Feishu
 	}
 	return cfg, nil
 }

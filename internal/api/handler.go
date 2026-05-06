@@ -2,10 +2,12 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/bot"
 	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/upgrade"
@@ -28,6 +31,7 @@ type Handler struct {
 	botBridge         *im.BotBridge
 	feishu            *feishu.Service
 	llm               *llm.Service
+	configPath        string
 	serverAccessToken string
 	serverNoAuth      bool
 	upgradeManager    *upgrade.Manager
@@ -35,7 +39,17 @@ type Handler struct {
 	upgradeApply      func(upgrade.ApplyHelperOptions) error
 }
 
-const sseHeartbeatInterval = 15 * time.Second
+const (
+	createOperationTimeout = 10 * time.Minute
+	sseHeartbeatInterval   = 15 * time.Second
+)
+
+func detachedCreateContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(context.WithoutCancel(ctx), createOperationTimeout)
+}
 
 type imBootstrapResponse struct {
 	CurrentUserID      string    `json:"current_user_id"`
@@ -60,6 +74,16 @@ type imAgentJoinResponse struct {
 	AgentID string `json:"agent_id,omitempty"`
 }
 
+type bootstrapConfigResponse struct {
+	RuntimeKind           string   `json:"runtime_kind"`
+	EffectiveManagerImage string   `json:"effective_manager_image"`
+	SupportedRuntimeKinds []string `json:"supported_runtime_kinds"`
+}
+
+type updateBootstrapConfigRequest struct {
+	RuntimeKind string `json:"runtime_kind"`
+}
+
 type agentResponse struct {
 	ID               string                         `json:"id"`
 	Name             string                         `json:"name"`
@@ -78,6 +102,118 @@ type agentResponse struct {
 	AgentProfile     agent.AgentProfileView         `json:"agent_profile,omitempty"`
 	ProfileComplete  bool                           `json:"profile_complete"`
 	DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
+}
+
+func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		cfg, path, err := h.loadBootstrapConfig()
+		_ = path
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, bootstrapConfigView(cfg))
+	case http.MethodPut:
+		var req updateBootstrapConfigRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+			return
+		}
+		cfg, path, err := h.loadBootstrapConfig()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		runtime, err := bootstrapRuntimeForRuntimeKind(req.RuntimeKind)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		cfg.Bootstrap.AgentRuntime = runtime
+		if err := cfg.Bootstrap.Validate(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := cfg.Save(path); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if h.svc != nil {
+			if err := h.svc.SetGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntime(), cfg.Bootstrap.EffectiveManagerImage()); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+		writeJSON(w, http.StatusOK, bootstrapConfigView(cfg))
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) loadBootstrapConfig() (config.Config, string, error) {
+	path := strings.TrimSpace(h.configPath)
+	if path == "" {
+		defaultPath, err := config.DefaultPath()
+		if err != nil {
+			return config.Config{}, "", err
+		}
+		path = defaultPath
+	}
+	if _, err := os.Stat(path); err != nil {
+		if !os.IsNotExist(err) {
+			return config.Config{}, "", err
+		}
+		cfg := config.Config{
+			Server: config.ServerConfig{
+				ListenAddr:  config.DefaultListenAddr(),
+				AccessToken: config.DefaultAccessToken,
+				NoAuth:      false,
+			},
+			Bootstrap: config.BootstrapConfig{},
+			Sandbox: config.SandboxConfig{
+				Provider:    config.DefaultSandboxProvider,
+				HomeDirName: config.DefaultSandboxHomeDirName,
+			},
+		}
+		return cfg, path, nil
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		return config.Config{}, "", err
+	}
+	return cfg, path, nil
+}
+
+func bootstrapConfigView(cfg config.Config) bootstrapConfigResponse {
+	return bootstrapConfigResponse{
+		RuntimeKind:           bootstrapRuntimeKind(cfg.Bootstrap.ResolvedGatewayRuntime()),
+		EffectiveManagerImage: cfg.Bootstrap.EffectiveManagerImage(),
+		SupportedRuntimeKinds: []string{
+			agent.RuntimeKindPicoClawSandbox,
+			agent.RuntimeKindOpenClawSandbox,
+		},
+	}
+}
+
+func bootstrapRuntimeKind(runtime string) string {
+	switch strings.TrimSpace(strings.ToLower(runtime)) {
+	case config.AgentRuntimeOpenClaw, agent.RuntimeKindOpenClawSandbox, "openclaw-sandbox":
+		return agent.RuntimeKindOpenClawSandbox
+	default:
+		return agent.RuntimeKindPicoClawSandbox
+	}
+}
+
+func bootstrapRuntimeForRuntimeKind(kind string) (string, error) {
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "", agent.RuntimeKindPicoClawSandbox, "picoclaw-sandbox", config.AgentRuntimePicoclaw:
+		return config.AgentRuntimePicoclaw, nil
+	case agent.RuntimeKindOpenClawSandbox, "openclaw-sandbox", config.AgentRuntimeOpenClaw:
+		return config.AgentRuntimeOpenClaw, nil
+	default:
+		return "", fmt.Errorf("runtime_kind %q is not supported", kind)
+	}
 }
 
 type createMessageRequest struct {
@@ -141,6 +277,12 @@ func (h *Handler) SetUpgradeApplyFunc(apply func(upgrade.ApplyHelperOptions) err
 		return
 	}
 	h.upgradeApply = apply
+}
+
+func (h *Handler) SetConfigPath(path string) {
+	if h != nil {
+		h.configPath = strings.TrimSpace(path)
+	}
 }
 
 func (h *Handler) validateServerAccessToken(authHeader string) bool {

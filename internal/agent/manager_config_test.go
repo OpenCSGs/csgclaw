@@ -133,7 +133,7 @@ func TestEnsureAgentWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	root, err := ensureAgentWorkspace("alice", workspaceTemplateWorker)
+	root, err := ensureAgentWorkspace("alice", workspaceTemplateWorkerPicoclaw)
 	if err != nil {
 		t.Fatalf("ensureAgentWorkspace(worker) error = %v", err)
 	}
@@ -143,7 +143,7 @@ func TestEnsureAgentWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 		filepath.Join(root, "AGENT.md"),
 		filepath.Join(root, "SOUL.md"),
 		filepath.Join(root, "memory", "MEMORY.md"),
-		filepath.Join(root, "skills", "weather", "SKILL.md"),
+		filepath.Join(root, "skills", "skill-installer", "SKILL.md"),
 	} {
 		if info, err := os.Stat(path); err != nil {
 			t.Fatalf("os.Stat(%q) error = %v", path, err)
@@ -152,7 +152,7 @@ func TestEnsureAgentWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 		}
 	}
 
-	managerRoot, err := ensureAgentWorkspace("manager", workspaceTemplateForAgent(ManagerName, ManagerUserID))
+	managerRoot, err := ensureAgentWorkspace("manager", workspaceTemplateForAgent(ManagerName, ManagerUserID, false))
 	if err != nil {
 		t.Fatalf("ensureAgentWorkspace(manager) error = %v", err)
 	}

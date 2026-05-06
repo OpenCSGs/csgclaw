@@ -2,8 +2,9 @@ package agent
 
 import "embed"
 
-// workspaceTemplateFS contains the bundled PicoClaw workspace templates.
+// workspaceTemplateFS contains the bundled gateway workspace templates.
 //
 //go:generate ../../scripts/sync-agent-runtimes.sh
 //go:embed embed/runtimes/picoclaw/manager/workspace embed/runtimes/picoclaw/worker/workspace
+//go:embed embed/runtimes/openclaw/worker/workspace
 var workspaceTemplateFS embed.FS

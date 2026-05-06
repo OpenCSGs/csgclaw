@@ -164,6 +164,9 @@ func (s *Service) readState() (map[string]Agent, error) {
 		}
 		for _, a := range state.Agents {
 			normalized := s.normalizeLoadedAgent(a.toAgent())
+			if rt, ok := runtimes[normalized.RuntimeID]; ok {
+				normalized.RuntimeKind = normalizeRuntimeKind(rt.Kind)
+			}
 			agents[normalized.ID] = normalized
 			if _, ok := runtimes[normalized.RuntimeID]; !ok {
 				runtimes[normalized.RuntimeID] = runtimeRecordForAgent(normalized)
@@ -171,6 +174,9 @@ func (s *Service) readState() (map[string]Agent, error) {
 		}
 		for _, w := range state.Workers {
 			normalized := s.normalizeLoadedAgent(w.toAgent())
+			if rt, ok := runtimes[normalized.RuntimeID]; ok {
+				normalized.RuntimeKind = normalizeRuntimeKind(rt.Kind)
+			}
 			agents[normalized.ID] = normalized
 			if _, ok := runtimes[normalized.RuntimeID]; !ok {
 				runtimes[normalized.RuntimeID] = runtimeRecordForAgent(normalized)
@@ -223,7 +229,9 @@ func (s *Service) normalizeLoadedAgent(a Agent) Agent {
 	a = *cloneAgent(&a)
 	a.Role = normalizeRole(a.Role)
 	a.RuntimeID = normalizeRuntimeID(a.RuntimeID, a.ID)
-	a.RuntimeKind = runtimeKindForAgent(a)
+	if a.RuntimeKind == "" {
+		a.RuntimeKind = runtimeKindForAgent(a)
+	}
 	a.AgentProfile = normalizeProfile(a.AgentProfile, a.Name, a.Description)
 	if !a.AgentProfile.ProfileComplete && (strings.TrimSpace(a.Provider) != "" || strings.TrimSpace(a.ModelID) != "") {
 		legacyProfile := profileFromLegacy(a.Name, a.Description, a.Provider, a.ModelID, a.ReasoningEffort)

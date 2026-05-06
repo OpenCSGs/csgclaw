@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
 )
 
@@ -51,11 +52,45 @@ func runtimeKindForAgent(a Agent) string {
 	}
 }
 
-func normalizeRuntimeKind(kind string) string {
-	switch strings.TrimSpace(kind) {
-	case RuntimeKindPicoClawSandbox:
+func isGatewayRuntimeKind(kind string) bool {
+	switch normalizeRuntimeKind(kind) {
+	case RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox:
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeKindForGatewayRuntime(runtime string) string {
+	if kind := normalizeRuntimeKind(runtime); isGatewayRuntimeKind(kind) {
+		return kind
+	}
+	switch strings.TrimSpace(strings.ToLower(runtime)) {
+	case config.AgentRuntimeOpenClaw:
+		return RuntimeKindOpenClawSandbox
+	case config.AgentRuntimePicoclaw:
 		return RuntimeKindPicoClawSandbox
+	default:
+		return ""
+	}
+}
+
+func managerImageForRuntimeKind(kind string) string {
+	switch normalizeRuntimeKind(kind) {
 	case RuntimeKindOpenClawSandbox:
+		return config.DefaultManagerImageForAgentRuntime(config.AgentRuntimeOpenClaw)
+	case RuntimeKindPicoClawSandbox:
+		return config.DefaultManagerImageForAgentRuntime(config.AgentRuntimePicoclaw)
+	default:
+		return ""
+	}
+}
+
+func normalizeRuntimeKind(kind string) string {
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case RuntimeKindPicoClawSandbox, "picoclaw-sandbox":
+		return RuntimeKindPicoClawSandbox
+	case RuntimeKindOpenClawSandbox, "openclaw-sandbox":
 		return RuntimeKindOpenClawSandbox
 	case RuntimeKindCodex:
 		return RuntimeKindCodex

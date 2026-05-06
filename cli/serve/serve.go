@@ -258,7 +258,7 @@ func serveForeground(ctx context.Context, run *command.Context, cfg config.Confi
 	return serveForegroundWithConfigPath(ctx, run, cfg, "", output)
 }
 
-func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath, output string) error {
+func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string) error {
 	_ = preflightDefaultModelProvider(ctx, cfg)
 	imBus := im.NewBus()
 	svc, err := NewAgentService(cfg)
@@ -711,12 +711,13 @@ no_auth = %t
 
 [bootstrap]
 manager_image_override = %q
+agent_runtime = %q
 
 [sandbox]
 provider = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Bootstrap.ManagerImageOverride, cfg.Sandbox.Resolved().Provider)
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Bootstrap.ManagerImageOverride, cfg.Bootstrap.ResolvedGatewayRuntime(), cfg.Sandbox.Resolved().Provider)
 	if strings.TrimSpace(cfg.Bootstrap.ManagerImageOverride) == "" {
-		content = strings.Replace(content, "[bootstrap]\nmanager_image_override", fmt.Sprintf("[bootstrap]\n# using default image: %q\nmanager_image_override", config.DefaultManagerImage), 1)
+		content = strings.Replace(content, "[bootstrap]\nmanager_image_override", fmt.Sprintf("[bootstrap]\n# using default image: %q\nmanager_image_override", cfg.Bootstrap.EffectiveManagerImage()), 1)
 	}
 	if len(cfg.Sandbox.Resolved().DebianRegistriesOverride) > 0 {
 		content += fmt.Sprintf("debian_registries_override = %s\n", formatModelList(cfg.Sandbox.Resolved().DebianRegistriesOverride))
@@ -750,6 +751,9 @@ func loadConfig(path string) (config.Config, error) {
 }
 
 func validateModelConfig(cfg config.Config) error {
+	if err := cfg.Bootstrap.Validate(); err != nil {
+		return err
+	}
 	if effectiveLLMConfig(cfg).IsZero() {
 		return nil
 	}
@@ -792,9 +796,13 @@ func newAgentService(cfg config.Config) (*agent.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	opts = append(opts, runtimewiring.WithPicoClawSandboxRuntime(cfg.Channels))
-	opts = append(opts, runtimewiring.WithCodexRuntime())
-	return agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
+	opts = append(opts,
+		runtimewiring.WithPicoClawSandboxRuntime(cfg.Channels),
+		runtimewiring.WithOpenClawSandboxRuntime(),
+		runtimewiring.WithCodexRuntime(),
+		agent.WithGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntime()),
+	)
+	return agent.NewServiceWithLLMAndChannels(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
 }
 
 type codexBridgeManager interface {

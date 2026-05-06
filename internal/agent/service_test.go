@@ -14,7 +14,9 @@ import (
 
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
+	"csgclaw/internal/runtime/sandboxgateway"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/boxlitecli"
 )
@@ -2120,8 +2122,14 @@ func TestStartFallsBackToNameAndRefreshesStoredAgentState(t *testing.T) {
 		startCalls++
 		return nil
 	}
+	var infoCalls int
 	testBoxInfoHook = func(_ *Service, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
-		return sandbox.Info{ID: "box-new", State: sandbox.StateRunning}, nil
+		infoCalls++
+		state := sandbox.StateRunning
+		if infoCalls <= 2 {
+			state = sandbox.StateStopped
+		}
+		return sandbox.Info{ID: "box-new", State: state}, nil
 	}
 	defer func() {
 		testGetBoxHook = nil
@@ -2212,6 +2220,58 @@ func TestStartTriggersLifecycleObserver(t *testing.T) {
 	}
 	if len(observer.ensureCalls) != 1 || observer.ensureCalls[0].ID != "u-alice" {
 		t.Fatalf("EnsureAgent() calls = %+v, want one call for u-alice", observer.ensureCalls)
+	}
+}
+
+func TestStartSkipsStartBoxWhenAlreadyRunning(t *testing.T) {
+	rt := &fakeRuntime{}
+	SetTestHooks(func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil }, nil)
+	defer ResetTestHooks()
+
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		if idOrName == "alice" {
+			return &fakeInstance{}, nil
+		}
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	var startCalls int
+	testStartBoxHook = func(_ *Service, _ context.Context, _ sandbox.Instance) error {
+		startCalls++
+		return nil
+	}
+	testBoxInfoHook = func(_ *Service, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
+		return sandbox.Info{ID: "box-new", State: sandbox.StateRunning}, nil
+	}
+	defer func() {
+		testGetBoxHook = nil
+		testStartBoxHook = nil
+		testBoxInfoHook = nil
+	}()
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agents.json")
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", statePath)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:        "u-alice",
+		Name:      "alice",
+		BoxID:     "box-stale",
+		Role:      RoleWorker,
+		Status:    "running",
+		CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+	}
+
+	got, err := svc.Start(context.Background(), "u-alice")
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if startCalls != 0 {
+		t.Fatalf("startBox() calls = %d, want 0", startCalls)
+	}
+	if got.Status != "running" {
+		t.Fatalf("Start().Status = %q, want running", got.Status)
 	}
 }
 
@@ -3288,6 +3348,95 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	}
 }
 
+func TestGatewayCreateSpecBuildsOpenClawSpecWithoutPluginMount(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	orig := localIPv4Resolver
+	localIPv4Resolver = func() string { return "10.0.0.8" }
+	defer func() { localIPv4Resolver = orig }()
+
+	svc, err := NewServiceWithChannels(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "shared-token"},
+		config.ChannelsConfig{},
+		"openclaw-csgclaw:local",
+		"",
+		WithGatewayRuntime(config.AgentRuntimeOpenClaw),
+	)
+	if err != nil {
+		t.Fatalf("NewServiceWithChannels() error = %v", err)
+	}
+
+	spec, err := svc.gatewayCreateSpec("openclaw-csgclaw:local", "alice", "u-worker-1", AgentProfile{
+		BaseURL: "https://api.minimaxi.com/v1",
+		APIKey:  "sk-minimax-test",
+		ModelID: "MiniMax-M2.7",
+	})
+	if err != nil {
+		t.Fatalf("gatewayCreateSpec() error = %v", err)
+	}
+
+	if got, want := spec.Env["HOME"], boxOpenClawUserHome; got != want {
+		t.Fatalf("HOME env = %q, want %q", got, want)
+	}
+	wantCmd := "/bin/sh -c " + openClawStartScript()
+	if strings.Join(spec.Cmd, " ") != wantCmd {
+		t.Fatalf("gatewayCreateSpec() cmd = %q, want %q", spec.Cmd, wantCmd)
+	}
+	cmdJoined := strings.Join(spec.Cmd, " ")
+	if strings.Contains(cmdJoined, "install.sh") || strings.Contains(cmdJoined, "command -v csgclaw-cli") {
+		t.Fatalf("openclaw start script should not install csgclaw-cli at runtime (it is baked into the image), got: %q", spec.Cmd)
+	}
+
+	wantProjectsRoot := filepath.Join(homeDir, config.AppDirName, hostProjectsDir)
+	wantOpenClawRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostOpenClawDir)
+	if len(spec.Mounts) != 2 {
+		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 2 mounts", spec.Mounts)
+	}
+	wants := map[string]string{
+		wantOpenClawRoot: boxOpenClawDir,
+		wantProjectsRoot: boxOpenClawProjectsDir,
+	}
+	for _, mount := range spec.Mounts {
+		if strings.Contains(mount.GuestPath, "openclaw-plugins") {
+			t.Fatalf("gatewayCreateSpec() should not mount over baked plugins: %+v", spec.Mounts)
+		}
+		if wantGuest, ok := wants[mount.HostPath]; !ok || wantGuest != mount.GuestPath {
+			t.Fatalf("unexpected mount %+v; wants host->guest %v", mount, wants)
+		}
+		delete(wants, mount.HostPath)
+	}
+	if len(wants) != 0 {
+		t.Fatalf("missing mounts: %v", wants)
+	}
+	if _, err := os.Stat(filepath.Join(wantOpenClawRoot, hostWorkspaceDir, "AGENT.md")); err != nil {
+		t.Fatalf("expected openclaw workspace template under openclaw root: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(wantOpenClawRoot, hostOpenClawConfig))
+	if err != nil {
+		t.Fatalf("ReadFile(openclaw config) error = %v", err)
+	}
+	cfgText := string(data)
+	if strings.Contains(cfgText, "csg-skills") {
+		t.Fatalf("openclaw config should not load the manager-only CSG skill pack, got:\n%s", cfgText)
+	}
+	if !strings.Contains(cfgText, `"security": "full"`) || !strings.Contains(cfgText, `"ask": "off"`) {
+		t.Fatalf("openclaw config should disable exec approval prompts (tools.exec security=full ask=off), got:\n%s", cfgText)
+	}
+	if !strings.Contains(cfgText, `"verboseDefault": "on"`) {
+		t.Fatalf("openclaw config should set agents.defaults.verboseDefault to on for tool stream visibility, got:\n%s", cfgText)
+	}
+	approvalsRaw, err := os.ReadFile(filepath.Join(wantOpenClawRoot, hostOpenClawExecApproval))
+	if err != nil {
+		t.Fatalf("ReadFile(openclaw exec-approvals) error = %v", err)
+	}
+	approvalsText := string(approvalsRaw)
+	if !strings.Contains(approvalsText, `"security": "full"`) || !strings.Contains(approvalsText, `"ask": "off"`) {
+		t.Fatalf("openclaw exec-approvals should default security=full ask=off, got:\n%s", approvalsText)
+	}
+}
+
 func TestGatewayStartCommandUsesTiniForNormalMode(t *testing.T) {
 	entrypoint, cmd := gatewayStartCommand(false)
 
@@ -3551,16 +3700,28 @@ func withTestPicoClawSandboxRuntime(channels ...config.ChannelsConfig) ServiceOp
 		if len(channels) > 0 {
 			channelConfig = channels[0]
 		}
-		host := s.PicoClawRuntimeHost()
-		return WithRuntime(picoclawsandbox.New(picoclawsandbox.Dependencies{
+		if err := withTestSandboxRuntimeHost(s.PicoClawRuntimeHost(), channelConfig, func(deps sandboxgateway.Dependencies) agentruntime.Runtime {
+			return picoclawsandbox.New(deps)
+		})(s); err != nil {
+			return err
+		}
+		return withTestSandboxRuntimeHost(s.OpenClawRuntimeHost(), config.ChannelsConfig{}, func(deps sandboxgateway.Dependencies) agentruntime.Runtime {
+			return openclawsandbox.New(deps)
+		})(s)
+	}
+}
+
+func withTestSandboxRuntimeHost(host PicoClawRuntimeHost, channels config.ChannelsConfig, newRuntime func(sandboxgateway.Dependencies) agentruntime.Runtime) ServiceOption {
+	return func(s *Service) error {
+		return WithRuntime(newRuntime(sandboxgateway.Dependencies{
 			ModelFallback:  host.ModelFallback,
 			Server:         host.Server,
-			Channels:       channelConfig,
+			Channels:       channels,
 			ResolveBaseURL: resolveManagerBaseURL,
 			EnsureRuntime:  host.EnsureRuntime,
 			RuntimeHome:    host.RuntimeHome,
 			CloseRuntime:   host.CloseRuntime,
-			ResolveBox: func(ctx context.Context, rt sandbox.Runtime, got picoclawsandbox.AgentRef) (sandbox.Instance, string, error) {
+			ResolveBox: func(ctx context.Context, rt sandbox.Runtime, got sandboxgateway.AgentRef) (sandbox.Instance, string, error) {
 				return host.ResolveBox(ctx, rt, Agent{
 					ID:        got.ID,
 					Name:      got.Name,
@@ -3575,12 +3736,12 @@ func withTestPicoClawSandboxRuntime(channels ...config.ChannelsConfig) ServiceOp
 			ForceRemoveBox: host.ForceRemoveBox,
 			CloseBox:       host.CloseBox,
 			RunBoxCommand:  host.RunBoxCommand,
-			ResolveAgent: func(h agentruntime.Handle) (picoclawsandbox.AgentRef, error) {
+			ResolveAgent: func(h agentruntime.Handle) (sandboxgateway.AgentRef, error) {
 				got, err := host.ResolveAgent(h)
 				if err != nil {
-					return picoclawsandbox.AgentRef{}, err
+					return sandboxgateway.AgentRef{}, err
 				}
-				return picoclawsandbox.AgentRef{
+				return sandboxgateway.AgentRef{
 					ID:        got.ID,
 					Name:      got.Name,
 					RuntimeID: got.RuntimeID,
@@ -3597,8 +3758,13 @@ func withTestPicoClawSandboxRuntime(channels ...config.ChannelsConfig) ServiceOp
 				addFeishuBoxEnvVars(env, botID, channels)
 				return env
 			},
-			AddProfileEnv: addProfileEnvVars,
-			StreamLogs:    host.StreamLogs,
+			AddProfileEnv:      addProfileEnvVars,
+			HomeEnv:            host.HomeEnv,
+			WorkspaceGuestPath: host.WorkspaceGuestPath,
+			ProjectsGuestPath:  host.ProjectsGuestPath,
+			GatewayLogPath:     host.GatewayLogPath,
+			GatewayCommand:     host.GatewayCommand,
+			StreamLogs:         host.StreamLogs,
 		}))(s)
 	}
 }

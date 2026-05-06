@@ -23,6 +23,8 @@ var (
 			cfg.Bootstrap.EffectiveManagerImage(),
 			path,
 			runtimewiring.WithPicoClawSandboxRuntime(cfg.Channels),
+			runtimewiring.WithOpenClawSandboxRuntime(),
+			agent.WithGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntime()),
 		)
 	}
 )

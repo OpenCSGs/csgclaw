@@ -47,6 +47,7 @@ models = ["Qwen/Qwen3-0.6B-GGUF"]
 
 [bootstrap]
 manager_image_override = ""
+agent_runtime = "picoclaw"
 
 [sandbox]
 provider = "boxlite"
@@ -71,6 +72,7 @@ models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image_override = ""
+agent_runtime = "picoclaw"
 
 [sandbox]
 provider = "boxlite"
@@ -87,6 +89,7 @@ no_auth = false
 
 [bootstrap]
 manager_image_override = ""
+agent_runtime = "picoclaw"
 
 [sandbox]
 provider = "boxlite"
@@ -97,6 +100,7 @@ Codex 和 Claude Code Profile 通过 Web UI 写入 agent state。CSGClaw 在 `se
 Worker 在创建时也可以显式选择 runtime kind。默认值是 `picoclaw-sandbox`。如果要创建 Codex worker，可以使用 `csgclaw agent create --runtime codex ...`，或者在 `POST /api/v1/agents` 里传 `runtime_kind: "codex"`。
 
 `[bootstrap].manager_image_override` 留空时会使用代码内置的默认 manager image；只有在需要覆盖默认值时才设置它。
+设置 `[bootstrap].agent_runtime = "openclaw"` 时会使用 OpenClaw gateway runtime；如果 `manager_image_override` 为空，CSGClaw 会选择内置的 OpenClaw manager image。
 
 本地鉴权由 CSGClaw 统一管理：
 
@@ -116,6 +120,18 @@ Worker 在创建时也可以显式选择 runtime kind。默认值是 `picoclaw-s
 - `CSGCLAW_CODEX_ACP_PATH`：指定本地 `codex-acp` 可执行文件路径
 - `CSGCLAW_CODEX_ACP_VERSION`：固定下载版本
 - `CSGCLAW_CODEX_ACP_BASE_URL`：指定下载源
+
+## OpenClaw Runtime
+
+CSGClaw 默认使用 PicoClaw。若要让 bootstrap manager 和新建 worker 都使用 OpenClaw，请配置 `agent_runtime = "openclaw"`，必要时将 `manager_image_override` 指向内置了 CSGClaw channel plugin 的 OpenClaw 镜像。
+
+```toml
+[bootstrap]
+manager_image_override = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260509.1-csgclaw"
+agent_runtime = "openclaw"
+```
+
+推荐镜像形态是基于 OpenClaw slim 二次封装，并把 CSGClaw channel plugin 烘焙到 `/home/node/openclaw-plugins/csgclaw-extension`。运行时状态仍由 `~/.csgclaw/agents/<agent>/.openclaw/openclaw.json` 提供；不要把空的宿主机目录挂载到 `/home/node/openclaw-plugins`，否则会遮住镜像内已经烘焙好的插件。
 
 ## Sandbox Provider
 

@@ -51,16 +51,20 @@ const (
 )
 
 type Profile struct {
-	ModelID string
-	BaseURL string
-	APIKey  string
-	Env     map[string]string
+	Provider        string
+	BaseURL         string
+	APIKey          string
+	ModelID         string
+	ReasoningEffort string
+	Env             map[string]string
 }
 
 func (p Profile) Normalized() Profile {
+	p.Provider = strings.TrimSpace(p.Provider)
 	p.ModelID = strings.TrimSpace(p.ModelID)
 	p.BaseURL = strings.TrimRight(strings.TrimSpace(p.BaseURL), "/")
 	p.APIKey = strings.TrimSpace(p.APIKey)
+	p.ReasoningEffort = strings.TrimSpace(p.ReasoningEffort)
 	if len(p.Env) == 0 {
 		p.Env = nil
 		return p

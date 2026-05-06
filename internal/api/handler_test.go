@@ -36,7 +36,12 @@ type fakeCompatRuntime struct {
 }
 
 func init() {
-	_ = agent.TestOnlySetDefaultServiceOption(runtimewiring.WithPicoClawSandboxRuntime(config.ChannelsConfig{}))
+	_ = agent.TestOnlySetDefaultServiceOption(func(s *agent.Service) error {
+		if err := runtimewiring.WithPicoClawSandboxRuntime(config.ChannelsConfig{})(s); err != nil {
+			return err
+		}
+		return runtimewiring.WithOpenClawSandboxRuntime()(s)
+	})
 }
 
 func (f fakeCompatRuntime) Kind() string {
@@ -1249,7 +1254,11 @@ func TestHandleAgentStartStartsExistingBox(t *testing.T) {
 		return nil
 	})
 	agent.TestOnlySetBoxInfoHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
-		return sandbox.Info{ID: "box-new", Name: "alice", State: sandbox.StateRunning}, nil
+		state := sandbox.StateStopped
+		if startCalls > 0 {
+			state = sandbox.StateRunning
+		}
+		return sandbox.Info{ID: "box-new", Name: "alice", State: state}, nil
 	})
 	defer func() {
 		agent.TestOnlySetGetBoxHook(nil)

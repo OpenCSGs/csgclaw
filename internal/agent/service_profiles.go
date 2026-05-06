@@ -129,6 +129,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		}
 	}
 	s.agents[id] = current
+	s.syncRuntimeRecordLocked(current)
 	if err := s.saveLocked(); err != nil {
 		s.mu.Unlock()
 		return Agent{}, err

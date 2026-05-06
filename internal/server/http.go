@@ -40,6 +40,7 @@ func Run(opts Options) error {
 	handler := api.NewHandlerWithBotAndAuth(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.BotBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
 	handler.SetUpgradeManager(opts.Upgrade)
 	handler.SetUpgradeConfigPath(opts.ConfigPath)
+	handler.SetConfigPath(opts.ConfigPath)
 	mux := handler.Routes()
 	mux.Handle("/", uiHandler())
 

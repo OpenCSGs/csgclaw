@@ -98,6 +98,16 @@ models = ["minimax-m2.7"]
 	}
 }
 
+func TestBootstrapResolvedGatewayRuntimeRecognizesOpenClawHQImage(t *testing.T) {
+	cfg := BootstrapConfig{
+		ManagerImageOverride: "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260509.1-csgclaw",
+	}
+
+	if got, want := cfg.ResolvedGatewayRuntime(), AgentRuntimeOpenClaw; got != want {
+		t.Fatalf("ResolvedGatewayRuntime() = %q, want %q", got, want)
+	}
+}
+
 func TestLoadReadsSandboxConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -665,6 +675,7 @@ no_auth = true
 
 [bootstrap]
 manager_image_override = "ghcr.io/russellluo/picoclaw:2026.4.25"
+agent_runtime = "picoclaw"
 
 [sandbox]
 provider = "boxlite"
