@@ -416,45 +416,29 @@ function profileBaseURLMissing(draft) {
   return draft?.provider === "api" && isBlank(draft.base_url);
 }
 
-function GlobeIcon() {
+function IconImage(name) {
   return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M12 3.25a8.75 8.75 0 1 0 0 17.5a8.75 8.75 0 0 0 0-17.5Zm5.99 7.97h-2.56a14.57 14.57 0 0 0-1.13-4.01a7.28 7.28 0 0 1 3.69 4.01Zm-5.24-4.47c.52.76 1.16 2.28 1.51 4.47h-4.52c.35-2.19.99-3.71 1.51-4.47c.22-.32.42-.5.5-.5s.28.18.5.5Zm-4.05.46a14.57 14.57 0 0 0-1.13 4.01H4.01A7.28 7.28 0 0 1 7.7 7.21Zm-4.19 5.51h2.81c.03 1.48.24 2.88.57 4.01H5.37a7.22 7.22 0 0 1-.86-4.01Zm3.89 0h4.72c-.04 1.4-.24 2.79-.62 4.01H9.02a17.18 17.18 0 0 1-.62-4.01Zm.87 5.51h3.46c-.27.69-.59 1.3-.95 1.83c-.29.42-.54.69-.68.69s-.39-.27-.68-.69a9.65 9.65 0 0 1-.95-1.83Zm4.95-1.5c.33-1.13.54-2.53.57-4.01h2.81a7.22 7.22 0 0 1-.86 4.01h-2.52Z"
-        fill="currentColor"
-      />
-    </svg>
+    <span
+      className="svg-icon"
+      aria-hidden="true"
+      style=${{
+        WebkitMaskImage: `url("/icons/${name}.svg")`,
+        maskImage: `url("/icons/${name}.svg")`,
+      }}
+    ></span>
   `;
+}
+
+function GlobeIcon() {
+  return IconImage("globe");
 }
 
 function SunIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="3.8" fill="none" stroke="currentColor" stroke-width="1.8" />
-      <path
-        d="M12 3.25v2.1M12 18.65v2.1M4.25 12h2.1M17.65 12h2.1M6.52 6.52l1.48 1.48M16 16l1.48 1.48M17.48 6.52L16 8M8 16l-1.48 1.48"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="1.8"
-      />
-    </svg>
-  `;
+  return IconImage("sun");
 }
 
 function MoonIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M19.2 14.6A7.3 7.3 0 0 1 9.4 4.8a7.6 7.6 0 1 0 9.8 9.8Z"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="1.8"
-      />
-    </svg>
-  `;
+  return IconImage("moon");
 }
 
 function MessageContent({ content }) {
@@ -526,187 +510,51 @@ function StructuredMessageCard({ data }) {
 }
 
 function AddUserIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M15 19c0-2.761-2.239-5-5-5s-5 2.239-5 5"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="1.8"
-      />
-      <circle
-        cx="10"
-        cy="7.5"
-        r="3.5"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-      />
-      <path
-        d="M18 8v6M15 11h6"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="1.8"
-      />
-    </svg>
-  `;
+  return IconImage("add-user");
 }
 
 function UsersIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M9 11a4 4 0 1 0 0-8a4 4 0 0 0 0 8Zm7 1a3 3 0 1 0 0-6a3 3 0 0 0 0 6Zm-7 2c-3.314 0-6 1.79-6 4c0 .552.448 1 1 1h10a1 1 0 0 0 1-1c0-2.21-2.686-4-6-4Zm7 1c-.758 0-1.483.11-2.147.312c1.16.87 1.956 2.035 2.118 3.358A1 1 0 0 0 16.964 19H20a1 1 0 0 0 1-1c0-1.657-2.239-3-5-3Z"
-        fill="currentColor"
-      />
-    </svg>
-  `;
+  return IconImage("users");
 }
 
 function WrenchIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M14.71 6.29a4 4 0 0 0-5.32 5.94l-4.1 4.1a1.5 1.5 0 1 0 2.12 2.12l4.1-4.1a4 4 0 0 0 5.94-5.32l-2.24 2.24a1 1 0 0 1-1.42 0l-1.38-1.38a1 1 0 0 1 0-1.42Z"
-        fill="currentColor"
-      />
-    </svg>
-  `;
+  return IconImage("wrench");
 }
 
 function SidebarToggleIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect
-        x="3.75"
-        y="5.25"
-        width="16.5"
-        height="13.5"
-        rx="2.25"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.6"
-      />
-      <path d="M8.5 5.75v12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-    </svg>
-  `;
+  return IconImage("sidebar-toggle");
 }
 
 function ChevronIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M8 9.5l4 4l4-4"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-      />
-    </svg>
-  `;
+  return IconImage("chevron");
 }
 
 function RoomPlusIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="10" fill="var(--panel-soft)" />
-      <path d="M12 7.5v9M7.5 12h9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9" />
-    </svg>
-  `;
+  return IconImage("room-plus");
 }
 
 function TrashIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M9.5 4.75h5a1.5 1.5 0 0 1 1.5 1.5v.5h3"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="1.8"
-      />
-      <path
-        d="M5 6.75h14"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="1.8"
-      />
-      <path
-        d="M8 9.5v6.75M12 9.5v6.75M16 9.5v6.75"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="1.8"
-      />
-      <path
-        d="M7.25 6.75l.63 10.11A2 2 0 0 0 9.87 18.75h4.26a2 2 0 0 0 1.99-1.89L16.75 6.75"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="1.8"
-      />
-    </svg>
-  `;
+  return IconImage("trash");
 }
 
 function RoomsIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="10" fill="var(--panel-soft)" />
-      <path
-        d="M9.25 7.75c-2.35 0-4.25 1.64-4.25 3.67c0 1.01.47 1.93 1.23 2.59L5.5 16.25l2.91-.46c.27.04.55.05.84.05c2.35 0 4.25-1.64 4.25-3.67S11.6 7.75 9.25 7.75Zm5.3 2.92c2.04.21 3.65 1.65 3.65 3.42c0 .88-.4 1.69-1.08 2.29l.58 1.88l-2.35-.43c-.25.03-.52.04-.8.04c-1.75 0-3.25-.78-4-1.95"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="1.7"
-      />
-    </svg>
-  `;
+  return IconImage("rooms");
 }
 
 function AgentIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M8.5 4.75a3.5 3.5 0 0 1 7 0v1.1h1.3a2.7 2.7 0 0 1 2.7 2.7v6.95a2.7 2.7 0 0 1-2.7 2.7H7.2a2.7 2.7 0 0 1-2.7-2.7V8.55a2.7 2.7 0 0 1 2.7-2.7h1.3v-1.1Zm1.5 1.1h4v-1.1a2 2 0 1 0-4 0v1.1Zm-2.8 1.5a1.2 1.2 0 0 0-1.2 1.2v6.95c0 .66.54 1.2 1.2 1.2h9.6a1.2 1.2 0 0 0 1.2-1.2V8.55a1.2 1.2 0 0 0-1.2-1.2H7.2Zm2.1 4.15a1.05 1.05 0 1 1 2.1 0a1.05 1.05 0 0 1-2.1 0Zm4.25 0a1.05 1.05 0 1 1 2.1 0a1.05 1.05 0 0 1-2.1 0Zm-4.22 3.1h5.34v1.35H9.33V14.6Z"
-        fill="currentColor"
-      />
-    </svg>
-  `;
+  return IconImage("agent");
 }
 
 function ComputerIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M4.5 5.75h15a1.75 1.75 0 0 1 1.75 1.75v8.25a1.75 1.75 0 0 1-1.75 1.75h-15a1.75 1.75 0 0 1-1.75-1.75V7.5A1.75 1.75 0 0 1 4.5 5.75Zm0 1.5a.25.25 0 0 0-.25.25v8.25c0 .14.11.25.25.25h15a.25.25 0 0 0 .25-.25V7.5a.25.25 0 0 0-.25-.25h-15ZM9 19h6v1.5H9V19Z"
-        fill="currentColor"
-      />
-    </svg>
-  `;
+  return IconImage("computer");
 }
 
 function PlayIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M8.3 5.7v12.6c0 .74.8 1.2 1.44.83l9.7-6.3a.98.98 0 0 0 0-1.66l-9.7-6.3a.97.97 0 0 0-1.44.83Z" fill="currentColor" />
-    </svg>
-  `;
+  return IconImage("play");
 }
 
 function StopIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M7.4 6.4h9.2c.55 0 1 .45 1 1v9.2c0 .55-.45 1-1 1H7.4c-.55 0-1-.45-1-1V7.4c0-.55.45-1 1-1Z" fill="currentColor" />
-    </svg>
-  `;
+  return IconImage("stop");
 }
 
 function paneFromLocation(pathname = window.location.pathname) {
@@ -2715,11 +2563,7 @@ function App() {
                         onClick=${sendMessage}
                       >
                         <span className="composer-send-main" aria-hidden="true">
-                          <svg viewBox="0 0 24 24" focusable="false">
-                            <path
-                              d="M 4.22 3.12 L 19.78 10.88 Q 22 12 19.78 13.12 L 4.22 20.88 Q 2 22 2 19.5 L 2 16.5 Q 2 14 4.4 13.32 L 7.56 12.41 Q 9 12 7.56 11.59 L 4.4 10.67 Q 2 10 2 7.5 L 2 4.5 Q 2 2 4.22 3.12 Z"
-                            />
-                          </svg>
+                          ${IconImage("send")}
                         </span>
                       </button>
                     </div>
@@ -3342,7 +3186,7 @@ function WorkspaceGroup({ id, title, count, collapsed, onToggle, onAdd, addLabel
                   onAdd?.();
                 }}
               >
-                <span aria-hidden="true">+</span>
+                <span className="icon-button-mark" aria-hidden="true"><${RoomPlusIcon} /></span>
               </button>
             `
           : null}

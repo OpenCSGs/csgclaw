@@ -5757,3 +5757,350 @@ body {
 .message-row.admin.own .message-bubble .message-content .message-mention {
   color: var(--portal-white);
 }
+
+/* Browser comments: workspace tabs count layout and group heading typography. */
+.workspace-tab .workspace-tab-copy {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workspace-tab .workspace-tab-copy strong,
+.workspace-tab .workspace-tab-copy small {
+  line-height: 20px;
+}
+
+.workspace-tab .workspace-tab-copy strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.workspace-tab .workspace-tab-copy small {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.workspace-group-toggle .workspace-group-title,
+.workspace-group-title {
+  color: var(--portal-gray-800);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 24px;
+  text-transform: none;
+}
+
+.workspace-group-title span,
+.workspace-group-title small {
+  color: var(--portal-gray-800);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+/* Browser comment: incoming message bubble padding matches Portal spacing. */
+.message-row:not(.own) .message-bubble {
+  padding: 10px 14px;
+}
+
+/* External SVG icon files should size like the previous inline SVG components. */
+.svg-icon {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.theme-toggle .svg-icon,
+.language-switch-icon .svg-icon,
+.sidebar-toggle-mark .svg-icon,
+.workspace-tab-icon .svg-icon,
+.workspace-group-arrow .svg-icon,
+.workspace-row-icon .svg-icon,
+.icon-button-mark .svg-icon,
+.tool-menu-icon .svg-icon,
+.conversation-delete-icon .svg-icon,
+.agent-icon-button .svg-icon,
+.entity-list-icon .svg-icon,
+.entity-avatar .svg-icon,
+.composer-send-main .svg-icon {
+  width: 100%;
+  height: 100%;
+}
+
+/* Browser comments: selected icons use explicit active colors. */
+.theme-toggle.active,
+.theme-toggle.active .svg-icon {
+  color: var(--portal-white);
+}
+
+.workspace-tab.active .workspace-tab-icon,
+.workspace-tab.active .workspace-tab-icon .svg-icon {
+  color: var(--portal-brand-600);
+}
+
+/* Figma Portal node 36482:523060: dark mode palette alignment. */
+:root[data-theme="dark"] {
+  --bg: #0c111d;
+  --sidebar: #0c111d;
+  --panel: #101828;
+  --panel-strong: #181d27;
+  --panel-soft: #182230;
+  --surface: #0c111d;
+  --field: #182230;
+  --text: #eaecf0;
+  --muted: #98a2b3;
+  --line: #344054;
+  --primary: #4d6ad6;
+  --primary-soft: rgba(77, 106, 214, 0.18);
+  --primary-strong: #6584f8;
+  --on-primary: #ffffff;
+  --mention: #acbdff;
+  --mention-on-primary: #ffffff;
+  --message-border: #344054;
+  --admin-bubble: #181d27;
+  --admin-text: #d0d5dd;
+  --admin-mention: #acbdff;
+  --shadow: 0 12px 16px -4px rgba(0, 0, 0, 0.28), 0 4px 6px -2px rgba(0, 0, 0, 0.18);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --focus-ring: 0 0 0 4px rgba(77, 106, 214, 0.28);
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .app-shell,
+:root[data-theme="dark"] .messages {
+  background: var(--bg);
+}
+
+:root[data-theme="dark"] .sidebar,
+:root[data-theme="dark"] .sidebar-rail,
+:root[data-theme="dark"] .chat-panel {
+  border-color: var(--line);
+  background: var(--sidebar);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .chat-panel,
+:root[data-theme="dark"] .chat-header,
+:root[data-theme="dark"] .composer,
+:root[data-theme="dark"] .modal-card,
+:root[data-theme="dark"] .modal-actions,
+:root[data-theme="dark"] .header-popover,
+:root[data-theme="dark"] .mention-picker,
+:root[data-theme="dark"] .profile-preview-popover {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .sidebar-header,
+:root[data-theme="dark"] .chat-header,
+:root[data-theme="dark"] .composer {
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .sidebar-brand,
+:root[data-theme="dark"] .sidebar-header.workspace-header .sidebar-brand-wordmark,
+:root[data-theme="dark"] .chat-title-bar .chat-title-row .chat-title-group .chat-title,
+:root[data-theme="dark"] .chat-title,
+:root[data-theme="dark"] .modal-title,
+:root[data-theme="dark"] .preview-name,
+:root[data-theme="dark"] .workspace-row-title,
+:root[data-theme="dark"] .conversation-nav-row .workspace-row-title,
+:root[data-theme="dark"] .entity-title-row h1 {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .chat-kicker,
+:root[data-theme="dark"] .chat-subtitle,
+:root[data-theme="dark"] .message-meta,
+:root[data-theme="dark"] .message-meta .message-author,
+:root[data-theme="dark"] .message-row .message-card .message-meta .message-author,
+:root[data-theme="dark"] .message-row.own .message-card .message-meta .message-author,
+:root[data-theme="dark"] .field .field-label,
+:root[data-theme="dark"] .field span,
+:root[data-theme="dark"] .profile-section .field span,
+:root[data-theme="dark"] .entity-field span,
+:root[data-theme="dark"] .metric span,
+:root[data-theme="dark"] .preview-title,
+:root[data-theme="dark"] .header-popover-title,
+:root[data-theme="dark"] .section-label {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .workspace-group-toggle .workspace-group-title,
+:root[data-theme="dark"] .workspace-group-title,
+:root[data-theme="dark"] .workspace-group-title span,
+:root[data-theme="dark"] .workspace-group-title small {
+  color: #d0d5dd;
+}
+
+:root[data-theme="dark"] .theme-switch-track,
+:root[data-theme="dark"] .language-switch-track,
+:root[data-theme="dark"] .composer-box,
+:root[data-theme="dark"] .profile-section,
+:root[data-theme="dark"] .entity-field,
+:root[data-theme="dark"] .metric,
+:root[data-theme="dark"] .entity-list-row,
+:root[data-theme="dark"] .agent-row,
+:root[data-theme="dark"] .auth-status-row,
+:root[data-theme="dark"] .detection-row,
+:root[data-theme="dark"] .selection-item {
+  border-color: var(--line);
+  background: var(--panel-strong);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .workspace-signal-panel,
+:root[data-theme="dark"] .workspace-tab,
+:root[data-theme="dark"] .icon-button,
+:root[data-theme="dark"] .member-badge-button,
+:root[data-theme="dark"] .ghost-button,
+:root[data-theme="dark"] .secondary-button,
+:root[data-theme="dark"] .modal-close,
+:root[data-theme="dark"] .tool-menu-row,
+:root[data-theme="dark"] .agent-add-button,
+:root[data-theme="dark"] .agent-icon-button,
+:root[data-theme="dark"] .agent-action-text,
+:root[data-theme="dark"] .preview-action-button,
+:root[data-theme="dark"] .workspace-add-button,
+:root[data-theme="dark"] .env-remove-button,
+:root[data-theme="dark"] .danger-button {
+  border-color: var(--line);
+  background: var(--panel);
+  color: #d0d5dd;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .workspace-tab:hover,
+:root[data-theme="dark"] .workspace-row:hover,
+:root[data-theme="dark"] .conversation-item:hover .conversation-item-main,
+:root[data-theme="dark"] .entity-list-main-button:hover,
+:root[data-theme="dark"] .icon-button:hover,
+:root[data-theme="dark"] .member-badge-button:hover,
+:root[data-theme="dark"] .ghost-button:hover,
+:root[data-theme="dark"] .secondary-button:hover,
+:root[data-theme="dark"] .modal-close:hover,
+:root[data-theme="dark"] .tool-menu-row:hover,
+:root[data-theme="dark"] .agent-add-button:hover,
+:root[data-theme="dark"] .agent-icon-button:hover,
+:root[data-theme="dark"] .agent-action-text:hover,
+:root[data-theme="dark"] .preview-action-button:hover:not(:disabled),
+:root[data-theme="dark"] .workspace-add-button:hover,
+:root[data-theme="dark"] .env-remove-button:hover,
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row:hover,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row:hover,
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row:focus-within,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row:focus-within {
+  border-color: #475467;
+  background: #182230;
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .workspace-tab.active,
+:root[data-theme="dark"] .workspace-row.active,
+:root[data-theme="dark"] .workspace-row.conversation-nav-row.active,
+:root[data-theme="dark"] .workspace-row.active.conversation-nav-row,
+:root[data-theme="dark"] .conversation-item.active .conversation-item-main,
+:root[data-theme="dark"] .icon-button.active,
+:root[data-theme="dark"] .member-badge-button.active,
+:root[data-theme="dark"] .agent-row.manager,
+:root[data-theme="dark"] .selection-item.selection-all-item,
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row:has(input:checked),
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row:has(input:checked) {
+  border-color: rgba(77, 106, 214, 0.62);
+  background: rgba(77, 106, 214, 0.18);
+  color: #d0d5dd;
+}
+
+:root[data-theme="dark"] .workspace-tab.active .workspace-tab-icon,
+:root[data-theme="dark"] .workspace-tab.active .workspace-tab-icon .svg-icon,
+:root[data-theme="dark"] .workspace-signal-copy strong,
+:root[data-theme="dark"] .workspace-tab-icon,
+:root[data-theme="dark"] .workspace-row-icon,
+:root[data-theme="dark"] .entity-avatar,
+:root[data-theme="dark"] .entity-list-icon,
+:root[data-theme="dark"] .rich-empty-mark {
+  color: var(--primary-strong);
+}
+
+:root[data-theme="dark"] .workspace-row-icon,
+:root[data-theme="dark"] .entity-list-icon,
+:root[data-theme="dark"] .entity-avatar,
+:root[data-theme="dark"] .rich-empty-mark {
+  border-color: var(--line);
+  background: #182230;
+}
+
+:root[data-theme="dark"] .message-row:not(.own) .message-bubble {
+  border-color: var(--message-border);
+  background: var(--panel-strong);
+  color: var(--admin-text);
+}
+
+:root[data-theme="dark"] .message-row:not(.own) .message-bubble .message-content p {
+  color: var(--admin-text);
+}
+
+:root[data-theme="dark"] .message-row.own .message-bubble,
+:root[data-theme="dark"] .composer-send-button,
+:root[data-theme="dark"] .send-button,
+:root[data-theme="dark"] .preview-action-button-primary,
+:root[data-theme="dark"] .btn-primary,
+:root[data-theme="dark"] .csg-button-primary {
+  border-color: #3250bd;
+  background: #3250bd;
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .message-row.own .message-bubble .message-content p,
+:root[data-theme="dark"] .message-row.own .message-bubble .message-content .message-mention,
+:root[data-theme="dark"] .message-row.own .message-bubble .message-content p > .message-mention {
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .modal-card .field input,
+:root[data-theme="dark"] .modal-card .field textarea,
+:root[data-theme="dark"] .modal-card .field select,
+:root[data-theme="dark"] .profile-section .field input,
+:root[data-theme="dark"] .profile-section .field textarea,
+:root[data-theme="dark"] .profile-section .field select,
+:root[data-theme="dark"] .env-row input,
+:root[data-theme="dark"] .composer-editor {
+  border-color: var(--line);
+  background-color: var(--field);
+  color: var(--text);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .modal-card .field input::placeholder,
+:root[data-theme="dark"] .modal-card .field textarea::placeholder,
+:root[data-theme="dark"] .profile-section .field input::placeholder,
+:root[data-theme="dark"] .profile-section .field textarea::placeholder,
+:root[data-theme="dark"] .env-row input::placeholder,
+:root[data-theme="dark"] .composer-editor:empty::before {
+  color: var(--portal-gray-400);
+}
+
+:root[data-theme="dark"] .modal-card .field input:hover,
+:root[data-theme="dark"] .modal-card .field textarea:hover,
+:root[data-theme="dark"] .modal-card .field select:hover,
+:root[data-theme="dark"] .profile-section .field input:hover,
+:root[data-theme="dark"] .profile-section .field textarea:hover,
+:root[data-theme="dark"] .profile-section .field select:hover,
+:root[data-theme="dark"] .env-row input:hover {
+  border-color: #475467;
+}
