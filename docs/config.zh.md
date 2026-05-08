@@ -105,8 +105,9 @@ Worker 在创建时也可以显式选择 runtime kind。默认值是 `picoclaw-s
 
 - Codex 会优先从 `~/.codex/auth.json` 自动导入。
 - Claude Code 会在 macOS 上优先探测 Keychain，未找到时再走 OAuth。
+- 服务启动时会把 Codex 和 Claude Code auth 导入或刷新到 CSGClaw 管理的 CLIProxy auth 目录中，并统一写成 CLIProxy 兼容 JSON。
 - 手动登录命令是 `csgclaw model auth login codex` 和 `csgclaw model auth login claude-code`。
-- `CSGCLAW_CLIPROXY_AUTH_DIR` 可覆盖 CLIProxy auth 目录，默认是 `~/.cli-proxy-api`。
+- `CSGCLAW_CLIPROXY_AUTH_DIR` 可覆盖 CLIProxy auth 目录，默认是 `~/.csgclaw/auth`。
 - `CSGCLAW_CLIPROXY_AUTO_LOGIN=0` 可关闭自动导入和探测。
 - `CSGCLAW_CLIPROXY_NO_BROWSER=1` 会打印 OAuth URL，而不是自动打开浏览器。
 - `CSGCLAW_CLIPROXY_DISABLE_KEYCHAIN=1` 可关闭 Claude Keychain 探测。

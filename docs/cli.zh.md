@@ -212,7 +212,7 @@ Provider：
 
 - `codex` 会优先复用 `~/.codex/auth.json`，没有可用 token 时再启动 OAuth。
 - `claude-code` 会在 macOS 上优先探测 Keychain，没有可用 token 时再启动 OAuth。
-- 鉴权文件会写入 CLIProxy auth 目录，默认是 `~/.cli-proxy-api`。
+- 鉴权文件会写入 CSGClaw 管理的 CLIProxy auth 目录，默认是 `~/.csgclaw/auth`。
 - 模型 Provider 鉴权放在 `csgclaw model auth` 下，不和服务端自身 API 鉴权混在一起。
 
 示例：
