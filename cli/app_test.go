@@ -2143,7 +2143,7 @@ func TestAgentCreateSubcommandHelpShowsReplaceAndForceFlags(t *testing.T) {
 		"--description string    agent description",
 		"--image string          agent image",
 		"--profile string        agent llm profile",
-		"--runtime string        agent runtime kind (for example: picoclaw-sandbox, codex)",
+		"--runtime string        agent runtime kind (for example: picoclaw-sandbox, openclaw-sandbox, codex)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("help = %q, want substring %q", got, want)

@@ -84,7 +84,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	role := fs.String("role", "", "bot role: manager or worker")
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	modelID := fs.String("model-id", "", "agent model identifier")
-	runtimeKind := fs.String("runtime", "", "agent runtime kind for worker bots (for example: picoclaw-sandbox, codex)")
+	runtimeKind := fs.String("runtime", "", "agent runtime kind for worker bots (for example: picoclaw-sandbox, openclaw-sandbox, codex)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

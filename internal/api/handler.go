@@ -198,6 +198,10 @@ func bootstrapConfigView(cfg config.Config) bootstrapConfigResponse {
 			agent.RuntimeKindPicoClawSandbox,
 			agent.RuntimeKindOpenClawSandbox,
 		},
+		RuntimeDefaultImages: map[string]string{
+			agent.RuntimeKindPicoClawSandbox: config.DefaultManagerImageForAgentRuntime(config.AgentRuntimePicoclaw),
+			agent.RuntimeKindOpenClawSandbox: config.DefaultManagerImageForAgentRuntime(config.AgentRuntimeOpenClaw),
+		},
 	}
 }
 

@@ -192,6 +192,14 @@ const messages = {
     inviteToRoom: "加入当前房间",
     agentCreateSave: "创建并启动",
     agentUpdateSave: "保存",
+    agentCreateProgressPreparing: "准备创建",
+    agentCreateProgressSandboxConfig: "写入沙箱配置",
+    agentCreateProgressImage: "准备镜像",
+    agentCreateProgressRuntime: "创建运行时",
+    agentCreateProgressStart: "启动 Agent",
+    agentCreateProgressFinishing: "同步状态",
+    agentCreateProgressDone: "完成",
+    agentCreateProgressFailed: "创建失败",
     agentCreated: "Agent 已创建",
     agentUpdated: "Agent 已更新",
     agentActionFailed: "Agent 操作失败",
@@ -377,6 +385,14 @@ const messages = {
     inviteToRoom: "Add to current room",
     agentCreateSave: "Create and start",
     agentUpdateSave: "Save",
+    agentCreateProgressPreparing: "Preparing",
+    agentCreateProgressSandboxConfig: "Writing sandbox config",
+    agentCreateProgressImage: "Preparing image",
+    agentCreateProgressRuntime: "Creating runtime",
+    agentCreateProgressStart: "Starting agent",
+    agentCreateProgressFinishing: "Syncing status",
+    agentCreateProgressDone: "Done",
+    agentCreateProgressFailed: "Create failed",
     agentCreated: "Agent created",
     agentUpdated: "Agent updated",
     agentActionFailed: "Agent action failed",
@@ -829,6 +845,7 @@ function App() {
   const [agentBusy, setAgentBusy] = useState(false);
   const [agentModelBusy, setAgentModelBusy] = useState(false);
   const [agentError, setAgentError] = useState("");
+  const [agentProgress, setAgentProgress] = useState(null);
   const [agentActionBusy, setAgentActionBusy] = useState("");
   const [agentPageDraft, setAgentPageDraft] = useState(null);
   const [agentPageModels, setAgentPageModels] = useState([]);
@@ -890,6 +907,16 @@ function App() {
       ? { ...current, runtime_kind: normalizeRuntimeKind(bootstrapConfig.runtime_kind) }
       : current);
   }, [bootstrapConfig?.runtime_kind]);
+
+  useEffect(() => {
+    if (!agentBusy || !agentProgress?.steps?.length) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      setAgentProgress((current) => advanceAgentProgress(current));
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [agentBusy, agentProgress?.startedAt]);
 
   useEffect(() => {
     // Temporarily disable background agent polling for debugging multi-tab pending requests.
@@ -2031,16 +2058,27 @@ function App() {
     setAgentModalMode("create");
     setEditingAgent(null);
     setAgentError("");
+    setAgentProgress(null);
     setAgentModels([]);
     try {
       const resp = await fetch("api/v1/agent-profile-defaults");
       const defaults = resp.ok ? await resp.json() : managerProfile;
-      const draft = agentToDraft({ image: managerAgent?.image || "", runtime_kind: bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "", agent_profile: defaults });
+      const runtimeKind = normalizeRuntimeKind(bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "");
+      const draft = agentToDraft({
+        image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
+        runtime_kind: runtimeKind,
+        agent_profile: defaults,
+      });
       setAgentDraft(draft);
       setShowAgentModal(true);
       loadAgentModels(draft, { silent: true });
     } catch (_) {
-      const draft = agentToDraft({ image: managerAgent?.image || "", runtime_kind: bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "", agent_profile: managerProfile });
+      const runtimeKind = normalizeRuntimeKind(bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "");
+      const draft = agentToDraft({
+        image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
+        runtime_kind: runtimeKind,
+        agent_profile: managerProfile,
+      });
       setAgentDraft(draft);
       setShowAgentModal(true);
       loadAgentModels(draft, { silent: true });
@@ -2051,6 +2089,7 @@ function App() {
     setAgentModalMode("edit");
     setEditingAgent(item);
     setAgentError("");
+    setAgentProgress(null);
     setAgentModels([]);
     try {
       const resp = await fetch(`api/v1/agents/${encodeURIComponent(item.id)}/profile`);
@@ -2226,6 +2265,9 @@ function App() {
     }
     setAgentBusy(true);
     setAgentError("");
+    const isCreate = agentModalMode === "create";
+    const runtimeKind = normalizeRuntimeKind(agentDraft.runtime_kind);
+    setAgentProgress(isCreate ? startAgentCreateProgress(runtimeKind) : null);
     try {
       const profile = draftToProfile(agentDraft, {
         name: agentDraft.name,
@@ -2236,10 +2278,9 @@ function App() {
         role: agentDraft.role,
         description: agentDraft.description,
         image: agentDraft.image,
-        runtime_kind: normalizeRuntimeKind(agentDraft.runtime_kind),
+        runtime_kind: runtimeKind,
         agent_profile: profile,
       };
-      const isCreate = agentModalMode === "create";
       const url = isCreate ? "api/v1/bots" : `api/v1/agents/${encodeURIComponent(editingAgent.id)}`;
       const resp = await fetch(url, {
         method: isCreate ? "POST" : "PATCH",
@@ -2263,9 +2304,14 @@ function App() {
       if (saved.id === "u-manager") {
         await refreshManagerProfile();
       }
+      if (isCreate) {
+        setAgentProgress((current) => current ? { ...current, percent: 100, status: "done", index: Math.max(0, (current.steps?.length || 1) - 1) } : current);
+      }
       setShowAgentModal(false);
       setAgentDraft(null);
+      setAgentProgress(null);
     } catch (err) {
+      setAgentProgress((current) => current ? { ...current, status: "failed" } : current);
       setAgentError(err.message || t("agentActionFailed"));
     } finally {
       setAgentBusy(false);
@@ -3269,11 +3315,7 @@ function App() {
                                   setAgentDraft({
                                     ...agentDraft,
                                     runtime_kind: runtimeKind,
-                                    image: runtimeKind === "codex"
-                                      ? ""
-                                      : runtimeKind === "picoclaw_sandbox"
-                                        ? (agentDraft.default_image || "")
-                                        : agentDraft.image,
+                                    image: runtimeImageForKind(runtimeKind, bootstrapConfig, agentDraft.default_image || managerAgent?.image || ""),
                                   });
                                 }}
                               >
@@ -3397,6 +3439,7 @@ function App() {
                   </section>
                 </div>
                 ${agentError ? html`<div className="form-error">${agentError}</div>` : null}
+                <${AgentCreateProgress} progress=${agentProgress} t=${t} />
                 <div className="modal-actions">
                   <button className="btn btn-secondary-gray btn-sm secondary-button" onClick=${() => setShowAgentModal(false)}>${t("cancel")}</button>
                   <button className="btn btn-primary btn-sm send-button" disabled=${agentBusy || isBlank(agentDraft.name) || !agentDraft.model_id || profileBaseURLMissing(agentDraft)} onClick=${saveAgent}>
@@ -4741,6 +4784,40 @@ function formatProviderLabel(provider) {
   }
 }
 
+function AgentCreateProgress({ progress, t }) {
+  if (!progress) {
+    return null;
+  }
+  const steps = progress.steps || [];
+  const currentStep = steps[Math.min(progress.index || 0, Math.max(steps.length - 1, 0))];
+  const failed = progress.status === "failed";
+  const done = progress.status === "done";
+  const label = failed
+    ? t("agentCreateProgressFailed")
+    : done
+      ? t("agentCreateProgressDone")
+      : t(currentStep?.label || "agentCreateProgressPreparing");
+  const percent = Math.max(0, Math.min(100, Math.round(progress.percent || 0)));
+  return html`
+    <div className=${`agent-create-progress ${failed ? "failed" : ""} ${done ? "done" : ""}`.trim()} role="status" aria-live="polite">
+      <div className="agent-create-progress-header">
+        <span>${label}</span>
+        <strong>${percent}%</strong>
+      </div>
+      <div className="agent-create-progress-track" aria-hidden="true">
+        <div className="agent-create-progress-fill" style=${{ width: `${percent}%` }} />
+      </div>
+      <div className="agent-create-progress-steps">
+        ${steps.map((step, index) => html`
+          <span key=${`${step.label}-${index}`} className=${index < progress.index || done ? "complete" : index === progress.index && !failed ? "active" : ""}>
+            ${t(step.label)}
+          </span>
+        `)}
+      </div>
+    </div>
+  `;
+}
+
 function normalizeRuntimeKind(kind) {
   const value = String(kind ?? "").trim().toLowerCase();
   switch (value) {
@@ -4756,6 +4833,82 @@ function normalizeRuntimeKind(kind) {
     default:
       return "picoclaw_sandbox";
   }
+}
+
+function normalizeRuntimeImageMap(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const out = {};
+  for (const [key, image] of Object.entries(value)) {
+    const runtimeKind = normalizeRuntimeKind(key);
+    const trimmed = String(image ?? "").trim();
+    if (runtimeKind && trimmed) {
+      out[runtimeKind] = trimmed;
+    }
+  }
+  return out;
+}
+
+function runtimeImageForKind(kind, bootstrapConfig, fallbackImage = "") {
+  const runtimeKind = normalizeRuntimeKind(kind);
+  if (runtimeKind === "codex") {
+    return "";
+  }
+  const images = normalizeRuntimeImageMap(bootstrapConfig?.runtime_default_images);
+  if (images[runtimeKind]) {
+    return images[runtimeKind];
+  }
+  if (normalizeRuntimeKind(bootstrapConfig?.runtime_kind) === runtimeKind && bootstrapConfig?.effective_manager_image) {
+    return String(bootstrapConfig.effective_manager_image).trim();
+  }
+  return String(fallbackImage ?? "").trim();
+}
+
+function agentCreateProgressSteps(runtimeKind) {
+  const kind = normalizeRuntimeKind(runtimeKind);
+  if (kind === "openclaw_sandbox" || kind === "picoclaw_sandbox") {
+    return [
+      { label: "agentCreateProgressSandboxConfig", target: 16 },
+      { label: "agentCreateProgressImage", target: 42 },
+      { label: "agentCreateProgressRuntime", target: 72 },
+      { label: "agentCreateProgressStart", target: 88 },
+      { label: "agentCreateProgressFinishing", target: 96 },
+    ];
+  }
+  return [
+    { label: "agentCreateProgressPreparing", target: 24 },
+    { label: "agentCreateProgressRuntime", target: 66 },
+    { label: "agentCreateProgressStart", target: 88 },
+    { label: "agentCreateProgressFinishing", target: 96 },
+  ];
+}
+
+function startAgentCreateProgress(runtimeKind) {
+  const steps = agentCreateProgressSteps(runtimeKind);
+  return {
+    steps,
+    index: 0,
+    percent: 4,
+    status: "running",
+    startedAt: Date.now(),
+  };
+}
+
+function advanceAgentProgress(current) {
+  if (!current || current.status !== "running" || !current.steps?.length) {
+    return current;
+  }
+  const step = current.steps[Math.min(current.index, current.steps.length - 1)];
+  const target = step?.target ?? 96;
+  if (current.percent < target) {
+    const delta = Math.max(1, Math.ceil((target - current.percent) / 3));
+    return { ...current, percent: Math.min(target, current.percent + delta) };
+  }
+  if (current.index < current.steps.length - 1) {
+    return { ...current, index: current.index + 1 };
+  }
+  return { ...current, percent: Math.min(96, current.percent) };
 }
 
 function formatRuntimeKindLabel(kind, t) {
