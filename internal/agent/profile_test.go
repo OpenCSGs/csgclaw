@@ -192,8 +192,10 @@ func TestListModelsForRequestUsesCLIProxyChoicesForDropdown(t *testing.T) {
 
 func TestListModelsForRequestUsesStoredAgentAPIKeyForMatchingProfile(t *testing.T) {
 	var authHeader string
+	var gotHeader string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader = r.Header.Get("Authorization")
+		gotHeader = r.Header.Get("X-Test")
 		_, _ = w.Write([]byte(`{"data":[{"id":"deepseek-chat"}]}`))
 	}))
 	defer upstream.Close()
@@ -210,6 +212,7 @@ func TestListModelsForRequestUsesStoredAgentAPIKeyForMatchingProfile(t *testing.
 			Provider: ProviderAPI,
 			BaseURL:  upstream.URL + "/v1",
 			APIKey:   "stored-key",
+			Headers:  map[string]string{"X-Test": "stored"},
 			ModelID:  "deepseek-chat",
 		}, "alice", ""),
 	}
@@ -218,12 +221,16 @@ func TestListModelsForRequestUsesStoredAgentAPIKeyForMatchingProfile(t *testing.
 		AgentID:  "u-alice",
 		Provider: ProviderAPI,
 		BaseURL:  upstream.URL + "/v1",
+		Headers:  map[string]string{"X-Test": "draft"},
 	})
 	if err != nil {
 		t.Fatalf("ListModelsForRequest() error = %v", err)
 	}
 	if authHeader != "Bearer stored-key" {
 		t.Fatalf("Authorization = %q, want stored key", authHeader)
+	}
+	if gotHeader != "draft" {
+		t.Fatalf("X-Test header = %q, want draft header", gotHeader)
 	}
 	if got, want := strings.Join(models, ","), "deepseek-chat"; got != want {
 		t.Fatalf("models = %v, want %s", models, want)

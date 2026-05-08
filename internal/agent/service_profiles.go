@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"maps"
 	"strings"
 	"time"
 
@@ -179,9 +178,6 @@ func (s *Service) storedAPIKeyForModelRequest(req ProfileModelRequest, profile A
 		return ""
 	}
 	if profile.BaseURL != stored.BaseURL {
-		return ""
-	}
-	if !maps.Equal(profile.Headers, stored.Headers) {
 		return ""
 	}
 	return stored.APIKey
