@@ -51,7 +51,12 @@ extract_dir="${tmpdir}/extract"
 mkdir -p "$OUTPUT_DIR" "$extract_dir"
 
 echo "fetching ${download_url}"
-curl -fsSL "$download_url" -o "$archive_path"
+curl_args=(-fsSL)
+# Corporate TLS inspection may present a self-signed chain; set BOXLITE_CURL_INSECURE=1 only in trusted CI.
+if [ "${BOXLITE_CURL_INSECURE:-}" = "1" ]; then
+  curl_args+=(-k)
+fi
+curl "${curl_args[@]}" "$download_url" -o "$archive_path"
 tar -xzf "$archive_path" -C "$extract_dir"
 
 boxlite_path="$(find "$extract_dir" -type f -name boxlite | head -n 1)"
