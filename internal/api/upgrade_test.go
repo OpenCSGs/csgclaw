@@ -103,7 +103,6 @@ func TestHandleUpgradeApply(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/upgrade/apply", nil)
-	req.RemoteAddr = "127.0.0.1:12345"
 	srv.Routes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusAccepted {
@@ -130,7 +129,6 @@ func TestHandleUpgradeApplyServiceUnavailable(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/upgrade/apply", nil)
-	req.RemoteAddr = "127.0.0.1:12345"
 	srv.Routes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusServiceUnavailable {
@@ -162,7 +160,6 @@ func TestHandleUpgradeApplyHelperFailure(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/upgrade/apply", nil)
-	req.RemoteAddr = "127.0.0.1:12345"
 	srv.Routes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
@@ -170,28 +167,6 @@ func TestHandleUpgradeApplyHelperFailure(t *testing.T) {
 	}
 	if status := manager.Status(); status.Upgrading || status.LastError == "" {
 		t.Fatalf("manager.Status() = %+v, want upgrading false and last_error populated", status)
-	}
-}
-
-func TestHandleUpgradeApplyRejectsRemoteRequest(t *testing.T) {
-	manager := upgrade.NewManager(stubUpgradeChecker{err: errors.New("unused")}, "v0.2.5", upgrade.ManagerOptions{})
-	srv := &Handler{}
-	srv.SetUpgradeManager(manager)
-	srv.SetUpgradeApplyFunc(func(upgrade.ApplyHelperOptions) error {
-		t.Fatal("upgrade helper should not be started for remote requests")
-		return nil
-	})
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/upgrade/apply", nil)
-	req.RemoteAddr = "203.0.113.10:12345"
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
-	}
-	if status := manager.Status(); status.Upgrading {
-		t.Fatalf("manager.Status().Upgrading = true, want false")
 	}
 }
 

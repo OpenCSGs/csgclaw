@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -181,10 +180,6 @@ func (h *Handler) handleUpgradeApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !isLocalRequest(r) {
-		http.Error(w, "upgrade can only be started from the local machine", http.StatusForbidden)
-		return
-	}
 	if h.upgradeManager == nil {
 		http.Error(w, "upgrade manager is not configured", http.StatusServiceUnavailable)
 		return
@@ -205,18 +200,6 @@ func (h *Handler) handleUpgradeApply(w http.ResponseWriter, r *http.Request) {
 		Status:  "accepted",
 		Message: "upgrade helper started",
 	})
-}
-
-func isLocalRequest(r *http.Request) bool {
-	if r == nil {
-		return false
-	}
-	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
-	if err != nil {
-		host = strings.TrimSpace(r.RemoteAddr)
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }
 
 func (h *Handler) handleBots(w http.ResponseWriter, r *http.Request) {
