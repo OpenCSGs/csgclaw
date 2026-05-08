@@ -1040,6 +1040,9 @@ func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
 	if !ok || profile["api_key_set"] != true {
 		t.Fatalf("agent_profile = %#v, want api_key_set true", got[0]["agent_profile"])
 	}
+	if got, want := profile["api_key_preview"], "secr..."; got != want {
+		t.Fatalf("agent_profile api_key_preview = %#v, want %q", got, want)
+	}
 	if _, ok := profile["api_key"]; ok {
 		t.Fatalf("agent_profile includes api_key: %#v", profile)
 	}

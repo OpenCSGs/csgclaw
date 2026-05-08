@@ -2043,6 +2043,54 @@ body::after {
   font-weight: 720;
 }
 
+.api-key-field {
+  min-width: 0;
+}
+
+.api-key-input-shell {
+  position: relative;
+  min-width: 0;
+}
+
+.api-key-input-shell input {
+  position: relative;
+  z-index: 1;
+}
+
+.api-key-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 9px 11px;
+  color: color-mix(in oklab, var(--text) 54%, var(--muted));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.api-key-mask-prefix {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.api-key-mask-dots {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 1px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
 .profile-section .field input,
 .profile-section .field textarea,
 .profile-section .field select {

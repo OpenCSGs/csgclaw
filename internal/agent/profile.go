@@ -55,6 +55,7 @@ type AgentProfileView struct {
 	Provider           string                   `json:"provider,omitempty"`
 	BaseURL            string                   `json:"base_url,omitempty"`
 	APIKeySet          bool                     `json:"api_key_set,omitempty"`
+	APIKeyPreview      string                   `json:"api_key_preview,omitempty"`
 	Headers            map[string]string        `json:"headers,omitempty"`
 	ModelID            string                   `json:"model_id,omitempty"`
 	ReasoningEffort    string                   `json:"reasoning_effort,omitempty"`
@@ -74,6 +75,7 @@ type ProfileDetectionResult struct {
 }
 
 type ProfileModelRequest struct {
+	AgentID  string            `json:"agent_id,omitempty"`
 	Provider string            `json:"provider"`
 	BaseURL  string            `json:"base_url,omitempty"`
 	APIKey   string            `json:"api_key,omitempty"`
@@ -206,6 +208,7 @@ func profileView(profile AgentProfile, detection []ProfileDetectionResult) Agent
 		Provider:           profile.Provider,
 		BaseURL:            profile.BaseURL,
 		APIKeySet:          strings.TrimSpace(profile.APIKey) != "",
+		APIKeyPreview:      apiKeyPreview(profile.APIKey),
 		Headers:            profile.Headers,
 		ModelID:            profile.ModelID,
 		ReasoningEffort:    profile.ReasoningEffort,
@@ -216,6 +219,23 @@ func profileView(profile AgentProfile, detection []ProfileDetectionResult) Agent
 		EnvRestartRequired: profile.EnvRestartRequired,
 		DetectionResults:   append([]ProfileDetectionResult(nil), detection...),
 	}
+}
+
+func apiKeyPreview(apiKey string) string {
+	const (
+		minPreviewRunes = 9
+		prefixRunes     = 4
+	)
+
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return ""
+	}
+	runes := []rune(apiKey)
+	if len(runes) < minPreviewRunes {
+		return ""
+	}
+	return string(runes[:prefixRunes]) + "..."
 }
 
 func RedactedProfileView(profile AgentProfile, detection []ProfileDetectionResult) AgentProfileView {

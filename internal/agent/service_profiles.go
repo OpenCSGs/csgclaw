@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -151,6 +152,9 @@ func (s *Service) ListModelsForRequest(ctx context.Context, req ProfileModelRequ
 		Headers:  req.Headers,
 	}
 	profile = normalizeProfile(profile, profile.Name, profile.Description)
+	if strings.TrimSpace(profile.APIKey) == "" {
+		profile.APIKey = s.storedAPIKeyForModelRequest(req, profile)
+	}
 	if profile.Provider == ProviderCodex || profile.Provider == ProviderClaudeCode {
 		models, err := listCLIProxyModelChoices(ctx, profile.Provider)
 		if err != nil {
@@ -159,6 +163,28 @@ func (s *Service) ListModelsForRequest(ctx context.Context, req ProfileModelRequ
 		return sortModelIDs(models), nil
 	}
 	return ListModelsForProfile(ctx, profile)
+}
+
+func (s *Service) storedAPIKeyForModelRequest(req ProfileModelRequest, profile AgentProfile) string {
+	agentID := strings.TrimSpace(req.AgentID)
+	if s == nil || agentID == "" || profile.Provider != ProviderAPI {
+		return ""
+	}
+	got, ok := s.Agent(agentID)
+	if !ok {
+		return ""
+	}
+	stored := normalizeProfile(got.AgentProfile, got.Name, got.Description)
+	if stored.Provider != ProviderAPI || strings.TrimSpace(stored.APIKey) == "" {
+		return ""
+	}
+	if profile.BaseURL != stored.BaseURL {
+		return ""
+	}
+	if !maps.Equal(profile.Headers, stored.Headers) {
+		return ""
+	}
+	return stored.APIKey
 }
 
 func (s *Service) ResolvedAgentProfile(agentID string) (AgentProfile, error) {
