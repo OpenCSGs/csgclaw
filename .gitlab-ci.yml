@@ -1,3 +1,0 @@
-# Entry point for GitLab CI. Pipeline jobs are defined in .gitlab/ci.yml
-include:
-  - local: ".gitlab/ci.yml"
