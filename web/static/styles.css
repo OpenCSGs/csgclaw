@@ -2214,6 +2214,18 @@ body::after {
   cursor: wait;
 }
 
+.sidebar-upgrade-button.is-running {
+  border-color: color-mix(in oklab, var(--primary) 36%, var(--line));
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+.sidebar-upgrade-button.is-done {
+  border-color: color-mix(in oklab, var(--portal-success-700) 36%, var(--line));
+  background: var(--portal-success-50);
+  color: var(--portal-success-700);
+}
+
 .sidebar-upgrade-dot {
   width: 8px;
   height: 8px;
@@ -2221,6 +2233,113 @@ body::after {
   background: var(--danger);
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 16%, transparent);
   flex: 0 0 auto;
+}
+
+.sidebar-upgrade-button.is-running .sidebar-upgrade-dot {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent);
+  animation: upgrade-pulse 1.4s ease-in-out infinite;
+}
+
+.sidebar-upgrade-button.is-done .sidebar-upgrade-dot {
+  background: var(--portal-success-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--portal-success-700) 16%, transparent);
+}
+
+.upgrade-modal {
+  width: min(520px, 100%);
+}
+
+.upgrade-summary {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.upgrade-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.upgrade-summary-row strong {
+  color: var(--text);
+  font-weight: 600;
+  text-align: right;
+}
+
+.upgrade-status-card {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in oklab, var(--primary) 28%, var(--line));
+  border-radius: 8px;
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+.upgrade-status-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.upgrade-status-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent);
+}
+
+.upgrade-status-card.starting .upgrade-status-dot,
+.upgrade-status-card.restarting .upgrade-status-dot {
+  animation: upgrade-pulse 1.4s ease-in-out infinite;
+}
+
+.upgrade-status-card.done {
+  border-color: color-mix(in oklab, var(--portal-success-700) 32%, var(--line));
+  background: var(--portal-success-50);
+}
+
+.upgrade-status-card.done .upgrade-status-dot {
+  background: var(--portal-success-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--portal-success-700) 16%, transparent);
+}
+
+.upgrade-status-card.error {
+  border-color: color-mix(in oklab, var(--danger) 32%, var(--line));
+  background: var(--portal-error-50);
+}
+
+.upgrade-status-card.error .upgrade-status-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 16%, transparent);
+}
+
+@keyframes upgrade-pulse {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(0.86);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .sidebar-footer-error {
@@ -4337,4 +4456,25 @@ body::after {
   .composer {
     padding: 14px;
   }
+}
+
+:root[data-theme="dark"] .upgrade-summary {
+  border-color: var(--line);
+  background: var(--panel-strong);
+}
+
+:root[data-theme="dark"] .upgrade-status-card.done {
+  border-color: rgba(23, 178, 106, 0.38);
+  background: rgba(23, 178, 106, 0.12);
+}
+
+:root[data-theme="dark"] .sidebar-upgrade-button.is-done {
+  border-color: rgba(23, 178, 106, 0.38);
+  background: rgba(23, 178, 106, 0.12);
+  color: #d0d5dd;
+}
+
+:root[data-theme="dark"] .upgrade-status-card.error {
+  border-color: rgba(217, 45, 32, 0.42);
+  background: rgba(217, 45, 32, 0.12);
 }

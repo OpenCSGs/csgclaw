@@ -231,6 +231,26 @@ const messages = {
     upgradeAction: "更新并重启",
     upgradeActionBusy: "更新中...",
     upgradeApplyFailed: "启动升级失败，请重试。",
+    upgradeTitle: "发现新版本",
+    upgradeSubtitle: "可以直接在界面中完成升级，升级过程会短暂重启本地服务。",
+    upgradeCurrentVersion: "当前版本",
+    upgradeLatestVersion: "最新版本",
+    upgradeStatus: "状态",
+    upgradeStatusReady: "准备升级",
+    upgradeStatusStarting: "正在启动升级",
+    upgradeStatusRestarting: "正在升级并等待服务重启",
+    upgradeStatusDone: "升级完成",
+    upgradeStatusError: "升级失败",
+    upgradeConfirmBody: "点击更新后会运行 csgclaw upgrade，并在完成后重启本地服务。",
+    upgradeRestartingBody: "升级 helper 已启动。页面会自动等待服务恢复，期间连接短暂中断是正常现象。",
+    upgradeDoneBody: "服务已经恢复，刷新页面后即可使用新版本。",
+    upgradeNoLatest: "未知",
+    upgradeRefresh: "刷新页面",
+    upgradeLater: "稍后",
+    upgradeConfirm: "立即更新并重启",
+    upgradeBackground: "后台升级中",
+    upgradeViewProgress: "查看进度",
+    upgradeContinueUsing: "升级已在后台运行，你可以继续使用产品。",
     roles: {
       admin: "管理员",
       manager: "经理",
@@ -392,6 +412,26 @@ const messages = {
     upgradeAction: "Update & Restart",
     upgradeActionBusy: "Updating...",
     upgradeApplyFailed: "Failed to start the upgrade. Please retry.",
+    upgradeTitle: "New version available",
+    upgradeSubtitle: "Upgrade directly from the app. The local service will restart briefly.",
+    upgradeCurrentVersion: "Current version",
+    upgradeLatestVersion: "Latest version",
+    upgradeStatus: "Status",
+    upgradeStatusReady: "Ready to update",
+    upgradeStatusStarting: "Starting upgrade",
+    upgradeStatusRestarting: "Upgrading and waiting for service restart",
+    upgradeStatusDone: "Upgrade complete",
+    upgradeStatusError: "Upgrade failed",
+    upgradeConfirmBody: "Updating runs csgclaw upgrade and restarts the local service when it finishes.",
+    upgradeRestartingBody: "The upgrade helper has started. This page will wait for the service to come back; a brief disconnect is normal.",
+    upgradeDoneBody: "The service is back. Refresh the page to use the new version.",
+    upgradeNoLatest: "Unknown",
+    upgradeRefresh: "Refresh page",
+    upgradeLater: "Later",
+    upgradeConfirm: "Update & Restart now",
+    upgradeBackground: "Updating in background",
+    upgradeViewProgress: "View progress",
+    upgradeContinueUsing: "The upgrade is running in the background. You can keep using the product.",
     roles: {
       admin: "admin",
       manager: "manager",
@@ -817,6 +857,33 @@ function normalizeUpgradeStatus(status) {
   };
 }
 
+function upgradeStatusLabel(phase, t) {
+  switch (phase) {
+    case "starting":
+      return t("upgradeStatusStarting");
+    case "restarting":
+      return t("upgradeStatusRestarting");
+    case "done":
+      return t("upgradeStatusDone");
+    case "error":
+      return t("upgradeStatusError");
+    default:
+      return t("upgradeStatusReady");
+  }
+}
+
+async function readErrorMessage(resp) {
+  if (!resp) {
+    return "";
+  }
+  try {
+    const text = await resp.text();
+    return text.trim();
+  } catch (_) {
+    return "";
+  }
+}
+
 function App() {
   const initialPane = useMemo(() => paneFromLocation(), []);
   const [locale, setLocale] = useState(() => detectInitialLocale());
@@ -879,6 +946,8 @@ function App() {
   const [upgradeStatus, setUpgradeStatus] = useState(null);
   const [upgradeBusy, setUpgradeBusy] = useState(false);
   const [upgradeError, setUpgradeError] = useState("");
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradePhase, setUpgradePhase] = useState("idle");
   const editorRef = useRef(null);
   const messageListRef = useRef(null);
   const memberMenuRef = useRef(null);
@@ -888,6 +957,7 @@ function App() {
   const profileDraftRef = useRef(null);
   const agentDraftRef = useRef(null);
   const agentPageDraftRef = useRef(null);
+  const upgradePollTimerRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
   const autoScrollConversationRef = useRef(activeConversationId);
 
@@ -901,6 +971,15 @@ function App() {
 
   useEffect(() => {
     refreshUpgradeStatus();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (upgradePollTimerRef.current) {
+        window.clearInterval(upgradePollTimerRef.current);
+        upgradePollTimerRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -932,6 +1011,7 @@ function App() {
         setUpgradeStatus(next);
         if (next?.upgrading) {
           setUpgradeBusy(true);
+          setUpgradePhase((phase) => phase === "done" ? phase : "restarting");
         } else if (!next?.update_available) {
           setUpgradeBusy(false);
         }
@@ -1401,6 +1481,7 @@ function App() {
       setUpgradeStatus(payload);
       if (payload?.upgrading) {
         setUpgradeBusy(true);
+        setUpgradePhase((phase) => phase === "done" ? phase : "restarting");
       } else if (!payload?.update_available) {
         setUpgradeBusy(false);
       }
@@ -1410,6 +1491,56 @@ function App() {
     }
   }
 
+  function stopUpgradePoll() {
+    if (upgradePollTimerRef.current) {
+      window.clearInterval(upgradePollTimerRef.current);
+      upgradePollTimerRef.current = null;
+    }
+  }
+
+  function startUpgradeReconnectPoll(expectedVersion) {
+    stopUpgradePoll();
+    let attempts = 0;
+    const poll = async () => {
+      attempts += 1;
+      try {
+        const resp = await fetch(`${VERSION_ENDPOINT}?_=${Date.now()}`, { cache: "no-store" });
+        if (!resp.ok) {
+          throw new Error("version unavailable");
+        }
+        const payload = await resp.json();
+        const version = typeof payload?.version === "string" ? payload.version.trim() : "";
+        const expected = (expectedVersion || "").trim();
+        if (version && (!expected || version === expected)) {
+          stopUpgradePoll();
+          setAppVersion(version);
+          setUpgradeBusy(false);
+          setUpgradePhase("done");
+          setUpgradeStatus((current) => ({
+            ...(current || {}),
+            current_version: version,
+            latest_version: version,
+            update_available: false,
+            checking: false,
+            upgrading: false,
+            last_error: "",
+          }));
+          return;
+        }
+      } catch (_) {
+        // The daemon is expected to be unavailable while the upgrade helper restarts it.
+      }
+      if (attempts >= 60) {
+        stopUpgradePoll();
+        setUpgradeBusy(false);
+        setUpgradePhase("error");
+        setUpgradeError(t("upgradeApplyFailed"));
+      }
+    };
+    poll();
+    upgradePollTimerRef.current = window.setInterval(poll, 2000);
+  }
+
   async function applyUpgrade() {
     if (upgradeBusy || upgradeStatus?.upgrading) {
       return;
@@ -1417,14 +1548,27 @@ function App() {
 
     setUpgradeBusy(true);
     setUpgradeError("");
+    setUpgradePhase("starting");
+    setShowUpgradeModal(true);
     try {
       const resp = await fetch(UPGRADE_APPLY_ENDPOINT, { method: "POST" });
       if (!resp.ok) {
-        throw new Error("upgrade apply failed");
+        const detail = await readErrorMessage(resp);
+        throw new Error(detail || "upgrade apply failed");
       }
-    } catch (_) {
+      setUpgradePhase("restarting");
+      setUpgradeStatus((current) => ({
+        ...(current || {}),
+        upgrading: true,
+        last_error: "",
+      }));
+      startUpgradeReconnectPoll(upgradeStatus?.latest_version);
+      setShowUpgradeModal(false);
+    } catch (err) {
       setUpgradeBusy(false);
-      setUpgradeError(t("upgradeApplyFailed"));
+      setUpgradePhase("error");
+      const detail = err?.message && err.message !== "upgrade apply failed" ? ` ${err.message}` : "";
+      setUpgradeError(`${t("upgradeApplyFailed")}${detail}`);
     }
   }
 
@@ -2577,16 +2721,19 @@ function App() {
             <div className="sidebar-footer">
               <div className="sidebar-footer-row">
                 <span className="sidebar-version-label">${`csgclaw v${appVersion}`}</span>
-                ${upgradeStatus?.update_available
+                ${upgradeStatus?.update_available || upgradeBusy || upgradeStatus?.upgrading || upgradePhase === "done" || upgradePhase === "error"
                   ? html`
                       <button
                         type="button"
-                        className="sidebar-upgrade-button"
-                        disabled=${upgradeBusy || upgradeStatus?.upgrading}
-                        onClick=${applyUpgrade}
+                        className=${`sidebar-upgrade-button ${upgradeBusy || upgradeStatus?.upgrading ? "is-running" : ""} ${upgradePhase === "done" ? "is-done" : ""}`}
+                        onClick=${() => {
+                          setUpgradeError("");
+                          setUpgradePhase(upgradeBusy || upgradeStatus?.upgrading ? "restarting" : "idle");
+                          setShowUpgradeModal(true);
+                        }}
                       >
                         <span className="sidebar-upgrade-dot" aria-hidden="true"></span>
-                        <span>${upgradeBusy || upgradeStatus?.upgrading ? t("upgradeActionBusy") : t("upgradeAction")}</span>
+                        <span>${upgradePhase === "done" ? t("upgradeRefresh") : upgradeBusy || upgradeStatus?.upgrading ? t("upgradeBackground") : t("upgradeAction")}</span>
                       </button>
                     `
                   : null}
@@ -3056,6 +3203,77 @@ function App() {
                 <div className="modal-actions">
                   <button className="secondary-button" onClick=${() => setShowInvite(false)}>${t("cancel")}</button>
                   <button className="send-button" disabled=${inviteUserIDs.length === 0} onClick=${inviteUsers}>${t("sendInvite")}</button>
+                </div>
+              </div>
+            </div>
+          `
+        : null}
+
+      ${showUpgradeModal
+        ? html`
+            <div className="modal-backdrop" onClick=${() => setShowUpgradeModal(false)}>
+              <div className="modal-card upgrade-modal" onClick=${(event) => event.stopPropagation()}>
+                <div className="modal-header">
+                  <div>
+                    <div className="modal-title">${t("upgradeTitle")}</div>
+                    <div className="modal-subtitle">${t("upgradeSubtitle")}</div>
+                  </div>
+                  <button
+                    className="modal-close"
+                    onClick=${() => setShowUpgradeModal(false)}
+                  >
+                    ${t("close")}
+                  </button>
+                </div>
+                <div className="upgrade-summary">
+                  <div className="upgrade-summary-row">
+                    <span>${t("upgradeCurrentVersion")}</span>
+                    <strong>${upgradeStatus?.current_version || appVersion || "dev"}</strong>
+                  </div>
+                  <div className="upgrade-summary-row">
+                    <span>${t("upgradeLatestVersion")}</span>
+                    <strong>${upgradeStatus?.latest_version || t("upgradeNoLatest")}</strong>
+                  </div>
+                  <div className="upgrade-summary-row">
+                    <span>${t("upgradeStatus")}</span>
+                    <strong>${upgradeStatusLabel(upgradePhase, t)}</strong>
+                  </div>
+                </div>
+                <div className=${`upgrade-status-card ${upgradePhase}`}>
+                  <span className="upgrade-status-dot" aria-hidden="true"></span>
+                  <p>
+                    ${upgradePhase === "done"
+                      ? t("upgradeDoneBody")
+                      : upgradePhase === "restarting" || upgradePhase === "starting" || upgradeBusy || upgradeStatus?.upgrading
+                        ? t("upgradeContinueUsing")
+                        : t("upgradeConfirmBody")}
+                  </p>
+                </div>
+                ${upgradeError || upgradeStatus?.last_error
+                  ? html`<div className="form-error">${upgradeError || upgradeStatus.last_error}</div>`
+                  : null}
+                <div className="modal-actions">
+                  ${upgradePhase === "done"
+                    ? html`
+                        <button className="send-button" onClick=${() => window.location.reload()}>
+                          ${t("upgradeRefresh")}
+                        </button>
+                      `
+                    : html`
+                        <button
+                          className="secondary-button"
+                          onClick=${() => setShowUpgradeModal(false)}
+                        >
+                          ${upgradeBusy || upgradeStatus?.upgrading ? t("close") : t("upgradeLater")}
+                        </button>
+                        <button
+                          className="send-button"
+                          disabled=${upgradeBusy || upgradeStatus?.upgrading || !upgradeStatus?.update_available}
+                          onClick=${applyUpgrade}
+                        >
+                          ${upgradeBusy || upgradeStatus?.upgrading ? t("upgradeActionBusy") : t("upgradeConfirm")}
+                        </button>
+                      `}
                 </div>
               </div>
             </div>

@@ -132,6 +132,46 @@ func (m *Manager) Status() apitypes.UpgradeStatus {
 	return status
 }
 
+func (m *Manager) MarkUpgrading() apitypes.UpgradeStatus {
+	if m == nil {
+		return apitypes.UpgradeStatus{}
+	}
+
+	m.mu.Lock()
+	previous := copyStatus(m.status)
+	m.status.Upgrading = true
+	m.status.LastError = ""
+	updated := copyStatus(m.status)
+	notify := shouldNotifyStatusChange(previous, updated)
+	callback := m.onStatusChange
+	m.mu.Unlock()
+	if notify && callback != nil {
+		callback(updated)
+	}
+	return updated
+}
+
+func (m *Manager) MarkUpgradeFailed(err error) apitypes.UpgradeStatus {
+	if m == nil {
+		return apitypes.UpgradeStatus{}
+	}
+
+	m.mu.Lock()
+	previous := copyStatus(m.status)
+	m.status.Upgrading = false
+	if err != nil {
+		m.status.LastError = err.Error()
+	}
+	updated := copyStatus(m.status)
+	notify := shouldNotifyStatusChange(previous, updated)
+	callback := m.onStatusChange
+	m.mu.Unlock()
+	if notify && callback != nil {
+		callback(updated)
+	}
+	return updated
+}
+
 func copyStatus(status apitypes.UpgradeStatus) apitypes.UpgradeStatus {
 	if status.LastCheckedAt != nil {
 		t := *status.LastCheckedAt
