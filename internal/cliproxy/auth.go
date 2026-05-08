@@ -86,6 +86,13 @@ func (s *Service) Login(ctx context.Context, provider string, opts LoginOptions)
 		return AuthStatus{}, err
 	}
 
+	if authProvider == ProviderCodex {
+		if imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider); imported.imported {
+			_ = s.Shutdown(context.Background())
+			return authenticatedStatus(statusProvider, imported.source, authProvider), nil
+		}
+	}
+
 	if existing, err := findAuth(ctx, cfg.AuthDir, authProvider); err == nil && existing != nil {
 		return authenticatedStatus(statusProvider, "cli-proxy", authProvider), nil
 	}
@@ -134,12 +141,21 @@ func (s *Service) authStatus(ctx context.Context, provider string, allowImport b
 		return AuthStatus{}, err
 	}
 
+	var importMessage string
+	if allowImport && autoAuthImportEnabled() && authProvider == ProviderCodex {
+		imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider)
+		importMessage = imported.message
+		if imported.imported {
+			_ = s.Shutdown(context.Background())
+			return authenticatedStatus(statusProvider, imported.source, authProvider), nil
+		}
+	}
+
 	if existing, err := findAuth(ctx, cfg.AuthDir, authProvider); err == nil && existing != nil {
 		return authenticatedStatus(statusProvider, "cli-proxy", authProvider), nil
 	}
 
-	var importMessage string
-	if allowImport && autoAuthImportEnabled() {
+	if allowImport && autoAuthImportEnabled() && authProvider != ProviderCodex {
 		imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider)
 		importMessage = imported.message
 		if imported.imported {
@@ -163,6 +179,10 @@ func importExistingAuth(ctx context.Context, authDir string) {
 		return
 	}
 	for _, provider := range []string{ProviderCodex, authProviderClaude} {
+		if provider == ProviderCodex {
+			_, _ = importExternalAuth(ctx, authDir, provider)
+			continue
+		}
 		if existing, err := findAuth(ctx, authDir, provider); err == nil && existing != nil {
 			continue
 		}
@@ -198,6 +218,9 @@ func importCodexHomeAuth(ctx context.Context, authDir string) (authImportResult,
 		return authImportResult{message: "Codex auth is not importable. Run csgclaw model auth login codex."}, nil
 	}
 	fileName := authFileName(ProviderCodex, metadata, "codex-imported")
+	if shouldKeepExistingAuth(filepath.Join(authDir, fileName), metadata) {
+		return authImportResult{}, nil
+	}
 	if _, err = saveMetadataAuth(ctx, authDir, ProviderCodex, fileName, metadata); err != nil {
 		return authImportResult{}, err
 	}
@@ -283,6 +306,10 @@ func codexMetadataFromAuthJSON(raw []byte) (map[string]any, error) {
 		metadata["email"] = email
 	}
 	if expired := expiryFromValue(firstValue(tokenMap, "expired", "expires_at", "expiresAt", "expiry", "expiration")); expired != "" {
+		metadata["expired"] = expired
+	} else if expired = expiryFromJWT(accessToken); expired != "" {
+		metadata["expired"] = expired
+	} else if expired = expiryFromJWT(stringFromMap(tokenMap, "id_token", "idToken")); expired != "" {
 		metadata["expired"] = expired
 	}
 	return metadata, nil
@@ -559,20 +586,94 @@ func unixExpiry(value float64) string {
 }
 
 func emailFromJWT(token string) string {
-	parts := strings.Split(token, ".")
-	if len(parts) < 2 {
-		return ""
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return ""
-	}
-	var claims map[string]any
-	if err = json.Unmarshal(raw, &claims); err != nil {
+	claims := jwtClaims(token)
+	if claims == nil {
 		return ""
 	}
 	if email, _ := claims["email"].(string); strings.TrimSpace(email) != "" {
 		return strings.TrimSpace(email)
 	}
 	return ""
+}
+
+func expiryFromJWT(token string) string {
+	claims := jwtClaims(token)
+	if claims == nil {
+		return ""
+	}
+	if expired := expiryFromValue(claims["exp"]); expired != "" {
+		return expired
+	}
+	return ""
+}
+
+func shouldKeepExistingAuth(path string, incoming map[string]any) bool {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var existing map[string]any
+	if err = json.Unmarshal(raw, &existing); err != nil {
+		return false
+	}
+	if disabled, _ := existing["disabled"].(bool); disabled {
+		return false
+	}
+	existingTime, existingOK := authFreshnessTime(existing)
+	incomingTime, incomingOK := authFreshnessTime(incoming)
+	if !existingOK {
+		return false
+	}
+	if !incomingOK {
+		return true
+	}
+	return existingTime.After(incomingTime)
+}
+
+func authFreshnessTime(metadata map[string]any) (time.Time, bool) {
+	var freshest time.Time
+	var ok bool
+	for _, key := range []string{"expired", "expires_at", "expiresAt", "expiry", "expiration", "last_refresh", "lastRefresh"} {
+		if value, exists := metadata[key]; exists {
+			if candidate, parsed := timeFromAuthValue(value); parsed && (!ok || candidate.After(freshest)) {
+				freshest = candidate
+				ok = true
+			}
+		}
+	}
+	for _, key := range []string{"access_token", "accessToken", "id_token", "idToken"} {
+		if candidate, parsed := timeFromAuthValue(expiryFromJWT(stringFromMap(metadata, key))); parsed && (!ok || candidate.After(freshest)) {
+			freshest = candidate
+			ok = true
+		}
+	}
+	return freshest, ok
+}
+
+func timeFromAuthValue(value any) (time.Time, bool) {
+	text := expiryFromValue(value)
+	if text == "" {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, text)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed, true
+}
+
+func jwtClaims(token string) map[string]any {
+	parts := strings.Split(token, ".")
+	if len(parts) < 2 {
+		return nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil
+	}
+	var claims map[string]any
+	if err = json.Unmarshal(raw, &claims); err != nil {
+		return nil
+	}
+	return claims
 }
