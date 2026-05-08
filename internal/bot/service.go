@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/im"
 )
@@ -305,12 +306,14 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 	} else {
 		var err error
 		created, err = s.agents.CreateWorker(ctx, agent.CreateAgentSpec{
-			ID:          normalized.ID,
-			Name:        normalized.Name,
-			Description: normalized.Description,
-			Role:        agent.RoleWorker,
-			ModelID:     normalized.ModelID,
-			RuntimeKind: normalized.RuntimeKind,
+			ID:           normalized.ID,
+			Name:         normalized.Name,
+			Description:  normalized.Description,
+			Image:        normalized.Image,
+			Role:         agent.RoleWorker,
+			ModelID:      normalized.ModelID,
+			RuntimeKind:  normalized.RuntimeKind,
+			AgentProfile: agentProfileFromBotRequest(normalized.AgentProfile),
 		})
 		if err != nil {
 			return Bot{}, err
@@ -354,6 +357,23 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 		return Bot{}, err
 	}
 	return b, nil
+}
+
+func agentProfileFromBotRequest(req apitypes.CreateAgentProfile) agent.AgentProfile {
+	return agent.AgentProfile{
+		Name:            req.Name,
+		Description:     req.Description,
+		Provider:        req.Provider,
+		BaseURL:         req.BaseURL,
+		APIKey:          req.APIKey,
+		Headers:         req.Headers,
+		ModelID:         req.ModelID,
+		ReasoningEffort: req.ReasoningEffort,
+		EnableFastMode:  req.EnableFastMode,
+		RequestOptions:  req.RequestOptions,
+		Env:             req.Env,
+		ProfileComplete: req.ProfileComplete,
+	}
 }
 
 func (s *Service) createManager(ctx context.Context, normalized CreateRequest, forceRecreateAgent bool) (Bot, error) {

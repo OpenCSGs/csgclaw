@@ -506,7 +506,7 @@ func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 		imBus:  bus,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots", strings.NewReader(`{"name":"alice","description":"test lead","role":"worker","channel":"csgclaw"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots", strings.NewReader(`{"name":"alice","description":"test lead","image":"agent-image:1","role":"worker","channel":"csgclaw","agent_profile":{"provider":"csghub_lite","model_id":"glm-4.5","reasoning_effort":"high"}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -552,6 +552,12 @@ func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 	}
 	if len(agents) != 1 || agents[0].ID != "u-alice" {
 		t.Fatalf("agents = %+v, want u-alice", agents)
+	}
+	if agents[0].Image != "agent-image:1" {
+		t.Fatalf("agents[0].Image = %q, want agent-image:1", agents[0].Image)
+	}
+	if agents[0].Provider != agent.ProviderCSGHubLite || agents[0].ModelID != "glm-4.5" {
+		t.Fatalf("agent profile = %s/%s, want csghub_lite/glm-4.5", agents[0].Provider, agents[0].ModelID)
 	}
 
 	rec = httptest.NewRecorder()

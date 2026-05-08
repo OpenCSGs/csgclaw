@@ -19,13 +19,15 @@ type Bot struct {
 }
 
 type CreateBotRequest struct {
-	ID          string `json:"id,omitempty"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Role        string `json:"role"`
-	Channel     string `json:"channel,omitempty"`
-	ModelID     string `json:"model_id,omitempty"`
-	RuntimeKind string `json:"runtime_kind,omitempty"`
+	ID           string             `json:"id,omitempty"`
+	Name         string             `json:"name"`
+	Description  string             `json:"description,omitempty"`
+	Image        string             `json:"image,omitempty"`
+	Role         string             `json:"role"`
+	Channel      string             `json:"channel,omitempty"`
+	ModelID      string             `json:"model_id,omitempty"`
+	RuntimeKind  string             `json:"runtime_kind,omitempty"`
+	AgentProfile CreateAgentProfile `json:"agent_profile,omitempty"`
 }
 
 type User struct {

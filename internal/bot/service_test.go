@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
@@ -666,9 +667,15 @@ func TestServiceCreateCSGClawWorkerCreatesAgentUserAndBot(t *testing.T) {
 	got, err := svc.Create(context.Background(), CreateRequest{
 		Name:        "alice",
 		Description: "test lead",
+		Image:       "agent-image:1",
 		Role:        string(RoleWorker),
 		Channel:     string(ChannelCSGClaw),
 		RuntimeKind: agent.RuntimeKindCodex,
+		AgentProfile: apitypes.CreateAgentProfile{
+			Provider:        agent.ProviderCSGHubLite,
+			ModelID:         "glm-4.5",
+			ReasoningEffort: "high",
+		},
 	})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -688,6 +695,15 @@ func TestServiceCreateCSGClawWorkerCreatesAgentUserAndBot(t *testing.T) {
 	}
 	if createdAgent.RuntimeKind != agent.RuntimeKindCodex {
 		t.Fatalf("agent.RuntimeKind = %q, want %q", createdAgent.RuntimeKind, agent.RuntimeKindCodex)
+	}
+	if createdAgent.Image != "agent-image:1" {
+		t.Fatalf("agent.Image = %q, want agent-image:1", createdAgent.Image)
+	}
+	if createdAgent.Provider != agent.ProviderCSGHubLite || createdAgent.ModelID != "glm-4.5" {
+		t.Fatalf("agent profile = %s/%s, want csghub_lite/glm-4.5", createdAgent.Provider, createdAgent.ModelID)
+	}
+	if createdAgent.AgentProfile.ReasoningEffort != "high" {
+		t.Fatalf("agent reasoning = %q, want high", createdAgent.AgentProfile.ReasoningEffort)
 	}
 	users := imSvc.ListUsers()
 	if !containsUser(users, "u-alice") {

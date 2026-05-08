@@ -30,6 +30,7 @@ func NormalizeCreateRequest(req CreateRequest) (CreateRequest, error) {
 	req.ID = strings.TrimSpace(req.ID)
 	req.Name = strings.TrimSpace(req.Name)
 	req.Description = strings.TrimSpace(req.Description)
+	req.Image = strings.TrimSpace(req.Image)
 	req.ModelID = strings.TrimSpace(req.ModelID)
 	req.RuntimeKind = strings.TrimSpace(req.RuntimeKind)
 	if req.Name == "" {
