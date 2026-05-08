@@ -1,6 +1,7 @@
 package cliproxy
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy"
@@ -75,6 +77,49 @@ func TestFallbackModelsCoverEmbeddedCLIProviders(t *testing.T) {
 	}
 }
 
+func TestEmbeddedCLIProxyRegistersImportedCodexAuthModels(t *testing.T) {
+	home := t.TempDir()
+	authDir := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(configDirEnv, t.TempDir())
+	t.Setenv(authDirEnv, authDir)
+
+	codexDir := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(codexDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{
+		"tokens": {
+			"access_token": "`+testJWT(t, `{"exp":1893456000}`)+`",
+			"refresh_token": "refresh",
+			"id_token": "`+testJWT(t, `{"exp":1893456000}`)+`",
+			"account_id": "acct_123"
+		}
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	svc := &Service{client: &http.Client{Timeout: 5 * time.Second}}
+	if err := svc.EnsureStarted(ctx); err != nil {
+		t.Fatalf("EnsureStarted() error = %v", err)
+	}
+	defer func() {
+		if err := svc.Shutdown(context.Background()); err != nil {
+			t.Fatalf("Shutdown() error = %v", err)
+		}
+	}()
+
+	models, err := svc.ListModels(ctx, ProviderCodex)
+	if err != nil {
+		t.Fatalf("ListModels() error = %v", err)
+	}
+	if !containsString(models, "gpt-5.2") {
+		t.Fatalf("models = %v, want gpt-5.2 registered for imported codex auth", models)
+	}
+}
+
 func TestEmbeddedCLIProxyLoadsBuiltinTranslators(t *testing.T) {
 	input := []byte(`{"model":"client-model","messages":[{"role":"user","content":"hello"}],"max_completion_tokens":1024}`)
 
@@ -95,6 +140,15 @@ func TestEmbeddedCLIProxyLoadsBuiltinTranslators(t *testing.T) {
 	if !strings.Contains(text, `"model":"gpt-5.4"`) {
 		t.Fatalf("translated request missing resolved model: %s", text)
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildConfigUsesPrivateNonReservedPortAndWritesConfig(t *testing.T) {
@@ -183,8 +237,23 @@ func TestConfiguredAuthDirExpandsHome(t *testing.T) {
 	if err != nil {
 		t.Fatalf("configuredAuthDir returned error: %v", err)
 	}
-	want := filepath.Join(home, ".cli-proxy-api")
+	want := filepath.Join(home, ".csgclaw", "auth")
 	if got != want {
 		t.Fatalf("configuredAuthDir = %q, want %q", got, want)
+	}
+}
+
+func TestConfigDirDefaultsToAuthDomain(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(configDirEnv, "")
+
+	got, err := configDir()
+	if err != nil {
+		t.Fatalf("configDir returned error: %v", err)
+	}
+	want := filepath.Join(home, ".csgclaw", "auth")
+	if got != want {
+		t.Fatalf("configDir = %q, want %q", got, want)
 	}
 }

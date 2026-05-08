@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -88,7 +89,6 @@ func (s *Service) Login(ctx context.Context, provider string, opts LoginOptions)
 
 	if authProvider == ProviderCodex {
 		if imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider); imported.imported {
-			_ = s.Shutdown(context.Background())
 			return authenticatedStatus(statusProvider, imported.source, authProvider), nil
 		}
 	}
@@ -99,7 +99,6 @@ func (s *Service) Login(ctx context.Context, provider string, opts LoginOptions)
 
 	if authProvider == authProviderClaude && keychainImportEnabled() {
 		if imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider); imported.imported {
-			_ = s.Shutdown(context.Background())
 			return authenticatedStatus(statusProvider, imported.source, authProvider), nil
 		}
 	}
@@ -116,7 +115,6 @@ func (s *Service) Login(ctx context.Context, provider string, opts LoginOptions)
 	}); err != nil {
 		return AuthStatus{}, err
 	}
-	_ = s.Shutdown(context.Background())
 	return authenticatedStatus(statusProvider, "oauth", authProvider), nil
 }
 
@@ -146,7 +144,6 @@ func (s *Service) authStatus(ctx context.Context, provider string, allowImport b
 		imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider)
 		importMessage = imported.message
 		if imported.imported {
-			_ = s.Shutdown(context.Background())
 			return authenticatedStatus(statusProvider, imported.source, authProvider), nil
 		}
 	}
@@ -159,7 +156,6 @@ func (s *Service) authStatus(ctx context.Context, provider string, allowImport b
 		imported, _ := importExternalAuth(ctx, cfg.AuthDir, authProvider)
 		importMessage = imported.message
 		if imported.imported {
-			_ = s.Shutdown(context.Background())
 			return authenticatedStatus(statusProvider, imported.source, authProvider), nil
 		}
 		if existing, err := findAuth(ctx, cfg.AuthDir, authProvider); err == nil && existing != nil {
@@ -179,13 +175,6 @@ func importExistingAuth(ctx context.Context, authDir string) {
 		return
 	}
 	for _, provider := range []string{ProviderCodex, authProviderClaude} {
-		if provider == ProviderCodex {
-			_, _ = importExternalAuth(ctx, authDir, provider)
-			continue
-		}
-		if existing, err := findAuth(ctx, authDir, provider); err == nil && existing != nil {
-			continue
-		}
 		_, _ = importExternalAuth(ctx, authDir, provider)
 	}
 }
@@ -619,6 +608,9 @@ func shouldKeepExistingAuth(path string, incoming map[string]any) bool {
 	if disabled, _ := existing["disabled"].(bool); disabled {
 		return false
 	}
+	if authMetadataEquivalent(existing, incoming) {
+		return true
+	}
 	existingTime, existingOK := authFreshnessTime(existing)
 	incomingTime, incomingOK := authFreshnessTime(incoming)
 	if !existingOK {
@@ -628,6 +620,13 @@ func shouldKeepExistingAuth(path string, incoming map[string]any) bool {
 		return true
 	}
 	return existingTime.After(incomingTime)
+}
+
+func authMetadataEquivalent(existing, incoming map[string]any) bool {
+	if len(existing) != len(incoming) {
+		return false
+	}
+	return reflect.DeepEqual(existing, incoming)
 }
 
 func authFreshnessTime(metadata map[string]any) (time.Time, bool) {
