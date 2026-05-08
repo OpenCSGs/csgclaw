@@ -212,7 +212,7 @@ Behavior:
 
 - `codex` first reuses `~/.codex/auth.json` when available, then starts OAuth if needed.
 - `claude-code` first probes macOS Keychain when available, then starts OAuth if needed.
-- Auth is stored in the CLIProxy auth directory, defaulting to `~/.cli-proxy-api`.
+- Auth is stored in the CSGClaw-managed CLIProxy auth directory, defaulting to `~/.csgclaw/auth`.
 - Model provider auth is scoped under `csgclaw model auth`, not the server's own API authentication.
 
 Examples:

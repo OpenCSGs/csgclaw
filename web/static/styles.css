@@ -4458,6 +4458,1825 @@ body::after {
   }
 }
 
+/* CSGHub CsgButton compatibility layer. */
+.csg-button,
+.btn {
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font: inherit;
+  font-weight: 400;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transform: scale(1);
+  -webkit-transform: scale(1);
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease;
+}
+
+.csg-button:disabled,
+.btn:disabled,
+.csg-button[disabled],
+.btn[disabled] {
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--portal-gray-100);
+  border-color: var(--portal-gray-200);
+  color: var(--portal-gray-400);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-sm,
+.csg-button-sm {
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.btn-md,
+.csg-button-md {
+  min-height: 42px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.btn-lg,
+.csg-button-lg {
+  min-height: 44px;
+  padding: 10px 16px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.btn-primary,
+.csg-button-primary,
+.send-button,
+.composer-send-button,
+.preview-action-button-primary {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-primary:hover:not(:disabled),
+.csg-button-primary:hover:not(:disabled),
+.send-button:hover:not(:disabled),
+.composer-send-button:hover:not(:disabled),
+.preview-action-button-primary:hover:not(:disabled) {
+  border-color: var(--portal-brand-700);
+  background: var(--portal-brand-700);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-primary:focus-visible,
+.csg-button-primary:focus-visible,
+.send-button:focus-visible,
+.composer-send-button:focus-visible,
+.preview-action-button-primary:focus-visible {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs), 0 0 0 4px rgba(77, 106, 214, 0.24);
+}
+
+.btn-secondary-gray,
+.csg-button-secondary-gray,
+.secondary-button,
+.modal-close,
+.preview-action-button:not(.preview-action-button-primary):not(.preview-action-button-danger),
+.agent-action-text,
+.tool-menu-row,
+.member-badge-button {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-white);
+  color: var(--portal-gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-secondary-gray:hover:not(:disabled),
+.csg-button-secondary-gray:hover:not(:disabled),
+.secondary-button:hover:not(:disabled),
+.modal-close:hover:not(:disabled),
+.preview-action-button:not(.preview-action-button-primary):not(.preview-action-button-danger):hover:not(:disabled),
+.agent-action-text:hover:not(:disabled),
+.tool-menu-row:hover:not(:disabled),
+.member-badge-button:hover:not(:disabled) {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-gray-50);
+  color: var(--portal-gray-800);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-secondary-gray:focus-visible,
+.csg-button-secondary-gray:focus-visible,
+.secondary-button:focus-visible,
+.modal-close:focus-visible,
+.preview-action-button:not(.preview-action-button-primary):not(.preview-action-button-danger):focus-visible,
+.agent-action-text:focus-visible,
+.tool-menu-row:focus-visible,
+.member-badge-button:focus-visible {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-white);
+  color: var(--portal-gray-700);
+  box-shadow: var(--shadow-xs), 0 0 0 4px rgba(152, 162, 179, 0.14);
+}
+
+.btn-secondary-color,
+.csg-button-secondary-color,
+.icon-button.active,
+.member-badge-button.active,
+.workspace-tab.active {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-25);
+  color: var(--portal-brand-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-secondary-color:hover:not(:disabled),
+.csg-button-secondary-color:hover:not(:disabled),
+.icon-button.active:hover:not(:disabled),
+.member-badge-button.active:hover:not(:disabled) {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-50);
+  color: var(--portal-brand-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-danger,
+.csg-button-danger,
+.danger-button {
+  border-color: var(--portal-error-600);
+  background: var(--portal-error-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-danger:hover:not(:disabled),
+.csg-button-danger:hover:not(:disabled),
+.danger-button:hover:not(:disabled) {
+  border-color: #b42318;
+  background: #b42318;
+  color: var(--portal-white);
+}
+
+.btn-outline-danger,
+.csg-button-outline-danger,
+.preview-action-button-danger,
+.agent-icon-button.danger,
+.tool-menu-row.danger,
+.conversation-delete-button {
+  border-color: #fecdca;
+  background: var(--portal-white);
+  color: #b42318;
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-outline-danger:hover:not(:disabled),
+.csg-button-outline-danger:hover:not(:disabled),
+.preview-action-button-danger:hover:not(:disabled),
+.agent-icon-button.danger:hover:not(:disabled),
+.tool-menu-row.danger:hover:not(:disabled),
+.conversation-delete-button:hover:not(:disabled) {
+  border-color: #fecdca;
+  background: var(--portal-error-50);
+  color: #912018;
+}
+
+.btn-ghost,
+.csg-button-ghost,
+.sidebar-toggle-button,
+.sidebar-expand-button,
+.workspace-add-button,
+.env-remove-button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--portal-gray-600);
+  box-shadow: none;
+}
+
+.btn-ghost:hover:not(:disabled),
+.csg-button-ghost:hover:not(:disabled),
+.sidebar-toggle-button:hover:not(:disabled),
+.sidebar-expand-button:hover:not(:disabled),
+.workspace-add-button:hover:not(:disabled),
+.env-remove-button:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--portal-gray-50);
+  color: var(--portal-gray-700);
+  box-shadow: none;
+}
+
+.csg-icon-button,
+.icon-button,
+.agent-icon-button,
+.workspace-add-button,
+.env-remove-button,
+.sidebar-toggle-button,
+.sidebar-expand-button,
+.conversation-delete-button {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-add-button,
+.env-remove-button {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.agent-action-text,
+.secondary-button.compact,
+.send-button.compact,
+.entity-toolbar .secondary-button,
+.entity-toolbar .danger-button,
+.entity-toolbar .send-button.compact,
+.modal-actions .send-button {
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.send-button:not(.compact),
+.secondary-button:not(.compact),
+.modal-close,
+.preview-action-button {
+  min-height: 42px;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.composer-send-button {
+  width: 44px;
+  height: 40px;
+  min-width: 44px;
+  min-height: 40px;
+  padding: 0;
+}
+
+button:disabled,
+button[disabled],
+.preview-action-button:disabled,
+.agent-icon-button:disabled,
+.agent-action-text:disabled,
+.send-button:disabled,
+.composer-send-button:disabled,
+.secondary-button:disabled,
+.modal-close:disabled,
+.danger-button:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--portal-gray-100);
+  border-color: var(--portal-gray-200);
+  color: var(--portal-gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+}
+
+:root[data-theme="dark"] .btn-secondary-gray,
+:root[data-theme="dark"] .csg-button-secondary-gray,
+:root[data-theme="dark"] .secondary-button,
+:root[data-theme="dark"] .modal-close,
+:root[data-theme="dark"] .preview-action-button:not(.preview-action-button-primary):not(.preview-action-button-danger),
+:root[data-theme="dark"] .agent-action-text,
+:root[data-theme="dark"] .tool-menu-row,
+:root[data-theme="dark"] .member-badge-button,
+:root[data-theme="dark"] .icon-button,
+:root[data-theme="dark"] .agent-icon-button {
+  border-color: rgba(208, 213, 221, 0.18);
+  background: var(--portal-gray-800);
+  color: var(--portal-gray-25);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .btn-secondary-gray:hover:not(:disabled),
+:root[data-theme="dark"] .csg-button-secondary-gray:hover:not(:disabled),
+:root[data-theme="dark"] .secondary-button:hover:not(:disabled),
+:root[data-theme="dark"] .modal-close:hover:not(:disabled),
+:root[data-theme="dark"] .preview-action-button:not(.preview-action-button-primary):not(.preview-action-button-danger):hover:not(:disabled),
+:root[data-theme="dark"] .agent-action-text:hover:not(:disabled),
+:root[data-theme="dark"] .tool-menu-row:hover:not(:disabled),
+:root[data-theme="dark"] .member-badge-button:hover:not(:disabled),
+:root[data-theme="dark"] .icon-button:hover:not(:disabled),
+:root[data-theme="dark"] .agent-icon-button:hover:not(:disabled) {
+  border-color: rgba(208, 213, 221, 0.28);
+  background: #253044;
+  color: var(--portal-gray-25);
+}
+
+:root[data-theme="dark"] .btn-primary,
+:root[data-theme="dark"] .csg-button-primary,
+:root[data-theme="dark"] .send-button,
+:root[data-theme="dark"] .composer-send-button,
+:root[data-theme="dark"] .preview-action-button-primary {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-300);
+  color: var(--portal-gray-950);
+}
+
+:root[data-theme="dark"] .btn-primary:hover:not(:disabled),
+:root[data-theme="dark"] .csg-button-primary:hover:not(:disabled),
+:root[data-theme="dark"] .send-button:hover:not(:disabled),
+:root[data-theme="dark"] .composer-send-button:hover:not(:disabled),
+:root[data-theme="dark"] .preview-action-button-primary:hover:not(:disabled) {
+  border-color: var(--portal-brand-100);
+  background: var(--portal-brand-100);
+  color: var(--portal-gray-950);
+}
+
+:root[data-theme="dark"] .btn-outline-danger,
+:root[data-theme="dark"] .csg-button-outline-danger,
+:root[data-theme="dark"] .preview-action-button-danger,
+:root[data-theme="dark"] .agent-icon-button.danger,
+:root[data-theme="dark"] .tool-menu-row.danger,
+:root[data-theme="dark"] .conversation-delete-button {
+  border-color: rgba(253, 162, 155, 0.28);
+  background: rgba(217, 45, 32, 0.12);
+  color: #fda29b;
+}
+
+:root[data-theme="dark"] button:disabled,
+:root[data-theme="dark"] button[disabled],
+:root[data-theme="dark"] .preview-action-button:disabled,
+:root[data-theme="dark"] .agent-icon-button:disabled,
+:root[data-theme="dark"] .agent-action-text:disabled,
+:root[data-theme="dark"] .send-button:disabled,
+:root[data-theme="dark"] .composer-send-button:disabled,
+:root[data-theme="dark"] .secondary-button:disabled,
+:root[data-theme="dark"] .modal-close:disabled,
+:root[data-theme="dark"] .danger-button:disabled {
+  border-color: rgba(208, 213, 221, 0.12);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--portal-gray-500);
+  box-shadow: none;
+}
+
+/* Match csghub-portal's global typography stack. */
+:root,
+:root[data-theme="light"],
+:root[data-theme="dark"] {
+  --font-sans: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+  --font-display: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+}
+
+html,
+body,
+button,
+input,
+textarea,
+select,
+.btn,
+.composer-editor,
+.message-bubble,
+.modal-card,
+.header-popover,
+.profile-preview-popover {
+  font-family: var(--font-sans);
+}
+
+body {
+  text-autospace: normal;
+}
+
+.sidebar-brand,
+.chat-title,
+.entity-title-row h1,
+.modal-title,
+.preview-name {
+  font-family: var(--font-display);
+}
+
+/* CSGHub Portal visual alignment: brand blue, neutral surfaces, compact work UI. */
+:root {
+  --portal-white: #ffffff;
+  --portal-gray-25: #fcfcfd;
+  --portal-gray-50: #f9fafb;
+  --portal-gray-100: #f2f4f7;
+  --portal-gray-200: #eaecf0;
+  --portal-gray-300: #d0d5dd;
+  --portal-gray-400: #98a2b3;
+  --portal-gray-500: #667085;
+  --portal-gray-600: #475467;
+  --portal-gray-700: #344054;
+  --portal-gray-800: #182230;
+  --portal-gray-900: #101828;
+  --portal-gray-950: #0c111d;
+  --portal-brand-25: #f0f3ff;
+  --portal-brand-50: #eef3ff;
+  --portal-brand-100: #acbdff;
+  --portal-brand-300: #6584f8;
+  --portal-brand-500: #4d6ad6;
+  --portal-brand-600: #3250bd;
+  --portal-brand-700: #223b99;
+  --portal-error-50: #fef3f2;
+  --portal-error-600: #d92d20;
+  --portal-warning-50: #fffaeb;
+  --portal-warning-700: #b54708;
+  --portal-success-50: #ecfdf3;
+  --portal-success-700: #067647;
+  --radius-md: 8px;
+  --radius-xl: 12px;
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.1), 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.1), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  --bg: var(--portal-gray-50);
+  --sidebar: var(--portal-white);
+  --panel: var(--portal-white);
+  --panel-strong: var(--portal-gray-50);
+  --panel-soft: var(--portal-gray-100);
+  --surface: var(--portal-white);
+  --field: var(--portal-white);
+  --text: var(--portal-gray-900);
+  --muted: var(--portal-gray-500);
+  --line: var(--portal-gray-200);
+  --grid-line: transparent;
+  --primary: var(--portal-brand-600);
+  --primary-soft: rgba(50, 80, 189, 0.08);
+  --primary-strong: var(--portal-brand-700);
+  --on-primary: var(--portal-white);
+  --mention: var(--portal-brand-600);
+  --mention-on-primary: var(--portal-brand-25);
+  --avatar-text: var(--portal-white);
+  --message-border: var(--portal-gray-200);
+  --admin-bubble: var(--portal-gray-100);
+  --admin-text: var(--portal-gray-900);
+  --admin-mention: var(--portal-brand-700);
+  --danger: var(--portal-error-600);
+  --warning: var(--portal-warning-700);
+  --shadow: var(--shadow-md);
+  --shadow-soft: var(--shadow-xs);
+  --focus-ring: 0 0 0 4px rgba(77, 106, 214, 0.24);
+  --font-sans: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+  --font-display: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--portal-gray-950);
+  --sidebar: var(--portal-gray-900);
+  --panel: var(--portal-gray-900);
+  --panel-strong: var(--portal-gray-800);
+  --panel-soft: #253044;
+  --surface: var(--portal-gray-950);
+  --field: var(--portal-gray-800);
+  --text: var(--portal-gray-25);
+  --muted: var(--portal-gray-400);
+  --line: rgba(208, 213, 221, 0.16);
+  --primary: var(--portal-brand-300);
+  --primary-soft: rgba(101, 132, 248, 0.15);
+  --primary-strong: var(--portal-brand-100);
+  --on-primary: var(--portal-gray-950);
+  --mention: var(--portal-brand-100);
+  --mention-on-primary: var(--portal-brand-700);
+  --message-border: rgba(208, 213, 221, 0.16);
+  --admin-bubble: #f2f4f7;
+  --admin-text: var(--portal-gray-900);
+  --admin-mention: var(--portal-brand-700);
+  --shadow: 0 20px 48px rgba(0, 0, 0, 0.32);
+  --shadow-soft: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+:root[data-theme="light"] {
+  --bg: var(--portal-gray-50);
+  --sidebar: var(--portal-white);
+  --panel: var(--portal-white);
+  --panel-strong: var(--portal-gray-50);
+  --panel-soft: var(--portal-gray-100);
+  --surface: var(--portal-white);
+  --field: var(--portal-white);
+  --text: var(--portal-gray-900);
+  --muted: var(--portal-gray-500);
+  --line: var(--portal-gray-200);
+  --primary: var(--portal-brand-600);
+  --primary-soft: rgba(50, 80, 189, 0.08);
+  --primary-strong: var(--portal-brand-700);
+  --on-primary: var(--portal-white);
+  --mention: var(--portal-brand-600);
+  --mention-on-primary: var(--portal-brand-25);
+  --message-border: var(--portal-gray-200);
+  --admin-bubble: var(--portal-gray-100);
+  --admin-text: var(--portal-gray-900);
+  --shadow: var(--shadow-md);
+  --shadow-soft: var(--shadow-xs);
+}
+
+body,
+:root[data-theme="light"] body {
+  background: var(--bg);
+  background-size: auto;
+  letter-spacing: 0;
+}
+
+body::before,
+body::after {
+  display: none;
+}
+
+.app-shell {
+  --sidebar-slot-width: 316px;
+  gap: 0;
+  padding: 0;
+  background: var(--bg);
+}
+
+.app-shell.sidebar-collapsed {
+  --sidebar-slot-width: 72px;
+}
+
+.sidebar-slot {
+  overflow: hidden;
+}
+
+.sidebar,
+.sidebar-rail,
+.chat-panel,
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .sidebar-rail,
+:root[data-theme="light"] .chat-panel {
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.sidebar,
+.sidebar-rail {
+  border-width: 0 1px 0 0;
+}
+
+.chat-panel {
+  border: 0;
+  background: var(--panel);
+}
+
+.sidebar-header,
+.chat-header,
+.composer {
+  background: var(--surface);
+}
+
+.sidebar-header,
+.chat-header {
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar-header {
+  padding: 20px 18px 16px;
+}
+
+.sidebar-brand-mark,
+.sidebar-brand-wordmark {
+  border-radius: var(--radius-md);
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  text-shadow: none;
+}
+
+.sidebar-brand-mark::before,
+.sidebar-brand-mark::after,
+.sidebar-brand-mark span {
+  background: var(--portal-white);
+  box-shadow: none;
+}
+
+.sidebar-brand {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.sidebar-brand-subtitle {
+  color: var(--muted);
+}
+
+.workspace-signal-panel {
+  border-color: var(--line);
+  border-radius: var(--radius-md);
+  background: var(--portal-brand-25);
+}
+
+:root[data-theme="dark"] .workspace-signal-panel {
+  background: rgba(101, 132, 248, 0.1);
+}
+
+.workspace-signal-copy strong,
+.workspace-tab-icon,
+.workspace-row-icon,
+.entity-avatar,
+.entity-list-icon,
+.rich-empty-mark {
+  color: var(--primary-strong);
+}
+
+.workspace-signal-meter span {
+  background: var(--primary);
+  animation: none;
+}
+
+.workspace-tabbar {
+  gap: 8px;
+  padding: 12px 0 4px;
+}
+
+.workspace-tab,
+.workspace-row,
+.conversation-item-main,
+.agent-row,
+.entity-list-row,
+.entity-field,
+.metric,
+.profile-section,
+.selection-item,
+.auth-status-row,
+.detection-row {
+  border-radius: var(--radius-md);
+}
+
+.workspace-tab {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--portal-gray-600);
+  box-shadow: var(--shadow-xs);
+}
+
+:root[data-theme="dark"] .workspace-tab {
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.workspace-tab:hover,
+.workspace-row:hover,
+.conversation-item:hover .conversation-item-main,
+.entity-list-main-button:hover {
+  background: var(--portal-gray-50);
+}
+
+:root[data-theme="dark"] .workspace-tab:hover,
+:root[data-theme="dark"] .workspace-row:hover,
+:root[data-theme="dark"] .conversation-item:hover .conversation-item-main {
+  background: var(--panel-strong);
+}
+
+.workspace-tab.active,
+.workspace-row.active,
+.conversation-item.active .conversation-item-main {
+  border-color: var(--portal-brand-100);
+  background: var(--portal-brand-25);
+  color: var(--primary-strong);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .workspace-tab.active,
+:root[data-theme="dark"] .workspace-row.active,
+:root[data-theme="dark"] .conversation-item.active .conversation-item-main {
+  border-color: rgba(101, 132, 248, 0.38);
+  background: rgba(101, 132, 248, 0.12);
+}
+
+.workspace-row {
+  border: 1px solid transparent;
+  transform: none;
+}
+
+.workspace-row:hover {
+  border-color: var(--line);
+  transform: none;
+}
+
+.workspace-row-icon,
+.entity-list-icon,
+.entity-avatar,
+.rich-empty-mark {
+  border-color: var(--line);
+  background: var(--portal-brand-25);
+}
+
+:root[data-theme="dark"] .workspace-row-icon,
+:root[data-theme="dark"] .entity-list-icon,
+:root[data-theme="dark"] .entity-avatar,
+:root[data-theme="dark"] .rich-empty-mark {
+  background: rgba(101, 132, 248, 0.12);
+}
+
+.chat-header {
+  padding: 16px 22px;
+}
+
+.chat-kicker {
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.chat-kicker strong {
+  color: var(--primary-strong);
+}
+
+.chat-title {
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.chat-subtitle {
+  color: var(--muted);
+}
+
+.icon-button,
+.member-badge-button,
+.ghost-button,
+.secondary-button,
+.modal-close,
+.tool-menu-row,
+.agent-add-button,
+.agent-icon-button,
+.agent-action-text,
+.preview-action-button,
+.workspace-add-button,
+.env-remove-button,
+.danger-button {
+  border-color: var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  color: var(--portal-gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+:root[data-theme="dark"] .icon-button,
+:root[data-theme="dark"] .member-badge-button,
+:root[data-theme="dark"] .ghost-button,
+:root[data-theme="dark"] .secondary-button,
+:root[data-theme="dark"] .modal-close,
+:root[data-theme="dark"] .tool-menu-row,
+:root[data-theme="dark"] .agent-add-button,
+:root[data-theme="dark"] .agent-icon-button,
+:root[data-theme="dark"] .agent-action-text,
+:root[data-theme="dark"] .preview-action-button,
+:root[data-theme="dark"] .workspace-add-button,
+:root[data-theme="dark"] .env-remove-button,
+:root[data-theme="dark"] .danger-button {
+  color: var(--text);
+  box-shadow: none;
+}
+
+.icon-button:hover,
+.member-badge-button:hover,
+.ghost-button:hover,
+.secondary-button:hover,
+.modal-close:hover,
+.tool-menu-row:hover,
+.agent-add-button:hover,
+.agent-icon-button:hover,
+.agent-action-text:hover,
+.preview-action-button:hover:not(:disabled),
+.workspace-add-button:hover,
+.env-remove-button:hover {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-gray-50);
+  color: var(--portal-gray-800);
+  transform: none;
+}
+
+:root[data-theme="dark"] .icon-button:hover,
+:root[data-theme="dark"] .member-badge-button:hover,
+:root[data-theme="dark"] .ghost-button:hover,
+:root[data-theme="dark"] .secondary-button:hover,
+:root[data-theme="dark"] .modal-close:hover,
+:root[data-theme="dark"] .tool-menu-row:hover,
+:root[data-theme="dark"] .agent-add-button:hover,
+:root[data-theme="dark"] .agent-icon-button:hover,
+:root[data-theme="dark"] .agent-action-text:hover,
+:root[data-theme="dark"] .preview-action-button:hover:not(:disabled),
+:root[data-theme="dark"] .workspace-add-button:hover,
+:root[data-theme="dark"] .env-remove-button:hover {
+  border-color: rgba(208, 213, 221, 0.28);
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+.icon-button.active,
+.member-badge-button.active {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-25);
+  color: var(--portal-brand-700);
+}
+
+.messages,
+:root[data-theme="light"] .messages {
+  padding: 28px;
+  gap: 18px;
+  background: var(--bg);
+  background-size: auto;
+}
+
+:root[data-theme="dark"] .messages {
+  background: var(--surface);
+}
+
+.message-row {
+  max-width: min(76%, 840px);
+}
+
+.message-meta {
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.message-bubble {
+  border: 1px solid var(--message-border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+:root[data-theme="dark"] .message-bubble {
+  background: var(--panel);
+}
+
+.message-row.own .message-bubble {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+}
+
+:root[data-theme="dark"] .message-row.own .message-bubble {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-300);
+  color: var(--portal-gray-950);
+}
+
+.message-row.admin .message-bubble {
+  border-color: var(--portal-gray-200);
+  background: var(--admin-bubble);
+  color: var(--admin-text);
+}
+
+.message-content :not(pre) > code {
+  border-radius: 6px;
+  background: var(--portal-gray-100);
+  color: var(--portal-brand-700);
+}
+
+:root[data-theme="dark"] .message-content :not(pre) > code {
+  background: rgba(208, 213, 221, 0.12);
+  color: var(--portal-brand-100);
+}
+
+.message-content pre,
+.structured-message-code,
+.structured-message-json {
+  border-radius: var(--radius-md);
+  border-color: var(--line);
+  background: var(--portal-gray-950);
+}
+
+.structured-message-details,
+.message-content .mermaid {
+  border-radius: var(--radius-md);
+  background: var(--portal-gray-50);
+}
+
+:root[data-theme="dark"] .structured-message-details,
+:root[data-theme="dark"] .message-content .mermaid {
+  background: var(--panel-strong);
+}
+
+.composer {
+  padding: 16px 22px;
+  border-top: 1px solid var(--line);
+}
+
+.composer-box {
+  border-color: var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--field);
+  box-shadow: var(--shadow-xs);
+}
+
+:root[data-theme="dark"] .composer-box {
+  box-shadow: none;
+}
+
+.composer-editor {
+  border-radius: var(--radius-xl);
+  color: var(--text);
+}
+
+.composer-editor:focus,
+.field input:focus,
+.field textarea:focus,
+.field select:focus,
+.preview-action-button:focus-visible,
+.send-button:focus-visible,
+.secondary-button:focus-visible,
+.modal-close:focus-visible {
+  border-color: var(--portal-brand-500);
+  box-shadow: var(--focus-ring);
+}
+
+.composer-send-button,
+.send-button,
+.preview-action-button-primary {
+  border-color: var(--portal-brand-600);
+  border-radius: var(--radius-md);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.composer-send-button:hover:not(:disabled),
+.send-button:hover:not(:disabled),
+.preview-action-button-primary:hover:not(:disabled) {
+  border-color: var(--portal-brand-700);
+  background: var(--portal-brand-700);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.header-popover,
+.mention-picker,
+.profile-preview-popover,
+.modal-card,
+:root[data-theme="light"] .header-popover,
+:root[data-theme="light"] .mention-picker,
+:root[data-theme="light"] .profile-preview-popover,
+:root[data-theme="light"] .modal-card {
+  border-radius: var(--radius-xl);
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: none;
+}
+
+.modal-backdrop {
+  background: rgba(12, 17, 29, 0.56);
+  backdrop-filter: none;
+}
+
+.modal-actions {
+  background: var(--panel);
+}
+
+.field .field-label,
+.field span,
+.profile-section .field span,
+.entity-field span,
+.metric span,
+.profile-section-title,
+.preview-title,
+.header-popover-title,
+.section-label,
+.workspace-group-title {
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.field input,
+.field textarea,
+.field select,
+.profile-section .field input,
+.profile-section .field textarea,
+.profile-section .field select,
+.env-row input {
+  border-color: var(--portal-gray-300);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
+:root[data-theme="dark"] .field input,
+:root[data-theme="dark"] .field textarea,
+:root[data-theme="dark"] .field select,
+:root[data-theme="dark"] .profile-section .field input,
+:root[data-theme="dark"] .profile-section .field textarea,
+:root[data-theme="dark"] .profile-section .field select,
+:root[data-theme="dark"] .env-row input {
+  border-color: rgba(208, 213, 221, 0.18);
+  box-shadow: none;
+}
+
+.field input:hover,
+.field textarea:hover,
+.field select:hover,
+.profile-section .field input:hover,
+.profile-section .field textarea:hover,
+.profile-section .field select:hover,
+.env-row input:hover {
+  border-color: var(--portal-gray-400);
+}
+
+.profile-section,
+.entity-field,
+.metric,
+.entity-list-row,
+.agent-row,
+.auth-status-row,
+.detection-row,
+.selection-item {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+:root[data-theme="dark"] .profile-section,
+:root[data-theme="dark"] .entity-field,
+:root[data-theme="dark"] .metric,
+:root[data-theme="dark"] .entity-list-row,
+:root[data-theme="dark"] .agent-row,
+:root[data-theme="dark"] .auth-status-row,
+:root[data-theme="dark"] .detection-row,
+:root[data-theme="dark"] .selection-item {
+  box-shadow: none;
+}
+
+.agent-row.manager,
+.selection-item.selection-all-item {
+  border-color: var(--portal-brand-100);
+  background: var(--portal-brand-25);
+}
+
+:root[data-theme="dark"] .agent-row.manager,
+:root[data-theme="dark"] .selection-item.selection-all-item {
+  border-color: rgba(101, 132, 248, 0.3);
+  background: rgba(101, 132, 248, 0.1);
+}
+
+.agent-status.running,
+.status-pill.online,
+.workspace-status-dot.online {
+  color: var(--portal-success-700);
+}
+
+.workspace-status-dot.online {
+  background: var(--portal-success-700);
+  box-shadow: 0 0 0 3px rgba(6, 118, 71, 0.12);
+}
+
+.mini-badge.warn,
+.agent-badge.warn {
+  color: var(--portal-warning-700);
+  background: var(--portal-warning-50);
+}
+
+.form-error,
+.danger-button,
+.preview-action-button-danger,
+.agent-icon-button.danger {
+  border-color: rgba(217, 45, 32, 0.28);
+  background: var(--portal-error-50);
+  color: var(--portal-error-600);
+}
+
+.entity-pane {
+  background: var(--bg);
+}
+
+.entity-header {
+  border-bottom-color: var(--line);
+}
+
+.entity-title-row h1 {
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.metric strong {
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+.messages-empty,
+.rich-empty {
+  border-color: var(--portal-gray-200);
+  border-style: solid;
+  background: var(--surface);
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    gap: 0;
+    padding: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell,
+  .app-shell.sidebar-collapsed {
+    grid-template-rows: minmax(260px, 40dvh) minmax(0, 1fr);
+  }
+
+  .messages {
+    padding: 18px;
+  }
+
+  .message-row {
+    max-width: 94%;
+  }
+
+  .composer {
+    padding: 14px;
+  }
+}
+
+/* Final typography override: keep csgclaw aligned with csghub-portal. */
+:root,
+:root[data-theme="light"],
+:root[data-theme="dark"] {
+  --font-sans: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+  --font-display: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+}
+
+html,
+body,
+button,
+input,
+textarea,
+select,
+.btn,
+.composer-editor,
+.message-bubble,
+.modal-card,
+.header-popover,
+.profile-preview-popover {
+  font-family: var(--font-sans);
+}
+
+body {
+  text-autospace: normal;
+}
+
+.sidebar-brand,
+.chat-title,
+.entity-title-row h1,
+.modal-title,
+.preview-name {
+  font-family: var(--font-display);
+}
+
+/* Final browser comment override: incoming bubbles use rounded-md, gray-300 border, shadow-sm. */
+.message-bubble {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.message-row:not(.own) .message-bubble {
+  border-color: var(--portal-gray-300);
+}
+
+/* Figma Portal node 51390:503356: outgoing input/message bubble. */
+.message-row.own .message-bubble {
+  padding: 10px 14px;
+  border: 0;
+  border-radius: var(--radius-md) 0 var(--radius-md) var(--radius-md);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: none;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+:root[data-theme="dark"] .message-row.own .message-bubble {
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+}
+
+.message-row.own .message-mention,
+.message-row.own .mention {
+  color: var(--portal-white);
+}
+
+/* Browser comment: message author label uses text-sm, normal, text-gray-700. */
+.message-author {
+  color: var(--portal-gray-700);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+:root[data-theme="dark"] .message-author {
+  color: var(--portal-gray-300);
+}
+
+/* Final browser comment override: message author must match text-sm font-normal text-gray-700. */
+.message-meta .message-author,
+.message-row .message-card .message-meta .message-author,
+.message-row.own .message-card .message-meta .message-author {
+  color: var(--portal-gray-700);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+:root[data-theme="dark"] .message-meta .message-author,
+:root[data-theme="dark"] .message-row .message-card .message-meta .message-author,
+:root[data-theme="dark"] .message-row.own .message-card .message-meta .message-author {
+  color: var(--portal-gray-700);
+}
+
+/* Browser comments: sidebar selection and conversation/header title typography. */
+.workspace-row.conversation-nav-row.active,
+.workspace-row.active.conversation-nav-row {
+  border-color: transparent;
+  background: var(--portal-gray-50);
+  color: var(--portal-gray-900);
+  box-shadow: none;
+}
+
+.workspace-row-title,
+.conversation-nav-row .workspace-row-title {
+  font-weight: 500;
+}
+
+.chat-title-bar .chat-title-row .chat-title-group .chat-title,
+.chat-title {
+  color: var(--portal-gray-900);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+/* Browser comment: regular message body text uses text-md, font-light, gray-700. */
+.message-row:not(.own) .message-bubble .message-content p {
+  color: var(--portal-gray-700);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 24px;
+}
+
+/* Browser comments: remove regular bubble shadow and lighten outgoing message text. */
+.message-row:not(.own) .message-bubble {
+  box-shadow: none;
+}
+
+.message-row.own .message-bubble .message-content p {
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 24px;
+}
+
+/* Browser comment: keep the header controls inside the sidebar width. */
+.sidebar-header.workspace-header {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.sidebar-header.workspace-header .sidebar-brand-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.sidebar-header.workspace-header .sidebar-brand-lockup {
+  min-width: 0;
+  justify-self: start;
+}
+
+.sidebar-header.workspace-header .sidebar-brand-wordmark {
+  width: auto;
+  min-width: 104px;
+  max-width: 112px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.sidebar-header.workspace-header .sidebar-controls {
+  width: max-content;
+  min-width: max-content;
+  justify-self: end;
+  gap: 4px;
+  margin-left: 0;
+}
+
+/* Browser comments: remove green shadows from theme and language switches. */
+.theme-switch-thumb,
+.language-switch-thumb,
+.theme-toggle,
+.language-toggle,
+.theme-toggle.active,
+.language-toggle.active,
+.theme-toggle:focus-visible,
+.language-toggle:focus-visible {
+  box-shadow: none;
+}
+
+/* Browser comment: remove the blue background from the CSGClaw wordmark. */
+.sidebar-header.workspace-header .sidebar-brand-wordmark {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--portal-gray-900);
+  text-shadow: none;
+}
+
+/* Browser comment: restyle modal/profile form inputs to match CSGHub Portal. */
+.modal-card .field input,
+.modal-card .field textarea,
+.modal-card .field select,
+.profile-section .field input,
+.profile-section .field textarea,
+.profile-section .field select,
+.env-row input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--portal-gray-300);
+  border-radius: var(--radius-md);
+  background-color: var(--portal-white);
+  color: var(--portal-gray-900);
+  box-shadow: var(--shadow-xs);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.modal-card .field input,
+.modal-card .field select,
+.profile-section .field input,
+.profile-section .field select,
+.env-row input {
+  height: 44px;
+  padding: 10px 14px;
+}
+
+.modal-card .field textarea,
+.profile-section .field textarea {
+  min-height: 88px;
+  padding: 10px 14px;
+  resize: vertical;
+}
+
+.modal-card .field textarea.compact-json,
+.profile-section .field textarea.compact-json {
+  min-height: 132px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.modal-card .field input::placeholder,
+.modal-card .field textarea::placeholder,
+.profile-section .field input::placeholder,
+.profile-section .field textarea::placeholder,
+.env-row input::placeholder {
+  color: var(--portal-gray-500);
+}
+
+.modal-card .field input:hover,
+.modal-card .field textarea:hover,
+.modal-card .field select:hover,
+.profile-section .field input:hover,
+.profile-section .field textarea:hover,
+.profile-section .field select:hover,
+.env-row input:hover {
+  border-color: var(--portal-gray-400);
+}
+
+.modal-card .field input:focus,
+.modal-card .field textarea:focus,
+.modal-card .field select:focus,
+.profile-section .field input:focus,
+.profile-section .field textarea:focus,
+.profile-section .field select:focus,
+.env-row input:focus {
+  border-color: var(--portal-brand-500);
+  box-shadow: var(--shadow-xs), 0 0 0 4px rgba(77, 106, 214, 0.24);
+}
+
+.modal-card .field input:disabled,
+.modal-card .field textarea:disabled,
+.modal-card .field select:disabled,
+.profile-section .field input:disabled,
+.profile-section .field textarea:disabled,
+.profile-section .field select:disabled,
+.env-row input:disabled {
+  border-color: var(--portal-gray-200);
+  background-color: var(--portal-gray-50);
+  color: var(--portal-gray-500);
+  cursor: not-allowed;
+}
+
+.modal-card .field span,
+.modal-card .field .field-label,
+.profile-section .field span,
+.profile-section .field .field-label {
+  color: var(--portal-gray-700);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+/* Browser comment: compact toggle hover states use the blue portal theme. */
+.modal-card .selection-item.compact-toggle-row,
+.profile-section .selection-item.compact-toggle-row {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-white);
+  color: var(--portal-gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.modal-card .selection-item.compact-toggle-row:hover,
+.profile-section .selection-item.compact-toggle-row:hover,
+.modal-card .selection-item.compact-toggle-row:focus-within,
+.profile-section .selection-item.compact-toggle-row:focus-within {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-25);
+  color: var(--portal-brand-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.modal-card .selection-item.compact-toggle-row:has(input:checked),
+.profile-section .selection-item.compact-toggle-row:has(input:checked) {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-50);
+  color: var(--portal-brand-700);
+}
+
+/* Browser comment: mentions inside outgoing messages should be white. */
+.message-row.own .message-bubble .message-content .message-mention,
+.message-row.own .message-bubble .message-content p > .message-mention,
+.message-row.admin.own .message-bubble .message-content .message-mention {
+  color: var(--portal-white);
+}
+
+/* Browser comments: workspace tabs count layout and group heading typography. */
+.workspace-tab .workspace-tab-copy {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workspace-tab .workspace-tab-copy strong,
+.workspace-tab .workspace-tab-copy small {
+  line-height: 20px;
+}
+
+.workspace-tab .workspace-tab-copy strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.workspace-tab .workspace-tab-copy small {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.workspace-group-toggle .workspace-group-title,
+.workspace-group-title {
+  color: var(--portal-gray-800);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 24px;
+  text-transform: none;
+}
+
+.workspace-group-title span,
+.workspace-group-title small {
+  color: var(--portal-gray-800);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+/* Browser comment: incoming message bubble padding matches Portal spacing. */
+.message-row:not(.own) .message-bubble {
+  padding: 10px 14px;
+}
+
+/* External SVG icon files should size like the previous inline SVG components. */
+.svg-icon {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.theme-toggle .svg-icon,
+.language-switch-icon .svg-icon,
+.sidebar-toggle-mark .svg-icon,
+.workspace-tab-icon .svg-icon,
+.workspace-group-arrow .svg-icon,
+.workspace-row-icon .svg-icon,
+.icon-button-mark .svg-icon,
+.tool-menu-icon .svg-icon,
+.conversation-delete-icon .svg-icon,
+.agent-icon-button .svg-icon,
+.entity-list-icon .svg-icon,
+.entity-avatar .svg-icon,
+.composer-send-main .svg-icon {
+  width: 100%;
+  height: 100%;
+}
+
+/* Browser comments: selected icons use explicit active colors. */
+.theme-toggle.active,
+.theme-toggle.active .svg-icon {
+  color: var(--portal-white);
+}
+
+.workspace-tab.active .workspace-tab-icon,
+.workspace-tab.active .workspace-tab-icon .svg-icon {
+  color: var(--portal-brand-600);
+}
+
+/* Figma Portal node 36482:523060: dark mode palette alignment. */
+:root[data-theme="dark"] {
+  --bg: #0c111d;
+  --sidebar: #0c111d;
+  --panel: #101828;
+  --panel-strong: #181d27;
+  --panel-soft: #182230;
+  --surface: #0c111d;
+  --field: #182230;
+  --text: #eaecf0;
+  --muted: #98a2b3;
+  --line: #344054;
+  --primary: #4d6ad6;
+  --primary-soft: rgba(77, 106, 214, 0.18);
+  --primary-strong: #6584f8;
+  --on-primary: #ffffff;
+  --mention: #acbdff;
+  --mention-on-primary: #ffffff;
+  --message-border: #344054;
+  --admin-bubble: #181d27;
+  --admin-text: #d0d5dd;
+  --admin-mention: #acbdff;
+  --shadow: 0 12px 16px -4px rgba(0, 0, 0, 0.28), 0 4px 6px -2px rgba(0, 0, 0, 0.18);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --focus-ring: 0 0 0 4px rgba(77, 106, 214, 0.28);
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .app-shell,
+:root[data-theme="dark"] .messages {
+  background: var(--bg);
+}
+
+:root[data-theme="dark"] .sidebar,
+:root[data-theme="dark"] .sidebar-rail,
+:root[data-theme="dark"] .chat-panel {
+  border-color: var(--line);
+  background: var(--sidebar);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .chat-panel,
+:root[data-theme="dark"] .chat-header,
+:root[data-theme="dark"] .composer,
+:root[data-theme="dark"] .modal-card,
+:root[data-theme="dark"] .modal-actions,
+:root[data-theme="dark"] .header-popover,
+:root[data-theme="dark"] .mention-picker,
+:root[data-theme="dark"] .profile-preview-popover {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .sidebar-header,
+:root[data-theme="dark"] .chat-header,
+:root[data-theme="dark"] .composer {
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .sidebar-brand,
+:root[data-theme="dark"] .sidebar-header.workspace-header .sidebar-brand-wordmark,
+:root[data-theme="dark"] .chat-title-bar .chat-title-row .chat-title-group .chat-title,
+:root[data-theme="dark"] .chat-title,
+:root[data-theme="dark"] .modal-title,
+:root[data-theme="dark"] .preview-name,
+:root[data-theme="dark"] .workspace-row-title,
+:root[data-theme="dark"] .conversation-nav-row .workspace-row-title,
+:root[data-theme="dark"] .entity-title-row h1 {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .chat-kicker,
+:root[data-theme="dark"] .chat-subtitle,
+:root[data-theme="dark"] .message-meta,
+:root[data-theme="dark"] .message-meta .message-author,
+:root[data-theme="dark"] .message-row .message-card .message-meta .message-author,
+:root[data-theme="dark"] .message-row.own .message-card .message-meta .message-author,
+:root[data-theme="dark"] .field .field-label,
+:root[data-theme="dark"] .field span,
+:root[data-theme="dark"] .profile-section .field span,
+:root[data-theme="dark"] .entity-field span,
+:root[data-theme="dark"] .metric span,
+:root[data-theme="dark"] .preview-title,
+:root[data-theme="dark"] .header-popover-title,
+:root[data-theme="dark"] .section-label {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .workspace-group-toggle .workspace-group-title,
+:root[data-theme="dark"] .workspace-group-title,
+:root[data-theme="dark"] .workspace-group-title span,
+:root[data-theme="dark"] .workspace-group-title small {
+  color: #d0d5dd;
+}
+
+:root[data-theme="dark"] .theme-switch-track,
+:root[data-theme="dark"] .language-switch-track,
+:root[data-theme="dark"] .composer-box,
+:root[data-theme="dark"] .profile-section,
+:root[data-theme="dark"] .entity-field,
+:root[data-theme="dark"] .metric,
+:root[data-theme="dark"] .entity-list-row,
+:root[data-theme="dark"] .agent-row,
+:root[data-theme="dark"] .auth-status-row,
+:root[data-theme="dark"] .detection-row,
+:root[data-theme="dark"] .selection-item {
+  border-color: var(--line);
+  background: var(--panel-strong);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .workspace-signal-panel,
+:root[data-theme="dark"] .workspace-tab,
+:root[data-theme="dark"] .icon-button,
+:root[data-theme="dark"] .member-badge-button,
+:root[data-theme="dark"] .ghost-button,
+:root[data-theme="dark"] .secondary-button,
+:root[data-theme="dark"] .modal-close,
+:root[data-theme="dark"] .tool-menu-row,
+:root[data-theme="dark"] .agent-add-button,
+:root[data-theme="dark"] .agent-icon-button,
+:root[data-theme="dark"] .agent-action-text,
+:root[data-theme="dark"] .preview-action-button,
+:root[data-theme="dark"] .workspace-add-button,
+:root[data-theme="dark"] .env-remove-button,
+:root[data-theme="dark"] .danger-button {
+  border-color: var(--line);
+  background: var(--panel);
+  color: #d0d5dd;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .workspace-tab:hover,
+:root[data-theme="dark"] .workspace-row:hover,
+:root[data-theme="dark"] .conversation-item:hover .conversation-item-main,
+:root[data-theme="dark"] .entity-list-main-button:hover,
+:root[data-theme="dark"] .icon-button:hover,
+:root[data-theme="dark"] .member-badge-button:hover,
+:root[data-theme="dark"] .ghost-button:hover,
+:root[data-theme="dark"] .secondary-button:hover,
+:root[data-theme="dark"] .modal-close:hover,
+:root[data-theme="dark"] .tool-menu-row:hover,
+:root[data-theme="dark"] .agent-add-button:hover,
+:root[data-theme="dark"] .agent-icon-button:hover,
+:root[data-theme="dark"] .agent-action-text:hover,
+:root[data-theme="dark"] .preview-action-button:hover:not(:disabled),
+:root[data-theme="dark"] .workspace-add-button:hover,
+:root[data-theme="dark"] .env-remove-button:hover,
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row:hover,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row:hover,
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row:focus-within,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row:focus-within {
+  border-color: #475467;
+  background: #182230;
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .workspace-tab.active,
+:root[data-theme="dark"] .workspace-row.active,
+:root[data-theme="dark"] .workspace-row.conversation-nav-row.active,
+:root[data-theme="dark"] .workspace-row.active.conversation-nav-row,
+:root[data-theme="dark"] .conversation-item.active .conversation-item-main,
+:root[data-theme="dark"] .icon-button.active,
+:root[data-theme="dark"] .member-badge-button.active,
+:root[data-theme="dark"] .agent-row.manager,
+:root[data-theme="dark"] .selection-item.selection-all-item,
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row:has(input:checked),
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row:has(input:checked) {
+  border-color: rgba(77, 106, 214, 0.62);
+  background: rgba(77, 106, 214, 0.18);
+  color: #d0d5dd;
+}
+
+:root[data-theme="dark"] .workspace-tab.active .workspace-tab-icon,
+:root[data-theme="dark"] .workspace-tab.active .workspace-tab-icon .svg-icon,
+:root[data-theme="dark"] .workspace-signal-copy strong,
+:root[data-theme="dark"] .workspace-tab-icon,
+:root[data-theme="dark"] .workspace-row-icon,
+:root[data-theme="dark"] .entity-avatar,
+:root[data-theme="dark"] .entity-list-icon,
+:root[data-theme="dark"] .rich-empty-mark {
+  color: var(--primary-strong);
+}
+
+:root[data-theme="dark"] .workspace-row-icon,
+:root[data-theme="dark"] .entity-list-icon,
+:root[data-theme="dark"] .entity-avatar,
+:root[data-theme="dark"] .rich-empty-mark {
+  border-color: var(--line);
+  background: #182230;
+}
+
+:root[data-theme="dark"] .message-row:not(.own) .message-bubble {
+  border-color: var(--message-border);
+  background: var(--panel-strong);
+  color: var(--admin-text);
+}
+
+:root[data-theme="dark"] .message-row:not(.own) .message-bubble .message-content p {
+  color: var(--admin-text);
+}
+
+:root[data-theme="dark"] .message-row.own .message-bubble,
+:root[data-theme="dark"] .composer-send-button,
+:root[data-theme="dark"] .send-button,
+:root[data-theme="dark"] .preview-action-button-primary,
+:root[data-theme="dark"] .btn-primary,
+:root[data-theme="dark"] .csg-button-primary {
+  border-color: #3250bd;
+  background: #3250bd;
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .message-row.own .message-bubble .message-content p,
+:root[data-theme="dark"] .message-row.own .message-bubble .message-content .message-mention,
+:root[data-theme="dark"] .message-row.own .message-bubble .message-content p > .message-mention {
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .modal-card .field input,
+:root[data-theme="dark"] .modal-card .field textarea,
+:root[data-theme="dark"] .modal-card .field select,
+:root[data-theme="dark"] .profile-section .field input,
+:root[data-theme="dark"] .profile-section .field textarea,
+:root[data-theme="dark"] .profile-section .field select,
+:root[data-theme="dark"] .env-row input,
+:root[data-theme="dark"] .composer-editor {
+  border-color: var(--line);
+  background-color: var(--field);
+  color: var(--text);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .modal-card .field input::placeholder,
+:root[data-theme="dark"] .modal-card .field textarea::placeholder,
+:root[data-theme="dark"] .profile-section .field input::placeholder,
+:root[data-theme="dark"] .profile-section .field textarea::placeholder,
+:root[data-theme="dark"] .env-row input::placeholder,
+:root[data-theme="dark"] .composer-editor:empty::before {
+  color: var(--portal-gray-400);
+}
+
+:root[data-theme="dark"] .modal-card .field input:hover,
+:root[data-theme="dark"] .modal-card .field textarea:hover,
+:root[data-theme="dark"] .modal-card .field select:hover,
+:root[data-theme="dark"] .profile-section .field input:hover,
+:root[data-theme="dark"] .profile-section .field textarea:hover,
+:root[data-theme="dark"] .profile-section .field select:hover,
+:root[data-theme="dark"] .env-row input:hover {
+  border-color: #475467;
+}
+
 :root[data-theme="dark"] .upgrade-summary {
   border-color: var(--line);
   background: var(--panel-strong);

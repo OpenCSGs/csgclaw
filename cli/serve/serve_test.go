@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -225,6 +226,8 @@ func TestServeForegroundPrintsManualIMURLWhenBrowserNotAllowed(t *testing.T) {
 	}
 
 	run := testContext()
+	stdout := newNotifyingBuffer("Open this URL in your browser after startup.")
+	run.Stdout = stdout
 	cfg := config.Config{
 		Server: config.ServerConfig{
 			AdvertiseBaseURL: "http://example.test/base",
@@ -238,7 +241,12 @@ func TestServeForegroundPrintsManualIMURLWhenBrowserNotAllowed(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("OpenBrowser fallback path was not reached after server readiness")
 	}
-	got := run.Stdout.(*bytes.Buffer).String()
+	select {
+	case <-stdout.Seen():
+	case <-time.After(time.Second):
+		t.Fatal("manual-open hint was not printed after browser fallback")
+	}
+	got := stdout.String()
 	if !strings.Contains(got, "CSGClaw IM is available at: http://example.test/base/") {
 		t.Fatalf("stdout missing IM URL:\n%s", got)
 	}
@@ -1135,6 +1143,41 @@ func testContext() *command.Context {
 		Stdout:  &bytes.Buffer{},
 		Stderr:  &bytes.Buffer{},
 	}
+}
+
+type notifyingBuffer struct {
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	needle string
+	seen   chan struct{}
+	once   sync.Once
+}
+
+func newNotifyingBuffer(needle string) *notifyingBuffer {
+	return &notifyingBuffer{
+		needle: needle,
+		seen:   make(chan struct{}),
+	}
+}
+
+func (b *notifyingBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	n, err := b.buf.Write(p)
+	if strings.Contains(b.buf.String(), b.needle) {
+		b.once.Do(func() { close(b.seen) })
+	}
+	return n, err
+}
+
+func (b *notifyingBuffer) Seen() <-chan struct{} {
+	return b.seen
+}
+
+func (b *notifyingBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 type fakeCodexBridgeManager struct {

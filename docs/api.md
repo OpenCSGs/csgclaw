@@ -27,7 +27,7 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
 
 ### `GET /api/v1/cliproxy/auth/status?provider=codex|claude_code`
 
-查询本地鉴权状态。服务端会在安全可读的情况下自动导入现有凭据：Codex 来自 `~/.codex/auth.json`，Claude Code 在 macOS 上来自 Keychain。
+查询本地鉴权状态。服务端会在安全可读的情况下自动导入现有凭据：Codex 来自 `~/.codex/auth.json`，Claude Code 在 macOS 上来自 Keychain。导入后的鉴权文件统一写入 CSGClaw 管理的 CLIProxy auth 目录，默认是 `~/.csgclaw/auth`。
 
 响应示例：
 

@@ -470,45 +470,29 @@ function profileBaseURLMissing(draft) {
   return draft?.provider === "api" && isBlank(draft.base_url);
 }
 
-function GlobeIcon() {
+function IconImage(name) {
   return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M12 3.25a8.75 8.75 0 1 0 0 17.5a8.75 8.75 0 0 0 0-17.5Zm5.99 7.97h-2.56a14.57 14.57 0 0 0-1.13-4.01a7.28 7.28 0 0 1 3.69 4.01Zm-5.24-4.47c.52.76 1.16 2.28 1.51 4.47h-4.52c.35-2.19.99-3.71 1.51-4.47c.22-.32.42-.5.5-.5s.28.18.5.5Zm-4.05.46a14.57 14.57 0 0 0-1.13 4.01H4.01A7.28 7.28 0 0 1 7.7 7.21Zm-4.19 5.51h2.81c.03 1.48.24 2.88.57 4.01H5.37a7.22 7.22 0 0 1-.86-4.01Zm3.89 0h4.72c-.04 1.4-.24 2.79-.62 4.01H9.02a17.18 17.18 0 0 1-.62-4.01Zm.87 5.51h3.46c-.27.69-.59 1.3-.95 1.83c-.29.42-.54.69-.68.69s-.39-.27-.68-.69a9.65 9.65 0 0 1-.95-1.83Zm4.95-1.5c.33-1.13.54-2.53.57-4.01h2.81a7.22 7.22 0 0 1-.86 4.01h-2.52Z"
-        fill="currentColor"
-      />
-    </svg>
+    <span
+      className="svg-icon"
+      aria-hidden="true"
+      style=${{
+        WebkitMaskImage: `url("/icons/${name}.svg")`,
+        maskImage: `url("/icons/${name}.svg")`,
+      }}
+    ></span>
   `;
+}
+
+function GlobeIcon() {
+  return IconImage("globe");
 }
 
 function SunIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="3.8" fill="none" stroke="currentColor" stroke-width="1.8" />
-      <path
-        d="M12 3.25v2.1M12 18.65v2.1M4.25 12h2.1M17.65 12h2.1M6.52 6.52l1.48 1.48M16 16l1.48 1.48M17.48 6.52L16 8M8 16l-1.48 1.48"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="1.8"
-      />
-    </svg>
-  `;
+  return IconImage("sun");
 }
 
 function MoonIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M19.2 14.6A7.3 7.3 0 0 1 9.4 4.8a7.6 7.6 0 1 0 9.8 9.8Z"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="1.8"
-      />
-    </svg>
-  `;
+  return IconImage("moon");
 }
 
 function MessageContent({ content }) {
@@ -580,187 +564,51 @@ function StructuredMessageCard({ data }) {
 }
 
 function AddUserIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M15 19c0-2.761-2.239-5-5-5s-5 2.239-5 5"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="1.8"
-      />
-      <circle
-        cx="10"
-        cy="7.5"
-        r="3.5"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-      />
-      <path
-        d="M18 8v6M15 11h6"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="1.8"
-      />
-    </svg>
-  `;
+  return IconImage("add-user");
 }
 
 function UsersIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M9 11a4 4 0 1 0 0-8a4 4 0 0 0 0 8Zm7 1a3 3 0 1 0 0-6a3 3 0 0 0 0 6Zm-7 2c-3.314 0-6 1.79-6 4c0 .552.448 1 1 1h10a1 1 0 0 0 1-1c0-2.21-2.686-4-6-4Zm7 1c-.758 0-1.483.11-2.147.312c1.16.87 1.956 2.035 2.118 3.358A1 1 0 0 0 16.964 19H20a1 1 0 0 0 1-1c0-1.657-2.239-3-5-3Z"
-        fill="currentColor"
-      />
-    </svg>
-  `;
+  return IconImage("users");
 }
 
 function WrenchIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M14.71 6.29a4 4 0 0 0-5.32 5.94l-4.1 4.1a1.5 1.5 0 1 0 2.12 2.12l4.1-4.1a4 4 0 0 0 5.94-5.32l-2.24 2.24a1 1 0 0 1-1.42 0l-1.38-1.38a1 1 0 0 1 0-1.42Z"
-        fill="currentColor"
-      />
-    </svg>
-  `;
+  return IconImage("wrench");
 }
 
 function SidebarToggleIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect
-        x="3.75"
-        y="5.25"
-        width="16.5"
-        height="13.5"
-        rx="2.25"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.6"
-      />
-      <path d="M8.5 5.75v12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-    </svg>
-  `;
+  return IconImage("sidebar-toggle");
 }
 
 function ChevronIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M8 9.5l4 4l4-4"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-      />
-    </svg>
-  `;
+  return IconImage("chevron");
 }
 
 function RoomPlusIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="10" fill="var(--panel-soft)" />
-      <path d="M12 7.5v9M7.5 12h9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9" />
-    </svg>
-  `;
+  return IconImage("room-plus");
 }
 
 function TrashIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M9.5 4.75h5a1.5 1.5 0 0 1 1.5 1.5v.5h3"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="1.8"
-      />
-      <path
-        d="M5 6.75h14"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="1.8"
-      />
-      <path
-        d="M8 9.5v6.75M12 9.5v6.75M16 9.5v6.75"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-width="1.8"
-      />
-      <path
-        d="M7.25 6.75l.63 10.11A2 2 0 0 0 9.87 18.75h4.26a2 2 0 0 0 1.99-1.89L16.75 6.75"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="1.8"
-      />
-    </svg>
-  `;
+  return IconImage("trash");
 }
 
 function RoomsIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="10" fill="var(--panel-soft)" />
-      <path
-        d="M9.25 7.75c-2.35 0-4.25 1.64-4.25 3.67c0 1.01.47 1.93 1.23 2.59L5.5 16.25l2.91-.46c.27.04.55.05.84.05c2.35 0 4.25-1.64 4.25-3.67S11.6 7.75 9.25 7.75Zm5.3 2.92c2.04.21 3.65 1.65 3.65 3.42c0 .88-.4 1.69-1.08 2.29l.58 1.88l-2.35-.43c-.25.03-.52.04-.8.04c-1.75 0-3.25-.78-4-1.95"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="1.7"
-      />
-    </svg>
-  `;
+  return IconImage("rooms");
 }
 
 function AgentIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M8.5 4.75a3.5 3.5 0 0 1 7 0v1.1h1.3a2.7 2.7 0 0 1 2.7 2.7v6.95a2.7 2.7 0 0 1-2.7 2.7H7.2a2.7 2.7 0 0 1-2.7-2.7V8.55a2.7 2.7 0 0 1 2.7-2.7h1.3v-1.1Zm1.5 1.1h4v-1.1a2 2 0 1 0-4 0v1.1Zm-2.8 1.5a1.2 1.2 0 0 0-1.2 1.2v6.95c0 .66.54 1.2 1.2 1.2h9.6a1.2 1.2 0 0 0 1.2-1.2V8.55a1.2 1.2 0 0 0-1.2-1.2H7.2Zm2.1 4.15a1.05 1.05 0 1 1 2.1 0a1.05 1.05 0 0 1-2.1 0Zm4.25 0a1.05 1.05 0 1 1 2.1 0a1.05 1.05 0 0 1-2.1 0Zm-4.22 3.1h5.34v1.35H9.33V14.6Z"
-        fill="currentColor"
-      />
-    </svg>
-  `;
+  return IconImage("agent");
 }
 
 function ComputerIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        d="M4.5 5.75h15a1.75 1.75 0 0 1 1.75 1.75v8.25a1.75 1.75 0 0 1-1.75 1.75h-15a1.75 1.75 0 0 1-1.75-1.75V7.5A1.75 1.75 0 0 1 4.5 5.75Zm0 1.5a.25.25 0 0 0-.25.25v8.25c0 .14.11.25.25.25h15a.25.25 0 0 0 .25-.25V7.5a.25.25 0 0 0-.25-.25h-15ZM9 19h6v1.5H9V19Z"
-        fill="currentColor"
-      />
-    </svg>
-  `;
+  return IconImage("computer");
 }
 
 function PlayIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M8.3 5.7v12.6c0 .74.8 1.2 1.44.83l9.7-6.3a.98.98 0 0 0 0-1.66l-9.7-6.3a.97.97 0 0 0-1.44.83Z" fill="currentColor" />
-    </svg>
-  `;
+  return IconImage("play");
 }
 
 function StopIcon() {
-  return html`
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M7.4 6.4h9.2c.55 0 1 .45 1 1v9.2c0 .55-.45 1-1 1H7.4c-.55 0-1-.45-1-1V7.4c0-.55.45-1 1-1Z" fill="currentColor" />
-    </svg>
-  `;
+  return IconImage("stop");
 }
 
 function paneFromLocation(pathname = window.location.pathname) {
@@ -2543,7 +2391,7 @@ function App() {
                     <div className=${`theme-switch-track ${theme === "dark" ? "is-dark" : "is-light"}`}>
                       <span className="theme-switch-thumb" aria-hidden="true"></span>
                       <button
-                        className=${`theme-toggle ${theme === "light" ? "active" : ""}`}
+                        className=${`btn btn-ghost theme-toggle ${theme === "light" ? "active" : ""}`}
                         aria-label=${t("themeLight")}
                         aria-pressed=${theme === "light"}
                         title=${t("themeLight")}
@@ -2552,7 +2400,7 @@ function App() {
                         <span aria-hidden="true"><${SunIcon} /></span>
                       </button>
                       <button
-                        className=${`theme-toggle ${theme === "dark" ? "active" : ""}`}
+                        className=${`btn btn-ghost theme-toggle ${theme === "dark" ? "active" : ""}`}
                         aria-label=${t("themeDark")}
                         aria-pressed=${theme === "dark"}
                         title=${t("themeDark")}
@@ -2566,12 +2414,12 @@ function App() {
                     <span className="language-switch-icon" aria-hidden="true"><${GlobeIcon} /></span>
                     <div className=${`language-switch-track ${locale === "en" ? "is-en" : "is-zh"}`}>
                       <span className="language-switch-thumb" aria-hidden="true"></span>
-                      <button className=${`language-toggle ${locale === "zh" ? "active" : ""}`} aria-pressed=${locale === "zh"} title=${t("languageOptionZh")} onClick=${() => setLocale("zh")}>中</button>
-                      <button className=${`language-toggle ${locale === "en" ? "active" : ""}`} aria-pressed=${locale === "en"} title=${t("languageOptionEn")} onClick=${() => setLocale("en")}>EN</button>
+                      <button className=${`btn btn-ghost language-toggle ${locale === "zh" ? "active" : ""}`} aria-pressed=${locale === "zh"} title=${t("languageOptionZh")} onClick=${() => setLocale("zh")}>中</button>
+                      <button className=${`btn btn-ghost language-toggle ${locale === "en" ? "active" : ""}`} aria-pressed=${locale === "en"} title=${t("languageOptionEn")} onClick=${() => setLocale("en")}>EN</button>
                     </div>
                   </div>
                   <button
-                    className="sidebar-toggle-button"
+                    className="btn btn-ghost btn-sm sidebar-toggle-button"
                     aria-label=${t("collapseSidebar")}
                     title=${t("collapseSidebar")}
                     onClick=${() => setIsSidebarCollapsed(true)}
@@ -2595,7 +2443,7 @@ function App() {
             <nav className="workspace-nav" aria-label="Workspace">
               <div className="workspace-tabbar" role="tablist" aria-label="Workspace sections">
                 <button
-                  className=${`workspace-tab ${workspaceTab === WORKSPACE_TAB_MESSAGES ? "active" : ""}`}
+                  className=${`btn btn-secondary-gray btn-sm workspace-tab ${workspaceTab === WORKSPACE_TAB_MESSAGES ? "active" : ""}`}
                   role="tab"
                   aria-selected=${workspaceTab === WORKSPACE_TAB_MESSAGES}
                   aria-label=${t("messagesTab")}
@@ -2609,7 +2457,7 @@ function App() {
                   </span>
                 </button>
                 <button
-                  className=${`workspace-tab ${workspaceTab === WORKSPACE_TAB_AGENTS ? "active" : ""}`}
+                  className=${`btn btn-secondary-gray btn-sm workspace-tab ${workspaceTab === WORKSPACE_TAB_AGENTS ? "active" : ""}`}
                   role="tab"
                   aria-selected=${workspaceTab === WORKSPACE_TAB_AGENTS}
                   aria-label=${t("agentsTab")}
@@ -2747,17 +2595,17 @@ function App() {
             aria-hidden=${!isSidebarCollapsed}
             inert=${!isSidebarCollapsed}
           >
-            <button className="sidebar-expand-button" aria-label=${t("expandSidebar")} title=${t("expandSidebar")} onClick=${() => setIsSidebarCollapsed(false)}>
+            <button className="btn btn-ghost btn-sm sidebar-expand-button" aria-label=${t("expandSidebar")} title=${t("expandSidebar")} onClick=${() => setIsSidebarCollapsed(false)}>
               <span className="sidebar-toggle-mark"><${SidebarToggleIcon} /></span>
             </button>
             <nav className="sidebar-rail-nav" aria-label="Workspace">
-              <button className=${`sidebar-rail-button ${activePane.type === "computer" ? "active" : ""}`} aria-label=${t("localComputer")} title=${t("localComputer")} onClick=${selectComputer}>
+              <button className=${`btn btn-ghost btn-sm sidebar-rail-button ${activePane.type === "computer" ? "active" : ""}`} aria-label=${t("localComputer")} title=${t("localComputer")} onClick=${selectComputer}>
                 <span className="sidebar-rail-icon" aria-hidden="true"><${ComputerIcon} /></span>
               </button>
-              <button type="button" className="sidebar-rail-button" aria-label=${t("createAgent")} title=${t("createAgent")} onClick=${openCreateAgentModal}>
+              <button type="button" className="btn btn-ghost btn-sm sidebar-rail-button" aria-label=${t("createAgent")} title=${t("createAgent")} onClick=${openCreateAgentModal}>
                 <span className="sidebar-rail-icon" aria-hidden="true"><${AgentIcon} /></span>
               </button>
-              <button type="button" className="sidebar-rail-button" aria-label=${t("createRoom")} title=${t("createRoom")} onClick=${() => openCreateRoomModal()}>
+              <button type="button" className="btn btn-ghost btn-sm sidebar-rail-button" aria-label=${t("createRoom")} title=${t("createRoom")} onClick=${() => openCreateRoomModal()}>
                 <span className="sidebar-rail-icon" aria-hidden="true"><${RoomPlusIcon} /></span>
               </button>
             </nav>
@@ -2819,7 +2667,7 @@ function App() {
                           <div className="chat-title truncate">${activeConversation.title}</div>
                           <div ref=${memberMenuRef} className="header-menu">
                             <button
-                              className=${`member-badge-button ${showMemberList ? "active" : ""}`}
+                              className=${`btn btn-secondary-gray btn-sm member-badge-button ${showMemberList ? "active" : ""}`}
                               aria-label=${t("membersTitle")}
                               aria-pressed=${showMemberList}
                               title=${t("membersTitle")}
@@ -2861,7 +2709,7 @@ function App() {
                       <div className="chat-title-actions">
                         <div ref=${channelToolsRef} className="header-menu tools-menu">
                           <button
-                            className=${`icon-button ${showChannelTools ? "active" : ""}`}
+                            className=${`btn btn-secondary-gray btn-sm icon-button ${showChannelTools ? "active" : ""}`}
                             aria-label=${t("channelTools")}
                             aria-expanded=${showChannelTools}
                             title=${t("channelTools")}
@@ -2876,14 +2724,14 @@ function App() {
                             ? html`
                                 <div className="header-popover tools-popover">
                                   <div className="header-popover-title">${t("channelTools")}</div>
-                                  <button className="tool-menu-row" onClick=${() => setShowToolCalls((value) => !value)}>
+                                  <button className="btn btn-secondary-gray btn-sm tool-menu-row" onClick=${() => setShowToolCalls((value) => !value)}>
                                     <span>${showToolCalls ? t("toggleToolCallsHide") : t("toggleToolCallsShow")}</span>
                                     <strong>${showToolCalls ? t("enabled") : t("disabled")}</strong>
                                   </button>
                                   ${!isDirectConversation(activeConversation)
                                     ? html`
                                         <button
-                                          className="tool-menu-row danger"
+                                          className="btn btn-outline-danger btn-sm tool-menu-row danger"
                                           onClick=${() => {
                                             setShowChannelTools(false);
                                             deleteRoom(activeConversation.id);
@@ -2900,7 +2748,7 @@ function App() {
                         </div>
                         <button
                           type="button"
-                          className="icon-button"
+                          className="btn btn-secondary-gray btn-sm icon-button"
                           aria-label=${inviteActionLabel}
                           title=${inviteActionLabel}
                           onClick=${(event) => {
@@ -3031,18 +2879,14 @@ function App() {
                       />
                       <button
                         type="button"
-                        className="composer-send-button"
+                        className="btn btn-primary btn-sm composer-send-button"
                         aria-label=${t("send")}
                         title=${t("send")}
                         disabled=${managerProfileIncomplete || !draftText.trim()}
                         onClick=${sendMessage}
                       >
                         <span className="composer-send-main" aria-hidden="true">
-                          <svg viewBox="0 0 24 24" focusable="false">
-                            <path
-                              d="M 4.22 3.12 L 19.78 10.88 Q 22 12 19.78 13.12 L 4.22 20.88 Q 2 22 2 19.5 L 2 16.5 Q 2 14 4.4 13.32 L 7.56 12.41 Q 9 12 7.56 11.59 L 4.4 10.67 Q 2 10 2 7.5 L 2 4.5 Q 2 2 4.22 3.12 Z"
-                            />
-                          </svg>
+                          ${IconImage("send")}
                         </span>
                       </button>
                     </div>
@@ -3090,7 +2934,7 @@ function App() {
                     <div className="modal-title">${t("createRoomTitle")}</div>
                     <div className="modal-subtitle">${t("createRoomSubtitle")}</div>
                   </div>
-                  <button className="modal-close" onClick=${() => setShowCreateRoom(false)}>${t("close")}</button>
+                  <button className="btn btn-secondary-gray btn-sm modal-close" onClick=${() => setShowCreateRoom(false)}>${t("close")}</button>
                 </div>
                 <label className="field">
                   ${requiredFieldLabel(t("roomName"))}
@@ -3143,8 +2987,8 @@ function App() {
                 </div>
                 ${submitError ? html`<div className="form-error">${submitError}</div>` : null}
                 <div className="modal-actions">
-                  <button className="secondary-button" onClick=${() => setShowCreateRoom(false)}>${t("cancel")}</button>
-                  <button className="send-button" disabled=${isBlank(roomTitle)} onClick=${createRoom}>${t("create")}</button>
+                  <button className="btn btn-secondary-gray btn-sm secondary-button" onClick=${() => setShowCreateRoom(false)}>${t("cancel")}</button>
+                  <button className="btn btn-primary btn-sm send-button" disabled=${isBlank(roomTitle)} onClick=${createRoom}>${t("create")}</button>
                 </div>
               </div>
             </div>
@@ -3160,7 +3004,7 @@ function App() {
                     <div className="modal-title">${t("inviteTitle")}</div>
                     <div className="modal-subtitle">${t("inviteSubtitle")}</div>
                   </div>
-                  <button className="modal-close" onClick=${() => setShowInvite(false)}>${t("close")}</button>
+                  <button className="btn btn-secondary-gray btn-sm modal-close" onClick=${() => setShowInvite(false)}>${t("close")}</button>
                 </div>
                 <div className="field">
                   <span>${t("inviteCandidates")}</span>
@@ -3201,8 +3045,8 @@ function App() {
                 </div>
                 ${submitError ? html`<div className="form-error">${submitError}</div>` : null}
                 <div className="modal-actions">
-                  <button className="secondary-button" onClick=${() => setShowInvite(false)}>${t("cancel")}</button>
-                  <button className="send-button" disabled=${inviteUserIDs.length === 0} onClick=${inviteUsers}>${t("sendInvite")}</button>
+                  <button className="btn btn-secondary-gray btn-sm secondary-button" onClick=${() => setShowInvite(false)}>${t("cancel")}</button>
+                  <button className="btn btn-primary btn-sm send-button" disabled=${inviteUserIDs.length === 0} onClick=${inviteUsers}>${t("sendInvite")}</button>
                 </div>
               </div>
             </div>
@@ -3289,7 +3133,7 @@ function App() {
                     <div className="modal-title">${agentModalMode === "create" ? t("createAgentTitle") : t("editAgentTitle")}</div>
                     <div className="modal-subtitle">${agentModalMode === "create" ? t("createAgentSubtitle") : t("editAgentSubtitle")}</div>
                   </div>
-                  <button className="modal-close" onClick=${() => setShowAgentModal(false)}>${t("close")}</button>
+                  <button className="btn btn-secondary-gray btn-sm modal-close" onClick=${() => setShowAgentModal(false)}>${t("close")}</button>
                 </div>
                 <div className="profile-editor-shell">
                   <section className="profile-section">
@@ -3452,8 +3296,8 @@ function App() {
                 </div>
                 ${agentError ? html`<div className="form-error">${agentError}</div>` : null}
                 <div className="modal-actions">
-                  <button className="secondary-button" onClick=${() => setShowAgentModal(false)}>${t("cancel")}</button>
-                  <button className="send-button" disabled=${agentBusy || isBlank(agentDraft.name) || !agentDraft.model_id || profileBaseURLMissing(agentDraft)} onClick=${saveAgent}>
+                  <button className="btn btn-secondary-gray btn-sm secondary-button" onClick=${() => setShowAgentModal(false)}>${t("cancel")}</button>
+                  <button className="btn btn-primary btn-sm send-button" disabled=${agentBusy || isBlank(agentDraft.name) || !agentDraft.model_id || profileBaseURLMissing(agentDraft)} onClick=${saveAgent}>
                     ${agentBusy ? "..." : agentModalMode === "create" ? t("agentCreateSave") : t("agentUpdateSave")}
                   </button>
                 </div>
@@ -3592,7 +3436,7 @@ function App() {
                 </div>
                 ${profileError ? html`<div className="form-error">${profileError}</div>` : null}
                 <div className="modal-actions">
-                  <button className="send-button" disabled=${profileBusy || !profileDraft.model_id || profileBaseURLMissing(profileDraft)} onClick=${saveManagerProfile}>
+                  <button className="btn btn-primary btn-sm send-button" disabled=${profileBusy || !profileDraft.model_id || profileBaseURLMissing(profileDraft)} onClick=${saveManagerProfile}>
                     ${profileBusy ? "..." : t("profileSave")}
                   </button>
                 </div>
@@ -3642,7 +3486,7 @@ function ConversationSection({ title, items, activeConversationId, currentUserID
               </div>
             </button>
             <button
-              className="conversation-delete-button"
+              className="btn btn-outline-danger btn-sm conversation-delete-button"
               aria-label=${`${t("deleteRoom")} ${conversation.title}`}
               title=${`${t("deleteRoom")} ${conversation.title}`}
               onClick=${(event) => {
@@ -3667,7 +3511,7 @@ function AgentSection({ title, manager, workers, t, activeRoom, busyKey, error, 
         <div>
           <div className="section-label">${title} ${items.length}</div>
         </div>
-        <button className="agent-add-button" aria-label=${t("createAgent")} title=${t("createAgent")} onClick=${onCreate}>
+        <button className="btn btn-secondary-gray btn-sm agent-add-button" aria-label=${t("createAgent")} title=${t("createAgent")} onClick=${onCreate}>
           <span aria-hidden="true"><${AgentIcon} /></span>
         </button>
       </div>
@@ -3717,19 +3561,19 @@ function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop, onRec
         </div>
       </div>
       <div className="agent-actions">
-        <button className="agent-icon-button" aria-label=${t("editProfile")} title=${t("editProfile")} onClick=${() => onEdit(item)}>
+        <button className="btn btn-secondary-gray btn-sm agent-icon-button" aria-label=${t("editProfile")} title=${t("editProfile")} onClick=${() => onEdit(item)}>
           <span aria-hidden="true"><${WrenchIcon} /></span>
         </button>
-        <button className="agent-icon-button" aria-label=${running ? t("agentStop") : t("agentStart")} title=${running ? t("agentStop") : t("agentStart")} disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => running ? onStop(item) : onStart(item)}>
+        <button className="btn btn-secondary-gray btn-sm agent-icon-button" aria-label=${running ? t("agentStop") : t("agentStart")} title=${running ? t("agentStop") : t("agentStart")} disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => running ? onStop(item) : onStart(item)}>
           <span aria-hidden="true">${running ? html`<${StopIcon} />` : html`<${PlayIcon} />`}</span>
         </button>
-        <button className="agent-action-text" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>
+        <button className="btn btn-secondary-gray btn-sm agent-action-text" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>
         ${activeRoom && !isManager
-          ? html`<button className="agent-action-text" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onInvite(item)}>${t("inviteToRoom")}</button>`
+          ? html`<button className="btn btn-secondary-gray btn-sm agent-action-text" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onInvite(item)}>${t("inviteToRoom")}</button>`
           : null}
         ${!isManager
           ? html`
-              <button className="agent-icon-button danger" aria-label=${t("agentDelete")} title=${t("agentDelete")} disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onDelete(item)}>
+              <button className="btn btn-outline-danger btn-sm agent-icon-button danger" aria-label=${t("agentDelete")} title=${t("agentDelete")} disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onDelete(item)}>
                 <span aria-hidden="true"><${TrashIcon} /></span>
               </button>
             `
@@ -3761,7 +3605,7 @@ function WorkspaceGroup({ id, title, count, collapsed, onToggle, onAdd, addLabel
           ? html`
               <button
                 type="button"
-                className="workspace-add-button"
+                className="btn btn-ghost btn-sm workspace-add-button"
                 aria-label=${addLabel || title}
                 title=${addLabel || title}
                 onClick=${(event) => {
@@ -3770,7 +3614,7 @@ function WorkspaceGroup({ id, title, count, collapsed, onToggle, onAdd, addLabel
                   onAdd?.();
                 }}
               >
-                <span aria-hidden="true">+</span>
+                <span className="icon-button-mark" aria-hidden="true"><${RoomPlusIcon} /></span>
               </button>
             `
           : null}
@@ -3891,22 +3735,22 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
       </header>
       <div className="entity-toolbar">
         <button
-          className="preview-action-button preview-action-button-primary"
+          className="btn btn-primary btn-sm preview-action-button preview-action-button-primary"
           disabled=${saving || isBlank(draft?.name) || !draft?.model_id || profileBaseURLMissing(draft)}
           onClick=${onSave}
         >
           ${saving ? t("profileLoadingModels") : t("agentUpdateSave")}
         </button>
-        <button className="preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => running ? onStop(item) : onStart(item)}>
+        <button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => running ? onStop(item) : onStart(item)}>
           ${running ? t("agentStop") : t("agentStart")}
         </button>
-        <button className="preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>
+        <button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>
         ${activeRoom && !isManager
-          ? html`<button className="preview-action-button" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onInvite(item)}>${t("inviteToRoom")}</button>`
+          ? html`<button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onInvite(item)}>${t("inviteToRoom")}</button>`
           : null}
-        <button className="preview-action-button" onClick=${() => onOpenDM(item)}>${t("openDM")}</button>
+        <button className="btn btn-secondary-gray btn-sm preview-action-button" onClick=${() => onOpenDM(item)}>${t("openDM")}</button>
         ${!isManager
-          ? html`<button className="preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onDelete(item)}>${t("agentDelete")}</button>`
+          ? html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onDelete(item)}>${t("agentDelete")}</button>`
           : null}
       </div>
       ${error ? html`<div className="form-error">${error}</div>` : null}
@@ -4115,7 +3959,7 @@ function ProfilePreviewPopover({ previewRef, agent, user, anchorRect, t, inDirec
     >
       <div className="preview-header">
         <div className="preview-title">${agent ? t("profilePreview") : t("personProfile")}</div>
-        <button className="modal-close" aria-label=${t("close")} onClick=${onClose}>
+        <button className="btn btn-secondary-gray btn-sm modal-close" aria-label=${t("close")} onClick=${onClose}>
           <span aria-hidden="true">×</span>
         </button>
       </div>
@@ -4157,12 +4001,12 @@ function ProfilePreviewPopover({ previewRef, agent, user, anchorRect, t, inDirec
               ${restartNeeded ? html`<span className="agent-badge warn">${t("profileRestartRequired")}</span>` : null}
             </div>
             <div className="preview-actions">
-              <button className="preview-action-button preview-action-button-primary" onClick=${() => onOpenAgent(agent)}>${t("openProfile")}</button>
+              <button className="btn btn-primary btn-sm preview-action-button preview-action-button-primary" onClick=${() => onOpenAgent(agent)}>${t("openProfile")}</button>
               ${canOpenDM
-                ? html`<button className="preview-action-button" onClick=${() => onOpenDM(agent)}>${t("openDM")}</button>`
+                ? html`<button className="btn btn-secondary-gray btn-sm preview-action-button" onClick=${() => onOpenDM(agent)}>${t("openDM")}</button>`
                 : null}
               ${agent.role !== "manager" && agent.id !== "u-manager"
-                ? html`<button className="preview-action-button preview-action-button-danger preview-actions-delete" disabled=${deleteBusy} onClick=${() => onDelete(agent)}>${t("agentDelete")}</button>`
+                ? html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger preview-actions-delete" disabled=${deleteBusy} onClick=${() => onDelete(agent)}>${t("agentDelete")}</button>`
                 : null}
             </div>
           `
@@ -4212,7 +4056,7 @@ function ComputerDetailPane({ t, agents, channels, directMessages, busyKey, onSe
       </div>
       <div className="section-header-inline">
         <div className="section-label">${t("computerAgentsSection")}</div>
-        <button className="send-button compact" onClick=${onCreateAgent}>${t("createAgent")}</button>
+        <button className="btn btn-primary btn-sm send-button compact" onClick=${onCreateAgent}>${t("createAgent")}</button>
       </div>
       <div className="entity-list">
         ${agents.length
@@ -4227,7 +4071,7 @@ function ComputerDetailPane({ t, agents, channels, directMessages, busyKey, onSe
                   <span className=${`workspace-status-dot ${isAgentRunning(item) ? "online" : ""}`}></span>
                 </button>
                 <button
-                  className="agent-icon-button"
+                  className="btn btn-secondary-gray btn-sm agent-icon-button"
                   disabled=${busyKey.startsWith(`${item.id}:`) || isAgentIncomplete(item)}
                   onClick=${() => onStartAgent(item)}
                 >
@@ -4264,12 +4108,12 @@ function EnvKeyValueEditor({ rows = [], t, onChange }) {
             placeholder=${t("profileEnvValue")}
             onInput=${(event) => update(index, { value: event.target.value })}
           />
-          <button type="button" className="env-remove-button" aria-label=${t("profileEnvRemove")} title=${t("profileEnvRemove")} onClick=${() => remove(index)}>
+          <button type="button" className="btn btn-ghost btn-sm env-remove-button" aria-label=${t("profileEnvRemove")} title=${t("profileEnvRemove")} onClick=${() => remove(index)}>
             ×
           </button>
         </div>
       `)}
-      <button type="button" className="secondary-button env-add-button" onClick=${() => onChange([...items, { key: "", value: "" }])}>
+      <button type="button" className="btn btn-secondary-gray btn-sm secondary-button env-add-button" onClick=${() => onChange([...items, { key: "", value: "" }])}>
         ${t("profileEnvAdd")}
       </button>
     </div>
@@ -4750,7 +4594,7 @@ function CLIProxyAuthControl({ provider, t, status, busy, onLogin }) {
       ${connected
         ? null
         : html`
-            <button type="button" className="secondary-button compact" disabled=${busy || !onLogin} onClick=${() => onLogin?.(normalized)}>
+            <button type="button" className="btn btn-secondary-gray btn-sm secondary-button compact" disabled=${busy || !onLogin} onClick=${() => onLogin?.(normalized)}>
               ${busy ? t("authConnecting") : `${t("authConnect")} ${formatProviderLabel(normalized)}`}
             </button>
           `}
@@ -5387,7 +5231,7 @@ class AppErrorBoundary extends React.Component {
         <div className="empty-state app-error-state">
           <strong>CSGClaw UI crashed</strong>
           <span>${this.state.error?.message || "Unknown frontend error"}</span>
-          <button className="secondary-button" onClick=${() => window.location.reload()}>Reload</button>
+          <button className="btn btn-secondary-gray btn-sm secondary-button" onClick=${() => window.location.reload()}>Reload</button>
         </div>
       `;
     }

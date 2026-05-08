@@ -30,7 +30,8 @@ const (
 
 	reservedLegacyCLIProxyPort = 8300 + 17
 
-	configDirName  = "cliproxy"
+	authDirName    = "auth"
+	configDirName  = authDirName
 	configFileName = "config.yaml"
 
 	configDirEnv = "CSGCLAW_CLIPROXY_CONFIG_DIR"
@@ -131,6 +132,9 @@ func (s *Service) ProviderBaseURL(ctx context.Context, provider string) (string,
 	if err != nil {
 		return "", err
 	}
+	if err := waitForProviderModels(ctx, provider); err != nil {
+		return "", err
+	}
 	provider = providerPath(provider)
 	if provider == "" {
 		return "", fmt.Errorf("unsupported cliproxy provider %q", rawProvider)
@@ -145,6 +149,9 @@ func (s *Service) ListModels(ctx context.Context, provider string) ([]string, er
 	registryProvider := registryProvider(provider)
 	if registryProvider == "" {
 		return nil, fmt.Errorf("unsupported cliproxy provider %q", provider)
+	}
+	if err := waitForProviderModels(ctx, provider); err != nil {
+		return nil, err
 	}
 	models := registeredModels(registryProvider)
 	if len(models) > 0 {
@@ -186,6 +193,44 @@ func registeredModels(provider string) []string {
 	}
 	sort.Strings(models)
 	return models
+}
+
+func waitForProviderModels(ctx context.Context, provider string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	authProvider, _, err := normalizeAuthProvider(provider)
+	if err != nil {
+		return err
+	}
+	registryProvider := registryProvider(provider)
+	if registryProvider == "" {
+		return fmt.Errorf("unsupported cliproxy provider %q", provider)
+	}
+	cfg, err := authConfig()
+	if err != nil {
+		return err
+	}
+	existing, err := findAuth(ctx, cfg.AuthDir, authProvider)
+	if err != nil || existing == nil {
+		return err
+	}
+	if len(registeredModels(registryProvider)) > 0 {
+		return nil
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+		if len(registeredModels(registryProvider)) > 0 {
+			return nil
+		}
+	}
+	return fmt.Errorf("no %s models registered in embedded cliproxy after loading %s auth from %s", registryProvider, authProvider, cfg.AuthDir)
 }
 
 func fallbackModels(provider string) []string {
@@ -335,7 +380,11 @@ func buildConfig() (*sdkconfig.Config, string, string, error) {
 func configuredAuthDir() (string, error) {
 	authDir := strings.TrimSpace(os.Getenv(authDirEnv))
 	if authDir == "" {
-		authDir = "~/.cli-proxy-api"
+		dir, err := config.DefaultDomainDir(authDirName)
+		if err != nil {
+			return "", fmt.Errorf("resolve embedded cliproxy auth dir: %w", err)
+		}
+		return dir, nil
 	}
 	expanded, err := expandHomePath(authDir)
 	if err != nil {
@@ -366,11 +415,7 @@ func configDir() (string, error) {
 	if dir := strings.TrimSpace(os.Getenv(configDirEnv)); dir != "" {
 		return dir, nil
 	}
-	dir, err := config.DefaultDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, configDirName), nil
+	return config.DefaultDomainDir(configDirName)
 }
 
 func writeConfigFile(path string, cfg *sdkconfig.Config) error {
