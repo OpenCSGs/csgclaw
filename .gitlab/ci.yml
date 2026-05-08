@@ -1,0 +1,109 @@
+# GitLab CI: on tag v*, build release archives and upload to SSH storage.
+#
+# Trigger: tags matching v* (e.g. pull mirror with "Trigger pipelines for mirror updates").
+#
+# Implementation: .gitlab/ci-gitlab-release-upload.sh (build + scp).
+#
+# Required CI/CD variables:
+#   REMOTE_SSH – e.g. root@cdn.example.com
+#   ACR_REGISTRY – registry hostname only (no scheme); CI image is ${ACR_REGISTRY}/opencsg_public/golang:bookworm
+#
+# Recommended:
+#   SSH_PRIVATE_KEY – PEM text (Variable) OR GitLab “File” variable (value is a path in the job; script copies to ~/.ssh/id_rsa)
+#   SSH_KNOWN_HOSTS – host keys for ssh (recommended)
+#
+# Optional:
+#   SSH_PORT – default 22
+#   REMOTE_BASE_DIR – default /data/csgclaw (releases under .../releases/<tag>/)
+#   BOXLITE_CLI_VERSION – default v0.9.0
+#   BOXLITE_CLI_BASE_URL – boxlite-cli tarballs; default mirrors https://csgclaw.opencsg.com/boxlite-cli/{version}/{filename} (matches fetch-boxlite-cli.sh)
+#   BOXLITE_CURL_INSECURE – default 1 (TLS inspection); set 0 if mirror uses publicly trusted certs only
+#
+# Debian apt: before install, rewrite official mirrors to Aliyun (faster in CN). Override DEBIAN_APT_MIRROR_* in CI vars if needed.
+#
+# Go modules: GOPROXY defaults below (mainland-friendly). Override in CI/CD Variables if needed.
+#
+# CI image: Alibaba Cloud ACR mirror of golang:bookworm (Runner cannot use docker.io).
+# Set ACR_REGISTRY in CI/CD Variables. Push mirror once, e.g.:
+#   docker login ${ACR_REGISTRY}
+#   docker tag golang:bookworm ${ACR_REGISTRY}/opencsg_public/golang:bookworm
+#   docker push ${ACR_REGISTRY}/opencsg_public/golang:bookworm
+
+variables:
+  GIT_STRATEGY: clone
+  GIT_DEPTH: "0"
+  BOXLITE_CLI_VERSION: "v0.9.0"
+  BOXLITE_CLI_BASE_URL: "https://csgclaw.opencsg.com/boxlite-cli"
+  # curl -k for boxlite download when TLS inspection breaks cert verify; use 0 if csgclaw.opencsg.com is trusted as-is.
+  BOXLITE_CURL_INSECURE: "1"
+  # go.mod may require a newer toolchain than the image; fetch if needed.
+  GOTOOLCHAIN: "auto"
+  # Default module proxy (no GitLab HTTP proxy vars required). Override GOPROXY in project/group CI vars if needed.
+  GOPROXY: "https://goproxy.cn,direct"
+  # Used by before_script to replace deb.debian.org / security.debian.org in sources (bookworm).
+  DEBIAN_APT_MIRROR_DEB: "http://mirrors.aliyun.com/debian"
+  DEBIAN_APT_MIRROR_SEC: "http://mirrors.aliyun.com/debian-security"
+
+stages:
+  - release
+
+release-upload:
+  stage: release
+  image:
+    name: ${ACR_REGISTRY}/opencsg_public/golang:bookworm
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/
+  before_script:
+    - |
+      set -e
+      deb="${DEBIAN_APT_MIRROR_DEB:-http://mirrors.aliyun.com/debian}"
+      sec="${DEBIAN_APT_MIRROR_SEC:-http://mirrors.aliyun.com/debian-security}"
+      rewrite_sources() {
+        local f="$1"
+        [ -f "$f" ] || return 0
+        sed -i \
+          -e "s|https://deb.debian.org/debian|${deb}|g" \
+          -e "s|http://deb.debian.org/debian|${deb}|g" \
+          -e "s|https://security.debian.org/debian-security|${sec}|g" \
+          -e "s|http://security.debian.org/debian-security|${sec}|g" \
+          "$f"
+      }
+      rewrite_sources /etc/apt/sources.list
+      if [ -d /etc/apt/sources.list.d ]; then
+        for f in /etc/apt/sources.list.d/*; do
+          [ -f "$f" ] || continue
+          case "$f" in
+            *.list|*.sources) rewrite_sources "$f" ;;
+          esac
+        done
+      fi
+    - apt-get update -qq && apt-get install -y --no-install-recommends openssh-client python3 ca-certificates
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - |
+      if [ -z "${REMOTE_SSH}" ]; then
+        echo "REMOTE_SSH must be set in CI/CD variables" >&2
+        exit 1
+      fi
+    - |
+      if [ -n "${SSH_PRIVATE_KEY}" ]; then
+        if [ -f "${SSH_PRIVATE_KEY}" ]; then
+          cp "${SSH_PRIVATE_KEY}" ~/.ssh/id_rsa
+        else
+          printf '%s\n' "${SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_rsa
+        fi
+        chmod 600 ~/.ssh/id_rsa
+        export SSH_IDENTITY_FILE="${HOME}/.ssh/id_rsa"
+      fi
+    - |
+      if [ -n "${SSH_KNOWN_HOSTS}" ]; then
+        printf '%s\n' "${SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+        chmod 644 ~/.ssh/known_hosts
+      else
+        KEYSCAN_HOST="${REMOTE_SSH##*@}"
+        if ! ssh-keyscan -p "${SSH_PORT:-22}" "${KEYSCAN_HOST}" >> ~/.ssh/known_hosts 2>/dev/null; then
+          echo "ssh-keyscan failed; set SSH_KNOWN_HOSTS in CI variables" >&2
+          exit 1
+        fi
+      fi
+  script:
+    - bash .gitlab/ci-gitlab-release-upload.sh

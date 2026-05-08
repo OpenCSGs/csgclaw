@@ -2,11 +2,14 @@
 set -euo pipefail
 
 APP="${APP:-csgclaw}"
-REPO="${REPO:-OpenCSGs/csgclaw}"
 VERSION="${VERSION:-latest}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 LIB_DIR="${LIB_DIR:-$HOME/.local/lib/${APP}}"
-BASE_URL="${BASE_URL:-https://csgclaw.opencsg.com/releases}"
+# All release metadata and downloads use this host (override per env if needed).
+MIRROR_HOST="${MIRROR_HOST:-https://csgclaw.opencsg.com}"
+BASE_URL="${BASE_URL:-${MIRROR_HOST}/releases}"
+# Latest-release JSON: top-level "tag_name" (GitHub releases/latest schema; mirror matches).
+LATEST_RELEASE_URL="${LATEST_RELEASE_URL:-${MIRROR_HOST}/releases/latest}"
 TMPDIR_INSTALL=""
 
 cleanup() {
@@ -56,11 +59,13 @@ ensure_supported_platform() {
 }
 
 resolve_latest_version() {
-  local api_url tag
-  api_url="https://api.github.com/repos/${REPO}/releases/latest"
-  tag="$(curl -fsSL "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+  local json flat tag
+  json="$(curl -fsSL "${LATEST_RELEASE_URL}")"
+  flat="$(printf '%s' "$json" | tr -d '\n\r')"
+  tag="$(printf '%s' "$flat" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
   if [ -z "$tag" ]; then
-    echo "failed to resolve latest release from ${api_url}" >&2
+    echo "failed to resolve latest release from ${LATEST_RELEASE_URL}" >&2
+    echo "Expected JSON with top-level \"tag_name\" (GitHub releases/latest schema)." >&2
     exit 1
   fi
   echo "$tag"

@@ -9,9 +9,8 @@
 # Optional:
 #   CI_PROJECT_DIR – repo root (default: git root or pwd)
 #   DIST_DIR       – default dist
-#   PACKAGE_MODE, BOXLITE_CLI_VERSION, REMOTE_BASE_DIR, INSTALL_BASE_URL
-#   GITHUB_OWNER, GITHUB_REPO, SSH_PORT, SSH_IDENTITY_FILE
-#   GOPROXY – set by .gitlab-ci.yml variables (Go modules); optional override in CI vars
+#   PACKAGE_MODE, BOXLITE_CLI_VERSION, REMOTE_BASE_DIR, SSH_PORT, SSH_IDENTITY_FILE
+#   GOPROXY – set by .gitlab/ci.yml variables (Go modules); optional override in CI vars
 set -euo pipefail
 
 ROOT="${CI_PROJECT_DIR:-}"
@@ -62,16 +61,9 @@ ssh "${SSH_OPTS[@]}" "${REMOTE_SSH}" "mkdir -p '${REL}'"
 scp "${SCP_OPTS[@]}" "${DIST_DIR}"/* "${REMOTE_SSH}:${REL}/"
 ssh "${SSH_OPTS[@]}" "${REMOTE_SSH}" "find '${REL}' -type f -exec chmod 0644 {} \\;"
 
-GITHUB_OWNER="${GITHUB_OWNER:-OpenCSGs}"
-GITHUB_REPO="${GITHUB_REPO:-csgclaw}"
-cp scripts/install.sh /tmp/install.sh
-if [[ -n "${INSTALL_BASE_URL:-}" ]]; then
-  python3 scripts/patch-install-for-mirror.py \
-    /tmp/install.sh "${GITHUB_OWNER}" "${GITHUB_REPO}" "${INSTALL_BASE_URL}"
-fi
 ssh_scp_opts
 ssh "${SSH_OPTS[@]}" "${REMOTE_SSH}" "mkdir -p '${REMOTE_BASE}'"
-scp "${SCP_OPTS[@]}" /tmp/install.sh "${REMOTE_SSH}:${REMOTE_BASE}/install.sh"
+scp "${SCP_OPTS[@]}" scripts/install.sh "${REMOTE_SSH}:${REMOTE_BASE}/install.sh"
 ssh "${SSH_OPTS[@]}" "${REMOTE_SSH}" "chmod 0644 '${REMOTE_BASE}/install.sh'"
 
 echo "==> Uploaded ${VERSION} to ${REMOTE_SSH}:${REMOTE_BASE}"
