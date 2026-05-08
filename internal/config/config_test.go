@@ -143,6 +143,54 @@ models = ["minimax-m2.7"]
 	}
 }
 
+func TestLoadReadsDockerSandboxConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[sandbox]
+provider = "docker"
+home_dir_name = "docker-runtime"
+docker_cli_path = "/custom/docker"
+
+[models]
+default = "default.minimax-m2.7"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["minimax-m2.7"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := cfg.Sandbox.Provider, DockerProvider; got != want {
+		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
+	}
+	if got, want := cfg.Sandbox.HomeDirName, "docker-runtime"; got != want {
+		t.Fatalf("cfg.Sandbox.HomeDirName = %q, want %q", got, want)
+	}
+	if got, want := cfg.Sandbox.DockerCLIPath, "/custom/docker"; got != want {
+		t.Fatalf("cfg.Sandbox.DockerCLIPath = %q, want %q", got, want)
+	}
+	if got, want := cfg.Sandbox.EffectiveDockerCLIPath(), "/custom/docker"; got != want {
+		t.Fatalf("EffectiveDockerCLIPath() = %q, want %q", got, want)
+	}
+}
+
+func TestSandboxEffectiveDockerCLIPathDefault(t *testing.T) {
+	cfg := SandboxConfig{Provider: DockerProvider}.Resolved()
+	if got, want := cfg.EffectiveDockerCLIPath(), "docker"; got != want {
+		t.Fatalf("EffectiveDockerCLIPath() = %q, want %q", got, want)
+	}
+}
+
 func TestLoadExpandsEnvironmentVariablesInConfigValues(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

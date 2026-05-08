@@ -952,14 +952,14 @@ func TestSandboxServiceOptionsSupportsConfiguredProvider(t *testing.T) {
 func TestNewAgentServiceRejectsUnsupportedSandboxProvider(t *testing.T) {
 	_, err := newAgentService(config.Config{
 		Sandbox: config.SandboxConfig{
-			Provider:    "docker",
-			HomeDirName: "docker",
+			Provider:    "not-a-sandbox-backend",
+			HomeDirName: "runtime",
 		},
 	})
 	if err == nil {
 		t.Fatal("newAgentService() error = nil, want unsupported sandbox provider")
 	}
-	if !strings.Contains(err.Error(), `unsupported sandbox provider "docker"`) {
+	if !strings.Contains(err.Error(), `unsupported sandbox provider "not-a-sandbox-backend"`) {
 		t.Fatalf("newAgentService() error = %q, want unsupported sandbox provider", err)
 	}
 }

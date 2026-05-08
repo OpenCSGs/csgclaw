@@ -64,6 +64,7 @@ type SandboxConfig struct {
 	HomeDirName              string
 	StoragePath              string
 	DebianRegistriesOverride []string
+	DockerCLIPath            string
 }
 
 func (c SandboxConfig) Resolved() SandboxConfig {
@@ -84,6 +85,16 @@ func (c SandboxConfig) EffectiveDebianRegistries() []string {
 		return append([]string(nil), DefaultDebianRegistries...)
 	}
 	return append([]string(nil), c.DebianRegistriesOverride...)
+}
+
+// EffectiveDockerCLIPath returns the docker binary path for [sandbox].provider = docker.
+// When unset, it defaults to "docker" (PATH lookup).
+func (c SandboxConfig) EffectiveDockerCLIPath() string {
+	p := strings.TrimSpace(c.DockerCLIPath)
+	if p != "" {
+		return p
+	}
+	return "docker"
 }
 
 type ChannelsConfig struct {
@@ -130,6 +141,7 @@ const (
 	DefaultAccessToken        = "your_access_token"
 	DefaultManagerImage       = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.29.0"
 	CSGHubProvider            = "csghub"
+	DockerProvider            = "docker"
 	BoxLiteCLIProvider        = "boxlite-cli"
 	DefaultSandboxHomeDirName = "boxlite"
 	RuntimeHomeDirName        = DefaultSandboxHomeDirName
@@ -316,6 +328,9 @@ func Load(path string) (Config, error) {
 					return Config{}, fmt.Errorf("parse sandbox.debian_registries_override: %w", parseErr)
 				}
 				cfg.Sandbox.DebianRegistriesOverride = registries
+			case "docker_cli_path":
+				cfg.raw.sandbox.DockerCLIPath = parseRawStringValue(rawValue)
+				cfg.Sandbox.DockerCLIPath = value
 			}
 		case section == "channels.feishu":
 			switch key {
@@ -426,6 +441,9 @@ home_dir_name = %q
 `, cfg.rawOrResolvedString(cfg.raw.sandbox.Provider, loadedRaw.sandbox.Provider, resolvedSandbox.Provider), cfg.rawOrResolvedString(cfg.raw.sandbox.HomeDirName, loadedRaw.sandbox.HomeDirName, resolvedSandbox.HomeDirName))
 	if strings.TrimSpace(resolvedSandbox.StoragePath) != "" {
 		sandboxSection = strings.Replace(sandboxSection, "[sandbox]\n", fmt.Sprintf("[sandbox]\nstorage_path = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.StoragePath, loadedRaw.sandbox.StoragePath, resolvedSandbox.StoragePath)), 1)
+	}
+	if strings.TrimSpace(resolvedSandbox.DockerCLIPath) != "" {
+		sandboxSection = strings.Replace(sandboxSection, "[sandbox]\n", fmt.Sprintf("[sandbox]\ndocker_cli_path = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.DockerCLIPath, loadedRaw.sandbox.DockerCLIPath, resolvedSandbox.DockerCLIPath)), 1)
 	}
 	overrideRegistries := cfg.rawOrResolvedStringArray(cfg.raw.sandbox.DebianRegistriesOverride, loadedRaw.sandbox.DebianRegistriesOverride, resolvedSandbox.DebianRegistriesOverride)
 	sandboxSection += fmt.Sprintf("debian_registries_override = %s\n", formatStringArray(overrideRegistries))
@@ -761,6 +779,9 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 	}
 	if len(c.raw.sandbox.DebianRegistriesOverride) > 0 {
 		out.sandbox.DebianRegistriesOverride = append([]string(nil), c.Sandbox.DebianRegistriesOverride...)
+	}
+	if c.raw.sandbox.DockerCLIPath != "" {
+		out.sandbox.DockerCLIPath = c.Sandbox.DockerCLIPath
 	}
 	if c.raw.modelsDefault != "" {
 		out.modelsDefault = c.Models.Default

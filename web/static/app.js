@@ -48,6 +48,15 @@ function safeParseEventData(raw) {
   }
 }
 
+// API returns Version from git describe (e.g. "v0.2.1-5-gabc-dirty") or "dev"; avoid "vv" in the UI.
+function formatSidebarVersionLabel(version) {
+  const raw = typeof version === "string" ? version.trim() : "";
+  if (!raw) {
+    return "csgclaw dev";
+  }
+  return raw.startsWith("v") ? `csgclaw ${raw}` : `csgclaw v${raw}`;
+}
+
 function subscribeIMEvents(onEvent) {
   if (typeof window.SharedWorker === "function") {
     try {
@@ -2568,7 +2577,7 @@ function App() {
             </nav>
             <div className="sidebar-footer">
               <div className="sidebar-footer-row">
-                <span className="sidebar-version-label">${`csgclaw v${appVersion}`}</span>
+                <span className="sidebar-version-label">${formatSidebarVersionLabel(appVersion)}</span>
                 ${upgradeStatus?.update_available || upgradeBusy || upgradeStatus?.upgrading || upgradePhase === "done" || upgradePhase === "error"
                   ? html`
                       <button
