@@ -6297,3 +6297,87 @@ body {
   border-color: rgba(217, 45, 32, 0.42);
   background: rgba(217, 45, 32, 0.12);
 }
+
+/* Figma Portal primary button states, node 52054:523346. */
+.btn-primary,
+.csg-button-primary,
+.send-button,
+.composer-send-button,
+.preview-action-button-primary {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-primary:hover:not(:disabled),
+.csg-button-primary:hover:not(:disabled),
+.send-button:hover:not(:disabled),
+.composer-send-button:hover:not(:disabled),
+.preview-action-button-primary:hover:not(:disabled) {
+  border-color: var(--portal-brand-700);
+  background: var(--portal-brand-700);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-primary:active:not(:disabled),
+.csg-button-primary:active:not(:disabled),
+.send-button:active:not(:disabled),
+.composer-send-button:active:not(:disabled),
+.preview-action-button-primary:active:not(:disabled) {
+  border-color: var(--portal-brand-700);
+  background: var(--portal-brand-700);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-primary:focus-visible,
+.csg-button-primary:focus-visible,
+.send-button:focus-visible,
+.composer-send-button:focus-visible,
+.preview-action-button-primary:focus-visible {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs), 0 0 0 4px rgba(77, 106, 214, 0.24);
+}
+
+.btn-primary:disabled,
+.btn-primary[disabled],
+.csg-button-primary:disabled,
+.csg-button-primary[disabled],
+.send-button:disabled,
+.send-button[disabled],
+.composer-send-button:disabled,
+.composer-send-button[disabled],
+.preview-action-button-primary:disabled,
+.preview-action-button-primary[disabled] {
+  border-color: var(--portal-gray-200);
+  background: var(--portal-gray-100);
+  color: var(--portal-gray-400);
+  box-shadow: var(--shadow-xs);
+}
+
+:root[data-theme="dark"] .btn-primary,
+:root[data-theme="dark"] .csg-button-primary,
+:root[data-theme="dark"] .send-button,
+:root[data-theme="dark"] .composer-send-button,
+:root[data-theme="dark"] .preview-action-button-primary,
+:root[data-theme="dark"] .btn-primary:hover:not(:disabled),
+:root[data-theme="dark"] .csg-button-primary:hover:not(:disabled),
+:root[data-theme="dark"] .send-button:hover:not(:disabled),
+:root[data-theme="dark"] .composer-send-button:hover:not(:disabled),
+:root[data-theme="dark"] .preview-action-button-primary:hover:not(:disabled),
+:root[data-theme="dark"] .btn-primary:active:not(:disabled),
+:root[data-theme="dark"] .csg-button-primary:active:not(:disabled),
+:root[data-theme="dark"] .send-button:active:not(:disabled),
+:root[data-theme="dark"] .composer-send-button:active:not(:disabled),
+:root[data-theme="dark"] .preview-action-button-primary:active:not(:disabled),
+:root[data-theme="dark"] .btn-primary:focus-visible,
+:root[data-theme="dark"] .csg-button-primary:focus-visible,
+:root[data-theme="dark"] .send-button:focus-visible,
+:root[data-theme="dark"] .composer-send-button:focus-visible,
+:root[data-theme="dark"] .preview-action-button-primary:focus-visible {
+  color: var(--portal-white);
+}
