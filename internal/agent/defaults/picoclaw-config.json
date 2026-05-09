@@ -147,7 +147,7 @@
       "allow_remote": true,
       "custom_deny_patterns": null,
       "custom_allow_patterns": null,
-      "timeout_seconds": 60
+      "timeout_seconds": 600
     },
     "skills": {
       "enabled": true,

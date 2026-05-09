@@ -7,7 +7,7 @@
 
 ## Overview
 
-CSGClaw is a Go-based local multi-agent platform. The `csgclaw` CLI bootstraps config, starts the local HTTP server and Web UI, and manages agents, rooms, and users. BoxLite runtime integration is provided through the `boxlite-cli` sandbox path.
+CSGClaw is a Go-based local multi-agent platform. The `csgclaw` CLI bootstraps config, starts the local HTTP server and Web UI, and manages agents, rooms, and users. BoxLite runtime integration is provided through the `boxlite` sandbox path.
 
 ## Structure
 

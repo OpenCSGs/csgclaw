@@ -46,7 +46,6 @@ func ServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {
 	}
 	return []agent.ServiceOption{
 		provider,
-		agent.WithSandboxHomeDirName(cfg.HomeDirName),
 	}, nil
 }
 

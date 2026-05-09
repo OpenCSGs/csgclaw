@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
-	"csgclaw/internal/channel"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
 )
 
@@ -18,7 +19,7 @@ type Service struct {
 	im     *im.Service
 	imBus  *im.Bus
 	imProv *im.Provisioner
-	feishu *channel.FeishuService
+	feishu *feishu.Service
 }
 
 func NewService(store *Store) (*Service, error) {
@@ -28,7 +29,7 @@ func NewService(store *Store) (*Service, error) {
 	return &Service{store: store}, nil
 }
 
-func NewServiceWithDependencies(store *Store, agentSvc *agent.Service, imSvc *im.Service, feishuSvc ...*channel.FeishuService) (*Service, error) {
+func NewServiceWithDependencies(store *Store, agentSvc *agent.Service, imSvc *im.Service, feishuSvc ...*feishu.Service) (*Service, error) {
 	s, err := NewService(store)
 	if err != nil {
 		return nil, err
@@ -37,7 +38,7 @@ func NewServiceWithDependencies(store *Store, agentSvc *agent.Service, imSvc *im
 	return s, nil
 }
 
-func (s *Service) SetDependencies(agentSvc *agent.Service, imSvc *im.Service, feishuSvc ...*channel.FeishuService) {
+func (s *Service) SetDependencies(agentSvc *agent.Service, imSvc *im.Service, feishuSvc ...*feishu.Service) {
 	if s == nil {
 		return
 	}
@@ -305,12 +306,14 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 	} else {
 		var err error
 		created, err = s.agents.CreateWorker(ctx, agent.CreateAgentSpec{
-			ID:          normalized.ID,
-			Name:        normalized.Name,
-			Description: normalized.Description,
-			Role:        agent.RoleWorker,
-			ModelID:     normalized.ModelID,
-			RuntimeKind: normalized.RuntimeKind,
+			ID:           normalized.ID,
+			Name:         normalized.Name,
+			Description:  normalized.Description,
+			Image:        normalized.Image,
+			Role:         agent.RoleWorker,
+			ModelID:      normalized.ModelID,
+			RuntimeKind:  normalized.RuntimeKind,
+			AgentProfile: agentProfileFromBotRequest(normalized.AgentProfile),
 		})
 		if err != nil {
 			return Bot{}, err
@@ -354,6 +357,23 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 		return Bot{}, err
 	}
 	return b, nil
+}
+
+func agentProfileFromBotRequest(req apitypes.CreateAgentProfile) agent.AgentProfile {
+	return agent.AgentProfile{
+		Name:            req.Name,
+		Description:     req.Description,
+		Provider:        req.Provider,
+		BaseURL:         req.BaseURL,
+		APIKey:          req.APIKey,
+		Headers:         req.Headers,
+		ModelID:         req.ModelID,
+		ReasoningEffort: req.ReasoningEffort,
+		EnableFastMode:  req.EnableFastMode,
+		RequestOptions:  req.RequestOptions,
+		Env:             req.Env,
+		ProfileComplete: req.ProfileComplete,
+	}
 }
 
 func (s *Service) createManager(ctx context.Context, normalized CreateRequest, forceRecreateAgent bool) (Bot, error) {
@@ -435,7 +455,7 @@ func (s *Service) ensureChannelUser(ctx context.Context, channelName string, cre
 		if s.feishu == nil {
 			return "", time.Time{}, fmt.Errorf("feishu service is required")
 		}
-		user, err := s.feishu.EnsureUser(channel.FeishuCreateUserRequest{
+		user, err := s.feishu.EnsureUser(feishu.CreateUserRequest{
 			ID:     created.ID,
 			Name:   created.Name,
 			Handle: deriveAgentHandle(created),

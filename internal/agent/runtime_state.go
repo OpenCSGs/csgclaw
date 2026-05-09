@@ -36,7 +36,6 @@ type gatewayBoxFactory interface {
 type PicoClawRuntimeHost struct {
 	ModelFallback         string
 	Server                config.ServerConfig
-	Channels              config.ChannelsConfig
 	EnsureRuntime         func(agentName string) (sandbox.Runtime, error)
 	AgentHome             func(agentName string) (string, error)
 	RuntimeHome           func(agentName string) (string, error)
@@ -60,10 +59,14 @@ type PicoClawRuntimeHost struct {
 }
 
 func (s *Service) PicoClawRuntimeHost() PicoClawRuntimeHost {
+	s.mu.RLock()
+	modelFallback := s.model.Resolved().ModelID
+	server := s.server
+	s.mu.RUnlock()
+
 	return PicoClawRuntimeHost{
-		ModelFallback: s.model.Resolved().ModelID,
-		Server:        s.server,
-		Channels:      s.channels,
+		ModelFallback: modelFallback,
+		Server:        server,
 		EnsureRuntime: s.ensureRuntime,
 		AgentHome:     agentHomeDir,
 		RuntimeHome:   s.sandboxRuntimeHome,

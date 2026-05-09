@@ -324,6 +324,22 @@ func botSpec() CommandSpec {
 				),
 			},
 			{Name: "delete", Summary: "Delete a bot", Flags: channelFlags()},
+			{
+				Name:    "config",
+				Summary: "Manage bot channel config",
+				Flags: append(feishuChannelFlags(),
+					FlagSpec{Name: "get"},
+					FlagSpec{Name: "set"},
+					FlagSpec{Name: "reload"},
+					FlagSpec{Name: "bot-id", TakesValue: true},
+					FlagSpec{Name: "app-id", TakesValue: true},
+					FlagSpec{Name: "admin-open-id", TakesValue: true},
+					FlagSpec{Name: "app-secret-file", TakesValue: true},
+					FlagSpec{Name: "app-secret-env", TakesValue: true},
+					FlagSpec{Name: "app-secret-stdin"},
+					FlagSpec{Name: "no-reload"},
+				),
+			},
 		},
 	}
 }
@@ -408,6 +424,10 @@ func completionSpec() CommandSpec {
 
 func channelFlags() []FlagSpec {
 	return []FlagSpec{{Name: "channel", TakesValue: true, Values: []string{"csgclaw", "feishu"}}}
+}
+
+func feishuChannelFlags() []FlagSpec {
+	return []FlagSpec{{Name: "channel", TakesValue: true, Values: []string{"feishu"}}}
 }
 
 func logLevelValues() []string {

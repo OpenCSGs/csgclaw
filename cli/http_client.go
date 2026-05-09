@@ -12,7 +12,7 @@ import (
 	"csgclaw/cli/command"
 	"csgclaw/internal/apiclient"
 	"csgclaw/internal/apitypes"
-	"csgclaw/internal/channel"
+	"csgclaw/internal/channel/feishu"
 )
 
 type HTTPClient = apiclient.HTTPClient
@@ -78,7 +78,7 @@ func (c *APIClient) StreamAgentLogs(ctx context.Context, id string, follow bool,
 	return c.Stream(ctx, "/api/v1/agents/"+id+"/logs", values, w)
 }
 
-func (c *APIClient) CreateFeishuUser(ctx context.Context, req channel.FeishuCreateUserRequest) (apitypes.User, error) {
+func (c *APIClient) CreateFeishuUser(ctx context.Context, req feishu.CreateUserRequest) (apitypes.User, error) {
 	var created apitypes.User
 	if err := c.DoJSON(ctx, http.MethodPost, "/api/v1/channels/feishu/users", req, &created); err != nil {
 		return apitypes.User{}, err

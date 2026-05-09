@@ -49,8 +49,7 @@ models = ["Qwen/Qwen3-0.6B-GGUF"]
 manager_image_override = ""
 
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 ```
 
 ### Remote LLM API
@@ -74,8 +73,7 @@ models = ["gpt-5.4"]
 manager_image_override = ""
 
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 ```
 
 ### Dynamic Codex or Claude Code profiles
@@ -91,8 +89,7 @@ no_auth = false
 manager_image_override = ""
 
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 ```
 
 Codex and Claude Code profiles are configured in agent state through the Web UI. CSGClaw starts an embedded CLIProxyAPI on a private localhost port at serve time, so static CLIProxy base URLs are not required.
@@ -122,38 +119,55 @@ When a worker uses the Codex runtime, CSGClaw resolves `codex-acp` automatically
 
 ## Sandbox Providers
 
-CSGClaw runs Workers through the configured sandbox provider. BoxLite integration is provided through `boxlite-cli`, which runs BoxLite through the external CLI process.
+CSGClaw runs Workers through the configured sandbox provider. Supported built-in providers are:
+
+- `boxlite`: runs Workers through the local `boxlite` CLI.
+- `docker`: runs Workers through the local Docker CLI.
+- `csghub`: runs Workers in the remote CSGHub sandbox. This is currently supported only in [AgenticHub](https://opencsg.com/agentichub).
 
 The default source build and official release bundles already align with the CLI-backed provider:
 
 ```toml
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 ```
 
-For `provider = "boxlite-cli"`, CSGClaw resolves the bundled sibling `boxlite` binary next to `csgclaw` first, then falls back to `PATH` if that bundle is missing.
+For `provider = "boxlite"`, CSGClaw resolves the bundled sibling `boxlite` binary next to `csgclaw` first, then falls back to `PATH` if that bundle is missing.
 
 `debian_registries_override` controls where BoxLite pulls `debian:bookworm-slim` when you need to override the built-in default order. If omitted or empty, CSGClaw uses `harbor.opencsg.com` then `docker.io`. When CSGClaw writes `config.toml`, it keeps this field visible as an empty array so it can be edited in place:
 
 ```toml
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 debian_registries_override = []
 ```
 
-CSGClaw passes an explicit `--home` to the BoxLite CLI for each agent, using the agent directory plus `home_dir_name` such as `~/.csgclaw/agents/<agent-id>/boxlite`. That explicit home takes precedence over `BOXLITE_HOME` for CSGClaw-managed sandboxes, while `BOXLITE_HOME` still applies when you run `boxlite` manually without `--home`.
+CSGClaw passes an explicit `--home` to the BoxLite CLI for each agent, using the fixed per-agent runtime home `~/.csgclaw/agents/<agent-id>/boxlite`. That explicit home takes precedence over `BOXLITE_HOME` for CSGClaw-managed sandboxes, while `BOXLITE_HOME` still applies when you run `boxlite` manually without `--home`.
 
-The `boxlite-cli` provider does not need a vendored Go SDK at runtime. Current source builds and release packaging use the same BoxLite CLI-backed integration:
+The `boxlite` provider does not need a vendored Go SDK at runtime. Current source builds and release packaging use the same BoxLite CLI-backed integration:
 
-- `make build`, `make test`, `make run`, and `make package` all use the standard `boxlite-cli` path.
-- `boxlite-cli` remains the built-in BoxLite sandbox provider, alongside other non-BoxLite providers such as `csghub`.
+- `make build`, `make test`, `make run`, and `make package` all use the standard `boxlite` path.
+- `boxlite` remains the built-in BoxLite sandbox provider, alongside other non-BoxLite providers such as `csghub`.
+
+To use Docker as the sandbox provider:
+
+```toml
+[sandbox]
+provider = "docker"
+```
+
+When `provider = "docker"`, CSGClaw runs the local `docker` CLI. By default it resolves `docker` from `PATH`. If you need a specific binary, set `docker_cli_path`:
+
+```toml
+[sandbox]
+provider = "docker"
+docker_cli_path = "/usr/local/bin/docker"
+```
 
 ## Channel Configuration
 
 Channel integration is optional. CSGClaw works with the built-in Web UI by default, and you only need channel config when you want to connect external messaging platforms such as Feishu.
 
-Channel-specific settings live under top-level config sections such as `channels.feishu`. Keep the main config focused on shared server, model, bootstrap, and sandbox settings, then add only the channel blocks you actually use.
+Keep `config.toml` focused on shared server, model, bootstrap, and sandbox settings. Feishu credentials live in a standalone `channels/feishu.toml` file next to the selected `config.toml`; legacy `[channels.feishu]` blocks in `config.toml` are not read.
 
 For detailed field definitions and examples, see [Feishu Channel Configuration](channel/feishu.md).

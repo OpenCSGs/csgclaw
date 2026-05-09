@@ -40,6 +40,8 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		return c.runCreate(ctx, run, args[1:], globals)
 	case "delete":
 		return c.runDelete(ctx, run, args[1:], globals)
+	case "config":
+		return c.runConfig(ctx, run, args[1:], globals)
 	default:
 		c.usage(run)
 		return fmt.Errorf("unknown bot subcommand %q", args[0])
@@ -47,11 +49,13 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 }
 
 func (c cmd) usage(run *command.Context) {
-	run.UsageCommandGroup(c, run.Program+" bot <subcommand> [flags]", []string{
+	subcommands := []string{
 		"list               List bots",
 		"create             Create a bot",
 		"delete <id>        Delete a bot",
-	})
+		"config             Manage bot channel config",
+	}
+	run.UsageCommandGroup(c, run.Program+" bot <subcommand> [flags]", subcommands)
 }
 
 func (c cmd) runList(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {

@@ -17,7 +17,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/bot"
-	"csgclaw/internal/channel"
+	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
@@ -36,7 +36,7 @@ type fakeCompatRuntime struct {
 }
 
 func init() {
-	_ = agent.TestOnlySetDefaultServiceOption(runtimewiring.WithPicoClawSandboxRuntime())
+	_ = agent.TestOnlySetDefaultServiceOption(runtimewiring.WithPicoClawSandboxRuntime(config.ChannelsConfig{}))
 }
 
 func (f fakeCompatRuntime) Kind() string {
@@ -164,7 +164,7 @@ func TestDeriveAgentHandle(t *testing.T) {
 }
 
 func TestHandleFeishuUsersCreateAndList(t *testing.T) {
-	srv := &Handler{feishu: channel.NewFeishuService()}
+	srv := &Handler{feishu: feishu.NewService()}
 
 	createReq := strings.NewReader(`{"id":"fsu-alice","name":"Alice","handle":"alice","role":"worker"}`)
 	rec := httptest.NewRecorder()
@@ -220,33 +220,33 @@ func TestHandleVersionMethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleFeishuRoomsMembers(t *testing.T) {
-	feishu := channel.NewFeishuServiceWithCreateChatAndAddMembers(
-		map[string]channel.FeishuAppConfig{
+	feishuSvc := feishu.NewServiceWithCreateChatAndAddMembers(
+		map[string]feishu.AppConfig{
 			"u-manager": {AppID: "manager-app-id", AppSecret: "app-secret", AdminOpenID: "ou_admin"},
 			"fsu-alice": {AppID: "alice-app-id", AppSecret: "alice-secret"},
 		},
-		func(_ context.Context, _ channel.FeishuAppConfig, req channel.FeishuCreateChatRequest) (channel.FeishuCreateChatResponse, error) {
-			return channel.FeishuCreateChatResponse{
+		func(_ context.Context, _ feishu.AppConfig, req feishu.CreateChatRequest) (feishu.CreateChatResponse, error) {
+			return feishu.CreateChatResponse{
 				ChatID:      "oc_alpha",
 				Name:        req.Title,
 				Description: req.Description,
 			}, nil
 		},
-		func(context.Context, channel.FeishuAppConfig, channel.FeishuAddChatMembersRequest) error { return nil },
-		func(context.Context, channel.FeishuAppConfig, map[string]channel.FeishuAppConfig, string) ([]im.User, error) {
+		func(context.Context, feishu.AppConfig, feishu.AddChatMembersRequest) error { return nil },
+		func(context.Context, feishu.AppConfig, map[string]feishu.AppConfig, string) ([]im.User, error) {
 			return []im.User{
 				{ID: "fsu-admin", Name: "Admin"},
 				{ID: "fsu-alice", Name: "Alice"},
 			}, nil
 		},
 	)
-	if _, err := feishu.CreateUser(channel.FeishuCreateUserRequest{ID: "fsu-admin", Name: "Admin"}); err != nil {
+	if _, err := feishuSvc.CreateUser(feishu.CreateUserRequest{ID: "fsu-admin", Name: "Admin"}); err != nil {
 		t.Fatalf("CreateUser(admin) error = %v", err)
 	}
-	if _, err := feishu.CreateUser(channel.FeishuCreateUserRequest{ID: "fsu-alice", Name: "Alice"}); err != nil {
+	if _, err := feishuSvc.CreateUser(feishu.CreateUserRequest{ID: "fsu-alice", Name: "Alice"}); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
-	srv := &Handler{feishu: feishu}
+	srv := &Handler{feishu: feishuSvc}
 
 	createReq := strings.NewReader(`{"title":"alpha","creator_id":"fsu-admin"}`)
 	rec := httptest.NewRecorder()
@@ -506,7 +506,7 @@ func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 		imBus:  bus,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots", strings.NewReader(`{"name":"alice","description":"test lead","role":"worker","channel":"csgclaw"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots", strings.NewReader(`{"name":"alice","description":"test lead","image":"agent-image:1","role":"worker","channel":"csgclaw","agent_profile":{"provider":"csghub_lite","model_id":"glm-4.5","reasoning_effort":"high"}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -552,6 +552,12 @@ func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 	}
 	if len(agents) != 1 || agents[0].ID != "u-alice" {
 		t.Fatalf("agents = %+v, want u-alice", agents)
+	}
+	if agents[0].Image != "agent-image:1" {
+		t.Fatalf("agents[0].Image = %q, want agent-image:1", agents[0].Image)
+	}
+	if agents[0].Provider != agent.ProviderCSGHubLite || agents[0].ModelID != "glm-4.5" {
+		t.Fatalf("agent profile = %s/%s, want csghub_lite/glm-4.5", agents[0].Provider, agents[0].ModelID)
 	}
 
 	rec = httptest.NewRecorder()
@@ -649,7 +655,7 @@ func TestHandleBotsCreateFeishuWorker(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	agentSvc, _ := mustNewSeededServiceWithPath(t, nil)
-	feishuSvc := channel.NewFeishuService()
+	feishuSvc := feishu.NewService()
 	store, err := bot.NewMemoryStore(nil)
 	if err != nil {
 		t.Fatalf("bot.NewMemoryStore() error = %v", err)
@@ -1039,6 +1045,9 @@ func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
 	profile, ok := got[0]["agent_profile"].(map[string]any)
 	if !ok || profile["api_key_set"] != true {
 		t.Fatalf("agent_profile = %#v, want api_key_set true", got[0]["agent_profile"])
+	}
+	if got, want := profile["api_key_preview"], "secr..."; got != want {
+		t.Fatalf("agent_profile api_key_preview = %#v, want %q", got, want)
 	}
 	if _, ok := profile["api_key"]; ok {
 		t.Fatalf("agent_profile includes api_key: %#v", profile)
@@ -2321,13 +2330,13 @@ func TestHandleMessagesPostPrefixesMentionID(t *testing.T) {
 }
 
 func TestHandleFeishuMessagesPostSendsMessage(t *testing.T) {
-	feishuSvc := channel.NewFeishuServiceWithSendMessage(
-		map[string]channel.FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
-		func(_ context.Context, _ channel.FeishuAppConfig, req channel.FeishuSendMessageRequest) (channel.FeishuSendMessageResponse, error) {
+	feishuSvc := feishu.NewServiceWithSendMessage(
+		map[string]feishu.AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, _ feishu.AppConfig, req feishu.SendMessageRequest) (feishu.SendMessageResponse, error) {
 			if req.ChatID != "oc_alpha" || req.Content != "hello" {
 				t.Fatalf("send request = %+v, want chat/content", req)
 			}
-			return channel.FeishuSendMessageResponse{MessageID: "om_1", SenderOpenID: "ou_manager"}, nil
+			return feishu.SendMessageResponse{MessageID: "om_1", SenderOpenID: "ou_manager"}, nil
 		},
 	)
 	srv := &Handler{feishu: feishuSvc}
@@ -2350,12 +2359,12 @@ func TestHandleFeishuMessagesPostSendsMessage(t *testing.T) {
 }
 
 func TestHandleFeishuMessagesGetListsRoomMessages(t *testing.T) {
-	feishuSvc := channel.NewFeishuServiceWithCreateChatAndListRoomMessages(
-		map[string]channel.FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
-		func(_ context.Context, _ channel.FeishuAppConfig, req channel.FeishuCreateChatRequest) (channel.FeishuCreateChatResponse, error) {
-			return channel.FeishuCreateChatResponse{ChatID: "oc_alpha", Name: req.Title}, nil
+	feishuSvc := feishu.NewServiceWithCreateChatAndListRoomMessages(
+		map[string]feishu.AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
+		func(_ context.Context, _ feishu.AppConfig, req feishu.CreateChatRequest) (feishu.CreateChatResponse, error) {
+			return feishu.CreateChatResponse{ChatID: "oc_alpha", Name: req.Title}, nil
 		},
-		func(_ context.Context, _ channel.FeishuAppConfig, roomID string) ([]im.Message, error) {
+		func(_ context.Context, _ feishu.AppConfig, roomID string) ([]im.Message, error) {
 			if roomID != "oc_alpha" {
 				t.Fatalf("room_id = %q, want oc_alpha", roomID)
 			}
@@ -2385,7 +2394,7 @@ func TestHandleFeishuMessagesGetListsRoomMessages(t *testing.T) {
 }
 
 func TestHandleFeishuEventsStreamsMessageBusEvents(t *testing.T) {
-	feishuSvc := channel.NewFeishuService()
+	feishuSvc := feishu.NewService()
 	srv := &Handler{feishu: feishuSvc, serverAccessToken: "secret"}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2402,8 +2411,8 @@ func TestHandleFeishuEventsStreamsMessageBusEvents(t *testing.T) {
 	}()
 
 	time.Sleep(20 * time.Millisecond)
-	feishuSvc.MessageBus().Publish(channel.FeishuMessageEvent{
-		Type:   channel.FeishuMessageEventTypeMessageCreated,
+	feishuSvc.MessageBus().Publish(feishu.MessageEvent{
+		Type:   feishu.MessageEventTypeMessageCreated,
 		RoomID: "oc_ignored",
 		Message: &im.Message{
 			ID:       "om_ignored",
@@ -2412,8 +2421,8 @@ func TestHandleFeishuEventsStreamsMessageBusEvents(t *testing.T) {
 			Mentions: []im.Mention{{ID: "u-worker"}},
 		},
 	})
-	feishuSvc.MessageBus().Publish(channel.FeishuMessageEvent{
-		Type:   channel.FeishuMessageEventTypeMessageCreated,
+	feishuSvc.MessageBus().Publish(feishu.MessageEvent{
+		Type:   feishu.MessageEventTypeMessageCreated,
 		RoomID: "oc_alpha",
 		Message: &im.Message{
 			ID:       "om_1",
@@ -2443,7 +2452,7 @@ func TestHandleFeishuEventsStreamsMessageBusEvents(t *testing.T) {
 
 func TestHandleFeishuEventsRequiresAuthorization(t *testing.T) {
 	srv := &Handler{
-		feishu:            channel.NewFeishuService(),
+		feishu:            feishu.NewService(),
 		serverAccessToken: "secret",
 	}
 
@@ -2612,9 +2621,9 @@ func TestHandleUsersDeleteCurrentUserReturnsConflict(t *testing.T) {
 
 func TestHandleFeishuUsersDeleteRemovesUser(t *testing.T) {
 	srv := &Handler{
-		feishu: channel.NewFeishuService(),
+		feishu: feishu.NewService(),
 	}
-	if _, err := srv.feishu.CreateUser(channel.FeishuCreateUserRequest{ID: "ou-alice", Name: "Alice"}); err != nil {
+	if _, err := srv.feishu.CreateUser(feishu.CreateUserRequest{ID: "ou-alice", Name: "Alice"}); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 
@@ -2655,9 +2664,9 @@ func TestHandleRoomsDeleteRemovesRoom(t *testing.T) {
 func TestHandleFeishuRoomsDeleteRemovesRoom(t *testing.T) {
 	deleted := make([]string, 0, 1)
 	srv := &Handler{
-		feishu: channel.NewFeishuServiceWithDeleteChat(
-			map[string]channel.FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
-			func(_ context.Context, _ channel.FeishuAppConfig, roomID string) error {
+		feishu: feishu.NewServiceWithDeleteChat(
+			map[string]feishu.AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
+			func(_ context.Context, _ feishu.AppConfig, roomID string) error {
 				deleted = append(deleted, roomID)
 				return nil
 			},
@@ -3389,7 +3398,12 @@ func mustNewSeededServiceWithPath(t *testing.T, agents []agent.Agent) (*agent.Se
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
 
-	svc, err := agent.NewService(config.ModelConfig{}, config.ServerConfig{}, "", statePath)
+	svc, err := agent.NewService(config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  "http://127.0.0.1:4000",
+		APIKey:   "sk-test",
+		ModelID:  "model-1",
+	}, config.ServerConfig{}, "", statePath)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

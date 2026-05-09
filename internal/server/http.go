@@ -10,7 +10,7 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/api"
 	"csgclaw/internal/bot"
-	"csgclaw/internal/channel"
+	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/upgrade"
@@ -23,7 +23,7 @@ type Options struct {
 	IM          *im.Service
 	IMBus       *im.Bus
 	BotBridge   *im.BotBridge
-	Feishu      *channel.FeishuService
+	Feishu      *feishu.Service
 	LLM         *llm.Service
 	Upgrade     *upgrade.Manager
 	ConfigPath  string

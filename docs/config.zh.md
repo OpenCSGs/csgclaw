@@ -49,8 +49,7 @@ models = ["Qwen/Qwen3-0.6B-GGUF"]
 manager_image_override = ""
 
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 ```
 
 ### 远程 LLM API
@@ -74,8 +73,7 @@ models = ["gpt-5.4"]
 manager_image_override = ""
 
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 ```
 
 ### 动态 Codex 或 Claude Code Profile
@@ -91,8 +89,7 @@ no_auth = false
 manager_image_override = ""
 
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 ```
 
 Codex 和 Claude Code Profile 通过 Web UI 写入 agent state。CSGClaw 在 `serve` 时会嵌入启动 CLIProxyAPI，并绑定到私有 localhost 端口，因此不再需要配置固定的 CLIProxy base URL。
@@ -122,38 +119,55 @@ Worker 在创建时也可以显式选择 runtime kind。默认值是 `picoclaw-s
 
 ## Sandbox Provider
 
-CSGClaw 通过配置的 sandbox provider 隔离 Worker 执行环境。当前 BoxLite 集成统一通过 `boxlite-cli` 提供，也就是通过外部 CLI 进程运行 BoxLite。
+CSGClaw 通过配置的 sandbox provider 隔离 Worker 执行环境。当前内置支持的 provider 包括：
+
+- `boxlite`：通过本地 `boxlite` CLI 运行 Worker。
+- `docker`：通过本地 Docker CLI 运行 Worker。
+- `csghub`：在远端 CSGHub sandbox 运行 Worker（目前仅支持在 [AgenticHub](https://opencsg.com/agentichub) 里使用）。
 
 默认源码构建和官方 release bundle 已经统一到基于 CLI 的 provider：
 
 ```toml
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 ```
 
-对于 `provider = "boxlite-cli"`，CSGClaw 会优先解析与 `csgclaw` 同 bundle 的 `boxlite`，只有 bundle 缺失时才回退到 `PATH`。
+对于 `provider = "boxlite"`，CSGClaw 会优先解析与 `csgclaw` 同 bundle 的 `boxlite`，只有 bundle 缺失时才回退到 `PATH`。
 
 `debian_registries_override` 用于在你需要覆盖内置顺序时，控制 BoxLite 拉取 `debian:bookworm-slim` 的仓库顺序。若省略或为空，CSGClaw 会使用默认顺序 `harbor.opencsg.com`、`docker.io`。当 CSGClaw 写入 `config.toml` 时，会把该字段保留为空数组，方便直接原地修改：
 
 ```toml
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 debian_registries_override = []
 ```
 
-CSGClaw 会为每个 agent 调用 BoxLite CLI 时显式传入 `--home`，目录由 agent 目录和 `home_dir_name` 组成，例如 `~/.csgclaw/agents/<agent-id>/boxlite`。这个显式 home 对 CSGClaw 管理的 sandbox 生效，优先于 `BOXLITE_HOME`；你手动运行 `boxlite` 且不传 `--home` 时，`BOXLITE_HOME` 仍按 BoxLite 自身规则生效。
+CSGClaw 会为每个 agent 调用 BoxLite CLI 时显式传入 `--home`，固定使用 `~/.csgclaw/agents/<agent-id>/boxlite` 作为每个 agent 的 runtime home。这个显式 home 对 CSGClaw 管理的 sandbox 生效，优先于 `BOXLITE_HOME`；你手动运行 `boxlite` 且不传 `--home` 时，`BOXLITE_HOME` 仍按 BoxLite 自身规则生效。
 
-`boxlite-cli` provider 运行时不需要 vendored Go SDK。当前源码构建和 release 打包都走同一条 BoxLite CLI 路径：
+`boxlite` provider 运行时不需要 vendored Go SDK。当前源码构建和 release 打包都走同一条 BoxLite CLI 路径：
 
-- `make build`、`make test`、`make run`、`make package` 都使用标准的 `boxlite-cli` 路径。
-- `boxlite-cli` 是内置的 BoxLite sandbox provider，同时仓库也保留 `csghub` 等其他非 BoxLite provider。
+- `make build`、`make test`、`make run`、`make package` 都使用标准的 `boxlite` 路径。
+- `boxlite` 是内置的 BoxLite sandbox provider，同时仓库也保留 `csghub` 等其他非 BoxLite provider。
+
+如果要使用 Docker 作为 sandbox provider，可以这样配置：
+
+```toml
+[sandbox]
+provider = "docker"
+```
+
+当 `provider = "docker"` 时，CSGClaw 会调用本地 `docker` CLI。默认情况下会从 `PATH` 解析 `docker`。如果你需要指定特定二进制路径，可以设置 `docker_cli_path`：
+
+```toml
+[sandbox]
+provider = "docker"
+docker_cli_path = "/usr/local/bin/docker"
+```
 
 ## Channel 配置
 
 Channel 集成是可选的。默认情况下，CSGClaw 直接使用内置 Web UI；只有在你需要接入飞书等外部消息平台时，才需要增加 channel 配置。
 
-Channel 相关配置通常放在顶层字段下，例如 `channels.feishu`。主配置文档主要说明通用的 server、model、bootstrap 和 sandbox 配置；实际使用时，再按需补充对应的 channel 配置块。
+`config.toml` 只保留通用的 server、model、bootstrap 和 sandbox 配置。飞书凭证放在所选 `config.toml` 旁边的独立 `channels/feishu.toml` 文件中；`config.toml` 里的旧 `[channels.feishu]` 配置块不会被读取。
 
 更详细的字段说明和示例，请参阅 [飞书 Channel 配置](channel/feishu.zh.md)。

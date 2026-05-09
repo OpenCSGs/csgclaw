@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
@@ -63,6 +64,7 @@ type Dependencies struct {
 }
 
 type Runtime struct {
+	mu   sync.RWMutex
 	deps Dependencies
 }
 
@@ -72,7 +74,26 @@ var (
 )
 
 func New(deps Dependencies) *Runtime {
+	deps.Channels = cloneChannelsConfig(deps.Channels)
 	return &Runtime{deps: deps}
+}
+
+func (r *Runtime) SetChannels(channels config.ChannelsConfig) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.deps.Channels = cloneChannelsConfig(channels)
+}
+
+func (r *Runtime) channels() config.ChannelsConfig {
+	if r == nil {
+		return config.ChannelsConfig{}
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return cloneChannelsConfig(r.deps.Channels)
 }
 
 func (r *Runtime) Kind() string {
@@ -285,7 +306,7 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 	if err != nil {
 		return sandbox.CreateSpec{}, err
 	}
-	envVars := r.deps.BuildRuntimeEnv(managerBaseURL, r.deps.Server.AccessToken, botID, llmBaseURL, modelID, r.deps.Channels)
+	envVars := r.deps.BuildRuntimeEnv(managerBaseURL, r.deps.Server.AccessToken, botID, llmBaseURL, modelID, r.channels())
 	r.deps.AddProfileEnv(envVars, profile.Env)
 	envVars["HOME"] = "/home/picoclaw"
 	spec := sandbox.CreateSpec{
@@ -313,6 +334,19 @@ func (r *Runtime) ProjectsGuestPath() string {
 
 func (r *Runtime) GatewayLogPath() string {
 	return BoxGatewayLogPath
+}
+
+func cloneChannelsConfig(channels config.ChannelsConfig) config.ChannelsConfig {
+	cloned := config.ChannelsConfig{
+		FeishuAdminOpenID: channels.FeishuAdminOpenID,
+	}
+	if len(channels.Feishu) > 0 {
+		cloned.Feishu = make(map[string]config.FeishuConfig, len(channels.Feishu))
+		for name, feishu := range channels.Feishu {
+			cloned.Feishu[name] = feishu
+		}
+	}
+	return cloned
 }
 
 func (r *Runtime) openSandboxRuntime(agentName string) (sandbox.Runtime, string, error) {

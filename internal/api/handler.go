@@ -12,7 +12,7 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/bot"
-	"csgclaw/internal/channel"
+	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/upgrade"
@@ -26,7 +26,7 @@ type Handler struct {
 	imBus             *im.Bus
 	imProvisioner     *im.Provisioner
 	botBridge         *im.BotBridge
-	feishu            *channel.FeishuService
+	feishu            *feishu.Service
 	llm               *llm.Service
 	serverAccessToken string
 	serverNoAuth      bool
@@ -92,24 +92,24 @@ type addRoomMembersRequest struct {
 	Locale    string   `json:"locale"`
 }
 
-func NewHandler(svc *agent.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *channel.FeishuService, llmSvc *llm.Service) *Handler {
+func NewHandler(svc *agent.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *feishu.Service, llmSvc *llm.Service) *Handler {
 	return NewHandlerWithBotAndAccessToken(svc, nil, imSvc, imBus, botBridge, feishu, llmSvc, "")
 }
 
-func NewHandlerWithBot(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *channel.FeishuService, llmSvc *llm.Service) *Handler {
+func NewHandlerWithBot(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *feishu.Service, llmSvc *llm.Service) *Handler {
 	return NewHandlerWithBotAndAccessToken(svc, botSvc, imSvc, imBus, botBridge, feishu, llmSvc, "")
 }
 
-func NewHandlerWithBotAndAccessToken(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *channel.FeishuService, llmSvc *llm.Service, serverAccessToken string) *Handler {
+func NewHandlerWithBotAndAccessToken(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *feishu.Service, llmSvc *llm.Service, serverAccessToken string) *Handler {
 	return NewHandlerWithBotAndAuth(svc, botSvc, imSvc, imBus, botBridge, feishu, llmSvc, serverAccessToken, false)
 }
 
-func NewHandlerWithBotAndAuth(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *channel.FeishuService, llmSvc *llm.Service, serverAccessToken string, serverNoAuth bool) *Handler {
+func NewHandlerWithBotAndAuth(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *feishu.Service, llmSvc *llm.Service, serverAccessToken string, serverNoAuth bool) *Handler {
 	if botSvc != nil {
 		botSvc.SetDependencies(svc, imSvc, feishu)
 		botSvc.SetIMBus(imBus)
 	}
-	return &Handler{
+	h := &Handler{
 		svc:               svc,
 		botSvc:            botSvc,
 		im:                imSvc,
@@ -122,6 +122,7 @@ func NewHandlerWithBotAndAuth(svc *agent.Service, botSvc *bot.Service, imSvc *im
 		serverNoAuth:      serverNoAuth,
 		upgradeApply:      upgrade.StartApplyHelper,
 	}
+	return h
 }
 
 func (h *Handler) SetUpgradeManager(manager *upgrade.Manager) {

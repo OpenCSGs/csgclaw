@@ -17,13 +17,12 @@ var (
 	loadIMBootstrap = im.LoadBootstrap
 	openBotStore    = bot.NewStore
 	openAgentState  = func(cfg config.Config, path string) (agentStateReader, error) {
-		return agent.NewServiceWithLLMAndChannels(
+		return agent.NewServiceWithLLM(
 			effectiveLLMConfig(cfg),
 			cfg.Server,
-			cfg.Channels,
 			cfg.Bootstrap.EffectiveManagerImage(),
 			path,
-			runtimewiring.WithPicoClawSandboxRuntime(),
+			runtimewiring.WithPicoClawSandboxRuntime(cfg.Channels),
 		)
 	}
 )

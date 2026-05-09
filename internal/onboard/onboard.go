@@ -71,6 +71,13 @@ func ensureConfigState(path string) (config.Config, error) {
 	if hasExistingConfig && configNeedsCompletion(existingContent) {
 		needsSave = true
 	}
+	if hasExistingConfig && strings.Contains(existingContent, `provider = "boxlite-cli"`) {
+		// Keep startup migration local to bootstrap so an existing config.toml
+		// using the legacy sandbox provider alias is rewritten to the canonical
+		// value during normal `csgclaw serve`.
+		// TODO: Remove this migration trigger after older config.toml files have been migrated.
+		needsSave = true
+	}
 	if needsSave {
 		if err := cfg.Save(path); err != nil {
 			return config.Config{}, err
@@ -110,8 +117,8 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 	if err != nil {
 		return bot.Bot{}, err
 	}
-	opts = append(opts, runtimewiring.WithPicoClawSandboxRuntime())
-	agentSvc, err := agent.NewServiceWithLLMAndChannels(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
+	opts = append(opts, runtimewiring.WithPicoClawSandboxRuntime(cfg.Channels))
+	agentSvc, err := agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
 	if err != nil {
 		return bot.Bot{}, err
 	}
@@ -147,8 +154,7 @@ func defaultConfig() config.Config {
 		},
 		Bootstrap: config.BootstrapConfig{},
 		Sandbox: config.SandboxConfig{
-			Provider:    config.DefaultSandboxProvider,
-			HomeDirName: config.DefaultSandboxHomeDirName,
+			Provider: config.DefaultSandboxProvider,
 		},
 	}
 }
@@ -196,7 +202,6 @@ func configNeedsCompletion(content string) bool {
 		`manager_image_override = `,
 		"[sandbox]",
 		`provider = `,
-		`home_dir_name = `,
 		`debian_registries_override = `,
 	}
 	for _, snippet := range requiredSnippets {

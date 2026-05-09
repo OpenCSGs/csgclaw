@@ -29,11 +29,10 @@ func TestClientCheckUpdateAvailable(t *testing.T) {
 				t.Fatalf("url = %q, want latest endpoint", req.URL.String())
 			}
 			return jsonResponse(http.StatusOK, `{
-				"version":"v0.2.7",
-				"download_base_url":"/downloads/v0.2.7",
+				"name":"v0.2.7",
 				"assets":[
 					{"name":"csgclaw-cli_v0.2.7_darwin_arm64.tar.gz"},
-					{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","size":123,"sha256":"abc"}
+					{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","browser_download_url":"http://csgclaw.opencsg.com/releases/v0.2.7/csgclaw_v0.2.7_darwin_arm64.tar.gz","size":123,"sha256":"abc"}
 				]
 			}`), nil
 		}),
@@ -61,15 +60,28 @@ func TestClientCheckUpdateAvailable(t *testing.T) {
 	if got, want := result.Asset.Name, "csgclaw_v0.2.7_darwin_arm64.tar.gz"; got != want {
 		t.Fatalf("Asset.Name = %q, want %q", got, want)
 	}
-	if got, want := result.Asset.DownloadURL, "https://csgclaw.opencsg.com/downloads/v0.2.7/csgclaw_v0.2.7_darwin_arm64.tar.gz"; got != want {
+	if got, want := result.Asset.DownloadURL, "http://csgclaw.opencsg.com/releases/v0.2.7/csgclaw_v0.2.7_darwin_arm64.tar.gz"; got != want {
 		t.Fatalf("Asset.DownloadURL = %q, want %q", got, want)
 	}
 }
 
-func TestClientCheckNoUpdate(t *testing.T) {
+func TestClientCheckRequiresNameField(t *testing.T) {
 	client := Client{
 		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return jsonResponse(http.StatusOK, `{"version":"v0.2.7","assets":[]}`), nil
+		}),
+		LatestURL: "https://example.test/releases/latest",
+	}
+
+	_, err := client.Check(context.Background(), "v0.2.7")
+	if err == nil || !strings.Contains(err.Error(), `latest version "" is not a valid semver release`) {
+		t.Fatalf("Check() error = %v, want missing name validation error", err)
+	}
+}
+func TestClientCheckNoUpdate(t *testing.T) {
+	client := Client{
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(http.StatusOK, `{"name":"v0.2.7","assets":[]}`), nil
 		}),
 		LatestURL: "https://example.test/releases/latest",
 		GOOS:      "darwin",
@@ -99,7 +111,7 @@ func TestClientCheckRejectsInvalidCurrentVersion(t *testing.T) {
 func TestClientCheckErrorsWhenAssetMissing(t *testing.T) {
 	client := Client{
 		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			return jsonResponse(http.StatusOK, `{"version":"v0.2.7","assets":[{"name":"csgclaw_v0.2.7_linux_amd64.tar.gz"}]}`), nil
+			return jsonResponse(http.StatusOK, `{"name":"v0.2.7","assets":[{"name":"csgclaw_v0.2.7_linux_amd64.tar.gz"}]}`), nil
 		}),
 		LatestURL: "https://example.test/releases/latest",
 		GOOS:      "darwin",
@@ -192,7 +204,7 @@ func TestClientPrepareReleaseRejectsSizeMismatch(t *testing.T) {
 	}
 }
 
-func TestClientPrepareReleaseRejectsSHA256Mismatch(t *testing.T) {
+func TestClientPrepareReleaseAllowsMissingSHA256MetadataTemporarily(t *testing.T) {
 	archive := releaseTarball(t, map[string]string{
 		"csgclaw/bin/csgclaw": "#!/bin/sh\n",
 		"csgclaw/bin/boxlite": "#!/bin/sh\n",
@@ -209,14 +221,16 @@ func TestClientPrepareReleaseRejectsSHA256Mismatch(t *testing.T) {
 		}),
 	}
 
-	_, err := client.PrepareRelease(context.Background(), ReleaseAsset{
+	prepared, err := client.PrepareRelease(context.Background(), ReleaseAsset{
 		Name:        "csgclaw_v0.2.7_darwin_arm64.tar.gz",
 		DownloadURL: "https://downloads.example.test/csgclaw.tar.gz",
 		Size:        int64(len(archive)),
-		SHA256:      strings.Repeat("0", 64),
 	}, t.TempDir())
-	if err == nil || !strings.Contains(err.Error(), "downloaded sha256 mismatch") {
-		t.Fatalf("PrepareRelease() error = %v, want sha256 mismatch", err)
+	if err != nil {
+		t.Fatalf("PrepareRelease() error = %v, want temporary success without sha256 metadata", err)
+	}
+	if prepared.BundleDir == "" {
+		t.Fatalf("PrepareRelease() = %#v, want extracted bundle", prepared)
 	}
 }
 

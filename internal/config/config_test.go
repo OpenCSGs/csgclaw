@@ -84,9 +84,6 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Sandbox.Provider, DefaultSandboxProvider; got != want {
 		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
 	}
-	if got, want := cfg.Sandbox.HomeDirName, DefaultSandboxHomeDirName; got != want {
-		t.Fatalf("cfg.Sandbox.HomeDirName = %q, want %q", got, want)
-	}
 	if got, want := strings.Join(cfg.Sandbox.EffectiveDebianRegistries(), ","), strings.Join(DefaultDebianRegistries, ","); got != want {
 		t.Fatalf("cfg.Sandbox.EffectiveDebianRegistries() = %q, want %q", got, want)
 	}
@@ -105,7 +102,7 @@ func TestLoadReadsSandboxConfig(t *testing.T) {
 listen_addr = "127.0.0.1:18080"
 
 [sandbox]
-provider = "boxlite-cli"
+provider = "boxlite"
 home_dir_name = "sandbox-home"
 debian_registries_override = ["registry.a", " docker.io ", "registry.a"]
 storage_path = "/shared/csgclaw"
@@ -129,9 +126,6 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Sandbox.Provider, BoxLiteCLIProvider; got != want {
 		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
 	}
-	if got, want := cfg.Sandbox.HomeDirName, "sandbox-home"; got != want {
-		t.Fatalf("cfg.Sandbox.HomeDirName = %q, want %q", got, want)
-	}
 	if got, want := strings.Join(cfg.Sandbox.DebianRegistriesOverride, ","), "registry.a,docker.io"; got != want {
 		t.Fatalf("cfg.Sandbox.DebianRegistriesOverride = %q, want %q", got, want)
 	}
@@ -140,6 +134,81 @@ models = ["minimax-m2.7"]
 	}
 	if got, want := cfg.Sandbox.StoragePath, "/shared/csgclaw"; got != want {
 		t.Fatalf("cfg.Sandbox.StoragePath = %q, want %q", got, want)
+	}
+}
+
+func TestLoadNormalizesLegacyBoxLiteCLIProvider(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[sandbox]
+provider = "boxlite-cli"
+
+[models]
+default = "default.minimax-m2.7"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["minimax-m2.7"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := cfg.Sandbox.Provider, BoxLiteCLIProvider; got != want {
+		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
+	}
+}
+
+func TestLoadReadsDockerSandboxConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[sandbox]
+provider = "docker"
+home_dir_name = "docker-runtime"
+docker_cli_path = "/custom/docker"
+
+[models]
+default = "default.minimax-m2.7"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["minimax-m2.7"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := cfg.Sandbox.Provider, DockerProvider; got != want {
+		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
+	}
+	if got, want := cfg.Sandbox.DockerCLIPath, "/custom/docker"; got != want {
+		t.Fatalf("cfg.Sandbox.DockerCLIPath = %q, want %q", got, want)
+	}
+	if got, want := cfg.Sandbox.EffectiveDockerCLIPath(), "/custom/docker"; got != want {
+		t.Fatalf("EffectiveDockerCLIPath() = %q, want %q", got, want)
+	}
+}
+
+func TestSandboxEffectiveDockerCLIPathDefault(t *testing.T) {
+	cfg := SandboxConfig{Provider: DockerProvider}.Resolved()
+	if got, want := cfg.EffectiveDockerCLIPath(), "docker"; got != want {
+		t.Fatalf("EffectiveDockerCLIPath() = %q, want %q", got, want)
 	}
 }
 
@@ -283,7 +352,7 @@ reasoning_effort = "medium"
 	}
 }
 
-func TestLoadSupportsNamedFeishuChannelConfigs(t *testing.T) {
+func TestLoadIgnoresLegacyFeishuChannelConfigs(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `[server]
@@ -318,20 +387,11 @@ app_secret = "dev-secret"
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if got, want := cfg.Channels.Feishu["manager"].AppID, "cli_manager"; got != want {
-		t.Fatalf("manager app_id = %q, want %q", got, want)
+	if got := cfg.Channels.FeishuAdminOpenID; got != "" {
+		t.Fatalf("feishu admin_open_id = %q, want empty", got)
 	}
-	if got, want := cfg.Channels.FeishuAdminOpenID, "ou_admin"; got != want {
-		t.Fatalf("feishu admin_open_id = %q, want %q", got, want)
-	}
-	if got, want := cfg.Channels.Feishu["manager"].AppSecret, "manager-secret"; got != want {
-		t.Fatalf("manager app_secret = %q, want %q", got, want)
-	}
-	if got, want := cfg.Channels.Feishu["dev"].AppID, "cli_dev"; got != want {
-		t.Fatalf("dev app_id = %q, want %q", got, want)
-	}
-	if got, want := cfg.Channels.Feishu["dev"].AppSecret, "dev-secret"; got != want {
-		t.Fatalf("dev app_secret = %q, want %q", got, want)
+	if len(cfg.Channels.Feishu) != 0 {
+		t.Fatalf("legacy feishu channel config was loaded: %+v", cfg.Channels.Feishu)
 	}
 }
 
@@ -353,7 +413,6 @@ func TestSaveWritesModelsSection(t *testing.T) {
 		LLM:    models,
 		Sandbox: SandboxConfig{
 			Provider:                 BoxLiteCLIProvider,
-			HomeDirName:              "sandbox-home",
 			StoragePath:              "/mnt/csgclaw",
 			DebianRegistriesOverride: []string{"registry.a", "docker.io"},
 		},
@@ -393,7 +452,7 @@ func TestSaveWritesModelsSection(t *testing.T) {
 	if !strings.Contains(content, "[models]") || !strings.Contains(content, "[models.providers.default]") {
 		t.Fatalf("saved config missing models sections:\n%s", content)
 	}
-	if !strings.Contains(content, "[sandbox]") || !strings.Contains(content, `provider = "boxlite-cli"`) || !strings.Contains(content, `home_dir_name = "sandbox-home"`) {
+	if !strings.Contains(content, "[sandbox]") || !strings.Contains(content, `provider = "boxlite"`) {
 		t.Fatalf("saved config missing sandbox section:\n%s", content)
 	}
 	if strings.Contains(content, "boxlite_cli_path") {
@@ -414,17 +473,16 @@ func TestSaveWritesModelsSection(t *testing.T) {
 	if strings.Contains(content, "[llm]") || strings.Contains(content, "model_id = ") {
 		t.Fatalf("saved config should not contain legacy llm/profile keys:\n%s", content)
 	}
-	for _, want := range []string{
-		"[channels.feishu.dev]",
-		`admin_open_id = "ou_admin"`,
-		`app_id = "cli_dev"`,
-		`app_secret = "dev-secret"`,
-		"[channels.feishu.manager]",
-		`app_id = "cli_manager"`,
-		`app_secret = "manager-secret"`,
+	for _, notWant := range []string{
+		"[channels.feishu",
+		"admin_open_id",
+		"cli_dev",
+		"dev-secret",
+		"cli_manager",
+		"manager-secret",
 	} {
-		if !strings.Contains(content, want) {
-			t.Fatalf("saved config missing %q:\n%s", want, content)
+		if strings.Contains(content, notWant) {
+			t.Fatalf("saved config should not contain feishu channel config %q:\n%s", notWant, content)
 		}
 	}
 }
@@ -498,8 +556,7 @@ func TestSaveFormatsTopLevelSectionsWithoutExtraWhitespace(t *testing.T) {
 			ManagerImageOverride: "ghcr.io/russellluo/picoclaw:2026.4.25",
 		},
 		Sandbox: SandboxConfig{
-			Provider:    BoxLiteCLIProvider,
-			HomeDirName: DefaultSandboxHomeDirName,
+			Provider: BoxLiteCLIProvider,
 		},
 	}
 
@@ -524,8 +581,7 @@ no_auth = true
 manager_image_override = "ghcr.io/russellluo/picoclaw:2026.4.25"
 
 [sandbox]
-provider = "boxlite-cli"
-home_dir_name = "boxlite"
+provider = "boxlite"
 debian_registries_override = []
 
 [models]
@@ -551,8 +607,7 @@ func TestSaveWritesEmptySandboxDebianRegistriesOverride(t *testing.T) {
 			AccessToken:      "shared-token",
 		},
 		Sandbox: SandboxConfig{
-			Provider:    BoxLiteCLIProvider,
-			HomeDirName: "sandbox-home",
+			Provider: BoxLiteCLIProvider,
 		},
 		Models: SingleProfileLLM(ModelConfig{
 			BaseURL: "http://127.0.0.1:4000",
@@ -571,6 +626,48 @@ func TestSaveWritesEmptySandboxDebianRegistriesOverride(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `debian_registries_override = []`) {
 		t.Fatalf("saved config missing empty sandbox debian_registries_override:\n%s", string(data))
+	}
+}
+
+func TestSaveRewritesLegacyBoxLiteCLIProviderAfterLoad(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[sandbox]
+provider = "boxlite-cli"
+
+[models]
+default = "default.gpt-test"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["gpt-test"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	saved := string(data)
+	if !strings.Contains(saved, `provider = "boxlite"`) {
+		t.Fatalf("saved config missing canonical sandbox provider:\n%s", saved)
+	}
+	if strings.Contains(saved, `provider = "boxlite-cli"`) {
+		t.Fatalf("saved config kept legacy sandbox provider alias:\n%s", saved)
 	}
 }
 
@@ -622,15 +719,11 @@ models = ["gpt-test"]
 func TestLoadExpandsNonServerEnvValues(t *testing.T) {
 	t.Setenv("MANAGER_IMAGE", "picoclaw:test")
 	t.Setenv("SANDBOX_PROVIDER", BoxLiteCLIProvider)
-	t.Setenv("SANDBOX_HOME", "env-home")
 	t.Setenv("MODEL_SELECTOR", "remote.gpt-env")
 	t.Setenv("MODEL_BASE_HOST", "models.example.test")
 	t.Setenv("MODEL_API_KEY", "sk-env")
 	t.Setenv("MODEL_ID", "gpt-env")
 	t.Setenv("REASONING_EFFORT", "HIGH")
-	t.Setenv("FEISHU_ADMIN_OPEN_ID", "ou_env_admin")
-	t.Setenv("FEISHU_APP_ID", "cli_env")
-	t.Setenv("FEISHU_APP_SECRET", "feishu-env-secret")
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -642,7 +735,6 @@ manager_image_override = "${MANAGER_IMAGE}"
 
 [sandbox]
 provider = "${SANDBOX_PROVIDER}"
-home_dir_name = "${SANDBOX_HOME}"
 
 [models]
 default = "${MODEL_SELECTOR}"
@@ -652,13 +744,6 @@ base_url = "https://${MODEL_BASE_HOST}/v1"
 api_key = "${MODEL_API_KEY}"
 models = ["${MODEL_ID}", "gpt-static"]
 reasoning_effort = "${REASONING_EFFORT}"
-
-[channels.feishu]
-admin_open_id = "${FEISHU_ADMIN_OPEN_ID}"
-
-[channels.feishu.manager]
-app_id = "${FEISHU_APP_ID}"
-app_secret = "${FEISHU_APP_SECRET}"
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -674,9 +759,6 @@ app_secret = "${FEISHU_APP_SECRET}"
 	}
 	if got, want := cfg.Sandbox.Provider, BoxLiteCLIProvider; got != want {
 		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
-	}
-	if got, want := cfg.Sandbox.HomeDirName, "env-home"; got != want {
-		t.Fatalf("cfg.Sandbox.HomeDirName = %q, want %q", got, want)
 	}
 	if got, want := cfg.Models.Default, "remote.gpt-env"; got != want {
 		t.Fatalf("cfg.Models.Default = %q, want %q", got, want)
@@ -696,15 +778,6 @@ app_secret = "${FEISHU_APP_SECRET}"
 	if got, want := strings.Join(cfg.Models.Providers["remote"].Models, ","), "gpt-env,gpt-static"; got != want {
 		t.Fatalf("cfg.Models.Providers[remote].Models = %q, want %q", got, want)
 	}
-	if got, want := cfg.Channels.FeishuAdminOpenID, "ou_env_admin"; got != want {
-		t.Fatalf("cfg.Channels.FeishuAdminOpenID = %q, want %q", got, want)
-	}
-	if got, want := cfg.Channels.Feishu["manager"].AppID, "cli_env"; got != want {
-		t.Fatalf("cfg.Channels.Feishu[manager].AppID = %q, want %q", got, want)
-	}
-	if got, want := cfg.Channels.Feishu["manager"].AppSecret, "feishu-env-secret"; got != want {
-		t.Fatalf("cfg.Channels.Feishu[manager].AppSecret = %q, want %q", got, want)
-	}
 }
 
 func TestSavePreservesEnvPlaceholdersAfterLoad(t *testing.T) {
@@ -713,15 +786,11 @@ func TestSavePreservesEnvPlaceholdersAfterLoad(t *testing.T) {
 	t.Setenv("ACCESS_TOKEN", "your_access_token")
 	t.Setenv("MANAGER_IMAGE", "picoclaw:test")
 	t.Setenv("SANDBOX_PROVIDER", BoxLiteCLIProvider)
-	t.Setenv("SANDBOX_HOME", "env-home")
 	t.Setenv("MODEL_SELECTOR", "remote.gpt-env")
 	t.Setenv("MODEL_BASE_HOST", "models.example.test")
 	t.Setenv("MODEL_API_KEY", "sk-env")
 	t.Setenv("MODEL_ID", "gpt-env")
 	t.Setenv("REASONING_EFFORT", "medium")
-	t.Setenv("FEISHU_ADMIN_OPEN_ID", "ou_env_admin")
-	t.Setenv("FEISHU_APP_ID", "cli_env")
-	t.Setenv("FEISHU_APP_SECRET", "feishu-env-secret")
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -735,7 +804,6 @@ manager_image_override = "${MANAGER_IMAGE}"
 
 [sandbox]
 provider = "${SANDBOX_PROVIDER}"
-home_dir_name = "${SANDBOX_HOME}"
 
 [models]
 default = "${MODEL_SELECTOR}"
@@ -745,13 +813,6 @@ base_url = "https://${MODEL_BASE_HOST}/v1"
 api_key = "${MODEL_API_KEY}"
 models = ["${MODEL_ID}", "gpt-static"]
 reasoning_effort = "${REASONING_EFFORT}"
-
-[channels.feishu]
-admin_open_id = "${FEISHU_ADMIN_OPEN_ID}"
-
-[channels.feishu.manager]
-app_id = "${FEISHU_APP_ID}"
-app_secret = "${FEISHU_APP_SECRET}"
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -766,7 +827,6 @@ app_secret = "${FEISHU_APP_SECRET}"
 	t.Setenv("ACCESS_TOKEN", "changed_access_token")
 	t.Setenv("MANAGER_IMAGE", "changed-image")
 	t.Setenv("MODEL_API_KEY", "changed-model-key")
-	t.Setenv("FEISHU_APP_SECRET", "changed-feishu-secret")
 
 	if err := cfg.Save(path); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -783,19 +843,18 @@ app_secret = "${FEISHU_APP_SECRET}"
 		`access_token = "${ACCESS_TOKEN}"`,
 		`manager_image_override = "${MANAGER_IMAGE}"`,
 		`provider = "${SANDBOX_PROVIDER}"`,
-		`home_dir_name = "${SANDBOX_HOME}"`,
 		`default = "${MODEL_SELECTOR}"`,
 		`base_url = "https://${MODEL_BASE_HOST}/v1"`,
 		`api_key = "${MODEL_API_KEY}"`,
 		`models = ["${MODEL_ID}", "gpt-static"]`,
 		`reasoning_effort = "${REASONING_EFFORT}"`,
-		`admin_open_id = "${FEISHU_ADMIN_OPEN_ID}"`,
-		`app_id = "${FEISHU_APP_ID}"`,
-		`app_secret = "${FEISHU_APP_SECRET}"`,
 	} {
 		if !strings.Contains(saved, want) {
 			t.Fatalf("saved config missing %q:\n%s", want, saved)
 		}
+	}
+	if strings.Contains(saved, "[channels.feishu") {
+		t.Fatalf("saved config should not contain feishu channel config:\n%s", saved)
 	}
 }
 
@@ -876,7 +935,7 @@ func TestLoadIgnoresLegacyBoxLiteCLIPath(t *testing.T) {
 listen_addr = "127.0.0.1:18080"
 
 [sandbox]
-provider = "boxlite-cli"
+provider = "boxlite"
 home_dir_name = "sandbox-home"
 boxlite_cli_path = "/custom/boxlite"
 
@@ -898,9 +957,6 @@ models = ["gpt-test"]
 	}
 	if got, want := cfg.Sandbox.Provider, BoxLiteCLIProvider; got != want {
 		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
-	}
-	if got, want := cfg.Sandbox.HomeDirName, "sandbox-home"; got != want {
-		t.Fatalf("cfg.Sandbox.HomeDirName = %q, want %q", got, want)
 	}
 }
 

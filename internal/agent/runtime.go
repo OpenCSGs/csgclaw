@@ -55,11 +55,7 @@ func (s *Service) ensureRuntimeAtHome(homeDir string) (sandbox.Runtime, error) {
 }
 
 func (s *Service) lookupBootstrapManager(ctx context.Context) (sandbox.Runtime, sandbox.Instance, error) {
-	homeDir, err := s.sandboxRuntimeHome(ManagerName)
-	if err != nil {
-		return nil, nil, err
-	}
-	rt, err := s.ensureRuntimeAtHome(homeDir)
+	rt, err := s.ensureRuntime(ManagerName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -152,28 +148,12 @@ func (s *Service) closeRuntime(homeDir string, rt sandbox.Runtime) error {
 	return rt.Close()
 }
 
-func sandboxRuntimeHome(agentName string) (string, error) {
-	return sandboxRuntimeHomeWithDirName(agentName, config.DefaultSandboxHomeDirName)
-}
-
 func (s *Service) sandboxRuntimeHome(agentName string) (string, error) {
-	homeDirName := config.DefaultSandboxHomeDirName
-	if s != nil && strings.TrimSpace(s.sandboxHome) != "" {
-		homeDirName = s.sandboxHome
-	}
-	return sandboxRuntimeHomeWithDirName(agentName, homeDirName)
-}
-
-func sandboxRuntimeHomeWithDirName(agentName, homeDirName string) (string, error) {
 	agentHome, err := agentHomeDir(agentName)
 	if err != nil {
 		return "", err
 	}
-	homeDirName = strings.TrimSpace(homeDirName)
-	if homeDirName == "" {
-		homeDirName = config.DefaultSandboxHomeDirName
-	}
-	return filepath.Join(agentHome, homeDirName), nil
+	return filepath.Join(agentHome, config.RuntimeHomeDirName), nil
 }
 
 func agentHomeDir(agentName string) (string, error) {

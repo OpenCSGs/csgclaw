@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 )
 
 var (
@@ -22,28 +21,43 @@ func StartApplyHelper(opts ApplyHelperOptions) error {
 		return fmt.Errorf("resolve executable: %w", err)
 	}
 
-	args := []string{"upgrade"}
-	if configPath := strings.TrimSpace(opts.ConfigPath); configPath != "" {
-		args = append(args, "--config", configPath)
+	artifacts, err := PrepareApplyArtifacts(opts.ConfigPath)
+	if err != nil {
+		return err
 	}
 
 	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", os.DevNull, err)
 	}
-	defer devNull.Close()
+
+	logFile, err := os.OpenFile(artifacts.LogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		_ = devNull.Close()
+		return fmt.Errorf("open upgrade helper log %s: %w", artifacts.LogPath, err)
+	}
+
+	args := []string{"upgrade"}
+	if opts.ConfigPath != "" {
+		args = append(args, "--config", opts.ConfigPath)
+	}
 
 	cmd := startHelperCommand(exe, args...)
 	cmd.Stdin = devNull
-	cmd.Stdout = devNull
-	cmd.Stderr = devNull
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.Env = append(os.Environ(), artifacts.Env()...)
 
 	if err := cmd.Start(); err != nil {
+		_ = logFile.Close()
+		_ = devNull.Close()
 		return fmt.Errorf("start upgrade helper: %w", err)
 	}
 
 	go func() {
 		_ = cmd.Wait()
+		_ = logFile.Close()
+		_ = devNull.Close()
 	}()
 
 	return nil

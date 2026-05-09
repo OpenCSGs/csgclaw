@@ -287,6 +287,102 @@ func TestExecuteBotDeleteSupportsJSONOutput(t *testing.T) {
 	}
 }
 
+func TestExecuteBotConfigSetUsesFeishuConfigRoute(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdin:  strings.NewReader("stdin-secret\n"),
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodPut {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodPut)
+			}
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/config" {
+				t.Fatalf("url = %q, want feishu config route", req.URL.String())
+			}
+			if got := req.Header.Get("Authorization"); got != "Bearer token" {
+				t.Fatalf("Authorization = %q, want bearer token", got)
+			}
+			var payload map[string]any
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			for key, want := range map[string]string{
+				"bot_id":        "u-dev",
+				"app_id":        "cli_dev",
+				"app_secret":    "stdin-secret",
+				"admin_open_id": "ou_admin",
+			} {
+				if got := payload[key]; got != want {
+					t.Fatalf("payload[%s] = %#v, want %q; payload=%#v", key, got, want, payload)
+				}
+			}
+			return jsonResponse(http.StatusOK, `{"bot_id":"u-dev","configured":true,"app_id":"cli_dev","app_secret":"present","admin_open_id":"ou_admin","reloaded":true}`), nil
+		}),
+	}
+
+	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--token", "token", "--output", "json", "bot", "config", "--channel", "feishu", "--set", "--bot-id", "u-dev", "--app-id", "cli_dev", "--admin-open-id", "ou_admin", "--app-secret-stdin"})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if strings.Contains(stdout.String(), "stdin-secret") {
+		t.Fatalf("stdout leaked secret: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"app_secret": "present"`) {
+		t.Fatalf("stdout = %q, want masked secret", stdout.String())
+	}
+}
+
+func TestExecuteBotConfigGetUsesFeishuConfigRoute(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodGet {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
+			}
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/config?bot_id=u-dev" {
+				t.Fatalf("url = %q, want feishu config get route", req.URL.String())
+			}
+			return jsonResponse(http.StatusOK, `{"bot_id":"u-dev","configured":true,"app_id":"cli_dev","app_secret":"present"}`), nil
+		}),
+	}
+
+	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "config", "--channel", "feishu", "--get", "--bot-id", "u-dev"})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "u-dev") || !strings.Contains(stdout.String(), "present") {
+		t.Fatalf("stdout = %s, want bot and masked secret", stdout.String())
+	}
+}
+
+func TestExecuteBotConfigReloadUsesFeishuConfigRoute(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodPost {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
+			}
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/config" {
+				t.Fatalf("url = %q, want feishu config reload route", req.URL.String())
+			}
+			return jsonResponse(http.StatusOK, `{"status":"reloaded","feishu_bots":["u-dev"]}`), nil
+		}),
+	}
+
+	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "config", "--channel", "feishu", "--reload"})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "reloaded") || !strings.Contains(stdout.String(), "u-dev") {
+		t.Fatalf("stdout = %s, want reload result", stdout.String())
+	}
+}
+
 func TestExecuteRoomCreateUsesChannelRoute(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{

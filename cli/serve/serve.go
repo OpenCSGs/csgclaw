@@ -26,8 +26,8 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/bot"
-	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/codexbridge"
+	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
@@ -363,12 +363,36 @@ func ensureServeBootstrapState(ctx context.Context, configPath string) error {
 		return err
 	}
 	if state.Complete() {
-		return nil
+		needsMigration, err := configNeedsLegacyBoxLiteProviderMigration(state.ConfigPath)
+		if err != nil {
+			return err
+		}
+		if !needsMigration {
+			return nil
+		}
 	}
 
 	slog.Info("bootstrap state incomplete; auto-initializing local state", "config_path", state.ConfigPath)
 	_, err = EnsureBootstrapState(ctx, internalonboard.EnsureStateOptions{ConfigPath: configPath})
 	return err
+}
+
+func configNeedsLegacyBoxLiteProviderMigration(path string) (bool, error) {
+	if strings.TrimSpace(path) == "" {
+		return false, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read config: %w", err)
+	}
+	// Keep `serve` rewriting older config.toml files that still use the legacy
+	// sandbox provider alias even when the rest of bootstrap state is already
+	// complete, so migration is not skipped by the startup fast path.
+	// TODO: Remove this migration trigger after older config.toml files have been migrated.
+	return strings.Contains(string(data), `provider = "boxlite-cli"`), nil
 }
 
 func configureServeLogger(w io.Writer, level string) (func(), error) {
@@ -403,11 +427,11 @@ func parseServeLogLevel(level string) (slog.Level, error) {
 	}
 }
 
-func startServer(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, feishuSvc *channel.FeishuService, output string) error {
+func startServer(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, feishuSvc *feishu.Service, output string) error {
 	return startServerWithConfigPath(ctx, run, cfg, svc, botSvc, imSvc, imBus, feishuSvc, "", output)
 }
 
-func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, feishuSvc *channel.FeishuService, configPath, output string) error {
+func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, feishuSvc *feishu.Service, configPath, output string) error {
 	_ = EnsureCLIProxy(ctx)
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -453,6 +477,14 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 			})
 		},
 	})
+	configureFeishuService(feishuSvc, configPath, func(channels config.ChannelsConfig) {
+		runtimewiring.UpdatePicoClawChannels(svc, channels)
+	})
+	if message, err := upgrade.ConsumeApplyFailure(configPath); err != nil {
+		slog.Warn("load upgrade helper failure", "error", err)
+	} else if message != "" {
+		upgradeManager.MarkUpgradeFailed(errors.New(message))
+	}
 	return RunServer(server.Options{
 		ListenAddr:  cfg.Server.ListenAddr,
 		Service:     svc,
@@ -492,6 +524,18 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 				}
 			}()
 		},
+	})
+}
+
+func configureFeishuService(feishu *feishu.Service, configPath string, onReload func(config.ChannelsConfig)) {
+	if feishu == nil {
+		return
+	}
+	feishu.SetConfigPath(configPath)
+	feishu.SetConfigReloadHook(func(channels config.ChannelsConfig) {
+		if onReload != nil {
+			onReload(channels)
+		}
 	})
 }
 
@@ -670,8 +714,7 @@ manager_image_override = %q
 
 [sandbox]
 provider = %q
-home_dir_name = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Bootstrap.ManagerImageOverride, cfg.Sandbox.Resolved().Provider, cfg.Sandbox.Resolved().HomeDirName)
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Bootstrap.ManagerImageOverride, cfg.Sandbox.Resolved().Provider)
 	if strings.TrimSpace(cfg.Bootstrap.ManagerImageOverride) == "" {
 		content = strings.Replace(content, "[bootstrap]\nmanager_image_override", fmt.Sprintf("[bootstrap]\n# using default image: %q\nmanager_image_override", config.DefaultManagerImage), 1)
 	}
@@ -685,28 +728,6 @@ home_dir_name = %q
 default = %q
 `, llmCfg.DefaultSelector()) + formatEffectiveProviders(llmCfg)
 
-	if strings.TrimSpace(cfg.Channels.FeishuAdminOpenID) != "" {
-		content += fmt.Sprintf(`
-[channels.feishu]
-admin_open_id = %q
-`, cfg.Channels.FeishuAdminOpenID)
-	}
-
-	if len(cfg.Channels.Feishu) > 0 {
-		names := make([]string, 0, len(cfg.Channels.Feishu))
-		for name := range cfg.Channels.Feishu {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			feishu := cfg.Channels.Feishu[name]
-			content += fmt.Sprintf(`
-[channels.feishu.%s]
-app_id = %q
-app_secret = %q
-`, name, feishu.AppID, partiallyMaskSecret(feishu.AppSecret))
-		}
-	}
 	return content
 }
 
@@ -723,9 +744,9 @@ func partiallyMaskSecret(value string) string {
 
 func loadConfig(path string) (config.Config, error) {
 	if path == "" {
-		return config.LoadDefault()
+		return config.LoadDefaultWithChannelFiles()
 	}
-	return config.Load(path)
+	return config.LoadWithChannelFiles(path)
 }
 
 func validateModelConfig(cfg config.Config) error {
@@ -771,9 +792,9 @@ func newAgentService(cfg config.Config) (*agent.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	opts = append(opts, runtimewiring.WithPicoClawSandboxRuntime())
+	opts = append(opts, runtimewiring.WithPicoClawSandboxRuntime(cfg.Channels))
 	opts = append(opts, runtimewiring.WithCodexRuntime())
-	return agent.NewServiceWithLLMAndChannels(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
+	return agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
 }
 
 type codexBridgeManager interface {
@@ -971,14 +992,14 @@ func newBotService() (*bot.Service, error) {
 	return bot.NewService(store)
 }
 
-func newFeishuService(cfg config.Config) (*channel.FeishuService, error) {
-	return channel.NewFeishuService(feishuAppsFromConfig(cfg.Channels)), nil
+func newFeishuService(cfg config.Config) (*feishu.Service, error) {
+	return feishu.NewService(feishuAppsFromConfig(cfg.Channels)), nil
 }
 
-func feishuAppsFromConfig(cfg config.ChannelsConfig) map[string]channel.FeishuAppConfig {
-	apps := make(map[string]channel.FeishuAppConfig, len(cfg.Feishu))
+func feishuAppsFromConfig(cfg config.ChannelsConfig) map[string]feishu.AppConfig {
+	apps := make(map[string]feishu.AppConfig, len(cfg.Feishu))
 	for name, app := range cfg.Feishu {
-		apps[name] = channel.FeishuAppConfig{
+		apps[name] = feishu.AppConfig{
 			AppID:       app.AppID,
 			AppSecret:   app.AppSecret,
 			AdminOpenID: cfg.FeishuAdminOpenID,

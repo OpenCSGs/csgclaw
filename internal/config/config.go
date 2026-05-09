@@ -61,17 +61,15 @@ func (c BootstrapConfig) EffectiveManagerImage() string {
 
 type SandboxConfig struct {
 	Provider                 string
-	HomeDirName              string
 	StoragePath              string
 	DebianRegistriesOverride []string
+	DockerCLIPath            string
 }
 
 func (c SandboxConfig) Resolved() SandboxConfig {
-	if strings.TrimSpace(c.Provider) == "" {
+	c.Provider = normalizeSandboxProvider(c.Provider)
+	if c.Provider == "" {
 		c.Provider = DefaultSandboxProvider
-	}
-	if strings.TrimSpace(c.HomeDirName) == "" {
-		c.HomeDirName = DefaultSandboxHomeDirName
 	}
 	c.StoragePath = strings.TrimSpace(c.StoragePath)
 	c.DebianRegistriesOverride = normalizeStringList(c.DebianRegistriesOverride)
@@ -84,6 +82,16 @@ func (c SandboxConfig) EffectiveDebianRegistries() []string {
 		return append([]string(nil), DefaultDebianRegistries...)
 	}
 	return append([]string(nil), c.DebianRegistriesOverride...)
+}
+
+// EffectiveDockerCLIPath returns the docker binary path for [sandbox].provider = docker.
+// When unset, it defaults to "docker" (PATH lookup).
+func (c SandboxConfig) EffectiveDockerCLIPath() string {
+	p := strings.TrimSpace(c.DockerCLIPath)
+	if p != "" {
+		return p
+	}
+	return "docker"
 }
 
 type ChannelsConfig struct {
@@ -102,13 +110,7 @@ type rawConfigValues struct {
 	sandbox       SandboxConfig
 	modelsDefault string
 	models        map[string]rawProviderConfig
-	channels      rawChannelsConfig
 	resolved      *rawConfigValues
-}
-
-type rawChannelsConfig struct {
-	FeishuAdminOpenID string
-	Feishu            map[string]FeishuConfig
 }
 
 type rawProviderConfig struct {
@@ -126,13 +128,16 @@ const (
 	IMDirName       = "im"
 	ChannelsDirName = "channels"
 
-	DefaultHTTPPort           = apiclient.DefaultHTTPPort
-	DefaultAccessToken        = "your_access_token"
-	DefaultManagerImage       = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.29.0"
-	CSGHubProvider            = "csghub"
-	BoxLiteCLIProvider        = "boxlite-cli"
-	DefaultSandboxHomeDirName = "boxlite"
-	RuntimeHomeDirName        = DefaultSandboxHomeDirName
+	DefaultHTTPPort     = apiclient.DefaultHTTPPort
+	DefaultAccessToken  = "your_access_token"
+	DefaultManagerImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.29.0"
+	CSGHubProvider      = "csghub"
+	DockerProvider      = "docker"
+	BoxLiteCLIProvider  = "boxlite"
+	// TODO: Remove this alias after older config.toml files have been migrated.
+	legacyBoxLiteCLIProvider = "boxlite-cli"
+	BoxLiteCLIHomeDirName    = "boxlite"
+	RuntimeHomeDirName       = BoxLiteCLIHomeDirName
 )
 
 // DefaultDebianRegistries is the default BoxLite Debian registry lookup order when
@@ -238,9 +243,6 @@ func Load(path string) (Config, error) {
 		LLM:    newLLMConfig(),
 		raw: rawConfigValues{
 			models: make(map[string]rawProviderConfig),
-			channels: rawChannelsConfig{
-				Feishu: make(map[string]FeishuConfig),
-			},
 		},
 	}
 
@@ -305,8 +307,8 @@ func Load(path string) (Config, error) {
 				cfg.raw.sandbox.Provider = parseRawStringValue(rawValue)
 				cfg.Sandbox.Provider = value
 			case "home_dir_name":
-				cfg.raw.sandbox.HomeDirName = parseRawStringValue(rawValue)
-				cfg.Sandbox.HomeDirName = value
+				// Keep loading legacy configs that still contain this key, but
+				// do not surface it in the public config model anymore.
 			case "storage_path":
 				cfg.raw.sandbox.StoragePath = parseRawStringValue(rawValue)
 				cfg.Sandbox.StoragePath = value
@@ -316,33 +318,10 @@ func Load(path string) (Config, error) {
 					return Config{}, fmt.Errorf("parse sandbox.debian_registries_override: %w", parseErr)
 				}
 				cfg.Sandbox.DebianRegistriesOverride = registries
+			case "docker_cli_path":
+				cfg.raw.sandbox.DockerCLIPath = parseRawStringValue(rawValue)
+				cfg.Sandbox.DockerCLIPath = value
 			}
-		case section == "channels.feishu":
-			switch key {
-			case "admin_open_id":
-				cfg.raw.channels.FeishuAdminOpenID = parseRawStringValue(rawValue)
-				cfg.Channels.FeishuAdminOpenID = value
-			}
-		case strings.HasPrefix(section, "channels.feishu."):
-			name := strings.TrimPrefix(section, "channels.feishu.")
-			if name == "" {
-				return Config{}, fmt.Errorf("invalid feishu channel section: %q", section)
-			}
-			if cfg.Channels.Feishu == nil {
-				cfg.Channels.Feishu = make(map[string]FeishuConfig)
-			}
-			feishu := cfg.Channels.Feishu[name]
-			rawFeishu := cfg.raw.channels.Feishu[name]
-			switch key {
-			case "app_id":
-				rawFeishu.AppID = parseRawStringValue(rawValue)
-				feishu.AppID = value
-			case "app_secret":
-				rawFeishu.AppSecret = parseRawStringValue(rawValue)
-				feishu.AppSecret = value
-			}
-			cfg.Channels.Feishu[name] = feishu
-			cfg.raw.channels.Feishu[name] = rawFeishu
 		default:
 			if name, ok := modelsProviderSectionName(section); ok {
 				provider := modelsCfg.Providers[name]
@@ -422,10 +401,12 @@ manager_image_override = %q
 	sandboxSection := fmt.Sprintf(`
 [sandbox]
 provider = %q
-home_dir_name = %q
-`, cfg.rawOrResolvedString(cfg.raw.sandbox.Provider, loadedRaw.sandbox.Provider, resolvedSandbox.Provider), cfg.rawOrResolvedString(cfg.raw.sandbox.HomeDirName, loadedRaw.sandbox.HomeDirName, resolvedSandbox.HomeDirName))
+`, cfg.rawOrResolvedSandboxProvider(cfg.raw.sandbox.Provider, loadedRaw.sandbox.Provider, resolvedSandbox.Provider))
 	if strings.TrimSpace(resolvedSandbox.StoragePath) != "" {
 		sandboxSection = strings.Replace(sandboxSection, "[sandbox]\n", fmt.Sprintf("[sandbox]\nstorage_path = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.StoragePath, loadedRaw.sandbox.StoragePath, resolvedSandbox.StoragePath)), 1)
+	}
+	if strings.TrimSpace(resolvedSandbox.DockerCLIPath) != "" {
+		sandboxSection = strings.Replace(sandboxSection, "[sandbox]\n", fmt.Sprintf("[sandbox]\ndocker_cli_path = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.DockerCLIPath, loadedRaw.sandbox.DockerCLIPath, resolvedSandbox.DockerCLIPath)), 1)
 	}
 	overrideRegistries := cfg.rawOrResolvedStringArray(cfg.raw.sandbox.DebianRegistriesOverride, loadedRaw.sandbox.DebianRegistriesOverride, resolvedSandbox.DebianRegistriesOverride)
 	sandboxSection += fmt.Sprintf("debian_registries_override = %s\n", formatStringArray(overrideRegistries))
@@ -451,31 +432,6 @@ models = %s
 			if provider.ReasoningEffort != "" {
 				fmt.Fprintf(&b, "reasoning_effort = %q\n", cfg.rawOrResolvedString(rawProvider.ReasoningEffort, loadedProvider.ReasoningEffort, provider.ReasoningEffort))
 			}
-		}
-	}
-
-	if strings.TrimSpace(c.Channels.FeishuAdminOpenID) != "" {
-		fmt.Fprintf(&b, `
-[channels.feishu]
-admin_open_id = %q
-`, cfg.rawOrResolvedString(cfg.raw.channels.FeishuAdminOpenID, loadedRaw.channels.FeishuAdminOpenID, c.Channels.FeishuAdminOpenID))
-	}
-
-	if len(c.Channels.Feishu) > 0 {
-		names := make([]string, 0, len(c.Channels.Feishu))
-		for name := range c.Channels.Feishu {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			feishu := c.Channels.Feishu[name]
-			rawFeishu := cfg.raw.channels.Feishu[name]
-			loadedFeishu := loadedRaw.channels.Feishu[name]
-			fmt.Fprintf(&b, `
-[channels.feishu.%s]
-app_id = %q
-app_secret = %q
-`, name, cfg.rawOrResolvedString(rawFeishu.AppID, loadedFeishu.AppID, feishu.AppID), cfg.rawOrResolvedString(rawFeishu.AppSecret, loadedFeishu.AppSecret, feishu.AppSecret))
 		}
 	}
 
@@ -654,6 +610,19 @@ func formatStringArray(values []string) string {
 	return "[" + strings.Join(quoted, ", ") + "]"
 }
 
+func normalizeSandboxProvider(provider string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	switch provider {
+	case "":
+		return ""
+	// TODO: Remove this alias mapping after older config.toml files have been migrated.
+	case legacyBoxLiteCLIProvider:
+		return BoxLiteCLIProvider
+	default:
+		return provider
+	}
+}
+
 func sortedProviderNames(providers map[string]ProviderConfig) []string {
 	names := make([]string, 0, len(providers))
 	for name := range providers {
@@ -699,6 +668,17 @@ func (c Config) rawOrResolvedString(raw, loaded, resolved string) string {
 	return resolved
 }
 
+func (c Config) rawOrResolvedSandboxProvider(raw, loaded, resolved string) string {
+	// Keep reading the legacy "boxlite-cli" alias for backward compatibility,
+	// but rewrite it to the canonical "boxlite" value on the next save so the
+	// migration happens automatically.
+	// TODO: Remove this special-case after older config.toml files have been migrated.
+	if strings.EqualFold(strings.TrimSpace(raw), legacyBoxLiteCLIProvider) {
+		return resolved
+	}
+	return c.rawOrResolvedString(raw, loaded, resolved)
+}
+
 func (c Config) rawOrResolvedStringArray(raw, loaded, resolved []string) []string {
 	if len(raw) > 0 && equalStringSlices(loaded, resolved) {
 		return raw
@@ -722,9 +702,6 @@ func (r rawConfigValues) resolvedOrZero() rawConfigValues {
 	if r.resolved == nil {
 		return rawConfigValues{
 			models: make(map[string]rawProviderConfig),
-			channels: rawChannelsConfig{
-				Feishu: make(map[string]FeishuConfig),
-			},
 		}
 	}
 	return *r.resolved
@@ -733,9 +710,6 @@ func (r rawConfigValues) resolvedOrZero() rawConfigValues {
 func (c Config) resolvedRawValues() *rawConfigValues {
 	out := rawConfigValues{
 		models: make(map[string]rawProviderConfig),
-		channels: rawChannelsConfig{
-			Feishu: make(map[string]FeishuConfig),
-		},
 	}
 
 	if c.raw.server.ListenAddr != "" {
@@ -753,14 +727,14 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 	if c.raw.sandbox.Provider != "" {
 		out.sandbox.Provider = c.Sandbox.Provider
 	}
-	if c.raw.sandbox.HomeDirName != "" {
-		out.sandbox.HomeDirName = c.Sandbox.HomeDirName
-	}
 	if c.raw.sandbox.StoragePath != "" {
 		out.sandbox.StoragePath = c.Sandbox.StoragePath
 	}
 	if len(c.raw.sandbox.DebianRegistriesOverride) > 0 {
 		out.sandbox.DebianRegistriesOverride = append([]string(nil), c.Sandbox.DebianRegistriesOverride...)
+	}
+	if c.raw.sandbox.DockerCLIPath != "" {
+		out.sandbox.DockerCLIPath = c.Sandbox.DockerCLIPath
 	}
 	if c.raw.modelsDefault != "" {
 		out.modelsDefault = c.Models.Default
@@ -782,21 +756,6 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 			loadedProvider.ReasoningEffort = provider.ReasoningEffort
 		}
 		out.models[name] = loadedProvider
-	}
-
-	if c.raw.channels.FeishuAdminOpenID != "" {
-		out.channels.FeishuAdminOpenID = c.Channels.FeishuAdminOpenID
-	}
-	for name, rawFeishu := range c.raw.channels.Feishu {
-		feishu := c.Channels.Feishu[name]
-		loadedFeishu := FeishuConfig{}
-		if rawFeishu.AppID != "" {
-			loadedFeishu.AppID = feishu.AppID
-		}
-		if rawFeishu.AppSecret != "" {
-			loadedFeishu.AppSecret = feishu.AppSecret
-		}
-		out.channels.Feishu[name] = loadedFeishu
 	}
 
 	return &out

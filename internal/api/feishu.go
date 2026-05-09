@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/apitypes"
-	"csgclaw/internal/channel"
+	"csgclaw/internal/channel/feishu"
 )
 
 func (h *Handler) handleFeishuBotByID(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +84,7 @@ func (h *Handler) handleFeishuEvents(w http.ResponseWriter, r *http.Request, bot
 	}
 }
 
-func feishuEventMentions(evt channel.FeishuMessageEvent, botOpenID string) bool {
+func feishuEventMentions(evt feishu.MessageEvent, botOpenID string) bool {
 	botOpenID = strings.TrimSpace(botOpenID)
 	if botOpenID == "" || evt.Message == nil {
 		return false
@@ -120,7 +120,7 @@ func (h *Handler) handleFeishuUsers(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, h.feishu.ListUsers())
 	case http.MethodPost:
-		var req channel.FeishuCreateUserRequest
+		var req feishu.CreateUserRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return

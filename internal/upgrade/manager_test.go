@@ -88,6 +88,26 @@ func TestManagerRefreshKeepsLastKnownVersionOnError(t *testing.T) {
 	}
 }
 
+func TestManagerRefreshPreservesUpgradeFailure(t *testing.T) {
+	manager := NewManager(fakeChecker{
+		check: func(_ context.Context, _ string) (CheckResult, error) {
+			return CheckResult{
+				CurrentVersion:  "v0.2.5",
+				LatestVersion:   "v0.2.7",
+				UpdateAvailable: true,
+			}, nil
+		},
+	}, "v0.2.5", ManagerOptions{})
+
+	manager.MarkUpgradeFailed(errors.New("restart daemon: boom"))
+	manager.Refresh(context.Background())
+
+	status := manager.Status()
+	if got, want := status.LastError, "restart daemon: boom"; got != want {
+		t.Fatalf("LastError = %q, want %q", got, want)
+	}
+}
+
 func TestManagerStartChecksImmediatelyAndPeriodically(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -50,29 +50,40 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		return fmt.Errorf("upgrade does not accept positional arguments")
 	}
 
+	applyArtifacts := upgrade.ApplyArtifactsFromEnv()
+	fail := func(err error) error {
+		err = explainError(run.Program, err)
+		if recordErr := applyArtifacts.RecordFailure(err); recordErr != nil {
+			return fmt.Errorf("%w\nAlso failed to record upgrade helper status: %v", err, recordErr)
+		}
+		return err
+	}
+
 	client := newUpgradeClient(run)
 	result, err := client.Check(ctx, appversion.Current())
 	if err != nil {
-		return explainError(run.Program, err)
+		return fail(err)
 	}
 	if *checkOnly || !result.UpdateAvailable {
+		_ = applyArtifacts.ClearStatus()
 		return renderResult(globals.Output, run.Stdout, result)
 	}
 	if result.Asset == nil {
-		return fmt.Errorf("matched release asset is required for installation")
+		return fail(fmt.Errorf("matched release asset is required for installation"))
 	}
 
 	prepared, err := client.PrepareRelease(ctx, *result.Asset, "")
 	if err != nil {
-		return explainError(run.Program, err)
+		return fail(err)
 	}
 	defer os.RemoveAll(prepared.WorkDir)
 
 	installed, err := client.InstallPrepared(prepared)
 	if err != nil {
-		return explainError(run.Program, err)
+		return fail(err)
 	}
 	if *noRestart {
+		_ = applyArtifacts.ClearStatus()
 		return renderInstallResult(globals.Output, run.Stdout, result, installed, upgrade.RestartResult{}, run.Program, true)
 	}
 
@@ -80,8 +91,9 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		ConfigPath: globals.Config,
 	})
 	if err != nil {
-		return explainError(run.Program, err)
+		return fail(err)
 	}
+	_ = applyArtifacts.ClearStatus()
 	return renderInstallResult(globals.Output, run.Stdout, result, installed, restarted, run.Program, false)
 }
 

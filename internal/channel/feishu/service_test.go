@@ -1,4 +1,4 @@
-package channel
+package feishu
 
 import (
 	"context"
@@ -13,9 +13,9 @@ import (
 
 func TestFeishuServiceDoesNotPersistState(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "channels", "feishu", "state.json")
-	svc := NewFeishuService()
+	svc := NewService()
 
-	if _, err := svc.CreateUser(FeishuCreateUserRequest{ID: "fsu-alice", Name: "Alice"}); err != nil {
+	if _, err := svc.CreateUser(CreateUserRequest{ID: "fsu-alice", Name: "Alice"}); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 
@@ -25,7 +25,7 @@ func TestFeishuServiceDoesNotPersistState(t *testing.T) {
 }
 
 func TestFeishuServiceInitializesMessageBus(t *testing.T) {
-	svc := NewFeishuService()
+	svc := NewService()
 
 	if svc.MessageBus() == nil {
 		t.Fatal("MessageBus() = nil, want initialized bus")
@@ -33,7 +33,7 @@ func TestFeishuServiceInitializesMessageBus(t *testing.T) {
 }
 
 func TestFeishuServiceKeepsNamedAppConfigs(t *testing.T) {
-	svc := NewFeishuService(map[string]FeishuAppConfig{
+	svc := NewService(map[string]AppConfig{
 		"manager": {
 			AppID:       "cli_manager",
 			AppSecret:   "manager-secret",
@@ -56,26 +56,26 @@ func TestFeishuServiceKeepsNamedAppConfigs(t *testing.T) {
 		t.Fatalf("dev app_secret = %q, want %q", got, want)
 	}
 
-	apps["manager"] = FeishuAppConfig{AppID: "mutated"}
+	apps["manager"] = AppConfig{AppID: "mutated"}
 	if got, want := svc.AppConfigs()["manager"].AppID, "cli_manager"; got != want {
 		t.Fatalf("manager app_id after caller mutation = %q, want %q", got, want)
 	}
 }
 
 func TestFeishuListUsersUsesConfiguredAppsAndOpenIDs(t *testing.T) {
-	svc := NewFeishuServiceWithBotOpenIDResolver(
-		map[string]FeishuAppConfig{
+	svc := NewServiceWithBotOpenIDResolver(
+		map[string]AppConfig{
 			"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"},
 			"u-dev":     {AppID: "cli_dev", AppSecret: "dev-secret"},
 		},
-		func(_ context.Context, app FeishuAppConfig) (FeishuBotInfo, error) {
+		func(_ context.Context, app AppConfig) (BotInfo, error) {
 			switch app.AppID {
 			case "cli_manager":
-				return FeishuBotInfo{OpenID: "ou_manager"}, nil
+				return BotInfo{OpenID: "ou_manager"}, nil
 			case "cli_dev":
-				return FeishuBotInfo{OpenID: "ou_dev"}, nil
+				return BotInfo{OpenID: "ou_dev"}, nil
 			default:
-				return FeishuBotInfo{}, nil
+				return BotInfo{}, nil
 			}
 		},
 	)
@@ -99,15 +99,15 @@ func TestFeishuListUsersUsesConfiguredAppsAndOpenIDs(t *testing.T) {
 }
 
 func TestFeishuResolveBotUserUsesConfiguredOpenID(t *testing.T) {
-	svc := NewFeishuServiceWithBotOpenIDResolver(
-		map[string]FeishuAppConfig{
+	svc := NewServiceWithBotOpenIDResolver(
+		map[string]AppConfig{
 			"u-alice": {AppID: "cli_alice", AppSecret: "alice-secret"},
 		},
-		func(_ context.Context, app FeishuAppConfig) (FeishuBotInfo, error) {
+		func(_ context.Context, app AppConfig) (BotInfo, error) {
 			if got, want := app.AppID, "cli_alice"; got != want {
 				t.Fatalf("resolve app_id = %q, want %q", got, want)
 			}
-			return FeishuBotInfo{OpenID: "ou_alice"}, nil
+			return BotInfo{OpenID: "ou_alice"}, nil
 		},
 	)
 
@@ -127,19 +127,19 @@ func TestFeishuResolveBotUserUsesConfiguredOpenID(t *testing.T) {
 }
 
 func TestFeishuEnsureUserUsesConfiguredOpenID(t *testing.T) {
-	svc := NewFeishuServiceWithBotOpenIDResolver(
-		map[string]FeishuAppConfig{
+	svc := NewServiceWithBotOpenIDResolver(
+		map[string]AppConfig{
 			"u-alice": {AppID: "cli_alice", AppSecret: "alice-secret"},
 		},
-		func(_ context.Context, app FeishuAppConfig) (FeishuBotInfo, error) {
+		func(_ context.Context, app AppConfig) (BotInfo, error) {
 			if got, want := app.AppID, "cli_alice"; got != want {
 				t.Fatalf("resolve app_id = %q, want %q", got, want)
 			}
-			return FeishuBotInfo{OpenID: "ou_alice"}, nil
+			return BotInfo{OpenID: "ou_alice"}, nil
 		},
 	)
 
-	user, err := svc.EnsureUser(FeishuCreateUserRequest{
+	user, err := svc.EnsureUser(CreateUserRequest{
 		ID:     "u-alice",
 		Name:   "alice",
 		Handle: "alice",
@@ -157,9 +157,9 @@ func TestFeishuEnsureUserUsesConfiguredOpenID(t *testing.T) {
 }
 
 func TestFeishuDeleteUserRemovesUser(t *testing.T) {
-	svc := NewFeishuService()
+	svc := NewService()
 
-	if _, err := svc.CreateUser(FeishuCreateUserRequest{ID: "ou_alice", Name: "Alice"}); err != nil {
+	if _, err := svc.CreateUser(CreateUserRequest{ID: "ou_alice", Name: "Alice"}); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 	if err := svc.DeleteUser("ou_alice"); err != nil {
@@ -175,7 +175,7 @@ func TestFeishuDeleteUserRemovesUser(t *testing.T) {
 }
 
 func TestFeishuBotMembersInChatWithResolversIncludesConfiguredBots(t *testing.T) {
-	apps := map[string]FeishuAppConfig{
+	apps := map[string]AppConfig{
 		"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"},
 		"u-dev":     {AppID: "cli_dev", AppSecret: "dev-secret"},
 		"u-qa":      {AppID: "cli_qa", AppSecret: "qa-secret"},
@@ -186,19 +186,19 @@ func TestFeishuBotMembersInChatWithResolversIncludesConfiguredBots(t *testing.T)
 		apps,
 		"oc_alpha",
 		map[string]struct{}{"ou_existing": {}},
-		func(_ context.Context, app FeishuAppConfig) (FeishuBotInfo, error) {
+		func(_ context.Context, app AppConfig) (BotInfo, error) {
 			switch app.AppID {
 			case "cli_manager":
-				return FeishuBotInfo{OpenID: "ou_manager"}, nil
+				return BotInfo{OpenID: "ou_manager"}, nil
 			case "cli_dev":
-				return FeishuBotInfo{OpenID: "ou_existing"}, nil
+				return BotInfo{OpenID: "ou_existing"}, nil
 			case "cli_qa":
-				return FeishuBotInfo{OpenID: "ou_qa"}, nil
+				return BotInfo{OpenID: "ou_qa"}, nil
 			default:
-				return FeishuBotInfo{}, nil
+				return BotInfo{}, nil
 			}
 		},
-		func(_ context.Context, app FeishuAppConfig, chatID string) (bool, error) {
+		func(_ context.Context, app AppConfig, chatID string) (bool, error) {
 			if got, want := chatID, "oc_alpha"; got != want {
 				t.Fatalf("chat_id = %q, want %q", got, want)
 			}
@@ -225,13 +225,13 @@ func TestFeishuBotMembersInChatWithResolversIncludesConfiguredBots(t *testing.T)
 
 func TestFeishuCreateRoomUsesConfiguredAdminOpenID(t *testing.T) {
 	var gotCreatorID string
-	svc := NewFeishuServiceWithCreateChatAndAddMembers(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
-		func(_ context.Context, _ FeishuAppConfig, req FeishuCreateChatRequest) (FeishuCreateChatResponse, error) {
+	svc := NewServiceWithCreateChatAndAddMembers(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
+		func(_ context.Context, _ AppConfig, req CreateChatRequest) (CreateChatResponse, error) {
 			gotCreatorID = req.CreatorID
-			return FeishuCreateChatResponse{ChatID: "oc_alpha", Name: req.Title, Description: req.Description}, nil
+			return CreateChatResponse{ChatID: "oc_alpha", Name: req.Title, Description: req.Description}, nil
 		},
-		func(context.Context, FeishuAppConfig, FeishuAddChatMembersRequest) error { return nil },
+		func(context.Context, AppConfig, AddChatMembersRequest) error { return nil },
 	)
 
 	if _, err := svc.CreateRoom(im.CreateRoomRequest{Title: "alpha", CreatorID: "u-manager"}); err != nil {
@@ -244,11 +244,11 @@ func TestFeishuCreateRoomUsesConfiguredAdminOpenID(t *testing.T) {
 }
 
 func TestFeishuDeleteRoomUsesConfiguredApp(t *testing.T) {
-	var gotApp FeishuAppConfig
+	var gotApp AppConfig
 	var gotRoomID string
-	svc := NewFeishuServiceWithDeleteChat(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
-		func(_ context.Context, app FeishuAppConfig, roomID string) error {
+	svc := NewServiceWithDeleteChat(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
+		func(_ context.Context, app AppConfig, roomID string) error {
 			gotApp = app
 			gotRoomID = roomID
 			return nil
@@ -267,14 +267,14 @@ func TestFeishuDeleteRoomUsesConfiguredApp(t *testing.T) {
 }
 
 func TestFeishuSendMessageUsesSenderAppAndStoresLocalMessage(t *testing.T) {
-	var gotApp FeishuAppConfig
-	var gotReq FeishuSendMessageRequest
-	svc := NewFeishuServiceWithSendMessage(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
-		func(_ context.Context, app FeishuAppConfig, req FeishuSendMessageRequest) (FeishuSendMessageResponse, error) {
+	var gotApp AppConfig
+	var gotReq SendMessageRequest
+	svc := NewServiceWithSendMessage(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, app AppConfig, req SendMessageRequest) (SendMessageResponse, error) {
 			gotApp = app
 			gotReq = req
-			return FeishuSendMessageResponse{MessageID: "om_1", SenderOpenID: "ou_manager"}, nil
+			return SendMessageResponse{MessageID: "om_1", SenderOpenID: "ou_manager"}, nil
 		},
 	)
 	svc.rooms["oc_alpha"] = &im.Room{ID: "oc_alpha", Title: "alpha", Members: []string{"u-manager"}}
@@ -303,15 +303,15 @@ func TestFeishuSendMessageUsesSenderAppAndStoresLocalMessage(t *testing.T) {
 }
 
 func TestFeishuSendMessageResolvesMentionApp(t *testing.T) {
-	var gotReq FeishuSendMessageRequest
-	svc := NewFeishuServiceWithSendMessage(
-		map[string]FeishuAppConfig{
+	var gotReq SendMessageRequest
+	svc := NewServiceWithSendMessage(
+		map[string]AppConfig{
 			"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"},
 			"u-dev":     {AppID: "cli_dev", AppSecret: "dev-secret"},
 		},
-		func(_ context.Context, _ FeishuAppConfig, req FeishuSendMessageRequest) (FeishuSendMessageResponse, error) {
+		func(_ context.Context, _ AppConfig, req SendMessageRequest) (SendMessageResponse, error) {
 			gotReq = req
-			return FeishuSendMessageResponse{MessageID: "om_mention", SenderOpenID: "ou_manager", MentionOpenID: "ou_dev"}, nil
+			return SendMessageResponse{MessageID: "om_mention", SenderOpenID: "ou_manager", MentionOpenID: "ou_dev"}, nil
 		},
 	)
 	svc.rooms["oc_alpha"] = &im.Room{ID: "oc_alpha", Title: "alpha", Members: []string{"u-manager", "u-dev"}}
@@ -338,13 +338,13 @@ func TestFeishuSendMessageResolvesMentionApp(t *testing.T) {
 }
 
 func TestFeishuSendMessageWithMentionPublishesMessageEvent(t *testing.T) {
-	svc := NewFeishuServiceWithSendMessage(
-		map[string]FeishuAppConfig{
+	svc := NewServiceWithSendMessage(
+		map[string]AppConfig{
 			"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"},
 			"u-dev":     {AppID: "cli_dev", AppSecret: "dev-secret"},
 		},
-		func(_ context.Context, _ FeishuAppConfig, _ FeishuSendMessageRequest) (FeishuSendMessageResponse, error) {
-			return FeishuSendMessageResponse{MessageID: "om_mention", SenderOpenID: "ou_manager", MentionOpenID: "ou_dev"}, nil
+		func(_ context.Context, _ AppConfig, _ SendMessageRequest) (SendMessageResponse, error) {
+			return SendMessageResponse{MessageID: "om_mention", SenderOpenID: "ou_manager", MentionOpenID: "ou_dev"}, nil
 		},
 	)
 	svc.rooms["oc_alpha"] = &im.Room{ID: "oc_alpha", Title: "alpha", Members: []string{"u-manager", "u-dev"}}
@@ -363,8 +363,8 @@ func TestFeishuSendMessageWithMentionPublishesMessageEvent(t *testing.T) {
 
 	select {
 	case evt := <-events:
-		if evt.Type != FeishuMessageEventTypeMessageCreated {
-			t.Fatalf("event type = %q, want %q", evt.Type, FeishuMessageEventTypeMessageCreated)
+		if evt.Type != MessageEventTypeMessageCreated {
+			t.Fatalf("event type = %q, want %q", evt.Type, MessageEventTypeMessageCreated)
 		}
 		if evt.RoomID != "oc_alpha" {
 			t.Fatalf("event room_id = %q, want oc_alpha", evt.RoomID)
@@ -384,10 +384,10 @@ func TestFeishuSendMessageWithMentionPublishesMessageEvent(t *testing.T) {
 }
 
 func TestFeishuSendMessageWithoutMentionDoesNotPublishMessageEvent(t *testing.T) {
-	svc := NewFeishuServiceWithSendMessage(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
-		func(_ context.Context, _ FeishuAppConfig, _ FeishuSendMessageRequest) (FeishuSendMessageResponse, error) {
-			return FeishuSendMessageResponse{MessageID: "om_plain", SenderOpenID: "ou_manager"}, nil
+	svc := NewServiceWithSendMessage(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, _ AppConfig, _ SendMessageRequest) (SendMessageResponse, error) {
+			return SendMessageResponse{MessageID: "om_plain", SenderOpenID: "ou_manager"}, nil
 		},
 	)
 	svc.rooms["oc_alpha"] = &im.Room{ID: "oc_alpha", Title: "alpha", Members: []string{"u-manager"}}
@@ -410,11 +410,11 @@ func TestFeishuSendMessageWithoutMentionDoesNotPublishMessageEvent(t *testing.T)
 }
 
 func TestFeishuSendMessageRequiresMentionApp(t *testing.T) {
-	svc := NewFeishuServiceWithSendMessage(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
-		func(context.Context, FeishuAppConfig, FeishuSendMessageRequest) (FeishuSendMessageResponse, error) {
+	svc := NewServiceWithSendMessage(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(context.Context, AppConfig, SendMessageRequest) (SendMessageResponse, error) {
 			t.Fatal("sendMessage should not be called without mention app config")
-			return FeishuSendMessageResponse{}, nil
+			return SendMessageResponse{}, nil
 		},
 	)
 
@@ -430,15 +430,15 @@ func TestFeishuSendMessageRequiresMentionApp(t *testing.T) {
 }
 
 func TestFeishuCreateRoomUsesManagerAppRegardlessOfCreatorID(t *testing.T) {
-	svc := NewFeishuServiceWithCreateChatAndAddMembers(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
-		func(_ context.Context, app FeishuAppConfig, _ FeishuCreateChatRequest) (FeishuCreateChatResponse, error) {
+	svc := NewServiceWithCreateChatAndAddMembers(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
+		func(_ context.Context, app AppConfig, _ CreateChatRequest) (CreateChatResponse, error) {
 			if got, want := app.AppID, "cli_manager"; got != want {
 				t.Fatalf("create chat app_id = %q, want %q", got, want)
 			}
-			return FeishuCreateChatResponse{ChatID: "oc_alpha"}, nil
+			return CreateChatResponse{ChatID: "oc_alpha"}, nil
 		},
-		func(context.Context, FeishuAppConfig, FeishuAddChatMembersRequest) error { return nil },
+		func(context.Context, AppConfig, AddChatMembersRequest) error { return nil },
 	)
 
 	room, err := svc.CreateRoom(im.CreateRoomRequest{Title: "alpha", CreatorID: "u-missing"})
@@ -451,15 +451,15 @@ func TestFeishuCreateRoomUsesManagerAppRegardlessOfCreatorID(t *testing.T) {
 }
 
 func TestFeishuListRoomsCallsConfiguredApp(t *testing.T) {
-	var gotApp FeishuAppConfig
-	svc := NewFeishuServiceWithCreateChatAndAddMembers(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
-		func(_ context.Context, _ FeishuAppConfig, req FeishuCreateChatRequest) (FeishuCreateChatResponse, error) {
-			return FeishuCreateChatResponse{ChatID: "oc_alpha", Name: req.Title, Description: req.Description}, nil
+	var gotApp AppConfig
+	svc := NewServiceWithCreateChatAndAddMembers(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
+		func(_ context.Context, _ AppConfig, req CreateChatRequest) (CreateChatResponse, error) {
+			return CreateChatResponse{ChatID: "oc_alpha", Name: req.Title, Description: req.Description}, nil
 		},
-		func(context.Context, FeishuAppConfig, FeishuAddChatMembersRequest) error { return nil },
+		func(context.Context, AppConfig, AddChatMembersRequest) error { return nil },
 	)
-	svc.listChats = func(_ context.Context, app FeishuAppConfig) ([]im.Room, error) {
+	svc.listChats = func(_ context.Context, app AppConfig) ([]im.Room, error) {
 		gotApp = app
 		return []im.Room{
 			{ID: "oc_beta", Title: "beta"},
@@ -495,12 +495,12 @@ func TestFeishuListRoomsCallsConfiguredApp(t *testing.T) {
 }
 
 func TestFeishuListRoomMessagesFetchesAllMessagesAndUpdatesCache(t *testing.T) {
-	var gotApp FeishuAppConfig
+	var gotApp AppConfig
 	var gotRoomID string
 	fetchedAt := time.Unix(5, 0).UTC()
-	svc := NewFeishuServiceWithListRoomMessages(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
-		func(_ context.Context, app FeishuAppConfig, roomID string) ([]im.Message, error) {
+	svc := NewServiceWithListRoomMessages(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, app AppConfig, roomID string) ([]im.Message, error) {
 			gotApp = app
 			gotRoomID = roomID
 			return []im.Message{
@@ -540,9 +540,9 @@ func TestFeishuListRoomMessagesFetchesAllMessagesAndUpdatesCache(t *testing.T) {
 
 func TestFeishuListRoomMessagesRequestsAPIWithoutLocalRoomValidation(t *testing.T) {
 	var gotRoomIDs []string
-	svc := NewFeishuServiceWithListRoomMessages(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
-		func(_ context.Context, _ FeishuAppConfig, roomID string) ([]im.Message, error) {
+	svc := NewServiceWithListRoomMessages(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, _ AppConfig, roomID string) ([]im.Message, error) {
 			gotRoomIDs = append(gotRoomIDs, roomID)
 			return []im.Message{{ID: "om_1"}}, nil
 		},
@@ -561,27 +561,27 @@ func TestFeishuListRoomMessagesRequestsAPIWithoutLocalRoomValidation(t *testing.
 }
 
 func TestFeishuAddRoomMembersCallsConfiguredApp(t *testing.T) {
-	var gotApp FeishuAppConfig
-	var gotReq FeishuAddChatMembersRequest
-	svc := NewFeishuServiceWithCreateChatAndAddMembers(
-		map[string]FeishuAppConfig{
+	var gotApp AppConfig
+	var gotReq AddChatMembersRequest
+	svc := NewServiceWithCreateChatAndAddMembers(
+		map[string]AppConfig{
 			"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"},
 			"ou_alice":  {AppID: "cli_alice", AppSecret: "alice-secret"},
 		},
-		func(_ context.Context, _ FeishuAppConfig, req FeishuCreateChatRequest) (FeishuCreateChatResponse, error) {
-			return FeishuCreateChatResponse{ChatID: "oc_alpha", Name: req.Title, Description: req.Description}, nil
+		func(_ context.Context, _ AppConfig, req CreateChatRequest) (CreateChatResponse, error) {
+			return CreateChatResponse{ChatID: "oc_alpha", Name: req.Title, Description: req.Description}, nil
 		},
-		func(_ context.Context, app FeishuAppConfig, req FeishuAddChatMembersRequest) error {
+		func(_ context.Context, app AppConfig, req AddChatMembersRequest) error {
 			gotApp = app
 			gotReq = req
 			return nil
 		},
 	)
 
-	if _, err := svc.CreateUser(FeishuCreateUserRequest{ID: "u-manager", Name: "Manager"}); err != nil {
+	if _, err := svc.CreateUser(CreateUserRequest{ID: "u-manager", Name: "Manager"}); err != nil {
 		t.Fatalf("CreateUser(manager) error = %v", err)
 	}
-	if _, err := svc.CreateUser(FeishuCreateUserRequest{ID: "ou_alice", Name: "Alice"}); err != nil {
+	if _, err := svc.CreateUser(CreateUserRequest{ID: "ou_alice", Name: "Alice"}); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 	if _, err := svc.CreateRoom(im.CreateRoomRequest{Title: "alpha", CreatorID: "u-manager"}); err != nil {
@@ -614,22 +614,22 @@ func TestFeishuAddRoomMembersCallsConfiguredApp(t *testing.T) {
 }
 
 func TestFeishuAddRoomMembersForwardsUnconfiguredMemberToFeishu(t *testing.T) {
-	var gotReq FeishuAddChatMembersRequest
-	svc := NewFeishuServiceWithCreateChatAndAddMembers(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
-		func(_ context.Context, _ FeishuAppConfig, req FeishuCreateChatRequest) (FeishuCreateChatResponse, error) {
-			return FeishuCreateChatResponse{ChatID: "oc_alpha", Name: req.Title, Description: req.Description}, nil
+	var gotReq AddChatMembersRequest
+	svc := NewServiceWithCreateChatAndAddMembers(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
+		func(_ context.Context, _ AppConfig, req CreateChatRequest) (CreateChatResponse, error) {
+			return CreateChatResponse{ChatID: "oc_alpha", Name: req.Title, Description: req.Description}, nil
 		},
-		func(_ context.Context, _ FeishuAppConfig, req FeishuAddChatMembersRequest) error {
+		func(_ context.Context, _ AppConfig, req AddChatMembersRequest) error {
 			gotReq = req
 			return nil
 		},
 	)
 
-	if _, err := svc.CreateUser(FeishuCreateUserRequest{ID: "u-manager", Name: "Manager"}); err != nil {
+	if _, err := svc.CreateUser(CreateUserRequest{ID: "u-manager", Name: "Manager"}); err != nil {
 		t.Fatalf("CreateUser(manager) error = %v", err)
 	}
-	if _, err := svc.CreateUser(FeishuCreateUserRequest{ID: "ou_alice", Name: "Alice"}); err != nil {
+	if _, err := svc.CreateUser(CreateUserRequest{ID: "ou_alice", Name: "Alice"}); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 	if _, err := svc.CreateRoom(im.CreateRoomRequest{Title: "alpha", CreatorID: "u-manager"}); err != nil {
@@ -649,14 +649,14 @@ func TestFeishuAddRoomMembersForwardsUnconfiguredMemberToFeishu(t *testing.T) {
 }
 
 func TestFeishuAddRoomMembersLetsFeishuValidateRoomID(t *testing.T) {
-	var gotReq FeishuAddChatMembersRequest
-	svc := NewFeishuServiceWithCreateChatAndAddMembers(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
-		func(context.Context, FeishuAppConfig, FeishuCreateChatRequest) (FeishuCreateChatResponse, error) {
+	var gotReq AddChatMembersRequest
+	svc := NewServiceWithCreateChatAndAddMembers(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
+		func(context.Context, AppConfig, CreateChatRequest) (CreateChatResponse, error) {
 			t.Fatal("createChat should not be called")
-			return FeishuCreateChatResponse{}, nil
+			return CreateChatResponse{}, nil
 		},
-		func(_ context.Context, _ FeishuAppConfig, req FeishuAddChatMembersRequest) error {
+		func(_ context.Context, _ AppConfig, req AddChatMembersRequest) error {
 			gotReq = req
 			return nil
 		},
@@ -682,16 +682,16 @@ func TestFeishuAddRoomMembersLetsFeishuValidateRoomID(t *testing.T) {
 }
 
 func TestFeishuListRoomMembersCallsConfiguredApp(t *testing.T) {
-	var gotApp FeishuAppConfig
+	var gotApp AppConfig
 	var gotRoomID string
-	svc := NewFeishuServiceWithCreateChatAndAddMembers(
-		map[string]FeishuAppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
-		func(_ context.Context, _ FeishuAppConfig, req FeishuCreateChatRequest) (FeishuCreateChatResponse, error) {
-			return FeishuCreateChatResponse{ChatID: "oc_alpha", Name: req.Title, Description: req.Description}, nil
+	svc := NewServiceWithCreateChatAndAddMembers(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
+		func(_ context.Context, _ AppConfig, req CreateChatRequest) (CreateChatResponse, error) {
+			return CreateChatResponse{ChatID: "oc_alpha", Name: req.Title, Description: req.Description}, nil
 		},
-		func(context.Context, FeishuAppConfig, FeishuAddChatMembersRequest) error { return nil },
+		func(context.Context, AppConfig, AddChatMembersRequest) error { return nil },
 	)
-	svc.listChatMembers = func(_ context.Context, app FeishuAppConfig, apps map[string]FeishuAppConfig, roomID string) ([]im.User, error) {
+	svc.listChatMembers = func(_ context.Context, app AppConfig, apps map[string]AppConfig, roomID string) ([]im.User, error) {
 		gotApp = app
 		gotRoomID = roomID
 		if got, want := apps["u-manager"].AppID, "cli_manager"; got != want {
@@ -700,10 +700,10 @@ func TestFeishuListRoomMembersCallsConfiguredApp(t *testing.T) {
 		return []im.User{{ID: "ou_alice", Name: "Alice"}}, nil
 	}
 
-	if _, err := svc.CreateUser(FeishuCreateUserRequest{ID: "u-manager", Name: "Manager"}); err != nil {
+	if _, err := svc.CreateUser(CreateUserRequest{ID: "u-manager", Name: "Manager"}); err != nil {
 		t.Fatalf("CreateUser(manager) error = %v", err)
 	}
-	if _, err := svc.CreateUser(FeishuCreateUserRequest{ID: "ou_alice", Name: "Alice Local", Handle: "alice-local", Role: "worker", Avatar: "AL"}); err != nil {
+	if _, err := svc.CreateUser(CreateUserRequest{ID: "ou_alice", Name: "Alice Local", Handle: "alice-local", Role: "worker", Avatar: "AL"}); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 	if _, err := svc.CreateRoom(im.CreateRoomRequest{Title: "alpha", CreatorID: "u-manager"}); err != nil {
@@ -736,10 +736,10 @@ func TestFeishuListRoomMembersCallsConfiguredApp(t *testing.T) {
 
 func TestFeishuListRoomMembersLetsFeishuValidateExternalRoomID(t *testing.T) {
 	var gotRoomID string
-	svc := NewFeishuService(map[string]FeishuAppConfig{
+	svc := NewService(map[string]AppConfig{
 		"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"},
 	})
-	svc.listChatMembers = func(_ context.Context, app FeishuAppConfig, _ map[string]FeishuAppConfig, roomID string) ([]im.User, error) {
+	svc.listChatMembers = func(_ context.Context, app AppConfig, _ map[string]AppConfig, roomID string) ([]im.User, error) {
 		if got, want := app.AppID, "cli_manager"; got != want {
 			t.Fatalf("list members app_id = %q, want %q", got, want)
 		}

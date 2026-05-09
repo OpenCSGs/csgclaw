@@ -100,6 +100,10 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
 
 获取全部 agent 列表。
 
+响应中的 `agent_profile` 不返回真实 `api_key`；若已保存密钥，只返回
+`api_key_set: true`，并在长密钥场景返回安全前缀 `api_key_preview`
+（例如 `sk-l...`）供 UI 展示。
+
 ### `POST /api/v1/agents`
 
 创建 `role=worker` 的 agent，并自动同步到 IM 用户体系。

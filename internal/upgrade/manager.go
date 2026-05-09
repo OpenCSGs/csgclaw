@@ -26,6 +26,7 @@ type Manager struct {
 	checkInterval  time.Duration
 	now            func() time.Time
 	onStatusChange func(apitypes.UpgradeStatus)
+	stickyError    string
 
 	mu     sync.RWMutex
 	status apitypes.UpgradeStatus
@@ -93,7 +94,11 @@ func (m *Manager) Refresh(ctx context.Context) {
 	m.status.LastCheckedAt = &checkedAt
 
 	if err != nil {
-		m.status.LastError = err.Error()
+		if m.stickyError != "" {
+			m.status.LastError = m.stickyError
+		} else {
+			m.status.LastError = err.Error()
+		}
 		updated := copyStatus(m.status)
 		notify := shouldNotifyStatusChange(previous, updated)
 		callback := m.onStatusChange
@@ -106,7 +111,7 @@ func (m *Manager) Refresh(ctx context.Context) {
 
 	m.status.LatestVersion = result.LatestVersion
 	m.status.UpdateAvailable = result.UpdateAvailable
-	m.status.LastError = ""
+	m.status.LastError = m.stickyError
 	updated := copyStatus(m.status)
 	notify := shouldNotifyStatusChange(previous, updated)
 	callback := m.onStatusChange
@@ -140,6 +145,7 @@ func (m *Manager) MarkUpgrading() apitypes.UpgradeStatus {
 	m.mu.Lock()
 	previous := copyStatus(m.status)
 	m.status.Upgrading = true
+	m.stickyError = ""
 	m.status.LastError = ""
 	updated := copyStatus(m.status)
 	notify := shouldNotifyStatusChange(previous, updated)
@@ -159,8 +165,10 @@ func (m *Manager) MarkUpgradeFailed(err error) apitypes.UpgradeStatus {
 	m.mu.Lock()
 	previous := copyStatus(m.status)
 	m.status.Upgrading = false
+	m.stickyError = ""
 	if err != nil {
-		m.status.LastError = err.Error()
+		m.stickyError = err.Error()
+		m.status.LastError = m.stickyError
 	}
 	updated := copyStatus(m.status)
 	notify := shouldNotifyStatusChange(previous, updated)

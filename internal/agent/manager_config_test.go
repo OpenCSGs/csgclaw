@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -65,6 +66,22 @@ func TestRenderAgentPicoClawConfigUsesBridgeModelEndpoint(t *testing.T) {
 	}
 	if strings.Contains(text, "cloud.infini-ai.com") {
 		t.Fatalf("renderAgentPicoClawConfig() leaked upstream base URL:\n%s", text)
+	}
+
+	var rendered map[string]any
+	if err := json.Unmarshal(data, &rendered); err != nil {
+		t.Fatalf("renderAgentPicoClawConfig() produced invalid JSON: %v", err)
+	}
+	tools, ok := rendered["tools"].(map[string]any)
+	if !ok {
+		t.Fatalf("renderAgentPicoClawConfig() missing tools in:\n%s", text)
+	}
+	execTool, ok := tools["exec"].(map[string]any)
+	if !ok {
+		t.Fatalf("renderAgentPicoClawConfig() missing tools.exec in:\n%s", text)
+	}
+	if got, want := execTool["timeout_seconds"], float64(600); got != want {
+		t.Fatalf("tools.exec.timeout_seconds = %v, want %v", got, want)
 	}
 }
 

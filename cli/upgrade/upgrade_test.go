@@ -41,8 +41,8 @@ func TestRunNoRestartInstallsBundle(t *testing.T) {
 				switch req.URL.String() {
 				case "https://example.test/releases/latest":
 					return jsonResponse(http.StatusOK, `{
-						"version":"v0.2.7",
-						"assets":[{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","download_url":"https://downloads.example.test/csgclaw.tar.gz","size":`+strconv.Itoa(len(archive))+`,"sha256":"`+hex.EncodeToString(sum[:])+`"}]
+						"name":"v0.2.7",
+						"assets":[{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","browser_download_url":"https://downloads.example.test/csgclaw.tar.gz","size":`+strconv.Itoa(len(archive))+`,"sha256":"`+hex.EncodeToString(sum[:])+`"}]
 					}`), nil
 				case "https://downloads.example.test/csgclaw.tar.gz":
 					return &http.Response{
@@ -120,8 +120,8 @@ func TestRunRestartsRunningDaemonAfterInstall(t *testing.T) {
 				switch req.URL.String() {
 				case "https://example.test/releases/latest":
 					return jsonResponse(http.StatusOK, `{
-						"version":"v0.2.7",
-						"assets":[{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","download_url":"https://downloads.example.test/csgclaw.tar.gz","size":`+strconv.Itoa(len(archive))+`,"sha256":"`+hex.EncodeToString(sum[:])+`"}]
+						"name":"v0.2.7",
+						"assets":[{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","browser_download_url":"https://downloads.example.test/csgclaw.tar.gz","size":`+strconv.Itoa(len(archive))+`,"sha256":"`+hex.EncodeToString(sum[:])+`"}]
 					}`), nil
 				case "https://downloads.example.test/csgclaw.tar.gz":
 					return &http.Response{
@@ -214,8 +214,8 @@ func TestRunInstallErrorExplainsBundleRequirement(t *testing.T) {
 				switch req.URL.String() {
 				case "https://example.test/releases/latest":
 					return jsonResponse(http.StatusOK, `{
-						"version":"v0.2.7",
-						"assets":[{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","download_url":"https://downloads.example.test/csgclaw.tar.gz","size":`+strconv.Itoa(len(archive))+`,"sha256":"`+hex.EncodeToString(sum[:])+`"}]
+						"name":"v0.2.7",
+						"assets":[{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","browser_download_url":"https://downloads.example.test/csgclaw.tar.gz","size":`+strconv.Itoa(len(archive))+`,"sha256":"`+hex.EncodeToString(sum[:])+`"}]
 					}`), nil
 				case "https://downloads.example.test/csgclaw.tar.gz":
 					return &http.Response{
@@ -288,8 +288,8 @@ func TestRunRestartErrorExplainsManualRecovery(t *testing.T) {
 				switch req.URL.String() {
 				case "https://example.test/releases/latest":
 					return jsonResponse(http.StatusOK, `{
-						"version":"v0.2.7",
-						"assets":[{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","download_url":"https://downloads.example.test/csgclaw.tar.gz","size":`+strconv.Itoa(len(archive))+`,"sha256":"`+hex.EncodeToString(sum[:])+`"}]
+						"name":"v0.2.7",
+						"assets":[{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","browser_download_url":"https://downloads.example.test/csgclaw.tar.gz","size":`+strconv.Itoa(len(archive))+`,"sha256":"`+hex.EncodeToString(sum[:])+`"}]
 					}`), nil
 				case "https://downloads.example.test/csgclaw.tar.gz":
 					return &http.Response{

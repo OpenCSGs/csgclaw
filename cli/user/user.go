@@ -8,7 +8,7 @@ import (
 
 	"csgclaw/cli/command"
 	"csgclaw/internal/apitypes"
-	"csgclaw/internal/channel"
+	"csgclaw/internal/channel/feishu"
 )
 
 type cmd struct{}
@@ -104,7 +104,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 			Role:   *role,
 		})
 	case "feishu":
-		err = run.APIClient(globals).DoJSON(ctx, http.MethodPost, "/api/v1/channels/feishu/users", channel.FeishuCreateUserRequest{
+		err = run.APIClient(globals).DoJSON(ctx, http.MethodPost, "/api/v1/channels/feishu/users", feishu.CreateUserRequest{
 			ID:     *id,
 			Name:   *name,
 			Handle: *handle,

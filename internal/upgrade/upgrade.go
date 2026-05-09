@@ -28,16 +28,16 @@ type Client struct {
 }
 
 type LatestRelease struct {
-	Version         string         `json:"version"`
-	DownloadBaseURL string         `json:"download_base_url"`
-	Assets          []ReleaseAsset `json:"assets"`
+	Name   string         `json:"name"`
+	Assets []ReleaseAsset `json:"assets"`
 }
 
 type ReleaseAsset struct {
-	Name        string `json:"name"`
-	DownloadURL string `json:"download_url"`
-	Size        int64  `json:"size"`
-	SHA256      string `json:"sha256"`
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+	Size               int64  `json:"size"`
+	SHA256             string `json:"sha256"`
+	DownloadURL        string `json:"-"`
 }
 
 type CheckResult struct {
@@ -57,13 +57,14 @@ func (c Client) Check(ctx context.Context, currentVersion string) (CheckResult, 
 	if err != nil {
 		return CheckResult{}, err
 	}
-	if !isSemver(release.Version) {
-		return CheckResult{}, fmt.Errorf("latest version %q is not a valid semver release", release.Version)
+	latestVersion := strings.TrimSpace(release.Name)
+	if !isSemver(latestVersion) {
+		return CheckResult{}, fmt.Errorf("latest version %q is not a valid semver release", latestVersion)
 	}
 
 	result := CheckResult{
 		CurrentVersion: normalizeSemver(currentVersion),
-		LatestVersion:  normalizeSemver(release.Version),
+		LatestVersion:  normalizeSemver(latestVersion),
 	}
 	if compareSemver(result.CurrentVersion, result.LatestVersion) >= 0 {
 		return result, nil
@@ -127,7 +128,8 @@ func (c Client) resolvedGOARCH() string {
 }
 
 func selectAsset(release LatestRelease, goos, goarch string) (ReleaseAsset, error) {
-	wantName := "csgclaw_" + normalizeSemver(release.Version) + "_" + goos + "_" + goarch + ".tar.gz"
+	version := normalizeSemver(release.Name)
+	wantName := "csgclaw_" + version + "_" + goos + "_" + goarch + ".tar.gz"
 	for _, asset := range release.Assets {
 		if strings.HasPrefix(asset.Name, "csgclaw-cli_") {
 			continue
@@ -135,24 +137,10 @@ func selectAsset(release LatestRelease, goos, goarch string) (ReleaseAsset, erro
 		if asset.Name != wantName {
 			continue
 		}
-		asset.DownloadURL = resolveDownloadURL(release.DownloadBaseURL, asset.Name, asset.DownloadURL)
+		asset.DownloadURL = absolutizeURL(defaultSiteBaseURL, asset.BrowserDownloadURL)
 		return asset, nil
 	}
-	return ReleaseAsset{}, fmt.Errorf("no release asset for %s/%s at version %s", goos, goarch, normalizeSemver(release.Version))
-}
-
-func resolveDownloadURL(baseURL, assetName, downloadURL string) string {
-	if u := strings.TrimSpace(downloadURL); u != "" {
-		if resolved := absolutizeURL(defaultSiteBaseURL, u); resolved != "" {
-			return resolved
-		}
-	}
-	if base := strings.TrimSpace(baseURL); base != "" {
-		if resolved := absolutizeURL(defaultSiteBaseURL, strings.TrimRight(base, "/")+"/"+assetName); resolved != "" {
-			return resolved
-		}
-	}
-	return ""
+	return ReleaseAsset{}, fmt.Errorf("no release asset for %s/%s at version %s", goos, goarch, version)
 }
 
 func absolutizeURL(baseURL, raw string) string {

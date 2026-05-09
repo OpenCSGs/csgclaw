@@ -17,7 +17,7 @@ import (
 
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/bot"
-	"csgclaw/internal/channel"
+	"csgclaw/internal/channel/feishu"
 	appversion "csgclaw/internal/version"
 )
 
@@ -40,6 +40,15 @@ func TestExecuteAgentListUsesHTTPClientJSON(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"id": "u-alice"`) {
 		t.Fatalf("stdout = %q, want JSON agent payload", stdout.String())
+	}
+}
+
+func TestExecuteChannelCommandIsRemoved(t *testing.T) {
+	var stderr bytes.Buffer
+	app := &App{stdout: io.Discard, stderr: &stderr}
+	err := app.Execute(context.Background(), []string{"channel", "reload"})
+	if err == nil || !strings.Contains(err.Error(), `unknown command "channel"`) {
+		t.Fatalf("Execute() error = %v, want unknown channel command", err)
 	}
 }
 
@@ -382,6 +391,30 @@ func TestExecuteBotDeleteSupportsJSONOutput(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want %s", stdout.String(), want)
 		}
+	}
+}
+
+func TestExecuteBotConfigGetUsesFeishuConfigRoute(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodGet {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
+			}
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/config?bot_id=u-dev" {
+				t.Fatalf("url = %q, want feishu config get route", req.URL.String())
+			}
+			return jsonResponse(http.StatusOK, `{"bot_id":"u-dev","configured":true,"app_id":"cli_dev","app_secret":"present"}`), nil
+		}),
+	}
+
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "config", "--channel", "feishu", "--get", "--bot-id", "u-dev"}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "u-dev") || !strings.Contains(stdout.String(), "present") {
+		t.Fatalf("stdout = %s, want bot and masked secret", stdout.String())
 	}
 }
 
@@ -1628,7 +1661,7 @@ func TestExecuteUserCreateUsesFeishuChannelRoute(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/channels/feishu/users" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/channels/feishu/users")
 			}
-			var body channel.FeishuCreateUserRequest
+			var body feishu.CreateUserRequest
 			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
@@ -1891,12 +1924,11 @@ func TestExecuteUpgradeCheckPrintsTable(t *testing.T) {
 				t.Fatalf("url = %q, want latest release endpoint", req.URL.String())
 			}
 			return jsonResponse(http.StatusOK, fmt.Sprintf(`{
-				"version":"v0.2.7",
-				"download_base_url":"https://downloads.example.test/csgclaw/v0.2.7",
+				"name":"v0.2.7",
 				"assets":[
-					{"name":"%s"}
+					{"name":"%s","browser_download_url":"https://downloads.example.test/csgclaw/v0.2.7/%s"}
 				]
-			}`, assetName)), nil
+			}`, assetName, assetName)), nil
 		}),
 	}
 
@@ -1925,7 +1957,7 @@ func TestExecuteUpgradeDefaultsToCheckResult(t *testing.T) {
 		stdout: &stdout,
 		stderr: &bytes.Buffer{},
 		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			return jsonResponse(http.StatusOK, `{"version":"v0.2.7","assets":[]}`), nil
+			return jsonResponse(http.StatusOK, `{"name":"v0.2.7","assets":[]}`), nil
 		}),
 	}
 
@@ -1956,11 +1988,11 @@ func TestExecuteUpgradeSupportsJSONOutput(t *testing.T) {
 		stderr: &bytes.Buffer{},
 		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return jsonResponse(http.StatusOK, fmt.Sprintf(`{
-				"version":"v0.2.7",
+				"name":"v0.2.7",
 				"assets":[
-					{"name":"%s"}
+					{"name":"%s","browser_download_url":"https://downloads.example.test/csgclaw/v0.2.7/%s"}
 				]
-			}`, assetName)), nil
+			}`, assetName, assetName)), nil
 		}),
 	}
 

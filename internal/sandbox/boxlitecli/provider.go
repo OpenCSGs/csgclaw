@@ -9,7 +9,7 @@ import (
 	"csgclaw/internal/sandbox"
 )
 
-const providerName = "boxlite-cli"
+const providerName = "boxlite"
 
 type Provider struct {
 	path       string

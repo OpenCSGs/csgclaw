@@ -3,6 +3,7 @@ package runtimewiring
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"strings"
 
@@ -13,7 +14,7 @@ import (
 	"csgclaw/internal/sandbox"
 )
 
-func WithPicoClawSandboxRuntime() agent.ServiceOption {
+func WithPicoClawSandboxRuntime(channels config.ChannelsConfig) agent.ServiceOption {
 	return func(s *agent.Service) error {
 		if s == nil {
 			return fmt.Errorf("agent service is required")
@@ -22,7 +23,7 @@ func WithPicoClawSandboxRuntime() agent.ServiceOption {
 		return agent.WithRuntime(picoclawsandbox.New(picoclawsandbox.Dependencies{
 			ModelFallback:  host.ModelFallback,
 			Server:         host.Server,
-			Channels:       host.Channels,
+			Channels:       channels,
 			ResolveBaseURL: resolveManagerBaseURL,
 			EnsureRuntime:  host.EnsureRuntime,
 			RuntimeHome:    host.RuntimeHome,
@@ -68,6 +69,26 @@ func WithPicoClawSandboxRuntime() agent.ServiceOption {
 			StreamLogs:    host.StreamLogs,
 		}))(s)
 	}
+}
+
+func UpdatePicoClawChannels(svc *agent.Service, channels config.ChannelsConfig) {
+	if svc == nil {
+		slog.Warn("skip picoclaw channel reload: agent service is nil")
+		return
+	}
+	rt, err := svc.Runtime(agentruntime.KindPicoClawSandbox)
+	if err != nil {
+		slog.Warn("skip picoclaw channel reload: runtime not available", "runtime_kind", agentruntime.KindPicoClawSandbox, "error", err)
+		return
+	}
+	updater, ok := rt.(interface {
+		SetChannels(config.ChannelsConfig)
+	})
+	if !ok {
+		slog.Warn("skip picoclaw channel reload: runtime does not support channel updates", "runtime_kind", rt.Kind())
+		return
+	}
+	updater.SetChannels(channels)
 }
 
 func resolveManagerBaseURL(server config.ServerConfig) string {

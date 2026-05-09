@@ -2,25 +2,29 @@
 
 English | [中文](feishu.zh.md)
 
-This document explains the Feishu channel configuration under `channels.feishu`.
+This document explains the standalone Feishu channel configuration file.
 
-CSGClaw uses this section to map one human Feishu administrator and multiple Feishu bot applications into local CSGClaw identities.
+CSGClaw uses this file to map one human Feishu administrator and multiple Feishu bot applications into local CSGClaw identities.
 
 ## Configuration Structure
 
+Feishu credentials are loaded from `channels/feishu.toml` next to the selected CSGClaw `config.toml`. With the default config path, the file is `~/.csgclaw/channels/feishu.toml`.
+
+CSGClaw does not read Feishu credentials from `config.toml`.
+
 ```toml
-[channels.feishu]
+[global]
 admin_open_id = "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-[channels.feishu.u-dev]
+[bots.u-dev]
 app_id = "cli_xxxxxxxxxxxxxxxx"
 app_secret = "your_feishu_app_secret"
 
-[channels.feishu.u-manager]
+[bots.u-manager]
 app_id = "cli_xxxxxxxxxxxxxxxx"
 app_secret = "your_feishu_app_secret"
 
-[channels.feishu.u-qa]
+[bots.u-qa]
 app_id = "cli_xxxxxxxxxxxxxxxx"
 app_secret = "your_feishu_app_secret"
 ```
@@ -31,9 +35,9 @@ app_secret = "your_feishu_app_secret"
 
 Use this field for the human administrator who manages or coordinates CSGClaw from Feishu. It is not a bot app ID and it is not a bot credential.
 
-## Bot Entries Under `channels.feishu`
+## Bot Entries
 
-Each nested table such as `[channels.feishu.u-dev]` defines one Feishu bot application for one CSGClaw bot identity.
+Each nested table such as `[bots.u-dev]` defines one Feishu bot application for one CSGClaw bot identity.
 
 The table key is the CSGClaw bot ID:
 

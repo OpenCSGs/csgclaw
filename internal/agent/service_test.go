@@ -25,6 +25,21 @@ func init() {
 
 type fakeRuntime struct{}
 
+type fakeProvider struct {
+	open func(context.Context, string) (sandbox.Runtime, error)
+}
+
+func (f fakeProvider) Name() string {
+	return "fake"
+}
+
+func (f fakeProvider) Open(ctx context.Context, homeDir string) (sandbox.Runtime, error) {
+	if f.open != nil {
+		return f.open(ctx, homeDir)
+	}
+	return &fakeRuntime{}, nil
+}
+
 func (f *fakeRuntime) Create(context.Context, sandbox.CreateSpec) (sandbox.Instance, error) {
 	return &fakeInstance{}, nil
 }
@@ -1680,9 +1695,9 @@ func TestDeleteRemovesRuntimeCacheByHomeDir(t *testing.T) {
 		CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
 	}
 
-	runtimeHome, err := sandboxRuntimeHome("alice")
+	runtimeHome, err := svc.sandboxRuntimeHome("alice")
 	if err != nil {
-		t.Fatalf("sandboxRuntimeHome() error = %v", err)
+		t.Fatalf("svc.sandboxRuntimeHome() error = %v", err)
 	}
 	svc.runtimes[runtimeHome] = rt
 
@@ -2795,9 +2810,14 @@ func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testi
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	runtimeHome, err := sandboxRuntimeHome(ManagerName)
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
 	if err != nil {
-		t.Fatalf("sandboxRuntimeHome() error = %v", err)
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	runtimeHome, err := svc.sandboxRuntimeHome(ManagerName)
+	if err != nil {
+		t.Fatalf("svc.sandboxRuntimeHome() error = %v", err)
 	}
 	managerHome, err := agentHomeDir(ManagerName)
 	if err != nil {
@@ -2999,9 +3019,14 @@ func TestBoxRuntimeHomeUsesPerAgentDirectory(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	got, err := sandboxRuntimeHome("alice")
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
 	if err != nil {
-		t.Fatalf("sandboxRuntimeHome() error = %v", err)
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.sandboxRuntimeHome("alice")
+	if err != nil {
+		t.Fatalf("svc.sandboxRuntimeHome() error = %v", err)
 	}
 
 	want := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", config.RuntimeHomeDirName)
@@ -3014,21 +3039,28 @@ func TestLookupBootstrapManagerUsesPerAgentHome(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	var gotHome string
-	testEnsureRuntimeAtHomeHook = func(_ *Service, homeDir string) (sandbox.Runtime, error) {
-		gotHome = homeDir
-		return &fakeRuntime{}, nil
-	}
 	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
 		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
 	}
 	defer func() {
-		testEnsureRuntimeAtHomeHook = nil
 		testGetBoxHook = nil
 	}()
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	provider := fakeProvider{
+		open: func(_ context.Context, homeDir string) (sandbox.Runtime, error) {
+			gotHome = homeDir
+			return &fakeRuntime{}, nil
+		},
+	}
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "", WithSandboxProvider(provider))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
+	}
+
+	wantHome, err := svc.sandboxRuntimeHome(ManagerName)
+	if err != nil {
+		t.Fatalf("svc.sandboxRuntimeHome() error = %v", err)
 	}
 
 	rt, box, err := svc.lookupBootstrapManager(context.Background())
@@ -3038,7 +3070,6 @@ func TestLookupBootstrapManagerUsesPerAgentHome(t *testing.T) {
 	if box != nil {
 		t.Fatalf("lookupBootstrapManager() box = %#v, want nil", box)
 	}
-	wantHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName, config.RuntimeHomeDirName)
 	if rt == nil {
 		t.Fatal("lookupBootstrapManager() runtime = nil, want non-nil")
 	}
@@ -3047,8 +3078,8 @@ func TestLookupBootstrapManagerUsesPerAgentHome(t *testing.T) {
 	} else if !info.IsDir() {
 		t.Fatalf("runtime home is not a directory: %q", wantHome)
 	}
-	if got, want := len(svc.runtimes), 0; got != want {
-		t.Fatalf("len(svc.runtimes) = %d, want %d when runtime creation is hooked", got, want)
+	if got, want := len(svc.runtimes), 1; got != want {
+		t.Fatalf("len(svc.runtimes) = %d, want %d", got, want)
 	}
 	if got, want := gotHome, wantHome; got != want {
 		t.Fatalf("resolved manager runtime home = %q, want %q", got, want)
@@ -3176,22 +3207,23 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	localIPv4Resolver = func() string { return "10.0.0.8" }
 	defer func() { localIPv4Resolver = orig }()
 
-	svc, err := NewServiceWithChannels(
-		testModelConfig(),
-		config.ServerConfig{ListenAddr: ":18080", AccessToken: "shared-token"},
-		config.ChannelsConfig{
-			Feishu: map[string]config.FeishuConfig{
-				"u-worker-1": {
-					AppID:     "cli_worker",
-					AppSecret: "worker-secret",
-				},
+	channels := config.ChannelsConfig{
+		Feishu: map[string]config.FeishuConfig{
+			"u-worker-1": {
+				AppID:     "cli_worker",
+				AppSecret: "worker-secret",
 			},
 		},
+	}
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "shared-token"},
 		"",
 		"",
+		withTestPicoClawSandboxRuntime(channels),
 	)
 	if err != nil {
-		t.Fatalf("NewServiceWithChannels() error = %v", err)
+		t.Fatalf("NewService() error = %v", err)
 	}
 
 	spec, err := svc.gatewayCreateSpec("picoclaw:latest", "alice", "u-worker-1", AgentProfile{
@@ -3513,13 +3545,17 @@ func addFeishuBoxEnvVars(envVars map[string]string, botID string, channels confi
 	envVars["PICOCLAW_CHANNELS_FEISHU_APP_SECRET"] = feishu.AppSecret
 }
 
-func withTestPicoClawSandboxRuntime() ServiceOption {
+func withTestPicoClawSandboxRuntime(channels ...config.ChannelsConfig) ServiceOption {
 	return func(s *Service) error {
+		channelConfig := config.ChannelsConfig{}
+		if len(channels) > 0 {
+			channelConfig = channels[0]
+		}
 		host := s.PicoClawRuntimeHost()
 		return WithRuntime(picoclawsandbox.New(picoclawsandbox.Dependencies{
 			ModelFallback:  host.ModelFallback,
 			Server:         host.Server,
-			Channels:       host.Channels,
+			Channels:       channelConfig,
 			ResolveBaseURL: resolveManagerBaseURL,
 			EnsureRuntime:  host.EnsureRuntime,
 			RuntimeHome:    host.RuntimeHome,

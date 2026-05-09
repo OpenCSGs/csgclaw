@@ -2,25 +2,29 @@
 
 [English](feishu.md) | 中文
 
-本文说明 `channels.feishu` 下的飞书 channel 配置格式。
+本文说明独立的飞书 channel 配置文件格式。
 
-CSGClaw 通过这一段配置，把一个真人飞书管理员和多个飞书机器人应用映射为本地的 CSGClaw 身份。
+CSGClaw 通过这个文件，把一个真人飞书管理员和多个飞书机器人应用映射为本地的 CSGClaw 身份。
 
 ## 配置结构
 
+飞书凭证从所选 CSGClaw `config.toml` 旁边的 `channels/feishu.toml` 读取。使用默认配置路径时，文件是 `~/.csgclaw/channels/feishu.toml`。
+
+CSGClaw 不再从 `config.toml` 读取飞书凭证。
+
 ```toml
-[channels.feishu]
+[global]
 admin_open_id = "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-[channels.feishu.u-dev]
+[bots.u-dev]
 app_id = "cli_xxxxxxxxxxxxxxxx"
 app_secret = "your_feishu_app_secret"
 
-[channels.feishu.u-manager]
+[bots.u-manager]
 app_id = "cli_xxxxxxxxxxxxxxxx"
 app_secret = "your_feishu_app_secret"
 
-[channels.feishu.u-qa]
+[bots.u-qa]
 app_id = "cli_xxxxxxxxxxxxxxxx"
 app_secret = "your_feishu_app_secret"
 ```
@@ -31,9 +35,9 @@ app_secret = "your_feishu_app_secret"
 
 这个字段用于表示在飞书侧管理或协调 CSGClaw 的管理员用户。它不是机器人的 App ID，也不是机器人的凭证。
 
-## `channels.feishu` 下的机器人条目
+## 机器人条目
 
-每个子表，例如 `[channels.feishu.u-dev]`，都表示一个飞书机器人应用，对应一个 CSGClaw 机器人身份。
+每个子表，例如 `[bots.u-dev]`，都表示一个飞书机器人应用，对应一个 CSGClaw 机器人身份。
 
 子表的 key 就是 CSGClaw 机器人的 ID：
 

@@ -179,6 +179,7 @@ func (a *App) usage() {
 	fmt.Fprintln(a.stderr, "  csgclaw-cli -h")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli --version")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli bot list --channel feishu")
+	fmt.Fprintln(a.stderr, "  csgclaw-cli bot config --channel feishu --get --bot-id u-dev")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli message create --channel feishu --room-id oc_x --sender-id u-manager --content hello")
 	fmt.Fprintln(a.stderr)
 	fmt.Fprintln(a.stderr, "Global flags:")

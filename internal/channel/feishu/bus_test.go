@@ -1,4 +1,4 @@
-package channel
+package feishu
 
 import (
 	"testing"
@@ -8,20 +8,20 @@ import (
 )
 
 func TestFeishuMessageBusPublishesToSubscribers(t *testing.T) {
-	bus := NewFeishuMessageBus()
+	bus := NewMessageBus()
 	events, cancel := bus.Subscribe()
 	defer cancel()
 
 	message := im.Message{ID: "om_1", SenderID: "ou_manager", Content: "hello", Mentions: []im.Mention{{ID: "ou_dev"}}}
-	bus.Publish(FeishuMessageEvent{
-		Type:    FeishuMessageEventTypeMessageCreated,
+	bus.Publish(MessageEvent{
+		Type:    MessageEventTypeMessageCreated,
 		RoomID:  "oc_alpha",
 		Message: &message,
 	})
 
 	select {
 	case evt := <-events:
-		if evt.Type != FeishuMessageEventTypeMessageCreated || evt.RoomID != "oc_alpha" || evt.Message == nil || evt.Message.ID != "om_1" || len(evt.Message.Mentions) != 1 || evt.Message.Mentions[0].ID != "ou_dev" {
+		if evt.Type != MessageEventTypeMessageCreated || evt.RoomID != "oc_alpha" || evt.Message == nil || evt.Message.ID != "om_1" || len(evt.Message.Mentions) != 1 || evt.Message.Mentions[0].ID != "ou_dev" {
 			t.Fatalf("event = %+v, want message.created for om_1 in oc_alpha", evt)
 		}
 	case <-time.After(time.Second):
@@ -30,7 +30,7 @@ func TestFeishuMessageBusPublishesToSubscribers(t *testing.T) {
 }
 
 func TestFeishuMessageBusCancelClosesSubscription(t *testing.T) {
-	bus := NewFeishuMessageBus()
+	bus := NewMessageBus()
 	events, cancel := bus.Subscribe()
 
 	cancel()

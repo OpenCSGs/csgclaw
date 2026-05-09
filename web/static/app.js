@@ -48,6 +48,15 @@ function safeParseEventData(raw) {
   }
 }
 
+// API returns Version from git describe (e.g. "v0.2.1-5-gabc-dirty") or "dev"; avoid "vv" in the UI.
+function formatSidebarVersionLabel(version) {
+  const raw = typeof version === "string" ? version.trim() : "";
+  if (!raw) {
+    return "csgclaw dev";
+  }
+  return raw.startsWith("v") ? `csgclaw ${raw}` : `csgclaw v${raw}`;
+}
+
 function subscribeIMEvents(onEvent) {
   if (typeof window.SharedWorker === "function") {
     try {
@@ -132,6 +141,7 @@ const messages = {
     profileModel: "Model",
     profileBaseURL: "Base URL",
     profileAPIKey: "API Key",
+    profileAPIKeyNewPlaceholder: "sk-...",
     profileHeaders: "Headers JSON",
     profileRequestOptions: "请求选项（JSON，合并到请求顶层）",
     profileEnv: "环境变量",
@@ -313,6 +323,7 @@ const messages = {
     profileModel: "Model",
     profileBaseURL: "Base URL",
     profileAPIKey: "API Key",
+    profileAPIKeyNewPlaceholder: "sk-...",
     profileHeaders: "Headers JSON",
     profileRequestOptions: "Request options (JSON, merged into top-level request)",
     profileEnv: "Environment variables",
@@ -459,6 +470,36 @@ function requiredFieldLabel(label) {
       ${label}
       <span className="field-required-star" aria-hidden="true">*</span>
     </span>
+  `;
+}
+
+function APIKeyField({ value, onInput, profile, t }) {
+  const stored = Boolean(profile?.api_key_set);
+  const preview = String(profile?.api_key_preview || "").trim();
+  const showStoredMask = stored && isBlank(value);
+  const previewPrefix = preview.endsWith("...") ? preview.slice(0, -3) : "";
+  const placeholder = stored ? "" : t("profileAPIKeyNewPlaceholder");
+  return html`
+    <label className="field api-key-field">
+      <span>${t("profileAPIKey")}</span>
+      <div className="api-key-input-shell">
+        <input
+          value=${value}
+          onInput=${onInput}
+          placeholder=${placeholder}
+          autoComplete="off"
+          spellCheck=${false}
+        />
+        ${showStoredMask
+          ? html`
+              <div className="api-key-mask" aria-hidden="true">
+                ${previewPrefix ? html`<span className="api-key-mask-prefix">${previewPrefix}</span>` : null}
+                <span className="api-key-mask-dots">••••••••</span>
+              </div>
+            `
+          : null}
+      </div>
+    </label>
   `;
 }
 
@@ -1333,9 +1374,11 @@ function App() {
       } else if (!payload?.update_available) {
         setUpgradeBusy(false);
       }
+      return payload;
     } catch (_) {
       setUpgradeStatus(null);
       setUpgradeBusy(false);
+      return null;
     }
   }
 
@@ -1382,7 +1425,9 @@ function App() {
         stopUpgradePoll();
         setUpgradeBusy(false);
         setUpgradePhase("error");
-        setUpgradeError(t("upgradeApplyFailed"));
+        const latest = await refreshUpgradeStatus();
+        const detail = latest?.last_error ? ` ${latest.last_error}` : "";
+        setUpgradeError(`${t("upgradeApplyFailed")}${detail}`);
       }
     };
     poll();
@@ -1751,7 +1796,7 @@ function App() {
       }
       const profile = await resp.json();
       setManagerProfile(profile);
-      setProfileDraft(profileToDraft(profile));
+      setProfileDraft({ ...profileToDraft(profile), agent_id: "u-manager" });
     } catch (_) {
       // The manager may not exist during the first bootstrap milliseconds.
     }
@@ -1837,6 +1882,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          agent_id: draft.agent_id,
           provider: draft.provider,
           base_url: draft.base_url,
           api_key: draft.api_key,
@@ -1889,7 +1935,7 @@ function App() {
       }
       const saved = await resp.json();
       setManagerProfile(saved);
-      setProfileDraft(profileToDraft(saved));
+      setProfileDraft({ ...profileToDraft(saved), agent_id: "u-manager" });
       if (saved.profile_complete) {
         await fetch("api/v1/agents/u-manager/recreate", { method: "POST" });
       }
@@ -1937,12 +1983,12 @@ function App() {
     try {
       const resp = await fetch("api/v1/agent-profile-defaults");
       const defaults = resp.ok ? await resp.json() : managerProfile;
-      const draft = agentToDraft({ image: managerAgent?.image || "", runtime_kind: managerAgent?.runtime_kind || "", agent_profile: defaults });
+      const draft = agentToDraft({ id: managerAgent?.id || "u-manager", image: managerAgent?.image || "", runtime_kind: managerAgent?.runtime_kind || "", agent_profile: defaults });
       setAgentDraft(draft);
       setShowAgentModal(true);
       loadAgentModels(draft, { silent: true });
     } catch (_) {
-      const draft = agentToDraft({ image: managerAgent?.image || "", runtime_kind: managerAgent?.runtime_kind || "", agent_profile: managerProfile });
+      const draft = agentToDraft({ id: managerAgent?.id || "u-manager", image: managerAgent?.image || "", runtime_kind: managerAgent?.runtime_kind || "", agent_profile: managerProfile });
       setAgentDraft(draft);
       setShowAgentModal(true);
       loadAgentModels(draft, { silent: true });
@@ -2000,6 +2046,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          agent_id: draft.agent_id,
           provider: draft.provider,
           base_url: draft.base_url,
           api_key: draft.api_key,
@@ -2048,6 +2095,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          agent_id: draft.agent_id,
           provider: draft.provider,
           base_url: draft.base_url,
           api_key: draft.api_key,
@@ -2568,7 +2616,7 @@ function App() {
             </nav>
             <div className="sidebar-footer">
               <div className="sidebar-footer-row">
-                <span className="sidebar-version-label">${`csgclaw v${appVersion}`}</span>
+                <span className="sidebar-version-label">${formatSidebarVersionLabel(appVersion)}</span>
                 ${upgradeStatus?.update_available || upgradeBusy || upgradeStatus?.upgrading || upgradePhase === "done" || upgradePhase === "error"
                   ? html`
                       <button
@@ -3264,10 +3312,12 @@ function App() {
                                 placeholder="https://api.openai.com/v1"
                               />
                             </label>
-                            <label className="field">
-                              <span>${t("profileAPIKey")}</span>
-                              <input value=${agentDraft.api_key} onInput=${(event) => setAgentDraft({ ...agentDraft, api_key: event.target.value })} placeholder=${editingAgent?.agent_profile?.api_key_set ? "Stored key will be kept if blank" : "sk-..."} />
-                            </label>
+                            <${APIKeyField}
+                              value=${agentDraft.api_key}
+                              onInput=${(event) => setAgentDraft({ ...agentDraft, api_key: event.target.value })}
+                              profile=${agentDraft}
+                              t=${t}
+                            />
                             <label className="field span-2">
                               <span>${t("profileHeaders")}</span>
                               <textarea className="compact-textarea" value=${agentDraft.headersText} onInput=${(event) => setAgentDraft({ ...agentDraft, headersText: event.target.value })} />
@@ -3404,10 +3454,12 @@ function App() {
                                 placeholder="https://api.openai.com/v1"
                               />
                             </label>
-                            <label className="field">
-                              <span>${t("profileAPIKey")}</span>
-                              <input value=${profileDraft.api_key} onInput=${(event) => setProfileDraft({ ...profileDraft, api_key: event.target.value })} placeholder=${managerProfile.api_key_set ? "Stored key will be kept if blank" : "sk-..."} />
-                            </label>
+                            <${APIKeyField}
+                              value=${profileDraft.api_key}
+                              onInput=${(event) => setProfileDraft({ ...profileDraft, api_key: event.target.value })}
+                              profile=${profileDraft}
+                              t=${t}
+                            />
                             <label className="field span-2">
                               <span>${t("profileHeaders")}</span>
                               <textarea className="compact-textarea" value=${profileDraft.headersText} onInput=${(event) => setProfileDraft({ ...profileDraft, headersText: event.target.value })} />
@@ -3874,10 +3926,12 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
                             placeholder="https://api.openai.com/v1"
                           />
                         </label>
-                        <label className="field">
-                          <span>${t("profileAPIKey")}</span>
-                          <input value=${draft.api_key} onInput=${(event) => updateDraft({ api_key: event.target.value })} placeholder=${item.agent_profile?.api_key_set ? "Stored key will be kept if blank" : "sk-..."} />
-                        </label>
+                        <${APIKeyField}
+                          value=${draft.api_key}
+                          onInput=${(event) => updateDraft({ api_key: event.target.value })}
+                          profile=${draft}
+                          t=${t}
+                        />
                         <label className="field span-2">
                           <span>${t("profileHeaders")}</span>
                           <textarea className="compact-textarea" value=${draft.headersText} onInput=${(event) => updateDraft({ headersText: event.target.value })} />
@@ -4451,6 +4505,8 @@ function profileToDraft(profile) {
     provider: profile?.provider || "csghub_lite",
     base_url: profile?.base_url || "",
     api_key: "",
+    api_key_set: Boolean(profile?.api_key_set),
+    api_key_preview: profile?.api_key_preview || "",
     model_id: profile?.model_id || "",
     reasoning_effort: profile?.reasoning_effort || "medium",
     enable_fast_mode: Boolean(profile?.enable_fast_mode),
@@ -4465,6 +4521,7 @@ function modelRequestKey(draft) {
     return "";
   }
   return JSON.stringify({
+    agent_id: draft.agent_id || "",
     provider: draft.provider || "",
     base_url: draft.base_url || "",
     api_key: draft.api_key || "",
@@ -4475,6 +4532,7 @@ function modelRequestKey(draft) {
 function agentToDraft(agent) {
   const profile = agent?.agent_profile || agent || {};
   return {
+    agent_id: agent?.id || "",
     name: agent?.name || "",
     role: agent?.role || "worker",
     description: agent?.description || profile.description || "",

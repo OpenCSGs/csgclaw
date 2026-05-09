@@ -148,11 +148,9 @@ type Service struct {
 	model            config.ModelConfig
 	llm              config.LLMConfig
 	server           config.ServerConfig
-	channels         config.ChannelsConfig
 	managerImage     string
 	state            string
 	sandbox          sandbox.Provider
-	sandboxHome      string
 	mu               sync.RWMutex
 	runtimes         map[string]sandbox.Runtime
 	agents           map[string]Agent
@@ -192,17 +190,6 @@ func WithRuntime(rt agentruntime.Runtime) ServiceOption {
 	}
 }
 
-func WithSandboxHomeDirName(name string) ServiceOption {
-	return func(s *Service) error {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return fmt.Errorf("sandbox home dir name is required")
-		}
-		s.sandboxHome = name
-		return nil
-	}
-}
-
 func WithLifecycleObserver(observer LifecycleObserver) ServiceOption {
 	return func(s *Service) error {
 		if s == nil {
@@ -217,15 +204,7 @@ func NewService(model config.ModelConfig, server config.ServerConfig, managerIma
 	return NewServiceWithLLM(config.SingleProfileLLM(model), server, managerImage, statePath, opts...)
 }
 
-func NewServiceWithChannels(model config.ModelConfig, server config.ServerConfig, channels config.ChannelsConfig, managerImage, statePath string, opts ...ServiceOption) (*Service, error) {
-	return NewServiceWithLLMAndChannels(config.SingleProfileLLM(model), server, channels, managerImage, statePath, opts...)
-}
-
 func NewServiceWithLLM(llmCfg config.LLMConfig, server config.ServerConfig, managerImage, statePath string, opts ...ServiceOption) (*Service, error) {
-	return NewServiceWithLLMAndChannels(llmCfg, server, config.ChannelsConfig{}, managerImage, statePath, opts...)
-}
-
-func NewServiceWithLLMAndChannels(llmCfg config.LLMConfig, server config.ServerConfig, channels config.ChannelsConfig, managerImage, statePath string, opts ...ServiceOption) (*Service, error) {
 	// agent.Service owns the persisted registry and runtime selection.
 	if managerImage == "" {
 		managerImage = config.DefaultManagerImage
@@ -242,11 +221,9 @@ func NewServiceWithLLMAndChannels(llmCfg config.LLMConfig, server config.ServerC
 		model:           model,
 		llm:             llmCfg.Normalized(),
 		server:          server,
-		channels:        cloneChannelsConfig(channels),
 		managerImage:    managerImage,
 		state:           statePath,
 		sandbox:         defaultSandboxProvider,
-		sandboxHome:     config.DefaultSandboxHomeDirName,
 		runtimes:        make(map[string]sandbox.Runtime),
 		agents:          make(map[string]Agent),
 		runtimeRecords:  make(map[string]RuntimeRecord),
@@ -273,19 +250,6 @@ func NewServiceWithLLMAndChannels(llmCfg config.LLMConfig, server config.ServerC
 		return nil, err
 	}
 	return svc, nil
-}
-
-func cloneChannelsConfig(channels config.ChannelsConfig) config.ChannelsConfig {
-	cloned := config.ChannelsConfig{
-		FeishuAdminOpenID: channels.FeishuAdminOpenID,
-	}
-	if len(channels.Feishu) > 0 {
-		cloned.Feishu = make(map[string]config.FeishuConfig, len(channels.Feishu))
-		for name, feishu := range channels.Feishu {
-			cloned.Feishu[name] = feishu
-		}
-	}
-	return cloned
 }
 
 func EnsureBootstrapState(ctx context.Context, statePath string, server config.ServerConfig, model config.ModelConfig, managerImage string, forceRecreate bool) error {

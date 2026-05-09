@@ -129,6 +129,42 @@ func TestProfileDefaultsPersistAfterProfileUpdate(t *testing.T) {
 	}
 }
 
+func TestRedactedProfileViewIncludesSafeAPIKeyPreview(t *testing.T) {
+	view := RedactedProfileView(AgentProfile{
+		Name:   "alice",
+		APIKey: "sk-live-secret-token",
+	}, nil)
+	if !view.APIKeySet {
+		t.Fatalf("APIKeySet = false, want true")
+	}
+	if got, want := view.APIKeyPreview, "sk-l..."; got != want {
+		t.Fatalf("APIKeyPreview = %q, want %q", got, want)
+	}
+	data, err := json.Marshal(view)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if strings.Contains(string(data), "secret-token") {
+		t.Fatalf("redacted view leaked API key: %s", string(data))
+	}
+	if strings.Contains(string(data), `"api_key"`) {
+		t.Fatalf("redacted view includes api_key: %s", string(data))
+	}
+}
+
+func TestRedactedProfileViewOmitsAPIKeyPreviewForShortKeys(t *testing.T) {
+	view := RedactedProfileView(AgentProfile{
+		Name:   "alice",
+		APIKey: "local",
+	}, nil)
+	if !view.APIKeySet {
+		t.Fatalf("APIKeySet = false, want true")
+	}
+	if view.APIKeyPreview != "" {
+		t.Fatalf("APIKeyPreview = %q, want empty for short key", view.APIKeyPreview)
+	}
+}
+
 func TestListModelsForRequestUsesCLIProxyChoicesForDropdown(t *testing.T) {
 	oldChoices := listCLIProxyModelChoices
 	defer func() {
@@ -151,6 +187,90 @@ func TestListModelsForRequestUsesCLIProxyChoicesForDropdown(t *testing.T) {
 	want := []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-4.1"}
 	if strings.Join(models, ",") != strings.Join(want, ",") {
 		t.Fatalf("models = %v, want %v", models, want)
+	}
+}
+
+func TestListModelsForRequestUsesStoredAgentAPIKeyForMatchingProfile(t *testing.T) {
+	var authHeader string
+	var gotHeader string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader = r.Header.Get("Authorization")
+		gotHeader = r.Header.Get("X-Test")
+		_, _ = w.Write([]byte(`{"data":[{"id":"deepseek-chat"}]}`))
+	}))
+	defer upstream.Close()
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:   "u-alice",
+		Name: "alice",
+		AgentProfile: normalizeProfile(AgentProfile{
+			Name:     "alice",
+			Provider: ProviderAPI,
+			BaseURL:  upstream.URL + "/v1",
+			APIKey:   "stored-key",
+			Headers:  map[string]string{"X-Test": "stored"},
+			ModelID:  "deepseek-chat",
+		}, "alice", ""),
+	}
+
+	models, err := svc.ListModelsForRequest(context.Background(), ProfileModelRequest{
+		AgentID:  "u-alice",
+		Provider: ProviderAPI,
+		BaseURL:  upstream.URL + "/v1",
+		Headers:  map[string]string{"X-Test": "draft"},
+	})
+	if err != nil {
+		t.Fatalf("ListModelsForRequest() error = %v", err)
+	}
+	if authHeader != "Bearer stored-key" {
+		t.Fatalf("Authorization = %q, want stored key", authHeader)
+	}
+	if gotHeader != "draft" {
+		t.Fatalf("X-Test header = %q, want draft header", gotHeader)
+	}
+	if got, want := strings.Join(models, ","), "deepseek-chat"; got != want {
+		t.Fatalf("models = %v, want %s", models, want)
+	}
+}
+
+func TestListModelsForRequestDoesNotReuseStoredAPIKeyForChangedBaseURL(t *testing.T) {
+	var authHeader string
+	otherUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader = r.Header.Get("Authorization")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}))
+	defer otherUpstream.Close()
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:   "u-alice",
+		Name: "alice",
+		AgentProfile: normalizeProfile(AgentProfile{
+			Name:     "alice",
+			Provider: ProviderAPI,
+			BaseURL:  "https://api.deepseek.com",
+			APIKey:   "stored-key",
+			ModelID:  "deepseek-chat",
+		}, "alice", ""),
+	}
+
+	_, err = svc.ListModelsForRequest(context.Background(), ProfileModelRequest{
+		AgentID:  "u-alice",
+		Provider: ProviderAPI,
+		BaseURL:  otherUpstream.URL + "/v1",
+	})
+	if err == nil {
+		t.Fatal("ListModelsForRequest() error = nil, want upstream auth failure")
+	}
+	if authHeader != "" {
+		t.Fatalf("Authorization sent to changed base URL = %q, want empty", authHeader)
 	}
 }
 

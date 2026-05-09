@@ -12,7 +12,7 @@ sandboxes; csgclaw is configured with `[sandbox].provider = csghub`).
 
 There is **no** separate `csghub` build tag. Variables in §2–§6 matter
 when the deployment uses the CSGHub sandbox provider and this PVC/API
-layout; pure local BoxLite (`provider = boxlite-cli`) does not need
+layout; pure local BoxLite (`provider = boxlite`) does not need
 them.
 
 It has two audiences:

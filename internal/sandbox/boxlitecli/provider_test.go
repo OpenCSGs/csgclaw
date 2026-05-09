@@ -15,7 +15,7 @@ import (
 
 func TestProviderImplementsSandboxProvider(t *testing.T) {
 	var _ sandbox.Provider = NewProvider()
-	if got, want := NewProvider().Name(), "boxlite-cli"; got != want {
+	if got, want := NewProvider().Name(), "boxlite"; got != want {
 		t.Fatalf("Name() = %q, want %q", got, want)
 	}
 }

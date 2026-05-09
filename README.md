@@ -74,7 +74,7 @@ CSGClaw gives you one **Manager** and a set of specialized **Workers**, so inste
 
 **Workers** — role-specific executors (frontend, backend, testing, docs, research…). Specialization keeps context clean and reduces role confusion.
 
-**Sandbox** — Worker execution is isolated by the configured sandbox provider. The default is **BoxLite**, with support for `boxlite-cli` and custom providers.
+**Sandbox** — Worker execution is isolated by the configured sandbox provider. The default is **BoxLite**, with support for `boxlite` and custom providers.
 
 **Interface** — WebUI out of the box; Feishu, WeChat, Matrix, and other channels available as integrations.
 

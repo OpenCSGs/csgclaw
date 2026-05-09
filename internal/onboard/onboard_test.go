@@ -68,9 +68,6 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 	if got, want := gotCfg.Sandbox.Provider, config.DefaultSandboxProvider; got != want {
 		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
 	}
-	if got, want := gotCfg.Sandbox.HomeDirName, config.DefaultSandboxHomeDirName; got != want {
-		t.Fatalf("cfg.Sandbox.HomeDirName = %q, want %q", got, want)
-	}
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -81,7 +78,6 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 		`[bootstrap]`,
 		`[sandbox]`,
 		`provider = "` + config.DefaultSandboxProvider + `"`,
-		`home_dir_name = "` + config.DefaultSandboxHomeDirName + `"`,
 		`debian_registries_override = []`,
 	} {
 		if !strings.Contains(string(data), want) {
@@ -105,7 +101,7 @@ access_token = "your_access_token"
 manager_image_override = "img"
 
 [sandbox]
-provider = "boxlite-cli"
+provider = "boxlite"
 home_dir_name = "boxlite"
 debian_registries_override = []
 
@@ -164,7 +160,7 @@ no_auth = false
 manager_image_override = ""
 
 [sandbox]
-provider = "boxlite-cli"
+provider = "boxlite"
 home_dir_name = "boxlite"
 debian_registries_override = []
 
@@ -200,6 +196,65 @@ models = ["gpt-test"]
 	}
 	if string(data) != original {
 		t.Fatalf("EnsureState() rewrote complete config.\nGot:\n%s\nWant:\n%s", string(data), original)
+	}
+}
+
+func TestEnsureStateRewritesLegacyBoxLiteCLIProviderInExistingCompleteConfig(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	original := `# custom config header
+
+[server]
+listen_addr = "127.0.0.1:19090"
+advertise_base_url = "http://example.test"
+access_token = "custom-token"
+no_auth = false
+
+[bootstrap]
+manager_image_override = ""
+
+[sandbox]
+provider = "boxlite-cli"
+home_dir_name = "boxlite"
+debian_registries_override = []
+
+[models]
+default = "default.gpt-test"
+
+[models.providers.default]
+base_url = "http://llm.test/v1"
+api_key = "secret"
+models = ["gpt-test"]
+`
+	if err := os.WriteFile(configPath, []byte(original), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	restore := stubEnsureStateDeps(t)
+	defer restore()
+	EnsureIMBootstrapState = func(string) error { return nil }
+	CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
+		if got, want := cfg.Sandbox.Provider, config.BoxLiteCLIProvider; got != want {
+			t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
+		}
+		return bot.Bot{}, nil
+	}
+
+	if _, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath}); err != nil {
+		t.Fatalf("EnsureState() error = %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, `provider = "boxlite"`) {
+		t.Fatalf("EnsureState() did not write canonical provider.\nGot:\n%s", got)
+	}
+	if strings.Contains(got, `provider = "boxlite-cli"`) {
+		t.Fatalf("EnsureState() kept legacy provider alias.\nGot:\n%s", got)
 	}
 }
 
@@ -241,7 +296,6 @@ access_token = "your_access_token"
 		`manager_image_override = ""`,
 		`[sandbox]`,
 		`provider = "` + config.DefaultSandboxProvider + `"`,
-		`home_dir_name = "` + config.DefaultSandboxHomeDirName + `"`,
 		`debian_registries_override = []`,
 	} {
 		if !strings.Contains(content, want) {

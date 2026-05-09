@@ -2,6 +2,10 @@
 
 ## Overview
 
+The following diagram shows the relationships among the main CSGClaw concepts.
+
+![CSGClaw concepts relationship diagram](../assets/concepts.png)
+
 CSGClaw is a Go-based local multi-agent platform. It runs a single local HTTP server, serves the Web UI, exposes REST/SSE/WebSocket APIs, and manages agents, bots, rooms, users, and messages.
 
 The main runtime concepts are:
