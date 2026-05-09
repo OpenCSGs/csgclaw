@@ -313,10 +313,16 @@ func (s *Service) DetectDefaultProfile(ctx context.Context) (AgentProfile, []Pro
 		s.mu.RUnlock()
 		defaultProfile = normalizeProfile(defaultProfile, ManagerName, "")
 		if defaultProfile.ProfileComplete {
+			if strings.TrimSpace(defaultProfile.ModelID) != "" {
+				// Trust explicit config (e.g. tests, headless bootstrap) without probing /v1/models.
+				return defaultProfile, []ProfileDetectionResult{{
+					Provider: defaultProfile.Provider,
+					Status:   "ok",
+					ModelID:  defaultProfile.ModelID,
+				}}
+			}
 			if models, err := ListModelsForProfile(ctx, defaultProfile); err == nil && len(models) > 0 {
-				if defaultProfile.ModelID == "" {
-					defaultProfile.ModelID = models[0]
-				}
+				defaultProfile.ModelID = models[0]
 				defaultProfile.ProfileComplete = true
 				return defaultProfile, []ProfileDetectionResult{{
 					Provider: defaultProfile.Provider,

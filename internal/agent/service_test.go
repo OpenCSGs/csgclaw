@@ -2786,14 +2786,14 @@ func TestEnsureBootstrapStateForceRecreatePrefersStoredManagerBoxID(t *testing.T
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
-	if err := EnsureBootstrapState(context.Background(), statePath, config.ServerConfig{}, config.ModelConfig{}, "", true); err != nil {
+	if err := EnsureBootstrapState(context.Background(), statePath, config.ServerConfig{}, testModelConfig(), "", true); err != nil {
 		t.Fatalf("EnsureBootstrapState() error = %v", err)
 	}
 	if removed != "box-old" {
 		t.Fatalf("ForceRemove() target = %q, want %q", removed, "box-old")
 	}
 
-	reloaded, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", statePath)
+	reloaded, err := NewService(testModelConfig(), config.ServerConfig{}, "", statePath)
 	if err != nil {
 		t.Fatalf("NewService() reload error = %v", err)
 	}
@@ -2883,7 +2883,7 @@ func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testi
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
-	if err := EnsureBootstrapState(context.Background(), statePath, config.ServerConfig{}, config.ModelConfig{}, "", true); err != nil {
+	if err := EnsureBootstrapState(context.Background(), statePath, config.ServerConfig{}, testModelConfig(), "", true); err != nil {
 		t.Fatalf("EnsureBootstrapState() error = %v", err)
 	}
 	if got, want := len(ensuredHomes), 2; got != want {
@@ -2936,7 +2936,7 @@ func TestEnsureBootstrapStateClosesManagerBoxHandleAfterCreate(t *testing.T) {
 
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "agents.json")
-	if err := EnsureBootstrapState(context.Background(), statePath, config.ServerConfig{}, config.ModelConfig{}, "", false); err != nil {
+	if err := EnsureBootstrapState(context.Background(), statePath, config.ServerConfig{}, testModelConfig(), "", false); err != nil {
 		t.Fatalf("EnsureBootstrapState() error = %v", err)
 	}
 	if closeCalls != 1 {
@@ -2946,7 +2946,7 @@ func TestEnsureBootstrapStateClosesManagerBoxHandleAfterCreate(t *testing.T) {
 		t.Fatalf("closeRuntime() calls = %d, want %d", closeRuntimeCalls, 1)
 	}
 
-	reloaded, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", statePath)
+	reloaded, err := NewService(testModelConfig(), config.ServerConfig{}, "", statePath)
 	if err != nil {
 		t.Fatalf("NewService() reload error = %v", err)
 	}

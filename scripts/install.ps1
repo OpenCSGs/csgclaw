@@ -10,9 +10,30 @@ $BaseUrl = if ($env:BASE_URL) { $env:BASE_URL } else { "$MirrorHost/releases" }
 $LatestReleaseUrl = if ($env:LATEST_RELEASE_URL) { $env:LATEST_RELEASE_URL } else { "$MirrorHost/releases/latest" }
 
 function Resolve-Arch {
-    switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()) {
+    $name = $null
+    try {
+        $osArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+        if ($null -ne $osArch) {
+            $name = $osArch.ToString().ToLowerInvariant()
+        }
+    } catch {
+        $name = $null
+    }
+    if (-not $name) {
+        # 32-bit PowerShell on 64-bit Windows exposes native CPU here.
+        if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
+            return "amd64"
+        }
+        if ($env:PROCESSOR_ARCHITECTURE -eq "AMD64") {
+            return "amd64"
+        }
+        throw "Unsupported architecture: could not detect CPU (PROCESSOR_ARCHITECTURE=$($env:PROCESSOR_ARCHITECTURE); PROCESSOR_ARCHITEW6432=$($env:PROCESSOR_ARCHITEW6432)). Official Windows installer supports windows/amd64 only."
+    }
+    switch ($name) {
         "x64" { return "amd64" }
-        default { throw "Unsupported architecture: $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture). Official Windows installer currently supports windows/amd64 only." }
+        default {
+            throw "Unsupported architecture: $name. Official Windows installer currently supports windows/amd64 only."
+        }
     }
 }
 
@@ -89,7 +110,7 @@ function Install-Bundle {
         $extractDir = Join-Path $tmpDir "extract"
 
         Write-Host "Downloading $downloadUrl"
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
 
         Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDir -Force
 

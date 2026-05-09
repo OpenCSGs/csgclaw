@@ -1,0 +1,8 @@
+# Canonical release targets (goos goarch). Keep GitLab parallel matrix in .gitlab/ci.yml in sync.
+# Used by: scripts/release-build-all.sh, GitHub Actions (dynamic matrix), GitLab release-build.
+
+linux amd64
+linux arm64
+darwin arm64
+darwin amd64
+windows amd64

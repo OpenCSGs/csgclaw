@@ -17,38 +17,40 @@ env:
   BOXLITE_CLI_VERSION: v0.9.0
 
 jobs:
-  build-and-release:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build matrix from release-platforms.txt
+        id: set-matrix
+        run: |
+          python3 <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          rows = []
+          for line in Path("scripts/release-platforms.txt").read_text().splitlines():
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              parts = line.split()
+              if len(parts) != 2:
+                  raise SystemExit(f"bad platform line: {line!r}")
+              goos, goarch = parts
+              rows.append({"goos": goos, "goarch": goarch})
+          print("matrix=" + json.dumps({"include": rows}))
+          PY
+
+  build:
+    needs: [prepare]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            goos: linux
-            goarch: amd64
-            include_boxlite: 1
-            cgo_enabled: 0
-          - runner: ubuntu-24.04-arm
-            goos: linux
-            goarch: arm64
-            include_boxlite: 1
-            cgo_enabled: 0
-          - runner: macos-latest
-            goos: darwin
-            goarch: arm64
-            include_boxlite: 1
-            cgo_enabled: 0
-          - runner: macos-latest
-            goos: darwin
-            goarch: amd64
-            include_boxlite: 0
-            cgo_enabled: 0
-          - runner: windows-latest
-            goos: windows
-            goarch: amd64
-            include_boxlite: 0
-            cgo_enabled: 0
-    runs-on: ${{ matrix.runner }}
-
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,29 +78,46 @@ jobs:
           echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      - name: Package release archive
+      - name: Package release archives (one platform)
         shell: bash
         run: |
-          chmod +x scripts/package-release.sh
+          chmod +x scripts/release-build-all.sh
           VERSION="${{ steps.version.outputs.value }}" \
           COMMIT="${{ steps.build_meta.outputs.commit }}" \
           BUILD_TIME="${{ steps.build_meta.outputs.build_time }}" \
           DIST_DIR=dist \
-          APP=csgclaw \
           GOCACHE="${{ github.workspace }}/.gocache" \
-          INCLUDE_BOXLITE="${{ matrix.include_boxlite }}" \
           BOXLITE_CLI_VERSION="${{ env.BOXLITE_CLI_VERSION }}" \
-          CGO_ENABLED="${{ matrix.cgo_enabled }}" \
-          ./scripts/package-release.sh "${{ matrix.goos }}" "${{ matrix.goarch }}"
-          VERSION="${{ steps.version.outputs.value }}" \
-          COMMIT="${{ steps.build_meta.outputs.commit }}" \
-          BUILD_TIME="${{ steps.build_meta.outputs.build_time }}" \
-          DIST_DIR=dist \
-          APP=csgclaw-cli \
-          GOCACHE="${{ github.workspace }}/.gocache" \
-          INCLUDE_BOXLITE=0 \
-          CGO_ENABLED="${{ matrix.cgo_enabled }}" \
-          ./scripts/package-release.sh "${{ matrix.goos }}" "${{ matrix.goarch }}"
+          ./scripts/release-build-all.sh "${{ matrix.goos }}" "${{ matrix.goarch }}"
+
+      - name: Upload platform artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  merge-and-release:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME}"
+          fi
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2

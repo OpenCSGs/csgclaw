@@ -1,8 +1,10 @@
-# GitLab CI: on tag v*, build release archives and upload to SSH storage.
+# GitLab CI: on tag v*, build release archives in parallel, then upload to SSH storage.
+#
+# Platform list: scripts/release-platforms.txt — keep parallel.matrix below in sync (same GOOS/GOARCH rows).
 #
 # Trigger: tags matching v* (e.g. pull mirror with "Trigger pipelines for mirror updates").
 #
-# Implementation: .gitlab/ci-gitlab-release-upload.sh (build + scp).
+# Implementation: scripts/release-build-all.sh (per matrix cell); .gitlab/ci-gitlab-release-upload.sh (upload only); .gitlab/bookworm-mirror.sh (apt sources).
 #
 # Required CI/CD variables:
 #   REMOTE_SSH – e.g. root@cdn.example.com
@@ -17,7 +19,7 @@
 #   REMOTE_BASE_DIR – default /data/csgclaw (releases under .../releases/<tag>/)
 #   BOXLITE_CLI_VERSION – default v0.9.0
 #   BOXLITE_CLI_BASE_URL – boxlite-cli tarballs; default mirrors https://csgclaw.opencsg.com/boxlite-cli/{version}/{filename} (matches fetch-boxlite-cli.sh)
-#   BOXLITE_CURL_INSECURE – default 1 (TLS inspection); set 0 if mirror uses publicly trusted certs only
+#   BOXLITE_CURL_INSECURE – default 1 (TLS inspection); set 0 if csgclaw.opencsg.com is trusted as-is
 #
 # Debian apt: before install, rewrite official mirrors to Aliyun (faster in CN). Override DEBIAN_APT_MIRROR_* in CI vars if needed.
 #
@@ -34,49 +36,71 @@ variables:
   GIT_DEPTH: "0"
   BOXLITE_CLI_VERSION: "v0.9.0"
   BOXLITE_CLI_BASE_URL: "https://csgclaw.opencsg.com/boxlite-cli"
-  # curl -k for boxlite download when TLS inspection breaks cert verify; use 0 if csgclaw.opencsg.com is trusted as-is.
   BOXLITE_CURL_INSECURE: "1"
-  # go.mod may require a newer toolchain than the image; fetch if needed.
   GOTOOLCHAIN: "auto"
-  # Default module proxy (no GitLab HTTP proxy vars required). Override GOPROXY in project/group CI vars if needed.
   GOPROXY: "https://goproxy.cn,direct"
-  # Used by before_script to replace deb.debian.org / security.debian.org in sources (bookworm).
   DEBIAN_APT_MIRROR_DEB: "http://mirrors.aliyun.com/debian"
   DEBIAN_APT_MIRROR_SEC: "http://mirrors.aliyun.com/debian-security"
 
 stages:
-  - release
+  - build
+  - upload
 
-release-upload:
-  stage: release
-  image:
-    name: ${ACR_REGISTRY}/opencsg_public/golang:bookworm
+.release_rules:
   rules:
     - if: $CI_COMMIT_TAG =~ /^v/
+
+.release_image:
+  image:
+    name: ${ACR_REGISTRY}/opencsg_public/golang:bookworm
+
+# Must match scripts/release-platforms.txt (order need not match; set must match).
+release-build:
+  extends:
+    - .release_image
+    - .release_rules
+  stage: build
+  parallel:
+    matrix:
+      - GOOS: linux
+        GOARCH: amd64
+      - GOOS: linux
+        GOARCH: arm64
+      - GOOS: darwin
+        GOARCH: arm64
+      - GOOS: darwin
+        GOARCH: amd64
+      - GOOS: windows
+        GOARCH: amd64
   before_script:
-    - |
-      set -e
-      deb="${DEBIAN_APT_MIRROR_DEB:-http://mirrors.aliyun.com/debian}"
-      sec="${DEBIAN_APT_MIRROR_SEC:-http://mirrors.aliyun.com/debian-security}"
-      rewrite_sources() {
-        local f="$1"
-        [ -f "$f" ] || return 0
-        sed -i \
-          -e "s|https://deb.debian.org/debian|${deb}|g" \
-          -e "s|http://deb.debian.org/debian|${deb}|g" \
-          -e "s|https://security.debian.org/debian-security|${sec}|g" \
-          -e "s|http://security.debian.org/debian-security|${sec}|g" \
-          "$f"
-      }
-      rewrite_sources /etc/apt/sources.list
-      if [ -d /etc/apt/sources.list.d ]; then
-        for f in /etc/apt/sources.list.d/*; do
-          [ -f "$f" ] || continue
-          case "$f" in
-            *.list|*.sources) rewrite_sources "$f" ;;
-          esac
-        done
-      fi
+    - chmod +x .gitlab/bookworm-mirror.sh scripts/release-build-all.sh
+    - bash .gitlab/bookworm-mirror.sh
+    - apt-get update -qq && apt-get install -y --no-install-recommends zip ca-certificates
+  script:
+    - export VERSION="$CI_COMMIT_TAG"
+    - export COMMIT="$(git rev-parse --short HEAD)"
+    - export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    - export DIST_DIR="${DIST_DIR:-dist}"
+    - mkdir -p "$DIST_DIR" "${CI_PROJECT_DIR}/.gocache"
+    - export GOCACHE="${GOCACHE:-${CI_PROJECT_DIR}/.gocache}"
+    - export BOXLITE_CLI_VERSION="${BOXLITE_CLI_VERSION:-v0.9.0}"
+    - ./scripts/release-build-all.sh "$GOOS" "$GOARCH"
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 day
+
+release-upload:
+  extends:
+    - .release_image
+    - .release_rules
+  stage: upload
+  needs:
+    - job: release-build
+      artifacts: true
+  before_script:
+    - chmod +x .gitlab/bookworm-mirror.sh
+    - bash .gitlab/bookworm-mirror.sh
     - apt-get update -qq && apt-get install -y --no-install-recommends openssh-client python3 ca-certificates
     - mkdir -p ~/.ssh && chmod 700 ~/.ssh
     - |

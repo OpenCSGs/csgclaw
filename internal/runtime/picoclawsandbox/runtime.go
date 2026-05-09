@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	"sync"
 
@@ -437,16 +437,18 @@ func stateFromSandboxState(state sandbox.State) agentruntime.State {
 }
 
 func GatewayRunCommand() string {
+	// Use path (not filepath): this string runs inside the Linux container's /bin/sh.
+	// On Windows hosts filepath.Join emits '\' which breaks the shell and mangles cp paths.
 	configPath := boxWorkspaceConfigPath(HostPicoClawConfig)
 	securityPath := boxWorkspaceConfigPath(HostPicoClawSecurity)
 	return "mkdir -p " + BoxPicoClawDir +
-		" && cp " + configPath + " " + filepath.Join(BoxPicoClawDir, HostPicoClawConfig) +
-		" && cp " + securityPath + " " + filepath.Join(BoxPicoClawDir, HostPicoClawSecurity) +
+		" && cp " + configPath + " " + path.Join(BoxPicoClawDir, HostPicoClawConfig) +
+		" && cp " + securityPath + " " + path.Join(BoxPicoClawDir, HostPicoClawSecurity) +
 		" && /usr/local/bin/picoclaw gateway -d 1>" + BoxGatewayLogPath + " 2>/dev/null"
 }
 
 func boxWorkspaceConfigPath(name string) string {
-	return filepath.Join(BoxWorkspaceDir, filepath.FromSlash(HostPicoClawStateDir), name)
+	return path.Join(BoxWorkspaceDir, HostPicoClawStateDir, name)
 }
 
 func llmBridgeBaseURL(managerBaseURL, botID string) string {
