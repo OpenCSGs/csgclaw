@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
-	"strings"
 )
 
 type Runner interface {
@@ -65,7 +64,6 @@ func (execRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, e
 		if result.ExitCode == 0 {
 			result.ExitCode = -1
 		}
-		slog.WarnContext(ctx, "boxlite cli command canceled", "action", safeBoxliteAction(req.Args), "exit_code", result.ExitCode, "ctx_err", ctxErr)
 		return result, fmt.Errorf("boxlite cli command canceled: %w", ctxErr)
 	}
 	if err != nil {
@@ -75,24 +73,4 @@ func (execRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, e
 		return result, err
 	}
 	return result, nil
-}
-
-func safeBoxliteAction(args []string) string {
-	skipNext := false
-	for _, arg := range args {
-		if skipNext {
-			skipNext = false
-			continue
-		}
-		switch arg {
-		case "--home", "--config", "--registry":
-			skipNext = true
-			continue
-		}
-		if strings.HasPrefix(arg, "-") {
-			continue
-		}
-		return arg
-	}
-	return ""
 }

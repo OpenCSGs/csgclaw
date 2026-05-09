@@ -1432,6 +1432,23 @@ body::after {
   color: inherit;
 }
 
+.structured-message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.structured-message-action-button {
+  width: fit-content;
+}
+
+.structured-message-action-error {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .structured-message-details {
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 14px;

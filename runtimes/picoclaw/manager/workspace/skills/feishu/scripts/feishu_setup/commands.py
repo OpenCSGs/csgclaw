@@ -16,7 +16,7 @@ from .csgclaw import (
     configure_csgclaw,
     ensure_bot,
     is_box_name_conflict,
-    manager_recreate_terminal_result,
+    manager_recreate_action_card,
     maybe_recreate,
     path_id,
     public_result,
@@ -165,6 +165,11 @@ def cmd_finalize(args: argparse.Namespace) -> int:
         "worker_recreate_policy": worker_recreate_policy,
         "recreate": public_result(recreated or {}),
     }
+    if isinstance(recreated, dict) and recreated.get("type") == "csgclaw.action_card":
+        setup_status = output["status"]
+        output.update(recreated)
+        output["setup_status"] = setup_status
+        output["recreate"] = public_result(recreated)
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 
@@ -179,12 +184,10 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_recreate_agent(args: argparse.Namespace) -> int:
     bot_id = validate_bot_id(args.bot_id)
-    if bot_id == "u-manager" and not args.confirm_manager:
-        raise RuntimeError("manager recreate can interrupt the current run; pass --confirm-manager as the final confirmed action")
-    result = api_json(args, "POST", f"/api/v1/agents/{path_id(bot_id)}/recreate", None)
     if bot_id == "u-manager":
-        output = manager_recreate_terminal_result(bot_id, result)
+        output = manager_recreate_action_card(bot_id)
     else:
+        result = api_json(args, "POST", f"/api/v1/agents/{path_id(bot_id)}/recreate", None)
         output = {"status": "recreate_requested", "bot_id": bot_id, "result": public_result(result or {})}
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
@@ -232,8 +235,7 @@ def build_parser() -> argparse.ArgumentParser:
     finalize.add_argument("--role", choices=["worker", "manager"], default="", help="Override role for ensure/recreate logic")
     finalize.add_argument("--bot-name", default="", help="Override bot name for ensure")
     finalize.add_argument("--description", default="", help="Override bot description for ensure")
-    finalize.add_argument("--recreate", choices=["none", "auto", "worker", "manager"], default="auto", help="auto recreates existing workers but skips newly created workers and manager; manager requires --recreate manager --confirm-manager")
-    finalize.add_argument("--confirm-manager", action="store_true", help="Required with --recreate manager; run only as the final confirmed action")
+    finalize.add_argument("--recreate", choices=["none", "auto", "worker", "manager"], default="auto", help="auto recreates existing workers and returns an action card for manager")
     finalize.add_argument("--keep-state", action="store_true", help="Keep registration state file after successful finalize")
     finalize.set_defaults(func=cmd_finalize)
 
@@ -242,10 +244,9 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--registration-id", required=True)
     status.set_defaults(func=cmd_status)
 
-    recreate = sub.add_parser("recreate-agent", help="Request agent recreate after configuration; manager requires explicit confirmation")
+    recreate = sub.add_parser("recreate-agent", help="Request worker agent recreate; manager returns a browser action card")
     add_api_common(recreate)
-    recreate.add_argument("--bot-id", required=True, help="CSGClaw bot/agent id to recreate")
-    recreate.add_argument("--confirm-manager", action="store_true", help="Required when --bot-id u-manager; run only as the final confirmed action")
+    recreate.add_argument("--bot-id", required=True, help="CSGClaw bot id to recreate")
     recreate.set_defaults(func=cmd_recreate_agent)
     return parser
 

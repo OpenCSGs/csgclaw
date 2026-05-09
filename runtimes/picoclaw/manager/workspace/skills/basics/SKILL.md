@@ -101,7 +101,7 @@ csgclaw-cli member create --room-id oc_xxx --user-id u-dev --inviter-id u-manage
 csgclaw-cli member create --room-id oc_xxx --user-id u-alex --inviter-id u-manager --channel feishu
 ```
 
-Send a message with a mention:
+Send a message with a mention ,Pay special attention to the specified parameters --mention-id,The parameter value is the NAME in the "member list --room-id oc_xxx --channel <current_channel>" command response :
 
 ```bash
 csgclaw-cli message create --room-id oc_xxx --sender-id u-manager --content "Please take a look." --mention-id u-alex --channel <current_channel>

@@ -12,6 +12,9 @@ from urllib.request import Request, urlopen
 
 from .config import API_REQUEST_TIMEOUT
 
+ACTION_CARD_TYPE = "csgclaw.action_card"
+MANAGER_REBUILD_ACTION_ID = "rebuild-manager"
+
 
 def api_base(args) -> str:
     return (args.csgclaw_base_url or os.environ.get("CSGCLAW_BASE_URL") or "http://127.0.0.1:18080").rstrip("/")
@@ -175,12 +178,9 @@ def maybe_recreate(args, state: dict, worker_existed_before_ensure: Optional[boo
     if mode == "none":
         return None
     if role == "manager":
-        if mode in ("auto", "worker"):
-            return {"skipped": True, "reason": "manager recreate requires explicit final confirmation"}
-        if mode == "manager" and not getattr(args, "confirm_manager", False):
-            raise RuntimeError("manager recreate can interrupt the current run; pass --confirm-manager as the final confirmed action")
-        result = api_json(args, "POST", f"/api/v1/agents/{path_id(bot_id)}/recreate", None)
-        return manager_recreate_terminal_result(bot_id, result)
+        if mode == "worker":
+            return {"skipped": True, "reason": "worker recreate requested for manager bot"}
+        return manager_recreate_action_card(bot_id)
     if mode == "manager":
         return {"skipped": True, "reason": "manager recreate requested for a worker bot"}
     if worker_existed_before_ensure is False:
@@ -198,12 +198,26 @@ def public_result(data: dict) -> dict:
     return clean
 
 
-def manager_recreate_terminal_result(bot_id: str, result: Optional[dict]) -> dict:
+def manager_recreate_action_card(bot_id: str) -> dict:
     return {
-        "status": "recreate_requested",
+        "type": ACTION_CARD_TYPE,
+        "status": "manager_recreate_pending",
         "bot_id": bot_id,
-        "terminal": True,
-        "post_recreate_status_check": "skip",
-        "message": "Manager self-recreate was requested. Stop this manager-hosted run here; do not inspect, start, or retry manager based on runtime status.",
-        "result": public_result(result or {}),
+        "title": "Manager Feishu 配置已完成",
+        "subtitle": bot_id,
+        "badge": "需在窗口点击",
+        "summary": (
+            "飞书配置已写入并重新加载。"
+            "Manager 需要重建后才能把新配置注入运行环境。"
+            "请直接点击下方按钮，由浏览器发起安全的 Manager bootstrap replace。"
+        ),
+        "actions": [
+            {
+                "id": MANAGER_REBUILD_ACTION_ID,
+                "label": "重建 Manager",
+                "style": "danger",
+                "method": "manager-bootstrap-replace",
+                "confirm": "重建 Manager 会中断当前 Manager，会话可能需要刷新。确认继续？",
+            }
+        ],
     }

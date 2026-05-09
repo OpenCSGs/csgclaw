@@ -77,8 +77,9 @@ Ask or infer the target:
 - Manager setup:
   - `bot_id = u-manager`
   - `role = manager`
-  - manager recreate is risky and must be the final step after explicit confirmation.
-  - after the confirmed recreate request returns, stop immediately; do not check manager runtime status or retry based on `stopped`.
+  - manager recreate must be handed off to the action-card flow; do not let this manager-hosted skill call the recreate API itself.
+  - always return the action-card JSON so the current window can render the rebuild button; do not branch on request origin.
+  - after finalize prints the action card, return that JSON object as the entire chat message content with no prose, no Markdown table, and no wrapper text.
 - Worker setup:
   - `bot_id = u-{name}`, for example `u-dev`
   - `role = worker`
@@ -135,7 +136,7 @@ By default, `finalize` will:
    - existing worker: recreate it so the new Feishu env takes effect
    - missing worker: let `POST /api/v1/bots` create it with the already-reloaded config, then skip redundant recreate
    - if BoxLite reports `box with name '<name>' already exists` while CSGClaw reports `agent "<id>" not found`, stop and tell the user the host has a stale partial worker box; do not keep trying random API paths or host-only commands from inside manager
-7. skip manager recreate unless explicitly requested with final confirmation
+7. for manager targets, print a `csgclaw.action_card` JSON payload with a whitelisted `rebuild-manager` action; the CSGClaw Web chat message should render the button to complete the window-triggered manager bootstrap replace flow.
 8. print JSON with `app_secret: present`, never the real secret
 
 For a worker, default finalize is usually enough:
@@ -146,13 +147,10 @@ python scripts/feishu_register.py finalize --registration-id <id>
 
 Use an exec/tool timeout of at least 600 seconds for this command. If `worker_existed_before_ensure` is `true`, the script recreates the existing worker after config reload; do not create a second worker or change the bot id.
 
-For manager, default finalize configures and ensures the bot, but skips manager recreate. Warn the user first. If the user explicitly confirms that interrupting the current manager is acceptable, run the standalone recreate command as the final action:
+For manager, default finalize configures and ensures the bot, then prints a structured action card. Return the JSON object exactly as the chat message content: no leading sentence, no Markdown table, no bullet list, no ```json fence, and no explanatory wrapper. The CSGClaw Web frontend will render a "重建 Manager" button.
+The click is handled by the browser and calls the manager bootstrap replace surface (`POST /api/v1/agents` with `{"id":"u-manager","replace":true}`), not the hazardous generic recreate route.
 
-```bash
-python scripts/feishu_register.py recreate-agent --bot-id u-manager --confirm-manager
-```
-
-Treat `status: recreate_requested` or an HTTP success response from this command as terminal success for this skill. Do not expect to continue the current manager-hosted skill after manager recreate. Do not run `csgclaw agent list`, `csgclaw bot list`, `csgclaw-cli bot config --channel feishu --get`, `/api/v1/agents/u-manager/start`, `/api/v1/agents/u-manager/recreate`, or any manager status polling after this command.
+Do not run `python scripts/feishu_register.py recreate-agent --bot-id u-manager` as a terminal self-recreate step anymore. The manager-rebuild action must be completed by clicking the rendered Web window button, which calls `POST /api/v1/agents` with `{"id":"u-manager","replace":true}`.
 
 For manager only, BoxLite status is not a valid post-recreate success check in this skill. The manager gateway starts with `picoclaw gateway -d`, so the launch command can return while the daemonized gateway continues separately; BoxLite may report `stopped` and CSGClaw may show `AVAILABLE=false`. Do not treat that as a reason to recreate manager again from the same manager-hosted run.
 
@@ -274,6 +272,8 @@ Run the command with exec `timeout` at least `600`.
 
 ## Manager One-Shot Recipe
 
+Run this recipe from the normal flow and render the manager rebuild action card in the web window.
+
 1. Start registration:
 
 ```bash
@@ -287,24 +287,11 @@ python scripts/feishu_register.py start --bot-id u-manager --role manager --bot-
 python scripts/feishu_register.py finalize --registration-id <id>
 ```
 
-4. Warn the user:
+4. Return the `finalize` JSON object exactly as the chat response. Do not summarize it, translate it, add a Markdown table, or wrap it in a code fence. The object contains `type: csgclaw.action_card` and action metadata so the Web frontend can render the button.
 
-"Manager config is set and reloaded. Recreating `u-manager` is required for the PicoClaw runtime env to refresh, but it may interrupt this current task. Confirm before running the recreate step."
+5. Do not call a manager recreate API or host command from this skill. The Manager rebuild must be completed by the rendered Web action-card button.
 
-5. If confirmed, run as the final action:
-
-```bash
-python scripts/feishu_register.py recreate-agent --bot-id u-manager --confirm-manager
-```
-
-Stop after this command succeeds. Do not inspect manager agent or bot status afterward; the caller is the manager being recreated, and `stopped` can be a BoxLite daemon-mode artifact rather than a Feishu setup failure.
-
-Alternative backend API recreate:
-
-```bash
-curl -sS -X POST "$CSGCLAW_BASE_URL/api/v1/agents/u-manager/recreate" \
-  -H "Authorization: Bearer [REDACTED]"
-```
+Do not use the generic manager recreate endpoint or any terminal/host-side manager rebuild fallback. The Web action card uses `POST /api/v1/agents` with `{"id":"u-manager","replace":true}` from the browser after the user clicks the window button.
 
 ## Common Pitfalls
 
@@ -313,7 +300,7 @@ curl -sS -X POST "$CSGCLAW_BASE_URL/api/v1/agents/u-manager/recreate" \
 3. Looking for removed `csgclaw channel ...` commands: Feishu config belongs to `csgclaw-cli bot config --channel feishu`.
 4. Creating the CSGClaw bot before writing/reloading Feishu config: this can create local placeholder identity.
 5. Expecting reload to update an already-running PicoClaw box: recreate is still required.
-6. Recreating manager in the middle of a skill: this can terminate the current task.
+6. Calling manager recreate from inside this manager-hosted skill: return the action card so the current window renders the rebuild button.
 7. Checking `agent list` or `bot list` after manager recreate and treating `stopped` as failure: manager gateway runs in daemon mode, so BoxLite status is not a reliable success signal for this skill.
 8. Printing secrets in summaries or logs: always mask as `[REDACTED]` or `present`.
 9. Calling CSGClaw SSE endpoint a Feishu webhook: it is an internal CSGClaw-to-PicoClaw bridge.
@@ -328,6 +315,6 @@ curl -sS -X POST "$CSGCLAW_BASE_URL/api/v1/agents/u-manager/recreate" \
 - [ ] CSGClaw bot exists with `channel=feishu`.
 - [ ] Existing worker agents are recreated after config reload.
 - [ ] New worker finalize was run with a tool timeout of at least 600 seconds.
-- [ ] Manager recreate is deferred until explicit final confirmation.
-- [ ] Confirmed manager recreate is treated as terminal; no immediate manager status check is run.
+- [ ] Manager finalize returned a raw `csgclaw.action_card` JSON object with `rebuild-manager` action metadata for the web button.
+- [ ] No manager-hosted command called the generic manager recreate endpoint or any host-side manager rebuild command.
 - [ ] No public Feishu webhook endpoint was added or required.
