@@ -75,13 +75,14 @@ type imAgentJoinResponse struct {
 }
 
 type bootstrapConfigResponse struct {
-	RuntimeKind           string   `json:"runtime_kind"`
-	EffectiveManagerImage string   `json:"effective_manager_image"`
-	SupportedRuntimeKinds []string `json:"supported_runtime_kinds"`
+	RuntimeKind           string            `json:"runtime_kind"`
+	EffectiveManagerImage string            `json:"effective_manager_image"`
+	SupportedRuntimeKinds []string          `json:"supported_runtime_kinds"`
+	RuntimeDefaultImages  map[string]string `json:"runtime_default_images,omitempty"`
 }
 
 type updateBootstrapConfigRequest struct {
-	RuntimeKind string `json:"runtime_kind"`
+	RuntimeKind *string `json:"runtime_kind,omitempty"`
 }
 
 type agentResponse struct {
@@ -125,12 +126,14 @@ func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		runtime, err := bootstrapRuntimeForRuntimeKind(req.RuntimeKind)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+		if req.RuntimeKind != nil {
+			runtime, err := bootstrapRuntimeForRuntimeKind(*req.RuntimeKind)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			cfg.Bootstrap.AgentRuntime = runtime
 		}
-		cfg.Bootstrap.AgentRuntime = runtime
 		if err := cfg.Bootstrap.Validate(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -140,9 +143,11 @@ func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		if h.svc != nil {
-			if err := h.svc.SetGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntime(), cfg.Bootstrap.EffectiveManagerImage()); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
+			if req.RuntimeKind != nil {
+				if err := h.svc.SetGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntime(), cfg.Bootstrap.EffectiveManagerImage()); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
 			}
 		}
 		writeJSON(w, http.StatusOK, bootstrapConfigView(cfg))

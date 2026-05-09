@@ -802,7 +802,7 @@ func newAgentService(cfg config.Config) (*agent.Service, error) {
 		runtimewiring.WithCodexRuntime(),
 		agent.WithGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntime()),
 	)
-	return agent.NewServiceWithLLMAndChannels(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
+	return agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
 }
 
 type codexBridgeManager interface {

@@ -3355,16 +3355,15 @@ func TestGatewayCreateSpecBuildsOpenClawSpecWithoutPluginMount(t *testing.T) {
 	localIPv4Resolver = func() string { return "10.0.0.8" }
 	defer func() { localIPv4Resolver = orig }()
 
-	svc, err := NewServiceWithChannels(
+	svc, err := NewService(
 		testModelConfig(),
 		config.ServerConfig{ListenAddr: ":18080", AccessToken: "shared-token"},
-		config.ChannelsConfig{},
 		"openclaw-csgclaw:local",
 		"",
 		WithGatewayRuntime(config.AgentRuntimeOpenClaw),
 	)
 	if err != nil {
-		t.Fatalf("NewServiceWithChannels() error = %v", err)
+		t.Fatalf("NewService() error = %v", err)
 	}
 
 	spec, err := svc.gatewayCreateSpec("openclaw-csgclaw:local", "alice", "u-worker-1", AgentProfile{

@@ -241,6 +241,18 @@ func (s *Service) gatewayConfigurer() (gatewayConfigurer, error) {
 	return cfg, nil
 }
 
+func (s *Service) gatewayConfigurerForAgent(a Agent) (gatewayConfigurer, error) {
+	rt, err := s.runtimeForKind(s.runtimeKindForGatewayAgent(a))
+	if err != nil {
+		return nil, err
+	}
+	cfg, ok := rt.(gatewayConfigurer)
+	if !ok {
+		return nil, fmt.Errorf("runtime %q does not support gateway configuration", rt.Kind())
+	}
+	return cfg, nil
+}
+
 func (s *Service) gatewayBoxFactory() (gatewayBoxFactory, error) {
 	rt, err := s.runtimeForKind(s.gatewayRuntimeKind())
 	if err != nil {

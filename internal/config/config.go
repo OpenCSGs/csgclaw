@@ -107,15 +107,19 @@ func DefaultManagerImageForAgentRuntime(runtime string) string {
 
 type SandboxConfig struct {
 	Provider                 string
+	HomeDirName              string
 	StoragePath              string
-	DebianRegistriesOverride []string
 	DockerCLIPath            string
+	DebianRegistriesOverride []string
 }
 
 func (c SandboxConfig) Resolved() SandboxConfig {
 	c.Provider = normalizeSandboxProvider(c.Provider)
 	if c.Provider == "" {
 		c.Provider = defaultSandboxProvider()
+	}
+	if strings.TrimSpace(c.HomeDirName) == "" {
+		c.HomeDirName = DefaultSandboxHomeDirName
 	}
 	c.StoragePath = strings.TrimSpace(c.StoragePath)
 	c.DebianRegistriesOverride = normalizeStringList(c.DebianRegistriesOverride)
@@ -156,7 +160,13 @@ type rawConfigValues struct {
 	sandbox       SandboxConfig
 	modelsDefault string
 	models        map[string]rawProviderConfig
+	channels      rawChannelsConfig
 	resolved      *rawConfigValues
+}
+
+type rawChannelsConfig struct {
+	FeishuAdminOpenID string
+	Feishu            map[string]FeishuConfig
 }
 
 type rawProviderConfig struct {
@@ -183,9 +193,8 @@ const (
 	BoxLiteCLIProvider          = "boxlite"
 	// TODO: Remove this alias after older config.toml files have been migrated.
 	legacyBoxLiteCLIProvider  = "boxlite-cli"
-	BoxLiteCLIHomeDirName     = "boxlite"
-	RuntimeHomeDirName        = BoxLiteCLIHomeDirName
-	DefaultSandboxHomeDirName = BoxLiteCLIHomeDirName
+	DefaultSandboxHomeDirName = "boxlite"
+	RuntimeHomeDirName        = DefaultSandboxHomeDirName
 )
 
 // DefaultDebianRegistries is the default BoxLite Debian registry lookup order when
@@ -291,6 +300,9 @@ func Load(path string) (Config, error) {
 		LLM:    newLLMConfig(),
 		raw: rawConfigValues{
 			models: make(map[string]rawProviderConfig),
+			channels: rawChannelsConfig{
+				Feishu: make(map[string]FeishuConfig),
+			},
 		},
 	}
 
@@ -361,20 +373,20 @@ func Load(path string) (Config, error) {
 				cfg.raw.sandbox.Provider = parseRawStringValue(rawValue)
 				cfg.Sandbox.Provider = value
 			case "home_dir_name":
-				// Keep loading legacy configs that still contain this key, but
-				// do not surface it in the public config model anymore.
+				cfg.raw.sandbox.HomeDirName = parseRawStringValue(rawValue)
+				cfg.Sandbox.HomeDirName = value
 			case "storage_path":
 				cfg.raw.sandbox.StoragePath = parseRawStringValue(rawValue)
 				cfg.Sandbox.StoragePath = value
+			case "docker_cli_path":
+				cfg.raw.sandbox.DockerCLIPath = parseRawStringValue(rawValue)
+				cfg.Sandbox.DockerCLIPath = value
 			case "debian_registries_override":
 				registries, parseErr := parseStringArray(rawValue)
 				if parseErr != nil {
 					return Config{}, fmt.Errorf("parse sandbox.debian_registries_override: %w", parseErr)
 				}
 				cfg.Sandbox.DebianRegistriesOverride = registries
-			case "docker_cli_path":
-				cfg.raw.sandbox.DockerCLIPath = parseRawStringValue(rawValue)
-				cfg.Sandbox.DockerCLIPath = value
 			}
 		default:
 			if name, ok := modelsProviderSectionName(section); ok {
@@ -462,6 +474,9 @@ agent_runtime = %q
 [sandbox]
 provider = %q
 `, cfg.rawOrResolvedSandboxProvider(cfg.raw.sandbox.Provider, loadedRaw.sandbox.Provider, resolvedSandbox.Provider))
+	if strings.TrimSpace(resolvedSandbox.HomeDirName) != "" && (strings.TrimSpace(cfg.raw.sandbox.HomeDirName) != "" || strings.TrimSpace(resolvedSandbox.HomeDirName) != DefaultSandboxHomeDirName) {
+		sandboxSection += fmt.Sprintf("home_dir_name = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.HomeDirName, loadedRaw.sandbox.HomeDirName, resolvedSandbox.HomeDirName))
+	}
 	if strings.TrimSpace(resolvedSandbox.StoragePath) != "" {
 		sandboxSection = strings.Replace(sandboxSection, "[sandbox]\n", fmt.Sprintf("[sandbox]\nstorage_path = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.StoragePath, loadedRaw.sandbox.StoragePath, resolvedSandbox.StoragePath)), 1)
 	}
@@ -765,6 +780,9 @@ func (r rawConfigValues) resolvedOrZero() rawConfigValues {
 	if r.resolved == nil {
 		return rawConfigValues{
 			models: make(map[string]rawProviderConfig),
+			channels: rawChannelsConfig{
+				Feishu: make(map[string]FeishuConfig),
+			},
 		}
 	}
 	return *r.resolved
@@ -773,6 +791,9 @@ func (r rawConfigValues) resolvedOrZero() rawConfigValues {
 func (c Config) resolvedRawValues() *rawConfigValues {
 	out := rawConfigValues{
 		models: make(map[string]rawProviderConfig),
+		channels: rawChannelsConfig{
+			Feishu: make(map[string]FeishuConfig),
+		},
 	}
 
 	if c.raw.server.ListenAddr != "" {
@@ -793,14 +814,17 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 	if c.raw.sandbox.Provider != "" {
 		out.sandbox.Provider = c.Sandbox.Provider
 	}
+	if c.raw.sandbox.HomeDirName != "" {
+		out.sandbox.HomeDirName = c.Sandbox.HomeDirName
+	}
 	if c.raw.sandbox.StoragePath != "" {
 		out.sandbox.StoragePath = c.Sandbox.StoragePath
 	}
-	if len(c.raw.sandbox.DebianRegistriesOverride) > 0 {
-		out.sandbox.DebianRegistriesOverride = append([]string(nil), c.Sandbox.DebianRegistriesOverride...)
-	}
 	if c.raw.sandbox.DockerCLIPath != "" {
 		out.sandbox.DockerCLIPath = c.Sandbox.DockerCLIPath
+	}
+	if len(c.raw.sandbox.DebianRegistriesOverride) > 0 {
+		out.sandbox.DebianRegistriesOverride = append([]string(nil), c.Sandbox.DebianRegistriesOverride...)
 	}
 	if c.raw.modelsDefault != "" {
 		out.modelsDefault = c.Models.Default

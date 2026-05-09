@@ -159,6 +159,7 @@ type Service struct {
 	gatewayRuntime   string
 	state            string
 	sandbox          sandbox.Provider
+	sandboxHome      string
 	mu               sync.RWMutex
 	runtimes         map[string]sandbox.Runtime
 	agents           map[string]Agent
@@ -197,6 +198,17 @@ func WithRuntime(rt agentruntime.Runtime) ServiceOption {
 			return fmt.Errorf("runtime kind is required")
 		}
 		s.runtimeRegistry[kind] = rt
+		return nil
+	}
+}
+
+func WithSandboxHomeDirName(name string) ServiceOption {
+	return func(s *Service) error {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return fmt.Errorf("sandbox home dir name is required")
+		}
+		s.sandboxHome = name
 		return nil
 	}
 }
@@ -1036,8 +1048,24 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 }
 
 func (s *Service) ensureWorkerGatewayConfig(got Agent) error {
-	if s == nil || !strings.EqualFold(strings.TrimSpace(got.Role), RoleWorker) || !isAgentProfileComplete(got) {
+	if s == nil || !strings.EqualFold(normalizeRole(got.Role), RoleWorker) {
 		return nil
+	}
+	return s.ensureGatewayConfigForAgent(got)
+}
+
+func (s *Service) ensureGatewayConfigForAgent(got Agent) error {
+	if s == nil || !isAgentProfileComplete(got) {
+		return nil
+	}
+	role := normalizeRole(got.Role)
+	if role != RoleManager && role != RoleWorker {
+		return nil
+	}
+	if role == RoleWorker {
+		if kind := normalizeRuntimeKind(got.RuntimeKind); kind != "" && !isGatewayRuntimeKind(kind) {
+			return nil
+		}
 	}
 	name := strings.TrimSpace(got.Name)
 	botID := strings.TrimSpace(got.ID)
@@ -1052,7 +1080,7 @@ func (s *Service) ensureWorkerGatewayConfig(got Agent) error {
 	if modelID == "" {
 		modelID = s.model.Resolved().ModelID
 	}
-	gatewayConfig, err := s.gatewayConfigurer()
+	gatewayConfig, err := s.gatewayConfigurerForAgent(got)
 	if err != nil {
 		return err
 	}

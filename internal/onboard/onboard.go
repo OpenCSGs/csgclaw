@@ -122,7 +122,7 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 		runtimewiring.WithOpenClawSandboxRuntime(),
 		agent.WithGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntime()),
 	)
-	agentSvc, err := agent.NewServiceWithLLMAndChannels(effectiveLLMConfig(cfg), cfg.Server, cfg.Channels, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
+	agentSvc, err := agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
 	if err != nil {
 		return bot.Bot{}, err
 	}
