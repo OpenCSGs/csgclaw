@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -217,27 +218,58 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 	if image == "" {
 		image = s.managerImage
 	}
+
+	start := time.Now()
+	opID := fmt.Sprintf("%s-%d", id, start.UnixNano())
+	stopContextLog := context.AfterFunc(ctx, func() {
+		log.Printf("agent recreate context done op=%s id=%q elapsed=%s ctx_err=%v", opID, id, time.Since(start), ctx.Err())
+	})
+	defer stopContextLog()
+
+	log.Printf(
+		"agent recreate start op=%s id=%q name=%q role=%q runtime_kind=%q runtime_id=%q box_id=%q profile_complete=%t ctx_err=%v",
+		opID,
+		got.ID,
+		got.Name,
+		got.Role,
+		got.RuntimeKind,
+		got.RuntimeID,
+		got.BoxID,
+		profile.ProfileComplete,
+		ctx.Err(),
+	)
+
 	if testCreateGatewayBoxHook != nil {
 		rt, err := s.ensureRuntime(got.Name)
 		if err != nil {
+			log.Printf("agent recreate ensure runtime failed op=%s id=%q elapsed=%s ctx_err=%v err=%v", opID, id, time.Since(start), ctx.Err(), err)
 			return Agent{}, err
 		}
 		runtimeHome, err := s.sandboxRuntimeHome(got.Name)
 		if err != nil {
+			log.Printf("agent recreate runtime home failed op=%s id=%q elapsed=%s ctx_err=%v err=%v", opID, id, time.Since(start), ctx.Err(), err)
 			return Agent{}, err
 		}
 		defer func() {
 			_ = s.closeRuntime(runtimeHome, rt)
 		}()
 		if strings.TrimSpace(got.BoxID) != "" {
-			if err := s.forceRemoveBox(ctx, rt, got.BoxID); err != nil && !sandbox.IsNotFound(err) {
-				return Agent{}, fmt.Errorf("remove existing agent box: %w", err)
+			deleteStart := time.Now()
+			log.Printf("agent recreate test delete start op=%s id=%q handle_id=%q ctx_err=%v", opID, id, got.BoxID, ctx.Err())
+			deleteErr := s.forceRemoveBox(ctx, rt, got.BoxID)
+			log.Printf("agent recreate test delete done op=%s id=%q duration=%s ctx_err=%v err=%v", opID, id, time.Since(deleteStart), ctx.Err(), deleteErr)
+			if deleteErr != nil && !sandbox.IsNotFound(deleteErr) {
+				return Agent{}, fmt.Errorf("remove existing agent box: %w", deleteErr)
 			}
 		}
+		createStart := time.Now()
+		log.Printf("agent recreate test create start op=%s id=%q agent_name=%q image=%q ctx_err=%v", opID, id, got.Name, image, ctx.Err())
 		box, sandboxInfo, err := s.createGatewayBox(ctx, rt, image, got.Name, got.ID, profile)
 		if err != nil {
+			log.Printf("agent recreate test create failed op=%s id=%q duration=%s ctx_err=%v err=%v", opID, id, time.Since(createStart), ctx.Err(), err)
 			return Agent{}, fmt.Errorf("create agent box: %w", err)
 		}
+		log.Printf("agent recreate test create done op=%s id=%q duration=%s handle_id=%q ctx_err=%v", opID, id, time.Since(createStart), sandboxInfo.ID, ctx.Err())
 		defer func() {
 			_ = s.closeBox(box)
 		}()
@@ -246,26 +278,58 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 			State:     agentruntime.State(sandboxInfo.State),
 			CreatedAt: sandboxInfo.CreatedAt.UTC(),
 		}
-		return s.persistRecreatedAgent(ctx, id, info)
+		persistStart := time.Now()
+		recreated, err := s.persistRecreatedAgent(ctx, id, info)
+		if err != nil {
+			log.Printf("agent recreate persist failed op=%s id=%q duration=%s ctx_err=%v err=%v", opID, id, time.Since(persistStart), ctx.Err(), err)
+			return Agent{}, err
+		}
+		log.Printf("agent recreate done op=%s id=%q total=%s final_status=%q final_box_id=%q ctx_err=%v", opID, id, time.Since(start), recreated.Status, recreated.BoxID, ctx.Err())
+		return recreated, nil
 	}
-	if err := runtimeImpl.Delete(ctx, runtimeHandleForAgent(got)); err != nil && !sandbox.IsNotFound(err) {
-		return Agent{}, fmt.Errorf("remove existing agent box: %w", err)
+
+	deleteHandle := runtimeHandleForAgent(got)
+	deleteStart := time.Now()
+	log.Printf("agent recreate delete start op=%s id=%q handle_id=%q ctx_err=%v", opID, id, deleteHandle.HandleID, ctx.Err())
+	deleteErr := runtimeImpl.Delete(ctx, deleteHandle)
+	log.Printf("agent recreate delete done op=%s id=%q duration=%s ctx_err=%v err=%v", opID, id, time.Since(deleteStart), ctx.Err(), deleteErr)
+	if deleteErr != nil && !sandbox.IsNotFound(deleteErr) {
+		return Agent{}, fmt.Errorf("remove existing agent box: %w", deleteErr)
 	}
-	handle, err := runtimeImpl.Create(ctx, agentruntime.Spec{
+
+	createSpec := agentruntime.Spec{
 		RuntimeID: normalizeRuntimeID(got.RuntimeID, got.ID),
 		AgentID:   got.ID,
 		AgentName: got.Name,
 		Image:     image,
 		Profile:   s.runtimeProfileForKind(runtimeKindForAgent(got), got.ID, got.Name, got.Description, profile),
-	})
+	}
+	createStart := time.Now()
+	log.Printf("agent recreate create start op=%s id=%q runtime_id=%q agent_name=%q image=%q ctx_err=%v", opID, id, createSpec.RuntimeID, createSpec.AgentName, createSpec.Image, ctx.Err())
+	handle, err := runtimeImpl.Create(ctx, createSpec)
 	if err != nil {
+		log.Printf("agent recreate create failed op=%s id=%q duration=%s ctx_err=%v err=%v", opID, id, time.Since(createStart), ctx.Err(), err)
 		return Agent{}, fmt.Errorf("create agent box: %w", err)
 	}
+	log.Printf("agent recreate create done op=%s id=%q duration=%s handle_id=%q ctx_err=%v", opID, id, time.Since(createStart), handle.HandleID, ctx.Err())
+
+	infoStart := time.Now()
+	log.Printf("agent recreate info start op=%s id=%q handle_id=%q ctx_err=%v", opID, id, handle.HandleID, ctx.Err())
 	info, err := s.runtimeInfo(ctx, runtimeImpl, handle)
 	if err != nil {
+		log.Printf("agent recreate info failed op=%s id=%q duration=%s ctx_err=%v err=%v", opID, id, time.Since(infoStart), ctx.Err(), err)
 		return Agent{}, fmt.Errorf("read agent runtime info: %w", err)
 	}
-	return s.persistRecreatedAgent(ctx, id, info)
+	log.Printf("agent recreate info done op=%s id=%q duration=%s state=%q handle_id=%q ctx_err=%v", opID, id, time.Since(infoStart), info.State, info.HandleID, ctx.Err())
+
+	persistStart := time.Now()
+	recreated, err := s.persistRecreatedAgent(ctx, id, info)
+	if err != nil {
+		log.Printf("agent recreate persist failed op=%s id=%q duration=%s ctx_err=%v err=%v", opID, id, time.Since(persistStart), ctx.Err(), err)
+		return Agent{}, err
+	}
+	log.Printf("agent recreate done op=%s id=%q total=%s final_status=%q final_box_id=%q ctx_err=%v", opID, id, time.Since(start), recreated.Status, recreated.BoxID, ctx.Err())
+	return recreated, nil
 }
 
 func (s *Service) persistRecreatedAgent(ctx context.Context, id string, info agentruntime.Info) (Agent, error) {
