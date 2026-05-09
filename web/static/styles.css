@@ -533,6 +533,11 @@ body::after {
   right: 0;
 }
 
+.members-popover {
+  left: auto;
+  right: 0;
+}
+
 .tools-popover {
   min-width: 230px;
   display: grid;
@@ -1668,6 +1673,8 @@ body::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 24px;
+  height: 24px;
 }
 
 .composer-send-main svg {
@@ -5416,6 +5423,132 @@ body::after {
   transform: none;
 }
 
+/* Figma Portal icon primary button, node 52056:525367. */
+.composer-editor {
+  padding-right: 64px;
+}
+
+.composer-placeholder {
+  right: 64px;
+}
+
+.composer-send-button,
+.btn.composer-send-button {
+  right: 12px;
+  bottom: 12px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 12px;
+  border: 1px solid var(--portal-brand-600);
+  border-radius: var(--radius-md);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.composer-send-button:hover:not(:disabled),
+.btn.composer-send-button:hover:not(:disabled) {
+  border-color: var(--portal-brand-700);
+  background: var(--portal-brand-700);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.composer-send-button:active:not(:disabled),
+.btn.composer-send-button:active:not(:disabled) {
+  border-color: var(--portal-brand-700);
+  background: var(--portal-brand-700);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.composer-send-button:focus-visible,
+.btn.composer-send-button:focus-visible {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs), 0 0 0 4px rgba(77, 106, 214, 0.24);
+}
+
+.composer-send-button:disabled,
+.composer-send-button[disabled],
+.btn.composer-send-button:disabled,
+.btn.composer-send-button[disabled] {
+  border-color: var(--portal-gray-200);
+  background: var(--portal-gray-100);
+  color: var(--portal-gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+}
+
+.composer-send-main {
+  width: 16px;
+  height: 16px;
+}
+
+/* Smooth segmented switch behavior for theme and language controls. */
+.theme-switch-track,
+.language-switch-track {
+  overflow: hidden;
+}
+
+.theme-switch-thumb,
+.language-switch-thumb {
+  left: 2px;
+  width: calc((100% - 4px) / 2);
+  background: var(--portal-brand-600);
+  transition:
+    transform 220ms cubic-bezier(0.2, 0, 0, 1),
+    background-color 160ms ease;
+}
+
+.theme-switch-track.is-dark .theme-switch-thumb,
+.language-switch-track.is-en .language-switch-thumb {
+  transform: translateX(100%);
+}
+
+.theme-toggle,
+.language-toggle {
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.theme-toggle:hover:not(.active),
+.language-toggle:hover:not(.active) {
+  background: transparent;
+  color: var(--portal-gray-700);
+}
+
+.theme-toggle.active,
+.theme-toggle.active:hover,
+.theme-toggle.active:focus-visible,
+.language-toggle.active,
+.language-toggle.active:hover,
+.language-toggle.active:focus-visible {
+  background: transparent;
+  color: var(--portal-white);
+}
+
+.theme-toggle.active .svg-icon,
+.theme-toggle.active:hover .svg-icon {
+  color: var(--portal-white);
+}
+
+:root[data-theme="dark"] .theme-switch-thumb,
+:root[data-theme="dark"] .language-switch-thumb {
+  background: var(--portal-brand-600);
+}
+
+:root[data-theme="dark"] .theme-toggle:hover:not(.active),
+:root[data-theme="dark"] .language-toggle:hover:not(.active) {
+  color: var(--portal-gray-300);
+}
+
 .header-popover,
 .mention-picker,
 .profile-preview-popover,
@@ -6296,4 +6429,332 @@ body {
 :root[data-theme="dark"] .upgrade-status-card.error {
   border-color: rgba(217, 45, 32, 0.42);
   background: rgba(217, 45, 32, 0.12);
+}
+
+/* Final primary button state guard, matching Figma Portal primary states. */
+.btn-primary,
+.csg-button-primary,
+.send-button,
+.composer-send-button,
+.preview-action-button-primary,
+.preview-action-button.preview-action-button-primary {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-primary:hover:not(:disabled),
+.csg-button-primary:hover:not(:disabled),
+.send-button:hover:not(:disabled),
+.composer-send-button:hover:not(:disabled),
+.preview-action-button-primary:hover:not(:disabled),
+.preview-action-button.preview-action-button-primary:hover:not(:disabled) {
+  border-color: var(--portal-brand-700);
+  background: var(--portal-brand-700);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.btn-primary:active:not(:disabled),
+.csg-button-primary:active:not(:disabled),
+.send-button:active:not(:disabled),
+.composer-send-button:active:not(:disabled),
+.preview-action-button-primary:active:not(:disabled),
+.preview-action-button.preview-action-button-primary:active:not(:disabled) {
+  border-color: var(--portal-brand-700);
+  background: var(--portal-brand-700);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.btn-primary:focus-visible,
+.csg-button-primary:focus-visible,
+.send-button:focus-visible,
+.composer-send-button:focus-visible,
+.preview-action-button-primary:focus-visible,
+.preview-action-button.preview-action-button-primary:focus-visible {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs), 0 0 0 4px rgba(77, 106, 214, 0.24);
+}
+
+.btn-primary:disabled,
+.btn-primary[disabled],
+.csg-button-primary:disabled,
+.csg-button-primary[disabled],
+.send-button:disabled,
+.send-button[disabled],
+.composer-send-button:disabled,
+.composer-send-button[disabled],
+.preview-action-button-primary:disabled,
+.preview-action-button-primary[disabled],
+.preview-action-button.preview-action-button-primary:disabled,
+.preview-action-button.preview-action-button-primary[disabled] {
+  border-color: var(--portal-gray-200);
+  background: var(--portal-gray-100);
+  color: var(--portal-gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+:root[data-theme="dark"] .btn-primary,
+:root[data-theme="dark"] .csg-button-primary,
+:root[data-theme="dark"] .send-button,
+:root[data-theme="dark"] .composer-send-button,
+:root[data-theme="dark"] .preview-action-button-primary,
+:root[data-theme="dark"] .preview-action-button.preview-action-button-primary,
+:root[data-theme="dark"] .btn-primary:hover:not(:disabled),
+:root[data-theme="dark"] .csg-button-primary:hover:not(:disabled),
+:root[data-theme="dark"] .send-button:hover:not(:disabled),
+:root[data-theme="dark"] .composer-send-button:hover:not(:disabled),
+:root[data-theme="dark"] .preview-action-button-primary:hover:not(:disabled),
+:root[data-theme="dark"] .preview-action-button.preview-action-button-primary:hover:not(:disabled),
+:root[data-theme="dark"] .btn-primary:active:not(:disabled),
+:root[data-theme="dark"] .csg-button-primary:active:not(:disabled),
+:root[data-theme="dark"] .send-button:active:not(:disabled),
+:root[data-theme="dark"] .composer-send-button:active:not(:disabled),
+:root[data-theme="dark"] .preview-action-button-primary:active:not(:disabled),
+:root[data-theme="dark"] .preview-action-button.preview-action-button-primary:active:not(:disabled),
+:root[data-theme="dark"] .btn-primary:focus-visible,
+:root[data-theme="dark"] .csg-button-primary:focus-visible,
+:root[data-theme="dark"] .send-button:focus-visible,
+:root[data-theme="dark"] .composer-send-button:focus-visible,
+:root[data-theme="dark"] .preview-action-button-primary:focus-visible,
+:root[data-theme="dark"] .preview-action-button.preview-action-button-primary:focus-visible {
+  color: var(--portal-white);
+}
+
+/* Final destructive button state guard, matching Figma Portal destructive states. */
+.btn-outline-danger.preview-action-button-danger,
+.preview-action-button-danger,
+.preview-action-button.preview-action-button-danger,
+.csg-button-outline-danger,
+.danger-button {
+  min-height: 42px;
+  padding: 10px 14px;
+  gap: 4px;
+  border: 1px solid var(--portal-error-600);
+  border-radius: var(--radius-md);
+  background: var(--portal-error-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  opacity: 1;
+  transform: none;
+}
+
+.btn-outline-danger.preview-action-button-danger:hover:not(:disabled),
+.preview-action-button-danger:hover:not(:disabled),
+.preview-action-button.preview-action-button-danger:hover:not(:disabled),
+.csg-button-outline-danger:hover:not(:disabled),
+.danger-button:hover:not(:disabled) {
+  border-color: #b42318;
+  background: #b42318;
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.btn-outline-danger.preview-action-button-danger:active:not(:disabled),
+.preview-action-button-danger:active:not(:disabled),
+.preview-action-button.preview-action-button-danger:active:not(:disabled),
+.csg-button-outline-danger:active:not(:disabled),
+.danger-button:active:not(:disabled) {
+  border-color: #b42318;
+  background: #b42318;
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.btn-outline-danger.preview-action-button-danger:focus-visible,
+.preview-action-button-danger:focus-visible,
+.preview-action-button.preview-action-button-danger:focus-visible,
+.csg-button-outline-danger:focus-visible,
+.danger-button:focus-visible {
+  border-color: var(--portal-error-600);
+  background: var(--portal-error-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs), 0 0 0 4px rgba(240, 68, 56, 0.24);
+}
+
+.btn-outline-danger.preview-action-button-danger:disabled,
+.btn-outline-danger.preview-action-button-danger[disabled],
+.preview-action-button-danger:disabled,
+.preview-action-button-danger[disabled],
+.preview-action-button.preview-action-button-danger:disabled,
+.preview-action-button.preview-action-button-danger[disabled],
+.csg-button-outline-danger:disabled,
+.csg-button-outline-danger[disabled],
+.danger-button:disabled,
+.danger-button[disabled] {
+  border-color: var(--portal-gray-200);
+  background: var(--portal-gray-100);
+  color: var(--portal-gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+:root[data-theme="dark"] .btn-outline-danger.preview-action-button-danger,
+:root[data-theme="dark"] .preview-action-button-danger,
+:root[data-theme="dark"] .preview-action-button.preview-action-button-danger,
+:root[data-theme="dark"] .csg-button-outline-danger,
+:root[data-theme="dark"] .danger-button,
+:root[data-theme="dark"] .btn-outline-danger.preview-action-button-danger:hover:not(:disabled),
+:root[data-theme="dark"] .preview-action-button-danger:hover:not(:disabled),
+:root[data-theme="dark"] .preview-action-button.preview-action-button-danger:hover:not(:disabled),
+:root[data-theme="dark"] .csg-button-outline-danger:hover:not(:disabled),
+:root[data-theme="dark"] .danger-button:hover:not(:disabled),
+:root[data-theme="dark"] .btn-outline-danger.preview-action-button-danger:active:not(:disabled),
+:root[data-theme="dark"] .preview-action-button-danger:active:not(:disabled),
+:root[data-theme="dark"] .preview-action-button.preview-action-button-danger:active:not(:disabled),
+:root[data-theme="dark"] .csg-button-outline-danger:active:not(:disabled),
+:root[data-theme="dark"] .danger-button:active:not(:disabled),
+:root[data-theme="dark"] .btn-outline-danger.preview-action-button-danger:focus-visible,
+:root[data-theme="dark"] .preview-action-button-danger:focus-visible,
+:root[data-theme="dark"] .preview-action-button.preview-action-button-danger:focus-visible,
+:root[data-theme="dark"] .csg-button-outline-danger:focus-visible,
+:root[data-theme="dark"] .danger-button:focus-visible {
+  color: var(--portal-white);
+}
+
+:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger,
+:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger {
+  min-height: 42px;
+  padding: 10px 14px;
+  gap: 4px;
+  border: 1px solid var(--portal-error-600);
+  border-radius: var(--radius-md);
+  background: var(--portal-error-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  opacity: 1;
+  transform: none;
+}
+
+:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:hover:not(:disabled),
+:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:hover:not(:disabled),
+:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:active:not(:disabled),
+:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:active:not(:disabled) {
+  border-color: #b42318;
+  background: #b42318;
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:focus-visible,
+:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:focus-visible {
+  border-color: var(--portal-error-600);
+  background: var(--portal-error-600);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-xs), 0 0 0 4px rgba(240, 68, 56, 0.24);
+}
+
+:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:disabled,
+:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger[disabled],
+:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:disabled,
+:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger[disabled] {
+  border-color: var(--portal-gray-200);
+  background: var(--portal-gray-100);
+  color: var(--portal-gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+/* Profile preview close button, matching Portal secondary-gray icon button states. */
+.profile-preview-popover .preview-header .modal-close {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 10px;
+  border: 1px solid var(--portal-gray-300);
+  border-radius: var(--radius-md);
+  background: var(--portal-white);
+  color: var(--portal-gray-700);
+  box-shadow: var(--shadow-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 20px;
+  transform: none;
+}
+
+.profile-preview-popover .preview-header .modal-close span {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 20px;
+}
+
+.profile-preview-popover .preview-header .modal-close:hover:not(:disabled) {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-gray-50);
+  color: var(--portal-gray-800);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.profile-preview-popover .preview-header .modal-close:active:not(:disabled) {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-gray-50);
+  color: var(--portal-gray-800);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.profile-preview-popover .preview-header .modal-close:focus-visible {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-white);
+  color: var(--portal-gray-700);
+  box-shadow: var(--shadow-xs), 0 0 0 4px rgba(77, 106, 214, 0.24);
+}
+
+.profile-preview-popover .preview-header .modal-close:disabled,
+.profile-preview-popover .preview-header .modal-close[disabled] {
+  border-color: var(--portal-gray-200);
+  background: var(--portal-gray-100);
+  color: var(--portal-gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+:root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close {
+  border-color: var(--line);
+  background: var(--panel);
+  color: #d0d5dd;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close:hover:not(:disabled),
+:root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close:active:not(:disabled) {
+  border-color: #475467;
+  background: var(--panel-strong);
+  color: var(--portal-white);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close:focus-visible {
+  border-color: #475467;
+  background: var(--panel);
+  color: #d0d5dd;
+  box-shadow: 0 0 0 4px rgba(77, 106, 214, 0.24);
 }
