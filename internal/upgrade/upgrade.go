@@ -66,7 +66,8 @@ func (c Client) Check(ctx context.Context, currentVersion string) (CheckResult, 
 		CurrentVersion: normalizeSemver(currentVersion),
 		LatestVersion:  normalizeSemver(latestVersion),
 	}
-	if compareSemver(result.CurrentVersion, result.LatestVersion) >= 0 {
+	currentComparable := comparableCurrentVersion(result.CurrentVersion)
+	if compareSemver(currentComparable, result.LatestVersion) >= 0 {
 		return result, nil
 	}
 	result.UpdateAvailable = true
@@ -245,6 +246,37 @@ func compareSemver(a, b string) int {
 		return compareInts(av.patch, bv.patch)
 	}
 	return comparePrerelease(av.pre, bv.pre)
+}
+
+func comparableCurrentVersion(version string) string {
+	version = normalizeSemver(version)
+	base, suffix, ok := strings.Cut(version, "-")
+	if !ok {
+		return version
+	}
+	if suffix == "dirty" || isGitDescribeSuffix(suffix) {
+		return base
+	}
+	return version
+}
+
+func isGitDescribeSuffix(suffix string) bool {
+	if strings.HasSuffix(suffix, "-dirty") {
+		suffix = strings.TrimSuffix(suffix, "-dirty")
+	}
+	count, commit, ok := strings.Cut(suffix, "-g")
+	if !ok || count == "" || commit == "" {
+		return false
+	}
+	if _, err := strconv.Atoi(count); err != nil {
+		return false
+	}
+	for _, r := range commit {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 func compareInts(a, b int) int {

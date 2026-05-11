@@ -101,6 +101,56 @@ func TestClientCheckNoUpdate(t *testing.T) {
 	}
 }
 
+func TestClientCheckNoUpdateForGitDescribeVersionAtLatestRelease(t *testing.T) {
+	client := Client{
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(http.StatusOK, `{"name":"v0.2.9","assets":[]}`), nil
+		}),
+		LatestURL: "https://example.test/releases/latest",
+		GOOS:      "darwin",
+		GOARCH:    "arm64",
+	}
+
+	result, err := client.Check(context.Background(), "v0.2.9-4-gd1e3c28-dirty")
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if result.UpdateAvailable {
+		t.Fatal("Check().UpdateAvailable = true, want false")
+	}
+	if got, want := result.CurrentVersion, "v0.2.9-4-gd1e3c28-dirty"; got != want {
+		t.Fatalf("CurrentVersion = %q, want %q", got, want)
+	}
+	if result.Asset != nil {
+		t.Fatalf("Asset = %#v, want nil", result.Asset)
+	}
+}
+
+func TestClientCheckStillUpdatesPrereleaseToRelease(t *testing.T) {
+	client := Client{
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(http.StatusOK, `{
+				"name":"v0.2.9",
+				"assets":[{"name":"csgclaw_v0.2.9_darwin_arm64.tar.gz","browser_download_url":"http://csgclaw.opencsg.com/releases/v0.2.9/csgclaw_v0.2.9_darwin_arm64.tar.gz"}]
+			}`), nil
+		}),
+		LatestURL: "https://example.test/releases/latest",
+		GOOS:      "darwin",
+		GOARCH:    "arm64",
+	}
+
+	result, err := client.Check(context.Background(), "v0.2.9-rc.1")
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if !result.UpdateAvailable {
+		t.Fatal("Check().UpdateAvailable = false, want true")
+	}
+	if result.Asset == nil {
+		t.Fatal("Asset = nil, want matched asset")
+	}
+}
+
 func TestClientCheckRejectsInvalidCurrentVersion(t *testing.T) {
 	client := Client{LatestURL: "https://example.test/releases/latest"}
 	_, err := client.Check(context.Background(), "dev")
@@ -626,6 +676,9 @@ func TestCompareSemver(t *testing.T) {
 		{a: "v0.3.0", b: "v0.2.9", want: 1},
 		{a: "v0.2.7-rc.1", b: "v0.2.7", want: -1},
 		{a: "v0.2.7", b: "v0.2.7-rc.1", want: 1},
+		{a: comparableCurrentVersion("v0.2.9-4-gd1e3c28-dirty"), b: "v0.2.9", want: 0},
+		{a: comparableCurrentVersion("v0.2.9-dirty"), b: "v0.2.9", want: 0},
+		{a: comparableCurrentVersion("v0.2.9-rc.1"), b: "v0.2.9", want: -1},
 	}
 
 	for _, tt := range tests {
