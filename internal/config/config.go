@@ -50,64 +50,70 @@ type LLMConfig struct {
 
 type BootstrapConfig struct {
 	ManagerImageOverride string
-	AgentRuntime         string
+	RuntimeKind          string
 }
 
 func (c BootstrapConfig) EffectiveManagerImage() string {
 	if override := strings.TrimSpace(c.ManagerImageOverride); override != "" {
 		return override
 	}
-	return DefaultManagerImageForAgentRuntime(c.ResolvedGatewayRuntime())
+	return DefaultManagerImageForRuntimeKind(c.ResolvedGatewayRuntimeKind())
 }
 
 const (
-	AgentRuntimePicoclaw = "picoclaw"
-	AgentRuntimeOpenClaw = "openclaw"
+	RuntimeKindPicoClawSandbox = "picoclaw_sandbox"
+	RuntimeKindOpenClawSandbox = "openclaw_sandbox"
 )
 
-// ResolvedGatewayRuntime selects PicoClaw vs OpenClaw gateway behavior for sandbox boxes.
-func (b BootstrapConfig) ResolvedGatewayRuntime() string {
-	explicit := strings.TrimSpace(strings.ToLower(b.AgentRuntime))
-	switch explicit {
-	case AgentRuntimeOpenClaw:
-		return AgentRuntimeOpenClaw
-	case AgentRuntimePicoclaw:
-		return AgentRuntimePicoclaw
-	case "":
-	default:
-		return explicit
+// ResolvedGatewayRuntimeKind selects the bootstrap manager runtime.
+func (b BootstrapConfig) ResolvedGatewayRuntimeKind() string {
+	if normalizeGatewayRuntimeKind(b.RuntimeKind) == RuntimeKindPicoClawSandbox {
+		return RuntimeKindPicoClawSandbox
 	}
-	img := strings.ToLower(b.ManagerImageOverride)
-	if strings.Contains(img, "openclaw/openclaw") || strings.Contains(img, "openclaw-csgclaw") ||
-		strings.Contains(img, "opencsg_public/openclaw") ||
-		strings.Contains(img, "opencsghq/openclaw") {
-		return AgentRuntimeOpenClaw
-	}
-	return AgentRuntimePicoclaw
+	return RuntimeKindPicoClawSandbox
 }
 
 func (b BootstrapConfig) Validate() error {
-	switch runtime := strings.TrimSpace(strings.ToLower(b.AgentRuntime)); runtime {
-	case "", AgentRuntimePicoclaw, AgentRuntimeOpenClaw:
-		return nil
-	default:
-		return fmt.Errorf("bootstrap agent_runtime %q is not supported (use %q or %q)", b.AgentRuntime, AgentRuntimePicoclaw, AgentRuntimeOpenClaw)
+	runtimeKind := strings.TrimSpace(b.RuntimeKind)
+	normalized := normalizeGatewayRuntimeKind(runtimeKind)
+	if normalized == RuntimeKindOpenClawSandbox {
+		return fmt.Errorf("bootstrap runtime_kind %q is not supported yet; only %q is supported for the manager runtime; use agent runtime_kind %q for OpenClaw workers", b.RuntimeKind, RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox)
 	}
+	if runtimeKind != "" && normalized == "" {
+		return fmt.Errorf("bootstrap runtime_kind %q is not supported (use %q)", b.RuntimeKind, RuntimeKindPicoClawSandbox)
+	}
+	if strings.Contains(strings.ToLower(b.ManagerImageOverride), "opencsghq/openclaw") {
+		return fmt.Errorf("bootstrap manager_image_override uses an OpenClaw manager image, which is not supported yet; use the PicoClaw manager and create OpenClaw workers with runtime_kind %q", RuntimeKindOpenClawSandbox)
+	}
+	if runtimeKind == "" || normalized == RuntimeKindPicoClawSandbox {
+		return nil
+	}
+	return nil
 }
 
-// DefaultManagerImageForAgentRuntime returns the default manager/worker sandbox image for an explicit agent_runtime value.
-func DefaultManagerImageForAgentRuntime(runtime string) string {
-	switch strings.TrimSpace(strings.ToLower(runtime)) {
-	case AgentRuntimeOpenClaw:
+// DefaultManagerImageForRuntimeKind returns the default manager/worker sandbox image for an explicit runtime_kind value.
+func DefaultManagerImageForRuntimeKind(runtimeKind string) string {
+	switch normalizeGatewayRuntimeKind(runtimeKind) {
+	case RuntimeKindOpenClawSandbox:
 		return DefaultOpenClawManagerImage
 	default:
 		return DefaultManagerImage
 	}
 }
 
+func normalizeGatewayRuntimeKind(kind string) string {
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case RuntimeKindPicoClawSandbox:
+		return RuntimeKindPicoClawSandbox
+	case RuntimeKindOpenClawSandbox:
+		return RuntimeKindOpenClawSandbox
+	default:
+		return ""
+	}
+}
+
 type SandboxConfig struct {
 	Provider                 string
-	HomeDirName              string
 	StoragePath              string
 	DockerCLIPath            string
 	DebianRegistriesOverride []string
@@ -117,9 +123,6 @@ func (c SandboxConfig) Resolved() SandboxConfig {
 	c.Provider = normalizeSandboxProvider(c.Provider)
 	if c.Provider == "" {
 		c.Provider = defaultSandboxProvider()
-	}
-	if strings.TrimSpace(c.HomeDirName) == "" {
-		c.HomeDirName = DefaultSandboxHomeDirName
 	}
 	c.StoragePath = strings.TrimSpace(c.StoragePath)
 	c.DebianRegistriesOverride = normalizeStringList(c.DebianRegistriesOverride)
@@ -192,9 +195,9 @@ const (
 	DockerProvider              = "docker"
 	BoxLiteCLIProvider          = "boxlite"
 	// TODO: Remove this alias after older config.toml files have been migrated.
-	legacyBoxLiteCLIProvider  = "boxlite-cli"
-	DefaultSandboxHomeDirName = "boxlite"
-	RuntimeHomeDirName        = DefaultSandboxHomeDirName
+	legacyBoxLiteCLIProvider = "boxlite-cli"
+	BoxLiteCLIHomeDirName    = "boxlite"
+	RuntimeHomeDirName       = BoxLiteCLIHomeDirName
 )
 
 // DefaultDebianRegistries is the default BoxLite Debian registry lookup order when
@@ -363,9 +366,9 @@ func Load(path string) (Config, error) {
 			case "manager_image":
 				cfg.raw.bootstrap.ManagerImageOverride = parseRawStringValue(rawValue)
 				cfg.Bootstrap.ManagerImageOverride = value
-			case "agent_runtime":
-				cfg.raw.bootstrap.AgentRuntime = parseRawStringValue(rawValue)
-				cfg.Bootstrap.AgentRuntime = value
+			case "runtime_kind":
+				cfg.raw.bootstrap.RuntimeKind = parseRawStringValue(rawValue)
+				cfg.Bootstrap.RuntimeKind = value
 			}
 		case section == "sandbox":
 			switch key {
@@ -373,8 +376,8 @@ func Load(path string) (Config, error) {
 				cfg.raw.sandbox.Provider = parseRawStringValue(rawValue)
 				cfg.Sandbox.Provider = value
 			case "home_dir_name":
-				cfg.raw.sandbox.HomeDirName = parseRawStringValue(rawValue)
-				cfg.Sandbox.HomeDirName = value
+				// Keep loading legacy configs that still contain this key, but
+				// do not surface it in the public config model anymore.
 			case "storage_path":
 				cfg.raw.sandbox.StoragePath = parseRawStringValue(rawValue)
 				cfg.Sandbox.StoragePath = value
@@ -422,7 +425,10 @@ func Load(path string) (Config, error) {
 	if cfg.Server.ListenAddr == "" {
 		cfg.Server.ListenAddr = DefaultListenAddr()
 	}
-	cfg.Bootstrap.AgentRuntime = strings.TrimSpace(strings.ToLower(cfg.Bootstrap.AgentRuntime))
+	if err := cfg.Bootstrap.Validate(); err != nil {
+		return Config{}, err
+	}
+	cfg.Bootstrap.RuntimeKind = normalizeGatewayRuntimeKind(cfg.Bootstrap.RuntimeKind)
 	if cfg.Server.AccessToken == "" {
 		cfg.Server.AccessToken = DefaultAccessToken
 	}
@@ -454,9 +460,9 @@ func (c Config) Save(path string) error {
 	loadedRaw := cfg.raw.resolvedOrZero()
 
 	var b strings.Builder
-	agentRuntime := strings.TrimSpace(cfg.Bootstrap.AgentRuntime)
-	if agentRuntime == "" {
-		agentRuntime = cfg.Bootstrap.ResolvedGatewayRuntime()
+	runtimeKind := strings.TrimSpace(cfg.Bootstrap.RuntimeKind)
+	if runtimeKind == "" {
+		runtimeKind = cfg.Bootstrap.ResolvedGatewayRuntimeKind()
 	}
 	fmt.Fprintf(&b, `# Generated by csgclaw.
 
@@ -468,15 +474,12 @@ no_auth = %t
 
 [bootstrap]
 manager_image_override = %q
-agent_runtime = %q
-`, cfg.rawOrResolvedString(cfg.raw.server.ListenAddr, loadedRaw.server.ListenAddr, cfg.Server.ListenAddr), cfg.rawOrResolvedString(cfg.raw.server.AdvertiseBaseURL, loadedRaw.server.AdvertiseBaseURL, cfg.Server.AdvertiseBaseURL), cfg.rawOrResolvedString(cfg.raw.server.AccessToken, loadedRaw.server.AccessToken, cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.rawOrResolvedString(cfg.raw.bootstrap.ManagerImageOverride, loadedRaw.bootstrap.ManagerImageOverride, cfg.Bootstrap.ManagerImageOverride), cfg.rawOrResolvedString(cfg.raw.bootstrap.AgentRuntime, loadedRaw.bootstrap.AgentRuntime, agentRuntime))
+runtime_kind = %q
+`, cfg.rawOrResolvedString(cfg.raw.server.ListenAddr, loadedRaw.server.ListenAddr, cfg.Server.ListenAddr), cfg.rawOrResolvedString(cfg.raw.server.AdvertiseBaseURL, loadedRaw.server.AdvertiseBaseURL, cfg.Server.AdvertiseBaseURL), cfg.rawOrResolvedString(cfg.raw.server.AccessToken, loadedRaw.server.AccessToken, cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.rawOrResolvedString(cfg.raw.bootstrap.ManagerImageOverride, loadedRaw.bootstrap.ManagerImageOverride, cfg.Bootstrap.ManagerImageOverride), runtimeKind)
 	sandboxSection := fmt.Sprintf(`
 [sandbox]
 provider = %q
 `, cfg.rawOrResolvedSandboxProvider(cfg.raw.sandbox.Provider, loadedRaw.sandbox.Provider, resolvedSandbox.Provider))
-	if strings.TrimSpace(resolvedSandbox.HomeDirName) != "" && (strings.TrimSpace(cfg.raw.sandbox.HomeDirName) != "" || strings.TrimSpace(resolvedSandbox.HomeDirName) != DefaultSandboxHomeDirName) {
-		sandboxSection += fmt.Sprintf("home_dir_name = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.HomeDirName, loadedRaw.sandbox.HomeDirName, resolvedSandbox.HomeDirName))
-	}
 	if strings.TrimSpace(resolvedSandbox.StoragePath) != "" {
 		sandboxSection = strings.Replace(sandboxSection, "[sandbox]\n", fmt.Sprintf("[sandbox]\nstorage_path = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.StoragePath, loadedRaw.sandbox.StoragePath, resolvedSandbox.StoragePath)), 1)
 	}
@@ -808,14 +811,11 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 	if c.raw.bootstrap.ManagerImageOverride != "" {
 		out.bootstrap.ManagerImageOverride = c.Bootstrap.ManagerImageOverride
 	}
-	if c.raw.bootstrap.AgentRuntime != "" {
-		out.bootstrap.AgentRuntime = c.Bootstrap.AgentRuntime
+	if c.raw.bootstrap.RuntimeKind != "" {
+		out.bootstrap.RuntimeKind = c.Bootstrap.RuntimeKind
 	}
 	if c.raw.sandbox.Provider != "" {
 		out.sandbox.Provider = c.Sandbox.Provider
-	}
-	if c.raw.sandbox.HomeDirName != "" {
-		out.sandbox.HomeDirName = c.Sandbox.HomeDirName
 	}
 	if c.raw.sandbox.StoragePath != "" {
 		out.sandbox.StoragePath = c.Sandbox.StoragePath

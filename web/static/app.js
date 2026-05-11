@@ -23,7 +23,7 @@ const RUNTIME_KIND_OPTIONS = [
   { value: "openclaw_sandbox", label: "openclaw_sandbox" },
   { value: "codex", label: "codex" },
 ];
-const GATEWAY_RUNTIME_KIND_OPTIONS = RUNTIME_KIND_OPTIONS.filter((option) => option.value !== "codex");
+const GATEWAY_RUNTIME_KIND_OPTIONS = RUNTIME_KIND_OPTIONS.filter((option) => option.value === "picoclaw_sandbox");
 const CLIPROXY_AUTH_PROVIDERS = new Set(["codex", "claude_code"]);
 const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 const WORKSPACE_TAB_MESSAGES = "messages";
@@ -4821,14 +4821,10 @@ function AgentCreateProgress({ progress, t }) {
 function normalizeRuntimeKind(kind) {
   const value = String(kind ?? "").trim().toLowerCase();
   switch (value) {
-    case "openclaw":
-    case "openclaw-sandbox":
     case "openclaw_sandbox":
       return "openclaw_sandbox";
     case "codex":
       return "codex";
-    case "picoclaw":
-    case "picoclaw-sandbox":
     case "picoclaw_sandbox":
     default:
       return "picoclaw_sandbox";

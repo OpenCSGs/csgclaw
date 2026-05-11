@@ -10,6 +10,7 @@ import (
 
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/sandbox"
 )
 
@@ -100,7 +101,7 @@ func (s *Service) PicoClawRuntimeHost() PicoClawRuntimeHost {
 			return err
 		},
 		EnsureWorkspace:    ensureAgentWorkspace,
-		WorkspaceTemplate:  func(name, botID string) string { return workspaceTemplateForAgent(name, botID, false) },
+		WorkspaceTemplate:  workspaceTemplateForAgent,
 		EnsureProjectsRoot: ensureAgentProjectsRoot,
 		StreamLogs:         s.streamRuntimeHostLogs,
 	}
@@ -109,30 +110,38 @@ func (s *Service) PicoClawRuntimeHost() PicoClawRuntimeHost {
 func (s *Service) OpenClawRuntimeHost() PicoClawRuntimeHost {
 	host := s.PicoClawRuntimeHost()
 	host.EnsureGatewayConfig = func(agentName, botID string, profile agentruntime.Profile) error {
-		_, err := ensureAgentOpenClawConfig(agentName, botID, s.server, config.ModelConfig{
+		agentHome, err := agentHomeDir(agentName)
+		if err != nil {
+			return err
+		}
+		_, err = openclawsandbox.EnsureConfig(agentHome, botID, s.server, config.ModelConfig{
 			Provider:        profile.Provider,
 			BaseURL:         profile.BaseURL,
 			APIKey:          profile.APIKey,
 			ModelID:         profile.ModelID,
 			ReasoningEffort: profile.ReasoningEffort,
-		})
+		}, resolveManagerBaseURL)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 	host.EnsureWorkspace = func(agentName, template string) (string, error) {
-		if _, err := ensureAgentOpenClawWorkspace(agentName, template); err != nil {
+		agentHome, err := agentHomeDir(agentName)
+		if err != nil {
 			return "", err
 		}
-		return agentOpenClawRoot(agentName)
+		if _, err := ensureWorkspaceAtRoot(openclawsandbox.WorkspaceRoot(agentHome), template); err != nil {
+			return "", err
+		}
+		return openclawsandbox.Root(agentHome), nil
 	}
-	host.WorkspaceTemplate = func(name, botID string) string { return workspaceTemplateForAgent(name, botID, true) }
-	host.HomeEnv = boxOpenClawUserHome
-	host.WorkspaceGuestPath = boxOpenClawDir
-	host.ProjectsGuestPath = boxOpenClawProjectsDir
-	host.GatewayLogPath = openClawGatewayLog
-	host.GatewayCommand = openClawStartScript
+	host.WorkspaceTemplate = func(name, botID string) string { return openclawsandbox.WorkspaceTemplateWorker }
+	host.HomeEnv = openclawsandbox.BoxUserHome
+	host.WorkspaceGuestPath = openclawsandbox.BoxDir
+	host.ProjectsGuestPath = openclawsandbox.BoxProjectsDir
+	host.GatewayLogPath = openclawsandbox.BoxGatewayLogPath
+	host.GatewayCommand = openclawsandbox.GatewayRunCommand
 	return host
 }
 
@@ -355,7 +364,11 @@ func (s *Service) streamRuntimeHostLogs(ctx context.Context, agentID string, fol
 		return fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
 	}
 	if s.useOpenClawGateway() {
-		return streamOpenClawGatewayLog(ctx, got.Name, follow, lines, w)
+		agentHome, err := agentHomeDir(got.Name)
+		if err != nil {
+			return err
+		}
+		return streamHostGatewayLogPaths(ctx, []string{openclawsandbox.HostGatewayLogPath(agentHome)}, follow, lines, w)
 	}
 	return streamHostGatewayLog(ctx, got.Name, follow, lines, w)
 }
@@ -451,10 +464,6 @@ func gatewayStartCommand(debug bool) ([]string, []string) {
 		return []string{"sleep"}, []string{"infinity"}
 	}
 	return []string{"tini"}, []string{"--", "picoclaw", "gateway", "-d"}
-}
-
-func openClawStartScript() string {
-	return "node /app/openclaw.mjs gateway stop 2>/dev/null; sleep 2; exec node /app/openclaw.mjs gateway --allow-unconfigured --bind lan --port 18789 1>>" + openClawGatewayLog + " 2>&1"
 }
 
 func ensureAgentProjectsRoot() (string, error) {

@@ -152,7 +152,7 @@ func TestEnsureAgentWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 		}
 	}
 
-	managerRoot, err := ensureAgentWorkspace("manager", workspaceTemplateForAgent(ManagerName, ManagerUserID, false))
+	managerRoot, err := ensureAgentWorkspace("manager", workspaceTemplateForAgent(ManagerName, ManagerUserID))
 	if err != nil {
 		t.Fatalf("ensureAgentWorkspace(manager) error = %v", err)
 	}

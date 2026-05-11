@@ -582,7 +582,7 @@ func TestRenderAgentsTableAlignsLongColumns(t *testing.T) {
 	var buf bytes.Buffer
 	agents := []apitypes.Agent{
 		{ID: "u-manager", Name: "manager", Role: "manager", Status: "running", RuntimeKind: "codex", Profile: "codex-main"},
-		{ID: "u-dev", Name: "dev", Role: "worker", Status: "running", RuntimeKind: "picoclaw-sandbox", Profile: "claude-main"},
+		{ID: "u-dev", Name: "dev", Role: "worker", Status: "running", RuntimeKind: "picoclaw_sandbox", Profile: "claude-main"},
 		{ID: "u-alex", Name: "alex", Role: "worker", Status: "running"},
 	}
 
@@ -2143,7 +2143,7 @@ func TestAgentCreateSubcommandHelpShowsReplaceAndForceFlags(t *testing.T) {
 		"--description string    agent description",
 		"--image string          agent image",
 		"--profile string        agent llm profile",
-		"--runtime string        agent runtime kind (for example: picoclaw-sandbox, openclaw-sandbox, codex)",
+		"--runtime string        agent runtime kind (for example: picoclaw_sandbox, openclaw_sandbox, codex)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("help = %q, want substring %q", got, want)

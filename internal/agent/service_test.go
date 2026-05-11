@@ -3390,7 +3390,7 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	}
 }
 
-func TestGatewayCreateSpecBuildsOpenClawSpecWithoutPluginMount(t *testing.T) {
+func TestOpenClawRuntimeHostBuildsWorkerWorkspaceAndConfig(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	orig := localIPv4Resolver
@@ -3402,59 +3402,44 @@ func TestGatewayCreateSpecBuildsOpenClawSpecWithoutPluginMount(t *testing.T) {
 		config.ServerConfig{ListenAddr: ":18080", AccessToken: "shared-token"},
 		"openclaw-csgclaw:local",
 		"",
-		WithGatewayRuntime(config.AgentRuntimeOpenClaw),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	spec, err := svc.gatewayCreateSpec("openclaw-csgclaw:local", "alice", "u-worker-1", AgentProfile{
+	host := svc.OpenClawRuntimeHost()
+	if got, want := host.HomeEnv, openclawsandbox.BoxUserHome; got != want {
+		t.Fatalf("HomeEnv = %q, want %q", got, want)
+	}
+	if got, want := host.WorkspaceGuestPath, openclawsandbox.BoxDir; got != want {
+		t.Fatalf("WorkspaceGuestPath = %q, want %q", got, want)
+	}
+	if got, want := host.ProjectsGuestPath, openclawsandbox.BoxProjectsDir; got != want {
+		t.Fatalf("ProjectsGuestPath = %q, want %q", got, want)
+	}
+	if got := host.GatewayCommand(); strings.Contains(got, "install.sh") || strings.Contains(got, "command -v csgclaw-cli") {
+		t.Fatalf("openclaw start script should not install csgclaw-cli at runtime (it is baked into the image), got: %q", got)
+	}
+
+	if err := host.EnsureGatewayConfig("alice", "u-worker-1", agentruntime.Profile{
 		BaseURL: "https://api.minimaxi.com/v1",
 		APIKey:  "sk-minimax-test",
 		ModelID: "MiniMax-M2.7",
-	})
-	if err != nil {
-		t.Fatalf("gatewayCreateSpec() error = %v", err)
+	}); err != nil {
+		t.Fatalf("EnsureGatewayConfig() error = %v", err)
 	}
-
-	if got, want := spec.Env["HOME"], boxOpenClawUserHome; got != want {
-		t.Fatalf("HOME env = %q, want %q", got, want)
+	wantAgentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")
+	wantOpenClawRoot := openclawsandbox.Root(wantAgentHome)
+	if got, err := host.EnsureWorkspace("alice", host.WorkspaceTemplate("alice", "u-worker-1")); err != nil {
+		t.Fatalf("EnsureWorkspace() error = %v", err)
+	} else if got != wantOpenClawRoot {
+		t.Fatalf("EnsureWorkspace() root = %q, want %q", got, wantOpenClawRoot)
 	}
-	wantCmd := "/bin/sh -c " + openClawStartScript()
-	if strings.Join(spec.Cmd, " ") != wantCmd {
-		t.Fatalf("gatewayCreateSpec() cmd = %q, want %q", spec.Cmd, wantCmd)
-	}
-	cmdJoined := strings.Join(spec.Cmd, " ")
-	if strings.Contains(cmdJoined, "install.sh") || strings.Contains(cmdJoined, "command -v csgclaw-cli") {
-		t.Fatalf("openclaw start script should not install csgclaw-cli at runtime (it is baked into the image), got: %q", spec.Cmd)
-	}
-
-	wantProjectsRoot := filepath.Join(homeDir, config.AppDirName, hostProjectsDir)
-	wantOpenClawRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostOpenClawDir)
-	if len(spec.Mounts) != 2 {
-		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 2 mounts", spec.Mounts)
-	}
-	wants := map[string]string{
-		wantOpenClawRoot: boxOpenClawDir,
-		wantProjectsRoot: boxOpenClawProjectsDir,
-	}
-	for _, mount := range spec.Mounts {
-		if strings.Contains(mount.GuestPath, "openclaw-plugins") {
-			t.Fatalf("gatewayCreateSpec() should not mount over baked plugins: %+v", spec.Mounts)
-		}
-		if wantGuest, ok := wants[mount.HostPath]; !ok || wantGuest != mount.GuestPath {
-			t.Fatalf("unexpected mount %+v; wants host->guest %v", mount, wants)
-		}
-		delete(wants, mount.HostPath)
-	}
-	if len(wants) != 0 {
-		t.Fatalf("missing mounts: %v", wants)
-	}
-	if _, err := os.Stat(filepath.Join(wantOpenClawRoot, hostWorkspaceDir, "AGENT.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(wantOpenClawRoot, openclawsandbox.HostWorkspaceDir, "AGENT.md")); err != nil {
 		t.Fatalf("expected openclaw workspace template under openclaw root: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(wantOpenClawRoot, hostOpenClawConfig))
+	data, err := os.ReadFile(filepath.Join(wantOpenClawRoot, openclawsandbox.HostConfig))
 	if err != nil {
 		t.Fatalf("ReadFile(openclaw config) error = %v", err)
 	}
@@ -3468,13 +3453,30 @@ func TestGatewayCreateSpecBuildsOpenClawSpecWithoutPluginMount(t *testing.T) {
 	if !strings.Contains(cfgText, `"verboseDefault": "on"`) {
 		t.Fatalf("openclaw config should set agents.defaults.verboseDefault to on for tool stream visibility, got:\n%s", cfgText)
 	}
-	approvalsRaw, err := os.ReadFile(filepath.Join(wantOpenClawRoot, hostOpenClawExecApproval))
+	approvalsRaw, err := os.ReadFile(filepath.Join(wantOpenClawRoot, openclawsandbox.HostExecApproval))
 	if err != nil {
 		t.Fatalf("ReadFile(openclaw exec-approvals) error = %v", err)
 	}
 	approvalsText := string(approvalsRaw)
 	if !strings.Contains(approvalsText, `"security": "full"`) || !strings.Contains(approvalsText, `"ask": "off"`) {
 		t.Fatalf("openclaw exec-approvals should default security=full ask=off, got:\n%s", approvalsText)
+	}
+}
+
+func TestWithGatewayRuntimeRejectsOpenClawManagerRuntime(t *testing.T) {
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"picoclaw:latest",
+		"",
+		WithGatewayRuntime(RuntimeKindOpenClawSandbox),
+	)
+	if err == nil {
+		_ = svc.Close()
+		t.Fatal("NewService() error = nil, want unsupported gateway runtime")
+	}
+	if !strings.Contains(err.Error(), `gateway runtime "openclaw_sandbox" is not supported`) {
+		t.Fatalf("NewService() error = %v, want unsupported openclaw gateway runtime", err)
 	}
 }
 

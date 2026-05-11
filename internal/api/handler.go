@@ -127,12 +127,7 @@ func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		if req.RuntimeKind != nil {
-			runtime, err := bootstrapRuntimeForRuntimeKind(*req.RuntimeKind)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			cfg.Bootstrap.AgentRuntime = runtime
+			cfg.Bootstrap.RuntimeKind = *req.RuntimeKind
 		}
 		if err := cfg.Bootstrap.Validate(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -144,7 +139,7 @@ func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) 
 		}
 		if h.svc != nil {
 			if req.RuntimeKind != nil {
-				if err := h.svc.SetGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntime(), cfg.Bootstrap.EffectiveManagerImage()); err != nil {
+				if err := h.svc.SetGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntimeKind(), cfg.Bootstrap.EffectiveManagerImage()); err != nil {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
 				}
@@ -177,8 +172,7 @@ func (h *Handler) loadBootstrapConfig() (config.Config, string, error) {
 			},
 			Bootstrap: config.BootstrapConfig{},
 			Sandbox: config.SandboxConfig{
-				Provider:    config.DefaultSandboxProvider,
-				HomeDirName: config.DefaultSandboxHomeDirName,
+				Provider: config.DefaultSandboxProvider,
 			},
 		}
 		return cfg, path, nil
@@ -192,36 +186,24 @@ func (h *Handler) loadBootstrapConfig() (config.Config, string, error) {
 
 func bootstrapConfigView(cfg config.Config) bootstrapConfigResponse {
 	return bootstrapConfigResponse{
-		RuntimeKind:           bootstrapRuntimeKind(cfg.Bootstrap.ResolvedGatewayRuntime()),
+		RuntimeKind:           bootstrapRuntimeKind(cfg.Bootstrap.ResolvedGatewayRuntimeKind()),
 		EffectiveManagerImage: cfg.Bootstrap.EffectiveManagerImage(),
 		SupportedRuntimeKinds: []string{
 			agent.RuntimeKindPicoClawSandbox,
-			agent.RuntimeKindOpenClawSandbox,
 		},
 		RuntimeDefaultImages: map[string]string{
-			agent.RuntimeKindPicoClawSandbox: config.DefaultManagerImageForAgentRuntime(config.AgentRuntimePicoclaw),
-			agent.RuntimeKindOpenClawSandbox: config.DefaultManagerImageForAgentRuntime(config.AgentRuntimeOpenClaw),
+			agent.RuntimeKindPicoClawSandbox: config.DefaultManagerImageForRuntimeKind(agent.RuntimeKindPicoClawSandbox),
+			agent.RuntimeKindOpenClawSandbox: config.DefaultManagerImageForRuntimeKind(agent.RuntimeKindOpenClawSandbox),
 		},
 	}
 }
 
 func bootstrapRuntimeKind(runtime string) string {
 	switch strings.TrimSpace(strings.ToLower(runtime)) {
-	case config.AgentRuntimeOpenClaw, agent.RuntimeKindOpenClawSandbox, "openclaw-sandbox":
+	case agent.RuntimeKindOpenClawSandbox:
 		return agent.RuntimeKindOpenClawSandbox
 	default:
 		return agent.RuntimeKindPicoClawSandbox
-	}
-}
-
-func bootstrapRuntimeForRuntimeKind(kind string) (string, error) {
-	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case "", agent.RuntimeKindPicoClawSandbox, "picoclaw-sandbox", config.AgentRuntimePicoclaw:
-		return config.AgentRuntimePicoclaw, nil
-	case agent.RuntimeKindOpenClawSandbox, "openclaw-sandbox", config.AgentRuntimeOpenClaw:
-		return config.AgentRuntimeOpenClaw, nil
-	default:
-		return "", fmt.Errorf("runtime_kind %q is not supported", kind)
 	}
 }
 

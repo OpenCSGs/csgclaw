@@ -33,66 +33,66 @@ type legacyWorker struct {
 }
 
 type persistedAgent struct {
-	ID                  string                   `json:"id"`
-	Name                string                   `json:"name"`
-	Description         string                   `json:"description,omitempty"`
-	RuntimeID           string                   `json:"runtime_id,omitempty"`
-	RuntimeKind         string                   `json:"runtime_kind,omitempty"`
-	Image               string                   `json:"image,omitempty"`
-	BoxID               string                   `json:"box_id,omitempty"`
-	Role                string                   `json:"role"`
-	Status              string                   `json:"status,omitempty"`
-	CreatedAt           time.Time                `json:"created_at"`
-	Profile             string                   `json:"profile,omitempty"`
-	Provider            string                   `json:"provider,omitempty"`
-	ModelID             string                   `json:"model_id,omitempty"`
-	ReasoningEffort     string                   `json:"reasoning_effort,omitempty"`
-	AgentProfile        AgentProfile             `json:"agent_profile,omitempty"`
-	ProfileComplete     bool                     `json:"profile_complete"`
-	DetectionResults    []ProfileDetectionResult `json:"detection_results,omitempty"`
+	ID               string                   `json:"id"`
+	Name             string                   `json:"name"`
+	Description      string                   `json:"description,omitempty"`
+	RuntimeID        string                   `json:"runtime_id,omitempty"`
+	RuntimeKind      string                   `json:"runtime_kind,omitempty"`
+	Image            string                   `json:"image,omitempty"`
+	BoxID            string                   `json:"box_id,omitempty"`
+	Role             string                   `json:"role"`
+	Status           string                   `json:"status,omitempty"`
+	CreatedAt        time.Time                `json:"created_at"`
+	Profile          string                   `json:"profile,omitempty"`
+	Provider         string                   `json:"provider,omitempty"`
+	ModelID          string                   `json:"model_id,omitempty"`
+	ReasoningEffort  string                   `json:"reasoning_effort,omitempty"`
+	AgentProfile     AgentProfile             `json:"agent_profile,omitempty"`
+	ProfileComplete  bool                     `json:"profile_complete"`
+	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
 func newPersistedAgent(a Agent) persistedAgent {
 	return persistedAgent{
-		ID:                  a.ID,
-		Name:                a.Name,
-		Description:         a.Description,
-		RuntimeID:           a.RuntimeID,
-		RuntimeKind:         a.RuntimeKind,
-		Image:               a.Image,
-		BoxID:               a.BoxID,
-		Role:                a.Role,
-		Status:              a.Status,
-		CreatedAt:           a.CreatedAt,
-		Profile:             a.Profile,
-		Provider:            a.Provider,
-		ModelID:             a.ModelID,
-		ReasoningEffort:     a.ReasoningEffort,
-		AgentProfile:        cloneProfile(a.AgentProfile),
-		ProfileComplete:     a.ProfileComplete,
-		DetectionResults:    append([]ProfileDetectionResult(nil), a.DetectionResults...),
+		ID:               a.ID,
+		Name:             a.Name,
+		Description:      a.Description,
+		RuntimeID:        a.RuntimeID,
+		RuntimeKind:      a.RuntimeKind,
+		Image:            a.Image,
+		BoxID:            a.BoxID,
+		Role:             a.Role,
+		Status:           a.Status,
+		CreatedAt:        a.CreatedAt,
+		Profile:          a.Profile,
+		Provider:         a.Provider,
+		ModelID:          a.ModelID,
+		ReasoningEffort:  a.ReasoningEffort,
+		AgentProfile:     cloneProfile(a.AgentProfile),
+		ProfileComplete:  a.ProfileComplete,
+		DetectionResults: append([]ProfileDetectionResult(nil), a.DetectionResults...),
 	}
 }
 
 func (a persistedAgent) toAgent() Agent {
 	return Agent{
-		ID:                  a.ID,
-		Name:                a.Name,
-		Description:         a.Description,
-		RuntimeID:           a.RuntimeID,
-		RuntimeKind:         a.RuntimeKind,
-		Image:               a.Image,
-		BoxID:               a.BoxID,
-		Role:                a.Role,
-		Status:              a.Status,
-		CreatedAt:           a.CreatedAt,
-		Profile:             a.Profile,
-		Provider:            a.Provider,
-		ModelID:             a.ModelID,
-		ReasoningEffort:     a.ReasoningEffort,
-		AgentProfile:        cloneProfile(a.AgentProfile),
-		ProfileComplete:     a.ProfileComplete,
-		DetectionResults:    append([]ProfileDetectionResult(nil), a.DetectionResults...),
+		ID:               a.ID,
+		Name:             a.Name,
+		Description:      a.Description,
+		RuntimeID:        a.RuntimeID,
+		RuntimeKind:      a.RuntimeKind,
+		Image:            a.Image,
+		BoxID:            a.BoxID,
+		Role:             a.Role,
+		Status:           a.Status,
+		CreatedAt:        a.CreatedAt,
+		Profile:          a.Profile,
+		Provider:         a.Provider,
+		ModelID:          a.ModelID,
+		ReasoningEffort:  a.ReasoningEffort,
+		AgentProfile:     cloneProfile(a.AgentProfile),
+		ProfileComplete:  a.ProfileComplete,
+		DetectionResults: append([]ProfileDetectionResult(nil), a.DetectionResults...),
 	}
 }
 

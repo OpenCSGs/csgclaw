@@ -24,7 +24,7 @@ var (
 			path,
 			runtimewiring.WithPicoClawSandboxRuntime(cfg.Channels),
 			runtimewiring.WithOpenClawSandboxRuntime(),
-			agent.WithGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntime()),
+			agent.WithGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntimeKind()),
 		)
 	}
 )

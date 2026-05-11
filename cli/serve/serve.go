@@ -711,11 +711,11 @@ no_auth = %t
 
 [bootstrap]
 manager_image_override = %q
-agent_runtime = %q
+runtime_kind = %q
 
 [sandbox]
 provider = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Bootstrap.ManagerImageOverride, cfg.Bootstrap.ResolvedGatewayRuntime(), cfg.Sandbox.Resolved().Provider)
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Bootstrap.ManagerImageOverride, cfg.Bootstrap.ResolvedGatewayRuntimeKind(), cfg.Sandbox.Resolved().Provider)
 	if strings.TrimSpace(cfg.Bootstrap.ManagerImageOverride) == "" {
 		content = strings.Replace(content, "[bootstrap]\nmanager_image_override", fmt.Sprintf("[bootstrap]\n# using default image: %q\nmanager_image_override", cfg.Bootstrap.EffectiveManagerImage()), 1)
 	}
@@ -800,7 +800,7 @@ func newAgentService(cfg config.Config) (*agent.Service, error) {
 		runtimewiring.WithPicoClawSandboxRuntime(cfg.Channels),
 		runtimewiring.WithOpenClawSandboxRuntime(),
 		runtimewiring.WithCodexRuntime(),
-		agent.WithGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntime()),
+		agent.WithGatewayRuntime(cfg.Bootstrap.ResolvedGatewayRuntimeKind()),
 	)
 	return agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, cfg.Bootstrap.EffectiveManagerImage(), agentsPath, opts...)
 }

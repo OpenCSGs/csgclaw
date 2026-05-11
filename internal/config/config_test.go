@@ -98,13 +98,25 @@ models = ["minimax-m2.7"]
 	}
 }
 
-func TestBootstrapResolvedGatewayRuntimeRecognizesOpenClawHQImage(t *testing.T) {
+func TestBootstrapValidateRejectsOpenClawManagerRuntime(t *testing.T) {
+	cfg := BootstrapConfig{
+		RuntimeKind: RuntimeKindOpenClawSandbox,
+	}
+
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "not supported yet") {
+		t.Fatalf("Validate() error = %v, want not supported yet", err)
+	}
+}
+
+func TestBootstrapValidateRejectsOpenClawManagerImage(t *testing.T) {
 	cfg := BootstrapConfig{
 		ManagerImageOverride: "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260509.1-csgclaw",
 	}
 
-	if got, want := cfg.ResolvedGatewayRuntime(), AgentRuntimeOpenClaw; got != want {
-		t.Fatalf("ResolvedGatewayRuntime() = %q, want %q", got, want)
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "OpenClaw manager image") {
+		t.Fatalf("Validate() error = %v, want OpenClaw manager image", err)
 	}
 }
 
@@ -675,7 +687,7 @@ no_auth = true
 
 [bootstrap]
 manager_image_override = "ghcr.io/russellluo/picoclaw:2026.4.25"
-agent_runtime = "picoclaw"
+runtime_kind = "picoclaw_sandbox"
 
 [sandbox]
 provider = "boxlite"

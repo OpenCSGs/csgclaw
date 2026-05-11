@@ -273,7 +273,7 @@ Flags:
 - `--description string`: agent description.
 - `--image string`: agent image.
 - `--profile string`: agent LLM profile.
-- `--runtime string`: agent runtime kind, for example `picoclaw-sandbox` or `codex`.
+- `--runtime string`: agent runtime kind, for example `picoclaw_sandbox` or `codex`.
 
 Behavior:
 

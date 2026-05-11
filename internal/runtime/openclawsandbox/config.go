@@ -1,10 +1,9 @@
-package agent
+package openclawsandbox
 
 import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,42 +15,45 @@ import (
 var defaultOpenClawGatewayConfig []byte
 
 const (
-	hostOpenClawDir              = ".openclaw"
-	hostOpenClawConfig           = "openclaw.json"
-	hostOpenClawExecApproval     = "exec-approvals.json"
-	hostOpenClawLogs             = "logs"
-	boxOpenClawUserHome          = "/home/node"
-	boxOpenClawDir               = "/home/node/.openclaw"
-	boxOpenClawWorkspaceDir      = boxOpenClawDir + "/workspace"
-	boxOpenClawProjectsDir       = boxOpenClawDir + "/workspace/projects"
-	openClawGatewayLog           = boxOpenClawDir + "/gateway.log"
-	openClawBridgeProviderID     = "csgclaw-llm"
-	openClawMinimaxProviderID    = "csgclaw-minimax"
-	openClawMinimaxCNBaseURL     = "https://api.minimaxi.com/anthropic"
-	openClawMinimaxGlobalBaseURL = "https://api.minimax.io/anthropic"
+	HostDir                 = ".openclaw"
+	HostConfig              = "openclaw.json"
+	HostExecApproval        = "exec-approvals.json"
+	HostLogs                = "logs"
+	HostWorkspaceDir        = "workspace"
+	WorkspaceTemplateWorker = "embed/runtimes/openclaw/worker/workspace"
+	BoxUserHome             = "/home/node"
+	BoxDir                  = "/home/node/.openclaw"
+	BoxWorkspaceDir         = BoxDir + "/workspace"
+	BoxProjectsDir          = BoxDir + "/workspace/projects"
+	BoxGatewayLogPath       = BoxDir + "/gateway.log"
+
+	openClawBridgeProviderID = "csgclaw-llm"
 )
 
-func agentOpenClawRoot(agentName string) (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve host home dir: %w", err)
-	}
-	return filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, agentName, hostOpenClawDir), nil
+type BaseURLResolver func(config.ServerConfig) string
+
+func Root(agentHome string) string {
+	return filepath.Join(agentHome, HostDir)
 }
 
-func ensureAgentOpenClawConfig(agentName, botID string, server config.ServerConfig, model config.ModelConfig) (string, error) {
-	hostRoot, err := agentOpenClawRoot(agentName)
-	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(filepath.Join(hostRoot, hostOpenClawLogs), 0o755); err != nil {
+func WorkspaceRoot(agentHome string) string {
+	return filepath.Join(Root(agentHome), HostWorkspaceDir)
+}
+
+func HostGatewayLogPath(agentHome string) string {
+	return filepath.Join(Root(agentHome), "gateway.log")
+}
+
+func EnsureConfig(agentHome, botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) (string, error) {
+	hostRoot := Root(agentHome)
+	if err := os.MkdirAll(filepath.Join(hostRoot, HostLogs), 0o755); err != nil {
 		return "", fmt.Errorf("create openclaw logs dir: %w", err)
 	}
-	data, err := renderAgentOpenClawConfig(botID, server, model)
+	data, err := renderConfig(botID, server, model, resolveBaseURL)
 	if err != nil {
 		return "", err
 	}
-	configPath := filepath.Join(hostRoot, hostOpenClawConfig)
+	configPath := filepath.Join(hostRoot, HostConfig)
 	newContent := append(data, '\n')
 	// Skip the write if the file already contains identical content. Writing
 	// openclaw.json while the gateway is running triggers a hot-reload that
@@ -65,17 +67,17 @@ func ensureAgentOpenClawConfig(agentName, botID string, server config.ServerConf
 			return "", fmt.Errorf("write openclaw config: %w", writeErr)
 		}
 	}
-	if err := writeOpenClawExecApprovalsAllowAll(hostRoot); err != nil {
+	if err := writeExecApprovalsAllowAll(hostRoot); err != nil {
 		return "", err
 	}
 	return hostRoot, nil
 }
 
-// writeOpenClawExecApprovalsAllowAll seeds ~/.openclaw/exec-approvals.json so the
+// writeExecApprovalsAllowAll seeds ~/.openclaw/exec-approvals.json so the
 // gateway-side approval daemon never prompts the agent for /approve. OpenClaw
 // takes the stricter of tools.exec.* and the file's defaults; without this file
 // the file-side defaults (deny + on-miss) still gate every command.
-func writeOpenClawExecApprovalsAllowAll(hostRoot string) error {
+func writeExecApprovalsAllowAll(hostRoot string) error {
 	payload := map[string]any{
 		"version": 1,
 		"defaults": map[string]any{
@@ -96,7 +98,7 @@ func writeOpenClawExecApprovalsAllowAll(hostRoot string) error {
 	if err != nil {
 		return fmt.Errorf("encode openclaw exec-approvals: %w", err)
 	}
-	target := filepath.Join(hostRoot, hostOpenClawExecApproval)
+	target := filepath.Join(hostRoot, HostExecApproval)
 	newContent := append(data, '\n')
 	if existing, readErr := os.ReadFile(target); readErr == nil && string(existing) == string(newContent) {
 		return nil // already up-to-date; avoid spurious VirtioFS write events
@@ -107,15 +109,15 @@ func writeOpenClawExecApprovalsAllowAll(hostRoot string) error {
 	return nil
 }
 
-func renderAgentOpenClawConfig(botID string, server config.ServerConfig, model config.ModelConfig) ([]byte, error) {
+func renderConfig(botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) ([]byte, error) {
 	var cfg map[string]any
 	if err := json.Unmarshal(defaultOpenClawGatewayConfig, &cfg); err != nil {
 		return nil, fmt.Errorf("decode embedded openclaw config: %w", err)
 	}
-	if err := updateOpenClawModelProvider(cfg, botID, server, model); err != nil {
+	if err := updateOpenClawModelProvider(cfg, botID, server, model, resolveBaseURL); err != nil {
 		return nil, err
 	}
-	if err := updateOpenClawCsgclawChannel(cfg, botID, server); err != nil {
+	if err := updateOpenClawCsgclawChannel(cfg, botID, server, resolveBaseURL); err != nil {
 		return nil, err
 	}
 	if err := updateOpenClawGatewayAuth(cfg, server); err != nil {
@@ -128,7 +130,7 @@ func renderAgentOpenClawConfig(botID string, server config.ServerConfig, model c
 	return data, nil
 }
 
-func updateOpenClawModelProvider(cfg map[string]any, botID string, server config.ServerConfig, modelCfg config.ModelConfig) error {
+func updateOpenClawModelProvider(cfg map[string]any, botID string, server config.ServerConfig, modelCfg config.ModelConfig, resolveBaseURL BaseURLResolver) error {
 	modelCfg = modelCfg.Resolved()
 	modelsRoot, ok := cfg["models"].(map[string]any)
 	if !ok {
@@ -142,15 +144,10 @@ func updateOpenClawModelProvider(cfg map[string]any, botID string, server config
 	if !ok {
 		return fmt.Errorf("embedded openclaw config is missing models.providers.%s", openClawBridgeProviderID)
 	}
-	managerBaseURL := resolveManagerBaseURL(server)
+	managerBaseURL := managerBaseURL(server, resolveBaseURL)
 	modelID := strings.TrimSpace(modelCfg.ModelID)
 	if modelID == "" {
 		return fmt.Errorf("openclaw config: model id is required")
-	}
-	if shouldUseOpenClawMinimaxProvider(modelCfg) {
-		providers[openClawMinimaxProviderID] = buildOpenClawMinimaxProvider(modelCfg)
-		delete(providers, openClawBridgeProviderID)
-		return updateOpenClawPrimaryModel(cfg, openClawMinimaxProviderID, modelID)
 	}
 	if base := strings.TrimSpace(modelCfg.BaseURL); base != "" {
 		llm["baseUrl"] = strings.TrimRight(base, "/")
@@ -180,84 +177,6 @@ func updateOpenClawModelProvider(cfg map[string]any, botID string, server config
 	return updateOpenClawPrimaryModel(cfg, openClawBridgeProviderID, modelID)
 }
 
-func shouldUseOpenClawMinimaxProvider(modelCfg config.ModelConfig) bool {
-	base := strings.TrimSpace(modelCfg.BaseURL)
-	if base == "" {
-		return false
-	}
-	// Infini MaaS is OpenAI-compatible at .../maas/v1; model IDs can contain "minimax" but
-	// must not use OpenClaw's built-in api.minimaxi.com Anthropic adapter.
-	if isInfiniMaaSOpenAICompatBaseURL(base) {
-		return false
-	}
-	modelID := strings.ToLower(strings.TrimSpace(modelCfg.ModelID))
-	if strings.Contains(modelID, "minimax") {
-		return true
-	}
-	parsed, err := url.Parse(base)
-	if err != nil {
-		return false
-	}
-	host := strings.ToLower(parsed.Hostname())
-	return strings.Contains(host, "minimax")
-}
-
-func isInfiniMaaSOpenAICompatBaseURL(base string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(base))
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(parsed.Hostname(), "cloud.infini-ai.com")
-}
-
-func buildOpenClawMinimaxProvider(modelCfg config.ModelConfig) map[string]any {
-	modelID := strings.TrimSpace(modelCfg.ModelID)
-	baseURL := openClawMinimaxAnthropicBaseURL(modelCfg.BaseURL)
-	provider := map[string]any{
-		"baseUrl":    baseURL,
-		"api":        "anthropic-messages",
-		"authHeader": true,
-		"models": []any{
-			map[string]any{
-				"id":            modelID,
-				"name":          modelID,
-				"reasoning":     false,
-				"input":         []any{"text"},
-				"contextWindow": 204800,
-				"maxTokens":     131072,
-				"cost": map[string]any{
-					"input":      0.3,
-					"output":     1.2,
-					"cacheRead":  0.06,
-					"cacheWrite": 0.375,
-				},
-			},
-		},
-	}
-	if apiKey := strings.TrimSpace(modelCfg.APIKey); apiKey != "" {
-		provider["apiKey"] = apiKey
-	}
-	return provider
-}
-
-func openClawMinimaxAnthropicBaseURL(rawBaseURL string) string {
-	parsed, err := url.Parse(strings.TrimSpace(rawBaseURL))
-	if err != nil {
-		return openClawMinimaxCNBaseURL
-	}
-	switch strings.ToLower(parsed.Hostname()) {
-	case "api.minimax.io":
-		return openClawMinimaxGlobalBaseURL
-	case "api.minimaxi.com":
-		return openClawMinimaxCNBaseURL
-	default:
-		if strings.TrimSpace(rawBaseURL) != "" {
-			return strings.TrimRight(rawBaseURL, "/")
-		}
-		return openClawMinimaxCNBaseURL
-	}
-}
-
 func updateOpenClawPrimaryModel(cfg map[string]any, providerID, modelID string) error {
 	agents, ok := cfg["agents"].(map[string]any)
 	if !ok {
@@ -275,7 +194,7 @@ func updateOpenClawPrimaryModel(cfg map[string]any, providerID, modelID string) 
 	return nil
 }
 
-func updateOpenClawCsgclawChannel(cfg map[string]any, botID string, server config.ServerConfig) error {
+func updateOpenClawCsgclawChannel(cfg map[string]any, botID string, server config.ServerConfig, resolveBaseURL BaseURLResolver) error {
 	channels, ok := cfg["channels"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("embedded openclaw config is missing channels")
@@ -284,7 +203,7 @@ func updateOpenClawCsgclawChannel(cfg map[string]any, botID string, server confi
 	if !ok {
 		return fmt.Errorf("embedded openclaw config is missing channels.csgclaw")
 	}
-	if baseURL := resolveManagerBaseURL(server); baseURL != "" {
+	if baseURL := managerBaseURL(server, resolveBaseURL); baseURL != "" {
 		ch["baseUrl"] = baseURL
 	}
 	if server.AccessToken != "" {
@@ -293,6 +212,18 @@ func updateOpenClawCsgclawChannel(cfg map[string]any, botID string, server confi
 	ch["botId"] = botID
 	ch["enabled"] = true
 	return nil
+}
+
+func managerBaseURL(server config.ServerConfig, resolveBaseURL BaseURLResolver) string {
+	if resolveBaseURL == nil {
+		return strings.TrimRight(strings.TrimSpace(server.AdvertiseBaseURL), "/")
+	}
+	return strings.TrimRight(strings.TrimSpace(resolveBaseURL(server)), "/")
+}
+
+func llmBridgeBaseURL(managerBaseURL, botID string) string {
+	managerBaseURL = strings.TrimRight(strings.TrimSpace(managerBaseURL), "/")
+	return managerBaseURL + "/api/bots/" + strings.TrimSpace(botID) + "/llm"
 }
 
 func updateOpenClawGatewayAuth(cfg map[string]any, server config.ServerConfig) error {

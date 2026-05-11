@@ -78,7 +78,7 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
   "id": "u-alice",
   "name": "alice",
   "description": "frontend dev",
-  "runtime_kind": "picoclaw-sandbox",
+  "runtime_kind": "picoclaw_sandbox",
   "role": "worker",
   "status": "running",
   "created_at": "2026-03-28T12:00:03Z",
@@ -160,7 +160,7 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
 - `name` 不能是 `manager`
 - `id` 可选；未传时服务端会自动生成
 - `profile` 可选；它引用配置中的 `models.default` 或显式 selector（例如 `codex.gpt-5.4`）
-- `runtime_kind` 可选；留空时默认 `picoclaw-sandbox`，可显式传 `codex`
+- `runtime_kind` 可选；留空时默认 `picoclaw_sandbox`，可显式传 `codex`
 - `provider`、`model_id`、`reasoning_effort` 是服务端解析后的快照字段，便于调试
 - `status`、`created_at` 以实际 box 启动结果为准
 - `manager` 嵌套字段已不再支持

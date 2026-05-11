@@ -62,25 +62,16 @@ func isGatewayRuntimeKind(kind string) bool {
 }
 
 func runtimeKindForGatewayRuntime(runtime string) string {
-	if kind := normalizeRuntimeKind(runtime); isGatewayRuntimeKind(kind) {
+	if kind := normalizeRuntimeKind(runtime); kind == RuntimeKindPicoClawSandbox {
 		return kind
 	}
-	switch strings.TrimSpace(strings.ToLower(runtime)) {
-	case config.AgentRuntimeOpenClaw:
-		return RuntimeKindOpenClawSandbox
-	case config.AgentRuntimePicoclaw:
-		return RuntimeKindPicoClawSandbox
-	default:
-		return ""
-	}
+	return ""
 }
 
 func managerImageForRuntimeKind(kind string) string {
 	switch normalizeRuntimeKind(kind) {
-	case RuntimeKindOpenClawSandbox:
-		return config.DefaultManagerImageForAgentRuntime(config.AgentRuntimeOpenClaw)
-	case RuntimeKindPicoClawSandbox:
-		return config.DefaultManagerImageForAgentRuntime(config.AgentRuntimePicoclaw)
+	case RuntimeKindOpenClawSandbox, RuntimeKindPicoClawSandbox:
+		return config.DefaultManagerImageForRuntimeKind(kind)
 	default:
 		return ""
 	}
@@ -88,9 +79,9 @@ func managerImageForRuntimeKind(kind string) string {
 
 func normalizeRuntimeKind(kind string) string {
 	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case RuntimeKindPicoClawSandbox, "picoclaw-sandbox":
+	case RuntimeKindPicoClawSandbox:
 		return RuntimeKindPicoClawSandbox
-	case RuntimeKindOpenClawSandbox, "openclaw-sandbox":
+	case RuntimeKindOpenClawSandbox:
 		return RuntimeKindOpenClawSandbox
 	case RuntimeKindCodex:
 		return RuntimeKindCodex

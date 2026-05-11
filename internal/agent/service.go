@@ -159,7 +159,6 @@ type Service struct {
 	gatewayRuntime   string
 	state            string
 	sandbox          sandbox.Provider
-	sandboxHome      string
 	mu               sync.RWMutex
 	runtimes         map[string]sandbox.Runtime
 	agents           map[string]Agent
@@ -198,17 +197,6 @@ func WithRuntime(rt agentruntime.Runtime) ServiceOption {
 			return fmt.Errorf("runtime kind is required")
 		}
 		s.runtimeRegistry[kind] = rt
-		return nil
-	}
-}
-
-func WithSandboxHomeDirName(name string) ServiceOption {
-	return func(s *Service) error {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return fmt.Errorf("sandbox home dir name is required")
-		}
-		s.sandboxHome = name
 		return nil
 	}
 }
@@ -292,7 +280,6 @@ func NewServiceWithLLM(llmCfg config.LLMConfig, server config.ServerConfig, mana
 		managerImage:    managerImage,
 		state:           statePath,
 		sandbox:         defaultSandboxProvider,
-		sandboxHome:     config.DefaultSandboxHomeDirName,
 		runtimes:        make(map[string]sandbox.Runtime),
 		agents:          make(map[string]Agent),
 		runtimeRecords:  make(map[string]RuntimeRecord),
@@ -344,14 +331,8 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	if err != nil {
 		return err
 	}
-	if svc.useOpenClawGateway() {
-		if _, err := ensureAgentOpenClawConfig(ManagerName, ManagerUserID, svc.server, defaultModel); err != nil {
-			return err
-		}
-	} else {
-		if _, err := ensureAgentPicoClawConfig(ManagerName, ManagerUserID, svc.server, defaultModel); err != nil {
-			return err
-		}
+	if _, err := ensureAgentPicoClawConfig(ManagerName, ManagerUserID, svc.server, defaultModel); err != nil {
+		return err
 	}
 	_, err = svc.EnsureManager(ctx, forceRecreate)
 	return err
@@ -1474,6 +1455,10 @@ func streamHostGatewayLog(ctx context.Context, agentName string, follow bool, li
 	if err != nil {
 		return err
 	}
+	return streamHostGatewayLogPaths(ctx, logPaths, follow, lines, w)
+}
+
+func streamHostGatewayLogPaths(ctx context.Context, logPaths []string, follow bool, lines int, w io.Writer) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1484,31 +1469,6 @@ func streamHostGatewayLog(ctx context.Context, agentName string, follow bool, li
 		return err
 	}
 	return nil
-}
-
-func streamOpenClawGatewayLog(ctx context.Context, agentName string, follow bool, lines int, w io.Writer) error {
-	logPath, err := agentOpenClawGatewayLogPath(agentName)
-	if err != nil {
-		return err
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := streamGatewayLogFile(ctx, []string{logPath}, follow, lines, w); err != nil {
-		if follow && errors.Is(err, context.Canceled) {
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-
-func agentOpenClawGatewayLogPath(agentName string) (string, error) {
-	root, err := agentOpenClawRoot(agentName)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(root, "gateway.log"), nil
 }
 
 func agentGatewayLogPath(agentName string) (string, error) {

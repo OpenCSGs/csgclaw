@@ -273,7 +273,7 @@ csgclaw agent create [-r|--replace] --id <id> [flags]
 - `--description string`：Agent 描述。
 - `--image string`：Agent 镜像。
 - `--profile string`：Agent 使用的 LLM profile。
-- `--runtime string`：Agent runtime kind，例如 `picoclaw-sandbox` 或 `codex`。
+- `--runtime string`：Agent runtime kind，例如 `picoclaw_sandbox` 或 `codex`。
 
 行为说明：
 

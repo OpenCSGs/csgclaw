@@ -11,7 +11,6 @@ import (
 const (
 	workspaceTemplateManagerPicoclaw = "embed/runtimes/picoclaw/manager/workspace"
 	workspaceTemplateWorkerPicoclaw  = "embed/runtimes/picoclaw/worker/workspace"
-	workspaceTemplateWorkerOpenClaw  = "embed/runtimes/openclaw/worker/workspace"
 )
 
 // managerGatewayMatch reports whether a gateway run should use the PicoClaw manager template,
@@ -20,11 +19,8 @@ func managerGatewayMatch(name, botID string) bool {
 	return strings.EqualFold(strings.TrimSpace(name), ManagerName) || strings.TrimSpace(botID) == ManagerUserID
 }
 
-func workspaceTemplateForAgent(name, botID string, openClaw bool) string {
+func workspaceTemplateForAgent(name, botID string) string {
 	isManager := managerGatewayMatch(name, botID)
-	if openClaw {
-		return workspaceTemplateWorkerOpenClaw
-	}
 	if isManager {
 		return workspaceTemplateManagerPicoclaw
 	}
@@ -33,14 +29,6 @@ func workspaceTemplateForAgent(name, botID string, openClaw bool) string {
 
 func ensureAgentWorkspace(agentName, template string) (string, error) {
 	hostRoot, err := agentWorkspaceRoot(agentName)
-	if err != nil {
-		return "", err
-	}
-	return ensureWorkspaceAtRoot(hostRoot, template)
-}
-
-func ensureAgentOpenClawWorkspace(agentName, template string) (string, error) {
-	hostRoot, err := agentOpenClawWorkspaceRoot(agentName)
 	if err != nil {
 		return "", err
 	}
@@ -66,14 +54,6 @@ func agentWorkspaceRoot(agentName string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(agentHome, hostWorkspaceDir), nil
-}
-
-func agentOpenClawWorkspaceRoot(agentName string) (string, error) {
-	hostRoot, err := agentOpenClawRoot(agentName)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(hostRoot, hostWorkspaceDir), nil
 }
 
 func copyEmbeddedTree(template, dstRoot string) error {
