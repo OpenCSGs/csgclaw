@@ -11,8 +11,9 @@ import (
 type Role string
 
 const (
-	RoleManager Role = "manager"
-	RoleWorker  Role = "worker"
+	RoleManager  Role = "manager"
+	RoleWorker   Role = "worker"
+	RoleNotifier Role = "notifier"
 )
 
 type Channel string
@@ -93,8 +94,10 @@ func NormalizeRole(role string) (Role, error) {
 		return RoleManager, nil
 	case RoleWorker:
 		return RoleWorker, nil
+	case RoleNotifier:
+		return RoleNotifier, nil
 	default:
-		return "", fmt.Errorf("role must be one of %q or %q", RoleManager, RoleWorker)
+		return "", fmt.Errorf("role must be one of %q, %q, or %q", RoleManager, RoleWorker, RoleNotifier)
 	}
 }
 

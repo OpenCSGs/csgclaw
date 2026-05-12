@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	RoleAgent   = "agent"
-	RoleWorker  = "worker"
-	RoleManager = "manager"
+	RoleAgent    = "agent"
+	RoleWorker   = "worker"
+	RoleManager  = "manager"
+	RoleNotifier = "notifier"
 )
 
 type Agent struct {
@@ -65,6 +66,8 @@ func normalizeRole(role string) string {
 		return RoleAgent
 	case RoleWorker:
 		return RoleWorker
+	case RoleNotifier:
+		return RoleNotifier
 	case RoleManager:
 		return RoleManager
 	default:

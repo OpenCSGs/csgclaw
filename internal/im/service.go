@@ -662,6 +662,24 @@ func (s *Service) ListMembers(roomID string) ([]User, error) {
 	return users, nil
 }
 
+// RoomIDsForMember returns sorted room IDs where the given user is a member (including direct rooms).
+func (s *Service) RoomIDsForMember(userID string) []string {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var ids []string
+	for id, room := range s.rooms {
+		if slices.Contains(room.Members, userID) {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
 func (s *Service) ListMessages(roomID string) ([]Message, error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {

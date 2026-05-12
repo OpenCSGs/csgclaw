@@ -50,6 +50,11 @@ func Run(opts Options) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	if opts.Service != nil && handler != nil {
+		pull := agent.NewNotifierPullWorker(opts.Service, handler)
+		go pull.Run(opts.Context)
+	}
+
 	if opts.IMBus != nil && opts.BotBridge != nil {
 		events, cancel := opts.IMBus.Subscribe()
 		defer cancel()

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/notifier"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
 )
@@ -628,7 +629,11 @@ func (s *Service) createNew(ctx context.Context, spec CreateAgentSpec) (Agent, e
 		return s.EnsureManager(ctx, false)
 	}
 	if shouldCreateWorkerSpec(spec) {
-		spec.Role = RoleWorker
+		if strings.EqualFold(strings.TrimSpace(spec.Role), RoleNotifier) {
+			spec.Role = RoleNotifier
+		} else {
+			spec.Role = RoleWorker
+		}
 		return s.CreateWorker(ctx, spec)
 	}
 
@@ -800,11 +805,15 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 	if isManagerAgent(existing) || isManagerCreateSpec(spec) {
 		return s.ensureManager(ctx, true, managerImageOverride)
 	}
-	if shouldCreateWorkerSpec(spec) || strings.EqualFold(existing.Role, RoleWorker) {
+	if shouldCreateWorkerSpec(spec) || strings.EqualFold(existing.Role, RoleWorker) || strings.EqualFold(existing.Role, RoleNotifier) {
 		if err := s.Delete(ctx, existing.ID); err != nil {
 			return Agent{}, err
 		}
-		spec.Role = RoleWorker
+		if strings.EqualFold(strings.TrimSpace(spec.Role), RoleNotifier) {
+			spec.Role = RoleNotifier
+		} else {
+			spec.Role = RoleWorker
+		}
 		return s.CreateWorker(ctx, spec)
 	}
 
@@ -891,7 +900,7 @@ func isManagerCreateSpec(spec CreateAgentSpec) bool {
 
 func shouldCreateWorkerSpec(spec CreateAgentSpec) bool {
 	role := strings.ToLower(strings.TrimSpace(spec.Role))
-	return role == "" || role == RoleWorker
+	return role == "" || role == RoleWorker || role == RoleNotifier
 }
 
 func normalizeCreateID(id string) string {
@@ -1030,7 +1039,8 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 }
 
 func (s *Service) ensureWorkerGatewayConfig(got Agent) error {
-	if s == nil || !strings.EqualFold(normalizeRole(got.Role), RoleWorker) {
+	r := normalizeRole(got.Role)
+	if s == nil || !(r == RoleWorker || r == RoleNotifier) || !isAgentProfileComplete(got) {
 		return nil
 	}
 	return s.ensureGatewayConfigForAgent(got)
@@ -1041,10 +1051,10 @@ func (s *Service) ensureGatewayConfigForAgent(got Agent) error {
 		return nil
 	}
 	role := normalizeRole(got.Role)
-	if role != RoleManager && role != RoleWorker {
+	if role != RoleManager && role != RoleWorker && role != RoleNotifier {
 		return nil
 	}
-	if role == RoleWorker {
+	if role == RoleWorker || role == RoleNotifier {
 		if kind := normalizeRuntimeKind(got.RuntimeKind); kind != "" && !isGatewayRuntimeKind(kind) {
 			return nil
 		}
@@ -1318,6 +1328,10 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	if err != nil {
 		return Agent{}, err
 	}
+	agentRole := RoleWorker
+	if strings.EqualFold(strings.TrimSpace(spec.Role), RoleNotifier) {
+		agentRole = RoleNotifier
+	}
 	if testCreateGatewayBoxHook != nil && isGatewayRuntimeKind(runtimeKind) {
 		rt, err := s.ensureRuntime(name)
 		if err != nil {
@@ -1341,7 +1355,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 			HandleID:  strings.TrimSpace(info.ID),
 			State:     agentruntime.State(info.State),
 			CreatedAt: info.CreatedAt.UTC(),
-		})
+		}, agentRole)
 	}
 	handle, err := runtimeImpl.Create(ctx, agentruntime.Spec{
 		RuntimeID: runtimeIDForAgentID(id),
@@ -1359,10 +1373,10 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		CreatedAt: time.Now().UTC(),
 	}
 
-	return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, info)
+	return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, info, agentRole)
 }
 
-func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, info agentruntime.Info) (Agent, error) {
+func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, info agentruntime.Info, role string) (Agent, error) {
 	s.mu.Lock()
 
 	if _, ok := s.agents[id]; ok {
@@ -1382,6 +1396,12 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 	if state == "" {
 		state = agentruntime.StateRunning
 	}
+	if strings.TrimSpace(role) == "" {
+		role = RoleWorker
+	}
+	if strings.EqualFold(strings.TrimSpace(role), RoleNotifier) {
+		profile.RequestOptions = notifier.EnsurePullRemoteSubscriptionInRequestOptions(profile.RequestOptions)
+	}
 	worker := Agent{
 		ID:              id,
 		Name:            name,
@@ -1398,7 +1418,7 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 		ReasoningEffort: profile.ReasoningEffort,
 		AgentProfile:    profile,
 		ProfileComplete: profile.ProfileComplete,
-		Role:            RoleWorker,
+		Role:            role,
 	}
 	s.agents[worker.ID] = worker
 	s.syncRuntimeRecordLocked(worker)

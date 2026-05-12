@@ -177,6 +177,22 @@ func normalizeRequestOptions(values map[string]any) map[string]any {
 	return out
 }
 
+// mergePreservedRequestOptions overlays preserved keys onto dst (shallow per key).
+// Used when profile resolution replaces the working profile (e.g. DetectDefaultProfile)
+// so user-supplied keys such as request_options.notifier are not lost.
+func mergePreservedRequestOptions(dst, preserved map[string]any) map[string]any {
+	if len(preserved) == 0 {
+		return dst
+	}
+	if dst == nil {
+		dst = make(map[string]any, len(preserved))
+	}
+	for k, v := range preserved {
+		dst[k] = v
+	}
+	return dst
+}
+
 func cloneProfile(profile AgentProfile) AgentProfile {
 	out := profile
 	if len(profile.Headers) > 0 {

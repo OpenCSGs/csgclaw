@@ -225,7 +225,7 @@ func (s *Service) Delete(ctx context.Context, channel, id string) error {
 	if s.agents == nil {
 		return nil
 	}
-	if strings.TrimSpace(deleted.Role) != string(RoleWorker) {
+	if strings.TrimSpace(deleted.Role) != string(RoleWorker) && strings.TrimSpace(deleted.Role) != string(RoleNotifier) {
 		return nil
 	}
 	agentID := strings.TrimSpace(deleted.AgentID)
@@ -275,10 +275,10 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Bot, error) {
 	switch normalized.Role {
 	case string(RoleManager):
 		return s.createManager(ctx, normalized, false)
-	case string(RoleWorker):
+	case string(RoleWorker), string(RoleNotifier):
 		return s.createWorker(ctx, normalized)
 	default:
-		return Bot{}, fmt.Errorf("role must be one of %q or %q", RoleManager, RoleWorker)
+		return Bot{}, fmt.Errorf("role must be one of %q, %q, or %q", RoleManager, RoleWorker, RoleNotifier)
 	}
 }
 
@@ -300,17 +300,25 @@ func (s *Service) CreateManager(ctx context.Context, req CreateRequest, forceRec
 func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (Bot, error) {
 	created, ok := s.agents.Agent(workerAgentID(normalized))
 	if ok {
-		if strings.ToLower(strings.TrimSpace(created.Role)) != agent.RoleWorker {
+		wantRole := agent.RoleWorker
+		if strings.EqualFold(normalized.Role, string(RoleNotifier)) {
+			wantRole = agent.RoleNotifier
+		}
+		if !strings.EqualFold(strings.TrimSpace(created.Role), wantRole) {
 			return Bot{}, fmt.Errorf("agent id %q already exists with role %q", created.ID, created.Role)
 		}
 	} else {
 		var err error
+		agentRole := agent.RoleWorker
+		if strings.EqualFold(normalized.Role, string(RoleNotifier)) {
+			agentRole = agent.RoleNotifier
+		}
 		created, err = s.agents.CreateWorker(ctx, agent.CreateAgentSpec{
 			ID:           normalized.ID,
 			Name:         normalized.Name,
 			Description:  normalized.Description,
 			Image:        normalized.Image,
-			Role:         agent.RoleWorker,
+			Role:         agentRole,
 			ModelID:      normalized.ModelID,
 			RuntimeKind:  normalized.RuntimeKind,
 			AgentProfile: agentProfileFromBotRequest(normalized.AgentProfile),
@@ -338,7 +346,7 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 		ID:          created.ID,
 		Name:        created.Name,
 		Description: normalized.Description,
-		Role:        string(RoleWorker),
+		Role:        normalized.Role,
 		Channel:     normalized.Channel,
 		AgentID:     created.ID,
 		UserID:      userID,
@@ -493,6 +501,8 @@ func displayRole(role string) string {
 		return "manager"
 	case agent.RoleWorker:
 		return "Worker"
+	case agent.RoleNotifier:
+		return "Notifier"
 	default:
 		return "Agent"
 	}

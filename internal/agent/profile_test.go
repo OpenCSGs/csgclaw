@@ -299,6 +299,24 @@ func TestSortModelIDsOrdersLatestKnownFamiliesFirst(t *testing.T) {
 	}
 }
 
+func TestMergePreservedRequestOptions(t *testing.T) {
+	dst := map[string]any{"foo": "bar"}
+	preserved := map[string]any{
+		"notifier": map[string]any{"webhook_token": "secret", "delivery_mode": "webhook"},
+	}
+	got := mergePreservedRequestOptions(dst, preserved)
+	if got["foo"] != "bar" {
+		t.Fatalf("existing key lost")
+	}
+	n, ok := got["notifier"].(map[string]any)
+	if !ok || n["webhook_token"] != "secret" {
+		t.Fatalf("notifier merge = %#v", got["notifier"])
+	}
+	if mergePreservedRequestOptions(nil, nil) != nil {
+		t.Fatal("nil preserved should leave nil dst")
+	}
+}
+
 func setProfileDetectionURLs(t *testing.T, csgHubLiteURL, cliProxyURL string, claudeCodeURL ...string) func() {
 	t.Helper()
 	oldCSGHubLite := defaultCSGHubLiteBaseURL

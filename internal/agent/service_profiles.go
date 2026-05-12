@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"csgclaw/internal/notifier"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
 )
@@ -51,6 +52,7 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 		profile.APIKey = current.AgentProfile.APIKey
 	}
 	normalized := normalizeProfile(profile, current.Name, current.Description)
+	normalized.RequestOptions = notifier.EnsurePullRemoteSubscriptionInRequestOptions(normalized.RequestOptions)
 	normalized.EnvRestartRequired = !profilesEqualEnv(current.AgentProfile, normalized)
 	current.AgentProfile = normalized
 	current.ProfileComplete = normalized.ProfileComplete
@@ -115,6 +117,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 			profile.APIKey = current.AgentProfile.APIKey
 		}
 		normalized := normalizeProfile(profile, current.Name, current.Description)
+		normalized.RequestOptions = notifier.EnsurePullRemoteSubscriptionInRequestOptions(normalized.RequestOptions)
 		normalized.EnvRestartRequired = !profilesEqualEnv(current.AgentProfile, normalized)
 		current.AgentProfile = normalized
 		current.ProfileComplete = normalized.ProfileComplete
@@ -321,6 +324,14 @@ func (s *Service) persistRecreatedAgent(ctx context.Context, id string, info age
 }
 
 func (s *Service) profileForCreateRequest(ctx context.Context, req CreateAgentSpec) (AgentProfile, error) {
+	var preservedRO map[string]any
+	if len(req.AgentProfile.RequestOptions) > 0 {
+		preservedRO = make(map[string]any, len(req.AgentProfile.RequestOptions))
+		for k, v := range req.AgentProfile.RequestOptions {
+			preservedRO[k] = v
+		}
+	}
+
 	profile := req.AgentProfile
 	if strings.TrimSpace(profile.ModelID) == "" && strings.TrimSpace(req.ModelID) != "" {
 		profile.ModelID = strings.TrimSpace(req.ModelID)
@@ -365,12 +376,14 @@ func (s *Service) profileForCreateRequest(ctx context.Context, req CreateAgentSp
 			profile.Env = defaultProfile.Env
 		}
 	}
+	profile.RequestOptions = mergePreservedRequestOptions(profile.RequestOptions, preservedRO)
 	profile = normalizeProfile(profile, req.Name, req.Description)
 	if !profile.ProfileComplete {
 		detected, _ := s.DetectDefaultProfile(ctx)
 		if detected.ProfileComplete {
 			detected.Name = strings.TrimSpace(req.Name)
 			detected.Description = strings.TrimSpace(req.Description)
+			detected.RequestOptions = mergePreservedRequestOptions(detected.RequestOptions, preservedRO)
 			return normalizeProfile(detected, req.Name, req.Description), nil
 		}
 		return AgentProfile{}, fmt.Errorf("agent profile is incomplete")

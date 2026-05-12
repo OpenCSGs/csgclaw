@@ -469,6 +469,19 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		h.handleAgentRecreate(w, r, id)
 		return
 	}
+	if strings.HasSuffix(path, "/webhooks/notify") {
+		id := strings.TrimSpace(strings.TrimSuffix(path, "/webhooks/notify"))
+		if id == "" || strings.Contains(id, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleAgentNotifierWebhook(w, r, id)
+		return
+	}
 
 	id := path
 	if strings.Contains(id, "/") {
@@ -1090,7 +1103,7 @@ func shouldCreateWorkerForUser(id, role string) bool {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case "", agent.RoleWorker, agent.RoleAgent:
 		return true
-	case agent.RoleManager, "admin":
+	case agent.RoleManager, "admin", agent.RoleNotifier:
 		return false
 	default:
 		return true
