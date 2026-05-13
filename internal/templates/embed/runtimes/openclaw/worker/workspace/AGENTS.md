@@ -10,8 +10,9 @@ Before acting on a request:
 1. Read `SOUL.md` for identity, tone, and boundaries.
 2. Read `USER.md` for user preferences when present.
 3. Read `IDENTITY.md` for the worker role.
-4. Use `MEMORY.md` only for durable context that is safe for the current
-   conversation.
+4. Use workspace memory only for durable context that is safe for the current
+   conversation. Prefer OpenClaw's memory tools or dated files under `memory/`
+   when preserving new notes.
 
 This workspace is already initialized by CSGClaw. Do not start an OpenClaw
 first-run hatch or identity onboarding unless the user explicitly asks for it.

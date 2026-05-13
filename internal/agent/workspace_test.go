@@ -62,7 +62,6 @@ func TestOpenClawWorkerTemplateUsesOpenClawBootstrapFiles(t *testing.T) {
 		"IDENTITY.md",
 		"USER.md",
 		"HEARTBEAT.md",
-		"MEMORY.md",
 	}
 	for _, name := range required {
 		path := "embed/runtimes/openclaw/worker/workspace/" + name
@@ -77,6 +76,7 @@ func TestOpenClawWorkerTemplateUsesOpenClawBootstrapFiles(t *testing.T) {
 
 	for _, path := range []string{
 		"embed/runtimes/openclaw/worker/workspace/AGENT.md",
+		"embed/runtimes/openclaw/worker/workspace/MEMORY.md",
 		"embed/runtimes/openclaw/worker/workspace/memory/MEMORY.md",
 		"embed/runtimes/openclaw/worker/workspace/BOOTSTRAP.md",
 	} {
