@@ -29,7 +29,7 @@ func TestRuntimeTemplateFSEmbedsCompleteTemplateUnits(t *testing.T) {
 		{
 			name:         "openclaw worker",
 			manifestPath: "embed/runtimes/openclaw/worker/agent.toml",
-			workspaceDoc: "embed/runtimes/openclaw/worker/workspace/AGENT.md",
+			workspaceDoc: "embed/runtimes/openclaw/worker/workspace/AGENTS.md",
 		},
 	}
 
@@ -51,6 +51,38 @@ func TestRuntimeTemplateFSEmbedsCompleteTemplateUnits(t *testing.T) {
 				t.Fatalf("ReadFile(%q) returned empty data", tt.workspaceDoc)
 			}
 		})
+	}
+}
+
+func TestOpenClawWorkerTemplateUsesOpenClawBootstrapFiles(t *testing.T) {
+	required := []string{
+		"AGENTS.md",
+		"SOUL.md",
+		"TOOLS.md",
+		"IDENTITY.md",
+		"USER.md",
+		"HEARTBEAT.md",
+		"MEMORY.md",
+	}
+	for _, name := range required {
+		path := "embed/runtimes/openclaw/worker/workspace/" + name
+		data, err := fs.ReadFile(templates.FS(), path)
+		if err != nil {
+			t.Fatalf("ReadFile(%q) error = %v", path, err)
+		}
+		if len(data) == 0 {
+			t.Fatalf("ReadFile(%q) returned empty data", path)
+		}
+	}
+
+	for _, path := range []string{
+		"embed/runtimes/openclaw/worker/workspace/AGENT.md",
+		"embed/runtimes/openclaw/worker/workspace/memory/MEMORY.md",
+		"embed/runtimes/openclaw/worker/workspace/BOOTSTRAP.md",
+	} {
+		if _, err := fs.Stat(templates.FS(), path); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("Stat(%q) error = %v, want fs.ErrNotExist", path, err)
+		}
 	}
 }
 

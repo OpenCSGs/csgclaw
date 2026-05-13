@@ -3796,8 +3796,14 @@ func TestOpenClawRuntimeHostBuildsWorkerWorkspaceAndConfig(t *testing.T) {
 	} else if got != wantOpenClawRoot {
 		t.Fatalf("EnsureWorkspace() root = %q, want %q", got, wantOpenClawRoot)
 	}
-	if _, err := os.Stat(filepath.Join(wantOpenClawRoot, openclawsandbox.HostWorkspaceDir, "AGENT.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(wantOpenClawRoot, openclawsandbox.HostWorkspaceDir, "AGENTS.md")); err != nil {
 		t.Fatalf("expected openclaw workspace template under openclaw root: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(wantOpenClawRoot, openclawsandbox.HostWorkspaceDir, "MEMORY.md")); err != nil {
+		t.Fatalf("expected openclaw root MEMORY.md under openclaw root: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(wantOpenClawRoot, openclawsandbox.HostWorkspaceDir, "AGENT.md")); !os.IsNotExist(err) {
+		t.Fatalf("AGENT.md should not be seeded for openclaw worker, stat error = %v", err)
 	}
 
 	data, err := os.ReadFile(filepath.Join(wantOpenClawRoot, openclawsandbox.HostConfig))

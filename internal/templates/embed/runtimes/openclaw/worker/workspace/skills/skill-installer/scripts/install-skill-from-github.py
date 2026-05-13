@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install a skill from a GitHub repo path or git repo into $CODEX_HOME/skills."""
+"""Install a skill from a GitHub repo path or git repo into the OpenClaw workspace."""
 
 from __future__ import annotations
 
@@ -43,8 +43,11 @@ class InstallError(Exception):
     pass
 
 
-def _codex_home() -> str:
-    return os.environ.get("CODEX_HOME", os.path.expanduser("~/.codex"))
+def _openclaw_workspace() -> str:
+    return os.environ.get(
+        "OPENCLAW_WORKSPACE",
+        os.path.expanduser("~/.openclaw/workspace"),
+    )
 
 
 def _tmp_root() -> str:
@@ -289,7 +292,7 @@ def _skill_name_for_path(source: Source, path: str, explicit_name: str | None, m
 
 
 def _default_dest() -> str:
-    return os.path.join(_codex_home(), "skills")
+    return os.path.join(_openclaw_workspace(), "skills")
 
 
 def _parse_args(argv: list[str]) -> Args:

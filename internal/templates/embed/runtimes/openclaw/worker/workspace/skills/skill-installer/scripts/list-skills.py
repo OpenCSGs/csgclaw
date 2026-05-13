@@ -31,12 +31,15 @@ def _request(url: str) -> bytes:
     return github_request(url, "codex-skill-list")
 
 
-def _codex_home() -> str:
-    return os.environ.get("CODEX_HOME", os.path.expanduser("~/.codex"))
+def _openclaw_workspace() -> str:
+    return os.environ.get(
+        "OPENCLAW_WORKSPACE",
+        os.path.expanduser("~/.openclaw/workspace"),
+    )
 
 
 def _installed_skills() -> set[str]:
-    root = os.path.join(_codex_home(), "skills")
+    root = os.path.join(_openclaw_workspace(), "skills")
     if not os.path.isdir(root):
         return set()
     entries = set()

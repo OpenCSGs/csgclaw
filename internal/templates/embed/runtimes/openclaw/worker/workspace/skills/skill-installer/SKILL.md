@@ -1,6 +1,6 @@
 ---
 name: skill-installer
-description: Install PicoClaw workspace skills into `~/.picoclaw/workspace/skills` from a curated list, a GitHub repo path, or a git repo URL. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos).
+description: Install OpenClaw workspace skills into `~/.openclaw/workspace/skills` from a curated list, a GitHub repo path, or a git repo URL. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos).
 metadata:
   short-description: Install curated skills from openai/skills or other repos
 ---
@@ -49,7 +49,7 @@ All of these scripts use network, so when running in the sandbox, request escala
 - GitHub download mode falls back to git sparse checkout on auth/permission errors.
 - Non-GitHub git repos use git sparse checkout directly.
 - Aborts if the destination skill directory already exists.
-- Installs into `~/.picoclaw/workspace/skills/<skill-name>`.
+- Installs into `~/.openclaw/workspace/skills/<skill-name>`.
 - Multiple `--path` values install multiple skills in one run, each named from the path basename unless `--name` is supplied.
 - Options: `--ref <ref>` (default `main`), `--dest <path>`, `--method auto|download|git`.
 
@@ -82,4 +82,4 @@ If no supported package manager is available, explain that automatic `git` insta
 - Private non-GitHub git repos depend on existing git credentials supported by the remote.
 - Git fallback tries HTTPS first, then SSH.
 - The skills at https://github.com/openai/skills/tree/main/skills/.system are preinstalled, so no need to help users install those. If they ask, just explain this. If they insist, you can download and overwrite.
-- Installed annotations come from `~/.picoclaw/workspace/skills`.
+- Installed annotations come from `~/.openclaw/workspace/skills`.
