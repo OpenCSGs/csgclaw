@@ -10,6 +10,14 @@ assert(
   'frontend must define the CSGClaw action-card payload type',
 );
 assert(
+  source.includes('const CSGCLAW_NOTIFY_CARD_TYPE = "csgclaw.notify_card";'),
+  'frontend must define the CSGClaw notifier notify-card payload type',
+);
+assert(
+  source.includes('function isNotifyCardPayload'),
+  'frontend must recognize notifier notify-card payloads',
+);
+assert(
   source.includes('function ActionCard'),
   'frontend must render structured action cards as React components',
 );

@@ -14,6 +14,7 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	notifierpull "csgclaw/internal/runtime/notifier/pull"
 	"csgclaw/internal/upgrade"
 )
 
@@ -51,6 +52,11 @@ func Run(opts Options) error {
 		Addr:              opts.ListenAddr,
 		Handler:           accessLog(slog.Default(), mux),
 		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	if opts.Service != nil && handler != nil {
+		pull := notifierpull.NewWorker(opts.Service, handler)
+		go pull.Run(opts.Context)
 	}
 
 	if opts.IMBus != nil && opts.BotBridge != nil {

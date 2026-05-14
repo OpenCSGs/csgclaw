@@ -227,3 +227,15 @@ func TestNewStoreRejectsInvalidState(t *testing.T) {
 		t.Fatalf("NewStore() error = %v, want role validation error", err)
 	}
 }
+
+func TestNewStoreRejectsLegacyNotifierBotRole(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bots.json")
+	raw := `{"bots":[{"id":"u-alerts","name":"alerts","role":"notifier","channel":"csgclaw","agent_id":"u-alerts","user_id":"u-alerts","available":true,"created_at":"2026-05-01T00:00:00Z"}]}`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	if _, err := NewStore(path); err == nil || !strings.Contains(err.Error(), "role must be one of") {
+		t.Fatalf("NewStore() error = %v, want role validation error", err)
+	}
+}

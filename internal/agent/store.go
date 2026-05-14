@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
 )
 
@@ -33,67 +34,104 @@ type legacyWorker struct {
 }
 
 type persistedAgent struct {
-	ID               string                   `json:"id"`
-	Name             string                   `json:"name"`
-	Description      string                   `json:"description,omitempty"`
-	RuntimeID        string                   `json:"runtime_id,omitempty"`
-	RuntimeKind      string                   `json:"runtime_kind,omitempty"`
-	Image            string                   `json:"image,omitempty"`
-	BoxID            string                   `json:"box_id,omitempty"`
-	Role             string                   `json:"role"`
-	Status           string                   `json:"status,omitempty"`
-	CreatedAt        time.Time                `json:"created_at"`
-	Profile          string                   `json:"profile,omitempty"`
-	Provider         string                   `json:"provider,omitempty"`
-	ModelID          string                   `json:"model_id,omitempty"`
-	ReasoningEffort  string                   `json:"reasoning_effort,omitempty"`
-	AgentProfile     AgentProfile             `json:"agent_profile,omitempty"`
-	ProfileComplete  bool                     `json:"profile_complete"`
-	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
+	ID                string                   `json:"id"`
+	Name              string                   `json:"name"`
+	Description       string                   `json:"description,omitempty"`
+	RuntimeID         string                   `json:"runtime_id,omitempty"`
+	RuntimeKind       string                   `json:"runtime_kind,omitempty"`
+	Image             string                   `json:"image,omitempty"`
+	BoxID             string                   `json:"box_id,omitempty"`
+	RuntimeExtensions map[string]any           `json:"runtime_extensions,omitempty"`
+	Role              string                   `json:"role"`
+	Status            string                   `json:"status,omitempty"`
+	CreatedAt         time.Time                `json:"created_at"`
+	Profile           string                   `json:"profile,omitempty"`
+	Provider          string                   `json:"provider,omitempty"`
+	ModelID           string                   `json:"model_id,omitempty"`
+	ReasoningEffort   string                   `json:"reasoning_effort,omitempty"`
+	AgentProfile      AgentProfile             `json:"agent_profile,omitempty"`
+	ProfileComplete   bool                     `json:"profile_complete"`
+	DetectionResults  []ProfileDetectionResult `json:"detection_results,omitempty"`
+	// LegacyDiskNotifierDetails is read from older state.json (top-level notifier_details); load migrates into agent.runtime_extensions.
+	LegacyDiskNotifierDetails map[string]any `json:"notifier_details,omitempty"`
 }
 
 func newPersistedAgent(a Agent) persistedAgent {
+	ap := cloneProfile(a.AgentProfile)
+	if strings.TrimSpace(ap.Name) == strings.TrimSpace(a.Name) {
+		ap.Name = ""
+	}
+	if strings.TrimSpace(ap.Description) == strings.TrimSpace(a.Description) {
+		ap.Description = ""
+	}
+	pol := agentruntime.ProfileExtensionsPolicyForKind(normalizeRuntimeKind(a.RuntimeKind))
+	nd := pol.FlatFromExtensionsMap(a.RuntimeExtensions)
+	var topRX map[string]any
+	if len(nd) > 0 {
+		topRX = agentruntime.CloneAnyMap(nd)
+		pol.StripNestedFromRequestOptions(ap.RequestOptions)
+		if len(ap.RequestOptions) == 0 {
+			ap.RequestOptions = nil
+		}
+		ap.RuntimeExtensions = pol.DetachPayloadFromProfileExtensions(ap.RuntimeExtensions)
+	} else if len(a.RuntimeExtensions) > 0 {
+		topRX = agentruntime.CloneAnyMap(a.RuntimeExtensions)
+	}
+	ap.BaseURL, ap.ModelID = pol.ProfileLLMFields(a.RuntimeKind, ap.BaseURL, ap.ModelID)
 	return persistedAgent{
-		ID:               a.ID,
-		Name:             a.Name,
-		Description:      a.Description,
-		RuntimeID:        a.RuntimeID,
-		RuntimeKind:      a.RuntimeKind,
-		Image:            a.Image,
-		BoxID:            a.BoxID,
-		Role:             a.Role,
-		Status:           a.Status,
-		CreatedAt:        a.CreatedAt,
-		Profile:          a.Profile,
-		Provider:         a.Provider,
-		ModelID:          a.ModelID,
-		ReasoningEffort:  a.ReasoningEffort,
-		AgentProfile:     cloneProfile(a.AgentProfile),
-		ProfileComplete:  a.ProfileComplete,
-		DetectionResults: append([]ProfileDetectionResult(nil), a.DetectionResults...),
+		ID:                a.ID,
+		Name:              a.Name,
+		Description:       a.Description,
+		RuntimeID:         a.RuntimeID,
+		RuntimeKind:       a.RuntimeKind,
+		Image:             a.Image,
+		BoxID:             a.BoxID,
+		RuntimeExtensions: topRX,
+		Role:              a.Role,
+		Status:            a.Status,
+		CreatedAt:         a.CreatedAt,
+		Profile:           a.Profile,
+		Provider:          a.Provider,
+		ModelID:           a.ModelID,
+		ReasoningEffort:   a.ReasoningEffort,
+		AgentProfile:      ap,
+		ProfileComplete:   a.ProfileComplete,
+		DetectionResults:  append([]ProfileDetectionResult(nil), a.DetectionResults...),
 	}
 }
 
 func (a persistedAgent) toAgent() Agent {
-	return Agent{
-		ID:               a.ID,
-		Name:             a.Name,
-		Description:      a.Description,
-		RuntimeID:        a.RuntimeID,
-		RuntimeKind:      a.RuntimeKind,
-		Image:            a.Image,
-		BoxID:            a.BoxID,
-		Role:             a.Role,
-		Status:           a.Status,
-		CreatedAt:        a.CreatedAt,
-		Profile:          a.Profile,
-		Provider:         a.Provider,
-		ModelID:          a.ModelID,
-		ReasoningEffort:  a.ReasoningEffort,
-		AgentProfile:     cloneProfile(a.AgentProfile),
-		ProfileComplete:  a.ProfileComplete,
-		DetectionResults: append([]ProfileDetectionResult(nil), a.DetectionResults...),
+	ap := cloneProfile(a.AgentProfile)
+	if strings.TrimSpace(ap.Name) == "" {
+		ap.Name = a.Name
 	}
+	if strings.TrimSpace(ap.Description) == "" {
+		ap.Description = a.Description
+	}
+	ag := Agent{
+		ID:                a.ID,
+		Name:              a.Name,
+		Description:       a.Description,
+		RuntimeID:         a.RuntimeID,
+		RuntimeKind:       a.RuntimeKind,
+		Image:             a.Image,
+		BoxID:             a.BoxID,
+		RuntimeExtensions: agentruntime.CloneAnyMap(a.RuntimeExtensions),
+		Role:              a.Role,
+		Status:            a.Status,
+		CreatedAt:         a.CreatedAt,
+		Profile:           a.Profile,
+		Provider:          a.Provider,
+		ModelID:           a.ModelID,
+		ReasoningEffort:   a.ReasoningEffort,
+		AgentProfile:      ap,
+		ProfileComplete:   a.ProfileComplete,
+		DetectionResults:  append([]ProfileDetectionResult(nil), a.DetectionResults...),
+	}
+	if len(a.LegacyDiskNotifierDetails) > 0 && len(ag.RuntimeExtensions) == 0 {
+		ag.RuntimeExtensions = agentruntime.CloneAnyMap(a.LegacyDiskNotifierDetails)
+	}
+	return ag
 }
 
 func (w legacyWorker) toAgent() Agent {
@@ -227,25 +265,39 @@ func (s *Service) saveLocked() error {
 
 func (s *Service) normalizeLoadedAgent(a Agent) Agent {
 	a = *cloneAgent(&a)
-	a.Role = normalizeRole(a.Role)
+	// Old agent.json used role "notifier" before runtime_kind; collapse to worker + notifier runtime.
+	if strings.EqualFold(strings.TrimSpace(a.Role), "notifier") {
+		a.Role = RoleWorker
+		a.RuntimeKind = RuntimeKindNotifier
+		a.BoxID = ""
+		a.Image = ""
+	} else {
+		a.Role = normalizeRole(a.Role)
+	}
 	a.RuntimeID = normalizeRuntimeID(a.RuntimeID, a.ID)
 	if a.RuntimeKind == "" {
 		a.RuntimeKind = runtimeKindForAgent(a)
 	}
 	a.AgentProfile = normalizeProfile(a.AgentProfile, a.Name, a.Description)
 	if !a.AgentProfile.ProfileComplete && (strings.TrimSpace(a.Provider) != "" || strings.TrimSpace(a.ModelID) != "") {
-		legacyProfile := profileFromLegacy(a.Name, a.Description, a.Provider, a.ModelID, a.ReasoningEffort)
-		if strings.TrimSpace(legacyProfile.BaseURL) == "" {
-			legacyProfile.BaseURL = s.profileDefaults.BaseURL
+		// Do not replace agent_profile with legacy LLM-only reconstruction when the agent already
+		// carries notifier-shaped runtime_extensions, or when the runtime is non-gateway (notifier
+		// workers have no LLM fields to reconstruct from legacy top-level provider/model).
+		if !agentruntime.ProfileExtensionsPolicyForKind(normalizeRuntimeKind(a.RuntimeKind)).LooksLikeFlatStorageAtRoot(a.RuntimeExtensions) && isGatewayRuntimeKind(normalizeRuntimeKind(a.RuntimeKind)) {
+			legacyProfile := profileFromLegacy(a.Name, a.Description, a.Provider, a.ModelID, a.ReasoningEffort)
+			if strings.TrimSpace(legacyProfile.BaseURL) == "" {
+				legacyProfile.BaseURL = s.profileDefaults.BaseURL
+			}
+			if strings.TrimSpace(legacyProfile.APIKey) == "" {
+				legacyProfile.APIKey = s.profileDefaults.APIKey
+			}
+			if len(legacyProfile.Headers) == 0 {
+				legacyProfile.Headers = s.profileDefaults.Headers
+			}
+			a.AgentProfile = normalizeProfile(legacyProfile, a.Name, a.Description)
 		}
-		if strings.TrimSpace(legacyProfile.APIKey) == "" {
-			legacyProfile.APIKey = s.profileDefaults.APIKey
-		}
-		if len(legacyProfile.Headers) == 0 {
-			legacyProfile.Headers = s.profileDefaults.Headers
-		}
-		a.AgentProfile = normalizeProfile(legacyProfile, a.Name, a.Description)
 	}
+	a.AgentProfile = normalizeProfileForAgentRuntime(a.AgentProfile, a.RuntimeExtensions, a.Name, a.Description, a.RuntimeKind, nil)
 	a.ProfileComplete = a.AgentProfile.ProfileComplete
 	a.Provider = a.AgentProfile.Provider
 	a.ModelID = a.AgentProfile.ModelID

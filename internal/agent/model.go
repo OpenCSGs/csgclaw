@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	agentruntime "csgclaw/internal/runtime"
 )
 
 const (
@@ -13,23 +15,24 @@ const (
 )
 
 type Agent struct {
-	ID               string                   `json:"id"`
-	Name             string                   `json:"name"`
-	Description      string                   `json:"description,omitempty"`
-	RuntimeID        string                   `json:"runtime_id,omitempty"`
-	RuntimeKind      string                   `json:"runtime_kind,omitempty"`
-	Image            string                   `json:"image,omitempty"`
-	BoxID            string                   `json:"box_id,omitempty"`
-	Role             string                   `json:"role"`
-	Status           string                   `json:"status"`
-	CreatedAt        time.Time                `json:"created_at"`
-	Profile          string                   `json:"profile,omitempty"`
-	Provider         string                   `json:"provider,omitempty"`
-	ModelID          string                   `json:"model_id,omitempty"`
-	ReasoningEffort  string                   `json:"reasoning_effort,omitempty"`
-	AgentProfile     AgentProfile             `json:"agent_profile,omitempty"`
-	ProfileComplete  bool                     `json:"profile_complete"`
-	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
+	ID                string                   `json:"id"`
+	Name              string                   `json:"name"`
+	Description       string                   `json:"description,omitempty"`
+	RuntimeID         string                   `json:"runtime_id,omitempty"`
+	RuntimeKind       string                   `json:"runtime_kind,omitempty"`
+	Image             string                   `json:"image,omitempty"`
+	BoxID             string                   `json:"box_id,omitempty"`
+	RuntimeExtensions map[string]any           `json:"runtime_extensions,omitempty"`
+	Role              string                   `json:"role"`
+	Status            string                   `json:"status"`
+	CreatedAt         time.Time                `json:"created_at"`
+	Profile           string                   `json:"profile,omitempty"`
+	Provider          string                   `json:"provider,omitempty"`
+	ModelID           string                   `json:"model_id,omitempty"`
+	ReasoningEffort   string                   `json:"reasoning_effort,omitempty"`
+	AgentProfile      AgentProfile             `json:"agent_profile,omitempty"`
+	ProfileComplete   bool                     `json:"profile_complete"`
+	DetectionResults  []ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
 type CreateAgentSpec struct {
@@ -119,5 +122,6 @@ func cloneAgent(src *Agent) *Agent {
 	dst := *src
 	dst.AgentProfile = cloneProfile(src.AgentProfile)
 	dst.DetectionResults = append([]ProfileDetectionResult(nil), src.DetectionResults...)
+	dst.RuntimeExtensions = agentruntime.CloneAnyMap(src.RuntimeExtensions)
 	return &dst
 }

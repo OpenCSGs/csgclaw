@@ -54,8 +54,44 @@ Content-Type: application/json
 - 不要返回或记录敏感凭证（如 `app_secret`、API key、token）。
 - 若敏感值出现在日志中，应使用掩码形式（例如 `present`）。
 
+## `csgclaw.notify_card` 结构
+
+Notifier（GitLab/GitHub webhook 等）投递到 CSGClaw Web IM 时使用该类型：**整条消息的 `content` 即一段 JSON**，由服务端 `internal/runtime/notifier` 生成，Web 前端按 `type` 渲染为结构化卡片（标题、徽章、元数据行、可选链接与折叠原始 JSON）。
+
+```json
+{
+  "type": "csgclaw.notify_card",
+  "schema_version": 1,
+  "provider": "gitlab",
+  "event": "merge_request",
+  "title": "GitLab · Merge request",
+  "subtitle": "acme/app",
+  "badge": "open",
+  "summary": "",
+  "link": "https://gitlab.example/acme/app/-/merge_requests/1",
+  "meta": [
+    { "label": "标题", "value": "Fix bug" },
+    { "label": "分支", "value": "fix → main" }
+  ],
+  "raw": ""
+}
+```
+
+### 字段说明
+
+- `type`：必须为 `csgclaw.notify_card`。
+- `schema_version`：当前为 `1`。
+- `provider`：`gitlab`、`github` 或 `generic`（未识别 JSON 等）。
+- `event`：规范化事件名（如 `push`、`merge_request`、`issue`、`pull_request`、`ping`）；`generic` 时可为 `json`、`text`、`empty` 等。
+- `title` / `subtitle` / `badge` / `summary`：展示用；`summary` 可与 `meta` 二选一或并存。
+- `link`：可选 HTTP(S) 链接；前端仅允许 `http:` / `https:`。
+- `meta`：可选 `{ "label", "value" }` 列表。
+- `raw`：可选，通常为未匹配 webhook 时的缩进 JSON 片段（已截断）；前端放在折叠区。
+- 与 `action_card` 相同：**整条聊天 `content` 应为裸 JSON**，不要外包 Markdown 或代码块。
+
 ### 相关代码路径
 
 - 前端解析与渲染：`web/static/app.js`
 - Action card 单测：`web/static/app_action_card.test.cjs`
+- Notifier 卡片生成：`internal/runtime/notifier/notify_card.go`、`internal/runtime/notifier/notify_webhooks.go`
 - Feishu setup 命令输出：`internal/templates/embed/runtimes/picoclaw/manager/workspace/skills/feishu/scripts/feishu_setup/csgclaw.py`

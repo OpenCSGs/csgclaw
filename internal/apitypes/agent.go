@@ -37,16 +37,17 @@ type CreateAgentRequest struct {
 }
 
 type CreateAgentProfile struct {
-	Name            string            `json:"name,omitempty"`
-	Description     string            `json:"description,omitempty"`
-	Provider        string            `json:"provider,omitempty"`
-	BaseURL         string            `json:"base_url,omitempty"`
-	APIKey          string            `json:"api_key,omitempty"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	ModelID         string            `json:"model_id,omitempty"`
-	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
-	EnableFastMode  bool              `json:"enable_fast_mode,omitempty"`
-	RequestOptions  map[string]any    `json:"request_options,omitempty"`
-	Env             map[string]string `json:"env,omitempty"`
-	ProfileComplete bool              `json:"profile_complete"`
+	Name              string            `json:"name,omitempty"`
+	Description       string            `json:"description,omitempty"`
+	Provider          string            `json:"provider,omitempty"`
+	BaseURL           string            `json:"base_url,omitempty"`
+	APIKey            string            `json:"api_key,omitempty"`
+	Headers           map[string]string `json:"headers,omitempty"`
+	ModelID           string            `json:"model_id,omitempty"`
+	ReasoningEffort   string            `json:"reasoning_effort,omitempty"`
+	EnableFastMode    bool              `json:"enable_fast_mode,omitempty"`
+	RequestOptions    map[string]any    `json:"request_options,omitempty"`
+	RuntimeExtensions map[string]any    `json:"runtime_extensions,omitempty"`
+	Env               map[string]string `json:"env,omitempty"`
+	ProfileComplete   bool              `json:"profile_complete"`
 }

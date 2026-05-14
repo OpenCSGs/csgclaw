@@ -16,10 +16,12 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/bot"
 	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/channel/notifierbridge"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/runtime/notifier"
 	"csgclaw/internal/upgrade"
 	"csgclaw/internal/version"
 )
@@ -92,23 +94,24 @@ type updateBootstrapConfigRequest struct {
 }
 
 type agentResponse struct {
-	ID               string                         `json:"id"`
-	Name             string                         `json:"name"`
-	Description      string                         `json:"description,omitempty"`
-	RuntimeID        string                         `json:"runtime_id,omitempty"`
-	RuntimeKind      string                         `json:"runtime_kind,omitempty"`
-	Image            string                         `json:"image,omitempty"`
-	BoxID            string                         `json:"box_id,omitempty"`
-	Role             string                         `json:"role"`
-	Status           string                         `json:"status"`
-	CreatedAt        time.Time                      `json:"created_at"`
-	Profile          string                         `json:"profile,omitempty"`
-	Provider         string                         `json:"provider,omitempty"`
-	ModelID          string                         `json:"model_id,omitempty"`
-	ReasoningEffort  string                         `json:"reasoning_effort,omitempty"`
-	AgentProfile     agent.AgentProfileView         `json:"agent_profile,omitempty"`
-	ProfileComplete  bool                           `json:"profile_complete"`
-	DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
+	ID                string                         `json:"id"`
+	Name              string                         `json:"name"`
+	Description       string                         `json:"description,omitempty"`
+	RuntimeID         string                         `json:"runtime_id,omitempty"`
+	RuntimeKind       string                         `json:"runtime_kind,omitempty"`
+	Image             string                         `json:"image,omitempty"`
+	BoxID             string                         `json:"box_id,omitempty"`
+	Role              string                         `json:"role"`
+	Status            string                         `json:"status"`
+	CreatedAt         time.Time                      `json:"created_at"`
+	Profile           string                         `json:"profile,omitempty"`
+	Provider          string                         `json:"provider,omitempty"`
+	ModelID           string                         `json:"model_id,omitempty"`
+	ReasoningEffort   string                         `json:"reasoning_effort,omitempty"`
+	RuntimeExtensions map[string]any                 `json:"runtime_extensions,omitempty"`
+	AgentProfile      agent.AgentProfileView         `json:"agent_profile,omitempty"`
+	ProfileComplete   bool                           `json:"profile_complete"`
+	DetectionResults  []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
 func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) {
@@ -205,6 +208,7 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 		SupportedRuntimeKinds: []string{
 			agent.RuntimeKindPicoClawSandbox,
 			agent.RuntimeKindOpenClawSandbox,
+			agent.RuntimeKindNotifier,
 		},
 		RuntimeDefaultImages: map[string]string{
 			agent.RuntimeKindPicoClawSandbox: config.DefaultManagerImageForRuntimeKind(agent.RuntimeKindPicoClawSandbox),
@@ -499,6 +503,19 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		h.handleAgentRecreate(w, r, id)
 		return
 	}
+	if strings.HasSuffix(path, "/webhooks/notify") {
+		id := strings.TrimSpace(strings.TrimSuffix(path, "/webhooks/notify"))
+		if id == "" || strings.Contains(id, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleAgentNotifierWebhook(w, r, id)
+		return
+	}
 
 	id := path
 	if strings.Contains(id, "/") {
@@ -771,6 +788,7 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 }
 
 func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequest {
+	prof := agentProfileFromAPI(req.AgentProfile)
 	return agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:           req.ID,
@@ -784,7 +802,7 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 			CreatedAt:    req.CreatedAt,
 			Profile:      req.Profile,
 			ModelID:      req.ModelID,
-			AgentProfile: agentProfileFromAPI(req.AgentProfile),
+			AgentProfile: prof,
 		},
 		Replace:   req.Replace,
 		FieldMask: req.FieldMask,
@@ -919,19 +937,39 @@ func splitHubTemplatePath(path string) (string, string) {
 
 func agentProfileFromAPI(req apitypes.CreateAgentProfile) agent.AgentProfile {
 	return agent.AgentProfile{
-		Name:            req.Name,
-		Description:     req.Description,
-		Provider:        req.Provider,
-		BaseURL:         req.BaseURL,
-		APIKey:          req.APIKey,
-		Headers:         req.Headers,
-		ModelID:         req.ModelID,
-		ReasoningEffort: req.ReasoningEffort,
-		EnableFastMode:  req.EnableFastMode,
-		RequestOptions:  req.RequestOptions,
-		Env:             req.Env,
-		ProfileComplete: req.ProfileComplete,
+		Name:              req.Name,
+		Description:       req.Description,
+		Provider:          req.Provider,
+		BaseURL:           req.BaseURL,
+		APIKey:            req.APIKey,
+		Headers:           req.Headers,
+		ModelID:           req.ModelID,
+		ReasoningEffort:   req.ReasoningEffort,
+		EnableFastMode:    req.EnableFastMode,
+		RequestOptions:    req.RequestOptions,
+		RuntimeExtensions: cloneRuntimeExtensionsFromAPI(req.RuntimeExtensions),
+		Env:               req.Env,
+		ProfileComplete:   req.ProfileComplete,
 	}
+}
+
+func cloneRuntimeExtensionsFromAPI(m map[string]any) map[string]any {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if sm, ok := v.(map[string]any); ok {
+			c := make(map[string]any, len(sm))
+			for ik, iv := range sm {
+				c[ik] = iv
+			}
+			out[k] = c
+		} else {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 func (h *Handler) workerIMProvisioner() *im.Provisioner {
@@ -1189,6 +1227,10 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(req.Name)
 	handle := strings.TrimSpace(req.Handle)
 	role := strings.TrimSpace(req.Role)
+	if strings.EqualFold(role, "notifier") {
+		http.Error(w, `user role "notifier" is not supported; use "worker" (notification agents use runtime_kind "notifier" on the agent)`, http.StatusBadRequest)
+		return
+	}
 
 	if id == "" {
 		http.Error(w, "id is required", http.StatusBadRequest)
@@ -1485,24 +1527,33 @@ func presentAgents(items []agent.Agent) []agentResponse {
 }
 
 func presentAgent(item agent.Agent) agentResponse {
+	av := agent.RedactedProfileViewForAgent(item)
+	if strings.TrimSpace(av.Name) == strings.TrimSpace(item.Name) {
+		av.Name = ""
+	}
+	if strings.TrimSpace(av.Description) == strings.TrimSpace(item.Description) {
+		av.Description = ""
+	}
+	rx := notifier.ViewRuntimeExtensionsForAPIUnified(item.RuntimeExtensions, item.AgentProfile.RuntimeExtensions)
 	return agentResponse{
-		ID:               item.ID,
-		Name:             item.Name,
-		Description:      item.Description,
-		RuntimeID:        item.RuntimeID,
-		RuntimeKind:      item.RuntimeKind,
-		Image:            item.Image,
-		BoxID:            item.BoxID,
-		Role:             item.Role,
-		Status:           item.Status,
-		CreatedAt:        item.CreatedAt,
-		Profile:          item.Profile,
-		Provider:         item.Provider,
-		ModelID:          item.ModelID,
-		ReasoningEffort:  item.ReasoningEffort,
-		AgentProfile:     agent.RedactedProfileView(item.AgentProfile, item.DetectionResults),
-		ProfileComplete:  item.ProfileComplete,
-		DetectionResults: append([]agent.ProfileDetectionResult(nil), item.DetectionResults...),
+		ID:                item.ID,
+		Name:              item.Name,
+		Description:       item.Description,
+		RuntimeID:         item.RuntimeID,
+		RuntimeKind:       item.RuntimeKind,
+		Image:             item.Image,
+		BoxID:             item.BoxID,
+		Role:              item.Role,
+		Status:            item.Status,
+		CreatedAt:         item.CreatedAt,
+		Profile:           item.Profile,
+		Provider:          item.Provider,
+		ModelID:           item.ModelID,
+		ReasoningEffort:   item.ReasoningEffort,
+		RuntimeExtensions: rx,
+		AgentProfile:      av,
+		ProfileComplete:   item.ProfileComplete,
+		DetectionResults:  append([]agent.ProfileDetectionResult(nil), item.DetectionResults...),
 	}
 }
 
@@ -1559,6 +1610,38 @@ func parseRoomMembersPath(path string) (string, bool) {
 		return parts[0], true
 	}
 	return "", false
+}
+
+func (h *Handler) notifierFanoutBridge() notifier.IMFanoutBridge {
+	if h == nil || h.im == nil {
+		return notifierbridge.NewFanout(nil, nil)
+	}
+	return notifierbridge.NewFanout(h.im, func(roomID, senderID string, msg apitypes.Message, sender apitypes.User) {
+		h.publishMessageCreated(roomID, senderID, im.Message(msg))
+	})
+}
+
+// DeliverNotifierFanout posts notifier chat content (JSON notify card) to every IM room that includes this agent as a member and publishes SSE events.
+func (h *Handler) DeliverNotifierFanout(agentID string, content string) error {
+	return notifier.DeliverNotifierFanout(agentID, content, h.notifierFanoutBridge())
+}
+
+func (h *Handler) handleAgentNotifierWebhook(w http.ResponseWriter, r *http.Request, agentID string) {
+	if h.svc == nil || h.im == nil {
+		http.Error(w, "service not configured", http.StatusServiceUnavailable)
+		return
+	}
+	notifier.ServeAgentWebhook(w, r, agentID, notifier.WebhookHTTPDeps{
+		Reload: h.svc.Reload,
+		LookupNotifierAgent: func(id string) (map[string]any, string, string, string, bool) {
+			a, ok := h.svc.Agent(id)
+			if !ok {
+				return nil, "", "", "", false
+			}
+			return a.RuntimeExtensions, a.Role, a.RuntimeKind, a.Status, true
+		},
+		Fanout: h.notifierFanoutBridge(),
+	})
 }
 
 func (h *Handler) reloadIM() error {

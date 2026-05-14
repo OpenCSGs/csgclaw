@@ -11,6 +11,7 @@ import (
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelprovider"
+	agentruntime "csgclaw/internal/runtime"
 )
 
 const (
@@ -34,16 +35,18 @@ var (
 )
 
 type AgentProfile struct {
-	Name               string            `json:"name,omitempty"`
-	Description        string            `json:"description,omitempty"`
-	Provider           string            `json:"provider,omitempty"`
-	BaseURL            string            `json:"base_url,omitempty"`
-	APIKey             string            `json:"api_key,omitempty"`
-	Headers            map[string]string `json:"headers,omitempty"`
-	ModelID            string            `json:"model_id,omitempty"`
-	ReasoningEffort    string            `json:"reasoning_effort,omitempty"`
-	EnableFastMode     bool              `json:"enable_fast_mode,omitempty"`
-	RequestOptions     map[string]any    `json:"request_options,omitempty"`
+	Name            string            `json:"name,omitempty"`
+	Description     string            `json:"description,omitempty"`
+	Provider        string            `json:"provider,omitempty"`
+	BaseURL         string            `json:"base_url,omitempty"`
+	APIKey          string            `json:"api_key,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	ModelID         string            `json:"model_id,omitempty"`
+	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
+	EnableFastMode  bool              `json:"enable_fast_mode,omitempty"`
+	RequestOptions  map[string]any    `json:"request_options,omitempty"`
+	// RuntimeExtensions holds per-runtime configuration; notifier workers store delivery fields as flat keys here (runtime_kind identifies notifier).
+	RuntimeExtensions  map[string]any    `json:"runtime_extensions,omitempty"`
 	Env                map[string]string `json:"env,omitempty"`
 	ProfileComplete    bool              `json:"profile_complete"`
 	EnvRestartRequired bool              `json:"env_restart_required,omitempty"`
@@ -61,6 +64,7 @@ type AgentProfileView struct {
 	ReasoningEffort    string                   `json:"reasoning_effort,omitempty"`
 	EnableFastMode     bool                     `json:"enable_fast_mode"`
 	RequestOptions     map[string]any           `json:"request_options,omitempty"`
+	RuntimeExtensions  map[string]any           `json:"runtime_extensions,omitempty"`
 	Env                map[string]string        `json:"env,omitempty"`
 	ProfileComplete    bool                     `json:"profile_complete"`
 	EnvRestartRequired bool                     `json:"env_restart_required,omitempty"`
@@ -108,7 +112,21 @@ func normalizeProfile(profile AgentProfile, fallbackName, fallbackDescription st
 	out.Headers = normalizeStringMap(out.Headers)
 	out.Env = normalizeStringMap(out.Env)
 	out.RequestOptions = normalizeRequestOptions(out.RequestOptions)
+	out.RuntimeExtensions = agentruntime.StripViewOnlyRuntimeExtensions(out.RuntimeExtensions)
 	out.ProfileComplete = profileIsComplete(out)
+	return out
+}
+
+// normalizeProfileForAgentRuntime applies profile normalization, then sets ProfileComplete using
+// runtime.ProfileCompleteFromAgentExtensions (gateway vs notifier vs other runtimes).
+// notifierFlat may be nil: completeness then uses ProfileExtensionsPolicyForKind(...).FlatFromExtensionsMap(agentRuntimeExt) when mergedFlat is empty.
+func normalizeProfileForAgentRuntime(profile AgentProfile, agentRuntimeExt map[string]any, fallbackName, fallbackDescription, runtimeKind string, notifierFlat map[string]any) AgentProfile {
+	out := normalizeProfile(profile, fallbackName, fallbackDescription)
+	llmComplete := profileIsComplete(out)
+	rk := normalizeRuntimeKind(runtimeKind)
+	pol := agentruntime.ProfileExtensionsPolicyForKind(agentruntime.NormalizeRuntimeKind(rk))
+	out.ProfileComplete = pol.ProfileComplete(isGatewayRuntimeKind(rk), llmComplete, agentRuntimeExt, rk, notifierFlat)
+	out.BaseURL, out.ModelID = pol.ProfileLLMFields(rk, out.BaseURL, out.ModelID)
 	return out
 }
 
@@ -197,12 +215,28 @@ func cloneProfile(profile AgentProfile) AgentProfile {
 			out.RequestOptions[key] = value
 		}
 	}
+	if len(profile.RuntimeExtensions) > 0 {
+		out.RuntimeExtensions = make(map[string]any, len(profile.RuntimeExtensions))
+		for key, value := range profile.RuntimeExtensions {
+			if m, ok := value.(map[string]any); ok {
+				nm := make(map[string]any, len(m))
+				for ik, iv := range m {
+					nm[ik] = iv
+				}
+				out.RuntimeExtensions[key] = nm
+			} else {
+				out.RuntimeExtensions[key] = value
+			}
+		}
+	}
 	return out
 }
 
-func profileView(profile AgentProfile, detection []ProfileDetectionResult) AgentProfileView {
+func profileViewWithAgentExtensions(profile AgentProfile, agentExt map[string]any, runtimeKind string, detection []ProfileDetectionResult) AgentProfileView {
 	profile = cloneProfile(profile)
-	return AgentProfileView{
+	pol := agentruntime.ProfileExtensionsPolicyForKind(agentruntime.NormalizeRuntimeKind(runtimeKind))
+	ro := pol.RequestOptionsForAgentProfileView(agentExt, profile.RequestOptions)
+	v := AgentProfileView{
 		Name:               profile.Name,
 		Description:        profile.Description,
 		Provider:           profile.Provider,
@@ -213,12 +247,22 @@ func profileView(profile AgentProfile, detection []ProfileDetectionResult) Agent
 		ModelID:            profile.ModelID,
 		ReasoningEffort:    profile.ReasoningEffort,
 		EnableFastMode:     profile.EnableFastMode,
-		RequestOptions:     profile.RequestOptions,
+		RequestOptions:     ro,
+		RuntimeExtensions:  pol.ViewRuntimeExtensionsForAPI(agentExt, profile.RuntimeExtensions),
 		Env:                profile.Env,
 		ProfileComplete:    profile.ProfileComplete,
 		EnvRestartRequired: profile.EnvRestartRequired,
 		DetectionResults:   append([]ProfileDetectionResult(nil), detection...),
 	}
+	return v
+}
+
+func profileView(profile AgentProfile, detection []ProfileDetectionResult) AgentProfileView {
+	return profileViewWithAgentExtensions(profile, nil, "", detection)
+}
+
+func RedactedProfileViewForAgent(a Agent) AgentProfileView {
+	return profileViewWithAgentExtensions(a.AgentProfile, a.RuntimeExtensions, a.RuntimeKind, a.DetectionResults)
 }
 
 func apiKeyPreview(apiKey string) string {

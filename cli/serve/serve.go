@@ -803,6 +803,7 @@ func newAgentService(cfg config.Config, feishuProvider feishu.BotCredentialProvi
 		runtimewiring.WithPicoClawSandboxRuntime(feishuProvider),
 		runtimewiring.WithOpenClawSandboxRuntime(),
 		runtimewiring.WithCodexRuntime(),
+		runtimewiring.WithNotifierRuntime(),
 		agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 	)

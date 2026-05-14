@@ -2556,6 +2556,18 @@ func TestHandleUsersCreateDefaultsHandleFromName(t *testing.T) {
 	}
 }
 
+func TestHandleUsersCreateRejectsNotifierRole(t *testing.T) {
+	srv := &Handler{im: im.NewService()}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"id":"u-n","name":"n","handle":"n","role":"notifier"}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
 func TestHandleUsersCreateRejectsMissingID(t *testing.T) {
 	srv := &Handler{im: im.NewService()}
 

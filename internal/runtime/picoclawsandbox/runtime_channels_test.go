@@ -27,7 +27,7 @@ func TestRuntimeSetFeishuProviderUpdatesGatewayCreateSpecEnv(t *testing.T) {
 		EnsureWorkspace: func(_, _ string) (string, error) {
 			return t.TempDir(), nil
 		},
-		WorkspaceTemplate: func(_, _ string) string { return "" },
+		WorkspaceTemplate: func(_, _ string) (string, error) { return "", nil },
 		EnsureProjectsRoot: func() (string, error) {
 			return t.TempDir(), nil
 		},

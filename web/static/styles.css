@@ -1389,6 +1389,61 @@ body::after {
   white-space: pre;
 }
 
+.field-label-with-help {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+
+.field-help-tooltip-root {
+  display: inline-flex;
+  align-items: center;
+}
+
+.field-help-trigger {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  cursor: help;
+}
+
+.field-help-trigger:hover,
+.field-help-trigger:focus-visible {
+  color: var(--text);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.field-help-flyout {
+  position: fixed;
+  z-index: 10060;
+  max-width: min(380px, calc(100vw - 20px));
+  max-height: min(280px, 42vh);
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.35);
+  background: var(--panel-strong, rgba(30, 41, 59, 0.98));
+  border: 1px solid var(--line, rgba(148, 163, 184, 0.28));
+  color: var(--text, #e2e8f0);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+}
+
 .structured-message {
   display: grid;
   gap: 12px;
@@ -1429,6 +1484,47 @@ body::after {
 .structured-message-summary {
   font-size: 13px;
   line-height: 1.55;
+  color: inherit;
+}
+
+.structured-message-link {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.structured-message-link a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.structured-message-link a:hover {
+  text-decoration: underline;
+}
+
+.structured-message-meta {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.structured-message-meta-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 34%) 1fr;
+  gap: 8px 12px;
+  align-items: start;
+}
+
+.structured-message-meta-label {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.structured-message-meta-value {
+  word-break: break-word;
   color: inherit;
 }
 

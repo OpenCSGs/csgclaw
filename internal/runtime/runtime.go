@@ -11,6 +11,8 @@ const (
 	KindPicoClawSandbox = "picoclaw_sandbox"
 	KindOpenClawSandbox = "openclaw_sandbox"
 	KindCodex           = "codex"
+	// KindNotifier is an in-process worker: no sandbox, IM delivery only (request_options.notifier).
+	KindNotifier = "notifier"
 )
 
 type Runtime interface {
@@ -26,6 +28,17 @@ type Runtime interface {
 
 type LogStreamer interface {
 	StreamLogs(ctx context.Context, h Handle, opts LogOptions) error
+}
+
+// HydrateTrustPersistedStopped reports whether hydrate should keep a persisted "stopped"
+// agent status instead of overwriting it from runtime Info (some in-process runtimes
+// always report "running" from Info/State).
+func HydrateTrustPersistedStopped(r Runtime) bool {
+	type trustPersisted interface {
+		HydrateTrustPersistedStopped() bool
+	}
+	v, ok := r.(trustPersisted)
+	return ok && v.HydrateTrustPersistedStopped()
 }
 
 type Handle struct {

@@ -18,9 +18,12 @@ assert(
     agentDetailPaneSource.includes('onClick=${() => onOpenDM(item)}>${t("openDM")}</button>') &&
     agentDetailPaneSource.includes('${isManager') &&
     agentDetailPaneSource.includes('preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>') &&
-    !agentDetailPaneSource.includes('onClick=${() => running ? onStop(item) : onStart(item)}') &&
-    !agentDetailPaneSource.includes('btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}'),
-  'agent detail pane must remove worker start-stop actions and keep a red manager recreate button next to DM',
+    agentDetailPaneSource.includes('onClick=${() => (running ? onStop(item) : onStart(item))}') &&
+    agentDetailPaneSource.includes('${running ? t("agentStop") : t("agentStart")}') &&
+    agentDetailPaneSource.includes(
+      'btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>',
+    ),
+  'agent detail pane must show start/stop labels, worker recreate (gray), and red manager recreate next to DM',
 );
 assert(
   source.includes('function openManagerRebuildModal(item = managerAgent)') &&

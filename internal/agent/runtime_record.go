@@ -13,6 +13,7 @@ const (
 	RuntimeKindPicoClawSandbox = agentruntime.KindPicoClawSandbox
 	RuntimeKindOpenClawSandbox = agentruntime.KindOpenClawSandbox
 	RuntimeKindCodex           = agentruntime.KindCodex
+	RuntimeKindNotifier        = agentruntime.KindNotifier
 )
 
 type RuntimeRecord struct {
@@ -87,6 +88,8 @@ func normalizeRuntimeKind(kind string) string {
 		return RuntimeKindOpenClawSandbox
 	case RuntimeKindCodex:
 		return RuntimeKindCodex
+	case RuntimeKindNotifier:
+		return RuntimeKindNotifier
 	default:
 		return strings.TrimSpace(kind)
 	}

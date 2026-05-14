@@ -92,7 +92,7 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
 
 补充说明：
 
-- `role` 当前常见值：`manager`、`worker`、`agent`
+- `role` 当前常见值：`manager`、`worker`、`agent`；通知投递能力由 `runtime_kind`（如 `notifier`）与 `request_options.notifier` 表达，不再使用单独的 agent `role=notifier`
 - `image` 仍可能出现在响应中，用于表示容器镜像；它不是统一身份字段的一部分
 - 创建 worker agent 请统一使用 `/api/v1/agents`
 
@@ -103,6 +103,8 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
 响应中的 `agent_profile` 不返回真实 `api_key`；若已保存密钥，只返回
 `api_key_set: true`，并在长密钥场景返回安全前缀 `api_key_preview`
 （例如 `sk-l...`）供 UI 展示。
+
+对配置了 notifier 投递的 agent，响应里 `agent_profile.runtime_extensions` 中会包含脱敏后的 `notifier` 子对象，并附带 **仅用于展示的** `notifier_profile` 子对象（`delivery_complete`、`webhook_token_set`、`remote_token_set`），以便在脱敏后的 `request_options` / `runtime_extensions` 不暴露 token 的前提下提示 UI；客户端写入配置时不要回传 `notifier_profile`（服务端会忽略）。不再使用顶层字段 `notifier_delivery_complete` 等。
 
 ### `POST /api/v1/agents`
 
@@ -166,6 +168,26 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
 - `manager` 嵌套字段已不再支持
 - 若 IM 服务可用，会自动创建对应 IM 用户，并创建 `Admin & <Worker>` 私聊
 - 校验失败通常返回 `400 Bad Request`
+- `runtime_kind` 为 `notifier` 时，投递相关配置须放在 `agent_profile.runtime_extensions.notifier`（或兼容的 `agent_profile.request_options.notifier`）；创建请求**不再**接受顶层 `notifier_details` 字段
+
+### `POST /api/v1/agents/{agent_id}/webhooks/notify`
+
+供第三方（GitHub / GitLab 等）向本服务 **POST** 原始 HTTP body；服务端将 payload 转为 Markdown 后 **向该 Agent 作为成员所在的全部 IM 房间各投递一条消息**。
+
+- 鉴权：必须在 HTTP 请求头使用 `Authorization: Bearer <webhook_token>`（与为该 agent 配置的 Webhook 令牌一致；**不再**支持 URL 查询参数 `?token=`）
+- `Content-Type`：任意；`application/json` 时会格式化为带 `json` 代码块的 Markdown
+- 成功：`202 Accepted`
+- 常见失败：`404`（agent 不存在）、`400`（非 notifier agent）、`403`（未启用 Webhook 投递）、`401`（令牌缺失或不匹配）、`503`（agent 或 IM 未配置）；投递 IM 失败时可能返回 `400` 及错误正文
+
+示例：
+
+```http
+POST /api/v1/agents/u-ci/webhooks/notify
+Authorization: Bearer <webhook_token>
+Content-Type: application/json
+
+{"event":"push","ref":"refs/heads/main"}
+```
 
 使用 Codex runtime 时，服务会在启动 worker 前自动解析或下载 `codex-acp`。如需手动指定或固定版本，可使用：
 

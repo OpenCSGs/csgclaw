@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "https://esm.sh/react@18.3.1";
 import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
+import { createPortal } from "https://esm.sh/react-dom@18.3.1";
 import htm from "https://esm.sh/htm@3.1.1";
 import { marked } from "https://esm.sh/marked@13.0.2";
 import DOMPurify from "https://esm.sh/dompurify@3.1.6";
@@ -22,14 +23,20 @@ const RUNTIME_KIND_OPTIONS = [
   { value: "picoclaw_sandbox", label: "picoclaw_sandbox" },
   { value: "openclaw_sandbox", label: "openclaw_sandbox" },
   { value: "codex", label: "codex" },
+  { value: "notifier", label: "notifier" },
 ];
 const GATEWAY_RUNTIME_KIND_OPTIONS = RUNTIME_KIND_OPTIONS.filter((option) => option.value === "picoclaw_sandbox");
+/** Notifier delivery: flat keys on `agent.runtime_extensions` (and create payload `agent_profile.runtime_extensions`); API adds `notifier_profile` summary. Legacy `agent.notifier_details` may still be read on load. */
+const NOTIFIER_DELIVERY_OPTIONS = ["webhook", "remote_pull"];
+/** Relay inbound Webhook path for GitLab POST (not the GET inbox list path). */
+const NOTIFIER_RELAY_WEBHOOK_INGRESS_PATH = "/api/v1/webhooks/ingress";
 const CLIPROXY_AUTH_PROVIDERS = new Set(["codex", "claude_code"]);
 const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 const WORKSPACE_TAB_MESSAGES = "messages";
 const WORKSPACE_TAB_AGENTS = "agents";
 const WORKSPACE_TAB_HUB = "hub";
 const CSGCLAW_ACTION_CARD_TYPE = "csgclaw.action_card";
+const CSGCLAW_NOTIFY_CARD_TYPE = "csgclaw.notify_card";
 const ACTION_REBUILD_MANAGER = "rebuild-manager";
 
 marked.setOptions({
@@ -182,6 +189,9 @@ const messages = {
     profileEnvValue: "值",
     profileEnvAdd: "添加变量",
     profileEnvRemove: "移除变量",
+    profileEnvNotifierSummary: "仅沙箱 Worker 会注入；notifier 通常留空。",
+    profileEnvNotifierHelp:
+      "若仍会启动网关沙箱，键值会注入容器；不参与 Webhook 校验与通知格式化。",
     profileReasoning: "Reasoning",
     profileFastMode: "Fast mode",
     agentRuntime: "Agent Runtime",
@@ -191,6 +201,53 @@ const messages = {
     profileRuntimeKind: "运行时",
     profileModelSection: "模型",
     profileAPIProvider: "API Provider",
+    profileNotifierSection: "通知投递",
+    notifierDeliveryMode: "投递方式",
+    notifierDeliveryWebhook: "推送（Webhook）",
+    notifierDeliveryRemotePull: "拉取（收件箱 API）",
+    notifierWebhookToken: "Webhook 访问令牌",
+    notifierWebhookTokenSummary: "POST Webhook 时在请求头 `Authorization: Bearer` 中携带；勿写在 URL。",
+    notifierWebhookTokenHelp: "须与调用方请求头一致。妥善保管，勿泄露或写入版本库。",
+    notifierWebhookTokenInputPlaceholder: "粘贴 Webhook 访问令牌（不是 LLM 的 API Key）",
+    notifierRemoteURL: "收件箱服务地址 (remote_url)",
+    notifierRemoteURLPlaceholder: "https://relay.example.com/api/v1/inbox/messages",
+    notifierRemoteURLSummary:
+      "GET 列表的完整 URL，或仅 origin。误填 `…/webhooks/ingress` 时自动改为同前缀 inbox 的 GET/ack。",
+    notifierRemoteURLHelp:
+      "须含 http(s)。仅填主机时默认请求 /api/v1/inbox/messages 与 /api/v1/inbox/ack；拉取会附带 subscription_id 等 query。",
+    notifierSubscriptionID: "订阅 ID（自动生成）",
+    notifierSubscriptionIDSummary: "拉取模式由服务端写入，只读。",
+    notifierSubscriptionIDHelp: "用于 relay 分区；对应 CSGClaw 的 subscription_id，请勿手动修改。",
+    notifierPollInterval: "拉取间隔",
+    notifierPollIntervalPlaceholder: "例如 2s、30s；仅填数字则按秒（如 2）",
+    notifierPollIntervalSummary: "最小 1 秒；无效或过小回退 30 秒。",
+    notifierPollIntervalHelp: "轮询每秒检查一次，按此处间隔向中继发 GET。",
+    notifierRemoteToken: "收件箱拉取鉴权（Bearer Token）",
+    notifierRemoteTokenSummary: "GET 列表与 POST ack 时添加 Bearer；不是 GitLab Webhook Secret。",
+    notifierRemoteTokenHelp:
+      "中继返回 401 等时在此填写平台颁发的 API token。GitLab「第三方粘贴地址」的 Secret 在 GitLab 或中继侧配置。",
+    notifierRemoteTokenInputPlaceholder: "填写中继拉取/ACK 使用的 Bearer token",
+    notifierRemoteTokenLeaveUnchangedPlaceholder: "已保存凭据；留空不变，更换时请粘贴新 token",
+    notifierPullEffectiveRoutes: "生效的拉取路由（预览）",
+    notifierPullEffectiveRoutesSummary: "由收件箱地址解析；下方「覆盖」优先。",
+    notifierPullEffectiveRoutesHelp: "展示 CSGClaw 实际用于 GET 列表与 POST ack 的 URL。",
+    notifierPullOverrideMessagesURL: "覆盖 GET 收件箱列表 URL（可选）",
+    notifierPullOverrideAckURL: "覆盖 POST 确认 (ack) URL（可选）",
+    notifierPullRoutePlaceholderUnset: "（请先填写收件箱服务地址）",
+    notifierThirdPartyWebhookPasteURL: "第三方 Webhook 粘贴地址（含订阅 ID）",
+    notifierThirdPartyWebhookPasteURLSummary: "供 GitLab 等 POST 的中继入站 URL（含 subscription_id）。",
+    notifierThirdPartyWebhookPasteURLHelp:
+      "仅 origin 时用默认 /api/v1/webhooks/ingress；以 …/inbox/messages 结尾则换成同 host 的 …/webhooks/ingress；其它 path 保留、仅追加 query。",
+    notifierWebhookPublicOrigin: "CSGClaw 对外基址（HTTPS）",
+    notifierWebhookPublicOriginPlaceholder: "https://gitlab 能访问到的地址:端口",
+    notifierWebhookPublicOriginSummary: "用于拼接下方对外 Webhook；默认同当前页 origin。",
+    notifierWebhookPublicOriginHelp: "请改为 GitLab 能访问的公网或穿透地址；留空时复制区可能为占位 host。",
+    notifierThirdPartyCSGWebhookURL: "本服务 Webhook（第三方 POST）",
+    notifierThirdPartyCSGWebhookURLSummary: "GitLab 向此 URL POST；`Authorization: Bearer` 须与上文 Webhook 令牌一致。",
+    notifierThirdPartyCSGWebhookURLHelp:
+      "保存前 URL 中的 <agent_id> 为占位符；保存后再复制为真实 ID。示例：curl -X POST <上方 URL> -H \"Authorization: Bearer <令牌>\" -H \"Content-Type: application/json\" -d '{\"text\":\"hi\"}'",
+    notifierWebhookOriginPlaceholder: "https://<your-csgclaw-host>",
+    copyToClipboard: "复制",
     profileAdvanced: "高级选项",
     templateLabel: "模板",
     templateNone: "空白",
@@ -211,6 +268,7 @@ const messages = {
     createAgent: "创建 Agent",
     createAgentTitle: "创建 Agent",
     createAgentSubtitle: "创建一个 Worker，并使用最新 Profile 默认值。",
+    createAgentSubtitleNotifier: "创建一个通知 Agent（推送 Webhook 或拉取收件箱），可与 Worker 一样绑定飞书并进群。",
     editAgentTitle: "编辑 Agent Profile",
     editAgentSubtitle: "修改运行配置。Env 变更需要重新创建沙箱。",
     agentName: "名称",
@@ -316,7 +374,7 @@ const messages = {
     roles: {
       admin: "管理员",
       manager: "经理",
-      worker: "成员",
+      worker: "worker（对话代理）",
     },
     errors: {
       "title is required": "标题不能为空",
@@ -412,6 +470,9 @@ const messages = {
     profileEnvValue: "Value",
     profileEnvAdd: "Add variable",
     profileEnvRemove: "Remove variable",
+    profileEnvNotifierSummary: "Injected for sandbox workers only; leave empty for notifier-only agents.",
+    profileEnvNotifierHelp:
+      "If this agent still runs a gateway sandbox, variables are injected into the container. They are not used for webhook verification or notification formatting.",
     profileReasoning: "Reasoning",
     profileFastMode: "Fast mode",
     agentRuntime: "Agent Runtime",
@@ -421,6 +482,53 @@ const messages = {
     profileRuntimeKind: "Runtime",
     profileModelSection: "Model",
     profileAPIProvider: "API Provider",
+    profileNotifierSection: "Notifications",
+    notifierDeliveryMode: "Delivery mode",
+    notifierDeliveryWebhook: "Push (webhook)",
+    notifierDeliveryRemotePull: "Pull (inbox API)",
+    notifierWebhookToken: "Webhook access token",
+    notifierWebhookTokenSummary: "Callers send this value in `Authorization: Bearer` only; never put it in the URL.",
+    notifierWebhookTokenHelp: "Must match the inbound webhook header. Keep it secret and out of source control.",
+    notifierWebhookTokenInputPlaceholder: "Paste webhook access token (not an LLM API key)",
+    notifierRemoteURL: "Inbox service URL (remote_url)",
+    notifierRemoteURLPlaceholder: "https://relay.example.com/api/v1/inbox/messages",
+    notifierRemoteURLSummary:
+      "Full GET inbox URL, or origin only. A mistaken `…/webhooks/ingress` POST URL is rewritten to inbox GET/ack under the same prefix.",
+    notifierRemoteURLHelp:
+      "Include http(s). Host-only defaults to /api/v1/inbox/messages and /api/v1/inbox/ack. Pull requests append subscription_id and other query params.",
+    notifierSubscriptionID: "Subscription ID (auto-generated)",
+    notifierSubscriptionIDSummary: "Written by the server in pull mode; read-only.",
+    notifierSubscriptionIDHelp: "Used for relay partitioning (CSGClaw subscription_id). Do not edit manually.",
+    notifierPollInterval: "Poll interval",
+    notifierPollIntervalPlaceholder: "e.g. 2s, 30s; a plain number means seconds (e.g. 2)",
+    notifierPollIntervalSummary: "Minimum 1s; invalid or too-small values fall back to 30s.",
+    notifierPollIntervalHelp: "The poller wakes every second and hits the relay at this interval.",
+    notifierRemoteToken: "Inbox pull auth (Bearer token)",
+    notifierRemoteTokenSummary: "Bearer on GET list and POST ack—not the GitLab webhook secret.",
+    notifierRemoteTokenHelp:
+      "Use the API token from the relay/OpenAPI when you see 401/login errors. The GitLab secret for the third-party paste URL is configured in GitLab or on the relay.",
+    notifierRemoteTokenInputPlaceholder: "Bearer token for relay pull/ack",
+    notifierRemoteTokenLeaveUnchangedPlaceholder: "Saved on server; leave blank to keep, or paste a new token to rotate",
+    notifierPullEffectiveRoutes: "Effective pull routes (preview)",
+    notifierPullEffectiveRoutesSummary: "Derived from the inbox URL; optional overrides below win.",
+    notifierPullEffectiveRoutesHelp: "These are the URLs CSGClaw uses for GET list and POST ack.",
+    notifierPullOverrideMessagesURL: "Override GET inbox list URL (optional)",
+    notifierPullOverrideAckURL: "Override POST ack URL (optional)",
+    notifierPullRoutePlaceholderUnset: "(Enter inbox service URL first)",
+    notifierThirdPartyWebhookPasteURL: "Third-party webhook URL (includes subscription ID)",
+    notifierThirdPartyWebhookPasteURLSummary: "Inbound relay URL for GitLab etc. (includes subscription_id).",
+    notifierThirdPartyWebhookPasteURLHelp:
+      "Origin-only inbox URL uses /api/v1/webhooks/ingress on that host. URLs ending in …/inbox/messages map to …/webhooks/ingress. Other paths stay the same; only query params are added.",
+    notifierWebhookPublicOrigin: "CSGClaw public base URL (HTTPS)",
+    notifierWebhookPublicOriginPlaceholder: "https://host:port reachable by GitLab",
+    notifierWebhookPublicOriginSummary: "Builds the public webhook URL below; defaults to this page origin.",
+    notifierWebhookPublicOriginHelp: "Set a URL GitLab can reach (public or tunneled). Empty uses a placeholder in preview/copy.",
+    notifierThirdPartyCSGWebhookURL: "CSGClaw Webhook (third-party POST)",
+    notifierThirdPartyCSGWebhookURLSummary: "GitLab POSTs here; `Authorization: Bearer` must match the webhook token above.",
+    notifierThirdPartyCSGWebhookURLHelp:
+      "<agent_id> is a placeholder until save—copy again after create. Example: curl -X POST <URL> -H \"Authorization: Bearer <token>\" -H \"Content-Type: application/json\" -d '{\"text\":\"hi\"}'",
+    notifierWebhookOriginPlaceholder: "https://<your-csgclaw-host>",
+    copyToClipboard: "Copy",
     profileAdvanced: "Advanced",
     templateLabel: "Template",
     templateNone: "Blank",
@@ -441,6 +549,7 @@ const messages = {
     createAgent: "Create Agent",
     createAgentTitle: "Create Agent",
     createAgentSubtitle: "Create a worker with the latest profile defaults.",
+    createAgentSubtitleNotifier: "Create a notification agent (push webhook or pull inbox). Can bind Feishu and join groups like workers.",
     editAgentTitle: "Edit Agent Profile",
     editAgentSubtitle: "Change runtime settings. Env changes need a sandbox recreate.",
     agentName: "Name",
@@ -611,6 +720,84 @@ function profileBaseURLMissing(draft) {
   return draft?.provider === "api" && isBlank(draft.base_url);
 }
 
+/** Help "?" next to label; full text in a fixed flyout that follows the pointer while hovering the trigger. */
+function FieldHelpTooltip({ summary, detail }) {
+  const s = String(summary ?? "").trim();
+  const d = String(detail ?? "").trim();
+  const body = s && d ? `${s}\n\n${d}` : s || d;
+  if (!body) {
+    return null;
+  }
+
+  const [open, setOpen] = useState(false);
+  const [xy, setXy] = useState({ x: 0, y: 0 });
+  const closeTimerRef = useRef(null);
+
+  const clearCloseTimer = () => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  const scheduleClose = () => {
+    clearCloseTimer();
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      setOpen(false);
+    }, 320);
+  };
+
+  const clamp = (x, y) => {
+    const margin = 10;
+    const tw = 360;
+    const th = 240;
+    return {
+      x: Math.max(margin, Math.min(x, window.innerWidth - tw - margin)),
+      y: Math.max(margin, Math.min(y, window.innerHeight - th - margin)),
+    };
+  };
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+    const onMove = (e) => {
+      setXy(clamp(e.clientX + 14, e.clientY + 14));
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, [open]);
+
+  useEffect(() => () => clearCloseTimer(), []);
+
+  const onEnter = (e) => {
+    clearCloseTimer();
+    setXy(clamp(e.clientX + 14, e.clientY + 14));
+    setOpen(true);
+  };
+
+  return html`
+    <span className="field-help-tooltip-root">
+      <button
+        type="button"
+        className="field-help-trigger"
+        aria-label=${body}
+        onMouseEnter=${onEnter}
+        onMouseLeave=${scheduleClose}
+      >
+        ?
+      </button>
+      ${open
+        ? createPortal(
+            html`<div className="field-help-flyout" style=${{ left: `${xy.x}px`, top: `${xy.y}px` }} role="tooltip">${body}</div>`,
+            document.body,
+          )
+        : null}
+    </span>
+  `;
+}
+
 function IconImage(name) {
   return html`
     <span
@@ -639,7 +826,7 @@ function MoonIcon() {
 function MessageContent({ content, message, actionBusy, actionError, onAction }) {
   const containerRef = useRef(null);
   const structured = useMemo(() => parseStructuredMessage(content), [content]);
-  const markup = useMemo(() => renderMarkdown(content), [content]);
+  const markup = useMemo(() => (structured ? "" : renderMarkdown(content)), [content, structured]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -676,17 +863,36 @@ function MessageContent({ content, message, actionBusy, actionError, onAction })
   return html`<div ref=${containerRef} className="message-content" dangerouslySetInnerHTML=${{ __html: markup }} />`;
 }
 
+function structuredMessageTitleBlock(data) {
+  return html`
+    <div className="structured-message-header">
+      <div>
+        <div className="structured-message-title">${data.title}</div>
+        ${data.subtitle ? html`<div className="structured-message-subtitle">${data.subtitle}</div>` : null}
+      </div>
+      ${data.badge ? html`<span className="structured-message-badge">${data.badge}</span>` : null}
+    </div>
+    ${data.summary ? html`<div className="structured-message-summary">${data.summary}</div>` : null}
+  `;
+}
+
 function StructuredMessageCard({ data }) {
   return html`
     <div className="structured-message">
-      <div className="structured-message-header">
-        <div>
-          <div className="structured-message-title">${data.title}</div>
-          ${data.subtitle ? html`<div className="structured-message-subtitle">${data.subtitle}</div>` : null}
-        </div>
-        ${data.badge ? html`<span className="structured-message-badge">${data.badge}</span>` : null}
-      </div>
-      ${data.summary ? html`<div className="structured-message-summary">${data.summary}</div>` : null}
+      ${structuredMessageTitleBlock(data)}
+      ${data.link && isSafeHttpURL(data.link)
+        ? html`<div className="structured-message-link"><a href=${data.link} target="_blank" rel="noopener noreferrer">打开链接</a></div>`
+        : null}
+      ${data.meta?.length
+        ? html`<div className="structured-message-meta">
+            ${data.meta.map((row, idx) =>
+              html`<div className="structured-message-meta-row" key=${`meta-${idx}`}>
+                <span className="structured-message-meta-label">${row.label}</span>
+                <span className="structured-message-meta-value">${row.value}</span>
+              </div>`,
+            )}
+          </div>`
+        : null}
       ${data.code
         ? html`
             <details className="structured-message-details">
@@ -713,14 +919,7 @@ function ActionCard({ data, message, busyKey, error, onAction }) {
     : "";
   return html`
     <div className="structured-message action-card">
-      <div className="structured-message-header">
-        <div>
-          <div className="structured-message-title">${data.title}</div>
-          ${data.subtitle ? html`<div className="structured-message-subtitle">${data.subtitle}</div>` : null}
-        </div>
-        ${data.badge ? html`<span className="structured-message-badge">${data.badge}</span>` : null}
-      </div>
-      ${data.summary ? html`<div className="structured-message-summary">${data.summary}</div>` : null}
+      ${structuredMessageTitleBlock(data)}
       ${data.actions?.length
         ? html`
             <div className="structured-message-actions">
@@ -1004,6 +1203,8 @@ function App() {
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPageModelBusy, setAgentPageModelBusy] = useState(false);
   const [agentPageError, setAgentPageError] = useState("");
+  const [notifierModalWebhookOrigin, setNotifierModalWebhookOrigin] = useState("");
+  const [notifierPageWebhookOrigin, setNotifierPageWebhookOrigin] = useState("");
   const [profilePreview, setProfilePreview] = useState(null);
   const [appVersion, setAppVersion] = useState("dev");
   const [upgradeStatus, setUpgradeStatus] = useState(null);
@@ -1034,6 +1235,13 @@ function App() {
   useEffect(() => {
     refreshVersion();
   }, []);
+
+  useEffect(() => {
+    if (!showAgentModal || !agentDraft || !isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)) {
+      return;
+    }
+    setNotifierModalWebhookOrigin(typeof window !== "undefined" ? window.location.origin : "");
+  }, [showAgentModal, agentModalMode, editingAgent?.id, agentDraft?.runtime_kind, editingAgent?.runtime_kind]);
 
   useEffect(() => {
     refreshUpgradeStatus();
@@ -1220,6 +1428,13 @@ function App() {
     return [managerAgent, ...workerAgents].filter(Boolean).find((item) => item.id === activePane.id) ?? null;
   }, [agents, activePane]);
 
+  useEffect(() => {
+    if (!agentPageDraft || !isNotifierRuntimeDraftOnAgentPage(agentPageDraft, selectedAgentForPage)) {
+      return;
+    }
+    setNotifierPageWebhookOrigin(typeof window !== "undefined" ? window.location.origin : "");
+  }, [agentPageDraft?.agent_id, agentPageDraft?.runtime_kind, selectedAgentForPage?.id, selectedAgentForPage?.runtime_kind]);
+
   const mentionCandidates = useMemo(() => {
     if (!data || !composerMentionState) {
       return [];
@@ -1400,9 +1615,12 @@ function App() {
     if (!showAgentModal || !agentDraft?.provider) {
       return undefined;
     }
+    if (isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)) {
+      return undefined;
+    }
     const timer = window.setTimeout(() => loadAgentModels(agentDraft, { silent: true }), agentDraft.provider === "api" ? 420 : 0);
     return () => window.clearTimeout(timer);
-  }, [showAgentModal, agentDraft?.provider, agentDraft?.base_url, agentDraft?.api_key, agentDraft?.headersText]);
+  }, [showAgentModal, agentDraft?.provider, agentDraft?.runtime_kind, agentDraft?.base_url, agentDraft?.api_key, agentDraft?.headersText, editingAgent?.id]);
 
   useEffect(() => {
     if (!selectedAgentForPage) {
@@ -1452,9 +1670,12 @@ function App() {
     if (activePane.type !== "agent" || !agentPageDraft?.provider) {
       return undefined;
     }
+    if (isNotifierRuntimeDraft(agentPageDraft)) {
+      return undefined;
+    }
     const timer = window.setTimeout(() => loadAgentPageModels(agentPageDraft, { silent: true }), agentPageDraft.provider === "api" ? 420 : 0);
     return () => window.clearTimeout(timer);
-  }, [activePane.type, activePane.id, agentPageDraft?.provider, agentPageDraft?.base_url, agentPageDraft?.api_key, agentPageDraft?.headersText]);
+  }, [activePane.type, activePane.id, agentPageDraft?.provider, agentPageDraft?.runtime_kind, agentPageDraft?.base_url, agentPageDraft?.api_key, agentPageDraft?.headersText]);
 
   useEffect(() => {
     if (!managerProfileIncomplete || !profileDraft?.provider) {
@@ -1713,6 +1934,25 @@ function App() {
     } catch (_) {
       return null;
     }
+  }
+
+  async function saveBootstrapRuntimeKind(runtimeKind) {
+    const resp = await fetch("api/v1/config/bootstrap", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runtime_kind: normalizeRuntimeKind(runtimeKind) || "picoclaw_sandbox" }),
+    });
+    if (!resp.ok) {
+      throw new Error((await resp.text()).trim());
+    }
+    const saved = await resp.json();
+    const normalized = {
+      ...saved,
+      runtime_kind: normalizeRuntimeKind(saved.runtime_kind) || "picoclaw_sandbox",
+      runtime_default_images: normalizeRuntimeImageMap(saved.runtime_default_images),
+    };
+    setBootstrapConfig(normalized);
+    return normalized;
   }
 
   async function sendMessage() {
@@ -2077,7 +2317,7 @@ function App() {
       setManagerProfile(profile);
       setProfileDraft({
         ...profileToDraft(profile),
-        runtime_kind: normalizeRuntimeKind(bootstrapConfig?.runtime_kind || profile.runtime_kind),
+        runtime_kind: normalizeRuntimeKind(bootstrapConfig?.runtime_kind || profile.runtime_kind) || "picoclaw_sandbox",
       });
     } catch (_) {
       // The manager may not exist during the first bootstrap milliseconds.
@@ -2342,6 +2582,7 @@ function App() {
     setProfileBusy(true);
     setProfileError("");
     try {
+      await saveBootstrapRuntimeKind(profileDraft.runtime_kind || bootstrapConfig?.runtime_kind || "picoclaw_sandbox");
       const payload = draftToProfile(profileDraft);
       const resp = await fetch("api/v1/agents/u-manager/profile", {
         method: "PUT",
@@ -2435,7 +2676,7 @@ function App() {
     try {
       const resp = await fetch(`api/v1/agents/${encodeURIComponent(item.id)}/profile`);
       const profile = resp.ok ? await resp.json() : item.agent_profile;
-      const draft = agentToDraft({ ...item, agent_profile: profile });
+      const draft = ensureNotifierPullSubscriptionDraft(agentToDraft({ ...item, agent_profile: profile }));
       setAgentDraft(draft);
       setShowAgentModal(true);
       loadAgentModels(draft, { silent: true });
@@ -2453,19 +2694,25 @@ function App() {
     try {
       const resp = await fetch(`api/v1/agents/${encodeURIComponent(item.id)}/profile`);
       const profile = resp.ok ? await resp.json() : item.agent_profile;
-      const draft = agentToDraft({ ...item, agent_profile: profile });
-      setAgentPageDraft(draft);
-      loadAgentPageModels(draft, { silent: true });
+      const base = ensureNotifierPullSubscriptionDraft(agentToDraft({ ...item, agent_profile: profile }));
+      const rk = normalizeRuntimeKind(item.runtime_kind || base.runtime_kind);
+      setAgentPageDraft({ ...base, runtime_kind: rk || base.runtime_kind });
+      loadAgentPageModels({ ...base, runtime_kind: rk || base.runtime_kind }, { silent: true });
     } catch (err) {
       setAgentPageError(err.message || t("agentActionFailed"));
-      const draft = agentToDraft(item);
-      setAgentPageDraft(draft);
-      loadAgentPageModels(draft, { silent: true });
+      const base = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
+      const rk = normalizeRuntimeKind(item.runtime_kind || base.runtime_kind);
+      setAgentPageDraft({ ...base, runtime_kind: rk || base.runtime_kind });
+      loadAgentPageModels({ ...base, runtime_kind: rk || base.runtime_kind }, { silent: true });
     }
   }
 
   async function loadAgentPageModels(draft = agentPageDraft, options = {}) {
     if (!draft?.provider) {
+      return;
+    }
+    if (isNotifierRuntimeDraft(draft)) {
+      setAgentPageModels([]);
       return;
     }
     const requestKey = modelRequestKey(draft);
@@ -2515,6 +2762,10 @@ function App() {
 
   async function loadAgentModels(draft = agentDraft, options = {}) {
     if (!draft?.provider) {
+      return;
+    }
+    if (isNotifierRuntimeDraftOnAgentPage(draft, editingAgent)) {
+      setAgentModels([]);
       return;
     }
     const requestKey = modelRequestKey(draft);
@@ -2569,9 +2820,10 @@ function App() {
     setAgentPageBusy(true);
     setAgentPageError("");
     try {
-      const profile = draftToProfile(agentPageDraft, {
+      const profile = draftToProfile(ensureNotifierPullSubscriptionDraft(agentPageDraft), {
         name: agentPageDraft.name,
         description: agentPageDraft.description,
+        mergeNotifier: isNotifierRuntimeDraftOnAgentPage(agentPageDraft, selectedAgentForPage),
       });
       const payload = {
         name: agentPageDraft.name,
@@ -2636,16 +2888,19 @@ function App() {
     setAgentBusy(true);
     setAgentError("");
     const isCreate = agentModalMode === "create";
-    const runtimeKind = normalizeRuntimeKind(agentDraft.runtime_kind);
+    const runtimeKind = normalizeRuntimeKind(agentDraft.runtime_kind) || "picoclaw_sandbox";
     setAgentProgress(isCreate ? startAgentCreateProgress(runtimeKind) : null);
     try {
-      const profile = draftToProfile(agentDraft, {
+      const profile = draftToProfile(ensureNotifierPullSubscriptionDraft(agentDraft), {
         name: agentDraft.name,
         description: agentDraft.description,
+        mergeNotifier: isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent),
       });
+      const isNotifierCreate =
+        isCreate && isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent);
       const payload = {
         name: agentDraft.name,
-        role: agentDraft.role,
+        role: "worker",
         description: agentDraft.description,
         image: agentDraft.image,
         runtime_kind: runtimeKind,
@@ -3221,6 +3476,8 @@ function App() {
                   saveError=${agentPageError}
                   authStatuses=${cliproxyAuthStatuses}
                   authBusyProvider=${cliproxyAuthBusy}
+                  notifierWebhookOrigin=${notifierPageWebhookOrigin}
+                  setNotifierWebhookOrigin=${setNotifierPageWebhookOrigin}
                   onDraftChange=${setAgentPageDraft}
                   onSave=${saveAgentPage}
                   onPublish=${publishAgentPage}
@@ -3775,7 +4032,11 @@ function App() {
                 <div className="modal-header">
                   <div>
                     <div className="modal-title">${agentModalMode === "create" ? t("createAgentTitle") : t("editAgentTitle")}</div>
-                    <div className="modal-subtitle">${agentModalMode === "create" ? t("createAgentSubtitle") : t("editAgentSubtitle")}</div>
+                    <div className="modal-subtitle">${agentModalMode === "create"
+                      ? isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)
+                        ? t("createAgentSubtitleNotifier")
+                        : t("createAgentSubtitle")
+                      : t("editAgentSubtitle")}</div>
                   </div>
                   <button className="btn btn-secondary-gray btn-sm modal-close" onClick=${() => setShowAgentModal(false)}>${t("close")}</button>
                 </div>
@@ -3813,20 +4074,16 @@ function App() {
                           placeholder=${t("agentNamePlaceholder")}
                         />
                       </label>
-                      ${agentModalMode === "create"
-                        ? html`
-                            <label className="field">
-                              <span>${t("roleLabel")}</span>
-                              <input value=${agentDraft.role || "worker"} readOnly disabled />
-                            </label>
-                          `
-                        : null}
+                      <label className="field">
+                        <span>${t("roleLabel")}</span>
+                        <input value=${t("roles.worker")} readOnly disabled />
+                      </label>
                       <label className="field">
                         <span>${t("profileRuntimeKind")}</span>
                         ${agentModalMode === "create"
                           ? html`
                               <select
-                                value=${normalizeRuntimeKind(agentDraft.runtime_kind)}
+                                value=${normalizeRuntimeKind(agentDraft.runtime_kind) || "picoclaw_sandbox"}
                                 onChange=${(event) => {
                                   const runtimeKind = normalizeRuntimeKind(event.target.value);
                                   const currentTemplate = normalizeTemplateSelection(hubTemplates.find((item) => item.id === agentDraft.from_template) || null);
@@ -3835,88 +4092,208 @@ function App() {
                                     : pickDefaultAgentTemplate(hubTemplates, runtimeKind, bootstrapConfig);
                                   let nextDraft = {
                                     ...agentDraft,
+                                    role: "worker",
                                     runtime_kind: runtimeKind,
                                     image: runtimeImageForKind(runtimeKind, bootstrapConfig, agentDraft.default_image || managerAgent?.image || ""),
                                   };
                                   nextDraft = applyTemplateToDraft(nextDraft, nextTemplate, bootstrapConfig, managerAgent?.image || "");
+                                  if (runtimeKind === "notifier") {
+                                    nextDraft.notifier_delivery_mode = nextDraft.notifier_delivery_mode || "webhook";
+                                    nextDraft = ensureNotifierPullSubscriptionDraft(nextDraft);
+                                  } else {
+                                    loadAgentModels(nextDraft, { silent: true });
+                                  }
                                   setAgentDraft(nextDraft);
                                 }}
                               >
                                 ${RUNTIME_KIND_OPTIONS.map((option) => html`
-                                  <option key=${option.value} value=${option.value}>${option.label}</option>
+                                  <option key=${option.value} value=${option.value}>${formatRuntimeKindLabel(option.value, t)}</option>
                                 `)}
                               </select>
                             `
                           : html`<input value=${agentDraft.runtime_kind || editingAgent?.runtime_kind || ""} readOnly disabled />`}
                       </label>
-                      <label className="field">
-                        <span>${t("agentImage")}</span>
-                        ${agentModalMode === "create"
-                          ? html`<input value=${agentDraft.image} onInput=${(event) => setAgentDraft({ ...agentDraft, image: event.target.value })} placeholder=${t("agentImagePlaceholder")} />`
-                          : html`<input value=${agentDraft.image} readOnly disabled placeholder=${t("agentImagePlaceholder")} />`}
-                      </label>
+                      ${!isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)
+                        ? html`
+                            <label className="field">
+                              <span>${t("agentImage")}</span>
+                              ${agentModalMode === "create"
+                                ? html`<input value=${agentDraft.image} onInput=${(event) => setAgentDraft({ ...agentDraft, image: event.target.value })} placeholder=${t("agentImagePlaceholder")} />`
+                                : html`<input value=${agentDraft.image} readOnly disabled placeholder=${t("agentImagePlaceholder")} />`}
+                            </label>
+                          `
+                        : null}
                       <label className="field span-2">
                         <span>${t("agentDescription")}</span>
                         <textarea className="compact-textarea" value=${agentDraft.description} onInput=${(event) => setAgentDraft({ ...agentDraft, description: event.target.value })} />
                       </label>
                     </div>
                   </section>
-                  <section className="profile-section">
-                    <div className="profile-section-title">${t("profileModelSection")}</div>
-                    <div className="profile-runtime-grid">
-                      <label className="field">
-                        <span>${t("profileProvider")}</span>
-                        <select
-                          value=${agentDraft.provider}
-                          onChange=${(event) => {
-                            const next = { ...agentDraft, provider: event.target.value, model_id: "" };
-                            setAgentDraft(next);
-                            setAgentModels([]);
-                          }}
-                        >
-                          ${["csghub_lite", "codex", "claude_code", "api"].map((provider) => html`
-                            <option key=${provider} value=${provider}>${formatProviderLabel(provider)}</option>
-                          `)}
-                        </select>
-                      </label>
-                      <label className="field">
-                        ${requiredFieldLabel(t("profileModel"))}
-                        <select
-                          value=${agentDraft.model_id}
-                          required
-                          aria-required="true"
-                          onChange=${(event) => setAgentDraft({ ...agentDraft, model_id: event.target.value })}
-                        >
-                          <option value="">${agentModelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
-                          ${agentModels.map((model) => html`<option key=${model} value=${model}>${model}</option>`)}
-                          ${agentDraft.model_id && !agentModels.includes(agentDraft.model_id)
-                            ? html`<option value=${agentDraft.model_id}>${agentDraft.model_id}</option>`
-                            : null}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>${t("profileReasoning")}</span>
-                        <select
-                          value=${agentDraft.reasoning_effort}
-                          onChange=${(event) => setAgentDraft({ ...agentDraft, reasoning_effort: event.target.value })}
-                        >
-                          ${["low", "medium", "high", "xhigh"].map((effort) => html`<option key=${effort} value=${effort}>${effort}</option>`)}
-                        </select>
-                      </label>
-                      <label className="selection-item compact-toggle-row">
-                        <input type="checkbox" checked=${agentDraft.enable_fast_mode} onChange=${() => setAgentDraft({ ...agentDraft, enable_fast_mode: !agentDraft.enable_fast_mode })} />
-                        <span>${t("profileFastMode")}</span>
-                      </label>
-                    </div>
-                    <${CLIProxyAuthControl}
-                      provider=${agentDraft.provider}
-                      t=${t}
-                      status=${cliproxyAuthStatuses[normalizeAuthProviderName(agentDraft.provider)]}
-                      busy=${cliproxyAuthBusy === normalizeAuthProviderName(agentDraft.provider)}
-                      onLogin=${loginCLIProxyProvider}
-                    />
-                  </section>
-                  ${agentDraft.provider === "api"
+                  ${!isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)
+                    ? html`
+                        <section className="profile-section">
+                          <div className="profile-section-title">${t("profileModelSection")}</div>
+                          <div className="profile-runtime-grid">
+                            <label className="field">
+                              <span>${t("profileProvider")}</span>
+                              <select
+                                value=${agentDraft.provider}
+                                onChange=${(event) => {
+                                  const next = { ...agentDraft, provider: event.target.value, model_id: "" };
+                                  setAgentDraft(next);
+                                  setAgentModels([]);
+                                }}
+                              >
+                                ${["csghub_lite", "codex", "claude_code", "api"].map((provider) => html`
+                                  <option key=${provider} value=${provider}>${formatProviderLabel(provider)}</option>
+                                `)}
+                              </select>
+                            </label>
+                            <label className="field">
+                              ${requiredFieldLabel(t("profileModel"))}
+                              <select
+                                value=${agentDraft.model_id}
+                                required
+                                aria-required="true"
+                                onChange=${(event) => setAgentDraft({ ...agentDraft, model_id: event.target.value })}
+                              >
+                                <option value="">${agentModelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
+                                ${agentModels.map((model) => html`<option key=${model} value=${model}>${model}</option>`)}
+                                ${agentDraft.model_id && !agentModels.includes(agentDraft.model_id)
+                                  ? html`<option value=${agentDraft.model_id}>${agentDraft.model_id}</option>`
+                                  : null}
+                              </select>
+                            </label>
+                            <label className="field">
+                              <span>${t("profileReasoning")}</span>
+                              <select
+                                value=${agentDraft.reasoning_effort}
+                                onChange=${(event) => setAgentDraft({ ...agentDraft, reasoning_effort: event.target.value })}
+                              >
+                                ${["low", "medium", "high", "xhigh"].map((effort) => html`<option key=${effort} value=${effort}>${effort}</option>`)}
+                              </select>
+                            </label>
+                            <label className="selection-item compact-toggle-row">
+                              <input type="checkbox" checked=${agentDraft.enable_fast_mode} onChange=${() => setAgentDraft({ ...agentDraft, enable_fast_mode: !agentDraft.enable_fast_mode })} />
+                              <span>${t("profileFastMode")}</span>
+                            </label>
+                          </div>
+                          <${CLIProxyAuthControl}
+                            provider=${agentDraft.provider}
+                            t=${t}
+                            status=${cliproxyAuthStatuses[normalizeAuthProviderName(agentDraft.provider)]}
+                            busy=${cliproxyAuthBusy === normalizeAuthProviderName(agentDraft.provider)}
+                            onLogin=${loginCLIProxyProvider}
+                          />
+                        </section>
+                      `
+                    : html`
+                        <section className="profile-section">
+                          <div className="profile-section-title">${t("profileNotifierSection")}</div>
+                          <div className="profile-grid profile-grid-compact">
+                            <label className="field span-2">
+                              <span>${t("notifierDeliveryMode")}</span>
+                              <select
+                                value=${agentDraft.notifier_delivery_mode || "webhook"}
+                                onChange=${(event) => {
+                                  const notifier_delivery_mode = event.target.value;
+                                  let next = { ...agentDraft, notifier_delivery_mode };
+                                  next = ensureNotifierPullSubscriptionDraft(next);
+                                  setAgentDraft(next);
+                                }}
+                              >
+                                ${NOTIFIER_DELIVERY_OPTIONS.map(
+                                  (mode) => html`
+                                    <option key=${mode} value=${mode}>
+                                      ${mode === "webhook" ? t("notifierDeliveryWebhook") : t("notifierDeliveryRemotePull")}
+                                    </option>
+                                  `,
+                                )}
+                              </select>
+                            </label>
+                            ${agentDraft.notifier_delivery_mode === "webhook"
+                              ? html`
+                                  <label className="field span-2">
+                                    <div className="field-label-with-help">
+                                      ${requiredFieldLabel(t("notifierWebhookToken"))}
+                                      <${FieldHelpTooltip} summary=${t("notifierWebhookTokenSummary")} detail=${t("notifierWebhookTokenHelp")} />
+                                    </div>
+                                    <div style=${{ display: "flex", gap: "8px", alignItems: "stretch", flexWrap: "wrap" }}>
+                                      <input
+                                        style=${{ flex: "1 1 200px", minWidth: 0 }}
+                                        type="password"
+                                        autoComplete="new-password"
+                                        value=${agentDraft.notifier_webhook_token || ""}
+                                        onInput=${(event) => setAgentDraft({ ...agentDraft, notifier_webhook_token: event.target.value })}
+                                        placeholder=${t("notifierWebhookTokenInputPlaceholder")}
+                                      />
+                                      <${ClipboardCopyButton} text=${agentDraft.notifier_webhook_token || ""} label=${t("copyToClipboard")} />
+                                    </div>
+                                  </label>
+                                  ${notifierPushWebhookSection(t, {
+                                    webhookOrigin: notifierModalWebhookOrigin,
+                                    setWebhookOrigin: setNotifierModalWebhookOrigin,
+                                    agentID: notifierModalWebhookAgentID(agentModalMode, editingAgent, agentDraft),
+                                  })}
+                                `
+                              : null}
+                            ${agentDraft.notifier_delivery_mode === "remote_pull"
+                              ? html`
+                                  <label className="field span-2">
+                                    <div className="field-label-with-help">
+                                      ${requiredFieldLabel(t("notifierRemoteURL"))}
+                                      <${FieldHelpTooltip} summary=${t("notifierRemoteURLSummary")} detail=${t("notifierRemoteURLHelp")} />
+                                    </div>
+                                    <input
+                                      value=${agentDraft.notifier_remote_url || ""}
+                                      onInput=${(event) => setAgentDraft({ ...agentDraft, notifier_remote_url: event.target.value })}
+                                      placeholder=${t("notifierRemoteURLPlaceholder")}
+                                    />
+                                  </label>
+                                  <label className="field span-2">
+                                    <div className="field-label-with-help">
+                                      <span>${t("notifierRemoteToken")}</span>
+                                      <${FieldHelpTooltip} summary=${t("notifierRemoteTokenSummary")} detail=${t("notifierRemoteTokenHelp")} />
+                                    </div>
+                                    <input
+                                      type="password"
+                                      autoComplete="new-password"
+                                      value=${agentDraft.notifier_remote_token || ""}
+                                      onInput=${(event) => setAgentDraft({ ...agentDraft, notifier_remote_token: event.target.value })}
+                                      placeholder=${notifierRemoteTokenPlaceholderText(agentDraft, t)}
+                                    />
+                                  </label>
+                                  ${notifierPullRouteOverridesSection(t, agentDraft, (p) => setAgentDraft({ ...agentDraft, ...p }))}
+                                  <label className="field">
+                                    <div className="field-label-with-help">
+                                      <span>${t("notifierSubscriptionID")}</span>
+                                      <${FieldHelpTooltip} summary=${t("notifierSubscriptionIDSummary")} detail=${t("notifierSubscriptionIDHelp")} />
+                                    </div>
+                                    <input
+                                      value=${agentDraft.notifier_remote_subscription_id || ""}
+                                      readOnly
+                                      disabled
+                                      title=${t("notifierSubscriptionIDHelp")}
+                                    />
+                                  </label>
+                                  ${notifierThirdPartyPasteUrlRow(agentDraft, t)}
+                                  <label className="field">
+                                    <div className="field-label-with-help">
+                                      <span>${t("notifierPollInterval")}</span>
+                                      <${FieldHelpTooltip} summary=${t("notifierPollIntervalSummary")} detail=${t("notifierPollIntervalHelp")} />
+                                    </div>
+                                    <input
+                                      value=${agentDraft.notifier_poll_interval || "30s"}
+                                      onInput=${(event) => setAgentDraft({ ...agentDraft, notifier_poll_interval: event.target.value })}
+                                      placeholder=${t("notifierPollIntervalPlaceholder")}
+                                    />
+                                  </label>
+                                `
+                              : null}
+                          </div>
+                        </section>
+                      `}
+                  ${!isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent) && agentDraft.provider === "api"
                     ? html`
                         <section className="profile-section">
                           <div className="profile-section-title">${t("profileAPIProvider")}</div>
@@ -3948,12 +4325,21 @@ function App() {
                   <section className="profile-section">
                     <div className="profile-section-title">${t("profileAdvanced")}</div>
                     <div className="profile-advanced-grid">
-                      <label className="field">
-                        <span>${t("profileRequestOptions")}</span>
-                        <textarea className="compact-json" value=${agentDraft.requestOptionsText} onInput=${(event) => setAgentDraft({ ...agentDraft, requestOptionsText: event.target.value })} />
-                      </label>
+                      ${!isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)
+                        ? html`
+                            <label className="field">
+                              <span>${t("profileRequestOptions")}</span>
+                              <textarea className="compact-json" value=${agentDraft.requestOptionsText} onInput=${(event) => setAgentDraft({ ...agentDraft, requestOptionsText: event.target.value })} />
+                            </label>
+                          `
+                        : null}
                       <div className="field">
-                        <span>${t("profileEnv")}</span>
+                        <div className="field-label-with-help">
+                          <span>${t("profileEnv")}</span>
+                          ${isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)
+                            ? html`<${FieldHelpTooltip} summary=${t("profileEnvNotifierSummary")} detail=${t("profileEnvNotifierHelp")} />`
+                            : null}
+                        </div>
                         <${EnvKeyValueEditor}
                           rows=${agentDraft.envRows}
                           t=${t}
@@ -3967,7 +4353,15 @@ function App() {
                 <${AgentCreateProgress} progress=${agentProgress} t=${t} />
                 <div className="modal-actions">
                   <button className="btn btn-secondary-gray btn-sm secondary-button" onClick=${() => setShowAgentModal(false)}>${t("cancel")}</button>
-                  <button className="btn btn-primary btn-sm send-button" disabled=${agentBusy || isBlank(agentDraft.name) || !agentDraft.model_id || profileBaseURLMissing(agentDraft)} onClick=${saveAgent}>
+                  <button
+                    className="btn btn-primary btn-sm send-button"
+                    disabled=${agentBusy ||
+                    isBlank(agentDraft.name) ||
+                    (isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)
+                      ? !notifierFormIsComplete(agentDraft, editingAgent)
+                      : !agentDraft.model_id || profileBaseURLMissing(agentDraft))}
+                    onClick=${saveAgent}
+                  >
                     ${agentBusy ? "..." : agentModalMode === "create" ? t("agentCreateSave") : t("agentUpdateSave")}
                   </button>
                 </div>
@@ -4006,7 +4400,7 @@ function App() {
                       <label className="field">
                         <span>${t("profileRuntimeKind")}</span>
                         <select
-                          value=${normalizeRuntimeKind(profileDraft.runtime_kind || bootstrapConfig?.runtime_kind)}
+                          value=${normalizeRuntimeKind(profileDraft.runtime_kind || bootstrapConfig?.runtime_kind) || "picoclaw_sandbox"}
                           onChange=${(event) => setProfileDraft({ ...profileDraft, runtime_kind: event.target.value })}
                         >
                           ${GATEWAY_RUNTIME_KIND_OPTIONS.map((option) => html`<option key=${option.value} value=${option.value}>${formatRuntimeKindLabel(option.value, t)}</option>`)}
@@ -4652,10 +5046,40 @@ function HubDetailPane({
   `;
 }
 
-function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, modelBusy, saving, publishBusy, saveError, authStatuses, authBusyProvider, onDraftChange, onSave, onPublish, onProviderLogin, onStart, onStop, onRecreate, onDelete, onInvite, onOpenDM }) {
+function AgentDetailPane({
+  item,
+  t,
+  activeRoom,
+  busyKey,
+  error,
+  draft,
+  models,
+  modelBusy,
+  saving,
+  publishBusy,
+  saveError,
+  authStatuses,
+  authBusyProvider,
+  notifierWebhookOrigin,
+  setNotifierWebhookOrigin,
+  onDraftChange,
+  onSave,
+  onPublish,
+  onProviderLogin,
+  onStart,
+  onStop,
+  onRecreate,
+  onDelete,
+  onInvite,
+  onOpenDM,
+}) {
   const isManager = item.role === "manager" || item.id === "u-manager";
   const running = isAgentRunning(item);
-  const incomplete = isAgentIncomplete(item);
+  const draftBelongsToItem = Boolean(draft) && String(draft?.agent_id ?? "").trim() === String(item?.id ?? "").trim();
+  const incomplete =
+    draftBelongsToItem && isNotifierRuntimeDraftOnAgentPage(draft, item)
+      ? !notifierFormIsComplete(draft, item)
+      : isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
   const busyPrefix = `${item.id}:`;
   const provider = item.provider || item.agent_profile?.provider;
@@ -4677,18 +5101,27 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
       <div className="entity-toolbar">
         <button
           className="btn btn-primary btn-sm preview-action-button preview-action-button-primary"
-          disabled=${saving || isBlank(draft?.name) || !draft?.model_id || profileBaseURLMissing(draft)}
+          disabled=${saving ||
+          isBlank(draft?.name) ||
+          (isNotifierRuntimeDraftOnAgentPage(draft, item) ? !notifierFormIsComplete(draft, item) : !draft?.model_id || profileBaseURLMissing(draft))}
           onClick=${onSave}
         >
           ${saving ? t("profileLoadingModels") : t("agentUpdateSave")}
         </button>
+        <button
+          className="btn btn-secondary-gray btn-sm preview-action-button"
+          disabled=${busyKey.startsWith(busyPrefix) || incomplete}
+          onClick=${() => (running ? onStop(item) : onStart(item))}
+        >
+          ${running ? t("agentStop") : t("agentStart")}
+        </button>
         ${activeRoom && !isManager
           ? html`<button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onInvite(item)}>${t("inviteToRoom")}</button>`
           : null}
-        <button className="btn btn-secondary-gray btn-sm preview-action-button" onClick=${() => onOpenDM(item)}>${t("openDM")}</button>
+        <button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onOpenDM(item)}>${t("openDM")}</button>
         ${isManager
           ? html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>`
-          : null}
+          : html`<button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>`}
         ${!isManager
           ? html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onDelete(item)}>${t("agentDelete")}</button>`
           : null}
@@ -4756,10 +5189,14 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
                     <span>${t("profileRuntimeKind")}</span>
                     <input value=${draft.runtime_kind || item.runtime_kind || ""} readOnly disabled />
                   </label>
-                  <label className="field">
-                    <span>${t("agentImage")}</span>
-                    <input value=${draft.image} readOnly disabled placeholder=${t("agentImagePlaceholder")} />
-                  </label>
+                  ${!isNotifierRuntimeDraftOnAgentPage(draft, item)
+                    ? html`
+                        <label className="field">
+                          <span>${t("agentImage")}</span>
+                          <input value=${draft.image} readOnly disabled placeholder=${t("agentImagePlaceholder")} />
+                        </label>
+                      `
+                    : null}
                   <label className="field span-2">
                     <span>${t("agentDescription")}</span>
                     <textarea className="compact-textarea" value=${draft.description} onInput=${(event) => updateDraft({ description: event.target.value })} />
@@ -4767,92 +5204,210 @@ function AgentDetailPane({ item, t, activeRoom, busyKey, error, draft, models, m
                 </div>
               </section>
 
-              <section className="profile-section">
-                <div className="profile-section-title">${t("profileModelSection")}</div>
-                <div className="profile-runtime-grid">
-                  <label className="field">
-                    <span>${t("profileProvider")}</span>
-                    <select
-                      value=${draft.provider}
-                      onChange=${(event) => updateDraft({ provider: event.target.value, model_id: "" })}
-                    >
-                      ${PROVIDERS.map((provider) => html`<option key=${provider} value=${provider}>${formatProviderLabel(provider)}</option>`)}
-                    </select>
-                  </label>
-                  <label className="field">
-                    ${requiredFieldLabel(t("profileModel"))}
-                    <select
-                      value=${draft.model_id}
-                      required
-                      aria-required="true"
-                      onChange=${(event) => updateDraft({ model_id: event.target.value })}
-                    >
-                      <option value="">${modelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
-                      ${models.map((model) => html`<option key=${model} value=${model}>${model}</option>`)}
-                      ${draft.model_id && !models.includes(draft.model_id)
-                        ? html`<option value=${draft.model_id}>${draft.model_id}</option>`
-                        : null}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>${t("profileReasoning")}</span>
-                    <select value=${draft.reasoning_effort} onChange=${(event) => updateDraft({ reasoning_effort: event.target.value })}>
-                      ${REASONING_EFFORTS.map((effort) => html`<option key=${effort} value=${effort}>${effort}</option>`)}
-                    </select>
-                  </label>
-                  <label className="selection-item compact-toggle-row">
-                    <input type="checkbox" checked=${draft.enable_fast_mode} onChange=${() => updateDraft({ enable_fast_mode: !draft.enable_fast_mode })} />
-                    <span>${t("profileFastMode")}</span>
-                  </label>
-                </div>
-                <${CLIProxyAuthControl}
-                  provider=${draft.provider}
-                  t=${t}
-                  status=${authStatuses?.[normalizeAuthProviderName(draft.provider)]}
-                  busy=${authBusyProvider === normalizeAuthProviderName(draft.provider)}
-                  onLogin=${onProviderLogin}
-                />
-              </section>
-
-              ${draft.provider === "api"
+              ${!isNotifierRuntimeDraftOnAgentPage(draft, item)
                 ? html`
                     <section className="profile-section">
-                      <div className="profile-section-title">${t("profileAPIProvider")}</div>
-                      <div className="profile-api-grid">
+                      <div className="profile-section-title">${t("profileModelSection")}</div>
+                      <div className="profile-runtime-grid">
                         <label className="field">
-                          ${requiredFieldLabel(t("profileBaseURL"))}
-                          <input
-                            value=${draft.base_url}
+                          <span>${t("profileProvider")}</span>
+                          <select
+                            value=${draft.provider}
+                            onChange=${(event) => updateDraft({ provider: event.target.value, model_id: "" })}
+                          >
+                            ${PROVIDERS.map((provider) => html`<option key=${provider} value=${provider}>${formatProviderLabel(provider)}</option>`)}
+                          </select>
+                        </label>
+                        <label className="field">
+                          ${requiredFieldLabel(t("profileModel"))}
+                          <select
+                            value=${draft.model_id}
                             required
                             aria-required="true"
-                            onInput=${(event) => updateDraft({ base_url: event.target.value })}
-                            placeholder="https://api.openai.com/v1"
-                          />
+                            onChange=${(event) => updateDraft({ model_id: event.target.value })}
+                          >
+                            <option value="">${modelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
+                            ${models.map((model) => html`<option key=${model} value=${model}>${model}</option>`)}
+                            ${draft.model_id && !models.includes(draft.model_id)
+                              ? html`<option value=${draft.model_id}>${draft.model_id}</option>`
+                              : null}
+                          </select>
                         </label>
-                        <${APIKeyField}
-                          value=${draft.api_key}
-                          onInput=${(event) => updateDraft({ api_key: event.target.value })}
-                          profile=${draft}
-                          t=${t}
-                        />
-                        <label className="field span-2">
-                          <span>${t("profileHeaders")}</span>
-                          <textarea className="compact-textarea" value=${draft.headersText} onInput=${(event) => updateDraft({ headersText: event.target.value })} />
+                        <label className="field">
+                          <span>${t("profileReasoning")}</span>
+                          <select value=${draft.reasoning_effort} onChange=${(event) => updateDraft({ reasoning_effort: event.target.value })}>
+                            ${REASONING_EFFORTS.map((effort) => html`<option key=${effort} value=${effort}>${effort}</option>`)}
+                          </select>
+                        </label>
+                        <label className="selection-item compact-toggle-row">
+                          <input type="checkbox" checked=${draft.enable_fast_mode} onChange=${() => updateDraft({ enable_fast_mode: !draft.enable_fast_mode })} />
+                          <span>${t("profileFastMode")}</span>
                         </label>
                       </div>
+                      <${CLIProxyAuthControl}
+                        provider=${draft.provider}
+                        t=${t}
+                        status=${authStatuses?.[normalizeAuthProviderName(draft.provider)]}
+                        busy=${authBusyProvider === normalizeAuthProviderName(draft.provider)}
+                        onLogin=${onProviderLogin}
+                      />
                     </section>
+
+                    ${draft.provider === "api"
+                      ? html`
+                          <section className="profile-section">
+                            <div className="profile-section-title">${t("profileAPIProvider")}</div>
+                            <div className="profile-api-grid">
+                              <label className="field">
+                                ${requiredFieldLabel(t("profileBaseURL"))}
+                                <input
+                                  value=${draft.base_url}
+                                  required
+                                  aria-required="true"
+                                  onInput=${(event) => updateDraft({ base_url: event.target.value })}
+                                  placeholder="https://api.openai.com/v1"
+                                />
+                              </label>
+                              <${APIKeyField}
+                                value=${draft.api_key}
+                                onInput=${(event) => updateDraft({ api_key: event.target.value })}
+                                profile=${draft}
+                                t=${t}
+                              />
+                              <label className="field span-2">
+                                <span>${t("profileHeaders")}</span>
+                                <textarea className="compact-textarea" value=${draft.headersText} onInput=${(event) => updateDraft({ headersText: event.target.value })} />
+                              </label>
+                            </div>
+                          </section>
+                        `
+                      : null}
                   `
-                : null}
+                : html`
+                    <section className="profile-section">
+                      <div className="profile-section-title">${t("profileNotifierSection")}</div>
+                      <div className="profile-grid profile-grid-compact">
+                        <label className="field span-2">
+                          <span>${t("notifierDeliveryMode")}</span>
+                          <select
+                            value=${draft.notifier_delivery_mode || "webhook"}
+                            onChange=${(event) => {
+                              const notifier_delivery_mode = event.target.value;
+                              let next = { ...(draft || agentToDraft(item)), notifier_delivery_mode };
+                              next = ensureNotifierPullSubscriptionDraft(next);
+                              onDraftChange(next);
+                            }}
+                          >
+                            ${NOTIFIER_DELIVERY_OPTIONS.map(
+                              (mode) => html`
+                                <option key=${mode} value=${mode}>
+                                  ${mode === "webhook" ? t("notifierDeliveryWebhook") : t("notifierDeliveryRemotePull")}
+                                </option>
+                              `,
+                            )}
+                          </select>
+                        </label>
+                        ${draft.notifier_delivery_mode === "webhook"
+                          ? html`
+                              <label className="field span-2">
+                                <div className="field-label-with-help">
+                                  ${requiredFieldLabel(t("notifierWebhookToken"))}
+                                  <${FieldHelpTooltip} summary=${t("notifierWebhookTokenSummary")} detail=${t("notifierWebhookTokenHelp")} />
+                                </div>
+                                <div style=${{ display: "flex", gap: "8px", alignItems: "stretch", flexWrap: "wrap" }}>
+                                  <input
+                                    style=${{ flex: "1 1 200px", minWidth: 0 }}
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value=${draft.notifier_webhook_token || ""}
+                                    onInput=${(event) => updateDraft({ notifier_webhook_token: event.target.value })}
+                                    placeholder=${t("notifierWebhookTokenInputPlaceholder")}
+                                  />
+                                  <${ClipboardCopyButton} text=${draft.notifier_webhook_token || ""} label=${t("copyToClipboard")} />
+                                </div>
+                              </label>
+                              ${notifierPushWebhookSection(t, {
+                                webhookOrigin: notifierWebhookOrigin,
+                                setWebhookOrigin: setNotifierWebhookOrigin,
+                                agentID: item.id,
+                              })}
+                            `
+                          : null}
+                        ${draft.notifier_delivery_mode === "remote_pull"
+                          ? html`
+                              <label className="field span-2">
+                                <div className="field-label-with-help">
+                                  ${requiredFieldLabel(t("notifierRemoteURL"))}
+                                  <${FieldHelpTooltip} summary=${t("notifierRemoteURLSummary")} detail=${t("notifierRemoteURLHelp")} />
+                                </div>
+                                <input
+                                  value=${draft.notifier_remote_url || ""}
+                                  onInput=${(event) => updateDraft({ notifier_remote_url: event.target.value })}
+                                  placeholder=${t("notifierRemoteURLPlaceholder")}
+                                />
+                              </label>
+                              <label className="field span-2">
+                                <div className="field-label-with-help">
+                                  <span>${t("notifierRemoteToken")}</span>
+                                  <${FieldHelpTooltip} summary=${t("notifierRemoteTokenSummary")} detail=${t("notifierRemoteTokenHelp")} />
+                                </div>
+                                <input
+                                  type="password"
+                                  autoComplete="new-password"
+                                  value=${draft.notifier_remote_token || ""}
+                                  onInput=${(event) => updateDraft({ notifier_remote_token: event.target.value })}
+                                  placeholder=${notifierRemoteTokenPlaceholderText(draft, t)}
+                                />
+                              </label>
+                              ${notifierPullRouteOverridesSection(t, draft, (p) => updateDraft(p))}
+                              <label className="field">
+                                <div className="field-label-with-help">
+                                  <span>${t("notifierSubscriptionID")}</span>
+                                  <${FieldHelpTooltip} summary=${t("notifierSubscriptionIDSummary")} detail=${t("notifierSubscriptionIDHelp")} />
+                                </div>
+                                <input
+                                  value=${draft.notifier_remote_subscription_id || ""}
+                                  readOnly
+                                  disabled
+                                  title=${t("notifierSubscriptionIDHelp")}
+                                />
+                              </label>
+                              ${notifierThirdPartyPasteUrlRow(draft, t)}
+                              <label className="field">
+                                <div className="field-label-with-help">
+                                  <span>${t("notifierPollInterval")}</span>
+                                  <${FieldHelpTooltip} summary=${t("notifierPollIntervalSummary")} detail=${t("notifierPollIntervalHelp")} />
+                                </div>
+                                <input
+                                  value=${draft.notifier_poll_interval || "30s"}
+                                  onInput=${(event) => updateDraft({ notifier_poll_interval: event.target.value })}
+                                  placeholder=${t("notifierPollIntervalPlaceholder")}
+                                />
+                              </label>
+                            `
+                          : null}
+                      </div>
+                    </section>
+                  `}
 
               <section className="profile-section">
                 <div className="profile-section-title">${t("profileAdvanced")}</div>
                 <div className="profile-advanced-grid">
-                  <label className="field">
-                    <span>${t("profileRequestOptions")}</span>
-                    <textarea className="compact-json" value=${draft.requestOptionsText} onInput=${(event) => updateDraft({ requestOptionsText: event.target.value })} />
-                  </label>
+                  ${!isNotifierRuntimeDraftOnAgentPage(draft, item)
+                    ? html`
+                        <label className="field">
+                          <span>${t("profileRequestOptions")}</span>
+                          <textarea className="compact-json" value=${draft.requestOptionsText} onInput=${(event) => updateDraft({ requestOptionsText: event.target.value })} />
+                        </label>
+                      `
+                    : null}
                   <div className="field">
-                    <span>${t("profileEnv")}</span>
+                    <div className="field-label-with-help">
+                      <span>${t("profileEnv")}</span>
+                      ${isNotifierRuntimeDraftOnAgentPage(draft, item)
+                        ? html`<${FieldHelpTooltip} summary=${t("profileEnvNotifierSummary")} detail=${t("profileEnvNotifierHelp")} />`
+                        : null}
+                    </div>
                     <${EnvKeyValueEditor}
                       rows=${draft.envRows}
                       t=${t}
@@ -5454,7 +6009,421 @@ function normalizeIMData(payload) {
   return { ...payload, rooms: payload.rooms ?? [] };
 }
 
-function profileToDraft(profile) {
+// UI: push = webhook, pull = remote_pull. Legacy API value "both" is treated as webhook for editing.
+function normalizeNotifierDeliveryMode(mode) {
+  const m = String(mode || "").trim().toLowerCase();
+  if (m === "remote_pull") {
+    return "remote_pull";
+  }
+  return "webhook";
+}
+
+/** Fills notifier_remote_subscription_id when runtime is notifier and mode is remote_pull and id is empty. */
+function ensureNotifierPullSubscriptionDraft(draft) {
+  if (!draft || !isNotifierRuntimeDraft(draft) || draft.notifier_delivery_mode !== "remote_pull") {
+    return draft;
+  }
+  if (String(draft.notifier_remote_subscription_id || "").trim()) {
+    return draft;
+  }
+  return { ...draft, notifier_remote_subscription_id: newNotifierSubscriptionId() };
+}
+
+function newNotifierSubscriptionId() {
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return `sub-${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+  }
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `sub-${crypto.randomUUID().replace(/-/g, "")}`;
+  }
+  return `sub-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function notifierPushWebhookPathForAgent(agentID) {
+  const id = String(agentID || "").trim();
+  if (!id) {
+    return "/api/v1/agents/<agent_id>/webhooks/notify";
+  }
+  return `/api/v1/agents/${encodeURIComponent(id)}/webhooks/notify`;
+}
+
+function notifierPushWebhookNotifyURL(originTrimmed, agentID, placeholderHost) {
+  const ph = String(placeholderHost || "https://<your-csgclaw-host>").trim();
+  let o = String(originTrimmed ?? "").trim().replace(/\/+$/, "");
+  if (!o) {
+    o = ph;
+  }
+  const path = notifierPushWebhookPathForAgent(agentID);
+  return `${o}${path}`;
+}
+
+function notifierModalWebhookAgentID(agentModalMode, editingAgent, agentDraft) {
+  if (agentModalMode === "edit" && editingAgent?.id) {
+    return editingAgent.id;
+  }
+  if (agentModalMode === "create" && isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)) {
+    return "";
+  }
+  return String(agentDraft?.agent_id || "").trim();
+}
+
+/** Third-party relay Webhook URL with subscription_id. Origin-only → ingress path; …/inbox/messages → …/webhooks/ingress. Scheme-less localhost / 127.0.0.1 / ::1 use http. */
+function notifierThirdPartyRelayWebhookURL(remoteBase, subscriptionId) {
+  const b = String(remoteBase ?? "").trim();
+  const sid = String(subscriptionId ?? "").trim();
+  if (!b || !sid) {
+    return "";
+  }
+  let input = b;
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(input)) {
+    const local =
+      /^(localhost|127\.0\.0\.1|\[::1\])(:|\/?|\?|$)/i.test(input) || /^\[::1\]/i.test(input);
+    input = `${local ? "http" : "https"}://${input.replace(/^\/+/, "")}`;
+  }
+  let u;
+  try {
+    u = new URL(input);
+  } catch {
+    const joiner = b.includes("?") ? "&" : "?";
+    return `${b}${joiner}subscription_id=${encodeURIComponent(sid)}`;
+  }
+  const segments = u.pathname.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    u.pathname = NOTIFIER_RELAY_WEBHOOK_INGRESS_PATH;
+  } else if (/\/inbox\/messages\/?$/i.test(u.pathname)) {
+    u.pathname = u.pathname.replace(/\/inbox\/messages\/?$/i, "/webhooks/ingress");
+  }
+  u.searchParams.set("subscription_id", sid);
+  return u.toString();
+}
+
+/**
+ * Mirrors internal/runtime/notifier/relay.go resolveRelayEndpoints for UI preview (defaults before overrides).
+ * @returns {{ messages: string, ack: string }}
+ */
+function notifierComputedPullRoutes(remoteUrlStr) {
+  const base = String(remoteUrlStr ?? "").trim();
+  if (!base) {
+    return { messages: "", ack: "" };
+  }
+  let input = base;
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(input)) {
+    const local =
+      /^(localhost|127\.0\.0\.1|\[::1\])(:|\/?|\?|$)/i.test(input) || /^\[::1\]/i.test(input);
+    input = `${local ? "http" : "https"}://${input.replace(/^\/+/, "")}`;
+  }
+  let u;
+  try {
+    u = new URL(input);
+  } catch {
+    return { messages: "", ack: "" };
+  }
+  if (!u.hostname) {
+    return { messages: "", ack: "" };
+  }
+  const pClean = (u.pathname || "/").replace(/\/+$/, "") || "/";
+  const lower = pClean.toLowerCase();
+  for (const suf of ["/webhooks/ingress", "/webhook/ingress"]) {
+    const idx = lower.lastIndexOf(suf);
+    if (idx < 0 || idx + suf.length !== lower.length) {
+      continue;
+    }
+    const parent = pClean.slice(0, idx).replace(/\/+$/, "");
+    const msgPath = parent ? `${parent}/inbox/messages`.replace(/\/+/g, "/") : "/inbox/messages";
+    const ackPath = parent ? `${parent}/inbox/ack`.replace(/\/+/g, "/") : "/inbox/ack";
+    const mu = new URL(u.href);
+    mu.pathname = msgPath;
+    const au = new URL(u.href);
+    au.pathname = ackPath;
+    au.search = "";
+    return { messages: mu.toString(), ack: au.toString() };
+  }
+  const pTrim = (u.pathname || "").replace(/\/+$/, "");
+  if (!pTrim || pTrim === "/") {
+    const origin = u.origin;
+    return {
+      messages: `${origin}/api/v1/inbox/messages`,
+      ack: `${origin}/api/v1/inbox/ack`,
+    };
+  }
+  const trimmed = pClean.replace(/\/+$/, "");
+  const li = trimmed.lastIndexOf("/");
+  const parentDir = li <= 0 ? "/" : trimmed.slice(0, li);
+  const ackPath = parentDir === "/" ? "/ack" : `${parentDir}/ack`.replace(/\/+/g, "/");
+  const ackURL = new URL(`${u.origin}${ackPath}`);
+  return { messages: u.toString(), ack: ackURL.toString() };
+}
+
+function notifierPullRouteOverridesSection(t, draft, onPatch) {
+  const computed = notifierComputedPullRoutes(draft?.notifier_remote_url);
+  const msgEff = String(draft?.notifier_remote_messages_url ?? "").trim() || computed.messages;
+  const ackEff = String(draft?.notifier_remote_ack_url ?? "").trim() || computed.ack;
+  return html`
+    <div className="field span-2">
+      <div className="field-label-with-help">
+        <span>${t("notifierPullEffectiveRoutes")}</span>
+        <${FieldHelpTooltip} summary=${t("notifierPullEffectiveRoutesSummary")} detail=${t("notifierPullEffectiveRoutesHelp")} />
+      </div>
+      <div style=${{ fontSize: "12px", opacity: 0.88, wordBreak: "break-all", lineHeight: 1.45 }}>
+        <div><strong>GET</strong> ${msgEff || "—"}</div>
+        <div style=${{ marginTop: "6px" }}><strong>ACK</strong> ${ackEff || "—"}</div>
+      </div>
+    </div>
+    <label className="field span-2">
+      <span>${t("notifierPullOverrideMessagesURL")}</span>
+      <input
+        value=${draft.notifier_remote_messages_url || ""}
+        placeholder=${computed.messages || t("notifierPullRoutePlaceholderUnset")}
+        onInput=${(e) => onPatch({ notifier_remote_messages_url: e.target.value })}
+      />
+    </label>
+    <label className="field span-2">
+      <span>${t("notifierPullOverrideAckURL")}</span>
+      <input
+        value=${draft.notifier_remote_ack_url || ""}
+        placeholder=${computed.ack || t("notifierPullRoutePlaceholderUnset")}
+        onInput=${(e) => onPatch({ notifier_remote_ack_url: e.target.value })}
+      />
+    </label>
+  `;
+}
+
+async function copyTextToClipboard(text) {
+  const s = String(text ?? "");
+  if (!s) {
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(s);
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = s;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function ClipboardCopyButton({ text, label, className, disabled }) {
+  const [copied, setCopied] = React.useState(false);
+  const timerRef = React.useRef(null);
+  React.useEffect(
+    () => () => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+      }
+    },
+    [],
+  );
+  async function onClick() {
+    if (disabled || !String(text ?? "").trim()) {
+      return;
+    }
+    await copyTextToClipboard(text);
+    setCopied(true);
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+    }
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      setCopied(false);
+    }, 2000);
+  }
+  const busy = Boolean(disabled) || !String(text ?? "").trim();
+  const btnClass = className || "btn btn-secondary-gray btn-sm";
+  return html`
+    <button
+      type="button"
+      className=${btnClass}
+      disabled=${busy}
+      style=${copied ? { background: "#16a34a", color: "#fff", borderColor: "transparent" } : undefined}
+      onClick=${onClick}
+    >
+      ${copied ? "✓" : label}
+    </button>
+  `;
+}
+
+function notifierPushWebhookSection(t, { webhookOrigin, setWebhookOrigin, agentID }) {
+  const ph = t("notifierWebhookOriginPlaceholder");
+  const full = notifierPushWebhookNotifyURL(webhookOrigin, agentID, ph);
+  return html`
+    <label className="field span-2">
+      <div className="field-label-with-help">
+        <span>${t("notifierWebhookPublicOrigin")}</span>
+        <${FieldHelpTooltip} summary=${t("notifierWebhookPublicOriginSummary")} detail=${t("notifierWebhookPublicOriginHelp")} />
+      </div>
+      <input
+        value=${webhookOrigin}
+        placeholder=${t("notifierWebhookPublicOriginPlaceholder")}
+        onInput=${(event) => setWebhookOrigin(event.target.value)}
+      />
+    </label>
+    <label className="field span-2">
+      <div className="field-label-with-help">
+        <span>${t("notifierThirdPartyCSGWebhookURL")}</span>
+        <${FieldHelpTooltip} summary=${t("notifierThirdPartyCSGWebhookURLSummary")} detail=${t("notifierThirdPartyCSGWebhookURLHelp")} />
+      </div>
+      <div style=${{ display: "flex", gap: "8px", alignItems: "stretch", flexWrap: "wrap" }}>
+        <input style=${{ flex: "1 1 220px", minWidth: 0 }} readOnly value=${full} />
+        <${ClipboardCopyButton} text=${full} label=${t("copyToClipboard")} />
+      </div>
+    </label>
+  `;
+}
+
+function notifierThirdPartyPasteUrlRow(draft, t) {
+  const paste = notifierThirdPartyRelayWebhookURL(draft?.notifier_remote_url, draft?.notifier_remote_subscription_id);
+  if (!paste) {
+    return null;
+  }
+  return html`
+    <label className="field span-2">
+      <div className="field-label-with-help">
+        <span>${t("notifierThirdPartyWebhookPasteURL")}</span>
+        <${FieldHelpTooltip} summary=${t("notifierThirdPartyWebhookPasteURLSummary")} detail=${t("notifierThirdPartyWebhookPasteURLHelp")} />
+      </div>
+      <div style=${{ display: "flex", gap: "8px", alignItems: "stretch", flexWrap: "wrap" }}>
+        <input style=${{ flex: "1 1 200px", minWidth: 0 }} readOnly value=${paste} />
+        <${ClipboardCopyButton} text=${paste} label=${t("copyToClipboard")} />
+      </div>
+    </label>
+  `;
+}
+
+/** Maps API notifier_profile summary (merged from agent.runtime_extensions and agent_profile.runtime_extensions) to flat draft flags. */
+const NOTIFIER_STORAGE_KEYS = [
+  "delivery_mode",
+  "webhook_token",
+  "remote_url",
+  "remote_messages_url",
+  "remote_ack_url",
+  "remote_subscription_id",
+  "poll_interval",
+  "remote_token",
+];
+
+function mergedRuntimeExtensionsForView(profile, agent) {
+  const p =
+    profile?.runtime_extensions && typeof profile.runtime_extensions === "object" && !Array.isArray(profile.runtime_extensions)
+      ? profile.runtime_extensions
+      : {};
+  const a =
+    agent?.runtime_extensions && typeof agent.runtime_extensions === "object" && !Array.isArray(agent.runtime_extensions)
+      ? agent.runtime_extensions
+      : {};
+  return { ...p, ...a };
+}
+
+function notifierKeysFromFlatRoot(m) {
+  if (!m || typeof m !== "object" || Array.isArray(m)) {
+    return null;
+  }
+  const o = {};
+  for (const k of NOTIFIER_STORAGE_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(m, k) && m[k] != null && String(m[k]).trim() !== "") {
+      o[k] = m[k];
+    }
+  }
+  if (Object.keys(o).length > 0) {
+    return o;
+  }
+  if (m.delivery_mode != null && String(m.delivery_mode).trim() !== "") {
+    const out = {};
+    for (const k of NOTIFIER_STORAGE_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(m, k) && m[k] != null) {
+        out[k] = m[k];
+      }
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  return null;
+}
+
+function notifierProfileSummaryFlags(profile, agent) {
+  const re = mergedRuntimeExtensionsForView(profile, agent);
+  const s =
+    re.notifier_profile && typeof re.notifier_profile === "object" && !Array.isArray(re.notifier_profile)
+      ? re.notifier_profile
+      : profile?.notifier_profile && typeof profile.notifier_profile === "object" && !Array.isArray(profile.notifier_profile)
+        ? profile.notifier_profile
+        : null;
+  if (!s || typeof s !== "object") {
+    return {
+      notifier_delivery_complete: false,
+      notifier_webhook_token_set: false,
+      notifier_remote_token_set: false,
+    };
+  }
+  return {
+    notifier_delivery_complete: Boolean(s.delivery_complete),
+    notifier_webhook_token_set: Boolean(s.webhook_token_set),
+    notifier_remote_token_set: Boolean(s.remote_token_set),
+  };
+}
+
+/** Placeholder for pull-mode inbox bearer when API redacts stored token. */
+function notifierRemoteTokenPlaceholderText(draft, t) {
+  if (String(draft?.notifier_remote_token ?? "").trim()) {
+    return "";
+  }
+  if (draft?.notifier_remote_token_set) {
+    return t("notifierRemoteTokenLeaveUnchangedPlaceholder");
+  }
+  return t("notifierRemoteTokenInputPlaceholder");
+}
+
+/** Flat notifier map: prefers agent.runtime_extensions (flat), then profile.runtime_extensions (flat or nested notifier), legacy agent.notifier_details, then request_options.notifier. */
+function notifierFlatFromSources(profile, agent) {
+  const fromAgentTop = notifierKeysFromFlatRoot(agent?.runtime_extensions);
+  if (fromAgentTop) {
+    return fromAgentTop;
+  }
+  const prof = profile && typeof profile === "object" ? profile : {};
+  const ext =
+    prof.runtime_extensions && typeof prof.runtime_extensions === "object" && !Array.isArray(prof.runtime_extensions)
+      ? prof.runtime_extensions
+      : {};
+  const fromExtNested = ext.notifier && typeof ext.notifier === "object" && !Array.isArray(ext.notifier) ? ext.notifier : {};
+  if (Object.keys(fromExtNested).length > 0) {
+    return fromExtNested;
+  }
+  const fromExtFlat = notifierKeysFromFlatRoot(ext);
+  if (fromExtFlat) {
+    return fromExtFlat;
+  }
+  const legacyTop =
+    agent && agent.notifier_details && typeof agent.notifier_details === "object" && !Array.isArray(agent.notifier_details)
+      ? agent.notifier_details
+      : {};
+  if (Object.keys(legacyTop).length > 0) {
+    return legacyTop;
+  }
+  const ro =
+    prof.request_options && typeof prof.request_options === "object" && !Array.isArray(prof.request_options)
+      ? prof.request_options
+      : {};
+  const fromRO = ro.notifier && typeof ro.notifier === "object" && !Array.isArray(ro.notifier) ? ro.notifier : {};
+  return fromRO;
+}
+
+function profileToDraft(profile, agent) {
+  const ro =
+    profile?.request_options && typeof profile.request_options === "object" && !Array.isArray(profile.request_options)
+      ? profile.request_options
+      : {};
+  const notifier = notifierFlatFromSources(profile, agent);
+  const { notifier: _n, ...restRO } = ro;
+  const np = notifierProfileSummaryFlags(profile, agent);
   return {
     runtime_kind: normalizeRuntimeKind(profile?.runtime_kind),
     provider: profile?.provider || "csghub_lite",
@@ -5466,8 +6435,19 @@ function profileToDraft(profile) {
     reasoning_effort: profile?.reasoning_effort || "medium",
     enable_fast_mode: Boolean(profile?.enable_fast_mode),
     headersText: stringifyJSON(profile?.headers || {}),
-    requestOptionsText: stringifyJSON(profile?.request_options || {}),
+    requestOptionsText: stringifyJSON(restRO),
     envRows: mapToEnvRows(profile?.env || {}),
+    notifier_delivery_mode: normalizeNotifierDeliveryMode(notifier.delivery_mode || "webhook"),
+    notifier_webhook_token: notifier.webhook_token || "",
+    notifier_remote_url: notifier.remote_url || "",
+    notifier_remote_subscription_id: notifier.remote_subscription_id || "",
+    notifier_poll_interval: notifier.poll_interval || "30s",
+    notifier_remote_token: notifier.remote_token || "",
+    notifier_remote_messages_url: notifier.remote_messages_url || "",
+    notifier_remote_ack_url: notifier.remote_ack_url || "",
+    notifier_remote_token_set: np.notifier_remote_token_set,
+    notifier_delivery_complete: np.notifier_delivery_complete,
+    notifier_webhook_token_set: np.notifier_webhook_token_set,
   };
 }
 
@@ -5484,19 +6464,55 @@ function modelRequestKey(draft) {
   });
 }
 
+function notifierConfiguredFromFlatDetails(flat) {
+  if (!flat || typeof flat !== "object" || Array.isArray(flat)) {
+    return false;
+  }
+  const deliveryRaw = String(flat.delivery_mode ?? "").trim().toLowerCase();
+  const mode = deliveryRaw === "remote_pull" ? "remote_pull" : deliveryRaw === "both" ? "both" : "webhook";
+  const webhookToken = String(flat.webhook_token ?? "").trim();
+  const remoteURL = String(flat.remote_url ?? "").trim();
+  const allowsWebhook = (mode === "webhook" || mode === "both") && webhookToken !== "";
+  const allowsPull = remoteURL !== "" && (mode === "remote_pull" || mode === "both");
+  return allowsWebhook || allowsPull;
+}
+
+// Mirrors notifier.Config AllowsWebhook/AllowsPull (internal/runtime/notifier/config.go).
+function notifierDeliveryConfiguredInProfile(profile, agent) {
+  const prof = profile && typeof profile === "object" ? profile : {};
+  return notifierConfiguredFromFlatDetails(notifierFlatFromSources(prof, agent));
+}
+
+function inferNotifierRuntimeKindIfUnset(agent, profile) {
+  if (String(agent?.runtime_kind ?? "").trim()) {
+    return "";
+  }
+  const prof = profile || agent?.agent_profile;
+  const np = notifierProfileSummaryFlags(prof, agent);
+  if (np.notifier_delivery_complete || np.notifier_webhook_token_set || np.notifier_remote_token_set) {
+    return "notifier";
+  }
+  if (!notifierDeliveryConfiguredInProfile(profile || agent?.agent_profile || {}, agent)) {
+    return "";
+  }
+  return "notifier";
+}
+
 function agentToDraft(agent) {
   const profile = agent?.agent_profile || agent || {};
+  const inferred = inferNotifierRuntimeKindIfUnset(agent, profile);
+  const merged = inferred ? { ...agent, runtime_kind: inferred } : agent;
   return {
-    agent_id: agent?.id || "",
-    name: agent?.name || "",
-    role: agent?.role || "worker",
-    description: agent?.description || profile.description || "",
-    default_image: agent?.image || "",
-    image: agent?.image || "",
-    from_template: agent?.from_template || "",
-    template_name: agent?.template_name || "",
-    ...profileToDraft(profile),
-    runtime_kind: normalizeRuntimeKind(agent?.runtime_kind || profile.runtime_kind),
+    agent_id: merged?.id || "",
+    name: merged?.name || "",
+    role: merged?.role || "worker",
+    description: merged?.description || profile.description || "",
+    default_image: merged?.image || "",
+    image: merged?.image || "",
+    from_template: merged?.from_template || "",
+    template_name: merged?.template_name || "",
+    ...profileToDraft(profile, merged),
+    runtime_kind: normalizeRuntimeKind(merged?.runtime_kind || profile.runtime_kind),
   };
 }
 
@@ -5568,7 +6584,50 @@ function applyTemplateToDraft(draft, template, bootstrapConfig, fallbackImage = 
   };
 }
 
+function mergeNotifierRequestOptions(parsed, draft) {
+  const base = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? { ...parsed } : {};
+  base.notifier = {
+    delivery_mode: normalizeNotifierDeliveryMode(draft.notifier_delivery_mode || "webhook"),
+    webhook_token: String(draft.notifier_webhook_token ?? "").trim(),
+    remote_url: String(draft.notifier_remote_url ?? "").trim(),
+    remote_subscription_id: String(draft.notifier_remote_subscription_id ?? "").trim(),
+    poll_interval: String(draft.notifier_poll_interval ?? "30s").trim(),
+    remote_token: String(draft.notifier_remote_token ?? "").trim(),
+    remote_messages_url: String(draft.notifier_remote_messages_url ?? "").trim(),
+    remote_ack_url: String(draft.notifier_remote_ack_url ?? "").trim(),
+  };
+  return base;
+}
+
+function draftNotifierDetailsFromDraft(draft) {
+  if (!draft) {
+    return null;
+  }
+  return {
+    delivery_mode: normalizeNotifierDeliveryMode(draft.notifier_delivery_mode || "webhook"),
+    webhook_token: String(draft.notifier_webhook_token ?? "").trim(),
+    remote_url: String(draft.notifier_remote_url ?? "").trim(),
+    remote_subscription_id: String(draft.notifier_remote_subscription_id ?? "").trim(),
+    poll_interval: String(draft.notifier_poll_interval ?? "30s").trim(),
+    remote_token: String(draft.notifier_remote_token ?? "").trim(),
+    remote_messages_url: String(draft.notifier_remote_messages_url ?? "").trim(),
+    remote_ack_url: String(draft.notifier_remote_ack_url ?? "").trim(),
+  };
+}
+
 function draftToProfile(draft, options = {}) {
+  let request_options = parseJSONMap(draft.requestOptionsText);
+  const mergeNotifier = Boolean(options.mergeNotifier) || isNotifierRuntimeDraft(draft);
+  if (mergeNotifier) {
+    request_options = mergeNotifierRequestOptions(request_options, draft);
+  }
+  let runtime_extensions;
+  if (mergeNotifier) {
+    const nf = draftNotifierDetailsFromDraft(draft);
+    if (nf && typeof nf === "object" && Object.keys(nf).length > 0) {
+      runtime_extensions = { ...nf };
+    }
+  }
   return {
     name: options.name || draft.name || "manager",
     description: options.description || draft.description || "Manager Worker Dispatch",
@@ -5579,9 +6638,59 @@ function draftToProfile(draft, options = {}) {
     reasoning_effort: draft.reasoning_effort || "medium",
     enable_fast_mode: Boolean(draft.enable_fast_mode),
     headers: parseJSONMap(draft.headersText),
-    request_options: parseJSONMap(draft.requestOptionsText),
+    request_options,
+    runtime_extensions,
     env: envRowsToMap(draft.envRows),
   };
+}
+
+function notifierFormIsComplete(draft, item) {
+  const hasItem = item != null && typeof item === "object";
+  const isNotifier = hasItem ? isNotifierRuntimeDraftOnAgentPage(draft, item) : isNotifierRuntimeDraft(draft);
+  if (!draft || !isNotifier) {
+    return true;
+  }
+  if (Boolean(draft.notifier_delivery_complete) || Boolean(draft.notifier_webhook_token_set) || Boolean(draft.notifier_remote_token_set)) {
+    return true;
+  }
+  const draftAsProfile = {
+    request_options: {
+      notifier: {
+        delivery_mode: draft.notifier_delivery_mode,
+        webhook_token: draft.notifier_webhook_token,
+        remote_url: draft.notifier_remote_url,
+        remote_token: draft.notifier_remote_token,
+      },
+    },
+  };
+  if (notifierDeliveryConfiguredInProfile(draftAsProfile)) {
+    return true;
+  }
+  if (hasItem && notifierDeliveryConfiguredInProfile(item.agent_profile, item)) {
+    return true;
+  }
+  const rxTop = item?.runtime_extensions;
+  const rxProf = item?.agent_profile?.runtime_extensions;
+  const rx =
+    rxTop && typeof rxTop === "object" && !Array.isArray(rxTop) && rxTop.notifier_profile && typeof rxTop.notifier_profile === "object"
+      ? rxTop.notifier_profile
+      : rxProf && typeof rxProf === "object" && !Array.isArray(rxProf) && rxProf.notifier_profile && typeof rxProf.notifier_profile === "object"
+        ? rxProf.notifier_profile
+        : null;
+  const legacyNp = item?.agent_profile?.notifier_profile;
+  const np =
+    rx && typeof rx === "object"
+      ? rx
+      : legacyNp && typeof legacyNp === "object" && !Array.isArray(legacyNp)
+        ? legacyNp
+        : null;
+  if (hasItem && Boolean(np?.webhook_token_set)) {
+    return true;
+  }
+  if (hasItem && Boolean(np?.remote_token_set)) {
+    return true;
+  }
+  return false;
 }
 
 function mapToEnvRows(value) {
@@ -5621,6 +6730,10 @@ function isAgentRunning(item) {
 }
 
 function isAgentIncomplete(item) {
+  const draft = agentToDraft(item);
+  if (isNotifierRuntimeDraftOnAgentPage(draft, item)) {
+    return !notifierFormIsComplete(draft, item);
+  }
   return item?.profile_complete === false || item?.agent_profile?.profile_complete === false;
 }
 
@@ -5736,15 +6849,34 @@ function AgentCreateProgress({ progress, t }) {
 
 function normalizeRuntimeKind(kind) {
   const value = String(kind ?? "").trim().toLowerCase();
+  if (value === "") {
+    return "";
+  }
   switch (value) {
     case "openclaw_sandbox":
       return "openclaw_sandbox";
     case "codex":
       return "codex";
+    case "notifier":
+      return "notifier";
     case "picoclaw_sandbox":
-    default:
       return "picoclaw_sandbox";
+    default:
+      return value;
   }
+}
+
+function isNotifierRuntimeDraft(draft) {
+  return normalizeRuntimeKind(draft?.runtime_kind) === "notifier";
+}
+
+function effectiveAgentRuntimeKind(draft, item) {
+  return normalizeRuntimeKind(draft?.runtime_kind || item?.runtime_kind || "");
+}
+
+/** Align with read-only runtime field (`draft.runtime_kind || item.runtime_kind`) on agent detail. */
+function isNotifierRuntimeDraftOnAgentPage(draft, item) {
+  return effectiveAgentRuntimeKind(draft, item) === "notifier";
 }
 
 function normalizeRuntimeImageMap(value) {
@@ -5763,8 +6895,11 @@ function normalizeRuntimeImageMap(value) {
 }
 
 function runtimeImageForKind(kind, bootstrapConfig, fallbackImage = "") {
-  const runtimeKind = normalizeRuntimeKind(kind);
-  if (runtimeKind === "codex") {
+  let runtimeKind = normalizeRuntimeKind(kind);
+  if (!runtimeKind) {
+    runtimeKind = "picoclaw_sandbox";
+  }
+  if (runtimeKind === "codex" || runtimeKind === "notifier") {
     return "";
   }
   const images = normalizeRuntimeImageMap(bootstrapConfig?.runtime_default_images);
@@ -5788,7 +6923,13 @@ function availableManagerRuntimeOptions(bootstrapConfig) {
 }
 
 function agentCreateProgressSteps(runtimeKind) {
-  const kind = normalizeRuntimeKind(runtimeKind);
+  const kind = normalizeRuntimeKind(runtimeKind) || "picoclaw_sandbox";
+  if (kind === "notifier") {
+    return [
+      { label: "agentCreateProgressPreparing", target: 40 },
+      { label: "agentCreateProgressFinishing", target: 96 },
+    ];
+  }
   if (kind === "openclaw_sandbox" || kind === "picoclaw_sandbox") {
     return [
       { label: "agentCreateProgressSandboxConfig", target: 16 },
@@ -5834,14 +6975,21 @@ function advanceAgentProgress(current) {
 }
 
 function formatRuntimeKindLabel(kind, t) {
-  switch (normalizeRuntimeKind(kind)) {
+  const k = normalizeRuntimeKind(kind);
+  if (!k) {
+    return t("runtimePicoclaw");
+  }
+  switch (k) {
     case "openclaw_sandbox":
       return t("runtimeOpenclaw");
     case "codex":
       return "Codex";
+    case "notifier":
+      return "notifier";
     case "picoclaw_sandbox":
-    default:
       return t("runtimePicoclaw");
+    default:
+      return k;
   }
 }
 
@@ -6290,21 +7438,15 @@ function parseStructuredMessage(content) {
 
   const fencedJSON = cleaned.match(/^```(?:json|javascript|js)?\s*([\s\S]+?)\s*```$/i);
   const rawJSON = fencedJSON ? fencedJSON[1].trim() : cleaned;
-  const parsed = tryParseJSON(rawJSON);
-  if (parsed && isActionCardPayload(parsed)) {
-    return buildActionCardPayload(parsed);
-  }
-  if (parsed && isStructuredPayload(parsed)) {
-    return buildStructuredPayload(parsed);
+  const fromPrimary = structuredPayloadFromParsed(tryParseJSON(rawJSON));
+  if (fromPrimary) {
+    return fromPrimary;
   }
 
   const extracted = extractTopLevelJSONObject(cleaned);
-  const extractedParsed = tryParseJSON(extracted);
-  if (extractedParsed && isActionCardPayload(extractedParsed)) {
-    return buildActionCardPayload(extractedParsed);
-  }
-  if (extractedParsed && isStructuredPayload(extractedParsed)) {
-    return buildStructuredPayload(extractedParsed);
+  const fromExtracted = structuredPayloadFromParsed(tryParseJSON(extracted));
+  if (fromExtracted) {
+    return fromExtracted;
   }
 
   const codeBlock = extractSingleLargeCodeBlock(cleaned);
@@ -6312,6 +7454,22 @@ function parseStructuredMessage(content) {
     return buildCodeBlockPayload(codeBlock);
   }
 
+  return null;
+}
+
+function structuredPayloadFromParsed(parsed) {
+  if (!parsed) {
+    return null;
+  }
+  if (isNotifyCardPayload(parsed)) {
+    return buildNotifyCardPayload(parsed);
+  }
+  if (isActionCardPayload(parsed)) {
+    return buildActionCardPayload(parsed);
+  }
+  if (isStructuredPayload(parsed)) {
+    return buildStructuredPayload(parsed);
+  }
   return null;
 }
 
@@ -6373,6 +7531,49 @@ function extractTopLevelJSONObject(input) {
   return null;
 }
 
+function isSafeHttpURL(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isNotifyCardPayload(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  return value.type === CSGCLAW_NOTIFY_CARD_TYPE;
+}
+
+function buildNotifyCardPayload(value) {
+  const meta = Array.isArray(value.meta)
+    ? value.meta
+        .filter((row) => row && typeof row === "object")
+        .map((row) => ({
+          label: String(row.label ?? "").trim(),
+          value: String(row.value ?? "").trim(),
+        }))
+        .filter((row) => row.label || row.value)
+    : [];
+  const payloadRaw = typeof value.raw === "string" ? value.raw.trim() : "";
+  const payloadSummary = payloadRaw ? "查看原始 JSON" : "";
+  return {
+    kind: "notify_card",
+    title: firstNonEmptyString(value.title, "Notification"),
+    subtitle: firstNonEmptyString(value.subtitle),
+    badge: firstNonEmptyString(value.badge),
+    summary: firstNonEmptyString(value.summary),
+    link: firstNonEmptyString(value.link),
+    meta,
+    code: "",
+    codeSummary: "",
+    payload: payloadRaw,
+    payloadSummary,
+  };
+}
+
 function isActionCardPayload(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -6406,6 +7607,9 @@ function normalizeActionCardActions(actions) {
 
 function isStructuredPayload(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  if (value.type === CSGCLAW_NOTIFY_CARD_TYPE || value.type === CSGCLAW_ACTION_CARD_TYPE) {
     return false;
   }
   const keys = Object.keys(value);
