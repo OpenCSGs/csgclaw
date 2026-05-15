@@ -87,8 +87,8 @@ func (defaultProfileExtensionsPolicy) ProfileLLMFields(_, baseURL, modelID strin
 	return baseURL, modelID
 }
 
-func (defaultProfileExtensionsPolicy) LooksLikeFlatStorageAtRoot(m map[string]any) bool {
-	return ExtensionsHaveNotifierFlatKeys(m)
+func (defaultProfileExtensionsPolicy) LooksLikeFlatStorageAtRoot(map[string]any) bool {
+	return false
 }
 
 func (defaultProfileExtensionsPolicy) ProfileComplete(isGatewayRuntime, llmComplete bool, _ map[string]any, _ string, _ map[string]any) bool {
@@ -99,11 +99,11 @@ func (defaultProfileExtensionsPolicy) ProfileComplete(isGatewayRuntime, llmCompl
 }
 
 func (defaultProfileExtensionsPolicy) RequestOptionsForAgentProfileView(_ map[string]any, requestOptions map[string]any) map[string]any {
-	return RedactedRequestOptionsForAPIView(requestOptions)
+	return redactNestedNotifierRequestOptions(requestOptions)
 }
 
 func (defaultProfileExtensionsPolicy) ViewRuntimeOptionsForAPI(agentExt map[string]any) map[string]any {
-	return MergeRuntimeOptionMapsForView(agentExt, nil)
+	return CloneAnyMap(agentExt)
 }
 
 func (defaultProfileExtensionsPolicy) MergeFlatForAgentPatch(_, _ map[string]any) map[string]any {
@@ -127,6 +127,33 @@ func (defaultProfileExtensionsPolicy) RequestOptionsWithoutNested(ro map[string]
 		return nil
 	}
 	delete(out, "notifier")
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func redactNestedNotifierRequestOptions(ro map[string]any) map[string]any {
+	if len(ro) == 0 {
+		return nil
+	}
+	out := CloneAnyMap(ro)
+	raw, ok := out["notifier"]
+	if !ok || raw == nil {
+		return out
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return out
+	}
+	nm := CloneAnyMap(m)
+	delete(nm, "webhook_token")
+	delete(nm, "remote_token")
+	if len(nm) == 0 {
+		delete(out, "notifier")
+	} else {
+		out["notifier"] = nm
+	}
 	if len(out) == 0 {
 		return nil
 	}

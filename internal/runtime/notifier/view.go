@@ -1,0 +1,94 @@
+package notifier
+
+import agentruntime "csgclaw/internal/runtime"
+
+// RuntimeOptionKeyNotifierProfile is the runtime_options key for derived notifier API summary.
+// It is merged for JSON responses and must be stripped before persisting profile or agent options.
+const RuntimeOptionKeyNotifierProfile = "notifier_profile"
+
+var viewOnlyRuntimeOptionRootKeys = []string{
+	RuntimeOptionKeyNotifierProfile,
+}
+
+// StripViewOnlyRuntimeOptionKeys removes API-only keys that must never be persisted (e.g. notifier_profile summary).
+func StripViewOnlyRuntimeOptionKeys(ext map[string]any) map[string]any {
+	if len(ext) == 0 {
+		return nil
+	}
+	needsCopy := false
+	for _, k := range viewOnlyRuntimeOptionRootKeys {
+		if _, ok := ext[k]; ok {
+			needsCopy = true
+			break
+		}
+	}
+	if !needsCopy {
+		return ext
+	}
+	out := agentruntime.CloneAnyMap(ext)
+	for _, k := range viewOnlyRuntimeOptionRootKeys {
+		delete(out, k)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// RedactDetailsForAPI returns a copy of notifier details with secret token fields removed.
+func RedactDetailsForAPI(nd map[string]any) map[string]any {
+	if len(nd) == 0 {
+		return nil
+	}
+	out := agentruntime.CloneAnyMap(nd)
+	delete(out, "webhook_token")
+	delete(out, "remote_token")
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// RedactedRequestOptionsForAPIView returns a copy of request_options safe for JSON responses:
+// nested notifier webhook_token and remote_token are removed (use runtime_options.notifier_profile for summaries).
+func RedactedRequestOptionsForAPIView(ro map[string]any) map[string]any {
+	if len(ro) == 0 {
+		return nil
+	}
+	out := agentruntime.CloneAnyMap(ro)
+	raw, ok := out["notifier"]
+	if !ok || raw == nil {
+		return out
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return out
+	}
+	nm := RedactDetailsForAPI(m)
+	if len(nm) == 0 {
+		delete(out, "notifier")
+	} else {
+		out["notifier"] = nm
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// MergeRuntimeOptionMapsForView merges agent-level and profile-level option maps for API display (agent keys win).
+func MergeRuntimeOptionMapsForView(agentExt, profileExt map[string]any) map[string]any {
+	out := agentruntime.CloneAnyMap(agentExt)
+	if len(profileExt) == 0 {
+		return out
+	}
+	if out == nil {
+		out = make(map[string]any, len(profileExt))
+	}
+	for k, v := range profileExt {
+		if _, ok := out[k]; !ok {
+			out[k] = v
+		}
+	}
+	return out
+}

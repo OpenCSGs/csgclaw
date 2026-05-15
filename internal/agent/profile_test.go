@@ -12,7 +12,6 @@ import (
 
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelprovider"
-	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/notifier"
 )
 
@@ -25,7 +24,7 @@ func notifierProfileViewMap(t *testing.T, agentExt map[string]any) map[string]an
 	if rx == nil {
 		return nil
 	}
-	raw, ok := rx[agentruntime.RuntimeOptionKeyNotifierProfile]
+	raw, ok := rx[notifier.RuntimeOptionKeyNotifierProfile]
 	if !ok || raw == nil {
 		return nil
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/notifier"
 	"csgclaw/internal/sandbox"
 )
 
@@ -278,7 +279,7 @@ func (s *Service) normalizeLoadedAgent(a Agent) Agent {
 		// Do not replace agent_profile with legacy LLM-only reconstruction when the agent already
 		// carries notifier-shaped runtime_options, or when the runtime is non-gateway (notifier
 		// workers have no LLM fields to reconstruct from legacy top-level provider/model).
-		if !agentruntime.ProfileExtensionsPolicyForKind(normalizeRuntimeKind(a.RuntimeKind)).LooksLikeFlatStorageAtRoot(a.RuntimeOptions) && isGatewayRuntimeKind(normalizeRuntimeKind(a.RuntimeKind)) {
+		if !notifier.IsNotifierFlatRoot(a.RuntimeOptions) && isGatewayRuntimeKind(normalizeRuntimeKind(a.RuntimeKind)) {
 			legacyProfile := profileFromLegacy(a.Name, a.Description, a.Provider, a.ModelID, a.ReasoningEffort)
 			if strings.TrimSpace(legacyProfile.BaseURL) == "" {
 				legacyProfile.BaseURL = s.profileDefaults.BaseURL

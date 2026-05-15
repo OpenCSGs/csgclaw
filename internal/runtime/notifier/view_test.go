@@ -1,33 +1,33 @@
-package runtime
+package notifier
 
 import "testing"
 
-func TestStripViewOnlyRuntimeOptions_nilEmpty(t *testing.T) {
+func TestStripViewOnlyRuntimeOptionKeys_nilEmpty(t *testing.T) {
 	t.Parallel()
-	if got := StripViewOnlyRuntimeOptions(nil); got != nil {
+	if got := StripViewOnlyRuntimeOptionKeys(nil); got != nil {
 		t.Fatalf("nil: got %#v, want nil", got)
 	}
-	if got := StripViewOnlyRuntimeOptions(map[string]any{}); got != nil {
+	if got := StripViewOnlyRuntimeOptionKeys(map[string]any{}); got != nil {
 		t.Fatalf("empty: got %#v, want nil", got)
 	}
 }
 
-func TestStripViewOnlyRuntimeOptions_noViewKeys(t *testing.T) {
+func TestStripViewOnlyRuntimeOptionKeys_noViewKeys(t *testing.T) {
 	t.Parallel()
 	ext := map[string]any{"delivery_mode": "webhook"}
-	got := StripViewOnlyRuntimeOptions(ext)
+	got := StripViewOnlyRuntimeOptionKeys(ext)
 	if got["delivery_mode"] != "webhook" || len(got) != 1 {
 		t.Fatalf("want delivery preserved, got %#v", got)
 	}
 }
 
-func TestStripViewOnlyRuntimeOptions_stripsNotifierProfile(t *testing.T) {
+func TestStripViewOnlyRuntimeOptionKeys_stripsNotifierProfile(t *testing.T) {
 	t.Parallel()
 	ext := map[string]any{
 		"delivery_mode":                 "webhook",
 		RuntimeOptionKeyNotifierProfile: map[string]any{"delivery_complete": true},
 	}
-	got := StripViewOnlyRuntimeOptions(ext)
+	got := StripViewOnlyRuntimeOptionKeys(ext)
 	if _, ok := got[RuntimeOptionKeyNotifierProfile]; ok {
 		t.Fatalf("notifier_profile should be removed, got %#v", got)
 	}

@@ -46,3 +46,12 @@ func TestRedactedRequestOptionsForAPIViewStripsNotifierTokens(t *testing.T) {
 		t.Fatalf("other = %v", got["other"])
 	}
 }
+
+func TestIsNotifierFlatRoot(t *testing.T) {
+	if IsNotifierFlatRoot(nil) || IsNotifierFlatRoot(map[string]any{"other": 1}) {
+		t.Fatal("want false without notifier keys")
+	}
+	if !IsNotifierFlatRoot(map[string]any{"delivery_mode": "webhook"}) {
+		t.Fatal("want true when flat notifier key present")
+	}
+}

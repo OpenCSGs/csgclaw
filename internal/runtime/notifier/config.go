@@ -1,6 +1,7 @@
 package notifier
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,6 +13,8 @@ const (
 	DeliveryRemotePull = "remote_pull"
 	DeliveryBoth       = "both"
 )
+
+const workerRole = "worker"
 
 // Config is parsed from flat notifier_details or legacy request_options["notifier"].
 type Config struct {
@@ -143,4 +146,20 @@ func (c Config) PollIntervalDuration() time.Duration {
 		return defaultPoll
 	}
 	return d
+}
+
+// SecretMatch compares secrets in constant time when lengths match (recommended: fixed-length random tokens).
+func SecretMatch(expected, got string) bool {
+	if len(expected) == 0 || len(got) == 0 {
+		return false
+	}
+	if len(expected) != len(got) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(expected), []byte(got)) == 1
+}
+
+// IsDeliveryWorker reports a worker agent that uses the in-server notifier runtime (IM delivery).
+func IsDeliveryWorker(role, runtimeKind string) bool {
+	return strings.EqualFold(strings.TrimSpace(role), workerRole) && MatchesNotifierRuntimeKind(runtimeKind)
 }

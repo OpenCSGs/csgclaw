@@ -11,6 +11,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
+	agentruntime "csgclaw/internal/runtime"
 )
 
 type Service struct {
@@ -317,7 +318,7 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 			Role:           agent.RoleWorker,
 			ModelID:        normalized.ModelID,
 			RuntimeKind:    normalized.RuntimeKind,
-			RuntimeOptions: cloneRuntimeOptionsMapForBot(normalized.RuntimeOptions),
+			RuntimeOptions: agentruntime.CloneAnyMap(normalized.RuntimeOptions),
 			AgentProfile:   agentProfileFromBotRequest(normalized.AgentProfile),
 		})
 		if err != nil {
@@ -379,25 +380,6 @@ func agentProfileFromBotRequest(req apitypes.CreateAgentProfile) agent.AgentProf
 		Env:             req.Env,
 		ProfileComplete: req.ProfileComplete,
 	}
-}
-
-func cloneRuntimeOptionsMapForBot(m map[string]any) map[string]any {
-	if len(m) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(m))
-	for k, v := range m {
-		if sm, ok := v.(map[string]any); ok {
-			c := make(map[string]any, len(sm))
-			for ik, iv := range sm {
-				c[ik] = iv
-			}
-			out[k] = c
-		} else {
-			out[k] = v
-		}
-	}
-	return out
 }
 
 func (s *Service) createManager(ctx context.Context, normalized CreateRequest, forceRecreateAgent bool) (Bot, error) {

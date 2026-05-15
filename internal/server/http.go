@@ -14,7 +14,6 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
-	runtimenotifier "csgclaw/internal/runtime/notifier"
 	"csgclaw/internal/upgrade"
 )
 
@@ -34,20 +33,28 @@ type Options struct {
 	NoAuth      bool
 	Context     context.Context
 	OnReady     func()
-	// NotifierBackground starts notifier-specific background work after the API handler is wired.
-	// The implementation should block until ctx is cancelled; Run invokes it in its own goroutine.
-	NotifierBackground func(ctx context.Context, svc *agent.Service, deliver runtimenotifier.Fanouter)
+	// Handler is the API handler to serve. When nil, NewHandler builds one from the other fields.
+	Handler *api.Handler
+}
+
+// NewHandler wires the HTTP API from server options (shared by Run and composition-layer background work).
+func NewHandler(opts Options) *api.Handler {
+	handler := api.NewHandlerWithBotAndAuth(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.BotBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
+	handler.SetHubService(opts.Hub)
+	handler.SetUpgradeManager(opts.Upgrade)
+	handler.SetUpgradeConfigPath(opts.ConfigPath)
+	handler.SetConfigPath(opts.ConfigPath)
+	return handler
 }
 
 func Run(opts Options) error {
 	if opts.Context == nil {
 		opts.Context = context.Background()
 	}
-	handler := api.NewHandlerWithBotAndAuth(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.BotBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
-	handler.SetHubService(opts.Hub)
-	handler.SetUpgradeManager(opts.Upgrade)
-	handler.SetUpgradeConfigPath(opts.ConfigPath)
-	handler.SetConfigPath(opts.ConfigPath)
+	handler := opts.Handler
+	if handler == nil {
+		handler = NewHandler(opts)
+	}
 	mux := handler.Routes()
 	mux.Handle("/", uiHandler())
 
@@ -55,10 +62,6 @@ func Run(opts Options) error {
 		Addr:              opts.ListenAddr,
 		Handler:           accessLog(slog.Default(), mux),
 		ReadHeaderTimeout: 5 * time.Second,
-	}
-
-	if opts.Service != nil && opts.NotifierBackground != nil && handler != nil {
-		go opts.NotifierBackground(opts.Context, opts.Service, handler)
 	}
 
 	if opts.IMBus != nil && opts.BotBridge != nil {
