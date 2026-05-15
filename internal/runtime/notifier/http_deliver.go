@@ -11,49 +11,40 @@ import (
 
 const maxNotifierWebhookBody = 4 << 20
 
-// IMFanoutBridge posts notifier chat content into IM rooms and publishes message-created events.
-// Implemented by the HTTP layer (e.g. api.Handler) so notifier stays free of internal/im imports.
-type IMFanoutBridge interface {
-	RoomIDsForMember(memberID string) []string
-	CreateMessage(req apitypes.CreateMessageRequest) (apitypes.Message, error)
-	User(userID string) (apitypes.User, bool)
-	PublishMessageCreated(roomID, senderID string, msg apitypes.Message, sender apitypes.User)
+// RoomMessenger delivers notifier chat content to IM rooms (typically via POST /api/v1/messages).
+type RoomMessenger interface {
+	RoomIDsForAgent(agentID string) []string
+	PostMessage(req apitypes.CreateMessageRequest) error
 }
 
 // DeliverNotifierFanout posts notifier chat content to every IM room that includes the agent as a member.
-func DeliverNotifierFanout(agentID, content string, bridge IMFanoutBridge) error {
+func DeliverNotifierFanout(agentID, content string, m RoomMessenger) error {
 	agentID = strings.TrimSpace(agentID)
-	if bridge == nil {
+	if m == nil {
 		return nil
 	}
-	roomIDs := bridge.RoomIDsForMember(agentID)
+	roomIDs := m.RoomIDsForAgent(agentID)
 	var lastErr error
 	for _, rid := range roomIDs {
-		msg, err := bridge.CreateMessage(apitypes.CreateMessageRequest{
+		if err := m.PostMessage(apitypes.CreateMessageRequest{
 			RoomID:   rid,
 			SenderID: agentID,
 			Content:  content,
-		})
-		if err != nil {
+		}); err != nil {
 			lastErr = err
-			continue
-		}
-		sender, ok := bridge.User(agentID)
-		if ok {
-			bridge.PublishMessageCreated(rid, agentID, msg, sender)
 		}
 	}
 	return lastErr
 }
 
-// WebhookHTTPDeps supplies agent lookup and IM fanout for ServeAgentWebhook / ServeNotifyHTTP.
-// When Reload or LookupNotifierAgent is nil, requests fail with 503. When Fanout is nil after auth,
-// ServeAgentWebhook fails with 503 (IM not configured for delivery).
+// WebhookHTTPDeps supplies agent lookup and room delivery for ServeAgentWebhook / ServeNotifyHTTP.
+// When Reload or LookupNotifierAgent is nil, requests fail with 503. When Deliver is nil after auth,
+// ServeAgentWebhook fails with 503 (delivery not configured).
 type WebhookHTTPDeps struct {
 	Reload func() error
 	// LookupNotifierAgent returns runtime_options and agent fields needed for webhook auth.
 	LookupNotifierAgent func(agentID string) (ext map[string]any, role, runtimeKind, status string, ok bool)
-	Fanout              IMFanoutBridge
+	Deliver             RoomMessenger
 }
 
 // BearerTokenFromRequest returns the bearer value from Authorization, or empty when absent.
@@ -120,7 +111,7 @@ func ServeAgentWebhook(w http.ResponseWriter, r *http.Request, agentID string, d
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if deps.Fanout == nil {
+	if deps.Deliver == nil {
 		http.Error(w, "service not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -132,7 +123,7 @@ func ServeAgentWebhook(w http.ResponseWriter, r *http.Request, agentID string, d
 	}
 	ct := r.Header.Get("Content-Type")
 	content := FormatPayloadAsChatContent(body, ct, r.Header)
-	if err := DeliverNotifierFanout(agentID, content, deps.Fanout); err != nil {
+	if err := DeliverNotifierFanout(agentID, content, deps.Deliver); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

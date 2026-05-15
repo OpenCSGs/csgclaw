@@ -6,30 +6,8 @@ import (
 	runtimenotifier "csgclaw/internal/runtime/notifier"
 )
 
-// notifyWebhookDeps wires the HTTP API handler into notifier webhook delivery. It stays in this
-// package (not in internal/runtime/notifier) to avoid an import cycle: deps need *Handler.svc / im.
-func notifyWebhookDeps(h *Handler) runtimenotifier.WebhookHTTPDeps {
-	var reload func() error
-	var lookup func(string) (map[string]any, string, string, string, bool)
-	if h.svc != nil {
-		reload = h.svc.Reload
-		lookup = func(id string) (map[string]any, string, string, string, bool) {
-			a, ok := h.svc.Agent(id)
-			if !ok {
-				return nil, "", "", "", false
-			}
-			return a.RuntimeOptions, a.Role, a.RuntimeKind, a.Status, true
-		}
-	}
-	return runtimenotifier.WebhookHTTPDeps{
-		Reload:              reload,
-		LookupNotifierAgent: lookup,
-		Fanout:              h.notifierFanoutBridge(),
-	}
-}
-
 func (h *Handler) handleNotifyHTTP(w http.ResponseWriter, r *http.Request) {
-	runtimenotifier.ServeNotifyHTTP(w, r, notifyWebhookDeps(h))
+	runtimenotifier.ServeNotifyHTTP(w, r, h.notifierWebhook)
 }
 
 func (h *Handler) Routes() *http.ServeMux {

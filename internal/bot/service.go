@@ -11,7 +11,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
-	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/utils"
 )
 
 type Service struct {
@@ -318,7 +318,7 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 			Role:           agent.RoleWorker,
 			ModelID:        normalized.ModelID,
 			RuntimeKind:    normalized.RuntimeKind,
-			RuntimeOptions: agentruntime.CloneAnyMap(normalized.RuntimeOptions),
+			RuntimeOptions: utils.CloneAnyMap(normalized.RuntimeOptions),
 			AgentProfile:   agentProfileFromBotRequest(normalized.AgentProfile),
 		})
 		if err != nil {

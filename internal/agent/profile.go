@@ -113,16 +113,13 @@ func normalizeProfile(profile AgentProfile, fallbackName, fallbackDescription st
 	return out
 }
 
-// normalizeProfileForAgentRuntime applies profile normalization, then sets ProfileComplete using
-// runtime.ProfileCompleteFromAgentExtensions (gateway vs notifier vs other runtimes).
-// notifierFlat may be nil: completeness then uses ProfileExtensionsPolicyForKind(...).FlatFromExtensionsMap(agentRuntimeExt) when mergedFlat is empty.
-func normalizeProfileForAgentRuntime(profile AgentProfile, agentRuntimeExt map[string]any, fallbackName, fallbackDescription, runtimeKind string, notifierFlat map[string]any) AgentProfile {
+// normalizeProfileForAgentRuntime applies profile normalization; ProfileComplete is decided by the runtime_kind policy.
+func normalizeProfileForAgentRuntime(profile AgentProfile, runtimeOptions map[string]any, fallbackName, fallbackDescription, runtimeKind string, runtimeOptionsAfterPatch map[string]any) AgentProfile {
 	out := normalizeProfile(profile, fallbackName, fallbackDescription)
-	llmComplete := profileIsComplete(out)
-	rk := normalizeRuntimeKind(runtimeKind)
-	pol := agentruntime.ProfileExtensionsPolicyForKind(agentruntime.NormalizeRuntimeKind(rk))
-	out.ProfileComplete = pol.ProfileComplete(isGatewayRuntimeKind(rk), llmComplete, agentRuntimeExt, rk, notifierFlat)
-	out.BaseURL, out.ModelID = pol.ProfileLLMFields(rk, out.BaseURL, out.ModelID)
+	rk := agentruntime.NormalizeRuntimeKind(normalizeRuntimeKind(runtimeKind))
+	pol := agentruntime.RuntimeOptionsPolicyForKind(rk)
+	out.ProfileComplete = pol.IsComplete(profileIsComplete(out), runtimeOptions, runtimeOptionsAfterPatch)
+	out.BaseURL, out.ModelID = pol.StripProfileLLMFields(rk, out.BaseURL, out.ModelID)
 	return out
 }
 
@@ -216,7 +213,7 @@ func cloneProfile(profile AgentProfile) AgentProfile {
 
 func profileViewWithAgentExtensions(profile AgentProfile, agentExt map[string]any, runtimeKind string, detection []ProfileDetectionResult) AgentProfileView {
 	profile = cloneProfile(profile)
-	pol := agentruntime.ProfileExtensionsPolicyForKind(agentruntime.NormalizeRuntimeKind(runtimeKind))
+	pol := agentruntime.RuntimeOptionsPolicyForKind(agentruntime.NormalizeRuntimeKind(runtimeKind))
 	ro := pol.RequestOptionsForAgentProfileView(agentExt, profile.RequestOptions)
 	v := AgentProfileView{
 		Name:               profile.Name,

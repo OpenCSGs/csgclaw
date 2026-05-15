@@ -1,6 +1,6 @@
 package notifier
 
-import agentruntime "csgclaw/internal/runtime"
+import "csgclaw/internal/utils"
 
 // RuntimeOptionKeyNotifierProfile is the runtime_options key for derived notifier API summary.
 // It is merged for JSON responses and must be stripped before persisting profile or agent options.
@@ -25,7 +25,7 @@ func StripViewOnlyRuntimeOptionKeys(ext map[string]any) map[string]any {
 	if !needsCopy {
 		return ext
 	}
-	out := agentruntime.CloneAnyMap(ext)
+	out := utils.CloneAnyMap(ext)
 	for _, k := range viewOnlyRuntimeOptionRootKeys {
 		delete(out, k)
 	}
@@ -40,7 +40,7 @@ func RedactDetailsForAPI(nd map[string]any) map[string]any {
 	if len(nd) == 0 {
 		return nil
 	}
-	out := agentruntime.CloneAnyMap(nd)
+	out := utils.CloneAnyMap(nd)
 	delete(out, "webhook_token")
 	delete(out, "remote_token")
 	if len(out) == 0 {
@@ -55,7 +55,7 @@ func RedactedRequestOptionsForAPIView(ro map[string]any) map[string]any {
 	if len(ro) == 0 {
 		return nil
 	}
-	out := agentruntime.CloneAnyMap(ro)
+	out := utils.CloneAnyMap(ro)
 	raw, ok := out["notifier"]
 	if !ok || raw == nil {
 		return out
@@ -78,7 +78,7 @@ func RedactedRequestOptionsForAPIView(ro map[string]any) map[string]any {
 
 // MergeRuntimeOptionMapsForView merges agent-level and profile-level option maps for API display (agent keys win).
 func MergeRuntimeOptionMapsForView(agentExt, profileExt map[string]any) map[string]any {
-	out := agentruntime.CloneAnyMap(agentExt)
+	out := utils.CloneAnyMap(agentExt)
 	if len(profileExt) == 0 {
 		return out
 	}

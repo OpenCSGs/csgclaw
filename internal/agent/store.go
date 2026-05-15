@@ -10,6 +10,7 @@ import (
 
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/notifier"
+	"csgclaw/internal/utils"
 	"csgclaw/internal/sandbox"
 )
 
@@ -63,19 +64,16 @@ func newPersistedAgent(a Agent) persistedAgent {
 	if strings.TrimSpace(ap.Description) == strings.TrimSpace(a.Description) {
 		ap.Description = ""
 	}
-	pol := agentruntime.ProfileExtensionsPolicyForKind(normalizeRuntimeKind(a.RuntimeKind))
-	nd := pol.FlatFromExtensionsMap(a.RuntimeOptions)
+	pol := agentruntime.RuntimeOptionsPolicyForKind(normalizeRuntimeKind(a.RuntimeKind))
 	var topRX map[string]any
-	if len(nd) > 0 {
-		topRX = agentruntime.CloneAnyMap(nd)
-		pol.StripNestedFromRequestOptions(ap.RequestOptions)
-		if len(ap.RequestOptions) == 0 {
-			ap.RequestOptions = nil
-		}
-	} else if len(a.RuntimeOptions) > 0 {
-		topRX = agentruntime.CloneAnyMap(a.RuntimeOptions)
+	if len(a.RuntimeOptions) > 0 {
+		topRX = utils.CloneAnyMap(a.RuntimeOptions)
 	}
-	ap.BaseURL, ap.ModelID = pol.ProfileLLMFields(a.RuntimeKind, ap.BaseURL, ap.ModelID)
+	pol.StripNestedFromRequestOptions(ap.RequestOptions)
+	if len(ap.RequestOptions) == 0 {
+		ap.RequestOptions = nil
+	}
+	ap.BaseURL, ap.ModelID = pol.StripProfileLLMFields(a.RuntimeKind, ap.BaseURL, ap.ModelID)
 	return persistedAgent{
 		ID:               a.ID,
 		Name:             a.Name,
@@ -100,7 +98,7 @@ func newPersistedAgent(a Agent) persistedAgent {
 
 func (a persistedAgent) toAgent() Agent {
 	ap := cloneProfile(a.AgentProfile)
-	rx := agentruntime.CloneAnyMap(a.RuntimeOptions)
+	rx := utils.CloneAnyMap(a.RuntimeOptions)
 	if strings.TrimSpace(ap.Name) == "" {
 		ap.Name = a.Name
 	}

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/utils"
 )
 
 // RuntimeOptionKeyNotifier names the legacy nested bucket under runtime_options; it is
@@ -24,7 +25,7 @@ func SubExtensionMap(extensions map[string]any, key string) map[string]any {
 	if !ok || len(m) == 0 {
 		return nil
 	}
-	return agentruntime.CloneAnyMap(m)
+	return utils.CloneAnyMap(m)
 }
 
 // NotifierFlatFromProfile reads notifier flat from a runtime_options map (e.g. create payload before agent exists).
@@ -39,14 +40,14 @@ func ConfigFromNotifierProfile(extensions map[string]any) Config {
 
 // WithRuntimeOption returns a copy of extensions with key set to flat (or deleted when flat is empty).
 func WithRuntimeOption(extensions map[string]any, key string, flat map[string]any) map[string]any {
-	out := agentruntime.CloneAnyMap(extensions)
+	out := utils.CloneAnyMap(extensions)
 	if out == nil {
 		out = make(map[string]any)
 	}
 	if len(flat) == 0 {
 		delete(out, key)
 	} else {
-		out[key] = agentruntime.CloneAnyMap(flat)
+		out[key] = utils.CloneAnyMap(flat)
 	}
 	if len(out) == 0 {
 		return nil
@@ -64,7 +65,7 @@ func RedactRuntimeOptionsForAPI(extensions map[string]any) map[string]any {
 	if len(extensions) == 0 {
 		return nil
 	}
-	out := agentruntime.CloneAnyMap(extensions)
+	out := utils.CloneAnyMap(extensions)
 	if out == nil {
 		return nil
 	}
@@ -91,19 +92,19 @@ func MatchesNotifierRuntimeKind(kind string) bool {
 	return strings.EqualFold(strings.TrimSpace(kind), agentruntime.KindNotifier)
 }
 
-// ProfileLLMEndpointFieldsForRuntime returns baseURL and modelID unchanged except for the in-server notifier worker runtime,
+// StripProfileLLMFieldsForRuntime returns baseURL and modelID unchanged except for the in-server notifier worker runtime,
 // which does not use LLM gateway fields; those must not be persisted on notifier agents.
-func ProfileLLMEndpointFieldsForRuntime(runtimeKind, baseURL, modelID string) (string, string) {
+func StripProfileLLMFieldsForRuntime(runtimeKind, baseURL, modelID string) (string, string) {
 	if MatchesNotifierRuntimeKind(runtimeKind) {
 		return "", ""
 	}
 	return baseURL, modelID
 }
 
-// MergeFlatForProfilePatch merges patch profile runtime_options onto a base options map (no agent-level storage yet).
-func MergeFlatForProfilePatch(baseProfileExtensions, patchProfileExtensions map[string]any) map[string]any {
-	base := NotifierFlatFromRuntimeOptionsMap(baseProfileExtensions)
-	incoming := NotifierFlatFromRuntimeOptionsMap(patchProfileExtensions)
+// MergeFlatRuntimeOptionsForProfilePatch merges patch profile runtime_options onto a base options map (no agent-level storage yet).
+func MergeFlatRuntimeOptionsForProfilePatch(baseRuntimeOptions, patchRuntimeOptions map[string]any) map[string]any {
+	base := NotifierFlatFromRuntimeOptionsMap(baseRuntimeOptions)
+	incoming := NotifierFlatFromRuntimeOptionsMap(patchRuntimeOptions)
 	return MergeNotifierFlatPatch(base, incoming)
 }
 
@@ -115,7 +116,7 @@ func PersistNotifierFlatToProfile(extensions, requestOptions, mergedFlat map[str
 
 // RequestOptionsWithoutNestedNotifier returns a copy of ro with request_options["notifier"] removed.
 func RequestOptionsWithoutNestedNotifier(ro map[string]any) map[string]any {
-	out := agentruntime.CloneAnyMap(ro)
+	out := utils.CloneAnyMap(ro)
 	if out == nil {
 		return nil
 	}
@@ -124,30 +125,6 @@ func RequestOptionsWithoutNestedNotifier(ro map[string]any) map[string]any {
 		return nil
 	}
 	return out
-}
-
-// ProfileCompleteForAgentRuntime reports whether a profile is complete for the agent's runtime class.
-// Gateway sandboxes require LLM fields; notifier workers require delivery configuration;
-// other non-gateway runtimes accept either LLM or notifier delivery completeness.
-func ProfileCompleteForAgentRuntime(isGatewayRuntime, llmComplete bool, flat map[string]any, runtimeKind string) bool {
-	deliveryComplete := ProfileDeliveryComplete(flat)
-	if isGatewayRuntime {
-		return llmComplete
-	}
-	if MatchesNotifierRuntimeKind(runtimeKind) {
-		return deliveryComplete
-	}
-	return deliveryComplete || llmComplete
-}
-
-// ProfileCompleteFromAgentExtensions resolves notifier flat from agent-level runtime_options
-// (or uses mergedFlat when non-empty, e.g. from MergeFlatForAgentPatch), then applies ProfileCompleteForAgentRuntime.
-func ProfileCompleteFromAgentExtensions(isGatewayRuntime, llmComplete bool, agentExt map[string]any, runtimeKind string, mergedFlat map[string]any) bool {
-	flat := mergedFlat
-	if len(flat) == 0 {
-		flat = NotifierFlatFromAgentStorage(agentExt)
-	}
-	return ProfileCompleteForAgentRuntime(isGatewayRuntime, llmComplete, flat, runtimeKind)
 }
 
 // ProfileDeliveryComplete reports whether notifier delivery is sufficiently configured from flat runtime storage.
@@ -249,7 +226,7 @@ func ViewRuntimeOptionsForAPIUnified(agentExt, profileExt map[string]any) map[st
 		}
 		return base
 	}
-	out := agentruntime.CloneAnyMap(base)
+	out := utils.CloneAnyMap(base)
 	if out == nil {
 		out = make(map[string]any)
 	}

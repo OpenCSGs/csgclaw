@@ -32,13 +32,10 @@ type Options struct {
 	AccessToken string
 	NoAuth      bool
 	Context     context.Context
-	OnReady     func()
-	// Handler is the API handler to serve. When nil, NewHandler builds one from the other fields.
-	Handler *api.Handler
+	OnReady     func(h *api.Handler)
 }
 
-// NewHandler wires the HTTP API from server options (shared by Run and composition-layer background work).
-func NewHandler(opts Options) *api.Handler {
+func newHandler(opts Options) *api.Handler {
 	handler := api.NewHandlerWithBotAndAuth(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.BotBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
 	handler.SetHubService(opts.Hub)
 	handler.SetUpgradeManager(opts.Upgrade)
@@ -51,10 +48,7 @@ func Run(opts Options) error {
 	if opts.Context == nil {
 		opts.Context = context.Background()
 	}
-	handler := opts.Handler
-	if handler == nil {
-		handler = NewHandler(opts)
-	}
+	handler := newHandler(opts)
 	mux := handler.Routes()
 	mux.Handle("/", uiHandler())
 
@@ -100,7 +94,7 @@ func Run(opts Options) error {
 		return err
 	}
 	if opts.OnReady != nil {
-		go opts.OnReady()
+		go opts.OnReady(handler)
 	}
 
 	if err := httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {

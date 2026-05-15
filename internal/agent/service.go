@@ -20,6 +20,7 @@ import (
 	"csgclaw/internal/hub"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
+	"csgclaw/internal/utils"
 )
 
 const (
@@ -1081,7 +1082,7 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 		CreatedAt:      existing.CreatedAt,
 		Profile:        existing.Profile,
 		ModelID:        existing.ModelID,
-		RuntimeOptions: agentruntime.CloneAnyMap(existing.RuntimeOptions),
+		RuntimeOptions: utils.CloneAnyMap(existing.RuntimeOptions),
 		AgentProfile:   cloneProfile(existing.AgentProfile),
 	}
 	for _, field := range fieldMask {
@@ -1117,7 +1118,7 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 			merged.Profile = ""
 			merged.ModelID = ""
 		case "runtime_options":
-			merged.RuntimeOptions = agentruntime.CloneAnyMap(next.RuntimeOptions)
+			merged.RuntimeOptions = utils.CloneAnyMap(next.RuntimeOptions)
 		default:
 			return CreateAgentSpec{}, fmt.Errorf("unsupported agent field mask path %q", field)
 		}
@@ -1658,11 +1659,9 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 		role = RoleWorker
 	}
 	prof := cloneProfile(profile)
-	pol := agentruntime.ProfileExtensionsPolicyForKind(agentruntime.NormalizeRuntimeKind(runtimeKind))
-	rx := pol.FlatFromExtensionsMap(createRuntimeExt)
 	var agentRX map[string]any
-	if len(rx) > 0 {
-		agentRX = agentruntime.CloneAnyMap(rx)
+	if len(createRuntimeExt) > 0 {
+		agentRX = utils.CloneAnyMap(createRuntimeExt)
 	}
 	worker := Agent{
 		ID:              id,

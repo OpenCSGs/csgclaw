@@ -1,4 +1,4 @@
-package runtime
+package utils
 
 // CloneAnyMap returns a shallow copy of src, or nil if src is nil or has no entries.
 func CloneAnyMap(src map[string]any) map[string]any {

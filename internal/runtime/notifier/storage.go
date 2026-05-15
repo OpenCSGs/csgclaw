@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/utils"
 )
 
 // NotifierStorageKeys lists flat keys for notifier delivery on runtime_options.
@@ -45,7 +45,7 @@ func NestedMapFromRequestOptions(ro map[string]any) map[string]any {
 	if !ok || m == nil {
 		return nil
 	}
-	return agentruntime.CloneAnyMap(m)
+	return utils.CloneAnyMap(m)
 }
 
 // StripNestedNotifier deletes request_options["notifier"] in place.
@@ -66,9 +66,9 @@ func ConfigFromStored(storedFlat map[string]any) Config {
 
 func MergeDetailMaps(base, overlay map[string]any) map[string]any {
 	if len(overlay) == 0 {
-		return agentruntime.CloneAnyMap(base)
+		return utils.CloneAnyMap(base)
 	}
-	out := agentruntime.CloneAnyMap(base)
+	out := utils.CloneAnyMap(base)
 	if out == nil {
 		out = make(map[string]any, len(overlay))
 	}
@@ -101,9 +101,9 @@ var notifierPatchSkipEmptyIncomingKeys = map[string]struct{}{
 // Empty values in incoming for certain keys (secrets and optional relay URLs) do not clear existing base values.
 func MergeNotifierFlatPatch(base, incoming map[string]any) map[string]any {
 	if len(incoming) == 0 {
-		return agentruntime.CloneAnyMap(base)
+		return utils.CloneAnyMap(base)
 	}
-	out := agentruntime.CloneAnyMap(base)
+	out := utils.CloneAnyMap(base)
 	if out == nil {
 		out = make(map[string]any, len(incoming))
 	}
@@ -149,7 +149,7 @@ func ProfileRuntimeOptionsWithoutNotifierPayload(ext map[string]any) map[string]
 	if len(ext) == 0 {
 		return nil
 	}
-	out := agentruntime.CloneAnyMap(ext)
+	out := utils.CloneAnyMap(ext)
 	StripNotifierKeysFromRootMap(out)
 	if len(out) == 0 {
 		return nil
@@ -170,7 +170,7 @@ func NotifierFlatFromRuntimeOptionsMap(ext map[string]any) map[string]any {
 		return nil
 	}
 	if flat := copyNotifierKeysFromMap(ext); len(flat) > 0 {
-		return agentruntime.CloneAnyMap(flat)
+		return utils.CloneAnyMap(flat)
 	}
 	return nil
 }
@@ -186,8 +186,8 @@ func MergeFlatForAgentPatch(agentExt, patchProfileRuntimeExt map[string]any) map
 }
 
 func mergeFlatForAgentPatch(agentExt, patchProfileRuntimeExt map[string]any) map[string]any {
-	base := NotifierFlatFromAgentStorage(agentExt)
-	incoming := NotifierFlatFromRuntimeOptionsMap(patchProfileRuntimeExt)
+	base := utils.CloneAnyMap(agentExt)
+	incoming := StripViewOnlyRuntimeOptionKeys(patchProfileRuntimeExt)
 	return MergeNotifierFlatPatch(base, incoming)
 }
 
@@ -202,31 +202,28 @@ func applyNotifierFlatPersistence(agentRE *map[string]any, profileRE, profileRO 
 	if len(mergedFlat) == 0 {
 		return profileRE, profileRO
 	}
-	flat := agentruntime.CloneAnyMap(mergedFlat)
+	flat := utils.CloneAnyMap(mergedFlat)
 	flat = EnsurePullRemoteSubscriptionInNotifierDetails(flat)
-	nextRO := agentruntime.CloneAnyMap(profileRO)
+	nextRO := utils.CloneAnyMap(profileRO)
 	StripNestedNotifier(nextRO)
 	if len(nextRO) == 0 {
 		nextRO = nil
 	}
 	if agentRE != nil {
-		base := agentruntime.CloneAnyMap(*agentRE)
+		base := utils.CloneAnyMap(*agentRE)
 		if base == nil {
 			base = make(map[string]any)
 		}
 		StripNotifierKeysFromRootMap(base)
-		for k, v := range flat {
-			if _, ok := notifierStorageKeySet[k]; ok {
-				base[k] = v
-			}
+		merged := MergeNotifierFlatPatch(base, flat)
+		if len(merged) == 0 {
+			*agentRE = nil
+		} else {
+			*agentRE = merged
 		}
-		if len(base) == 0 {
-			base = nil
-		}
-		*agentRE = base
 		return ProfileRuntimeOptionsWithoutNotifierPayload(profileRE), nextRO
 	}
-	base := agentruntime.CloneAnyMap(profileRE)
+	base := utils.CloneAnyMap(profileRE)
 	StripNotifierKeysFromRootMap(base)
 	for k, v := range flat {
 		if _, ok := notifierStorageKeySet[k]; ok {

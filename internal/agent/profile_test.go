@@ -143,7 +143,7 @@ func TestProfileDefaultsPersistAfterProfileUpdate(t *testing.T) {
 		Provider:        ProviderCSGHubLite,
 		ModelID:         "qwen-default",
 		ReasoningEffort: "medium",
-	}, nil); err != nil {
+	}); err != nil {
 		t.Fatalf("UpdateAgentProfile() error = %v", err)
 	}
 	data, err := os.ReadFile(statePath)

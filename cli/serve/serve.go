@@ -23,6 +23,7 @@ import (
 
 	"csgclaw/cli/command"
 	"csgclaw/internal/agent"
+	"csgclaw/internal/api"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/bot"
@@ -464,7 +465,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
-	serverOpts := server.Options{
+	return RunServer(server.Options{
 		ListenAddr:  cfg.Server.ListenAddr,
 		Service:     svc,
 		Hub:         hubSvc,
@@ -479,36 +480,33 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		AccessToken: cfg.Server.AccessToken,
 		NoAuth:      cfg.Server.NoAuth,
 		Context:     ctx,
-	}
-	handler := server.NewHandler(serverOpts)
-	serverOpts.Handler = handler
-	go runtimewiring.RunNotifierPullSupervisor(ctx, svc, handler)
-	serverOpts.OnReady = func() {
-		if output != "json" && run != nil {
+		OnReady: func(handler *api.Handler) {
+			runtimewiring.WireNotifierDelivery(ctx, handler, svc, imSvc, apiURL, cfg.Server.AccessToken)
+			if output != "json" && run != nil {
+				go func() {
+					if err := WaitForHealthy(apiURL, 5*time.Second); err != nil {
+						fmt.Fprintln(run.Stdout, "Open this URL in your browser after startup.")
+						return
+					}
+					if err := OpenBrowser(imURL); err != nil {
+						fmt.Fprintln(run.Stdout, "Open this URL in your browser after startup.")
+					} else {
+						fmt.Fprintln(run.Stdout, "Opened this URL in your browser.")
+					}
+				}()
+			}
 			go func() {
-				if err := WaitForHealthy(apiURL, 5*time.Second); err != nil {
-					fmt.Fprintln(run.Stdout, "Open this URL in your browser after startup.")
-					return
+				if err := StartConfiguredAgents(ctx, svc); err != nil {
+					slog.Warn("some configured agents failed to start", "error", err)
 				}
-				if err := OpenBrowser(imURL); err != nil {
-					fmt.Fprintln(run.Stdout, "Open this URL in your browser after startup.")
-				} else {
-					fmt.Fprintln(run.Stdout, "Opened this URL in your browser.")
+				if codexBridgeMgr != nil {
+					if err := codexBridgeMgr.Start(ctx); err != nil {
+						slog.Warn("some codex bridges failed to start", "error", err)
+					}
 				}
 			}()
-		}
-		go func() {
-			if err := StartConfiguredAgents(ctx, svc); err != nil {
-				slog.Warn("some configured agents failed to start", "error", err)
-			}
-			if codexBridgeMgr != nil {
-				if err := codexBridgeMgr.Start(ctx); err != nil {
-					slog.Warn("some codex bridges failed to start", "error", err)
-				}
-			}
-		}()
-	}
-	return RunServer(serverOpts)
+		},
+	})
 }
 
 func configureFeishuService(feishuSvc *feishu.Service, svc *agent.Service) {

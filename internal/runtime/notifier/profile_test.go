@@ -30,21 +30,21 @@ func TestViewRuntimeOptionsForAPIInjectsNotifierProfile(t *testing.T) {
 	}
 }
 
-func TestMergeFlatForProfilePatchOverlaysRuntimeOptions(t *testing.T) {
+func TestMergeFlatRuntimeOptionsForProfilePatchOverlaysRuntimeOptions(t *testing.T) {
 	baseExt := map[string]any{"delivery_mode": "webhook", "webhook_token": "a"}
 	patchExt := map[string]any{"delivery_mode": "webhook", "webhook_token": "b"}
-	got := MergeFlatForProfilePatch(baseExt, patchExt)
+	got := MergeFlatRuntimeOptionsForProfilePatch(baseExt, patchExt)
 	if got["webhook_token"] != "b" {
 		t.Fatalf("webhook_token = %v", got["webhook_token"])
 	}
 }
 
-func TestProfileLLMEndpointFieldsForRuntime(t *testing.T) {
-	b, m := ProfileLLMEndpointFieldsForRuntime(agentruntime.KindNotifier, "https://x", "gpt")
+func TestStripProfileLLMFieldsForRuntime(t *testing.T) {
+	b, m := StripProfileLLMFieldsForRuntime(agentruntime.KindNotifier, "https://x", "gpt")
 	if b != "" || m != "" {
 		t.Fatalf("notifier: want cleared, got base_url=%q model_id=%q", b, m)
 	}
-	b2, m2 := ProfileLLMEndpointFieldsForRuntime(agentruntime.KindPicoClawSandbox, "https://x", "gpt")
+	b2, m2 := StripProfileLLMFieldsForRuntime(agentruntime.KindPicoClawSandbox, "https://x", "gpt")
 	if b2 != "https://x" || m2 != "gpt" {
 		t.Fatalf("sandbox: want unchanged, got base_url=%q model_id=%q", b2, m2)
 	}
@@ -97,13 +97,13 @@ func TestMergeFlatForAgentPatchPreservesOptionalRelayURLsWhenPatchSendsEmpty(t *
 	}
 }
 
-func TestProfileCompleteFromAgentExtensionsPrefersMergedFlat(t *testing.T) {
+func TestProfileDeliveryComplete(t *testing.T) {
 	merged := map[string]any{"delivery_mode": "webhook", "webhook_token": "x"}
-	if !ProfileCompleteFromAgentExtensions(false, false, nil, agentruntime.KindNotifier, merged) {
-		t.Fatal("notifier: want complete from merged flat")
+	if !ProfileDeliveryComplete(merged) {
+		t.Fatal("notifier: want complete from flat runtime_options")
 	}
-	if ProfileCompleteFromAgentExtensions(false, false, nil, agentruntime.KindNotifier, nil) {
-		t.Fatal("notifier: want incomplete with no storage and no merged flat")
+	if ProfileDeliveryComplete(nil) {
+		t.Fatal("notifier: want incomplete with no runtime_options")
 	}
 }
 
@@ -116,25 +116,6 @@ func TestPersistNotifierFlatToProfileNoOpWhenEmpty(t *testing.T) {
 	}
 	if len(outRO) != len(ro) || outRO["foo"] != ro["foo"] {
 		t.Fatalf("request_options changed: %#v", outRO)
-	}
-}
-
-func TestProfileCompleteForAgentRuntimeGatewayVsNotifier(t *testing.T) {
-	flat := map[string]any{"delivery_mode": "webhook", "webhook_token": "x"}
-	if ProfileCompleteForAgentRuntime(true, false, flat, agentruntime.KindPicoClawSandbox) {
-		t.Fatal("gateway: want false when LLM incomplete")
-	}
-	if !ProfileCompleteForAgentRuntime(true, true, flat, agentruntime.KindPicoClawSandbox) {
-		t.Fatal("gateway: want true when LLM complete")
-	}
-	if ProfileCompleteForAgentRuntime(false, true, nil, agentruntime.KindNotifier) {
-		t.Fatal("notifier: want false when delivery incomplete")
-	}
-	if !ProfileCompleteForAgentRuntime(false, false, flat, agentruntime.KindNotifier) {
-		t.Fatal("notifier: want true when delivery complete")
-	}
-	if !ProfileCompleteForAgentRuntime(false, true, nil, agentruntime.KindCodex) {
-		t.Fatal("codex: want true when LLM complete without delivery")
 	}
 }
 

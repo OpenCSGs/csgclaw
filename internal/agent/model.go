@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/utils"
 )
 
 const (
@@ -57,12 +57,6 @@ type UpdateRequest struct {
 	Image          *string         `json:"image,omitempty"`
 	RuntimeOptions *map[string]any `json:"runtime_options,omitempty"`
 	AgentProfile   *AgentProfile   `json:"agent_profile,omitempty"`
-}
-
-// AgentProfilePutRequest is the JSON body for PUT /api/v1/agents/:id/profile (flat keys).
-type AgentProfilePutRequest struct {
-	AgentProfile
-	RuntimeOptions *map[string]any `json:"runtime_options,omitempty"`
 }
 
 type CreateRequest struct {
@@ -130,6 +124,6 @@ func cloneAgent(src *Agent) *Agent {
 	dst := *src
 	dst.AgentProfile = cloneProfile(src.AgentProfile)
 	dst.DetectionResults = append([]ProfileDetectionResult(nil), src.DetectionResults...)
-	dst.RuntimeOptions = agentruntime.CloneAnyMap(src.RuntimeOptions)
+	dst.RuntimeOptions = utils.CloneAnyMap(src.RuntimeOptions)
 	return &dst
 }

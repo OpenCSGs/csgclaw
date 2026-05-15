@@ -16,7 +16,6 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/bot"
 	"csgclaw/internal/channel/feishu"
-	"csgclaw/internal/channel/notifierbridge"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
@@ -42,6 +41,7 @@ type Handler struct {
 	upgradeManager    *upgrade.Manager
 	upgradeConfigPath string
 	upgradeApply      func(upgrade.ApplyHelperOptions) error
+	notifierWebhook     notifier.WebhookHTTPDeps
 }
 
 const (
@@ -310,6 +310,13 @@ func (h *Handler) SetConfigPath(path string) {
 	}
 }
 
+// SetNotifierWebhookDeps configures inbound notifier webhook delivery (wired from cli/serve).
+func (h *Handler) SetNotifierWebhookDeps(deps notifier.WebhookHTTPDeps) {
+	if h != nil {
+		h.notifierWebhook = deps
+	}
+}
+
 func (h *Handler) validateServerAccessToken(authHeader string) bool {
 	if h.serverNoAuth {
 		return true
@@ -571,12 +578,12 @@ func (h *Handler) handleAgentProfile(w http.ResponseWriter, r *http.Request, id 
 		}
 		writeJSON(w, http.StatusOK, profile)
 	case http.MethodPut:
-		var req agent.AgentProfilePutRequest
+		var req agent.AgentProfile
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
-		profile, err := h.svc.UpdateAgentProfile(id, req.AgentProfile, req.RuntimeOptions)
+		profile, err := h.svc.UpdateAgentProfile(id, req)
 		if err != nil {
 			status := http.StatusBadRequest
 			if strings.Contains(err.Error(), "not found") {
@@ -1593,20 +1600,6 @@ func parseRoomMembersPath(path string) (string, bool) {
 		return parts[0], true
 	}
 	return "", false
-}
-
-func (h *Handler) notifierFanoutBridge() notifier.IMFanoutBridge {
-	if h == nil || h.im == nil {
-		return nil
-	}
-	return notifierbridge.NewFanout(h.im, func(roomID, senderID string, msg apitypes.Message, sender apitypes.User) {
-		h.publishMessageCreated(roomID, senderID, im.Message(msg))
-	})
-}
-
-// DeliverNotifierFanout posts notifier chat content (JSON notify card) to every IM room that includes this agent as a member and publishes SSE events.
-func (h *Handler) DeliverNotifierFanout(agentID string, content string) error {
-	return notifier.DeliverNotifierFanout(agentID, content, h.notifierFanoutBridge())
 }
 
 func (h *Handler) reloadIM() error {
