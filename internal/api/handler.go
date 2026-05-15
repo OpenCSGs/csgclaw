@@ -503,19 +503,6 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		h.handleAgentRecreate(w, r, id)
 		return
 	}
-	if strings.HasSuffix(path, "/webhooks/notify") {
-		id := strings.TrimSpace(strings.TrimSuffix(path, "/webhooks/notify"))
-		if id == "" || strings.Contains(id, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		h.handleAgentNotifierWebhook(w, r, id)
-		return
-	}
 
 	id := path
 	if strings.Contains(id, "/") {
@@ -1227,10 +1214,6 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(req.Name)
 	handle := strings.TrimSpace(req.Handle)
 	role := strings.TrimSpace(req.Role)
-	if strings.EqualFold(role, "notifier") {
-		http.Error(w, `user role "notifier" is not supported; use "worker" (notification agents use runtime_kind "notifier" on the agent)`, http.StatusBadRequest)
-		return
-	}
 
 	if id == "" {
 		http.Error(w, "id is required", http.StatusBadRequest)
@@ -1614,7 +1597,7 @@ func parseRoomMembersPath(path string) (string, bool) {
 
 func (h *Handler) notifierFanoutBridge() notifier.IMFanoutBridge {
 	if h == nil || h.im == nil {
-		return notifierbridge.NewFanout(nil, nil)
+		return nil
 	}
 	return notifierbridge.NewFanout(h.im, func(roomID, senderID string, msg apitypes.Message, sender apitypes.User) {
 		h.publishMessageCreated(roomID, senderID, im.Message(msg))
@@ -1624,24 +1607,6 @@ func (h *Handler) notifierFanoutBridge() notifier.IMFanoutBridge {
 // DeliverNotifierFanout posts notifier chat content (JSON notify card) to every IM room that includes this agent as a member and publishes SSE events.
 func (h *Handler) DeliverNotifierFanout(agentID string, content string) error {
 	return notifier.DeliverNotifierFanout(agentID, content, h.notifierFanoutBridge())
-}
-
-func (h *Handler) handleAgentNotifierWebhook(w http.ResponseWriter, r *http.Request, agentID string) {
-	if h.svc == nil || h.im == nil {
-		http.Error(w, "service not configured", http.StatusServiceUnavailable)
-		return
-	}
-	notifier.ServeAgentWebhook(w, r, agentID, notifier.WebhookHTTPDeps{
-		Reload: h.svc.Reload,
-		LookupNotifierAgent: func(id string) (map[string]any, string, string, string, bool) {
-			a, ok := h.svc.Agent(id)
-			if !ok {
-				return nil, "", "", "", false
-			}
-			return a.RuntimeOptions, a.Role, a.RuntimeKind, a.Status, true
-		},
-		Fanout: h.notifierFanoutBridge(),
-	})
 }
 
 func (h *Handler) reloadIM() error {

@@ -10,7 +10,9 @@ import (
 
 const maxNotifierWebhookBody = 4 << 20
 
-// WebhookHTTPDeps supplies agent lookup and IM fanout for ServeAgentWebhook.
+// WebhookHTTPDeps supplies agent lookup and IM fanout for ServeAgentWebhook / ServeNotifyHTTP.
+// When Reload or LookupNotifierAgent is nil, requests fail with 503. When Fanout is nil after auth,
+// ServeAgentWebhook fails with 503 (IM not configured for delivery).
 type WebhookHTTPDeps struct {
 	Reload func() error
 	// LookupNotifierAgent returns runtime_options and agent fields needed for webhook auth.
@@ -27,7 +29,29 @@ func BearerTokenFromRequest(r *http.Request) string {
 	return ""
 }
 
-// ServeAgentWebhook handles POST …/agents/{id}/webhooks/notify for notifier delivery workers.
+// NotifyHTTPPathPrefix is the URL prefix for inbound third-party notifier webhooks; the agent id
+// is the single path segment after this prefix (POST only).
+const NotifyHTTPPathPrefix = "/api/v1/notify/"
+
+// ServeNotifyHTTP handles POST {NotifyHTTPPathPrefix}{agent_id} and delegates to [ServeAgentWebhook].
+func ServeNotifyHTTP(w http.ResponseWriter, r *http.Request, deps WebhookHTTPDeps) {
+	if !strings.HasPrefix(r.URL.Path, NotifyHTTPPathPrefix) {
+		http.NotFound(w, r)
+		return
+	}
+	agentID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, NotifyHTTPPathPrefix))
+	if agentID == "" || strings.Contains(agentID, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	ServeAgentWebhook(w, r, agentID, deps)
+}
+
+// ServeAgentWebhook handles POST webhook delivery for a notifier agent after the caller has resolved agentID.
 func ServeAgentWebhook(w http.ResponseWriter, r *http.Request, agentID string, deps WebhookHTTPDeps) {
 	if deps.Reload == nil || deps.LookupNotifierAgent == nil {
 		http.Error(w, "service not configured", http.StatusServiceUnavailable)
@@ -58,6 +82,10 @@ func ServeAgentWebhook(w http.ResponseWriter, r *http.Request, agentID string, d
 	got := BearerTokenFromRequest(r)
 	if !SecretMatch(cfg.WebhookToken, got) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if deps.Fanout == nil {
+		http.Error(w, "service not configured", http.StatusServiceUnavailable)
 		return
 	}
 

@@ -170,7 +170,7 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
 - 校验失败通常返回 `400 Bad Request`
 - `runtime_kind` 为 `notifier` 时，投递相关配置须放在 `agent_profile.runtime_options.notifier`（或兼容的 `agent_profile.request_options.notifier`）；创建请求**不再**接受顶层 `notifier_details` 字段
 
-### `POST /api/v1/agents/{agent_id}/webhooks/notify`
+### `POST /api/v1/notify/{agent_id}`
 
 供第三方（GitHub / GitLab 等）向本服务 **POST** 原始 HTTP body；服务端将 payload 转为 Markdown 后 **向该 Agent 作为成员所在的全部 IM 房间各投递一条消息**。
 
@@ -182,7 +182,7 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
 示例：
 
 ```http
-POST /api/v1/agents/u-ci/webhooks/notify
+POST /api/v1/notify/u-ci
 Authorization: Bearer <webhook_token>
 Content-Type: application/json
 

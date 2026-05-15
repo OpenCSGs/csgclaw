@@ -6057,10 +6057,11 @@ function newNotifierSubscriptionId() {
 
 function notifierPushWebhookPathForAgent(agentID) {
   const id = String(agentID || "").trim();
+  // Must match notifier.NotifyHTTPPathPrefix + single segment (see internal/runtime/notifier/webhook_http.go).
   if (!id) {
-    return "/api/v1/agents/<agent_id>/webhooks/notify";
+    return "/api/v1/notify/<agent_id>";
   }
-  return `/api/v1/agents/${encodeURIComponent(id)}/webhooks/notify`;
+  return `/api/v1/notify/${encodeURIComponent(id)}`;
 }
 
 function notifierPushWebhookNotifyURL(originTrimmed, agentID, placeholderHost) {
