@@ -41,7 +41,6 @@ type Handler struct {
 	upgradeManager    *upgrade.Manager
 	upgradeConfigPath string
 	upgradeApply      func(upgrade.ApplyHelperOptions) error
-	notifierWebhook     notifier.WebhookHTTPDeps
 }
 
 const (
@@ -307,13 +306,6 @@ func (h *Handler) SetUpgradeApplyFunc(apply func(upgrade.ApplyHelperOptions) err
 func (h *Handler) SetConfigPath(path string) {
 	if h != nil {
 		h.configPath = strings.TrimSpace(path)
-	}
-}
-
-// SetNotifierWebhookDeps configures inbound notifier webhook delivery (wired from cli/serve).
-func (h *Handler) SetNotifierWebhookDeps(deps notifier.WebhookHTTPDeps) {
-	if h != nil {
-		h.notifierWebhook = deps
 	}
 }
 

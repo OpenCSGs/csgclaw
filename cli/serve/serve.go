@@ -480,8 +480,8 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		AccessToken: cfg.Server.AccessToken,
 		NoAuth:      cfg.Server.NoAuth,
 		Context:     ctx,
-		OnReady: func(handler *api.Handler) {
-			runtimewiring.WireNotifierDelivery(ctx, handler, svc, imSvc, apiURL, cfg.Server.AccessToken)
+		OnReady: func(handler *api.Handler, mux *http.ServeMux) {
+			runtimewiring.WireNotifierDelivery(ctx, mux, svc, imSvc, apiURL, cfg.Server.AccessToken)
 			if output != "json" && run != nil {
 				go func() {
 					if err := WaitForHealthy(apiURL, 5*time.Second); err != nil {

@@ -32,7 +32,7 @@ type Options struct {
 	AccessToken string
 	NoAuth      bool
 	Context     context.Context
-	OnReady     func(h *api.Handler)
+	OnReady     func(h *api.Handler, mux *http.ServeMux)
 }
 
 func newHandler(opts Options) *api.Handler {
@@ -94,7 +94,7 @@ func Run(opts Options) error {
 		return err
 	}
 	if opts.OnReady != nil {
-		go opts.OnReady(handler)
+		go opts.OnReady(handler, mux)
 	}
 
 	if err := httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {

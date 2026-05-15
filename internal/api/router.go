@@ -2,18 +2,11 @@ package api
 
 import (
 	"net/http"
-
-	runtimenotifier "csgclaw/internal/runtime/notifier"
 )
-
-func (h *Handler) handleNotifyHTTP(w http.ResponseWriter, r *http.Request) {
-	runtimenotifier.ServeNotifyHTTP(w, r, h.notifierWebhook)
-}
 
 func (h *Handler) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	h.registerCoreRoutes(mux)
-	h.registerNotifierRoutes(mux)
 	h.registerChannelRoutes(mux)
 	h.registerBotCompatibilityRoutes(mux)
 	return mux
@@ -51,10 +44,6 @@ func (h *Handler) registerCoreRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/im/conversations/members", h.handleIMRoomMembers)
 	mux.HandleFunc("/api/v1/im/rooms", h.handleIMRooms)
 	mux.HandleFunc("/api/v1/im/rooms/invite", h.handleIMRoomMembers)
-}
-
-func (h *Handler) registerNotifierRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/v1/notify/", h.handleNotifyHTTP)
 }
 
 func (h *Handler) registerChannelRoutes(mux *http.ServeMux) {
