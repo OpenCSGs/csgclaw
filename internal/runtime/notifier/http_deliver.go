@@ -97,7 +97,7 @@ func ServeAgentWebhook(w http.ResponseWriter, r *http.Request, agentID string, d
 		http.Error(w, "not a notifier delivery agent", http.StatusBadRequest)
 		return
 	}
-	cfg := ConfigFromAgentParts(ext)
+	cfg := ConfigFromAgentRuntimeOptions(ext)
 	if !cfg.AllowsWebhook() {
 		http.Error(w, "webhook delivery not enabled for this agent", http.StatusForbidden)
 		return

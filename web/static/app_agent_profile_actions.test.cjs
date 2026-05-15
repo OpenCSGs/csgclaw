@@ -14,16 +14,13 @@ assert(
   'Chinese locale must label the DM action as 私信',
 );
 assert(
-  agentDetailPaneSource.includes('${activeRoom && !isManager') &&
-    agentDetailPaneSource.includes('onClick=${() => onOpenDM(item)}>${t("openDM")}</button>') &&
-    agentDetailPaneSource.includes('${isManager') &&
-    agentDetailPaneSource.includes('preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>') &&
-    agentDetailPaneSource.includes('onClick=${() => (running ? onStop(item) : onStart(item))}') &&
-    agentDetailPaneSource.includes('${running ? t("agentStop") : t("agentStart")}') &&
-    agentDetailPaneSource.includes(
-      'btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>',
-    ),
-  'agent detail pane must show start/stop labels, worker recreate (gray), and red manager recreate next to DM',
+  source.includes('const SHOW_AGENT_LIFECYCLE_ACTIONS = false;'),
+  'agent lifecycle controls must be hidden by default in the web UI',
+);
+assert(
+  agentDetailPaneSource.includes('SHOW_AGENT_LIFECYCLE_ACTIONS') &&
+    agentDetailPaneSource.includes('onClick=${() => onOpenDM(item)}>${t("openDM")}</button>'),
+  'agent detail pane must keep DM while gating start/stop/recreate behind SHOW_AGENT_LIFECYCLE_ACTIONS',
 );
 assert(
   source.includes('function openManagerRebuildModal(item = managerAgent)') &&

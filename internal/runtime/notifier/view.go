@@ -77,15 +77,15 @@ func RedactedRequestOptionsForAPIView(ro map[string]any) map[string]any {
 }
 
 // MergeRuntimeOptionMapsForView merges agent-level and profile-level option maps for API display (agent keys win).
-func MergeRuntimeOptionMapsForView(agentExt, profileExt map[string]any) map[string]any {
-	out := utils.CloneAnyMap(agentExt)
-	if len(profileExt) == 0 {
+func MergeRuntimeOptionMapsForView(agentRuntimeOptions, profileRuntimeOptions map[string]any) map[string]any {
+	out := utils.CloneAnyMap(agentRuntimeOptions)
+	if len(profileRuntimeOptions) == 0 {
 		return out
 	}
 	if out == nil {
-		out = make(map[string]any, len(profileExt))
+		out = make(map[string]any, len(profileRuntimeOptions))
 	}
-	for k, v := range profileExt {
+	for k, v := range profileRuntimeOptions {
 		if _, ok := out[k]; !ok {
 			out[k] = v
 		}

@@ -15,12 +15,12 @@ import (
 	"csgclaw/internal/runtime/notifier"
 )
 
-func notifierProfileViewMap(t *testing.T, agentExt map[string]any) map[string]any {
+func notifierProfileViewMap(t *testing.T, agentRuntimeOptions map[string]any) map[string]any {
 	t.Helper()
-	if len(agentExt) == 0 {
+	if len(agentRuntimeOptions) == 0 {
 		return nil
 	}
-	rx := notifier.ViewRuntimeOptionsForAPI(agentExt)
+	rx := notifier.ViewRuntimeOptionsForAPI(agentRuntimeOptions)
 	if rx == nil {
 		return nil
 	}
@@ -331,7 +331,7 @@ func TestSortModelIDsOrdersLatestKnownFamiliesFirst(t *testing.T) {
 
 func TestProfileViewNotifierDeliveryComplete(t *testing.T) {
 	ext := map[string]any{"delivery_mode": "webhook", "webhook_token": "secret-token"}
-	_ = profileViewWithAgentExtensions(AgentProfile{Name: "n"}, ext, RuntimeKindNotifier, nil)
+	_ = profileViewWithAgentRuntimeOptions(AgentProfile{Name: "n"}, ext, RuntimeKindNotifier, nil)
 	np := notifierProfileViewMap(t, ext)
 	if np == nil {
 		t.Fatal("notifier_profile summary = nil, want non-nil")
@@ -348,7 +348,7 @@ func TestProfileViewNotifierDeliveryComplete(t *testing.T) {
 		"remote_token":           "pull-bearer-secret",
 		"remote_subscription_id": "sub-1",
 	}
-	pullView := profileViewWithAgentExtensions(AgentProfile{Name: "pull"}, pullExt, RuntimeKindNotifier, nil)
+	pullView := profileViewWithAgentRuntimeOptions(AgentProfile{Name: "pull"}, pullExt, RuntimeKindNotifier, nil)
 	pullNP := notifierProfileViewMap(t, pullExt)
 	if pullNP == nil {
 		t.Fatal("notifier_profile summary = nil, want non-nil")
@@ -399,11 +399,11 @@ func TestNormalizeProfileForAgentRuntimeNotifierProfileCompleteFromDeliveryOnly(
 }
 
 func TestProfileViewRedactsNotifierSecretsInJSON(t *testing.T) {
-	agentExt := map[string]any{
+	agentRuntimeOptions := map[string]any{
 		"delivery_mode": "webhook", "webhook_token": "super-secret-token",
 	}
-	view := profileViewWithAgentExtensions(AgentProfile{Name: "n"}, agentExt, RuntimeKindNotifier, nil)
-	np := notifierProfileViewMap(t, agentExt)
+	view := profileViewWithAgentRuntimeOptions(AgentProfile{Name: "n"}, agentRuntimeOptions, RuntimeKindNotifier, nil)
+	np := notifierProfileViewMap(t, agentRuntimeOptions)
 	if np == nil || !notifierProfileViewBool(np, "webhook_token_set") {
 		t.Fatal("webhook_token_set = false, want true")
 	}

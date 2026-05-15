@@ -10,8 +10,8 @@ import (
 
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/notifier"
-	"csgclaw/internal/utils"
 	"csgclaw/internal/sandbox"
+	"csgclaw/internal/utils"
 )
 
 type persistedState struct {
@@ -68,10 +68,6 @@ func newPersistedAgent(a Agent) persistedAgent {
 	var topRX map[string]any
 	if len(a.RuntimeOptions) > 0 {
 		topRX = utils.CloneAnyMap(a.RuntimeOptions)
-	}
-	pol.StripNestedFromRequestOptions(ap.RequestOptions)
-	if len(ap.RequestOptions) == 0 {
-		ap.RequestOptions = nil
 	}
 	ap.BaseURL, ap.ModelID = pol.StripProfileLLMFields(a.RuntimeKind, ap.BaseURL, ap.ModelID)
 	return persistedAgent{

@@ -211,10 +211,8 @@ func cloneProfile(profile AgentProfile) AgentProfile {
 	return out
 }
 
-func profileViewWithAgentExtensions(profile AgentProfile, agentExt map[string]any, runtimeKind string, detection []ProfileDetectionResult) AgentProfileView {
+func profileViewWithAgentRuntimeOptions(profile AgentProfile, _ map[string]any, _ string, detection []ProfileDetectionResult) AgentProfileView {
 	profile = cloneProfile(profile)
-	pol := agentruntime.RuntimeOptionsPolicyForKind(agentruntime.NormalizeRuntimeKind(runtimeKind))
-	ro := pol.RequestOptionsForAgentProfileView(agentExt, profile.RequestOptions)
 	v := AgentProfileView{
 		Name:               profile.Name,
 		Description:        profile.Description,
@@ -226,7 +224,7 @@ func profileViewWithAgentExtensions(profile AgentProfile, agentExt map[string]an
 		ModelID:            profile.ModelID,
 		ReasoningEffort:    profile.ReasoningEffort,
 		EnableFastMode:     profile.EnableFastMode,
-		RequestOptions:     ro,
+		RequestOptions:     profile.RequestOptions,
 		Env:                profile.Env,
 		ProfileComplete:    profile.ProfileComplete,
 		EnvRestartRequired: profile.EnvRestartRequired,
@@ -236,11 +234,11 @@ func profileViewWithAgentExtensions(profile AgentProfile, agentExt map[string]an
 }
 
 func profileView(profile AgentProfile, detection []ProfileDetectionResult) AgentProfileView {
-	return profileViewWithAgentExtensions(profile, nil, "", detection)
+	return profileViewWithAgentRuntimeOptions(profile, nil, "", detection)
 }
 
 func RedactedProfileViewForAgent(a Agent) AgentProfileView {
-	return profileViewWithAgentExtensions(a.AgentProfile, a.RuntimeOptions, a.RuntimeKind, a.DetectionResults)
+	return profileViewWithAgentRuntimeOptions(a.AgentProfile, a.RuntimeOptions, a.RuntimeKind, a.DetectionResults)
 }
 
 func apiKeyPreview(apiKey string) string {

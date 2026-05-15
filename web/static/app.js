@@ -38,6 +38,8 @@ const WORKSPACE_TAB_HUB = "hub";
 const CSGCLAW_ACTION_CARD_TYPE = "csgclaw.action_card";
 const CSGCLAW_NOTIFY_CARD_TYPE = "csgclaw.notify_card";
 const ACTION_REBUILD_MANAGER = "rebuild-manager";
+// Hide start/stop/recreate controls in the web UI (API routes remain available).
+const SHOW_AGENT_LIFECYCLE_ACTIONS = false;
 
 marked.setOptions({
   gfm: true,
@@ -4653,10 +4655,14 @@ function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop, onRec
         <button className="btn btn-secondary-gray btn-sm agent-icon-button" aria-label=${t("editProfile")} title=${t("editProfile")} onClick=${() => onEdit(item)}>
           <span aria-hidden="true"><${WrenchIcon} /></span>
         </button>
-        <button className="btn btn-secondary-gray btn-sm agent-icon-button" aria-label=${running ? t("agentStop") : t("agentStart")} title=${running ? t("agentStop") : t("agentStart")} disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => running ? onStop(item) : onStart(item)}>
-          <span aria-hidden="true">${running ? html`<${StopIcon} />` : html`<${PlayIcon} />`}</span>
-        </button>
-        <button className="btn btn-secondary-gray btn-sm agent-action-text" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>
+        ${SHOW_AGENT_LIFECYCLE_ACTIONS
+          ? html`
+              <button className="btn btn-secondary-gray btn-sm agent-icon-button" aria-label=${running ? t("agentStop") : t("agentStart")} title=${running ? t("agentStop") : t("agentStart")} disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => running ? onStop(item) : onStart(item)}>
+                <span aria-hidden="true">${running ? html`<${StopIcon} />` : html`<${PlayIcon} />`}</span>
+              </button>
+              <button className="btn btn-secondary-gray btn-sm agent-action-text" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>
+            `
+          : null}
         ${activeRoom && !isManager
           ? html`<button className="btn btn-secondary-gray btn-sm agent-action-text" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onInvite(item)}>${t("inviteToRoom")}</button>`
           : null}
@@ -5122,20 +5128,26 @@ function AgentDetailPane({
         >
           ${saving ? t("profileLoadingModels") : t("agentUpdateSave")}
         </button>
-        <button
-          className="btn btn-secondary-gray btn-sm preview-action-button"
-          disabled=${busyKey.startsWith(busyPrefix) || incomplete}
-          onClick=${() => (running ? onStop(item) : onStart(item))}
-        >
-          ${running ? t("agentStop") : t("agentStart")}
-        </button>
+        ${SHOW_AGENT_LIFECYCLE_ACTIONS
+          ? html`
+              <button
+                className="btn btn-secondary-gray btn-sm preview-action-button"
+                disabled=${busyKey.startsWith(busyPrefix) || incomplete}
+                onClick=${() => (running ? onStop(item) : onStart(item))}
+              >
+                ${running ? t("agentStop") : t("agentStart")}
+              </button>
+            `
+          : null}
         ${activeRoom && !isManager
           ? html`<button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onInvite(item)}>${t("inviteToRoom")}</button>`
           : null}
         <button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onOpenDM(item)}>${t("openDM")}</button>
-        ${isManager
-          ? html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>`
-          : html`<button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>`}
+        ${SHOW_AGENT_LIFECYCLE_ACTIONS
+          ? isManager
+            ? html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>`
+            : html`<button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>`
+          : null}
         ${!isManager
           ? html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onDelete(item)}>${t("agentDelete")}</button>`
           : null}
@@ -5596,13 +5608,17 @@ function ComputerDetailPane({ t, agents, channels, directMessages, busyKey, onSe
                   </span>
                   <span className=${`workspace-status-dot ${isAgentRunning(item) ? "online" : ""}`}></span>
                 </button>
-                <button
-                  className="btn btn-secondary-gray btn-sm agent-icon-button"
-                  disabled=${busyKey.startsWith(`${item.id}:`) || isAgentIncomplete(item)}
-                  onClick=${() => onStartAgent(item)}
-                >
-                  <span aria-hidden="true"><${PlayIcon} /></span>
-                </button>
+                ${SHOW_AGENT_LIFECYCLE_ACTIONS
+                  ? html`
+                      <button
+                        className="btn btn-secondary-gray btn-sm agent-icon-button"
+                        disabled=${busyKey.startsWith(`${item.id}:`) || isAgentIncomplete(item)}
+                        onClick=${() => onStartAgent(item)}
+                      >
+                        <span aria-hidden="true"><${PlayIcon} /></span>
+                      </button>
+                    `
+                  : null}
               </div>
             `)
           : html`<div className="agent-empty">${t("noAgents")}</div>`}
@@ -7587,6 +7603,9 @@ function buildActionCardPayload(value) {
 }
 
 function normalizeActionCardActions(actions) {
+  if (!SHOW_AGENT_LIFECYCLE_ACTIONS) {
+    return [];
+  }
   return (actions ?? [])
     .filter((action) => action && action.id === ACTION_REBUILD_MANAGER)
     .slice(0, 1)

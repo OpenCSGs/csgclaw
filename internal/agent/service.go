@@ -1584,7 +1584,6 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	if err != nil {
 		return Agent{}, err
 	}
-	agentRole := RoleWorker
 	if testCreateGatewayBoxHook != nil && isGatewayRuntimeKind(runtimeKind) {
 		rt, err := s.ensureRuntime(name)
 		if err != nil {
@@ -1611,7 +1610,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 			HandleID:  strings.TrimSpace(info.ID),
 			State:     agentruntime.State(info.State),
 			CreatedAt: info.CreatedAt.UTC(),
-		}, agentRole)
+		})
 	}
 	handle, err := runtimeImpl.Create(ctx, agentruntime.Spec{
 		RuntimeID: runtimeIDForAgentID(id),
@@ -1632,10 +1631,10 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		CreatedAt: time.Now().UTC(),
 	}
 
-	return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, spec.RuntimeOptions, info, agentRole)
+	return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, spec.RuntimeOptions, info)
 }
 
-func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, createRuntimeExt map[string]any, info agentruntime.Info, role string) (Agent, error) {
+func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, createRuntimeExt map[string]any, info agentruntime.Info) (Agent, error) {
 	s.mu.Lock()
 
 	if _, ok := s.agents[id]; ok {
@@ -1654,9 +1653,6 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 	state := info.State
 	if state == "" {
 		state = agentruntime.StateRunning
-	}
-	if strings.TrimSpace(role) == "" {
-		role = RoleWorker
 	}
 	prof := cloneProfile(profile)
 	var agentRX map[string]any
@@ -1680,7 +1676,7 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 		ReasoningEffort: prof.ReasoningEffort,
 		AgentProfile:    prof,
 		ProfileComplete: prof.ProfileComplete,
-		Role:            role,
+		Role:            RoleWorker,
 	}
 	s.agents[worker.ID] = worker
 	s.syncRuntimeRecordLocked(worker)

@@ -763,7 +763,7 @@ func TestCreateWorkerNotifierPersistsWebhookToken(t *testing.T) {
 	if got.RuntimeKind != RuntimeKindNotifier {
 		t.Fatalf("CreateWorker().RuntimeKind = %q, want %q", got.RuntimeKind, RuntimeKindNotifier)
 	}
-	cfg := notifier.ConfigFromAgentParts(got.RuntimeOptions)
+	cfg := notifier.ConfigFromAgentRuntimeOptions(got.RuntimeOptions)
 	if cfg.WebhookToken != wantToken {
 		t.Fatalf("in-memory webhook_token = %q, want %q", cfg.WebhookToken, wantToken)
 	}
@@ -776,7 +776,7 @@ func TestCreateWorkerNotifierPersistsWebhookToken(t *testing.T) {
 	if !ok {
 		t.Fatalf("Agent(%q) after reload: ok = false", got.ID)
 	}
-	cfg2 := notifier.ConfigFromAgentParts(got2.RuntimeOptions)
+	cfg2 := notifier.ConfigFromAgentRuntimeOptions(got2.RuntimeOptions)
 	if cfg2.WebhookToken != wantToken {
 		t.Fatalf("after reload webhook_token = %q, want %q", cfg2.WebhookToken, wantToken)
 	}

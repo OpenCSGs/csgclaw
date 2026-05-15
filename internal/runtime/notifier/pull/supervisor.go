@@ -102,7 +102,7 @@ func (s *Supervisor) desiredPullAgentIDs() map[string]struct{} {
 		if !notifier.IsDeliveryWorker(a.Role, a.RuntimeKind) {
 			continue
 		}
-		cfg := notifier.ConfigFromAgentParts(a.RuntimeOptions)
+		cfg := notifier.ConfigFromAgentRuntimeOptions(a.RuntimeOptions)
 		if !cfg.AllowsPull() {
 			continue
 		}
@@ -157,7 +157,7 @@ func (s *Supervisor) agentPullLoop(ctx context.Context, agentID string) {
 		if !notifier.IsDeliveryWorker(a.Role, a.RuntimeKind) {
 			return
 		}
-		cfg := notifier.ConfigFromAgentParts(a.RuntimeOptions)
+		cfg := notifier.ConfigFromAgentRuntimeOptions(a.RuntimeOptions)
 		if !cfg.AllowsPull() {
 			return
 		}

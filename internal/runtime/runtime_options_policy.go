@@ -22,20 +22,17 @@ func NormalizeRuntimeKind(kind string) string {
 	}
 }
 
-// RuntimeOptionsPolicy defines how runtime_options (and related request_options) behave
-// for a concrete runtime_kind. Implementations register via RegisterRuntimeOptionsPolicy.
+// RuntimeOptionsPolicy defines how runtime_options behave for a concrete runtime_kind.
+// Implementations register via RegisterRuntimeOptionsPolicy.
 type RuntimeOptionsPolicy interface {
-	StripNestedFromRequestOptions(ro map[string]any)
 	// StripProfileLLMFields clears LLM endpoint fields on runtimes that do not use them (e.g. notifier).
 	StripProfileLLMFields(runtimeKind, baseURL, modelID string) (string, string)
 	// IsComplete reports whether the agent profile is complete for this runtime_kind.
 	// runtimeOptionsAfterPatch is merged agent runtime_options + incoming patch before persist (may be nil).
 	IsComplete(llmComplete bool, runtimeOptions, runtimeOptionsAfterPatch map[string]any) bool
-	RequestOptionsForAgentProfileView(agentExt, requestOptions map[string]any) map[string]any
 	MergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions map[string]any) map[string]any
-	ApplyFlatPersistence(agentRE *map[string]any, profileRE, profileRO map[string]any, mergedFlat map[string]any) (map[string]any, map[string]any)
+	ApplyFlatPersistence(agentRuntimeOptions *map[string]any, profileRuntimeOptions, profileRequestOptions map[string]any, mergedFlat map[string]any) (map[string]any, map[string]any)
 	WithPullSubscriptionDefaults(flat map[string]any) map[string]any
-	RequestOptionsWithoutNested(ro map[string]any) map[string]any
 }
 
 var (
@@ -64,18 +61,12 @@ func RuntimeOptionsPolicyForKind(kind string) RuntimeOptionsPolicy {
 
 type defaultRuntimeOptionsPolicy struct{}
 
-func (defaultRuntimeOptionsPolicy) StripNestedFromRequestOptions(map[string]any) {}
-
 func (defaultRuntimeOptionsPolicy) StripProfileLLMFields(_, baseURL, modelID string) (string, string) {
 	return baseURL, modelID
 }
 
 func (defaultRuntimeOptionsPolicy) IsComplete(llmComplete bool, _, _ map[string]any) bool {
 	return llmComplete
-}
-
-func (defaultRuntimeOptionsPolicy) RequestOptionsForAgentProfileView(_ map[string]any, requestOptions map[string]any) map[string]any {
-	return redactNestedNotifierRequestOptions(requestOptions)
 }
 
 func (defaultRuntimeOptionsPolicy) MergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions map[string]any) map[string]any {
@@ -88,52 +79,13 @@ func (defaultRuntimeOptionsPolicy) MergeFlatForAgentPatch(agentRuntimeOptions, p
 	return utils.OverlayAnyMap(utils.CloneAnyMap(agentRuntimeOptions), patchRuntimeOptions)
 }
 
-func (defaultRuntimeOptionsPolicy) ApplyFlatPersistence(agentRE *map[string]any, profileRE, profileRO map[string]any, mergedFlat map[string]any) (map[string]any, map[string]any) {
-	if agentRE != nil && len(mergedFlat) > 0 {
-		*agentRE = utils.CloneAnyMap(mergedFlat)
+func (defaultRuntimeOptionsPolicy) ApplyFlatPersistence(agentRuntimeOptions *map[string]any, profileRuntimeOptions, profileRequestOptions map[string]any, mergedFlat map[string]any) (map[string]any, map[string]any) {
+	if agentRuntimeOptions != nil && len(mergedFlat) > 0 {
+		*agentRuntimeOptions = utils.CloneAnyMap(mergedFlat)
 	}
-	return profileRE, profileRO
+	return profileRuntimeOptions, profileRequestOptions
 }
 
 func (defaultRuntimeOptionsPolicy) WithPullSubscriptionDefaults(flat map[string]any) map[string]any {
 	return flat
-}
-
-func (defaultRuntimeOptionsPolicy) RequestOptionsWithoutNested(ro map[string]any) map[string]any {
-	out := utils.CloneAnyMap(ro)
-	if len(out) == 0 {
-		return nil
-	}
-	delete(out, "notifier")
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func redactNestedNotifierRequestOptions(ro map[string]any) map[string]any {
-	if len(ro) == 0 {
-		return nil
-	}
-	out := utils.CloneAnyMap(ro)
-	raw, ok := out["notifier"]
-	if !ok || raw == nil {
-		return out
-	}
-	m, ok := raw.(map[string]any)
-	if !ok {
-		return out
-	}
-	nm := utils.CloneAnyMap(m)
-	delete(nm, "webhook_token")
-	delete(nm, "remote_token")
-	if len(nm) == 0 {
-		delete(out, "notifier")
-	} else {
-		out["notifier"] = nm
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }

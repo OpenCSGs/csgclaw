@@ -145,11 +145,11 @@ func StripNotifierKeysFromRootMap(m map[string]any) {
 
 // ProfileRuntimeOptionsWithoutNotifierPayload returns a copy of profile-level runtime_options
 // with notifier payload removed (nested key and flat keys).
-func ProfileRuntimeOptionsWithoutNotifierPayload(ext map[string]any) map[string]any {
-	if len(ext) == 0 {
+func ProfileRuntimeOptionsWithoutNotifierPayload(profileRuntimeOptions map[string]any) map[string]any {
+	if len(profileRuntimeOptions) == 0 {
 		return nil
 	}
-	out := utils.CloneAnyMap(ext)
+	out := utils.CloneAnyMap(profileRuntimeOptions)
 	StripNotifierKeysFromRootMap(out)
 	if len(out) == 0 {
 		return nil
@@ -161,69 +161,69 @@ func ProfileRuntimeOptionsWithoutNotifierPayload(ext map[string]any) map[string]
 // Storage is flat keys at the map root (delivery_mode, webhook_token, …); runtime_kind identifies
 // notifier agents. View-only keys are ignored. The legacy nested runtime_options["notifier"]
 // object is not read (StripNotifierKeysFromRootMap still removes it on persist).
-func NotifierFlatFromRuntimeOptionsMap(ext map[string]any) map[string]any {
-	if len(ext) == 0 {
+func NotifierFlatFromRuntimeOptionsMap(runtimeOptions map[string]any) map[string]any {
+	if len(runtimeOptions) == 0 {
 		return nil
 	}
-	ext = StripViewOnlyRuntimeOptionKeys(ext)
-	if len(ext) == 0 {
+	runtimeOptions = StripViewOnlyRuntimeOptionKeys(runtimeOptions)
+	if len(runtimeOptions) == 0 {
 		return nil
 	}
-	if flat := copyNotifierKeysFromMap(ext); len(flat) > 0 {
+	if flat := copyNotifierKeysFromMap(runtimeOptions); len(flat) > 0 {
 		return utils.CloneAnyMap(flat)
 	}
 	return nil
 }
 
-// NotifierFlatFromAgentStorage returns notifier flat stored on the agent (runtime_options only).
-func NotifierFlatFromAgentStorage(agentExt map[string]any) map[string]any {
-	return NotifierFlatFromRuntimeOptionsMap(agentExt)
+// NotifierFlatFromAgentRuntimeOptions returns notifier flat stored on the agent (runtime_options only).
+func NotifierFlatFromAgentRuntimeOptions(agentRuntimeOptions map[string]any) map[string]any {
+	return NotifierFlatFromRuntimeOptionsMap(agentRuntimeOptions)
 }
 
 // MergeFlatForAgentPatch merges patch runtime_options onto the stored agent flat.
-func MergeFlatForAgentPatch(agentExt, patchProfileRuntimeExt map[string]any) map[string]any {
-	return mergeFlatForAgentPatch(agentExt, patchProfileRuntimeExt)
+func MergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions map[string]any) map[string]any {
+	return mergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions)
 }
 
-func mergeFlatForAgentPatch(agentExt, patchProfileRuntimeExt map[string]any) map[string]any {
-	base := utils.CloneAnyMap(agentExt)
-	incoming := StripViewOnlyRuntimeOptionKeys(patchProfileRuntimeExt)
+func mergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions map[string]any) map[string]any {
+	base := utils.CloneAnyMap(agentRuntimeOptions)
+	incoming := StripViewOnlyRuntimeOptionKeys(patchRuntimeOptions)
 	return MergeNotifierFlatPatch(base, incoming)
 }
 
-// ApplyNotifierFlatPersistence writes merged notifier flat onto *agentRE when non-nil (agent-level storage),
-// otherwise merges flat keys at the root of profile runtime_options (create path before Agent exists).
-// It always strips nested notifier from a copy of profileRO and returns updated profile maps.
-func ApplyNotifierFlatPersistence(agentRE *map[string]any, profileRE, profileRO map[string]any, mergedFlat map[string]any) (nextProfileRE, nextProfileRO map[string]any) {
-	return applyNotifierFlatPersistence(agentRE, profileRE, profileRO, mergedFlat)
+// ApplyNotifierFlatPersistence writes merged notifier flat onto *agentRuntimeOptions when non-nil (agent-level storage),
+// otherwise merges flat keys at the root of profileRuntimeOptions (create path before Agent exists).
+// It always strips nested notifier from a copy of profileRequestOptions and returns updated profile maps.
+func ApplyNotifierFlatPersistence(agentRuntimeOptions *map[string]any, profileRuntimeOptions, profileRequestOptions map[string]any, mergedFlat map[string]any) (nextProfileRuntimeOptions, nextProfileRequestOptions map[string]any) {
+	return applyNotifierFlatPersistence(agentRuntimeOptions, profileRuntimeOptions, profileRequestOptions, mergedFlat)
 }
 
-func applyNotifierFlatPersistence(agentRE *map[string]any, profileRE, profileRO map[string]any, mergedFlat map[string]any) (nextProfileRE, nextProfileRO map[string]any) {
+func applyNotifierFlatPersistence(agentRuntimeOptions *map[string]any, profileRuntimeOptions, profileRequestOptions map[string]any, mergedFlat map[string]any) (nextProfileRuntimeOptions, nextProfileRequestOptions map[string]any) {
 	if len(mergedFlat) == 0 {
-		return profileRE, profileRO
+		return profileRuntimeOptions, profileRequestOptions
 	}
 	flat := utils.CloneAnyMap(mergedFlat)
 	flat = EnsurePullRemoteSubscriptionInNotifierDetails(flat)
-	nextRO := utils.CloneAnyMap(profileRO)
+	nextRO := utils.CloneAnyMap(profileRequestOptions)
 	StripNestedNotifier(nextRO)
 	if len(nextRO) == 0 {
 		nextRO = nil
 	}
-	if agentRE != nil {
-		base := utils.CloneAnyMap(*agentRE)
+	if agentRuntimeOptions != nil {
+		base := utils.CloneAnyMap(*agentRuntimeOptions)
 		if base == nil {
 			base = make(map[string]any)
 		}
 		StripNotifierKeysFromRootMap(base)
 		merged := MergeNotifierFlatPatch(base, flat)
 		if len(merged) == 0 {
-			*agentRE = nil
+			*agentRuntimeOptions = nil
 		} else {
-			*agentRE = merged
+			*agentRuntimeOptions = merged
 		}
-		return ProfileRuntimeOptionsWithoutNotifierPayload(profileRE), nextRO
+		return ProfileRuntimeOptionsWithoutNotifierPayload(profileRuntimeOptions), nextRO
 	}
-	base := utils.CloneAnyMap(profileRE)
+	base := utils.CloneAnyMap(profileRuntimeOptions)
 	StripNotifierKeysFromRootMap(base)
 	for k, v := range flat {
 		if _, ok := notifierStorageKeySet[k]; ok {
@@ -247,7 +247,7 @@ var notifierStorageKeySet = func() map[string]struct{} {
 	return m
 }()
 
-// ConfigFromAgentParts parses notifier.Config from agent-level runtime_options only.
-func ConfigFromAgentParts(agentLevelExt map[string]any) Config {
-	return ConfigFromStored(NotifierFlatFromAgentStorage(agentLevelExt))
+// ConfigFromAgentRuntimeOptions parses notifier.Config from agent-level runtime_options only.
+func ConfigFromAgentRuntimeOptions(agentRuntimeOptions map[string]any) Config {
+	return ConfigFromStored(NotifierFlatFromAgentRuntimeOptions(agentRuntimeOptions))
 }

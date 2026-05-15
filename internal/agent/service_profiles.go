@@ -20,7 +20,7 @@ func (s *Service) AgentProfileView(id string) (AgentProfileView, error) {
 	if !ok {
 		return AgentProfileView{}, fmt.Errorf("agent %q not found", id)
 	}
-	return profileViewWithAgentExtensions(got.AgentProfile, got.RuntimeOptions, got.RuntimeKind, got.DetectionResults), nil
+	return profileViewWithAgentRuntimeOptions(got.AgentProfile, got.RuntimeOptions, got.RuntimeKind, got.DetectionResults), nil
 }
 
 func (s *Service) ProfileDefaultsView() AgentProfileView {
@@ -68,7 +68,7 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	if err := s.saveLocked(); err != nil {
 		return AgentProfileView{}, err
 	}
-	return profileViewWithAgentExtensions(normalized, current.RuntimeOptions, current.RuntimeKind, current.DetectionResults), nil
+	return profileViewWithAgentRuntimeOptions(normalized, current.RuntimeOptions, current.RuntimeKind, current.DetectionResults), nil
 }
 
 func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Agent, error) {
@@ -389,7 +389,6 @@ func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgent
 
 	pol := agentruntime.RuntimeOptionsPolicyForKind(rk)
 	runtimeOptionsAfterPatch := pol.WithPullSubscriptionDefaults(pol.MergeFlatForAgentPatch(nil, spec.RuntimeOptions))
-	profile.RequestOptions = pol.RequestOptionsWithoutNested(profile.RequestOptions)
 	profile = normalizeProfileForAgentRuntime(profile, nil, spec.Name, spec.Description, spec.RuntimeKind, runtimeOptionsAfterPatch)
 	if !profile.ProfileComplete {
 		detected, _ := s.DetectDefaultProfile(ctx)

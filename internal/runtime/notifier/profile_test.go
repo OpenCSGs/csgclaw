@@ -7,13 +7,13 @@ import (
 )
 
 func TestViewRuntimeOptionsForAPIInjectsNotifierProfile(t *testing.T) {
-	ext := map[string]any{
+	runtimeOptions := map[string]any{
 		"delivery_mode": "webhook",
 		"webhook_token": "secret",
 		"remote_token":  "",
 		"remote_url":    "",
 	}
-	out := ViewRuntimeOptionsForAPI(ext)
+	out := ViewRuntimeOptionsForAPI(runtimeOptions)
 	raw, ok := out[RuntimeOptionKeyNotifierProfile]
 	if !ok {
 		t.Fatal("missing notifier_profile")
@@ -31,9 +31,9 @@ func TestViewRuntimeOptionsForAPIInjectsNotifierProfile(t *testing.T) {
 }
 
 func TestMergeFlatRuntimeOptionsForProfilePatchOverlaysRuntimeOptions(t *testing.T) {
-	baseExt := map[string]any{"delivery_mode": "webhook", "webhook_token": "a"}
-	patchExt := map[string]any{"delivery_mode": "webhook", "webhook_token": "b"}
-	got := MergeFlatRuntimeOptionsForProfilePatch(baseExt, patchExt)
+	baseRuntimeOptions := map[string]any{"delivery_mode": "webhook", "webhook_token": "a"}
+	patchRuntimeOptions := map[string]any{"delivery_mode": "webhook", "webhook_token": "b"}
+	got := MergeFlatRuntimeOptionsForProfilePatch(baseRuntimeOptions, patchRuntimeOptions)
 	if got["webhook_token"] != "b" {
 		t.Fatalf("webhook_token = %v", got["webhook_token"])
 	}
@@ -51,19 +51,19 @@ func TestStripProfileLLMFieldsForRuntime(t *testing.T) {
 }
 
 func TestMergeFlatForAgentPatchPreservesTokensWhenPatchSendsEmpty(t *testing.T) {
-	agentExt := map[string]any{
+	agentRuntimeOptions := map[string]any{
 		"delivery_mode": "remote_pull",
 		"remote_token":  "secret-rt",
 		"remote_url":    "http://old/inbox",
 		"webhook_token": "wh-keep",
 	}
-	patchExt := map[string]any{
+	patchRuntimeOptions := map[string]any{
 		"delivery_mode": "remote_pull",
 		"remote_url":    "http://new/inbox",
 		"remote_token":  "",
 		"webhook_token": "",
 	}
-	got := MergeFlatForAgentPatch(agentExt, patchExt)
+	got := MergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions)
 	if got["remote_token"] != "secret-rt" {
 		t.Fatalf("remote_token = %q", got["remote_token"])
 	}
@@ -76,19 +76,19 @@ func TestMergeFlatForAgentPatchPreservesTokensWhenPatchSendsEmpty(t *testing.T) 
 }
 
 func TestMergeFlatForAgentPatchPreservesOptionalRelayURLsWhenPatchSendsEmpty(t *testing.T) {
-	agentExt := map[string]any{
+	agentRuntimeOptions := map[string]any{
 		"delivery_mode":       "remote_pull",
 		"remote_url":          "http://inbox",
 		"remote_messages_url": "http://messages",
 		"remote_ack_url":      "http://ack",
 	}
-	patchExt := map[string]any{
+	patchRuntimeOptions := map[string]any{
 		"delivery_mode":       "remote_pull",
 		"remote_url":          "http://inbox",
 		"remote_messages_url": "",
 		"remote_ack_url":      "",
 	}
-	got := MergeFlatForAgentPatch(agentExt, patchExt)
+	got := MergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions)
 	if got["remote_messages_url"] != "http://messages" {
 		t.Fatalf("remote_messages_url = %q", got["remote_messages_url"])
 	}
@@ -108,34 +108,34 @@ func TestProfileDeliveryComplete(t *testing.T) {
 }
 
 func TestPersistNotifierFlatToProfileNoOpWhenEmpty(t *testing.T) {
-	ext := map[string]any{"other": 1}
-	ro := map[string]any{"foo": "bar"}
-	outExt, outRO := PersistNotifierFlatToProfile(ext, ro, map[string]any{})
-	if len(outExt) != len(ext) || outExt["other"] != ext["other"] {
-		t.Fatalf("extensions changed: %#v", outExt)
+	profileRuntimeOptions := map[string]any{"other": 1}
+	requestOptions := map[string]any{"foo": "bar"}
+	outProfileRuntimeOptions, outRequestOptions := PersistNotifierFlatToProfile(profileRuntimeOptions, requestOptions, map[string]any{})
+	if len(outProfileRuntimeOptions) != len(profileRuntimeOptions) || outProfileRuntimeOptions["other"] != profileRuntimeOptions["other"] {
+		t.Fatalf("profile runtime_options changed: %#v", outProfileRuntimeOptions)
 	}
-	if len(outRO) != len(ro) || outRO["foo"] != ro["foo"] {
-		t.Fatalf("request_options changed: %#v", outRO)
+	if len(outRequestOptions) != len(requestOptions) || outRequestOptions["foo"] != requestOptions["foo"] {
+		t.Fatalf("request_options changed: %#v", outRequestOptions)
 	}
 }
 
-func TestApplyNotifierFlatPersistenceMergesOntoAgentExtPreservesOtherKeys(t *testing.T) {
-	agentRE := map[string]any{
+func TestApplyNotifierFlatPersistenceMergesOntoAgentRuntimeOptionsPreservesOtherKeys(t *testing.T) {
+	agentRuntimeOptions := map[string]any{
 		"keep":                   "yes",
 		RuntimeOptionKeyNotifier: map[string]any{"delivery_mode": "webhook", "webhook_token": "old"},
 	}
 	flat := map[string]any{"delivery_mode": "webhook", "webhook_token": "new"}
-	nextRE, _ := ApplyNotifierFlatPersistence(&agentRE, nil, nil, flat)
-	if nextRE != nil {
-		t.Fatalf("nextRE = %#v", nextRE)
+	nextProfileRuntimeOptions, _ := ApplyNotifierFlatPersistence(&agentRuntimeOptions, nil, nil, flat)
+	if nextProfileRuntimeOptions != nil {
+		t.Fatalf("nextProfileRuntimeOptions = %#v", nextProfileRuntimeOptions)
 	}
-	if agentRE["keep"] != "yes" {
-		t.Fatalf("lost sibling key: %#v", agentRE)
+	if agentRuntimeOptions["keep"] != "yes" {
+		t.Fatalf("lost sibling key: %#v", agentRuntimeOptions)
 	}
-	if _, nested := agentRE[RuntimeOptionKeyNotifier]; nested {
+	if _, nested := agentRuntimeOptions[RuntimeOptionKeyNotifier]; nested {
 		t.Fatal("legacy nested notifier key should be stripped on persist")
 	}
-	if agentRE["webhook_token"] != "new" {
-		t.Fatalf("webhook_token = %v", agentRE["webhook_token"])
+	if agentRuntimeOptions["webhook_token"] != "new" {
+		t.Fatalf("webhook_token = %v", agentRuntimeOptions["webhook_token"])
 	}
 }

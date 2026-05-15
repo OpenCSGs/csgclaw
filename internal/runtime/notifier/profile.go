@@ -12,12 +12,12 @@ import (
 // on the same map (see NotifierStorageKeys).
 const RuntimeOptionKeyNotifier = "notifier"
 
-// SubExtensionMap returns a shallow copy of extensions[key] when it is a non-empty map[string]any.
-func SubExtensionMap(extensions map[string]any, key string) map[string]any {
-	if len(extensions) == 0 {
+// NestedRuntimeOptionsMap returns a shallow copy of runtimeOptions[key] when it is a non-empty map[string]any.
+func NestedRuntimeOptionsMap(runtimeOptions map[string]any, key string) map[string]any {
+	if len(runtimeOptions) == 0 {
 		return nil
 	}
-	raw, ok := extensions[key]
+	raw, ok := runtimeOptions[key]
 	if !ok || raw == nil {
 		return nil
 	}
@@ -28,19 +28,14 @@ func SubExtensionMap(extensions map[string]any, key string) map[string]any {
 	return utils.CloneAnyMap(m)
 }
 
-// NotifierFlatFromProfile reads notifier flat from a runtime_options map (e.g. create payload before agent exists).
-func NotifierFlatFromProfile(extensions map[string]any) map[string]any {
-	return NotifierFlatFromRuntimeOptionsMap(extensions)
+// ConfigFromRuntimeOptions parses Config from a runtime_options map (e.g. create payload before agent exists).
+func ConfigFromRuntimeOptions(runtimeOptions map[string]any) Config {
+	return ConfigFromStored(NotifierFlatFromRuntimeOptionsMap(runtimeOptions))
 }
 
-// ConfigFromNotifierProfile parses Config from profile runtime_options only.
-func ConfigFromNotifierProfile(extensions map[string]any) Config {
-	return ConfigFromStored(NotifierFlatFromProfile(extensions))
-}
-
-// WithRuntimeOption returns a copy of extensions with key set to flat (or deleted when flat is empty).
-func WithRuntimeOption(extensions map[string]any, key string, flat map[string]any) map[string]any {
-	out := utils.CloneAnyMap(extensions)
+// WithRuntimeOption returns a copy of runtimeOptions with key set to flat (or deleted when flat is empty).
+func WithRuntimeOption(runtimeOptions map[string]any, key string, flat map[string]any) map[string]any {
+	out := utils.CloneAnyMap(runtimeOptions)
 	if out == nil {
 		out = make(map[string]any)
 	}
@@ -55,17 +50,17 @@ func WithRuntimeOption(extensions map[string]any, key string, flat map[string]an
 	return out
 }
 
-// WithNotifierExtension sets legacy nested runtime_options["notifier"] (prefer flat root keys on the map instead).
-func WithNotifierExtension(extensions map[string]any, flat map[string]any) map[string]any {
-	return WithRuntimeOption(extensions, RuntimeOptionKeyNotifier, flat)
+// WithNestedNotifierRuntimeOption sets legacy nested runtime_options["notifier"] (prefer flat root keys on the map instead).
+func WithNestedNotifierRuntimeOption(runtimeOptions map[string]any, flat map[string]any) map[string]any {
+	return WithRuntimeOption(runtimeOptions, RuntimeOptionKeyNotifier, flat)
 }
 
-// RedactRuntimeOptionsForAPI returns a shallow copy of extensions with known secret-bearing subtrees redacted.
-func RedactRuntimeOptionsForAPI(extensions map[string]any) map[string]any {
-	if len(extensions) == 0 {
+// RedactRuntimeOptionsForAPI returns a shallow copy of runtime_options with known secret-bearing subtrees redacted.
+func RedactRuntimeOptionsForAPI(runtimeOptions map[string]any) map[string]any {
+	if len(runtimeOptions) == 0 {
 		return nil
 	}
-	out := utils.CloneAnyMap(extensions)
+	out := utils.CloneAnyMap(runtimeOptions)
 	if out == nil {
 		return nil
 	}
@@ -108,23 +103,10 @@ func MergeFlatRuntimeOptionsForProfilePatch(baseRuntimeOptions, patchRuntimeOpti
 	return MergeNotifierFlatPatch(base, incoming)
 }
 
-// PersistNotifierFlatToProfile merges flat notifier keys at the root of extensions (no nested "notifier" map)
-// and strips nested notifier from request_options. When mergedFlat is empty, inputs are unchanged.
-func PersistNotifierFlatToProfile(extensions, requestOptions, mergedFlat map[string]any) (map[string]any, map[string]any) {
-	return ApplyNotifierFlatPersistence(nil, extensions, requestOptions, mergedFlat)
-}
-
-// RequestOptionsWithoutNestedNotifier returns a copy of ro with request_options["notifier"] removed.
-func RequestOptionsWithoutNestedNotifier(ro map[string]any) map[string]any {
-	out := utils.CloneAnyMap(ro)
-	if out == nil {
-		return nil
-	}
-	StripNestedNotifier(out)
-	if len(out) == 0 {
-		return nil
-	}
-	return out
+// PersistNotifierFlatToProfile merges flat notifier keys at the root of profileRuntimeOptions (no nested "notifier" map)
+// and strips nested notifier from requestOptions. When mergedFlat is empty, inputs are unchanged.
+func PersistNotifierFlatToProfile(profileRuntimeOptions, requestOptions, mergedFlat map[string]any) (map[string]any, map[string]any) {
+	return ApplyNotifierFlatPersistence(nil, profileRuntimeOptions, requestOptions, mergedFlat)
 }
 
 // ProfileDeliveryComplete reports whether notifier delivery is sufficiently configured from flat runtime storage.
@@ -143,9 +125,9 @@ type ProfileViewSummary struct {
 	RemoteTokenSet   bool `json:"remote_token_set,omitempty"`
 }
 
-// ProfileViewSummaryForAPI returns nil when no notifier configuration is present in the given options map.
-func ProfileViewSummaryForAPI(extensions map[string]any) *ProfileViewSummary {
-	return ProfileViewSummaryForAgentStorage(NotifierFlatFromRuntimeOptionsMap(extensions))
+// ProfileViewSummaryForAPI returns nil when no notifier configuration is present in the given runtime_options map.
+func ProfileViewSummaryForAPI(runtimeOptions map[string]any) *ProfileViewSummary {
+	return ProfileViewSummaryForAgentStorage(NotifierFlatFromRuntimeOptionsMap(runtimeOptions))
 }
 
 // ProfileViewSummaryForAgentStorage builds a summary from agent-level notifier flat only.
@@ -184,41 +166,19 @@ func profileViewSummaryToMap(s *ProfileViewSummary) map[string]any {
 	return m
 }
 
-// requestOptionsForAgentProfileView returns request_options safe for JSON (secrets redacted).
-// When agent-level notifier flat is present, nested request_options["notifier"] is omitted from the view
-// to avoid duplicating what is summarized under runtime_options.notifier_profile.
-func requestOptionsForAgentProfileView(agentExt map[string]any, requestOptions map[string]any) map[string]any {
-	flat := NotifierFlatFromAgentStorage(agentExt)
-	ro := RedactedRequestOptionsForAPIView(requestOptions)
-	if len(flat) > 0 && ro != nil {
-		delete(ro, "notifier")
-		if len(ro) == 0 {
-			ro = nil
-		}
-	}
-	return ro
-}
-
-// RequestOptionsForAgentProfileView returns request_options safe for JSON (secrets redacted).
-// When agent-level notifier flat is present, nested request_options["notifier"] is omitted from the view
-// to avoid duplicating what is summarized under runtime_options.notifier_profile.
-func RequestOptionsForAgentProfileView(agentExt map[string]any, requestOptions map[string]any) map[string]any {
-	return requestOptionsForAgentProfileView(agentExt, requestOptions)
-}
-
 // ViewRuntimeOptionsForAPI returns runtime_options safe for JSON: redacted notifier subtree plus view-only notifier_profile summary.
 // Options are treated as agent-level runtime_options (the only source of truth for notifier delivery).
-func ViewRuntimeOptionsForAPI(extensions map[string]any) map[string]any {
-	return ViewRuntimeOptionsForAPIUnified(extensions, nil)
+func ViewRuntimeOptionsForAPI(agentRuntimeOptions map[string]any) map[string]any {
+	return ViewRuntimeOptionsForAPIUnified(agentRuntimeOptions, nil)
 }
 
 // ViewRuntimeOptionsForAPIUnified merges agent-level and profile-level runtime_options before redacting and summarizing.
 // Profile-level notifier payload is not merged (agent runtime_options is the only source of truth for delivery config).
-func ViewRuntimeOptionsForAPIUnified(agentExt, profileExt map[string]any) map[string]any {
-	profileExt = ProfileRuntimeOptionsWithoutNotifierPayload(profileExt)
-	merged := MergeRuntimeOptionMapsForView(agentExt, profileExt)
+func ViewRuntimeOptionsForAPIUnified(agentRuntimeOptions, profileRuntimeOptions map[string]any) map[string]any {
+	profileRuntimeOptions = ProfileRuntimeOptionsWithoutNotifierPayload(profileRuntimeOptions)
+	merged := MergeRuntimeOptionMapsForView(agentRuntimeOptions, profileRuntimeOptions)
 	base := RedactRuntimeOptionsForAPI(merged)
-	agentFlat := NotifierFlatFromAgentStorage(agentExt)
+	agentFlat := NotifierFlatFromAgentRuntimeOptions(agentRuntimeOptions)
 	summaryMap := profileViewSummaryToMap(ProfileViewSummaryForAgentStorage(agentFlat))
 	if summaryMap == nil {
 		if len(base) == 0 {
