@@ -11,7 +11,7 @@ const (
 	KindPicoClawSandbox = "picoclaw_sandbox"
 	KindOpenClawSandbox = "openclaw_sandbox"
 	KindCodex           = "codex"
-	// KindNotifier is an in-process worker: no sandbox, IM delivery only (request_options.notifier).
+	// KindNotifier is an in-process worker: no sandbox, IM delivery only (agent.runtime_options).
 	KindNotifier = "notifier"
 )
 

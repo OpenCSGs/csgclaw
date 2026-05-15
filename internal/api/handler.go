@@ -94,24 +94,24 @@ type updateBootstrapConfigRequest struct {
 }
 
 type agentResponse struct {
-	ID                string                         `json:"id"`
-	Name              string                         `json:"name"`
-	Description       string                         `json:"description,omitempty"`
-	RuntimeID         string                         `json:"runtime_id,omitempty"`
-	RuntimeKind       string                         `json:"runtime_kind,omitempty"`
-	Image             string                         `json:"image,omitempty"`
-	BoxID             string                         `json:"box_id,omitempty"`
-	Role              string                         `json:"role"`
-	Status            string                         `json:"status"`
-	CreatedAt         time.Time                      `json:"created_at"`
-	Profile           string                         `json:"profile,omitempty"`
-	Provider          string                         `json:"provider,omitempty"`
-	ModelID           string                         `json:"model_id,omitempty"`
-	ReasoningEffort   string                         `json:"reasoning_effort,omitempty"`
-	RuntimeExtensions map[string]any                 `json:"runtime_extensions,omitempty"`
-	AgentProfile      agent.AgentProfileView         `json:"agent_profile,omitempty"`
-	ProfileComplete   bool                           `json:"profile_complete"`
-	DetectionResults  []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
+	ID               string                         `json:"id"`
+	Name             string                         `json:"name"`
+	Description      string                         `json:"description,omitempty"`
+	RuntimeID        string                         `json:"runtime_id,omitempty"`
+	RuntimeKind      string                         `json:"runtime_kind,omitempty"`
+	Image            string                         `json:"image,omitempty"`
+	BoxID            string                         `json:"box_id,omitempty"`
+	Role             string                         `json:"role"`
+	Status           string                         `json:"status"`
+	CreatedAt        time.Time                      `json:"created_at"`
+	Profile          string                         `json:"profile,omitempty"`
+	Provider         string                         `json:"provider,omitempty"`
+	ModelID          string                         `json:"model_id,omitempty"`
+	ReasoningEffort  string                         `json:"reasoning_effort,omitempty"`
+	RuntimeOptions   map[string]any                 `json:"runtime_options,omitempty"`
+	AgentProfile     agent.AgentProfileView         `json:"agent_profile,omitempty"`
+	ProfileComplete  bool                           `json:"profile_complete"`
+	DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
 func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) {
@@ -584,12 +584,12 @@ func (h *Handler) handleAgentProfile(w http.ResponseWriter, r *http.Request, id 
 		}
 		writeJSON(w, http.StatusOK, profile)
 	case http.MethodPut:
-		var req agent.AgentProfile
+		var req agent.AgentProfilePutRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
-		profile, err := h.svc.UpdateAgentProfile(id, req)
+		profile, err := h.svc.UpdateAgentProfile(id, req.AgentProfile, req.RuntimeOptions)
 		if err != nil {
 			status := http.StatusBadRequest
 			if strings.Contains(err.Error(), "not found") {
@@ -791,18 +791,19 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 	prof := agentProfileFromAPI(req.AgentProfile)
 	return agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
-			ID:           req.ID,
-			Name:         req.Name,
-			Description:  req.Description,
-			Image:        req.Image,
-			RuntimeKind:  req.RuntimeKind,
-			FromTemplate: req.FromTemplate,
-			Role:         req.Role,
-			Status:       req.Status,
-			CreatedAt:    req.CreatedAt,
-			Profile:      req.Profile,
-			ModelID:      req.ModelID,
-			AgentProfile: prof,
+			ID:             req.ID,
+			Name:           req.Name,
+			Description:    req.Description,
+			Image:          req.Image,
+			RuntimeKind:    req.RuntimeKind,
+			FromTemplate:   req.FromTemplate,
+			Role:           req.Role,
+			Status:         req.Status,
+			CreatedAt:      req.CreatedAt,
+			Profile:        req.Profile,
+			ModelID:        req.ModelID,
+			RuntimeOptions: cloneRuntimeOptionsFromAPI(req.RuntimeOptions),
+			AgentProfile:   prof,
 		},
 		Replace:   req.Replace,
 		FieldMask: req.FieldMask,
@@ -937,23 +938,22 @@ func splitHubTemplatePath(path string) (string, string) {
 
 func agentProfileFromAPI(req apitypes.CreateAgentProfile) agent.AgentProfile {
 	return agent.AgentProfile{
-		Name:              req.Name,
-		Description:       req.Description,
-		Provider:          req.Provider,
-		BaseURL:           req.BaseURL,
-		APIKey:            req.APIKey,
-		Headers:           req.Headers,
-		ModelID:           req.ModelID,
-		ReasoningEffort:   req.ReasoningEffort,
-		EnableFastMode:    req.EnableFastMode,
-		RequestOptions:    req.RequestOptions,
-		RuntimeExtensions: cloneRuntimeExtensionsFromAPI(req.RuntimeExtensions),
-		Env:               req.Env,
-		ProfileComplete:   req.ProfileComplete,
+		Name:            req.Name,
+		Description:     req.Description,
+		Provider:        req.Provider,
+		BaseURL:         req.BaseURL,
+		APIKey:          req.APIKey,
+		Headers:         req.Headers,
+		ModelID:         req.ModelID,
+		ReasoningEffort: req.ReasoningEffort,
+		EnableFastMode:  req.EnableFastMode,
+		RequestOptions:  req.RequestOptions,
+		Env:             req.Env,
+		ProfileComplete: req.ProfileComplete,
 	}
 }
 
-func cloneRuntimeExtensionsFromAPI(m map[string]any) map[string]any {
+func cloneRuntimeOptionsFromAPI(m map[string]any) map[string]any {
 	if len(m) == 0 {
 		return nil
 	}
@@ -1534,26 +1534,26 @@ func presentAgent(item agent.Agent) agentResponse {
 	if strings.TrimSpace(av.Description) == strings.TrimSpace(item.Description) {
 		av.Description = ""
 	}
-	rx := notifier.ViewRuntimeExtensionsForAPIUnified(item.RuntimeExtensions, item.AgentProfile.RuntimeExtensions)
+	rx := notifier.ViewRuntimeOptionsForAPI(item.RuntimeOptions)
 	return agentResponse{
-		ID:                item.ID,
-		Name:              item.Name,
-		Description:       item.Description,
-		RuntimeID:         item.RuntimeID,
-		RuntimeKind:       item.RuntimeKind,
-		Image:             item.Image,
-		BoxID:             item.BoxID,
-		Role:              item.Role,
-		Status:            item.Status,
-		CreatedAt:         item.CreatedAt,
-		Profile:           item.Profile,
-		Provider:          item.Provider,
-		ModelID:           item.ModelID,
-		ReasoningEffort:   item.ReasoningEffort,
-		RuntimeExtensions: rx,
-		AgentProfile:      av,
-		ProfileComplete:   item.ProfileComplete,
-		DetectionResults:  append([]agent.ProfileDetectionResult(nil), item.DetectionResults...),
+		ID:               item.ID,
+		Name:             item.Name,
+		Description:      item.Description,
+		RuntimeID:        item.RuntimeID,
+		RuntimeKind:      item.RuntimeKind,
+		Image:            item.Image,
+		BoxID:            item.BoxID,
+		Role:             item.Role,
+		Status:           item.Status,
+		CreatedAt:        item.CreatedAt,
+		Profile:          item.Profile,
+		Provider:         item.Provider,
+		ModelID:          item.ModelID,
+		ReasoningEffort:  item.ReasoningEffort,
+		RuntimeOptions:   rx,
+		AgentProfile:     av,
+		ProfileComplete:  item.ProfileComplete,
+		DetectionResults: append([]agent.ProfileDetectionResult(nil), item.DetectionResults...),
 	}
 }
 
@@ -1638,7 +1638,7 @@ func (h *Handler) handleAgentNotifierWebhook(w http.ResponseWriter, r *http.Requ
 			if !ok {
 				return nil, "", "", "", false
 			}
-			return a.RuntimeExtensions, a.Role, a.RuntimeKind, a.Status, true
+			return a.RuntimeOptions, a.Role, a.RuntimeKind, a.Status, true
 		},
 		Fanout: h.notifierFanoutBridge(),
 	})

@@ -11,7 +11,6 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
-	"csgclaw/internal/runtime/notifier"
 )
 
 type Service struct {
@@ -299,6 +298,7 @@ func (s *Service) CreateManager(ctx context.Context, req CreateRequest, forceRec
 }
 
 func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (Bot, error) {
+	var err error
 	if existing, ok := s.findByChannelName(normalized.Channel, normalized.Name); ok {
 		return Bot{}, fmt.Errorf("bot name %q already exists in channel %q with id %q", normalized.Name, normalized.Channel, existing.ID)
 	}
@@ -309,19 +309,19 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 			return Bot{}, fmt.Errorf("agent id %q already exists with role %q", created.ID, created.Role)
 		}
 	} else {
-		var createErr error
-		created, createErr = s.agents.CreateWorker(ctx, agent.CreateAgentSpec{
-			ID:           normalized.ID,
-			Name:         normalized.Name,
-			Description:  normalized.Description,
-			Image:        normalized.Image,
-			Role:         agent.RoleWorker,
-			ModelID:      normalized.ModelID,
-			RuntimeKind:  normalized.RuntimeKind,
-			AgentProfile: agentProfileFromBotRequest(normalized.AgentProfile),
+		created, err = s.agents.CreateWorker(ctx, agent.CreateAgentSpec{
+			ID:             normalized.ID,
+			Name:           normalized.Name,
+			Description:    normalized.Description,
+			Image:          normalized.Image,
+			Role:           agent.RoleWorker,
+			ModelID:        normalized.ModelID,
+			RuntimeKind:    normalized.RuntimeKind,
+			RuntimeOptions: cloneRuntimeOptionsMapForBot(normalized.RuntimeOptions),
+			AgentProfile:   agentProfileFromBotRequest(normalized.AgentProfile),
 		})
-		if createErr != nil {
-			return Bot{}, createErr
+		if err != nil {
+			return Bot{}, err
 		}
 	}
 
@@ -366,23 +366,22 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 
 func agentProfileFromBotRequest(req apitypes.CreateAgentProfile) agent.AgentProfile {
 	return agent.AgentProfile{
-		Name:              req.Name,
-		Description:       req.Description,
-		Provider:          req.Provider,
-		BaseURL:           req.BaseURL,
-		APIKey:            req.APIKey,
-		Headers:           req.Headers,
-		ModelID:           req.ModelID,
-		ReasoningEffort:   req.ReasoningEffort,
-		EnableFastMode:    req.EnableFastMode,
-		RequestOptions:    req.RequestOptions,
-		RuntimeExtensions: cloneRuntimeExtensionsMapForBot(req.RuntimeExtensions),
-		Env:               req.Env,
-		ProfileComplete:   req.ProfileComplete,
+		Name:            req.Name,
+		Description:     req.Description,
+		Provider:        req.Provider,
+		BaseURL:         req.BaseURL,
+		APIKey:          req.APIKey,
+		Headers:         req.Headers,
+		ModelID:         req.ModelID,
+		ReasoningEffort: req.ReasoningEffort,
+		EnableFastMode:  req.EnableFastMode,
+		RequestOptions:  req.RequestOptions,
+		Env:             req.Env,
+		ProfileComplete: req.ProfileComplete,
 	}
 }
 
-func cloneRuntimeExtensionsMapForBot(m map[string]any) map[string]any {
+func cloneRuntimeOptionsMapForBot(m map[string]any) map[string]any {
 	if len(m) == 0 {
 		return nil
 	}
@@ -510,7 +509,8 @@ func (s *Service) ensureChannelUser(ctx context.Context, channelName string, cre
 }
 
 func deriveAgentHandle(a agent.Agent) string {
-	if notifier.IsDeliveryWorker(a.Role, a.RuntimeKind) {
+	if strings.EqualFold(strings.TrimSpace(a.Role), agent.RoleWorker) &&
+		strings.EqualFold(strings.TrimSpace(a.RuntimeKind), agent.RuntimeKindNotifier) {
 		if handle, ok := sanitizeHandle(strings.ToLower(strings.ReplaceAll(strings.TrimSpace(a.Name), " ", "-"))); ok {
 			return handle
 		}

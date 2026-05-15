@@ -13,7 +13,7 @@ const maxNotifierWebhookBody = 4 << 20
 // WebhookHTTPDeps supplies agent lookup and IM fanout for ServeAgentWebhook.
 type WebhookHTTPDeps struct {
 	Reload func() error
-	// LookupNotifierAgent returns runtime_extensions and agent fields needed for webhook auth.
+	// LookupNotifierAgent returns runtime_options and agent fields needed for webhook auth.
 	LookupNotifierAgent func(agentID string) (ext map[string]any, role, runtimeKind, status string, ok bool)
 	Fanout              IMFanoutBridge
 }
@@ -67,7 +67,7 @@ func ServeAgentWebhook(w http.ResponseWriter, r *http.Request, agentID string, d
 		return
 	}
 	ct := r.Header.Get("Content-Type")
-	content := FormatPayloadAsChatContent(body, ct)
+	content := FormatPayloadAsChatContent(body, ct, r.Header)
 	if err := DeliverNotifierFanout(agentID, content, deps.Fanout); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

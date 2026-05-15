@@ -13,9 +13,9 @@ type ProfileViewSummary struct {
 	RemoteTokenSet   bool `json:"remote_token_set,omitempty"`
 }
 
-// ProfileViewSummaryForAPI returns nil when no notifier configuration is present (profile runtime_extensions only).
+// ProfileViewSummaryForAPI returns nil when no notifier configuration is present in the given options map.
 func ProfileViewSummaryForAPI(extensions map[string]any) *ProfileViewSummary {
-	return ProfileViewSummaryForAgentStorage(NotifierFlatFromRuntimeExtensionsMap(extensions))
+	return ProfileViewSummaryForAgentStorage(NotifierFlatFromRuntimeOptionsMap(extensions))
 }
 
 // ProfileViewSummaryForAgentStorage builds a summary from agent-level notifier flat only.
@@ -56,7 +56,7 @@ func profileViewSummaryToMap(s *ProfileViewSummary) map[string]any {
 
 // requestOptionsForAgentProfileView returns request_options safe for JSON (secrets redacted).
 // When agent-level notifier flat is present, nested request_options["notifier"] is omitted from the view
-// to avoid duplicating what is summarized under runtime_extensions.notifier_profile.
+// to avoid duplicating what is summarized under runtime_options.notifier_profile.
 func requestOptionsForAgentProfileView(agentExt map[string]any, requestOptions map[string]any) map[string]any {
 	flat := NotifierFlatFromAgentStorage(agentExt)
 	ro := agentruntime.RedactedRequestOptionsForAPIView(requestOptions)
@@ -71,23 +71,23 @@ func requestOptionsForAgentProfileView(agentExt map[string]any, requestOptions m
 
 // RequestOptionsForAgentProfileView returns request_options safe for JSON (secrets redacted).
 // When agent-level notifier flat is present, nested request_options["notifier"] is omitted from the view
-// to avoid duplicating what is summarized under runtime_extensions.notifier_profile.
+// to avoid duplicating what is summarized under runtime_options.notifier_profile.
 func RequestOptionsForAgentProfileView(agentExt map[string]any, requestOptions map[string]any) map[string]any {
 	return requestOptionsForAgentProfileView(agentExt, requestOptions)
 }
 
-// ViewRuntimeExtensionsForAPI returns runtime_extensions safe for JSON: redacted notifier subtree plus view-only notifier_profile summary.
-// Extensions are treated as agent-level runtime_extensions (the only source of truth for notifier delivery).
-func ViewRuntimeExtensionsForAPI(extensions map[string]any) map[string]any {
-	return ViewRuntimeExtensionsForAPIUnified(extensions, nil)
+// ViewRuntimeOptionsForAPI returns runtime_options safe for JSON: redacted notifier subtree plus view-only notifier_profile summary.
+// Options are treated as agent-level runtime_options (the only source of truth for notifier delivery).
+func ViewRuntimeOptionsForAPI(extensions map[string]any) map[string]any {
+	return ViewRuntimeOptionsForAPIUnified(extensions, nil)
 }
 
-// ViewRuntimeExtensionsForAPIUnified merges agent-level and profile-level runtime_extensions before redacting and summarizing.
-// Profile-level notifier payload is not merged (agent runtime_extensions is the only source of truth for delivery config).
-func ViewRuntimeExtensionsForAPIUnified(agentExt, profileExt map[string]any) map[string]any {
-	profileExt = ProfileRuntimeExtensionsWithoutNotifierPayload(profileExt)
-	merged := MergeRuntimeExtensionMapsForView(agentExt, profileExt)
-	base := RedactRuntimeExtensionsForAPI(merged)
+// ViewRuntimeOptionsForAPIUnified merges agent-level and profile-level runtime_options before redacting and summarizing.
+// Profile-level notifier payload is not merged (agent runtime_options is the only source of truth for delivery config).
+func ViewRuntimeOptionsForAPIUnified(agentExt, profileExt map[string]any) map[string]any {
+	profileExt = ProfileRuntimeOptionsWithoutNotifierPayload(profileExt)
+	merged := MergeRuntimeOptionMapsForView(agentExt, profileExt)
+	base := RedactRuntimeOptionsForAPI(merged)
 	agentFlat := NotifierFlatFromAgentStorage(agentExt)
 	summaryMap := profileViewSummaryToMap(ProfileViewSummaryForAgentStorage(agentFlat))
 	if summaryMap == nil {
@@ -100,6 +100,6 @@ func ViewRuntimeExtensionsForAPIUnified(agentExt, profileExt map[string]any) map
 	if out == nil {
 		out = make(map[string]any)
 	}
-	out[RuntimeExtensionKeyNotifierProfile] = summaryMap
+	out[RuntimeOptionKeyNotifierProfile] = summaryMap
 	return out
 }

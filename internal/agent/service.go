@@ -926,7 +926,7 @@ func (s *Service) createNew(ctx context.Context, spec CreateAgentSpec) (Agent, e
 		_ = s.closeRuntime(runtimeHome, rt)
 	}()
 
-	resolvedProfile, _, err := s.profileForCreateRequest(ctx, spec)
+	resolvedProfile, err := s.profileForCreateRequest(ctx, &spec)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -1071,17 +1071,18 @@ func replaceImageOverride(req CreateRequest) string {
 
 func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) (CreateAgentSpec, error) {
 	merged := CreateAgentSpec{
-		ID:           existing.ID,
-		Name:         existing.Name,
-		Description:  existing.Description,
-		Image:        existing.Image,
-		RuntimeKind:  existing.RuntimeKind,
-		Role:         existing.Role,
-		Status:       existing.Status,
-		CreatedAt:    existing.CreatedAt,
-		Profile:      existing.Profile,
-		ModelID:      existing.ModelID,
-		AgentProfile: cloneProfile(existing.AgentProfile),
+		ID:             existing.ID,
+		Name:           existing.Name,
+		Description:    existing.Description,
+		Image:          existing.Image,
+		RuntimeKind:    existing.RuntimeKind,
+		Role:           existing.Role,
+		Status:         existing.Status,
+		CreatedAt:      existing.CreatedAt,
+		Profile:        existing.Profile,
+		ModelID:        existing.ModelID,
+		RuntimeOptions: agentruntime.CloneAnyMap(existing.RuntimeOptions),
+		AgentProfile:   cloneProfile(existing.AgentProfile),
 	}
 	for _, field := range fieldMask {
 		switch strings.ToLower(strings.TrimSpace(field)) {
@@ -1115,6 +1116,8 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 			merged.AgentProfile = cloneProfile(next.AgentProfile)
 			merged.Profile = ""
 			merged.ModelID = ""
+		case "runtime_options":
+			merged.RuntimeOptions = agentruntime.CloneAnyMap(next.RuntimeOptions)
 		default:
 			return CreateAgentSpec{}, fmt.Errorf("unsupported agent field mask path %q", field)
 		}
@@ -1576,7 +1579,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	if err != nil {
 		return Agent{}, err
 	}
-	resolvedProfile, _, err := s.profileForCreateRequest(ctx, spec)
+	resolvedProfile, err := s.profileForCreateRequest(ctx, &spec)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -1603,7 +1606,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		if err := s.overlayTemplateWorkspace(name, spec.FromTemplate); err != nil {
 			return Agent{}, err
 		}
-		return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, agentruntime.Info{
+		return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, spec.RuntimeOptions, agentruntime.Info{
 			HandleID:  strings.TrimSpace(info.ID),
 			State:     agentruntime.State(info.State),
 			CreatedAt: info.CreatedAt.UTC(),
@@ -1628,10 +1631,10 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		CreatedAt: time.Now().UTC(),
 	}
 
-	return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, info, agentRole)
+	return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, spec.RuntimeOptions, info, agentRole)
 }
 
-func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, info agentruntime.Info, role string) (Agent, error) {
+func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, createRuntimeExt map[string]any, info agentruntime.Info, role string) (Agent, error) {
 	s.mu.Lock()
 
 	if _, ok := s.agents[id]; ok {
@@ -1655,32 +1658,30 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 		role = RoleWorker
 	}
 	prof := cloneProfile(profile)
-	// New worker has no agent-level extensions yet; notifier flat is lifted from the create payload profile.runtime_extensions into agent storage.
 	pol := agentruntime.ProfileExtensionsPolicyForKind(agentruntime.NormalizeRuntimeKind(runtimeKind))
-	rx := pol.FlatFromExtensionsMap(prof.RuntimeExtensions)
+	rx := pol.FlatFromExtensionsMap(createRuntimeExt)
 	var agentRX map[string]any
 	if len(rx) > 0 {
 		agentRX = agentruntime.CloneAnyMap(rx)
-		prof.RuntimeExtensions = pol.DetachPayloadFromProfileExtensions(prof.RuntimeExtensions)
 	}
 	worker := Agent{
-		ID:                id,
-		Name:              name,
-		RuntimeID:         runtimeIDForAgentID(id),
-		RuntimeKind:       runtimeKind,
-		Image:             image,
-		BoxID:             strings.TrimSpace(info.HandleID),
-		Description:       description,
-		Status:            string(state),
-		CreatedAt:         createdAt,
-		RuntimeExtensions: agentRX,
-		Profile:           profileSelector(prof),
-		Provider:          prof.Provider,
-		ModelID:           prof.ModelID,
-		ReasoningEffort:   prof.ReasoningEffort,
-		AgentProfile:      prof,
-		ProfileComplete:   prof.ProfileComplete,
-		Role:              role,
+		ID:              id,
+		Name:            name,
+		RuntimeID:       runtimeIDForAgentID(id),
+		RuntimeKind:     runtimeKind,
+		Image:           image,
+		BoxID:           strings.TrimSpace(info.HandleID),
+		Description:     description,
+		Status:          string(state),
+		CreatedAt:       createdAt,
+		RuntimeOptions:  agentRX,
+		Profile:         profileSelector(prof),
+		Provider:        prof.Provider,
+		ModelID:         prof.ModelID,
+		ReasoningEffort: prof.ReasoningEffort,
+		AgentProfile:    prof,
+		ProfileComplete: prof.ProfileComplete,
+		Role:            role,
 	}
 	s.agents[worker.ID] = worker
 	s.syncRuntimeRecordLocked(worker)

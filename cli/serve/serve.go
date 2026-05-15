@@ -37,6 +37,8 @@ import (
 	internalonboard "csgclaw/internal/onboard"
 	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
+	runtimenotifier "csgclaw/internal/runtime/notifier"
+	notifierpull "csgclaw/internal/runtime/notifier/pull"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/server"
 	"csgclaw/internal/upgrade"
@@ -479,6 +481,12 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		AccessToken: cfg.Server.AccessToken,
 		NoAuth:      cfg.Server.NoAuth,
 		Context:     ctx,
+		NotifierBackground: func(bgCtx context.Context, agentSvc *agent.Service, deliver runtimenotifier.Fanouter) {
+			if agentSvc == nil || deliver == nil {
+				return
+			}
+			notifierpull.NewSupervisor(agentSvc, deliver).Run(bgCtx)
+		},
 		OnReady: func() {
 			if output != "json" && run != nil {
 				go func() {

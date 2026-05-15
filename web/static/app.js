@@ -26,7 +26,7 @@ const RUNTIME_KIND_OPTIONS = [
   { value: "notifier", label: "notifier" },
 ];
 const GATEWAY_RUNTIME_KIND_OPTIONS = RUNTIME_KIND_OPTIONS.filter((option) => option.value === "picoclaw_sandbox");
-/** Notifier delivery: flat keys on `agent.runtime_extensions` (and create payload `agent_profile.runtime_extensions`); API adds `notifier_profile` summary. Legacy `agent.notifier_details` may still be read on load. */
+/** Notifier delivery: flat keys on `agent.runtime_options` (create/PATCH send top-level `runtime_options`); API adds `notifier_profile` summary. */
 const NOTIFIER_DELIVERY_OPTIONS = ["webhook", "remote_pull"];
 /** Relay inbound Webhook path for GitLab POST (not the GET inbox list path). */
 const NOTIFIER_RELAY_WEBHOOK_INGRESS_PATH = "/api/v1/webhooks/ingress";
@@ -2820,9 +2820,12 @@ function App() {
     setAgentPageBusy(true);
     setAgentPageError("");
     try {
-      const profile = draftToProfile(ensureNotifierPullSubscriptionDraft(agentPageDraft), {
+      const draft = ensureNotifierPullSubscriptionDraft(agentPageDraft);
+      const profile = draftToProfile(draft, {
         name: agentPageDraft.name,
         description: agentPageDraft.description,
+      });
+      const rx = draftNotifierRuntimeOptionsForSave(draft, {
         mergeNotifier: isNotifierRuntimeDraftOnAgentPage(agentPageDraft, selectedAgentForPage),
       });
       const payload = {
@@ -2830,6 +2833,9 @@ function App() {
         description: agentPageDraft.description,
         agent_profile: profile,
       };
+      if (rx) {
+        payload.runtime_options = rx;
+      }
       const resp = await fetch(`api/v1/agents/${encodeURIComponent(selectedAgentForPage.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -2891,13 +2897,14 @@ function App() {
     const runtimeKind = normalizeRuntimeKind(agentDraft.runtime_kind) || "picoclaw_sandbox";
     setAgentProgress(isCreate ? startAgentCreateProgress(runtimeKind) : null);
     try {
-      const profile = draftToProfile(ensureNotifierPullSubscriptionDraft(agentDraft), {
+      const draft = ensureNotifierPullSubscriptionDraft(agentDraft);
+      const profile = draftToProfile(draft, {
         name: agentDraft.name,
         description: agentDraft.description,
+      });
+      const rx = draftNotifierRuntimeOptionsForSave(draft, {
         mergeNotifier: isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent),
       });
-      const isNotifierCreate =
-        isCreate && isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent);
       const payload = {
         name: agentDraft.name,
         role: "worker",
@@ -2907,15 +2914,22 @@ function App() {
         from_template: agentDraft.from_template || "",
         agent_profile: profile,
       };
+      if (rx) {
+        payload.runtime_options = rx;
+      }
       const url = isCreate ? "api/v1/bots" : `api/v1/agents/${encodeURIComponent(editingAgent.id)}`;
+      const patchBody = {
+        name: payload.name,
+        description: payload.description,
+        agent_profile: payload.agent_profile,
+      };
+      if (payload.runtime_options) {
+        patchBody.runtime_options = payload.runtime_options;
+      }
       const resp = await fetch(url, {
         method: isCreate ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isCreate ? payload : {
-          name: payload.name,
-          description: payload.description,
-          agent_profile: payload.agent_profile,
-        }),
+        body: JSON.stringify(isCreate ? payload : patchBody),
       });
       if (!resp.ok) {
         throw new Error((await resp.text()).trim());
@@ -6300,7 +6314,7 @@ function notifierThirdPartyPasteUrlRow(draft, t) {
   `;
 }
 
-/** Maps API notifier_profile summary (merged from agent.runtime_extensions and agent_profile.runtime_extensions) to flat draft flags. */
+/** Maps API notifier_profile summary (from `agent.runtime_options`) to flat draft flags. */
 const NOTIFIER_STORAGE_KEYS = [
   "delivery_mode",
   "webhook_token",
@@ -6312,14 +6326,14 @@ const NOTIFIER_STORAGE_KEYS = [
   "remote_token",
 ];
 
-function mergedRuntimeExtensionsForView(profile, agent) {
-  const p =
-    profile?.runtime_extensions && typeof profile.runtime_extensions === "object" && !Array.isArray(profile.runtime_extensions)
-      ? profile.runtime_extensions
-      : {};
+function mergedRuntimeOptionsForView(profile, agent) {
   const a =
-    agent?.runtime_extensions && typeof agent.runtime_extensions === "object" && !Array.isArray(agent.runtime_extensions)
-      ? agent.runtime_extensions
+    agent?.runtime_options && typeof agent.runtime_options === "object" && !Array.isArray(agent.runtime_options)
+      ? agent.runtime_options
+      : {};
+  const p =
+    profile?.runtime_options && typeof profile.runtime_options === "object" && !Array.isArray(profile.runtime_options)
+      ? profile.runtime_options
       : {};
   return { ...p, ...a };
 }
@@ -6350,7 +6364,7 @@ function notifierKeysFromFlatRoot(m) {
 }
 
 function notifierProfileSummaryFlags(profile, agent) {
-  const re = mergedRuntimeExtensionsForView(profile, agent);
+  const re = mergedRuntimeOptionsForView(profile, agent);
   const s =
     re.notifier_profile && typeof re.notifier_profile === "object" && !Array.isArray(re.notifier_profile)
       ? re.notifier_profile
@@ -6382,16 +6396,16 @@ function notifierRemoteTokenPlaceholderText(draft, t) {
   return t("notifierRemoteTokenInputPlaceholder");
 }
 
-/** Flat notifier map: prefers agent.runtime_extensions (flat), then profile.runtime_extensions (flat or nested notifier), legacy agent.notifier_details, then request_options.notifier. */
+/** Flat notifier map: prefers agent.runtime_options (flat), then profile.runtime_options (flat or nested notifier), then request_options.notifier. */
 function notifierFlatFromSources(profile, agent) {
-  const fromAgentTop = notifierKeysFromFlatRoot(agent?.runtime_extensions);
+  const fromAgentTop = notifierKeysFromFlatRoot(agent?.runtime_options);
   if (fromAgentTop) {
     return fromAgentTop;
   }
   const prof = profile && typeof profile === "object" ? profile : {};
   const ext =
-    prof.runtime_extensions && typeof prof.runtime_extensions === "object" && !Array.isArray(prof.runtime_extensions)
-      ? prof.runtime_extensions
+    prof.runtime_options && typeof prof.runtime_options === "object" && !Array.isArray(prof.runtime_options)
+      ? prof.runtime_options
       : {};
   const fromExtNested = ext.notifier && typeof ext.notifier === "object" && !Array.isArray(ext.notifier) ? ext.notifier : {};
   if (Object.keys(fromExtNested).length > 0) {
@@ -6400,13 +6414,6 @@ function notifierFlatFromSources(profile, agent) {
   const fromExtFlat = notifierKeysFromFlatRoot(ext);
   if (fromExtFlat) {
     return fromExtFlat;
-  }
-  const legacyTop =
-    agent && agent.notifier_details && typeof agent.notifier_details === "object" && !Array.isArray(agent.notifier_details)
-      ? agent.notifier_details
-      : {};
-  if (Object.keys(legacyTop).length > 0) {
-    return legacyTop;
   }
   const ro =
     prof.request_options && typeof prof.request_options === "object" && !Array.isArray(prof.request_options)
@@ -6584,21 +6591,6 @@ function applyTemplateToDraft(draft, template, bootstrapConfig, fallbackImage = 
   };
 }
 
-function mergeNotifierRequestOptions(parsed, draft) {
-  const base = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? { ...parsed } : {};
-  base.notifier = {
-    delivery_mode: normalizeNotifierDeliveryMode(draft.notifier_delivery_mode || "webhook"),
-    webhook_token: String(draft.notifier_webhook_token ?? "").trim(),
-    remote_url: String(draft.notifier_remote_url ?? "").trim(),
-    remote_subscription_id: String(draft.notifier_remote_subscription_id ?? "").trim(),
-    poll_interval: String(draft.notifier_poll_interval ?? "30s").trim(),
-    remote_token: String(draft.notifier_remote_token ?? "").trim(),
-    remote_messages_url: String(draft.notifier_remote_messages_url ?? "").trim(),
-    remote_ack_url: String(draft.notifier_remote_ack_url ?? "").trim(),
-  };
-  return base;
-}
-
 function draftNotifierDetailsFromDraft(draft) {
   if (!draft) {
     return null;
@@ -6615,19 +6607,20 @@ function draftNotifierDetailsFromDraft(draft) {
   };
 }
 
-function draftToProfile(draft, options = {}) {
-  let request_options = parseJSONMap(draft.requestOptionsText);
+function draftNotifierRuntimeOptionsForSave(draft, options = {}) {
   const mergeNotifier = Boolean(options.mergeNotifier) || isNotifierRuntimeDraft(draft);
-  if (mergeNotifier) {
-    request_options = mergeNotifierRequestOptions(request_options, draft);
+  if (!mergeNotifier) {
+    return null;
   }
-  let runtime_extensions;
-  if (mergeNotifier) {
-    const nf = draftNotifierDetailsFromDraft(draft);
-    if (nf && typeof nf === "object" && Object.keys(nf).length > 0) {
-      runtime_extensions = { ...nf };
-    }
+  const nf = draftNotifierDetailsFromDraft(draft);
+  if (!nf || typeof nf !== "object" || Object.keys(nf).length === 0) {
+    return null;
   }
+  return { ...nf };
+}
+
+function draftToProfile(draft, options = {}) {
+  const request_options = parseJSONMap(draft.requestOptionsText);
   return {
     name: options.name || draft.name || "manager",
     description: options.description || draft.description || "Manager Worker Dispatch",
@@ -6639,7 +6632,6 @@ function draftToProfile(draft, options = {}) {
     enable_fast_mode: Boolean(draft.enable_fast_mode),
     headers: parseJSONMap(draft.headersText),
     request_options,
-    runtime_extensions,
     env: envRowsToMap(draft.envRows),
   };
 }
@@ -6669,8 +6661,8 @@ function notifierFormIsComplete(draft, item) {
   if (hasItem && notifierDeliveryConfiguredInProfile(item.agent_profile, item)) {
     return true;
   }
-  const rxTop = item?.runtime_extensions;
-  const rxProf = item?.agent_profile?.runtime_extensions;
+  const rxTop = item?.runtime_options;
+  const rxProf = item?.agent_profile?.runtime_options;
   const rx =
     rxTop && typeof rxTop === "object" && !Array.isArray(rxTop) && rxTop.notifier_profile && typeof rxTop.notifier_profile === "object"
       ? rxTop.notifier_profile

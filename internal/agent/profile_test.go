@@ -13,15 +13,19 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelprovider"
 	agentruntime "csgclaw/internal/runtime"
-	_ "csgclaw/internal/runtime/notifier"
+	"csgclaw/internal/runtime/notifier"
 )
 
-func notifierProfileViewMap(t *testing.T, v AgentProfileView) map[string]any {
+func notifierProfileViewMap(t *testing.T, agentExt map[string]any) map[string]any {
 	t.Helper()
-	if v.RuntimeExtensions == nil {
+	if len(agentExt) == 0 {
 		return nil
 	}
-	raw, ok := v.RuntimeExtensions[agentruntime.RuntimeExtensionKeyNotifierProfile]
+	rx := notifier.ViewRuntimeOptionsForAPI(agentExt)
+	if rx == nil {
+		return nil
+	}
+	raw, ok := rx[agentruntime.RuntimeOptionKeyNotifierProfile]
 	if !ok || raw == nil {
 		return nil
 	}
@@ -140,7 +144,7 @@ func TestProfileDefaultsPersistAfterProfileUpdate(t *testing.T) {
 		Provider:        ProviderCSGHubLite,
 		ModelID:         "qwen-default",
 		ReasoningEffort: "medium",
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("UpdateAgentProfile() error = %v", err)
 	}
 	data, err := os.ReadFile(statePath)
@@ -327,10 +331,9 @@ func TestSortModelIDsOrdersLatestKnownFamiliesFirst(t *testing.T) {
 }
 
 func TestProfileViewNotifierDeliveryComplete(t *testing.T) {
-	view := profileViewWithAgentExtensions(AgentProfile{Name: "n"}, map[string]any{
-		"delivery_mode": "webhook", "webhook_token": "secret-token",
-	}, RuntimeKindNotifier, nil)
-	np := notifierProfileViewMap(t, view)
+	ext := map[string]any{"delivery_mode": "webhook", "webhook_token": "secret-token"}
+	_ = profileViewWithAgentExtensions(AgentProfile{Name: "n"}, ext, RuntimeKindNotifier, nil)
+	np := notifierProfileViewMap(t, ext)
 	if np == nil {
 		t.Fatal("notifier_profile summary = nil, want non-nil")
 	}
@@ -340,13 +343,14 @@ func TestProfileViewNotifierDeliveryComplete(t *testing.T) {
 	if !notifierProfileViewBool(np, "webhook_token_set") {
 		t.Fatalf("webhook_token_set = false, want true")
 	}
-	pullView := profileViewWithAgentExtensions(AgentProfile{Name: "pull"}, map[string]any{
+	pullExt := map[string]any{
 		"delivery_mode":          "remote_pull",
 		"remote_url":             "https://relay.example/inbox/messages",
 		"remote_token":           "pull-bearer-secret",
 		"remote_subscription_id": "sub-1",
-	}, RuntimeKindNotifier, nil)
-	pullNP := notifierProfileViewMap(t, pullView)
+	}
+	pullView := profileViewWithAgentExtensions(AgentProfile{Name: "pull"}, pullExt, RuntimeKindNotifier, nil)
+	pullNP := notifierProfileViewMap(t, pullExt)
 	if pullNP == nil {
 		t.Fatal("notifier_profile summary = nil, want non-nil")
 	}
@@ -360,8 +364,8 @@ func TestProfileViewNotifierDeliveryComplete(t *testing.T) {
 	if strings.Contains(string(raw), "pull-bearer-secret") {
 		t.Fatalf("JSON leaked remote_token: %s", string(raw))
 	}
-	view2 := RedactedProfileView(AgentProfile{Name: "n"}, nil)
-	np2 := notifierProfileViewMap(t, view2)
+	_ = RedactedProfileView(AgentProfile{Name: "n"}, nil)
+	np2 := notifierProfileViewMap(t, nil)
 	if notifierProfileViewBool(np2, "delivery_complete") {
 		t.Fatalf("delivery_complete = true, want false")
 	}
@@ -396,10 +400,11 @@ func TestNormalizeProfileForAgentRuntimeNotifierProfileCompleteFromDeliveryOnly(
 }
 
 func TestProfileViewRedactsNotifierSecretsInJSON(t *testing.T) {
-	view := profileViewWithAgentExtensions(AgentProfile{Name: "n"}, map[string]any{
+	agentExt := map[string]any{
 		"delivery_mode": "webhook", "webhook_token": "super-secret-token",
-	}, RuntimeKindNotifier, nil)
-	np := notifierProfileViewMap(t, view)
+	}
+	view := profileViewWithAgentExtensions(AgentProfile{Name: "n"}, agentExt, RuntimeKindNotifier, nil)
+	np := notifierProfileViewMap(t, agentExt)
 	if np == nil || !notifierProfileViewBool(np, "webhook_token_set") {
 		t.Fatal("webhook_token_set = false, want true")
 	}

@@ -751,12 +751,11 @@ func TestCreateWorkerNotifierPersistsWebhookToken(t *testing.T) {
 	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
 		Name:        "notify-worker",
 		RuntimeKind: RuntimeKindNotifier,
-		AgentProfile: AgentProfile{
-			RuntimeExtensions: map[string]any{
-				"delivery_mode": "webhook",
-				"webhook_token": wantToken,
-			},
+		RuntimeOptions: map[string]any{
+			"delivery_mode": "webhook",
+			"webhook_token": wantToken,
 		},
+		AgentProfile: AgentProfile{},
 	})
 	if err != nil {
 		t.Fatalf("CreateWorker() error = %v", err)
@@ -764,7 +763,7 @@ func TestCreateWorkerNotifierPersistsWebhookToken(t *testing.T) {
 	if got.RuntimeKind != RuntimeKindNotifier {
 		t.Fatalf("CreateWorker().RuntimeKind = %q, want %q", got.RuntimeKind, RuntimeKindNotifier)
 	}
-	cfg := notifier.ConfigFromAgentParts(got.RuntimeExtensions)
+	cfg := notifier.ConfigFromAgentParts(got.RuntimeOptions)
 	if cfg.WebhookToken != wantToken {
 		t.Fatalf("in-memory webhook_token = %q, want %q", cfg.WebhookToken, wantToken)
 	}
@@ -777,7 +776,7 @@ func TestCreateWorkerNotifierPersistsWebhookToken(t *testing.T) {
 	if !ok {
 		t.Fatalf("Agent(%q) after reload: ok = false", got.ID)
 	}
-	cfg2 := notifier.ConfigFromAgentParts(got2.RuntimeExtensions)
+	cfg2 := notifier.ConfigFromAgentParts(got2.RuntimeOptions)
 	if cfg2.WebhookToken != wantToken {
 		t.Fatalf("after reload webhook_token = %q, want %q", cfg2.WebhookToken, wantToken)
 	}
@@ -791,11 +790,10 @@ func TestStopNotifierPersistsStoppedAndHydrateKeepsStopped(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
-		Name:        "notifier-stop-test",
-		RuntimeKind: RuntimeKindNotifier,
-		AgentProfile: AgentProfile{
-			RuntimeExtensions: map[string]any{"delivery_mode": "webhook", "webhook_token": "tok"},
-		},
+		Name:           "notifier-stop-test",
+		RuntimeKind:    RuntimeKindNotifier,
+		RuntimeOptions: map[string]any{"delivery_mode": "webhook", "webhook_token": "tok"},
+		AgentProfile:   AgentProfile{},
 	})
 	if err != nil {
 		t.Fatalf("CreateWorker() error = %v", err)
@@ -2941,11 +2939,10 @@ func TestCreateWorkerNotifierSkipsDefaultSandboxTemplate(t *testing.T) {
 	}
 
 	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
-		Name:        "notifier-hub-skip",
-		RuntimeKind: RuntimeKindNotifier,
-		AgentProfile: AgentProfile{
-			RuntimeExtensions: map[string]any{"delivery_mode": "webhook", "webhook_token": "tok"},
-		},
+		Name:           "notifier-hub-skip",
+		RuntimeKind:    RuntimeKindNotifier,
+		RuntimeOptions: map[string]any{"delivery_mode": "webhook", "webhook_token": "tok"},
+		AgentProfile:   AgentProfile{},
 	})
 	if err != nil {
 		t.Fatalf("CreateWorker() error = %v", err)

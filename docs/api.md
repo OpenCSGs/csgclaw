@@ -104,7 +104,7 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
 `api_key_set: true`，并在长密钥场景返回安全前缀 `api_key_preview`
 （例如 `sk-l...`）供 UI 展示。
 
-对配置了 notifier 投递的 agent，响应里 `agent_profile.runtime_extensions` 中会包含脱敏后的 `notifier` 子对象，并附带 **仅用于展示的** `notifier_profile` 子对象（`delivery_complete`、`webhook_token_set`、`remote_token_set`），以便在脱敏后的 `request_options` / `runtime_extensions` 不暴露 token 的前提下提示 UI；客户端写入配置时不要回传 `notifier_profile`（服务端会忽略）。不再使用顶层字段 `notifier_delivery_complete` 等。
+对配置了 notifier 投递的 agent，响应里 `agent_profile.runtime_options` 中会包含脱敏后的 `notifier` 子对象，并附带 **仅用于展示的** `notifier_profile` 子对象（`delivery_complete`、`webhook_token_set`、`remote_token_set`），以便在脱敏后的 `request_options` / `runtime_options` 不暴露 token 的前提下提示 UI；客户端写入配置时不要回传 `notifier_profile`（服务端会忽略）。不再使用顶层字段 `notifier_delivery_complete` 等。
 
 ### `POST /api/v1/agents`
 
@@ -168,7 +168,7 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
 - `manager` 嵌套字段已不再支持
 - 若 IM 服务可用，会自动创建对应 IM 用户，并创建 `Admin & <Worker>` 私聊
 - 校验失败通常返回 `400 Bad Request`
-- `runtime_kind` 为 `notifier` 时，投递相关配置须放在 `agent_profile.runtime_extensions.notifier`（或兼容的 `agent_profile.request_options.notifier`）；创建请求**不再**接受顶层 `notifier_details` 字段
+- `runtime_kind` 为 `notifier` 时，投递相关配置须放在 `agent_profile.runtime_options.notifier`（或兼容的 `agent_profile.request_options.notifier`）；创建请求**不再**接受顶层 `notifier_details` 字段
 
 ### `POST /api/v1/agents/{agent_id}/webhooks/notify`
 

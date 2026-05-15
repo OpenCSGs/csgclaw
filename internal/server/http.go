@@ -14,7 +14,7 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
-	notifierpull "csgclaw/internal/runtime/notifier/pull"
+	runtimenotifier "csgclaw/internal/runtime/notifier"
 	"csgclaw/internal/upgrade"
 )
 
@@ -34,6 +34,9 @@ type Options struct {
 	NoAuth      bool
 	Context     context.Context
 	OnReady     func()
+	// NotifierBackground starts notifier-specific background work after the API handler is wired.
+	// The implementation should block until ctx is cancelled; Run invokes it in its own goroutine.
+	NotifierBackground func(ctx context.Context, svc *agent.Service, deliver runtimenotifier.Fanouter)
 }
 
 func Run(opts Options) error {
@@ -54,9 +57,8 @@ func Run(opts Options) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	if opts.Service != nil && handler != nil {
-		pull := notifierpull.NewWorker(opts.Service, handler)
-		go pull.Run(opts.Context)
+	if opts.Service != nil && opts.NotifierBackground != nil && handler != nil {
+		go opts.NotifierBackground(opts.Context, opts.Service, handler)
 	}
 
 	if opts.IMBus != nil && opts.BotBridge != nil {

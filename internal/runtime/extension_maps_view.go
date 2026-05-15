@@ -1,7 +1,7 @@
 package runtime
 
-// MergeRuntimeExtensionMapsForView merges agent-level and profile-level extension maps for API display (agent keys win).
-func MergeRuntimeExtensionMapsForView(agentExt, profileExt map[string]any) map[string]any {
+// MergeRuntimeOptionMapsForView merges agent-level and profile-level option maps for API display (agent keys win).
+func MergeRuntimeOptionMapsForView(agentExt, profileExt map[string]any) map[string]any {
 	out := CloneAnyMap(agentExt)
 	if len(profileExt) == 0 {
 		return out

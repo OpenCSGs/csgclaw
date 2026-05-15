@@ -20,10 +20,10 @@ func ProfileLLMEndpointFieldsForRuntime(runtimeKind, baseURL, modelID string) (s
 	return baseURL, modelID
 }
 
-// MergeFlatForProfilePatch merges patch profile runtime_extensions onto a base extensions map (no agent-level storage yet).
+// MergeFlatForProfilePatch merges patch profile runtime_options onto a base options map (no agent-level storage yet).
 func MergeFlatForProfilePatch(baseProfileExtensions, patchProfileExtensions map[string]any) map[string]any {
-	base := NotifierFlatFromRuntimeExtensionsMap(baseProfileExtensions)
-	incoming := NotifierFlatFromRuntimeExtensionsMap(patchProfileExtensions)
+	base := NotifierFlatFromRuntimeOptionsMap(baseProfileExtensions)
+	incoming := NotifierFlatFromRuntimeOptionsMap(patchProfileExtensions)
 	return MergeNotifierFlatPatch(base, incoming)
 }
 
@@ -60,7 +60,7 @@ func ProfileCompleteForAgentRuntime(isGatewayRuntime, llmComplete bool, flat map
 	return deliveryComplete || llmComplete
 }
 
-// ProfileCompleteFromAgentExtensions resolves notifier flat from agent-level runtime_extensions
+// ProfileCompleteFromAgentExtensions resolves notifier flat from agent-level runtime_options
 // (or uses mergedFlat when non-empty, e.g. from MergeFlatForAgentPatch), then applies ProfileCompleteForAgentRuntime.
 func ProfileCompleteFromAgentExtensions(isGatewayRuntime, llmComplete bool, agentExt map[string]any, runtimeKind string, mergedFlat map[string]any) bool {
 	flat := mergedFlat

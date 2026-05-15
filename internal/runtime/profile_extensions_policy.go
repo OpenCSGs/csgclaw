@@ -21,7 +21,7 @@ func NormalizeRuntimeKind(kind string) string {
 	}
 }
 
-// ProfileExtensionsPolicy defines how runtime_extensions (and related request_options) behave
+// ProfileExtensionsPolicy defines how runtime_options (and related request_options) behave
 // for a concrete runtime_kind. Implementations register via RegisterProfileExtensionsPolicy.
 type ProfileExtensionsPolicy interface {
 	FlatFromExtensionsMap(ext map[string]any) map[string]any
@@ -32,7 +32,7 @@ type ProfileExtensionsPolicy interface {
 	LooksLikeFlatStorageAtRoot(m map[string]any) bool
 	ProfileComplete(isGatewayRuntime, llmComplete bool, agentExt map[string]any, runtimeKind string, mergedFlat map[string]any) bool
 	RequestOptionsForAgentProfileView(agentExt, requestOptions map[string]any) map[string]any
-	ViewRuntimeExtensionsForAPI(agentExt, profileExt map[string]any) map[string]any
+	ViewRuntimeOptionsForAPI(agentExt map[string]any) map[string]any
 	MergeFlatForAgentPatch(agentExt, patchProfileExt map[string]any) map[string]any
 	ApplyFlatPersistence(agentRE *map[string]any, profileRE, profileRO map[string]any, mergedFlat map[string]any) (map[string]any, map[string]any)
 	WithPullSubscriptionDefaults(flat map[string]any) map[string]any
@@ -102,8 +102,8 @@ func (defaultProfileExtensionsPolicy) RequestOptionsForAgentProfileView(_ map[st
 	return RedactedRequestOptionsForAPIView(requestOptions)
 }
 
-func (defaultProfileExtensionsPolicy) ViewRuntimeExtensionsForAPI(agentExt, profileExt map[string]any) map[string]any {
-	return MergeRuntimeExtensionMapsForView(agentExt, profileExt)
+func (defaultProfileExtensionsPolicy) ViewRuntimeOptionsForAPI(agentExt map[string]any) map[string]any {
+	return MergeRuntimeOptionMapsForView(agentExt, nil)
 }
 
 func (defaultProfileExtensionsPolicy) MergeFlatForAgentPatch(_, _ map[string]any) map[string]any {

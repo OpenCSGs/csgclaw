@@ -2,6 +2,7 @@ package notifier
 
 import (
 	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -35,12 +36,12 @@ func metaValue(t *testing.T, m map[string]any, wantLabel string) string {
 }
 
 func TestFormatPayloadAsChatContentGenericJSON(t *testing.T) {
-	s := FormatPayloadAsChatContent([]byte(`{"a":1}`), "application/json")
+	s := FormatPayloadAsChatContent([]byte(`{"a":1}`), "application/json", nil)
 	c := parseCard(t, s)
 	if c["type"] != NotifyCardType {
 		t.Fatalf("type: %v", c["type"])
 	}
-	if c["provider"] != "generic" {
+	if c["provider"] != NotifyCardProviderGeneric {
 		t.Fatalf("provider: %v", c["provider"])
 	}
 	raw, _ := c["raw"].(string)
@@ -62,9 +63,9 @@ func TestFormatPayloadAsChatContentGitLabMergeRequest(t *testing.T) {
     "url": "https://gitlab.example/acme/app/-/merge_requests/1"
   }
 }`
-	s := FormatPayloadAsChatContent([]byte(payload), "application/json")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", nil)
 	c := parseCard(t, s)
-	if c["provider"] != "gitlab" || c["event"] != "merge_request" {
+	if c["provider"] != NotifyCardProviderGitLab || c["event"] != "merge_request" {
 		t.Fatalf("%v", c)
 	}
 	if c["badge"] != "open" || c["subtitle"] != "acme/app" {
@@ -96,7 +97,7 @@ func TestFormatPayloadAsChatContentGitLabPush(t *testing.T) {
   "project": {"path_with_namespace": "acme/app"},
   "commits": [{"message": "Second line\n\nBody"}, {"message": "Latest commit\nfix"}]
 }`
-	s := FormatPayloadAsChatContent([]byte(payload), "application/json")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", nil)
 	c := parseCard(t, s)
 	if c["event"] != "push" {
 		t.Fatal(c)
@@ -118,7 +119,7 @@ func TestFormatPayloadAsChatContentGitLabPipeline(t *testing.T) {
   "project": {"path_with_namespace": "acme/app"},
   "object_attributes": {"status": "success", "ref": "main", "sha": "deadbeefcafe"}
 }`
-	s := FormatPayloadAsChatContent([]byte(payload), "application/json")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", nil)
 	c := parseCard(t, s)
 	if c["badge"] != "success" {
 		t.Fatal(c)
@@ -151,7 +152,7 @@ func TestFormatPayloadAsChatContentGitLabNoteIssue(t *testing.T) {
     "title": "test"
   }
 }`
-	s := FormatPayloadAsChatContent([]byte(payload), "application/json")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", nil)
 	c := parseCard(t, s)
 	if c["event"] != "note_issue" {
 		t.Fatal(c)
@@ -191,7 +192,7 @@ func TestFormatPayloadAsChatContentGitLabNoteMergeRequest(t *testing.T) {
     "target_branch": "markdown"
   }
 }`
-	s := FormatPayloadAsChatContent([]byte(payload), "application/json")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", nil)
 	c := parseCard(t, s)
 	if !strings.Contains(metaValue(t, c, "MR"), "!1") || !strings.Contains(metaValue(t, c, "MR"), "Example MR") {
 		t.Fatal(metaValue(t, c, "MR"))
@@ -215,9 +216,9 @@ func TestFormatPayloadAsChatContentGitHubPullRequest(t *testing.T) {
     "base": {"ref": "main"}
   }
 }`
-	s := FormatPayloadAsChatContent([]byte(payload), "application/json")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", nil)
 	c := parseCard(t, s)
-	if c["provider"] != "github" || c["event"] != "pull_request" {
+	if c["provider"] != NotifyCardProviderGitHub || c["event"] != "pull_request" {
 		t.Fatal(c)
 	}
 	if c["badge"] != "opened" || c["subtitle"] != "acme/app" {
@@ -241,7 +242,7 @@ func TestFormatPayloadAsChatContentGitHubPush(t *testing.T) {
   "pusher": {"name": "Pat"},
   "commits": [{"message": "one"}, {"message": "two\n\nmore"}]
 }`
-	s := FormatPayloadAsChatContent([]byte(payload), "application/json")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", nil)
 	c := parseCard(t, s)
 	if c["event"] != "push" {
 		t.Fatal(c)
@@ -253,7 +254,7 @@ func TestFormatPayloadAsChatContentGitHubPush(t *testing.T) {
 
 func TestFormatPayloadAsChatContentGitHubPing(t *testing.T) {
 	payload := `{"zen":"Speak like a human.","repository":{"full_name":"octocat/Hello-World"}}`
-	s := FormatPayloadAsChatContent([]byte(payload), "application/json")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", nil)
 	c := parseCard(t, s)
 	if c["event"] != "ping" || !strings.Contains(c["summary"].(string), "Speak like a human") {
 		t.Fatal(c)
@@ -266,7 +267,7 @@ func TestFormatPayloadAsChatContentGitHubIssue(t *testing.T) {
   "repository": {"full_name": "acme/app"},
   "issue": {"title": "Bug", "html_url": "https://github.com/acme/app/issues/9"}
 }`
-	s := FormatPayloadAsChatContent([]byte(payload), "application/json")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", nil)
 	c := parseCard(t, s)
 	if c["event"] != "issue" || metaValue(t, c, "标题") != "Bug" {
 		t.Fatal(c)
@@ -274,7 +275,7 @@ func TestFormatPayloadAsChatContentGitHubIssue(t *testing.T) {
 }
 
 func TestFormatPayloadAsChatContentEmpty(t *testing.T) {
-	s := FormatPayloadAsChatContent(nil, "")
+	s := FormatPayloadAsChatContent(nil, "", nil)
 	c := parseCard(t, s)
 	if c["event"] != "empty" {
 		t.Fatal(c)
@@ -282,9 +283,72 @@ func TestFormatPayloadAsChatContentEmpty(t *testing.T) {
 }
 
 func TestFormatPayloadAsChatContentNonJSON(t *testing.T) {
-	s := FormatPayloadAsChatContent([]byte("  hello plain  "), "text/plain")
+	s := FormatPayloadAsChatContent([]byte("  hello plain  "), "text/plain", nil)
 	c := parseCard(t, s)
 	if c["event"] != "text" || c["summary"] != "hello plain" {
 		t.Fatalf("%v", c)
+	}
+}
+
+func TestFormatPayloadAsChatContentGitLabWebhookHeader(t *testing.T) {
+	payload := `{
+  "object_kind": "merge_request",
+  "user": {"name": "Alice", "username": "alice"},
+  "project": {"path_with_namespace": "acme/app"},
+  "object_attributes": {
+    "title": "Fix bug",
+    "action": "open",
+    "source_branch": "fix",
+    "target_branch": "main",
+    "url": "https://gitlab.example/acme/app/-/merge_requests/1"
+  }
+}`
+	h := http.Header{}
+	h.Set("X-Gitlab-Event", "Merge Request Hook")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", h)
+	c := parseCard(t, s)
+	if c["provider"] != NotifyCardProviderGitLab || c["event"] != "merge_request" {
+		t.Fatalf("%v", c)
+	}
+}
+
+func TestFormatPayloadAsChatContentMisleadingGitHubHeaderFallsBackToGitLabBody(t *testing.T) {
+	payload := `{
+  "object_kind": "push",
+  "ref": "refs/heads/main",
+  "total_commits_count": 1,
+  "user": {"name": "Bob", "username": "bob"},
+  "project": {"path_with_namespace": "acme/app"},
+  "commits": [{"message": "x"}]
+}`
+	h := http.Header{}
+	h.Set("X-GitHub-Event", "push")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", h)
+	c := parseCard(t, s)
+	if c["provider"] != NotifyCardProviderGitLab {
+		t.Fatalf("provider %v", c["provider"])
+	}
+	if c["event"] != "push" {
+		t.Fatalf("event %v", c["event"])
+	}
+}
+
+func TestFormatPayloadAsChatContentGitHubWebhookHeader(t *testing.T) {
+	payload := `{
+  "action": "opened",
+  "repository": {"full_name": "acme/app"},
+  "pull_request": {
+    "title": "Feature",
+    "html_url": "https://github.com/acme/app/pull/3",
+    "head": {"ref": "feat"},
+    "base": {"ref": "main"}
+  }
+}`
+	h := http.Header{}
+	h.Set("X-GitHub-Event", "pull_request")
+	s := FormatPayloadAsChatContent([]byte(payload), "application/json", h)
+	c := parseCard(t, s)
+	if c["provider"] != NotifyCardProviderGitHub || c["event"] != "pull_request" {
+		t.Fatal(c)
 	}
 }

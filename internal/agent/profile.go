@@ -35,18 +35,16 @@ var (
 )
 
 type AgentProfile struct {
-	Name            string            `json:"name,omitempty"`
-	Description     string            `json:"description,omitempty"`
-	Provider        string            `json:"provider,omitempty"`
-	BaseURL         string            `json:"base_url,omitempty"`
-	APIKey          string            `json:"api_key,omitempty"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	ModelID         string            `json:"model_id,omitempty"`
-	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
-	EnableFastMode  bool              `json:"enable_fast_mode,omitempty"`
-	RequestOptions  map[string]any    `json:"request_options,omitempty"`
-	// RuntimeExtensions holds per-runtime configuration; notifier workers store delivery fields as flat keys here (runtime_kind identifies notifier).
-	RuntimeExtensions  map[string]any    `json:"runtime_extensions,omitempty"`
+	Name               string            `json:"name,omitempty"`
+	Description        string            `json:"description,omitempty"`
+	Provider           string            `json:"provider,omitempty"`
+	BaseURL            string            `json:"base_url,omitempty"`
+	APIKey             string            `json:"api_key,omitempty"`
+	Headers            map[string]string `json:"headers,omitempty"`
+	ModelID            string            `json:"model_id,omitempty"`
+	ReasoningEffort    string            `json:"reasoning_effort,omitempty"`
+	EnableFastMode     bool              `json:"enable_fast_mode,omitempty"`
+	RequestOptions     map[string]any    `json:"request_options,omitempty"`
 	Env                map[string]string `json:"env,omitempty"`
 	ProfileComplete    bool              `json:"profile_complete"`
 	EnvRestartRequired bool              `json:"env_restart_required,omitempty"`
@@ -64,7 +62,6 @@ type AgentProfileView struct {
 	ReasoningEffort    string                   `json:"reasoning_effort,omitempty"`
 	EnableFastMode     bool                     `json:"enable_fast_mode"`
 	RequestOptions     map[string]any           `json:"request_options,omitempty"`
-	RuntimeExtensions  map[string]any           `json:"runtime_extensions,omitempty"`
 	Env                map[string]string        `json:"env,omitempty"`
 	ProfileComplete    bool                     `json:"profile_complete"`
 	EnvRestartRequired bool                     `json:"env_restart_required,omitempty"`
@@ -112,7 +109,6 @@ func normalizeProfile(profile AgentProfile, fallbackName, fallbackDescription st
 	out.Headers = normalizeStringMap(out.Headers)
 	out.Env = normalizeStringMap(out.Env)
 	out.RequestOptions = normalizeRequestOptions(out.RequestOptions)
-	out.RuntimeExtensions = agentruntime.StripViewOnlyRuntimeExtensions(out.RuntimeExtensions)
 	out.ProfileComplete = profileIsComplete(out)
 	return out
 }
@@ -215,20 +211,6 @@ func cloneProfile(profile AgentProfile) AgentProfile {
 			out.RequestOptions[key] = value
 		}
 	}
-	if len(profile.RuntimeExtensions) > 0 {
-		out.RuntimeExtensions = make(map[string]any, len(profile.RuntimeExtensions))
-		for key, value := range profile.RuntimeExtensions {
-			if m, ok := value.(map[string]any); ok {
-				nm := make(map[string]any, len(m))
-				for ik, iv := range m {
-					nm[ik] = iv
-				}
-				out.RuntimeExtensions[key] = nm
-			} else {
-				out.RuntimeExtensions[key] = value
-			}
-		}
-	}
 	return out
 }
 
@@ -248,7 +230,6 @@ func profileViewWithAgentExtensions(profile AgentProfile, agentExt map[string]an
 		ReasoningEffort:    profile.ReasoningEffort,
 		EnableFastMode:     profile.EnableFastMode,
 		RequestOptions:     ro,
-		RuntimeExtensions:  pol.ViewRuntimeExtensionsForAPI(agentExt, profile.RuntimeExtensions),
 		Env:                profile.Env,
 		ProfileComplete:    profile.ProfileComplete,
 		EnvRestartRequired: profile.EnvRestartRequired,
@@ -262,7 +243,7 @@ func profileView(profile AgentProfile, detection []ProfileDetectionResult) Agent
 }
 
 func RedactedProfileViewForAgent(a Agent) AgentProfileView {
-	return profileViewWithAgentExtensions(a.AgentProfile, a.RuntimeExtensions, a.RuntimeKind, a.DetectionResults)
+	return profileViewWithAgentExtensions(a.AgentProfile, a.RuntimeOptions, a.RuntimeKind, a.DetectionResults)
 }
 
 func apiKeyPreview(apiKey string) string {

@@ -6,10 +6,16 @@ import (
 	"strings"
 )
 
-func cardFromKnownWebhooks(root map[string]any) (NotifyCard, bool) {
+// cardFromGitLabWebhookBody parses GitLab-style webhook JSON (object_kind + payload shape).
+func cardFromGitLabWebhookBody(root map[string]any) (NotifyCard, bool) {
 	if kind := strings.TrimSpace(toStr(root["object_kind"])); kind != "" {
 		return cardGitLab(strings.ToLower(kind), root)
 	}
+	return NotifyCard{}, false
+}
+
+// cardFromGitHubWebhookBody parses GitHub-style webhook JSON (zen, pull_request, issue, push shapes).
+func cardFromGitHubWebhookBody(root map[string]any) (NotifyCard, bool) {
 	if _, ok := root["zen"]; ok {
 		return cardGitHubPing(root), true
 	}
@@ -23,6 +29,13 @@ func cardFromKnownWebhooks(root map[string]any) (NotifyCard, bool) {
 		return cardGitHubPush(root), true
 	}
 	return NotifyCard{}, false
+}
+
+func cardFromKnownWebhooks(root map[string]any) (NotifyCard, bool) {
+	if card, ok := cardFromGitLabWebhookBody(root); ok {
+		return card, true
+	}
+	return cardFromGitHubWebhookBody(root)
 }
 
 func cardGitLab(kind string, root map[string]any) (NotifyCard, bool) {
@@ -80,7 +93,7 @@ func cardGitLabIssueComment(root map[string]any) NotifyCard {
 	who := formatGitLabUser(nestedMap(root, "user"))
 
 	c := NotifyCard{
-		Provider: "gitlab",
+		Provider: NotifyCardProviderGitLab,
 		Event:    "note_issue",
 		Title:    "GitLab · Issue 评论",
 		Badge:    action,
@@ -124,7 +137,7 @@ func cardGitLabMergeRequestComment(root map[string]any) NotifyCard {
 	who := formatGitLabUser(nestedMap(root, "user"))
 
 	c := NotifyCard{
-		Provider: "gitlab",
+		Provider: NotifyCardProviderGitLab,
 		Event:    "note_merge_request",
 		Title:    "GitLab · MR 评论",
 		Badge:    action,
@@ -185,7 +198,7 @@ func cardGitLabMergeRequest(root map[string]any) (NotifyCard, bool) {
 	who := formatGitLabUser(user)
 
 	c := NotifyCard{
-		Provider: "gitlab",
+		Provider: NotifyCardProviderGitLab,
 		Event:    "merge_request",
 		Title:    "GitLab · Merge request",
 		Badge:    action,
@@ -214,7 +227,7 @@ func cardGitLabPush(root map[string]any) NotifyCard {
 	lastMsg := gitLabLastCommitSubject(root)
 
 	c := NotifyCard{
-		Provider: "gitlab",
+		Provider: NotifyCardProviderGitLab,
 		Event:    "push",
 		Title:    "GitLab · Push",
 		Subtitle: path,
@@ -271,7 +284,7 @@ func cardGitLabPipeline(root map[string]any) NotifyCard {
 		path = getStr(proj, "name")
 	}
 	c := NotifyCard{
-		Provider: "gitlab",
+		Provider: NotifyCardProviderGitLab,
 		Event:    "pipeline",
 		Title:    "GitLab · Pipeline",
 		Badge:    status,
@@ -297,7 +310,7 @@ func cardGitLabIssue(root map[string]any) NotifyCard {
 	proj := nestedMap(root, "project")
 	path := getStr(proj, "path_with_namespace")
 	c := NotifyCard{
-		Provider: "gitlab",
+		Provider: NotifyCardProviderGitLab,
 		Event:    "issue",
 		Title:    "GitLab · Issue",
 		Badge:    action,
@@ -315,7 +328,7 @@ func cardGitHubPing(root map[string]any) NotifyCard {
 	repo := nestedMap(root, "repository")
 	name := getStr(repo, "full_name")
 	return NotifyCard{
-		Provider: "github",
+		Provider: NotifyCardProviderGitHub,
 		Event:    "ping",
 		Title:    "GitHub · Ping",
 		Subtitle: name,
@@ -333,7 +346,7 @@ func cardGitHubPullRequest(root map[string]any) NotifyCard {
 	repo := nestedMap(root, "repository")
 	full := getStr(repo, "full_name")
 	c := NotifyCard{
-		Provider: "github",
+		Provider: NotifyCardProviderGitHub,
 		Event:    "pull_request",
 		Title:    "GitHub · Pull request",
 		Badge:    action,
@@ -357,7 +370,7 @@ func cardGitHubIssue(root map[string]any) NotifyCard {
 	repo := nestedMap(root, "repository")
 	full := getStr(repo, "full_name")
 	c := NotifyCard{
-		Provider: "github",
+		Provider: NotifyCardProviderGitHub,
 		Event:    "issue",
 		Title:    "GitHub · Issue",
 		Badge:    action,
@@ -378,7 +391,7 @@ func cardGitHubPush(root map[string]any) NotifyCard {
 	who := getStr(pusher, "name")
 	lastMsg := gitHubLastCommitSubject(root)
 	c := NotifyCard{
-		Provider: "github",
+		Provider: NotifyCardProviderGitHub,
 		Event:    "push",
 		Title:    "GitHub · Push",
 		Subtitle: full,

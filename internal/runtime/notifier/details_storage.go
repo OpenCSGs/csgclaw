@@ -36,7 +36,7 @@ func StripNestedNotifier(ro map[string]any) {
 	delete(ro, "notifier")
 }
 
-// ConfigFromStored parses notifier.Config from flat notifier_details (runtime_extensions storage).
+// ConfigFromStored parses notifier.Config from flat notifier_details (runtime_options storage).
 func ConfigFromStored(storedFlat map[string]any) Config {
 	if len(storedFlat) == 0 {
 		return Config{}
@@ -102,7 +102,7 @@ func RedactDetailsForAPI(nd map[string]any) map[string]any {
 }
 
 // RedactedRequestOptionsForAPIView returns a copy of request_options safe for JSON responses:
-// nested notifier webhook_token and remote_token are removed (use runtime_extensions.notifier_profile for summaries).
+// nested notifier webhook_token and remote_token are removed (use runtime_options.notifier_profile for summaries).
 func RedactedRequestOptionsForAPIView(ro map[string]any) map[string]any {
 	return agentruntime.RedactedRequestOptionsForAPIView(ro)
 }

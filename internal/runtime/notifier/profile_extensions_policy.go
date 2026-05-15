@@ -5,11 +5,11 @@ import agentruntime "csgclaw/internal/runtime"
 type profileExtensionsPolicy struct{}
 
 func (profileExtensionsPolicy) FlatFromExtensionsMap(ext map[string]any) map[string]any {
-	return NotifierFlatFromRuntimeExtensionsMap(ext)
+	return NotifierFlatFromRuntimeOptionsMap(ext)
 }
 
 func (profileExtensionsPolicy) DetachPayloadFromProfileExtensions(profileExt map[string]any) map[string]any {
-	return ProfileRuntimeExtensionsWithoutNotifierPayload(profileExt)
+	return ProfileRuntimeOptionsWithoutNotifierPayload(profileExt)
 }
 
 func (profileExtensionsPolicy) StripNestedFromRequestOptions(ro map[string]any) {
@@ -32,8 +32,8 @@ func (profileExtensionsPolicy) RequestOptionsForAgentProfileView(agentExt, reque
 	return requestOptionsForAgentProfileView(agentExt, requestOptions)
 }
 
-func (profileExtensionsPolicy) ViewRuntimeExtensionsForAPI(agentExt, profileExt map[string]any) map[string]any {
-	return ViewRuntimeExtensionsForAPIUnified(agentExt, profileExt)
+func (profileExtensionsPolicy) ViewRuntimeOptionsForAPI(agentExt map[string]any) map[string]any {
+	return ViewRuntimeOptionsForAPI(agentExt)
 }
 
 func (profileExtensionsPolicy) MergeFlatForAgentPatch(agentExt, patchProfileExt map[string]any) map[string]any {

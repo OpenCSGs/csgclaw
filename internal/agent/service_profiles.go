@@ -19,7 +19,7 @@ func (s *Service) AgentProfileView(id string) (AgentProfileView, error) {
 	if !ok {
 		return AgentProfileView{}, fmt.Errorf("agent %q not found", id)
 	}
-	return profileViewWithAgentExtensions(got.AgentProfile, got.RuntimeExtensions, got.RuntimeKind, got.DetectionResults), nil
+	return profileViewWithAgentExtensions(got.AgentProfile, got.RuntimeOptions, got.RuntimeKind, got.DetectionResults), nil
 }
 
 func (s *Service) ProfileDefaultsView() AgentProfileView {
@@ -31,7 +31,7 @@ func (s *Service) ProfileDefaultsView() AgentProfileView {
 	return profileView(s.profileDefaults, s.detectionResults)
 }
 
-func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProfileView, error) {
+func (s *Service) UpdateAgentProfile(id string, profile AgentProfile, patchRuntimeOptions *map[string]any) (AgentProfileView, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return AgentProfileView{}, fmt.Errorf("agent id is required")
@@ -51,10 +51,13 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 		profile.APIKey = current.AgentProfile.APIKey
 	}
 	pol := agentruntime.ProfileExtensionsPolicyForKind(normalizeRuntimeKind(current.RuntimeKind))
-	mergedFlat := pol.MergeFlatForAgentPatch(current.RuntimeExtensions, profile.RuntimeExtensions)
-	normalized := normalizeProfileForAgentRuntime(profile, current.RuntimeExtensions, current.Name, current.Description, current.RuntimeKind, mergedFlat)
-	nextRE, nextRO := pol.ApplyFlatPersistence(&current.RuntimeExtensions, normalized.RuntimeExtensions, normalized.RequestOptions, mergedFlat)
-	normalized.RuntimeExtensions = nextRE
+	var patch map[string]any
+	if patchRuntimeOptions != nil {
+		patch = *patchRuntimeOptions
+	}
+	mergedFlat := pol.MergeFlatForAgentPatch(current.RuntimeOptions, patch)
+	normalized := normalizeProfileForAgentRuntime(profile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, mergedFlat)
+	_, nextRO := pol.ApplyFlatPersistence(&current.RuntimeOptions, nil, normalized.RequestOptions, mergedFlat)
 	normalized.RequestOptions = nextRO
 	normalized.EnvRestartRequired = !profilesEqualEnv(current.AgentProfile, normalized)
 	current.AgentProfile = normalized
@@ -72,7 +75,7 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	if err := s.saveLocked(); err != nil {
 		return AgentProfileView{}, err
 	}
-	return profileViewWithAgentExtensions(normalized, current.RuntimeExtensions, current.RuntimeKind, current.DetectionResults), nil
+	return profileViewWithAgentExtensions(normalized, current.RuntimeOptions, current.RuntimeKind, current.DetectionResults), nil
 }
 
 func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Agent, error) {
@@ -114,16 +117,22 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 	if req.Image != nil {
 		current.Image = strings.TrimSpace(*req.Image)
 	}
-	if req.AgentProfile != nil {
-		profile := *req.AgentProfile
-		if strings.TrimSpace(profile.APIKey) == "" {
-			profile.APIKey = current.AgentProfile.APIKey
+	if req.AgentProfile != nil || req.RuntimeOptions != nil {
+		profile := current.AgentProfile
+		if req.AgentProfile != nil {
+			profile = *req.AgentProfile
+			if strings.TrimSpace(profile.APIKey) == "" {
+				profile.APIKey = current.AgentProfile.APIKey
+			}
 		}
 		pol := agentruntime.ProfileExtensionsPolicyForKind(normalizeRuntimeKind(current.RuntimeKind))
-		mergedFlat := pol.MergeFlatForAgentPatch(current.RuntimeExtensions, profile.RuntimeExtensions)
-		normalized := normalizeProfileForAgentRuntime(profile, current.RuntimeExtensions, current.Name, current.Description, current.RuntimeKind, mergedFlat)
-		nextRE, nextRO := pol.ApplyFlatPersistence(&current.RuntimeExtensions, normalized.RuntimeExtensions, normalized.RequestOptions, mergedFlat)
-		normalized.RuntimeExtensions = nextRE
+		var patch map[string]any
+		if req.RuntimeOptions != nil {
+			patch = *req.RuntimeOptions
+		}
+		mergedFlat := pol.MergeFlatForAgentPatch(current.RuntimeOptions, patch)
+		normalized := normalizeProfileForAgentRuntime(profile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, mergedFlat)
+		_, nextRO := pol.ApplyFlatPersistence(&current.RuntimeOptions, nil, normalized.RequestOptions, mergedFlat)
 		normalized.RequestOptions = nextRO
 		normalized.EnvRestartRequired = !profilesEqualEnv(current.AgentProfile, normalized)
 		current.AgentProfile = normalized
@@ -199,7 +208,7 @@ func (s *Service) ResolvedAgentProfile(agentID string) (AgentProfile, error) {
 	if !ok {
 		return AgentProfile{}, fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
 	}
-	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeExtensions, got.Name, got.Description, got.RuntimeKind, nil)
+	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil)
 	if !profile.ProfileComplete {
 		return AgentProfile{}, fmt.Errorf("agent %q profile is incomplete", strings.TrimSpace(agentID))
 	}
@@ -215,7 +224,7 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
-	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeExtensions, got.Name, got.Description, got.RuntimeKind, nil)
+	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil)
 	if !profile.ProfileComplete {
 		return Agent{}, fmt.Errorf("agent %q profile is incomplete", id)
 	}
@@ -332,25 +341,28 @@ func (s *Service) persistRecreatedAgent(ctx context.Context, id string, info age
 	return recreated, nil
 }
 
-func (s *Service) profileForCreateRequest(ctx context.Context, req CreateAgentSpec) (AgentProfile, map[string]any, error) {
+func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgentSpec) (AgentProfile, error) {
+	if spec == nil {
+		return AgentProfile{}, fmt.Errorf("create spec is required")
+	}
 	var preservedRO map[string]any
-	if len(req.AgentProfile.RequestOptions) > 0 {
-		preservedRO = make(map[string]any, len(req.AgentProfile.RequestOptions))
-		for k, v := range req.AgentProfile.RequestOptions {
+	if len(spec.AgentProfile.RequestOptions) > 0 {
+		preservedRO = make(map[string]any, len(spec.AgentProfile.RequestOptions))
+		for k, v := range spec.AgentProfile.RequestOptions {
 			preservedRO[k] = v
 		}
 	}
 
-	profile := req.AgentProfile
-	rk := normalizeRuntimeKind(req.RuntimeKind)
+	profile := spec.AgentProfile
+	rk := normalizeRuntimeKind(spec.RuntimeKind)
 	if rk == "" || isGatewayRuntimeKind(rk) {
-		if strings.TrimSpace(profile.ModelID) == "" && strings.TrimSpace(req.ModelID) != "" {
-			profile.ModelID = strings.TrimSpace(req.ModelID)
+		if strings.TrimSpace(profile.ModelID) == "" && strings.TrimSpace(spec.ModelID) != "" {
+			profile.ModelID = strings.TrimSpace(spec.ModelID)
 		}
-		if strings.TrimSpace(profile.Provider) == "" && strings.TrimSpace(req.Profile) != "" {
-			if _, cfg, err := s.llm.Resolve(req.Profile); err == nil {
-				profile = profileFromConfigModel(req.Name, req.Description, cfg)
-			} else if provider, modelID, ok := splitProfileSelector(req.Profile); ok {
+		if strings.TrimSpace(profile.Provider) == "" && strings.TrimSpace(spec.Profile) != "" {
+			if _, cfg, err := s.llm.Resolve(spec.Profile); err == nil {
+				profile = profileFromConfigModel(spec.Name, spec.Description, cfg)
+			} else if provider, modelID, ok := splitProfileSelector(spec.Profile); ok {
 				profile.Provider = provider
 				if strings.TrimSpace(profile.ModelID) == "" {
 					profile.ModelID = modelID
@@ -389,28 +401,26 @@ func (s *Service) profileForCreateRequest(ctx context.Context, req CreateAgentSp
 		}
 	}
 
-	// Re-apply caller-supplied request_options keys after defaults (e.g. nested notifier) so DetectDefaultProfile does not drop them.
+	// Re-apply caller-supplied request_options keys after defaults so DetectDefaultProfile does not drop them.
 	profile.RequestOptions = agentruntime.OverlayAnyMap(profile.RequestOptions, preservedRO)
-	pol := agentruntime.ProfileExtensionsPolicyForKind(normalizeRuntimeKind(req.RuntimeKind))
-	notifierFlat := pol.FlatFromExtensionsMap(profile.RuntimeExtensions)
+	pol := agentruntime.ProfileExtensionsPolicyForKind(normalizeRuntimeKind(spec.RuntimeKind))
+	notifierFlat := pol.FlatFromExtensionsMap(spec.RuntimeOptions)
 	notifierFlat = pol.WithPullSubscriptionDefaults(notifierFlat)
 	profile.RequestOptions = pol.RequestOptionsWithoutNested(profile.RequestOptions)
-	profile = normalizeProfileForAgentRuntime(profile, nil, req.Name, req.Description, req.RuntimeKind, notifierFlat)
+	profile = normalizeProfileForAgentRuntime(profile, nil, spec.Name, spec.Description, spec.RuntimeKind, notifierFlat)
 	if !profile.ProfileComplete {
 		detected, _ := s.DetectDefaultProfile(ctx)
 		if detected.ProfileComplete {
-			detected.Name = strings.TrimSpace(req.Name)
-			detected.Description = strings.TrimSpace(req.Description)
+			detected.Name = strings.TrimSpace(spec.Name)
+			detected.Description = strings.TrimSpace(spec.Description)
 			detected.RequestOptions = agentruntime.OverlayAnyMap(detected.RequestOptions, preservedRO)
-			detectedFlat := pol.FlatFromExtensionsMap(detected.RuntimeExtensions)
-			det := normalizeProfileForAgentRuntime(detected, nil, req.Name, req.Description, req.RuntimeKind, detectedFlat)
-			det.RuntimeExtensions, det.RequestOptions = pol.ApplyFlatPersistence(nil, det.RuntimeExtensions, det.RequestOptions, detectedFlat)
-			return det, nil, nil
+			det := normalizeProfileForAgentRuntime(detected, nil, spec.Name, spec.Description, spec.RuntimeKind, nil)
+			return det, nil
 		}
-		return AgentProfile{}, nil, fmt.Errorf("agent profile is incomplete")
+		return AgentProfile{}, fmt.Errorf("agent profile is incomplete")
 	}
-	profile.RuntimeExtensions, profile.RequestOptions = pol.ApplyFlatPersistence(nil, profile.RuntimeExtensions, profile.RequestOptions, notifierFlat)
-	return profile, nil, nil
+	spec.RuntimeOptions, profile.RequestOptions = pol.ApplyFlatPersistence(nil, spec.RuntimeOptions, profile.RequestOptions, notifierFlat)
+	return profile, nil
 }
 
 func splitProfileSelector(selector string) (string, string, bool) {

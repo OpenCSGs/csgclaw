@@ -6,7 +6,7 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 )
 
-func TestMergeFlatForProfilePatchOverlaysRuntimeExtensions(t *testing.T) {
+func TestMergeFlatForProfilePatchOverlaysRuntimeOptions(t *testing.T) {
 	baseExt := map[string]any{"delivery_mode": "webhook", "webhook_token": "a"}
 	patchExt := map[string]any{"delivery_mode": "webhook", "webhook_token": "b"}
 	got := MergeFlatForProfilePatch(baseExt, patchExt)
@@ -116,8 +116,8 @@ func TestProfileCompleteForAgentRuntimeGatewayVsNotifier(t *testing.T) {
 
 func TestApplyNotifierFlatPersistenceMergesOntoAgentExtPreservesOtherKeys(t *testing.T) {
 	agentRE := map[string]any{
-		"keep":                      "yes",
-		RuntimeExtensionKeyNotifier: map[string]any{"delivery_mode": "webhook", "webhook_token": "old"},
+		"keep":                   "yes",
+		RuntimeOptionKeyNotifier: map[string]any{"delivery_mode": "webhook", "webhook_token": "old"},
 	}
 	flat := map[string]any{"delivery_mode": "webhook", "webhook_token": "new"}
 	nextRE, _ := ApplyNotifierFlatPersistence(&agentRE, nil, nil, flat)
@@ -127,7 +127,7 @@ func TestApplyNotifierFlatPersistenceMergesOntoAgentExtPreservesOtherKeys(t *tes
 	if agentRE["keep"] != "yes" {
 		t.Fatalf("lost sibling key: %#v", agentRE)
 	}
-	if _, nested := agentRE[RuntimeExtensionKeyNotifier]; nested {
+	if _, nested := agentRE[RuntimeOptionKeyNotifier]; nested {
 		t.Fatal("legacy nested notifier key should be stripped on persist")
 	}
 	if agentRE["webhook_token"] != "new" {

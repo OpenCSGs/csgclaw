@@ -15,7 +15,7 @@ func RedactNotifierDetailsForAPI(nd map[string]any) map[string]any {
 }
 
 // RedactedRequestOptionsForAPIView returns a copy of request_options safe for JSON responses:
-// nested notifier webhook_token and remote_token are removed (use runtime_extensions.notifier_profile for summaries).
+// nested notifier webhook_token and remote_token are removed (secrets live on agent.runtime_options).
 func RedactedRequestOptionsForAPIView(ro map[string]any) map[string]any {
 	if len(ro) == 0 {
 		return nil

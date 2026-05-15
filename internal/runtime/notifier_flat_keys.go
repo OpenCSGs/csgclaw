@@ -1,6 +1,6 @@
 package runtime
 
-// NotifierFlatStorageKeys are flat keys used for notifier delivery on runtime_extensions (must stay aligned with notifier package).
+// NotifierFlatStorageKeys are flat keys used for notifier delivery on runtime_options (must stay aligned with notifier package).
 var NotifierFlatStorageKeys = []string{
 	"delivery_mode",
 	"webhook_token",
