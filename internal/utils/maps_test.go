@@ -19,3 +19,24 @@ func TestOverlayAnyMap(t *testing.T) {
 		t.Fatal("nil overlay should leave nil dst")
 	}
 }
+
+func TestCloneAnyMapShallowNestedStringMaps(t *testing.T) {
+	t.Parallel()
+	inner := map[string]any{"a": 1}
+	src := map[string]any{"nested": inner, "plain": "x"}
+	got := CloneAnyMapShallowNestedStringMaps(src)
+	inner["a"] = 999
+	n, ok := got["nested"].(map[string]any)
+	if !ok || n["a"] != 1 {
+		t.Fatalf("nested map should be copied, got nested=%#v", got["nested"])
+	}
+	if got["plain"] != "x" {
+		t.Fatalf("plain = %q", got["plain"])
+	}
+	if CloneAnyMapShallowNestedStringMaps(nil) != nil {
+		t.Fatal("nil src should return nil")
+	}
+	if CloneAnyMapShallowNestedStringMaps(map[string]any{}) != nil {
+		t.Fatal("empty src should return nil")
+	}
+}

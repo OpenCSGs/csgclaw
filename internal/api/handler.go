@@ -22,6 +22,7 @@ import (
 	"csgclaw/internal/llm"
 	"csgclaw/internal/runtime/notifier"
 	"csgclaw/internal/upgrade"
+	"csgclaw/internal/utils"
 	"csgclaw/internal/version"
 )
 
@@ -788,7 +789,7 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 			CreatedAt:      req.CreatedAt,
 			Profile:        req.Profile,
 			ModelID:        req.ModelID,
-			RuntimeOptions: cloneRuntimeOptionsFromAPI(req.RuntimeOptions),
+			RuntimeOptions: utils.CloneAnyMapShallowNestedStringMaps(req.RuntimeOptions),
 			AgentProfile:   prof,
 		},
 		Replace:   req.Replace,
@@ -937,25 +938,6 @@ func agentProfileFromAPI(req apitypes.CreateAgentProfile) agent.AgentProfile {
 		Env:             req.Env,
 		ProfileComplete: req.ProfileComplete,
 	}
-}
-
-func cloneRuntimeOptionsFromAPI(m map[string]any) map[string]any {
-	if len(m) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(m))
-	for k, v := range m {
-		if sm, ok := v.(map[string]any); ok {
-			c := make(map[string]any, len(sm))
-			for ik, iv := range sm {
-				c[ik] = iv
-			}
-			out[k] = c
-		} else {
-			out[k] = v
-		}
-	}
-	return out
 }
 
 func (h *Handler) workerIMProvisioner() *im.Provisioner {
