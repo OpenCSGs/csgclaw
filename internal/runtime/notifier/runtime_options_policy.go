@@ -17,15 +17,12 @@ func (runtimeOptionsPolicy) IsComplete(_ bool, runtimeOptions, runtimeOptionsAft
 }
 
 func (runtimeOptionsPolicy) MergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions map[string]any) map[string]any {
-	return mergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions)
+	out := mergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions)
+	return EnsurePullRemoteSubscriptionInNotifierDetails(out)
 }
 
 func (runtimeOptionsPolicy) ApplyFlatPersistence(agentRuntimeOptions *map[string]any, profileRuntimeOptions, profileRequestOptions map[string]any, mergedFlat map[string]any) (map[string]any, map[string]any) {
 	return applyNotifierFlatPersistence(agentRuntimeOptions, profileRuntimeOptions, profileRequestOptions, mergedFlat)
-}
-
-func (runtimeOptionsPolicy) WithPullSubscriptionDefaults(flat map[string]any) map[string]any {
-	return EnsurePullRemoteSubscriptionInNotifierDetails(flat)
 }
 
 func init() {

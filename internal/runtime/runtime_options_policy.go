@@ -32,7 +32,6 @@ type RuntimeOptionsPolicy interface {
 	IsComplete(llmComplete bool, runtimeOptions, runtimeOptionsAfterPatch map[string]any) bool
 	MergeFlatForAgentPatch(agentRuntimeOptions, patchRuntimeOptions map[string]any) map[string]any
 	ApplyFlatPersistence(agentRuntimeOptions *map[string]any, profileRuntimeOptions, profileRequestOptions map[string]any, mergedFlat map[string]any) (map[string]any, map[string]any)
-	WithPullSubscriptionDefaults(flat map[string]any) map[string]any
 }
 
 var (
@@ -84,8 +83,4 @@ func (defaultRuntimeOptionsPolicy) ApplyFlatPersistence(agentRuntimeOptions *map
 		*agentRuntimeOptions = utils.CloneAnyMap(mergedFlat)
 	}
 	return profileRuntimeOptions, profileRequestOptions
-}
-
-func (defaultRuntimeOptionsPolicy) WithPullSubscriptionDefaults(flat map[string]any) map[string]any {
-	return flat
 }

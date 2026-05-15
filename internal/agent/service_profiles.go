@@ -388,7 +388,7 @@ func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgent
 	}
 
 	pol := agentruntime.RuntimeOptionsPolicyForKind(rk)
-	runtimeOptionsAfterPatch := pol.WithPullSubscriptionDefaults(pol.MergeFlatForAgentPatch(nil, spec.RuntimeOptions))
+	runtimeOptionsAfterPatch := pol.MergeFlatForAgentPatch(nil, spec.RuntimeOptions)
 	profile = normalizeProfileForAgentRuntime(profile, nil, spec.Name, spec.Description, spec.RuntimeKind, runtimeOptionsAfterPatch)
 	if !profile.ProfileComplete {
 		detected, _ := s.DetectDefaultProfile(ctx)
