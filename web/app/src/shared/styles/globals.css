@@ -2821,20 +2821,24 @@ body::after {
 
 .template-runtime-badge {
   width: fit-content;
+  display: inline-flex;
+  align-items: center;
   padding: 2px 8px;
-  border: 1px solid #e9eaeb;
+  border: 1px solid #d5d7da;
   border-radius: 6px;
-  background: #fafafa;
+  background: #fff;
   color: #414651;
   font-size: 14px;
   line-height: 20px;
   font-weight: 400;
+  box-shadow: 0 1px 2px 0 rgba(10, 13, 18, 0.05);
 }
 
 :root[data-theme="dark"] .template-runtime-badge {
   border-color: #333741;
-  background: #161b26;
+  background: #0c111d;
   color: #cecfd2;
+  box-shadow: 0 1px 2px 0 rgba(10, 13, 18, 0.05);
 }
 
 .template-role-badge {
@@ -3183,9 +3187,17 @@ body::after {
   font-size: 12px;
 }
 
+.hub-inspector-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .hub-inspector-panel {
+  container-type: inline-size;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   align-content: stretch;
   gap: 20px;
   min-height: 0;
@@ -3227,7 +3239,7 @@ body::after {
 
 .hub-inspector-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 0.8fr) minmax(280px, 1.8fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   padding: 22px;
   border: 1px solid var(--line);
@@ -3271,6 +3283,12 @@ body::after {
 
 .hub-field-value-multiline {
   word-break: break-word;
+}
+
+@container (max-width: 620px) {
+  .hub-inspector-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .hub-description-block,
@@ -5204,7 +5222,6 @@ body::after {
     border-bottom: 1px solid var(--line);
   }
 
-  .hub-inspector-grid,
   .entity-grid,
   .metric-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
