@@ -261,7 +261,7 @@ const (
 	DefaultHTTPPort                 = apiclient.DefaultHTTPPort
 	DefaultAccessToken              = "your_access_token"
 	DefaultManagerImage             = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.9"
-	DefaultOpenClawManagerImage     = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260509.1-csgclaw"
+	DefaultOpenClawManagerImage     = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260518.1-csgclaw"
 	CSGHubProvider                  = "csghub"
 	DockerProvider                  = "docker"
 	BoxLiteProvider                 = "boxlite"

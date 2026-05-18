@@ -1,5 +1,5 @@
 name = "openclaw-worker"
 description = "Builtin OpenClaw worker template"
 runtime_kind = "openclaw_sandbox"
-image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260509.1-csgclaw"
-updated_at = "2026-05-13T01:23:34Z"
+image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260518.1-csgclaw"
+updated_at = "2026-05-18T10:39:05Z"
