@@ -4996,8 +4996,10 @@ function HubDetailPane({
                           <div className="hub-inspector-copy">
                             <h2>${selectedTemplate.name || selectedTemplate.id}</h2>
                             <p>${selectedTemplate.description || selectedTemplate.id}</p>
-                            <span className="mini-badge template-runtime-badge">${selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind || "-"}</span>
-                            <span className="mini-badge template-source-badge"><span className="template-source-badge-dot" aria-hidden="true"></span>${localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}</span>
+                            <div className="hub-inspector-badge-row">
+                              <span className="mini-badge template-runtime-badge">${selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind || "-"}</span>
+                              <span className="mini-badge template-source-badge"><span className="template-source-badge-dot" aria-hidden="true"></span>${localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}</span>
+                            </div>
                           </div>
                         </div>
                         <div className="hub-template-actions">
@@ -5029,11 +5031,6 @@ function HubDetailPane({
                         <span>${t("hubUpdatedAtLabel")}</span>
                         <strong>${formatHubDateTime(selectedTemplate.updated_at, locale)}</strong>
                       </div>
-                    </div>
-
-                    <div className="hub-description-block">
-                      <span className="hub-section-label">${t("hubDescriptionLabel")}</span>
-                      <p>${selectedTemplate.description || selectedTemplate.id}</p>
                     </div>
 
                     <div className="hub-workspace-block">
