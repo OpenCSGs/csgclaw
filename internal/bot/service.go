@@ -310,16 +310,18 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 			return Bot{}, fmt.Errorf("agent id %q already exists with role %q", created.ID, created.Role)
 		}
 	} else {
-		created, err = s.agents.CreateWorker(ctx, agent.CreateAgentSpec{
-			ID:             normalized.ID,
-			Name:           normalized.Name,
-			Description:    normalized.Description,
-			Image:          normalized.Image,
-			Role:           agent.RoleWorker,
-			RuntimeKind:    normalized.RuntimeKind,
-			FromTemplate:   normalized.FromTemplate,
-			RuntimeOptions: utils.CloneAnyMap(normalized.RuntimeOptions),
-			AgentProfile:   agentProfileFromBotRequest(normalized.AgentProfile),
+		created, err = s.agents.Create(ctx, agent.CreateRequest{
+			Spec: agent.CreateAgentSpec{
+				ID:             normalized.ID,
+				Name:           normalized.Name,
+				Description:    normalized.Description,
+				Image:          normalized.Image,
+				Role:           agent.RoleWorker,
+				RuntimeKind:    normalized.RuntimeKind,
+				FromTemplate:   normalized.FromTemplate,
+				RuntimeOptions: utils.CloneAnyMap(normalized.RuntimeOptions),
+				AgentProfile:   agentProfileFromBotRequest(normalized.AgentProfile),
+			},
 		})
 		if err != nil {
 			return Bot{}, err

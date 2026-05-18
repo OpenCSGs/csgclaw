@@ -19,6 +19,7 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/sandboxgateway"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/sandboxtest"
 )
@@ -27,6 +28,12 @@ var (
 	fakeBotRuntimeStateMu sync.RWMutex
 	fakeBotRuntimeStates  = make(map[string]agentruntime.Info)
 )
+
+func init() {
+	_ = agent.TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
+		return nil
+	})
+}
 
 type fakeBotAgentRuntime struct {
 	kind string
@@ -41,6 +48,18 @@ func (f fakeBotAgentRuntime) New(_ context.Context, spec agentruntime.Spec) (age
 		RuntimeID: spec.RuntimeID,
 		HandleID:  fmt.Sprintf("%s-%s", f.kind, spec.AgentName),
 	}, nil
+}
+
+func (f fakeBotAgentRuntime) Provision(_ context.Context, req agentruntime.ProvisionRequest) error {
+	if strings.TrimSpace(req.WorkspaceOverlay) == "" {
+		return nil
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	workspaceRoot := filepath.Join(homeDir, config.AppDirName, "agents", req.AgentName, "workspace")
+	return sandboxgateway.OverlayWorkspaceTree(req.WorkspaceOverlay, workspaceRoot)
 }
 
 func (f fakeBotAgentRuntime) Start(context.Context, agentruntime.Handle) (agentruntime.State, error) {
@@ -304,11 +323,11 @@ func TestServiceListFeishuIncludesConfiguredUnavailableBots(t *testing.T) {
 	)
 	agentSvc := mustNewSeededAgentService(t, []agent.Agent{
 		{
-			ID:        "u-worker",
-			Name:      "worker",
-			Role:      agent.RoleWorker,
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-			ModelID:   "default-model",
+			ID:           "u-worker",
+			Name:         "worker",
+			Role:         agent.RoleWorker,
+			CreatedAt:    time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
+			AgentProfile: agent.AgentProfile{ModelID: "default-model"},
 		},
 	})
 	svc, err := NewServiceWithDependencies(store, agentSvc, nil, feishuSvc)
@@ -339,11 +358,11 @@ func TestServiceListFeishuConfiguredBotUsesMatchingAgent(t *testing.T) {
 	}
 	agentSvc := mustNewSeededAgentService(t, []agent.Agent{
 		{
-			ID:        "u-manager",
-			Name:      "manager",
-			Role:      agent.RoleManager,
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-			ModelID:   "default-model",
+			ID:           "u-manager",
+			Name:         "manager",
+			Role:         agent.RoleManager,
+			CreatedAt:    time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
+			AgentProfile: agent.AgentProfile{ModelID: "default-model"},
 		},
 	})
 	feishuSvc := feishu.NewServiceWithBotOpenIDResolver(
@@ -393,11 +412,11 @@ func TestServiceListStoredBotUnavailableWhenAgentNotRunning(t *testing.T) {
 	}
 	agentSvc := mustNewSeededAgentService(t, []agent.Agent{
 		{
-			ID:        "u-worker",
-			Name:      "worker",
-			Role:      agent.RoleWorker,
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-			ModelID:   "default-model",
+			ID:           "u-worker",
+			Name:         "worker",
+			Role:         agent.RoleWorker,
+			CreatedAt:    time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
+			AgentProfile: agent.AgentProfile{ModelID: "default-model"},
 		},
 	})
 	svc, err := NewServiceWithDependencies(store, agentSvc, nil)
@@ -436,11 +455,11 @@ func TestServiceListWithoutFiltersRefreshesAvailability(t *testing.T) {
 	}
 	agentSvc := mustNewSeededAgentService(t, []agent.Agent{
 		{
-			ID:        "u-worker",
-			Name:      "worker",
-			Role:      agent.RoleWorker,
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-			ModelID:   "default-model",
+			ID:           "u-worker",
+			Name:         "worker",
+			Role:         agent.RoleWorker,
+			CreatedAt:    time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
+			AgentProfile: agent.AgentProfile{ModelID: "default-model"},
 		},
 	})
 	svc, err := NewServiceWithDependencies(store, agentSvc, nil)
@@ -722,8 +741,8 @@ func TestServiceCreateCSGClawWorkerCreatesAgentUserAndBot(t *testing.T) {
 	if createdAgent.Image != "agent-image:1" {
 		t.Fatalf("agent.Image = %q, want agent-image:1", createdAgent.Image)
 	}
-	if createdAgent.Provider != agent.ProviderCSGHubLite || createdAgent.ModelID != "glm-4.5" {
-		t.Fatalf("agent profile = %s/%s, want csghub_lite/glm-4.5", createdAgent.Provider, createdAgent.ModelID)
+	if createdAgent.AgentProfile.Provider != agent.ProviderCSGHubLite || createdAgent.AgentProfile.ModelID != "glm-4.5" {
+		t.Fatalf("agent profile = %s/%s, want csghub_lite/glm-4.5", createdAgent.AgentProfile.Provider, createdAgent.AgentProfile.ModelID)
 	}
 	if createdAgent.AgentProfile.ReasoningEffort != "high" {
 		t.Fatalf("agent reasoning = %q, want high", createdAgent.AgentProfile.ReasoningEffort)
@@ -997,11 +1016,11 @@ func TestServiceCreateWorkerUsesFromTemplateWorkspace(t *testing.T) {
 func TestServiceCreateCSGClawManagerBindsBootstrappedAgent(t *testing.T) {
 	agentSvc := mustNewSeededAgentService(t, []agent.Agent{
 		{
-			ID:        agent.ManagerUserID,
-			Name:      agent.ManagerName,
-			Role:      agent.RoleManager,
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-			ModelID:   "default-model",
+			ID:           agent.ManagerUserID,
+			Name:         agent.ManagerName,
+			Role:         agent.RoleManager,
+			CreatedAt:    time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
+			AgentProfile: agent.AgentProfile{ModelID: "default-model"},
 		},
 	})
 	imSvc := im.NewService()
@@ -1036,11 +1055,11 @@ func TestServiceCreateCSGClawManagerBindsBootstrappedAgent(t *testing.T) {
 func TestServiceCreateManagerBindsSameAgentAcrossChannels(t *testing.T) {
 	agentSvc := mustNewSeededAgentService(t, []agent.Agent{
 		{
-			ID:        agent.ManagerUserID,
-			Name:      agent.ManagerName,
-			Role:      agent.RoleManager,
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-			ModelID:   "default-model",
+			ID:           agent.ManagerUserID,
+			Name:         agent.ManagerName,
+			Role:         agent.RoleManager,
+			CreatedAt:    time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
+			AgentProfile: agent.AgentProfile{ModelID: "default-model"},
 		},
 	})
 	imSvc := im.NewService()
@@ -1397,6 +1416,11 @@ func mustNewSeededAgentService(t *testing.T, agents []agent.Agent) *agent.Servic
 
 	if agents == nil {
 		agents = []agent.Agent{}
+	}
+	for i := range agents {
+		if strings.TrimSpace(agents[i].RuntimeKind) == "" {
+			agents[i].RuntimeKind = agent.RuntimeKindPicoClawSandbox
+		}
 	}
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "agents.json")

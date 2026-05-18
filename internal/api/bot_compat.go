@@ -31,6 +31,8 @@ func (h *Handler) registerBotCompatibilityRoutes(router chi.Router) {
 		r.Get("/llm/v1/models", h.handleBotCompatibilityLLMModels)
 		r.Post("/llm/chat/completions", h.handleBotCompatibilityLLMChatCompletions)
 		r.Post("/llm/v1/chat/completions", h.handleBotCompatibilityLLMChatCompletions)
+		r.Post("/llm/responses", h.handleBotCompatibilityLLMResponses)
+		r.Post("/llm/v1/responses", h.handleBotCompatibilityLLMResponses)
 	})
 }
 
@@ -80,6 +82,14 @@ func (h *Handler) handleBotCompatibilityLLMChatCompletions(w http.ResponseWriter
 		return
 	}
 	h.handleBotLLMChatCompletions(w, r, botID)
+}
+
+func (h *Handler) handleBotCompatibilityLLMResponses(w http.ResponseWriter, r *http.Request) {
+	botID, ok := h.requireBotCompatibilityBotID(w, r)
+	if !ok {
+		return
+	}
+	h.handleBotLLMResponses(w, r, botID)
 }
 
 func (h *Handler) requireBotCompatibilityBotID(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -376,7 +386,7 @@ func parseBotCompatibilityPath(path string) (botID, action string, ok bool) {
 	botID = parts[0]
 	action = strings.Join(parts[1:], "/")
 	switch action {
-	case "events", "messages/send", "llm/models", "llm/v1/models", "llm/chat/completions", "llm/v1/chat/completions":
+	case "events", "messages/send", "llm/models", "llm/v1/models", "llm/chat/completions", "llm/v1/chat/completions", "llm/responses", "llm/v1/responses":
 		return botID, action, true
 	default:
 		return "", "", false

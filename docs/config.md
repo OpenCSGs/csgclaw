@@ -115,6 +115,8 @@ Auth is also managed locally:
 
 When a worker uses the Codex runtime, its local state is stored under `~/.csgclaw/agents/<agent-name>/.codex/`. The workspace lives at `~/.csgclaw/agents/<agent-name>/.codex/workspace`, shell home lives at `~/.csgclaw/agents/<agent-name>/.codex/home`, and Codex-managed files such as `auth.json` are stored directly under `~/.csgclaw/agents/<agent-name>/.codex`. This path is intentionally separate from the sandbox provider home such as `~/.csgclaw/agents/<agent-name>/boxlite`.
 
+For complete Codex worker profiles, CSGClaw writes `~/.csgclaw/agents/<agent-name>/.codex/config.toml` with an OpenAI-compatible proxy provider and always sets `wire_api = "responses"` because current `codex-acp` no longer accepts chat wire API providers. If the upstream provider reports the Responses endpoint as unsupported, CSGClaw keeps the Codex-facing Responses bridge and falls back to upstream chat completions behind that bridge. The raw upstream API key is not written to this file; it is injected into the runtime environment through `env_key = "OPENAI_API_KEY"`.
+
 When a worker uses the Codex runtime, CSGClaw resolves `codex-acp` automatically before startup. You can override that behavior with:
 
 - `CSGCLAW_CODEX_ACP_PATH` to point at a preinstalled `codex-acp` binary

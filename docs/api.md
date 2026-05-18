@@ -25,6 +25,8 @@ This document is generated from the HTTP routes and behaviors currently implemen
   - `GET /api/bots/{id}/llm/v1/models`
   - `POST /api/bots/{id}/llm/chat/completions`
   - `POST /api/bots/{id}/llm/v1/chat/completions`
+  - `POST /api/bots/{id}/llm/responses`
+  - `POST /api/bots/{id}/llm/v1/responses`
 - If the server runs with `no_auth`, the checks above are skipped
 
 ## Health Check
@@ -404,6 +406,7 @@ Notes:
 - For `provider=codex` or `claude_code`, model choices are obtained through CLIProxy
 - For `provider=api`, the server calls the target OpenAI-compatible `/models` endpoint
 - If `agent_id` is provided and `api_key` is omitted in the request, the server may reuse the saved key from that agent
+- If `agent_id` is omitted and `api_key` is omitted, the server may reuse the saved default API key only when `provider=api` and `base_url` matches the current default profile
 
 ### `GET /api/v1/agent-profile-defaults`
 
@@ -978,6 +981,31 @@ Notes:
   }
 }
 ```
+
+### `POST /api/bots/{id}/llm/responses`
+
+### `POST /api/bots/{id}/llm/v1/responses`
+
+Forwards OpenAI-compatible Responses API requests to the LLM bridge. Codex runtime uses this entrypoint for provider traffic. If the selected upstream provider returns an unsupported Responses endpoint status, the bridge falls back to upstream chat completions and wraps the result in a Responses-compatible response for Codex.
+
+Example request body:
+
+```json
+{
+  "model": "ignored-by-server",
+  "input": "Review this patch.",
+  "stream": true
+}
+```
+
+Notes:
+
+- Requires Bearer Token
+- The request is first forwarded to the selected profile's `base_url + /responses`
+- If upstream `/responses` returns `404` or `405`, the bridge retries via `base_url + /chat/completions`
+- The `model` field is overwritten with the agent's resolved `model_id`
+- Responses forwarding does not inject the chat-only top-level `reasoning_effort`
+- Upstream Responses headers, status, and body are copied through, including streaming responses such as `text/event-stream`
 
 ## Compatibility Notes
 

@@ -25,6 +25,8 @@
   - `GET /api/bots/{id}/llm/v1/models`
   - `POST /api/bots/{id}/llm/chat/completions`
   - `POST /api/bots/{id}/llm/v1/chat/completions`
+  - `POST /api/bots/{id}/llm/responses`
+  - `POST /api/bots/{id}/llm/v1/responses`
 - 若服务端开启 `no_auth`，上述鉴权会被跳过
 
 ## 健康检查
@@ -404,6 +406,7 @@ ok
 - `provider=codex` 或 `claude_code` 时会通过 CLIProxy 获取模型选项
 - `provider=api` 时会调用目标 OpenAI-compatible `/models`
 - 若提供了 `agent_id` 且当前请求未显式传 `api_key`，服务端可能复用该 agent 已保存的密钥
+- 若未提供 `agent_id` 且当前请求未显式传 `api_key`，仅当 `provider=api` 且 `base_url` 匹配当前默认 profile 时，服务端才可能复用已保存的默认 API key
 
 ### `GET /api/v1/agent-profile-defaults`
 
@@ -978,6 +981,31 @@ data: {"message_id":"msg-1","room_id":"room-1","sender_id":"u-admin","text":"hel
   }
 }
 ```
+
+### `POST /api/bots/{id}/llm/responses`
+
+### `POST /api/bots/{id}/llm/v1/responses`
+
+转发 OpenAI-compatible Responses API 请求到 LLM bridge。Codex runtime 使用这个入口发送 provider 流量。如果所选上游 provider 返回不支持 Responses endpoint 的状态，bridge 会回退到上游 chat completions，并把结果包装成 Codex 可消费的 Responses-compatible response。
+
+请求体示例：
+
+```json
+{
+  "model": "ignored-by-server",
+  "input": "Review this patch.",
+  "stream": true
+}
+```
+
+说明：
+
+- 需要 Bearer Token
+- 请求会先转发到所选 profile 的 `base_url + /responses`
+- 若上游 `/responses` 返回 `404` 或 `405`，bridge 会改为请求 `base_url + /chat/completions`
+- `model` 字段会被覆盖为 agent 已解析出的 `model_id`
+- Responses 转发不会注入 chat-only 的顶层 `reasoning_effort`
+- 上游 Responses 的 headers、status 和 body 会被透传，包括 `text/event-stream` 这类流式响应
 
 ## 兼容性说明
 

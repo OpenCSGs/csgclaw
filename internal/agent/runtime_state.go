@@ -138,6 +138,7 @@ func (s *Service) runtimeProfileForKind(runtimeKind, agentID, fallbackName, fall
 		APIKey:          apiKey,
 		ModelID:         profile.ModelID,
 		ReasoningEffort: profile.ReasoningEffort,
+		WireAPI:         codexWireAPIForProfile(runtimeKind, profile),
 		Env:             normalizeStringMap(profile.Env),
 	}).Normalized()
 }

@@ -16,6 +16,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
+	"csgclaw/internal/modelprovider"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/notifier"
 	"csgclaw/internal/runtime/openclawsandbox"
@@ -29,6 +30,9 @@ import (
 
 func init() {
 	testDefaultServiceOption = withTestPicoClawSandboxRuntime()
+	checkResponsesAPIForProvider = func(context.Context, string, string, string, map[string]string) error {
+		return nil
+	}
 }
 
 type fakeRuntime struct{}
@@ -529,6 +533,9 @@ func TestCreateWorkerUsesCodexRuntimeWhenRequested(t *testing.T) {
 				if got, want := spec.Profile.APIKey, "shared-token"; got != want {
 					t.Fatalf("Create() profile api key = %q, want %q", got, want)
 				}
+				if got, want := spec.Profile.WireAPI, "responses"; got != want {
+					t.Fatalf("Create() profile wire API = %q, want %q", got, want)
+				}
 				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-alice"}, nil
 			},
 		}),
@@ -561,6 +568,436 @@ func TestCreateWorkerUsesCodexRuntimeWhenRequested(t *testing.T) {
 	}
 	if rt := svc.runtimeRecords[got.RuntimeID]; rt.Kind != RuntimeKindCodex {
 		t.Fatalf("runtime record kind = %q, want %q", rt.Kind, RuntimeKindCodex)
+	}
+}
+
+func TestCreateWorkerPersistsCodexProfileBeforeRuntimeNew(t *testing.T) {
+	var svc *Service
+	var sawProfile bool
+	var err error
+	svc, err = NewService(
+		testModelConfig(),
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		},
+		"",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				profile, err := svc.ResolvedAgentProfile(spec.AgentID)
+				if err != nil {
+					t.Fatalf("ResolvedAgentProfile(%q) during runtime New = %v", spec.AgentID, err)
+				}
+				if got, want := profile.ModelID, "deepseek-v4-pro"; got != want {
+					t.Fatalf("ResolvedAgentProfile().ModelID = %q, want %q", got, want)
+				}
+				sawProfile = true
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-alice"}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeKind: RuntimeKindCodex,
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.deepseek.com",
+			APIKey:          "api-key",
+			ModelID:         "deepseek-v4-pro",
+			ProfileComplete: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
+	}
+	if !sawProfile {
+		t.Fatal("runtime New did not observe persisted profile")
+	}
+	if got.Status != string(agentruntime.StateRunning) {
+		t.Fatalf("CreateWorker().Status = %q, want running", got.Status)
+	}
+}
+
+func TestCreateWorkerRemovesStartingCodexAgentWhenRuntimeNewFails(t *testing.T) {
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		},
+		"",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			new: func(context.Context, agentruntime.Spec) (agentruntime.Handle, error) {
+				return agentruntime.Handle{}, errors.New("boom")
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeKind: RuntimeKindCodex,
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.deepseek.com",
+			APIKey:          "api-key",
+			ModelID:         "deepseek-v4-pro",
+			ProfileComplete: true,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "create worker box: boom") {
+		t.Fatalf("CreateWorker() error = %v, want runtime New failure", err)
+	}
+	if _, ok := svc.Agent("u-alice"); ok {
+		t.Fatal("Agent(\"u-alice\") exists after runtime New failure")
+	}
+}
+
+func TestCreateWorkerPreservesProfileDefaultsWhenCodexRuntimeNewFails(t *testing.T) {
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		},
+		"",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			new: func(context.Context, agentruntime.Spec) (agentruntime.Handle, error) {
+				return agentruntime.Handle{}, errors.New("boom")
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.profileDefaults = normalizeProfile(AgentProfile{
+		Name:            ManagerName,
+		Provider:        ProviderAPI,
+		BaseURL:         "https://default.example/v1",
+		APIKey:          "default-key",
+		ModelID:         "default-model",
+		ProfileComplete: true,
+	}, ManagerName, "")
+
+	_, err = svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeKind: RuntimeKindCodex,
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.deepseek.com",
+			APIKey:          "api-key",
+			ModelID:         "deepseek-v4-pro",
+			ProfileComplete: true,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "create worker box: boom") {
+		t.Fatalf("CreateWorker() error = %v, want runtime New failure", err)
+	}
+	if got, want := svc.profileDefaults.ModelID, "default-model"; got != want {
+		t.Fatalf("profileDefaults.ModelID = %q, want %q", got, want)
+	}
+	if got, want := svc.profileDefaults.APIKey, "default-key"; got != want {
+		t.Fatalf("profileDefaults.APIKey = %q, want preserved default key", got)
+	}
+}
+
+func TestEnsureCodexWireAPIRetriesAfterTransientProbeError(t *testing.T) {
+	calls := 0
+	restore := TestOnlySetResponsesAPIProbe(func(_ context.Context, baseURL, apiKey, modelID string, _ map[string]string) error {
+		calls++
+		if baseURL != "https://api.example/v1" {
+			t.Fatalf("responses probe baseURL = %q, want api.example", baseURL)
+		}
+		if modelID != "gpt-5.5" {
+			t.Fatalf("responses probe modelID = %q, want gpt-5.5", modelID)
+		}
+		if calls == 1 {
+			if apiKey != "bad-key" {
+				t.Fatalf("first responses probe apiKey = %q, want bad-key", apiKey)
+			}
+			return errors.New("temporary outage")
+		}
+		if apiKey != "fixed-key" {
+			t.Fatalf("second responses probe apiKey = %q, want fixed-key", apiKey)
+		}
+		return nil
+	})
+	t.Cleanup(restore)
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	err = svc.ensureCodexWireAPI(context.Background(), RuntimeKindCodex, AgentProfile{
+		Provider:        ProviderAPI,
+		BaseURL:         "https://api.example/v1",
+		APIKey:          "bad-key",
+		ModelID:         "gpt-5.5",
+		ProfileComplete: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "temporary outage") {
+		t.Fatalf("first ensureCodexWireAPI() error = %v, want temporary outage", err)
+	}
+
+	err = svc.ensureCodexWireAPI(context.Background(), RuntimeKindCodex, AgentProfile{
+		Provider:        ProviderAPI,
+		BaseURL:         "https://api.example/v1",
+		APIKey:          "fixed-key",
+		ModelID:         "gpt-5.5",
+		ProfileComplete: true,
+	})
+	if err != nil {
+		t.Fatalf("second ensureCodexWireAPI() error = %v, want retry success", err)
+	}
+	if calls != 2 {
+		t.Fatalf("responses probe calls = %d, want 2", calls)
+	}
+}
+
+func TestCreateWorkerCodexRuntimeKeepsResponsesWireAPIWhenResponsesUnsupported(t *testing.T) {
+	restore := TestOnlySetResponsesAPIProbe(func(_ context.Context, baseURL, apiKey, modelID string, _ map[string]string) error {
+		if baseURL != "https://unsupported.example/v1" {
+			t.Fatalf("responses probe baseURL = %q, want upstream profile URL", baseURL)
+		}
+		if apiKey != "api-key" {
+			t.Fatalf("responses probe apiKey = %q, want upstream profile key", apiKey)
+		}
+		if modelID != "gpt-4.1" {
+			t.Fatalf("responses probe modelID = %q, want gpt-4.1", modelID)
+		}
+		return modelprovider.ErrResponsesAPIUnsupported
+	})
+	t.Cleanup(restore)
+
+	var gotWireAPI string
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		},
+		"",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				gotWireAPI = spec.Profile.WireAPI
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-alice"}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeKind: RuntimeKindCodex,
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderAPI,
+			BaseURL:         "https://unsupported.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "gpt-4.1",
+			ProfileComplete: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
+	}
+	if got.BoxID != "codex-session-alice" {
+		t.Fatalf("CreateWorker().BoxID = %q, want codex-session-alice", got.BoxID)
+	}
+	if gotWireAPI != "responses" {
+		t.Fatalf("runtime profile wire API = %q, want responses", gotWireAPI)
+	}
+}
+
+func TestUpdateCodexAgentProfilePatchRestartsActiveBridge(t *testing.T) {
+	probeCalls := 0
+	restore := TestOnlySetResponsesAPIProbe(func(_ context.Context, baseURL, apiKey, modelID string, _ map[string]string) error {
+		probeCalls++
+		if baseURL != "https://api.deepseek.com" {
+			t.Fatalf("responses probe baseURL = %q, want deepseek upstream", baseURL)
+		}
+		if apiKey != "deepseek-key" {
+			t.Fatalf("responses probe apiKey = %q, want updated profile key", apiKey)
+		}
+		if modelID != "deepseek-v4-pro" {
+			t.Fatalf("responses probe modelID = %q, want deepseek-v4-pro", modelID)
+		}
+		return modelprovider.ErrResponsesAPIUnsupported
+	})
+	t.Cleanup(restore)
+
+	observer := &fakeLifecycleObserver{}
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		},
+		"",
+		"",
+		WithLifecycleObserver(observer),
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	currentProfile := AgentProfile{
+		Name:            "dev",
+		Provider:        ProviderAPI,
+		BaseURL:         "https://api.openai.com/v1",
+		APIKey:          "openai-key",
+		ModelID:         "gpt-5.5",
+		ProfileComplete: true,
+	}
+	svc.agents["u-dev"] = Agent{
+		ID:              "u-dev",
+		Name:            "dev",
+		RuntimeID:       "rt-u-dev",
+		RuntimeKind:     RuntimeKindCodex,
+		BoxID:           "codex-session-old",
+		Role:            RoleWorker,
+		Status:          string(agentruntime.StateRunning),
+		Profile:         profileSelector(currentProfile),
+		AgentProfile:    currentProfile,
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 5, 18, 9, 0, 0, 0, time.UTC),
+	}
+	nextProfile := AgentProfile{
+		Provider: ProviderAPI,
+		BaseURL:  "https://api.deepseek.com",
+		APIKey:   "deepseek-key",
+		ModelID:  "deepseek-v4-pro",
+	}
+
+	updated, err := svc.Update(context.Background(), "u-dev", UpdateRequest{AgentProfile: &nextProfile})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if probeCalls != 1 {
+		t.Fatalf("responses probe calls = %d, want 1", probeCalls)
+	}
+	if !updated.AgentProfile.EnvRestartRequired {
+		t.Fatal("Update().AgentProfile.EnvRestartRequired = false, want true so running Codex bridge is refreshed")
+	}
+	if len(observer.stopCalls) != 1 || observer.stopCalls[0] != "u-dev" {
+		t.Fatalf("StopAgent() calls = %+v, want [u-dev]", observer.stopCalls)
+	}
+}
+
+func TestUpdateAgentProfileCodexRuntimeFallbackRestartsActiveBridge(t *testing.T) {
+	restore := TestOnlySetResponsesAPIProbe(func(_ context.Context, baseURL, apiKey, modelID string, _ map[string]string) error {
+		if baseURL != "https://api.deepseek.com" {
+			t.Fatalf("responses probe baseURL = %q, want deepseek upstream", baseURL)
+		}
+		if apiKey != "deepseek-key" {
+			t.Fatalf("responses probe apiKey = %q, want updated profile key", apiKey)
+		}
+		if modelID != "deepseek-v4-pro" {
+			t.Fatalf("responses probe modelID = %q, want deepseek-v4-pro", modelID)
+		}
+		return modelprovider.ErrResponsesAPIUnsupported
+	})
+	t.Cleanup(restore)
+
+	observer := &fakeLifecycleObserver{}
+	var gotWireAPI string
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		},
+		"",
+		"",
+		WithLifecycleObserver(observer),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				gotWireAPI = spec.Profile.WireAPI
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-dev"}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	currentProfile := AgentProfile{
+		Name:            "dev",
+		Provider:        ProviderAPI,
+		BaseURL:         "https://api.openai.com/v1",
+		APIKey:          "openai-key",
+		ModelID:         "gpt-5.5",
+		ProfileComplete: true,
+	}
+	svc.agents["u-dev"] = Agent{
+		ID:              "u-dev",
+		Name:            "dev",
+		RuntimeID:       "rt-u-dev",
+		RuntimeKind:     RuntimeKindCodex,
+		BoxID:           "codex-session-old",
+		Role:            RoleWorker,
+		Status:          string(agentruntime.StateRunning),
+		Profile:         profileSelector(currentProfile),
+		AgentProfile:    currentProfile,
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 5, 18, 9, 0, 0, 0, time.UTC),
+	}
+
+	view, err := svc.UpdateAgentProfile("u-dev", AgentProfile{
+		Provider: ProviderAPI,
+		BaseURL:  "https://api.deepseek.com",
+		APIKey:   "deepseek-key",
+		ModelID:  "deepseek-v4-pro",
+	})
+	if err != nil {
+		t.Fatalf("UpdateAgentProfile() error = %v", err)
+	}
+	if !view.EnvRestartRequired {
+		t.Fatal("UpdateAgentProfile().EnvRestartRequired = false, want true so running Codex bridge is refreshed")
+	}
+	if len(observer.stopCalls) != 1 || observer.stopCalls[0] != "u-dev" {
+		t.Fatalf("StopAgent() calls = %+v, want [u-dev]", observer.stopCalls)
+	}
+
+	started, err := svc.Start(context.Background(), "u-dev")
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if started.AgentProfile.EnvRestartRequired {
+		t.Fatal("Start().AgentProfile.EnvRestartRequired = true, want false after recreate")
+	}
+	if gotWireAPI != "responses" {
+		t.Fatalf("runtime profile wire API = %q, want responses", gotWireAPI)
 	}
 }
 

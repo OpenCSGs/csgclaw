@@ -44,6 +44,9 @@ func init() {
 		}
 		return runtimewiring.WithOpenClawSandboxRuntime()(s)
 	})
+	_ = agent.TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
+		return nil
+	})
 }
 
 func testFeishuBotInfoResolver(t *testing.T, openIDsByAppID map[string]string) func(context.Context, feishu.AppConfig) (feishu.BotInfo, error) {
@@ -139,6 +142,8 @@ func TestParseBotCompatibilityPath(t *testing.T) {
 		{path: "/api/bots/u-manager/llm/v1/models", wantBotID: "u-manager", wantAction: "llm/v1/models", wantOK: true},
 		{path: "/api/bots/u-manager/llm/chat/completions", wantBotID: "u-manager", wantAction: "llm/chat/completions", wantOK: true},
 		{path: "/api/bots/u-manager/llm/v1/chat/completions", wantBotID: "u-manager", wantAction: "llm/v1/chat/completions", wantOK: true},
+		{path: "/api/bots/u-manager/llm/responses", wantBotID: "u-manager", wantAction: "llm/responses", wantOK: true},
+		{path: "/api/bots/u-manager/llm/v1/responses", wantBotID: "u-manager", wantAction: "llm/v1/responses", wantOK: true},
 		{path: "/api/bots/u-manager", wantOK: false},
 		{path: "/api/bots//events", wantOK: false},
 	}
@@ -3629,7 +3634,9 @@ func TestHandleBotLLMModelsReturnsBridgeCatalog(t *testing.T) {
 			RuntimeKind: agent.RuntimeKindCodex,
 			Profile:     config.DefaultLLMProfile,
 			AgentProfile: agent.AgentProfile{
-				Provider:        agent.ProviderCodex,
+				Provider:        agent.ProviderAPI,
+				BaseURL:         "http://127.0.0.1:4000",
+				APIKey:          "sk-test",
 				ModelID:         "gpt-5.4",
 				ReasoningEffort: agent.DefaultReasoningEffort,
 				ProfileComplete: true,
@@ -3689,7 +3696,9 @@ func TestHandleBotLLMModelsLegacyRouteReturnsBridgeCatalog(t *testing.T) {
 			RuntimeKind: agent.RuntimeKindCodex,
 			Profile:     config.DefaultLLMProfile,
 			AgentProfile: agent.AgentProfile{
-				Provider:        agent.ProviderCodex,
+				Provider:        agent.ProviderAPI,
+				BaseURL:         "http://127.0.0.1:4000",
+				APIKey:          "sk-test",
 				ModelID:         "gpt-5.4",
 				ReasoningEffort: agent.DefaultReasoningEffort,
 				ProfileComplete: true,

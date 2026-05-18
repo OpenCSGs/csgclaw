@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"csgclaw/internal/agent"
@@ -16,9 +18,11 @@ import (
 )
 
 type Service struct {
-	defaults config.ModelConfig
-	agents   *agent.Service
-	client   *http.Client
+	defaults              config.ModelConfig
+	agents                *agent.Service
+	client                *http.Client
+	responsesCapabilityMu sync.Mutex
+	responsesUnsupported  map[string]struct{}
 }
 
 type HTTPError struct {
@@ -26,6 +30,12 @@ type HTTPError struct {
 	Message  string
 	Code     string
 	Provider string
+}
+
+type UpstreamResponse struct {
+	StatusCode int
+	Header     http.Header
+	Body       io.ReadCloser
 }
 
 var embeddedCLIProxyProviderBaseURL = func(ctx context.Context, provider string) (string, error) {
@@ -45,9 +55,10 @@ func (e *HTTPError) Error() string {
 
 func NewService(defaults config.ModelConfig, agents *agent.Service) *Service {
 	return &Service{
-		defaults: defaults.Resolved(),
-		agents:   agents,
-		client:   &http.Client{Timeout: 60 * time.Second},
+		defaults:             defaults.Resolved(),
+		agents:               agents,
+		client:               &http.Client{Timeout: 60 * time.Second},
+		responsesUnsupported: make(map[string]struct{}),
 	}
 }
 
@@ -56,16 +67,18 @@ func (s *Service) Models(_ context.Context, botID string) ([]byte, int, string, 
 	if err != nil {
 		return nil, 0, "", err
 	}
+	modelID := strings.TrimSpace(profile.ModelID)
 	payload := map[string]any{
 		"object": "list",
 		"data": []map[string]any{
 			{
-				"id":       profile.ModelID,
+				"id":       modelID,
 				"object":   "model",
 				"created":  0,
 				"owned_by": "csgclaw",
 			},
 		},
+		"models": []map[string]any{codexModelMetadata(profile)},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -74,12 +87,82 @@ func (s *Service) Models(_ context.Context, botID string) ([]byte, int, string, 
 	return body, http.StatusOK, "application/json", nil
 }
 
+func codexModelMetadata(profile agent.AgentProfile) map[string]any {
+	modelID := strings.TrimSpace(profile.ModelID)
+	if modelID == "" {
+		modelID = "unknown"
+	}
+	reasoningEffort := strings.ToLower(strings.TrimSpace(profile.ReasoningEffort))
+	switch reasoningEffort {
+	case "none", "minimal", "low", "medium", "high", "xhigh":
+	default:
+		reasoningEffort = "medium"
+	}
+	baseInstructions := "You are Codex, a coding agent. Follow the user's instructions and use available tools carefully."
+	return map[string]any{
+		"slug":                    modelID,
+		"display_name":            modelID,
+		"description":             "CSGClaw OpenAI-compatible provider model",
+		"default_reasoning_level": reasoningEffort,
+		"supported_reasoning_levels": []map[string]any{
+			{"effort": "low", "description": "low"},
+			{"effort": "medium", "description": "medium"},
+			{"effort": "high", "description": "high"},
+		},
+		"shell_type":                   "default",
+		"visibility":                   "list",
+		"supported_in_api":             true,
+		"priority":                     1,
+		"availability_nux":             nil,
+		"upgrade":                      nil,
+		"base_instructions":            baseInstructions,
+		"model_messages":               codexModelMessages(baseInstructions),
+		"supports_search_tool":         false,
+		"supports_reasoning_summaries": false,
+		"default_reasoning_summary":    "auto",
+		"support_verbosity":            false,
+		"default_verbosity":            nil,
+		"apply_patch_tool_type":        nil,
+		"web_search_tool_type":         "text",
+		"truncation_policy": map[string]any{
+			"mode":  "bytes",
+			"limit": 10000,
+		},
+		"supports_parallel_tool_calls":     false,
+		"supports_image_detail_original":   false,
+		"context_window":                   272000,
+		"auto_compact_token_limit":         nil,
+		"effective_context_window_percent": 95,
+		"experimental_supported_tools":     []any{},
+		"input_modalities":                 []string{"text", "image"},
+	}
+}
+
+func codexModelMessages(baseInstructions string) map[string]any {
+	return map[string]any{
+		"instructions_template": "{{ personality }}\n\n" + baseInstructions,
+		"instructions_variables": map[string]any{
+			"personality_default":   "",
+			"personality_friendly":  "You are collaborative, supportive, and clear.",
+			"personality_pragmatic": "You are a deeply pragmatic, effective software engineer.",
+		},
+	}
+}
+
 func (s *Service) ChatCompletions(ctx context.Context, botID string, body []byte) ([]byte, int, string, error) {
 	profile, err := s.resolveProfile(botID)
 	if err != nil {
 		return nil, 0, "", err
 	}
 	return s.forwardRemoteChat(ctx, profile, body)
+}
+
+func (s *Service) Responses(ctx context.Context, botID string, body []byte) (*UpstreamResponse, error) {
+	profile, err := s.resolveProfile(botID)
+	if err != nil {
+		return nil, err
+	}
+	return s.forwardRemoteResponses(ctx, profile, body)
 }
 
 func (s *Service) resolveProfile(botID string) (agent.AgentProfile, error) {
@@ -149,6 +232,574 @@ func (s *Service) forwardRemoteChat(ctx context.Context, profile agent.AgentProf
 	return respBody, resp.StatusCode, contentType, nil
 }
 
+func (s *Service) forwardRemoteResponses(ctx context.Context, profile agent.AgentProfile, body []byte) (*UpstreamResponse, error) {
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
+	}
+	mergeResponsesPayload(payload, profile)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
+	}
+
+	baseURL, apiKey, err := s.agentProfileTarget(ctx, profile)
+	if err != nil {
+		return nil, err
+	}
+	if baseURL == "" {
+		return nil, &HTTPError{Status: http.StatusBadRequest, Message: "profile base_url is required"}
+	}
+	if s.responsesAPIUnsupportedCached(profile, baseURL) {
+		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey)
+	}
+	upstreamURL := strings.TrimRight(baseURL, "/") + "/responses"
+	req, err := newProfileJSONRequest(ctx, upstreamURL, encoded, apiKey, profile.Headers)
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build upstream request: %v", err)}
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send upstream request: %v", err)}
+	}
+	if responsesAPIUnsupportedStatus(resp.StatusCode) {
+		_ = resp.Body.Close()
+		s.markResponsesAPIUnsupported(profile, baseURL)
+		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey)
+	}
+	return &UpstreamResponse{
+		StatusCode: resp.StatusCode,
+		Header:     resp.Header.Clone(),
+		Body:       resp.Body,
+	}, nil
+}
+
+func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.AgentProfile, responsesPayload map[string]any, baseURL, apiKey string) (*UpstreamResponse, error) {
+	chatPayload, err := responsesPayloadToChatPayload(responsesPayload)
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusBadRequest, Message: err.Error()}
+	}
+	mergeProfilePayload(chatPayload, profile)
+	encoded, err := json.Marshal(chatPayload)
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode chat fallback request: %v", err)}
+	}
+
+	upstreamURL := strings.TrimRight(baseURL, "/") + "/chat/completions"
+	req, err := newProfileJSONRequest(ctx, upstreamURL, encoded, apiKey, profile.Headers)
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build chat fallback request: %v", err)}
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send chat fallback request: %v", err)}
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return &UpstreamResponse{
+			StatusCode: resp.StatusCode,
+			Header:     resp.Header.Clone(),
+			Body:       resp.Body,
+		}, nil
+	}
+	if payloadBool(chatPayload["stream"]) {
+		return streamChatCompletionAsResponse(resp, strings.TrimSpace(profile.ModelID)), nil
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("read chat fallback response: %v", err)}
+	}
+	converted, err := chatCompletionResponseToResponses(respBody, strings.TrimSpace(profile.ModelID))
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("convert chat fallback response: %v", err)}
+	}
+	header := make(http.Header)
+	header.Set("Content-Type", "application/json")
+	return &UpstreamResponse{
+		StatusCode: http.StatusOK,
+		Header:     header,
+		Body:       io.NopCloser(bytes.NewReader(converted)),
+	}, nil
+}
+
+func newProfileJSONRequest(ctx context.Context, url string, body []byte, apiKey string, headers map[string]string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for key, value := range headers {
+		key = strings.TrimSpace(key)
+		if key == "" || strings.EqualFold(key, "authorization") || strings.EqualFold(key, "content-type") {
+			continue
+		}
+		req.Header.Set(key, value)
+	}
+	return req, nil
+}
+
+func responsesAPIUnsupportedStatus(status int) bool {
+	return status == http.StatusNotFound || status == http.StatusMethodNotAllowed
+}
+
+func (s *Service) responsesAPIUnsupportedCached(profile agent.AgentProfile, baseURL string) bool {
+	key := responsesCapabilityKey(profile, baseURL)
+	s.responsesCapabilityMu.Lock()
+	defer s.responsesCapabilityMu.Unlock()
+	_, ok := s.responsesUnsupported[key]
+	return ok
+}
+
+func (s *Service) markResponsesAPIUnsupported(profile agent.AgentProfile, baseURL string) {
+	key := responsesCapabilityKey(profile, baseURL)
+	s.responsesCapabilityMu.Lock()
+	defer s.responsesCapabilityMu.Unlock()
+	if s.responsesUnsupported == nil {
+		s.responsesUnsupported = make(map[string]struct{})
+	}
+	s.responsesUnsupported[key] = struct{}{}
+}
+
+func responsesCapabilityKey(profile agent.AgentProfile, baseURL string) string {
+	return strings.TrimSpace(profile.Provider) + "\x00" + strings.TrimRight(strings.TrimSpace(baseURL), "/") + "\x00" + strings.TrimSpace(profile.ModelID)
+}
+
+func responsesPayloadToChatPayload(payload map[string]any) (map[string]any, error) {
+	messages := make([]map[string]any, 0, 4)
+	if instructions := strings.TrimSpace(stringValue(payload["instructions"])); instructions != "" {
+		messages = append(messages, map[string]any{"role": "system", "content": instructions})
+	}
+	switch input := payload["input"].(type) {
+	case string:
+		if strings.TrimSpace(input) != "" {
+			messages = append(messages, map[string]any{"role": "user", "content": input})
+		}
+	case []any:
+		for _, item := range input {
+			message, ok := responseInputItemToChatMessage(item)
+			if ok {
+				messages = append(messages, message)
+			}
+		}
+	case nil:
+	default:
+		text := strings.TrimSpace(stringValue(input))
+		if text != "" {
+			messages = append(messages, map[string]any{"role": "user", "content": text})
+		}
+	}
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("responses input is required for chat fallback")
+	}
+
+	chatPayload := map[string]any{"messages": messages}
+	copyResponsesOptionToChat(payload, chatPayload, "stream", "stream")
+	copyResponsesOptionToChat(payload, chatPayload, "temperature", "temperature")
+	copyResponsesOptionToChat(payload, chatPayload, "top_p", "top_p")
+	copyResponsesOptionToChat(payload, chatPayload, "presence_penalty", "presence_penalty")
+	copyResponsesOptionToChat(payload, chatPayload, "frequency_penalty", "frequency_penalty")
+	copyResponsesOptionToChat(payload, chatPayload, "stop", "stop")
+	copyResponsesOptionToChat(payload, chatPayload, "seed", "seed")
+	copyResponsesOptionToChat(payload, chatPayload, "response_format", "response_format")
+	copyResponsesOptionToChat(payload, chatPayload, "user", "user")
+	copyResponsesOptionToChat(payload, chatPayload, "max_output_tokens", "max_tokens")
+	return chatPayload, nil
+}
+
+func responseInputItemToChatMessage(item any) (map[string]any, bool) {
+	switch value := item.(type) {
+	case string:
+		if strings.TrimSpace(value) == "" {
+			return nil, false
+		}
+		return map[string]any{"role": "user", "content": value}, true
+	case map[string]any:
+		role := normalizeChatFallbackRole(stringValue(value["role"]))
+		if role == "" {
+			role = "user"
+		}
+		content := responseContentToText(value["content"])
+		if strings.TrimSpace(content) == "" {
+			content = responseContentToText(value["text"])
+		}
+		if strings.TrimSpace(content) == "" {
+			return nil, false
+		}
+		return map[string]any{"role": role, "content": content}, true
+	default:
+		text := responseContentToText(value)
+		if strings.TrimSpace(text) == "" {
+			return nil, false
+		}
+		return map[string]any{"role": "user", "content": text}, true
+	}
+}
+
+func normalizeChatFallbackRole(role string) string {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "developer", "latest_reminder", "system":
+		return "system"
+	case "user", "assistant", "tool":
+		return strings.ToLower(strings.TrimSpace(role))
+	default:
+		return "user"
+	}
+}
+
+func responseContentToText(content any) string {
+	switch value := content.(type) {
+	case string:
+		return value
+	case []any:
+		var b strings.Builder
+		for _, part := range value {
+			text := responseContentToText(part)
+			if text != "" {
+				b.WriteString(text)
+			}
+		}
+		return b.String()
+	case map[string]any:
+		if text := stringValue(value["text"]); text != "" {
+			return text
+		}
+		if text := stringValue(value["content"]); text != "" {
+			return text
+		}
+		return ""
+	default:
+		return stringValue(value)
+	}
+}
+
+func copyResponsesOptionToChat(src, dst map[string]any, srcKey, dstKey string) {
+	value, ok := src[srcKey]
+	if !ok || value == nil {
+		return
+	}
+	if _, exists := dst[dstKey]; exists {
+		return
+	}
+	dst[dstKey] = value
+}
+
+func chatCompletionResponseToResponses(body []byte, fallbackModel string) ([]byte, error) {
+	var chat struct {
+		ID      string         `json:"id"`
+		Created int64          `json:"created"`
+		Model   string         `json:"model"`
+		Choices []chatChoice   `json:"choices"`
+		Usage   map[string]any `json:"usage,omitempty"`
+	}
+	if err := json.Unmarshal(body, &chat); err != nil {
+		return nil, err
+	}
+	text := ""
+	if len(chat.Choices) > 0 {
+		text = responseContentToText(chat.Choices[0].Message["content"])
+	}
+	model := strings.TrimSpace(chat.Model)
+	if model == "" {
+		model = fallbackModel
+	}
+	response := completedResponsesPayload(responseID(chat.ID), model, chat.Created, text, chat.Usage)
+	return json.Marshal(response)
+}
+
+type chatChoice struct {
+	Message      map[string]any `json:"message"`
+	Delta        map[string]any `json:"delta"`
+	FinishReason any            `json:"finish_reason"`
+}
+
+func completedResponsesPayload(id, model string, created int64, text string, usage map[string]any) map[string]any {
+	if id == "" {
+		id = responseID("")
+	}
+	if created == 0 {
+		created = time.Now().Unix()
+	}
+	messageID := id + "_msg"
+	item := map[string]any{
+		"id":     messageID,
+		"type":   "message",
+		"status": "completed",
+		"role":   "assistant",
+		"content": []map[string]any{
+			{
+				"type":        "output_text",
+				"text":        text,
+				"annotations": []any{},
+			},
+		},
+	}
+	response := map[string]any{
+		"id":          id,
+		"object":      "response",
+		"created_at":  created,
+		"status":      "completed",
+		"model":       model,
+		"output":      []map[string]any{item},
+		"output_text": text,
+	}
+	if len(usage) > 0 {
+		response["usage"] = usage
+	}
+	return response
+}
+
+func streamChatCompletionAsResponse(resp *http.Response, fallbackModel string) *UpstreamResponse {
+	reader, writer := io.Pipe()
+	go func() {
+		defer resp.Body.Close()
+		err := writeChatCompletionStreamAsResponse(writer, resp.Body, fallbackModel)
+		_ = writer.CloseWithError(err)
+	}()
+	header := make(http.Header)
+	header.Set("Content-Type", "text/event-stream")
+	header.Set("Cache-Control", "no-cache")
+	return &UpstreamResponse{
+		StatusCode: http.StatusOK,
+		Header:     header,
+		Body:       reader,
+	}
+}
+
+func writeChatCompletionStreamAsResponse(w io.Writer, r io.Reader, fallbackModel string) error {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	responseIDValue := responseID("")
+	messageID := responseIDValue + "_msg"
+	model := fallbackModel
+	created := time.Now().Unix()
+	var text strings.Builder
+	started := false
+	completed := false
+
+	ensureStarted := func() error {
+		if started {
+			return nil
+		}
+		started = true
+		if err := writeSSE(w, "response.created", map[string]any{
+			"type":     "response.created",
+			"response": inProgressResponsePayload(responseIDValue, model, created),
+		}); err != nil {
+			return err
+		}
+		if err := writeSSE(w, "response.output_item.added", map[string]any{
+			"type":         "response.output_item.added",
+			"output_index": 0,
+			"item": map[string]any{
+				"id":      messageID,
+				"type":    "message",
+				"status":  "in_progress",
+				"role":    "assistant",
+				"content": []any{},
+			},
+		}); err != nil {
+			return err
+		}
+		return writeSSE(w, "response.content_part.added", map[string]any{
+			"type":          "response.content_part.added",
+			"item_id":       messageID,
+			"output_index":  0,
+			"content_index": 0,
+			"part": map[string]any{
+				"type":        "output_text",
+				"text":        "",
+				"annotations": []any{},
+			},
+		})
+	}
+	complete := func() error {
+		if completed {
+			return nil
+		}
+		completed = true
+		fullText := text.String()
+		if err := ensureStarted(); err != nil {
+			return err
+		}
+		if err := writeSSE(w, "response.output_text.done", map[string]any{
+			"type":          "response.output_text.done",
+			"item_id":       messageID,
+			"output_index":  0,
+			"content_index": 0,
+			"text":          fullText,
+		}); err != nil {
+			return err
+		}
+		item := completedResponseItem(messageID, fullText)
+		if err := writeSSE(w, "response.content_part.done", map[string]any{
+			"type":          "response.content_part.done",
+			"item_id":       messageID,
+			"output_index":  0,
+			"content_index": 0,
+			"part":          item["content"].([]map[string]any)[0],
+		}); err != nil {
+			return err
+		}
+		if err := writeSSE(w, "response.output_item.done", map[string]any{
+			"type":         "response.output_item.done",
+			"output_index": 0,
+			"item":         item,
+		}); err != nil {
+			return err
+		}
+		return writeSSE(w, "response.completed", map[string]any{
+			"type":     "response.completed",
+			"response": completedResponsesPayload(responseIDValue, model, created, fullText, nil),
+		})
+	}
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" {
+			continue
+		}
+		if data == "[DONE]" {
+			if err := complete(); err != nil {
+				return err
+			}
+			continue
+		}
+		var chunk struct {
+			ID      string       `json:"id"`
+			Created int64        `json:"created"`
+			Model   string       `json:"model"`
+			Choices []chatChoice `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			return err
+		}
+		if chunk.ID != "" && strings.HasPrefix(responseIDValue, "resp_csgclaw_") {
+			responseIDValue = responseID(chunk.ID)
+			messageID = responseIDValue + "_msg"
+		}
+		if chunk.Created != 0 {
+			created = chunk.Created
+		}
+		if strings.TrimSpace(chunk.Model) != "" {
+			model = strings.TrimSpace(chunk.Model)
+		}
+		for _, choice := range chunk.Choices {
+			delta := responseContentToText(choice.Delta["content"])
+			if delta != "" {
+				if err := ensureStarted(); err != nil {
+					return err
+				}
+				text.WriteString(delta)
+				if err := writeSSE(w, "response.output_text.delta", map[string]any{
+					"type":          "response.output_text.delta",
+					"item_id":       messageID,
+					"output_index":  0,
+					"content_index": 0,
+					"delta":         delta,
+				}); err != nil {
+					return err
+				}
+			}
+			if choice.FinishReason != nil {
+				if err := complete(); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if !completed {
+		return complete()
+	}
+	return nil
+}
+
+func inProgressResponsePayload(id, model string, created int64) map[string]any {
+	if created == 0 {
+		created = time.Now().Unix()
+	}
+	return map[string]any{
+		"id":         id,
+		"object":     "response",
+		"created_at": created,
+		"status":     "in_progress",
+		"model":      model,
+		"output":     []any{},
+	}
+}
+
+func completedResponseItem(messageID, text string) map[string]any {
+	return map[string]any{
+		"id":     messageID,
+		"type":   "message",
+		"status": "completed",
+		"role":   "assistant",
+		"content": []map[string]any{
+			{
+				"type":        "output_text",
+				"text":        text,
+				"annotations": []any{},
+			},
+		},
+	}
+}
+
+func writeSSE(w io.Writer, event string, payload map[string]any) error {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data); err != nil {
+		return err
+	}
+	if flusher, ok := w.(interface{ Flush() error }); ok {
+		return flusher.Flush()
+	}
+	return nil
+}
+
+func responseID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Sprintf("resp_csgclaw_%d", time.Now().UnixNano())
+	}
+	if strings.HasPrefix(id, "resp_") {
+		return id
+	}
+	return "resp_" + id
+}
+
+func stringValue(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	default:
+		return ""
+	}
+}
+
+func payloadBool(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	default:
+		return false
+	}
+}
+
 func applyReasoningEffortDefault(payload map[string]any, defaultEffort string) {
 	defaultEffort = strings.ToLower(strings.TrimSpace(defaultEffort))
 	if defaultEffort == "" {
@@ -191,6 +842,27 @@ func mergeProfilePayload(payload map[string]any, profile agent.AgentProfile) {
 		if _, exists := payload["service_tier"]; !exists {
 			payload["service_tier"] = "priority"
 		}
+	}
+}
+
+func mergeResponsesPayload(payload map[string]any, profile agent.AgentProfile) {
+	payload["model"] = strings.TrimSpace(profile.ModelID)
+	for key, value := range profile.RequestOptions {
+		key = strings.TrimSpace(key)
+		if key == "" || strings.EqualFold(key, "model") || strings.EqualFold(key, "reasoning_effort") {
+			continue
+		}
+		if _, exists := payload[key]; exists {
+			continue
+		}
+		payload[key] = value
+	}
+	applyProviderPayloadConstraints(payload, profile)
+	if !profile.EnableFastMode {
+		return
+	}
+	if _, exists := payload["service_tier"]; !exists {
+		payload["service_tier"] = "priority"
 	}
 }
 

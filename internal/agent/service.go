@@ -1123,6 +1123,9 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 	if got.AgentProfile.EnvRestartRequired {
 		return s.Recreate(ctx, id)
 	}
+	if err := s.ensureCodexWireAPI(ctx, strings.TrimSpace(got.RuntimeKind), got.AgentProfile); err != nil {
+		return Agent{}, err
+	}
 
 	runtimeImpl, err := s.runtimeForKind(strings.TrimSpace(got.RuntimeKind))
 	if err != nil {
@@ -1413,6 +1416,9 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	if err != nil {
 		return Agent{}, err
 	}
+	if err := s.ensureCodexWireAPI(ctx, runtimeKind, resolvedProfile); err != nil {
+		return Agent{}, err
+	}
 	runtimeProfile := s.runtimeProfileForKind(runtimeKind, id, name, description, resolvedProfile)
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
 		RuntimeID:        runtimeIDForAgentID(id),
@@ -1448,6 +1454,16 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 			CreatedAt: info.CreatedAt.UTC(),
 		})
 	}
+	if runtimeKind == RuntimeKindCodex {
+		if err := s.persistStartingWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, spec.RuntimeOptions); err != nil {
+			return Agent{}, err
+		}
+		defer func() {
+			if err != nil {
+				_ = s.removeStartingWorker(ctx, id)
+			}
+		}()
+	}
 	handle, err := runtimeImpl.New(ctx, agentruntime.Spec{
 		RuntimeID: runtimeIDForAgentID(id),
 		AgentID:   id,
@@ -1467,18 +1483,78 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, spec.RuntimeOptions, info)
 }
 
-func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, createRuntimeExt map[string]any, info agentruntime.Info) (Agent, error) {
+func (s *Service) persistStartingWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, runtimeOptions map[string]any) error {
 	s.mu.Lock()
 
 	if _, ok := s.agents[id]; ok {
 		s.mu.Unlock()
-		return Agent{}, fmt.Errorf("agent id %q already exists", id)
+		return fmt.Errorf("agent id %q already exists", id)
 	}
 	if s.hasNameLocked(name) {
+		s.mu.Unlock()
+		return fmt.Errorf("agent name %q already exists", name)
+	}
+
+	worker := newWorkerAgent(id, name, description, image, runtimeKind, profile, runtimeOptions, agentruntime.Info{
+		State:     agentruntime.StateCreated,
+		CreatedAt: time.Now().UTC(),
+	})
+	s.agents[worker.ID] = worker
+	s.syncRuntimeRecordLocked(worker)
+	err := s.saveLocked()
+	s.mu.Unlock()
+	if err != nil {
+		_ = s.removeStartingWorker(ctx, id)
+		return err
+	}
+	return nil
+}
+
+func (s *Service) removeStartingWorker(ctx context.Context, id string) error {
+	s.mu.Lock()
+	current, ok := s.agents[id]
+	if ok && strings.TrimSpace(current.BoxID) == "" && strings.EqualFold(strings.TrimSpace(current.Status), string(agentruntime.StateCreated)) {
+		delete(s.agents, id)
+		s.deleteRuntimeRecordLocked(current.RuntimeID)
+	}
+	err := s.saveLocked()
+	s.mu.Unlock()
+	return err
+}
+
+func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, createRuntimeExt map[string]any, info agentruntime.Info) (Agent, error) {
+	s.mu.Lock()
+
+	if existing, ok := s.agents[id]; ok && !isStartingWorker(existing) {
+		s.mu.Unlock()
+		return Agent{}, fmt.Errorf("agent id %q already exists", id)
+	}
+	if s.hasNameLockedExcept(name, id) {
 		s.mu.Unlock()
 		return Agent{}, fmt.Errorf("agent name %q already exists", name)
 	}
 
+	worker := newWorkerAgent(id, name, description, image, runtimeKind, profile, createRuntimeExt, info)
+	s.agents[worker.ID] = worker
+	s.syncRuntimeRecordLocked(worker)
+	if worker.AgentProfile.ProfileComplete {
+		s.profileDefaults = cloneProfile(worker.AgentProfile)
+	}
+	if err := s.saveLocked(); err != nil {
+		delete(s.agents, worker.ID)
+		s.deleteRuntimeRecordLocked(worker.RuntimeID)
+		s.mu.Unlock()
+		return Agent{}, err
+	}
+	created := *cloneAgent(&worker)
+	s.mu.Unlock()
+	if err := s.syncLifecycleForAgent(ctx, created); err != nil {
+		return Agent{}, err
+	}
+	return created, nil
+}
+
+func newWorkerAgent(id, name, description, image, runtimeKind string, profile AgentProfile, runtimeOptions map[string]any, info agentruntime.Info) Agent {
 	createdAt := info.CreatedAt.UTC()
 	if info.CreatedAt.IsZero() {
 		createdAt = time.Now().UTC()
@@ -1489,10 +1565,10 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 	}
 	prof := cloneProfile(profile)
 	var agentRX map[string]any
-	if len(createRuntimeExt) > 0 {
-		agentRX = utils.CloneAnyMap(createRuntimeExt)
+	if len(runtimeOptions) > 0 {
+		agentRX = utils.CloneAnyMap(runtimeOptions)
 	}
-	worker := Agent{
+	return Agent{
 		ID:              id,
 		Name:            name,
 		RuntimeID:       runtimeIDForAgentID(id),
@@ -1508,23 +1584,10 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 		ProfileComplete: prof.ProfileComplete,
 		Role:            RoleWorker,
 	}
-	s.agents[worker.ID] = worker
-	s.syncRuntimeRecordLocked(worker)
-	if prof.ProfileComplete {
-		s.profileDefaults = cloneProfile(prof)
-	}
-	if err := s.saveLocked(); err != nil {
-		delete(s.agents, worker.ID)
-		s.deleteRuntimeRecordLocked(worker.RuntimeID)
-		s.mu.Unlock()
-		return Agent{}, err
-	}
-	created := *cloneAgent(&worker)
-	s.mu.Unlock()
-	if err := s.syncLifecycleForAgent(ctx, created); err != nil {
-		return Agent{}, err
-	}
-	return created, nil
+}
+
+func isStartingWorker(a Agent) bool {
+	return strings.TrimSpace(a.BoxID) == "" && strings.EqualFold(strings.TrimSpace(a.Status), string(agentruntime.StateCreated))
 }
 
 func isResolvedWorkspacePath(path string) bool {
@@ -1926,7 +1989,14 @@ func (s *Service) Close() error {
 }
 
 func (s *Service) hasNameLocked(name string) bool {
+	return s.hasNameLockedExcept(name, "")
+}
+
+func (s *Service) hasNameLockedExcept(name, exceptID string) bool {
 	for _, existing := range s.agents {
+		if strings.TrimSpace(exceptID) != "" && strings.EqualFold(existing.ID, exceptID) {
+			continue
+		}
 		if strings.EqualFold(existing.Name, name) {
 			return true
 		}

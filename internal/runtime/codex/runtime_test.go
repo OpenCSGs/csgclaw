@@ -163,9 +163,12 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 		t.Fatalf("runtime auth = %q, want copied host auth", string(authRaw))
 	}
 
-	if _, err := os.Stat(filepath.Join(root, "alice", ".codex", configFileName)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("config.toml should not be written when auth.json exists, stat err = %v", err)
-	}
+	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", configFileName),
+		`model = "gpt-5.5"`,
+		`model_provider = "proxy"`,
+		`wire_api = "responses"`,
+		`supports_websockets = false`,
+	)
 }
 
 func TestRuntimeStopAndDelete(t *testing.T) {
@@ -372,7 +375,7 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 	}
 }
 
-func TestRuntimeCreateSkipsConfigWhenHostAuthIsSeeded(t *testing.T) {
+func TestRuntimeCreateWritesConfigWhenHostAuthIsSeeded(t *testing.T) {
 	root := t.TempDir()
 	hostHome := t.TempDir()
 	t.Setenv("HOME", hostHome)
@@ -433,9 +436,11 @@ func TestRuntimeCreateSkipsConfigWhenHostAuthIsSeeded(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(root, "alice", ".codex", configFileName)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("config.toml should not be written after host auth seeding, stat err = %v", err)
-	}
+	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", configFileName),
+		`model = "gpt-5.5"`,
+		`wire_api = "responses"`,
+		`supports_websockets = false`,
+	)
 }
 
 func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
@@ -506,6 +511,8 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 		`name = "OpenAI using LLM proxy"`,
 		`base_url = "https://runtime.example/v1"`,
 		`env_key = "OPENAI_API_KEY"`,
+		`wire_api = "responses"`,
+		`supports_websockets = false`,
 	} {
 		if !strings.Contains(configText, want) {
 			t.Fatalf("runtime config missing %q:\n%s", want, configText)
@@ -513,10 +520,66 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 	}
 	for _, unwanted := range []string{
 		`wire_api = "chat"`,
+		`runtime-key`,
 	} {
 		if strings.Contains(configText, unwanted) {
 			t.Fatalf("runtime config unexpectedly contains %q:\n%s", unwanted, configText)
 		}
+	}
+}
+
+func TestRuntimeCreateKeepsResponsesWireAPIWhenProfileRequestsFallback(t *testing.T) {
+	root := t.TempDir()
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
+		AgentHome: func(agentName string) (string, error) {
+			return filepath.Join(root, agentName), nil
+		},
+		Manager: fakeManager{
+			start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+				return &Session{
+					RuntimeID:    spec.RuntimeID,
+					AgentID:      spec.AgentID,
+					AgentName:    spec.AgentName,
+					SessionID:    "sess-chat",
+					BinaryPath:   spec.BinaryPath,
+					WorkspaceDir: spec.WorkspaceDir,
+					HomeDir:      spec.HomeDir,
+					CodexHomeDir: spec.CodexHomeDir,
+					StderrPath:   spec.StderrPath,
+					ProcessID:    os.Getpid(),
+					CreatedAt:    time.Now().UTC(),
+					StartedAt:    time.Now().UTC(),
+				}, nil
+			},
+		},
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-u-alice",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+		Profile: agentruntime.Profile{
+			ModelID: "deepseek-v4-pro",
+			BaseURL: "https://runtime.example/v1",
+			APIKey:  "runtime-key",
+			WireAPI: "chat",
+		},
+	}); err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", configFileName),
+		`model = "deepseek-v4-pro"`,
+		`wire_api = "responses"`,
+		`supports_websockets = false`,
+	)
+	configText, err := os.ReadFile(filepath.Join(root, "alice", ".codex", configFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(configText), `wire_api = "chat"`) {
+		t.Fatalf("runtime config must not contain chat wire API:\n%s", configText)
 	}
 }
 
@@ -583,8 +646,33 @@ func TestRuntimeCreateRemovesStaleConfigWhenAuthExists(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(runtimeRoot, configFileName)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("stale config.toml should be removed when auth.json exists, stat err = %v", err)
+	configRaw, err := os.ReadFile(filepath.Join(runtimeRoot, configFileName))
+	if err != nil {
+		t.Fatalf("read rewritten config: %v", err)
+	}
+	configText := string(configRaw)
+	if strings.Contains(configText, "stale = true") {
+		t.Fatalf("stale config was not replaced:\n%s", configText)
+	}
+	for _, want := range []string{`model = "gpt-5.5"`, `wire_api = "responses"`} {
+		if !strings.Contains(configText, want) {
+			t.Fatalf("runtime config missing %q:\n%s", want, configText)
+		}
+	}
+}
+
+func assertRuntimeConfigContains(t *testing.T, path string, wants ...string) {
+	t.Helper()
+
+	configRaw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read runtime config: %v", err)
+	}
+	configText := string(configRaw)
+	for _, want := range wants {
+		if !strings.Contains(configText, want) {
+			t.Fatalf("runtime config missing %q:\n%s", want, configText)
+		}
 	}
 }
 

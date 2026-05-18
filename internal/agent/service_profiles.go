@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -43,17 +44,33 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	current, ok := s.agents[id]
 	if !ok {
+		s.mu.Unlock()
 		return AgentProfileView{}, fmt.Errorf("agent %q not found", id)
 	}
 	if strings.TrimSpace(profile.APIKey) == "" {
 		profile.APIKey = current.AgentProfile.APIKey
 	}
 	normalized := normalizeProfileForAgentRuntime(profile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, nil)
-	normalized.EnvRestartRequired = !profilesEqualEnv(current.AgentProfile, normalized)
+	restartRequired := !profilesEqualEnv(current.AgentProfile, normalized) || codexProfileRuntimeRestartRequired(current, normalized)
+	runtimeKind := strings.TrimSpace(current.RuntimeKind)
+	runningCodex := runtimeKind == RuntimeKindCodex && isRuntimeRunning(current)
+	s.mu.Unlock()
+
+	if normalized.ProfileComplete {
+		if err := s.ensureCodexWireAPI(context.Background(), runtimeKind, normalized); err != nil {
+			return AgentProfileView{}, err
+		}
+	}
+
+	s.mu.Lock()
+	current, ok = s.agents[id]
+	if !ok {
+		s.mu.Unlock()
+		return AgentProfileView{}, fmt.Errorf("agent %q not found", id)
+	}
+	normalized.EnvRestartRequired = restartRequired
 	current.AgentProfile = normalized
 	current.ProfileComplete = normalized.ProfileComplete
 	current.Profile = profileSelector(normalized)
@@ -64,9 +81,35 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 		s.detectionResults = nil
 	}
 	if err := s.saveLocked(); err != nil {
+		s.mu.Unlock()
 		return AgentProfileView{}, err
 	}
+	s.mu.Unlock()
+	if restartRequired && runningCodex {
+		s.stopLifecycleAgent(id)
+	}
 	return profileViewWithAgentRuntimeOptions(normalized, current.RuntimeOptions, current.RuntimeKind, current.DetectionResults), nil
+}
+
+func codexProfileRuntimeRestartRequired(current Agent, next AgentProfile) bool {
+	if strings.TrimSpace(current.RuntimeKind) != RuntimeKindCodex {
+		return false
+	}
+	if !isRuntimeRunning(current) {
+		return false
+	}
+	previous := normalizeProfileForAgentRuntime(current.AgentProfile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, nil)
+	return !codexProfileRuntimeInputsEqual(previous, next)
+}
+
+func codexProfileRuntimeInputsEqual(a, b AgentProfile) bool {
+	return strings.TrimSpace(a.Provider) == strings.TrimSpace(b.Provider) &&
+		strings.TrimRight(strings.TrimSpace(a.BaseURL), "/") == strings.TrimRight(strings.TrimSpace(b.BaseURL), "/") &&
+		strings.TrimSpace(a.APIKey) == strings.TrimSpace(b.APIKey) &&
+		strings.TrimSpace(a.ModelID) == strings.TrimSpace(b.ModelID) &&
+		strings.TrimSpace(a.ReasoningEffort) == strings.TrimSpace(b.ReasoningEffort) &&
+		reflect.DeepEqual(a.Headers, b.Headers) &&
+		reflect.DeepEqual(a.RequestOptions, b.RequestOptions)
 }
 
 func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Agent, error) {
@@ -84,6 +127,13 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		s.mu.Unlock()
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
+	previous := current
+	runtimeKind := strings.TrimSpace(current.RuntimeKind)
+	runningCodex := runtimeKind == RuntimeKindCodex && isRuntimeRunning(current)
+	restartRequired := false
+	ensureProfile := AgentProfile{}
+	shouldEnsureProfile := false
+	profileUpdated := false
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
 		if name == "" {
@@ -109,6 +159,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		current.Image = strings.TrimSpace(*req.Image)
 	}
 	if req.AgentProfile != nil || req.RuntimeOptions != nil {
+		profileUpdated = true
 		profile := current.AgentProfile
 		if req.AgentProfile != nil {
 			profile = *req.AgentProfile
@@ -123,15 +174,32 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		mergedFlat := runtimeOptionsAfterPatch(current.RuntimeKind, current.RuntimeOptions, patch)
 		current.RuntimeOptions = nextAgentRuntimeOptions(current.RuntimeKind, current.RuntimeOptions, mergedFlat)
 		normalized := normalizeProfileForAgentRuntime(profile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, mergedFlat)
-		normalized.EnvRestartRequired = !profilesEqualEnv(current.AgentProfile, normalized)
+		restartRequired = !profilesEqualEnv(previous.AgentProfile, normalized) || codexProfileRuntimeRestartRequired(previous, normalized)
+		normalized.EnvRestartRequired = restartRequired
 		current.AgentProfile = normalized
 		current.ProfileComplete = normalized.ProfileComplete
 		current.Profile = profileSelector(normalized)
 		current.DetectionResults = nil
-		if normalized.ProfileComplete {
-			s.profileDefaults = cloneProfile(normalized)
-			s.detectionResults = nil
+		if normalized.ProfileComplete && runtimeKind == RuntimeKindCodex {
+			ensureProfile = normalized
+			shouldEnsureProfile = true
 		}
+	}
+
+	if shouldEnsureProfile {
+		s.mu.Unlock()
+		if err := s.ensureCodexWireAPI(ctx, runtimeKind, ensureProfile); err != nil {
+			return Agent{}, err
+		}
+		s.mu.Lock()
+		if _, ok := s.agents[id]; !ok {
+			s.mu.Unlock()
+			return Agent{}, fmt.Errorf("agent %q not found", id)
+		}
+	}
+	if profileUpdated && current.ProfileComplete {
+		s.profileDefaults = cloneProfile(current.AgentProfile)
+		s.detectionResults = nil
 	}
 	s.agents[id] = current
 	s.syncRuntimeRecordLocked(current)
@@ -140,6 +208,9 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		return Agent{}, err
 	}
 	s.mu.Unlock()
+	if restartRequired && runningCodex {
+		s.stopLifecycleAgent(id)
+	}
 
 	updated, ok := s.Agent(id)
 	if !ok {
@@ -159,6 +230,9 @@ func (s *Service) ListModelsForRequest(ctx context.Context, req ProfileModelRequ
 	profile = normalizeProfile(profile, profile.Name, profile.Description)
 	if strings.TrimSpace(profile.APIKey) == "" {
 		profile.APIKey = s.storedAPIKeyForModelRequest(req, profile)
+	}
+	if strings.TrimSpace(profile.APIKey) == "" {
+		profile = s.withDefaultAPIKeyForMatchingProfile(profile)
 	}
 	if profile.Provider == ProviderCodex || profile.Provider == ProviderClaudeCode {
 		models, err := listCLIProxyModelChoices(ctx, profile.Provider)
@@ -189,6 +263,25 @@ func (s *Service) storedAPIKeyForModelRequest(req ProfileModelRequest, profile A
 	return stored.APIKey
 }
 
+func (s *Service) withDefaultAPIKeyForMatchingProfile(profile AgentProfile) AgentProfile {
+	if s == nil || strings.TrimSpace(profile.APIKey) != "" || normalizeProfileProvider(profile.Provider) != ProviderAPI {
+		return profile
+	}
+	s.mu.RLock()
+	defaultProfile := cloneProfile(s.profileDefaults)
+	s.mu.RUnlock()
+	defaultProfile = normalizeProfile(defaultProfile, defaultProfile.Name, defaultProfile.Description)
+	if defaultProfile.Provider != ProviderAPI || strings.TrimSpace(defaultProfile.APIKey) == "" {
+		return profile
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(profile.BaseURL), "/")
+	if baseURL == "" || baseURL != defaultProfile.BaseURL {
+		return profile
+	}
+	profile.APIKey = defaultProfile.APIKey
+	return profile
+}
+
 func (s *Service) ResolvedAgentProfile(agentID string) (AgentProfile, error) {
 	got, ok := s.Agent(agentID)
 	if !ok {
@@ -213,6 +306,9 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil)
 	if !profile.ProfileComplete {
 		return Agent{}, fmt.Errorf("agent %q profile is incomplete", id)
+	}
+	if err := s.ensureCodexWireAPI(ctx, strings.TrimSpace(got.RuntimeKind), profile); err != nil {
+		return Agent{}, err
 	}
 
 	runtimeImpl, err := s.runtimeForKind(strings.TrimSpace(got.RuntimeKind))
@@ -376,6 +472,7 @@ func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgent
 			}
 		}
 	}
+	profile = s.withDefaultAPIKeyForMatchingProfile(profile)
 	runtimeOptionsAfterPatch := runtimeOptionsAfterPatch(rk, nil, spec.RuntimeOptions)
 	profile = normalizeProfileForAgentRuntime(profile, nil, spec.Name, spec.Description, spec.RuntimeKind, runtimeOptionsAfterPatch)
 	if !profile.ProfileComplete {

@@ -267,6 +267,81 @@ func TestListModelsForRequestUsesStoredAgentAPIKeyForMatchingProfile(t *testing.
 	}
 }
 
+func TestListModelsForRequestUsesDefaultAPIKeyForMatchingProfile(t *testing.T) {
+	var authHeader string
+	var gotHeader string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader = r.Header.Get("Authorization")
+		gotHeader = r.Header.Get("X-Test")
+		_, _ = w.Write([]byte(`{"data":[{"id":"gpt-default"}]}`))
+	}))
+	defer upstream.Close()
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.profileDefaults = normalizeProfile(AgentProfile{
+		Name:     ManagerName,
+		Provider: ProviderAPI,
+		BaseURL:  upstream.URL + "/v1",
+		APIKey:   "default-key",
+		Headers:  map[string]string{"X-Test": "stored"},
+		ModelID:  "gpt-default",
+	}, ManagerName, "")
+
+	models, err := svc.ListModelsForRequest(context.Background(), ProfileModelRequest{
+		Provider: ProviderAPI,
+		BaseURL:  upstream.URL + "/v1",
+		Headers:  map[string]string{"X-Test": "draft"},
+	})
+	if err != nil {
+		t.Fatalf("ListModelsForRequest() error = %v", err)
+	}
+	if authHeader != "Bearer default-key" {
+		t.Fatalf("Authorization = %q, want default key", authHeader)
+	}
+	if gotHeader != "draft" {
+		t.Fatalf("X-Test header = %q, want draft header", gotHeader)
+	}
+	if got, want := strings.Join(models, ","), "gpt-default"; got != want {
+		t.Fatalf("models = %v, want %s", models, want)
+	}
+}
+
+func TestProfileForCreateRequestUsesDefaultAPIKeyWithoutReplacingSelectedModel(t *testing.T) {
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.profileDefaults = normalizeProfile(AgentProfile{
+		Name:     ManagerName,
+		Provider: ProviderAPI,
+		BaseURL:  "https://api.example/v1",
+		APIKey:   "default-key",
+		ModelID:  "gpt-default",
+	}, ManagerName, "")
+
+	profile, err := svc.profileForCreateRequest(context.Background(), &CreateAgentSpec{
+		Name:        "alice",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		AgentProfile: AgentProfile{
+			Provider: ProviderAPI,
+			BaseURL:  "https://api.example/v1",
+			ModelID:  "gpt-selected",
+		},
+	})
+	if err != nil {
+		t.Fatalf("profileForCreateRequest() error = %v", err)
+	}
+	if got, want := profile.APIKey, "default-key"; got != want {
+		t.Fatalf("APIKey = %q, want %q", got, want)
+	}
+	if got, want := profile.ModelID, "gpt-selected"; got != want {
+		t.Fatalf("ModelID = %q, want %q", got, want)
+	}
+}
+
 func TestListModelsForRequestDoesNotReuseStoredAPIKeyForChangedBaseURL(t *testing.T) {
 	var authHeader string
 	otherUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

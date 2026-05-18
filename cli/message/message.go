@@ -89,7 +89,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		return fmt.Errorf("room_id is required")
 	}
 	if *senderID == "" {
-		return fmt.Errorf("--sender-id is required")
+		return fmt.Errorf("--sender-id bot id is required")
 	}
 	if *content == "" {
 		return fmt.Errorf("content is required")

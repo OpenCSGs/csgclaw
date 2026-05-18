@@ -3,6 +3,7 @@ package api
 import (
 	"io"
 	"net/http"
+	"strings"
 
 	"csgclaw/internal/llm"
 )
@@ -40,6 +41,38 @@ func (h *Handler) handleBotLLMChatCompletions(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(status)
 	_, _ = w.Write(respBody)
+}
+
+func (h *Handler) handleBotLLMResponses(w http.ResponseWriter, r *http.Request, botID string) {
+	if h.llm == nil {
+		http.Error(w, "llm bridge is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 10*1024*1024))
+	if err != nil {
+		http.Error(w, "read request body", http.StatusBadRequest)
+		return
+	}
+	resp, callErr := h.llm.Responses(r.Context(), botID, body)
+	if callErr != nil {
+		writeLLMError(w, callErr)
+		return
+	}
+	defer resp.Body.Close()
+	copyLLMHeaders(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
+func copyLLMHeaders(dst, src http.Header) {
+	for key, values := range src {
+		if strings.EqualFold(key, "connection") || strings.EqualFold(key, "content-length") {
+			continue
+		}
+		for _, value := range values {
+			dst.Add(key, value)
+		}
+	}
 }
 
 func writeLLMError(w http.ResponseWriter, err error) {
