@@ -528,7 +528,7 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 	}
 }
 
-func TestRuntimeCreateKeepsResponsesWireAPIWhenProfileRequestsFallback(t *testing.T) {
+func TestRuntimeCreateAlwaysWritesResponsesConfig(t *testing.T) {
 	root := t.TempDir()
 	rt := New(Dependencies{
 		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
@@ -563,7 +563,6 @@ func TestRuntimeCreateKeepsResponsesWireAPIWhenProfileRequestsFallback(t *testin
 			ModelID: "deepseek-v4-pro",
 			BaseURL: "https://runtime.example/v1",
 			APIKey:  "runtime-key",
-			WireAPI: "chat",
 		},
 	}); err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -579,7 +578,7 @@ func TestRuntimeCreateKeepsResponsesWireAPIWhenProfileRequestsFallback(t *testin
 		t.Fatal(err)
 	}
 	if strings.Contains(string(configText), `wire_api = "chat"`) {
-		t.Fatalf("runtime config must not contain chat wire API:\n%s", configText)
+		t.Fatalf("runtime config must not contain chat wire_api:\n%s", configText)
 	}
 }
 

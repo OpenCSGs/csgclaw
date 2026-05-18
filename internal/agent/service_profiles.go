@@ -59,7 +59,7 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	s.mu.Unlock()
 
 	if normalized.ProfileComplete {
-		if err := s.ensureCodexWireAPI(context.Background(), runtimeKind, normalized); err != nil {
+		if err := s.ensureCodexResponsesAPI(context.Background(), runtimeKind, normalized); err != nil {
 			return AgentProfileView{}, err
 		}
 	}
@@ -188,7 +188,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 
 	if shouldEnsureProfile {
 		s.mu.Unlock()
-		if err := s.ensureCodexWireAPI(ctx, runtimeKind, ensureProfile); err != nil {
+		if err := s.ensureCodexResponsesAPI(ctx, runtimeKind, ensureProfile); err != nil {
 			return Agent{}, err
 		}
 		s.mu.Lock()
@@ -307,7 +307,7 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 	if !profile.ProfileComplete {
 		return Agent{}, fmt.Errorf("agent %q profile is incomplete", id)
 	}
-	if err := s.ensureCodexWireAPI(ctx, strings.TrimSpace(got.RuntimeKind), profile); err != nil {
+	if err := s.ensureCodexResponsesAPI(ctx, strings.TrimSpace(got.RuntimeKind), profile); err != nil {
 		return Agent{}, err
 	}
 

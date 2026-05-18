@@ -533,9 +533,6 @@ func TestCreateWorkerUsesCodexRuntimeWhenRequested(t *testing.T) {
 				if got, want := spec.Profile.APIKey, "shared-token"; got != want {
 					t.Fatalf("Create() profile api key = %q, want %q", got, want)
 				}
-				if got, want := spec.Profile.WireAPI, "responses"; got != want {
-					t.Fatalf("Create() profile wire API = %q, want %q", got, want)
-				}
 				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-alice"}, nil
 			},
 		}),
@@ -572,6 +569,8 @@ func TestCreateWorkerUsesCodexRuntimeWhenRequested(t *testing.T) {
 }
 
 func TestCreateWorkerPersistsCodexProfileBeforeRuntimeNew(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	var svc *Service
 	var sawProfile bool
 	var err error
@@ -582,7 +581,7 @@ func TestCreateWorkerPersistsCodexProfileBeforeRuntimeNew(t *testing.T) {
 			AdvertiseBaseURL: "http://127.0.0.1:18080",
 			AccessToken:      "shared-token",
 		},
-		"",
+		"manager-image:test",
 		"",
 		WithRuntime(fakeAgentRuntime{
 			kind: RuntimeKindCodex,
@@ -628,6 +627,8 @@ func TestCreateWorkerPersistsCodexProfileBeforeRuntimeNew(t *testing.T) {
 }
 
 func TestCreateWorkerRemovesStartingCodexAgentWhenRuntimeNewFails(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	svc, err := NewService(
 		testModelConfig(),
 		config.ServerConfig{
@@ -635,7 +636,7 @@ func TestCreateWorkerRemovesStartingCodexAgentWhenRuntimeNewFails(t *testing.T) 
 			AdvertiseBaseURL: "http://127.0.0.1:18080",
 			AccessToken:      "shared-token",
 		},
-		"",
+		"manager-image:test",
 		"",
 		WithRuntime(fakeAgentRuntime{
 			kind: RuntimeKindCodex,
@@ -670,6 +671,8 @@ func TestCreateWorkerRemovesStartingCodexAgentWhenRuntimeNewFails(t *testing.T) 
 }
 
 func TestCreateWorkerPreservesProfileDefaultsWhenCodexRuntimeNewFails(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	svc, err := NewService(
 		testModelConfig(),
 		config.ServerConfig{
@@ -677,7 +680,7 @@ func TestCreateWorkerPreservesProfileDefaultsWhenCodexRuntimeNewFails(t *testing
 			AdvertiseBaseURL: "http://127.0.0.1:18080",
 			AccessToken:      "shared-token",
 		},
-		"",
+		"manager-image:test",
 		"",
 		WithRuntime(fakeAgentRuntime{
 			kind: RuntimeKindCodex,
@@ -722,7 +725,9 @@ func TestCreateWorkerPreservesProfileDefaultsWhenCodexRuntimeNewFails(t *testing
 	}
 }
 
-func TestEnsureCodexWireAPIRetriesAfterTransientProbeError(t *testing.T) {
+func TestEnsureCodexResponsesAPIRetriesAfterTransientProbeError(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	calls := 0
 	restore := TestOnlySetResponsesAPIProbe(func(_ context.Context, baseURL, apiKey, modelID string, _ map[string]string) error {
 		calls++
@@ -745,12 +750,12 @@ func TestEnsureCodexWireAPIRetriesAfterTransientProbeError(t *testing.T) {
 	})
 	t.Cleanup(restore)
 
-	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "", "")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	err = svc.ensureCodexWireAPI(context.Background(), RuntimeKindCodex, AgentProfile{
+	err = svc.ensureCodexResponsesAPI(context.Background(), RuntimeKindCodex, AgentProfile{
 		Provider:        ProviderAPI,
 		BaseURL:         "https://api.example/v1",
 		APIKey:          "bad-key",
@@ -758,10 +763,10 @@ func TestEnsureCodexWireAPIRetriesAfterTransientProbeError(t *testing.T) {
 		ProfileComplete: true,
 	})
 	if err == nil || !strings.Contains(err.Error(), "temporary outage") {
-		t.Fatalf("first ensureCodexWireAPI() error = %v, want temporary outage", err)
+		t.Fatalf("first ensureCodexResponsesAPI() error = %v, want temporary outage", err)
 	}
 
-	err = svc.ensureCodexWireAPI(context.Background(), RuntimeKindCodex, AgentProfile{
+	err = svc.ensureCodexResponsesAPI(context.Background(), RuntimeKindCodex, AgentProfile{
 		Provider:        ProviderAPI,
 		BaseURL:         "https://api.example/v1",
 		APIKey:          "fixed-key",
@@ -769,14 +774,16 @@ func TestEnsureCodexWireAPIRetriesAfterTransientProbeError(t *testing.T) {
 		ProfileComplete: true,
 	})
 	if err != nil {
-		t.Fatalf("second ensureCodexWireAPI() error = %v, want retry success", err)
+		t.Fatalf("second ensureCodexResponsesAPI() error = %v, want retry success", err)
 	}
 	if calls != 2 {
 		t.Fatalf("responses probe calls = %d, want 2", calls)
 	}
 }
 
-func TestCreateWorkerCodexRuntimeKeepsResponsesWireAPIWhenResponsesUnsupported(t *testing.T) {
+func TestCreateWorkerCodexRuntimeContinuesWhenResponsesUnsupported(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	restore := TestOnlySetResponsesAPIProbe(func(_ context.Context, baseURL, apiKey, modelID string, _ map[string]string) error {
 		if baseURL != "https://unsupported.example/v1" {
 			t.Fatalf("responses probe baseURL = %q, want upstream profile URL", baseURL)
@@ -791,7 +798,6 @@ func TestCreateWorkerCodexRuntimeKeepsResponsesWireAPIWhenResponsesUnsupported(t
 	})
 	t.Cleanup(restore)
 
-	var gotWireAPI string
 	svc, err := NewService(
 		testModelConfig(),
 		config.ServerConfig{
@@ -799,12 +805,11 @@ func TestCreateWorkerCodexRuntimeKeepsResponsesWireAPIWhenResponsesUnsupported(t
 			AdvertiseBaseURL: "http://127.0.0.1:18080",
 			AccessToken:      "shared-token",
 		},
-		"",
+		"manager-image:test",
 		"",
 		WithRuntime(fakeAgentRuntime{
 			kind: RuntimeKindCodex,
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-				gotWireAPI = spec.Profile.WireAPI
 				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-alice"}, nil
 			},
 		}),
@@ -832,12 +837,11 @@ func TestCreateWorkerCodexRuntimeKeepsResponsesWireAPIWhenResponsesUnsupported(t
 	if got.BoxID != "codex-session-alice" {
 		t.Fatalf("CreateWorker().BoxID = %q, want codex-session-alice", got.BoxID)
 	}
-	if gotWireAPI != "responses" {
-		t.Fatalf("runtime profile wire API = %q, want responses", gotWireAPI)
-	}
 }
 
 func TestUpdateCodexAgentProfilePatchRestartsActiveBridge(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	probeCalls := 0
 	restore := TestOnlySetResponsesAPIProbe(func(_ context.Context, baseURL, apiKey, modelID string, _ map[string]string) error {
 		probeCalls++
@@ -862,7 +866,7 @@ func TestUpdateCodexAgentProfilePatchRestartsActiveBridge(t *testing.T) {
 			AdvertiseBaseURL: "http://127.0.0.1:18080",
 			AccessToken:      "shared-token",
 		},
-		"",
+		"manager-image:test",
 		"",
 		WithLifecycleObserver(observer),
 		WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex}),
@@ -914,6 +918,8 @@ func TestUpdateCodexAgentProfilePatchRestartsActiveBridge(t *testing.T) {
 }
 
 func TestUpdateAgentProfileCodexRuntimeFallbackRestartsActiveBridge(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	restore := TestOnlySetResponsesAPIProbe(func(_ context.Context, baseURL, apiKey, modelID string, _ map[string]string) error {
 		if baseURL != "https://api.deepseek.com" {
 			t.Fatalf("responses probe baseURL = %q, want deepseek upstream", baseURL)
@@ -929,7 +935,6 @@ func TestUpdateAgentProfileCodexRuntimeFallbackRestartsActiveBridge(t *testing.T
 	t.Cleanup(restore)
 
 	observer := &fakeLifecycleObserver{}
-	var gotWireAPI string
 	svc, err := NewService(
 		testModelConfig(),
 		config.ServerConfig{
@@ -937,13 +942,12 @@ func TestUpdateAgentProfileCodexRuntimeFallbackRestartsActiveBridge(t *testing.T
 			AdvertiseBaseURL: "http://127.0.0.1:18080",
 			AccessToken:      "shared-token",
 		},
-		"",
+		"manager-image:test",
 		"",
 		WithLifecycleObserver(observer),
 		WithRuntime(fakeAgentRuntime{
 			kind: RuntimeKindCodex,
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-				gotWireAPI = spec.Profile.WireAPI
 				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-dev"}, nil
 			},
 		}),
@@ -995,9 +999,6 @@ func TestUpdateAgentProfileCodexRuntimeFallbackRestartsActiveBridge(t *testing.T
 	}
 	if started.AgentProfile.EnvRestartRequired {
 		t.Fatal("Start().AgentProfile.EnvRestartRequired = true, want false after recreate")
-	}
-	if gotWireAPI != "responses" {
-		t.Fatalf("runtime profile wire API = %q, want responses", gotWireAPI)
 	}
 }
 

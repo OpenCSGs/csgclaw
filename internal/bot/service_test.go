@@ -814,6 +814,7 @@ func TestServiceCreateFeishuWorkerCreatesAgentUserAndBot(t *testing.T) {
 		Description: "test lead",
 		Role:        string(RoleWorker),
 		Channel:     string(ChannelFeishu),
+		RuntimeKind: agent.RuntimeKindCodex,
 	})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -872,18 +873,20 @@ func TestServiceCreateWorkerReusesAgentAcrossChannels(t *testing.T) {
 	}
 
 	csgclawBot, err := svc.Create(context.Background(), CreateRequest{
-		Name:    "alice",
-		Role:    string(RoleWorker),
-		Channel: string(ChannelCSGClaw),
+		Name:        "alice",
+		Role:        string(RoleWorker),
+		Channel:     string(ChannelCSGClaw),
+		RuntimeKind: agent.RuntimeKindCodex,
 	})
 	if err != nil {
 		t.Fatalf("Create(csgclaw worker) error = %v", err)
 	}
 	time.Sleep(5 * time.Millisecond)
 	feishuBot, err := svc.Create(context.Background(), CreateRequest{
-		Name:    "alice",
-		Role:    string(RoleWorker),
-		Channel: string(ChannelFeishu),
+		Name:        "alice",
+		Role:        string(RoleWorker),
+		Channel:     string(ChannelFeishu),
+		RuntimeKind: agent.RuntimeKindCodex,
 	})
 	if err != nil {
 		t.Fatalf("Create(feishu worker) error = %v", err)
@@ -944,17 +947,19 @@ func TestServiceCreateWorkerRejectsDuplicateNameInSameChannel(t *testing.T) {
 	}
 
 	if _, err := svc.Create(context.Background(), CreateRequest{
-		Name:    "alice",
-		Role:    string(RoleWorker),
-		Channel: string(ChannelCSGClaw),
+		Name:        "alice",
+		Role:        string(RoleWorker),
+		Channel:     string(ChannelCSGClaw),
+		RuntimeKind: agent.RuntimeKindCodex,
 	}); err != nil {
 		t.Fatalf("first Create(worker) error = %v", err)
 	}
 
 	_, err = svc.Create(context.Background(), CreateRequest{
-		Name:    "alice",
-		Role:    string(RoleWorker),
-		Channel: string(ChannelCSGClaw),
+		Name:        "alice",
+		Role:        string(RoleWorker),
+		Channel:     string(ChannelCSGClaw),
+		RuntimeKind: agent.RuntimeKindCodex,
 	})
 	if err == nil || !strings.Contains(err.Error(), `bot name "alice" already exists in channel "csgclaw"`) {
 		t.Fatalf("second Create(worker) error = %v, want duplicate name error", err)

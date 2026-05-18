@@ -277,7 +277,7 @@ func TestListModelsForRequestUsesDefaultAPIKeyForMatchingProfile(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -310,7 +310,7 @@ func TestListModelsForRequestUsesDefaultAPIKeyForMatchingProfile(t *testing.T) {
 }
 
 func TestProfileForCreateRequestUsesDefaultAPIKeyWithoutReplacingSelectedModel(t *testing.T) {
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

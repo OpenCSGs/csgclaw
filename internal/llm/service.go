@@ -368,6 +368,10 @@ func responsesCapabilityKey(profile agent.AgentProfile, baseURL string) string {
 }
 
 func responsesPayloadToChatPayload(payload map[string]any) (map[string]any, error) {
+	if responsesPayloadHasToolSemantics(payload) {
+		return nil, fmt.Errorf("active tool-use Responses requests are not supported by chat-completions fallback")
+	}
+
 	messages := make([]map[string]any, 0, 4)
 	if instructions := strings.TrimSpace(stringValue(payload["instructions"])); instructions != "" {
 		messages = append(messages, map[string]any{"role": "system", "content": instructions})
@@ -407,6 +411,96 @@ func responsesPayloadToChatPayload(payload map[string]any) (map[string]any, erro
 	copyResponsesOptionToChat(payload, chatPayload, "user", "user")
 	copyResponsesOptionToChat(payload, chatPayload, "max_output_tokens", "max_tokens")
 	return chatPayload, nil
+}
+
+func responsesPayloadHasToolSemantics(payload map[string]any) bool {
+	if toolChoiceRequestsTools(payload["tool_choice"]) {
+		return true
+	}
+	return responseValueHasToolSemantics(payload["input"])
+}
+
+func toolChoiceRequestsTools(value any) bool {
+	switch v := value.(type) {
+	case nil:
+		return false
+	case string:
+		text := strings.ToLower(strings.TrimSpace(v))
+		return text != "" && text != "none" && text != "auto"
+	case map[string]any:
+		if len(v) == 0 {
+			return false
+		}
+		if len(v) == 1 && strings.EqualFold(strings.TrimSpace(stringValue(v["type"])), "none") {
+			return false
+		}
+		return true
+	default:
+		return payloadValuePresent(v)
+	}
+}
+
+func responseValueHasToolSemantics(value any) bool {
+	switch v := value.(type) {
+	case []any:
+		for _, item := range v {
+			if responseValueHasToolSemantics(item) {
+				return true
+			}
+		}
+	case []map[string]any:
+		for _, item := range v {
+			if responseValueHasToolSemantics(item) {
+				return true
+			}
+		}
+	case map[string]any:
+		itemType := strings.ToLower(strings.TrimSpace(stringValue(v["type"])))
+		switch {
+		case strings.Contains(itemType, "tool"),
+			itemType == "function_call",
+			itemType == "function_call_output",
+			strings.HasSuffix(itemType, "_call"),
+			strings.HasSuffix(itemType, "_call_output"):
+			return true
+		}
+		if strings.EqualFold(strings.TrimSpace(stringValue(v["role"])), "tool") {
+			return true
+		}
+		for _, key := range []string{"tool_calls", "function_call", "tool_call_id"} {
+			if payloadValuePresent(v[key]) {
+				return true
+			}
+		}
+		if payloadValuePresent(v["call_id"]) && payloadValuePresent(v["output"]) {
+			return true
+		}
+		for _, item := range v {
+			if responseValueHasToolSemantics(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func payloadValuePresent(value any) bool {
+	switch v := value.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(v) != ""
+	case bool:
+		return v
+	case []any:
+		return len(v) > 0
+	case []map[string]any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	default:
+		return true
+	}
 }
 
 func responseInputItemToChatMessage(item any) (map[string]any, bool) {

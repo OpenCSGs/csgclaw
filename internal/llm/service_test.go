@@ -671,6 +671,136 @@ func TestResponsesLLMAPIFallsBackToStreamingChatCompletionsWhenUnsupported(t *te
 	}
 }
 
+func TestResponsesLLMAPIFallbackAllowsAdvertisedToolsForTextOnlyRequests(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var gotChatPayload map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/responses":
+			http.Error(w, "no responses here", http.StatusNotFound)
+		case "/v1/chat/completions":
+			if err := json.NewDecoder(r.Body).Decode(&gotChatPayload); err != nil {
+				t.Fatalf("Decode() chat payload error = %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"chatcmpl-fallback","object":"chat.completion","created":1710000000,"model":"deepseek-v4-pro","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}]}`))
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+
+	agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
+		{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+			Role: agent.RoleManager,
+			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
+				Provider:        agent.ProviderAPI,
+				BaseURL:         upstream.URL + "/v1",
+				APIKey:          "sk-test",
+				ModelID:         "deepseek-v4-pro",
+				ProfileComplete: true,
+			},
+			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	})
+
+	svc := NewService(config.ModelConfig{}, agentSvc)
+	resp, err := svc.Responses(context.Background(), agent.ManagerUserID, []byte(`{"model":"client-model","input":"hi","tools":[{"type":"function","name":"shell","description":"run shell"}],"stream":false}`))
+	if err != nil {
+		t.Fatalf("Responses() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if _, ok := gotChatPayload["tools"]; ok {
+		t.Fatalf("chat fallback payload includes tools: %#v", gotChatPayload["tools"])
+	}
+	messages, _ := gotChatPayload["messages"].([]any)
+	if len(messages) != 1 {
+		t.Fatalf("chat messages = %#v, want single text message", messages)
+	}
+	if msg, _ := messages[0].(map[string]any); msg["role"] != "user" || msg["content"] != "hi" {
+		t.Fatalf("chat messages = %#v, want user hi", messages)
+	}
+}
+
+func TestResponsesLLMAPIFallbackRejectsActiveToolSemantics(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: "tool output",
+			body: `{"model":"client-model","input":[{"type":"function_call_output","call_id":"call-1","output":"done"}],"stream":false}`,
+		},
+		{
+			name: "required tool choice",
+			body: `{"model":"client-model","input":"hello","tools":[{"type":"function","name":"shell","description":"run shell"}],"tool_choice":"required","stream":false}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+
+			var chatCalls int
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v1/responses":
+					http.Error(w, "no responses here", http.StatusNotFound)
+				case "/v1/chat/completions":
+					chatCalls++
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"id":"chatcmpl-fallback","object":"chat.completion","created":1710000000,"model":"deepseek-v4-pro","choices":[{"index":0,"message":{"role":"assistant","content":"fallback result"},"finish_reason":"stop"}]}`))
+				default:
+					t.Fatalf("unexpected path %q", r.URL.Path)
+				}
+			}))
+			defer upstream.Close()
+
+			agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
+				{
+					ID:   agent.ManagerUserID,
+					Name: agent.ManagerName,
+					Role: agent.RoleManager,
+					AgentProfile: agent.AgentProfile{
+						Name:            agent.ManagerName,
+						Provider:        agent.ProviderAPI,
+						BaseURL:         upstream.URL + "/v1",
+						APIKey:          "sk-test",
+						ModelID:         "deepseek-v4-pro",
+						ProfileComplete: true,
+					},
+					CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+				},
+			})
+
+			svc := NewService(config.ModelConfig{}, agentSvc)
+			resp, err := svc.Responses(context.Background(), agent.ManagerUserID, []byte(tc.body))
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			if err == nil {
+				t.Fatal("Responses() error = nil, want explicit tool-bearing fallback rejection")
+			}
+			httpErr, ok := err.(*HTTPError)
+			if !ok {
+				t.Fatalf("Responses() error type = %T, want *HTTPError", err)
+			}
+			if httpErr.Status != http.StatusBadRequest {
+				t.Fatalf("HTTP status = %d, want %d", httpErr.Status, http.StatusBadRequest)
+			}
+			if !strings.Contains(httpErr.Message, "active tool-use") {
+				t.Fatalf("error message = %q, want active tool-use rejection", httpErr.Message)
+			}
+			if chatCalls != 0 {
+				t.Fatalf("/chat/completions calls = %d, want 0", chatCalls)
+			}
+		})
+	}
+}
+
 func TestModelsReturnsResolvedAgentModel(t *testing.T) {
 	agentSvc := mustSeededAgentService(t, config.SingleProfileLLM(config.ModelConfig{
 		Provider:        config.ProviderLLMAPI,

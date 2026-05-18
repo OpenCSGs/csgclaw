@@ -12,22 +12,12 @@ import (
 
 var checkResponsesAPIForProvider = modelprovider.CheckResponsesAPI
 
-const (
-	codexWireAPIResponses = "responses"
-	codexWireAPIChat      = "chat"
-)
-
-type responsesProbeResult struct {
-	wireAPI string
-	err     error
-}
-
 type responsesProbeCache struct {
 	mu      sync.Mutex
-	results map[string]responsesProbeResult
+	results map[string]struct{}
 }
 
-var codexResponsesProbeCache = responsesProbeCache{results: make(map[string]responsesProbeResult)}
+var codexResponsesProbeCache = responsesProbeCache{results: make(map[string]struct{})}
 
 func TestOnlySetResponsesAPIProbe(probe func(context.Context, string, string, string, map[string]string) error) func() {
 	previous := checkResponsesAPIForProvider
@@ -39,7 +29,7 @@ func TestOnlySetResponsesAPIProbe(probe func(context.Context, string, string, st
 	}
 }
 
-func (s *Service) ensureCodexWireAPI(ctx context.Context, runtimeKind string, profile AgentProfile) error {
+func (s *Service) ensureCodexResponsesAPI(ctx context.Context, runtimeKind string, profile AgentProfile) error {
 	if strings.TrimSpace(runtimeKind) != RuntimeKindCodex {
 		return nil
 	}
@@ -50,7 +40,7 @@ func (s *Service) ensureCodexWireAPI(ctx context.Context, runtimeKind string, pr
 	if !ok {
 		return nil
 	}
-	if _, err := codexResponsesProbeCache.wireAPI(ctx, target); err != nil {
+	if err := codexResponsesProbeCache.validate(ctx, target); err != nil {
 		return fmt.Errorf("validate Codex provider Responses API at %s for model %s: %w", target.baseURL, target.modelID, err)
 	}
 	return nil
@@ -85,58 +75,37 @@ func responsesProbeTarget(profile AgentProfile) (responsesProbeTargetConfig, boo
 	}, true, nil
 }
 
-func (c *responsesProbeCache) wireAPI(ctx context.Context, target responsesProbeTargetConfig) (string, error) {
+func (c *responsesProbeCache) validate(ctx context.Context, target responsesProbeTargetConfig) error {
 	key := responsesProbeCacheKey(target)
 	c.mu.Lock()
 	if c.results == nil {
-		c.results = make(map[string]responsesProbeResult)
+		c.results = make(map[string]struct{})
 	}
-	if result, ok := c.results[key]; ok {
+	if _, ok := c.results[key]; ok {
 		c.mu.Unlock()
-		return result.wireAPI, result.err
+		return nil
 	}
 	c.mu.Unlock()
 
 	err := checkResponsesAPIForProvider(ctx, target.baseURL, target.apiKey, target.modelID, target.headers)
-	result := responsesProbeResult{wireAPI: codexWireAPIResponses}
 	if errors.Is(err, modelprovider.ErrResponsesAPIUnsupported) {
-		result.wireAPI = codexWireAPIChat
 		err = nil
 	}
-	result.err = err
 
 	if err == nil {
 		c.mu.Lock()
-		c.results[key] = result
+		c.results[key] = struct{}{}
 		c.mu.Unlock()
 	}
-	return result.wireAPI, result.err
-}
-
-func (c *responsesProbeCache) cachedWireAPI(target responsesProbeTargetConfig) (string, bool) {
-	key := responsesProbeCacheKey(target)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	result, ok := c.results[key]
-	if !ok || result.err != nil || strings.TrimSpace(result.wireAPI) == "" {
-		return "", false
-	}
-	return result.wireAPI, true
+	return err
 }
 
 func (c *responsesProbeCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.results = make(map[string]responsesProbeResult)
+	c.results = make(map[string]struct{})
 }
 
 func responsesProbeCacheKey(target responsesProbeTargetConfig) string {
 	return strings.TrimSpace(target.provider) + "\x00" + strings.TrimRight(strings.TrimSpace(target.baseURL), "/") + "\x00" + strings.TrimSpace(target.modelID)
-}
-
-func codexWireAPIForProfile(runtimeKind string, profile AgentProfile) string {
-	if strings.TrimSpace(runtimeKind) != RuntimeKindCodex {
-		return ""
-	}
-	return codexWireAPIResponses
 }

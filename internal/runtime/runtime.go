@@ -75,7 +75,6 @@ type Profile struct {
 	APIKey          string
 	ModelID         string
 	ReasoningEffort string
-	WireAPI         string
 	Env             map[string]string
 }
 
@@ -85,7 +84,6 @@ func (p Profile) Normalized() Profile {
 	p.BaseURL = strings.TrimRight(strings.TrimSpace(p.BaseURL), "/")
 	p.APIKey = strings.TrimSpace(p.APIKey)
 	p.ReasoningEffort = strings.TrimSpace(p.ReasoningEffort)
-	p.WireAPI = strings.ToLower(strings.TrimSpace(p.WireAPI))
 	if len(p.Env) == 0 {
 		p.Env = nil
 		return p
