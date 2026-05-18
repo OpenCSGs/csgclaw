@@ -76,9 +76,9 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	fs := run.NewFlagSet("message create", run.Program+" message create [flags]", "Create a message.")
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	roomID := fs.String("room-id", "", "target room id")
-	senderID := fs.String("sender-id", "", "sender user id")
+	senderID := fs.String("sender-id", "", "sender bot id")
 	content := fs.String("content", "", "message content")
-	mentionID := fs.String("mention-id", "", "mentioned user id")
+	mentionID := fs.String("mention-id", "", "mentioned bot id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		return fmt.Errorf("room_id is required")
 	}
 	if *senderID == "" {
-		return fmt.Errorf("sender_id is required")
+		return fmt.Errorf("--sender-id is required")
 	}
 	if *content == "" {
 		return fmt.Errorf("content is required")

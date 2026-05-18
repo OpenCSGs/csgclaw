@@ -16,6 +16,7 @@ import (
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
+	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
@@ -35,7 +36,7 @@ func (f fakeBotAgentRuntime) Kind() string {
 	return f.kind
 }
 
-func (f fakeBotAgentRuntime) Create(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+func (f fakeBotAgentRuntime) New(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
 	return agentruntime.Handle{
 		RuntimeID: spec.RuntimeID,
 		HandleID:  fmt.Sprintf("%s-%s", f.kind, spec.AgentName),
@@ -693,7 +694,7 @@ func TestServiceCreateCSGClawWorkerCreatesAgentUserAndBot(t *testing.T) {
 		Role:        string(RoleWorker),
 		Channel:     string(ChannelCSGClaw),
 		RuntimeKind: agent.RuntimeKindCodex,
-		AgentProfile: apitypes.CreateAgentProfile{
+		AgentProfile: &apitypes.CreateAgentProfile{
 			Provider:        agent.ProviderCSGHubLite,
 			ModelID:         "glm-4.5",
 			ReasoningEffort: "high",
@@ -938,6 +939,58 @@ func TestServiceCreateWorkerRejectsDuplicateNameInSameChannel(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), `bot name "alice" already exists in channel "csgclaw"`) {
 		t.Fatalf("second Create(worker) error = %v, want duplicate name error", err)
+	}
+}
+
+func TestServiceCreateWorkerUsesFromTemplateWorkspace(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	resetFakeBotRuntimeStates()
+	t.Cleanup(resetFakeBotRuntimeStates)
+	restoreDefault := agent.TestOnlySetDefaultServiceOption(func(s *agent.Service) error {
+		return agent.WithRuntime(fakeBotAgentRuntime{kind: agent.RuntimeKindPicoClawSandbox})(s)
+	})
+	t.Cleanup(restoreDefault)
+
+	hubSvc := mustNewBotLocalTemplateHubService(t, "frontend-worker", hub.Template{
+		ID:          "frontend-worker",
+		Name:        "frontend-worker",
+		Description: "frontend worker",
+		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		Image:       "worker-image:1",
+	})
+	agentSvc, err := agent.NewService(
+		testAgentModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+		agent.WithHubService(hubSvc),
+	)
+	if err != nil {
+		t.Fatalf("agent.NewService() error = %v", err)
+	}
+	imSvc := im.NewService()
+	store, err := NewMemoryStore(nil)
+	if err != nil {
+		t.Fatalf("NewMemoryStore() error = %v", err)
+	}
+	svc, err := NewServiceWithDependencies(store, agentSvc, imSvc)
+	if err != nil {
+		t.Fatalf("NewServiceWithDependencies() error = %v", err)
+	}
+
+	if _, err := svc.Create(context.Background(), CreateRequest{
+		Name:         "alice",
+		Role:         string(RoleWorker),
+		Channel:      string(ChannelCSGClaw),
+		FromTemplate: "local/frontend-worker",
+	}); err != nil {
+		t.Fatalf("Create(worker) error = %v", err)
+	}
+
+	skillPath := filepath.Join(homeDir, config.AppDirName, "agents", "alice", "workspace", "skills", "custom", "SKILL.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Fatalf("template skill missing after bot create: %v", err)
 	}
 }
 
@@ -1281,6 +1334,46 @@ func mustNewBotService(t *testing.T, bots []Bot) *Service {
 	svc, err := NewService(store)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
+	}
+	return svc
+}
+
+func mustNewBotLocalTemplateHubService(t *testing.T, id string, item hub.Template) *hub.Service {
+	t.Helper()
+
+	registryRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "USER.md"), []byte("template user\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(USER.md) error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(workspaceRoot, "skills", "custom"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(skill dir) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "skills", "custom", "SKILL.md"), []byte("# Custom\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(SKILL.md) error = %v", err)
+	}
+
+	store := hub.NewLocalStore(registryRoot)
+	if _, err := store.Publish(context.Background(), hub.PublishSpec{
+		ID:           id,
+		Name:         item.Name,
+		Description:  item.Description,
+		RuntimeKind:  item.RuntimeKind,
+		Image:        item.Image,
+		WorkspaceRef: hub.WorkspaceRef{Kind: hub.WorkspaceKindDir, Path: workspaceRoot},
+		UpdatedAt:    time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	svc, err := hub.NewService(config.HubConfig{
+		DefaultRegistry: "local",
+		Registries: []config.HubRegistryConfig{
+			{Name: "local", Kind: hub.RegistryKindLocal, Path: registryRoot, Enabled: true},
+		},
+	}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
 	}
 	return svc
 }

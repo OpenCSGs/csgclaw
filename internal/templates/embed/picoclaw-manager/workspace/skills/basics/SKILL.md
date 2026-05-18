@@ -40,14 +40,10 @@ Do not use this skill when the task requires any of the following:
 Create a room:
 
 ```bash
-csgclaw-cli room create --title test-room --creator-id ou_xxx --channel <current_channel>
+csgclaw-cli room create --title test-room --creator-id u-manager --member-ids u-manager,u-dev --channel <current_channel>
 ```
 
-For Feishu rooms, create the room first without bot members. Do not pass CSGClaw bot IDs such as `u-dev`, bot app IDs, or bot open IDs through `--member-ids`:
-
-```bash
-csgclaw-cli room create --title dev-ui-group --creator-id <manager_or_admin_open_id> --channel feishu
-```
+Use CSGClaw bot IDs in room, member, and message commands.
 
 List rooms and check whether a room is direct:
 
@@ -89,19 +85,17 @@ csgclaw-cli room create \
   --channel <current_channel>
 ```
 
-For Feishu, do not use `--member-ids` for this direct-room upgrade. Create the room first, then add each bot with `member create`; that path converts configured CSGClaw bot IDs to Feishu bot app IDs before calling Feishu:
+For Feishu, keep the same bot ID parameters:
 
 ```bash
 csgclaw-cli room create \
   --title "manager-dev-alex" \
-  --creator-id <manager_or_admin_open_id> \
+  --creator-id u-manager \
+  --member-ids u-manager,u-dev,u-alex \
   --channel feishu
-
-csgclaw-cli member create --room-id oc_xxx --user-id u-dev --inviter-id u-manager --channel feishu
-csgclaw-cli member create --room-id oc_xxx --user-id u-alex --inviter-id u-manager --channel feishu
 ```
 
-Send a message with a mention ,Pay special attention to the specified parameters --mention-id,The parameter value is the NAME in the "member list --room-id oc_xxx --channel <current_channel>" command response :
+Send a message with a mention. Use the mentioned bot ID for `--mention-id`:
 
 ```bash
 csgclaw-cli message create --room-id oc_xxx --sender-id u-manager --content "Please take a look." --mention-id u-alex --channel <current_channel>
@@ -113,7 +107,7 @@ csgclaw-cli message create --room-id oc_xxx --sender-id u-manager --content "Ple
 - Use `bot list` before creating a new bot if the user may be referring to an existing one.
 - When creating a bot, always pass a meaningful `--description` so later matching and reuse remain clear.
 - Verify room membership with `member list` after adding a member when room presence matters.
-- A direct room cannot accept an added bot as a new member. In the local `csgclaw` channel, create a new room with `--member-ids` containing the existing DM users and the new bot.
-- In Feishu channel, never use `room create --member-ids` to add CSGClaw bots. Feishu room creation treats `member_ids` as open IDs in the creating app's context, while CSGClaw bots are added reliably through `member create`, which uses configured bot app IDs. Use the two-step create-then-add flow for every Feishu bot member.
+- A direct room cannot accept an added bot as a new member. Create a new room with `--member-ids` containing the existing DM bots and the new bot.
+- Keep `csgclaw-cli` parameters bot-facing across channels: use bot IDs such as `u-manager`, `u-dev`, and `u-alex`.
 - Keep the response focused on the concrete CLI result instead of introducing external planning artifacts.
 - Hand off to `manager-worker-dispatch` only if the user explicitly needs manager orchestration or multi-worker sequencing.

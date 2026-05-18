@@ -498,7 +498,7 @@ class CSGClawAPI:
         url: str,
         payload: dict[str, Any] | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
-        if method == "GET" and path == "/api/v1/im/bootstrap":
+        if method == "GET" and path == "/api/v1/bootstrap":
             return {"current_user_id": "u-admin", "users": [], "rooms": []}
 
         if method == "GET" and (
@@ -566,7 +566,7 @@ class CSGClawAPI:
             raise SystemExit(f"Invalid JSON response from csgclaw-cli message create: {output}") from exc
 
     def get_bootstrap(self) -> dict[str, Any]:
-        data = self.request_json("GET", "/api/v1/im/bootstrap")
+        data = self.request_json("GET", "/api/v1/bootstrap")
         if isinstance(data, dict):
             return data
         raise SystemExit(f"Unexpected bootstrap response: {json.dumps(data, ensure_ascii=False)}")

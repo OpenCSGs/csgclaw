@@ -114,7 +114,7 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 		},
 	})
 
-	handle, err := rt.Create(context.Background(), agentruntime.Spec{
+	handle, err := rt.New(context.Background(), agentruntime.Spec{
 		RuntimeID: "rt-u-alice",
 		AgentID:   "u-alice",
 		AgentName: "alice",
@@ -204,7 +204,7 @@ func TestRuntimeStopAndDelete(t *testing.T) {
 		},
 	})
 
-	handle, err := rt.Create(context.Background(), agentruntime.Spec{
+	handle, err := rt.New(context.Background(), agentruntime.Spec{
 		RuntimeID: "rt-u-alice",
 		AgentID:   "u-alice",
 		AgentName: "alice",
@@ -352,7 +352,7 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 		},
 	})
 
-	if _, err := rt.Create(context.Background(), agentruntime.Spec{
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
 		RuntimeID: "rt-u-alice",
 		AgentID:   "u-alice",
 		AgentName: "alice",
@@ -420,7 +420,7 @@ func TestRuntimeCreateSkipsConfigWhenHostAuthIsSeeded(t *testing.T) {
 		},
 	})
 
-	if _, err := rt.Create(context.Background(), agentruntime.Spec{
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
 		RuntimeID: "rt-u-alice",
 		AgentID:   "u-alice",
 		AgentName: "alice",
@@ -481,7 +481,7 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 		},
 	})
 
-	if _, err := rt.Create(context.Background(), agentruntime.Spec{
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
 		RuntimeID: "rt-u-alice",
 		AgentID:   "u-alice",
 		AgentName: "alice",
@@ -570,7 +570,7 @@ func TestRuntimeCreateRemovesStaleConfigWhenAuthExists(t *testing.T) {
 		},
 	})
 
-	if _, err := rt.Create(context.Background(), agentruntime.Spec{
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
 		RuntimeID: "rt-u-alice",
 		AgentID:   "u-alice",
 		AgentName: "alice",
@@ -626,7 +626,7 @@ func TestRuntimeStartKeepsExistingRunningSession(t *testing.T) {
 		},
 	})
 
-	handle, err := rt.Create(context.Background(), agentruntime.Spec{
+	handle, err := rt.New(context.Background(), agentruntime.Spec{
 		RuntimeID: "rt-u-alice",
 		AgentID:   "u-alice",
 		AgentName: "alice",
@@ -697,7 +697,7 @@ func TestRuntimeCreateDetachesManagerStartContext(t *testing.T) {
 	})
 
 	parentCtx, cancel := context.WithCancel(context.Background())
-	if _, err := rt.Create(parentCtx, agentruntime.Spec{
+	if _, err := rt.New(parentCtx, agentruntime.Spec{
 		RuntimeID: "rt-u-alice",
 		AgentID:   "u-alice",
 		AgentName: "alice",

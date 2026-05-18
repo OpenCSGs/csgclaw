@@ -29,11 +29,11 @@ func (s *Service) inferProfileForAgent(got Agent) string {
 			return profile
 		}
 	}
-	if strings.TrimSpace(got.Provider) != "" || strings.TrimSpace(got.ModelID) != "" {
+	if strings.TrimSpace(got.AgentProfile.Provider) != "" || strings.TrimSpace(got.AgentProfile.ModelID) != "" {
 		if name, _, ok := s.llm.MatchProfile(config.ModelConfig{
-			Provider:        got.Provider,
-			ModelID:         got.ModelID,
-			ReasoningEffort: got.ReasoningEffort,
+			Provider:        got.AgentProfile.Provider,
+			ModelID:         got.AgentProfile.ModelID,
+			ReasoningEffort: got.AgentProfile.ReasoningEffort,
 		}); ok {
 			return name
 		}

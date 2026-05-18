@@ -11,12 +11,20 @@ const (
 	KindPicoClawSandbox = "picoclaw_sandbox"
 	KindOpenClawSandbox = "openclaw_sandbox"
 	KindCodex           = "codex"
+	// KindNotifier is an in-process worker: no sandbox, IM delivery only (agent.runtime_options).
+	KindNotifier = "notifier"
 )
 
+// Runtime owns the lightweight execution lifecycle for an agent runtime.
+//
+// New should stay focused on instantiating or reopening the runtime execution
+// object and returning a handle. Host-side preparation such as workspace
+// seeding, config materialization, or runtime directory setup belongs behind
+// the optional Provisioner capability instead of being folded into New.
 type Runtime interface {
 	Kind() string
 
-	Create(ctx context.Context, spec Spec) (Handle, error)
+	New(ctx context.Context, spec Spec) (Handle, error)
 	Start(ctx context.Context, h Handle) (State, error)
 	Stop(ctx context.Context, h Handle) (State, error)
 	Delete(ctx context.Context, h Handle) error
@@ -26,6 +34,17 @@ type Runtime interface {
 
 type LogStreamer interface {
 	StreamLogs(ctx context.Context, h Handle, opts LogOptions) error
+}
+
+// HydrateTrustPersistedStopped reports whether hydrate should keep a persisted "stopped"
+// agent status instead of overwriting it from runtime Info (some in-process runtimes
+// always report "running" from Info/State).
+func HydrateTrustPersistedStopped(r Runtime) bool {
+	type trustPersisted interface {
+		HydrateTrustPersistedStopped() bool
+	}
+	v, ok := r.(trustPersisted)
+	return ok && v.HydrateTrustPersistedStopped()
 }
 
 type Handle struct {

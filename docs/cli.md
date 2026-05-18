@@ -493,9 +493,11 @@ Subcommands:
 - `--channel string`: `csgclaw` or `feishu`. Default `csgclaw`.
 - `--title string`: room title.
 - `--description string`: room description.
-- `--creator-id string`: creator user ID.
-- `--member-ids string`: comma-separated member IDs.
+- `--creator-id string`: creator bot ID, such as `u-manager`.
+- `--member-ids string`: comma-separated bot IDs, such as `u-manager,u-dev`.
 - `--locale string`: room locale.
+
+Design note for `csgclaw-cli`: room creation should expose CSGClaw bot IDs, not channel user IDs, agent IDs, Feishu open IDs, Feishu app IDs, or app credentials. In the Feishu channel, the channel adapter resolves bot IDs to the configured Feishu app credentials and bot identifiers internally. When Feishu group creation needs a real human owner ID, CSGClaw continues to use the configured `admin_open_id` internally; callers should still pass bot IDs at the CLI boundary.
 
 `room delete` usage and flags:
 
@@ -527,13 +529,14 @@ Subcommands:
 
 - `--channel string`: `csgclaw` or `feishu`. Default `csgclaw`.
 - `--room-id string`: target room ID.
-- `--user-id string`: required. User to add.
-- `--inviter-id string`: inviter user ID.
+- `--user-id string`: required. Bot ID to add, such as `u-dev`.
+- `--inviter-id string`: inviter bot ID, such as `u-manager`.
 - `--locale string`: room locale.
 
 `member create` behavior:
 
 - `--user-id` is required.
+- `csgclaw-cli` room membership commands should use bot IDs consistently across channels. Feishu open IDs and app IDs are channel implementation details.
 
 #### `message`
 
@@ -557,9 +560,9 @@ Subcommands:
 
 - `--channel string`: `csgclaw` or `feishu`. Default `csgclaw`.
 - `--room-id string`: required.
-- `--sender-id string`: required.
+- `--sender-id string`: required sender bot ID.
 - `--content string`: required.
-- `--mention-id string`: optional mentioned user ID.
+- `--mention-id string`: optional mentioned bot ID.
 
 `message list` behavior:
 
@@ -570,10 +573,10 @@ Examples:
 ```bash
 csgclaw bot list
 csgclaw bot create --name alice --role worker --model-id gpt-5.4-mini
-csgclaw room create --title "release-room" --creator-id admin --member-ids admin,manager
-csgclaw member create --room-id room-1 --user-id u-alice --inviter-id admin
+csgclaw room create --title "release-room" --creator-id u-manager --member-ids u-manager,u-alice
+csgclaw member create --room-id room-1 --user-id u-alice --inviter-id u-manager
 csgclaw message list --room-id room-1
-csgclaw message create --channel csgclaw --room-id room-1 --sender-id admin --content hello
+csgclaw message create --channel csgclaw --room-id room-1 --sender-id u-manager --content hello
 ```
 
 ## `csgclaw-cli`
@@ -633,7 +636,10 @@ Examples:
 ```bash
 csgclaw-cli bot list --channel feishu
 csgclaw-cli bot create --name manager --role manager --channel feishu
-csgclaw-cli room create --channel feishu --title "ops-room"
+csgclaw-cli room create --channel feishu --title "ops-room" --creator-id u-manager --member-ids u-manager,u-dev
 csgclaw-cli member list --channel feishu --room-id oc_x
-csgclaw-cli message create --channel feishu --room-id oc_x --sender-id u-manager --content hello
+csgclaw-cli member create --channel feishu --room-id oc_x --user-id u-dev --inviter-id u-manager
+csgclaw-cli message create --channel feishu --room-id oc_x --sender-id u-manager --mention-id u-dev --content hello
 ```
+
+`csgclaw-cli` is the bot-facing CLI. It should not require callers to know or pass agent IDs, Feishu open IDs, Feishu app IDs, App ID/App Secret, or other channel credentials in room, member, or message commands. Channel-specific adapters are responsible for exchanging bot IDs for the identifiers required by the target channel.

@@ -13,6 +13,7 @@ const (
 	RuntimeKindPicoClawSandbox = agentruntime.KindPicoClawSandbox
 	RuntimeKindOpenClawSandbox = agentruntime.KindOpenClawSandbox
 	RuntimeKindCodex           = agentruntime.KindCodex
+	RuntimeKindNotifier        = agentruntime.KindNotifier
 )
 
 type RuntimeRecord struct {
@@ -40,20 +41,8 @@ func runtimeIDForAgentID(agentID string) string {
 	return "rt-" + agentID
 }
 
-func runtimeKindForAgent(a Agent) string {
-	if kind := normalizeRuntimeKind(a.RuntimeKind); kind != "" {
-		return kind
-	}
-	switch normalizeRole(a.Role) {
-	case RoleManager, RoleWorker:
-		return RuntimeKindPicoClawSandbox
-	default:
-		return RuntimeKindOpenClawSandbox
-	}
-}
-
 func isGatewayRuntimeKind(kind string) bool {
-	switch normalizeRuntimeKind(kind) {
+	switch kind {
 	case RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox:
 		return true
 	default:
@@ -62,16 +51,16 @@ func isGatewayRuntimeKind(kind string) bool {
 }
 
 func runtimeKindForGatewayRuntime(runtime string) string {
-	switch kind := normalizeRuntimeKind(runtime); kind {
+	switch runtime {
 	case RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox:
-		return kind
+		return runtime
 	default:
 		return ""
 	}
 }
 
 func managerImageForRuntimeKind(kind string) string {
-	switch normalizeRuntimeKind(kind) {
+	switch kind {
 	case RuntimeKindOpenClawSandbox, RuntimeKindPicoClawSandbox:
 		return config.DefaultManagerImageForRuntimeKind(kind)
 	default:
@@ -79,25 +68,9 @@ func managerImageForRuntimeKind(kind string) string {
 	}
 }
 
-func normalizeRuntimeKind(kind string) string {
-	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case RuntimeKindPicoClawSandbox:
-		return RuntimeKindPicoClawSandbox
-	case RuntimeKindOpenClawSandbox:
-		return RuntimeKindOpenClawSandbox
-	case RuntimeKindCodex:
-		return RuntimeKindCodex
-	default:
-		return strings.TrimSpace(kind)
-	}
-}
-
 func normalizeRuntimeRecord(rt RuntimeRecord) RuntimeRecord {
 	rt.ID = strings.TrimSpace(rt.ID)
 	rt.Kind = strings.TrimSpace(rt.Kind)
-	if rt.Kind == "" {
-		rt.Kind = RuntimeKindPicoClawSandbox
-	}
 	rt.State = agentruntime.State(strings.TrimSpace(string(rt.State)))
 	rt.SandboxID = strings.TrimSpace(rt.SandboxID)
 	rt.AgentIDs = normalizeRuntimeAgentIDs(rt.AgentIDs)
@@ -132,7 +105,7 @@ func runtimeRecordForAgent(a Agent) RuntimeRecord {
 	}
 	return normalizeRuntimeRecord(RuntimeRecord{
 		ID:        normalizeRuntimeID(a.RuntimeID, a.ID),
-		Kind:      runtimeKindForAgent(a),
+		Kind:      strings.TrimSpace(a.RuntimeKind),
 		State:     agentruntime.State(strings.TrimSpace(a.Status)),
 		AgentIDs:  []string{strings.TrimSpace(a.ID)},
 		SandboxID: strings.TrimSpace(a.BoxID),

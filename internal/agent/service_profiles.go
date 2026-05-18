@@ -7,7 +7,9 @@ import (
 	"time"
 
 	agentruntime "csgclaw/internal/runtime"
+	runtimenotifier "csgclaw/internal/runtime/notifier"
 	"csgclaw/internal/sandbox"
+	"csgclaw/internal/utils"
 )
 
 func (s *Service) AgentProfileView(id string) (AgentProfileView, error) {
@@ -19,7 +21,7 @@ func (s *Service) AgentProfileView(id string) (AgentProfileView, error) {
 	if !ok {
 		return AgentProfileView{}, fmt.Errorf("agent %q not found", id)
 	}
-	return profileView(got.AgentProfile, got.DetectionResults), nil
+	return profileViewWithAgentRuntimeOptions(got.AgentProfile, got.RuntimeOptions, got.RuntimeKind, got.DetectionResults), nil
 }
 
 func (s *Service) ProfileDefaultsView() AgentProfileView {
@@ -50,14 +52,11 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	if strings.TrimSpace(profile.APIKey) == "" {
 		profile.APIKey = current.AgentProfile.APIKey
 	}
-	normalized := normalizeProfile(profile, current.Name, current.Description)
+	normalized := normalizeProfileForAgentRuntime(profile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, nil)
 	normalized.EnvRestartRequired = !profilesEqualEnv(current.AgentProfile, normalized)
 	current.AgentProfile = normalized
 	current.ProfileComplete = normalized.ProfileComplete
 	current.Profile = profileSelector(normalized)
-	current.Provider = normalized.Provider
-	current.ModelID = normalized.ModelID
-	current.ReasoningEffort = normalized.ReasoningEffort
 	current.DetectionResults = nil
 	s.agents[id] = current
 	if normalized.ProfileComplete {
@@ -67,7 +66,7 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	if err := s.saveLocked(); err != nil {
 		return AgentProfileView{}, err
 	}
-	return profileView(normalized, current.DetectionResults), nil
+	return profileViewWithAgentRuntimeOptions(normalized, current.RuntimeOptions, current.RuntimeKind, current.DetectionResults), nil
 }
 
 func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Agent, error) {
@@ -109,19 +108,25 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 	if req.Image != nil {
 		current.Image = strings.TrimSpace(*req.Image)
 	}
-	if req.AgentProfile != nil {
-		profile := *req.AgentProfile
-		if strings.TrimSpace(profile.APIKey) == "" {
-			profile.APIKey = current.AgentProfile.APIKey
+	if req.AgentProfile != nil || req.RuntimeOptions != nil {
+		profile := current.AgentProfile
+		if req.AgentProfile != nil {
+			profile = *req.AgentProfile
+			if strings.TrimSpace(profile.APIKey) == "" {
+				profile.APIKey = current.AgentProfile.APIKey
+			}
 		}
-		normalized := normalizeProfile(profile, current.Name, current.Description)
+		var patch map[string]any
+		if req.RuntimeOptions != nil {
+			patch = *req.RuntimeOptions
+		}
+		mergedFlat := runtimeOptionsAfterPatch(current.RuntimeKind, current.RuntimeOptions, patch)
+		current.RuntimeOptions = nextAgentRuntimeOptions(current.RuntimeKind, current.RuntimeOptions, mergedFlat)
+		normalized := normalizeProfileForAgentRuntime(profile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, mergedFlat)
 		normalized.EnvRestartRequired = !profilesEqualEnv(current.AgentProfile, normalized)
 		current.AgentProfile = normalized
 		current.ProfileComplete = normalized.ProfileComplete
 		current.Profile = profileSelector(normalized)
-		current.Provider = normalized.Provider
-		current.ModelID = normalized.ModelID
-		current.ReasoningEffort = normalized.ReasoningEffort
 		current.DetectionResults = nil
 		if normalized.ProfileComplete {
 			s.profileDefaults = cloneProfile(normalized)
@@ -189,7 +194,7 @@ func (s *Service) ResolvedAgentProfile(agentID string) (AgentProfile, error) {
 	if !ok {
 		return AgentProfile{}, fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
 	}
-	profile := normalizeProfile(got.AgentProfile, got.Name, got.Description)
+	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil)
 	if !profile.ProfileComplete {
 		return AgentProfile{}, fmt.Errorf("agent %q profile is incomplete", strings.TrimSpace(agentID))
 	}
@@ -205,18 +210,21 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
-	profile := normalizeProfile(got.AgentProfile, got.Name, got.Description)
+	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil)
 	if !profile.ProfileComplete {
 		return Agent{}, fmt.Errorf("agent %q profile is incomplete", id)
 	}
 
-	runtimeImpl, err := s.runtimeForAgent(got)
+	runtimeImpl, err := s.runtimeForKind(strings.TrimSpace(got.RuntimeKind))
 	if err != nil {
 		return Agent{}, err
 	}
 	image := strings.TrimSpace(got.Image)
-	if image == "" {
-		image = s.managerImage
+	runtimeKind := strings.TrimSpace(got.RuntimeKind)
+	if isGatewayRuntimeKind(runtimeKind) {
+		if image == "" {
+			image = s.managerImage
+		}
 	}
 
 	if testCreateGatewayBoxHook != nil {
@@ -262,14 +270,23 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 		return Agent{}, fmt.Errorf("remove existing agent box: %w", deleteErr)
 	}
 
+	runtimeProfile := s.runtimeProfileForKind(runtimeKind, got.ID, got.Name, got.Description, profile)
 	createSpec := agentruntime.Spec{
 		RuntimeID: normalizeRuntimeID(got.RuntimeID, got.ID),
 		AgentID:   got.ID,
 		AgentName: got.Name,
 		Image:     image,
-		Profile:   s.runtimeProfileForKind(runtimeKindForAgent(got), got.ID, got.Name, got.Description, profile),
+		Profile:   runtimeProfile,
 	}
-	handle, err := runtimeImpl.Create(ctx, createSpec)
+	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
+		RuntimeID: createSpec.RuntimeID,
+		AgentID:   createSpec.AgentID,
+		AgentName: createSpec.AgentName,
+		Profile:   runtimeProfile,
+	}); err != nil {
+		return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
+	}
+	handle, err := runtimeImpl.New(ctx, createSpec)
 	if err != nil {
 		return Agent{}, fmt.Errorf("create agent box: %w", err)
 	}
@@ -320,74 +337,82 @@ func (s *Service) persistRecreatedAgent(ctx context.Context, id string, info age
 	return recreated, nil
 }
 
-func (s *Service) profileForCreateRequest(ctx context.Context, req CreateAgentSpec) (AgentProfile, error) {
-	profile := req.AgentProfile
-	if strings.TrimSpace(profile.ModelID) == "" && strings.TrimSpace(req.ModelID) != "" {
-		profile.ModelID = strings.TrimSpace(req.ModelID)
+func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgentSpec) (AgentProfile, error) {
+	if spec == nil {
+		return AgentProfile{}, fmt.Errorf("create spec is required")
 	}
-	if strings.TrimSpace(profile.Provider) == "" && strings.TrimSpace(req.Profile) != "" {
-		if _, cfg, err := s.llm.Resolve(req.Profile); err == nil {
-			profile = profileFromConfigModel(req.Name, req.Description, cfg)
-		} else if provider, modelID, ok := splitProfileSelector(req.Profile); ok {
-			profile.Provider = provider
+
+	profile := spec.AgentProfile
+	rk := strings.TrimSpace(spec.RuntimeKind)
+	if isGatewayRuntimeKind(rk) {
+		if strings.TrimSpace(profile.Provider) == "" || strings.TrimSpace(profile.ModelID) == "" {
+			s.mu.RLock()
+			defaultProfile := cloneProfile(s.profileDefaults)
+			s.mu.RUnlock()
+			if strings.TrimSpace(profile.Provider) == "" {
+				profile.Provider = defaultProfile.Provider
+			}
 			if strings.TrimSpace(profile.ModelID) == "" {
-				profile.ModelID = modelID
+				profile.ModelID = defaultProfile.ModelID
+			}
+			if strings.TrimSpace(profile.BaseURL) == "" {
+				profile.BaseURL = defaultProfile.BaseURL
+			}
+			if strings.TrimSpace(profile.APIKey) == "" {
+				profile.APIKey = defaultProfile.APIKey
+			}
+			if len(profile.Headers) == 0 {
+				profile.Headers = defaultProfile.Headers
+			}
+			if strings.TrimSpace(profile.ReasoningEffort) == "" {
+				profile.ReasoningEffort = defaultProfile.ReasoningEffort
+			}
+			profile.EnableFastMode = profile.EnableFastMode || defaultProfile.EnableFastMode
+			if len(profile.RequestOptions) == 0 {
+				profile.RequestOptions = defaultProfile.RequestOptions
+			}
+			if len(profile.Env) == 0 {
+				profile.Env = defaultProfile.Env
 			}
 		}
 	}
-	if strings.TrimSpace(profile.Provider) == "" || strings.TrimSpace(profile.ModelID) == "" {
-		s.mu.RLock()
-		defaultProfile := cloneProfile(s.profileDefaults)
-		s.mu.RUnlock()
-		if strings.TrimSpace(profile.Provider) == "" {
-			profile.Provider = defaultProfile.Provider
-		}
-		if strings.TrimSpace(profile.ModelID) == "" {
-			profile.ModelID = defaultProfile.ModelID
-		}
-		if strings.TrimSpace(profile.BaseURL) == "" {
-			profile.BaseURL = defaultProfile.BaseURL
-		}
-		if strings.TrimSpace(profile.APIKey) == "" {
-			profile.APIKey = defaultProfile.APIKey
-		}
-		if len(profile.Headers) == 0 {
-			profile.Headers = defaultProfile.Headers
-		}
-		if strings.TrimSpace(profile.ReasoningEffort) == "" {
-			profile.ReasoningEffort = defaultProfile.ReasoningEffort
-		}
-		profile.EnableFastMode = profile.EnableFastMode || defaultProfile.EnableFastMode
-		if len(profile.RequestOptions) == 0 {
-			profile.RequestOptions = defaultProfile.RequestOptions
-		}
-		if len(profile.Env) == 0 {
-			profile.Env = defaultProfile.Env
-		}
-	}
-	profile = normalizeProfile(profile, req.Name, req.Description)
+	runtimeOptionsAfterPatch := runtimeOptionsAfterPatch(rk, nil, spec.RuntimeOptions)
+	profile = normalizeProfileForAgentRuntime(profile, nil, spec.Name, spec.Description, spec.RuntimeKind, runtimeOptionsAfterPatch)
 	if !profile.ProfileComplete {
 		detected, _ := s.DetectDefaultProfile(ctx)
 		if detected.ProfileComplete {
-			detected.Name = strings.TrimSpace(req.Name)
-			detected.Description = strings.TrimSpace(req.Description)
-			return normalizeProfile(detected, req.Name, req.Description), nil
+			detected.Name = strings.TrimSpace(spec.Name)
+			detected.Description = strings.TrimSpace(spec.Description)
+			det := normalizeProfileForAgentRuntime(detected, nil, spec.Name, spec.Description, spec.RuntimeKind, nil)
+			return det, nil
 		}
 		return AgentProfile{}, fmt.Errorf("agent profile is incomplete")
+	}
+	if len(runtimeOptionsAfterPatch) > 0 {
+		spec.RuntimeOptions = utils.CloneAnyMap(runtimeOptionsAfterPatch)
 	}
 	return profile, nil
 }
 
-func splitProfileSelector(selector string) (string, string, bool) {
-	selector = strings.TrimSpace(selector)
-	if selector == "" {
-		return "", "", false
+func runtimeOptionsAfterPatch(runtimeKind string, currentRuntimeOptions, patchRuntimeOptions map[string]any) map[string]any {
+	if runtimenotifier.MatchesNotifierRuntimeKind(runtimeKind) {
+		return runtimenotifier.MergeFlatForAgentPatch(currentRuntimeOptions, patchRuntimeOptions)
 	}
-	for _, sep := range []string{".", ":"} {
-		provider, modelID, ok := strings.Cut(selector, sep)
-		if ok && strings.TrimSpace(provider) != "" && strings.TrimSpace(modelID) != "" {
-			return normalizeProfileProvider(provider), strings.TrimSpace(modelID), true
+	if len(patchRuntimeOptions) == 0 {
+		return utils.CloneAnyMap(currentRuntimeOptions)
+	}
+	if len(currentRuntimeOptions) == 0 {
+		return utils.CloneAnyMap(patchRuntimeOptions)
+	}
+	return utils.OverlayAnyMap(utils.CloneAnyMap(currentRuntimeOptions), patchRuntimeOptions)
+}
+
+func nextAgentRuntimeOptions(runtimeKind string, currentRuntimeOptions, mergedRuntimeOptions map[string]any) map[string]any {
+	if len(mergedRuntimeOptions) == 0 {
+		if runtimenotifier.MatchesNotifierRuntimeKind(runtimeKind) {
+			return nil
 		}
+		return currentRuntimeOptions
 	}
-	return normalizeProfileProvider(selector), "", true
+	return utils.CloneAnyMap(mergedRuntimeOptions)
 }

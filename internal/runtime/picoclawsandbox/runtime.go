@@ -1,8 +1,13 @@
 package picoclawsandbox
 
 import (
+	"context"
+	"fmt"
 	"path"
+	"path/filepath"
+	"strings"
 
+	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/sandboxgateway"
 )
@@ -20,18 +25,65 @@ const (
 
 type AgentRef = sandboxgateway.AgentRef
 type Dependencies = sandboxgateway.Dependencies
-type Runtime = sandboxgateway.Runtime
+type WorkspaceLayout = sandboxgateway.WorkspaceLayout
+
+type Runtime struct {
+	*sandboxgateway.Runtime
+	deps Dependencies
+}
+
+var _ agentruntime.Provisioner = (*Runtime)(nil)
 
 func New(deps Dependencies) *Runtime {
 	deps.RuntimeKind = agentruntime.KindPicoClawSandbox
 	deps.HomeEnv = "/home/picoclaw"
+	deps.MountGuestPath = BoxWorkspaceDir
 	deps.WorkspaceGuestPath = BoxWorkspaceDir
 	deps.ProjectsGuestPath = BoxProjectsDir
 	deps.GatewayLogPath = BoxGatewayLogPath
 	if deps.GatewayCommand == nil {
 		deps.GatewayCommand = GatewayRunCommand
 	}
-	return sandboxgateway.New(deps)
+	return &Runtime{
+		Runtime: sandboxgateway.New(deps),
+		deps:    deps,
+	}
+}
+
+func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest) error {
+	if r == nil {
+		return nil
+	}
+	gateway := req.Gateway
+	if gateway == nil {
+		return fmt.Errorf("gateway provisioning data is required")
+	}
+	profile := req.Profile.Normalized()
+	if strings.TrimSpace(profile.ModelID) == "" {
+		profile.ModelID = strings.TrimSpace(gateway.ModelFallback)
+	}
+	agentHome := strings.TrimSpace(gateway.AgentHome)
+	if agentHome == "" {
+		return fmt.Errorf("gateway agent home is required")
+	}
+	if _, err := EnsureConfig(agentHome, req.AgentID, gateway.Server, configModelFromProfile(profile), fixedBaseURL(gateway.ManagerBaseURL)); err != nil {
+		return err
+	}
+	workspaceRoot := filepath.Join(agentHome, "workspace")
+	if err := sandboxgateway.EnsureEmbeddedWorkspace(gateway.WorkspaceTemplate, workspaceRoot); err != nil {
+		return err
+	}
+	prepared, err := sandboxgateway.FinalizePreparedGatewayProvision(req, WorkspaceLayout{
+		MountHostPath:      workspaceRoot,
+		MountGuestPath:     BoxWorkspaceDir,
+		WorkspaceHostPath:  workspaceRoot,
+		WorkspaceGuestPath: BoxWorkspaceDir,
+	})
+	if err != nil {
+		return err
+	}
+	r.RememberPreparedGatewayProvision(req.AgentID, prepared)
+	return nil
 }
 
 func GatewayRunCommand() string {
@@ -47,4 +99,21 @@ func GatewayRunCommand() string {
 
 func boxWorkspaceConfigPath(name string) string {
 	return path.Join(BoxWorkspaceDir, HostPicoClawStateDir, name)
+}
+
+func fixedBaseURL(baseURL string) BaseURLResolver {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	return func(config.ServerConfig) string {
+		return baseURL
+	}
+}
+
+func configModelFromProfile(profile agentruntime.Profile) config.ModelConfig {
+	return config.ModelConfig{
+		Provider:        profile.Provider,
+		BaseURL:         profile.BaseURL,
+		APIKey:          profile.APIKey,
+		ModelID:         profile.ModelID,
+		ReasoningEffort: profile.ReasoningEffort,
+	}
 }

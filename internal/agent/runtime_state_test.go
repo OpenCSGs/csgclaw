@@ -164,3 +164,14 @@ func TestPicoClawRuntimeHostResolveRuntimeProfilePreservesAPIProfile(t *testing.
 		t.Fatalf("host.ResolveRuntimeProfile().Env[FEATURE_FLAG] = %q, want %q", got, want)
 	}
 }
+
+func TestRuntimeRecordForAgentPreservesEmptyRuntimeKind(t *testing.T) {
+	rt := runtimeRecordForAgent(Agent{
+		ID:        "u-alice",
+		RuntimeID: "rt-u-alice",
+		Role:      RoleWorker,
+	})
+	if rt.Kind != "" {
+		t.Fatalf("runtimeRecordForAgent().Kind = %q, want empty", rt.Kind)
+	}
+}

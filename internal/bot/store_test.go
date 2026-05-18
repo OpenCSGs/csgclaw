@@ -218,12 +218,22 @@ func TestStoreSaveRejectsInvalidBot(t *testing.T) {
 }
 
 func TestNewStoreRejectsInvalidState(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "bots.json")
-	if err := os.WriteFile(path, []byte(`{"bots":[{"id":"bot-1","name":"alice","role":"agent","channel":"csgclaw"}]}`), 0o600); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
-
-	if _, err := NewStore(path); err == nil || !strings.Contains(err.Error(), "role must be one of") {
-		t.Fatalf("NewStore() error = %v, want role validation error", err)
+	for _, tc := range []struct {
+		name string
+		role string
+	}{
+		{name: "agent", role: "agent"},
+		{name: "notifier", role: "notifier"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "bots.json")
+			raw := `{"bots":[{"id":"bot-1","name":"alice","role":"` + tc.role + `","channel":"csgclaw"}]}`
+			if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+				t.Fatalf("os.WriteFile() error = %v", err)
+			}
+			if _, err := NewStore(path); err == nil || !strings.Contains(err.Error(), "role must be one of") {
+				t.Fatalf("NewStore() error = %v, want role validation error", err)
+			}
+		})
 	}
 }

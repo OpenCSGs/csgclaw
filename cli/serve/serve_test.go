@@ -533,7 +533,7 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		if opts.OnReady == nil {
 			return fmt.Errorf("OnReady is nil")
 		}
-		go opts.OnReady()
+		go opts.OnReady(nil, nil)
 		return nil
 	}
 	releasedStart := false
@@ -729,7 +729,7 @@ func TestServeForegroundStartsConfiguredAgentsOnReady(t *testing.T) {
 		if opts.OnReady == nil {
 			return fmt.Errorf("OnReady is nil")
 		}
-		opts.OnReady()
+		opts.OnReady(nil, nil)
 		return nil
 	}
 
@@ -803,7 +803,7 @@ func TestServeForegroundStartsCodexBridgesAfterConfiguredAgents(t *testing.T) {
 		if opts.OnReady == nil {
 			return fmt.Errorf("OnReady is nil")
 		}
-		opts.OnReady()
+		opts.OnReady(nil, nil)
 		close(releaseAgents)
 		if opts.Context == nil {
 			return fmt.Errorf("Context is nil")
@@ -902,7 +902,7 @@ func TestServeForegroundPreservesBootstrapDefaultTemplates(t *testing.T) {
 	})
 	RunServer = func(opts server.Options) error {
 		if opts.OnReady != nil {
-			go opts.OnReady()
+			go opts.OnReady(nil, nil)
 		}
 		return nil
 	}
@@ -1249,7 +1249,7 @@ func stubServeDependencies(t *testing.T) func() {
 	origWaitForHealthy := WaitForHealthy
 	RunServer = func(opts server.Options) error {
 		if opts.OnReady != nil {
-			go opts.OnReady()
+			go opts.OnReady(nil, nil)
 		}
 		return nil
 	}

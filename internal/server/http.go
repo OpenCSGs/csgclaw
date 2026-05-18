@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"csgclaw/internal/agent"
 	"csgclaw/internal/api"
 	"csgclaw/internal/bot"
@@ -32,24 +34,29 @@ type Options struct {
 	AccessToken string
 	NoAuth      bool
 	Context     context.Context
-	OnReady     func()
+	OnReady     func(h *api.Handler, router chi.Router)
+}
+
+func newHandler(opts Options) *api.Handler {
+	handler := api.NewHandlerWithBotAndAuth(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.BotBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
+	handler.SetHubService(opts.Hub)
+	handler.SetUpgradeManager(opts.Upgrade)
+	handler.SetUpgradeConfigPath(opts.ConfigPath)
+	handler.SetConfigPath(opts.ConfigPath)
+	return handler
 }
 
 func Run(opts Options) error {
 	if opts.Context == nil {
 		opts.Context = context.Background()
 	}
-	handler := api.NewHandlerWithBotAndAuth(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.BotBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
-	handler.SetHubService(opts.Hub)
-	handler.SetUpgradeManager(opts.Upgrade)
-	handler.SetUpgradeConfigPath(opts.ConfigPath)
-	handler.SetConfigPath(opts.ConfigPath)
-	mux := handler.Routes()
-	mux.Handle("/", uiHandler())
+	handler := newHandler(opts)
+	router := handler.Routes()
+	router.Handle("/*", uiHandler())
 
 	httpServer := &http.Server{
 		Addr:              opts.ListenAddr,
-		Handler:           accessLog(slog.Default(), mux),
+		Handler:           accessLog(slog.Default(), router),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -89,7 +96,7 @@ func Run(opts Options) error {
 		return err
 	}
 	if opts.OnReady != nil {
-		go opts.OnReady()
+		go opts.OnReady(handler, router)
 	}
 
 	if err := httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {

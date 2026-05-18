@@ -19,7 +19,7 @@ func FS() fs.FS {
 }
 
 func Resolve(runtimeKind, role string) (string, error) {
-	switch normalizeRuntimeKind(runtimeKind) {
+	switch runtimeKind {
 	case runtimepkg.KindPicoClawSandbox:
 		switch normalizeRole(role) {
 		case roleManager:
@@ -52,19 +52,6 @@ func TemplateIDFromManifestPath(path string) string {
 		return ""
 	}
 	return pathpkg.Base(pathpkg.Dir(path))
-}
-
-func normalizeRuntimeKind(kind string) string {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case runtimepkg.KindPicoClawSandbox:
-		return runtimepkg.KindPicoClawSandbox
-	case runtimepkg.KindOpenClawSandbox:
-		return runtimepkg.KindOpenClawSandbox
-	case runtimepkg.KindCodex:
-		return runtimepkg.KindCodex
-	default:
-		return strings.ToLower(strings.TrimSpace(kind))
-	}
 }
 
 func normalizeRole(role string) string {

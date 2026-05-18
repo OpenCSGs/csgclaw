@@ -76,8 +76,8 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	title := fs.String("title", "", "room title")
 	description := fs.String("description", "", "room description")
-	creatorID := fs.String("creator-id", "", "room creator id")
-	memberIDs := fs.String("member-ids", "", "comma-separated member ids")
+	creatorID := fs.String("creator-id", "", "creator bot id")
+	memberIDs := fs.String("member-ids", "", "comma-separated member bot ids")
 	locale := fs.String("locale", "", "room locale")
 	if err := fs.Parse(args); err != nil {
 		return err

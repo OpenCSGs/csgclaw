@@ -158,7 +158,7 @@ func (r *Runtime) EventSink() SessionEventSink {
 	return r.deps.EventSink
 }
 
-func (r *Runtime) Create(ctx context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
 	if err := r.ensureRuntimeHome(spec.AgentName); err != nil {
 		return agentruntime.Handle{}, err
 	}

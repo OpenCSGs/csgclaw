@@ -12,8 +12,8 @@ import (
 )
 
 func (h *Handler) handleFeishuBotByID(w http.ResponseWriter, r *http.Request) {
-	botID, ok := parseFeishuBotEventsPath(r.URL.Path)
-	if !ok {
+	botID := pathValue(r, "id")
+	if botID == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -97,19 +97,6 @@ func feishuEventMentions(evt feishu.MessageEvent, botOpenID string) bool {
 	return false
 }
 
-func parseFeishuBotEventsPath(path string) (string, bool) {
-	const prefix = "/api/v1/channels/feishu/bots/"
-	if !strings.HasPrefix(path, prefix) {
-		return "", false
-	}
-	rest := strings.TrimPrefix(path, prefix)
-	botID, suffix, ok := strings.Cut(rest, "/")
-	if !ok || strings.TrimSpace(botID) == "" || suffix != "events" {
-		return "", false
-	}
-	return botID, true
-}
-
 func (h *Handler) handleFeishuUsers(w http.ResponseWriter, r *http.Request) {
 	if h.feishu == nil {
 		http.Error(w, "feishu channel is not configured", http.StatusServiceUnavailable)
@@ -142,8 +129,8 @@ func (h *Handler) handleFeishuUserByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, ok := parseFeishuUserPath(r.URL.Path)
-	if !ok {
+	userID := pathValue(r, "id")
+	if userID == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -241,27 +228,36 @@ func (h *Handler) handleFeishuRoomByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roomID, membersPath := parseFeishuRoomPath(r.URL.Path)
+	roomID := pathValue(r, "id")
 	if roomID == "" {
 		http.NotFound(w, r)
 		return
 	}
-
-	if !membersPath {
-		switch r.Method {
-		case http.MethodDelete:
-			if err := h.feishu.DeleteRoom(roomID); err != nil {
-				if strings.Contains(err.Error(), "not found") {
-					http.Error(w, "room not found", http.StatusNotFound)
-					return
-				}
-				http.Error(w, err.Error(), http.StatusBadRequest)
+	switch r.Method {
+	case http.MethodDelete:
+		if err := h.feishu.DeleteRoom(roomID); err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				http.Error(w, "room not found", http.StatusNotFound)
 				return
 			}
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) handleFeishuRoomMembersByID(w http.ResponseWriter, r *http.Request) {
+	if h.feishu == nil {
+		http.Error(w, "feishu channel is not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	roomID := pathValue(r, "id")
+	if roomID == "" {
+		http.NotFound(w, r)
 		return
 	}
 
@@ -297,34 +293,4 @@ func (h *Handler) handleFeishuRoomByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
-}
-
-func parseFeishuRoomPath(path string) (string, bool) {
-	const prefix = "/api/v1/channels/feishu/rooms/"
-	if !strings.HasPrefix(path, prefix) {
-		return "", false
-	}
-	rest := strings.TrimPrefix(path, prefix)
-	roomID, suffix, ok := strings.Cut(rest, "/")
-	if !ok {
-		roomID = strings.TrimSpace(rest)
-		return roomID, false
-	}
-	roomID = strings.TrimSpace(roomID)
-	if roomID == "" || suffix != "members" {
-		return "", false
-	}
-	return roomID, true
-}
-
-func parseFeishuUserPath(path string) (string, bool) {
-	const prefix = "/api/v1/channels/feishu/users/"
-	if !strings.HasPrefix(path, prefix) {
-		return "", false
-	}
-	userID := strings.TrimSpace(strings.TrimPrefix(path, prefix))
-	if userID == "" || strings.Contains(userID, "/") {
-		return "", false
-	}
-	return userID, true
 }

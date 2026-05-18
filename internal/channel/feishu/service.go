@@ -37,10 +37,10 @@ type BotInfo struct {
 }
 
 type CreateChatRequest struct {
-	Title       string
-	Description string
-	CreatorID   string
-	MemberIDs   []string
+	Title        string
+	Description  string
+	CreatorID    string
+	MemberAppIDs []string
 }
 
 type CreateChatResponse struct {
@@ -53,7 +53,7 @@ type CreateChatFunc func(context.Context, AppConfig, CreateChatRequest) (CreateC
 
 type AddChatMembersRequest struct {
 	ChatID       string
-	MemberIDs    []string
+	MemberBotIDs []string
 	MemberAppIDs []string
 }
 
@@ -136,10 +136,17 @@ func NewServiceWithProvider(provider Provider) *Service {
 
 func NewServiceWithBotOpenIDResolver(apps map[string]AppConfig, resolveBotInfo func(context.Context, AppConfig) (BotInfo, error)) *Service {
 	svc := NewService(apps)
-	if resolveBotInfo != nil {
-		svc.resolveBotInfo = resolveBotInfo
-	}
+	svc.SetBotOpenIDResolver(resolveBotInfo)
 	return svc
+}
+
+func (s *Service) SetBotOpenIDResolver(resolveBotInfo func(context.Context, AppConfig) (BotInfo, error)) {
+	if s == nil || resolveBotInfo == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.resolveBotInfo = resolveBotInfo
 }
 
 func NewServiceWithCreateChat(apps map[string]AppConfig, createChat CreateChatFunc) *Service {
@@ -451,14 +458,18 @@ func (s *Service) CreateRoom(req im.CreateRoomRequest) (im.Room, error) {
 		return im.Room{}, fmt.Errorf("feishu admin_open_id is required")
 	}
 	members := normalizeMembers(creatorID, req.MemberIDs)
-	memberIDs := members[1:]
+	memberBotIDs := members[1:]
+	memberAppIDs, err := s.appIDsForMembers(memberBotIDs)
+	if err != nil {
+		return im.Room{}, err
+	}
 	description := strings.TrimSpace(req.Description)
 
 	created, err := s.createChat(context.Background(), app, CreateChatRequest{
-		Title:       title,
-		Description: description,
-		CreatorID:   adminOpenID, // TODO: use u-manager app_id?
-		MemberIDs:   memberIDs,
+		Title:        title,
+		Description:  description,
+		CreatorID:    adminOpenID,
+		MemberAppIDs: memberAppIDs,
 	})
 	if err != nil {
 		return im.Room{}, err
@@ -493,15 +504,15 @@ func (s *Service) CreateRoom(req im.CreateRoomRequest) (im.Room, error) {
 func defaultCreateChat(ctx context.Context, app AppConfig, req CreateChatRequest) (CreateChatResponse, error) {
 	client := lark.NewClient(app.AppID, app.AppSecret)
 	createReq := larkim.NewCreateChatReqBuilder().
-		UserIdType("open_id"). // TODO: use app_id?
+		UserIdType("open_id"). // OwnerId is an open_id; BotIdList below expects bot app_id values.
 		SetBotManager(true).
 		Uuid(feishuRequestUUID()).
 		Body(larkim.NewCreateChatReqBodyBuilder().
 			Name(req.Title).
 			Description(req.Description).
 			OwnerId(req.CreatorID).
-			UserIdList(req.MemberIDs).
-			BotIdList([]string{}).
+			UserIdList([]string{}).
+			BotIdList(req.MemberAppIDs).
 			GroupMessageType("chat").
 			ChatMode("group").
 			ChatType("private").
@@ -696,13 +707,13 @@ func feishuBotMembersInChatWithResolvers(
 			name = openID
 		}
 		members = append(members, im.User{
-			ID:        openID,
+			ID:        botID,
 			Name:      name,
-			Handle:    deriveHandle(name, openID),
+			Handle:    deriveHandle(name, botID),
 			Role:      "member",
 			Avatar:    initials(name),
 			IsOnline:  true,
-			AccentHex: accentHexForID(openID),
+			AccentHex: accentHexForID(botID),
 		})
 	}
 	return members, nil
@@ -1111,20 +1122,20 @@ func (s *Service) ListRooms() ([]im.Room, error) {
 	if err != nil {
 		return nil, err
 	}
+	identity, err := s.botIdentityMap(context.Background())
+	if err != nil {
+		return nil, err
+	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	for i := range rooms {
-		local, ok := s.rooms[rooms[i].ID]
-		if !ok {
-			continue
+		rooms[i].Members = identity.memberIDsToBotIDs(rooms[i].Members)
+		if local, ok := s.rooms[rooms[i].ID]; ok {
+			rooms[i].Messages = identity.messagesToBotMessages(local.Messages)
 		}
-		if len(rooms[i].Members) == 0 {
-			rooms[i].Members = append([]string(nil), local.Members...)
-			rooms[i].Subtitle = formatMembers(len(rooms[i].Members))
-		}
-		rooms[i].Messages = append([]im.Message(nil), local.Messages...)
+		rooms[i].Subtitle = formatMembers(len(rooms[i].Members))
 	}
 	slices.SortFunc(rooms, func(a, b im.Room) int { return strings.Compare(a.Title, b.Title) })
 	return rooms, nil
@@ -1140,6 +1151,11 @@ func (s *Service) ListRoomMessages(roomID string) ([]im.Message, error) {
 	if err != nil {
 		return nil, err
 	}
+	identity, err := s.botIdentityMap(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	messages = identity.messagesToBotMessages(messages)
 
 	s.mu.Lock()
 	if room, ok := s.rooms[roomID]; ok {
@@ -1200,11 +1216,10 @@ func (s *Service) AddRoomMembers(req im.AddRoomMembersRequest) (im.Room, error) 
 		}
 		existing[userID] = struct{}{}
 		newMembers = append(newMembers, userID)
-		memberAppID := userID
-		if app, ok := s.apps[userID]; ok {
-			if configuredAppID := strings.TrimSpace(app.AppID); configuredAppID != "" {
-				memberAppID = configuredAppID
-			}
+		memberAppID, err := s.appIDForMemberLocked(userID)
+		if err != nil {
+			s.mu.Unlock()
+			return im.Room{}, err
 		}
 		newMemberAppIDs = append(newMemberAppIDs, memberAppID)
 	}
@@ -1225,7 +1240,7 @@ func (s *Service) AddRoomMembers(req im.AddRoomMembersRequest) (im.Room, error) 
 
 	if err := s.addChatMembers(context.Background(), app, AddChatMembersRequest{
 		ChatID:       roomID,
-		MemberIDs:    newMembers,
+		MemberBotIDs: newMembers,
 		MemberAppIDs: newMemberAppIDs,
 	}); err != nil {
 		return im.Room{}, err
@@ -1271,6 +1286,11 @@ func (s *Service) ListRoomMembers(roomID string) ([]im.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	identity, err := s.botIdentityMap(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	members = identity.usersToBotUsers(members)
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1288,6 +1308,162 @@ func (s *Service) ListRoomMembers(roomID string) ([]im.User, error) {
 	}
 	slices.SortFunc(users, func(a, b im.User) int { return strings.Compare(a.Name, b.Name) })
 	return users, nil
+}
+
+type botIdentityMap struct {
+	botIDs        map[string]struct{}
+	openIDToBotID map[string]string
+}
+
+func (s *Service) botIdentityMap(ctx context.Context) (botIdentityMap, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.mu.RLock()
+	apps := cloneAppConfigs(s.apps)
+	resolveBotInfo := s.resolveBotInfo
+	s.mu.RUnlock()
+
+	identity := botIdentityMap{
+		botIDs:        make(map[string]struct{}, len(apps)),
+		openIDToBotID: make(map[string]string, len(apps)),
+	}
+	for botID, rawApp := range apps {
+		botID = strings.TrimSpace(botID)
+		if botID == "" {
+			continue
+		}
+		identity.botIDs[botID] = struct{}{}
+		app, err := validateAppConfig(rawApp, botID)
+		if err != nil {
+			return identity, err
+		}
+		botInfo, err := resolveBotInfo(ctx, app)
+		if err != nil {
+			return identity, fmt.Errorf("resolve feishu bot %q open_id: %w", botID, err)
+		}
+		openID := strings.TrimSpace(botInfo.OpenID)
+		if openID == "" {
+			return identity, fmt.Errorf("resolve feishu bot %q open_id: empty open_id", botID)
+		}
+		identity.openIDToBotID[openID] = botID
+	}
+	return identity, nil
+}
+
+func (m botIdentityMap) botIDFor(id string) (string, bool) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", false
+	}
+	if botID, ok := m.openIDToBotID[id]; ok {
+		return botID, true
+	}
+	if _, ok := m.botIDs[id]; ok {
+		return id, true
+	}
+	return "", false
+}
+
+func (m botIdentityMap) memberIDsToBotIDs(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if botID, ok := m.botIDFor(id); ok {
+			id = botID
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func (m botIdentityMap) usersToBotUsers(members []im.User) []im.User {
+	if len(members) == 0 {
+		return nil
+	}
+	out := make([]im.User, 0, len(members))
+	seen := make(map[string]struct{}, len(members))
+	for _, member := range members {
+		member.ID = strings.TrimSpace(member.ID)
+		if member.ID == "" {
+			continue
+		}
+		if botID, ok := m.botIDFor(member.ID); ok {
+			member.ID = botID
+			if strings.TrimSpace(member.Name) == "" {
+				member.Name = botID
+			}
+			if strings.TrimSpace(member.Handle) == "" {
+				member.Handle = deriveHandle(member.Name, botID)
+			}
+			if strings.TrimSpace(member.Avatar) == "" {
+				member.Avatar = initials(member.Name)
+			}
+			if strings.TrimSpace(member.AccentHex) == "" {
+				member.AccentHex = accentHexForID(botID)
+			}
+		}
+		if _, ok := seen[member.ID]; ok {
+			continue
+		}
+		seen[member.ID] = struct{}{}
+		out = append(out, member)
+	}
+	return out
+}
+
+func (m botIdentityMap) messagesToBotMessages(messages []im.Message) []im.Message {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]im.Message, 0, len(messages))
+	for _, message := range messages {
+		if senderID := strings.TrimSpace(message.SenderID); senderID != "" {
+			if botID, ok := m.botIDFor(senderID); ok {
+				message.SenderID = botID
+			}
+		}
+		message.Mentions = m.mentionsToBotMentions(message.Mentions)
+		out = append(out, message)
+	}
+	return out
+}
+
+func (m botIdentityMap) mentionsToBotMentions(mentions []im.Mention) []im.Mention {
+	if len(mentions) == 0 {
+		return nil
+	}
+	out := make([]im.Mention, 0, len(mentions))
+	seen := make(map[string]struct{}, len(mentions))
+	for _, mention := range mentions {
+		mention.ID = strings.TrimSpace(mention.ID)
+		if mention.ID == "" {
+			continue
+		}
+		if botID, ok := m.botIDFor(mention.ID); ok {
+			mention.ID = botID
+			if strings.TrimSpace(mention.Name) == "" {
+				mention.Name = botID
+			}
+		}
+		if _, ok := seen[mention.ID]; ok {
+			continue
+		}
+		seen[mention.ID] = struct{}{}
+		out = append(out, mention)
+	}
+	return out
 }
 
 func (s *Service) normalizeMembersLocked(creatorID string, memberIDs []string) ([]string, error) {
@@ -1371,13 +1547,32 @@ func (s *Service) appIDForMemberLocked(memberID string) (string, error) {
 	}
 	app, ok := s.apps[memberID]
 	if !ok {
-		return "", fmt.Errorf("feishu app is not configured for member_id %q", memberID)
+		return "", fmt.Errorf("feishu app is not configured for bot %q", memberID)
 	}
 	appID := strings.TrimSpace(app.AppID)
 	if appID == "" {
-		return "", fmt.Errorf("feishu app_id is required for member_id %q", memberID)
+		return "", fmt.Errorf("feishu app_id is required for bot %q", memberID)
 	}
 	return appID, nil
+}
+
+func (s *Service) appIDsForMembers(memberIDs []string) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	appIDs := make([]string, 0, len(memberIDs))
+	for _, memberID := range memberIDs {
+		memberID = strings.TrimSpace(memberID)
+		if memberID == "" {
+			continue
+		}
+		appID, err := s.appIDForMemberLocked(memberID)
+		if err != nil {
+			return nil, err
+		}
+		appIDs = append(appIDs, appID)
+	}
+	return appIDs, nil
 }
 
 func normalizeNonEmptyStrings(values []string) []string {

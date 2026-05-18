@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"csgclaw/internal/apiclient"
 	"csgclaw/internal/apitypes"
@@ -161,6 +162,29 @@ func RenderBots(output string, w io.Writer, bots []apitypes.Bot) error {
 	}
 }
 
+func RenderCompactBotList(output string, w io.Writer, bots []apitypes.Bot) error {
+	compact := compactBotList(bots)
+	switch output {
+	case "", "table":
+		return RenderCompactBotsTable(w, compact)
+	case "json":
+		return WriteJSON(w, compact)
+	default:
+		return fmt.Errorf("unsupported output format %q", output)
+	}
+}
+
+func RenderFullBotList(output string, w io.Writer, bots []apitypes.Bot) error {
+	switch output {
+	case "", "table":
+		return RenderFullBotsTable(w, bots)
+	case "json":
+		return WriteJSON(w, bots)
+	default:
+		return fmt.Errorf("unsupported output format %q", output)
+	}
+}
+
 func RenderAgents(output string, w io.Writer, agents []apitypes.Agent) error {
 	switch output {
 	case "", "table":
@@ -227,12 +251,58 @@ func displayAgentProfile(profile string) string {
 }
 
 func RenderBotsTable(w io.Writer, bots []apitypes.Bot) error {
+	return RenderCompactBotsTable(w, compactBotList(bots))
+}
+
+func RenderCompactBotsTable(w io.Writer, bots []compactBot) error {
 	tw := NewTableWriter(w)
-	fmt.Fprintln(tw, "ID\tNAME\tDESCRIPTION\tROLE\tCHANNEL\tRUNTIME\tAGENT\tUSER\tAVAILABLE")
+	fmt.Fprintln(tw, "ID\tNAME\tDESCRIPTION\tROLE\tCHANNEL")
 	for _, b := range bots {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\n", b.ID, b.Name, displayBotDescription(b.Description), b.Role, b.Channel, displayBotField(b.RuntimeKind), displayBotField(b.AgentID), displayBotField(b.UserID), b.Available)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", b.ID, b.Name, displayBotDescription(b.Description), b.Role, b.Channel)
 	}
 	return tw.Flush()
+}
+
+func RenderFullBotsTable(w io.Writer, bots []apitypes.Bot) error {
+	tw := NewTableWriter(w)
+	fmt.Fprintln(tw, "ID\tNAME\tDESCRIPTION\tROLE\tCHANNEL\tAGENT_ID\tUSER_ID\tAVAILABLE\tRUNTIME_KIND\tCREATED_AT")
+	for _, b := range bots {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\n",
+			b.ID,
+			b.Name,
+			displayBotDescription(b.Description),
+			b.Role,
+			b.Channel,
+			displayBotField(b.AgentID),
+			displayBotField(b.UserID),
+			b.Available,
+			displayBotField(b.RuntimeKind),
+			displayBotTime(b.CreatedAt),
+		)
+	}
+	return tw.Flush()
+}
+
+type compactBot struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Role        string `json:"role"`
+	Channel     string `json:"channel"`
+}
+
+func compactBotList(bots []apitypes.Bot) []compactBot {
+	out := make([]compactBot, 0, len(bots))
+	for _, b := range bots {
+		out = append(out, compactBot{
+			ID:          b.ID,
+			Name:        b.Name,
+			Description: b.Description,
+			Role:        b.Role,
+			Channel:     b.Channel,
+		})
+	}
+	return out
 }
 
 func displayBotDescription(value string) string {
@@ -256,6 +326,13 @@ func displayBotField(value string) string {
 		return "-"
 	}
 	return value
+}
+
+func displayBotTime(value time.Time) string {
+	if value.IsZero() {
+		return "-"
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 func RenderRoomsTable(w io.Writer, rooms []apitypes.Room) error {

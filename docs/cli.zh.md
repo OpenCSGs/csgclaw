@@ -493,9 +493,11 @@ csgclaw room <subcommand> [flags]
 - `--channel string`：`csgclaw` 或 `feishu`，默认 `csgclaw`。
 - `--title string`：房间标题。
 - `--description string`：房间描述。
-- `--creator-id string`：创建者用户 ID。
-- `--member-ids string`：逗号分隔的成员 ID 列表。
+- `--creator-id string`：创建者 bot ID，例如 `u-manager`。
+- `--member-ids string`：逗号分隔的 bot ID 列表，例如 `u-manager,u-dev`。
 - `--locale string`：房间 locale。
+
+`csgclaw-cli` 设计约束：创建 room 时只暴露 CSGClaw bot ID，不暴露 channel user ID、agent ID、飞书 open_id、飞书 app_id 或应用凭证。Feishu 渠道由 adapter 在内部把 bot ID 兑换为已配置的飞书应用凭证和 bot 标识。飞书建群需要真人 owner ID 时，代码仍使用配置里的 `admin_open_id`，CLI 调用方仍只传 bot ID。
 
 `room delete` 用法与参数：
 
@@ -527,13 +529,14 @@ csgclaw member <subcommand> [flags]
 
 - `--channel string`：`csgclaw` 或 `feishu`，默认 `csgclaw`。
 - `--room-id string`：目标房间 ID。
-- `--user-id string`：必填，要加入房间的用户。
-- `--inviter-id string`：邀请人用户 ID。
+- `--user-id string`：必填，要加入房间的 bot ID，例如 `u-dev`。
+- `--inviter-id string`：邀请人 bot ID，例如 `u-manager`。
 - `--locale string`：房间 locale。
 
 `member create` 行为说明：
 
 - `--user-id` 为必填。
+- `csgclaw-cli` 的成员操作在所有渠道下都应使用 bot ID。飞书 open_id 和 app_id 是渠道内部实现细节。
 
 #### `message`
 
@@ -557,9 +560,9 @@ csgclaw message <subcommand> [flags]
 
 - `--channel string`：`csgclaw` 或 `feishu`，默认 `csgclaw`。
 - `--room-id string`：必填。
-- `--sender-id string`：必填。
+- `--sender-id string`：必填，发送方 bot ID。
 - `--content string`：必填。
-- `--mention-id string`：可选，被提及用户 ID。
+- `--mention-id string`：可选，被提及 bot ID。
 
 `message list` 行为说明：
 
@@ -570,10 +573,10 @@ csgclaw message <subcommand> [flags]
 ```bash
 csgclaw bot list
 csgclaw bot create --name alice --role worker --model-id gpt-5.4-mini
-csgclaw room create --title "release-room" --creator-id admin --member-ids admin,manager
-csgclaw member create --room-id room-1 --user-id u-alice --inviter-id admin
+csgclaw room create --title "release-room" --creator-id u-manager --member-ids u-manager,u-alice
+csgclaw member create --room-id room-1 --user-id u-alice --inviter-id u-manager
 csgclaw message list --room-id room-1
-csgclaw message create --channel csgclaw --room-id room-1 --sender-id admin --content hello
+csgclaw message create --channel csgclaw --room-id room-1 --sender-id u-manager --content hello
 ```
 
 ## `csgclaw-cli`
@@ -633,7 +636,10 @@ csgclaw-cli completion fish
 ```bash
 csgclaw-cli bot list --channel feishu
 csgclaw-cli bot create --name manager --role manager --channel feishu
-csgclaw-cli room create --channel feishu --title "ops-room"
+csgclaw-cli room create --channel feishu --title "ops-room" --creator-id u-manager --member-ids u-manager,u-dev
 csgclaw-cli member list --channel feishu --room-id oc_x
-csgclaw-cli message create --channel feishu --room-id oc_x --sender-id u-manager --content hello
+csgclaw-cli member create --channel feishu --room-id oc_x --user-id u-dev --inviter-id u-manager
+csgclaw-cli message create --channel feishu --room-id oc_x --sender-id u-manager --mention-id u-dev --content hello
 ```
+
+`csgclaw-cli` 是面向 bot 的 CLI。room、member、message 命令不应要求调用方理解或传入 agent ID、飞书 open_id、飞书 app_id、App ID/App Secret 或其他渠道凭证。各 channel adapter 负责把 bot ID 转换成目标渠道需要的标识。

@@ -24,6 +24,7 @@ var (
 			path,
 			runtimewiring.WithPicoClawSandboxRuntime(nil),
 			runtimewiring.WithOpenClawSandboxRuntime(),
+			runtimewiring.WithNotifierRuntime(),
 			agent.WithGatewayRuntime(config.RuntimeKindPicoClawSandbox),
 			agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 		)

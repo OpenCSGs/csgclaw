@@ -69,7 +69,7 @@ def csgclaw_cli_env(args) -> dict[str, str]:
     return env
 
 
-def csgclaw_cli_json(args, cli_args: list[str], input_text: Optional[str] = None) -> dict:
+def csgclaw_cli_json(args, cli_args: list[str], input_text: Optional[str] = None) -> Any:
     command = ["csgclaw-cli", "--output", "json", *cli_args]
     try:
         completed = subprocess.run(
@@ -99,9 +99,6 @@ def csgclaw_cli_json(args, cli_args: list[str], input_text: Optional[str] = None
 
 def configure_csgclaw(args, state: dict, result: dict) -> dict:
     bot_id = state["bot_id"]
-    existing = csgclaw_cli_json(args, ["bot", "config", "--channel", "feishu", "--get", "--bot-id", bot_id]) or {}
-    existing_admin_open_id = str(existing.get("admin_open_id") or "").strip()
-    candidate_admin_open_id = str(state.get("admin_open_id") or result.get("open_id") or "").strip()
     cli_args = [
         "bot",
         "config",
@@ -114,14 +111,18 @@ def configure_csgclaw(args, state: dict, result: dict) -> dict:
         result["app_id"],
         "--app-secret-stdin",
     ]
-    if not existing_admin_open_id and candidate_admin_open_id:
+    candidate_admin_open_id = str(result.get("open_id") or "").strip()
+    if bot_id == "u-manager" and candidate_admin_open_id:
         cli_args.extend(["--admin-open-id", candidate_admin_open_id])
     response = csgclaw_cli_json(args, cli_args, input_text=result["app_secret"] + "\n") or {}
-    if existing_admin_open_id and not response.get("admin_open_id"):
-        response["admin_open_id"] = existing_admin_open_id
-        response["admin_open_id_preserved"] = True
-    elif not existing_admin_open_id and candidate_admin_open_id:
-        response["admin_open_id_source"] = "registration"
+    if bot_id == "u-manager":
+        if candidate_admin_open_id:
+            response["admin_open_id"] = candidate_admin_open_id
+            response["admin_open_id_source"] = "manager_registration"
+        else:
+            response.pop("admin_open_id", None)
+    elif bot_id != "u-manager":
+        response.pop("admin_open_id", None)
     return response
 
 
@@ -144,7 +145,7 @@ def ensure_bot(args, state: dict, result: dict) -> Optional[dict]:
         "role": role,
         "channel": "feishu",
     }
-    return api_json(args, "POST", "/api/v1/bots", payload)
+    return api_json(args, "POST", f"/api/v1/channels/feishu/bots", payload)
 
 
 def worker_box_conflict_message(bot_id: str, name: str) -> str:
@@ -160,15 +161,11 @@ def is_box_name_conflict(exc: RuntimeError, name: str) -> bool:
     return "box with name" in message and f"'{name}' already exists" in message
 
 
-def agent_exists(args, bot_id: str) -> bool:
-    try:
-        api_json(args, "GET", f"/api/v1/agents/{path_id(bot_id)}", None)
-        return True
-    except RuntimeError as exc:
-        message = str(exc)
-        if "HTTP 404" in message and "agent not found" in message:
-            return False
-        raise
+def bot_exists(args, bot_id: str) -> bool:
+    bots = csgclaw_cli_json(args, ["bot", "list", "--channel", "feishu"])
+    if not isinstance(bots, list):
+        raise RuntimeError(f"csgclaw-cli bot list returned unexpected JSON: {bots!r}")
+    return any(str(bot.get("id") or "").strip() == bot_id for bot in bots if isinstance(bot, dict))
 
 
 def maybe_recreate(args, state: dict, worker_existed_before_ensure: Optional[bool] = None) -> Optional[dict]:

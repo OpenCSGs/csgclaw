@@ -11,6 +11,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
+	"csgclaw/internal/utils"
 )
 
 type Service struct {
@@ -225,7 +226,7 @@ func (s *Service) Delete(ctx context.Context, channel, id string) error {
 	if s.agents == nil {
 		return nil
 	}
-	if strings.TrimSpace(deleted.Role) != string(RoleWorker) {
+	if r := strings.ToLower(strings.TrimSpace(deleted.Role)); r != string(RoleWorker) {
 		return nil
 	}
 	agentID := strings.TrimSpace(deleted.AgentID)
@@ -298,26 +299,27 @@ func (s *Service) CreateManager(ctx context.Context, req CreateRequest, forceRec
 }
 
 func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (Bot, error) {
+	var err error
 	if existing, ok := s.findByChannelName(normalized.Channel, normalized.Name); ok {
 		return Bot{}, fmt.Errorf("bot name %q already exists in channel %q with id %q", normalized.Name, normalized.Channel, existing.ID)
 	}
 
 	created, ok := s.agents.Agent(workerAgentID(normalized))
 	if ok {
-		if strings.ToLower(strings.TrimSpace(created.Role)) != agent.RoleWorker {
+		if !strings.EqualFold(strings.TrimSpace(created.Role), agent.RoleWorker) {
 			return Bot{}, fmt.Errorf("agent id %q already exists with role %q", created.ID, created.Role)
 		}
 	} else {
-		var err error
 		created, err = s.agents.CreateWorker(ctx, agent.CreateAgentSpec{
-			ID:           normalized.ID,
-			Name:         normalized.Name,
-			Description:  normalized.Description,
-			Image:        normalized.Image,
-			Role:         agent.RoleWorker,
-			ModelID:      normalized.ModelID,
-			RuntimeKind:  normalized.RuntimeKind,
-			AgentProfile: agentProfileFromBotRequest(normalized.AgentProfile),
+			ID:             normalized.ID,
+			Name:           normalized.Name,
+			Description:    normalized.Description,
+			Image:          normalized.Image,
+			Role:           agent.RoleWorker,
+			RuntimeKind:    normalized.RuntimeKind,
+			FromTemplate:   normalized.FromTemplate,
+			RuntimeOptions: utils.CloneAnyMap(normalized.RuntimeOptions),
+			AgentProfile:   agentProfileFromBotRequest(normalized.AgentProfile),
 		})
 		if err != nil {
 			return Bot{}, err
@@ -342,7 +344,7 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 		ID:          created.ID,
 		Name:        created.Name,
 		Description: normalized.Description,
-		Role:        string(RoleWorker),
+		Role:        normalized.Role,
 		Channel:     normalized.Channel,
 		AgentID:     created.ID,
 		UserID:      userID,
@@ -363,7 +365,10 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 	return b, nil
 }
 
-func agentProfileFromBotRequest(req apitypes.CreateAgentProfile) agent.AgentProfile {
+func agentProfileFromBotRequest(req *apitypes.CreateAgentProfile) agent.AgentProfile {
+	if req == nil {
+		return agent.AgentProfile{}
+	}
 	return agent.AgentProfile{
 		Name:            req.Name,
 		Description:     req.Description,
@@ -463,7 +468,7 @@ func (s *Service) ensureChannelUser(ctx context.Context, channelName string, cre
 			Name:        created.Name,
 			Description: created.Description,
 			Handle:      deriveAgentHandle(created),
-			Role:        displayRole(created.Role),
+			Role:        displayRole(created),
 		})
 		if err != nil {
 			return "", time.Time{}, fmt.Errorf("failed to ensure im user: %w", err)
@@ -477,7 +482,7 @@ func (s *Service) ensureChannelUser(ctx context.Context, channelName string, cre
 			ID:     created.ID,
 			Name:   created.Name,
 			Handle: deriveAgentHandle(created),
-			Role:   displayRole(created.Role),
+			Role:   displayRole(created),
 		})
 		if err != nil {
 			return "", time.Time{}, fmt.Errorf("failed to ensure feishu user: %w", err)
@@ -489,6 +494,13 @@ func (s *Service) ensureChannelUser(ctx context.Context, channelName string, cre
 }
 
 func deriveAgentHandle(a agent.Agent) string {
+	if strings.EqualFold(strings.TrimSpace(a.Role), agent.RoleWorker) &&
+		strings.EqualFold(strings.TrimSpace(a.RuntimeKind), agent.RuntimeKindNotifier) {
+		if handle, ok := sanitizeHandle(strings.ToLower(strings.ReplaceAll(strings.TrimSpace(a.Name), " ", "-"))); ok {
+			return handle
+		}
+		return "notifier"
+	}
 	if handle, ok := sanitizeHandle(strings.ToLower(strings.ReplaceAll(strings.TrimSpace(a.Name), " ", "-"))); ok {
 		return handle
 	}
@@ -505,8 +517,8 @@ func deriveAgentHandle(a agent.Agent) string {
 	}
 }
 
-func displayRole(role string) string {
-	switch strings.ToLower(strings.TrimSpace(role)) {
+func displayRole(a agent.Agent) string {
+	switch strings.ToLower(strings.TrimSpace(a.Role)) {
 	case agent.RoleManager:
 		return "manager"
 	case agent.RoleWorker:

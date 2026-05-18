@@ -108,8 +108,8 @@ All new product APIs should live under `/api/v1`.
 
 ```text
 # Bot
-GET    /api/v1/bots                  List bots
-POST   /api/v1/bots                  Create a bot
+GET    /api/v1/channels/{channel}/bots       List bots
+POST   /api/v1/channels/{channel}/bots       Create a bot
 
 # Agent
 GET    /api/v1/agents                List agents
@@ -137,7 +137,7 @@ POST   /api/v1/channels/feishu/rooms/{room_id}/members
 POST   /api/v1/channels/feishu/messages
 ```
 
-`POST /api/v1/bots` should be handled as a bot use case:
+`POST /api/v1/channels/{channel}/bots` should be handled as a bot use case:
 
 ```text
 API handler
@@ -173,7 +173,7 @@ For the current command tree, flags, defaults, and examples, see [cli.md](./cli.
 
 ```text
 csgclaw bot create --channel feishu
-  └─► POST /api/v1/bots
+  └─► POST /api/v1/channels/feishu/bots
         └─► internal/bot.Create
               ├─► internal/agent creates BoxLite-backed agent
               ├─► internal/channel creates Feishu user
@@ -206,6 +206,6 @@ Do not store channel-specific details directly inside the agent record. The agen
 
 ## Notes
 
-- Existing compatibility routes, such as PicoClaw-specific bot APIs or older IM aliases, can remain for compatibility, but new bot lifecycle work should use `/api/v1/bots`.
+- Existing compatibility routes, such as PicoClaw-specific bot APIs or older IM aliases, can remain for compatibility, but new bot lifecycle work should use `/api/v1/channels/{channel}/bots`.
 - Feishu support should live behind `internal/channel`, while bot lifecycle decisions stay in `internal/bot`.
 - When changing config fields or defaults for bot/channel behavior, update loader, saver, bootstrap initialization flow, tests, and docs together.

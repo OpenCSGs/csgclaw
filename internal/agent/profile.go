@@ -11,6 +11,7 @@ import (
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelprovider"
+	agentruntime "csgclaw/internal/runtime"
 )
 
 const (
@@ -112,6 +113,16 @@ func normalizeProfile(profile AgentProfile, fallbackName, fallbackDescription st
 	return out
 }
 
+// normalizeProfileForAgentRuntime applies profile normalization; ProfileComplete is decided by the runtime_kind policy.
+func normalizeProfileForAgentRuntime(profile AgentProfile, runtimeOptions map[string]any, fallbackName, fallbackDescription, runtimeKind string, runtimeOptionsAfterPatch map[string]any) AgentProfile {
+	out := normalizeProfile(profile, fallbackName, fallbackDescription)
+	rk := runtimeKind
+	pol := agentruntime.RuntimeOptionsPolicyForKind(rk)
+	out.ProfileComplete = pol.IsComplete(profileIsComplete(out), runtimeOptions, runtimeOptionsAfterPatch)
+	out.BaseURL, out.ModelID = pol.StripProfileLLMFields(rk, out.BaseURL, out.ModelID)
+	return out
+}
+
 func normalizeProfileProvider(provider string) string {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case "", ProviderCSGHubLite, "csghub-lite":
@@ -200,9 +211,9 @@ func cloneProfile(profile AgentProfile) AgentProfile {
 	return out
 }
 
-func profileView(profile AgentProfile, detection []ProfileDetectionResult) AgentProfileView {
+func profileViewWithAgentRuntimeOptions(profile AgentProfile, _ map[string]any, _ string, detection []ProfileDetectionResult) AgentProfileView {
 	profile = cloneProfile(profile)
-	return AgentProfileView{
+	v := AgentProfileView{
 		Name:               profile.Name,
 		Description:        profile.Description,
 		Provider:           profile.Provider,
@@ -219,6 +230,15 @@ func profileView(profile AgentProfile, detection []ProfileDetectionResult) Agent
 		EnvRestartRequired: profile.EnvRestartRequired,
 		DetectionResults:   append([]ProfileDetectionResult(nil), detection...),
 	}
+	return v
+}
+
+func profileView(profile AgentProfile, detection []ProfileDetectionResult) AgentProfileView {
+	return profileViewWithAgentRuntimeOptions(profile, nil, "", detection)
+}
+
+func RedactedProfileViewForAgent(a Agent) AgentProfileView {
+	return profileViewWithAgentRuntimeOptions(a.AgentProfile, a.RuntimeOptions, a.RuntimeKind, a.DetectionResults)
 }
 
 func apiKeyPreview(apiKey string) string {

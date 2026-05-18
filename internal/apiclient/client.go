@@ -48,13 +48,13 @@ func New(endpoint, token string, client HTTPClient) *Client {
 func (c *Client) ListBots(ctx context.Context, channel, role string) ([]apitypes.Bot, error) {
 	var bots []apitypes.Bot
 	values := url.Values{}
-	if strings.TrimSpace(channel) != "" {
-		values.Set("channel", strings.TrimSpace(channel))
-	}
 	if strings.TrimSpace(role) != "" {
 		values.Set("role", strings.TrimSpace(role))
 	}
-	path := "/api/v1/bots"
+	path, err := botCollectionPath(channel)
+	if err != nil {
+		return nil, err
+	}
 	if encoded := values.Encode(); encoded != "" {
 		path += "?" + encoded
 	}
@@ -66,20 +66,20 @@ func (c *Client) ListBots(ctx context.Context, channel, role string) ([]apitypes
 
 func (c *Client) CreateBot(ctx context.Context, req apitypes.CreateBotRequest) (apitypes.Bot, error) {
 	var created apitypes.Bot
-	if err := c.DoJSON(ctx, http.MethodPost, "/api/v1/bots", req, &created); err != nil {
+	path, err := botCollectionPath(req.Channel)
+	if err != nil {
+		return apitypes.Bot{}, err
+	}
+	if err := c.DoJSON(ctx, http.MethodPost, path, req, &created); err != nil {
 		return apitypes.Bot{}, err
 	}
 	return created, nil
 }
 
 func (c *Client) DeleteBot(ctx context.Context, channel, id string) error {
-	values := url.Values{}
-	if strings.TrimSpace(channel) != "" {
-		values.Set("channel", strings.TrimSpace(channel))
-	}
-	path := "/api/v1/bots/" + url.PathEscape(id)
-	if encoded := values.Encode(); encoded != "" {
-		path += "?" + encoded
+	path, err := botItemPath(channel, id)
+	if err != nil {
+		return err
 	}
 	return c.DoNoContent(ctx, http.MethodDelete, path)
 }
@@ -318,13 +318,40 @@ func ExtractAPIErrorMessage(body []byte) string {
 
 func channelPath(channelName, resource string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(channelName)) {
-	case "", "csgclaw":
+	case "":
 		return "/api/v1/" + resource, nil
+	case "csgclaw":
+		return "/api/v1/channels/csgclaw/" + resource, nil
 	case "feishu":
 		return "/api/v1/channels/feishu/" + resource, nil
 	default:
 		return "", fmt.Errorf("unsupported channel %q", channelName)
 	}
+}
+
+func botCollectionPath(channelName string) (string, error) {
+	channelName = strings.ToLower(strings.TrimSpace(channelName))
+	if channelName == "" {
+		channelName = "csgclaw"
+	}
+	switch channelName {
+	case "csgclaw", "feishu":
+		return "/api/v1/channels/" + channelName + "/bots", nil
+	default:
+		return "", fmt.Errorf("unsupported channel %q", channelName)
+	}
+}
+
+func botItemPath(channelName, botID string) (string, error) {
+	path, err := botCollectionPath(channelName)
+	if err != nil {
+		return "", err
+	}
+	botID = strings.TrimSpace(botID)
+	if botID == "" {
+		return "", fmt.Errorf("bot id is required")
+	}
+	return path + "/" + url.PathEscape(botID), nil
 }
 
 func memberCreatePath(channelName, roomID string) (string, error) {
@@ -341,7 +368,9 @@ func roomMembersPath(channelName, roomID, operation string) (string, error) {
 	switch channelName {
 	case "feishu":
 		return "/api/v1/channels/feishu/rooms/" + url.PathEscape(roomID) + "/members", nil
-	case "", "csgclaw":
+	case "csgclaw":
+		return "/api/v1/channels/csgclaw/rooms/" + url.PathEscape(roomID) + "/members", nil
+	case "":
 		return "/api/v1/rooms/" + url.PathEscape(roomID) + "/members", nil
 	default:
 		return "", fmt.Errorf("unsupported channel %q", channelName)
@@ -355,8 +384,10 @@ func roomDeletePath(channelName, roomID string) (string, error) {
 		return "", fmt.Errorf("room id is required")
 	}
 	switch channelName {
-	case "", "csgclaw":
+	case "":
 		return "/api/v1/rooms/" + url.PathEscape(roomID), nil
+	case "csgclaw":
+		return "/api/v1/channels/csgclaw/rooms/" + url.PathEscape(roomID), nil
 	case "feishu":
 		return "/api/v1/channels/feishu/rooms/" + url.PathEscape(roomID), nil
 	default:
@@ -371,8 +402,10 @@ func userDeletePath(channelName, userID string) (string, error) {
 		return "", fmt.Errorf("user id is required")
 	}
 	switch channelName {
-	case "", "csgclaw":
+	case "":
 		return "/api/v1/users/" + url.PathEscape(userID), nil
+	case "csgclaw":
+		return "/api/v1/channels/csgclaw/users/" + url.PathEscape(userID), nil
 	case "feishu":
 		return "/api/v1/channels/feishu/users/" + url.PathEscape(userID), nil
 	default:

@@ -15,12 +15,15 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/bot"
+	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/runtime/notifier"
 	"csgclaw/internal/upgrade"
+	"csgclaw/internal/utils"
 	"csgclaw/internal/version"
 )
 
@@ -28,6 +31,7 @@ type Handler struct {
 	svc               *agent.Service
 	botSvc            *bot.Service
 	im                *im.Service
+	csgclaw           *csgclawchannel.Service
 	imBus             *im.Bus
 	imProvisioner     *im.Provisioner
 	botBridge         *im.BotBridge
@@ -71,12 +75,6 @@ type imEventResponse struct {
 	Upgrade *apitypes.UpgradeStatus `json:"upgrade,omitempty"`
 }
 
-type imAgentJoinResponse struct {
-	Message string `json:"message"`
-	RoomID  string `json:"room_id,omitempty"`
-	AgentID string `json:"agent_id,omitempty"`
-}
-
 type bootstrapConfigResponse struct {
 	DefaultManagerTemplate string            `json:"default_manager_template"`
 	DefaultWorkerTemplate  string            `json:"default_worker_template"`
@@ -103,9 +101,7 @@ type agentResponse struct {
 	Status           string                         `json:"status"`
 	CreatedAt        time.Time                      `json:"created_at"`
 	Profile          string                         `json:"profile,omitempty"`
-	Provider         string                         `json:"provider,omitempty"`
-	ModelID          string                         `json:"model_id,omitempty"`
-	ReasoningEffort  string                         `json:"reasoning_effort,omitempty"`
+	RuntimeOptions   map[string]any                 `json:"runtime_options,omitempty"`
 	AgentProfile     agent.AgentProfileView         `json:"agent_profile,omitempty"`
 	ProfileComplete  bool                           `json:"profile_complete"`
 	DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
@@ -205,6 +201,7 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 		SupportedRuntimeKinds: []string{
 			agent.RuntimeKindPicoClawSandbox,
 			agent.RuntimeKindOpenClawSandbox,
+			agent.RuntimeKindNotifier,
 		},
 		RuntimeDefaultImages: map[string]string{
 			agent.RuntimeKindPicoClawSandbox: config.DefaultManagerImageForRuntimeKind(agent.RuntimeKindPicoClawSandbox),
@@ -268,6 +265,7 @@ func NewHandlerWithBotAndAuth(svc *agent.Service, botSvc *bot.Service, imSvc *im
 		svc:               svc,
 		botSvc:            botSvc,
 		im:                imSvc,
+		csgclaw:           csgclawchannel.NewService(imSvc),
 		imBus:             imBus,
 		imProvisioner:     im.NewProvisioner(imSvc, imBus),
 		botBridge:         botBridge,
@@ -278,6 +276,25 @@ func NewHandlerWithBotAndAuth(svc *agent.Service, botSvc *bot.Service, imSvc *im
 		upgradeApply:      upgrade.StartApplyHelper,
 	}
 	return h
+}
+
+func (h *Handler) localChannel() *csgclawchannel.Service {
+	if h == nil {
+		return nil
+	}
+	if h.csgclaw != nil {
+		return h.csgclaw
+	}
+	return csgclawchannel.NewService(h.im)
+}
+
+func (h *Handler) requireLocalChannel(w http.ResponseWriter) (*csgclawchannel.Service, bool) {
+	channel := h.localChannel()
+	if channel == nil {
+		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
+		return nil, false
+	}
+	return channel, true
 }
 
 func (h *Handler) SetUpgradeManager(manager *upgrade.Manager) {
@@ -374,10 +391,11 @@ func (h *Handler) handleBots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.botSvc.SetIMBus(h.imBus)
+	channelName := botChannelName(r)
 
 	switch r.Method {
 	case http.MethodGet:
-		bots, err := h.botSvc.List(r.URL.Query().Get("channel"), r.URL.Query().Get("role"))
+		bots, err := h.botSvc.List(channelName, r.URL.Query().Get("role"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -389,6 +407,7 @@ func (h *Handler) handleBots(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
+		req.Channel = channelName
 		created, err := h.botSvc.Create(r.Context(), req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -406,21 +425,38 @@ func (h *Handler) handleBotByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/v1/bots/"))
-	if id == "" || strings.Contains(id, "/") {
+	id := pathValue(r, "id")
+	if id == "" {
 		http.NotFound(w, r)
 		return
 	}
 
 	switch r.Method {
 	case http.MethodDelete:
-		if err := h.botSvc.Delete(r.Context(), r.URL.Query().Get("channel"), id); err != nil {
+		if err := h.botSvc.Delete(r.Context(), botChannelName(r), id); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func botChannelName(r *http.Request) string {
+	if channel := pathValue(r, "channel"); channel != "" {
+		return channel
+	}
+	if r == nil {
+		return ""
+	}
+	switch {
+	case strings.HasPrefix(r.URL.Path, "/api/v1/channels/csgclaw/"):
+		return "csgclaw"
+	case strings.HasPrefix(r.URL.Path, "/api/v1/channels/feishu/"):
+		return "feishu"
+	default:
+		return ""
 	}
 }
 
@@ -449,59 +485,8 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/v1/agents/"))
-	if path == "" {
-		http.NotFound(w, r)
-		return
-	}
-	if id, ok := strings.CutSuffix(path, "/start"); ok {
-		id = strings.TrimSpace(id)
-		if id == "" || strings.Contains(id, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		h.handleAgentStart(w, r, id)
-		return
-	}
-	if id, ok := strings.CutSuffix(path, "/stop"); ok {
-		id = strings.TrimSpace(id)
-		if id == "" || strings.Contains(id, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		h.handleAgentStop(w, r, id)
-		return
-	}
-	if id, ok := strings.CutSuffix(path, "/logs"); ok {
-		id = strings.TrimSpace(id)
-		if id == "" || strings.Contains(id, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		h.handleAgentLogs(w, r, id)
-		return
-	}
-	if id, ok := strings.CutSuffix(path, "/profile"); ok {
-		id = strings.TrimSpace(id)
-		if id == "" || strings.Contains(id, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		h.handleAgentProfile(w, r, id)
-		return
-	}
-	if id, ok := strings.CutSuffix(path, "/recreate"); ok {
-		id = strings.TrimSpace(id)
-		if id == "" || strings.Contains(id, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		h.handleAgentRecreate(w, r, id)
-		return
-	}
-
-	id := path
-	if strings.Contains(id, "/") {
+	id := pathValue(r, "id")
+	if id == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -547,6 +532,24 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (h *Handler) handleAgentProfileByID(w http.ResponseWriter, r *http.Request) {
+	id := pathValue(r, "id")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	h.handleAgentProfile(w, r, id)
+}
+
+func (h *Handler) handleAgentRecreateByID(w http.ResponseWriter, r *http.Request) {
+	id := pathValue(r, "id")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	h.handleAgentRecreate(w, r, id)
 }
 
 func (h *Handler) handleAgentProfile(w http.ResponseWriter, r *http.Request, id string) {
@@ -666,6 +669,15 @@ func (h *Handler) handleAgentStart(w http.ResponseWriter, r *http.Request, id st
 	writeJSON(w, http.StatusOK, presentAgent(started))
 }
 
+func (h *Handler) handleAgentStartByID(w http.ResponseWriter, r *http.Request) {
+	id := pathValue(r, "id")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	h.handleAgentStart(w, r, id)
+}
+
 func (h *Handler) handleAgentStop(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -685,6 +697,15 @@ func (h *Handler) handleAgentStop(w http.ResponseWriter, r *http.Request, id str
 		return
 	}
 	writeJSON(w, http.StatusOK, presentAgent(stopped))
+}
+
+func (h *Handler) handleAgentStopByID(w http.ResponseWriter, r *http.Request) {
+	id := pathValue(r, "id")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	h.handleAgentStop(w, r, id)
 }
 
 func (h *Handler) handleAgentLogs(w http.ResponseWriter, r *http.Request, id string) {
@@ -734,6 +755,15 @@ func (h *Handler) handleAgentLogs(w http.ResponseWriter, r *http.Request, id str
 	}
 }
 
+func (h *Handler) handleAgentLogsByID(w http.ResponseWriter, r *http.Request) {
+	id := pathValue(r, "id")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	h.handleAgentLogs(w, r, id)
+}
+
 type flushWriter struct {
 	http.ResponseWriter
 	flusher http.Flusher
@@ -771,20 +801,21 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 }
 
 func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequest {
+	prof := agentProfileFromAPI(req.AgentProfile)
 	return agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
-			ID:           req.ID,
-			Name:         req.Name,
-			Description:  req.Description,
-			Image:        req.Image,
-			RuntimeKind:  req.RuntimeKind,
-			FromTemplate: req.FromTemplate,
-			Role:         req.Role,
-			Status:       req.Status,
-			CreatedAt:    req.CreatedAt,
-			Profile:      req.Profile,
-			ModelID:      req.ModelID,
-			AgentProfile: agentProfileFromAPI(req.AgentProfile),
+			ID:             req.ID,
+			Name:           req.Name,
+			Description:    req.Description,
+			Image:          req.Image,
+			RuntimeKind:    req.RuntimeKind,
+			FromTemplate:   req.FromTemplate,
+			Role:           req.Role,
+			Status:         req.Status,
+			CreatedAt:      req.CreatedAt,
+			Profile:        req.Profile,
+			RuntimeOptions: utils.CloneAnyMapShallowNestedStringMaps(req.RuntimeOptions),
+			AgentProfile:   prof,
 		},
 		Replace:   req.Replace,
 		FieldMask: req.FieldMask,
@@ -836,12 +867,7 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleHubTemplateByID(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/hub/templates/")
-	id, remainder := splitHubTemplatePath(path)
-	if remainder == "workspace/file" {
-		h.handleHubTemplateWorkspaceFile(w, r, id)
-		return
-	}
+	id := hubTemplateIDFromPathValues(r)
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -875,6 +901,11 @@ func (h *Handler) handleHubTemplateByID(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, presented)
 }
 
+func (h *Handler) handleHubTemplateWorkspaceFileByID(w http.ResponseWriter, r *http.Request) {
+	id := hubTemplateIDFromPathValues(r)
+	h.handleHubTemplateWorkspaceFile(w, r, id)
+}
+
 func presentHubTemplates(items []hub.Template) []apitypes.HubTemplate {
 	out := make([]apitypes.HubTemplate, 0, len(items))
 	for _, item := range items {
@@ -901,23 +932,10 @@ func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 	}
 }
 
-func splitHubTemplatePath(path string) (string, string) {
-	path = strings.Trim(path, "/")
-	if path == "" {
-		return "", ""
+func agentProfileFromAPI(req *apitypes.CreateAgentProfile) agent.AgentProfile {
+	if req == nil {
+		return agent.AgentProfile{}
 	}
-	parts := strings.Split(path, "/")
-	if len(parts) < 2 {
-		return path, ""
-	}
-	id := strings.Join(parts[:2], "/")
-	if len(parts) == 2 {
-		return id, ""
-	}
-	return id, strings.Join(parts[2:], "/")
-}
-
-func agentProfileFromAPI(req apitypes.CreateAgentProfile) agent.AgentProfile {
 	return agent.AgentProfile{
 		Name:            req.Name,
 		Description:     req.Description,
@@ -944,58 +962,6 @@ func (h *Handler) workerIMProvisioner() *im.Provisioner {
 	return h.imProvisioner
 }
 
-func (h *Handler) handleIMAgentJoin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if h.svc == nil {
-		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
-		return
-	}
-	if h.im == nil {
-		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	var req im.AddAgentToConversationRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	joinedAgent, ok := h.svc.Agent(req.AgentID)
-	if !ok {
-		http.Error(w, "agent not found", http.StatusNotFound)
-		return
-	}
-
-	if _, _, err := h.im.EnsureAgentUser(im.EnsureAgentUserRequest{
-		ID:     joinedAgent.ID,
-		Name:   joinedAgent.Name,
-		Handle: deriveAgentHandle(joinedAgent),
-		Role:   displayRole(joinedAgent.Role),
-	}); err != nil {
-		http.Error(w, fmt.Sprintf("ensure agent im user: %v", err), http.StatusBadGateway)
-		return
-	}
-
-	if strings.TrimSpace(req.InviterID) == "" {
-		req.InviterID = "u-admin"
-	}
-	room, err := h.im.AddAgentToRoom(req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	h.publishRoomEvent(im.EventTypeRoomMembersAdded, room)
-	writeJSON(w, http.StatusOK, imAgentJoinResponse{
-		Message: "agent joined successfully",
-		RoomID:  room.ID,
-		AgentID: joinedAgent.ID,
-	})
-}
-
 func (h *Handler) handleIMBootstrap(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1009,8 +975,8 @@ func (h *Handler) handleIMBootstrap(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleRooms(w http.ResponseWriter, r *http.Request) {
-	if h.im == nil {
-		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
+	channel, ok := h.requireLocalChannel(w)
+	if !ok {
 		return
 	}
 	switch r.Method {
@@ -1019,7 +985,7 @@ func (h *Handler) handleRooms(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, h.im.ListRooms())
+		writeJSON(w, http.StatusOK, channel.ListRooms())
 	case http.MethodPost:
 		h.handleCreateRoom(w, r)
 	default:
@@ -1047,8 +1013,8 @@ func (h *Handler) handleUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
-	if h.im == nil {
-		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
+	channel, ok := h.requireLocalChannel(w)
+	if !ok {
 		return
 	}
 	switch r.Method {
@@ -1063,7 +1029,7 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		messages, err := h.im.ListMessages(roomID)
+		messages, err := channel.ListMessages(roomID)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				http.Error(w, err.Error(), http.StatusNotFound)
@@ -1081,25 +1047,23 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleRoomByID(w http.ResponseWriter, r *http.Request) {
-	if h.im == nil {
-		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	id, membersPath := parseRoomMembersPath(r.URL.Path)
+	id := pathValue(r, "id")
 	if id == "" {
 		http.NotFound(w, r)
 		return
 	}
+	h.handleLocalRoomByID(w, r, id)
+}
 
-	if membersPath {
-		h.handleRoomMembersByID(w, r, id)
+func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id string) {
+	channel, ok := h.requireLocalChannel(w)
+	if !ok {
 		return
 	}
 
 	switch r.Method {
 	case http.MethodDelete:
-		if err := h.im.DeleteRoom(id); err != nil {
+		if err := channel.DeleteRoom(id); err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				http.Error(w, "room not found", http.StatusNotFound)
 				return
@@ -1113,7 +1077,20 @@ func (h *Handler) handleRoomByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) handleRoomMembersByIDPath(w http.ResponseWriter, r *http.Request) {
+	id := pathValue(r, "id")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	h.handleRoomMembersByID(w, r, id)
+}
+
 func (h *Handler) handleRoomMembersByID(w http.ResponseWriter, r *http.Request, roomID string) {
+	channel, ok := h.requireLocalChannel(w)
+	if !ok {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		if err := h.reloadIM(); err != nil {
@@ -1128,7 +1105,7 @@ func (h *Handler) handleRoomMembersByID(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	members, err := h.im.ListMembers(roomID)
+	members, err := channel.ListRoomMembers(roomID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			http.Error(w, "room not found", http.StatusNotFound)
@@ -1141,14 +1118,17 @@ func (h *Handler) handleRoomMembersByID(w http.ResponseWriter, r *http.Request, 
 }
 
 func (h *Handler) handleUserByID(w http.ResponseWriter, r *http.Request) {
-	if h.im == nil {
-		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
+	id := pathValue(r, "id")
+	if id == "" {
+		http.NotFound(w, r)
 		return
 	}
+	h.handleLocalUserByID(w, r, id)
+}
 
-	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/v1/users/"))
-	if id == "" || strings.Contains(id, "/") {
-		http.NotFound(w, r)
+func (h *Handler) handleLocalUserByID(w http.ResponseWriter, r *http.Request, id string) {
+	if h.im == nil {
+		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -1255,6 +1235,10 @@ func shouldCreateWorkerForUser(id, role string) bool {
 }
 
 func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
+	channel, ok := h.requireLocalChannel(w)
+	if !ok {
+		return
+	}
 	var req createMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
@@ -1267,23 +1251,27 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message, err := h.im.CreateMessage(serviceReq)
+	message, err := channel.SendMessage(serviceReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.publishMessageCreated(serviceReq.RoomID, serviceReq.SenderID, message)
+	h.publishMessageCreated(serviceReq.RoomID, message.SenderID, message)
 	writeJSON(w, http.StatusCreated, message)
 }
 
 func (h *Handler) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
+	channel, ok := h.requireLocalChannel(w)
+	if !ok {
+		return
+	}
 	var req apitypes.CreateRoomRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	room, err := h.im.CreateRoom(req)
+	room, err := channel.CreateRoom(req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1317,6 +1305,10 @@ func (h *Handler) handleIMRoomMembers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleAddRoomMembers(w http.ResponseWriter, r *http.Request, pathRoomID string) {
+	channel, ok := h.requireLocalChannel(w)
+	if !ok {
+		return
+	}
 	var req addRoomMembersRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
@@ -1338,7 +1330,7 @@ func (h *Handler) handleAddRoomMembers(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	room, err := h.im.AddRoomMembers(serviceReq)
+	room, err := channel.AddRoomMembers(serviceReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1485,6 +1477,14 @@ func presentAgents(items []agent.Agent) []agentResponse {
 }
 
 func presentAgent(item agent.Agent) agentResponse {
+	av := agent.RedactedProfileViewForAgent(item)
+	if strings.TrimSpace(av.Name) == strings.TrimSpace(item.Name) {
+		av.Name = ""
+	}
+	if strings.TrimSpace(av.Description) == strings.TrimSpace(item.Description) {
+		av.Description = ""
+	}
+	rx := notifier.ViewRuntimeOptionsForAPI(item.RuntimeOptions)
 	return agentResponse{
 		ID:               item.ID,
 		Name:             item.Name,
@@ -1497,10 +1497,8 @@ func presentAgent(item agent.Agent) agentResponse {
 		Status:           item.Status,
 		CreatedAt:        item.CreatedAt,
 		Profile:          item.Profile,
-		Provider:         item.Provider,
-		ModelID:          item.ModelID,
-		ReasoningEffort:  item.ReasoningEffort,
-		AgentProfile:     agent.RedactedProfileView(item.AgentProfile, item.DetectionResults),
+		RuntimeOptions:   rx,
+		AgentProfile:     av,
 		ProfileComplete:  item.ProfileComplete,
 		DetectionResults: append([]agent.ProfileDetectionResult(nil), item.DetectionResults...),
 	}
@@ -1546,19 +1544,8 @@ func (r addRoomMembersRequest) toServiceRequest() (im.AddRoomMembersRequest, err
 	}, nil
 }
 
-func parseRoomMembersPath(path string) (string, bool) {
-	rest := strings.Trim(strings.TrimPrefix(path, "/api/v1/rooms/"), "/")
-	if rest == "" {
-		return "", false
-	}
-	parts := strings.Split(rest, "/")
-	if len(parts) == 1 {
-		return parts[0], false
-	}
-	if len(parts) == 2 && parts[1] == "members" {
-		return parts[0], true
-	}
-	return "", false
+func hubTemplateIDFromPathValues(r *http.Request) string {
+	return pathValue(r, "id")
 }
 
 func (h *Handler) reloadIM() error {

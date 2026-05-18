@@ -666,3 +666,23 @@ func TestReloadRefreshesRoomsFromStateFile(t *testing.T) {
 		t.Fatalf("rooms after reload = %+v, want room-1", rooms)
 	}
 }
+
+func TestRoomIDsForMember(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []User{
+			{ID: "u-bot", Name: "Bot", Handle: "bot", Role: "Worker"},
+		},
+		Rooms: []Room{
+			{ID: "room-a", Title: "A", Members: []string{"u-admin", "u-bot"}},
+			{ID: "room-b", Title: "B", Members: []string{"u-admin"}},
+		},
+	})
+	ids := svc.RoomIDsForMember("u-bot")
+	if len(ids) != 1 || ids[0] != "room-a" {
+		t.Fatalf("RoomIDsForMember(u-bot) = %#v, want [room-a]", ids)
+	}
+	if len(svc.RoomIDsForMember("unknown")) != 0 {
+		t.Fatal("expected empty for unknown user")
+	}
+}

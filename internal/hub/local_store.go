@@ -230,7 +230,6 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 		return PublishSpec{}, ErrTemplateNameRequired
 	}
 	spec.Description = strings.TrimSpace(spec.Description)
-	spec.RuntimeKind = normalizeRuntimeKind(spec.RuntimeKind)
 	if spec.RuntimeKind == "" {
 		return PublishSpec{}, ErrRuntimeKindRequired
 	}
@@ -276,7 +275,9 @@ func validateManifest(manifest localTemplateManifest) error {
 	if manifest.Name == "" {
 		return ErrTemplateNameRequired
 	}
-	if normalizeRuntimeKind(manifest.RuntimeKind) == "" {
+	switch manifest.RuntimeKind {
+	case runtime.KindPicoClawSandbox, runtime.KindOpenClawSandbox, runtime.KindCodex:
+	default:
 		return fmt.Errorf("%w: %s", ErrRuntimeKindRequired, manifest.RuntimeKind)
 	}
 	if _, err := parseManifestUpdatedAt(manifest.UpdatedAt); err != nil {
@@ -312,17 +313,4 @@ func validateLocalTemplateID(id string) error {
 		return ErrWorkspacePathUnsafe
 	}
 	return nil
-}
-
-func normalizeRuntimeKind(kind string) string {
-	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case runtime.KindPicoClawSandbox:
-		return runtime.KindPicoClawSandbox
-	case runtime.KindOpenClawSandbox:
-		return runtime.KindOpenClawSandbox
-	case runtime.KindCodex:
-		return runtime.KindCodex
-	default:
-		return ""
-	}
 }

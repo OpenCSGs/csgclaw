@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"csgclaw/internal/agent"
 	"csgclaw/internal/im"
 	agentruntime "csgclaw/internal/runtime"
@@ -21,8 +23,15 @@ const (
 	botHeartbeatInterval = 15 * time.Second
 )
 
-func (h *Handler) registerBotCompatibilityRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/bots/", h.handleBotCompatibilityRoutes)
+func (h *Handler) registerBotCompatibilityRoutes(router chi.Router) {
+	router.Route("/api/bots/{id}", func(r chi.Router) {
+		r.Get("/events", h.handleBotCompatibilityEvents)
+		r.Post("/messages/send", h.handleBotCompatibilitySendMessage)
+		r.Get("/llm/models", h.handleBotCompatibilityLLMModels)
+		r.Get("/llm/v1/models", h.handleBotCompatibilityLLMModels)
+		r.Post("/llm/chat/completions", h.handleBotCompatibilityLLMChatCompletions)
+		r.Post("/llm/v1/chat/completions", h.handleBotCompatibilityLLMChatCompletions)
+	})
 }
 
 func (h *Handler) PublishBotEvent(evt im.Event) {
@@ -41,33 +50,53 @@ func (h *Handler) PublishBotEvent(evt im.Event) {
 	h.reconnectMissedBotAgents(evt.Sender.ID, missed)
 }
 
-func (h *Handler) handleBotCompatibilityRoutes(w http.ResponseWriter, r *http.Request) {
-	botID, action, ok := parseBotCompatibilityPath(r.URL.Path)
+func (h *Handler) handleBotCompatibilityEvents(w http.ResponseWriter, r *http.Request) {
+	botID, ok := h.requireBotCompatibilityBotID(w, r)
 	if !ok {
-		http.NotFound(w, r)
 		return
+	}
+	h.handleBotEvents(w, r, botID)
+}
+
+func (h *Handler) handleBotCompatibilitySendMessage(w http.ResponseWriter, r *http.Request) {
+	botID, ok := h.requireBotCompatibilityBotID(w, r)
+	if !ok {
+		return
+	}
+	h.handleBotSendMessage(w, r, botID)
+}
+
+func (h *Handler) handleBotCompatibilityLLMModels(w http.ResponseWriter, r *http.Request) {
+	botID, ok := h.requireBotCompatibilityBotID(w, r)
+	if !ok {
+		return
+	}
+	h.handleBotLLMModels(w, r, botID)
+}
+
+func (h *Handler) handleBotCompatibilityLLMChatCompletions(w http.ResponseWriter, r *http.Request) {
+	botID, ok := h.requireBotCompatibilityBotID(w, r)
+	if !ok {
+		return
+	}
+	h.handleBotLLMChatCompletions(w, r, botID)
+}
+
+func (h *Handler) requireBotCompatibilityBotID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	botID := pathValue(r, "id")
+	if botID == "" {
+		http.NotFound(w, r)
+		return "", false
 	}
 	if h.botBridge == nil {
 		http.Error(w, "picoclaw integration is not configured", http.StatusServiceUnavailable)
-		return
+		return "", false
 	}
 	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return "", false
 	}
-
-	switch {
-	case r.Method == http.MethodGet && action == "events":
-		h.handleBotEvents(w, r, botID)
-	case r.Method == http.MethodPost && action == "messages/send":
-		h.handleBotSendMessage(w, r, botID)
-	case r.Method == http.MethodGet && (action == "llm/models" || action == "llm/v1/models"):
-		h.handleBotLLMModels(w, r, botID)
-	case r.Method == http.MethodPost && (action == "llm/chat/completions" || action == "llm/v1/chat/completions"):
-		h.handleBotLLMChatCompletions(w, r, botID)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
+	return botID, true
 }
 
 func (h *Handler) handleBotEvents(w http.ResponseWriter, r *http.Request, botID string) {

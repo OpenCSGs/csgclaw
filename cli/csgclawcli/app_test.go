@@ -109,6 +109,91 @@ func TestExecuteRejectsFullCsgclawCommands(t *testing.T) {
 	}
 }
 
+func TestExecuteBotIdentityHelpUsesBotIDSemantics(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "room create",
+			args: []string{"room", "create", "--help"},
+			want: []string{"creator bot id", "comma-separated member bot ids"},
+		},
+		{
+			name: "member create",
+			args: []string{"member", "create", "--help"},
+			want: []string{"bot id to add", "inviter bot id"},
+		},
+		{
+			name: "message create",
+			args: []string{"message", "create", "--help"},
+			want: []string{"sender bot id", "mentioned bot id"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			app := &App{
+				stdout: &bytes.Buffer{},
+				stderr: &stderr,
+				httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					t.Fatalf("unexpected request: %s %s", req.Method, req.URL.String())
+					return nil, nil
+				}),
+			}
+
+			err := app.Execute(context.Background(), tt.args)
+			if err != flag.ErrHelp {
+				t.Fatalf("Execute() error = %v, want %v", err, flag.ErrHelp)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(stderr.String(), want) {
+					t.Fatalf("help = %q, want substring %q", stderr.String(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestExecuteBotIdentityRequiredErrorsUseBotIDSemantics(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "member create missing user id",
+			args: []string{"member", "create", "--room-id", "room-1", "--inviter-id", "u-manager"},
+			want: "--user-id bot id is required",
+		},
+		{
+			name: "message create missing sender id",
+			args: []string{"message", "create", "--room-id", "room-1", "--content", "hello"},
+			want: "--sender-id bot id is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := &App{
+				stdout: &bytes.Buffer{},
+				stderr: &bytes.Buffer{},
+				httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					t.Fatalf("unexpected request: %s %s", req.Method, req.URL.String())
+					return nil, nil
+				}),
+			}
+
+			err := app.Execute(context.Background(), tt.args)
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("Execute() error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestExecuteBotListUsesAPIClient(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{
@@ -118,7 +203,7 @@ func TestExecuteBotListUsesAPIClient(t *testing.T) {
 			if req.Method != http.MethodGet {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
 			}
-			if req.URL.String() != "http://example.test/api/v1/bots?channel=feishu" {
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/bots" {
 				t.Fatalf("url = %q, want feishu bot list route", req.URL.String())
 			}
 			return jsonResponse(http.StatusOK, `[{"id":"bot-feishu","name":"feishu","role":"manager","channel":"feishu","agent_id":"u-manager","user_id":"fsu-manager","created_at":"2026-04-12T09:00:00Z"}]`), nil
@@ -131,6 +216,11 @@ func TestExecuteBotListUsesAPIClient(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"id": "bot-feishu"`) || !strings.Contains(stdout.String(), `"channel": "feishu"`) {
 		t.Fatalf("stdout = %q, want JSON bot payload", stdout.String())
+	}
+	for _, unexpected := range []string{`"agent_id"`, `"user_id"`, `"created_at"`} {
+		if strings.Contains(stdout.String(), unexpected) {
+			t.Fatalf("stdout = %q, want compact csgclaw-cli bot list without %s", stdout.String(), unexpected)
+		}
 	}
 }
 
@@ -148,7 +238,7 @@ func TestExecuteDefaultsToJSONOutputForNonTerminalStdout(t *testing.T) {
 			if req.Method != http.MethodGet {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
 			}
-			if req.URL.String() != "http://example.test/api/v1/bots?channel=feishu" {
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/bots" {
 				t.Fatalf("url = %q, want feishu bot list route", req.URL.String())
 			}
 			return jsonResponse(http.StatusOK, `[{"id":"bot-feishu","name":"feishu","role":"manager","channel":"feishu","agent_id":"u-manager","user_id":"fsu-manager","created_at":"2026-04-12T09:00:00Z"}]`), nil
@@ -165,6 +255,11 @@ func TestExecuteDefaultsToJSONOutputForNonTerminalStdout(t *testing.T) {
 	if !strings.Contains(string(got), `"id": "bot-feishu"`) || !strings.Contains(string(got), `"channel": "feishu"`) {
 		t.Fatalf("stdout = %q, want JSON bot payload", string(got))
 	}
+	for _, unexpected := range []string{`"agent_id"`, `"user_id"`, `"created_at"`} {
+		if strings.Contains(string(got), unexpected) {
+			t.Fatalf("stdout = %q, want compact csgclaw-cli bot list without %s", string(got), unexpected)
+		}
+	}
 }
 
 func TestExecuteBotListUsesRoleQuery(t *testing.T) {
@@ -176,7 +271,7 @@ func TestExecuteBotListUsesRoleQuery(t *testing.T) {
 			if req.Method != http.MethodGet {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
 			}
-			if req.URL.String() != "http://example.test/api/v1/bots?channel=feishu&role=manager" {
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/bots?role=manager" {
 				t.Fatalf("url = %q, want role-filtered bot list route", req.URL.String())
 			}
 			return jsonResponse(http.StatusOK, `[{"id":"bot-feishu","name":"feishu","role":"manager","channel":"feishu","agent_id":"u-manager","user_id":"fsu-manager","created_at":"2026-04-12T09:00:00Z"}]`), nil
@@ -190,6 +285,11 @@ func TestExecuteBotListUsesRoleQuery(t *testing.T) {
 	if !strings.Contains(stdout.String(), `"id": "bot-feishu"`) || !strings.Contains(stdout.String(), `"role": "manager"`) {
 		t.Fatalf("stdout = %q, want JSON bot payload", stdout.String())
 	}
+	for _, unexpected := range []string{`"agent_id"`, `"user_id"`, `"created_at"`} {
+		if strings.Contains(stdout.String(), unexpected) {
+			t.Fatalf("stdout = %q, want compact csgclaw-cli bot list without %s", stdout.String(), unexpected)
+		}
+	}
 }
 
 func TestExecuteUsesEnvironmentForEndpointAndToken(t *testing.T) {
@@ -200,8 +300,8 @@ func TestExecuteUsesEnvironmentForEndpointAndToken(t *testing.T) {
 		stdout: &bytes.Buffer{},
 		stderr: &bytes.Buffer{},
 		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.String() != "http://env.example.test/api/v1/bots?channel=feishu" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://env.example.test/api/v1/bots?channel=feishu")
+			if req.URL.String() != "http://env.example.test/api/v1/channels/feishu/bots" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://env.example.test/api/v1/channels/feishu/bots")
 			}
 			if got := req.Header.Get("Authorization"); got != "Bearer env-secret-token" {
 				t.Fatalf("Authorization = %q, want %q", got, "Bearer env-secret-token")
@@ -223,8 +323,8 @@ func TestExecuteFlagsOverrideEnvironmentForEndpointAndToken(t *testing.T) {
 		stdout: &bytes.Buffer{},
 		stderr: &bytes.Buffer{},
 		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.String() != "http://flag.example.test/api/v1/bots?channel=feishu" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://flag.example.test/api/v1/bots?channel=feishu")
+			if req.URL.String() != "http://flag.example.test/api/v1/channels/feishu/bots" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://flag.example.test/api/v1/channels/feishu/bots")
 			}
 			if got := req.Header.Get("Authorization"); got != "Bearer flag-secret-token" {
 				t.Fatalf("Authorization = %q, want %q", got, "Bearer flag-secret-token")
@@ -250,7 +350,7 @@ func TestExecuteBotDeleteUsesAPIClient(t *testing.T) {
 			if req.Method != http.MethodDelete {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodDelete)
 			}
-			if req.URL.String() != "http://example.test/api/v1/bots/u-alice?channel=feishu" {
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/bots/u-alice" {
 				t.Fatalf("url = %q, want feishu bot delete route", req.URL.String())
 			}
 			return jsonResponse(http.StatusNoContent, ``), nil
@@ -531,7 +631,7 @@ func TestExecuteMemberListUsesCSGClawDefault(t *testing.T) {
 			if req.Method != http.MethodGet {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
 			}
-			if req.URL.String() != "http://example.test/api/v1/rooms/oc_alpha/members" {
+			if req.URL.String() != "http://example.test/api/v1/channels/csgclaw/rooms/oc_alpha/members" {
 				t.Fatalf("url = %q, want csgclaw room members route", req.URL.String())
 			}
 			return jsonResponse(http.StatusOK, `[{"id":"u_alice","name":"Alice","handle":"alice","role":"worker","is_online":true}]`), nil

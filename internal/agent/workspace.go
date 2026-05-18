@@ -81,7 +81,7 @@ func copyEmbeddedTree(templateRoot, dstRoot string) error {
 	if _, err := fs.Stat(templates.FS(), runtimeTemplateManifestPath(templateRoot)); err != nil {
 		return fmt.Errorf("stat embedded runtime template manifest %q: %w", templateRoot, err)
 	}
-	return copyWorkspaceFS(templates.FS(), runtimeTemplateWorkspacePath(templateRoot), dstRoot, "embedded workspace")
+	return copyWorkspaceFS(templates.FS(), runtimeTemplateWorkspacePath(templateRoot), dstRoot, "embedded workspace", false)
 }
 
 func overlayWorkspaceTree(srcRoot, dstRoot string) error {
@@ -99,10 +99,10 @@ func overlayWorkspaceTree(srcRoot, dstRoot string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("workspace source %q is not a directory", srcRoot)
 	}
-	return copyWorkspaceFS(os.DirFS(srcRoot), ".", dstRoot, "workspace")
+	return copyWorkspaceFS(os.DirFS(srcRoot), ".", dstRoot, "workspace", true)
 }
 
-func copyWorkspaceFS(srcFS fs.FS, root, dstRoot, label string) error {
+func copyWorkspaceFS(srcFS fs.FS, root, dstRoot, label string, overwrite bool) error {
 	dstRoot = strings.TrimSpace(dstRoot)
 	if dstRoot == "" {
 		return fmt.Errorf("workspace destination is required")
@@ -156,6 +156,14 @@ func copyWorkspaceFS(srcFS fs.FS, root, dstRoot, label string) error {
 			mode = 0o644
 		}
 		mode |= 0o200
+		if !overwrite {
+			if _, err := os.Stat(dst); err == nil {
+				fileCount++
+				return nil
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("stat workspace file %q: %w", dst, err)
+			}
+		}
 		if err := os.WriteFile(dst, data, mode); err != nil {
 			return fmt.Errorf("write workspace file %q: %w", dst, err)
 		}

@@ -1,35 +1,21 @@
 package picoclawsandbox
 
 import (
+	"context"
 	"testing"
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/templates"
 )
 
 func TestRuntimeSetFeishuProviderUpdatesGatewayCreateSpecEnv(t *testing.T) {
 	rt := New(Dependencies{
-		ModelFallback: "model-1",
-		Server: config.ServerConfig{
-			AdvertiseBaseURL: "http://127.0.0.1:18080",
-			AccessToken:      "token",
-		},
 		FeishuProvider: feishuProviderStub{
 			apps: map[string]feishu.AppConfig{
 				"u-dev": {AppID: "old-app", AppSecret: "old-secret"},
 			},
-		},
-		ResolveBaseURL: func(server config.ServerConfig) string {
-			return server.AdvertiseBaseURL
-		},
-		EnsureGatewayConfig: func(_, _ string, _ agentruntime.Profile) error { return nil },
-		EnsureWorkspace: func(_, _ string) (string, error) {
-			return t.TempDir(), nil
-		},
-		WorkspaceTemplate: func(_, _ string) string { return "" },
-		EnsureProjectsRoot: func() (string, error) {
-			return t.TempDir(), nil
 		},
 		BuildRuntimeEnv: func(_, _, botID, _, _ string, provider feishu.BotCredentialProvider) map[string]string {
 			env := map[string]string{}
@@ -41,6 +27,21 @@ func TestRuntimeSetFeishuProviderUpdatesGatewayCreateSpecEnv(t *testing.T) {
 		},
 		AddProfileEnv: func(envVars map[string]string, profileEnv map[string]string) {},
 	})
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID: "rt-u-dev",
+		AgentID:   "u-dev",
+		AgentName: "dev",
+		Gateway: &agentruntime.GatewayProvision{
+			ModelFallback:     "model-1",
+			Server:            config.ServerConfig{AdvertiseBaseURL: "http://127.0.0.1:18080", AccessToken: "token"},
+			ManagerBaseURL:    "http://127.0.0.1:18080",
+			AgentHome:         t.TempDir(),
+			ProjectsRoot:      t.TempDir(),
+			WorkspaceTemplate: templates.PicoClawWorkerRoot,
+		},
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
 
 	rt.SetFeishuProvider(feishuProviderStub{
 		apps: map[string]feishu.AppConfig{

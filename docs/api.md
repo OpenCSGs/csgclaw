@@ -1,141 +1,241 @@
-# CSGClaw API 简要文档
+# CSGClaw API Documentation
 
-本文基于当前代码中的实际 HTTP 路由整理，默认服务地址为 `http://127.0.0.1:18080`。
+This document is generated from the HTTP routes and behaviors currently implemented in the codebase. The default example server address is `http://127.0.0.1:18080`.
 
-## 约定
+## Conventions
 
-- 内容类型：除 SSE 接口外，请求和响应均为 `application/json`
-- 时间格式：使用 RFC3339 / ISO8601，例如 `2026-03-28T12:00:00Z`
-- 认证：大部分接口当前不需要认证；`/api/bots/*` 和 `GET /api/v1/channels/feishu/bots/{id}/events` 需要 `Authorization: Bearer <token>`
-- 错误返回：失败时通常返回纯文本错误信息；LLM 鉴权缺失等少量场景会返回 JSON error payload
+- Except for streaming endpoints, requests and responses use `application/json`
+- Time fields use RFC3339 / ISO8601
+- Most non-streaming errors are returned as plain-text response bodies
+- SSE endpoints use `text/event-stream`
+- The current API is mainly grouped into 4 areas:
+  - Core API: `/api/v1/*`
+  - Channel API: `/api/v1/channels/*`
+  - Bot compatibility API: `/api/bots/*`
+  - Health check: `/healthz`
 
-## 1. 基础接口
+## Authentication
+
+- Most `/api/v1/*` endpoints do not require authentication by default
+- The following endpoints require `Authorization: Bearer <token>`, where the token is the server access token:
+  - `GET /api/v1/channels/feishu/bots/{id}/events`
+  - `GET /api/bots/{id}/events`
+  - `POST /api/bots/{id}/messages/send`
+  - `GET /api/bots/{id}/llm/models`
+  - `GET /api/bots/{id}/llm/v1/models`
+  - `POST /api/bots/{id}/llm/chat/completions`
+  - `POST /api/bots/{id}/llm/v1/chat/completions`
+- If the server runs with `no_auth`, the checks above are skipped
+
+## Health Check
 
 ### `GET /healthz`
 
-健康检查。
+Health check endpoint.
 
-响应示例：
+Example response:
 
 ```text
 ok
 ```
 
-## 2. CLIProxy Auth 接口
+## Core API
 
-Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状态可通过以下接口查询和触发登录。
+### `GET /api/v1/version`
 
-### `GET /api/v1/cliproxy/auth/status?provider=codex|claude_code`
+Returns the current server version.
 
-查询本地鉴权状态。服务端会在安全可读的情况下自动导入现有凭据：Codex 来自 `~/.codex/auth.json`，Claude Code 在 macOS 上来自 Keychain。导入后的鉴权文件统一写入 CSGClaw 管理的 CLIProxy auth 目录，默认是 `~/.csgclaw/auth`。
-
-响应示例：
+Example response:
 
 ```json
 {
-  "provider": "codex",
-  "authenticated": true,
-  "login_required": false,
-  "source": "codex-home",
-  "supports_login": true
+  "version": "0.1.0"
 }
 ```
 
-未登录时：
+### Upgrade
+
+#### `GET /api/v1/upgrade/status`
+
+Returns the upgrade status.
+
+Response fields:
+
+- `current_version`
+- `latest_version`
+- `update_available`
+- `checking`
+- `upgrading`
+- `last_checked_at`
+- `last_error`
+
+#### `POST /api/v1/upgrade/apply`
+
+Starts the upgrade helper.
+
+On success, returns `202 Accepted`:
 
 ```json
 {
-  "provider": "claude_code",
-  "authenticated": false,
-  "login_required": true,
-  "message": "Auth required. Run csgclaw model auth login claude-code or connect this provider in the CSGClaw UI.",
-  "supports_login": true,
-  "supports_keychain": true
+  "status": "accepted",
+  "message": "upgrade helper started"
 }
 ```
 
-### `POST /api/v1/cliproxy/auth/login`
+Returns `503 Service Unavailable` if the upgrade manager is not configured.
 
-触发 Provider 登录。Claude Code 会先尝试 macOS Keychain 导入，再进入 OAuth。
+## Bot Management API
 
-请求体：
+These endpoints are exposed under the channel API namespace and are still backed by the unified `internal/bot` service. The route shape is channel-scoped, but bot lifecycle orchestration is not split into separate per-channel bot services. `role` only supports `manager` and `worker`, and `channel` only supports `csgclaw` and `feishu`.
+
+### `GET /api/v1/channels/{channel}/bots`
+
+Returns the bot list for the specified channel.
+
+Path parameters:
+
+- `channel`: `csgclaw` or `feishu`
+
+Optional query parameters:
+
+- `role`
+
+Response fields:
+
+- `id`
+- `name`
+- `description`
+- `role`
+- `channel`
+- `agent_id`
+- `user_id`
+- `available`
+- `runtime_kind`
+- `created_at`
+
+Examples:
+
+- `GET /api/v1/channels/csgclaw/bots`
+- `GET /api/v1/channels/feishu/bots?role=worker`
+
+### `POST /api/v1/channels/{channel}/bots`
+
+Creates a bot in the specified channel.
+
+Path parameters:
+
+- `channel`: `csgclaw` or `feishu`
+
+Example request body:
 
 ```json
 {
-  "provider": "claude_code",
-  "no_browser": true
+  "id": "u-alice",
+  "name": "alice",
+  "role": "worker",
+  "runtime_kind": "codex",
+  "from_template": "local/review-bot"
 }
 ```
 
-响应同 status 接口。
+Notes:
 
-## 3. Agent 接口
+- `name` is required
+- `role` is required and must be either `manager` or `worker`
+- The effective channel comes from the route path rather than the request body
+- A `worker` bot is associated with a backend agent
+- `manager` and `worker` creation behavior can differ by channel
 
-统一后的 `worker` 对象字段如下。除 PicoClaw Bot 兼容接口外，`bot / worker / agent` 在 API 和内部结构里都按这一套字段表达：
+Examples:
+
+- `POST /api/v1/channels/csgclaw/bots`
+- `POST /api/v1/channels/feishu/bots`
+
+### `DELETE /api/v1/channels/{channel}/bots/{id}`
+
+Deletes the specified bot in the specified channel.
+
+Path parameters:
+
+- `channel`: `csgclaw` or `feishu`
+- `id`: bot ID
+
+Returns `204 No Content` on success.
+
+Examples:
+
+- `DELETE /api/v1/channels/csgclaw/bots/u-alice`
+- `DELETE /api/v1/channels/feishu/bots/u-alice`
+
+## Agent API
+
+### Agent Response Shape
+
+`/api/v1/agents*` returns agent objects with fields like:
 
 ```json
 {
   "id": "u-alice",
   "name": "alice",
   "description": "frontend dev",
-  "runtime_kind": "picoclaw_sandbox",
+  "runtime_id": "codex",
+  "runtime_kind": "codex",
+  "image": "example/image:latest",
+  "box_id": "codex-session-alice",
   "role": "worker",
   "status": "running",
-  "created_at": "2026-03-28T12:00:03Z",
-  "profile": "codex.gpt-5.4",
-  "provider": "llm-api",
-  "model_id": "gpt-5.4",
-  "reasoning_effort": "medium",
-  "image": "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.29.0"
+  "created_at": "2026-05-16T08:00:00Z",
+  "profile": "api.gpt-5.4",
+  "runtime_options": {},
+  "agent_profile": {
+    "provider": "api",
+    "base_url": "https://api.example.com/v1",
+    "api_key_set": true,
+    "api_key_preview": "sk-1...",
+    "model_id": "gpt-5.4",
+    "reasoning_effort": "medium",
+    "profile_complete": true
+  },
+  "profile_complete": true,
+  "detection_results": []
 }
 ```
 
-补充说明：
+Notes:
 
-- `role` 当前常见值：`manager`、`worker`、`agent`
-- `image` 仍可能出现在响应中，用于表示容器镜像；它不是统一身份字段的一部分
-- 创建 worker agent 请统一使用 `/api/v1/agents`
+- The real `api_key` is never returned in `agent_profile`
+- `runtime_options` is sanitized before being exposed by the API
+- `profile` is the normalized selector generated by the server, for example `api.gpt-5.4`
+- `detection_results` is used to present default profile detection results
 
 ### `GET /api/v1/agents`
 
-获取全部 agent 列表。
+Lists all agents.
 
-响应中的 `agent_profile` 不返回真实 `api_key`；若已保存密钥，只返回
-`api_key_set: true`，并在长密钥场景返回安全前缀 `api_key_preview`
-（例如 `sk-l...`）供 UI 展示。
+The server reloads state before returning the latest snapshot.
 
 ### `POST /api/v1/agents`
 
-创建 `role=worker` 的 agent，并自动同步到 IM 用户体系。
+Creates an agent.
 
-请求体：
+Request fields:
 
-```json
-{
-  "id": "u-alice",
-  "name": "alice",
-  "description": "frontend dev",
-  "profile": "codex.gpt-5.4",
-  "runtime_kind": "codex",
-  "role": "worker"
-}
-```
+- `id`
+- `name`
+- `description`
+- `image`
+- `runtime_kind`
+- `from_template`
+- `replace`
+- `field_mask`
+- `role`
+- `status`
+- `created_at`
+- `profile`
+- `runtime_options`
+- `agent_profile`
 
-替换已有 agent 时传入 `replace: true` 和目标 `id`。如果同时传入
-`field_mask`，服务端会先读取已有 agent 配置，只用 mask 中列出的字段覆盖
-已有值，再执行重建；这可以区分“未传字段”和“显式传空值”。
-
-```json
-{
-  "id": "u-alice",
-  "name": "alice-v2",
-  "description": "",
-  "replace": true,
-  "field_mask": ["id", "name", "description"]
-}
-```
-
-响应：`201 Created`
+Example request body:
 
 ```json
 {
@@ -143,409 +243,753 @@ Codex 和 Claude Code Provider 由 CSGClaw 内嵌 CLIProxyAPI 转发。鉴权状
   "name": "alice",
   "description": "frontend dev",
   "runtime_kind": "codex",
-  "role": "worker",
-  "status": "running",
-  "created_at": "2026-03-28T12:00:03Z",
-  "profile": "codex.gpt-5.4",
-  "provider": "llm-api",
-  "model_id": "gpt-5.4",
-  "reasoning_effort": "medium",
-  "image": "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.4.29.0"
-}
-```
-
-说明：
-
-- `name` 必填
-- `name` 不能是 `manager`
-- `id` 可选；未传时服务端会自动生成
-- `profile` 可选；它引用配置中的 `models.default` 或显式 selector（例如 `codex.gpt-5.4`）
-- `runtime_kind` 可选；留空时默认 `picoclaw_sandbox`，可显式传 `codex`
-- `provider`、`model_id`、`reasoning_effort` 是服务端解析后的快照字段，便于调试
-- `status`、`created_at` 以实际 box 启动结果为准
-- `manager` 嵌套字段已不再支持
-- 若 IM 服务可用，会自动创建对应 IM 用户，并创建 `Admin & <Worker>` 私聊
-- 校验失败通常返回 `400 Bad Request`
-
-使用 Codex runtime 时，服务会在启动 worker 前自动解析或下载 `codex-acp`。如需手动指定或固定版本，可使用：
-
-- `CSGCLAW_CODEX_ACP_PATH`：指定本地 `codex-acp` 可执行文件路径
-- `CSGCLAW_CODEX_ACP_VERSION`：指定下载版本
-- `CSGCLAW_CODEX_ACP_BASE_URL`：指定下载源，默认指向 GitHub Releases
-
-## 4. IM 接口
-
-### `GET /api/v1/im/bootstrap`
-
-获取 IM 初始化数据，供 WebUI 首次加载使用。
-响应返回 `rooms`。
-
-响应示例：
-
-```json
-{
-  "current_user_id": "u-admin",
-  "users": [
-    {
-      "id": "u-admin",
-      "name": "Admin",
-      "handle": "admin",
-      "role": "Admin",
-      "avatar": "AD",
-      "is_online": true,
-      "accent_hex": "#dc2626"
-    }
-  ],
-  "rooms": []
-}
-```
-
-### `GET /api/v1/im/events`
-
-订阅 IM 事件流，返回 `text/event-stream`。
-
-事件格式：
-
-```text
-: connected
-
-data: {"type":"message.created","room_id":"room-1","message":{"id":"msg-1","sender_id":"u-admin","content":"hello","created_at":"2026-04-13T11:15:01.848093Z","mentions":["u-alice"]},"sender":{"id":"u-admin","name":"Admin","handle":"admin","role":"Admin","avatar":"AD","is_online":true,"accent_hex":"#dc2626"}}
-```
-
-当前事件类型：
-
-- `message.created`
-- `room.created`
-- `room.members_added`
-
-### `POST /api/v1/im/messages`
-
-在 room 中发送消息。
-
-请求体：
-
-```json
-{
-  "room_id": "room-1",
-  "sender_id": "u-admin",
-  "content": "hello @alice"
-}
-```
-
-响应：`201 Created`
-
-```json
-{
-  "id": "msg-1743139200000000001",
-  "sender_id": "u-admin",
-  "content": "hello @alice",
-  "created_at": "2026-03-28T12:00:00Z",
-  "mentions": [
-    "u-alice"
-  ]
-}
-```
-
-说明：
-
-- `room_id`、`sender_id`、`content` 必填
-- `content` 中的 `@handle` 会解析为 `mentions`
-
-### `POST /api/v1/im/conversations`
-
-创建新 room。
-
-请求体：
-
-```json
-{
-  "title": "Frontend Sync",
-  "description": "Discuss frontend tasks",
-  "creator_id": "u-admin",
-  "member_ids": ["u-manager", "u-alice"],
-  "locale": "zh-CN"
-}
-```
-
-响应：`201 Created`
-
-```json
-{
-  "id": "room-1743139200000000000",
-  "title": "Frontend Sync",
-  "subtitle": "3 members",
-  "description": "Discuss frontend tasks",
-  "members": ["u-admin", "u-manager", "u-alice"],
-  "messages": [
-    {
-      "id": "msg-1743139200000000002",
-      "sender_id": "u-admin",
-      "content": "已创建房间“Frontend Sync”，欢迎大家加入。",
-      "created_at": "2026-03-28T12:00:00Z"
-    }
-  ]
-}
-```
-
-说明：
-
-- `title`、`creator_id` 必填
-- `member_ids` 会和 `creator_id` 合并去重
-- 返回里的 `subtitle` 会根据人数自动生成
-
-### `POST /api/v1/im/conversations/members`
-
-向 room 中添加成员。
-
-请求体：
-
-```json
-{
-  "room_id": "room-1",
-  "inviter_id": "u-admin",
-  "user_ids": ["u-alice", "u-bob"],
-  "locale": "zh-CN"
-}
-```
-
-响应：`200 OK`，返回更新后的 room 对象。
-
-说明：
-
-- `room_id`、`inviter_id`、`user_ids` 必填
-- `inviter_id` 必须已经在 room 内
-- 若没有任何新成员被加入，会返回 `400 Bad Request`
-
-### `GET /api/v1/rooms`
-
-获取全部会话列表，按最近消息时间倒序返回。
-
-### `POST /api/v1/rooms`
-
-创建新 room。请求体与 `POST /api/v1/im/conversations` 一致，响应：`201 Created`。
-
-### `DELETE /api/v1/rooms/{id}`
-
-删除指定 room。
-
-响应：`204 No Content`
-
-说明：
-
-- `id` 必须是已存在会话
-- 若 room 不存在，返回 `404 Not Found`
-
-### `GET /api/v1/users`
-
-获取全部用户列表，按名称排序返回。
-
-### `DELETE /api/v1/users/{id}`
-
-删除指定用户。
-
-响应：`204 No Content`
-
-说明：
-
-- 当前语义为“全局移除用户，并从所有会话成员及历史消息中清理该用户”
-- 若某个会话清理后剩余成员少于 2 人，该会话会被一并删除
-- 不允许删除当前用户；此时返回 `409 Conflict`
-- 若用户不存在，返回 `404 Not Found`
-
-### `GET /api/v1/messages`
-
-获取指定会话的消息历史。查询参数为 `room_id`。
-
-### `POST /api/v1/messages`
-
-发送消息。请求体与 `POST /api/v1/im/messages` 一致，响应：`201 Created`。
-
-### `POST /api/v1/im/agents/join`
-
-把 agent 加入指定会话。该接口会先确保 agent 在 IM 中拥有对应用户身份。
-
-请求体：
-
-```json
-{
-  "agent_id": "u-alice",
-  "room_id": "room-1",
-  "inviter_id": "u-admin",
-  "locale": "zh-CN"
-}
-```
-
-响应：`200 OK`，返回更新后的会话对象。
-
-说明：
-
-- `agent_id`、`room_id` 必填
-- `inviter_id` 为空时，服务端默认使用 `u-admin`
-- 若 `agent_id` 不存在，返回 `404 Not Found`
-
-## 5. Feishu Channel 接口
-
-### `GET /api/v1/channels/feishu/bots/{id}/events`
-
-订阅指定 Feishu bot 的 channel message bus 事件流，返回 `text/event-stream`。例如：
-
-```http
-GET /api/v1/channels/feishu/bots/u-manager/events
-```
-
-服务端只会推送 `mentions` 包含该 bot 对应 Feishu `open_id` 的消息事件。
-
-返回示例：
-
-```text
-: connected
-
-data: {"type":"message.created","room_id":"oc_f778","message":{"id":"om_x100","sender_id":"ou_323c","kind":"message","content":"what skills are available?","created_at":"2026-04-13T11:15:01.848093Z","mentions":["ou_2074"]}}
-```
-
-认证要求：
-
-- 请求头必须带 `Authorization: Bearer <token>`
-- token 来自 `~/.csgclaw/config.toml` 中的 `[server].access_token`
-
-## 6. 兼容别名接口
-
-当前以下接口是同义路由，行为与上文一致：
-
-- `GET /api/v1/bootstrap` 等价于 `GET /api/v1/im/bootstrap`
-- `GET /api/v1/events` 等价于 `GET /api/v1/im/events`
-- `POST /api/v1/rooms/invite` 等价于 `POST /api/v1/im/conversations/members`
-- `POST /api/v1/im/rooms` 等价于 `POST /api/v1/im/conversations`
-- `POST /api/v1/im/rooms/invite` 等价于 `POST /api/v1/im/conversations/members`
-
-## 7. PicoClaw Bot 接口
-
-这组接口用于 PicoClaw 与 IM 的双向通信，以及 Worker 访问服务端暴露的 OpenAI 兼容 LLM bridge。
-
-认证要求：
-
-- 请求头必须带 `Authorization: Bearer <token>`
-- token 来自 `~/.csgclaw/config.toml` 中的 `[server].access_token`
-- 若服务端配置为空，则不校验；默认初始化值为 `your_access_token`
-
-### `GET /api/bots/{bot_id}/events`
-
-订阅 bot 事件流，返回 `text/event-stream`。
-
-响应示例：
-
-```text
-: connected
-
-event: message
-data: {"message_id":"msg-1","room_id":"room-1","chat_type":"direct","sender":{"id":"u-admin","username":"admin","display_name":"Admin"},"text":"hello","timestamp":"1743139200000"}
-```
-
-说明：
-
-- 支持的 `chat_type` 为 `direct` 或 `group`
-- 私聊中，bot 只要在会话里就会收到消息
-- 群聊中，只有被 `@bot` 时才会收到消息
-- bot 自己发出的消息不会被回推
-
-### `POST /api/bots/{bot_id}/messages/send`
-
-bot 向指定会话发送消息。
-
-请求体：
-
-```json
-{
-  "room_id": "room-1",
-  "text": "hello from bot"
-}
-```
-
-响应：`200 OK`
-
-```json
-{
-  "message_id": "msg-1743139200000000003"
-}
-```
-
-说明：
-
-- 消息发送者固定为路径中的 `bot_id`
-- `room_id` 必须是已存在会话
-- `text` 不能为空
-
-### `GET /api/bots/{bot_id}/llm/v1/models`
-
-返回 bot 当前可见的模型列表，格式兼容 OpenAI `GET /v1/models`。
-
-响应示例：
-
-```json
-{
-  "object": "list",
-  "data": [
-    {
-      "id": "gpt-5.4",
-      "object": "model",
-      "created": 0,
-      "owned_by": "csgclaw"
-    }
-  ]
-}
-```
-
-说明：
-
-- 服务端会根据 `bot_id` 对应 agent 的 `profile` 解析实际模型配置，并在响应中保留已解析快照字段
-- box 内看到的是统一的 OpenAI 兼容接口；不会拿到宿主机上的真实上游 `api_key`
-
-### `POST /api/bots/{bot_id}/llm/v1/chat/completions`
-
-OpenAI 兼容的聊天补全入口。
-
-请求体示例：
-
-```json
-{
-  "model": "ignored-by-server",
-  "messages": [
-    {
-      "role": "user",
-      "content": "Review this patch."
-    }
-  ]
-}
-```
-
-响应示例：
-
-```json
-{
-  "id": "chatcmpl-1",
-  "object": "chat.completion",
-  "created": 1743139200,
-  "model": "gpt-5.4",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "..."
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 0,
-    "completion_tokens": 0,
-    "total_tokens": 0
+  "profile": "api.gpt-5.4",
+  "agent_profile": {
+    "provider": "api",
+    "base_url": "https://api.example.com/v1",
+    "api_key": "sk-xxx",
+    "model_id": "gpt-5.4",
+    "reasoning_effort": "medium"
   }
 }
 ```
 
-说明：
+Additional notes:
 
-- 请求会由服务端转发到对应 profile 配置中的 `base_url + /chat/completions`
-- `model` 字段会被服务端强制改写为该 agent 解析出的 `model_id`
-- 若 profile 配置了 `reasoning_effort`，且请求体没有显式提供 `reasoning_effort`，服务端会把该默认值注入转发请求
+- `name` is required
+- `replace=true` enables replace logic
+- `field_mask` limits which fields are overwritten during replacement
+- `agent_profile.api_key` is write-only and will be redacted in reads
+
+### `GET /api/v1/agents/{id}`
+
+Gets a single agent.
+
+Returns `404` if it does not exist.
+
+### `PATCH /api/v1/agents/{id}`
+
+Updates basic agent fields.
+
+Supported fields:
+
+- `name`
+- `description`
+- `image`
+- `runtime_options`
+- `agent_profile`
+
+Example request body:
+
+```json
+{
+  "description": "updated description",
+  "runtime_options": {
+    "sandbox": "default"
+  }
+}
+```
+
+Notes:
+
+- Omitted fields are left unchanged
+- If `agent_profile.api_key` is sent empty, the server keeps the existing key
+- If `agent_profile.env` changes, `env_restart_required` may become `true` in the response
+
+### `DELETE /api/v1/agents/{id}`
+
+Deletes an agent.
+
+Returns `204 No Content` on success.
+
+### `POST /api/v1/agents/{id}/start`
+
+Starts the agent and returns the updated agent object.
+
+### `POST /api/v1/agents/{id}/stop`
+
+Stops the agent and returns the updated agent object.
+
+### `GET /api/v1/agents/{id}/logs`
+
+Returns agent logs.
+
+Query parameters:
+
+- `lines`: defaults to `20`
+- `follow`: `1/true/yes/on` enables streaming follow mode
+
+Response type: `text/plain; charset=utf-8`
+
+Notes:
+
+- With `follow=false`, errors are returned as normal HTTP errors
+- With `follow=true`, streaming-time errors may be written into the response body
+
+### `GET /api/v1/agents/{id}/profile`
+
+Returns the redacted profile for a single agent.
+
+### `PUT /api/v1/agents/{id}/profile`
+
+Replaces the profile for a single agent.
+
+The request body uses the `agent_profile` shape, for example:
+
+```json
+{
+  "provider": "api",
+  "base_url": "https://api.example.com/v1",
+  "api_key": "sk-xxx",
+  "model_id": "gpt-5.4",
+  "reasoning_effort": "medium",
+  "headers": {
+    "x-org": "demo"
+  },
+  "env": {
+    "FOO": "bar"
+  }
+}
+```
+
+Notes:
+
+- Unlike `PATCH /api/v1/agents/{id}`, this endpoint semantically replaces the current profile with the new one
+- If `api_key` is empty, the server keeps the existing key
+
+### `POST /api/v1/agents/{id}/recreate`
+
+Recreates the agent using its current configuration and returns the new agent state.
+
+Common failures:
+
+- `404`: agent does not exist
+- `400`: profile is incomplete, or the runtime does not allow recreation
+
+## Agent Profile Helper API
+
+### `POST /api/v1/agent-profiles/models`
+
+Returns the available model list for the given provider configuration.
+
+Request fields:
+
+- `agent_id`
+- `provider`
+- `base_url`
+- `api_key`
+- `headers`
+
+Example request body:
+
+```json
+{
+  "provider": "api",
+  "base_url": "https://api.example.com/v1",
+  "api_key": "sk-xxx"
+}
+```
+
+Example response:
+
+```json
+{
+  "provider": "api",
+  "models": ["gpt-5.4", "gpt-5.4-mini"]
+}
+```
+
+Notes:
+
+- For `provider=codex` or `claude_code`, model choices are obtained through CLIProxy
+- For `provider=api`, the server calls the target OpenAI-compatible `/models` endpoint
+- If `agent_id` is provided and `api_key` is omitted in the request, the server may reuse the saved key from that agent
+
+### `GET /api/v1/agent-profile-defaults`
+
+Returns the redacted view of the current default agent profile.
+
+This is commonly used by the frontend to initialize default provider/model state.
+
+## Hub Template API
+
+### `GET /api/v1/hub/templates`
+
+Lists all templates from readable registries.
+
+Response fields:
+
+- `id`
+- `name`
+- `description`
+- `runtime_kind`
+- `image`
+- `updated_at`
+- `source.name`
+- `source.kind`
+- `workspace.kind`
+
+### `POST /api/v1/hub/templates`
+
+Publishes an existing agent workspace to the hub.
+
+Request body:
+
+```json
+{
+  "agent_id": "u-alice",
+  "registry": "local"
+}
+```
+
+Notes:
+
+- `agent_id` is required
+- `registry` uses the default publish registry when omitted
+- Successful publish returns `201 Created`
+
+### `GET /api/v1/hub/templates/{id}`
+
+Returns template details.
+
+In addition to the list view fields, this endpoint also returns:
+
+- `workspace.entries`
+
+Example `workspace.entries` payload:
+
+```json
+{
+  "workspace": {
+    "kind": "dir",
+    "entries": [
+      {"path":"SKILL.md","name":"SKILL.md","type":"file","depth":0,"size":128},
+      {"path":"assets","name":"assets","type":"dir","depth":0,"size":0}
+    ]
+  }
+}
+```
+
+### `GET /api/v1/hub/templates/{id}/workspace/file?path=...`
+
+Reads a single file preview from the template workspace.
+
+Query parameters:
+
+- `path`: required relative path
+
+Response fields:
+
+- `path`
+- `content`
+- `size`
+- `truncated`
+- `binary`
+
+Notes:
+
+- Non-UTF-8 files return `binary=true`
+- Text content larger than `256 KiB` is truncated and returned with `truncated=true`
+- Absolute paths and `..` traversal are rejected
+
+## CLIProxy Auth API
+
+### `GET /api/v1/cliproxy/auth/status?provider=...`
+
+Returns the local auth status for a provider.
+
+`provider` is required.
+
+The response is provided by CLIProxy and commonly includes:
+
+- `provider`
+- `authenticated`
+- `login_required`
+- `message`
+- `supports_login`
+
+### `POST /api/v1/cliproxy/auth/login`
+
+Triggers provider login.
+
+Request body:
+
+```json
+{
+  "provider": "codex",
+  "no_browser": true
+}
+```
+
+Returns the current provider auth status on success.
+
+Notes:
+
+- Missing `provider` returns `400`
+- Login failure returns `502 Bad Gateway`
+
+## Bootstrap Config API
+
+### `GET /api/v1/config/bootstrap`
+
+Returns the bootstrap config view.
+
+Response fields:
+
+- `default_manager_template`
+- `default_worker_template`
+- `runtime_kind`
+- `effective_manager_image`
+- `supported_runtime_kinds`
+- `runtime_default_images`
+
+### `PUT /api/v1/config/bootstrap`
+
+Updates the default bootstrap templates.
+
+Request body:
+
+```json
+{
+  "default_manager_template": "builtin/manager",
+  "default_worker_template": "local/review-bot"
+}
+```
+
+Notes:
+
+- Both fields are optional
+- The updated config is validated after modification
+- If the default templates change and the agent service is mounted, the gateway runtime is updated as well
+
+## Local IM API
+
+These endpoints expose CSGClaw local IM data.
+
+### `GET /api/v1/bootstrap`
+
+Returns IM bootstrap data.
+
+Response fields:
+
+- `current_user_id`
+- `users`
+- `rooms`
+- `invite_draft_user_ids`
+
+### `GET /api/v1/events`
+
+Subscribes to the local IM event stream.
+
+Returns `text/event-stream`. After the connection is established, the server first writes:
+
+```text
+: connected
+```
+
+Then it streams JSON events as SSE `data:` frames. The heartbeat frame is:
+
+```text
+: ping
+```
+
+Currently observed event types include:
+
+- `message.created`
+- `room.created`
+- `room.members_added`
+- `upgrade.status_changed`
+
+Event JSON fields:
+
+- `type`
+- `room_id`
+- `room`
+- `user`
+- `message`
+- `sender`
+- `upgrade`
+
+### `GET /api/v1/users`
+
+Lists local IM users.
+
+### `POST /api/v1/users`
+
+Creates a local IM user.
+
+Request body:
+
+```json
+{
+  "id": "u-alice",
+  "name": "Alice",
+  "handle": "alice",
+  "role": "worker"
+}
+```
+
+Notes:
+
+- `id` is required
+- `name` is required
+- `handle` defaults to `name` when omitted
+- For `worker` or `agent` roles, if bot service and agent service are both enabled, the server may create a worker bot and its backing agent instead
+
+### `DELETE /api/v1/users/{id}`
+
+Deletes a local IM user.
+
+Common responses:
+
+- `204`: deleted successfully
+- `404`: user not found
+- `409`: attempted to delete the current user
+
+### `GET /api/v1/rooms`
+
+Lists local IM rooms.
+
+### `POST /api/v1/rooms`
+
+Creates a room.
+
+Request body:
+
+```json
+{
+  "title": "Launch",
+  "description": "coordination",
+  "creator_id": "u-admin",
+  "member_ids": ["u-alice", "u-bob"],
+  "locale": "en"
+}
+```
+
+Compatibility field:
+
+- Legacy `participant_ids` is still accepted and mapped to `member_ids`
+
+### `DELETE /api/v1/rooms/{id}`
+
+Deletes a room and returns `204` on success.
+
+### `GET /api/v1/rooms/{id}/members`
+
+Lists room members.
+
+### `POST /api/v1/rooms/{id}/members`
+
+Adds members to the specified room.
+
+Request body:
+
+```json
+{
+  "inviter_id": "u-admin",
+  "user_ids": ["u-bob"],
+  "locale": "en"
+}
+```
+
+Notes:
+
+- The path `{id}` is used as `room_id`
+- If `room_id` is also present in the body, it must match the path value
+
+### `POST /api/v1/rooms/invite`
+
+Adds members by room ID, with semantics similar to `POST /api/v1/rooms/{id}/members`.
+
+Request body:
+
+```json
+{
+  "room_id": "room-1",
+  "inviter_id": "u-admin",
+  "user_ids": ["u-bob"],
+  "locale": "en"
+}
+```
+
+### `GET /api/v1/messages?room_id=...`
+
+Returns the message list for the specified room.
+
+`room_id` is required.
+
+### `POST /api/v1/messages`
+
+Sends a message.
+
+Request body:
+
+```json
+{
+  "room_id": "room-1",
+  "sender_id": "u-admin",
+  "content": "hello @alice",
+  "mention_id": "u-alice"
+}
+```
+
+Notes:
+
+- `room_id` is required
+- Returns `201 Created` on success
+- A successful send also publishes `message.created` to `/api/v1/events`
+
+## Channel API
+
+## `csgclaw` Channel
+
+`/api/v1/channels/csgclaw/*` is essentially a mirrored entrypoint for the local IM API.
+
+### Users
+
+- `GET /api/v1/channels/csgclaw/users`
+- `POST /api/v1/channels/csgclaw/users`
+- `DELETE /api/v1/channels/csgclaw/users/{id}`
+
+Notes:
+
+- `GET` and `POST` reuse the local IM user logic
+- `DELETE` uses channel-specific delete handling, but still semantically deletes the local user
+
+### Rooms
+
+- `GET /api/v1/channels/csgclaw/rooms`
+- `POST /api/v1/channels/csgclaw/rooms`
+- `DELETE /api/v1/channels/csgclaw/rooms/{id}`
+- `GET /api/v1/channels/csgclaw/rooms/{id}/members`
+- `POST /api/v1/channels/csgclaw/rooms/{id}/members`
+
+### Messages
+
+- `GET /api/v1/channels/csgclaw/messages?room_id=...`
+- `POST /api/v1/channels/csgclaw/messages`
+
+## `feishu` Channel
+
+### Config
+
+#### `GET /api/v1/channels/feishu/config`
+
+Returns the Feishu channel config view.
+
+Optional query parameters:
+
+- `bot_id`
+
+Example response:
+
+```json
+{
+  "bot_id": "u-manager",
+  "configured": true,
+  "app_id": "cli_xxx",
+  "app_secret": "present",
+  "admin_open_id": "ou_xxx"
+}
+```
+
+Note:
+
+- `app_secret` is returned as a status marker, not the real secret
+
+#### `PUT /api/v1/channels/feishu/config`
+
+Updates the Feishu channel config.
+
+Request body:
+
+```json
+{
+  "bot_id": "u-manager",
+  "app_id": "cli_xxx",
+  "app_secret": "secret",
+  "admin_open_id": "ou_xxx",
+  "reload": true
+}
+```
+
+Notes:
+
+- `app_id` and `app_secret` are required
+- `bot_id` may come from either query or body
+- `reload` defaults to `true` when omitted
+
+#### `POST /api/v1/channels/feishu/config`
+
+Reloads the Feishu config.
+
+Example response:
+
+```json
+{
+  "status": "reloaded",
+  "feishu_bots": ["u-manager"]
+}
+```
+
+### Bot Events
+
+#### `GET /api/v1/channels/feishu/bots/{id}/events`
+
+Subscribes to mention events for the specified bot in Feishu.
+
+Characteristics:
+
+- Requires Bearer Token
+- Returns `text/event-stream`
+- Only forwards events whose message mentions the bot open_id
+- Writes `: connected` immediately after the stream is established
+
+### Users
+
+- `GET /api/v1/channels/feishu/users`
+- `POST /api/v1/channels/feishu/users`
+- `DELETE /api/v1/channels/feishu/users/{id}`
+
+Example `POST` body:
+
+```json
+{
+  "id": "ou_xxx",
+  "name": "Alice",
+  "handle": "alice",
+  "role": "member",
+  "avatar": "AL"
+}
+```
+
+### Rooms
+
+- `GET /api/v1/channels/feishu/rooms`
+- `POST /api/v1/channels/feishu/rooms`
+- `DELETE /api/v1/channels/feishu/rooms/{id}`
+- `GET /api/v1/channels/feishu/rooms/{id}/members`
+- `POST /api/v1/channels/feishu/rooms/{id}/members`
+
+Room creation and member-addition requests are mostly aligned with local IM and still use:
+
+- `title`
+- `description`
+- `creator_id`
+- `member_ids`
+- `locale`
+
+Example add-members request:
+
+```json
+{
+  "inviter_id": "u-manager",
+  "user_ids": ["ou_member"],
+  "locale": "zh-CN"
+}
+```
+
+### Messages
+
+- `GET /api/v1/channels/feishu/messages?room_id=...`
+- `POST /api/v1/channels/feishu/messages`
+
+Example send-message request:
+
+```json
+{
+  "room_id": "oc_xxx",
+  "sender_id": "u-manager",
+  "content": "hello",
+  "mention_id": "u-worker"
+}
+```
+
+## Bot Compatibility API
+
+These endpoints live under `/api/bots/{id}` and exist for compatibility with the older PicoClaw bot integration.
+
+### `GET /api/bots/{id}/events`
+
+Subscribes to the bot event stream.
+
+Characteristics:
+
+- Requires Bearer Token
+- Returns `text/event-stream`
+- Writes `: connected` immediately after the stream is established
+- Uses `: heartbeat` as the heartbeat comment
+- Uses `message` as the SSE event name
+- If the client sends `Last-Event-ID`, the server may replay recent messages according to the replay rules
+
+Example single event:
+
+```text
+id: msg-1
+event: message
+data: {"message_id":"msg-1","room_id":"room-1","sender_id":"u-admin","text":"hello"}
+```
+
+### `POST /api/bots/{id}/messages/send`
+
+Sends a message through the bot compatibility channel.
+
+Example request body:
+
+```json
+{
+  "room_id": "room-1",
+  "text": "hello"
+}
+```
+
+The detailed response behavior depends on the compatibility bridge implementation.
+
+### `GET /api/bots/{id}/llm/models`
+
+### `GET /api/bots/{id}/llm/v1/models`
+
+Forwards model-list requests to the LLM bridge.
+
+Notes:
+
+- Requires Bearer Token
+- Response content type and body are determined by the upstream bridge
+
+### `POST /api/bots/{id}/llm/chat/completions`
+
+### `POST /api/bots/{id}/llm/v1/chat/completions`
+
+Forwards chat-completions requests to the LLM bridge.
+
+Notes:
+
+- Requires Bearer Token
+- The request body is read and forwarded as-is
+- Maximum single request-body read size is `10 MiB`
+- Failures may return either plain-text errors or a JSON error payload such as:
+
+```json
+{
+  "error": {
+    "code": "unauthorized",
+    "message": "upstream auth failed",
+    "provider": "openai"
+  }
+}
+```
+
+## Compatibility Notes
+
+- `CreateRoomRequest.participant_ids` is still accepted and mapped to `member_ids`
+- `Message.mentions` remains backward-compatible with the legacy format:
+  - New format: `[{ "id": "u-alice", "name": "Alice" }]`
+  - Legacy format: `["u-alice"]`
+- The local `csgclaw` channel routes are effectively mirrored entrypoints for `/api/v1/users|rooms|messages`
+
+## Old Endpoints No Longer Exposed
+
+The following paths often seen in older docs are no longer registered in the current router and should not be treated as public APIs:
+
+- `/api/v1/notify/{agent_id}`
+- Any other legacy path not registered in `internal/api/router.go`

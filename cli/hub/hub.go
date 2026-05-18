@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"text/tabwriter"
 
@@ -125,7 +126,7 @@ func listTemplates(ctx context.Context, client *apiclient.Client) ([]apitypes.Hu
 
 func getTemplate(ctx context.Context, client *apiclient.Client, id string) (apitypes.HubTemplate, error) {
 	var item apitypes.HubTemplate
-	if err := client.GetJSON(ctx, "/api/v1/hub/templates/"+strings.TrimSpace(id), &item); err != nil {
+	if err := client.GetJSON(ctx, "/api/v1/hub/templates/"+url.PathEscape(strings.TrimSpace(id)), &item); err != nil {
 		return apitypes.HubTemplate{}, err
 	}
 	return item, nil

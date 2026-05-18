@@ -1,0 +1,13 @@
+interface:
+  display_name: "GitHub PR Review Comment"
+  short_description: "Review PR diffs and draft comments"
+  default_prompt: "Use $gh-pr-review-comment to review PR #123 in this repo, summarize findings, and wait for my confirmation before posting comments."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "github"
+      description: "GitHub MCP server for reading PR metadata and posting review comments"
+
+policy:
+  allow_implicit_invocation: true

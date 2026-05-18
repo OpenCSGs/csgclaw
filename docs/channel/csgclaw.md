@@ -54,8 +54,44 @@ Do not call `POST /api/v1/agents/u-manager/recreate` for this flow.
 - Never return or log secret values (for example `app_secret`, API keys, tokens).
 - If any sensitive value appears in logs, use masked forms such as `present`.
 
+## csgclaw.notify_card payload
+
+Notifier deliveries (GitLab/GitHub webhooks, and so on) to the CSGClaw Web IM use this type: the message **`content` is a single JSON object** produced by `internal/runtime/notifier`, and the Web UI renders it as a structured card (title, badge, meta rows, optional link, optional collapsible raw JSON).
+
+```json
+{
+  "type": "csgclaw.notify_card",
+  "schema_version": 1,
+  "provider": "gitlab",
+  "event": "merge_request",
+  "title": "GitLab · Merge request",
+  "subtitle": "acme/app",
+  "badge": "open",
+  "summary": "",
+  "link": "https://gitlab.example/acme/app/-/merge_requests/1",
+  "meta": [
+    { "label": "标题", "value": "Fix bug" },
+    { "label": "分支", "value": "fix → main" }
+  ],
+  "raw": ""
+}
+```
+
+### Field notes
+
+- `type`: must be `csgclaw.notify_card`.
+- `schema_version`: currently `1`.
+- `provider`: `gitlab`, `github`, or `generic`.
+- `event`: normalized name (for example `push`, `merge_request`, `issue`, `pull_request`, `ping`); for `generic` payloads values such as `json`, `text`, or `empty` are used.
+- `title` / `subtitle` / `badge` / `summary`: display fields.
+- `link`: optional HTTP(S) URL; the UI only allows `http:` and `https:` schemes.
+- `meta`: optional list of `{ "label", "value" }` rows.
+- `raw`: optional truncated pretty JSON when the webhook shape is unknown.
+- Like `action_card`, **`content` must be the raw JSON object only** (no markdown wrapper or code fence).
+
 ### Related code paths
 
 - Frontend parser/renderer: `web/static/app.js`
 - Action-card test coverage: `web/static/app_action_card.test.cjs`
+- Notifier card encoding: `internal/runtime/notifier/notify_card.go`, `internal/runtime/notifier/notify_webhooks.go`
 - Feishu setup command output: `internal/templates/embed/runtimes/picoclaw/manager/workspace/skills/feishu/scripts/feishu_setup/csgclaw.py`

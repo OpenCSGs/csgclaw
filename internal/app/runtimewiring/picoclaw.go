@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"strings"
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/channel/feishu"
-	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
@@ -44,10 +42,7 @@ func WithOpenClawSandboxRuntime() agent.ServiceOption {
 func withSandboxRuntimeHost(host agent.PicoClawRuntimeHost, feishuProvider feishu.BotCredentialProvider, newRuntime func(sandboxgateway.Dependencies) agentruntime.Runtime) agent.ServiceOption {
 	return func(s *agent.Service) error {
 		return agent.WithRuntime(newRuntime(sandboxgateway.Dependencies{
-			ModelFallback:  host.ModelFallback,
-			Server:         host.Server,
 			FeishuProvider: feishuProvider,
-			ResolveBaseURL: resolveManagerBaseURL,
 			EnsureRuntime:  host.EnsureRuntime,
 			RuntimeHome:    host.RuntimeHome,
 			CloseRuntime:   host.CloseRuntime,
@@ -78,23 +73,14 @@ func withSandboxRuntimeHost(host agent.PicoClawRuntimeHost, feishuProvider feish
 					BoxID:     got.BoxID,
 				}, nil
 			},
-			SyncHandle:          host.SyncHandle,
-			EnsureGatewayConfig: host.EnsureGatewayConfig,
-			EnsureWorkspace:     host.EnsureWorkspace,
-			WorkspaceTemplate:   host.WorkspaceTemplate,
-			EnsureProjectsRoot:  host.EnsureProjectsRoot,
+			SyncHandle: host.SyncHandle,
 			BuildRuntimeEnv: func(baseURL, accessToken, botID, llmBaseURL, modelID string, provider feishu.BotCredentialProvider) map[string]string {
 				env := picoClawBoxEnvVars(baseURL, accessToken, botID, llmBaseURL, modelID)
 				addFeishuBoxEnvVars(env, botID, provider)
 				return env
 			},
-			AddProfileEnv:      agentAddProfileEnv,
-			HomeEnv:            host.HomeEnv,
-			WorkspaceGuestPath: host.WorkspaceGuestPath,
-			ProjectsGuestPath:  host.ProjectsGuestPath,
-			GatewayLogPath:     host.GatewayLogPath,
-			GatewayCommand:     host.GatewayCommand,
-			StreamLogs:         host.StreamLogs,
+			AddProfileEnv: agentAddProfileEnv,
+			StreamLogs:    host.StreamLogs,
 		}))(s)
 	}
 }
@@ -117,17 +103,6 @@ func UpdatePicoClawFeishuProvider(svc *agent.Service, provider feishu.BotCredent
 		return
 	}
 	updater.SetFeishuProvider(provider)
-}
-
-func resolveManagerBaseURL(server config.ServerConfig) string {
-	if server.AdvertiseBaseURL != "" {
-		return strings.TrimRight(server.AdvertiseBaseURL, "/")
-	}
-	port := config.ListenPort(server.ListenAddr)
-	if ip := localIPv4(); ip != "" {
-		return fmt.Sprintf("http://%s:%s", ip, port)
-	}
-	return ""
 }
 
 func picoClawBoxEnvVars(baseURL, accessToken, botID, llmBaseURL, modelID string) map[string]string {
@@ -203,65 +178,4 @@ func isReservedSandboxEnvKey(key string) bool {
 		return true
 	}
 	return strings.HasPrefix(upper, "CSGCLAW_") || strings.HasPrefix(upper, "PICOCLAW_")
-}
-
-func localIPv4() string {
-	if ip := outboundIPv4(); ip != "" {
-		return ip
-	}
-	return interfaceIPv4()
-}
-
-func outboundIPv4() string {
-	conn, err := net.Dial("udp4", "8.8.8.8:80")
-	if err != nil {
-		return ""
-	}
-	defer conn.Close()
-
-	addr, ok := conn.LocalAddr().(*net.UDPAddr)
-	if !ok || addr.IP == nil {
-		return ""
-	}
-	ip := addr.IP.To4()
-	if ip == nil || ip.IsLoopback() || ip.IsUnspecified() {
-		return ""
-	}
-	return ip.String()
-}
-
-func interfaceIPv4() string {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return ""
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			if ip := ipv4FromAddr(addr); ip != "" {
-				return ip
-			}
-		}
-	}
-	return ""
-}
-
-func ipv4FromAddr(addr net.Addr) string {
-	switch v := addr.(type) {
-	case *net.IPNet:
-		if ip := v.IP.To4(); ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() {
-			return ip.String()
-		}
-	case *net.IPAddr:
-		if ip := v.IP.To4(); ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() {
-			return ip.String()
-		}
-	}
-	return ""
 }

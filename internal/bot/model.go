@@ -31,8 +31,8 @@ func NormalizeCreateRequest(req CreateRequest) (CreateRequest, error) {
 	req.Name = strings.TrimSpace(req.Name)
 	req.Description = strings.TrimSpace(req.Description)
 	req.Image = strings.TrimSpace(req.Image)
-	req.ModelID = strings.TrimSpace(req.ModelID)
 	req.RuntimeKind = strings.TrimSpace(req.RuntimeKind)
+	req.FromTemplate = strings.TrimSpace(req.FromTemplate)
 	if req.Name == "" {
 		return CreateRequest{}, fmt.Errorf("name is required")
 	}

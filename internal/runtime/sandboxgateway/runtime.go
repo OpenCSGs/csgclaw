@@ -22,12 +22,16 @@ type AgentRef struct {
 	BoxID     string
 }
 
+type WorkspaceLayout struct {
+	MountHostPath      string
+	MountGuestPath     string
+	WorkspaceHostPath  string
+	WorkspaceGuestPath string
+}
+
 type Dependencies struct {
 	RuntimeKind    string
-	ModelFallback  string
-	Server         config.ServerConfig
 	FeishuProvider feishu.BotCredentialProvider
-	ResolveBaseURL func(server config.ServerConfig) string
 
 	EnsureRuntime    func(agentName string) (sandbox.Runtime, error)
 	RuntimeHome      func(agentName string) (string, error)
@@ -42,25 +46,23 @@ type Dependencies struct {
 	CloseBox         func(box sandbox.Instance) error
 	RunBoxCommand    func(ctx context.Context, box sandbox.Instance, name string, args []string, w io.Writer) (int, error)
 
-	ResolveAgent        func(h agentruntime.Handle) (AgentRef, error)
-	SyncHandle          func(h agentruntime.Handle) error
-	EnsureGatewayConfig func(agentName, botID string, profile agentruntime.Profile) error
-	EnsureWorkspace     func(agentName, template string) (string, error)
-	WorkspaceTemplate   func(name, botID string) (string, error)
-	EnsureProjectsRoot  func() (string, error)
-	BuildRuntimeEnv     func(baseURL, accessToken, botID, llmBaseURL, modelID string, feishuProvider feishu.BotCredentialProvider) map[string]string
-	AddProfileEnv       func(envVars map[string]string, profileEnv map[string]string)
-	HomeEnv             string
-	WorkspaceGuestPath  string
-	ProjectsGuestPath   string
-	GatewayLogPath      string
-	GatewayCommand      func() string
-	StreamLogs          func(ctx context.Context, agentID string, follow bool, lines int, w io.Writer) error
+	ResolveAgent       func(h agentruntime.Handle) (AgentRef, error)
+	SyncHandle         func(h agentruntime.Handle) error
+	BuildRuntimeEnv    func(baseURL, accessToken, botID, llmBaseURL, modelID string, feishuProvider feishu.BotCredentialProvider) map[string]string
+	AddProfileEnv      func(envVars map[string]string, profileEnv map[string]string)
+	HomeEnv            string
+	MountGuestPath     string
+	WorkspaceGuestPath string
+	ProjectsGuestPath  string
+	GatewayLogPath     string
+	GatewayCommand     func() string
+	StreamLogs         func(ctx context.Context, agentID string, follow bool, lines int, w io.Writer) error
 }
 
 type Runtime struct {
-	mu   sync.RWMutex
-	deps Dependencies
+	mu       sync.RWMutex
+	deps     Dependencies
+	prepared map[string]PreparedGatewayProvision
 }
 
 var (
@@ -69,7 +71,10 @@ var (
 )
 
 func New(deps Dependencies) *Runtime {
-	return &Runtime{deps: deps}
+	return &Runtime{
+		deps:     deps,
+		prepared: make(map[string]PreparedGatewayProvision),
+	}
 }
 
 func (r *Runtime) SetFeishuProvider(provider feishu.BotCredentialProvider) {
@@ -97,7 +102,7 @@ func (r *Runtime) Kind() string {
 	return "sandbox_gateway"
 }
 
-func (r *Runtime) Create(ctx context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
 	agentName := strings.TrimSpace(spec.AgentName)
 	agentID := strings.TrimSpace(spec.AgentID)
 	if agentName == "" || agentID == "" {
@@ -297,38 +302,34 @@ func (r *Runtime) CreateGatewayBox(ctx context.Context, rt sandbox.Runtime, imag
 }
 
 func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentruntime.Profile) (sandbox.CreateSpec, error) {
-	modelID := strings.TrimSpace(profile.ModelID)
-	if modelID == "" {
-		modelID = strings.TrimSpace(r.deps.ModelFallback)
+	prepared, err := r.preparedGatewayProvision(botID)
+	if err != nil {
+		return sandbox.CreateSpec{}, err
 	}
-	managerBaseURL := r.deps.ResolveBaseURL(r.deps.Server)
+	modelID := prepared.ModelID
+	managerBaseURL := strings.TrimRight(strings.TrimSpace(prepared.ManagerBaseURL), "/")
 	llmBaseURL := llmBridgeBaseURL(managerBaseURL, botID)
-	profile.ModelID = modelID
-	if err := r.deps.EnsureGatewayConfig(name, botID, profile); err != nil {
-		return sandbox.CreateSpec{}, err
-	}
-	templateRoot, err := r.deps.WorkspaceTemplate(name, botID)
-	if err != nil {
-		return sandbox.CreateSpec{}, err
-	}
-	hostWorkspaceRoot, err := r.deps.EnsureWorkspace(name, templateRoot)
-	if err != nil {
-		return sandbox.CreateSpec{}, err
-	}
-	projectsRoot, err := r.deps.EnsureProjectsRoot()
-	if err != nil {
-		return sandbox.CreateSpec{}, err
-	}
-	envVars := r.deps.BuildRuntimeEnv(managerBaseURL, r.deps.Server.AccessToken, botID, llmBaseURL, modelID, r.feishuProvider())
+	profile = prepared.Profile
+	workspaceLayout := prepared.WorkspaceLayout
+	projectsRoot := prepared.ProjectsRoot
+	envVars := r.deps.BuildRuntimeEnv(managerBaseURL, prepared.Server.AccessToken, botID, llmBaseURL, modelID, r.feishuProvider())
 	r.deps.AddProfileEnv(envVars, profile.Env)
 	homeEnv := r.homeEnv()
-	workspaceGuestPath := r.workspaceGuestPath()
 	projectsGuestPath := r.projectsGuestPath()
 	gatewayCommand := r.gatewayCommand()
 	if homeEnv == "" {
 		return sandbox.CreateSpec{}, fmt.Errorf("runtime HOME env is required")
 	}
-	if workspaceGuestPath == "" {
+	if workspaceLayout.MountHostPath == "" {
+		return sandbox.CreateSpec{}, fmt.Errorf("workspace mount host path is required")
+	}
+	if workspaceLayout.MountGuestPath == "" {
+		return sandbox.CreateSpec{}, fmt.Errorf("workspace mount guest path is required")
+	}
+	if workspaceLayout.WorkspaceHostPath == "" {
+		return sandbox.CreateSpec{}, fmt.Errorf("workspace host path is required")
+	}
+	if workspaceLayout.WorkspaceGuestPath == "" {
 		return sandbox.CreateSpec{}, fmt.Errorf("workspace guest path is required")
 	}
 	if projectsGuestPath == "" {
@@ -347,18 +348,80 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 		Cmd:        []string{"/bin/sh", "-c", gatewayCommand},
 	}
 	spec.Mounts = append(spec.Mounts,
-		sandbox.Mount{HostPath: hostWorkspaceRoot, GuestPath: workspaceGuestPath},
+		sandbox.Mount{HostPath: workspaceLayout.MountHostPath, GuestPath: workspaceLayout.MountGuestPath},
 		sandbox.Mount{HostPath: projectsRoot, GuestPath: projectsGuestPath},
 	)
 	return spec, nil
 }
 
-func (r *Runtime) EnsureGatewayConfig(agentName, botID, modelID string) error {
-	return r.deps.EnsureGatewayConfig(agentName, botID, agentruntime.Profile{ModelID: strings.TrimSpace(modelID)})
+type PreparedGatewayProvision struct {
+	ModelID         string
+	Profile         agentruntime.Profile
+	WorkspaceLayout WorkspaceLayout
+	ProjectsRoot    string
+	ManagerBaseURL  string
+	Server          config.ServerConfig
 }
 
-func (r *Runtime) ProjectsGuestPath() string {
-	return r.projectsGuestPath()
+func FinalizePreparedGatewayProvision(req agentruntime.ProvisionRequest, workspaceLayout WorkspaceLayout) (PreparedGatewayProvision, error) {
+	name := strings.TrimSpace(req.AgentName)
+	if name == "" || strings.TrimSpace(req.AgentID) == "" {
+		return PreparedGatewayProvision{}, fmt.Errorf("runtime agent name and id are required")
+	}
+	gateway := req.Gateway
+	if gateway == nil {
+		return PreparedGatewayProvision{}, fmt.Errorf("gateway provisioning data is required")
+	}
+	profile := req.Profile.Normalized()
+	modelID := strings.TrimSpace(profile.ModelID)
+	if modelID == "" {
+		modelID = strings.TrimSpace(gateway.ModelFallback)
+	}
+	profile.ModelID = modelID
+	workspaceLayout = normalizeWorkspaceLayout(Dependencies{}, workspaceLayout)
+	if overlayRoot := strings.TrimSpace(req.WorkspaceOverlay); overlayRoot != "" {
+		if err := OverlayWorkspaceTree(overlayRoot, workspaceLayout.WorkspaceHostPath); err != nil {
+			return PreparedGatewayProvision{}, fmt.Errorf("overlay workspace for agent %q: %w", name, err)
+		}
+	}
+	return PreparedGatewayProvision{
+		ModelID:         modelID,
+		Profile:         profile,
+		WorkspaceLayout: workspaceLayout,
+		ProjectsRoot:    strings.TrimSpace(gateway.ProjectsRoot),
+		ManagerBaseURL:  strings.TrimRight(strings.TrimSpace(gateway.ManagerBaseURL), "/"),
+		Server:          gateway.Server,
+	}, nil
+}
+
+func (r *Runtime) RememberPreparedGatewayProvision(agentID string, prepared PreparedGatewayProvision) {
+	if r == nil {
+		return
+	}
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.prepared[agentID] = prepared
+}
+
+func (r *Runtime) preparedGatewayProvision(agentID string) (PreparedGatewayProvision, error) {
+	if r == nil {
+		return PreparedGatewayProvision{}, fmt.Errorf("runtime is required")
+	}
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return PreparedGatewayProvision{}, fmt.Errorf("runtime agent id is required")
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	prepared, ok := r.prepared[agentID]
+	if !ok {
+		return PreparedGatewayProvision{}, fmt.Errorf("gateway provision for agent %q is not available; call Provision first", agentID)
+	}
+	return prepared, nil
 }
 
 func (r *Runtime) GatewayLogPath() string {
@@ -367,6 +430,10 @@ func (r *Runtime) GatewayLogPath() string {
 
 func (r *Runtime) homeEnv() string {
 	return strings.TrimSpace(r.deps.HomeEnv)
+}
+
+func (r *Runtime) mountGuestPath() string {
+	return strings.TrimSpace(r.deps.MountGuestPath)
 }
 
 func (r *Runtime) workspaceGuestPath() string {
@@ -386,6 +453,27 @@ func (r *Runtime) gatewayCommand() string {
 		return strings.TrimSpace(r.deps.GatewayCommand())
 	}
 	return ""
+}
+
+func (r *Runtime) normalizeWorkspaceLayout(layout WorkspaceLayout) WorkspaceLayout {
+	return normalizeWorkspaceLayout(r.deps, layout)
+}
+
+func normalizeWorkspaceLayout(deps Dependencies, layout WorkspaceLayout) WorkspaceLayout {
+	layout.MountHostPath = strings.TrimSpace(layout.MountHostPath)
+	layout.MountGuestPath = strings.TrimSpace(layout.MountGuestPath)
+	layout.WorkspaceHostPath = strings.TrimSpace(layout.WorkspaceHostPath)
+	layout.WorkspaceGuestPath = strings.TrimSpace(layout.WorkspaceGuestPath)
+	if layout.WorkspaceHostPath == "" {
+		layout.WorkspaceHostPath = layout.MountHostPath
+	}
+	if layout.MountGuestPath == "" {
+		layout.MountGuestPath = strings.TrimSpace(deps.MountGuestPath)
+	}
+	if layout.WorkspaceGuestPath == "" {
+		layout.WorkspaceGuestPath = strings.TrimSpace(deps.WorkspaceGuestPath)
+	}
+	return layout
 }
 
 func (r *Runtime) openSandboxRuntime(agentName string) (sandbox.Runtime, string, error) {

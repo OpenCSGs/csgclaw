@@ -11,8 +11,8 @@ from typing import Any, Optional
 
 from .config import API_REQUEST_TIMEOUT, DEFAULT_EXPIRE_SECONDS
 from .csgclaw import (
-    agent_exists,
     api_json,
+    bot_exists,
     configure_csgclaw,
     ensure_bot,
     is_box_name_conflict,
@@ -51,7 +51,6 @@ def cmd_start(args: argparse.Namespace) -> int:
         "role": role,
         "bot_name": args.bot_name or bot_id.removeprefix("u-") or bot_id,
         "description": args.description or "",
-        "admin_open_id": args.admin_open_id or "",
         "domain": domain,
         "device_code": begin["device_code"],
         "qr_url": begin["qr_url"],
@@ -71,7 +70,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         "interval": begin["interval"],
         "expires_in": min(begin["expire_in"], args.timeout),
         "state_path": str(state_path(args, registration_id)),
-        "next": f"python scripts/feishu_register.py finalize --registration-id {registration_id}",
+        "next": f"python /home/picoclaw/.picoclaw/workspace/skills/feishu/scripts/feishu_register.py finalize --registration-id {registration_id}",
         "next_tool_timeout_seconds": API_REQUEST_TIMEOUT,
     }
     if args.json:
@@ -103,7 +102,7 @@ def cmd_poll(args: argparse.Namespace) -> int:
                     "status": "confirmed",
                     "bot_id": state["bot_id"],
                     "credentials": "available",
-                    "next": f"python scripts/feishu_register.py finalize --registration-id {state['registration_id']}",
+                    "next": f"python /home/picoclaw/.picoclaw/workspace/skills/feishu/scripts/feishu_register.py finalize --registration-id {state['registration_id']}",
                     "next_tool_timeout_seconds": API_REQUEST_TIMEOUT,
                 },
                 ensure_ascii=False,
@@ -124,7 +123,7 @@ def cmd_finalize(args: argparse.Namespace) -> int:
     role = resolve_role(args, state)
     worker_existed_before_ensure = None
     if role == "worker" and args.recreate in ("auto", "worker"):
-        worker_existed_before_ensure = agent_exists(args, state["bot_id"])
+        worker_existed_before_ensure = bot_exists(args, state["bot_id"])
     try:
         ensured = ensure_bot(args, state, result)
     except RuntimeError as exc:
@@ -136,9 +135,9 @@ def cmd_finalize(args: argparse.Namespace) -> int:
     if not args.keep_state:
         delete_state(args, state["registration_id"])
     if configured is not None:
-        admin_open_id = str((configured or {}).get("admin_open_id") or "").strip()
+        admin_open_id = str((configured or {}).get("admin_open_id") or "").strip() if state["bot_id"] == "u-manager" else ""
     else:
-        admin_open_id = str(result.get("open_id") or state.get("admin_open_id") or "").strip()
+        admin_open_id = str(result.get("open_id") or "").strip() if state["bot_id"] == "u-manager" else ""
     worker_recreate_policy = None
     if role == "worker":
         if worker_existed_before_ensure is True:
@@ -212,7 +211,6 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--role", choices=["worker", "manager"], default="", help="Bot role; inferred from bot id when omitted")
     start.add_argument("--bot-name", default="", help="CSGClaw bot display name")
     start.add_argument("--description", default="", help="CSGClaw bot description")
-    start.add_argument("--admin-open-id", default="", help="Fallback admin open_id if registration does not return one")
     start.add_argument("--domain", choices=["feishu", "lark"], default="feishu")
     start.add_argument("--timeout", type=int, default=DEFAULT_EXPIRE_SECONDS)
     start.add_argument("--json", action="store_true", help="Print machine-readable JSON")
@@ -231,7 +229,7 @@ def build_parser() -> argparse.ArgumentParser:
     finalize.add_argument("--registration-id", required=True)
     finalize.add_argument("--timeout", type=int, default=DEFAULT_EXPIRE_SECONDS)
     finalize.add_argument("--no-configure", action="store_true", help="Do not write CSGClaw config; for debugging only, still never prints secret")
-    finalize.add_argument("--no-ensure-bot", action="store_true", help="Skip POST /api/v1/bots")
+    finalize.add_argument("--no-ensure-bot", action="store_true", help="Skip POST /api/v1/channels/feishu/bots")
     finalize.add_argument("--role", choices=["worker", "manager"], default="", help="Override role for ensure/recreate logic")
     finalize.add_argument("--bot-name", default="", help="Override bot name for ensure")
     finalize.add_argument("--description", default="", help="Override bot description for ensure")
