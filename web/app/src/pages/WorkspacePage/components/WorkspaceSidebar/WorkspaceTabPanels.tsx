@@ -1,6 +1,5 @@
-// @ts-nocheck
-import { WORKSPACE_TAB_HUB, WORKSPACE_TAB_MESSAGES } from "@/bootstrap/constants";
 import { HubIcon } from "@/components/ui/Icons";
+import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { WorkspaceAgentRow, WorkspaceComputerRow, WorkspaceConversationRow, WorkspaceGroup } from "../WorkspaceRows";
 
@@ -34,7 +33,7 @@ export function WorkspaceTabPanels({
 
   return (
     <>
-      {workspaceTab === WORKSPACE_TAB_MESSAGES ? (
+      {workspaceTab === WorkspaceTabs.messages ? (
         <div className="workspace-tab-panel" role="tabpanel" aria-label={t("messagesTab")}>
           <WorkspaceGroup
             id="rooms"
@@ -50,7 +49,7 @@ export function WorkspaceTabPanels({
                 <WorkspaceConversationRow
                   key={conversation.id}
                   conversation={conversation}
-                  active={activePane.type === "conversation" && activePane.id === conversation.id}
+                  active={activePane.type === WorkspacePaneTypes.conversation && activePane.id === conversation.id}
                   currentUserID={currentUserID}
                   usersById={usersById}
                   locale={locale}
@@ -75,7 +74,7 @@ export function WorkspaceTabPanels({
                 <WorkspaceConversationRow
                   key={conversation.id}
                   conversation={conversation}
-                  active={activePane.type === "conversation" && activePane.id === conversation.id}
+                  active={activePane.type === WorkspacePaneTypes.conversation && activePane.id === conversation.id}
                   currentUserID={currentUserID}
                   usersById={usersById}
                   locale={locale}
@@ -89,7 +88,7 @@ export function WorkspaceTabPanels({
             )}
           </WorkspaceGroup>
         </div>
-      ) : workspaceTab === WORKSPACE_TAB_HUB ? (
+      ) : workspaceTab === WorkspaceTabs.hub ? (
         <div className="workspace-tab-panel" role="tabpanel" aria-label={t("hubTab")}>
           <WorkspaceGroup
             id="hub"
@@ -143,7 +142,7 @@ export function WorkspaceTabPanels({
                 <WorkspaceAgentRow
                   key={item.id}
                   item={item}
-                  active={activePane.type === "agent" && activePane.id === item.id}
+                  active={activePane.type === WorkspacePaneTypes.agent && activePane.id === item.id}
                   t={t}
                   onSelect={onSelectAgent}
                   onPreview={onPreviewAgent}
@@ -162,7 +161,7 @@ export function WorkspaceTabPanels({
           >
             <WorkspaceComputerRow
               title={t("localComputer")}
-              active={activePane.type === "computer"}
+              active={activePane.type === WorkspacePaneTypes.computer}
               subtitle={`${agentItems.length} ${t("computerAgentsSection")}`}
               onSelect={onSelectComputer}
             />

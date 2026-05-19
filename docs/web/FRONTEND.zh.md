@@ -37,11 +37,11 @@ pnpm --dir web/app install
 ## 顶层结构
 
 - `src/api/`: HTTP 请求封装和 API 边界代码。
-- `src/bootstrap/`: 应用启动、providers、常量和全局装配。
+- `src/bootstrap/`: 应用启动、providers、根装配、错误边界和应用级 wiring。
 - `src/components/`: 跨页面复用组件。
 - `src/models/`: 纯数据归一化、格式化、路由解析和领域 helper。
 - `src/pages/`: 路由页面和页面私有模块。
-- `src/shared/`: 跨模块通用的 i18n、storage key、realtime、theme、样式和通用 helper。
+- `src/shared/`: 跨模块通用的常量、i18n、storage key、realtime、theme、样式和通用 helper。
 
 不要随意新增顶层目录。只有模块确实是跨领域通用，并且不适合现有目录时再新增。
 
@@ -52,7 +52,7 @@ pnpm --dir web/app install
 | 路径 | 职责 | 避免 |
 | --- | --- | --- |
 | `src/main.tsx` | React 入口。 | 应用逻辑、路由规则或 provider 细节。 |
-| `src/bootstrap/` | 应用启动、providers、常量、根装配、错误边界和共享 client。 | 页面私有行为或 feature 专属 helper。 |
+| `src/bootstrap/` | 应用启动、providers、根装配、错误边界和共享 client。 | 页面私有行为、feature 专属 helper 或万能 constants 文件。 |
 | `src/routes/` | 路由声明和 route 到 page 的装配。 | 页面实现细节。 |
 | `src/api/` | HTTP client、请求封装、endpoint 类型和传输边界。 | 渲染逻辑、页面状态或可复用数据归一化。 |
 | `src/models/` | 可共享或可独立测试的纯数据整理、格式化、解析、路由和领域 helper。 | React hooks、浏览器存储、fetch 调用或 UI 状态。 |
@@ -61,6 +61,7 @@ pnpm --dir web/app install
 | `src/components/business/` | 跨页面复用的业务组件，组合 UI 基础件和业务文案、状态、动作或 API 数据。 | 只被单个页面使用的组件。 |
 | `src/pages/<PageName>/` | 路由页面和该页面拥有的模块。 | 没有真实复用前提前抽跨页面抽象。 |
 | `src/pages/<PageName>/components/` | 页面私有组件。 | 从其它页面导入私有模块。 |
+| `src/shared/constants/` | 小而明确的跨模块稳定契约常量，例如 API endpoint、agent 默认值、结构化消息 type 字符串。 | 单个万能 constants 文件、页面私有值或领域逻辑。 |
 | `src/shared/i18n/` | 文案表、语言选择和翻译 helper。 | 只属于单个未国际化路径的一次性文案。 |
 | `src/shared/storage/` | storage key 和 local/session storage 封装。 | 页面专属持久化策略。 |
 | `src/shared/realtime/` | event bus、SSE/shared worker、实时事件解析和订阅 helper。 | 页面渲染或组件私有 effect。 |
@@ -71,6 +72,15 @@ pnpm --dir web/app install
 默认把代码放在最接近 owner 的地方。只有出现真实跨页面复用，或边界确实共享时，才提升到 `src/components`、`src/models`、`src/hooks` 或 `src/shared`。
 
 如果后续某个子目录需要自己的规则，在该子目录加一个短 README，并从本规范链接过去。
+
+## 常量与共享契约
+
+- 不要使用 `src/bootstrap/constants.ts` 或其它单个万能 constants 模块。
+- 页面私有常量放在拥有它的页面、组件、hook 或 helper 附近。
+- 被 model helper 使用的纯领域常量放在对应的 `src/models/<domain>.ts`。路由常量、pane type、route segment alias 和 path builder 应一起放在 `src/models/routing.ts`。
+- 被多个远距离模块导入的稳定跨模块契约，放在 `src/shared/constants/` 下的聚焦文件里，例如 `api.ts`、`agents.ts`、`messages.ts` 或 `workspace.ts`。
+- 成组字符串值优先使用 enum-like 的 `as const` 对象，并从对象推导 union type；只有孤立的一次性常量或外部协议字符串才用平铺 `export const`。
+- 除非外部 API 明确需要运行时 enum 对象，否则避免 TypeScript `enum`；`as const` 对象生成的 JavaScript 更简单，也更容易表达 alias。
 
 ## 页面模块
 

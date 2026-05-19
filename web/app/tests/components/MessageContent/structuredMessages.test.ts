@@ -1,4 +1,8 @@
-import { ACTION_REBUILD_MANAGER, CSGCLAW_ACTION_CARD_TYPE, CSGCLAW_NOTIFY_CARD_TYPE } from "@/bootstrap/constants";
+import {
+  ACTION_REBUILD_MANAGER,
+  CSGCLAW_ACTION_CARD_TYPE,
+  CSGCLAW_NOTIFY_CARD_TYPE,
+} from "@/shared/constants/messages";
 import {
   extractTopLevelJSONObject,
   parseStructuredMessage,

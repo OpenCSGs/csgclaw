@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Button } from "@/components/ui";
 import { defaultManagerRebuildImageForRuntime, formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
 
@@ -39,7 +38,7 @@ export function ManagerRebuildModal({
                 <select
                   value={selectedRuntimeKind}
                   onChange={(event) => {
-                    const nextRuntimeKind = normalizeRuntimeKind(event.target.value);
+                    const nextRuntimeKind = normalizeRuntimeKind(event.currentTarget.value);
                     onRuntimeKindChange(nextRuntimeKind);
                     onImageChange(
                       defaultManagerRebuildImageForRuntime(
@@ -63,7 +62,7 @@ export function ManagerRebuildModal({
                 <input
                   list="manager-rebuild-image-options"
                   value={image}
-                  onInput={(event) => onImageChange(event.target.value)}
+                  onInput={(event) => onImageChange(event.currentTarget.value)}
                   placeholder={t("agentImagePlaceholder")}
                 />
                 <datalist id="manager-rebuild-image-options">

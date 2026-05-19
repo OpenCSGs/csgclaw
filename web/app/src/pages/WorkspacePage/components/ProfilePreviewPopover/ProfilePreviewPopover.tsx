@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useLayoutEffect, useState } from "react";
 import {
   agentModelID,

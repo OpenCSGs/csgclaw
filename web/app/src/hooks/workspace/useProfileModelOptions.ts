@@ -1,12 +1,19 @@
-// @ts-nocheck
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import type { Dispatch, SetStateAction } from "react";
 import { isNotifierRuntimeDraft, modelRequestKey } from "@/models/agents";
+import type { AgentDraft } from "@/models/agents";
 import { useWorkspaceAgentProfileModelsQuery, workspaceQueryKeys } from "./workspaceQueries";
 
-export function useProfileModelOptions({ draft, enabled = true, onDraftChange }) {
+export type UseProfileModelOptionsArgs = {
+  draft: AgentDraft | null;
+  enabled?: boolean;
+  onDraftChange?: Dispatch<SetStateAction<AgentDraft | null>>;
+};
+
+export function useProfileModelOptions({ draft, enabled = true, onDraftChange }: UseProfileModelOptionsArgs) {
   const queryClient = useQueryClient();
-  const [requestDraft, setRequestDraft] = useState(null);
+  const [requestDraft, setRequestDraft] = useState<AgentDraft | null>(null);
   const draftRequestKey = modelRequestKey(draft);
   const requestKey = modelRequestKey(requestDraft);
   const shouldLoad = Boolean(enabled && draft?.provider && !isNotifierRuntimeDraft(draft));
@@ -38,7 +45,7 @@ export function useProfileModelOptions({ draft, enabled = true, onDraftChange })
       return;
     }
     onDraftChange((current) => {
-      if (modelRequestKey(current) !== requestKey || current.model_id) {
+      if (!current || modelRequestKey(current) !== requestKey || current.model_id) {
         return current;
       }
       return { ...current, model_id: models[0] };

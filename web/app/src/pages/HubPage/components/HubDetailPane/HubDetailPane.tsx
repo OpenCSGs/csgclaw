@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import {
   buildInitialCollapsedHubWorkspaceDirs,
@@ -8,6 +7,7 @@ import {
   formatHubTemplateCount,
   hubWorkspaceAncestorDirs,
 } from "@/models/hubWorkspace";
+import type { HubTreeDepthStyle } from "@/models/hubWorkspace";
 import { localizeRole, localizeTemplateSourceTag } from "@/shared/i18n";
 import { HubIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
@@ -213,13 +213,13 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
                               key={entry.path}
                               type="button"
                               className={`hub-tree-row ${entry.type} ${entry.type === "dir" ? "toggleable" : ""} ${entry.type === "file" && selectedWorkspacePath === entry.path ? "active" : ""}`.trim()}
-                              style={{ "--hub-tree-depth": entry.depth }}
+                              style={{ "--hub-tree-depth": entry.depth ?? 0 } as HubTreeDepthStyle}
                               onClick={() =>
                                 entry.type === "dir"
                                   ? toggleWorkspaceDir(entry.path)
                                   : onSelectWorkspaceFile?.(entry.path)
                               }
-                              aria-expanded={entry.type === "dir" ? String(!collapsed) : undefined}
+                              aria-expanded={entry.type === "dir" ? !collapsed : undefined}
                             >
                               <span
                                 className={`hub-tree-toggle ${entry.type === "file" ? "spacer" : ""} ${collapsed ? "collapsed" : ""}`.trim()}

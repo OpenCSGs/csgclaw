@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {
   agentModelID,
   formatProviderLabel,
@@ -14,8 +13,29 @@ import {
 } from "@/models/conversations";
 import { AgentIcon, ChevronIcon, ComputerIcon, RoomPlusIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
+import type { ReactNode } from "react";
 
-export function WorkspaceGroup({ id, title, count, collapsed, onToggle, onAdd, addLabel, children }) {
+export type WorkspaceGroupProps = {
+  addLabel?: string;
+  children: ReactNode;
+  collapsed: boolean;
+  count: number;
+  id: string;
+  onAdd?: () => void;
+  onToggle: () => void;
+  title: string;
+};
+
+export function WorkspaceGroup({
+  id,
+  title,
+  count,
+  collapsed,
+  onToggle,
+  onAdd,
+  addLabel,
+  children,
+}: WorkspaceGroupProps) {
   const itemsID = `workspace-group-items-${id || String(title).toLowerCase().replace(/\s+/g, "-")}`;
   return (
     <section className={`workspace-group ${collapsed ? "collapsed" : ""}`}>
@@ -89,7 +109,7 @@ export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview }) {
       <span
         className="workspace-row-icon workspace-row-icon-clickable"
         role="button"
-        tabIndex="0"
+        tabIndex={0}
         aria-label={`${t("profilePreview")} ${item.name}`}
         onClick={(event) => {
           event.stopPropagation();
@@ -145,7 +165,7 @@ export function WorkspaceConversationRow({
       <span
         className={`workspace-row-icon ${isDirect ? "avatar-icon workspace-row-icon-clickable" : ""}`}
         role={isDirect ? "button" : undefined}
-        tabIndex={isDirect ? "0" : undefined}
+        tabIndex={isDirect ? 0 : undefined}
         aria-label={isDirect && displayUser ? `${t("profilePreview")} ${displayUser.name}` : undefined}
         onClick={
           isDirect && displayUser

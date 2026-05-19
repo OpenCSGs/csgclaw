@@ -1,19 +1,18 @@
-// @ts-nocheck
-import { WORKSPACE_TAB_AGENTS, WORKSPACE_TAB_HUB, WORKSPACE_TAB_MESSAGES } from "@/bootstrap/constants";
 import { Button } from "@/components/ui";
 import { HubIcon, RoomsIcon, UsersIcon } from "@/components/ui/Icons";
+import { WorkspaceTabs } from "@/models/routing";
 
 export function WorkspaceTabBar({ workspaceTab, onWorkspaceTabChange, roomCount, agentCount, onSelectHub, t }) {
   return (
     <div className="workspace-tabbar" role="tablist" aria-label="Workspace sections">
       <Button
         className="workspace-tab"
-        active={workspaceTab === WORKSPACE_TAB_MESSAGES}
+        active={workspaceTab === WorkspaceTabs.messages}
         role="tab"
-        aria-selected={workspaceTab === WORKSPACE_TAB_MESSAGES}
+        aria-selected={workspaceTab === WorkspaceTabs.messages}
         aria-label={t("messagesTab")}
         title={t("messagesTab")}
-        onClick={() => onWorkspaceTabChange(WORKSPACE_TAB_MESSAGES)}
+        onClick={() => onWorkspaceTabChange(WorkspaceTabs.messages)}
       >
         <span className="workspace-tab-icon" aria-hidden="true">
           <RoomsIcon />
@@ -25,12 +24,12 @@ export function WorkspaceTabBar({ workspaceTab, onWorkspaceTabChange, roomCount,
       </Button>
       <Button
         className="workspace-tab"
-        active={workspaceTab === WORKSPACE_TAB_AGENTS}
+        active={workspaceTab === WorkspaceTabs.agents}
         role="tab"
-        aria-selected={workspaceTab === WORKSPACE_TAB_AGENTS}
+        aria-selected={workspaceTab === WorkspaceTabs.agents}
         aria-label={t("agentsTab")}
         title={t("agentsTab")}
-        onClick={() => onWorkspaceTabChange(WORKSPACE_TAB_AGENTS)}
+        onClick={() => onWorkspaceTabChange(WorkspaceTabs.agents)}
       >
         <span className="workspace-tab-icon" aria-hidden="true">
           <UsersIcon />
@@ -42,9 +41,9 @@ export function WorkspaceTabBar({ workspaceTab, onWorkspaceTabChange, roomCount,
       </Button>
       <Button
         className="workspace-tab"
-        active={workspaceTab === WORKSPACE_TAB_HUB}
+        active={workspaceTab === WorkspaceTabs.hub}
         role="tab"
-        aria-selected={workspaceTab === WORKSPACE_TAB_HUB}
+        aria-selected={workspaceTab === WorkspaceTabs.hub}
         aria-label={t("hubTab")}
         title={t("hubTab")}
         onClick={() => onSelectHub()}

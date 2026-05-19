@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import { MessageContent } from "@/components/business/MessageContent";
 import { Button } from "@/components/ui";

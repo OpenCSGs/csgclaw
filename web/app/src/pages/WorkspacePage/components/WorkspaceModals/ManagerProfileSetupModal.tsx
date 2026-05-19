@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { GATEWAY_RUNTIME_KIND_OPTIONS } from "@/bootstrap/constants";
+import { GATEWAY_RUNTIME_KIND_OPTIONS } from "@/shared/constants/agents";
 import {
   APIKeyField,
   CLIProxyAuthControl,
@@ -59,7 +58,9 @@ export function ManagerProfileSetupModal({
                 <span>{t("profileRuntimeKind")}</span>
                 <select
                   value={normalizeRuntimeKind(profileDraft.runtime_kind || bootstrapConfig?.runtime_kind)}
-                  onChange={(event) => onProfileDraftChange({ ...profileDraft, runtime_kind: event.target.value })}
+                  onChange={(event) =>
+                    onProfileDraftChange({ ...profileDraft, runtime_kind: event.currentTarget.value })
+                  }
                 >
                   {GATEWAY_RUNTIME_KIND_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -73,7 +74,7 @@ export function ManagerProfileSetupModal({
                 <select
                   value={profileDraft.provider}
                   onChange={(event) => {
-                    onProfileDraftChange({ ...profileDraft, provider: event.target.value, model_id: "" });
+                    onProfileDraftChange({ ...profileDraft, provider: event.currentTarget.value, model_id: "" });
                     onProfileModelsReset();
                   }}
                 >
@@ -90,7 +91,7 @@ export function ManagerProfileSetupModal({
                   value={profileDraft.model_id}
                   required
                   aria-required="true"
-                  onChange={(event) => onProfileDraftChange({ ...profileDraft, model_id: event.target.value })}
+                  onChange={(event) => onProfileDraftChange({ ...profileDraft, model_id: event.currentTarget.value })}
                 >
                   <option value="">{profileModelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
                   {profileModels.map((model) => (
@@ -107,7 +108,9 @@ export function ManagerProfileSetupModal({
                 <span>{t("profileReasoning")}</span>
                 <select
                   value={profileDraft.reasoning_effort}
-                  onChange={(event) => onProfileDraftChange({ ...profileDraft, reasoning_effort: event.target.value })}
+                  onChange={(event) =>
+                    onProfileDraftChange({ ...profileDraft, reasoning_effort: event.currentTarget.value })
+                  }
                 >
                   {["low", "medium", "high", "xhigh"].map((effort) => (
                     <option key={effort} value={effort}>
@@ -145,13 +148,13 @@ export function ManagerProfileSetupModal({
                     value={profileDraft.base_url}
                     required
                     aria-required="true"
-                    onInput={(event) => onProfileDraftChange({ ...profileDraft, base_url: event.target.value })}
+                    onInput={(event) => onProfileDraftChange({ ...profileDraft, base_url: event.currentTarget.value })}
                     placeholder="https://api.openai.com/v1"
                   />
                 </label>
                 <APIKeyField
                   value={profileDraft.api_key}
-                  onInput={(event) => onProfileDraftChange({ ...profileDraft, api_key: event.target.value })}
+                  onInput={(event) => onProfileDraftChange({ ...profileDraft, api_key: event.currentTarget.value })}
                   profile={profileDraft}
                   t={t}
                 />
@@ -160,7 +163,9 @@ export function ManagerProfileSetupModal({
                   <textarea
                     className="compact-textarea"
                     value={profileDraft.headersText}
-                    onInput={(event) => onProfileDraftChange({ ...profileDraft, headersText: event.target.value })}
+                    onInput={(event) =>
+                      onProfileDraftChange({ ...profileDraft, headersText: event.currentTarget.value })
+                    }
                   />
                 </label>
               </div>
@@ -174,7 +179,9 @@ export function ManagerProfileSetupModal({
                 <textarea
                   className="compact-json"
                   value={profileDraft.requestOptionsText}
-                  onInput={(event) => onProfileDraftChange({ ...profileDraft, requestOptionsText: event.target.value })}
+                  onInput={(event) =>
+                    onProfileDraftChange({ ...profileDraft, requestOptionsText: event.currentTarget.value })
+                  }
                 />
               </label>
               <div className="field">

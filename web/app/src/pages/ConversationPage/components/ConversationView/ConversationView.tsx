@@ -1,7 +1,10 @@
-// @ts-nocheck
 import { ConversationPane } from "../ConversationPane";
 
-export function ConversationView({ conversation, t, ...props }) {
+type ConversationViewProps = Parameters<typeof ConversationPane>[0] & {
+  conversation: Parameters<typeof ConversationPane>[0]["conversation"] | null;
+};
+
+export function ConversationView({ conversation, t, ...props }: ConversationViewProps) {
   if (!conversation) {
     return (
       <div className="empty-state shell-empty-state">

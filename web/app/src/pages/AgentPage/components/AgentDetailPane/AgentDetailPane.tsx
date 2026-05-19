@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { PROVIDERS, REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/bootstrap/constants";
+import { PROVIDERS, REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
   APIKeyField,
   CLIProxyAuthControl,
@@ -188,7 +187,7 @@ export function AgentDetailPane({
                   value={draft.name}
                   required
                   aria-required="true"
-                  onInput={(event) => updateDraft({ name: event.target.value })}
+                  onInput={(event) => updateDraft({ name: event.currentTarget.value })}
                   placeholder={t("agentNamePlaceholder")}
                 />
               </label>
@@ -203,7 +202,7 @@ export function AgentDetailPane({
                     value={draft.image}
                     readOnly
                     disabled
-                    onInput={(event) => updateDraft({ image: event.target.value })}
+                    onInput={(event) => updateDraft({ image: event.currentTarget.value })}
                     placeholder={t("agentImagePlaceholder")}
                   />
                 </label>
@@ -213,7 +212,7 @@ export function AgentDetailPane({
                 <textarea
                   className="compact-textarea"
                   value={draft.description}
-                  onInput={(event) => updateDraft({ description: event.target.value })}
+                  onInput={(event) => updateDraft({ description: event.currentTarget.value })}
                 />
               </label>
             </div>
@@ -227,7 +226,7 @@ export function AgentDetailPane({
                   <span>{t("profileProvider")}</span>
                   <select
                     value={draft.provider}
-                    onChange={(event) => updateDraft({ provider: event.target.value, model_id: "" })}
+                    onChange={(event) => updateDraft({ provider: event.currentTarget.value, model_id: "" })}
                   >
                     {PROVIDERS.map((provider) => (
                       <option key={provider} value={provider}>
@@ -242,7 +241,7 @@ export function AgentDetailPane({
                     value={draft.model_id}
                     required
                     aria-required="true"
-                    onChange={(event) => updateDraft({ model_id: event.target.value })}
+                    onChange={(event) => updateDraft({ model_id: event.currentTarget.value })}
                   >
                     <option value="">{modelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
                     {models.map((model) => (
@@ -259,7 +258,7 @@ export function AgentDetailPane({
                   <span>{t("profileReasoning")}</span>
                   <select
                     value={draft.reasoning_effort}
-                    onChange={(event) => updateDraft({ reasoning_effort: event.target.value })}
+                    onChange={(event) => updateDraft({ reasoning_effort: event.currentTarget.value })}
                   >
                     {REASONING_EFFORTS.map((effort) => (
                       <option key={effort} value={effort}>
@@ -306,13 +305,13 @@ export function AgentDetailPane({
                     value={draft.base_url}
                     required
                     aria-required="true"
-                    onInput={(event) => updateDraft({ base_url: event.target.value })}
+                    onInput={(event) => updateDraft({ base_url: event.currentTarget.value })}
                     placeholder="https://api.openai.com/v1"
                   />
                 </label>
                 <APIKeyField
                   value={draft.api_key}
-                  onInput={(event) => updateDraft({ api_key: event.target.value })}
+                  onInput={(event) => updateDraft({ api_key: event.currentTarget.value })}
                   profile={draft}
                   t={t}
                 />
@@ -321,7 +320,7 @@ export function AgentDetailPane({
                   <textarea
                     className="compact-textarea"
                     value={draft.headersText}
-                    onInput={(event) => updateDraft({ headersText: event.target.value })}
+                    onInput={(event) => updateDraft({ headersText: event.currentTarget.value })}
                   />
                 </label>
               </div>
@@ -337,7 +336,7 @@ export function AgentDetailPane({
                   <textarea
                     className="compact-json"
                     value={draft.requestOptionsText}
-                    onInput={(event) => updateDraft({ requestOptionsText: event.target.value })}
+                    onInput={(event) => updateDraft({ requestOptionsText: event.currentTarget.value })}
                   />
                 </label>
               ) : null}

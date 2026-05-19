@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchAgents, fetchManagerProfile } from "@/api/agents";

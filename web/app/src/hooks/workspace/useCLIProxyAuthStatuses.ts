@@ -1,11 +1,14 @@
-// @ts-nocheck
 import { useCallback, useMemo } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { fetchCLIProxyAuthStatus } from "@/api/cliproxy";
+import type { CLIProxyAuthStatus } from "@/api/cliproxy";
 import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
+import type { TranslateFn } from "@/models/conversations";
 import { workspaceQueryKeys } from "./workspaceQueries";
 
-export function useCLIProxyAuthStatuses(providers, t) {
+export type CLIProxyAuthStatusMap = Record<string, CLIProxyAuthStatus>;
+
+export function useCLIProxyAuthStatuses(providers: readonly unknown[], t: TranslateFn) {
   const queryClient = useQueryClient();
   const normalizedProviders = useMemo(
     () =>
@@ -28,7 +31,7 @@ export function useCLIProxyAuthStatuses(providers, t) {
   });
 
   const cliproxyAuthStatuses = useMemo(() => {
-    const result = {};
+    const result: CLIProxyAuthStatusMap = {};
     normalizedProviders.forEach((provider, index) => {
       const query = authQueries[index];
       if (query?.data) {
@@ -48,7 +51,7 @@ export function useCLIProxyAuthStatuses(providers, t) {
   }, [authQueries, normalizedProviders, t]);
 
   const setCLIProxyAuthStatus = useCallback(
-    (provider, status) => {
+    (provider: unknown, status: CLIProxyAuthStatus) => {
       const normalized = normalizeAuthProviderName(provider);
       if (!providerNeedsAuth(normalized)) {
         return;
@@ -59,7 +62,7 @@ export function useCLIProxyAuthStatuses(providers, t) {
   );
 
   const refreshCLIProxyAuthStatus = useCallback(
-    async (provider) => {
+    async (provider: unknown): Promise<CLIProxyAuthStatus | null> => {
       const normalized = normalizeAuthProviderName(provider);
       if (!providerNeedsAuth(normalized)) {
         return null;

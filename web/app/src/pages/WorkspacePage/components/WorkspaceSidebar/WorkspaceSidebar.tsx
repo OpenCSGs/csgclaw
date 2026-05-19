@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarRail } from "./SidebarRail";

@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/bootstrap/constants";
+import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { agentModelID, formatProviderLabel, isAgentIncomplete, isAgentRunning } from "@/models/agents";
 import { AgentIcon, ComputerIcon, PlayIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";

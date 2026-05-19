@@ -1,4 +1,3 @@
-// @ts-nocheck
 export function createMentionTokenElement(user) {
   const token = document.createElement("span");
   token.className = "composer-mention-token";

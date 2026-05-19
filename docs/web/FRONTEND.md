@@ -37,11 +37,11 @@ pnpm --dir web/app install
 ## Top-Level Structure
 
 - `src/api/`: HTTP request wrappers and API boundary code.
-- `src/bootstrap/`: app bootstrapping, providers, constants, and app-level wiring.
+- `src/bootstrap/`: app bootstrapping, providers, root assembly, error boundaries, and app-level wiring.
 - `src/components/`: shared components used outside a single page.
 - `src/models/`: pure data normalization, formatting, routing, and domain helpers.
 - `src/pages/`: route-level pages and page-private modules.
-- `src/shared/`: cross-cutting i18n, storage keys, realtime utilities, theme, styles, and generic helpers.
+- `src/shared/`: cross-cutting constants, i18n, storage keys, realtime utilities, theme, styles, and generic helpers.
 
 Do not create new top-level directories unless a module is clearly cross-cutting and does not fit the existing structure.
 
@@ -52,7 +52,7 @@ Use this map when creating, moving, or reorganizing files under `web/app/src`.
 | Path | Owns | Avoid |
 | --- | --- | --- |
 | `src/main.tsx` | React entrypoint only. | App logic, routing rules, or provider setup details. |
-| `src/bootstrap/` | App startup, providers, constants, root app assembly, error boundaries, and shared clients. | Page-private behavior or feature-specific helpers. |
+| `src/bootstrap/` | App startup, providers, root app assembly, error boundaries, and shared clients. | Page-private behavior, feature-specific helpers, or catch-all constants. |
 | `src/routes/` | Route declarations and route-to-page wiring. | Page implementation details. |
 | `src/api/` | HTTP clients, request wrappers, endpoint types, and transport boundary code. | Rendering logic, page state, or reusable data normalization. |
 | `src/models/` | Pure data shaping, formatting, parsing, routing helpers, and domain helpers that are shared or independently testable. | React hooks, browser storage, fetch calls, or UI state. |
@@ -61,6 +61,7 @@ Use this map when creating, moving, or reorganizing files under `web/app/src`.
 | `src/components/business/` | Cross-page app-aware components that combine UI primitives with business labels, state, actions, or API data. | Components used by only one page. |
 | `src/pages/<PageName>/` | Route screens and modules owned by one page. | Cross-page abstractions before real reuse exists. |
 | `src/pages/<PageName>/components/` | Components private to that page. | Imports from another page's private modules. |
+| `src/shared/constants/` | Small, named constant modules for stable cross-cutting contracts such as API endpoints, agent defaults, or structured message type strings. | A single catch-all constants file, page-private values, or domain logic. |
 | `src/shared/i18n/` | Message catalogs, locale selection, and translation helpers. | One-off text that belongs to a single untranslated path. |
 | `src/shared/storage/` | Storage keys and local/session storage wrappers. | Page-specific persistence policy. |
 | `src/shared/realtime/` | Event bus, SSE/shared worker plumbing, realtime event parsing, and subscription helpers. | Page rendering or component-owned effects. |
@@ -71,6 +72,15 @@ Use this map when creating, moving, or reorganizing files under `web/app/src`.
 Default to placing code near its owner. Promote code to `src/components`, `src/models`, `src/hooks`, or `src/shared` only after there is real cross-page reuse or a clear shared boundary.
 
 If a subdirectory later needs its own rules, add a short README in that subdirectory and link it from this guide.
+
+## Constants And Shared Contracts
+
+- Do not use `src/bootstrap/constants.ts` or any other single catch-all constants module.
+- Page-private constants belong next to the page, component, hook, or helper that owns them.
+- Pure domain constants used by model helpers belong in the owning `src/models/<domain>.ts` module. Routing constants, pane types, route segment aliases, and path builders should stay together in `src/models/routing.ts`.
+- Stable cross-cutting contracts that are imported by multiple distant modules belong in focused files under `src/shared/constants/`, for example `api.ts`, `agents.ts`, `messages.ts`, or `workspace.ts`.
+- For grouped string values, prefer enum-like `as const` objects plus derived union types over many flat exports. Use flat `export const` values only for isolated one-off constants or external protocol strings.
+- Avoid TypeScript `enum` unless a runtime enum object is explicitly required by an external API; `as const` objects keep emitted JavaScript simpler and make aliases easier to model.
 
 ## Page Modules
 

@@ -1,4 +1,4 @@
-import { NOTIFIER_DELIVERY_OPTIONS } from "@/bootstrap/constants";
+import { NOTIFIER_DELIVERY_OPTIONS } from "@/shared/constants/agents";
 import type { ReactNode } from "react";
 import {
   ensureNotifierPullSubscriptionDraft,

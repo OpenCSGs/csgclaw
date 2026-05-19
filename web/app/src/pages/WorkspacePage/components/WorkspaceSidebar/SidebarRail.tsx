@@ -1,7 +1,6 @@
-// @ts-nocheck
-import { WORKSPACE_TAB_AGENTS, WORKSPACE_TAB_HUB, WORKSPACE_TAB_MESSAGES } from "@/bootstrap/constants";
 import { Button } from "@/components/ui";
 import { HubIcon, RoomPlusIcon, RoomsIcon, SidebarToggleIcon, UsersIcon } from "@/components/ui/Icons";
+import { WorkspaceTabs } from "@/models/routing";
 
 export function SidebarRail({
   isSidebarCollapsed,
@@ -33,10 +32,10 @@ export function SidebarRail({
         <Button
           variant="ghost"
           className="sidebar-rail-button"
-          active={workspaceTab === WORKSPACE_TAB_MESSAGES}
+          active={workspaceTab === WorkspaceTabs.messages}
           aria-label={t("messagesTab")}
           title={t("messagesTab")}
-          onClick={() => onWorkspaceTabChange(WORKSPACE_TAB_MESSAGES)}
+          onClick={() => onWorkspaceTabChange(WorkspaceTabs.messages)}
         >
           <span className="sidebar-rail-icon" aria-hidden="true">
             <RoomsIcon />
@@ -45,10 +44,10 @@ export function SidebarRail({
         <Button
           variant="ghost"
           className="sidebar-rail-button"
-          active={workspaceTab === WORKSPACE_TAB_AGENTS}
+          active={workspaceTab === WorkspaceTabs.agents}
           aria-label={t("agentsTab")}
           title={t("agentsTab")}
-          onClick={() => onWorkspaceTabChange(WORKSPACE_TAB_AGENTS)}
+          onClick={() => onWorkspaceTabChange(WorkspaceTabs.agents)}
         >
           <span className="sidebar-rail-icon" aria-hidden="true">
             <UsersIcon />
@@ -57,7 +56,7 @@ export function SidebarRail({
         <Button
           variant="ghost"
           className="sidebar-rail-button"
-          active={workspaceTab === WORKSPACE_TAB_HUB}
+          active={workspaceTab === WorkspaceTabs.hub}
           aria-label={t("hubTab")}
           title={t("hubTab")}
           onClick={() => onSelectHub()}

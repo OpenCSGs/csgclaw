@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { formatSidebarVersionLabel } from "@/models/upgradeStatus";
 
 export function SidebarFooter({

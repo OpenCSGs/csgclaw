@@ -1,31 +1,39 @@
-// @ts-nocheck
-let es = null;
-let retryTimer = null;
+type SharedWorkerGlobal = typeof globalThis & {
+  onconnect: ((event: MessageEvent) => void) | null;
+};
+
+type WorkerControlMessage = {
+  endpoint?: string;
+  type?: "close" | "subscribe" | string;
+};
+
+let es: EventSource | null = null;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let endpoint = "/api/v1/events";
-const ports = new Set();
+const ports = new Set<MessagePort>();
 let reconnectDelayMs = 3000;
 
-function broadcast(data) {
+function broadcast(data: Record<string, unknown>) {
   for (const port of ports) {
     port.postMessage(data);
   }
 }
 
-function cleanup() {
+function cleanup(): void {
   if (es) {
     es.close();
     es = null;
   }
 }
 
-function clearReconnectTimer() {
+function clearReconnectTimer(): void {
   if (retryTimer) {
     clearTimeout(retryTimer);
     retryTimer = null;
   }
 }
 
-function scheduleReconnect() {
+function scheduleReconnect(): void {
   if (ports.size === 0 || retryTimer) {
     return;
   }
@@ -36,7 +44,7 @@ function scheduleReconnect() {
   reconnectDelayMs = Math.min(reconnectDelayMs * 2, 30000);
 }
 
-function connect() {
+function connect(): void {
   if (es || ports.size === 0) {
     return;
   }
@@ -63,12 +71,12 @@ function connect() {
   };
 }
 
-self.onconnect = (event) => {
+(self as unknown as SharedWorkerGlobal).onconnect = (event: MessageEvent) => {
   const port = event.ports[0];
   ports.add(port);
   port.start();
 
-  port.onmessage = ({ data }) => {
+  port.onmessage = ({ data }: MessageEvent<WorkerControlMessage>) => {
     if (data?.type === "subscribe") {
       if (typeof data.endpoint === "string" && data.endpoint.length > 0) {
         endpoint = data.endpoint;

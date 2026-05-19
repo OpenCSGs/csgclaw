@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { applyUpgradeRequest } from "@/api/upgrade";
@@ -13,6 +12,7 @@ import {
   saveManagerProfileRequest,
   updateAgentRequest,
 } from "@/api/agents";
+import type { AgentUpdatePayload, FetchAgentsOptions } from "@/api/agents";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
 import { publishAgentTemplateRequest } from "@/api/hub";
 import {
@@ -23,7 +23,14 @@ import {
   joinAgentToRoomRequest,
   sendMessageRequest,
 } from "@/api/im";
-import { ACTION_REBUILD_MANAGER, MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/bootstrap/constants";
+import {
+  DEFAULT_RUNTIME_KIND,
+  MANAGER_AGENT_ID,
+  MANAGER_AGENT_ROLE,
+  WORKER_AGENT_ROLE,
+} from "@/shared/constants/agents";
+import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
+import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
 import {
   applyTemplateToDraft,
   advanceAgentProgress,
@@ -48,6 +55,7 @@ import {
   runtimeImageForKind,
   startAgentCreateProgress,
 } from "@/models/agents";
+import type { AgentLike, RuntimeKind } from "@/models/agents";
 import {
   agentMatchesUser,
   appendMessageToData,
@@ -89,6 +97,20 @@ import { useProfileModelOptions } from "./useProfileModelOptions";
 import { useWorkspaceData } from "./useWorkspaceData";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
+import { DefaultWorkspacePaneIds, WorkspacePaneTypes } from "@/models/routing";
+import type { WorkspacePane } from "@/models/routing";
+
+type OpenCreateRoomOptions = {
+  description?: string;
+  lockedMemberIDs?: string[];
+  preselectedMemberIDs?: string[];
+  title?: string;
+};
+
+type ManagerRebuildOptions = {
+  image?: string;
+  runtimeKind?: RuntimeKind;
+};
 
 export function useWorkspaceController() {
   const location = useLocation();
@@ -156,7 +178,7 @@ export function useWorkspaceController() {
   const [hubManualError, setHubManualError] = useState("");
   const [showAgentModal, setShowAgentModal] = useState(false);
   const [showManagerRebuildModal, setShowManagerRebuildModal] = useState(false);
-  const [managerRebuildRuntimeKind, setManagerRebuildRuntimeKind] = useState("picoclaw_sandbox");
+  const [managerRebuildRuntimeKind, setManagerRebuildRuntimeKind] = useState(DEFAULT_RUNTIME_KIND);
   const [managerRebuildImage, setManagerRebuildImage] = useState("");
   const [agentModalMode, setAgentModalMode] = useState("create");
   const [editingAgent, setEditingAgent] = useState(null);
@@ -224,7 +246,7 @@ export function useWorkspaceController() {
     resetModels: resetAgentPageModels,
   } = useProfileModelOptions({
     draft: agentPageDraft,
-    enabled: activePane.type === "agent",
+    enabled: activePane.type === WorkspacePaneTypes.agent,
     onDraftChange: setAgentPageDraft,
   });
   const { cliproxyAuthStatuses, setCLIProxyAuthStatus } = useCLIProxyAuthStatuses(
@@ -398,10 +420,10 @@ export function useWorkspaceController() {
   const channels = useMemo(() => rooms.filter((room) => !isDirectConversation(room)), [rooms]);
   const directMessages = useMemo(() => rooms.filter((room) => isDirectConversation(room)), [rooms]);
   const selectedAgentForPage = useMemo(() => {
-    if (activePane.type !== "agent") {
+    if (activePane.type !== WorkspacePaneTypes.agent) {
       return null;
     }
-    const managerAgent = agents.find((item) => item.role === "manager" || item.id === "u-manager");
+    const managerAgent = agents.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
     const workerAgents = agents.filter((item) => item.id !== managerAgent?.id);
     return [managerAgent, ...workerAgents].filter(Boolean).find((item) => item.id === activePane.id) ?? null;
   }, [agents, activePane]);
@@ -548,13 +570,13 @@ export function useWorkspaceController() {
       if (data.rooms.length > 0) {
         setActiveConversationId(data.rooms[0].id);
         if (!activePane.id) {
-          const next = { type: "conversation", id: data.rooms[0].id };
+          const next: WorkspacePane = { type: WorkspacePaneTypes.conversation, id: data.rooms[0].id };
           setActivePane(next);
           navigatePane(next, data.rooms, { replace: true });
         }
       } else {
         if (!activePane.id) {
-          const next = { type: "computer", id: "local" };
+          const next: WorkspacePane = { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
           setActivePane(next);
           navigatePane(next, data.rooms, { replace: true });
         }
@@ -573,7 +595,7 @@ export function useWorkspaceController() {
   }, [data, activeConversationId, activePane.id]);
 
   useEffect(() => {
-    if (!activePane || activePane.type !== "agent") {
+    if (!activePane || activePane.type !== WorkspacePaneTypes.agent) {
       return;
     }
     if (!agentsLoaded) {
@@ -613,7 +635,7 @@ export function useWorkspaceController() {
   }, [activeConversationId]);
 
   useLayoutEffect(() => {
-    if (activePane.type !== "conversation") {
+    if (activePane.type !== WorkspacePaneTypes.conversation) {
       return;
     }
     const el = messageListRef.current;
@@ -673,7 +695,7 @@ export function useWorkspaceController() {
     }
     setInviteUserIDs([]);
     if (!activeConversationId && normalized.rooms.length > 0) {
-      if (activePane.id && activePane.type !== "conversation") {
+      if (activePane.id && activePane.type !== WorkspacePaneTypes.conversation) {
         setActiveConversationId(normalized.rooms[0].id);
       } else {
         selectConversation(normalized.rooms[0].id, { replace: true, rooms: normalized.rooms });
@@ -839,7 +861,7 @@ export function useWorkspaceController() {
     }));
   }
 
-  function openCreateRoomModal(options = {}) {
+  function openCreateRoomModal(options: OpenCreateRoomOptions = {}) {
     if (!data) {
       return;
     }
@@ -1042,7 +1064,7 @@ export function useWorkspaceController() {
   const inviteActionLabel =
     activeConversation && isDirectConversation(activeConversation) ? t("createRoomFromDM") : t("inviteMembers");
 
-  const managerAgent = agents.find((item) => item.role === "manager" || item.id === "u-manager");
+  const managerAgent = agents.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
   const managerTemplateVariants = collectManagerTemplateVariants(hubTemplates);
   const managerRuntimeOptions = availableManagerRebuildRuntimeOptions(
     managerTemplateVariants,
@@ -1058,16 +1080,16 @@ export function useWorkspaceController() {
   const agentItems = [managerAgent, ...workerAgents].filter(Boolean);
   const runningAgentCount = agentItems.filter(isAgentRunning).length;
   const selectedAgent = selectedAgentForPage;
-  const selectedConversation = activePane.type === "conversation" ? activeConversation : null;
+  const selectedConversation = activePane.type === WorkspacePaneTypes.conversation ? activeConversation : null;
   const activeChannel =
     selectedConversation && !isDirectConversation(selectedConversation) ? selectedConversation : null;
   const selectedMessageCount = selectedConversation?.messages?.length ?? 0;
   const currentWorkspaceLabel =
-    activePane.type === "agent"
+    activePane.type === WorkspacePaneTypes.agent
       ? t("agentOverview")
-      : activePane.type === "computer"
+      : activePane.type === WorkspacePaneTypes.computer
         ? t("computerOverview")
-        : activePane.type === "hub"
+        : activePane.type === WorkspacePaneTypes.hub
           ? t("hubOverview")
           : t("conversationOverview");
   const previewUser =
@@ -1131,7 +1153,7 @@ export function useWorkspaceController() {
     const initialRuntimeKind = normalizeRuntimeKind(
       item?.runtime_kind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind || managerRebuildRuntimeKind,
     );
-    const fallbackRuntimeKind = managerRuntimeOptions[0]?.value || "picoclaw_sandbox";
+    const fallbackRuntimeKind = managerRuntimeOptions[0]?.value || DEFAULT_RUNTIME_KIND;
     const resolvedRuntimeKind = managerRuntimeOptions.some((option) => option.value === initialRuntimeKind)
       ? initialRuntimeKind
       : fallbackRuntimeKind;
@@ -1144,7 +1166,7 @@ export function useWorkspaceController() {
     setShowManagerRebuildModal(true);
   }
 
-  async function requestManagerRebuild(options = {}) {
+  async function requestManagerRebuild(options: ManagerRebuildOptions = {}) {
     const runtimeKind = normalizeRuntimeKind(
       options.runtimeKind ||
         managerAgent?.runtime_kind ||
@@ -1161,8 +1183,8 @@ export function useWorkspaceController() {
     await refreshBootstrapConfig();
   }
 
-  async function rebuildManagerFromBrowser(options = {}) {
-    setAgentActionBusy("u-manager:recreate");
+  async function rebuildManagerFromBrowser(options: ManagerRebuildOptions = {}) {
+    setAgentActionBusy(`${MANAGER_AGENT_ID}:recreate`);
     setAgentsError("");
     try {
       await requestManagerRebuild(options);
@@ -1211,7 +1233,7 @@ export function useWorkspaceController() {
       const payload = draftToProfile(profileDraft);
       const saved = await saveManagerProfileRequest(payload);
       setManagerProfileData(saved);
-      setProfileDraft({ ...profileToDraft(saved), agent_id: "u-manager" });
+      setProfileDraft({ ...profileToDraft(saved), agent_id: MANAGER_AGENT_ID });
       await refreshManagerProfile();
       setComposerError("");
     } catch (err) {
@@ -1221,7 +1243,7 @@ export function useWorkspaceController() {
     }
   }
 
-  async function refreshAgents(options = {}) {
+  async function refreshAgents(options: FetchAgentsOptions = {}) {
     try {
       await refreshWorkspaceAgents(options);
       setAgentsError("");
@@ -1276,7 +1298,7 @@ export function useWorkspaceController() {
     setAgentProgress(null);
     resetAgentModels();
     const preferredRuntimeKind =
-      normalizeRuntimeKind(bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "") || "picoclaw_sandbox";
+      normalizeRuntimeKind(bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "") || DEFAULT_RUNTIME_KIND;
     const selectedTemplate =
       template === undefined
         ? pickDefaultAgentTemplate(hubTemplates, preferredRuntimeKind, bootstrapConfig)
@@ -1286,7 +1308,7 @@ export function useWorkspaceController() {
       const runtimeKind =
         normalizeRuntimeKind(
           selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
-        ) || "picoclaw_sandbox";
+        ) || DEFAULT_RUNTIME_KIND;
       let draft = agentToDraft({
         image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
@@ -1299,7 +1321,7 @@ export function useWorkspaceController() {
       const runtimeKind =
         normalizeRuntimeKind(
           selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
-        ) || "picoclaw_sandbox";
+        ) || DEFAULT_RUNTIME_KIND;
       let draft = agentToDraft({
         image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
@@ -1357,7 +1379,7 @@ export function useWorkspaceController() {
       const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, {
         mergeNotifier: isNotifierRuntimeDraftOnAgentPage(agentPageDraft, selectedAgentForPage),
       });
-      const payload = {
+      const payload: AgentUpdatePayload = {
         name: agentPageDraft.name,
         description: agentPageDraft.description,
         agent_profile: profile,
@@ -1367,7 +1389,7 @@ export function useWorkspaceController() {
       }
       const saved = await updateAgentRequest(selectedAgentForPage.id, payload);
       await refreshAgents();
-      if (saved.id === "u-manager") {
+      if (saved.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }
       setAgentPageDraft(await agentDraftFromItem(saved));
@@ -1405,7 +1427,7 @@ export function useWorkspaceController() {
     setAgentBusy(true);
     setAgentError("");
     const isCreate = agentModalMode === "create";
-    const runtimeKind = normalizeRuntimeKind(agentDraft.runtime_kind) || "picoclaw_sandbox";
+    const runtimeKind = normalizeRuntimeKind(agentDraft.runtime_kind) || DEFAULT_RUNTIME_KIND;
     setAgentProgress(isCreate ? startAgentCreateProgress(runtimeKind) : null);
     try {
       const draft = ensureNotifierPullSubscriptionDraft(agentDraft);
@@ -1416,9 +1438,9 @@ export function useWorkspaceController() {
       const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, {
         mergeNotifier: isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent),
       });
-      const payload = {
+      const payload: AgentUpdatePayload = {
         name: agentDraft.name,
-        role: "worker",
+        role: WORKER_AGENT_ROLE,
         description: agentDraft.description,
         image: isNotifierRuntimeDraft(draft) ? "" : agentDraft.image,
         runtime_kind: runtimeKind,
@@ -1440,7 +1462,7 @@ export function useWorkspaceController() {
       if (isCreate) {
         await refreshBootstrap();
       }
-      if (saved.id === "u-manager") {
+      if (saved.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }
       if (isCreate) {
@@ -1481,7 +1503,7 @@ export function useWorkspaceController() {
         await runAgentActionRequest(item.id, action);
       }
       await refreshAgents();
-      if (item.id === "u-manager") {
+      if (item.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }
     } catch (err) {
@@ -1505,7 +1527,7 @@ export function useWorkspaceController() {
       closeProfilePreview();
       await refreshAgents();
       await refreshBootstrap();
-      if (item.id === "u-manager") {
+      if (item.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }
     } catch (err) {
@@ -1515,7 +1537,7 @@ export function useWorkspaceController() {
     }
   }
 
-  async function inviteAgentToRoom(item, options = {}) {
+  async function inviteAgentToRoom(item: AgentLike | null | undefined, options: { silent?: boolean } = {}) {
     if (!activeConversation || isDirectConversation(activeConversation) || !data?.current_user_id || !item?.id) {
       return;
     }
@@ -1562,7 +1584,7 @@ export function useWorkspaceController() {
           id: item.id,
           name: item.name,
           handle: item.handle || item.id.replace(/^u-/, "") || item.name,
-          role: item.role || "worker",
+          role: item.role || WORKER_AGENT_ROLE,
         });
         nextData = await refreshBootstrap();
         direct = directConversationForUser(
@@ -1623,11 +1645,11 @@ export function useWorkspaceController() {
       return;
     }
     setProfilePreview((current) => {
-      if (current?.type === "agent" && current?.id === item.id) {
+      if (current?.type === WorkspacePaneTypes.agent && current?.id === item.id) {
         return null;
       }
       return {
-        type: "agent",
+        type: WorkspacePaneTypes.agent,
         id: item.id,
         anchorRect: {
           top: rect.top,
@@ -1732,7 +1754,7 @@ export function useWorkspaceController() {
       agents: agentItems,
       channels,
       directMessages,
-      activeAgentID: activePane.type === "agent" ? activePane.id : "",
+      activeAgentID: activePane.type === WorkspacePaneTypes.agent ? activePane.id : "",
       busyKey: agentActionBusy,
       onSelectAgent: selectAgent,
       onCreateAgent: openCreateAgentModal,
@@ -1877,7 +1899,7 @@ export function useWorkspaceController() {
           templateVariants: managerTemplateVariants,
           bootstrapConfig,
           managerAgent,
-          busy: agentActionBusy === "u-manager:recreate",
+          busy: agentActionBusy === `${MANAGER_AGENT_ID}:recreate`,
           error: agentsError,
           onRuntimeKindChange: setManagerRebuildRuntimeKind,
           onImageChange: setManagerRebuildImage,

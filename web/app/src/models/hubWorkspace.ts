@@ -1,5 +1,41 @@
-// @ts-nocheck
-export function hubWorkspaceAncestorDirs(path) {
+import type { CSSProperties } from "react";
+import type { AgentTemplateLike } from "@/models/agents";
+import type { LocaleCode, TranslateFn } from "@/models/conversations";
+
+export type HubWorkspaceEntry = {
+  depth?: number;
+  name?: string;
+  path: string;
+  type: "dir" | "file" | string;
+};
+
+export type HubWorkspaceFile = {
+  binary?: boolean | null;
+  content?: string | null;
+  path: string;
+  size?: number | null;
+};
+
+export type HubTemplateSource = {
+  name?: string | null;
+};
+
+export type HubTemplate = AgentTemplateLike & {
+  source?: HubTemplateSource | null;
+  updated_at?: string | null;
+  workspace?: {
+    entries?: HubWorkspaceEntry[];
+    kind?: string | null;
+  } | null;
+};
+
+export type HubTreeDepthStyle = CSSProperties & {
+  "--hub-tree-depth"?: number;
+};
+
+export type CollapsedHubWorkspaceDirs = Record<string, boolean>;
+
+export function hubWorkspaceAncestorDirs(path: unknown): string[] {
   const normalized = typeof path === "string" ? path.trim() : "";
   if (!normalized) {
     return [];
@@ -15,9 +51,12 @@ export function hubWorkspaceAncestorDirs(path) {
   return ancestors;
 }
 
-export function buildVisibleHubWorkspaceEntries(entries, collapsedDirs) {
-  const hiddenParents = [];
-  return entries.filter((entry) => {
+export function buildVisibleHubWorkspaceEntries(
+  entries: readonly HubWorkspaceEntry[] | null | undefined,
+  collapsedDirs: CollapsedHubWorkspaceDirs,
+): HubWorkspaceEntry[] {
+  const hiddenParents: string[] = [];
+  return (entries ?? []).filter((entry) => {
     while (hiddenParents.length && !entry.path.startsWith(`${hiddenParents[hiddenParents.length - 1]}/`)) {
       hiddenParents.pop();
     }
@@ -29,8 +68,10 @@ export function buildVisibleHubWorkspaceEntries(entries, collapsedDirs) {
   });
 }
 
-export function buildInitialCollapsedHubWorkspaceDirs(entries) {
-  return (entries || []).reduce((acc, entry) => {
+export function buildInitialCollapsedHubWorkspaceDirs(
+  entries: readonly HubWorkspaceEntry[] | null | undefined,
+): CollapsedHubWorkspaceDirs {
+  return (entries || []).reduce<CollapsedHubWorkspaceDirs>((acc, entry) => {
     if (entry?.type === "dir" && entry.path) {
       acc[entry.path] = true;
     }
@@ -38,7 +79,7 @@ export function buildInitialCollapsedHubWorkspaceDirs(entries) {
   }, {});
 }
 
-export function formatHubDate(value, locale) {
+export function formatHubDate(value: string | number | Date | null | undefined, locale: LocaleCode): string {
   if (!value) {
     return "-";
   }
@@ -50,7 +91,7 @@ export function formatHubDate(value, locale) {
   }).format(new Date(value));
 }
 
-export function formatHubDateTime(value, locale) {
+export function formatHubDateTime(value: string | number | Date | null | undefined, locale: LocaleCode): string {
   if (!value) {
     return "-";
   }
@@ -66,7 +107,7 @@ export function formatHubDateTime(value, locale) {
   }).format(new Date(value))} (UTC)`;
 }
 
-export function formatHubTemplateCount(count, locale, t) {
+export function formatHubTemplateCount(count: number, locale: LocaleCode, t: TranslateFn): string {
   if (locale === "zh") {
     return `共 ${count} ${t("hubTemplateCountSuffix")}`;
   }

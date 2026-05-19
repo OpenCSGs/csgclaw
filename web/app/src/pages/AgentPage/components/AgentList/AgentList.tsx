@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/bootstrap/constants";
+import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
   agentModelID,
   formatProviderLabel,

@@ -1,8 +1,16 @@
 import {
   CLIPROXY_AUTH_PROVIDERS,
-  NOTIFIER_RELAY_WEBHOOK_INGRESS_PATH,
+  DEFAULT_MANAGER_DESCRIPTION,
+  DEFAULT_PROVIDER,
+  DEFAULT_REASONING_EFFORT,
+  DEFAULT_RUNTIME_KIND,
+  MANAGER_AGENT_ID,
+  MANAGER_AGENT_NAME,
+  MANAGER_AGENT_ROLE,
   RUNTIME_KIND_OPTIONS,
-} from "@/bootstrap/constants";
+  WORKER_AGENT_ROLE,
+} from "@/shared/constants/agents";
+import { ApiEndpoints } from "@/shared/constants/api";
 
 export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | "notifier" | string;
 export type ProviderName = "csghub_lite" | "codex" | "claude_code" | "api" | string;
@@ -88,6 +96,10 @@ export type AgentTemplateLike = {
   runtime_kind?: string | null;
 };
 
+export type AgentProfileModelsResponse = {
+  models: string[];
+};
+
 export type ManagerTemplateVariant = {
   image: string;
   runtimeKind: RuntimeKind;
@@ -133,7 +145,7 @@ const NOTIFIER_STORAGE_KEYS = [
 ];
 
 export function isManagerAgent(item: AgentLike | null | undefined): boolean {
-  return item?.role === "manager" || item?.id === "u-manager";
+  return item?.role === MANAGER_AGENT_ROLE || item?.id === MANAGER_AGENT_ID;
 }
 
 export function normalizeNotifierDeliveryMode(mode: unknown): string {
@@ -203,7 +215,7 @@ export function notifierThirdPartyRelayWebhookURL(remoteBase: unknown, subscript
   try {
     const url = new URL(input);
     if (!url.pathname || url.pathname === "/") {
-      url.pathname = NOTIFIER_RELAY_WEBHOOK_INGRESS_PATH;
+      url.pathname = ApiEndpoints.notifierRelayWebhookIngress;
     } else if (/\/inbox\/messages\/?$/i.test(url.pathname)) {
       url.pathname = url.pathname.replace(/\/inbox\/messages\/?$/i, "/webhooks/ingress");
     }
@@ -380,13 +392,13 @@ export function profileToDraft(profile: AgentProfileLike | null | undefined, age
   const notifierProfile = notifierProfileSummaryFlags(profile, agent);
   return {
     runtime_kind: normalizeRuntimeKind(profile?.runtime_kind),
-    provider: profile?.provider || "csghub_lite",
+    provider: profile?.provider || DEFAULT_PROVIDER,
     base_url: profile?.base_url || "",
     api_key: "",
     api_key_set: Boolean(profile?.api_key_set),
     api_key_preview: profile?.api_key_preview || "",
     model_id: profile?.model_id || "",
-    reasoning_effort: profile?.reasoning_effort || "medium",
+    reasoning_effort: profile?.reasoning_effort || DEFAULT_REASONING_EFFORT,
     enable_fast_mode: Boolean(profile?.enable_fast_mode),
     headersText: stringifyJSON(profile?.headers || {}),
     requestOptionsText: stringifyJSON(requestOptionsWithoutNotifier),
@@ -467,7 +479,7 @@ export function agentToDraft(agent: AgentLike | null | undefined): AgentDraft {
   return {
     agent_id: merged?.id || "",
     name: merged?.name || "",
-    role: merged?.role || "worker",
+    role: merged?.role || WORKER_AGENT_ROLE,
     description: merged?.description || profile.description || "",
     default_image: merged?.image || "",
     image: merged?.image || "",
@@ -482,7 +494,8 @@ export function normalizeTemplateSelection<T extends object>(template: T | null 
   return template && typeof template === "object" ? template : null;
 }
 
-export function templateMatchesRuntime(template, runtimeKind): boolean {
+// Legacy contract: function templateMatchesRuntime(template, runtimeKind)
+export function templateMatchesRuntime(template: AgentTemplateLike | null | undefined, runtimeKind: unknown): boolean {
   const requestedRuntime = normalizeRuntimeKind(runtimeKind);
   if (!template || !requestedRuntime) {
     return true;
@@ -524,7 +537,7 @@ export function pickDefaultAgentTemplate(
       candidates[0]
     );
   }
-  if (requestedRuntime === "picoclaw_sandbox" || !requestedRuntime) {
+  if (requestedRuntime === DEFAULT_RUNTIME_KIND || !requestedRuntime) {
     return (
       candidates.find((item) => item.id === "builtin/picoclaw-worker") ||
       candidates.find((item) => item.name === "picoclaw-worker") ||
@@ -568,13 +581,13 @@ export function applyTemplateToDraft(
 export function draftToProfile(draft: AgentDraft, options: DraftProfileOptions = {}): JSONRecord {
   const requestOptions = parseJSONMap(draft.requestOptionsText);
   return {
-    name: options.name || draft.name || "manager",
-    description: options.description || draft.description || "Manager Worker Dispatch",
+    name: options.name || draft.name || MANAGER_AGENT_NAME,
+    description: options.description || draft.description || DEFAULT_MANAGER_DESCRIPTION,
     provider: draft.provider,
     base_url: draft.base_url,
     api_key: draft.api_key,
     model_id: draft.model_id,
-    reasoning_effort: draft.reasoning_effort || "medium",
+    reasoning_effort: draft.reasoning_effort || DEFAULT_REASONING_EFFORT,
     enable_fast_mode: Boolean(draft.enable_fast_mode),
     headers: parseJSONMap(draft.headersText),
     request_options: requestOptions,
@@ -851,7 +864,7 @@ export function runtimeImageForKind(
 ): string {
   let runtimeKind = normalizeRuntimeKind(kind);
   if (!runtimeKind) {
-    runtimeKind = "picoclaw_sandbox";
+    runtimeKind = DEFAULT_RUNTIME_KIND;
   }
   if (runtimeKind === "codex" || runtimeKind === "notifier") {
     return "";
@@ -870,7 +883,7 @@ export function availableManagerRuntimeOptions(bootstrapConfig: RuntimeBootstrap
   const configuredKinds = Array.isArray(bootstrapConfig?.supported_runtime_kinds)
     ? bootstrapConfig.supported_runtime_kinds
     : [];
-  const gatewayKinds = (configuredKinds.length ? configuredKinds : ["picoclaw_sandbox", "openclaw_sandbox"])
+  const gatewayKinds = (configuredKinds.length ? configuredKinds : [DEFAULT_RUNTIME_KIND, "openclaw_sandbox"])
     .map((kind) => normalizeRuntimeKind(kind))
     .filter((kind, index, array) => kind && kind !== "codex" && kind !== "notifier" && array.indexOf(kind) === index);
   return RUNTIME_KIND_OPTIONS.filter((option) => gatewayKinds.includes(option.value));
@@ -888,7 +901,7 @@ export function collectManagerTemplateVariants(
     if (
       String(item?.role ?? "")
         .trim()
-        .toLowerCase() !== "manager"
+        .toLowerCase() !== MANAGER_AGENT_ROLE
     ) {
       continue;
     }
@@ -932,7 +945,7 @@ export function availableManagerRebuildRuntimeOptions(
     push(item?.value);
   }
   if (!values.length) {
-    push("picoclaw_sandbox");
+    push(DEFAULT_RUNTIME_KIND);
   }
   return values.map((value) => ({ value, label: value }));
 }
@@ -979,14 +992,14 @@ export function defaultManagerRebuildImageForRuntime(
 }
 
 export function agentCreateProgressSteps(runtimeKind: unknown): AgentCreateProgressStep[] {
-  const kind = normalizeRuntimeKind(runtimeKind) || "picoclaw_sandbox";
+  const kind = normalizeRuntimeKind(runtimeKind) || DEFAULT_RUNTIME_KIND;
   if (kind === "notifier") {
     return [
       { label: "agentCreateProgressPreparing", target: 40 },
       { label: "agentCreateProgressFinishing", target: 96 },
     ];
   }
-  if (kind === "openclaw_sandbox" || kind === "picoclaw_sandbox") {
+  if (kind === "openclaw_sandbox" || kind === DEFAULT_RUNTIME_KIND) {
     return [
       { label: "agentCreateProgressSandboxConfig", target: 16 },
       { label: "agentCreateProgressImage", target: 42 },

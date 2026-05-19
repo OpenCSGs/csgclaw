@@ -1,11 +1,11 @@
-// @ts-nocheck
-import { UPGRADE_APPLY_ENDPOINT, UPGRADE_STATUS_ENDPOINT } from "@/bootstrap/constants";
 import { get, post } from "@/api/client";
+import type { UpgradeStatus } from "@/models/upgradeStatus";
+import { ApiEndpoints } from "@/shared/constants/api";
 
-export function fetchUpgradeStatus() {
-  return get(UPGRADE_STATUS_ENDPOINT);
+export function fetchUpgradeStatus(): Promise<UpgradeStatus> {
+  return get(ApiEndpoints.upgradeStatus);
 }
 
-export function applyUpgradeRequest() {
-  return post(UPGRADE_APPLY_ENDPOINT);
+export function applyUpgradeRequest(): Promise<void> {
+  return post(ApiEndpoints.upgradeApply);
 }

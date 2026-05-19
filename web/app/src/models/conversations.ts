@@ -1,18 +1,84 @@
-// @ts-nocheck
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
 
-export function isToolCallMessage(content) {
-  return (content ?? "").trimStart().startsWith("🔧 ");
+export type LocaleCode = "zh" | "en" | string;
+export type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
+
+export type IMUser = {
+  accent_hex?: string | null;
+  avatar?: string | null;
+  handle?: string | null;
+  id: string;
+  name?: string | null;
+  role?: string | null;
+  user_id?: string | null;
+};
+
+export type MessageMention = string | { id?: string | null };
+
+export type IMMessageEvent = {
+  actor_id?: string | null;
+  key?: string | null;
+  target_ids?: string[] | null;
+  title?: string | null;
+};
+
+export type IMMessage = {
+  id?: string;
+  content: string;
+  created_at?: string;
+  event?: IMMessageEvent | null;
+  kind?: string | null;
+  mentions?: MessageMention[] | null;
+  sender_id?: string | null;
+};
+
+export type IMConversation = {
+  description?: string | null;
+  id: string;
+  is_direct?: boolean | null;
+  members: string[];
+  messages: IMMessage[];
+  title?: string | null;
+};
+
+export type IMData = {
+  current_user_id?: string;
+  rooms: IMConversation[];
+  users: IMUser[];
+};
+
+export type IMServerEvent = {
+  message?: IMMessage | null;
+  room?: Partial<IMConversation> | null;
+  room_id?: string | null;
+  type?: string | null;
+  upgrade?: unknown;
+  user?: IMUser | null;
+};
+
+export type UsersById = Map<string, IMUser>;
+
+export function isToolCallMessage(content: unknown): boolean {
+  return String(content ?? "")
+    .trimStart()
+    .startsWith("🔧 ");
 }
 
-export function isEventMessage(message) {
+export function isEventMessage(message: IMMessage | null | undefined): boolean {
   if (message?.kind === "event") {
     return true;
   }
   return isLegacySystemEventContent(message?.content);
 }
 
-export function formatConversationPreview(message, conversation, currentUserID, usersById, locale, t) {
+export function formatConversationPreview(
+  message: IMMessage | null | undefined,
+  conversation: IMConversation,
+  currentUserID: string,
+  usersById: UsersById,
+  locale: LocaleCode,
+  t: TranslateFn,
+): string {
   if (message) {
     if (isEventMessage(message)) {
       return formatEventMessage(message, usersById, locale);
@@ -22,7 +88,11 @@ export function formatConversationPreview(message, conversation, currentUserID, 
   return getConversationSubtitle(conversation, currentUserID, usersById, locale, t);
 }
 
-export function formatEventMessage(message, usersById, locale) {
+export function formatEventMessage(
+  message: IMMessage | null | undefined,
+  usersById: UsersById,
+  locale: LocaleCode,
+): string {
   if (!message) {
     return "";
   }
@@ -45,7 +115,7 @@ export function formatEventMessage(message, usersById, locale) {
   return message.content || "";
 }
 
-export function mentionIDs(mentions) {
+export function mentionIDs(mentions: readonly MessageMention[] | null | undefined): string[] {
   return (mentions || [])
     .map((mention) => {
       if (typeof mention === "string") {
@@ -56,8 +126,8 @@ export function mentionIDs(mentions) {
     .filter(Boolean);
 }
 
-export function isLegacySystemEventContent(content) {
-  const text = (content ?? "").trim();
+export function isLegacySystemEventContent(content: unknown): boolean {
+  const text = String(content ?? "").trim();
   if (!text) {
     return false;
   }
@@ -73,7 +143,7 @@ export function isLegacySystemEventContent(content) {
   ].some((pattern) => pattern.test(text));
 }
 
-export function userDisplayName(userID, usersById) {
+export function userDisplayName(userID: string | null | undefined, usersById: UsersById): string {
   if (!userID) {
     return "";
   }
@@ -84,12 +154,19 @@ export function userDisplayName(userID, usersById) {
   return user.name || (user.handle ? `@${user.handle}` : userID);
 }
 
-export function resolveConversationUser(conversation, currentUserID, usersById) {
+export function resolveConversationUser(
+  conversation: IMConversation,
+  currentUserID: string,
+  usersById: UsersById,
+): IMUser | undefined {
   const otherID = conversation.members.find((id) => id !== currentUserID) ?? currentUserID;
   return usersById.get(otherID);
 }
 
-export function agentMatchesUser(agent, user) {
+export function agentMatchesUser(
+  agent: { handle?: string | null; id?: string | null; name?: string | null; user_id?: string | null } | null,
+  user: { handle?: string | null; id?: string | null; name?: string | null } | null | undefined,
+): boolean {
   if (!agent || !user) {
     return false;
   }
@@ -105,28 +182,49 @@ export function agentMatchesUser(agent, user) {
   );
 }
 
-export function normalizeComparable(value) {
+export function normalizeComparable(value: unknown): string {
   return String(value || "")
     .trim()
     .toLowerCase();
 }
 
-export function isDirectConversation(conversation) {
+export function isDirectConversation(conversation: { is_direct?: boolean | null } | null | undefined): boolean {
   return Boolean(conversation?.is_direct);
 }
 
-export function getConversationSubtitle(conversation, currentUserID, usersById, locale, t) {
+export function getConversationSubtitle(
+  conversation: IMConversation,
+  currentUserID: string,
+  usersById: UsersById,
+  locale: LocaleCode,
+  t: TranslateFn,
+): string {
+  void conversation;
+  void currentUserID;
+  void usersById;
+  void locale;
+  void t;
   return "";
 }
 
-export function getConversationDescription(conversation, currentUserID, usersById, locale, t) {
+export function getConversationDescription(
+  conversation: IMConversation,
+  currentUserID: string,
+  usersById: UsersById,
+  locale: LocaleCode,
+  t: TranslateFn,
+): string {
+  void currentUserID;
+  void usersById;
+  void locale;
+  void t;
   if (isDirectConversation(conversation)) {
     return "";
   }
   return conversation.description || "";
 }
 
-export function formatTime(value, locale) {
+export function formatTime(value: string | number | Date | null | undefined, locale: LocaleCode): string {
   if (!value) return "";
   return new Date(value).toLocaleTimeString(locale === "zh" ? "zh-CN" : "en-US", {
     hour: "2-digit",
@@ -135,12 +233,16 @@ export function formatTime(value, locale) {
   });
 }
 
-export function latestAt(conversation) {
-  if (!conversation.messages.length) return 0;
-  return new Date(conversation.messages[conversation.messages.length - 1].created_at).getTime();
+export function latestAt(conversation: { messages?: readonly IMMessage[] | null }): number {
+  const messages = conversation.messages ?? [];
+  if (!messages.length) return 0;
+  return new Date(messages[messages.length - 1].created_at || "").getTime();
 }
 
-export function applyIMEvent(current, event) {
+export function applyIMEvent<T extends IMData | null | undefined>(
+  current: T,
+  event: IMServerEvent | null | undefined,
+): T | IMData {
   if (!current || !event?.type) {
     return current;
   }
@@ -159,14 +261,14 @@ export function applyIMEvent(current, event) {
       event.type === "conversation.members_added" ||
       event.type === "room.created" ||
       event.type === "room.members_added") &&
-    event.room
+    event.room?.id
   ) {
-    return upsertConversationInData(current, event.room);
+    return upsertConversationInData(current, event.room as IMConversation);
   }
   return current;
 }
 
-export function isAgentRosterEvent(event) {
+export function isAgentRosterEvent(event: IMServerEvent | null | undefined): boolean {
   if (!event?.type) {
     return false;
   }
@@ -179,7 +281,11 @@ export function isAgentRosterEvent(event) {
   return false;
 }
 
-export function appendMessageToData(current, conversationID, message) {
+export function appendMessageToData<T extends IMData | null | undefined>(
+  current: T,
+  conversationID: string | null | undefined,
+  message: IMMessage | null | undefined,
+): T | IMData {
   if (!current || !conversationID || !message) {
     return current;
   }
@@ -196,7 +302,10 @@ export function appendMessageToData(current, conversationID, message) {
   return { ...current, rooms: sortConversations(rooms) };
 }
 
-export function upsertConversationInData(current, conversation) {
+export function upsertConversationInData<T extends IMData | null | undefined>(
+  current: T,
+  conversation: IMConversation | null | undefined,
+): T | IMData {
   if (!current || !conversation) {
     return current;
   }
@@ -208,7 +317,10 @@ export function upsertConversationInData(current, conversation) {
   return { ...current, rooms: sortConversations(rooms) };
 }
 
-export function upsertUserInData(current, user) {
+export function upsertUserInData<T extends IMData | null | undefined>(
+  current: T,
+  user: IMUser | null | undefined,
+): T | IMData {
   if (!current || !user) {
     return current;
   }
@@ -219,7 +331,10 @@ export function upsertUserInData(current, user) {
   return { ...current, users };
 }
 
-export function removeUserFromData(current, userID) {
+export function removeUserFromData<T extends IMData | null | undefined>(
+  current: T,
+  userID: string | null | undefined,
+): T | IMData {
   if (!current || !userID) {
     return current;
   }
@@ -243,7 +358,10 @@ export function removeUserFromData(current, userID) {
   return { ...current, users, rooms: sortConversations(rooms) };
 }
 
-export function removeConversationFromData(current, conversationID) {
+export function removeConversationFromData<T extends IMData | null | undefined>(
+  current: T,
+  conversationID: string | null | undefined,
+): T | IMData {
   if (!current || !conversationID) {
     return current;
   }
@@ -252,13 +370,13 @@ export function removeConversationFromData(current, conversationID) {
   return { ...current, rooms };
 }
 
-export function sortConversations(conversations) {
+export function sortConversations(conversations: readonly IMConversation[]): IMConversation[] {
   return [...conversations].sort((a, b) => latestAt(b) - latestAt(a));
 }
 
-export function normalizeIMData(payload) {
+export function normalizeIMData<T extends Partial<IMData> | null | undefined>(payload: T): T | IMData {
   if (!payload) {
     return payload;
   }
-  return { ...payload, rooms: payload.rooms ?? [] };
+  return { ...payload, rooms: payload.rooms ?? [], users: payload.users ?? [] } as T | IMData;
 }

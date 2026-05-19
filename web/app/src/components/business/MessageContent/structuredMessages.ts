@@ -1,4 +1,8 @@
-import { ACTION_REBUILD_MANAGER, CSGCLAW_ACTION_CARD_TYPE, CSGCLAW_NOTIFY_CARD_TYPE } from "@/bootstrap/constants";
+import {
+  ACTION_REBUILD_MANAGER,
+  CSGCLAW_ACTION_CARD_TYPE,
+  CSGCLAW_NOTIFY_CARD_TYPE,
+} from "@/shared/constants/messages";
 import type { ActionCardPayload, MessageAction, ParsedStructuredMessage, StructuredMessagePayload } from "./types";
 
 type UnknownRecord = Record<string, unknown>;

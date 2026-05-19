@@ -1,7 +1,36 @@
-// @ts-nocheck
 import { del, get, patch, post, put } from "@/api/client";
+import { MANAGER_AGENT_ID } from "@/shared/constants/agents";
+import type { AgentLike, AgentProfileLike, AgentProfileModelsResponse, JSONRecord, RuntimeKind } from "@/models/agents";
 
-function modelPayload(draft) {
+export type AgentProfileModelRequest = {
+  agent_id?: string;
+  api_key?: string;
+  base_url?: string;
+  headers?: JSONRecord;
+  provider?: string;
+};
+
+export type FetchAgentsOptions = {
+  silent?: boolean;
+};
+
+export type CreateManagerAgentOptions = {
+  image?: string;
+  runtime_kind?: RuntimeKind;
+};
+
+export type AgentUpdatePayload = {
+  agent_profile?: JSONRecord;
+  description?: string;
+  image?: string;
+  name?: string;
+  role?: string;
+  runtime_kind?: RuntimeKind;
+  runtime_options?: JSONRecord;
+  from_template?: string;
+};
+
+function modelPayload(draft: AgentProfileModelRequest): AgentProfileModelRequest {
   return {
     agent_id: draft.agent_id,
     provider: draft.provider,
@@ -11,26 +40,26 @@ function modelPayload(draft) {
   };
 }
 
-export function fetchManagerProfile() {
-  return get("api/v1/agents/u-manager/profile");
+export function fetchManagerProfile(): Promise<AgentProfileLike> {
+  return get(`api/v1/agents/${MANAGER_AGENT_ID}/profile`);
 }
 
-export function saveManagerProfileRequest(profile) {
-  return put("api/v1/agents/u-manager/profile", profile);
+export function saveManagerProfileRequest(profile: JSONRecord): Promise<AgentProfileLike> {
+  return put(`api/v1/agents/${MANAGER_AGENT_ID}/profile`, profile);
 }
 
-export function fetchAgents(options = {}) {
+export function fetchAgents(options: FetchAgentsOptions = {}): Promise<AgentLike[]> {
   void options;
   return get("api/v1/channels/csgclaw/bots");
 }
 
-export function fetchAgent(agentID) {
+export function fetchAgent(agentID: string): Promise<AgentLike> {
   return get(`api/v1/agents/${encodeURIComponent(agentID)}`);
 }
 
-export function createManagerAgentRequest(options = {}) {
-  const payload = {
-    id: "u-manager",
+export function createManagerAgentRequest(options: CreateManagerAgentOptions = {}): Promise<AgentLike> {
+  const payload: { id: string; image?: string; replace: boolean; runtime_kind?: RuntimeKind } = {
+    id: MANAGER_AGENT_ID, // Legacy contract: id: "u-manager",
     replace: true,
   };
   if (options.runtime_kind) {
@@ -42,30 +71,30 @@ export function createManagerAgentRequest(options = {}) {
   return post("api/v1/agents", payload);
 }
 
-export function fetchAgentProfileDefaults() {
+export function fetchAgentProfileDefaults(): Promise<AgentProfileLike> {
   return get("api/v1/agent-profile-defaults");
 }
 
-export function fetchAgentProfile(agentID) {
+export function fetchAgentProfile(agentID: string): Promise<AgentProfileLike> {
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/profile`);
 }
 
-export function fetchAgentProfileModels(draft) {
+export function fetchAgentProfileModels(draft: AgentProfileModelRequest): Promise<AgentProfileModelsResponse> {
   return post("api/v1/agent-profiles/models", modelPayload(draft));
 }
 
-export function updateAgentRequest(agentID, payload) {
+export function updateAgentRequest(agentID: string, payload: AgentUpdatePayload): Promise<AgentLike> {
   return patch(`api/v1/agents/${encodeURIComponent(agentID)}`, payload);
 }
 
-export function createBotRequest(payload) {
+export function createBotRequest(payload: AgentUpdatePayload): Promise<AgentLike> {
   return post("api/v1/channels/csgclaw/bots", payload);
 }
 
-export function deleteBotRequest(botID) {
+export function deleteBotRequest(botID: string): Promise<void> {
   return del(`api/v1/channels/csgclaw/bots/${encodeURIComponent(botID)}`);
 }
 
-export function runAgentActionRequest(agentID, action) {
+export function runAgentActionRequest(agentID: string, action: string): Promise<void> {
   return post(`api/v1/agents/${encodeURIComponent(agentID)}/${action}`);
 }

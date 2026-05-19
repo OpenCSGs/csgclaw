@@ -1,7 +1,36 @@
-// @ts-nocheck
 import { useCallback, useEffect } from "react";
-import { WORKSPACE_TAB_AGENTS, WORKSPACE_TAB_HUB, WORKSPACE_TAB_MESSAGES } from "@/bootstrap/constants";
-import { paneFromLocation, pathForPane, workspaceTabForPane } from "@/models/routing";
+import {
+  DefaultWorkspacePaneIds,
+  WorkspacePaneTypes,
+  WorkspaceTabs,
+  paneFromLocation,
+  pathForPane,
+  workspaceTabForPane,
+} from "@/models/routing";
+import type { NavigateFunction, Location } from "react-router-dom";
+import type { Dispatch, SetStateAction } from "react";
+import type { IMConversation } from "@/models/conversations";
+import type { WorkspacePane, WorkspaceTab } from "@/models/routing";
+
+export type NavigatePaneOptions = {
+  replace?: boolean;
+  rooms?: IMConversation[];
+  updateURL?: boolean;
+};
+
+export type UseWorkspaceNavigationArgs = {
+  activeConversationId: string;
+  activePane: WorkspacePane;
+  dataReady: boolean;
+  location: Location;
+  navigate: NavigateFunction;
+  rooms: IMConversation[];
+  setActiveConversationId: (id: string) => void;
+  setActivePane: (pane: WorkspacePane) => void;
+  setShowChannelTools: Dispatch<SetStateAction<boolean>>;
+  setShowMemberList: Dispatch<SetStateAction<boolean>>;
+  setWorkspaceTab: (tab: WorkspaceTab) => void;
+};
 
 export function useWorkspaceNavigation({
   location,
@@ -15,9 +44,9 @@ export function useWorkspaceNavigation({
   setShowMemberList,
   setShowChannelTools,
   rooms,
-}) {
+}: UseWorkspaceNavigationArgs) {
   const navigatePane = useCallback(
-    (pane, roomList = rooms, options = {}) => {
+    (pane: WorkspacePane, roomList = rooms, options: NavigatePaneOptions = {}) => {
       const nextPath = pathForPane(pane, roomList);
       if (!nextPath || location.pathname === nextPath) {
         return;
@@ -28,11 +57,11 @@ export function useWorkspaceNavigation({
   );
 
   const selectConversation = useCallback(
-    (id, options = {}) => {
+    (id: string, options: NavigatePaneOptions = {}) => {
       setActiveConversationId(id);
-      const next = { type: "conversation", id };
+      const next: WorkspacePane = { type: WorkspacePaneTypes.conversation, id };
       setActivePane(next);
-      setWorkspaceTab(WORKSPACE_TAB_MESSAGES);
+      setWorkspaceTab(WorkspaceTabs.messages);
       setShowMemberList(false);
       setShowChannelTools(false);
       if (options.updateURL !== false) {
@@ -51,13 +80,13 @@ export function useWorkspaceNavigation({
   );
 
   const selectAgent = useCallback(
-    (item, options = {}) => {
+    (item: { id?: string | null } | null | undefined, options: NavigatePaneOptions = {}) => {
       if (!item?.id) {
         return;
       }
-      const next = { type: "agent", id: item.id };
+      const next: WorkspacePane = { type: WorkspacePaneTypes.agent, id: item.id };
       setActivePane(next);
-      setWorkspaceTab(WORKSPACE_TAB_AGENTS);
+      setWorkspaceTab(WorkspaceTabs.agents);
       setShowMemberList(false);
       setShowChannelTools(false);
       if (options.updateURL !== false) {
@@ -68,10 +97,10 @@ export function useWorkspaceNavigation({
   );
 
   const selectComputer = useCallback(
-    (options = {}) => {
-      const next = { type: "computer", id: "local" };
+    (options: NavigatePaneOptions = {}) => {
+      const next: WorkspacePane = { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
       setActivePane(next);
-      setWorkspaceTab(WORKSPACE_TAB_AGENTS);
+      setWorkspaceTab(WorkspaceTabs.agents);
       setShowMemberList(false);
       setShowChannelTools(false);
       if (options.updateURL !== false) {
@@ -82,10 +111,10 @@ export function useWorkspaceNavigation({
   );
 
   const selectHub = useCallback(
-    (options = {}) => {
-      const next = { type: "hub", id: "hub" };
+    (options: NavigatePaneOptions = {}) => {
+      const next: WorkspacePane = { type: WorkspacePaneTypes.hub, id: DefaultWorkspacePaneIds.hub };
       setActivePane(next);
-      setWorkspaceTab(WORKSPACE_TAB_HUB);
+      setWorkspaceTab(WorkspaceTabs.hub);
       setShowMemberList(false);
       setShowChannelTools(false);
       if (options.updateURL !== false) {
@@ -102,7 +131,7 @@ export function useWorkspaceNavigation({
   useEffect(() => {
     const next = paneFromLocation(location.pathname);
     setActivePane(next);
-    if (next.type === "conversation") {
+    if (next.type === WorkspacePaneTypes.conversation) {
       setActiveConversationId(next.id);
     }
     setShowMemberList(false);

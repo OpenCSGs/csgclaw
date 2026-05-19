@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Button } from "@/components/ui";
 import { toggleSelection } from "@/shared/lib/collections";
 

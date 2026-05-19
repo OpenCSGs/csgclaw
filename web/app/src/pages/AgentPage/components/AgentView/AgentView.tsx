@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { AgentDetailPane } from "../AgentDetailPane";
 
 export function AgentView(props) {

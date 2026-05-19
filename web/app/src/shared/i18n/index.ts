@@ -1,8 +1,8 @@
-// @ts-nocheck
 import { messages } from "@/shared/i18n/messages";
 import { LOCALE_STORAGE_KEY } from "@/shared/storage/keys";
+import type { LocaleCode, TranslateFn } from "@/models/conversations";
 
-export function detectInitialLocale() {
+export function detectInitialLocale(): LocaleCode {
   const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
   if (stored === "zh" || stored === "en") {
     return stored;
@@ -10,7 +10,7 @@ export function detectInitialLocale() {
   return navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
 
-export function createTranslator(locale) {
+export function createTranslator(locale: LocaleCode): TranslateFn {
   return (key, params = {}) => {
     const value = resolveTranslation(locale, key);
     if (typeof value !== "string") {
@@ -20,15 +20,22 @@ export function createTranslator(locale) {
   };
 }
 
-export function resolveTranslation(locale, key) {
-  return key.split(".").reduce((current, part) => current?.[part], messages[locale]);
+export function resolveTranslation(locale: LocaleCode, key: string): unknown {
+  const catalog = locale === "zh" ? messages.zh : messages.en;
+  return key.split(".").reduce<unknown>((current, part) => {
+    if (!current || typeof current !== "object") {
+      return undefined;
+    }
+    return (current as Record<string, unknown>)[part];
+  }, catalog);
 }
 
-export function localizeRole(role, t) {
+export function localizeRole(role: string, t: TranslateFn): string {
   return t(`roles.${role}`) === `roles.${role}` ? role : t(`roles.${role}`);
 }
 
-export function localizeTemplateSourceTag(source, locale) {
+// Legacy contract: function localizeTemplateSourceTag(source, locale)
+export function localizeTemplateSourceTag(source: unknown, locale: LocaleCode): string {
   const value = String(source ?? "").trim();
   if (!value) {
     return "-";
@@ -47,8 +54,8 @@ export function localizeTemplateSourceTag(source, locale) {
   return value;
 }
 
-export function localizeError(raw, t) {
-  const cleaned = raw.trim();
+export function localizeError(raw: unknown, t: TranslateFn): string {
+  const cleaned = String(raw ?? "").trim();
   for (const key of Object.keys(messages.zh.errors)) {
     if (cleaned.includes(key)) {
       return t(`errors.${key}`);

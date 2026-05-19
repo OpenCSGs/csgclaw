@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Button } from "@/components/ui";
 import { GlobeIcon, MoonIcon, SidebarToggleIcon, SunIcon } from "@/components/ui/Icons";
 

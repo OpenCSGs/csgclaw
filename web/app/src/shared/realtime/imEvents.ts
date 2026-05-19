@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { IM_EVENTS_ENDPOINT, IM_EVENTS_SHARED_WORKER_PATH } from "@/bootstrap/constants";
+import { ApiEndpoints, IM_EVENTS_SHARED_WORKER_PATH } from "@/shared/constants/api";
 
 const sharedWorkerURL = import.meta.env.DEV ? "/src/shared/realtime/sseSharedWorker.ts" : IM_EVENTS_SHARED_WORKER_PATH;
 
@@ -36,7 +35,7 @@ export function subscribeIMEvents(onEvent) {
 
       port.addEventListener("message", handleMessage);
       port.start();
-      port.postMessage({ type: "subscribe", endpoint: IM_EVENTS_ENDPOINT });
+      port.postMessage({ type: "subscribe", endpoint: ApiEndpoints.imEvents });
 
       return () => {
         port.postMessage({ type: "close" });
@@ -48,7 +47,7 @@ export function subscribeIMEvents(onEvent) {
     }
   }
 
-  const source = new EventSource(IM_EVENTS_ENDPOINT);
+  const source = new EventSource(ApiEndpoints.imEvents);
   source.onmessage = (event) => {
     const payload = safeParseEventData(event.data);
     if (payload) {

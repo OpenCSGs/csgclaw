@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { isBlank, requiredFieldLabel } from "@/components/business/ProfileControls";
 import { Button } from "@/components/ui";
 import { toggleSelection } from "@/shared/lib/collections";
@@ -40,7 +39,7 @@ export function CreateRoomModal({
             value={roomTitle}
             required
             aria-required="true"
-            onInput={(event) => onRoomTitleChange(event.target.value)}
+            onInput={(event) => onRoomTitleChange(event.currentTarget.value)}
             placeholder={t("roomNamePlaceholder")}
           />
         </label>
@@ -48,7 +47,7 @@ export function CreateRoomModal({
           <span>{t("roomDescription")}</span>
           <textarea
             value={roomDescription}
-            onInput={(event) => onRoomDescriptionChange(event.target.value)}
+            onInput={(event) => onRoomDescriptionChange(event.currentTarget.value)}
             placeholder={t("roomDescriptionPlaceholder")}
           />
         </label>

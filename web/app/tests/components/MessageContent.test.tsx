@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MessageContent } from "@/components/business/MessageContent";
-import { ACTION_REBUILD_MANAGER, CSGCLAW_ACTION_CARD_TYPE, CSGCLAW_NOTIFY_CARD_TYPE } from "@/bootstrap/constants";
+import {
+  ACTION_REBUILD_MANAGER,
+  CSGCLAW_ACTION_CARD_TYPE,
+  CSGCLAW_NOTIFY_CARD_TYPE,
+} from "@/shared/constants/messages";
 
 describe("MessageContent", () => {
   it("renders sanitized markdown links with safe external-link attributes", () => {

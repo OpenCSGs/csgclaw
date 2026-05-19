@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { PROVIDERS, RUNTIME_KIND_OPTIONS } from "@/bootstrap/constants";
+import { PROVIDERS, RUNTIME_KIND_OPTIONS } from "@/shared/constants/agents";
 import {
   AgentCreateProgress,
   APIKeyField,
@@ -80,7 +79,7 @@ export function AgentProfileModal({
                     value={agentDraft.from_template || ""}
                     onChange={(event) => {
                       const nextTemplate = normalizeTemplateSelection(
-                        hubTemplates.find((item) => item.id === event.target.value) || null,
+                        hubTemplates.find((item) => item.id === event.currentTarget.value) || null,
                       );
                       onAgentDraftChange((current) =>
                         applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || ""),
@@ -103,7 +102,7 @@ export function AgentProfileModal({
                   disabled={agentModalMode === "edit" && editingAgent?.id === "u-manager"}
                   required
                   aria-required="true"
-                  onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.target.value })}
+                  onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}
                   placeholder={t("agentNamePlaceholder")}
                 />
               </label>
@@ -119,7 +118,7 @@ export function AgentProfileModal({
                   <select
                     value={normalizeRuntimeKind(agentDraft.runtime_kind) || "picoclaw_sandbox"}
                     onChange={(event) => {
-                      const runtimeKind = normalizeRuntimeKind(event.target.value);
+                      const runtimeKind = normalizeRuntimeKind(event.currentTarget.value);
                       const currentTemplate = normalizeTemplateSelection(
                         hubTemplates.find((item) => item.id === agentDraft.from_template) || null,
                       );
@@ -171,7 +170,7 @@ export function AgentProfileModal({
                     value={agentDraft.image}
                     readOnly={agentModalMode === "edit"}
                     disabled={agentModalMode === "edit"}
-                    onInput={(event) => onAgentDraftChange({ ...agentDraft, image: event.target.value })}
+                    onInput={(event) => onAgentDraftChange({ ...agentDraft, image: event.currentTarget.value })}
                     placeholder={t("agentImagePlaceholder")}
                   />
                 </label>
@@ -181,7 +180,7 @@ export function AgentProfileModal({
                 <textarea
                   className="compact-textarea"
                   value={agentDraft.description}
-                  onInput={(event) => onAgentDraftChange({ ...agentDraft, description: event.target.value })}
+                  onInput={(event) => onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })}
                 />
               </label>
             </div>
@@ -195,7 +194,7 @@ export function AgentProfileModal({
                   <select
                     value={agentDraft.provider}
                     onChange={(event) => {
-                      onAgentDraftChange({ ...agentDraft, provider: event.target.value, model_id: "" });
+                      onAgentDraftChange({ ...agentDraft, provider: event.currentTarget.value, model_id: "" });
                       onAgentModelsReset();
                     }}
                   >
@@ -212,7 +211,7 @@ export function AgentProfileModal({
                     value={agentDraft.model_id}
                     required
                     aria-required="true"
-                    onChange={(event) => onAgentDraftChange({ ...agentDraft, model_id: event.target.value })}
+                    onChange={(event) => onAgentDraftChange({ ...agentDraft, model_id: event.currentTarget.value })}
                   >
                     <option value="">{agentModelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
                     {agentModels.map((model) => (
@@ -229,7 +228,9 @@ export function AgentProfileModal({
                   <span>{t("profileReasoning")}</span>
                   <select
                     value={agentDraft.reasoning_effort}
-                    onChange={(event) => onAgentDraftChange({ ...agentDraft, reasoning_effort: event.target.value })}
+                    onChange={(event) =>
+                      onAgentDraftChange({ ...agentDraft, reasoning_effort: event.currentTarget.value })
+                    }
                   >
                     {["low", "medium", "high", "xhigh"].map((effort) => (
                       <option key={effort} value={effort}>
@@ -277,13 +278,13 @@ export function AgentProfileModal({
                     value={agentDraft.base_url}
                     required
                     aria-required="true"
-                    onInput={(event) => onAgentDraftChange({ ...agentDraft, base_url: event.target.value })}
+                    onInput={(event) => onAgentDraftChange({ ...agentDraft, base_url: event.currentTarget.value })}
                     placeholder="https://api.openai.com/v1"
                   />
                 </label>
                 <APIKeyField
                   value={agentDraft.api_key}
-                  onInput={(event) => onAgentDraftChange({ ...agentDraft, api_key: event.target.value })}
+                  onInput={(event) => onAgentDraftChange({ ...agentDraft, api_key: event.currentTarget.value })}
                   profile={agentDraft}
                   t={t}
                 />
@@ -292,7 +293,7 @@ export function AgentProfileModal({
                   <textarea
                     className="compact-textarea"
                     value={agentDraft.headersText}
-                    onInput={(event) => onAgentDraftChange({ ...agentDraft, headersText: event.target.value })}
+                    onInput={(event) => onAgentDraftChange({ ...agentDraft, headersText: event.currentTarget.value })}
                   />
                 </label>
               </div>
@@ -307,7 +308,9 @@ export function AgentProfileModal({
                   <textarea
                     className="compact-json"
                     value={agentDraft.requestOptionsText}
-                    onInput={(event) => onAgentDraftChange({ ...agentDraft, requestOptionsText: event.target.value })}
+                    onInput={(event) =>
+                      onAgentDraftChange({ ...agentDraft, requestOptionsText: event.currentTarget.value })
+                    }
                   />
                 </label>
               ) : null}
