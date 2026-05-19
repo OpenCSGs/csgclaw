@@ -2703,9 +2703,7 @@ function App() {
     setAgentProgress(null);
     setAgentModels([]);
     try {
-      const resp = await fetch(`api/v1/agents/${encodeURIComponent(item.id)}/profile`);
-      const profile = resp.ok ? await resp.json() : item.agent_profile;
-      const draft = ensureNotifierPullSubscriptionDraft(agentToDraft({ ...item, agent_profile: profile }));
+      const draft = await agentDraftFromItem(item);
       setAgentDraft(draft);
       setShowAgentModal(true);
       loadAgentModels(draft, { silent: true });
@@ -2721,12 +2719,9 @@ function App() {
     setAgentPageError("");
     setAgentPageModels([]);
     try {
-      const resp = await fetch(`api/v1/agents/${encodeURIComponent(item.id)}/profile`);
-      const profile = resp.ok ? await resp.json() : item.agent_profile;
-      const base = ensureNotifierPullSubscriptionDraft(agentToDraft({ ...item, agent_profile: profile }));
-      const rk = normalizeRuntimeKind(item.runtime_kind || base.runtime_kind);
-      setAgentPageDraft({ ...base, runtime_kind: rk || base.runtime_kind });
-      loadAgentPageModels({ ...base, runtime_kind: rk || base.runtime_kind }, { silent: true });
+      const draft = await agentDraftFromItem(item);
+      setAgentPageDraft(draft);
+      loadAgentPageModels(draft, { silent: true });
     } catch (err) {
       setAgentPageError(err.message || t("agentActionFailed"));
       const base = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
@@ -2878,7 +2873,7 @@ function App() {
       if (saved.id === "u-manager") {
         await refreshManagerProfile();
       }
-      setAgentPageDraft(agentToDraft(saved));
+      setAgentPageDraft(await agentDraftFromItem(saved));
     } catch (err) {
       setAgentPageError(err.message || t("agentActionFailed"));
     } finally {
@@ -5159,10 +5154,7 @@ function AgentDetailPane({
   const isManager = item.role === "manager" || item.id === "u-manager";
   const running = isAgentRunning(item);
   const draftBelongsToItem = Boolean(draft) && String(draft?.agent_id ?? "").trim() === String(item?.id ?? "").trim();
-  const incomplete =
-    draftBelongsToItem && isNotifierRuntimeDraftOnAgentPage(draft, item)
-      ? !notifierFormIsComplete(draft, item)
-      : isAgentIncomplete(item);
+  const incomplete = isAgentIncomplete(item, draftBelongsToItem ? draft : undefined);
   const restartNeeded = isAgentRestartNeeded(item);
   const busyPrefix = `${item.id}:`;
   const provider = item.provider || item.agent_profile?.provider;
@@ -5205,7 +5197,7 @@ function AgentDetailPane({
         <button className="btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onOpenDM(item)}>${t("openDM")}</button>
         ${isManager
           ? html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>`
-          : html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>`}
+          : null}
         ${!isManager
           ? html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix)} onClick=${() => onDelete(item)}>${t("agentDelete")}</button>`
           : null}
@@ -6583,6 +6575,40 @@ function inferNotifierRuntimeKindIfUnset(agent, profile) {
   return "notifier";
 }
 
+/** Loads full agent record (runtime_options) plus redacted profile view for draft editing. */
+async function fetchAgentWithProfile(item) {
+  const id = String(item?.id ?? "").trim();
+  if (!id) {
+    return { agent: item || {}, profile: item?.agent_profile };
+  }
+  let agent = item || {};
+  try {
+    const agentResp = await fetch(`api/v1/agents/${encodeURIComponent(id)}`);
+    if (agentResp.ok) {
+      agent = { ...agent, ...(await agentResp.json()) };
+    }
+  } catch {
+    // keep channel bot list item
+  }
+  let profile = agent?.agent_profile;
+  try {
+    const profileResp = await fetch(`api/v1/agents/${encodeURIComponent(id)}/profile`);
+    if (profileResp.ok) {
+      profile = await profileResp.json();
+    }
+  } catch {
+    // keep profile from agent record
+  }
+  return { agent, profile };
+}
+
+async function agentDraftFromItem(item) {
+  const { agent, profile } = await fetchAgentWithProfile(item);
+  const base = agentToDraft({ ...agent, agent_profile: profile });
+  const rk = normalizeRuntimeKind(agent?.runtime_kind || item?.runtime_kind || base.runtime_kind);
+  return ensureNotifierPullSubscriptionDraft({ ...base, runtime_kind: rk || base.runtime_kind });
+}
+
 function agentToDraft(agent) {
   const profile = agent?.agent_profile || agent || {};
   const inferred = inferNotifierRuntimeKindIfUnset(agent, profile);
@@ -6799,8 +6825,15 @@ function isAgentRunning(item) {
   return status === "running" || status === "online";
 }
 
-function isAgentIncomplete(item) {
-  const draft = agentToDraft(item);
+function isAgentProfileMarkedComplete(item) {
+  return item?.profile_complete === true || item?.agent_profile?.profile_complete === true;
+}
+
+function isAgentIncomplete(item, draftOverride) {
+  if (isAgentProfileMarkedComplete(item)) {
+    return false;
+  }
+  const draft = draftOverride ?? agentToDraft(item);
   if (isNotifierRuntimeDraftOnAgentPage(draft, item)) {
     return !notifierFormIsComplete(draft, item);
   }

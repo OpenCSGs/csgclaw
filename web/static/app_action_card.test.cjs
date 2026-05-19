@@ -119,3 +119,15 @@ assert(
   source.includes('pickDefaultAgentTemplate(hubTemplates, runtimeKind, bootstrapConfig)'),
   'changing the runtime must re-pick a compatible default template when needed',
 );
+assert(
+  source.includes('function isAgentProfileMarkedComplete(item)') &&
+    source.includes('if (isAgentProfileMarkedComplete(item))') &&
+    source.includes('return false;'),
+  'notifier agents with profile_complete from the bots API must not show as incomplete in the UI',
+);
+assert(
+  source.includes('async function fetchAgentWithProfile(item)') &&
+    source.includes('fetch(`api/v1/agents/${encodeURIComponent(id)}`)') &&
+    source.includes('async function agentDraftFromItem(item)'),
+  'notifier agent drafts must load runtime_options from the full agent API, not profile-only',
+);

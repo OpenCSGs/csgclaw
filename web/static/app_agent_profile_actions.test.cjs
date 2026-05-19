@@ -26,8 +26,8 @@ assert(
   agentDetailPaneSource.includes('isManager') &&
     agentDetailPaneSource.includes('btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger') &&
     !agentDetailPaneSource.includes('btn btn-secondary-gray btn-sm preview-action-button" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}') &&
-    agentDetailPaneSource.includes('<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>'),
-  'agent detail pane must expose recreate for both manager and worker with the same red danger styling',
+    agentDetailPaneSource.includes('${isManager\n          ? html`<button className="btn btn-outline-danger btn-sm preview-action-button preview-action-button-danger" disabled=${busyKey.startsWith(busyPrefix) || incomplete} onClick=${() => onRecreate(item)}>${t("agentRecreate")}</button>`\n          : null}'),
+  'agent detail pane must expose recreate for manager only, not ordinary workers',
 );
 
 const agentRowSource = source.slice(
