@@ -166,9 +166,11 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", configFileName),
 		`model = "gpt-5.5"`,
 		`model_provider = "proxy"`,
+		`model_catalog_json = "model_catalog.json"`,
 		`wire_api = "responses"`,
 		`supports_websockets = false`,
 	)
+	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", modelCatalogFileName), "gpt-5.5")
 }
 
 func TestRuntimeStopAndDelete(t *testing.T) {
@@ -438,9 +440,11 @@ func TestRuntimeCreateWritesConfigWhenHostAuthIsSeeded(t *testing.T) {
 
 	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", configFileName),
 		`model = "gpt-5.5"`,
+		`model_catalog_json = "model_catalog.json"`,
 		`wire_api = "responses"`,
 		`supports_websockets = false`,
 	)
+	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", modelCatalogFileName), "gpt-5.5")
 }
 
 func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
@@ -507,6 +511,7 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 	for _, want := range []string{
 		`model = "gpt-5.5"`,
 		`model_provider = "proxy"`,
+		`model_catalog_json = "model_catalog.json"`,
 		`[model_providers.proxy]`,
 		`name = "OpenAI using LLM proxy"`,
 		`base_url = "https://runtime.example/v1"`,
@@ -570,9 +575,11 @@ func TestRuntimeCreateAlwaysWritesResponsesConfig(t *testing.T) {
 
 	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", configFileName),
 		`model = "deepseek-v4-pro"`,
+		`model_catalog_json = "model_catalog.json"`,
 		`wire_api = "responses"`,
 		`supports_websockets = false`,
 	)
+	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", modelCatalogFileName), "deepseek-v4-pro")
 	configText, err := os.ReadFile(filepath.Join(root, "alice", ".codex", configFileName))
 	if err != nil {
 		t.Fatal(err)
@@ -658,6 +665,7 @@ func TestRuntimeCreateRemovesStaleConfigWhenAuthExists(t *testing.T) {
 			t.Fatalf("runtime config missing %q:\n%s", want, configText)
 		}
 	}
+	assertRuntimeModelCatalog(t, filepath.Join(runtimeRoot, modelCatalogFileName), "gpt-5.5")
 }
 
 func assertRuntimeConfigContains(t *testing.T, path string, wants ...string) {
@@ -672,6 +680,33 @@ func assertRuntimeConfigContains(t *testing.T, path string, wants ...string) {
 		if !strings.Contains(configText, want) {
 			t.Fatalf("runtime config missing %q:\n%s", want, configText)
 		}
+	}
+}
+
+func assertRuntimeModelCatalog(t *testing.T, path, wantModel string) {
+	t.Helper()
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read runtime model catalog: %v", err)
+	}
+	if strings.Contains(string(raw), "runtime-key") {
+		t.Fatalf("runtime model catalog contains raw API key:\n%s", raw)
+	}
+	var payload struct {
+		Models []map[string]any `json:"models"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode runtime model catalog: %v", err)
+	}
+	if len(payload.Models) != 1 {
+		t.Fatalf("runtime model catalog models = %#v, want one model", payload.Models)
+	}
+	if got := payload.Models[0]["slug"]; got != wantModel {
+		t.Fatalf("runtime model catalog slug = %#v, want %q", got, wantModel)
+	}
+	if _, ok := payload.Models[0]["model_messages"]; !ok {
+		t.Fatalf("runtime model catalog missing model_messages: %#v", payload.Models[0])
 	}
 }
 

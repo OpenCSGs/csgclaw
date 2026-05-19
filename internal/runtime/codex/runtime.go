@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"csgclaw/internal/codexacp"
+	"csgclaw/internal/codexmodel"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
 
@@ -24,6 +25,7 @@ import (
 const (
 	hostStateDirName       = ".codex"
 	configFileName         = "config.toml"
+	modelCatalogFileName   = "model_catalog.json"
 	runtimeFileName        = "runtime.json"
 	sessionFileName        = "session.json"
 	stderrLogFileName      = "stderr.log"
@@ -410,9 +412,14 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome string, profile agentrunt
 		return nil
 	}
 
+	if err := r.writeModelCatalog(runtimeCodexHome, profile); err != nil {
+		return err
+	}
+
 	var b strings.Builder
 	fmt.Fprintf(&b, "model = %s\n", strconv.Quote(profile.ModelID))
 	fmt.Fprintf(&b, "model_provider = %s\n\n", strconv.Quote(codexProxyProviderName))
+	fmt.Fprintf(&b, "model_catalog_json = %s\n\n", strconv.Quote(modelCatalogFileName))
 	fmt.Fprintf(&b, "[model_providers.%s]\n", codexProxyProviderName)
 	fmt.Fprintf(&b, "name = %s\n", strconv.Quote("OpenAI using LLM proxy"))
 	fmt.Fprintf(&b, "base_url = %s\n", strconv.Quote(profile.BaseURL))
@@ -424,6 +431,22 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome string, profile agentrunt
 
 	if err := r.writeFile(configPath, []byte(b.String()), 0o600); err != nil {
 		return fmt.Errorf("write runtime codex config %s: %w", configPath, err)
+	}
+	return nil
+}
+
+func (r *Runtime) writeModelCatalog(runtimeCodexHome string, profile agentruntime.Profile) error {
+	catalogPath := filepath.Join(runtimeCodexHome, modelCatalogFileName)
+	body, err := json.MarshalIndent(codexmodel.Catalog(codexmodel.Profile{
+		ModelID:         profile.ModelID,
+		ReasoningEffort: profile.ReasoningEffort,
+	}), "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode runtime codex model catalog: %w", err)
+	}
+	body = append(body, '\n')
+	if err := r.writeFile(catalogPath, body, 0o600); err != nil {
+		return fmt.Errorf("write runtime codex model catalog %s: %w", catalogPath, err)
 	}
 	return nil
 }
