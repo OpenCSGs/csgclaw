@@ -2,7 +2,7 @@
 
 本规范适用于 `web/app` 下的 Vite 前端应用。
 
-英文版为 `FRONTEND.md`，Agent 默认以英文版为准。
+英文版为 `development.md`，Agent 默认以英文版为准。
 
 ## 工具链
 
@@ -75,7 +75,6 @@ pnpm --dir web/app install
 
 ## 常量与共享契约
 
-- 不要使用 `src/bootstrap/constants.ts` 或其它单个万能 constants 模块。
 - 页面私有常量放在拥有它的页面、组件、hook 或 helper 附近。
 - 被 model helper 使用的纯领域常量放在对应的 `src/models/<domain>.ts`。路由常量、pane type、route segment alias 和 path builder 应一起放在 `src/models/routing.ts`。
 - 被多个远距离模块导入的稳定跨模块契约，放在 `src/shared/constants/` 下的聚焦文件里，例如 `api.ts`、`agents.ts`、`messages.ts` 或 `workspace.ts`。
@@ -147,6 +146,18 @@ src/pages/WorkspacePage/components/
 - 临时 UI 状态留在拥有它的页面或组件里。
 - 只有多个远距离模块都需要读写时，才引入共享状态。
 - 不要把 fetch、数据归一化和渲染逻辑都混在一个大组件里；可以清晰拆分时就拆出去。
+
+## 数据流
+
+- 把 `src/api/` 当作传输边界。API 模块负责 endpoint path、请求 payload、响应类型、底层错误映射，以及与 OpenAPI/server 返回形态的兼容；不要在这里承载 React 状态、渲染决策或页面专属默认值。
+- 原始 API 响应进入大范围 UI 代码前，如果转换逻辑会复用、足够复杂或需要回归测试，先转换成前端应用使用的形态。纯转换 helper 放在 `src/models/<domain>.ts` 或聚焦的 model 模块里。
+- 路由页面或页面拥有的 hook 负责组合数据加载、mutation、loading/error/empty 状态和页面专属默认值。只要还没有其它页面复用，就把这层编排留在路由附近。
+- 共享组件应接收已经整理好的 props 或聚焦的 callback。组件可以展示业务状态，但不要直接 fetch；除非它是 `src/components/business/` 下有明确跨页面用途的 app-aware 组件。
+- `src/components/ui/` 下的 UI 基础件必须与数据来源无关。不要导入 `src/api/`、route model、storage client、realtime client 或页面模块。
+- 实时事件、轮询和共享订阅放在 `src/shared/realtime/`；如果只有一个页面消费，放在页面拥有的 hook 里。能复用 HTTP 数据的 model helper 时，实时 payload 也通过同一套 helper 归一化。
+- mutation 流程保持显式：在页面/controller 层调用 API，在一个明确位置更新本地或共享状态，并通过 props 暴露 loading、disabled 和 error 状态。只有回滚行为清晰时才使用 optimistic update。
+- 只有状态确实需要跨远距离路由或布局区域共享时，才引入全局 store 或 context。单一可见 owner 的数据优先使用页面本地 hook 和派生 props。
+- 优先测试数据流中的纯逻辑：API shape adapter、model normalizer、serializer、routing helper 和状态流转 helper。组件测试只补用户可观察的 wiring。
 
 ## i18n 与文案
 

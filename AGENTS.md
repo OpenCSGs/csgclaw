@@ -44,7 +44,7 @@ make release
 - Prefer existing patterns and the standard library before adding dependencies.
 - Format with `make fmt`.
 - Add or update tests when changing CLI, config, API, or runtime behavior.
-- When changing the Vite web app, follow `docs/web/FRONTEND.md` for frontend structure, source layout, components, styling, state, accessibility, and verification.
+- When changing the Vite web app, follow `docs/web/development.md` for frontend structure, source layout, components, styling, state, accessibility, and verification.
 - Do not change BoxLite sandbox integration or packaging paths unless the task is about sandbox/runtime integration.
 - When changing config fields or defaults, update loader, saver, onboard flow, tests, and docs together.
 - Never hardcode or print real secrets; startup and logs must keep tokens redacted.
@@ -60,6 +60,6 @@ make release
 
 - `README.md`
 - `docs/README.go.md`
-- `docs/web/FRONTEND.md`
+- `docs/web/development.md`
 - `Makefile`
 - `.github/workflows/release.yml`

@@ -2,7 +2,7 @@
 
 These rules apply to the Vite web app in `web/app`.
 
-Chinese companion: `FRONTEND.zh.md`. This English document is the agent-facing source of truth.
+Chinese companion: `development.zh.md`. This English document is the agent-facing source of truth.
 
 ## Tooling
 
@@ -75,7 +75,6 @@ If a subdirectory later needs its own rules, add a short README in that subdirec
 
 ## Constants And Shared Contracts
 
-- Do not use `src/bootstrap/constants.ts` or any other single catch-all constants module.
 - Page-private constants belong next to the page, component, hook, or helper that owns them.
 - Pure domain constants used by model helpers belong in the owning `src/models/<domain>.ts` module. Routing constants, pane types, route segment aliases, and path builders should stay together in `src/models/routing.ts`.
 - Stable cross-cutting contracts that are imported by multiple distant modules belong in focused files under `src/shared/constants/`, for example `api.ts`, `agents.ts`, `messages.ts`, or `workspace.ts`.
@@ -147,6 +146,18 @@ src/pages/WorkspacePage/components/
 - Keep transient UI state inside the owning page or component.
 - Add shared state only when state must be read or updated by multiple distant modules.
 - Do not mix fetch calls, normalization, and rendering logic in one large component when the logic can be cleanly separated.
+
+## Data Flow
+
+- Treat `src/api/` as the transport boundary. API modules should own endpoint paths, request payloads, response types, low-level error mapping, and OpenAPI/server shape compatibility. They should not own React state, rendering decisions, or page-specific defaults.
+- Convert raw API responses into app-facing shapes before they reach broad UI code when the conversion is reused, non-trivial, or needs regression coverage. Put those pure helpers in `src/models/<domain>.ts` or a focused model module.
+- Route pages or page-owned hooks should compose data loading, mutations, loading/error/empty state, and page-specific defaults. Keep this orchestration near the route until another page needs the same behavior.
+- Shared components should receive already-shaped props or focused callbacks. They may display business state, but they should not fetch directly unless they are intentionally app-aware components in `src/components/business/` with a documented cross-page use.
+- UI primitives in `src/components/ui/` must stay data-source agnostic. They should not import `src/api/`, route models, storage clients, realtime clients, or page modules.
+- Realtime events, polling, and shared subscriptions belong in `src/shared/realtime/` or in a page-owned hook when only one page consumes them. Normalize realtime payloads through the same model helpers used by HTTP data when possible.
+- Keep mutation flows explicit: call the API at the page/controller layer, update local or shared state in one place, and surface loading, disabled, and error states through props. Use optimistic updates only when rollback behavior is clear.
+- Introduce app-wide stores or context only for state that is genuinely shared across distant routes or layout areas. Prefer page-local hooks and derived props for data that has one visible owner.
+- Test the pure parts of the flow first: API shape adapters, model normalizers, serializers, routing helpers, and state-transition helpers. Add component tests only for the user-visible wiring around those helpers.
 
 ## i18n And Text
 

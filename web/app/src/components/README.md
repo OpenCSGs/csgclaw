@@ -6,4 +6,4 @@ This directory is only for components shared outside a single page.
 - `business/` contains shared app-aware components.
 - Page-private components belong under `src/pages/<PageName>/components/`.
 
-See [docs/web/FRONTEND.md](../../../../docs/web/FRONTEND.md) for the full frontend rules.
+See [docs/web/development.md](../../../../docs/web/development.md) for the full frontend rules.
