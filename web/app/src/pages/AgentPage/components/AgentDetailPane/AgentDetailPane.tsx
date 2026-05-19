@@ -55,10 +55,7 @@ export function AgentDetailPane({
   const isManager = item.role === "manager" || item.id === "u-manager";
   const running = isAgentRunning(item);
   const draftBelongsToItem = Boolean(draft) && String(draft?.agent_id ?? "").trim() === String(item?.id ?? "").trim();
-  const incomplete =
-    draftBelongsToItem && isNotifierRuntimeDraftOnAgentPage(draft, item)
-      ? !notifierFormIsComplete(draft, item)
-      : isAgentIncomplete(item);
+  const incomplete = isAgentIncomplete(item, draftBelongsToItem ? draft : undefined);
   const restartNeeded = isAgentRestartNeeded(item);
   const busyPrefix = `${item.id}:`;
   const provider = item.provider || item.agent_profile?.provider;

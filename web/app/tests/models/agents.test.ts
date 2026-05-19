@@ -295,6 +295,14 @@ describe("agent model helpers", () => {
     expect(JSON.parse(draft.requestOptionsText)).toEqual({ temperature: 0.1 });
     expect(notifierFormIsComplete(draft)).toBe(true);
     expect(isAgentIncomplete({ runtime_kind: "notifier", runtime_options: {} })).toBe(true);
+    expect(isAgentIncomplete({ runtime_kind: "notifier", profile_complete: true, runtime_options: {} })).toBe(false);
+    expect(
+      isAgentIncomplete({
+        runtime_kind: "notifier",
+        agent_profile: { profile_complete: true },
+        runtime_options: {},
+      }),
+    ).toBe(false);
   });
 
   it("builds notifier pull subscriptions and route previews", () => {

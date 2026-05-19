@@ -718,8 +718,18 @@ export function isAgentRunning(item: AgentLike | null | undefined): boolean {
   return status === "running" || status === "online";
 }
 
-export function isAgentIncomplete(item: AgentLike | null | undefined): boolean {
-  const draft = agentToDraft(item);
+export function isAgentProfileMarkedComplete(item: AgentLike | null | undefined): boolean {
+  return item?.profile_complete === true || item?.agent_profile?.profile_complete === true;
+}
+
+export function isAgentIncomplete(
+  item: AgentLike | null | undefined,
+  draftOverride?: AgentDraft | null | undefined,
+): boolean {
+  if (isAgentProfileMarkedComplete(item)) {
+    return false;
+  }
+  const draft = draftOverride ?? agentToDraft(item);
   if (isNotifierRuntimeDraftOnAgentPage(draft, item)) {
     return !notifierFormIsComplete(draft, item);
   }

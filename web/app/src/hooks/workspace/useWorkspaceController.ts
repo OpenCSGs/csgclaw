@@ -6,6 +6,7 @@ import {
   createBotRequest,
   createManagerAgentRequest,
   deleteBotRequest,
+  fetchAgent,
   fetchAgentProfile,
   fetchAgentProfileDefaults,
   runAgentActionRequest,
@@ -1241,6 +1242,33 @@ export function useWorkspaceController() {
     }, 120);
   }
 
+  async function fetchAgentWithProfile(item) {
+    const id = String(item?.id ?? "").trim();
+    if (!id) {
+      return { agent: item || {}, profile: item?.agent_profile };
+    }
+    let agent = item || {};
+    try {
+      agent = { ...agent, ...(await fetchAgent(id)) };
+    } catch (_) {
+      // Keep the channel bot list item when the full agent endpoint is unavailable.
+    }
+    let profile = agent?.agent_profile;
+    try {
+      profile = await fetchAgentProfile(id);
+    } catch (_) {
+      // Keep the profile embedded in the full agent record or list item.
+    }
+    return { agent, profile };
+  }
+
+  async function agentDraftFromItem(item) {
+    const { agent, profile } = await fetchAgentWithProfile(item);
+    const base = agentToDraft({ ...agent, agent_profile: profile });
+    const runtimeKind = normalizeRuntimeKind(agent?.runtime_kind || item?.runtime_kind || base.runtime_kind);
+    return ensureNotifierPullSubscriptionDraft({ ...base, runtime_kind: runtimeKind || base.runtime_kind });
+  }
+
   async function openCreateAgentModal(template = undefined) {
     setAgentModalMode("create");
     setEditingAgent(null);
@@ -1290,15 +1318,7 @@ export function useWorkspaceController() {
     setAgentProgress(null);
     resetAgentModels();
     try {
-      let profile = item.agent_profile;
-      try {
-        profile = await fetchAgentProfile(item.id);
-      } catch (err) {
-        if (!profile) {
-          throw err;
-        }
-      }
-      const draft = ensureNotifierPullSubscriptionDraft(agentToDraft({ ...item, agent_profile: profile }));
+      const draft = await agentDraftFromItem(item);
       setAgentDraft(draft);
       setShowAgentModal(true);
     } catch (err) {
@@ -1313,15 +1333,7 @@ export function useWorkspaceController() {
     setAgentPageError("");
     resetAgentPageModels();
     try {
-      let profile = item.agent_profile;
-      try {
-        profile = await fetchAgentProfile(item.id);
-      } catch (err) {
-        if (!profile) {
-          throw err;
-        }
-      }
-      const draft = ensureNotifierPullSubscriptionDraft(agentToDraft({ ...item, agent_profile: profile }));
+      const draft = await agentDraftFromItem(item);
       setAgentPageDraft(draft);
     } catch (err) {
       setAgentPageError(err.message || t("agentActionFailed"));
@@ -1358,7 +1370,7 @@ export function useWorkspaceController() {
       if (saved.id === "u-manager") {
         await refreshManagerProfile();
       }
-      setAgentPageDraft(agentToDraft(saved));
+      setAgentPageDraft(await agentDraftFromItem(saved));
     } catch (err) {
       setAgentPageError(err.message || t("agentActionFailed"));
     } finally {

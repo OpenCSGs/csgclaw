@@ -24,6 +24,10 @@ export function fetchAgents(options = {}) {
   return get("api/v1/channels/csgclaw/bots");
 }
 
+export function fetchAgent(agentID) {
+  return get(`api/v1/agents/${encodeURIComponent(agentID)}`);
+}
+
 export function createManagerAgentRequest(options = {}) {
   const payload = {
     id: "u-manager",
