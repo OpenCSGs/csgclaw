@@ -26,12 +26,20 @@ func isSandboxRunning(status string) bool {
 	return false
 }
 
-func isSandboxDeploying(status string) bool {
-	return strings.EqualFold(strings.TrimSpace(status), "deploying")
+func isSandboxStartGraceStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "stopped", "terminated":
+		return true
+	}
+	return false
 }
 
-func shouldStartOnCreate(status string) bool {
-	return !isSandboxRunning(status)
+func isSandboxStoppedForRecreate(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "stopped", "terminated", "failed", "error", "errored", "crashed", "dead", "exited":
+		return true
+	}
+	return false
 }
 
 // isSandboxTerminalFailure is the "terminal unhealthy" check used by polling.

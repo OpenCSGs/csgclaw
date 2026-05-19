@@ -24,6 +24,7 @@ const (
 	defaultReadyTimeout = 5 * time.Minute
 	defaultPollInterval = 3 * time.Second
 	defaultHealthReqTO  = 5 * time.Second
+	startStateGrace     = 10 * time.Second
 	minReadyTimeout     = 5 * time.Second
 	minPollInterval     = 500 * time.Millisecond
 	maxPollInterval     = 30 * time.Second
@@ -132,41 +133,22 @@ func (r *Runtime) Create(ctx context.Context, spec sandbox.CreateSpec) (sandbox.
 		return nil, err
 	}
 
-	resp, err := r.client.Create(ctx, req)
-	if err != nil {
+	if _, err := r.client.Create(ctx, req); err != nil {
 		if !csghubsdk.IsConflict(err) {
 			return nil, wrapError("create csghub sandbox", err)
 		}
-		// Existing sandbox: align desired spec then read latest state.
+		// Existing sandbox: align desired spec. CSGHub lifecycle responses can
+		// report stale states, so readiness is verified by GET polling below.
 		if _, applyErr := r.client.Apply(ctx, req); applyErr != nil {
 			return nil, wrapError("apply csghub sandbox", applyErr)
 		}
-		resp, err = r.client.Get(ctx, req.SandboxName)
-		if err != nil {
-			return nil, wrapError("get csghub sandbox after apply", err)
-		}
 	}
 
-	if !isSandboxRunning(resp.State.Status) {
-		if isSandboxDeploying(resp.State.Status) {
-			// Deploying indicates a previously created sandbox needs an explicit
-			// start trigger before polling until running.
-		}
-		if shouldStartOnCreate(resp.State.Status) {
-			started, startErr := r.startSandboxIdempotent(ctx, req.SandboxName)
-			if startErr != nil {
-				return nil, startErr
-			}
-			if started != nil {
-				resp = started
-			}
-			if !isSandboxRunning(resp.State.Status) {
-				resp, err = r.waitForRunning(ctx, req.SandboxName)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
+	if _, err := r.startSandboxIdempotent(ctx, req.SandboxName); err != nil {
+		return nil, err
+	}
+	if _, err := r.waitForRunning(ctx, req.SandboxName); err != nil {
+		return nil, err
 	}
 
 	if err := r.waitForRuntimeHealth(ctx, req.SandboxName); err != nil {
@@ -203,7 +185,10 @@ func (r *Runtime) Remove(ctx context.Context, idOrName string, _ sandbox.RemoveO
 	if err != nil {
 		return err
 	}
-	return wrapError("remove csghub sandbox", r.client.Delete(ctx, name))
+	if err := r.client.Delete(ctx, name); err != nil {
+		return wrapError("remove csghub sandbox", err)
+	}
+	return r.waitForStopped(ctx, name)
 }
 
 func (r *Runtime) Close() error {
@@ -297,18 +282,26 @@ func (r *Runtime) waitForRunning(ctx context.Context, sandboxName string) (*csgh
 	ticker := time.NewTicker(r.cfg.pollInterval)
 	defer ticker.Stop()
 
-	var attempt int
 	var lastErr error
 	var lastStatus string
+	var graceStatusFirstSeen time.Time
 	for {
-		attempt++
 		resp, err := r.client.Get(waitCtx, sandboxName)
 		if err == nil {
 			lastStatus = strings.TrimSpace(resp.State.Status)
 			if isSandboxUpOrComingUp(lastStatus) {
 				return resp, nil
 			}
-			if isSandboxTerminalFailure(lastStatus) {
+			graceStatus := false
+			if isSandboxStartGraceStatus(lastStatus) {
+				if graceStatusFirstSeen.IsZero() {
+					graceStatusFirstSeen = time.Now()
+				}
+				if time.Since(graceStatusFirstSeen) <= startStateGrace {
+					graceStatus = true
+				}
+			}
+			if !graceStatus && isSandboxTerminalFailure(lastStatus) {
 				return nil, fmt.Errorf("wait csghub sandbox failed to start: status=%q", lastStatus)
 			}
 		} else if shouldRaiseImmediately(err) {
@@ -326,6 +319,49 @@ func (r *Runtime) waitForRunning(ctx context.Context, sandboxName string) (*csgh
 			}
 			return nil, fmt.Errorf(
 				"wait csghub sandbox running exceeded deadline (%s), last status=%q: %w",
+				r.cfg.readyTimeout,
+				lastStatus,
+				waitCtx.Err(),
+			)
+		case <-ticker.C:
+		}
+	}
+}
+
+func (r *Runtime) waitForStopped(ctx context.Context, sandboxName string) error {
+	waitCtx, cancel := context.WithTimeout(ctx, r.cfg.readyTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(r.cfg.pollInterval)
+	defer ticker.Stop()
+
+	var lastErr error
+	var lastStatus string
+	for {
+		resp, err := r.client.Get(waitCtx, sandboxName)
+		if err == nil {
+			lastStatus = strings.TrimSpace(resp.State.Status)
+			if isSandboxStoppedForRecreate(lastStatus) {
+				return nil
+			}
+		} else if csghubsdk.IsNotFound(err) {
+			return nil
+		} else if shouldRaiseImmediately(err) {
+			return wrapError("poll csghub sandbox stopped", err)
+		} else {
+			lastErr = err
+		}
+
+		select {
+		case <-waitCtx.Done():
+			if lastErr != nil {
+				return wrapError("wait csghub sandbox stopped", lastErr)
+			}
+			if strings.TrimSpace(lastStatus) == "" {
+				return fmt.Errorf("wait csghub sandbox stopped exceeded deadline (%s): %w", r.cfg.readyTimeout, waitCtx.Err())
+			}
+			return fmt.Errorf(
+				"wait csghub sandbox stopped exceeded deadline (%s), last status=%q: %w",
 				r.cfg.readyTimeout,
 				lastStatus,
 				waitCtx.Err(),
@@ -378,24 +414,20 @@ func (r *Runtime) waitForRuntimeHealth(ctx context.Context, sandboxName string) 
 }
 
 func (r *Runtime) startSandboxIdempotent(ctx context.Context, sandboxName string) (*csghubsdk.Response, error) {
-	started, err := r.client.Start(ctx, sandboxName)
+	_, err := r.client.Start(ctx, sandboxName)
 	if err == nil {
-		return started, nil
+		return nil, nil
 	}
 	if isStartUnsupported(err) {
-		return started, nil
+		return nil, nil
 	}
 	if !isDuplicateStartError(err) {
 		return nil, wrapError("start csghub sandbox", err)
 	}
-	resp, getErr := r.client.Get(ctx, sandboxName)
-	if getErr != nil {
+	if _, getErr := r.client.Get(ctx, sandboxName); getErr != nil {
 		return nil, wrapError("get csghub sandbox after duplicate start", getErr)
 	}
-	if statusOKAfterDuplicateStart(resp.State.Status) {
-		return resp, nil
-	}
-	return nil, wrapError("start csghub sandbox", err)
+	return nil, nil
 }
 
 // Instance adapts one csghub sandbox to sandbox.Instance.
@@ -414,15 +446,11 @@ func (i *Instance) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := i.runtime.startSandboxIdempotent(ctx, name)
-	if err != nil {
+	if _, err := i.runtime.startSandboxIdempotent(ctx, name); err != nil {
 		return err
 	}
-	if resp != nil && !isSandboxRunning(resp.State.Status) {
-		_, err = i.runtime.waitForRunning(ctx, name)
-		if err != nil {
-			return err
-		}
+	if _, err := i.runtime.waitForRunning(ctx, name); err != nil {
+		return err
 	}
 	return i.runtime.waitForRuntimeHealth(ctx, name)
 }
@@ -441,7 +469,10 @@ func (i *Instance) Stop(ctx context.Context, opts sandbox.StopOptions) error {
 	if err != nil {
 		return err
 	}
-	return wrapError("stop csghub sandbox", i.runtime.client.Stop(ctx, name))
+	if err := i.runtime.client.Stop(ctx, name); err != nil {
+		return wrapError("stop csghub sandbox", err)
+	}
+	return i.runtime.waitForStopped(ctx, name)
 }
 
 func (i *Instance) Info(ctx context.Context) (sandbox.Info, error) {
@@ -671,14 +702,6 @@ func isDuplicateStartError(err error) bool {
 		return false
 	}
 	return httpErr.StatusCode == 400
-}
-
-func statusOKAfterDuplicateStart(status string) bool {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "deploying", "running", "starting", "creating", "created", "pending":
-		return true
-	}
-	return false
 }
 
 func sandboxInfo(resp *csghubsdk.Response) sandbox.Info {

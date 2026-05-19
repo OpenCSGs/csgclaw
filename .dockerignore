@@ -1,0 +1,11 @@
+.git
+.gocache
+.codex
+.cursor
+.vscode
+.agents
+bin
+dist
+manager-data
+tmp
+*.log

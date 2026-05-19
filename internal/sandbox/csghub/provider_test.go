@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,6 +26,13 @@ func setRequiredEnv(t *testing.T, baseURL string) {
 	t.Setenv("CSGCLAW_SANDBOX_TIMEOUT", "600")
 	t.Setenv("CSGCLAW_SANDBOX_READY_TIMEOUT", "30s")
 	t.Setenv("CSGCLAW_SANDBOX_POLL_INTERVAL", "1s")
+}
+
+func writeSandboxState(w http.ResponseWriter, name, image, status string) {
+	_, _ = fmt.Fprintf(w, `{
+		"spec": {"sandbox_name":%q,"image":%q},
+		"state": {"status":%q,"created_at":"2026-04-22T00:00:00Z"}
+	}`, name, image, status)
 }
 
 func TestOpenRequiresBaseURL(t *testing.T) {
@@ -54,6 +62,8 @@ func TestRuntimeCreateBuildsRequestAndMapsMounts(t *testing.T) {
 				"spec": {"sandbox_name":"worker-1","image":"img:1"},
 				"state": {"status":"running","created_at":"2026-04-22T00:00:00Z"}
 			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/sandboxes/worker-1":
+			writeSandboxState(w, "worker-1", "img:1", "running")
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/sandboxes/worker-1/":
 			w.WriteHeader(http.StatusOK)
 		default:
@@ -150,6 +160,10 @@ func TestRuntimeOpenWithPVCMountPathOverridesEnvMountPath(t *testing.T) {
 				"spec": {"sandbox_name":"worker-1","image":"img:1"},
 				"state": {"status":"running","created_at":"2026-04-22T00:00:00Z"}
 			}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/sandboxes/worker-1/status/start":
+			writeSandboxState(w, "worker-1", "img:1", "running")
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/sandboxes/worker-1":
+			writeSandboxState(w, "worker-1", "img:1", "running")
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/sandboxes/worker-1/":
 			w.WriteHeader(http.StatusOK)
 		default:
@@ -199,6 +213,10 @@ func TestRuntimeOpenWithPVCMountSubpathPrefix(t *testing.T) {
 				"spec": {"sandbox_name":"worker-1","image":"img:1"},
 				"state": {"status":"running","created_at":"2026-04-22T00:00:00Z"}
 			}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/sandboxes/worker-1/status/start":
+			writeSandboxState(w, "worker-1", "img:1", "running")
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/sandboxes/worker-1":
+			writeSandboxState(w, "worker-1", "img:1", "running")
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/sandboxes/worker-1/":
 			w.WriteHeader(http.StatusOK)
 		default:
@@ -250,6 +268,10 @@ func TestRuntimeOpenReadsPVCSubpathPrefixFromEnv(t *testing.T) {
 				"spec": {"sandbox_name":"worker-1","image":"img:1"},
 				"state": {"status":"running","created_at":"2026-04-22T00:00:00Z"}
 			}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/sandboxes/worker-1/status/start":
+			writeSandboxState(w, "worker-1", "img:1", "running")
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/sandboxes/worker-1":
+			writeSandboxState(w, "worker-1", "img:1", "running")
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/sandboxes/worker-1/":
 			w.WriteHeader(http.StatusOK)
 		default:
@@ -300,6 +322,10 @@ func TestRuntimeCreatePrefixesSandboxNameWhenCSGCLAWNameProvided(t *testing.T) {
 				"spec": {"sandbox_name":"cluster-a-worker-1","image":"img:1"},
 				"state": {"status":"running","created_at":"2026-04-22T00:00:00Z"}
 			}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/sandboxes/cluster-a-worker-1/status/start":
+			writeSandboxState(w, "cluster-a-worker-1", "img:1", "running")
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/sandboxes/cluster-a-worker-1":
+			writeSandboxState(w, "cluster-a-worker-1", "img:1", "running")
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/sandboxes/cluster-a-worker-1/":
 			w.WriteHeader(http.StatusOK)
 		default:
@@ -463,6 +489,140 @@ func TestRuntimeCreateStartsWhenDeployingThenWaitsForRunning(t *testing.T) {
 	}
 }
 
+func TestRuntimeCreateConflictAppliesStartsAndWaitsPastStopped(t *testing.T) {
+	var patchCalls, startCalls, getCalls int
+	var healthChecked bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/sandboxes":
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"msg":"the record already exists"}`))
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/sandboxes/worker-1":
+			patchCalls++
+			writeSandboxState(w, "worker-1", "img:2", "running")
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/sandboxes/worker-1/status/start":
+			startCalls++
+			writeSandboxState(w, "worker-1", "img:2", "stopped")
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/sandboxes/worker-1":
+			getCalls++
+			if getCalls == 1 {
+				writeSandboxState(w, "worker-1", "img:2", "stopped")
+				return
+			}
+			writeSandboxState(w, "worker-1", "img:2", "deploying")
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/sandboxes/worker-1/":
+			healthChecked = true
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+	setRequiredEnv(t, server.URL)
+	t.Setenv("CSGCLAW_SANDBOX_POLL_INTERVAL", "500ms")
+
+	rtAny, err := NewProvider().Open(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	_, err = rtAny.(*Runtime).Create(context.Background(), sandbox.CreateSpec{
+		Image: "img:2",
+		Name:  "worker-1",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if patchCalls != 1 {
+		t.Fatalf("patch calls = %d, want 1", patchCalls)
+	}
+	if startCalls != 1 {
+		t.Fatalf("start calls = %d, want 1", startCalls)
+	}
+	if getCalls < 2 {
+		t.Fatalf("get calls = %d, want >=2", getCalls)
+	}
+	if !healthChecked {
+		t.Fatal("Create() did not wait for runtime health")
+	}
+}
+
+func TestRuntimeRemoveWaitsForStopped(t *testing.T) {
+	var stopCalls, getCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/sandboxes/worker-1/status/stop":
+			stopCalls++
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/sandboxes/worker-1":
+			getCalls++
+			if getCalls == 1 {
+				writeSandboxState(w, "worker-1", "img:1", "running")
+				return
+			}
+			writeSandboxState(w, "worker-1", "img:1", "stopped")
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+	setRequiredEnv(t, server.URL)
+	t.Setenv("CSGCLAW_SANDBOX_POLL_INTERVAL", "500ms")
+
+	rtAny, err := NewProvider().Open(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	err = rtAny.(*Runtime).Remove(context.Background(), "worker-1", sandbox.RemoveOptions{Force: true})
+	if err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if stopCalls != 1 {
+		t.Fatalf("stop calls = %d, want 1", stopCalls)
+	}
+	if getCalls < 2 {
+		t.Fatalf("get calls = %d, want >=2", getCalls)
+	}
+}
+
+func TestInstanceStopWaitsForStopped(t *testing.T) {
+	var stopCalls, getCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/sandboxes/worker-1/status/stop":
+			stopCalls++
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/sandboxes/worker-1":
+			getCalls++
+			if getCalls == 1 {
+				writeSandboxState(w, "worker-1", "img:1", "running")
+				return
+			}
+			writeSandboxState(w, "worker-1", "img:1", "stopped")
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+	setRequiredEnv(t, server.URL)
+	t.Setenv("CSGCLAW_SANDBOX_POLL_INTERVAL", "500ms")
+
+	rtAny, err := NewProvider().Open(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	instance := &Instance{runtime: rtAny.(*Runtime), name: "worker-1"}
+	err = instance.Stop(context.Background(), sandbox.StopOptions{})
+	if err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if stopCalls != 1 {
+		t.Fatalf("stop calls = %d, want 1", stopCalls)
+	}
+	if getCalls < 2 {
+		t.Fatalf("get calls = %d, want >=2", getCalls)
+	}
+}
+
 func TestRuntimeCreateRejectsMountOutsidePVCPath(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
@@ -619,12 +779,14 @@ func TestParseDurationEnvSupportsSeconds(t *testing.T) {
 	}
 }
 
-func TestStartSandboxIdempotentAcceptsDuplicateStartDeployingState(t *testing.T) {
+func TestStartSandboxIdempotentAcceptsDuplicateStartAfterGet(t *testing.T) {
+	var getCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/sandboxes/worker-1/status/start":
 			w.WriteHeader(http.StatusBadRequest)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/sandboxes/worker-1":
+			getCalls++
 			_, _ = w.Write([]byte(`{
 				"spec": {"sandbox_name":"worker-1","image":"img:1"},
 				"state": {"status":"deploying","created_at":"2026-04-22T00:00:00Z"}
@@ -646,7 +808,37 @@ func TestStartSandboxIdempotentAcceptsDuplicateStartDeployingState(t *testing.T)
 	if err != nil {
 		t.Fatalf("startSandboxIdempotent() error = %v", err)
 	}
-	if got := strings.TrimSpace(resp.State.Status); got != "deploying" {
-		t.Fatalf("startSandboxIdempotent() status = %q, want %q", got, "deploying")
+	if resp != nil {
+		t.Fatalf("startSandboxIdempotent() response = %#v, want nil state response", resp)
+	}
+	if getCalls != 1 {
+		t.Fatalf("startSandboxIdempotent() GET calls = %d, want 1", getCalls)
+	}
+}
+
+func TestStartSandboxIdempotentDuplicateStartReturnsNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/sandboxes/worker-1/status/start":
+			w.WriteHeader(http.StatusBadRequest)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/sandboxes/worker-1":
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"msg":"sandbox not found"}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+	setRequiredEnv(t, server.URL)
+
+	rtAny, err := NewProvider().Open(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	runtime := rtAny.(*Runtime)
+
+	_, err = runtime.startSandboxIdempotent(context.Background(), "worker-1")
+	if !sandbox.IsNotFound(err) {
+		t.Fatalf("startSandboxIdempotent() error = %v, want sandbox not found", err)
 	}
 }
