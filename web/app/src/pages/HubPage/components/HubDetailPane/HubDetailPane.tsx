@@ -8,7 +8,7 @@ import {
   formatHubTemplateCount,
   hubWorkspaceAncestorDirs,
 } from "@/models/hubWorkspace";
-import { localizeTemplateSourceTag } from "@/shared/i18n";
+import { localizeRole, localizeTemplateSourceTag } from "@/shared/i18n";
 import { HubIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
 
@@ -114,6 +114,7 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
                     </div>
                     <p>{item.description || item.id}</p>
                     <div className="hub-template-card-meta">
+                      <span className="mini-badge template-role-badge">{localizeRole(item.role || "worker", t)}</span>
                       <span className="mini-badge template-runtime-badge">
                         {item.runtime_kind || item.workspace?.kind || "-"}
                       </span>
@@ -144,6 +145,9 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
                       <div className="hub-inspector-copy">
                         <h2>{selectedTemplate.name || selectedTemplate.id}</h2>
                         <p>{selectedTemplate.description || selectedTemplate.id}</p>
+                        <span className="mini-badge template-role-badge">
+                          {localizeRole(selectedTemplate.role || "worker", t)}
+                        </span>
                         <span className="mini-badge template-runtime-badge">
                           {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind || "-"}
                         </span>
@@ -166,6 +170,10 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
                 </div>
 
                 <div className="hub-inspector-grid">
+                  <div className="hub-inspector-field">
+                    <span>{t("roleLabel")}</span>
+                    <strong>{localizeRole(selectedTemplate.role || "worker", t)}</strong>
+                  </div>
                   <div className="hub-inspector-field">
                     <span>{t("hubSourceLabel")}</span>
                     <strong>{localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}</strong>

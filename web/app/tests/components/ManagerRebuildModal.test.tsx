@@ -29,6 +29,11 @@ describe("ManagerRebuildModal", () => {
         runtimeOptions={[{ value: "picoclaw_sandbox" }, { value: "openclaw_sandbox" }]}
         runtimeKind="picoclaw_sandbox"
         image="picoclaw:manager"
+        imageOptions={["picoclaw:manager", "picoclaw:alternate"]}
+        templateVariants={[
+          { runtimeKind: "picoclaw_sandbox", image: "picoclaw:manager" },
+          { runtimeKind: "openclaw_sandbox", image: "openclaw:template" },
+        ]}
         bootstrapConfig={{
           runtime_default_images: {
             openclaw_sandbox: "openclaw:manager",
@@ -48,10 +53,11 @@ describe("ManagerRebuildModal", () => {
     expect(screen.getByText("Recreate Manager")).toBeInTheDocument();
     expect(screen.getByLabelText("Runtime")).toHaveValue("picoclaw_sandbox");
     expect(screen.getByLabelText("Image")).toHaveValue("picoclaw:manager");
+    expect(document.querySelector('option[value="picoclaw:alternate"]')).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Runtime"), "openclaw_sandbox");
     expect(onRuntimeKindChange).toHaveBeenCalledWith("openclaw_sandbox");
-    expect(onImageChange).toHaveBeenCalledWith("openclaw:manager");
+    expect(onImageChange).toHaveBeenCalledWith("openclaw:template");
 
     await user.click(screen.getByRole("button", { name: "Recreate" }));
     expect(onConfirm).toHaveBeenCalledTimes(1);

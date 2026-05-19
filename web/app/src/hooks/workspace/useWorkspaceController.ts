@@ -27,7 +27,10 @@ import {
   applyTemplateToDraft,
   advanceAgentProgress,
   agentToDraft,
-  availableManagerRuntimeOptions,
+  availableManagerRebuildImageOptions,
+  availableManagerRebuildRuntimeOptions,
+  collectManagerTemplateVariants,
+  defaultManagerRebuildImageForRuntime,
   draftNotifierRuntimeOptionsForSave,
   draftToProfile,
   ensureNotifierPullSubscriptionDraft,
@@ -1014,7 +1017,17 @@ export function useWorkspaceController() {
     activeConversation && isDirectConversation(activeConversation) ? t("createRoomFromDM") : t("inviteMembers");
 
   const managerAgent = agents.find((item) => item.role === "manager" || item.id === "u-manager");
-  const managerRuntimeOptions = availableManagerRuntimeOptions(bootstrapConfig);
+  const managerTemplateVariants = collectManagerTemplateVariants(hubTemplates);
+  const managerRuntimeOptions = availableManagerRebuildRuntimeOptions(
+    managerTemplateVariants,
+    bootstrapConfig,
+    managerAgent?.runtime_kind,
+  );
+  const managerRebuildImageOptions = availableManagerRebuildImageOptions(
+    managerTemplateVariants,
+    managerRebuildRuntimeKind,
+    managerAgent?.image,
+  );
   const workerAgents = agents.filter((item) => item.id !== managerAgent?.id);
   const agentItems = [managerAgent, ...workerAgents].filter(Boolean);
   const runningAgentCount = agentItems.filter(isAgentRunning).length;
@@ -1090,17 +1103,16 @@ export function useWorkspaceController() {
 
   function openManagerRebuildModal(item = managerAgent) {
     const initialRuntimeKind = normalizeRuntimeKind(
-      item?.runtime_kind || bootstrapConfig?.runtime_kind || managerRebuildRuntimeKind,
+      item?.runtime_kind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind || managerRebuildRuntimeKind,
     );
     const fallbackRuntimeKind = managerRuntimeOptions[0]?.value || "picoclaw_sandbox";
     const resolvedRuntimeKind = managerRuntimeOptions.some((option) => option.value === initialRuntimeKind)
       ? initialRuntimeKind
       : fallbackRuntimeKind;
-    const resolvedImage = runtimeImageForKind(
-      resolvedRuntimeKind,
-      bootstrapConfig,
-      item?.image || managerAgent?.image || "",
-    );
+    const currentImage = String(item?.image ?? managerAgent?.image ?? "").trim();
+    const resolvedImage =
+      currentImage ||
+      defaultManagerRebuildImageForRuntime(managerTemplateVariants, resolvedRuntimeKind, bootstrapConfig, "");
     setManagerRebuildRuntimeKind(resolvedRuntimeKind);
     setManagerRebuildImage(resolvedImage);
     setShowManagerRebuildModal(true);
@@ -1822,6 +1834,8 @@ export function useWorkspaceController() {
           runtimeOptions: managerRuntimeOptions,
           runtimeKind: managerRebuildRuntimeKind,
           image: managerRebuildImage,
+          imageOptions: managerRebuildImageOptions,
+          templateVariants: managerTemplateVariants,
           bootstrapConfig,
           managerAgent,
           busy: agentActionBusy === "u-manager:recreate",

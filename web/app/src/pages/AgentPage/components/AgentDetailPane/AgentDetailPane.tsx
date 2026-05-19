@@ -110,24 +110,14 @@ export function AgentDetailPane({
         >
           {t("openDM")}
         </Button>
-        {isManager ? (
-          <Button
-            variant="outlineDanger"
-            className="preview-action-button preview-action-button-danger"
-            disabled={busyKey.startsWith(busyPrefix) || incomplete}
-            onClick={() => onRecreate(item)}
-          >
-            {t("agentRecreate")}
-          </Button>
-        ) : SHOW_AGENT_LIFECYCLE_ACTIONS ? (
-          <Button
-            className="preview-action-button"
-            disabled={busyKey.startsWith(busyPrefix) || incomplete}
-            onClick={() => onRecreate(item)}
-          >
-            {t("agentRecreate")}
-          </Button>
-        ) : null}
+        <Button
+          variant="outlineDanger"
+          className="preview-action-button preview-action-button-danger"
+          disabled={busyKey.startsWith(busyPrefix) || incomplete}
+          onClick={() => onRecreate(item)}
+        >
+          {t("agentRecreate")}
+        </Button>
         {SHOW_AGENT_LIFECYCLE_ACTIONS && activeRoom && !isManager ? (
           <Button
             className="preview-action-button"

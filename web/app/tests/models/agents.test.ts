@@ -2,7 +2,11 @@ import {
   advanceAgentProgress,
   agentToDraft,
   applyTemplateToDraft,
+  availableManagerRebuildImageOptions,
+  availableManagerRebuildRuntimeOptions,
   availableManagerRuntimeOptions,
+  collectManagerTemplateVariants,
+  defaultManagerRebuildImageForRuntime,
   draftNotifierRuntimeOptionsForSave,
   draftToProfile,
   ensureNotifierPullSubscriptionDraft,
@@ -172,6 +176,57 @@ describe("agent model helpers", () => {
       "picoclaw_sandbox",
       "openclaw_sandbox",
     ]);
+  });
+
+  it("uses manager template variants for manager rebuild runtime and image choices", () => {
+    const variants = collectManagerTemplateVariants([
+      {
+        id: "builtin/picoclaw-manager",
+        role: "manager",
+        runtime_kind: "picoclaw_sandbox",
+        image: "picoclaw:manager",
+      },
+      {
+        id: "builtin/openclaw-manager",
+        role: "manager",
+        runtime_kind: "openclaw_sandbox",
+        image: "openclaw:manager",
+      },
+      {
+        id: "builtin/openclaw-worker",
+        role: "worker",
+        runtime_kind: "openclaw_sandbox",
+        image: "openclaw:worker",
+      },
+      {
+        id: "duplicate/openclaw-manager",
+        role: "manager",
+        runtime_kind: "openclaw_sandbox",
+        image: "openclaw:manager",
+      },
+    ]);
+
+    expect(variants).toEqual([
+      { runtimeKind: "picoclaw_sandbox", image: "picoclaw:manager" },
+      { runtimeKind: "openclaw_sandbox", image: "openclaw:manager" },
+    ]);
+    expect(
+      availableManagerRebuildRuntimeOptions(
+        variants,
+        { supported_runtime_kinds: ["codex", "picoclaw_sandbox"] },
+        "custom_sandbox",
+      ).map((option) => option.value),
+    ).toEqual(["custom_sandbox", "picoclaw_sandbox", "openclaw_sandbox"]);
+    expect(availableManagerRebuildImageOptions(variants, "openclaw_sandbox", "current:manager")).toEqual([
+      "current:manager",
+      "openclaw:manager",
+    ]);
+    expect(defaultManagerRebuildImageForRuntime(variants, "openclaw_sandbox", null, "fallback:manager")).toBe(
+      "openclaw:manager",
+    );
+    expect(defaultManagerRebuildImageForRuntime([], "openclaw_sandbox", null, "fallback:manager")).toBe(
+      "fallback:manager",
+    );
   });
 
   it("normalizes runtime and auth provider labels", () => {

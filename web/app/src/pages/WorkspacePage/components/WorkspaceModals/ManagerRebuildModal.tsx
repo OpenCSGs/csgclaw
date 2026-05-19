@@ -1,12 +1,14 @@
 // @ts-nocheck
 import { Button } from "@/components/ui";
-import { formatRuntimeKindLabel, normalizeRuntimeKind, runtimeImageForKind } from "@/models/agents";
+import { defaultManagerRebuildImageForRuntime, formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
 
 export function ManagerRebuildModal({
   t,
   runtimeOptions,
   runtimeKind,
   image,
+  imageOptions = [],
+  templateVariants = [],
   bootstrapConfig,
   managerAgent,
   busy,
@@ -39,7 +41,14 @@ export function ManagerRebuildModal({
                   onChange={(event) => {
                     const nextRuntimeKind = normalizeRuntimeKind(event.target.value);
                     onRuntimeKindChange(nextRuntimeKind);
-                    onImageChange(runtimeImageForKind(nextRuntimeKind, bootstrapConfig, managerAgent?.image || ""));
+                    onImageChange(
+                      defaultManagerRebuildImageForRuntime(
+                        templateVariants,
+                        nextRuntimeKind,
+                        bootstrapConfig,
+                        managerAgent?.image || "",
+                      ),
+                    );
                   }}
                 >
                   {runtimeOptions.map((option) => (
@@ -52,10 +61,16 @@ export function ManagerRebuildModal({
               <label className="field manager-rebuild-image-field">
                 <span>{t("agentImage")}</span>
                 <input
+                  list="manager-rebuild-image-options"
                   value={image}
                   onInput={(event) => onImageChange(event.target.value)}
                   placeholder={t("agentImagePlaceholder")}
                 />
+                <datalist id="manager-rebuild-image-options">
+                  {imageOptions.map((option) => (
+                    <option key={option} value={option} />
+                  ))}
+                </datalist>
               </label>
             </div>
           </section>

@@ -84,7 +84,13 @@ export type AgentTemplateLike = {
   id?: string | null;
   image?: string | null;
   name?: string | null;
+  role?: string | null;
   runtime_kind?: string | null;
+};
+
+export type ManagerTemplateVariant = {
+  image: string;
+  runtimeKind: RuntimeKind;
 };
 
 export type RuntimeBootstrapConfig = {
@@ -858,6 +864,108 @@ export function availableManagerRuntimeOptions(bootstrapConfig: RuntimeBootstrap
     .map((kind) => normalizeRuntimeKind(kind))
     .filter((kind, index, array) => kind && kind !== "codex" && kind !== "notifier" && array.indexOf(kind) === index);
   return RUNTIME_KIND_OPTIONS.filter((option) => gatewayKinds.includes(option.value));
+}
+
+export function collectManagerTemplateVariants(
+  templates: readonly AgentTemplateLike[] | null | undefined,
+): ManagerTemplateVariant[] {
+  if (!Array.isArray(templates) || templates.length === 0) {
+    return [];
+  }
+  const out: ManagerTemplateVariant[] = [];
+  const seen = new Set<string>();
+  for (const item of templates) {
+    if (
+      String(item?.role ?? "")
+        .trim()
+        .toLowerCase() !== "manager"
+    ) {
+      continue;
+    }
+    const runtimeKind = normalizeRuntimeKind(item?.runtime_kind);
+    const image = String(item?.image ?? "").trim();
+    if (!runtimeKind && !image) {
+      continue;
+    }
+    const key = `${runtimeKind}\n${image}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push({ runtimeKind, image });
+  }
+  return out;
+}
+
+export function availableManagerRebuildRuntimeOptions(
+  variants: readonly ManagerTemplateVariant[] | null | undefined,
+  bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
+  currentRuntimeKind = "",
+) {
+  const values: RuntimeKind[] = [];
+  const seen = new Set<string>();
+  const push = (kind: unknown) => {
+    const normalized = normalizeRuntimeKind(kind);
+    if (!normalized || normalized === "codex" || normalized === "notifier" || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    values.push(normalized);
+  };
+  push(currentRuntimeKind);
+  if (Array.isArray(variants)) {
+    for (const item of variants) {
+      push(item?.runtimeKind);
+    }
+  }
+  for (const item of availableManagerRuntimeOptions(bootstrapConfig)) {
+    push(item?.value);
+  }
+  if (!values.length) {
+    push("picoclaw_sandbox");
+  }
+  return values.map((value) => ({ value, label: value }));
+}
+
+export function availableManagerRebuildImageOptions(
+  variants: readonly ManagerTemplateVariant[] | null | undefined,
+  runtimeKind: unknown,
+  currentImage = "",
+): string[] {
+  const images: string[] = [];
+  const seen = new Set<string>();
+  const push = (image: unknown) => {
+    const trimmed = String(image ?? "").trim();
+    if (!trimmed || seen.has(trimmed)) {
+      return;
+    }
+    seen.add(trimmed);
+    images.push(trimmed);
+  };
+  push(currentImage);
+  const selectedRuntime = normalizeRuntimeKind(runtimeKind);
+  if (Array.isArray(variants)) {
+    for (const item of variants) {
+      if (selectedRuntime && normalizeRuntimeKind(item?.runtimeKind) !== selectedRuntime) {
+        continue;
+      }
+      push(item?.image);
+    }
+  }
+  return images;
+}
+
+export function defaultManagerRebuildImageForRuntime(
+  variants: readonly ManagerTemplateVariant[] | null | undefined,
+  runtimeKind: unknown,
+  bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
+  fallbackImage = "",
+): string {
+  const images = availableManagerRebuildImageOptions(variants, runtimeKind);
+  if (images.length > 0) {
+    return images[0];
+  }
+  return runtimeImageForKind(runtimeKind, bootstrapConfig, fallbackImage);
 }
 
 export function agentCreateProgressSteps(runtimeKind: unknown): AgentCreateProgressStep[] {

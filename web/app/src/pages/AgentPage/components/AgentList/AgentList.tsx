@@ -115,15 +115,16 @@ export function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop
             >
               <span aria-hidden="true">{running ? <StopIcon /> : <PlayIcon />}</span>
             </Button>
-            <Button
-              className="agent-action-text"
-              disabled={busyKey.startsWith(busyPrefix) || incomplete}
-              onClick={() => onRecreate(item)}
-            >
-              {t("agentRecreate")}
-            </Button>
           </>
         ) : null}
+        <Button
+          variant="outlineDanger"
+          className="agent-action-text danger"
+          disabled={busyKey.startsWith(busyPrefix) || incomplete}
+          onClick={() => onRecreate(item)}
+        >
+          {t("agentRecreate")}
+        </Button>
         {SHOW_AGENT_LIFECYCLE_ACTIONS && activeRoom && !isManager ? (
           <Button
             className="agent-action-text"
