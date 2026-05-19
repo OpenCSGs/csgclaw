@@ -45,8 +45,57 @@ jobs:
           print("matrix=" + json.dumps({"include": rows}))
           PY
 
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: web/app/package.json
+
+      - name: Enable Corepack
+        shell: bash
+        run: corepack enable
+
+      - name: Resolve pnpm store path
+        id: pnpm_store
+        shell: bash
+        working-directory: web/app
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm_store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('web/app/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install Web UI dependencies
+        shell: bash
+        working-directory: web/app
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Web UI
+        shell: bash
+        working-directory: web/app
+        run: |
+          mkdir -p ../static-dist
+          pnpm build
+          test -f ../static-dist/index.html
+
+      - name: Upload Web UI static assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-static-dist
+          path: web/static-dist/
+          if-no-files-found: error
+
   build:
-    needs: [prepare]
+    needs: [prepare, web]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -54,6 +103,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Prepare Web UI embed directory
+        shell: bash
+        run: |
+          rm -rf web/static-dist
+          mkdir -p web/static-dist
+
+      - name: Download Web UI static assets
+        uses: actions/download-artifact@v4
+        with:
+          name: web-static-dist
+          path: web/static-dist
 
       - name: Set up Go
         uses: actions/setup-go@v5
