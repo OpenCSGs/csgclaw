@@ -60,6 +60,7 @@ import {
   areComposerSegmentsEqual,
   getComposerMentionState,
   insertComposerLineBreak,
+  isComposerKeyboardEventComposing,
   parseComposerSegments,
   placeCaretAtEnd,
   removeAdjacentMentionToken,
@@ -177,6 +178,8 @@ export function useWorkspaceController() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradePhase, setUpgradePhase] = useState("idle");
   const editorRef = useRef(null);
+  const composerIsComposingRef = useRef(false);
+  const composerJustEndedCompositionRef = useRef(false);
   const messageListRef = useRef(null);
   const memberMenuRef = useRef(null);
   const channelToolsRef = useRef(null);
@@ -935,6 +938,14 @@ export function useWorkspaceController() {
   }
 
   function onComposerKeyDown(event) {
+    if (
+      isComposerKeyboardEventComposing(event) ||
+      composerIsComposingRef.current ||
+      (event.key === "Enter" && composerJustEndedCompositionRef.current)
+    ) {
+      return;
+    }
+
     if (mentionCandidates.length > 0) {
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -976,6 +987,20 @@ export function useWorkspaceController() {
       insertComposerLineBreak(editorRef.current);
       syncComposerFromEditor();
     }
+  }
+
+  function onComposerCompositionStart() {
+    composerIsComposingRef.current = true;
+    composerJustEndedCompositionRef.current = false;
+  }
+
+  function onComposerCompositionEnd() {
+    composerIsComposingRef.current = false;
+    composerJustEndedCompositionRef.current = true;
+    requestAnimationFrame(() => {
+      composerJustEndedCompositionRef.current = false;
+      syncComposerFromEditor();
+    });
   }
 
   function syncComposerFromEditor() {
@@ -1738,6 +1763,8 @@ export function useWorkspaceController() {
       mentionableUsersByHandle,
       onSyncComposer: syncComposerFromEditor,
       onComposerKeyDown,
+      onComposerCompositionStart,
+      onComposerCompositionEnd,
       onSendMessage: sendMessage,
       composerError,
       messageActionBusy,

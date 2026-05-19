@@ -55,6 +55,8 @@ export function ConversationPane({
   mentionableUsersByHandle,
   onSyncComposer,
   onComposerKeyDown,
+  onComposerCompositionStart,
+  onComposerCompositionEnd,
   onSendMessage,
   composerError,
   messageActionBusy,
@@ -300,6 +302,8 @@ export function ConversationPane({
               onInput={onSyncComposer}
               onClick={onSyncComposer}
               onKeyDown={onComposerKeyDown}
+              onCompositionStart={onComposerCompositionStart}
+              onCompositionEnd={onComposerCompositionEnd}
               onKeyUp={onSyncComposer}
               onPaste={(event) => {
                 event.preventDefault();

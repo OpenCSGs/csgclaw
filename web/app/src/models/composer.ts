@@ -146,6 +146,18 @@ export function areComposerSegmentsEqual(left, right) {
   });
 }
 
+export function isComposerKeyboardEventComposing(event) {
+  const nativeEvent = event?.nativeEvent;
+  return Boolean(
+    event?.isComposing ||
+    nativeEvent?.isComposing ||
+    event?.keyCode === 229 ||
+    nativeEvent?.keyCode === 229 ||
+    event?.which === 229 ||
+    nativeEvent?.which === 229,
+  );
+}
+
 export function updateDrafts(current, conversationID, segments) {
   const normalized = normalizeComposerSegments(segments ?? []);
   const existing = current[conversationID] ?? [];

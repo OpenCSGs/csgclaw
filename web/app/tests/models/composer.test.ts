@@ -1,5 +1,6 @@
 import {
   getComposerMentionState,
+  isComposerKeyboardEventComposing,
   normalizeComposerSegments,
   normalizeTextMentions,
   parseComposerSegments,
@@ -93,6 +94,14 @@ describe("composer model helpers", () => {
       room1: [{ type: "text", text: "Hello" }],
       room2: [{ type: "text", text: "Hi" }],
     });
+  });
+
+  it("detects keyboard events owned by text composition", () => {
+    expect(isComposerKeyboardEventComposing({ isComposing: true })).toBe(true);
+    expect(isComposerKeyboardEventComposing({ nativeEvent: { isComposing: true } })).toBe(true);
+    expect(isComposerKeyboardEventComposing({ keyCode: 229 })).toBe(true);
+    expect(isComposerKeyboardEventComposing({ nativeEvent: { which: 229 } })).toBe(true);
+    expect(isComposerKeyboardEventComposing({ key: "Enter", keyCode: 13 })).toBe(false);
   });
 
   it("detects and replaces the active mention query", () => {
