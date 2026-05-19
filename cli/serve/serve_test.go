@@ -275,6 +275,8 @@ func TestServeForegroundOpensIMURLWhenBrowserAllowed(t *testing.T) {
 	}
 
 	run := testContext()
+	stdout := newNotifyingBuffer("Opened this URL in your browser.")
+	run.Stdout = stdout
 	cfg := config.Config{
 		Server: config.ServerConfig{
 			AdvertiseBaseURL: "http://example.test/base",
@@ -291,7 +293,12 @@ func TestServeForegroundOpensIMURLWhenBrowserAllowed(t *testing.T) {
 	if got, want := opened, "http://example.test/base/"; got != want {
 		t.Fatalf("OpenBrowser() URL = %q, want %q", got, want)
 	}
-	if got := run.Stdout.(*bytes.Buffer).String(); !strings.Contains(got, "Opened this URL in your browser.") {
+	select {
+	case <-stdout.Seen():
+	case <-time.After(time.Second):
+		t.Fatal("browser-open confirmation was not printed")
+	}
+	if got := stdout.String(); !strings.Contains(got, "Opened this URL in your browser.") {
 		t.Fatalf("stdout missing browser-open confirmation:\n%s", got)
 	}
 }
@@ -1062,10 +1069,8 @@ default_registry = "team"
 default_publish_registry = "local"
 
 [[hub.registries]]
-name = "team"
-kind = "remote"
-url = "https://hub.example.com"
-token = "hu******et"
+name = "builtin"
+kind = "builtin"
 enabled = true
 
 [[hub.registries]]
@@ -1073,6 +1078,19 @@ name = "local"
 kind = "local"
 path = "/tmp/hub"
 enabled = false
+
+[[hub.registries]]
+name = "official"
+kind = "remote"
+url = "https://csgclaw.opencsg.com"
+enabled = true
+
+[[hub.registries]]
+name = "team"
+kind = "remote"
+url = "https://hub.example.com"
+token = "hu******et"
+enabled = true
 
 [models]
 default = "default.local.minimax-m2.5"
