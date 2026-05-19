@@ -5743,6 +5743,9 @@ function localizeTemplateSourceTag(source, locale) {
     if (value === "local") {
       return "本地";
     }
+    if (value === "official") {
+      return "官方";
+    }
   }
   return value;
 }

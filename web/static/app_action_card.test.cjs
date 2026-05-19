@@ -89,8 +89,10 @@ assert(
   source.includes('if (value === "builtin")') &&
     source.includes('return "内建";') &&
     source.includes('if (value === "local")') &&
-    source.includes('return "本地";'),
-  'frontend must localize builtin/local template source tags in Chinese',
+    source.includes('return "本地";') &&
+    source.includes('if (value === "official")') &&
+    source.includes('return "官方";'),
+  'frontend must localize builtin/local/official template source tags in Chinese',
 );
 assert(
   source.includes('localizeTemplateSourceTag(item.source?.name, locale)') &&

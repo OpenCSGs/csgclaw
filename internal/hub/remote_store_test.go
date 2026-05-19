@@ -54,7 +54,7 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 					ID:          "review-bot",
 					Name:        "review-bot",
 					RuntimeKind: "codex",
-					Source:      apitypes.HubTemplateSource{Name: "opencsg", Kind: "remote"},
+					Source:      apitypes.HubTemplateSource{Name: config.DefaultOfficialHubRegistryName, Kind: "remote"},
 					Workspace:   apitypes.HubTemplateWorkspace{Kind: "dir"},
 				},
 			})
@@ -64,7 +64,7 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 				Name:        "review-bot",
 				Description: "code review helper",
 				RuntimeKind: "codex",
-				Source:      apitypes.HubTemplateSource{Name: "opencsg", Kind: "remote"},
+				Source:      apitypes.HubTemplateSource{Name: config.DefaultOfficialHubRegistryName, Kind: "remote"},
 				Workspace:   apitypes.HubTemplateWorkspace{Kind: "dir"},
 			})
 		case "/api/v1/hub/templates/review-bot/workspace.tar.gz":

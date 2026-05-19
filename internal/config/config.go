@@ -118,11 +118,11 @@ func (c HubConfig) Resolved() HubConfig {
 		return c
 	}
 
-	user := make([]HubRegistryConfig, 0, len(c.Registries))
+	configured := make([]HubRegistryConfig, 0, len(c.Registries))
 	for _, registry := range c.Registries {
-		user = append(user, normalizeHubRegistry(registry))
+		configured = append(configured, normalizeHubRegistry(registry))
 	}
-	c.Registries = mergeHubRegistries(defaultHubRegistries(), user)
+	c.Registries = mergeHubRegistries(defaultHubRegistries(), configured)
 	return c
 }
 
@@ -135,23 +135,23 @@ func normalizeHubRegistry(registry HubRegistryConfig) HubRegistryConfig {
 	return registry
 }
 
-func mergeHubRegistries(defaults, user []HubRegistryConfig) []HubRegistryConfig {
-	byName := make(map[string]HubRegistryConfig, len(user))
-	for _, registry := range user {
-		byName[registry.Name] = registry
+func mergeHubRegistries(defaults, configured []HubRegistryConfig) []HubRegistryConfig {
+	configuredByName := make(map[string]HubRegistryConfig, len(configured))
+	for _, registry := range configured {
+		configuredByName[registry.Name] = registry
 	}
 
-	out := make([]HubRegistryConfig, 0, len(defaults)+len(user))
-	seen := make(map[string]struct{}, len(defaults)+len(user))
+	out := make([]HubRegistryConfig, 0, len(defaults)+len(configured))
+	seen := make(map[string]struct{}, len(defaults)+len(configured))
 	for _, registry := range defaults {
-		if override, ok := byName[registry.Name]; ok {
+		if override, ok := configuredByName[registry.Name]; ok {
 			out = append(out, override)
 		} else {
 			out = append(out, registry)
 		}
 		seen[registry.Name] = struct{}{}
 	}
-	for _, registry := range user {
+	for _, registry := range configured {
 		if _, ok := seen[registry.Name]; ok {
 			continue
 		}
@@ -281,7 +281,7 @@ const (
 	BoxLiteProvider                 = "boxlite"
 	DefaultHubRegistry              = "builtin"
 	DefaultHubPublishRegistry       = "local"
-	DefaultOfficialHubRegistryName  = "opencsg"
+	DefaultOfficialHubRegistryName  = "official"
 	DefaultOfficialHubRegistryURL   = "https://csgclaw.opencsg.com"
 	DefaultBootstrapManagerTemplate = "builtin/picoclaw-manager"
 	DefaultBootstrapWorkerTemplate  = "builtin/picoclaw-worker"

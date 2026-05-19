@@ -919,7 +919,7 @@ path = "` + filepath.Join(dir, AppDirName, HubDirName) + `"
 enabled = true
 
 [[hub.registries]]
-name = "opencsg"
+name = "official"
 kind = "remote"
 url = "https://csgclaw.opencsg.com"
 enabled = true

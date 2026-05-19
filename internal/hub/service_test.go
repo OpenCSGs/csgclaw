@@ -170,13 +170,13 @@ func TestListContinuesWhenRegistryFails(t *testing.T) {
 		DefaultPublishRegistry: "local",
 		Registries: []config.HubRegistryConfig{
 			{Name: "builtin", Kind: RegistryKindBuiltin, Enabled: true},
-			{Name: "opencsg", Kind: RegistryKindRemote, Enabled: true},
+			{Name: config.DefaultOfficialHubRegistryName, Kind: RegistryKindRemote, Enabled: true},
 		},
 	}, map[string]Store{
 		"builtin": stubStore{
 			listResult: []Template{{ID: "picoclaw-manager", Name: "picoclaw-manager"}},
 		},
-		"opencsg": stubStore{listErr: errors.New("network down")},
+		config.DefaultOfficialHubRegistryName: stubStore{listErr: errors.New("network down")},
 	})
 
 	items, err := svc.List(context.Background())

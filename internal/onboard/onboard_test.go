@@ -486,7 +486,7 @@ models = ["gpt-test"]
 		`[[hub.registries]]`,
 		`name = "builtin"`,
 		`name = "local"`,
-		`name = "opencsg"`,
+		`name = "official"`,
 		`kind = "local"`,
 		`kind = "remote"`,
 		`url = "https://csgclaw.opencsg.com"`,
