@@ -118,20 +118,47 @@ func (c HubConfig) Resolved() HubConfig {
 		return c
 	}
 
-	out := make([]HubRegistryConfig, 0, len(c.Registries))
+	user := make([]HubRegistryConfig, 0, len(c.Registries))
 	for _, registry := range c.Registries {
-		registry.Name = strings.TrimSpace(registry.Name)
-		registry.Kind = strings.TrimSpace(registry.Kind)
-		registry.Path = strings.TrimSpace(registry.Path)
-		registry.URL = strings.TrimSpace(strings.TrimRight(registry.URL, "/"))
-		registry.Token = strings.TrimSpace(registry.Token)
-		out = append(out, registry)
+		user = append(user, normalizeHubRegistry(registry))
 	}
-	if c.DefaultPublishRegistry == DefaultHubPublishRegistry && !hasHubRegistry(out, DefaultHubPublishRegistry) {
-		out = append(out, defaultLocalHubRegistry())
-	}
-	c.Registries = out
+	c.Registries = mergeHubRegistries(defaultHubRegistries(), user)
 	return c
+}
+
+func normalizeHubRegistry(registry HubRegistryConfig) HubRegistryConfig {
+	registry.Name = strings.TrimSpace(registry.Name)
+	registry.Kind = strings.TrimSpace(registry.Kind)
+	registry.Path = strings.TrimSpace(registry.Path)
+	registry.URL = strings.TrimSpace(strings.TrimRight(registry.URL, "/"))
+	registry.Token = strings.TrimSpace(registry.Token)
+	return registry
+}
+
+func mergeHubRegistries(defaults, user []HubRegistryConfig) []HubRegistryConfig {
+	byName := make(map[string]HubRegistryConfig, len(user))
+	for _, registry := range user {
+		byName[registry.Name] = registry
+	}
+
+	out := make([]HubRegistryConfig, 0, len(defaults)+len(user))
+	seen := make(map[string]struct{}, len(defaults)+len(user))
+	for _, registry := range defaults {
+		if override, ok := byName[registry.Name]; ok {
+			out = append(out, override)
+		} else {
+			out = append(out, registry)
+		}
+		seen[registry.Name] = struct{}{}
+	}
+	for _, registry := range user {
+		if _, ok := seen[registry.Name]; ok {
+			continue
+		}
+		out = append(out, registry)
+		seen[registry.Name] = struct{}{}
+	}
+	return out
 }
 
 func defaultBuiltinHubRegistry() HubRegistryConfig {
@@ -151,10 +178,20 @@ func defaultLocalHubRegistry() HubRegistryConfig {
 	}
 }
 
+func defaultOfficialRemoteHubRegistry() HubRegistryConfig {
+	return HubRegistryConfig{
+		Name:    DefaultOfficialHubRegistryName,
+		Kind:    HubRegistryKindRemote,
+		URL:     DefaultOfficialHubRegistryURL,
+		Enabled: true,
+	}
+}
+
 func defaultHubRegistries() []HubRegistryConfig {
 	return []HubRegistryConfig{
 		defaultBuiltinHubRegistry(),
 		defaultLocalHubRegistry(),
+		defaultOfficialRemoteHubRegistry(),
 	}
 }
 
@@ -244,6 +281,8 @@ const (
 	BoxLiteProvider                 = "boxlite"
 	DefaultHubRegistry              = "builtin"
 	DefaultHubPublishRegistry       = "local"
+	DefaultOfficialHubRegistryName  = "opencsg"
+	DefaultOfficialHubRegistryURL   = "https://csgclaw.opencsg.com"
 	DefaultBootstrapManagerTemplate = "builtin/picoclaw-manager"
 	DefaultBootstrapWorkerTemplate  = "builtin/picoclaw-worker"
 	HubRegistryKindBuiltin          = "builtin"
@@ -610,15 +649,9 @@ provider = %q
 default_registry = %q
 default_publish_registry = %q
 `, cfg.rawOrResolvedString(cfg.raw.hub.DefaultRegistry, loadedRaw.hub.DefaultRegistry, resolvedHub.DefaultRegistry), cfg.rawOrResolvedString(cfg.raw.hub.DefaultPublishRegistry, loadedRaw.hub.DefaultPublishRegistry, resolvedHub.DefaultPublishRegistry))
-	for i, registry := range resolvedHub.Registries {
-		var rawRegistry rawHubRegistryConfig
-		var loadedRegistry rawHubRegistryConfig
-		if i < len(cfg.raw.hub.Registries) {
-			rawRegistry = cfg.raw.hub.Registries[i]
-		}
-		if i < len(loadedRaw.hub.Registries) {
-			loadedRegistry = loadedRaw.hub.Registries[i]
-		}
+	for _, registry := range resolvedHub.Registries {
+		rawRegistry := findRawHubRegistry(cfg.raw.hub.Registries, registry.Name)
+		loadedRegistry := findRawHubRegistry(loadedRaw.hub.Registries, registry.Name)
 		fmt.Fprintf(&b, `
 [[hub.registries]]
 name = %q
@@ -774,6 +807,26 @@ func parseBoolValue(raw string) (bool, error) {
 
 func parseRawStringValue(raw string) string {
 	return strings.Trim(strings.TrimSpace(raw), `"`)
+}
+
+func findRawHubRegistry(registries []rawHubRegistryConfig, name string) rawHubRegistryConfig {
+	name = strings.TrimSpace(name)
+	for _, registry := range registries {
+		if parseRawStringValue(registry.Name) == name {
+			return registry
+		}
+	}
+	return rawHubRegistryConfig{}
+}
+
+func findResolvedHubRegistry(registries []HubRegistryConfig, name string) (HubRegistryConfig, bool) {
+	name = strings.TrimSpace(name)
+	for _, registry := range registries {
+		if registry.Name == name {
+			return registry, true
+		}
+	}
+	return HubRegistryConfig{}, false
 }
 
 func parseStringArray(raw string) ([]string, error) {
@@ -962,11 +1015,12 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 	if c.raw.hub.DefaultPublishRegistry != "" {
 		out.hub.DefaultPublishRegistry = c.Hub.DefaultPublishRegistry
 	}
-	for i, rawRegistry := range c.raw.hub.Registries {
-		if i >= len(c.Hub.Registries) {
-			break
+	resolvedHub := c.Hub.Resolved()
+	for _, rawRegistry := range c.raw.hub.Registries {
+		registry, ok := findResolvedHubRegistry(resolvedHub.Registries, parseRawStringValue(rawRegistry.Name))
+		if !ok {
+			continue
 		}
-		registry := c.Hub.Registries[i]
 		loadedRegistry := rawHubRegistryConfig{
 			EnabledSet: rawRegistry.EnabledSet,
 		}

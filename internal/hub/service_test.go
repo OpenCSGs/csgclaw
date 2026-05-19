@@ -20,8 +20,8 @@ func TestNewServiceUsesResolvedBuiltinRegistry(t *testing.T) {
 	if svc == nil {
 		t.Fatal("NewService() = nil, want service")
 	}
-	if len(got) != 2 {
-		t.Fatalf("len(factory calls) = %d, want 2", len(got))
+	if len(got) != 3 {
+		t.Fatalf("len(factory calls) = %d, want 3", len(got))
 	}
 	if got[0].Name != config.DefaultHubRegistry {
 		t.Fatalf("factory registry name = %q, want %q", got[0].Name, config.DefaultHubRegistry)
@@ -34,6 +34,12 @@ func TestNewServiceUsesResolvedBuiltinRegistry(t *testing.T) {
 	}
 	if got[1].Kind != config.HubRegistryKindLocal {
 		t.Fatalf("factory registry kind = %q, want %q", got[1].Kind, config.HubRegistryKindLocal)
+	}
+	if got[2].Name != config.DefaultOfficialHubRegistryName {
+		t.Fatalf("factory registry name = %q, want %q", got[2].Name, config.DefaultOfficialHubRegistryName)
+	}
+	if got[2].Kind != config.HubRegistryKindRemote {
+		t.Fatalf("factory registry kind = %q, want %q", got[2].Kind, config.HubRegistryKindRemote)
 	}
 }
 
@@ -158,6 +164,33 @@ func TestPublishUsesDefaultPublishRegistry(t *testing.T) {
 	}
 }
 
+func TestListContinuesWhenRegistryFails(t *testing.T) {
+	svc := mustService(t, config.HubConfig{
+		DefaultRegistry:        "builtin",
+		DefaultPublishRegistry: "local",
+		Registries: []config.HubRegistryConfig{
+			{Name: "builtin", Kind: RegistryKindBuiltin, Enabled: true},
+			{Name: "opencsg", Kind: RegistryKindRemote, Enabled: true},
+		},
+	}, map[string]Store{
+		"builtin": stubStore{
+			listResult: []Template{{ID: "picoclaw-manager", Name: "picoclaw-manager"}},
+		},
+		"opencsg": stubStore{listErr: errors.New("network down")},
+	})
+
+	items, err := svc.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if got, want := len(items), 1; got != want {
+		t.Fatalf("len(List()) = %d, want %d", got, want)
+	}
+	if got, want := items[0].ID, "builtin/picoclaw-manager"; got != want {
+		t.Fatalf("List()[0].ID = %q, want %q", got, want)
+	}
+}
+
 func TestPublishRejectsBuiltinRegistry(t *testing.T) {
 	svc := mustService(t, config.HubConfig{
 		DefaultRegistry:        "builtin",
@@ -177,10 +210,14 @@ func TestPublishRejectsBuiltinRegistry(t *testing.T) {
 
 type stubStore struct {
 	listResult []Template
+	listErr    error
 	getResult  Template
 }
 
 func (s stubStore) List(context.Context) ([]Template, error) {
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
 	return append([]Template(nil), s.listResult...), nil
 }
 
@@ -224,11 +261,10 @@ func (s *recordingStore) Publish(_ context.Context, spec PublishSpec) (Template,
 func mustService(t *testing.T, cfg config.HubConfig, stores map[string]Store) *Service {
 	t.Helper()
 	svc, err := NewService(cfg, func(reg config.HubRegistryConfig) (Store, error) {
-		store, ok := stores[reg.Name]
-		if !ok {
-			return nil, errors.New("unexpected registry")
+		if store, ok := stores[reg.Name]; ok {
+			return store, nil
 		}
-		return store, nil
+		return stubStore{}, nil
 	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

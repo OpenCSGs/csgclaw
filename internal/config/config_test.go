@@ -200,7 +200,7 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Bootstrap.ResolvedDefaultWorkerTemplate(), DefaultBootstrapWorkerTemplate; got != want {
 		t.Fatalf("cfg.Bootstrap.ResolvedDefaultWorkerTemplate() = %q, want %q", got, want)
 	}
-	if got, want := len(cfg.Hub.Registries), 2; got != want {
+	if got, want := len(cfg.Hub.Registries), 3; got != want {
 		t.Fatalf("len(cfg.Hub.Registries) = %d, want %d", got, want)
 	}
 	registry := cfg.Hub.Registries[0]
@@ -225,6 +225,19 @@ models = ["minimax-m2.7"]
 	}
 	if !localRegistry.Enabled {
 		t.Fatal("cfg.Hub.Registries[1].Enabled = false, want true")
+	}
+	officialRegistry := cfg.Hub.Registries[2]
+	if got, want := officialRegistry.Name, DefaultOfficialHubRegistryName; got != want {
+		t.Fatalf("cfg.Hub.Registries[2].Name = %q, want %q", got, want)
+	}
+	if got, want := officialRegistry.Kind, HubRegistryKindRemote; got != want {
+		t.Fatalf("cfg.Hub.Registries[2].Kind = %q, want %q", got, want)
+	}
+	if got, want := officialRegistry.URL, DefaultOfficialHubRegistryURL; got != want {
+		t.Fatalf("cfg.Hub.Registries[2].URL = %q, want %q", got, want)
+	}
+	if !officialRegistry.Enabled {
+		t.Fatal("cfg.Hub.Registries[2].Enabled = false, want true")
 	}
 }
 
@@ -289,7 +302,7 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Bootstrap.ResolvedDefaultWorkerTemplate(), "builtin/openclaw-worker"; got != want {
 		t.Fatalf("cfg.Bootstrap.ResolvedDefaultWorkerTemplate() = %q, want %q", got, want)
 	}
-	if got, want := len(cfg.Hub.Registries), 3; got != want {
+	if got, want := len(cfg.Hub.Registries), 4; got != want {
 		t.Fatalf("len(cfg.Hub.Registries) = %d, want %d", got, want)
 	}
 	if got, want := cfg.Hub.Registries[0].Enabled, true; got != want {
@@ -298,14 +311,20 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Hub.Registries[1].Path, "/tmp/hub"; got != want {
 		t.Fatalf("cfg.Hub.Registries[1].Path = %q, want %q", got, want)
 	}
-	if got, want := cfg.Hub.Registries[2].URL, "https://hub.example.com"; got != want {
+	if got, want := cfg.Hub.Registries[2].URL, DefaultOfficialHubRegistryURL; got != want {
 		t.Fatalf("cfg.Hub.Registries[2].URL = %q, want %q", got, want)
 	}
-	if got, want := cfg.Hub.Registries[2].Token, "hub-secret"; got != want {
-		t.Fatalf("cfg.Hub.Registries[2].Token = %q, want %q", got, want)
-	}
-	if got, want := cfg.Hub.Registries[2].Enabled, false; got != want {
+	if got, want := cfg.Hub.Registries[2].Enabled, true; got != want {
 		t.Fatalf("cfg.Hub.Registries[2].Enabled = %t, want %t", got, want)
+	}
+	if got, want := cfg.Hub.Registries[3].URL, "https://hub.example.com"; got != want {
+		t.Fatalf("cfg.Hub.Registries[3].URL = %q, want %q", got, want)
+	}
+	if got, want := cfg.Hub.Registries[3].Token, "hub-secret"; got != want {
+		t.Fatalf("cfg.Hub.Registries[3].Token = %q, want %q", got, want)
+	}
+	if got, want := cfg.Hub.Registries[3].Enabled, false; got != want {
+		t.Fatalf("cfg.Hub.Registries[3].Enabled = %t, want %t", got, want)
 	}
 }
 
@@ -341,7 +360,7 @@ models = ["minimax-m2.7"]
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got, want := len(cfg.Hub.Registries), 2; got != want {
+	if got, want := len(cfg.Hub.Registries), 3; got != want {
 		t.Fatalf("len(cfg.Hub.Registries) = %d, want %d", got, want)
 	}
 	localRegistry := cfg.Hub.Registries[1]
@@ -356,6 +375,13 @@ models = ["minimax-m2.7"]
 	}
 	if !localRegistry.Enabled {
 		t.Fatal("cfg.Hub.Registries[1].Enabled = false, want true")
+	}
+	officialRegistry := cfg.Hub.Registries[2]
+	if got, want := officialRegistry.Name, DefaultOfficialHubRegistryName; got != want {
+		t.Fatalf("cfg.Hub.Registries[2].Name = %q, want %q", got, want)
+	}
+	if got, want := officialRegistry.URL, DefaultOfficialHubRegistryURL; got != want {
+		t.Fatalf("cfg.Hub.Registries[2].URL = %q, want %q", got, want)
 	}
 }
 
@@ -890,6 +916,12 @@ enabled = true
 name = "local"
 kind = "local"
 path = "` + filepath.Join(dir, AppDirName, HubDirName) + `"
+enabled = true
+
+[[hub.registries]]
+name = "opencsg"
+kind = "remote"
+url = "https://csgclaw.opencsg.com"
 enabled = true
 
 [models]

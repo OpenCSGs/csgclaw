@@ -869,7 +869,9 @@ func templateWorkspaceCleanup(kind string, workspace hub.WorkspaceRef) func() {
 	if strings.TrimSpace(workspace.Kind) != hub.WorkspaceKindDir {
 		return nil
 	}
-	if strings.TrimSpace(kind) != hub.RegistryKindBuiltin {
+	switch strings.TrimSpace(kind) {
+	case hub.RegistryKindBuiltin, hub.RegistryKindRemote:
+	default:
 		return nil
 	}
 	path := strings.TrimSpace(workspace.Path)

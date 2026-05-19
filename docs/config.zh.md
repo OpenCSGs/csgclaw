@@ -212,7 +212,7 @@ docker_cli_path = "/usr/local/bin/docker"
 
 CSGClaw 可以从一个或多个 hub registry 读取 agent 模板。registry 配置是可叠加的：内置、本地和远端 registry 可以同时存在于同一个 `config.toml` 中。
 
-即使省略 `[hub]`，CSGClaw 也会默认启用内置的只读 `builtin` registry。
+即使省略 `[hub]`，CSGClaw 也会默认启用三个 registry：`builtin`（内置只读）、`local`（本地发布）和 `opencsg`（官方远端 `https://csgclaw.opencsg.com`）。你在 `config.toml` 里只写了部分 registry 时，缺失的默认项会自动合并进来，因此删掉 `builtin` 也不会导致启动失败。
 
 ```toml
 [hub]
@@ -230,6 +230,12 @@ enabled = true
 name = "local"
 kind = "local"
 path = "~/.csgclaw/hub"
+enabled = true
+
+[[hub.registries]]
+name = "opencsg"
+kind = "remote"
+url = "https://csgclaw.opencsg.com"
 enabled = true
 
 [[hub.registries]]

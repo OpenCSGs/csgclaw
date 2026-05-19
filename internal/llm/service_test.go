@@ -51,6 +51,7 @@ func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 			Profile:     config.DefaultLLMProfile,
 			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
 			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
 				Provider:        agent.ProviderAPI,
 				BaseURL:         upstream.URL + "/v1",
 				APIKey:          "sk-test",
@@ -58,7 +59,8 @@ func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 				ReasoningEffort: "medium",
 				ProfileComplete: true,
 			},
-			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			ProfileComplete: true,
+			CreatedAt:       time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
 		},
 	})
 
@@ -110,6 +112,7 @@ func TestChatCompletionsLLMAPIDoesNotOverrideRequestReasoningEffort(t *testing.T
 			Profile:     config.DefaultLLMProfile,
 			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
 			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
 				Provider:        agent.ProviderAPI,
 				BaseURL:         upstream.URL + "/v1",
 				APIKey:          "sk-test",
@@ -117,7 +120,8 @@ func TestChatCompletionsLLMAPIDoesNotOverrideRequestReasoningEffort(t *testing.T
 				ReasoningEffort: "medium",
 				ProfileComplete: true,
 			},
-			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			ProfileComplete: true,
+			CreatedAt:       time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
 		},
 	})
 
@@ -816,6 +820,7 @@ func TestModelsReturnsResolvedAgentModel(t *testing.T) {
 			Profile:     config.DefaultLLMProfile,
 			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
 			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
 				Provider:        agent.ProviderAPI,
 				BaseURL:         "https://example.test/v1",
 				APIKey:          "sk-test",
@@ -823,7 +828,8 @@ func TestModelsReturnsResolvedAgentModel(t *testing.T) {
 				ReasoningEffort: "high",
 				ProfileComplete: true,
 			},
-			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			ProfileComplete: true,
+			CreatedAt:       time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
 		},
 	})
 

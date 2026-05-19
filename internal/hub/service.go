@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"csgclaw/internal/config"
@@ -73,6 +74,7 @@ func NewService(cfg config.HubConfig, factory StoreFactory) (*Service, error) {
 
 func (s *Service) List(ctx context.Context) ([]Template, error) {
 	var out []Template
+	var listErrs []error
 	for _, name := range s.order {
 		cfgStore, ok := s.stores[name]
 		if !ok || !isReadableKind(cfgStore.ref.Kind) {
@@ -80,11 +82,21 @@ func (s *Service) List(ctx context.Context) ([]Template, error) {
 		}
 		items, err := cfgStore.store.List(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list hub registry %q: %w", name, err)
+			listErr := fmt.Errorf("list hub registry %q: %w", name, err)
+			listErrs = append(listErrs, listErr)
+			slog.Warn("hub registry list failed", "registry", name, "kind", cfgStore.ref.Kind, "error", err)
+			continue
 		}
 		for _, item := range items {
 			out = append(out, decorateTemplate(cfgStore.ref, item))
 		}
+	}
+	if len(listErrs) > 0 {
+		joined := errors.Join(listErrs...)
+		if len(out) == 0 {
+			return nil, joined
+		}
+		slog.Warn("hub list returned partial results", "template_count", len(out), "error", joined)
 	}
 	return out, nil
 }

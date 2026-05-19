@@ -11,6 +11,7 @@ import (
 var (
 	ErrRegistryKindUnsupported = errors.New("hub registry kind is not supported yet")
 	ErrRegistryPathRequired    = errors.New("hub registry path is required")
+	ErrRegistryURLRequired     = errors.New("hub registry url is required")
 )
 
 func DefaultStoreFactory(cfg config.HubRegistryConfig) (Store, error) {
@@ -24,7 +25,11 @@ func DefaultStoreFactory(cfg config.HubRegistryConfig) (Store, error) {
 		}
 		return NewLocalStore(path), nil
 	case RegistryKindRemote:
-		return nil, fmt.Errorf("%w: %s", ErrRegistryKindUnsupported, cfg.Kind)
+		baseURL := strings.TrimSpace(cfg.URL)
+		if baseURL == "" {
+			return nil, ErrRegistryURLRequired
+		}
+		return NewRemoteStore(baseURL, cfg.Token), nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrRegistryKindUnsupported, cfg.Kind)
 	}

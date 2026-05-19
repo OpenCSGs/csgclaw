@@ -818,20 +818,7 @@ func newAgentService(cfg config.Config, feishuProvider feishu.BotCredentialProvi
 }
 
 func newAgentTemplateHubService(cfg config.HubConfig) (*hub.Service, error) {
-	resolved := cfg.Resolved()
-	filtered := resolved
-	filtered.Registries = make([]config.HubRegistryConfig, 0, len(resolved.Registries))
-	for _, registry := range resolved.Registries {
-		switch strings.ToLower(strings.TrimSpace(registry.Kind)) {
-		case "", hub.RegistryKindBuiltin, hub.RegistryKindLocal:
-			filtered.Registries = append(filtered.Registries, registry)
-		case hub.RegistryKindRemote:
-			continue
-		default:
-			continue
-		}
-	}
-	return hub.NewService(filtered, hub.DefaultStoreFactory)
+	return hub.NewService(cfg.Resolved(), hub.DefaultStoreFactory)
 }
 
 type codexBridgeManager interface {

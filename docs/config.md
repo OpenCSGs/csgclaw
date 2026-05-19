@@ -212,7 +212,7 @@ Current platform expectations:
 
 CSGClaw can read agent templates from one or more hub registries. Registry configuration is additive: built-in, local, and remote registries can coexist in the same `config.toml`.
 
-When `[hub]` is omitted, CSGClaw enables the built-in read-only registry and a writable local registry at `~/.csgclaw/hub` by default.
+When `[hub]` is omitted, CSGClaw enables three registries by default: `builtin` (read-only), `local` (writable publish target at `~/.csgclaw/hub`), and `opencsg` (official remote at `https://csgclaw.opencsg.com`). If your `config.toml` lists only some registries, missing defaults are merged in automatically so removing `builtin` does not break startup.
 
 ```toml
 [hub]
@@ -230,6 +230,12 @@ enabled = true
 name = "local"
 kind = "local"
 path = "~/.csgclaw/hub"
+enabled = true
+
+[[hub.registries]]
+name = "opencsg"
+kind = "remote"
+url = "https://csgclaw.opencsg.com"
 enabled = true
 
 [[hub.registries]]

@@ -85,14 +85,16 @@ func (h *Handler) handleHubTemplateWorkspaceFile(w http.ResponseWriter, r *http.
 }
 
 func (h *Handler) hubWorkspaceRoot(ctx context.Context, item hub.Template) (string, func(), error) {
-	if item.Source.Kind == hub.RegistryKindBuiltin {
+	switch item.Source.Kind {
+	case hub.RegistryKindBuiltin, hub.RegistryKindRemote:
 		workspace, err := h.hub.FetchWorkspace(ctx, item.ID)
 		if err != nil {
 			return "", nil, err
 		}
 		return workspace.Path, func() { _ = os.RemoveAll(workspace.Path) }, nil
+	default:
+		return strings.TrimSpace(item.WorkspaceRef.Path), nil, nil
 	}
-	return strings.TrimSpace(item.WorkspaceRef.Path), nil, nil
 }
 
 func buildHubWorkspaceEntries(root string) ([]apitypes.HubTemplateWorkspaceEntry, error) {

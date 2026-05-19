@@ -104,6 +104,7 @@ func TestServiceListAggregatesBuiltinAndLocalWithDefaultStoreFactory(t *testing.
 		Registries: []config.HubRegistryConfig{
 			{Name: "builtin", Kind: RegistryKindBuiltin, Enabled: true},
 			{Name: "local", Kind: RegistryKindLocal, Path: registryRoot, Enabled: true},
+			{Name: "opencsg", Kind: RegistryKindRemote, Enabled: false},
 		},
 	}, DefaultStoreFactory)
 	if err != nil {

@@ -467,7 +467,7 @@ models = ["gpt-test"]
 	defer restore()
 	EnsureIMBootstrapState = func(string) error { return nil }
 	CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
-		if got, want := len(cfg.Hub.Registries), 2; got != want {
+		if got, want := len(cfg.Hub.Registries), 3; got != want {
 			t.Fatalf("len(cfg.Hub.Registries) = %d, want %d", got, want)
 		}
 		return bot.Bot{}, nil
@@ -486,7 +486,10 @@ models = ["gpt-test"]
 		`[[hub.registries]]`,
 		`name = "builtin"`,
 		`name = "local"`,
+		`name = "opencsg"`,
 		`kind = "local"`,
+		`kind = "remote"`,
+		`url = "https://csgclaw.opencsg.com"`,
 		`enabled = true`,
 	} {
 		if !strings.Contains(content, want) {
