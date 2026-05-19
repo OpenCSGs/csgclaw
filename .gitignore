@@ -8,6 +8,15 @@ dist/
 *.test
 *.out
 
+# Web frontend local artifacts
+node_modules/
+web/app/playwright-report/
+web/app/test-results/
+web/app/.vite/
+web/static-dist/*
+!web/static-dist/
+!web/static-dist/.gitkeep
+
 # Local binaries
 /csgclaw
 
@@ -22,6 +31,9 @@ docker/
 .cursor/
 .idea/
 .vscode/
+!.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
 
 # Vendored native libraries / SDK dist fetched on demand
 third_party/boxlite-go/libboxlite.a

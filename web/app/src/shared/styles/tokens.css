@@ -1,0 +1,57 @@
+:root {
+  --bg: oklch(0.16 0.014 248);
+  --sidebar: oklch(0.205 0.018 248);
+  --panel: oklch(0.18 0.014 248);
+  --panel-strong: oklch(0.235 0.018 248);
+  --panel-soft: oklch(0.275 0.018 248);
+  --surface: oklch(0.145 0.012 248);
+  --field: oklch(0.235 0.014 248);
+  --text: oklch(0.94 0.006 248);
+  --muted: oklch(0.68 0.018 248);
+  --line: oklch(0.35 0.018 248 / 0.62);
+  --primary: oklch(0.7 0.12 188);
+  --primary-soft: oklch(0.7 0.12 188 / 0.16);
+  --primary-strong: oklch(0.8 0.13 188);
+  --on-primary: oklch(0.16 0.014 248);
+  --mention-on-primary: oklch(0.27 0.11 188);
+  --mention: oklch(0.78 0.13 188);
+  --avatar-text: oklch(0.985 0.004 248);
+  --message-border: oklch(0.36 0.018 248 / 0.68);
+  --admin-bubble: oklch(0.86 0.05 248);
+  --admin-text: oklch(0.23 0.018 248);
+  --admin-mention: oklch(0.52 0.19 258);
+  --danger: oklch(0.62 0.18 28);
+  --warning: oklch(0.78 0.13 72);
+  --shadow: 0 18px 42px oklch(0.08 0.01 248 / 0.36);
+  --shadow-soft: 0 8px 22px oklch(0.08 0.01 248 / 0.24);
+  --font-sans: Inter, "Avenir Next", "Segoe UI", "PingFang SC", system-ui, sans-serif;
+  --font-display: Inter, "Avenir Next", "Segoe UI", "PingFang SC", system-ui, sans-serif;
+}
+
+:root[data-theme="light"] {
+  --bg: oklch(0.955 0.008 248);
+  --sidebar: oklch(0.982 0.004 248);
+  --panel: oklch(0.99 0.003 248);
+  --panel-strong: oklch(0.958 0.007 248);
+  --panel-soft: oklch(0.915 0.012 248);
+  --surface: oklch(0.973 0.005 248);
+  --field: oklch(0.944 0.007 248);
+  --text: oklch(0.23 0.018 248);
+  --muted: oklch(0.51 0.024 248);
+  --line: oklch(0.82 0.018 248 / 0.78);
+  --primary: oklch(0.58 0.13 188);
+  --primary-soft: oklch(0.58 0.13 188 / 0.13);
+  --primary-strong: oklch(0.48 0.13 188);
+  --on-primary: oklch(0.985 0.004 248);
+  --mention-on-primary: oklch(0.93 0.08 188);
+  --mention: oklch(0.47 0.13 188);
+  --avatar-text: oklch(0.985 0.004 248);
+  --message-border: oklch(0.86 0.016 248 / 0.94);
+  --admin-bubble: oklch(0.89 0.04 248);
+  --admin-text: oklch(0.22 0.018 248);
+  --admin-mention: oklch(0.52 0.19 258);
+  --danger: oklch(0.55 0.18 28);
+  --warning: oklch(0.54 0.13 72);
+  --shadow: 0 18px 42px oklch(0.36 0.028 248 / 0.16);
+  --shadow-soft: 0 8px 22px oklch(0.36 0.028 248 / 0.11);
+}

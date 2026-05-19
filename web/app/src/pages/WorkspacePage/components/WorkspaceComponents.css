@@ -1,0 +1,7 @@
+.workspace-group,
+.workspace-row,
+.entity-pane,
+.hub-detail-pane,
+.profile-preview-popover {
+  box-sizing: border-box;
+}

@@ -1,0 +1,4 @@
+export const LOCALE_STORAGE_KEY = "csgclaw.im.locale" as const;
+export const THEME_STORAGE_KEY = "csgclaw.im.theme" as const;
+export const SIDEBAR_COLLAPSED_STORAGE_KEY = "csgclaw.im.sidebarCollapsed" as const;
+export const WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY = "csgclaw.im.workspaceGroupsCollapsed" as const;

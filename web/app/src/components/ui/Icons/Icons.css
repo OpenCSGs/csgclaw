@@ -1,0 +1,31 @@
+.svg-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.theme-toggle .svg-icon,
+.language-switch-icon .svg-icon,
+.sidebar-toggle-mark .svg-icon,
+.workspace-tab-icon .svg-icon,
+.workspace-group-arrow .svg-icon,
+.workspace-row-icon .svg-icon,
+.icon-button-mark .svg-icon,
+.tool-menu-icon .svg-icon,
+.conversation-delete-icon .svg-icon,
+.agent-icon-button .svg-icon,
+.entity-list-icon .svg-icon,
+.entity-avatar .svg-icon,
+.composer-send-main .svg-icon {
+  width: 100%;
+  height: 100%;
+}

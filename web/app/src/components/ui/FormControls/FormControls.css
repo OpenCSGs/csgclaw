@@ -1,0 +1,60 @@
+.field {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.field textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.field input:hover,
+.field textarea:hover,
+.field select:hover {
+  border-color: oklch(0.77 0.16 164 / 0.38);
+}
+
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  border-color: var(--portal-brand-500);
+  box-shadow: var(--focus-ring);
+}
+
+.field input:disabled,
+.field textarea:disabled,
+.field select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.field-hint,
+.form-error {
+  color: var(--muted);
+}
+
+.form-error {
+  margin-top: 14px;
+  color: oklch(0.72 0.16 35);
+}

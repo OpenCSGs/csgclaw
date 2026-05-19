@@ -1,0 +1,271 @@
+import {
+  advanceAgentProgress,
+  agentToDraft,
+  applyTemplateToDraft,
+  availableManagerRuntimeOptions,
+  draftNotifierRuntimeOptionsForSave,
+  draftToProfile,
+  ensureNotifierPullSubscriptionDraft,
+  envRowsToMap,
+  formatProviderLabel,
+  isAgentIncomplete,
+  mapToEnvRows,
+  notifierComputedPullRoutes,
+  notifierFormIsComplete,
+  notifierThirdPartyRelayWebhookURL,
+  normalizeAuthProviderName,
+  normalizeRuntimeKind,
+  parseJSONMap,
+  pickDefaultAgentTemplate,
+  providerNeedsAuth,
+  runtimeImageForKind,
+} from "@/models/agents";
+
+describe("agent model helpers", () => {
+  it("normalizes agent profiles into editable drafts", () => {
+    const draft = agentToDraft({
+      agent_profile: {
+        api_key_preview: "sk-...",
+        api_key_set: true,
+        env: { ZED: 1, alpha: "two" },
+        headers: { "X-Trace": "1" },
+        model_id: "qwen3",
+        provider: "api",
+        reasoning_effort: "",
+        request_options: { temperature: 0.2 },
+      },
+      id: "worker-1",
+      image: "worker:latest",
+      name: "Worker",
+      role: "worker",
+      runtime_kind: "openclaw_sandbox",
+    });
+
+    expect(draft).toMatchObject({
+      agent_id: "worker-1",
+      api_key_preview: "sk-...",
+      api_key_set: true,
+      image: "worker:latest",
+      model_id: "qwen3",
+      name: "Worker",
+      provider: "api",
+      reasoning_effort: "medium",
+      runtime_kind: "openclaw_sandbox",
+    });
+    expect(draft.envRows).toEqual([
+      { key: "alpha", value: "two" },
+      { key: "ZED", value: "1" },
+    ]);
+    expect(JSON.parse(draft.headersText)).toEqual({ "X-Trace": "1" });
+    expect(JSON.parse(draft.requestOptionsText)).toEqual({ temperature: 0.2 });
+  });
+
+  it("converts env rows to maps while rejecting missing and duplicate keys", () => {
+    expect(
+      envRowsToMap([
+        { key: " FOO ", value: "one" },
+        { key: "", value: "" },
+        { key: "BAR", value: "" },
+      ]),
+    ).toEqual({ FOO: "one", BAR: "" });
+
+    expect(() => envRowsToMap([{ key: "", value: "set" }])).toThrow("Environment variable key is required");
+    expect(() =>
+      envRowsToMap([
+        { key: "Path", value: "one" },
+        { key: "PATH", value: "two" },
+      ]),
+    ).toThrow("Duplicate environment variable: PATH");
+  });
+
+  it("keeps JSON profile fields object-shaped", () => {
+    expect(parseJSONMap("")).toEqual({});
+    expect(parseJSONMap('{"temperature":0.1}')).toEqual({ temperature: 0.1 });
+    expect(() => parseJSONMap("[1,2,3]")).toThrow("Expected a JSON object");
+
+    expect(
+      draftToProfile({
+        api_key: "",
+        api_key_preview: "",
+        api_key_set: false,
+        base_url: "http://127.0.0.1:11435/v1",
+        enable_fast_mode: true,
+        envRows: [{ key: "MODEL_HOME", value: "/models" }],
+        headersText: '{"Authorization":"Bearer test"}',
+        model_id: "Qwen/Qwen3-0.6B-GGUF",
+        provider: "csghub_lite",
+        reasoning_effort: "",
+        requestOptionsText: '{"top_p":0.9}',
+        runtime_kind: "picoclaw_sandbox",
+      }),
+    ).toMatchObject({
+      description: "Manager Worker Dispatch",
+      enable_fast_mode: true,
+      env: { MODEL_HOME: "/models" },
+      headers: { Authorization: "Bearer test" },
+      name: "manager",
+      reasoning_effort: "medium",
+      request_options: { top_p: 0.9 },
+    });
+  });
+
+  it("selects runtime-specific templates and images", () => {
+    const templates = [
+      { id: "custom/worker", name: "custom-worker", runtime_kind: "picoclaw_sandbox" },
+      { id: "builtin/openclaw-worker", name: "openclaw-worker", runtime_kind: "openclaw_sandbox" },
+      { id: "builtin/picoclaw-worker", name: "picoclaw-worker", runtime_kind: "picoclaw_sandbox" },
+    ];
+    const bootstrapConfig = {
+      default_worker_template: "custom/worker",
+      effective_manager_image: "manager:effective",
+      runtime_default_images: {
+        openclaw_sandbox: "openclaw:worker",
+        picoclaw_sandbox: "picoclaw:worker",
+      },
+      runtime_kind: "openclaw_sandbox",
+    };
+
+    expect(pickDefaultAgentTemplate(templates, "picoclaw_sandbox", bootstrapConfig)?.id).toBe("custom/worker");
+    expect(pickDefaultAgentTemplate(templates, "openclaw_sandbox", bootstrapConfig)?.id).toBe(
+      "builtin/openclaw-worker",
+    );
+    expect(pickDefaultAgentTemplate(templates, "notifier", bootstrapConfig)).toBeNull();
+    expect(runtimeImageForKind("openclaw_sandbox", bootstrapConfig, "fallback:worker")).toBe("openclaw:worker");
+    expect(runtimeImageForKind("codex", bootstrapConfig, "fallback:worker")).toBe("");
+    expect(runtimeImageForKind("notifier", bootstrapConfig, "fallback:worker")).toBe("");
+
+    expect(
+      applyTemplateToDraft(
+        {
+          api_key: "",
+          api_key_preview: "",
+          api_key_set: false,
+          base_url: "",
+          enable_fast_mode: false,
+          envRows: [],
+          headersText: "{}",
+          model_id: "",
+          provider: "csghub_lite",
+          reasoning_effort: "medium",
+          requestOptionsText: "{}",
+          runtime_kind: "picoclaw_sandbox",
+        },
+        templates[1],
+        bootstrapConfig,
+      ),
+    ).toMatchObject({
+      from_template: "builtin/openclaw-worker",
+      image: "openclaw:worker",
+      runtime_kind: "openclaw_sandbox",
+      template_name: "openclaw-worker",
+    });
+  });
+
+  it("filters manager rebuild runtime options to gateway runtimes", () => {
+    expect(
+      availableManagerRuntimeOptions({
+        supported_runtime_kinds: ["picoclaw_sandbox", "openclaw_sandbox", "codex", "notifier", "picoclaw_sandbox"],
+      }).map((option) => option.value),
+    ).toEqual(["picoclaw_sandbox", "openclaw_sandbox"]);
+
+    expect(availableManagerRuntimeOptions(null).map((option) => option.value)).toEqual([
+      "picoclaw_sandbox",
+      "openclaw_sandbox",
+    ]);
+  });
+
+  it("normalizes runtime and auth provider labels", () => {
+    expect(normalizeRuntimeKind("codex")).toBe("codex");
+    expect(normalizeRuntimeKind("notifier")).toBe("notifier");
+    expect(normalizeRuntimeKind("unknown")).toBe("unknown");
+    expect(normalizeAuthProviderName("claude-code")).toBe("claude_code");
+    expect(providerNeedsAuth("claude")).toBe(true);
+    expect(providerNeedsAuth("api")).toBe(false);
+    expect(formatProviderLabel("csghub_lite")).toBe("CSGHub Lite");
+  });
+
+  it("advances agent creation progress toward each step target", () => {
+    expect(advanceAgentProgress(null)).toBeNull();
+    expect(
+      advanceAgentProgress({
+        index: 0,
+        percent: 4,
+        startedAt: 1,
+        status: "running",
+        steps: [{ label: "configure", target: 16 }],
+      }),
+    ).toMatchObject({ index: 0, percent: 8 });
+    expect(
+      advanceAgentProgress({
+        index: 0,
+        percent: 16,
+        startedAt: 1,
+        status: "running",
+        steps: [
+          { label: "configure", target: 16 },
+          { label: "start", target: 88 },
+        ],
+      }),
+    ).toMatchObject({ index: 1, percent: 16 });
+  });
+
+  it("maps non-object env values to one blank editable row", () => {
+    expect(mapToEnvRows(null)).toEqual([{ key: "", value: "" }]);
+    expect(mapToEnvRows(["not", "a", "map"])).toEqual([{ key: "", value: "" }]);
+  });
+
+  it("normalizes notifier runtime options outside request options", () => {
+    const draft = agentToDraft({
+      agent_profile: {
+        request_options: {
+          notifier: { delivery_mode: "webhook", webhook_token: "secret" },
+          temperature: 0.1,
+        },
+      },
+      id: "n-1",
+      name: "Notifier",
+      role: "worker",
+      runtime_kind: "notifier",
+      runtime_options: {
+        delivery_mode: "remote_pull",
+        remote_url: "https://relay.example.com/api/v1/inbox/messages",
+        notifier_profile: { delivery_complete: true, remote_token_set: true },
+      },
+    });
+
+    expect(draft.runtime_kind).toBe("notifier");
+    expect(draft.notifier_delivery_mode).toBe("remote_pull");
+    expect(draft.notifier_remote_url).toBe("https://relay.example.com/api/v1/inbox/messages");
+    expect(draft.notifier_delivery_complete).toBe(true);
+    expect(JSON.parse(draft.requestOptionsText)).toEqual({ temperature: 0.1 });
+    expect(notifierFormIsComplete(draft)).toBe(true);
+    expect(isAgentIncomplete({ runtime_kind: "notifier", runtime_options: {} })).toBe(true);
+  });
+
+  it("builds notifier pull subscriptions and route previews", () => {
+    const draft = ensureNotifierPullSubscriptionDraft({
+      runtime_kind: "notifier",
+      notifier_delivery_mode: "remote_pull",
+    }) as ReturnType<typeof agentToDraft>;
+
+    expect(draft.notifier_remote_subscription_id).toMatch(/^sub-/);
+    expect(
+      draftNotifierRuntimeOptionsForSave({
+        ...draft,
+        notifier_remote_url: "https://relay.example.com/api/v1/webhooks/ingress",
+        notifier_remote_token: "token",
+      }),
+    ).toMatchObject({
+      delivery_mode: "remote_pull",
+      remote_url: "https://relay.example.com/api/v1/webhooks/ingress",
+      remote_token: "token",
+    });
+    expect(notifierComputedPullRoutes("https://relay.example.com/api/v1/webhooks/ingress")).toEqual({
+      messages: "https://relay.example.com/api/v1/inbox/messages",
+      ack: "https://relay.example.com/api/v1/inbox/ack",
+    });
+    expect(notifierThirdPartyRelayWebhookURL("https://relay.example.com/api/v1/inbox/messages", "sub-1")).toBe(
+      "https://relay.example.com/api/v1/webhooks/ingress?subscription_id=sub-1",
+    );
+  });
+});

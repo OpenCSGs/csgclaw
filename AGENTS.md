@@ -19,7 +19,9 @@ internal/config/        config defaults, load/save
 internal/api/           HTTP handlers and router
 internal/im/            IM service and PicoClaw bridge
 internal/server/        HTTP server and UI wiring
-web/static/             shipped frontend assets
+web/app/                Web UI development source and Vite project
+web/static/             legacy frontend assets retained for comparison
+web/static-dist/        generated Web UI assets for Go embed; run make web-build
 ```
 
 ## Commands
@@ -42,6 +44,7 @@ make release
 - Prefer existing patterns and the standard library before adding dependencies.
 - Format with `make fmt`.
 - Add or update tests when changing CLI, config, API, or runtime behavior.
+- When changing the Vite web app, follow `docs/web/FRONTEND.md` for frontend structure, source layout, components, styling, state, accessibility, and verification.
 - Do not change BoxLite sandbox integration or packaging paths unless the task is about sandbox/runtime integration.
 - When changing config fields or defaults, update loader, saver, onboard flow, tests, and docs together.
 - Never hardcode or print real secrets; startup and logs must keep tokens redacted.
@@ -57,5 +60,6 @@ make release
 
 - `README.md`
 - `docs/README.go.md`
+- `docs/web/FRONTEND.md`
 - `Makefile`
 - `.github/workflows/release.yml`

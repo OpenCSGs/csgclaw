@@ -67,7 +67,9 @@ internal/sandbox/csghub/ CSGHub sandbox implementation
 internal/im/            built-in csgclaw IM and PicoClaw bridge
 internal/channel/       external channel integrations, including Feishu
 internal/config/        config defaults, load/save
-web/static/             shipped frontend assets
+web/app/                Web UI development source and Vite project
+web/static/             legacy frontend assets retained for comparison
+web/static-dist/        generated Web UI assets for Go embed; run make build-web
 ```
 
 `internal/bot` is the new business boundary for bot behavior. It should not be implemented as extra glue inside API handlers.

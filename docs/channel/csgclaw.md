@@ -91,7 +91,7 @@ Notifier deliveries (GitLab/GitHub webhooks, and so on) to the CSGClaw Web IM us
 
 ### Related code paths
 
-- Frontend parser/renderer: `web/static/app.js`
-- Action-card test coverage: `web/static/app_action_card.test.cjs`
+- Frontend parser/renderer: `web/app/src/components/business/MessageContent/MessageContent.tsx`, `web/app/src/components/business/MessageContent/structuredMessages.ts`
+- Action-card and notifier-card test coverage: `web/app/tests/legacy-contract.test.ts`, `web/app/tests/components/MessageContent/structuredMessages.test.ts`
 - Notifier card encoding: `internal/runtime/notifier/notify_card.go`, `internal/runtime/notifier/notify_webhooks.go`
 - Feishu setup command output: `internal/templates/embed/runtimes/picoclaw/manager/workspace/skills/feishu/scripts/feishu_setup/csgclaw.py`

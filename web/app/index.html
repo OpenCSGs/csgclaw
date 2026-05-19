@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>CSGClaw</title>
+    <base href="/" />
+    <script>
+      (() => {
+        try {
+          const theme = localStorage.getItem("csgclaw.im.theme");
+          const next = theme === "light" || theme === "dark" ? theme : "dark";
+          document.documentElement.dataset.theme = next;
+          document.documentElement.style.colorScheme = next;
+        } catch (_) {
+          document.documentElement.dataset.theme = "dark";
+          document.documentElement.style.colorScheme = "dark";
+        }
+      })();
+    </script>
+    <link rel="icon" href="/favicon.ico?v=20260507" type="image/x-icon" />
+    <link rel="shortcut icon" href="/favicon.ico?v=20260507" type="image/x-icon" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
