@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyUpgradeRequest } from "@/api/upgrade";
 import { normalizeUpgradeStatus } from "@/models/upgradeStatus";
+import type { UpgradePhase } from "@/models/upgradeStatus";
+import type { UpgradeController, UseUpgradeControllerArgs } from "./types";
 
 export function useUpgradeController({
   appVersion,
@@ -10,12 +12,12 @@ export function useUpgradeController({
   setUpgradeStatusData,
   t,
   upgradeStatus,
-}) {
+}: UseUpgradeControllerArgs): UpgradeController {
   const [upgradeBusy, setUpgradeBusy] = useState(false);
   const [upgradeError, setUpgradeError] = useState("");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [upgradePhase, setUpgradePhase] = useState("idle");
-  const upgradePollTimerRef = useRef(null);
+  const [upgradePhase, setUpgradePhase] = useState<UpgradePhase>("idle");
+  const upgradePollTimerRef = useRef<number | null>(null);
 
   const stopUpgradePoll = useCallback(() => {
     if (upgradePollTimerRef.current) {
@@ -25,7 +27,7 @@ export function useUpgradeController({
   }, []);
 
   const handleUpgradeStatusChange = useCallback(
-    (payload) => {
+    (payload: unknown) => {
       const next = normalizeUpgradeStatus(payload);
       setUpgradeStatusData(next);
       if (next?.upgrading) {
@@ -50,7 +52,7 @@ export function useUpgradeController({
   }, [refreshWorkspaceUpgradeStatus]);
 
   const startUpgradeReconnectPoll = useCallback(
-    (expectedVersion) => {
+    (expectedVersion?: string | null) => {
       stopUpgradePoll();
       let attempts = 0;
       const poll = async () => {
@@ -64,9 +66,9 @@ export function useUpgradeController({
             setUpgradeBusy(false);
             setUpgradePhase("done");
             setUpgradeStatusData((current) => ({
-              ...(current || {}),
               current_version: version,
               latest_version: version,
+              last_checked_at: current?.last_checked_at ?? "",
               update_available: false,
               checking: false,
               upgrading: false,
@@ -105,7 +107,11 @@ export function useUpgradeController({
       await applyUpgradeRequest();
       setUpgradePhase("restarting");
       setUpgradeStatusData((current) => ({
-        ...(current || {}),
+        current_version: current?.current_version || appVersion,
+        latest_version: current?.latest_version || upgradeStatus?.latest_version || "",
+        update_available: current?.update_available ?? Boolean(upgradeStatus?.update_available),
+        checking: current?.checking ?? false,
+        last_checked_at: current?.last_checked_at ?? "",
         upgrading: true,
         last_error: "",
       }));
@@ -117,7 +123,7 @@ export function useUpgradeController({
       const detail = err?.message && err.message !== "upgrade apply failed" ? ` ${err.message}` : "";
       setUpgradeError(`${t("upgradeApplyFailed")}${detail}`);
     }
-  }, [setUpgradeStatusData, startUpgradeReconnectPoll, t, upgradeBusy, upgradeStatus]);
+  }, [appVersion, setUpgradeStatusData, startUpgradeReconnectPoll, t, upgradeBusy, upgradeStatus]);
 
   const openUpgradeModal = useCallback(() => {
     setUpgradeError("");

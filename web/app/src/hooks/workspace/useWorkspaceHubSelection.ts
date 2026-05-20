@@ -2,9 +2,18 @@ import { useCallback, useEffect, useMemo } from "react";
 import { errorMessage } from "@/api/client";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
 import { useWorkspaceHubTemplateQuery, useWorkspaceHubWorkspaceFileQuery } from "./workspaceQueries";
+import type { HubTemplate } from "@/models/hubWorkspace";
+import type { UseWorkspaceHubSelectionArgs } from "./types";
 
-export function useWorkspaceHubSelection({ templates, templatesQuery, loaded, manualError, refreshTemplates, t }) {
-  const hubTemplates = templates ?? [];
+export function useWorkspaceHubSelection({
+  templates,
+  templatesQuery,
+  loaded,
+  manualError = "",
+  refreshTemplates,
+  t,
+}: UseWorkspaceHubSelectionArgs) {
+  const hubTemplates = useMemo(() => templates ?? [], [templates]);
   const selectedHubTemplateId = useWorkspaceUiStore((state) => state.selectedHubTemplateId);
   const setSelectedHubTemplateId = useWorkspaceUiStore((state) => state.setSelectedHubTemplateId);
   const selectedHubWorkspacePath = useWorkspaceUiStore((state) => state.selectedHubWorkspacePath);
@@ -27,6 +36,7 @@ export function useWorkspaceHubSelection({ templates, templatesQuery, loaded, ma
 
   const hubTemplateDetailQuery = useWorkspaceHubTemplateQuery(selectedHubTemplateId);
   const hubWorkspaceFileQuery = useWorkspaceHubWorkspaceFileQuery(selectedHubTemplateId, selectedHubWorkspacePath);
+  const refetchHubTemplateDetail = hubTemplateDetailQuery.refetch;
 
   const selectedHubTemplate = useMemo(
     () => hubTemplates.find((item) => item.id === selectedHubTemplateId) || hubTemplates[0] || null,
@@ -37,7 +47,7 @@ export function useWorkspaceHubSelection({ templates, templatesQuery, loaded, ma
     hubTemplateDetailQuery.data?.id === selectedHubTemplateId ? hubTemplateDetailQuery.data : selectedHubTemplate;
 
   const selectWorkspaceFile = useCallback(
-    (workspacePath) => {
+    (workspacePath: string) => {
       setSelectedHubWorkspacePath(workspacePath);
     },
     [setSelectedHubWorkspacePath],
@@ -56,9 +66,9 @@ export function useWorkspaceHubSelection({ templates, templatesQuery, loaded, ma
       await refreshTemplates();
     }
     if (selectedHubTemplateId) {
-      await hubTemplateDetailQuery.refetch();
+      await refetchHubTemplateDetail();
     }
-  }, [hubTemplateDetailQuery.refetch, refreshTemplates, selectedHubTemplateId]);
+  }, [refetchHubTemplateDetail, refreshTemplates, selectedHubTemplateId]);
 
   return {
     templates: hubTemplates,
@@ -72,7 +82,7 @@ export function useWorkspaceHubSelection({ templates, templatesQuery, loaded, ma
     hubTemplateDetail: hubTemplateDetailQuery.data ?? null,
     hubTemplateDetailLoading: hubTemplateDetailQuery.isFetching,
     hubTemplateDetailError: detailError,
-    refetchHubTemplateDetail: hubTemplateDetailQuery.refetch,
+    refetchHubTemplateDetail,
     selectedHubWorkspacePath,
     setSelectedHubWorkspacePath,
     selectWorkspaceFile,
@@ -93,7 +103,7 @@ export function useWorkspaceHubSelection({ templates, templatesQuery, loaded, ma
       workspaceFileLoading: hubWorkspaceFileQuery.isFetching,
       workspaceFileError,
       onRetry: retry,
-      onSelectTemplate: (item) => {
+      onSelectTemplate: (item: HubTemplate | null | undefined) => {
         if (item?.id) {
           setSelectedHubTemplateId(item.id);
         }

@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { agentMatchesUser, isDirectConversation } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
+import type { AgentLike } from "@/models/agents";
+import type { IMUser } from "@/models/conversations";
+import type { ProfilePreviewAnchorRect, ProfilePreviewController, UseProfilePreviewControllerArgs } from "./types";
+
+type ProfilePreviewState = {
+  anchorEl: HTMLElement;
+  anchorRect: ProfilePreviewAnchorRect;
+  id: string;
+  type: "user" | typeof WorkspacePaneTypes.agent;
+};
 
 export function useProfilePreviewController({
   agentActionBusy,
@@ -12,19 +22,24 @@ export function useProfilePreviewController({
   selectAgent,
   t,
   usersById,
-}) {
-  const [profilePreview, setProfilePreview] = useState(null);
-  const profilePreviewRef = useRef(null);
+}: UseProfilePreviewControllerArgs): ProfilePreviewController {
+  const [profilePreview, setProfilePreview] = useState<ProfilePreviewState | null>(null);
+  const profilePreviewRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!profilePreview) {
       return undefined;
     }
 
-    function handlePointerDown(event) {
+    function handlePointerDown(event: MouseEvent) {
       const preview = profilePreviewRef.current;
       const anchor = profilePreview?.anchorEl;
-      if (!preview || preview.contains(event.target) || anchor?.contains?.(event.target)) {
+      if (
+        !preview ||
+        !(event.target instanceof Node) ||
+        preview.contains(event.target) ||
+        anchor.contains(event.target)
+      ) {
         return;
       }
       closeProfilePreview();
@@ -54,7 +69,7 @@ export function useProfilePreviewController({
     ? (agentItems.find((item) => item.id === profilePreview.id || agentMatchesUser(item, previewUser)) ?? null)
     : null;
 
-  function openParticipantPreview(user, anchor) {
+  function openParticipantPreview(user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) {
     if (!user?.id) {
       return;
     }
@@ -84,7 +99,7 @@ export function useProfilePreviewController({
     closeConversationTools();
   }
 
-  function openAgentPreview(item, anchor) {
+  function openAgentPreview(item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) {
     if (!item?.id) {
       return;
     }

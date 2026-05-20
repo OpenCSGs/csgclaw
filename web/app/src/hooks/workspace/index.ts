@@ -1,4 +1,5 @@
 export * from "./WorkspaceControllerContext";
+export * from "./types";
 export * from "./useCLIProxyAuthStatuses";
 export * from "./useAgentController";
 export * from "./useConversationController";

@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
+import type { UseWorkspaceHubControllerArgs } from "./types";
+
+export type WorkspaceHubController = {
+  hub: ReturnType<typeof useWorkspaceHubSelection>;
+  refreshHubTemplates: () => Promise<void>;
+};
 
 export function useWorkspaceHubController({
   hubLoaded,
@@ -7,10 +13,10 @@ export function useWorkspaceHubController({
   hubTemplatesQuery,
   refreshWorkspaceHubTemplates,
   t,
-}) {
+}: UseWorkspaceHubControllerArgs): WorkspaceHubController {
   const [hubManualError, setHubManualError] = useState("");
 
-  async function refreshHubTemplates() {
+  async function refreshHubTemplates(): Promise<void> {
     try {
       await refreshWorkspaceHubTemplates();
       setHubManualError("");

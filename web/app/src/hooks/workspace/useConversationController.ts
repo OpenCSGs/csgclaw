@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoomRequest, deleteRoomRequest, inviteRoomUsersRequest, sendMessageRequest } from "@/api/im";
 import {
   appendMessageToData,
@@ -27,6 +28,28 @@ import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
 import { localizeError } from "@/shared/i18n";
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
+import type { IMServerEvent, IMUser } from "@/models/conversations";
+import type { UseConversationControllerArgs } from "./types";
+
+type ComposerSegment =
+  | {
+      text: string;
+      type: "text";
+    }
+  | {
+      type: "mention";
+      userId: string;
+      userName: string;
+    };
+
+type ComposerMentionState = {
+  endOffset: number;
+  query: string;
+  startOffset: number;
+  textNode: Node;
+};
+
+type DraftsByConversationId = Record<string, ComposerSegment[]>;
 
 type OpenCreateRoomOptions = {
   description?: string;
@@ -59,9 +82,9 @@ export function useConversationController({
   theme,
   messageActionBusy,
   messageActionError,
-}) {
-  const [draftsByConversationId, setDraftsByConversationId] = useState({});
-  const [composerMentionState, setComposerMentionState] = useState(null);
+}: UseConversationControllerArgs) {
+  const [draftsByConversationId, setDraftsByConversationId] = useState<DraftsByConversationId>({});
+  const [composerMentionState, setComposerMentionState] = useState<ComposerMentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -69,22 +92,22 @@ export function useConversationController({
   const [showChannelTools, setShowChannelTools] = useState(false);
   const [roomTitle, setRoomTitle] = useState("");
   const [roomDescription, setRoomDescription] = useState("");
-  const [roomMemberIDs, setRoomMemberIDs] = useState([]);
-  const [lockedRoomMemberIDs, setLockedRoomMemberIDs] = useState([]);
-  const [inviteUserIDs, setInviteUserIDs] = useState([]);
+  const [roomMemberIDs, setRoomMemberIDs] = useState<string[]>([]);
+  const [lockedRoomMemberIDs, setLockedRoomMemberIDs] = useState<string[]>([]);
+  const [inviteUserIDs, setInviteUserIDs] = useState<string[]>([]);
   const [submitError, setSubmitError] = useState("");
   const [composerError, setComposerError] = useState("");
-  const editorRef = useRef(null);
+  const editorRef = useRef<HTMLElement | null>(null);
   const composerIsComposingRef = useRef(false);
   const composerJustEndedCompositionRef = useRef(false);
-  const messageListRef = useRef(null);
-  const memberMenuRef = useRef(null);
-  const channelToolsRef = useRef(null);
+  const messageListRef = useRef<HTMLElement | null>(null);
+  const memberMenuRef = useRef<HTMLElement | null>(null);
+  const channelToolsRef = useRef<HTMLElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const autoScrollConversationRef = useRef(activeConversationId);
 
   const usersById = useMemo(() => {
-    const result = new Map();
+    const result = new Map<string, IMUser>();
     data?.users.forEach((user) => result.set(user.id, user));
     return result;
   }, [data]);
@@ -133,7 +156,7 @@ export function useConversationController({
       .slice(0, 5);
   }, [data, activeConversation, composerMentionState]);
   const mentionableUsersByHandle = useMemo(() => {
-    const result = new Map();
+    const result = new Map<string, IMUser>();
     if (!data) {
       return result;
     }
@@ -158,7 +181,7 @@ export function useConversationController({
   const draftText = useMemo(() => segmentsToPlainText(draftSegments), [draftSegments]);
 
   useEffect(() => {
-    const unsubscribe = subscribeIMEvents((payload) => {
+    const unsubscribe = subscribeIMEvents((payload: IMServerEvent) => {
       setBootstrapData((current) => applyIMEvent(current, payload));
       if (payload?.type === "upgrade.status_changed" && payload.upgrade) {
         onUpgradeStatusChange(payload.upgrade);
@@ -207,9 +230,9 @@ export function useConversationController({
       return undefined;
     }
 
-    function handlePointerDown(event) {
+    function handlePointerDown(event: MouseEvent) {
       const menu = memberMenuRef.current;
-      if (!menu || menu.contains(event.target)) {
+      if (!menu || !(event.target instanceof Node) || menu.contains(event.target)) {
         return;
       }
       setShowMemberList(false);
@@ -224,9 +247,9 @@ export function useConversationController({
       return undefined;
     }
 
-    function handlePointerDown(event) {
+    function handlePointerDown(event: MouseEvent) {
       const menu = channelToolsRef.current;
-      if (!menu || menu.contains(event.target)) {
+      if (!menu || !(event.target instanceof Node) || menu.contains(event.target)) {
         return;
       }
       setShowChannelTools(false);
@@ -348,7 +371,7 @@ export function useConversationController({
     });
   }, [activeConversationId, showCreateRoom, showInvite]);
 
-  async function sendMessage() {
+  async function sendMessage(): Promise<void> {
     if (managerProfileIncomplete) {
       setComposerError(t("profileIncomplete"));
       return;
@@ -376,7 +399,7 @@ export function useConversationController({
     }
   }
 
-  async function createRoom() {
+  async function createRoom(): Promise<void> {
     if (!data || !roomTitle.trim()) {
       return;
     }
@@ -431,7 +454,7 @@ export function useConversationController({
     setShowInvite(true);
   }
 
-  async function inviteUsers() {
+  async function inviteUsers(): Promise<void> {
     if (!data || !activeConversation || inviteUserIDs.length === 0) {
       return;
     }
@@ -452,7 +475,7 @@ export function useConversationController({
     }
   }
 
-  async function deleteRoom(roomID) {
+  async function deleteRoom(roomID: string): Promise<void> {
     if (!data || !roomID) {
       return;
     }
@@ -487,7 +510,7 @@ export function useConversationController({
     }
   }
 
-  function applyMention(user) {
+  function applyMention(user: IMUser | null | undefined) {
     const editor = editorRef.current;
     const state = getComposerMentionState(editor);
     if (!state) {
@@ -499,7 +522,7 @@ export function useConversationController({
     syncComposerFromEditor();
   }
 
-  function onComposerKeyDown(event) {
+  function onComposerKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (
       isComposerKeyboardEventComposing(event) ||
       composerIsComposingRef.current ||
@@ -570,9 +593,9 @@ export function useConversationController({
     if (!editor || !activeConversationId) {
       return;
     }
-    const segments = parseComposerSegments(editor);
+    const segments = parseComposerSegments(editor) as ComposerSegment[];
     setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, segments));
-    setComposerMentionState(getComposerMentionState(editor));
+    setComposerMentionState(getComposerMentionState(editor) as ComposerMentionState | null);
   }
 
   function clearComposer() {

@@ -46,15 +46,33 @@ import {
   runtimeImageForKind,
   startAgentCreateProgress,
 } from "@/models/agents";
-import type { AgentLike, RuntimeKind } from "@/models/agents";
+import type {
+  AgentCreateProgressState,
+  AgentDraft,
+  AgentLike,
+  AgentProfileLike,
+  AgentTemplateLike,
+  RuntimeKind,
+} from "@/models/agents";
 import { isDirectConversation } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { useProfileModelOptions } from "./useProfileModelOptions";
+import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
+import type { IMConversation } from "@/models/conversations";
+import type { UseAgentControllerArgs } from "./types";
 
 type ManagerRebuildOptions = {
   image?: string;
   runtimeKind?: RuntimeKind;
+};
+
+type AgentModalMode = "create" | "edit";
+type AgentAction = "delete" | "recreate" | "start" | "stop";
+
+type AgentWithProfile = {
+  agent: AgentLike;
+  profile?: AgentProfileLike | null;
 };
 
 export function useAgentController({
@@ -80,26 +98,26 @@ export function useAgentController({
   setManagerProfileData,
   setSelectedHubTemplateId,
   t,
-}) {
-  const [profileDraft, setProfileDraft] = useState(null);
+}: UseAgentControllerArgs) {
+  const [profileDraft, setProfileDraft] = useState<AgentDraft | null>(null);
   const [profileError, setProfileError] = useState("");
   const [profileBusy, setProfileBusy] = useState(false);
   const [cliproxyAuthBusy, setCLIProxyAuthBusy] = useState("");
   const [agentsError, setAgentsError] = useState("");
   const [showAgentModal, setShowAgentModal] = useState(false);
   const [showManagerRebuildModal, setShowManagerRebuildModal] = useState(false);
-  const [managerRebuildRuntimeKind, setManagerRebuildRuntimeKind] = useState(DEFAULT_RUNTIME_KIND);
+  const [managerRebuildRuntimeKind, setManagerRebuildRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
   const [managerRebuildImage, setManagerRebuildImage] = useState("");
-  const [agentModalMode, setAgentModalMode] = useState("create");
-  const [editingAgent, setEditingAgent] = useState(null);
-  const [agentDraft, setAgentDraft] = useState(null);
+  const [agentModalMode, setAgentModalMode] = useState<AgentModalMode>("create");
+  const [editingAgent, setEditingAgent] = useState<AgentLike | null>(null);
+  const [agentDraft, setAgentDraft] = useState<AgentDraft | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
   const [agentError, setAgentError] = useState("");
-  const [agentProgress, setAgentProgress] = useState(null);
+  const [agentProgress, setAgentProgress] = useState<AgentCreateProgressState | null>(null);
   const [agentActionBusy, setAgentActionBusy] = useState("");
   const [messageActionBusy] = useState("");
-  const [messageActionError, setMessageActionError] = useState({ key: "", message: "" });
-  const [agentPageDraft, setAgentPageDraft] = useState(null);
+  const [messageActionError, setMessageActionError] = useState<MessageActionError>({ key: "", message: "" });
+  const [agentPageDraft, setAgentPageDraft] = useState<AgentDraft | null>(null);
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPageError, setAgentPageError] = useState("");
@@ -109,7 +127,7 @@ export function useAgentController({
   const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
   const managerAgent = agents.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
   const workerAgents = agents.filter((item) => item.id !== managerAgent?.id);
-  const agentItems = [managerAgent, ...workerAgents].filter(Boolean);
+  const agentItems = [managerAgent, ...workerAgents].filter((item): item is AgentLike => Boolean(item));
   const runningAgentCount = agentItems.filter(isAgentRunning).length;
   const selectedAgentForPage = useMemo(() => {
     if (activePane.type !== WorkspacePaneTypes.agent) {
@@ -246,7 +264,7 @@ export function useAgentController({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAgentForPage?.id]);
 
-  async function refreshManagerProfile() {
+  async function refreshManagerProfile(): Promise<void> {
     const profile = await refreshWorkspaceManagerProfile();
     if (!profile) {
       // The manager may not exist during the first bootstrap milliseconds.
@@ -258,7 +276,7 @@ export function useAgentController({
     });
   }
 
-  async function loginCLIProxyProvider(provider) {
+  async function loginCLIProxyProvider(provider: string | null | undefined): Promise<void> {
     const normalized = normalizeAuthProviderName(provider);
     if (!providerNeedsAuth(normalized) || cliproxyAuthBusy) {
       return;
@@ -284,7 +302,7 @@ export function useAgentController({
     }
   }
 
-  function openManagerRebuildModal(item = managerAgent) {
+  function openManagerRebuildModal(item: AgentLike | null | undefined = managerAgent) {
     const initialRuntimeKind = normalizeRuntimeKind(
       item?.runtime_kind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind || managerRebuildRuntimeKind,
     );
@@ -301,7 +319,7 @@ export function useAgentController({
     setShowManagerRebuildModal(true);
   }
 
-  async function requestManagerRebuild(options: ManagerRebuildOptions = {}) {
+  async function requestManagerRebuild(options: ManagerRebuildOptions = {}): Promise<void> {
     const runtimeKind = normalizeRuntimeKind(
       options.runtimeKind ||
         managerAgent?.runtime_kind ||
@@ -318,7 +336,7 @@ export function useAgentController({
     await refreshWorkspaceBootstrapConfig();
   }
 
-  async function rebuildManagerFromBrowser(options: ManagerRebuildOptions = {}) {
+  async function rebuildManagerFromBrowser(options: ManagerRebuildOptions = {}): Promise<boolean> {
     setAgentActionBusy(`${MANAGER_AGENT_ID}:recreate`);
     setAgentsError("");
     try {
@@ -332,7 +350,7 @@ export function useAgentController({
     }
   }
 
-  async function confirmManagerRebuild() {
+  async function confirmManagerRebuild(): Promise<void> {
     if (agentActionBusy) {
       return;
     }
@@ -347,7 +365,7 @@ export function useAgentController({
     }
   }
 
-  async function handleMessageAction(action, _message) {
+  async function handleMessageAction(action: MessageAction | null | undefined, _message?: MessageLike | null) {
     if (!action || action.id !== ACTION_REBUILD_MANAGER) {
       return;
     }
@@ -358,7 +376,7 @@ export function useAgentController({
     openManagerRebuildModal(managerAgent);
   }
 
-  async function saveManagerProfile() {
+  async function saveManagerProfile(): Promise<void> {
     if (!profileDraft) {
       return;
     }
@@ -388,12 +406,12 @@ export function useAgentController({
     }
   }
 
-  async function fetchAgentWithProfile(item) {
+  async function fetchAgentWithProfile(item: AgentLike | null | undefined): Promise<AgentWithProfile> {
     const id = String(item?.id ?? "").trim();
     if (!id) {
       return { agent: item || {}, profile: item?.agent_profile };
     }
-    let agent = item || {};
+    let agent: AgentLike = item || {};
     try {
       agent = { ...agent, ...(await fetchAgent(id)) };
     } catch (_) {
@@ -408,14 +426,14 @@ export function useAgentController({
     return { agent, profile };
   }
 
-  async function agentDraftFromItem(item) {
+  async function agentDraftFromItem(item: AgentLike): Promise<AgentDraft> {
     const { agent, profile } = await fetchAgentWithProfile(item);
     const base = agentToDraft({ ...agent, agent_profile: profile });
     const runtimeKind = normalizeRuntimeKind(agent?.runtime_kind || item?.runtime_kind || base.runtime_kind);
     return ensureNotifierPullSubscriptionDraft({ ...base, runtime_kind: runtimeKind || base.runtime_kind });
   }
 
-  async function openCreateAgentModal(template = undefined) {
+  async function openCreateAgentModal(template: AgentTemplateLike | null | undefined = undefined): Promise<void> {
     setAgentModalMode("create");
     setEditingAgent(null);
     setAgentError("");
@@ -457,7 +475,7 @@ export function useAgentController({
     }
   }
 
-  async function openEditAgentModal(item) {
+  async function openEditAgentModal(item: AgentLike): Promise<void> {
     setAgentModalMode("edit");
     setEditingAgent(item);
     setAgentError("");
@@ -472,7 +490,7 @@ export function useAgentController({
     }
   }
 
-  async function loadAgentPageDraft(item) {
+  async function loadAgentPageDraft(item: AgentLike | null | undefined): Promise<void> {
     if (!item?.id) {
       return;
     }
@@ -488,7 +506,7 @@ export function useAgentController({
     }
   }
 
-  async function saveAgentPage() {
+  async function saveAgentPage(): Promise<void> {
     if (!agentPageDraft || !selectedAgentForPage?.id) {
       return;
     }
@@ -524,7 +542,7 @@ export function useAgentController({
     }
   }
 
-  async function publishAgentPage() {
+  async function publishAgentPage(): Promise<void> {
     if (!selectedAgentForPage?.id || agentPagePublishBusy) {
       return;
     }
@@ -544,7 +562,7 @@ export function useAgentController({
     }
   }
 
-  async function saveAgent() {
+  async function saveAgent(): Promise<void> {
     if (!agentDraft) {
       return;
     }
@@ -607,7 +625,7 @@ export function useAgentController({
     }
   }
 
-  async function runAgentAction(item, action) {
+  async function runAgentAction(item: AgentLike | null | undefined, action: AgentAction): Promise<void> {
     if (!item?.id || agentActionBusy) {
       return;
     }
@@ -684,7 +702,11 @@ export function useAgentController({
     }
   }
 
-  function directConversationForUser(userID, roomList = rooms, currentUserID = data?.current_user_id) {
+  function directConversationForUser(
+    userID: string | null | undefined,
+    roomList: IMConversation[] = rooms,
+    currentUserID: string | null | undefined = data?.current_user_id,
+  ): IMConversation | null {
     if (!userID || !currentUserID) {
       return null;
     }
@@ -695,7 +717,7 @@ export function useAgentController({
     );
   }
 
-  async function openAgentDirectMessage(item) {
+  async function openAgentDirectMessage(item: AgentLike | null | undefined): Promise<void> {
     if (!item?.id || !data?.current_user_id) {
       return;
     }
@@ -768,10 +790,10 @@ export function useAgentController({
       onSave: saveAgentPage,
       onPublish: publishAgentPage,
       onProviderLogin: loginCLIProxyProvider,
-      onStart: (item) => runAgentAction(item, "start"),
-      onStop: (item) => runAgentAction(item, "stop"),
-      onRecreate: (item) => runAgentAction(item, "recreate"),
-      onDelete: (item) => runAgentAction(item, "delete"),
+      onStart: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),
+      onStop: (item: AgentLike | null | undefined) => runAgentAction(item, "stop"),
+      onRecreate: (item: AgentLike | null | undefined) => runAgentAction(item, "recreate"),
+      onDelete: (item: AgentLike | null | undefined) => runAgentAction(item, "delete"),
       onInvite: inviteAgentToRoom,
       onOpenDM: openAgentDirectMessage,
     },
@@ -781,7 +803,7 @@ export function useAgentController({
       activeAgentID: activePane.type === WorkspacePaneTypes.agent ? activePane.id : "",
       busyKey: agentActionBusy,
       onCreateAgent: openCreateAgentModal,
-      onStartAgent: (item) => runAgentAction(item, "start"),
+      onStartAgent: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),
     },
     agentProfileModalProps:
       showAgentModal && agentDraft

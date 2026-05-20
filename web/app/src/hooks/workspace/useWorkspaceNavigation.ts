@@ -1,21 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { DefaultWorkspacePaneIds, WorkspacePaneTypes, paneFromLocation, pathForPane } from "@/models/routing";
-import type { NavigateFunction, Location } from "react-router-dom";
-import type { IMConversation } from "@/models/conversations";
 import type { WorkspacePane } from "@/models/routing";
-
-export type NavigatePaneOptions = {
-  replace?: boolean;
-  rooms?: IMConversation[];
-};
-
-export type UseWorkspaceNavigationArgs = {
-  dataReady: boolean;
-  location: Location;
-  navigate: NavigateFunction;
-  rooms: IMConversation[];
-  setActiveConversationId: (id: string) => void;
-};
+import type { NavigatePaneOptions, UseWorkspaceNavigationArgs, WorkspaceNavigationController } from "./types";
 
 export function useWorkspaceNavigation({
   location,
@@ -23,7 +9,7 @@ export function useWorkspaceNavigation({
   dataReady,
   setActiveConversationId,
   rooms,
-}: UseWorkspaceNavigationArgs) {
+}: UseWorkspaceNavigationArgs): WorkspaceNavigationController {
   const navigatePane = useCallback(
     (pane: WorkspacePane, roomList = rooms, options: NavigatePaneOptions = {}) => {
       const nextPath = pathForPane(pane, roomList);

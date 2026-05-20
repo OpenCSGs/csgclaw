@@ -11,6 +11,7 @@ import { useUpgradeController } from "./useUpgradeController";
 import { useAgentController } from "./useAgentController";
 import { useConversationController } from "./useConversationController";
 import { useProfilePreviewController } from "./useProfilePreviewController";
+import type { HubTemplate } from "@/models/hubWorkspace";
 
 export function useWorkspaceController() {
   const location = useLocation();
@@ -158,7 +159,7 @@ export function useWorkspaceController() {
     usersById: conversation.usersById,
   });
 
-  function selectHubTemplate(item) {
+  function selectHubTemplate(item: HubTemplate | null | undefined) {
     if (!item?.id) {
       selectHub();
       return;

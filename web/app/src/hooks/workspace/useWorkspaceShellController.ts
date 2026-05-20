@@ -9,6 +9,7 @@ import {
 } from "@/shared/storage/keys";
 import { WorkspacePaneTypes, WorkspaceTabs, workspaceTabForPane } from "@/models/routing";
 import type { WorkspaceTab } from "@/models/routing";
+import type { UseWorkspaceShellControllerArgs, WorkspaceShellController } from "./types";
 
 export function useWorkspaceShellController({
   activeConversationId,
@@ -25,7 +26,7 @@ export function useWorkspaceShellController({
   t,
   theme,
   workspaceTab,
-}) {
+}: UseWorkspaceShellControllerArgs): WorkspaceShellController {
   const currentWorkspaceLabel =
     activePane.type === WorkspacePaneTypes.agent
       ? t("agentOverview")
@@ -40,8 +41,9 @@ export function useWorkspaceShellController({
   );
 
   useEffect(() => {
+    const messageLocale = locale === "zh" ? "zh" : "en";
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-    document.title = messages[locale].pageTitle;
+    document.title = messages[messageLocale].pageTitle;
     window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
   }, [locale]);
 
@@ -80,7 +82,7 @@ export function useWorkspaceShellController({
     navigatePane({ type: WorkspacePaneTypes.conversation, id: "" });
   }
 
-  function toggleWorkspaceGroup(id) {
+  function toggleWorkspaceGroup(id: string) {
     setCollapsedWorkspaceGroups((current) => ({
       ...current,
       [id]: !current[id],

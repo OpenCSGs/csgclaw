@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchAgents, fetchManagerProfile } from "@/api/agents";
+import type { FetchAgentsOptions } from "@/api/agents";
+import type { FetchVersionOptions } from "@/api/app";
 import {
   fetchWorkspaceAppVersion,
   fetchWorkspaceBootstrapConfig,
@@ -16,6 +18,11 @@ import {
   workspaceQueryKeys,
 } from "./workspaceQueries";
 import { fetchHubTemplates } from "@/api/hub";
+import type { AgentLike, AgentProfileLike } from "@/models/agents";
+import type { IMData } from "@/models/conversations";
+import type { HubTemplate } from "@/models/hubWorkspace";
+import type { UpgradeStatus } from "@/models/upgradeStatus";
+import type { WorkspaceQueryData } from "./types";
 
 export function useWorkspaceData() {
   const queryClient = useQueryClient();
@@ -28,8 +35,8 @@ export function useWorkspaceData() {
   const upgradeStatusQuery = useWorkspaceUpgradeStatusQuery();
 
   const setBootstrapData = useCallback(
-    (value) => {
-      queryClient.setQueryData(workspaceQueryKeys.bootstrap(), (current) =>
+    (value: WorkspaceQueryData<IMData | null>) => {
+      queryClient.setQueryData<IMData | null>(workspaceQueryKeys.bootstrap(), (current) =>
         typeof value === "function" ? value(current ?? null) : value,
       );
     },
@@ -37,8 +44,8 @@ export function useWorkspaceData() {
   );
 
   const setManagerProfileData = useCallback(
-    (value) => {
-      queryClient.setQueryData(workspaceQueryKeys.managerProfile(), (current) =>
+    (value: WorkspaceQueryData<AgentProfileLike | null>) => {
+      queryClient.setQueryData<AgentProfileLike | null>(workspaceQueryKeys.managerProfile(), (current) =>
         typeof value === "function" ? value(current ?? null) : value,
       );
     },
@@ -46,8 +53,8 @@ export function useWorkspaceData() {
   );
 
   const setAgentsData = useCallback(
-    (value) => {
-      queryClient.setQueryData(workspaceQueryKeys.agents(), (current) =>
+    (value: WorkspaceQueryData<AgentLike[]>) => {
+      queryClient.setQueryData<AgentLike[]>(workspaceQueryKeys.agents(), (current) =>
         typeof value === "function" ? value(current ?? []) : value,
       );
     },
@@ -55,8 +62,8 @@ export function useWorkspaceData() {
   );
 
   const setHubTemplatesData = useCallback(
-    (value) => {
-      queryClient.setQueryData(workspaceQueryKeys.hubTemplates(), (current) =>
+    (value: WorkspaceQueryData<HubTemplate[]>) => {
+      queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) =>
         typeof value === "function" ? value(current ?? []) : value,
       );
     },
@@ -64,8 +71,8 @@ export function useWorkspaceData() {
   );
 
   const setAppVersionData = useCallback(
-    (value) => {
-      queryClient.setQueryData(workspaceQueryKeys.appVersion(), (current) =>
+    (value: WorkspaceQueryData<string>) => {
+      queryClient.setQueryData<string>(workspaceQueryKeys.appVersion(), (current) =>
         typeof value === "function" ? value(current ?? "dev") : value,
       );
     },
@@ -73,8 +80,8 @@ export function useWorkspaceData() {
   );
 
   const setUpgradeStatusData = useCallback(
-    (value) => {
-      queryClient.setQueryData(workspaceQueryKeys.upgradeStatus(), (current) =>
+    (value: WorkspaceQueryData<UpgradeStatus | null>) => {
+      queryClient.setQueryData<UpgradeStatus | null>(workspaceQueryKeys.upgradeStatus(), (current) =>
         typeof value === "function" ? value(current ?? null) : value,
       );
     },
@@ -113,7 +120,7 @@ export function useWorkspaceData() {
   }, [setUpgradeStatusData]);
 
   const refreshWorkspaceAppVersion = useCallback(
-    async (options = {}) => {
+    async (options: FetchVersionOptions = {}) => {
       const version = await fetchWorkspaceAppVersion(options);
       setAppVersionData(version);
       return version;
@@ -132,7 +139,7 @@ export function useWorkspaceData() {
   }, [setManagerProfileData]);
 
   const refreshWorkspaceAgents = useCallback(
-    async (options = {}) => {
+    async (options: FetchAgentsOptions = {}) => {
       const agents = await fetchAgents(options);
       setAgentsData(agents);
       return agents;

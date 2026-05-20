@@ -44,6 +44,7 @@ export type AgentLike = AgentProfileLike & {
   agent_profile?: AgentProfileLike | null;
   default_image?: string | null;
   from_template?: string | null;
+  handle?: string | null;
   id?: string | null;
   image?: string | null;
   name?: string | null;
