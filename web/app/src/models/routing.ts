@@ -60,7 +60,6 @@ export type WorkspacePane = {
   id?: string;
 };
 
-export type BrowserPathSyncMode = "push" | "replace";
 export type CollapsedWorkspaceGroups = Record<string, boolean>;
 
 export function paneFromLocation(pathname = window.location.pathname): WorkspacePane {
@@ -108,23 +107,6 @@ export function pathForPane(
     return `${prefix}${encodeURIComponent(pane.id)}`;
   }
   return "/";
-}
-
-export function syncBrowserPath(
-  pane: WorkspacePane | null | undefined,
-  rooms: readonly IMConversation[],
-  mode: BrowserPathSyncMode = "push",
-): void {
-  const nextPath = pathForPane(pane, rooms);
-  if (!nextPath || window.location.pathname === nextPath) {
-    return;
-  }
-  const state = { pane };
-  if (mode === "replace") {
-    window.history.replaceState(state, "", nextPath);
-    return;
-  }
-  window.history.pushState(state, "", nextPath);
 }
 
 export function decodePathSegment(value: string): string {

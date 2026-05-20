@@ -97,8 +97,14 @@ import { useProfileModelOptions } from "./useProfileModelOptions";
 import { useWorkspaceData } from "./useWorkspaceData";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
-import { DefaultWorkspacePaneIds, WorkspacePaneTypes } from "@/models/routing";
-import type { WorkspacePane } from "@/models/routing";
+import {
+  DefaultWorkspacePaneIds,
+  WorkspacePaneTypes,
+  WorkspaceTabs,
+  paneFromLocation,
+  workspaceTabForPane,
+} from "@/models/routing";
+import type { WorkspaceTab } from "@/models/routing";
 
 type OpenCreateRoomOptions = {
   description?: string;
@@ -123,14 +129,10 @@ export function useWorkspaceController() {
   const setShowToolCalls = useWorkspaceUiStore((state) => state.setShowToolCalls);
   const isSidebarCollapsed = useWorkspaceUiStore((state) => state.isSidebarCollapsed);
   const setIsSidebarCollapsed = useWorkspaceUiStore((state) => state.setIsSidebarCollapsed);
-  const workspaceTab = useWorkspaceUiStore((state) => state.workspaceTab);
-  const setWorkspaceTab = useWorkspaceUiStore((state) => state.setWorkspaceTab);
   const collapsedWorkspaceGroups = useWorkspaceUiStore((state) => state.collapsedWorkspaceGroups);
   const setCollapsedWorkspaceGroups = useWorkspaceUiStore((state) => state.setCollapsedWorkspaceGroups);
   const activeConversationId = useWorkspaceUiStore((state) => state.activeConversationId);
   const setActiveConversationId = useWorkspaceUiStore((state) => state.setActiveConversationId);
-  const activePane = useWorkspaceUiStore((state) => state.activePane);
-  const setActivePane = useWorkspaceUiStore((state) => state.setActivePane);
   const {
     bootstrapQuery,
     agentsQuery,
@@ -212,6 +214,8 @@ export function useWorkspaceController() {
   const shouldAutoScrollRef = useRef(true);
   const autoScrollConversationRef = useRef(activeConversationId);
   const t = useMemo(() => createTranslator(locale), [locale]);
+  const activePane = useMemo(() => paneFromLocation(location.pathname), [location.pathname]);
+  const workspaceTab = useMemo(() => workspaceTabForPane(activePane), [activePane]);
   const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
   const hub = useWorkspaceHubSelection({
     templates: hubTemplates,
@@ -375,11 +379,7 @@ export function useWorkspaceController() {
     location,
     navigate,
     dataReady: Boolean(data),
-    activePane,
-    setActivePane,
-    activeConversationId,
     setActiveConversationId,
-    setWorkspaceTab,
     setShowMemberList,
     setShowChannelTools,
     rooms,
@@ -566,33 +566,47 @@ export function useWorkspaceController() {
     if (!data) {
       return;
     }
+    const fallbackConversationId = data.rooms[0]?.id ?? "";
     if (!activeConversationId) {
-      if (data.rooms.length > 0) {
-        setActiveConversationId(data.rooms[0].id);
-        if (!activePane.id) {
-          const next: WorkspacePane = { type: WorkspacePaneTypes.conversation, id: data.rooms[0].id };
-          setActivePane(next);
-          navigatePane(next, data.rooms, { replace: true });
+      if (fallbackConversationId) {
+        setActiveConversationId(fallbackConversationId);
+        if (activePane.type === WorkspacePaneTypes.conversation && !activePane.id) {
+          navigatePane({ type: WorkspacePaneTypes.conversation, id: fallbackConversationId }, data.rooms, {
+            replace: true,
+          });
         }
-      } else {
-        if (!activePane.id) {
-          const next: WorkspacePane = { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
-          setActivePane(next);
-          navigatePane(next, data.rooms, { replace: true });
-        }
+      } else if (activePane.type === WorkspacePaneTypes.conversation && !activePane.id) {
+        navigatePane({ type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer }, data.rooms, {
+          replace: true,
+        });
       }
       return;
     }
     if (!data.rooms.some((room) => room.id === activeConversationId)) {
-      const nextID = data.rooms[0]?.id ?? "";
+      const nextID = fallbackConversationId;
       if (nextID) {
-        selectConversation(nextID, { replace: true });
-      } else {
+        if (activePane.type === WorkspacePaneTypes.conversation) {
+          selectConversation(nextID, { replace: true });
+        } else {
+          setActiveConversationId(nextID);
+        }
+      } else if (activePane.type === WorkspacePaneTypes.conversation) {
         setActiveConversationId("");
         selectComputer({ replace: true });
+      } else {
+        setActiveConversationId("");
       }
     }
-  }, [data, activeConversationId, activePane.id]);
+  }, [
+    data,
+    activeConversationId,
+    activePane.id,
+    activePane.type,
+    navigatePane,
+    selectComputer,
+    selectConversation,
+    setActiveConversationId,
+  ]);
 
   useEffect(() => {
     if (!activePane || activePane.type !== WorkspacePaneTypes.agent) {
@@ -608,7 +622,7 @@ export function useWorkspaceController() {
         selectComputer({ replace: true });
       }
     }
-  }, [agents, agentsLoaded, activePane, activeConversationId]);
+  }, [agents, agentsLoaded, activePane, activeConversationId, selectComputer, selectConversation]);
 
   useEffect(() => {
     if (!selectedAgentForPage) {
@@ -852,6 +866,28 @@ export function useWorkspaceController() {
     }
     setSelectedHubTemplateId(item.id);
     selectHub();
+  }
+
+  function selectWorkspaceTab(tab: WorkspaceTab) {
+    if (tab === workspaceTab) {
+      return;
+    }
+    if (tab === WorkspaceTabs.hub) {
+      selectHub();
+      return;
+    }
+    if (tab === WorkspaceTabs.agents) {
+      selectComputer();
+      return;
+    }
+    const nextID = activeConversationId || rooms[0]?.id || "";
+    if (nextID) {
+      selectConversation(nextID);
+      return;
+    }
+    setShowMemberList(false);
+    setShowChannelTools(false);
+    navigatePane({ type: WorkspacePaneTypes.conversation, id: "" });
   }
 
   function toggleWorkspaceGroup(id) {
@@ -1685,7 +1721,7 @@ export function useWorkspaceController() {
       runningAgentCount,
       agentItems,
       workspaceTab,
-      onWorkspaceTabChange: setWorkspaceTab,
+      onWorkspaceTabChange: selectWorkspaceTab,
       roomCount,
       channels,
       directMessages,

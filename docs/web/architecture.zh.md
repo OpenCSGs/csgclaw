@@ -138,6 +138,56 @@
   +--------------------------------------------------------------------------------------------+
 
 
+  Router-first 工作区导航
+  ----------------------------------------------------------------------------------------------
+
+  工作区 pane 和 sidebar tab 都从 URL 推导。React Router 拥有 route location；
+  Zustand 只保留非路由工作区状态。
+
+  用户点击
+      |
+      v
+  selectConversation / selectAgent / selectComputer / selectHub / selectWorkspaceTab
+      |
+      v
+  pathForPane(pane, rooms)
+      |
+      v
+  React Router navigate(canonicalPath)
+      |
+      v
+  useLocation().pathname 变化
+      |
+      v
+  paneFromLocation(pathname)
+      |
+      +------------------------------+
+      |                              |
+      v                              v
+  activePane 派生值             workspaceTabForPane(activePane)
+      |                              |
+      v                              v
+  嵌套路由页面                   Sidebar active tab / tab panel
+
+  pathname 变化后可以运行辅助 effect:
+
+    pathname changed
+      -> conversation route 更新 activeConversationId
+      -> 关闭 member/channel tools 等临时 UI
+      -> 用 navigate(..., replace: true) 规范化 route alias
+
+  不要把这些派生值复制到其它 store:
+
+    URL / Router location  ---->  activePane  ---->  workspaceTab
+            |                         |                 |
+            +-------------------------+-----------------+
+                              唯一来源
+
+    workspaceUiStore 保留:
+      locale、theme、sidebar collapsed、collapsed groups、
+      activeConversationId、hub selection、composer/UI flags
+
+
   数据流
   ----------------------------------------------------------------------------------------------
 

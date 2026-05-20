@@ -147,6 +147,16 @@ src/pages/WorkspacePage/components/
 - 只有多个远距离模块都需要读写时，才引入共享状态。
 - 不要把 fetch、数据归一化和渲染逻辑都混在一个大组件里；可以清晰拆分时就拆出去。
 
+## 工作区路由维护
+
+- URL 是工作区导航面向用户的契约。每个可直接打开的 pane 都需要规范路由，以保证 deep link 和浏览器前进后退可用。
+- 当前 pane 通过 `paneFromLocation(useLocation().pathname)` 读取，可见 workspace tab 通过 `workspaceTabForPane` 推导。
+- 用户选择 conversation、agent、computer、hub 或 workspace tab 时，通过 `pathForPane` 构造目标路径，再使用 React Router 导航。
+- 路由解析和路径构建放在 `src/models/routing.ts`。路由声明放在 `src/routes/`，页面行为留在 `WorkspacePage` 附近。
+- Zustand 只保存不属于 URL 的辅助 UI 状态，例如偏好设置、折叠分组、hub 选择、composer 状态和临时 UI flags。
+- 路由变化相关 effect 应保持显式且范围有限，只处理辅助状态，例如更新 `activeConversationId`、关闭临时工具，或把 route alias 替换为规范路径。
+- 新增或重命名工作区 pane 时，同步更新路由声明、`src/models/routing.ts`、tab 推导、sidebar 选择行为、路由测试和架构图。
+
 ## 数据流
 
 - 把 `src/api/` 当作传输边界。API 模块负责 endpoint path、请求 payload、响应类型、底层错误映射，以及与 OpenAPI/server 返回形态的兼容；不要在这里承载 React 状态、渲染决策或页面专属默认值。

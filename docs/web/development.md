@@ -147,6 +147,16 @@ src/pages/WorkspacePage/components/
 - Add shared state only when state must be read or updated by multiple distant modules.
 - Do not mix fetch calls, normalization, and rendering logic in one large component when the logic can be cleanly separated.
 
+## Workspace Routing Maintenance
+
+- Use the URL as the user-facing contract for workspace navigation. Each addressable pane needs a canonical route so deep links and browser back/forward keep working.
+- Read the current pane from `paneFromLocation(useLocation().pathname)` and derive the visible workspace tab with `workspaceTabForPane`.
+- When a user selects a conversation, agent, computer, hub, or workspace tab, build the destination with `pathForPane` and navigate through React Router.
+- Keep route parsing and path building in `src/models/routing.ts`. Keep route declarations in `src/routes/`, and keep page behavior near `WorkspacePage`.
+- Use Zustand only for supporting UI state that is not part of the URL, such as preferences, collapsed groups, hub selection, composer state, and transient UI flags.
+- Route-change effects should stay explicit and limited to supporting state, such as updating `activeConversationId`, closing transient tools, or replacing route aliases with canonical paths.
+- When adding or renaming a workspace pane, update route declarations, `src/models/routing.ts`, tab derivation, sidebar selection behavior, routing tests, and the architecture diagram together.
+
 ## Data Flow
 
 - Treat `src/api/` as the transport boundary. API modules should own endpoint paths, request payloads, response types, low-level error mapping, and OpenAPI/server shape compatibility. They should not own React state, rendering decisions, or page-specific defaults.

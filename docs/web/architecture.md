@@ -138,6 +138,56 @@ Chinese companion: `architecture.zh.md`.
   +--------------------------------------------------------------------------------------------+
 
 
+  Router-First Workspace Navigation
+  ----------------------------------------------------------------------------------------------
+
+  Workspace pane and sidebar tab selection are derived from the URL. React Router owns the route
+  location; Zustand keeps only non-route workspace state.
+
+  User click
+      |
+      v
+  selectConversation / selectAgent / selectComputer / selectHub / selectWorkspaceTab
+      |
+      v
+  pathForPane(pane, rooms)
+      |
+      v
+  React Router navigate(canonicalPath)
+      |
+      v
+  useLocation().pathname changes
+      |
+      v
+  paneFromLocation(pathname)
+      |
+      +------------------------------+
+      |                              |
+      v                              v
+  activePane derived value      workspaceTabForPane(activePane)
+      |                              |
+      v                              v
+  Nested route page             Sidebar active tab / tab panel
+
+  Supporting effects may run after pathname changes:
+
+    pathname changed
+      -> update activeConversationId for conversation routes
+      -> close transient member/channel tool UI
+      -> normalize route aliases with navigate(..., replace: true)
+
+  Do not copy these derived values into another store:
+
+    URL / Router location  ---->  activePane  ---->  workspaceTab
+            |                         |                 |
+            +-------------------------+-----------------+
+                         single source of truth
+
+    workspaceUiStore keeps:
+      locale, theme, sidebar collapsed state, collapsed groups,
+      activeConversationId, hub selection, composer/UI flags
+
+
   Data Flow
   ----------------------------------------------------------------------------------------------
 
