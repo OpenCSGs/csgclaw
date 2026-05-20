@@ -888,6 +888,7 @@ export function useAgentController({
             t,
             agentModalMode,
             agentCreateBotKind,
+            onAgentCreateBotKindChange: setAgentCreateBotKind,
             editingAgent,
             agentDraft,
             onAgentDraftChange: setAgentDraft,
