@@ -1,5 +1,20 @@
 ARG GO_IMAGE=golang:1.26.2-alpine
+ARG NODE_IMAGE=node:22.13.0-alpine
+ARG PNPM_VERSION=11.1.3
 ARG RUNTIME_IMAGE=alpine:3.23
+
+FROM ${NODE_IMAGE} AS web
+
+WORKDIR /src/web/app
+
+ARG PNPM_VERSION
+RUN npm install -g pnpm@${PNPM_VERSION}
+
+COPY web/app/package.json web/app/pnpm-lock.yaml web/app/.npmrc ./
+RUN pnpm install --frozen-lockfile
+
+COPY web/app ./
+RUN pnpm build && test -f ../static-dist/index.html
 
 FROM ${GO_IMAGE} AS build
 
@@ -11,6 +26,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+COPY --from=web /src/web/static-dist ./web/static-dist
 
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64

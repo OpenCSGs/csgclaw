@@ -9,3 +9,7 @@ dist
 manager-data
 tmp
 *.log
+third_party
+web/app/node_modules
+web/app/coverage
+web/static-dist
