@@ -49,6 +49,9 @@ func TestNotificationBotsCRUDAndListBotsFilter(t *testing.T) {
 	if created.Type != bot.BotTypeNotification {
 		t.Fatalf("created.Type = %q, want %q", created.Type, bot.BotTypeNotification)
 	}
+	if created.ID != "n-notify-1" {
+		t.Fatalf("created.ID = %q, want n-notify-1", created.ID)
+	}
 	if created.AgentID != "" {
 		t.Fatalf("created.AgentID = %q, want empty", created.AgentID)
 	}

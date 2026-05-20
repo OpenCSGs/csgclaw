@@ -11,6 +11,8 @@ import (
 const (
 	BotTypeNormal       = "normal"
 	BotTypeNotification = "notification"
+	// NotificationBotIDPrefix separates notification bot ids from worker agent ids (u-{name}).
+	NotificationBotIDPrefix = "n-"
 )
 
 type Role string

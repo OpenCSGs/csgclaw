@@ -244,7 +244,7 @@ func (s *Supervisor) pullBot(ctx context.Context, b bot.Bot, cfg notification_bo
 	if s.Log != nil {
 		switch {
 		case len(msgs) == 0:
-			s.Log.Info("notification pull ok", "bot_id", b.ID, "messages", 0)
+			s.Log.Debug("notification pull ok", "bot_id", b.ID, "messages", 0)
 		case delivered > 0:
 			s.Log.Info("notification pull delivered", "bot_id", b.ID, "messages", delivered, "acked", len(ackIDs))
 		case len(msgs) > 0 && delivered == 0:

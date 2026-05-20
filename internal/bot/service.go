@@ -333,6 +333,16 @@ func (s *Service) deleteBackingAgent(ctx context.Context, target Bot) (bool, err
 }
 
 func (s *Service) deleteChannelUser(target Bot) (bool, error) {
+	if IsNotificationBot(target) {
+		botID := strings.TrimSpace(target.ID)
+		userID := strings.TrimSpace(target.UserID)
+		if userID != "" && botID != "" && userID != botID {
+			return false, nil
+		}
+	}
+	if s.channelUserStillReferenced(target) {
+		return false, nil
+	}
 	userID := strings.TrimSpace(target.UserID)
 	if userID == "" {
 		return false, nil
@@ -367,6 +377,44 @@ func (s *Service) deleteChannelUser(target Bot) (bool, error) {
 func sameChannelBot(a, b Bot) bool {
 	return strings.TrimSpace(a.Channel) == strings.TrimSpace(b.Channel) &&
 		strings.TrimSpace(a.ID) == strings.TrimSpace(b.ID)
+}
+
+func (s *Service) channelUserStillReferenced(target Bot) bool {
+	if s == nil {
+		return false
+	}
+	userID := strings.TrimSpace(target.UserID)
+	if userID == "" {
+		userID = strings.TrimSpace(target.ID)
+	}
+	if userID == "" {
+		return false
+	}
+	if s.agents != nil {
+		if _, ok := s.agents.Agent(userID); ok {
+			return true
+		}
+		if botID := strings.TrimSpace(target.ID); botID != "" && botID != userID {
+			if _, ok := s.agents.Agent(botID); ok {
+				return true
+			}
+		}
+	}
+	if s.store == nil {
+		return false
+	}
+	for _, b := range s.store.List() {
+		if sameChannelBot(target, b) {
+			continue
+		}
+		if strings.TrimSpace(b.UserID) == userID {
+			return true
+		}
+		if !IsNotificationBot(b) && strings.TrimSpace(b.AgentID) == userID {
+			return true
+		}
+	}
+	return false
 }
 
 func isNotFoundError(err error) bool {

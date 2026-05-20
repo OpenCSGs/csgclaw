@@ -91,10 +91,8 @@ func (s *Service) CreateNotificationBot(ctx context.Context, req CreateRequest) 
 		return Bot{}, fmt.Errorf("bot name %q already exists in channel %q with id %q", normalized.Name, normalized.Channel, existing.ID)
 	}
 	botID := notificationBotID(normalized)
-	if _, ok, err := s.store.GetByChannelID(normalized.Channel, botID); err != nil {
+	if err := s.validateNotificationBotID(normalized.Channel, botID); err != nil {
 		return Bot{}, err
-	} else if ok {
-		return Bot{}, fmt.Errorf("bot id %q already exists", botID)
 	}
 
 	userID, userCreatedAt, err := s.ensureChannelUserForBot(ctx, normalized.Channel, channelBotIdentity{
@@ -174,7 +172,47 @@ func notificationBotID(req CreateRequest) string {
 	if id := strings.TrimSpace(req.ID); id != "" {
 		return id
 	}
-	return fmt.Sprintf("u-%s", strings.TrimSpace(req.Name))
+	return NotificationBotIDPrefix + strings.TrimSpace(req.Name)
+}
+
+func (s *Service) validateNotificationBotID(channel, botID string) error {
+	if s == nil || s.store == nil {
+		return fmt.Errorf("bot store is required")
+	}
+	botID = strings.TrimSpace(botID)
+	if botID == "" {
+		return fmt.Errorf("bot id is required")
+	}
+	if _, ok, err := s.store.GetByChannelID(channel, botID); err != nil {
+		return err
+	} else if ok {
+		return fmt.Errorf("bot id %q already exists", botID)
+	}
+	if s.agents != nil {
+		if a, ok := s.agents.Agent(botID); ok {
+			return fmt.Errorf("bot id %q conflicts with existing agent %q (role %q)", botID, a.ID, a.Role)
+		}
+	}
+	for _, b := range s.store.List() {
+		if b.Channel != channel {
+			continue
+		}
+		if IsNotificationBot(b) {
+			continue
+		}
+		if strings.TrimSpace(b.ID) == botID || strings.TrimSpace(b.AgentID) == botID {
+			return fmt.Errorf("bot id %q conflicts with existing channel bot %q", botID, b.ID)
+		}
+	}
+	return nil
+}
+
+// BotByChannelID returns the stored bot record without API redaction.
+func (s *Service) BotByChannelID(channel, id string) (Bot, bool, error) {
+	if s == nil || s.store == nil {
+		return Bot{}, false, fmt.Errorf("bot store is required")
+	}
+	return s.store.GetByChannelID(channel, id)
 }
 
 type channelBotIdentity struct {
@@ -190,7 +228,7 @@ func (s *Service) ensureChannelUserForBot(ctx context.Context, channelName strin
 	if handle == "" {
 		if h, ok := sanitizeHandle(strings.ToLower(strings.ReplaceAll(strings.TrimSpace(identity.Name), " ", "-"))); ok {
 			handle = h
-		} else if h, ok := sanitizeHandle(strings.ToLower(strings.TrimPrefix(strings.TrimSpace(identity.ID), "u-"))); ok {
+		} else if h, ok := notificationBotHandleFromID(identity.ID); ok {
 			handle = h
 		} else {
 			handle = "notification"
@@ -215,4 +253,14 @@ func (s *Service) ensureChannelUserForBot(ctx context.Context, channelName strin
 	default:
 		return "", time.Time{}, fmt.Errorf("notification bots are only supported on channel %q", ChannelCSGClaw)
 	}
+}
+
+func notificationBotHandleFromID(id string) (string, bool) {
+	stem := strings.TrimSpace(id)
+	for _, prefix := range []string{NotificationBotIDPrefix, "u-"} {
+		if h, ok := sanitizeHandle(strings.ToLower(strings.TrimPrefix(stem, prefix))); ok {
+			return h, true
+		}
+	}
+	return "", false
 }

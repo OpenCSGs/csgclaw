@@ -16,35 +16,35 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/bot"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
+	"csgclaw/internal/channel/csgclaw/notification_bot"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
-	"csgclaw/internal/channel/csgclaw/notification_bot"
 	"csgclaw/internal/upgrade"
 	"csgclaw/internal/utils"
 	"csgclaw/internal/version"
 )
 
 type Handler struct {
-	svc               *agent.Service
-	botSvc            *bot.Service
-	im                *im.Service
-	csgclaw           *csgclawchannel.Service
-	imBus             *im.Bus
-	imProvisioner     *im.Provisioner
-	botBridge         *im.BotBridge
-	feishu            *feishu.Service
-	llm               *llm.Service
-	hub               *hub.Service
-	configPath        string
-	serverAccessToken string
-	serverNoAuth      bool
-	upgradeManager       *upgrade.Manager
-	upgradeConfigPath    string
-	upgradeApply         func(upgrade.ApplyHelperOptions) error
-	notificationDeliver  notification_bot.Fanouter
+	svc                 *agent.Service
+	botSvc              *bot.Service
+	im                  *im.Service
+	csgclaw             *csgclawchannel.Service
+	imBus               *im.Bus
+	imProvisioner       *im.Provisioner
+	botBridge           *im.BotBridge
+	feishu              *feishu.Service
+	llm                 *llm.Service
+	hub                 *hub.Service
+	configPath          string
+	serverAccessToken   string
+	serverNoAuth        bool
+	upgradeManager      *upgrade.Manager
+	upgradeConfigPath   string
+	upgradeApply        func(upgrade.ApplyHelperOptions) error
+	notificationDeliver notification_bot.Fanouter
 }
 
 const (
@@ -460,6 +460,23 @@ func (h *Handler) handleBotByID(w http.ResponseWriter, r *http.Request) {
 	}
 	channelName := botChannelName(r)
 
+	stored, found, err := h.botSvc.BotByChannelID(channelName, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet, http.MethodPatch:
+		if !bot.IsNotificationBot(stored) {
+			http.Error(w, "method not allowed for this bot type", http.StatusMethodNotAllowed)
+			return
+		}
+	}
 	switch r.Method {
 	case http.MethodGet:
 		b, err := h.botSvc.GetNotificationBot(channelName, id)
