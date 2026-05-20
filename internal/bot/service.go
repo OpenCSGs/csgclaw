@@ -85,6 +85,9 @@ func (s *Service) List(channel, role string) ([]Bot, error) {
 
 	filtered := make([]Bot, 0, len(all))
 	for _, b := range all {
+		if IsNotificationBot(b) {
+			continue
+		}
 		if normalizedChannel != "" && b.Channel != normalizedChannel {
 			continue
 		}
@@ -110,6 +113,10 @@ func (s *Service) refreshBotAvailability(bots []Bot) []Bot {
 	}
 	refreshed := make([]Bot, 0, len(bots))
 	for _, b := range bots {
+		if IsNotificationBot(b) {
+			refreshed = append(refreshed, s.presentNotificationBot(b))
+			continue
+		}
 		agentID := strings.TrimSpace(b.AgentID)
 		b.Available = false
 		if agentID != "" {
@@ -289,6 +296,9 @@ func (s *Service) deletionTarget(ctx context.Context, channel, id string, stored
 }
 
 func (s *Service) deleteBackingAgent(ctx context.Context, target Bot) (bool, error) {
+	if IsNotificationBot(target) {
+		return false, nil
+	}
 	if s == nil || s.agents == nil {
 		return false, nil
 	}
@@ -598,13 +608,6 @@ func (s *Service) ensureChannelUser(ctx context.Context, channelName string, cre
 }
 
 func deriveAgentHandle(a agent.Agent) string {
-	if strings.EqualFold(strings.TrimSpace(a.Role), agent.RoleWorker) &&
-		strings.EqualFold(strings.TrimSpace(a.RuntimeKind), agent.RuntimeKindNotifier) {
-		if handle, ok := sanitizeHandle(strings.ToLower(strings.ReplaceAll(strings.TrimSpace(a.Name), " ", "-"))); ok {
-			return handle
-		}
-		return "notifier"
-	}
 	if handle, ok := sanitizeHandle(strings.ToLower(strings.ReplaceAll(strings.TrimSpace(a.Name), " ", "-"))); ok {
 		return handle
 	}

@@ -10,9 +10,7 @@ import (
 const (
 	KindPicoClawSandbox = "picoclaw_sandbox"
 	KindOpenClawSandbox = "openclaw_sandbox"
-	KindCodex           = "codex"
-	// KindNotifier is an in-process worker: no sandbox, IM delivery only (agent.runtime_options).
-	KindNotifier = "notifier"
+	KindCodex = "codex"
 )
 
 // Runtime owns the lightweight execution lifecycle for an agent runtime.

@@ -4,10 +4,12 @@ import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
 import {
   createBotRequest,
   createManagerAgentRequest,
+  createNotificationBotRequest,
   deleteBotRequest,
   fetchAgent,
   fetchAgentProfile,
   fetchAgentProfileDefaults,
+  patchNotificationBotRequest,
   runAgentActionRequest,
   saveManagerProfileRequest,
   updateAgentRequest,
@@ -16,6 +18,10 @@ import type { AgentUpdatePayload, FetchAgentsOptions } from "@/api/agents";
 import { publishAgentTemplateRequest } from "@/api/hub";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
 import {
+  BOT_CREATE_KIND_NOTIFICATION,
+  BOT_CREATE_KIND_WORKER,
+  BOT_TYPE_NORMAL,
+  BOT_TYPE_NOTIFICATION,
   DEFAULT_RUNTIME_KIND,
   MANAGER_AGENT_ID,
   MANAGER_AGENT_ROLE,
@@ -35,14 +41,18 @@ import {
   ensureNotifierPullSubscriptionDraft,
   isAgentRunning,
   isManagerAgent,
+  isNotificationBotAgent,
+  isNotificationBotDraftContext,
   isNotifierRuntimeDraft,
   isNotifierRuntimeDraftOnAgentPage,
   normalizeAuthProviderName,
+  partitionWorkspaceAgentItems,
   normalizeRuntimeKind,
   normalizeTemplateSelection,
   pickDefaultAgentTemplate,
   profileToDraft,
   providerNeedsAuth,
+  resolvedNotifierWebhookOrigin,
   runtimeImageForKind,
   startAgentCreateProgress,
 } from "@/models/agents";
@@ -109,6 +119,7 @@ export function useAgentController({
   const [managerRebuildRuntimeKind, setManagerRebuildRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
   const [managerRebuildImage, setManagerRebuildImage] = useState("");
   const [agentModalMode, setAgentModalMode] = useState<AgentModalMode>("create");
+  const [agentCreateBotKind, setAgentCreateBotKind] = useState(BOT_CREATE_KIND_WORKER);
   const [editingAgent, setEditingAgent] = useState<AgentLike | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentDraft | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
@@ -121,20 +132,21 @@ export function useAgentController({
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPageError, setAgentPageError] = useState("");
-  const [notifierModalWebhookOrigin, setNotifierModalWebhookOrigin] = useState("");
-  const [notifierPageWebhookOrigin, setNotifierPageWebhookOrigin] = useState("");
-
   const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
   const managerAgent = agents.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
-  const workerAgents = agents.filter((item) => item.id !== managerAgent?.id);
-  const agentItems = [managerAgent, ...workerAgents].filter((item): item is AgentLike => Boolean(item));
+  const { workerAgentItems, notificationAgentItems } = partitionWorkspaceAgentItems(agents, MANAGER_AGENT_ID);
+  const agentItems = [...workerAgentItems, ...notificationAgentItems];
   const runningAgentCount = agentItems.filter(isAgentRunning).length;
+  const notifierWebhookPublicOrigin = useMemo(
+    () => resolvedNotifierWebhookOrigin(bootstrapConfig),
+    [bootstrapConfig?.advertise_base_url],
+  );
   const selectedAgentForPage = useMemo(() => {
     if (activePane.type !== WorkspacePaneTypes.agent) {
       return null;
     }
-    return agentItems.find((item) => item.id === activePane.id) ?? null;
-  }, [activePane, agentItems]);
+    return agents.find((item) => item.id === activePane.id) ?? null;
+  }, [agents, activePane]);
   const activeConversation = useMemo(
     () => data?.rooms.find((item) => item.id === activeConversationId) ?? null,
     [data, activeConversationId],
@@ -213,13 +225,6 @@ export function useAgentController({
   }, [agentBusy, agentProgress?.startedAt, agentProgress?.steps?.length]);
 
   useEffect(() => {
-    if (!showAgentModal || !agentDraft || !isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)) {
-      return;
-    }
-    setNotifierModalWebhookOrigin(typeof window !== "undefined" ? window.location.origin : "");
-  }, [showAgentModal, agentDraft?.runtime_kind, editingAgent?.id, agentDraft, editingAgent]);
-
-  useEffect(() => {
     if (!managerProfile) {
       return;
     }
@@ -228,13 +233,6 @@ export function useAgentController({
       runtime_kind: normalizeRuntimeKind(bootstrapConfig?.runtime_kind || managerProfile.runtime_kind),
     });
   }, [managerProfile, bootstrapConfig?.runtime_kind]);
-
-  useEffect(() => {
-    if (!agentPageDraft || !isNotifierRuntimeDraftOnAgentPage(agentPageDraft, selectedAgentForPage)) {
-      return;
-    }
-    setNotifierPageWebhookOrigin(typeof window !== "undefined" ? window.location.origin : "");
-  }, [agentPageDraft?.runtime_kind, selectedAgentForPage?.id, agentPageDraft, selectedAgentForPage]);
 
   useEffect(() => {
     if (!activePane || activePane.type !== WorkspacePaneTypes.agent) {
@@ -427,14 +425,41 @@ export function useAgentController({
   }
 
   async function agentDraftFromItem(item: AgentLike): Promise<AgentDraft> {
+    if (isNotificationBotAgent(item)) {
+      return ensureNotifierPullSubscriptionDraft(agentToDraft(item));
+    }
     const { agent, profile } = await fetchAgentWithProfile(item);
     const base = agentToDraft({ ...agent, agent_profile: profile });
     const runtimeKind = normalizeRuntimeKind(agent?.runtime_kind || item?.runtime_kind || base.runtime_kind);
-    return ensureNotifierPullSubscriptionDraft({ ...base, runtime_kind: runtimeKind || base.runtime_kind });
+    return ensureNotifierPullSubscriptionDraft({
+      ...base,
+      runtime_kind: runtimeKind || base.runtime_kind,
+      bot_type: BOT_TYPE_NORMAL,
+    });
+  }
+
+  async function openCreateNotificationBotModal(): Promise<void> {
+    setAgentModalMode("create");
+    setAgentCreateBotKind(BOT_CREATE_KIND_NOTIFICATION);
+    setEditingAgent(null);
+    setAgentError("");
+    setAgentProgress(null);
+    resetAgentModels();
+    const draft = ensureNotifierPullSubscriptionDraft(
+      agentToDraft({
+        name: "",
+        description: "",
+        bot_type: BOT_TYPE_NOTIFICATION,
+        notifier_delivery_mode: "webhook",
+      }),
+    );
+    setAgentDraft(draft);
+    setShowAgentModal(true);
   }
 
   async function openCreateAgentModal(template: AgentTemplateLike | null | undefined = undefined): Promise<void> {
     setAgentModalMode("create");
+    setAgentCreateBotKind(BOT_CREATE_KIND_WORKER);
     setEditingAgent(null);
     setAgentError("");
     setAgentProgress(null);
@@ -454,6 +479,7 @@ export function useAgentController({
       let draft = agentToDraft({
         image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
+        bot_type: BOT_TYPE_NORMAL,
         agent_profile: defaults,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, bootstrapConfig, managerAgent?.image || "");
@@ -467,6 +493,7 @@ export function useAgentController({
       let draft = agentToDraft({
         image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
+        bot_type: BOT_TYPE_NORMAL,
         agent_profile: managerProfile,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, bootstrapConfig, managerAgent?.image || "");
@@ -477,6 +504,7 @@ export function useAgentController({
 
   async function openEditAgentModal(item: AgentLike): Promise<void> {
     setAgentModalMode("edit");
+    setAgentCreateBotKind(isNotificationBotAgent(item) ? BOT_CREATE_KIND_NOTIFICATION : BOT_CREATE_KIND_WORKER);
     setEditingAgent(item);
     setAgentError("");
     setAgentProgress(null);
@@ -514,12 +542,26 @@ export function useAgentController({
     setAgentPageError("");
     try {
       const draft = ensureNotifierPullSubscriptionDraft(agentPageDraft);
+      if (isNotifierRuntimeDraftOnAgentPage(agentPageDraft, selectedAgentForPage)) {
+        const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, { mergeNotifier: true });
+        const payload: AgentUpdatePayload = {
+          name: agentPageDraft.name,
+          description: agentPageDraft.description,
+        };
+        if (runtimeOptions) {
+          payload.runtime_options = runtimeOptions;
+        }
+        const saved = await patchNotificationBotRequest(selectedAgentForPage.id, payload);
+        await refreshAgents();
+        setAgentPageDraft(agentToDraft(saved));
+        return;
+      }
       const profile = draftToProfile(draft, {
         name: agentPageDraft.name,
         description: agentPageDraft.description,
       });
       const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, {
-        mergeNotifier: isNotifierRuntimeDraftOnAgentPage(agentPageDraft, selectedAgentForPage),
+        mergeNotifier: false,
       });
       const payload: AgentUpdatePayload = {
         name: agentPageDraft.name,
@@ -569,22 +611,52 @@ export function useAgentController({
     setAgentBusy(true);
     setAgentError("");
     const isCreate = agentModalMode === "create";
+    const isNotification = isNotificationBotDraftContext(
+      agentDraft,
+      editingAgent,
+      isCreate ? agentCreateBotKind : undefined,
+    );
     const runtimeKind = normalizeRuntimeKind(agentDraft.runtime_kind) || DEFAULT_RUNTIME_KIND;
-    setAgentProgress(isCreate ? startAgentCreateProgress(runtimeKind) : null);
+    setAgentProgress(isCreate ? startAgentCreateProgress(isNotification ? BOT_TYPE_NOTIFICATION : runtimeKind) : null);
     try {
       const draft = ensureNotifierPullSubscriptionDraft(agentDraft);
+      if (isNotification) {
+        const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, { mergeNotifier: true });
+        const payload: AgentUpdatePayload = {
+          name: agentDraft.name,
+          description: agentDraft.description,
+        };
+        if (runtimeOptions) {
+          payload.runtime_options = runtimeOptions;
+        }
+        const saved = isCreate
+          ? await createNotificationBotRequest(payload)
+          : await patchNotificationBotRequest(editingAgent!.id, payload);
+        await refreshAgents();
+        if (isCreate) {
+          setAgentProgress((current) =>
+            current
+              ? { ...current, percent: 100, status: "done", index: Math.max(0, (current.steps?.length || 1) - 1) }
+              : current,
+          );
+        }
+        setShowAgentModal(false);
+        setAgentDraft(null);
+        setAgentProgress(null);
+        return;
+      }
       const profile = draftToProfile(draft, {
         name: agentDraft.name,
         description: agentDraft.description,
       });
       const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, {
-        mergeNotifier: isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent),
+        mergeNotifier: false,
       });
       const payload: AgentUpdatePayload = {
         name: agentDraft.name,
         role: WORKER_AGENT_ROLE,
         description: agentDraft.description,
-        image: isNotifierRuntimeDraft(draft) ? "" : agentDraft.image,
+        image: agentDraft.image,
         runtime_kind: runtimeKind,
         from_template: agentDraft.from_template || "",
         agent_profile: profile,
@@ -594,7 +666,7 @@ export function useAgentController({
       }
       const saved = isCreate
         ? await createBotRequest(payload)
-        : await updateAgentRequest(editingAgent.id, {
+        : await updateAgentRequest(editingAgent!.id, {
             name: payload.name,
             description: payload.description,
             agent_profile: payload.agent_profile,
@@ -627,6 +699,9 @@ export function useAgentController({
 
   async function runAgentAction(item: AgentLike | null | undefined, action: AgentAction): Promise<void> {
     if (!item?.id || agentActionBusy) {
+      return;
+    }
+    if (isNotificationBotAgent(item) && (action === "recreate" || action === "start" || action === "stop")) {
       return;
     }
     if (action === "recreate" && isManagerAgent(item)) {
@@ -765,12 +840,15 @@ export function useAgentController({
     messageActionBusy,
     messageActionError,
     openAgentDirectMessage,
+    notificationAgentItems,
     openCreateAgentModal,
+    openCreateNotificationBotModal,
     openEditAgentModal,
     runningAgentCount,
     runAgentAction,
     selectedAgentForPage,
-    workerAgents,
+    workerAgentItems,
+    notifierWebhookPublicOrigin,
     agentViewProps: {
       item: selectedAgentForPage,
       t,
@@ -784,8 +862,7 @@ export function useAgentController({
       saveError: agentPageError,
       authStatuses: cliproxyAuthStatuses,
       authBusyProvider: cliproxyAuthBusy,
-      notifierWebhookOrigin: notifierPageWebhookOrigin,
-      setNotifierWebhookOrigin: setNotifierPageWebhookOrigin,
+      notifierWebhookPublicOrigin,
       onDraftChange: setAgentPageDraft,
       onSave: saveAgentPage,
       onPublish: publishAgentPage,
@@ -810,6 +887,7 @@ export function useAgentController({
         ? {
             t,
             agentModalMode,
+            agentCreateBotKind,
             editingAgent,
             agentDraft,
             onAgentDraftChange: setAgentDraft,
@@ -821,8 +899,7 @@ export function useAgentController({
             agentModelBusy,
             authStatuses: cliproxyAuthStatuses,
             authBusyProvider: cliproxyAuthBusy,
-            notifierWebhookOrigin: notifierModalWebhookOrigin,
-            setNotifierWebhookOrigin: setNotifierModalWebhookOrigin,
+            notifierWebhookPublicOrigin,
             onProviderLogin: loginCLIProxyProvider,
             agentError,
             agentProgress,

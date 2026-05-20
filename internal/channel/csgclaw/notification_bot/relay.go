@@ -1,4 +1,4 @@
-package notifier
+package notification_bot
 
 import (
 	"context"
@@ -8,15 +8,15 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 	"time"
 )
 
-// Fanouter delivers notifier chat content (JSON notify card) from notifier payloads to IM rooms.
-type Fanouter interface {
-	DeliverNotifierFanout(agentID string, content string) error
-}
+const (
+	relayRouteInboxMessages    = "/inbox/messages"
+	relayRouteInboxAck       = "/inbox/ack"
+	relayRouteWebhooksIngress = "/webhooks/ingress"
+)
 
 // Inbox JSON types for relay GET list / POST ack (see types below).
 
@@ -38,7 +38,7 @@ type inboxAckRequest struct {
 	MessageIDs     []string `json:"message_ids"`
 }
 
-// RelayClient pulls from a compatible relay; remote_url resolution is in resolveRelayEndpoints.
+// RelayClient pulls from a compatible relay; remote_url is the relay service base URL.
 type RelayClient struct {
 	HTTP *http.Client
 }
@@ -50,102 +50,107 @@ func (c *RelayClient) client() *http.Client {
 	return &http.Client{Timeout: 45 * time.Second}
 }
 
-func joinAPIPath(base, suffix string) (string, error) {
-	base = strings.TrimSpace(base)
-	if base == "" {
-		return "", fmt.Errorf("remote_url is required")
-	}
-	u, err := url.Parse(base)
-	if err != nil {
-		return "", err
-	}
-	if u.Scheme == "" || u.Host == "" {
-		return "", fmt.Errorf("invalid remote_url")
-	}
-	rel, err := url.Parse(strings.TrimPrefix(suffix, "/"))
-	if err != nil {
-		return "", err
-	}
-	return u.ResolveReference(rel).String(), nil
+var relayBasePathSuffixes = []string{
+	relayRouteWebhooksIngress,
+	"/webhook/ingress",
+	relayRouteInboxMessages,
+	relayRouteInboxAck,
 }
 
-// deriveInboxURLsFromThirdPartyIngress treats remote_url values that point at a relay **POST webhook
-// ingress** (what GitLab etc. paste) and maps them to the sibling **GET list** and **POST ack**
-// paths under the same path prefix: …/webhooks/ingress → …/inbox/messages and …/inbox/ack.
-func deriveInboxURLsFromThirdPartyIngress(u *url.URL) (messages *url.URL, ack *url.URL, ok bool) {
-	if u == nil {
-		return nil, nil, false
-	}
-	p := path.Clean(strings.TrimSpace(u.Path))
-	if p == "." || p == "/" {
-		return nil, nil, false
+func relayURLPathBase(path string) string {
+	p := strings.TrimSuffix(strings.TrimSpace(path), "/")
+	if p == "" || p == "/" {
+		return ""
 	}
 	lower := strings.ToLower(p)
-	suffixes := []string{"/webhooks/ingress", "/webhook/ingress"}
-	for _, suf := range suffixes {
-		idx := strings.LastIndex(lower, suf)
-		if idx < 0 || idx+len(suf) != len(lower) {
-			continue
+	for {
+		trimmed := false
+		for _, suf := range relayBasePathSuffixes {
+			if strings.HasSuffix(lower, strings.ToLower(suf)) {
+				p = strings.TrimSuffix(p, suf)
+				p = strings.TrimSuffix(p, "/")
+				lower = strings.ToLower(p)
+				trimmed = true
+				break
+			}
 		}
-		parent := strings.TrimSuffix(strings.TrimSuffix(p[:idx], "/"), "/")
-		if parent == "" {
-			parent = "/"
+		if !trimmed {
+			break
 		}
-		msgPath := path.Join(parent, "inbox", "messages")
-		ackPath := path.Join(parent, "inbox", "ack")
-		mu := *u
-		mu.Path = msgPath
-		mu.Fragment = ""
-		au := *u
-		au.Path = ackPath
-		au.RawQuery = ""
-		au.Fragment = ""
-		return &mu, &au, true
 	}
-	return nil, nil, false
+	return p
 }
 
-// resolveRelayEndpoints interprets remote_url for pull mode.
-// If the URL has no path (or only "/"), legacy mode appends /api/v1/inbox/messages and /api/v1/inbox/ack.
-// If the path ends with …/webhooks/ingress (third-party paste URL), it is rewritten to …/inbox/messages
-// and …/inbox/ack under the same prefix.
-// Otherwise remote_url is the full URL of the GET messages list endpoint; ack is the same path
-// with the last path segment replaced by "ack" (sibling resource).
-func resolveRelayEndpoints(remoteURL string) (messages string, ack string, err error) {
+// normalizeRelayBaseURL parses remote_url as the relay service base (no route suffix).
+func normalizeRelayBaseURL(remoteURL string) (*url.URL, error) {
 	base := strings.TrimSpace(remoteURL)
 	if base == "" {
-		return "", "", fmt.Errorf("remote_url is required")
+		return nil, fmt.Errorf("remote_url is required")
 	}
 	u, err := url.Parse(base)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 	if u.Scheme == "" || u.Host == "" {
-		return "", "", fmt.Errorf("invalid remote_url")
+		return nil, fmt.Errorf("invalid remote_url")
 	}
-	if mu, au, ok := deriveInboxURLsFromThirdPartyIngress(u); ok {
-		return mu.String(), au.String(), nil
-	}
-	p := strings.TrimSuffix(strings.TrimSpace(u.Path), "/")
-	if p == "" {
-		msgs, err := joinAPIPath(base, "/api/v1/inbox/messages")
-		if err != nil {
-			return "", "", err
-		}
-		ackEp, err := joinAPIPath(base, "/api/v1/inbox/ack")
-		if err != nil {
-			return "", "", err
-		}
-		return msgs, ackEp, nil
-	}
-	ackURL := *u
-	ackURL.RawQuery = ""
-	p = path.Clean(u.Path)
-	parent := path.Dir(p)
-	ackURL.Path = path.Join(parent, "ack")
+	u.RawQuery = ""
 	u.Fragment = ""
-	ackURL.Fragment = ""
-	return u.String(), ackURL.String(), nil
+	u.Path = relayURLPathBase(u.Path)
+	return u, nil
+}
+
+// NormalizeRemoteURLForStorage returns canonical relay base URL for persistence.
+func NormalizeRemoteURLForStorage(remoteURL string) string {
+	u, err := normalizeRelayBaseURL(remoteURL)
+	if err != nil {
+		return strings.TrimSpace(remoteURL)
+	}
+	return u.String()
+}
+
+func relayURLWithSuffix(base *url.URL, route string) string {
+	u := *base
+	root := strings.TrimSuffix(strings.TrimSpace(u.Path), "/")
+	suffix := strings.TrimPrefix(strings.TrimSpace(route), "/")
+	switch {
+	case root == "" || root == "/":
+		u.Path = "/" + suffix
+	default:
+		u.Path = root + "/" + suffix
+	}
+	return u.String()
+}
+
+// ResolveRelayRoutes appends /inbox/messages, /inbox/ack, and /webhooks/ingress under remote_url.
+func ResolveRelayRoutes(remoteURL string) (messages, ack, ingress string, err error) {
+	base, err := normalizeRelayBaseURL(remoteURL)
+	if err != nil {
+		return "", "", "", err
+	}
+	messages = relayURLWithSuffix(base, relayRouteInboxMessages)
+	ack = relayURLWithSuffix(base, relayRouteInboxAck)
+	ingress = relayURLWithSuffix(base, relayRouteWebhooksIngress)
+	return messages, ack, ingress, nil
+}
+
+func resolveRelayEndpoints(remoteURL string) (messages string, ack string, err error) {
+	messages, ack, _, err = ResolveRelayRoutes(remoteURL)
+	return messages, ack, err
+}
+
+func bearerAuthHeaderValue(token string) string {
+	tok := strings.TrimSpace(token)
+	if tok == "" {
+		return ""
+	}
+	if len(tok) >= 7 && strings.EqualFold(tok[:7], "bearer ") {
+		tok = strings.TrimSpace(tok[7:])
+	}
+	if tok == "" {
+		return ""
+	}
+	return "Bearer " + tok
 }
 
 // ResolvePullEndpoints returns the GET inbox list URL and POST ack URL for pull mode.
@@ -190,8 +195,8 @@ func (c *RelayClient) FetchInbox(ctx context.Context, cfg Config, limit int, cur
 	if err != nil {
 		return nil, "", err
 	}
-	if tok := strings.TrimSpace(cfg.RemoteToken); tok != "" {
-		req.Header.Set("Authorization", "Bearer "+tok)
+	if auth := bearerAuthHeaderValue(cfg.RemoteToken); auth != "" {
+		req.Header.Set("Authorization", auth)
 	}
 
 	resp, err := c.client().Do(req)
@@ -239,8 +244,8 @@ func (c *RelayClient) Ack(ctx context.Context, cfg Config, messageIDs []string) 
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if tok := strings.TrimSpace(cfg.RemoteToken); tok != "" {
-		req.Header.Set("Authorization", "Bearer "+tok)
+	if auth := bearerAuthHeaderValue(cfg.RemoteToken); auth != "" {
+		req.Header.Set("Authorization", auth)
 	}
 	resp, err := c.client().Do(req)
 	if err != nil {

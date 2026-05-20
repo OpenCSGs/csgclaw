@@ -4,6 +4,7 @@ import {
   isAgentIncomplete,
   isAgentRestartNeeded,
   isAgentRunning,
+  notificationBotMetaLabel,
 } from "@/models/agents";
 import {
   formatConversationPreview,
@@ -97,10 +98,11 @@ export function WorkspaceComputerRow({ title, active, subtitle, onSelect }) {
   );
 }
 
-export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview }) {
+export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notification = false }) {
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
   const running = isAgentRunning(item);
+  const meta = notification ? notificationBotMetaLabel(item, t) : `${formatProviderLabel(item.provider || item.agent_profile?.provider)} · ${agentModelID(item)}`;
   return (
     <button
       className={`workspace-row agent-nav-row ${active ? "active" : ""} ${incomplete ? "warn" : ""}`.trim()}
@@ -130,9 +132,7 @@ export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview }) {
           <span className="workspace-row-title truncate">{item.name}</span>
           <span className={`workspace-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
         </span>
-        <span className="workspace-row-meta truncate">
-          {formatProviderLabel(item.provider || item.agent_profile?.provider)} · {agentModelID(item)}
-        </span>
+        <span className="workspace-row-meta truncate">{meta}</span>
       </span>
       <span className="workspace-row-badges">
         {incomplete ? <span className="mini-badge warn">{t("profileIncompleteBadge")}</span> : null}

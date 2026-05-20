@@ -535,6 +535,15 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.agent-create-kind-tabbar {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.agent-create-kind-tabbar .workspace-tab {
+  height: 48px;
+}
+
 .workspace-tab {
   min-width: 0;
   border-bottom: 1px solid var(--line);

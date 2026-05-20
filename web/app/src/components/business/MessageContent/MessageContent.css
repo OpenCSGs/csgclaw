@@ -8,13 +8,13 @@
 }
 
 .structured-message-link a {
-  color: var(--accent);
+  color: var(--link, var(--accent));
   font-weight: 650;
-  text-decoration: none;
+  text-decoration: underline;
 }
 
 .structured-message-link a:hover {
-  text-decoration: underline;
+  color: var(--link-hover, var(--accent));
 }
 
 .structured-message-meta {

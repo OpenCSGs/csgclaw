@@ -18,7 +18,6 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/modelprovider"
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/runtime/notifier"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/runtime/sandboxgateway"
@@ -1348,91 +1347,6 @@ func TestCreateWorkerRequiresRuntimeKindWhenTemplateDoesNotProvideIt(t *testing.
 	}
 	if !strings.Contains(err.Error(), "runtime_kind is required") {
 		t.Fatalf("CreateWorker() error = %v, want missing runtime_kind error", err)
-	}
-}
-
-func TestCreateWorkerNotifierPersistsWebhookToken(t *testing.T) {
-	dir := t.TempDir()
-	statePath := filepath.Join(dir, "state.json")
-	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", statePath)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	const wantToken = "notifier-webhook-secret-xyz"
-	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
-		Name:        "notify-worker",
-		RuntimeKind: RuntimeKindNotifier,
-		RuntimeOptions: map[string]any{
-			"delivery_mode": "webhook",
-			"webhook_token": wantToken,
-		},
-		AgentProfile: AgentProfile{},
-	})
-	if err != nil {
-		t.Fatalf("CreateWorker() error = %v", err)
-	}
-	if got.RuntimeKind != RuntimeKindNotifier {
-		t.Fatalf("CreateWorker().RuntimeKind = %q, want %q", got.RuntimeKind, RuntimeKindNotifier)
-	}
-	cfg := notifier.ConfigFromAgentRuntimeOptions(got.RuntimeOptions)
-	if cfg.WebhookToken != wantToken {
-		t.Fatalf("in-memory webhook_token = %q, want %q", cfg.WebhookToken, wantToken)
-	}
-
-	reloaded, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", statePath)
-	if err != nil {
-		t.Fatalf("NewService(reload) error = %v", err)
-	}
-	got2, ok := reloaded.Agent(got.ID)
-	if !ok {
-		t.Fatalf("Agent(%q) after reload: ok = false", got.ID)
-	}
-	cfg2 := notifier.ConfigFromAgentRuntimeOptions(got2.RuntimeOptions)
-	if cfg2.WebhookToken != wantToken {
-		t.Fatalf("after reload webhook_token = %q, want %q", cfg2.WebhookToken, wantToken)
-	}
-}
-
-func TestStopNotifierPersistsStoppedAndHydrateKeepsStopped(t *testing.T) {
-	dir := t.TempDir()
-	statePath := filepath.Join(dir, "state.json")
-	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", statePath)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
-		Name:           "notifier-stop-test",
-		RuntimeKind:    RuntimeKindNotifier,
-		RuntimeOptions: map[string]any{"delivery_mode": "webhook", "webhook_token": "tok"},
-		AgentProfile:   AgentProfile{},
-	})
-	if err != nil {
-		t.Fatalf("CreateWorker() error = %v", err)
-	}
-	stopped, err := svc.Stop(context.Background(), got.ID)
-	if err != nil {
-		t.Fatalf("Stop() error = %v", err)
-	}
-	if stopped.Status != string(sandbox.StateStopped) {
-		t.Fatalf("Stop().Status = %q, want stopped", stopped.Status)
-	}
-	agentNow, ok := svc.Agent(got.ID)
-	if !ok {
-		t.Fatal("Agent() missing after stop")
-	}
-	if agentNow.Status != string(sandbox.StateStopped) {
-		t.Fatalf("Agent().Status after stop = %q, want stopped (notifier Runtime.Info reports running)", agentNow.Status)
-	}
-	reloaded, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", statePath)
-	if err != nil {
-		t.Fatalf("NewService(reload) error = %v", err)
-	}
-	reloadedAgent, ok := reloaded.Agent(got.ID)
-	if !ok {
-		t.Fatal("Agent() missing after reload")
-	}
-	if reloadedAgent.Status != string(sandbox.StateStopped) {
-		t.Fatalf("reloaded Agent().Status = %q, want stopped", reloadedAgent.Status)
 	}
 }
 
@@ -3892,49 +3806,6 @@ func TestCreateWorkerAppliesTemplateDefaultsWithoutWorkspace(t *testing.T) {
 	}
 }
 
-func TestCreateWorkerNotifierSkipsDefaultSandboxTemplate(t *testing.T) {
-	dir := t.TempDir()
-	statePath := filepath.Join(dir, "state.json")
-	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	hubSvc := mustNewLocalTemplateHubService(t, "frontend-worker", hub.Template{
-		ID:          "frontend-worker",
-		Name:        "frontend-worker",
-		Description: "frontend worker",
-		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "worker-image:1",
-	})
-
-	svc, err := NewService(
-		testModelConfig(),
-		config.ServerConfig{},
-		"manager-image:1",
-		statePath,
-		WithHubService(hubSvc),
-		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-
-	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
-		Name:           "notifier-hub-skip",
-		RuntimeKind:    RuntimeKindNotifier,
-		RuntimeOptions: map[string]any{"delivery_mode": "webhook", "webhook_token": "tok"},
-		AgentProfile:   AgentProfile{},
-	})
-	if err != nil {
-		t.Fatalf("CreateWorker() error = %v", err)
-	}
-	if got.RuntimeKind != RuntimeKindNotifier {
-		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, RuntimeKindNotifier)
-	}
-	if strings.TrimSpace(got.Image) != "" {
-		t.Fatalf("notifier Image = %q, want empty (no default sandbox template)", got.Image)
-	}
-}
-
 func TestCreateRejectsDefaultManagerTemplateRoleMismatch(t *testing.T) {
 	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
@@ -5380,7 +5251,7 @@ func withTestPicoClawSandboxRuntime(apps ...map[string]feishu.AppConfig) Service
 		})(s); err != nil {
 			return err
 		}
-		return WithRuntime(notifier.NewAgentRuntime())(s)
+		return nil
 	}
 }
 

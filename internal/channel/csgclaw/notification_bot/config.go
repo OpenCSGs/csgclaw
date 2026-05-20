@@ -1,4 +1,4 @@
-package notifier
+package notification_bot
 
 import (
 	"crypto/subtle"
@@ -14,9 +14,7 @@ const (
 	DeliveryBoth       = "both"
 )
 
-const workerRole = "worker"
-
-// Config is parsed from flat notifier_details stored on runtime_options.
+// Config is parsed from flat delivery settings stored on bot.runtime_options.
 type Config struct {
 	DeliveryMode         string
 	WebhookToken         string
@@ -103,11 +101,24 @@ func (c Config) AllowsPull() bool {
 	}
 }
 
-// PollIntervalDuration defaults to 30s when unset or invalid.
+// WebhookDeliveryComplete reports whether inbound webhook delivery is fully configured.
+func (c Config) WebhookDeliveryComplete() bool {
+	return c.AllowsWebhook()
+}
+
+// PullDeliveryComplete reports whether relay pull is fully configured (URL + token).
+func (c Config) PullDeliveryComplete() bool {
+	if !c.AllowsPull() {
+		return false
+	}
+	return strings.TrimSpace(c.RemoteToken) != ""
+}
+
+// PollIntervalDuration defaults to 5s when unset or invalid.
 // Accepts Go duration strings (e.g. "2s", "45s") or a bare positive number meaning seconds (UI often sends "2").
 func (c Config) PollIntervalDuration() time.Duration {
 	const (
-		defaultPoll = 30 * time.Second
+		defaultPoll = 5 * time.Second
 		minPoll     = time.Second
 		maxPoll     = 24 * time.Hour
 	)
@@ -141,9 +152,4 @@ func SecretMatch(expected, got string) bool {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(got)) == 1
-}
-
-// IsDeliveryWorker reports a worker agent that uses the in-server notifier runtime (IM delivery).
-func IsDeliveryWorker(role, runtimeKind string) bool {
-	return strings.EqualFold(strings.TrimSpace(role), workerRole) && MatchesNotifierRuntimeKind(runtimeKind)
 }

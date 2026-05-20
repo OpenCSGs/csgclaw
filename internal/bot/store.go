@@ -108,13 +108,15 @@ func (s *Store) DeleteByChannelID(channel, id string) (Bot, bool, error) {
 }
 
 func (s *Store) Reload() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.path == "" {
+		return nil
+	}
 	items, err := s.readState()
 	if err != nil {
 		return err
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.items = items
 	return nil
 }

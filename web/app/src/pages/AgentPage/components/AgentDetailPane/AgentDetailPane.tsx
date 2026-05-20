@@ -38,8 +38,7 @@ export function AgentDetailPane({
   saveError,
   authStatuses,
   authBusyProvider,
-  notifierWebhookOrigin,
-  setNotifierWebhookOrigin,
+  notifierWebhookPublicOrigin,
   onDraftChange,
   onSave,
   onPublish,
@@ -291,8 +290,7 @@ export function AgentDetailPane({
               agentID={item.id}
               draft={draft}
               t={t}
-              webhookOrigin={notifierWebhookOrigin}
-              setWebhookOrigin={setNotifierWebhookOrigin}
+              webhookPublicOrigin={notifierWebhookPublicOrigin}
               onPatch={(patch) => updateDraft(patch)}
             />
           )}

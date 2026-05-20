@@ -54,9 +54,21 @@ Do not call `POST /api/v1/agents/u-manager/recreate` for this flow.
 - Never return or log secret values (for example `app_secret`, API keys, tokens).
 - If any sensitive value appears in logs, use masked forms such as `present`.
 
+## Notification bots
+
+Notification bots are channel bots with `type=notification`. They do not create backing worker agents; delivery configuration is stored on `bot.runtime_options` in `bots.json`.
+
+- List: `GET /api/v1/channels/csgclaw/bots?type=notification`
+- Create: `POST /api/v1/channels/csgclaw/bots` with `"type":"notification"` and flat `runtime_options` (`delivery_mode`, `webhook_token`, `remote_url`, …)
+- Update: `PATCH /api/v1/channels/csgclaw/bots/{id}`
+- Delete: `DELETE /api/v1/channels/csgclaw/bots/{id}`
+- Push (webhook): `POST /api/v1/channels/csgclaw/bots/{id}/notifications` with `Authorization: Bearer <webhook_token>`
+
+Implementation: `internal/channel/csgclaw/notification_bot/`, `internal/bot/notification.go`.
+
 ## csgclaw.notify_card payload
 
-Notifier deliveries (GitLab/GitHub webhooks, and so on) to the CSGClaw Web IM use this type: the message **`content` is a single JSON object** produced by `internal/runtime/notifier`, and the Web UI renders it as a structured card (title, badge, meta rows, optional link, optional collapsible raw JSON).
+Notification deliveries (GitLab/GitHub webhooks, and so on) to the CSGClaw Web IM use this type: the message **`content` is a single JSON object** produced by `internal/channel/csgclaw/notification_bot`, and the Web UI renders it as a structured card (title, badge, meta rows, optional link, optional collapsible raw JSON).
 
 ```json
 {
@@ -93,5 +105,5 @@ Notifier deliveries (GitLab/GitHub webhooks, and so on) to the CSGClaw Web IM us
 
 - Frontend parser/renderer: `web/app/src/components/business/MessageContent/MessageContent.tsx`, `web/app/src/components/business/MessageContent/structuredMessages.ts`
 - Action-card and notifier-card test coverage: `web/app/tests/legacy-contract.test.ts`, `web/app/tests/components/MessageContent/structuredMessages.test.ts`
-- Notifier card encoding: `internal/runtime/notifier/notify_card.go`, `internal/runtime/notifier/notify_webhooks.go`
+- Notification card encoding: `internal/channel/csgclaw/notification_bot/notify_card.go`, `internal/channel/csgclaw/notification_bot/notify_webhooks.go`
 - Feishu setup command output: `internal/templates/embed/runtimes/picoclaw/manager/workspace/skills/feishu/scripts/feishu_setup/csgclaw.py`

@@ -8,6 +8,7 @@ import (
 
 	"csgclaw/cli/command"
 	"csgclaw/internal/apitypes"
+	botdomain "csgclaw/internal/bot"
 )
 
 type cmd struct{}
@@ -37,6 +38,8 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	switch args[0] {
 	case "list":
 		return c.runList(ctx, run, args[1:], globals)
+	case "notification":
+		return c.runNotification(ctx, run, args[1:], globals)
 	case "create":
 		return c.runCreate(ctx, run, args[1:], globals)
 	case "delete":
@@ -51,7 +54,8 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 
 func (c cmd) usage(run *command.Context) {
 	subcommands := []string{
-		"list               List bots",
+		"list               List normal bots (workers/manager; excludes notification bots)",
+		"notification list  List notification bots",
 		"create             Create a bot",
 		"delete <id>        Delete a bot",
 		"config             Manage bot channel config",
@@ -60,7 +64,7 @@ func (c cmd) usage(run *command.Context) {
 }
 
 func (c cmd) runList(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("bot list", run.Program+" bot list [flags]", "List bots.")
+	fs := run.NewFlagSet("bot list", run.Program+" bot list [flags]", "List normal bots (excludes notification bots).")
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	role := fs.String("role", "", "bot role: manager or worker")
 	if err := fs.Parse(args); err != nil {
@@ -70,10 +74,44 @@ func (c cmd) runList(ctx context.Context, run *command.Context, args []string, g
 		return fmt.Errorf("bot list does not accept positional arguments")
 	}
 
-	bots, err := run.APIClient(globals).ListBots(ctx, *channelName, *role)
+	client := run.APIClient(globals)
+	bots, err := client.ListBots(ctx, *channelName, *role)
 	if err != nil {
 		return err
 	}
+	return renderBotList(run, globals, bots)
+}
+
+func (c cmd) runNotification(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
+	if len(args) == 0 || command.IsHelpArg(args[0]) {
+		fmt.Fprintf(run.Stderr, "usage: %s bot notification list [flags]\n", run.Program)
+		return flag.ErrHelp
+	}
+	switch args[0] {
+	case "list":
+		return c.runNotificationList(ctx, run, args[1:], globals)
+	default:
+		return fmt.Errorf("unknown bot notification subcommand %q", args[0])
+	}
+}
+
+func (c cmd) runNotificationList(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
+	fs := run.NewFlagSet("bot notification list", run.Program+" bot notification list [flags]", "List notification bots.")
+	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(fs.Args()) != 0 {
+		return fmt.Errorf("bot notification list does not accept positional arguments")
+	}
+	bots, err := run.APIClient(globals).ListNotificationBots(ctx, *channelName)
+	if err != nil {
+		return err
+	}
+	return renderBotList(run, globals, bots)
+}
+
+func renderBotList(run *command.Context, globals command.GlobalOptions, bots []apitypes.Bot) error {
 	if strings.TrimSpace(run.Program) == "csgclaw-cli" {
 		return command.RenderCompactBotList(globals.Output, run.Stdout, bots)
 	}
@@ -89,6 +127,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	modelID := fs.String("model-id", "", "agent model identifier")
 	runtimeKind := fs.String("runtime", "", "agent runtime kind for worker bots (for example: picoclaw_sandbox, openclaw_sandbox, codex)")
+	botType := fs.String("type", botdomain.BotTypeNormal, "bot type: normal or notification")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -106,6 +145,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		ID:          *id,
 		Name:        *name,
 		Description: *description,
+		Type:        botdomain.NormalizeBotType(*botType),
 		Role:        *role,
 		Channel:     *channelName,
 		RuntimeKind: *runtimeKind,
@@ -113,7 +153,14 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	if strings.TrimSpace(*modelID) != "" {
 		req.AgentProfile = &apitypes.CreateAgentProfile{ModelID: *modelID}
 	}
-	created, err := run.APIClient(globals).CreateBot(ctx, req)
+	client := run.APIClient(globals)
+	var created apitypes.Bot
+	var err error
+	if req.Type == botdomain.BotTypeNotification {
+		created, err = client.CreateNotificationBot(ctx, req)
+	} else {
+		created, err = client.CreateBot(ctx, req)
+	}
 	if err != nil {
 		return err
 	}

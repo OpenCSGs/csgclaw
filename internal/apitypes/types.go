@@ -6,15 +6,17 @@ import (
 )
 
 type Bot struct {
-	ID                 string    `json:"id"`
-	Name               string    `json:"name"`
-	Description        string    `json:"description,omitempty"`
-	Role               string    `json:"role"`
-	Channel            string    `json:"channel"`
-	AgentID            string    `json:"agent_id"`
-	UserID             string    `json:"user_id"`
-	Available          bool      `json:"available"`
-	RuntimeKind        string    `json:"runtime_kind,omitempty"`
+	ID                 string         `json:"id"`
+	Name               string         `json:"name"`
+	Description        string         `json:"description,omitempty"`
+	Type               string         `json:"type,omitempty"`
+	Role               string         `json:"role"`
+	Channel            string         `json:"channel"`
+	AgentID            string         `json:"agent_id"`
+	UserID             string         `json:"user_id"`
+	Available          bool           `json:"available"`
+	RuntimeOptions     map[string]any `json:"runtime_options,omitempty"`
+	RuntimeKind        string         `json:"runtime_kind,omitempty"`
 	Image              string    `json:"image,omitempty"`
 	Status             string    `json:"status,omitempty"`
 	Provider           string    `json:"provider,omitempty"`
@@ -28,6 +30,7 @@ type CreateBotRequest struct {
 	ID             string              `json:"id,omitempty"`
 	Name           string              `json:"name"`
 	Description    string              `json:"description,omitempty"`
+	Type           string              `json:"type,omitempty"`
 	Image          string              `json:"image,omitempty"`
 	Role           string              `json:"role"`
 	Channel        string              `json:"channel,omitempty"`
@@ -35,6 +38,12 @@ type CreateBotRequest struct {
 	FromTemplate   string              `json:"from_template,omitempty"`
 	RuntimeOptions map[string]any      `json:"runtime_options,omitempty"`
 	AgentProfile   *CreateAgentProfile `json:"agent_profile,omitempty"`
+}
+
+type PatchNotificationBotRequest struct {
+	Name           string         `json:"name,omitempty"`
+	Description    string         `json:"description,omitempty"`
+	RuntimeOptions map[string]any `json:"runtime_options,omitempty"`
 }
 
 type User struct {

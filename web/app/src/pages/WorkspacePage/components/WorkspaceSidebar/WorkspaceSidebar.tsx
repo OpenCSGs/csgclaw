@@ -16,6 +16,8 @@ export function WorkspaceSidebar({
   currentWorkspaceLabel,
   runningAgentCount,
   agentItems,
+  workerAgentItems,
+  notificationAgentItems,
   workspaceTab,
   onWorkspaceTabChange,
   roomCount,
@@ -28,6 +30,7 @@ export function WorkspaceSidebar({
   onToggleWorkspaceGroup,
   onCreateRoom,
   onCreateAgent,
+  onCreateNotificationBot,
   hub,
   onSelectHubTemplate,
   onSelectHub,
@@ -86,12 +89,15 @@ export function WorkspaceSidebar({
             onToggleWorkspaceGroup={onToggleWorkspaceGroup}
             onCreateRoom={onCreateRoom}
             onCreateAgent={onCreateAgent}
+            onCreateNotificationBot={onCreateNotificationBot}
             hub={hub}
             onSelectHubTemplate={onSelectHubTemplate}
             agentsError={agentsError}
             onSelectConversation={onSelectConversation}
             onPreviewUser={onPreviewUser}
             agentItems={agentItems}
+            workerAgentItems={workerAgentItems}
+            notificationAgentItems={notificationAgentItems}
             onSelectAgent={onSelectAgent}
             onPreviewAgent={onPreviewAgent}
             onSelectComputer={onSelectComputer}

@@ -85,7 +85,10 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 				r.Post("/", h.createBot)
 			})
 			r.Route("/bots/{id}", func(r chi.Router) {
+				r.Get("/", h.handleBotByID)
+				r.Patch("/", h.handleBotByID)
 				r.Delete("/", h.deleteBot)
+				r.Post("/notifications", h.pushNotificationBot)
 			})
 			r.Route("/users", func(r chi.Router) {
 				r.Get("/", h.listUsers)
@@ -148,7 +151,10 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Post("/", h.createBot)
 		})
 		r.Route("/{channel}/bots/{id}", func(r chi.Router) {
+			r.Get("/", h.handleBotByID)
+			r.Patch("/", h.handleBotByID)
 			r.Delete("/", h.deleteBot)
+			r.Post("/notifications", h.pushNotificationBot)
 		})
 	})
 }

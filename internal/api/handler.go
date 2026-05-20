@@ -21,7 +21,7 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
-	"csgclaw/internal/runtime/notifier"
+	"csgclaw/internal/channel/csgclaw/notification_bot"
 	"csgclaw/internal/upgrade"
 	"csgclaw/internal/utils"
 	"csgclaw/internal/version"
@@ -41,9 +41,10 @@ type Handler struct {
 	configPath        string
 	serverAccessToken string
 	serverNoAuth      bool
-	upgradeManager    *upgrade.Manager
-	upgradeConfigPath string
-	upgradeApply      func(upgrade.ApplyHelperOptions) error
+	upgradeManager       *upgrade.Manager
+	upgradeConfigPath    string
+	upgradeApply         func(upgrade.ApplyHelperOptions) error
+	notificationDeliver  notification_bot.Fanouter
 }
 
 const (
@@ -80,6 +81,7 @@ type bootstrapConfigResponse struct {
 	DefaultWorkerTemplate  string            `json:"default_worker_template"`
 	RuntimeKind            string            `json:"runtime_kind"`
 	EffectiveManagerImage  string            `json:"effective_manager_image"`
+	AdvertiseBaseURL       string            `json:"advertise_base_url,omitempty"`
 	SupportedRuntimeKinds  []string          `json:"supported_runtime_kinds"`
 	RuntimeDefaultImages   map[string]string `json:"runtime_default_images,omitempty"`
 }
@@ -198,10 +200,11 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 	resp := bootstrapConfigResponse{
 		DefaultManagerTemplate: cfg.Bootstrap.ResolvedDefaultManagerTemplate(),
 		DefaultWorkerTemplate:  cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
+		AdvertiseBaseURL:       config.AdvertiseBaseURLForClient(cfg.Server),
 		SupportedRuntimeKinds: []string{
 			agent.RuntimeKindPicoClawSandbox,
 			agent.RuntimeKindOpenClawSandbox,
-			agent.RuntimeKindNotifier,
+			agent.RuntimeKindCodex,
 		},
 		RuntimeDefaultImages: map[string]string{},
 	}
@@ -276,6 +279,12 @@ func NewHandlerWithBotAndAuth(svc *agent.Service, botSvc *bot.Service, imSvc *im
 		upgradeApply:      upgrade.StartApplyHelper,
 	}
 	return h
+}
+
+func (h *Handler) SetNotificationDeliver(d notification_bot.Fanouter) {
+	if h != nil {
+		h.notificationDeliver = d
+	}
 }
 
 func (h *Handler) localChannel() *csgclawchannel.Service {
@@ -395,6 +404,15 @@ func (h *Handler) handleBots(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if r.URL.Query().Get("type") == bot.BotTypeNotification {
+			bots, err := h.botSvc.ListNotificationBots(channelName)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			writeJSON(w, http.StatusOK, bots)
+			return
+		}
 		bots, err := h.botSvc.List(channelName, r.URL.Query().Get("role"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -408,6 +426,16 @@ func (h *Handler) handleBots(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		req.Channel = channelName
+		req.Type = bot.NormalizeBotType(req.Type)
+		if req.Type == bot.BotTypeNotification {
+			created, err := h.botSvc.CreateNotificationBot(r.Context(), req)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			writeJSON(w, http.StatusCreated, created)
+			return
+		}
 		created, err := h.botSvc.Create(r.Context(), req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -430,10 +458,34 @@ func (h *Handler) handleBotByID(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	channelName := botChannelName(r)
 
 	switch r.Method {
+	case http.MethodGet:
+		b, err := h.botSvc.GetNotificationBot(channelName, id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, b)
+	case http.MethodPatch:
+		var patch apitypes.PatchNotificationBotRequest
+		if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+			return
+		}
+		updated, err := h.botSvc.PatchNotificationBot(r.Context(), channelName, id, bot.CreateRequest{
+			Name:           patch.Name,
+			Description:    patch.Description,
+			RuntimeOptions: patch.RuntimeOptions,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
 	case http.MethodDelete:
-		if err := h.botSvc.Delete(r.Context(), botChannelName(r), id); err != nil {
+		if err := h.botSvc.Delete(r.Context(), channelName, id); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -1485,7 +1537,6 @@ func presentAgent(item agent.Agent) agentResponse {
 	if strings.TrimSpace(av.Description) == strings.TrimSpace(item.Description) {
 		av.Description = ""
 	}
-	rx := notifier.ViewRuntimeOptionsForAPI(item.RuntimeOptions)
 	return agentResponse{
 		ID:               item.ID,
 		Name:             item.Name,
@@ -1498,7 +1549,7 @@ func presentAgent(item agent.Agent) agentResponse {
 		Status:           item.Status,
 		CreatedAt:        item.CreatedAt,
 		Profile:          item.Profile,
-		RuntimeOptions:   rx,
+		RuntimeOptions:   item.RuntimeOptions,
 		AgentProfile:     av,
 		ProfileComplete:  item.ProfileComplete,
 		DetectionResults: append([]agent.ProfileDetectionResult(nil), item.DetectionResults...),

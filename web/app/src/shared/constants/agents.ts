@@ -8,17 +8,27 @@ export const DEFAULT_PROVIDER = "csghub_lite";
 export const DEFAULT_REASONING_EFFORT = "medium";
 export const DEFAULT_RUNTIME_KIND = "picoclaw_sandbox";
 
+export const BOT_TYPE_NORMAL = "normal";
+export const BOT_TYPE_NOTIFICATION = "notification";
+
+/** Create-agent modal tab: sandbox worker (default). */
+export const BOT_CREATE_KIND_WORKER = "worker";
+/** Create-agent modal tab: notification bot (no sandbox). */
+export const BOT_CREATE_KIND_NOTIFICATION = "notification";
+
 export const PROVIDERS = ["csghub_lite", "codex", "claude_code", "api"];
 export const RUNTIME_KIND_OPTIONS = [
   { value: "picoclaw_sandbox", label: "picoclaw_sandbox" },
   { value: "openclaw_sandbox", label: "openclaw_sandbox" },
   { value: "codex", label: "codex" },
-  { value: "notifier", label: "notifier" },
 ];
+/** Worker create flow only (excludes legacy notifier runtime_kind). */
+export const WORKER_RUNTIME_KIND_OPTIONS = RUNTIME_KIND_OPTIONS;
 export const GATEWAY_RUNTIME_KIND_OPTIONS = RUNTIME_KIND_OPTIONS.filter(
   (option) => option.value === "picoclaw_sandbox",
 );
 export const NOTIFIER_DELIVERY_OPTIONS = ["webhook", "remote_pull"];
+export const DEFAULT_NOTIFIER_POLL_INTERVAL = "5s";
 export const CLIPROXY_AUTH_PROVIDERS = new Set(["codex", "claude_code"]);
 export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 

@@ -1,4 +1,4 @@
-package notifierbridge
+package notification_bot
 
 import (
 	"bytes"
@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"csgclaw/internal/apitypes"
-	"csgclaw/internal/runtime/notifier"
 )
 
 // RoomLister returns IM room IDs for a member (typically *im.Service).
@@ -17,7 +16,7 @@ type RoomLister interface {
 	RoomIDsForMember(memberID string) []string
 }
 
-// APIDeliver fans out notifier content by posting to POST /api/v1/messages per room.
+// APIDeliver fans out notification content by posting to POST /api/v1/messages per room.
 type APIDeliver struct {
 	Rooms   RoomLister
 	BaseURL string
@@ -42,18 +41,18 @@ func (d *APIDeliver) httpClient() *http.Client {
 	return http.DefaultClient
 }
 
-// RoomIDsForAgent implements notifier.RoomMessenger.
-func (d *APIDeliver) RoomIDsForAgent(agentID string) []string {
+// RoomIDsForMember implements RoomMessenger.
+func (d *APIDeliver) RoomIDsForMember(memberID string) []string {
 	if d == nil || d.Rooms == nil {
 		return nil
 	}
-	return d.Rooms.RoomIDsForMember(agentID)
+	return d.Rooms.RoomIDsForMember(memberID)
 }
 
-// PostMessage implements notifier.RoomMessenger.
+// PostMessage implements RoomMessenger.
 func (d *APIDeliver) PostMessage(req apitypes.CreateMessageRequest) error {
 	if d == nil || strings.TrimSpace(d.BaseURL) == "" {
-		return fmt.Errorf("notifier api deliver: base url is required")
+		return fmt.Errorf("notification api deliver: base url is required")
 	}
 	payload, err := json.Marshal(req)
 	if err != nil {
@@ -80,7 +79,7 @@ func (d *APIDeliver) PostMessage(req apitypes.CreateMessageRequest) error {
 	return nil
 }
 
-// DeliverNotifierFanout implements notifier.Fanouter.
-func (d *APIDeliver) DeliverNotifierFanout(agentID, content string) error {
-	return notifier.DeliverNotifierFanout(agentID, content, d)
+// DeliverFanout implements Fanouter.
+func (d *APIDeliver) DeliverFanout(memberID, content string) error {
+	return DeliverFanout(memberID, content, d)
 }

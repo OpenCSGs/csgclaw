@@ -316,6 +316,14 @@ func ListenPort(listenAddr string) string {
 	return port
 }
 
+// AdvertiseBaseURLForClient returns the base URL exposed to Web UI and external webhook callers.
+func AdvertiseBaseURLForClient(server ServerConfig) string {
+	if u := strings.TrimRight(strings.TrimSpace(server.AdvertiseBaseURL), "/"); u != "" {
+		return u
+	}
+	return "http://" + net.JoinHostPort("127.0.0.1", ListenPort(server.ListenAddr))
+}
+
 func DefaultDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

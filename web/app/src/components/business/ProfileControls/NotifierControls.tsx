@@ -1,8 +1,7 @@
-import { NOTIFIER_DELIVERY_OPTIONS } from "@/shared/constants/agents";
+import { DEFAULT_NOTIFIER_POLL_INTERVAL, NOTIFIER_DELIVERY_OPTIONS } from "@/shared/constants/agents";
 import type { ReactNode } from "react";
 import {
   ensureNotifierPullSubscriptionDraft,
-  notifierComputedPullRoutes,
   notifierPushWebhookNotifyURL,
   notifierRemoteTokenPlaceholderText,
   notifierThirdPartyRelayWebhookURL,
@@ -17,9 +16,9 @@ export type NotifierControlsProps = {
   agentID?: string;
   draft: AgentDraft;
   onPatch: (patch: Partial<AgentDraft>) => void;
-  setWebhookOrigin: (origin: string) => void;
+  /** Resolved from config.toml advertise_base_url (or listen_addr when empty); not user-editable. */
+  webhookPublicOrigin: string;
   t: Translator;
-  webhookOrigin: string;
 };
 
 function FieldLabelWithHelp({ children, detail, summary }: { children: ReactNode; detail?: string; summary?: string }) {
@@ -31,59 +30,19 @@ function FieldLabelWithHelp({ children, detail, summary }: { children: ReactNode
   );
 }
 
-function NotifierPullRouteOverrides({ draft, onPatch, t }: Pick<NotifierControlsProps, "draft" | "onPatch" | "t">) {
-  const computed = notifierComputedPullRoutes(draft.notifier_remote_url);
-  const messagesURL = String(draft.notifier_remote_messages_url ?? "").trim() || computed.messages;
-  const ackURL = String(draft.notifier_remote_ack_url ?? "").trim() || computed.ack;
-
-  return (
-    <>
-      <div className="field span-2">
-        <FieldLabelWithHelp
-          summary={t("notifierPullEffectiveRoutesSummary")}
-          detail={t("notifierPullEffectiveRoutesHelp")}
-        >
-          <span>{t("notifierPullEffectiveRoutes")}</span>
-        </FieldLabelWithHelp>
-        <div className="notifier-route-preview">
-          <div>
-            <strong>GET</strong> {messagesURL || "-"}
-          </div>
-          <div>
-            <strong>ACK</strong> {ackURL || "-"}
-          </div>
-        </div>
-      </div>
-      <label className="field span-2">
-        <span>{t("notifierPullOverrideMessagesURL")}</span>
-        <input
-          value={draft.notifier_remote_messages_url || ""}
-          placeholder={computed.messages || t("notifierPullRoutePlaceholderUnset")}
-          onInput={(event) => onPatch({ notifier_remote_messages_url: event.currentTarget.value })}
-        />
-      </label>
-      <label className="field span-2">
-        <span>{t("notifierPullOverrideAckURL")}</span>
-        <input
-          value={draft.notifier_remote_ack_url || ""}
-          placeholder={computed.ack || t("notifierPullRoutePlaceholderUnset")}
-          onInput={(event) => onPatch({ notifier_remote_ack_url: event.currentTarget.value })}
-        />
-      </label>
-    </>
-  );
-}
-
 export function NotifierControls({
   agentID,
   draft,
   onPatch,
-  setWebhookOrigin,
   t,
-  webhookOrigin,
+  webhookPublicOrigin,
 }: NotifierControlsProps) {
   const deliveryMode = draft.notifier_delivery_mode || "webhook";
-  const publicWebhookURL = notifierPushWebhookNotifyURL(webhookOrigin, agentID, t("notifierWebhookOriginPlaceholder"));
+  const publicWebhookURL = notifierPushWebhookNotifyURL(
+    webhookPublicOrigin,
+    agentID,
+    t("notifierWebhookOriginPlaceholder"),
+  );
   const relayPasteURL = notifierThirdPartyRelayWebhookURL(
     draft.notifier_remote_url,
     draft.notifier_remote_subscription_id,
@@ -132,19 +91,6 @@ export function NotifierControls({
             </label>
             <label className="field span-2">
               <FieldLabelWithHelp
-                summary={t("notifierWebhookPublicOriginSummary")}
-                detail={t("notifierWebhookPublicOriginHelp")}
-              >
-                <span>{t("notifierWebhookPublicOrigin")}</span>
-              </FieldLabelWithHelp>
-              <input
-                value={webhookOrigin}
-                placeholder={t("notifierWebhookPublicOriginPlaceholder")}
-                onInput={(event) => setWebhookOrigin(event.currentTarget.value)}
-              />
-            </label>
-            <label className="field span-2">
-              <FieldLabelWithHelp
                 summary={t("notifierThirdPartyCSGWebhookURLSummary")}
                 detail={t("notifierThirdPartyCSGWebhookURLHelp")}
               >
@@ -182,18 +128,6 @@ export function NotifierControls({
                 onInput={(event) => patch({ notifier_remote_token: event.currentTarget.value })}
               />
             </label>
-            <NotifierPullRouteOverrides draft={draft} t={t} onPatch={patch} />
-            <label className="field">
-              <FieldLabelWithHelp summary={t("notifierSubscriptionIDSummary")} detail={t("notifierSubscriptionIDHelp")}>
-                <span>{t("notifierSubscriptionID")}</span>
-              </FieldLabelWithHelp>
-              <input
-                value={draft.notifier_remote_subscription_id || ""}
-                readOnly
-                disabled
-                title={t("notifierSubscriptionIDHelp")}
-              />
-            </label>
             {relayPasteURL ? (
               <label className="field span-2">
                 <FieldLabelWithHelp
@@ -213,7 +147,7 @@ export function NotifierControls({
                 <span>{t("notifierPollInterval")}</span>
               </FieldLabelWithHelp>
               <input
-                value={draft.notifier_poll_interval || "30s"}
+                value={draft.notifier_poll_interval || DEFAULT_NOTIFIER_POLL_INTERVAL}
                 placeholder={t("notifierPollIntervalPlaceholder")}
                 onInput={(event) => patch({ notifier_poll_interval: event.currentTarget.value })}
               />

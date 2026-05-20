@@ -8,7 +8,6 @@ import (
 	"time"
 
 	agentruntime "csgclaw/internal/runtime"
-	runtimenotifier "csgclaw/internal/runtime/notifier"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/utils"
 )
@@ -492,9 +491,6 @@ func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgent
 }
 
 func runtimeOptionsAfterPatch(runtimeKind string, currentRuntimeOptions, patchRuntimeOptions map[string]any) map[string]any {
-	if runtimenotifier.MatchesNotifierRuntimeKind(runtimeKind) {
-		return runtimenotifier.MergeFlatForAgentPatch(currentRuntimeOptions, patchRuntimeOptions)
-	}
 	if len(patchRuntimeOptions) == 0 {
 		return utils.CloneAnyMap(currentRuntimeOptions)
 	}
@@ -506,9 +502,6 @@ func runtimeOptionsAfterPatch(runtimeKind string, currentRuntimeOptions, patchRu
 
 func nextAgentRuntimeOptions(runtimeKind string, currentRuntimeOptions, mergedRuntimeOptions map[string]any) map[string]any {
 	if len(mergedRuntimeOptions) == 0 {
-		if runtimenotifier.MatchesNotifierRuntimeKind(runtimeKind) {
-			return nil
-		}
 		return currentRuntimeOptions
 	}
 	return utils.CloneAnyMap(mergedRuntimeOptions)

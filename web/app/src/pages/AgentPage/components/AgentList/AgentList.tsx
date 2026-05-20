@@ -5,6 +5,7 @@ import {
   isAgentIncomplete,
   isAgentRestartNeeded,
   isAgentRunning,
+  isNotificationBotAgent,
 } from "@/models/agents";
 import { AgentIcon, PlayIcon, StopIcon, TrashIcon, WrenchIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
@@ -68,6 +69,7 @@ export function AgentSection({
 
 export function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop, onRecreate, onDelete, onInvite }) {
   const isManager = item.role === "manager" || item.id === "u-manager";
+  const isNotification = isNotificationBotAgent(item);
   const running = isAgentRunning(item);
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
@@ -116,14 +118,16 @@ export function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop
             </Button>
           </>
         ) : null}
-        <Button
-          variant="outlineDanger"
-          className="agent-action-text danger"
-          disabled={busyKey.startsWith(busyPrefix) || incomplete}
-          onClick={() => onRecreate(item)}
-        >
-          {t("agentRecreate")}
-        </Button>
+        {!isNotification ? (
+          <Button
+            variant="outlineDanger"
+            className="agent-action-text danger"
+            disabled={busyKey.startsWith(busyPrefix) || incomplete}
+            onClick={() => onRecreate(item)}
+          >
+            {t("agentRecreate")}
+          </Button>
+        ) : null}
         {SHOW_AGENT_LIFECYCLE_ACTIONS && activeRoom && !isManager ? (
           <Button
             className="agent-action-text"

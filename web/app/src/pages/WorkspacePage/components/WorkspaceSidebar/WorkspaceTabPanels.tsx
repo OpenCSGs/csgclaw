@@ -16,12 +16,15 @@ export function WorkspaceTabPanels({
   onToggleWorkspaceGroup,
   onCreateRoom,
   onCreateAgent,
+  onCreateNotificationBot,
   hub,
   onSelectHubTemplate,
   agentsError,
   onSelectConversation,
   onPreviewUser,
   agentItems,
+  workerAgentItems = agentItems,
+  notificationAgentItems = [],
   onSelectAgent,
   onPreviewAgent,
   onSelectComputer,
@@ -131,14 +134,14 @@ export function WorkspaceTabPanels({
           <WorkspaceGroup
             id="agents"
             title={t("computerAgentsSection")}
-            count={agentItems.length}
+            count={workerAgentItems.length}
             collapsed={Boolean(collapsedWorkspaceGroups.agents)}
             onToggle={() => onToggleWorkspaceGroup("agents")}
             onAdd={onCreateAgent}
             addLabel={t("createAgent")}
           >
-            {agentItems.length ? (
-              agentItems.map((item) => (
+            {workerAgentItems.length ? (
+              workerAgentItems.map((item) => (
                 <WorkspaceAgentRow
                   key={item.id}
                   item={item}
@@ -150,6 +153,31 @@ export function WorkspaceTabPanels({
               ))
             ) : (
               <div className="workspace-empty">{t("noAgents")}</div>
+            )}
+          </WorkspaceGroup>
+          <WorkspaceGroup
+            id="notifications"
+            title={t("notificationsSection")}
+            count={notificationAgentItems.length}
+            collapsed={Boolean(collapsedWorkspaceGroups.notifications)}
+            onToggle={() => onToggleWorkspaceGroup("notifications")}
+            onAdd={onCreateNotificationBot}
+            addLabel={t("createNotificationBot")}
+          >
+            {notificationAgentItems.length ? (
+              notificationAgentItems.map((item) => (
+                <WorkspaceAgentRow
+                  key={item.id}
+                  item={item}
+                  active={activePane.type === WorkspacePaneTypes.agent && activePane.id === item.id}
+                  t={t}
+                  onSelect={onSelectAgent}
+                  onPreview={onPreviewAgent}
+                  notification
+                />
+              ))
+            ) : (
+              <div className="workspace-empty">{t("noNotificationBots")}</div>
             )}
           </WorkspaceGroup>
           <WorkspaceGroup

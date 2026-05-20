@@ -1,5 +1,6 @@
 import {
   advanceAgentProgress,
+  agentCreateTemplateLocked,
   agentToDraft,
   applyTemplateToDraft,
   availableManagerRebuildImageOptions,
@@ -13,15 +14,19 @@ import {
   envRowsToMap,
   formatProviderLabel,
   isAgentIncomplete,
+  isNotificationBotAgent,
   mapToEnvRows,
+  partitionWorkspaceAgentItems,
   notifierComputedPullRoutes,
   notifierFormIsComplete,
   notifierThirdPartyRelayWebhookURL,
   normalizeAuthProviderName,
   normalizeRuntimeKind,
+  notificationPushWebhookPathForBot,
   parseJSONMap,
   pickDefaultAgentTemplate,
   providerNeedsAuth,
+  resolvedNotifierWebhookOrigin,
   runtimeImageForKind,
 } from "@/models/agents";
 
@@ -133,10 +138,10 @@ describe("agent model helpers", () => {
     expect(pickDefaultAgentTemplate(templates, "openclaw_sandbox", bootstrapConfig)?.id).toBe(
       "builtin/openclaw-worker",
     );
-    expect(pickDefaultAgentTemplate(templates, "notifier", bootstrapConfig)).toBeNull();
+    expect(pickDefaultAgentTemplate(templates, "notification", bootstrapConfig)).toBeNull();
     expect(runtimeImageForKind("openclaw_sandbox", bootstrapConfig, "fallback:worker")).toBe("openclaw:worker");
     expect(runtimeImageForKind("codex", bootstrapConfig, "fallback:worker")).toBe("");
-    expect(runtimeImageForKind("notifier", bootstrapConfig, "fallback:worker")).toBe("");
+    expect(runtimeImageForKind("notification", bootstrapConfig, "fallback:worker")).toBe("");
 
     expect(
       applyTemplateToDraft(
@@ -231,7 +236,9 @@ describe("agent model helpers", () => {
 
   it("normalizes runtime and auth provider labels", () => {
     expect(normalizeRuntimeKind("codex")).toBe("codex");
-    expect(normalizeRuntimeKind("notifier")).toBe("notifier");
+    expect(notificationPushWebhookPathForBot("u-test")).toBe(
+      "/api/v1/channels/csgclaw/bots/u-test/notifications",
+    );
     expect(normalizeRuntimeKind("unknown")).toBe("unknown");
     expect(normalizeAuthProviderName("claude-code")).toBe("claude_code");
     expect(providerNeedsAuth("claude")).toBe(true);
@@ -269,45 +276,37 @@ describe("agent model helpers", () => {
     expect(mapToEnvRows(["not", "a", "map"])).toEqual([{ key: "", value: "" }]);
   });
 
-  it("normalizes notifier runtime options outside request options", () => {
+  it("normalizes notification bot runtime options outside request options", () => {
     const draft = agentToDraft({
-      agent_profile: {
-        request_options: {
-          notifier: { delivery_mode: "webhook", webhook_token: "secret" },
-          temperature: 0.1,
-        },
-      },
       id: "n-1",
       name: "Notifier",
       role: "worker",
-      runtime_kind: "notifier",
+      type: "notification",
       runtime_options: {
         delivery_mode: "remote_pull",
         remote_url: "https://relay.example.com/api/v1/inbox/messages",
-        notifier_profile: { delivery_complete: true, remote_token_set: true },
+        notification_profile: { delivery_complete: true, remote_token_set: true },
       },
     });
 
-    expect(draft.runtime_kind).toBe("notifier");
+    expect(draft.bot_type).toBe("notification");
     expect(draft.notifier_delivery_mode).toBe("remote_pull");
     expect(draft.notifier_remote_url).toBe("https://relay.example.com/api/v1/inbox/messages");
     expect(draft.notifier_delivery_complete).toBe(true);
-    expect(JSON.parse(draft.requestOptionsText)).toEqual({ temperature: 0.1 });
     expect(notifierFormIsComplete(draft)).toBe(true);
-    expect(isAgentIncomplete({ runtime_kind: "notifier", runtime_options: {} })).toBe(true);
-    expect(isAgentIncomplete({ runtime_kind: "notifier", profile_complete: true, runtime_options: {} })).toBe(false);
-    expect(
-      isAgentIncomplete({
-        runtime_kind: "notifier",
-        agent_profile: { profile_complete: true },
-        runtime_options: {},
-      }),
-    ).toBe(false);
+    expect(isAgentIncomplete({ type: "notification", runtime_options: {} })).toBe(true);
+    expect(isAgentIncomplete({ type: "notification", available: true, runtime_options: {} })).toBe(false);
+  });
+
+  it("locks runtime and image on create when a template is selected", () => {
+    expect(agentCreateTemplateLocked({ from_template: "" }, "create")).toBe(false);
+    expect(agentCreateTemplateLocked({ from_template: "builtin/picoclaw-worker" }, "create")).toBe(true);
+    expect(agentCreateTemplateLocked({ from_template: "builtin/picoclaw-worker" }, "edit")).toBe(false);
   });
 
   it("builds notifier pull subscriptions and route previews", () => {
     const draft = ensureNotifierPullSubscriptionDraft({
-      runtime_kind: "notifier",
+      bot_type: "notification",
       notifier_delivery_mode: "remote_pull",
     }) as ReturnType<typeof agentToDraft>;
 
@@ -329,6 +328,33 @@ describe("agent model helpers", () => {
     });
     expect(notifierThirdPartyRelayWebhookURL("https://relay.example.com/api/v1/inbox/messages", "sub-1")).toBe(
       "https://relay.example.com/api/v1/webhooks/ingress?subscription_id=sub-1",
+    );
+    expect(
+      notifierThirdPartyRelayWebhookURL("http://opencsg-stg.com/api/v1/csgbot/notification-relay", "sub-1"),
+    ).toBe(
+      "http://opencsg-stg.com/api/v1/csgbot/notification-relay/webhooks/ingress?subscription_id=sub-1",
+    );
+    expect(notifierThirdPartyRelayWebhookURL("https://relay.example.com", "sub-1")).toBe(
+      "https://relay.example.com/webhooks/ingress?subscription_id=sub-1",
+    );
+  });
+
+  it("partitions workspace agents into workers and notification bots", () => {
+    const agents = [
+      { id: "u-manager", role: "manager", type: "normal" },
+      { id: "u-worker", role: "worker", type: "normal" },
+      { id: "u-notify", role: "worker", type: "notification" },
+    ];
+    const { workerAgentItems, notificationAgentItems } = partitionWorkspaceAgentItems(agents);
+    expect(workerAgentItems.map((item) => item.id)).toEqual(["u-manager", "u-worker"]);
+    expect(notificationAgentItems.map((item) => item.id)).toEqual(["u-notify"]);
+    expect(isNotificationBotAgent({ type: "notification" })).toBe(true);
+  });
+
+  it("uses bootstrap advertise_base_url for notifier webhook origin", () => {
+    expect(resolvedNotifierWebhookOrigin(null)).toBe("");
+    expect(resolvedNotifierWebhookOrigin({ advertise_base_url: "http://127.0.0.1:18080/" })).toBe(
+      "http://127.0.0.1:18080",
     );
   });
 });

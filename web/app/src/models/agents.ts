@@ -3,6 +3,11 @@ import {
   DEFAULT_MANAGER_DESCRIPTION,
   DEFAULT_PROVIDER,
   DEFAULT_REASONING_EFFORT,
+  BOT_CREATE_KIND_NOTIFICATION,
+  BOT_CREATE_KIND_WORKER,
+  BOT_TYPE_NOTIFICATION,
+  BOT_TYPE_NORMAL,
+  DEFAULT_NOTIFIER_POLL_INTERVAL,
   DEFAULT_RUNTIME_KIND,
   MANAGER_AGENT_ID,
   MANAGER_AGENT_NAME,
@@ -10,9 +15,9 @@ import {
   RUNTIME_KIND_OPTIONS,
   WORKER_AGENT_ROLE,
 } from "@/shared/constants/agents";
-import { ApiEndpoints } from "@/shared/constants/api";
 
-export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | "notifier" | string;
+export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | string;
+export type BotType = typeof BOT_TYPE_NORMAL | typeof BOT_TYPE_NOTIFICATION | string;
 export type ProviderName = "csghub_lite" | "codex" | "claude_code" | "api" | string;
 export type JSONRecord = Record<string, unknown>;
 
@@ -38,6 +43,7 @@ export type AgentProfileLike = {
   runtime_options?: JSONRecord | null;
   runtime_kind?: string | null;
   notifier_profile?: JSONRecord | null;
+  notification_profile?: JSONRecord | null;
 };
 
 export type AgentLike = AgentProfileLike & {
@@ -46,6 +52,8 @@ export type AgentLike = AgentProfileLike & {
   from_template?: string | null;
   handle?: string | null;
   id?: string | null;
+  type?: BotType | null;
+  available?: boolean | null;
   image?: string | null;
   name?: string | null;
   role?: string | null;
@@ -84,6 +92,7 @@ export type AgentDraft = {
   reasoning_effort: string;
   requestOptionsText: string;
   role?: string;
+  bot_type?: BotType;
   runtime_kind: RuntimeKind;
   template_name?: string;
 };
@@ -107,6 +116,7 @@ export type ManagerTemplateVariant = {
 };
 
 export type RuntimeBootstrapConfig = {
+  advertise_base_url?: string | null;
   default_worker_template?: string | null;
   effective_manager_image?: string | null;
   runtime_default_images?: unknown;
@@ -180,17 +190,64 @@ export function newNotifierSubscriptionId(): string {
   return `sub-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
 }
 
-export function notifierPushWebhookPathForAgent(agentID: unknown): string {
-  const id = String(agentID || "").trim();
-  if (!id) {
-    return "/api/v1/notify/<agent_id>";
-  }
-  return `/api/v1/notify/${encodeURIComponent(id)}`;
+export function normalizeBotType(value: unknown): BotType {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized === BOT_TYPE_NOTIFICATION ? BOT_TYPE_NOTIFICATION : BOT_TYPE_NORMAL;
 }
 
-export function notifierPushWebhookNotifyURL(
+export function isNotificationBotAgent(item: AgentLike | null | undefined): boolean {
+  return normalizeBotType(item?.type) === BOT_TYPE_NOTIFICATION;
+}
+
+export function partitionWorkspaceAgentItems(
+  agents: readonly AgentLike[] | null | undefined,
+  managerID = MANAGER_AGENT_ID,
+): { workerAgentItems: AgentLike[]; notificationAgentItems: AgentLike[] } {
+  const manager = (agents ?? []).find((item) => item.role === MANAGER_AGENT_ROLE || item.id === managerID) ?? null;
+  const rest = (agents ?? []).filter((item) => item.id !== manager?.id);
+  const notificationAgentItems = rest.filter((item) => isNotificationBotAgent(item));
+  const workerAgentItems = [manager, ...rest.filter((item) => !isNotificationBotAgent(item))].filter(Boolean);
+  return { workerAgentItems, notificationAgentItems };
+}
+
+export function notificationBotStatusLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
+  if (isNotificationBotAgent(item)) {
+    return item?.available === true ? t("notificationBotReady") : t("notificationBotNotReady");
+  }
+  return String(item?.status || "unknown");
+}
+
+export function notificationBotMetaLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
+  const draft = agentToDraft(item);
+  const mode = draft.notifier_delivery_mode || "webhook";
+  if (mode === "remote_pull") {
+    return t("notifierDeliveryRemotePull");
+  }
+  return t("notifierDeliveryWebhook");
+}
+
+export function notificationPushWebhookPathForBot(botID: unknown): string {
+  const id = String(botID || "").trim();
+  if (!id) {
+    return "/api/v1/channels/csgclaw/bots/<bot_id>/notifications";
+  }
+  return `/api/v1/channels/csgclaw/bots/${encodeURIComponent(id)}/notifications`;
+}
+
+export function notifierPushWebhookPathForAgent(botID: unknown): string {
+  return notificationPushWebhookPathForBot(botID);
+}
+
+/** Public webhook base URL from bootstrap (server resolves empty advertise_base_url via listen_addr). */
+export function resolvedNotifierWebhookOrigin(bootstrap: RuntimeBootstrapConfig | null | undefined): string {
+  return String(bootstrap?.advertise_base_url ?? "").trim().replace(/\/+$/, "");
+}
+
+export function notificationPushWebhookNotifyURL(
   origin: unknown,
-  agentID: unknown,
+  botID: unknown,
   placeholderHost = "https://<your-csgclaw-host>",
 ): string {
   let base = String(origin ?? "")
@@ -199,7 +256,69 @@ export function notifierPushWebhookNotifyURL(
   if (!base) {
     base = String(placeholderHost || "https://<your-csgclaw-host>").trim();
   }
-  return `${base}${notifierPushWebhookPathForAgent(agentID)}`;
+  return `${base}${notificationPushWebhookPathForBot(botID)}`;
+}
+
+export function notifierPushWebhookNotifyURL(
+  origin: unknown,
+  botID: unknown,
+  placeholderHost = "https://<your-csgclaw-host>",
+): string {
+  return notificationPushWebhookNotifyURL(origin, botID, placeholderHost);
+}
+
+const RELAY_ROUTE_SUFFIXES = ["/webhooks/ingress", "/webhook/ingress", "/inbox/messages", "/inbox/ack"] as const;
+const RELAY_ROUTE_WEBHOOKS_INGRESS = "/webhooks/ingress";
+
+function parseNotifierRelayURL(input: string): URL | null {
+  let raw = String(input ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) {
+    const local = /^(localhost|127\.0\.0\.1|\[::1\])(:|\/?|\?|$)/i.test(raw) || /^\[::1\]/i.test(raw);
+    raw = `${local ? "http" : "https"}://${raw.replace(/^\/+/, "")}`;
+  }
+  try {
+    const url = new URL(raw);
+    if (!url.hostname) {
+      return null;
+    }
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+/** Mirrors Go relayURLPathBase: strip known relay route suffixes from pathname. */
+function normalizeRelayBasePath(pathname: string): string {
+  let path = (pathname || "/").replace(/\/+$/, "") || "/";
+  let lower = path.toLowerCase();
+  for (;;) {
+    let trimmed = false;
+    for (const suffix of RELAY_ROUTE_SUFFIXES) {
+      if (lower.endsWith(suffix)) {
+        path = path.slice(0, -suffix.length).replace(/\/+$/, "");
+        lower = path.toLowerCase();
+        trimmed = true;
+        break;
+      }
+    }
+    if (!trimmed) {
+      break;
+    }
+  }
+  return path || "/";
+}
+
+/** Mirrors Go relayURLWithSuffix for /webhooks/ingress under remote_url base. */
+function relayIngressPath(pathname: string): string {
+  const root = normalizeRelayBasePath(pathname);
+  const suffix = RELAY_ROUTE_WEBHOOKS_INGRESS.replace(/^\/+/, "");
+  if (!root || root === "/") {
+    return `/${suffix}`;
+  }
+  return `${root}/${suffix}`.replace(/\/+/g, "/");
 }
 
 export function notifierThirdPartyRelayWebhookURL(remoteBase: unknown, subscriptionID: unknown): string {
@@ -208,24 +327,17 @@ export function notifierThirdPartyRelayWebhookURL(remoteBase: unknown, subscript
   if (!base || !sid) {
     return "";
   }
-  let input = base;
-  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(input)) {
-    const local = /^(localhost|127\.0\.0\.1|\[::1\])(:|\/?|\?|$)/i.test(input) || /^\[::1\]/i.test(input);
-    input = `${local ? "http" : "https"}://${input.replace(/^\/+/, "")}`;
+  const url = parseNotifierRelayURL(base);
+  if (!url) {
+    const ingress = `${base.replace(/\/+$/, "")}${RELAY_ROUTE_WEBHOOKS_INGRESS}`;
+    const joiner = ingress.includes("?") ? "&" : "?";
+    return `${ingress}${joiner}subscription_id=${encodeURIComponent(sid)}`;
   }
-  try {
-    const url = new URL(input);
-    if (!url.pathname || url.pathname === "/") {
-      url.pathname = ApiEndpoints.notifierRelayWebhookIngress;
-    } else if (/\/inbox\/messages\/?$/i.test(url.pathname)) {
-      url.pathname = url.pathname.replace(/\/inbox\/messages\/?$/i, "/webhooks/ingress");
-    }
-    url.searchParams.set("subscription_id", sid);
-    return url.toString();
-  } catch {
-    const joiner = base.includes("?") ? "&" : "?";
-    return `${base}${joiner}subscription_id=${encodeURIComponent(sid)}`;
-  }
+  url.pathname = relayIngressPath(url.pathname);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("subscription_id", sid);
+  return url.toString();
 }
 
 export function notifierComputedPullRoutes(remoteURL: unknown): { messages: string; ack: string } {
@@ -327,15 +439,23 @@ function notifierProfileSummaryFlags(
 ) {
   const runtimeOptions = mergedRuntimeOptionsForView(profile, agent);
   const summary =
-    runtimeOptions.notifier_profile &&
-    typeof runtimeOptions.notifier_profile === "object" &&
-    !Array.isArray(runtimeOptions.notifier_profile)
-      ? (runtimeOptions.notifier_profile as JSONRecord)
-      : profile?.notifier_profile &&
-          typeof profile.notifier_profile === "object" &&
-          !Array.isArray(profile.notifier_profile)
-        ? profile.notifier_profile
-        : null;
+    runtimeOptions.notification_profile &&
+    typeof runtimeOptions.notification_profile === "object" &&
+    !Array.isArray(runtimeOptions.notification_profile)
+      ? (runtimeOptions.notification_profile as JSONRecord)
+      : runtimeOptions.notifier_profile &&
+          typeof runtimeOptions.notifier_profile === "object" &&
+          !Array.isArray(runtimeOptions.notifier_profile)
+        ? (runtimeOptions.notifier_profile as JSONRecord)
+        : profile?.notification_profile &&
+            typeof profile.notification_profile === "object" &&
+            !Array.isArray(profile.notification_profile)
+          ? profile.notification_profile
+          : profile?.notifier_profile &&
+              typeof profile.notifier_profile === "object" &&
+              !Array.isArray(profile.notifier_profile)
+            ? profile.notifier_profile
+            : null;
   if (!summary) {
     return {
       notifier_delivery_complete: false,
@@ -408,7 +528,7 @@ export function profileToDraft(profile: AgentProfileLike | null | undefined, age
     notifier_webhook_token: String(notifier.webhook_token || ""),
     notifier_remote_url: String(notifier.remote_url || ""),
     notifier_remote_subscription_id: String(notifier.remote_subscription_id || ""),
-    notifier_poll_interval: String(notifier.poll_interval || "30s"),
+    notifier_poll_interval: String(notifier.poll_interval || DEFAULT_NOTIFIER_POLL_INTERVAL),
     notifier_remote_token: String(notifier.remote_token || ""),
     notifier_remote_messages_url: String(notifier.remote_messages_url || ""),
     notifier_remote_ack_url: String(notifier.remote_ack_url || ""),
@@ -452,42 +572,21 @@ export function notifierDeliveryConfiguredInProfile(
   return notifierConfiguredFromFlatDetails(notifierFlatFromSources(profile, agent));
 }
 
-function inferNotifierRuntimeKindIfUnset(
-  agent: AgentLike | null | undefined,
-  profile: AgentProfileLike | null | undefined,
-): string {
-  if (String(agent?.runtime_kind ?? "").trim()) {
-    return "";
-  }
-  const profileSummary = notifierProfileSummaryFlags(profile || agent?.agent_profile, agent);
-  if (
-    profileSummary.notifier_delivery_complete ||
-    profileSummary.notifier_webhook_token_set ||
-    profileSummary.notifier_remote_token_set
-  ) {
-    return "notifier";
-  }
-  if (!notifierDeliveryConfiguredInProfile(profile || agent?.agent_profile || {}, agent)) {
-    return "";
-  }
-  return "notifier";
-}
-
 export function agentToDraft(agent: AgentLike | null | undefined): AgentDraft {
   const profile = agent?.agent_profile || agent || {};
-  const inferredRuntimeKind = inferNotifierRuntimeKindIfUnset(agent, profile);
-  const merged = inferredRuntimeKind ? { ...agent, runtime_kind: inferredRuntimeKind } : agent;
+  const botType = normalizeBotType(agent?.type);
   return {
-    agent_id: merged?.id || "",
-    name: merged?.name || "",
-    role: merged?.role || WORKER_AGENT_ROLE,
-    description: merged?.description || profile.description || "",
-    default_image: merged?.image || "",
-    image: merged?.image || "",
-    from_template: merged?.from_template || "",
-    template_name: merged?.template_name || "",
-    ...profileToDraft(profile, merged),
-    runtime_kind: normalizeRuntimeKind(merged?.runtime_kind || profile.runtime_kind),
+    agent_id: agent?.id || "",
+    name: agent?.name || "",
+    role: agent?.role || WORKER_AGENT_ROLE,
+    bot_type: botType,
+    description: agent?.description || profile.description || "",
+    default_image: agent?.image || "",
+    image: agent?.image || "",
+    from_template: agent?.from_template || "",
+    template_name: agent?.template_name || "",
+    ...profileToDraft(profile, agent),
+    runtime_kind: normalizeRuntimeKind(agent?.runtime_kind || profile.runtime_kind),
   };
 }
 
@@ -520,7 +619,7 @@ export function pickDefaultAgentTemplate(
   if (!candidates.length) {
     return null;
   }
-  if (requestedRuntime === "notifier") {
+  if (requestedRuntime === BOT_TYPE_NOTIFICATION) {
     return null;
   }
   const configuredDefault = String(bootstrapConfig?.default_worker_template || "").trim();
@@ -605,7 +704,7 @@ export function draftNotifierDetailsFromDraft(draft: Partial<AgentDraft> | null 
     webhook_token: String(draft.notifier_webhook_token ?? "").trim(),
     remote_url: String(draft.notifier_remote_url ?? "").trim(),
     remote_subscription_id: String(draft.notifier_remote_subscription_id ?? "").trim(),
-    poll_interval: String(draft.notifier_poll_interval ?? "30s").trim(),
+    poll_interval: String(draft.notifier_poll_interval ?? DEFAULT_NOTIFIER_POLL_INTERVAL).trim(),
     remote_token: String(draft.notifier_remote_token ?? "").trim(),
     remote_messages_url: String(draft.notifier_remote_messages_url ?? "").trim(),
     remote_ack_url: String(draft.notifier_remote_ack_url ?? "").trim(),
@@ -671,15 +770,23 @@ export function notifierFormIsComplete(
   const runtimeOptions = item?.runtime_options;
   const profileRuntimeOptions = item?.agent_profile?.runtime_options;
   const runtimeSummary =
-    runtimeOptions?.notifier_profile &&
-    typeof runtimeOptions.notifier_profile === "object" &&
-    !Array.isArray(runtimeOptions.notifier_profile)
-      ? (runtimeOptions.notifier_profile as JSONRecord)
-      : profileRuntimeOptions?.notifier_profile &&
-          typeof profileRuntimeOptions.notifier_profile === "object" &&
-          !Array.isArray(profileRuntimeOptions.notifier_profile)
-        ? (profileRuntimeOptions.notifier_profile as JSONRecord)
-        : null;
+    runtimeOptions?.notification_profile &&
+    typeof runtimeOptions.notification_profile === "object" &&
+    !Array.isArray(runtimeOptions.notification_profile)
+      ? (runtimeOptions.notification_profile as JSONRecord)
+      : runtimeOptions?.notifier_profile &&
+          typeof runtimeOptions.notifier_profile === "object" &&
+          !Array.isArray(runtimeOptions.notifier_profile)
+        ? (runtimeOptions.notifier_profile as JSONRecord)
+        : profileRuntimeOptions?.notification_profile &&
+            typeof profileRuntimeOptions.notification_profile === "object" &&
+            !Array.isArray(profileRuntimeOptions.notification_profile)
+          ? (profileRuntimeOptions.notification_profile as JSONRecord)
+          : profileRuntimeOptions?.notifier_profile &&
+              typeof profileRuntimeOptions.notifier_profile === "object" &&
+              !Array.isArray(profileRuntimeOptions.notifier_profile)
+            ? (profileRuntimeOptions.notifier_profile as JSONRecord)
+            : null;
   const legacySummary =
     item?.agent_profile?.notifier_profile &&
     typeof item.agent_profile.notifier_profile === "object" &&
@@ -728,6 +835,9 @@ export function envRowsToMap(rows: readonly EnvKeyValueRow[] | null | undefined)
 }
 
 export function isAgentRunning(item: AgentLike | null | undefined): boolean {
+  if (isNotificationBotAgent(item)) {
+    return item?.available === true;
+  }
   const status = String(item?.status || "").toLowerCase();
   return status === "running" || status === "online";
 }
@@ -741,6 +851,9 @@ export function isAgentIncomplete(
   draftOverride?: AgentDraft | null | undefined,
 ): boolean {
   if (isAgentProfileMarkedComplete(item)) {
+    return false;
+  }
+  if (isNotificationBotAgent(item) && item?.available === true) {
     return false;
   }
   const draft = draftOverride ?? agentToDraft(item);
@@ -816,8 +929,6 @@ export function normalizeRuntimeKind(kind: unknown): RuntimeKind {
       return "openclaw_sandbox";
     case "codex":
       return "codex";
-    case "notifier":
-      return "notifier";
     case "picoclaw_sandbox":
       return "picoclaw_sandbox";
     default:
@@ -826,7 +937,7 @@ export function normalizeRuntimeKind(kind: unknown): RuntimeKind {
 }
 
 export function isNotifierRuntimeDraft(draft: Partial<AgentDraft> | null | undefined): boolean {
-  return normalizeRuntimeKind(draft?.runtime_kind) === "notifier";
+  return normalizeBotType(draft?.bot_type) === BOT_TYPE_NOTIFICATION;
 }
 
 export function effectiveAgentRuntimeKind(
@@ -840,7 +951,36 @@ export function isNotifierRuntimeDraftOnAgentPage(
   draft: Partial<AgentDraft> | null | undefined,
   item: AgentLike | null | undefined,
 ): boolean {
-  return effectiveAgentRuntimeKind(draft, item) === "notifier";
+  if (normalizeBotType(draft?.bot_type) === BOT_TYPE_NOTIFICATION) {
+    return true;
+  }
+  return isNotificationBotAgent(item);
+}
+
+/** Create-modal tab context: worker vs notification (overrides draft bot_type on create). */
+export function isNotificationBotDraftContext(
+  draft: Partial<AgentDraft> | null | undefined,
+  item?: AgentLike | null,
+  createBotKind?: string,
+): boolean {
+  if (createBotKind === BOT_CREATE_KIND_NOTIFICATION) {
+    return true;
+  }
+  if (createBotKind === BOT_CREATE_KIND_WORKER) {
+    return false;
+  }
+  return isNotifierRuntimeDraftOnAgentPage(draft, item ?? null);
+}
+
+/** When a hub template is selected on create, runtime and image come from the template. */
+export function agentCreateTemplateLocked(
+  draft: Partial<AgentDraft> | null | undefined,
+  modalMode: string,
+): boolean {
+  if (modalMode !== "create") {
+    return false;
+  }
+  return Boolean(String(draft?.from_template ?? "").trim());
 }
 
 export function normalizeRuntimeImageMap(value: unknown): Partial<Record<RuntimeKind, string>> {
@@ -867,7 +1007,7 @@ export function runtimeImageForKind(
   if (!runtimeKind) {
     runtimeKind = DEFAULT_RUNTIME_KIND;
   }
-  if (runtimeKind === "codex" || runtimeKind === "notifier") {
+  if (runtimeKind === "codex" || runtimeKind === BOT_TYPE_NOTIFICATION) {
     return "";
   }
   const images = normalizeRuntimeImageMap(bootstrapConfig?.runtime_default_images);
@@ -886,7 +1026,7 @@ export function availableManagerRuntimeOptions(bootstrapConfig: RuntimeBootstrap
     : [];
   const gatewayKinds = (configuredKinds.length ? configuredKinds : [DEFAULT_RUNTIME_KIND, "openclaw_sandbox"])
     .map((kind) => normalizeRuntimeKind(kind))
-    .filter((kind, index, array) => kind && kind !== "codex" && kind !== "notifier" && array.indexOf(kind) === index);
+    .filter((kind, index, array) => kind && kind !== "codex" && array.indexOf(kind) === index);
   return RUNTIME_KIND_OPTIONS.filter((option) => gatewayKinds.includes(option.value));
 }
 
@@ -930,7 +1070,7 @@ export function availableManagerRebuildRuntimeOptions(
   const seen = new Set<string>();
   const push = (kind: unknown) => {
     const normalized = normalizeRuntimeKind(kind);
-    if (!normalized || normalized === "codex" || normalized === "notifier" || seen.has(normalized)) {
+    if (!normalized || normalized === "codex" || seen.has(normalized)) {
       return;
     }
     seen.add(normalized);
@@ -994,7 +1134,7 @@ export function defaultManagerRebuildImageForRuntime(
 
 export function agentCreateProgressSteps(runtimeKind: unknown): AgentCreateProgressStep[] {
   const kind = normalizeRuntimeKind(runtimeKind) || DEFAULT_RUNTIME_KIND;
-  if (kind === "notifier") {
+  if (kind === BOT_TYPE_NOTIFICATION) {
     return [
       { label: "agentCreateProgressPreparing", target: 40 },
       { label: "agentCreateProgressFinishing", target: 96 },
@@ -1056,8 +1196,6 @@ export function formatRuntimeKindLabel(kind: unknown, t: TranslateFn): string {
       return t("runtimeOpenclaw");
     case "codex":
       return "Codex";
-    case "notifier":
-      return "notifier";
     case "picoclaw_sandbox":
       return t("runtimePicoclaw");
     default:

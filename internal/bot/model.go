@@ -8,6 +8,11 @@ import (
 	"csgclaw/internal/apitypes"
 )
 
+const (
+	BotTypeNormal       = "normal"
+	BotTypeNotification = "notification"
+)
+
 type Role string
 
 const (
@@ -26,6 +31,19 @@ type Bot = apitypes.Bot
 
 type CreateRequest = apitypes.CreateBotRequest
 
+func NormalizeBotType(botType string) string {
+	switch strings.ToLower(strings.TrimSpace(botType)) {
+	case BotTypeNotification:
+		return BotTypeNotification
+	default:
+		return BotTypeNormal
+	}
+}
+
+func IsNotificationBot(b Bot) bool {
+	return NormalizeBotType(b.Type) == BotTypeNotification
+}
+
 func NormalizeCreateRequest(req CreateRequest) (CreateRequest, error) {
 	req.ID = strings.TrimSpace(req.ID)
 	req.Name = strings.TrimSpace(req.Name)
@@ -33,6 +51,7 @@ func NormalizeCreateRequest(req CreateRequest) (CreateRequest, error) {
 	req.Image = strings.TrimSpace(req.Image)
 	req.RuntimeKind = strings.TrimSpace(req.RuntimeKind)
 	req.FromTemplate = strings.TrimSpace(req.FromTemplate)
+	req.Type = NormalizeBotType(req.Type)
 	if req.Name == "" {
 		return CreateRequest{}, fmt.Errorf("name is required")
 	}
@@ -61,6 +80,7 @@ func NormalizeBot(b Bot) (Bot, error) {
 	b.Description = strings.TrimSpace(b.Description)
 	b.AgentID = strings.TrimSpace(b.AgentID)
 	b.UserID = strings.TrimSpace(b.UserID)
+	b.Type = NormalizeBotType(b.Type)
 	if b.ID == "" {
 		return Bot{}, fmt.Errorf("id is required")
 	}
@@ -78,7 +98,11 @@ func NormalizeBot(b Bot) (Bot, error) {
 	}
 	b.Role = string(role)
 	b.Channel = string(channel)
-	b.Available = true
+	if IsNotificationBot(b) {
+		b.Available = false
+	} else {
+		b.Available = true
+	}
 	return b, nil
 }
 
