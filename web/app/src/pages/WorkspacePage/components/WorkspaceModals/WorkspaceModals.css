@@ -1,0 +1,868 @@
+.modal-actions .send-button {
+  height: 34px;
+  padding: 0 14px;
+  box-shadow: none;
+}
+
+.modal-backdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.modal-card {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.modal-actions {
+  position: relative;
+  z-index: 1;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.modal-title {
+  font-weight: 650;
+}
+
+.agent-create-progress {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface) 88%, var(--panel));
+}
+
+.agent-create-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.agent-create-progress-header strong {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.agent-create-progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--line) 52%, transparent);
+}
+
+.agent-create-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 360ms ease;
+}
+
+.agent-create-progress-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.agent-create-progress-steps span {
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.agent-create-progress-steps span.active {
+  color: var(--text);
+  border-color: color-mix(in oklab, var(--primary) 56%, var(--line));
+}
+
+.agent-create-progress-steps span.complete {
+  color: var(--on-primary);
+  border-color: transparent;
+  background: var(--primary);
+}
+
+.agent-create-progress.failed {
+  border-color: color-mix(in oklab, var(--danger) 42%, var(--line));
+}
+
+.agent-create-progress.failed .agent-create-progress-fill {
+  background: var(--danger);
+}
+
+.selection-list {
+  display: grid;
+  gap: 10px;
+}
+
+.selection-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+}
+
+.selection-all-item {
+  border-color: color-mix(in oklab, var(--primary) 34%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--primary) 13%, transparent), transparent 72%), var(--field);
+}
+
+.profile-backdrop {
+  z-index: 20;
+}
+
+.profile-backdrop.nonblocking {
+  pointer-events: none;
+  place-items: end;
+  background: transparent;
+}
+
+.profile-backdrop.nonblocking .profile-modal {
+  pointer-events: auto;
+  width: min(820px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  margin-right: 16px;
+  box-shadow: var(--shadow);
+}
+
+.profile-modal {
+  width: min(880px, 100%);
+}
+
+.agent-modal {
+  width: min(920px, 100%);
+}
+
+.profile-modal .modal-header {
+  position: sticky;
+  top: -24px;
+  z-index: 2;
+  margin: -24px -24px 0;
+  padding: 18px 24px 14px;
+  background: color-mix(in oklab, var(--panel) 94%, transparent);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+}
+
+.profile-editor-shell {
+  display: grid;
+  margin-top: 14px;
+}
+
+.profile-section {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.profile-section-title {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
+  gap: 14px;
+}
+
+.profile-grid-compact,
+.profile-api-grid,
+.profile-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profile-runtime-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(220px, 1.3fr) minmax(116px, 0.7fr) minmax(120px, 0.6fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.auth-status-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+}
+
+.auth-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #d69321;
+}
+
+.auth-status-row.connected .auth-status-dot {
+  background: #2f9e60;
+}
+
+.auth-status-message {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.profile-section .field {
+  gap: 6px;
+  margin-top: 0;
+}
+
+.profile-section .field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.api-key-field {
+  min-width: 0;
+}
+
+.api-key-input-shell {
+  position: relative;
+  min-width: 0;
+}
+
+.api-key-input-shell input {
+  position: relative;
+  z-index: 1;
+}
+
+.api-key-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 9px 11px;
+  color: color-mix(in oklab, var(--text) 54%, var(--muted));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.api-key-mask-prefix {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.api-key-mask-dots {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 1px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.profile-section .field input,
+.profile-section .field textarea,
+.profile-section .field select {
+  min-height: 38px;
+  padding: 9px 11px;
+  font-size: 13px;
+}
+
+.profile-section .field textarea.compact-textarea {
+  min-height: 64px;
+}
+
+.profile-section .field textarea.compact-json {
+  min-height: 132px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.compact-toggle-row {
+  min-height: 38px;
+  grid-template-columns: auto 1fr;
+  align-self: end;
+  margin: 0;
+  padding: 9px 11px;
+}
+
+.profile-model-row {
+  display: grid;
+  gap: 12px;
+  align-items: end;
+}
+
+.profile-refresh {
+  height: 48px;
+  margin-top: 18px;
+  white-space: nowrap;
+}
+
+.fast-mode-row {
+  margin-top: 16px;
+  grid-template-columns: auto 1fr;
+}
+
+.detection-list {
+  margin-top: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.detection-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+}
+
+.detection-row span {
+  font-weight: 650;
+}
+
+.detection-row.ok span {
+  color: var(--mention);
+}
+
+.detection-row.failed span {
+  color: oklch(0.72 0.16 35);
+}
+
+.detection-row small {
+  min-width: 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-upgrade-button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--danger) 30%, var(--line));
+  background: color-mix(in oklab, var(--danger) 8%, var(--field));
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.sidebar-upgrade-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: color-mix(in oklab, var(--danger) 12%, var(--field));
+  border-color: color-mix(in oklab, var(--danger) 44%, var(--line));
+}
+
+.sidebar-upgrade-button:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.sidebar-upgrade-button.is-running {
+  border-color: color-mix(in oklab, var(--primary) 36%, var(--line));
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+.sidebar-upgrade-button.is-done {
+  border-color: color-mix(in oklab, var(--portal-success-700) 36%, var(--line));
+  background: var(--portal-success-50);
+  color: var(--portal-success-700);
+}
+
+.sidebar-upgrade-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--danger);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 16%, transparent);
+  flex: 0 0 auto;
+}
+
+.sidebar-upgrade-button.is-running .sidebar-upgrade-dot {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent);
+  animation: upgrade-pulse 1.4s ease-in-out infinite;
+}
+
+.sidebar-upgrade-button.is-done .sidebar-upgrade-dot {
+  background: var(--portal-success-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--portal-success-700) 16%, transparent);
+}
+
+.upgrade-modal {
+  width: min(520px, 100%);
+}
+
+.upgrade-summary {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.upgrade-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.upgrade-summary-row strong {
+  color: var(--text);
+  font-weight: 600;
+  text-align: right;
+}
+
+.upgrade-status-card {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in oklab, var(--primary) 28%, var(--line));
+  border-radius: 8px;
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+.upgrade-status-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.upgrade-status-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent);
+}
+
+.upgrade-status-card.starting .upgrade-status-dot,
+.upgrade-status-card.restarting .upgrade-status-dot {
+  animation: upgrade-pulse 1.4s ease-in-out infinite;
+}
+
+.upgrade-status-card.done {
+  border-color: color-mix(in oklab, var(--portal-success-700) 32%, var(--line));
+  background: var(--portal-success-50);
+}
+
+.upgrade-status-card.done .upgrade-status-dot {
+  background: var(--portal-success-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--portal-success-700) 16%, transparent);
+}
+
+.upgrade-status-card.error {
+  border-color: color-mix(in oklab, var(--danger) 32%, var(--line));
+  background: var(--portal-error-50);
+}
+
+.upgrade-status-card.error .upgrade-status-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 16%, transparent);
+}
+
+.profile-model-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.env-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.env-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.env-row input {
+  min-width: 0;
+}
+
+.env-remove-button {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.env-add-button {
+  justify-self: start;
+  margin-top: 2px;
+}
+
+@media (max-width: 960px) {
+  .profile-refresh {
+    width: 100%;
+  }
+}
+
+.modal-card {
+  padding: 26px;
+}
+
+.modal-actions {
+  border-top-color: var(--line);
+}
+
+.modal-title {
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1.08;
+}
+
+.selection-item {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: var(--field);
+}
+
+.selection-item.selection-all-item {
+  border-color: color-mix(in oklab, var(--primary) 34%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--primary) 13%, transparent), transparent 72%), var(--field);
+}
+
+.selection-item.compact-toggle-row {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px;
+}
+
+.selection-item.compact-toggle-row span {
+  white-space: nowrap;
+}
+
+.selection-item:hover {
+  border-color: oklch(0.77 0.16 164 / 0.38);
+}
+
+.profile-editor-shell {
+  gap: 16px;
+}
+
+.profile-section {
+  padding: 18px;
+}
+
+.modal-backdrop {
+  background: rgba(12, 17, 29, 0.56);
+  backdrop-filter: none;
+}
+
+.modal-actions {
+  background: var(--panel);
+}
+
+.modal-card .field input,
+.modal-card .field textarea,
+.modal-card .field select,
+.profile-section .field input,
+.profile-section .field textarea,
+.profile-section .field select,
+.env-row input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--portal-gray-300);
+  border-radius: var(--radius-md);
+  background-color: var(--portal-white);
+  color: var(--portal-gray-900);
+  box-shadow: var(--shadow-xs);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.modal-card .field input,
+.modal-card .field select,
+.profile-section .field input,
+.profile-section .field select,
+.env-row input {
+  height: 44px;
+  padding: 10px 14px;
+}
+
+.modal-card .field textarea,
+.profile-section .field textarea {
+  min-height: 88px;
+  padding: 10px 14px;
+  resize: vertical;
+}
+
+.modal-card .field textarea.compact-json,
+.profile-section .field textarea.compact-json {
+  min-height: 132px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.modal-card .field input::placeholder,
+.modal-card .field textarea::placeholder,
+.profile-section .field input::placeholder,
+.profile-section .field textarea::placeholder,
+.env-row input::placeholder {
+  color: var(--portal-gray-500);
+}
+
+.modal-card .field input:hover,
+.modal-card .field textarea:hover,
+.modal-card .field select:hover,
+.profile-section .field input:hover,
+.profile-section .field textarea:hover,
+.profile-section .field select:hover,
+.env-row input:hover {
+  border-color: var(--portal-gray-400);
+}
+
+.modal-card .field input:focus,
+.modal-card .field textarea:focus,
+.modal-card .field select:focus,
+.profile-section .field input:focus,
+.profile-section .field textarea:focus,
+.profile-section .field select:focus,
+.env-row input:focus {
+  border-color: var(--portal-brand-500);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 4px rgba(77, 106, 214, 0.24);
+}
+
+.modal-card .field input:disabled,
+.modal-card .field textarea:disabled,
+.modal-card .field select:disabled,
+.profile-section .field input:disabled,
+.profile-section .field textarea:disabled,
+.profile-section .field select:disabled,
+.env-row input:disabled {
+  border-color: var(--portal-gray-200);
+  background-color: var(--portal-gray-50);
+  color: var(--portal-gray-500);
+  cursor: not-allowed;
+}
+
+.modal-card .field span,
+.modal-card .field .field-label,
+.profile-section .field span,
+.profile-section .field .field-label {
+  color: var(--portal-gray-700);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.modal-card .selection-item.compact-toggle-row,
+.profile-section .selection-item.compact-toggle-row {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-white);
+  color: var(--portal-gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.modal-card .selection-item.compact-toggle-row:hover,
+.profile-section .selection-item.compact-toggle-row:hover,
+.modal-card .selection-item.compact-toggle-row:focus-within,
+.profile-section .selection-item.compact-toggle-row:focus-within {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-25);
+  color: var(--portal-brand-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.modal-card .selection-item.compact-toggle-row:has(input:checked),
+.profile-section .selection-item.compact-toggle-row:has(input:checked) {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-50);
+  color: var(--portal-brand-700);
+}
+
+:root[data-theme="dark"] .modal-card .field input:hover,
+:root[data-theme="dark"] .modal-card .field textarea:hover,
+:root[data-theme="dark"] .modal-card .field select:hover,
+:root[data-theme="dark"] .profile-section .field input:hover,
+:root[data-theme="dark"] .profile-section .field textarea:hover,
+:root[data-theme="dark"] .profile-section .field select:hover,
+:root[data-theme="dark"] .env-row input:hover {
+  border-color: #475467;
+}
+
+:root[data-theme="dark"] .upgrade-summary {
+  border-color: var(--line);
+  background: var(--panel-strong);
+}
+
+:root[data-theme="dark"] .upgrade-status-card.done {
+  border-color: rgba(23, 178, 106, 0.38);
+  background: rgba(23, 178, 106, 0.12);
+}
+
+:root[data-theme="dark"] .sidebar-upgrade-button.is-done {
+  border-color: rgba(23, 178, 106, 0.38);
+  background: rgba(23, 178, 106, 0.12);
+  color: #d0d5dd;
+}
+
+:root[data-theme="dark"] .upgrade-status-card.error {
+  border-color: rgba(217, 45, 32, 0.42);
+  background: rgba(217, 45, 32, 0.12);
+}
+
+.profile-preview-popover .preview-header .modal-close {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 10px;
+  border: 1px solid var(--portal-gray-300);
+  border-radius: var(--radius-md);
+  background: var(--portal-white);
+  color: var(--portal-gray-700);
+  box-shadow: var(--shadow-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 20px;
+  transform: none;
+}
+
+.profile-preview-popover .preview-header .modal-close span {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 20px;
+}
+
+.profile-preview-popover .preview-header .modal-close:hover:not(:disabled) {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-gray-50);
+  color: var(--portal-gray-800);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.profile-preview-popover .preview-header .modal-close:active:not(:disabled) {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-gray-50);
+  color: var(--portal-gray-800);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.profile-preview-popover .preview-header .modal-close:focus-visible {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-white);
+  color: var(--portal-gray-700);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 4px rgba(77, 106, 214, 0.24);
+}
+
+.profile-preview-popover .preview-header .modal-close:disabled,
+.profile-preview-popover .preview-header .modal-close[disabled] {
+  border-color: var(--portal-gray-200);
+  background: var(--portal-gray-100);
+  color: var(--portal-gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+:root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close {
+  border-color: var(--line);
+  background: var(--panel);
+  color: #d0d5dd;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close:hover:not(:disabled),
+:root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close:active:not(:disabled) {
+  border-color: #475467;
+  background: var(--panel-strong);
+  color: var(--portal-white);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close:focus-visible {
+  border-color: #475467;
+  background: var(--panel);
+  color: #d0d5dd;
+  box-shadow: 0 0 0 4px rgba(77, 106, 214, 0.24);
+}

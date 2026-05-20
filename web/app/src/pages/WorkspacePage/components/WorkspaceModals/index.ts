@@ -1,3 +1,5 @@
+import "./WorkspaceModals.css";
+
 export * from "./AgentProfileModal";
 export * from "./CreateRoomModal";
 export * from "./InviteMembersModal";

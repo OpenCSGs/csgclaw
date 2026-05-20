@@ -1,0 +1,21 @@
+.agent-page-editor {
+  margin-top: 0;
+}
+
+.entity-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.entity-toolbar-publish {
+  margin-left: auto;
+}
+
+.entity-toolbar .send-button.compact,
+.entity-toolbar .secondary-button,
+.entity-toolbar .danger-button {
+  height: 38px;
+  min-height: 38px;
+}
