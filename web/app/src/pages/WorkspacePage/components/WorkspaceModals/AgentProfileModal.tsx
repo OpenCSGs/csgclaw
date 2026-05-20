@@ -99,7 +99,8 @@ export function AgentProfileModal({
                 {requiredFieldLabel(t("agentName"))}
                 <input
                   value={agentDraft.name}
-                  disabled={agentModalMode === "edit" && editingAgent?.id === "u-manager"}
+                  readOnly={agentModalMode === "edit"}
+                  disabled={agentModalMode === "edit"}
                   required
                   aria-required="true"
                   onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}
@@ -286,6 +287,7 @@ export function AgentProfileModal({
                   value={agentDraft.api_key}
                   onInput={(event) => onAgentDraftChange({ ...agentDraft, api_key: event.currentTarget.value })}
                   profile={agentDraft}
+                  required={!agentDraft.api_key_set}
                   t={t}
                 />
                 <label className="field span-2">

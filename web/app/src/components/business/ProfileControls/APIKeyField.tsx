@@ -2,16 +2,18 @@ import type { FormEventHandler } from "react";
 import { useId } from "react";
 import { TextInput } from "@/components/ui";
 import type { APIKeyProfile, Translator } from "./types";
+import { requiredFieldLabel } from "./requiredFieldLabel";
 import { isBlank } from "./utils";
 
 export type APIKeyFieldProps = {
   onInput?: FormEventHandler<HTMLInputElement>;
   profile?: APIKeyProfile | null;
+  required?: boolean;
   t: Translator;
   value: string;
 };
 
-export function APIKeyField({ value, onInput, profile, t }: APIKeyFieldProps) {
+export function APIKeyField({ value, onInput, profile, required = false, t }: APIKeyFieldProps) {
   const generatedID = useId();
   const inputID = `${generatedID}-api-key`;
   const labelID = `${generatedID}-api-key-label`;
@@ -22,14 +24,20 @@ export function APIKeyField({ value, onInput, profile, t }: APIKeyFieldProps) {
   const placeholder = stored ? "" : t("profileAPIKeyNewPlaceholder");
   return (
     <label className="field api-key-field" htmlFor={inputID}>
-      <span id={labelID}>{t("profileAPIKey")}</span>
+      {required ? (
+        requiredFieldLabel(t("profileAPIKey"), { id: labelID })
+      ) : (
+        <span id={labelID}>{t("profileAPIKey")}</span>
+      )}
       <div className="api-key-input-shell">
         <TextInput
           id={inputID}
           aria-labelledby={labelID}
+          aria-required={required ? "true" : undefined}
           value={value}
           onInput={onInput}
           placeholder={placeholder}
+          required={required}
           autoComplete="off"
           spellCheck={false}
         />

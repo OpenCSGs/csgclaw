@@ -185,6 +185,8 @@ export function AgentDetailPane({
                 {requiredFieldLabel(t("agentName"))}
                 <input
                   value={draft.name}
+                  readOnly
+                  disabled
                   required
                   aria-required="true"
                   onInput={(event) => updateDraft({ name: event.currentTarget.value })}
@@ -313,6 +315,7 @@ export function AgentDetailPane({
                   value={draft.api_key}
                   onInput={(event) => updateDraft({ api_key: event.currentTarget.value })}
                   profile={draft}
+                  required={!draft.api_key_set}
                   t={t}
                 />
                 <label className="field span-2">

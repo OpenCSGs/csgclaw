@@ -156,6 +156,7 @@ export function ManagerProfileSetupModal({
                   value={profileDraft.api_key}
                   onInput={(event) => onProfileDraftChange({ ...profileDraft, api_key: event.currentTarget.value })}
                   profile={profileDraft}
+                  required={!profileDraft.api_key_set}
                   t={t}
                 />
                 <label className="field span-2">

@@ -17,6 +17,7 @@ const labels: Record<string, string> = {
   profileReasoning: "Reasoning",
   profileRestartRequired: "Restart required",
   profileRuntimeKind: "Runtime",
+  agentName: "Name",
 };
 
 function t(key: string): string {
@@ -129,5 +130,41 @@ describe("agent action visibility", () => {
     );
 
     expect(screen.getByRole("button", { name: "Recreate" })).not.toBeDisabled();
+  });
+
+  it("keeps the agent detail name read-only while editing", () => {
+    render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={agentToDraft(worker)}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookOrigin=""
+        setNotifierWebhookOrigin={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    const nameInput = screen.getByDisplayValue("Worker");
+    expect(nameInput).toBeDisabled();
+    expect(nameInput).toHaveAttribute("readonly");
   });
 });

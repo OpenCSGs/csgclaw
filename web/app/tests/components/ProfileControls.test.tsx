@@ -48,10 +48,14 @@ describe("ProfileControls", () => {
     expect(container.querySelector(".api-key-mask")).toBeNull();
   });
 
-  it("shows new-key placeholders when no key is stored", () => {
-    render(<APIKeyField profile={{ api_key_set: false }} t={t} value="" onInput={() => {}} />);
+  it("marks first-time API keys as required when requested", () => {
+    const { container } = render(
+      <APIKeyField profile={{ api_key_set: false }} required t={t} value="" onInput={() => {}} />,
+    );
 
-    expect(screen.getByLabelText("API key")).toHaveAttribute("placeholder", "Enter API key");
+    expect(screen.getByRole("textbox", { name: /API key/ })).toHaveAttribute("placeholder", "Enter API key");
+    expect(screen.getByRole("textbox", { name: /API key/ })).toBeRequired();
+    expect(container.querySelector(".field-required-star")).toHaveTextContent("*");
   });
 
   it("normalizes CLI proxy auth providers before starting login", async () => {
