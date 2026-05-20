@@ -1,0 +1,850 @@
+import { useEffect, useMemo, useState } from "react";
+import { errorMessage } from "@/api/client";
+import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
+import {
+  createBotRequest,
+  createManagerAgentRequest,
+  deleteBotRequest,
+  fetchAgent,
+  fetchAgentProfile,
+  fetchAgentProfileDefaults,
+  runAgentActionRequest,
+  saveManagerProfileRequest,
+  updateAgentRequest,
+} from "@/api/agents";
+import type { AgentUpdatePayload, FetchAgentsOptions } from "@/api/agents";
+import { publishAgentTemplateRequest } from "@/api/hub";
+import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
+import {
+  DEFAULT_RUNTIME_KIND,
+  MANAGER_AGENT_ID,
+  MANAGER_AGENT_ROLE,
+  WORKER_AGENT_ROLE,
+} from "@/shared/constants/agents";
+import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
+import {
+  applyTemplateToDraft,
+  advanceAgentProgress,
+  agentToDraft,
+  availableManagerRebuildImageOptions,
+  availableManagerRebuildRuntimeOptions,
+  collectManagerTemplateVariants,
+  defaultManagerRebuildImageForRuntime,
+  draftNotifierRuntimeOptionsForSave,
+  draftToProfile,
+  ensureNotifierPullSubscriptionDraft,
+  isAgentRunning,
+  isManagerAgent,
+  isNotifierRuntimeDraft,
+  isNotifierRuntimeDraftOnAgentPage,
+  normalizeAuthProviderName,
+  normalizeRuntimeKind,
+  normalizeTemplateSelection,
+  pickDefaultAgentTemplate,
+  profileToDraft,
+  providerNeedsAuth,
+  runtimeImageForKind,
+  startAgentCreateProgress,
+} from "@/models/agents";
+import type { AgentLike, RuntimeKind } from "@/models/agents";
+import { isDirectConversation } from "@/models/conversations";
+import { WorkspacePaneTypes } from "@/models/routing";
+import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
+import { useProfileModelOptions } from "./useProfileModelOptions";
+
+type ManagerRebuildOptions = {
+  image?: string;
+  runtimeKind?: RuntimeKind;
+};
+
+export function useAgentController({
+  activeConversationId,
+  activePane,
+  agents,
+  agentsLoaded,
+  agentsQuery,
+  bootstrapConfig,
+  data,
+  hubTemplates,
+  locale,
+  managerProfile,
+  refreshHubTemplates,
+  refreshWorkspaceAgents,
+  refreshWorkspaceBootstrap,
+  refreshWorkspaceBootstrapConfig,
+  refreshWorkspaceManagerProfile,
+  rooms,
+  selectComputer,
+  selectConversation,
+  selectHub,
+  setManagerProfileData,
+  setSelectedHubTemplateId,
+  t,
+}) {
+  const [profileDraft, setProfileDraft] = useState(null);
+  const [profileError, setProfileError] = useState("");
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [cliproxyAuthBusy, setCLIProxyAuthBusy] = useState("");
+  const [agentsError, setAgentsError] = useState("");
+  const [showAgentModal, setShowAgentModal] = useState(false);
+  const [showManagerRebuildModal, setShowManagerRebuildModal] = useState(false);
+  const [managerRebuildRuntimeKind, setManagerRebuildRuntimeKind] = useState(DEFAULT_RUNTIME_KIND);
+  const [managerRebuildImage, setManagerRebuildImage] = useState("");
+  const [agentModalMode, setAgentModalMode] = useState("create");
+  const [editingAgent, setEditingAgent] = useState(null);
+  const [agentDraft, setAgentDraft] = useState(null);
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [agentError, setAgentError] = useState("");
+  const [agentProgress, setAgentProgress] = useState(null);
+  const [agentActionBusy, setAgentActionBusy] = useState("");
+  const [messageActionBusy] = useState("");
+  const [messageActionError, setMessageActionError] = useState({ key: "", message: "" });
+  const [agentPageDraft, setAgentPageDraft] = useState(null);
+  const [agentPageBusy, setAgentPageBusy] = useState(false);
+  const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
+  const [agentPageError, setAgentPageError] = useState("");
+  const [notifierModalWebhookOrigin, setNotifierModalWebhookOrigin] = useState("");
+  const [notifierPageWebhookOrigin, setNotifierPageWebhookOrigin] = useState("");
+
+  const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
+  const managerAgent = agents.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
+  const workerAgents = agents.filter((item) => item.id !== managerAgent?.id);
+  const agentItems = [managerAgent, ...workerAgents].filter(Boolean);
+  const runningAgentCount = agentItems.filter(isAgentRunning).length;
+  const selectedAgentForPage = useMemo(() => {
+    if (activePane.type !== WorkspacePaneTypes.agent) {
+      return null;
+    }
+    return agentItems.find((item) => item.id === activePane.id) ?? null;
+  }, [activePane, agentItems]);
+  const activeConversation = useMemo(
+    () => data?.rooms.find((item) => item.id === activeConversationId) ?? null,
+    [data, activeConversationId],
+  );
+
+  const managerTemplateVariants = collectManagerTemplateVariants(hubTemplates);
+  const managerRuntimeOptions = availableManagerRebuildRuntimeOptions(
+    managerTemplateVariants,
+    bootstrapConfig,
+    managerAgent?.runtime_kind,
+  );
+  const managerRebuildImageOptions = availableManagerRebuildImageOptions(
+    managerTemplateVariants,
+    managerRebuildRuntimeKind,
+    managerAgent?.image,
+  );
+  const agentsDisplayError =
+    agentsError || (agentsQuery.isError ? errorMessage(agentsQuery.error, t("agentActionFailed")) : "");
+
+  const {
+    models: profileModels,
+    modelBusy: profileModelBusy,
+    resetModels: resetProfileModels,
+  } = useProfileModelOptions({
+    draft: profileDraft,
+    enabled: Boolean(managerProfileIncomplete),
+    onDraftChange: setProfileDraft,
+  });
+  const {
+    models: agentModels,
+    modelBusy: agentModelBusy,
+    resetModels: resetAgentModels,
+  } = useProfileModelOptions({
+    draft: agentDraft,
+    enabled: Boolean(showAgentModal),
+    onDraftChange: setAgentDraft,
+  });
+  const {
+    models: agentPageModels,
+    modelBusy: agentPageModelBusy,
+    resetModels: resetAgentPageModels,
+  } = useProfileModelOptions({
+    draft: agentPageDraft,
+    enabled: activePane.type === WorkspacePaneTypes.agent,
+    onDraftChange: setAgentPageDraft,
+  });
+  const { cliproxyAuthStatuses, setCLIProxyAuthStatus } = useCLIProxyAuthStatuses(
+    [
+      managerProfile?.provider,
+      profileDraft?.provider,
+      isNotifierRuntimeDraft(agentDraft) ? "" : agentDraft?.provider,
+      isNotifierRuntimeDraft(agentPageDraft) ? "" : agentPageDraft?.provider,
+    ],
+    t,
+  );
+
+  useEffect(() => {
+    if (!bootstrapConfig?.runtime_kind) {
+      return;
+    }
+    setProfileDraft((current) =>
+      current && !current.runtime_kind
+        ? { ...current, runtime_kind: normalizeRuntimeKind(bootstrapConfig.runtime_kind) }
+        : current,
+    );
+  }, [bootstrapConfig?.runtime_kind]);
+
+  useEffect(() => {
+    if (!agentBusy || !agentProgress?.steps?.length) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      setAgentProgress((current) => advanceAgentProgress(current));
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [agentBusy, agentProgress?.startedAt, agentProgress?.steps?.length]);
+
+  useEffect(() => {
+    if (!showAgentModal || !agentDraft || !isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent)) {
+      return;
+    }
+    setNotifierModalWebhookOrigin(typeof window !== "undefined" ? window.location.origin : "");
+  }, [showAgentModal, agentDraft?.runtime_kind, editingAgent?.id, agentDraft, editingAgent]);
+
+  useEffect(() => {
+    if (!managerProfile) {
+      return;
+    }
+    setProfileDraft({
+      ...profileToDraft(managerProfile),
+      runtime_kind: normalizeRuntimeKind(bootstrapConfig?.runtime_kind || managerProfile.runtime_kind),
+    });
+  }, [managerProfile, bootstrapConfig?.runtime_kind]);
+
+  useEffect(() => {
+    if (!agentPageDraft || !isNotifierRuntimeDraftOnAgentPage(agentPageDraft, selectedAgentForPage)) {
+      return;
+    }
+    setNotifierPageWebhookOrigin(typeof window !== "undefined" ? window.location.origin : "");
+  }, [agentPageDraft?.runtime_kind, selectedAgentForPage?.id, agentPageDraft, selectedAgentForPage]);
+
+  useEffect(() => {
+    if (!activePane || activePane.type !== WorkspacePaneTypes.agent) {
+      return;
+    }
+    if (!agentsLoaded) {
+      return;
+    }
+    if (!agents.some((item) => item.id === activePane.id)) {
+      if (activeConversationId) {
+        selectConversation(activeConversationId, { replace: true });
+      } else {
+        selectComputer({ replace: true });
+      }
+    }
+  }, [agents, agentsLoaded, activePane, activeConversationId, selectComputer, selectConversation]);
+
+  useEffect(() => {
+    if (!selectedAgentForPage) {
+      setAgentPageDraft(null);
+      setAgentPageError("");
+      setAgentPagePublishBusy(false);
+      return;
+    }
+    loadAgentPageDraft(selectedAgentForPage);
+    // Reload only when the routed agent changes; form draft edits should not refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAgentForPage?.id]);
+
+  async function refreshManagerProfile() {
+    const profile = await refreshWorkspaceManagerProfile();
+    if (!profile) {
+      // The manager may not exist during the first bootstrap milliseconds.
+      return;
+    }
+    setProfileDraft({
+      ...profileToDraft(profile),
+      runtime_kind: normalizeRuntimeKind(bootstrapConfig?.runtime_kind || profile.runtime_kind),
+    });
+  }
+
+  async function loginCLIProxyProvider(provider) {
+    const normalized = normalizeAuthProviderName(provider);
+    if (!providerNeedsAuth(normalized) || cliproxyAuthBusy) {
+      return;
+    }
+    setCLIProxyAuthBusy(normalized);
+    setCLIProxyAuthStatus(normalized, {
+      ...(cliproxyAuthStatuses[normalized] || {}),
+      provider: normalized,
+      message: t("authConnecting"),
+    });
+    try {
+      const status = await loginCLIProxyProviderRequest(normalized);
+      setCLIProxyAuthStatus(normalized, status);
+    } catch (err) {
+      setCLIProxyAuthStatus(normalized, {
+        provider: normalized,
+        authenticated: false,
+        login_required: true,
+        message: err.message || t("authMissing"),
+      });
+    } finally {
+      setCLIProxyAuthBusy("");
+    }
+  }
+
+  function openManagerRebuildModal(item = managerAgent) {
+    const initialRuntimeKind = normalizeRuntimeKind(
+      item?.runtime_kind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind || managerRebuildRuntimeKind,
+    );
+    const fallbackRuntimeKind = managerRuntimeOptions[0]?.value || DEFAULT_RUNTIME_KIND;
+    const resolvedRuntimeKind = managerRuntimeOptions.some((option) => option.value === initialRuntimeKind)
+      ? initialRuntimeKind
+      : fallbackRuntimeKind;
+    const currentImage = String(item?.image ?? managerAgent?.image ?? "").trim();
+    const resolvedImage =
+      currentImage ||
+      defaultManagerRebuildImageForRuntime(managerTemplateVariants, resolvedRuntimeKind, bootstrapConfig, "");
+    setManagerRebuildRuntimeKind(resolvedRuntimeKind);
+    setManagerRebuildImage(resolvedImage);
+    setShowManagerRebuildModal(true);
+  }
+
+  async function requestManagerRebuild(options: ManagerRebuildOptions = {}) {
+    const runtimeKind = normalizeRuntimeKind(
+      options.runtimeKind ||
+        managerAgent?.runtime_kind ||
+        bootstrapConfig?.runtime_kind ||
+        managerRuntimeOptions[0]?.value,
+    );
+    const image = String(options.image ?? managerAgent?.image ?? "").trim();
+    await createManagerAgentRequest({
+      runtime_kind: runtimeKind,
+      image,
+    });
+    await refreshAgents();
+    await refreshManagerProfile();
+    await refreshWorkspaceBootstrapConfig();
+  }
+
+  async function rebuildManagerFromBrowser(options: ManagerRebuildOptions = {}) {
+    setAgentActionBusy(`${MANAGER_AGENT_ID}:recreate`);
+    setAgentsError("");
+    try {
+      await requestManagerRebuild(options);
+      return true;
+    } catch (err) {
+      setAgentsError(err.message || t("agentActionFailed"));
+      return false;
+    } finally {
+      setAgentActionBusy("");
+    }
+  }
+
+  async function confirmManagerRebuild() {
+    if (agentActionBusy) {
+      return;
+    }
+    const selectedRuntimeKind = normalizeRuntimeKind(
+      managerRebuildRuntimeKind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind,
+    );
+    const selectedImage = String(managerRebuildImage ?? "").trim();
+    setMessageActionError({ key: "", message: "" });
+    const rebuilt = await rebuildManagerFromBrowser({ runtimeKind: selectedRuntimeKind, image: selectedImage });
+    if (rebuilt) {
+      setShowManagerRebuildModal(false);
+    }
+  }
+
+  async function handleMessageAction(action, _message) {
+    if (!action || action.id !== ACTION_REBUILD_MANAGER) {
+      return;
+    }
+    if (messageActionBusy || agentActionBusy) {
+      return;
+    }
+    setMessageActionError({ key: "", message: "" });
+    openManagerRebuildModal(managerAgent);
+  }
+
+  async function saveManagerProfile() {
+    if (!profileDraft) {
+      return;
+    }
+    setProfileBusy(true);
+    setProfileError("");
+    try {
+      const payload = draftToProfile(profileDraft);
+      const saved = await saveManagerProfileRequest(payload);
+      setManagerProfileData(saved);
+      setProfileDraft({ ...profileToDraft(saved), agent_id: MANAGER_AGENT_ID });
+      await refreshManagerProfile();
+    } catch (err) {
+      setProfileError(err.message || t("sendFailed"));
+    } finally {
+      setProfileBusy(false);
+    }
+  }
+
+  async function refreshAgents(options: FetchAgentsOptions = {}) {
+    try {
+      await refreshWorkspaceAgents(options);
+      setAgentsError("");
+    } catch (err) {
+      if (!options.silent) {
+        setAgentsError(errorMessage(err, t("agentActionFailed")));
+      }
+    }
+  }
+
+  async function fetchAgentWithProfile(item) {
+    const id = String(item?.id ?? "").trim();
+    if (!id) {
+      return { agent: item || {}, profile: item?.agent_profile };
+    }
+    let agent = item || {};
+    try {
+      agent = { ...agent, ...(await fetchAgent(id)) };
+    } catch (_) {
+      // Keep the channel bot list item when the full agent endpoint is unavailable.
+    }
+    let profile = agent?.agent_profile;
+    try {
+      profile = await fetchAgentProfile(id);
+    } catch (_) {
+      // Keep the profile embedded in the full agent record or list item.
+    }
+    return { agent, profile };
+  }
+
+  async function agentDraftFromItem(item) {
+    const { agent, profile } = await fetchAgentWithProfile(item);
+    const base = agentToDraft({ ...agent, agent_profile: profile });
+    const runtimeKind = normalizeRuntimeKind(agent?.runtime_kind || item?.runtime_kind || base.runtime_kind);
+    return ensureNotifierPullSubscriptionDraft({ ...base, runtime_kind: runtimeKind || base.runtime_kind });
+  }
+
+  async function openCreateAgentModal(template = undefined) {
+    setAgentModalMode("create");
+    setEditingAgent(null);
+    setAgentError("");
+    setAgentProgress(null);
+    resetAgentModels();
+    const preferredRuntimeKind =
+      normalizeRuntimeKind(bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "") || DEFAULT_RUNTIME_KIND;
+    const selectedTemplate =
+      template === undefined
+        ? pickDefaultAgentTemplate(hubTemplates, preferredRuntimeKind, bootstrapConfig)
+        : normalizeTemplateSelection(template);
+    try {
+      const defaults = await fetchAgentProfileDefaults();
+      const runtimeKind =
+        normalizeRuntimeKind(
+          selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
+        ) || DEFAULT_RUNTIME_KIND;
+      let draft = agentToDraft({
+        image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
+        runtime_kind: runtimeKind,
+        agent_profile: defaults,
+      });
+      draft = applyTemplateToDraft(draft, selectedTemplate, bootstrapConfig, managerAgent?.image || "");
+      setAgentDraft(draft);
+      setShowAgentModal(true);
+    } catch (_) {
+      const runtimeKind =
+        normalizeRuntimeKind(
+          selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
+        ) || DEFAULT_RUNTIME_KIND;
+      let draft = agentToDraft({
+        image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
+        runtime_kind: runtimeKind,
+        agent_profile: managerProfile,
+      });
+      draft = applyTemplateToDraft(draft, selectedTemplate, bootstrapConfig, managerAgent?.image || "");
+      setAgentDraft(draft);
+      setShowAgentModal(true);
+    }
+  }
+
+  async function openEditAgentModal(item) {
+    setAgentModalMode("edit");
+    setEditingAgent(item);
+    setAgentError("");
+    setAgentProgress(null);
+    resetAgentModels();
+    try {
+      const draft = await agentDraftFromItem(item);
+      setAgentDraft(draft);
+      setShowAgentModal(true);
+    } catch (err) {
+      setAgentError(err.message || t("agentActionFailed"));
+    }
+  }
+
+  async function loadAgentPageDraft(item) {
+    if (!item?.id) {
+      return;
+    }
+    setAgentPageError("");
+    resetAgentPageModels();
+    try {
+      const draft = await agentDraftFromItem(item);
+      setAgentPageDraft(draft);
+    } catch (err) {
+      setAgentPageError(err.message || t("agentActionFailed"));
+      const draft = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
+      setAgentPageDraft(draft);
+    }
+  }
+
+  async function saveAgentPage() {
+    if (!agentPageDraft || !selectedAgentForPage?.id) {
+      return;
+    }
+    setAgentPageBusy(true);
+    setAgentPageError("");
+    try {
+      const draft = ensureNotifierPullSubscriptionDraft(agentPageDraft);
+      const profile = draftToProfile(draft, {
+        name: agentPageDraft.name,
+        description: agentPageDraft.description,
+      });
+      const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, {
+        mergeNotifier: isNotifierRuntimeDraftOnAgentPage(agentPageDraft, selectedAgentForPage),
+      });
+      const payload: AgentUpdatePayload = {
+        name: agentPageDraft.name,
+        description: agentPageDraft.description,
+        agent_profile: profile,
+      };
+      if (runtimeOptions) {
+        payload.runtime_options = runtimeOptions;
+      }
+      const saved = await updateAgentRequest(selectedAgentForPage.id, payload);
+      await refreshAgents();
+      if (saved.id === MANAGER_AGENT_ID) {
+        await refreshManagerProfile();
+      }
+      setAgentPageDraft(await agentDraftFromItem(saved));
+    } catch (err) {
+      setAgentPageError(err.message || t("agentActionFailed"));
+    } finally {
+      setAgentPageBusy(false);
+    }
+  }
+
+  async function publishAgentPage() {
+    if (!selectedAgentForPage?.id || agentPagePublishBusy) {
+      return;
+    }
+    setAgentPagePublishBusy(true);
+    setAgentPageError("");
+    try {
+      const published = await publishAgentTemplateRequest(selectedAgentForPage.id);
+      await refreshHubTemplates();
+      if (published?.id) {
+        setSelectedHubTemplateId(published.id);
+      }
+      selectHub();
+    } catch (err) {
+      setAgentPageError(err.message || t("agentActionFailed"));
+    } finally {
+      setAgentPagePublishBusy(false);
+    }
+  }
+
+  async function saveAgent() {
+    if (!agentDraft) {
+      return;
+    }
+    setAgentBusy(true);
+    setAgentError("");
+    const isCreate = agentModalMode === "create";
+    const runtimeKind = normalizeRuntimeKind(agentDraft.runtime_kind) || DEFAULT_RUNTIME_KIND;
+    setAgentProgress(isCreate ? startAgentCreateProgress(runtimeKind) : null);
+    try {
+      const draft = ensureNotifierPullSubscriptionDraft(agentDraft);
+      const profile = draftToProfile(draft, {
+        name: agentDraft.name,
+        description: agentDraft.description,
+      });
+      const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, {
+        mergeNotifier: isNotifierRuntimeDraftOnAgentPage(agentDraft, editingAgent),
+      });
+      const payload: AgentUpdatePayload = {
+        name: agentDraft.name,
+        role: WORKER_AGENT_ROLE,
+        description: agentDraft.description,
+        image: isNotifierRuntimeDraft(draft) ? "" : agentDraft.image,
+        runtime_kind: runtimeKind,
+        from_template: agentDraft.from_template || "",
+        agent_profile: profile,
+      };
+      if (runtimeOptions) {
+        payload.runtime_options = runtimeOptions;
+      }
+      const saved = isCreate
+        ? await createBotRequest(payload)
+        : await updateAgentRequest(editingAgent.id, {
+            name: payload.name,
+            description: payload.description,
+            agent_profile: payload.agent_profile,
+            ...(payload.runtime_options ? { runtime_options: payload.runtime_options } : {}),
+          });
+      await refreshAgents();
+      if (isCreate) {
+        await refreshWorkspaceBootstrap();
+      }
+      if (saved.id === MANAGER_AGENT_ID) {
+        await refreshManagerProfile();
+      }
+      if (isCreate) {
+        setAgentProgress((current) =>
+          current
+            ? { ...current, percent: 100, status: "done", index: Math.max(0, (current.steps?.length || 1) - 1) }
+            : current,
+        );
+      }
+      setShowAgentModal(false);
+      setAgentDraft(null);
+      setAgentProgress(null);
+    } catch (err) {
+      setAgentProgress((current) => (current ? { ...current, status: "failed" } : current));
+      setAgentError(err.message || t("agentActionFailed"));
+    } finally {
+      setAgentBusy(false);
+    }
+  }
+
+  async function runAgentAction(item, action) {
+    if (!item?.id || agentActionBusy) {
+      return;
+    }
+    if (action === "recreate" && isManagerAgent(item)) {
+      openManagerRebuildModal(item);
+      return;
+    }
+    if (action === "delete" && !window.confirm(`${t("agentDelete")} ${item.name}?`)) {
+      return;
+    }
+    setAgentActionBusy(`${item.id}:${action}`);
+    setAgentsError("");
+    try {
+      if (action === "delete") {
+        await deleteBotRequest(item.id);
+      } else {
+        await runAgentActionRequest(item.id, action);
+      }
+      await refreshAgents();
+      if (item.id === MANAGER_AGENT_ID) {
+        await refreshManagerProfile();
+      }
+    } catch (err) {
+      setAgentsError(err.message || t("agentActionFailed"));
+    } finally {
+      setAgentActionBusy("");
+    }
+  }
+
+  async function deletePreviewBot(item: AgentLike | null | undefined) {
+    if (!item?.id || agentActionBusy) {
+      return false;
+    }
+    if (!window.confirm(`${t("agentDelete")} ${item.name}?`)) {
+      return false;
+    }
+    setAgentActionBusy(`${item.id}:delete-bot`);
+    setAgentsError("");
+    try {
+      await deleteBotRequest(item.id);
+      await refreshAgents();
+      await refreshWorkspaceBootstrap();
+      if (item.id === MANAGER_AGENT_ID) {
+        await refreshManagerProfile();
+      }
+      return true;
+    } catch (err) {
+      setAgentsError(err.message || t("agentActionFailed"));
+      return false;
+    } finally {
+      setAgentActionBusy("");
+    }
+  }
+
+  async function inviteAgentToRoom(item: AgentLike | null | undefined, options: { silent?: boolean } = {}) {
+    if (!activeConversation || isDirectConversation(activeConversation) || !data?.current_user_id || !item?.id) {
+      return;
+    }
+    if (!options.silent) {
+      setAgentsError("");
+    }
+    try {
+      await joinAgentToRoomRequest({
+        agent_id: item.id,
+        room_id: activeConversation.id,
+        inviter_id: data.current_user_id,
+        locale,
+      });
+      await refreshWorkspaceBootstrap();
+    } catch (err) {
+      if (!options.silent) {
+        setAgentsError(err.message || t("agentActionFailed"));
+      }
+    }
+  }
+
+  function directConversationForUser(userID, roomList = rooms, currentUserID = data?.current_user_id) {
+    if (!userID || !currentUserID) {
+      return null;
+    }
+    return (
+      roomList.find(
+        (room) => isDirectConversation(room) && room.members.includes(currentUserID) && room.members.includes(userID),
+      ) ?? null
+    );
+  }
+
+  async function openAgentDirectMessage(item) {
+    if (!item?.id || !data?.current_user_id) {
+      return;
+    }
+
+    setAgentsError("");
+    try {
+      let nextData = null;
+      let direct = directConversationForUser(item.id);
+      if (!direct) {
+        await createUserRequest({
+          id: item.id,
+          name: item.name,
+          handle: item.handle || item.id.replace(/^u-/, "") || item.name,
+          role: item.role || WORKER_AGENT_ROLE,
+        });
+        nextData = await refreshWorkspaceBootstrap();
+        direct = directConversationForUser(
+          item.id,
+          nextData?.rooms ?? rooms,
+          nextData?.current_user_id ?? data.current_user_id,
+        );
+      }
+
+      if (!direct) {
+        setAgentsError(t("agentActionFailed"));
+        return;
+      }
+      selectConversation(direct.id, { rooms: nextData?.rooms ?? rooms });
+    } catch (err) {
+      setAgentsError(err.message || t("agentActionFailed"));
+    }
+  }
+
+  return {
+    agentActionBusy,
+    agentItems,
+    agentsDisplayError,
+    cliproxyAuthBusy,
+    cliproxyAuthStatuses,
+    deletePreviewBot,
+    handleMessageAction,
+    loginCLIProxyProvider,
+    managerAgent,
+    managerProfileIncomplete,
+    messageActionBusy,
+    messageActionError,
+    openAgentDirectMessage,
+    openCreateAgentModal,
+    openEditAgentModal,
+    runningAgentCount,
+    runAgentAction,
+    selectedAgentForPage,
+    workerAgents,
+    agentViewProps: {
+      item: selectedAgentForPage,
+      t,
+      busyKey: agentActionBusy,
+      error: agentsDisplayError,
+      draft: agentPageDraft,
+      models: agentPageModels,
+      modelBusy: agentPageModelBusy,
+      saving: agentPageBusy,
+      publishBusy: agentPagePublishBusy,
+      saveError: agentPageError,
+      authStatuses: cliproxyAuthStatuses,
+      authBusyProvider: cliproxyAuthBusy,
+      notifierWebhookOrigin: notifierPageWebhookOrigin,
+      setNotifierWebhookOrigin: setNotifierPageWebhookOrigin,
+      onDraftChange: setAgentPageDraft,
+      onSave: saveAgentPage,
+      onPublish: publishAgentPage,
+      onProviderLogin: loginCLIProxyProvider,
+      onStart: (item) => runAgentAction(item, "start"),
+      onStop: (item) => runAgentAction(item, "stop"),
+      onRecreate: (item) => runAgentAction(item, "recreate"),
+      onDelete: (item) => runAgentAction(item, "delete"),
+      onInvite: inviteAgentToRoom,
+      onOpenDM: openAgentDirectMessage,
+    },
+    computerViewProps: {
+      t,
+      agents: agentItems,
+      activeAgentID: activePane.type === WorkspacePaneTypes.agent ? activePane.id : "",
+      busyKey: agentActionBusy,
+      onCreateAgent: openCreateAgentModal,
+      onStartAgent: (item) => runAgentAction(item, "start"),
+    },
+    agentProfileModalProps:
+      showAgentModal && agentDraft
+        ? {
+            t,
+            agentModalMode,
+            editingAgent,
+            agentDraft,
+            onAgentDraftChange: setAgentDraft,
+            onAgentModelsReset: resetAgentModels,
+            hubTemplates,
+            bootstrapConfig,
+            managerAgent,
+            agentModels,
+            agentModelBusy,
+            authStatuses: cliproxyAuthStatuses,
+            authBusyProvider: cliproxyAuthBusy,
+            notifierWebhookOrigin: notifierModalWebhookOrigin,
+            setNotifierWebhookOrigin: setNotifierModalWebhookOrigin,
+            onProviderLogin: loginCLIProxyProvider,
+            agentError,
+            agentProgress,
+            agentBusy,
+            onClose: () => setShowAgentModal(false),
+            onSave: saveAgent,
+          }
+        : null,
+    managerRebuildModalProps: showManagerRebuildModal
+      ? {
+          t,
+          runtimeOptions: managerRuntimeOptions,
+          runtimeKind: managerRebuildRuntimeKind,
+          image: managerRebuildImage,
+          imageOptions: managerRebuildImageOptions,
+          templateVariants: managerTemplateVariants,
+          bootstrapConfig,
+          managerAgent,
+          busy: agentActionBusy === `${MANAGER_AGENT_ID}:recreate`,
+          error: agentsError,
+          onRuntimeKindChange: setManagerRebuildRuntimeKind,
+          onImageChange: setManagerRebuildImage,
+          onClose: () => setShowManagerRebuildModal(false),
+          onConfirm: confirmManagerRebuild,
+        }
+      : null,
+    managerProfileSetupModalProps:
+      managerProfileIncomplete && profileDraft
+        ? {
+            t,
+            managerProfile,
+            profileDraft,
+            onProfileDraftChange: setProfileDraft,
+            onProfileModelsReset: resetProfileModels,
+            bootstrapConfig,
+            profileModels,
+            profileModelBusy,
+            authStatuses: cliproxyAuthStatuses,
+            authBusyProvider: cliproxyAuthBusy,
+            onProviderLogin: loginCLIProxyProvider,
+            profileError,
+            profileBusy,
+            onSave: saveManagerProfile,
+          }
+        : null,
+  };
+}

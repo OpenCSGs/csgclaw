@@ -1,7 +1,6 @@
 import { useCallback, useEffect } from "react";
 import { DefaultWorkspacePaneIds, WorkspacePaneTypes, paneFromLocation, pathForPane } from "@/models/routing";
 import type { NavigateFunction, Location } from "react-router-dom";
-import type { Dispatch, SetStateAction } from "react";
 import type { IMConversation } from "@/models/conversations";
 import type { WorkspacePane } from "@/models/routing";
 
@@ -16,8 +15,6 @@ export type UseWorkspaceNavigationArgs = {
   navigate: NavigateFunction;
   rooms: IMConversation[];
   setActiveConversationId: (id: string) => void;
-  setShowChannelTools: Dispatch<SetStateAction<boolean>>;
-  setShowMemberList: Dispatch<SetStateAction<boolean>>;
 };
 
 export function useWorkspaceNavigation({
@@ -25,8 +22,6 @@ export function useWorkspaceNavigation({
   navigate,
   dataReady,
   setActiveConversationId,
-  setShowMemberList,
-  setShowChannelTools,
   rooms,
 }: UseWorkspaceNavigationArgs) {
   const navigatePane = useCallback(
@@ -44,11 +39,9 @@ export function useWorkspaceNavigation({
     (id: string, options: NavigatePaneOptions = {}) => {
       setActiveConversationId(id);
       const next: WorkspacePane = { type: WorkspacePaneTypes.conversation, id };
-      setShowMemberList(false);
-      setShowChannelTools(false);
       navigatePane(next, options.rooms ?? rooms, options);
     },
-    [navigatePane, rooms, setActiveConversationId, setShowChannelTools, setShowMemberList],
+    [navigatePane, rooms, setActiveConversationId],
   );
 
   const selectAgent = useCallback(
@@ -57,31 +50,25 @@ export function useWorkspaceNavigation({
         return;
       }
       const next: WorkspacePane = { type: WorkspacePaneTypes.agent, id: item.id };
-      setShowMemberList(false);
-      setShowChannelTools(false);
       navigatePane(next, rooms, options);
     },
-    [navigatePane, rooms, setShowChannelTools, setShowMemberList],
+    [navigatePane, rooms],
   );
 
   const selectComputer = useCallback(
     (options: NavigatePaneOptions = {}) => {
       const next: WorkspacePane = { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
-      setShowMemberList(false);
-      setShowChannelTools(false);
       navigatePane(next, rooms, options);
     },
-    [navigatePane, rooms, setShowChannelTools, setShowMemberList],
+    [navigatePane, rooms],
   );
 
   const selectHub = useCallback(
     (options: NavigatePaneOptions = {}) => {
       const next: WorkspacePane = { type: WorkspacePaneTypes.hub, id: DefaultWorkspacePaneIds.hub };
-      setShowMemberList(false);
-      setShowChannelTools(false);
       navigatePane(next, rooms, options);
     },
-    [navigatePane, rooms, setShowChannelTools, setShowMemberList],
+    [navigatePane, rooms],
   );
 
   useEffect(() => {
@@ -89,9 +76,7 @@ export function useWorkspaceNavigation({
     if (next.type === WorkspacePaneTypes.conversation) {
       setActiveConversationId(next.id || "");
     }
-    setShowMemberList(false);
-    setShowChannelTools(false);
-  }, [location.pathname, setActiveConversationId, setShowChannelTools, setShowMemberList]);
+  }, [location.pathname, setActiveConversationId]);
 
   useEffect(() => {
     if (!dataReady) {

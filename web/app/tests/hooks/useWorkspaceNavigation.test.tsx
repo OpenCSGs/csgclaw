@@ -19,8 +19,6 @@ function NavigationHarness() {
   const location = useLocation();
   const navigate = useNavigate();
   const [activeConversationId, setActiveConversationId] = useState("room-1");
-  const [, setShowMemberList] = useState(false);
-  const [, setShowChannelTools] = useState(false);
 
   const activePane = paneFromLocation(location.pathname);
   const navigation = useWorkspaceNavigation({
@@ -29,8 +27,6 @@ function NavigationHarness() {
     navigate,
     rooms,
     setActiveConversationId,
-    setShowChannelTools,
-    setShowMemberList,
   });
 
   return (

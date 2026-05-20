@@ -37,7 +37,7 @@ describe("legacy UI contract", () => {
   });
 
   it("keeps hub template creation behavior", () => {
-    expect(source).toContain("onCreateFromTemplate: openCreateAgentModal");
+    expect(source).toContain("onCreateFromTemplate: agent.openCreateAgentModal");
     expect(source).toContain('from_template: agentDraft.from_template || ""');
     expect(source).toContain('templateLabel: "模板"');
     expect(source).toContain("onClick={() => onCreateFromTemplate?.(selectedTemplate)}");

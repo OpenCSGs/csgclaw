@@ -169,6 +169,19 @@ src/pages/WorkspacePage/components/
 - 只有状态确实需要跨远距离路由或布局区域共享时，才引入全局 store 或 context。单一可见 owner 的数据优先使用页面本地 hook 和派生 props。
 - 优先测试数据流中的纯逻辑：API shape adapter、model normalizer、serializer、routing helper 和状态流转 helper。组件测试只补用户可观察的 wiring。
 
+### Workspace Controller 分层
+
+- `src/hooks/workspace/useWorkspaceController.ts` 只作为 `WorkspacePage` 的组合层。它负责汇总共享数据、调用聚焦的 controller hooks，并组装 sidebar、route views 和 overlays 消费的 props。
+- 不要把大块业务流程直接加回 `useWorkspaceController.ts`。workspace 行为放在 `src/hooks/workspace/` 下的聚焦 hook 中:
+  - `useConversationController`: rooms、邀请、当前 conversation 状态、IM realtime events、消息输入框、mentions、消息列表滚动，以及 conversation modal props。
+  - `useAgentController`: agent 列表和详情页状态、创建/编辑 modal、manager profile setup、manager rebuild、provider auth、agent actions、agent direct message，以及 template publishing。
+  - `useUpgradeController`: upgrade modal 状态、apply-upgrade mutation、upgrade status 更新和重连轮询。
+  - `useProfilePreviewController`: participant/agent preview popover 状态、outside-click 处理和 preview actions。
+- 如果 ownership 清楚，可以继续拆小的辅助组合 hook，例如 shell 偏好/theme/localStorage wiring，或 Hub selection refresh 状态。
+- `useWorkspaceNavigation` 只负责 pane 导航和同步路由派生状态，不要持有 member menu、channel tools 这类 feature UI state。
+- Controller hooks 可以调用 API 并更新 query/local state；纯解析、归一化、序列化和路由 helper 仍应放在 `src/models/` 或 `src/shared/`。
+- 新增 workspace feature 时，先判断哪个 controller 拥有该用户流程。只有新功能有独立生命周期或状态面、放进已有 controller 会明显膨胀时，才新增 controller。
+
 ## i18n 与文案
 
 - 需要翻译的用户可见文案放在现有 i18n message 结构里。

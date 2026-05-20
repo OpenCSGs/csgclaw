@@ -169,6 +169,19 @@ src/pages/WorkspacePage/components/
 - Introduce app-wide stores or context only for state that is genuinely shared across distant routes or layout areas. Prefer page-local hooks and derived props for data that has one visible owner.
 - Test the pure parts of the flow first: API shape adapters, model normalizers, serializers, routing helpers, and state-transition helpers. Add component tests only for the user-visible wiring around those helpers.
 
+### Workspace Controller Layering
+
+- Keep `src/hooks/workspace/useWorkspaceController.ts` as the composition layer for `WorkspacePage`. It should gather shared data, call focused controller hooks, and assemble the props consumed by sidebar, route views, and overlays.
+- Do not add large business flows directly to `useWorkspaceController.ts`. Put workspace behavior into focused hooks under `src/hooks/workspace/`:
+  - `useConversationController`: rooms, invites, selected conversation state, IM realtime events, message composer, mentions, message list scrolling, and conversation modal props.
+  - `useAgentController`: agent list/page state, create/edit modal state, manager profile setup, manager rebuild, provider auth, agent actions, agent direct messages, and template publishing.
+  - `useUpgradeController`: upgrade modal state, apply-upgrade mutation, upgrade status updates, and reconnect polling.
+  - `useProfilePreviewController`: participant/agent preview popover state, outside-click handling, and preview actions.
+- Keep small supporting composition hooks separate when they have clear ownership, such as shell preferences/theme/localStorage wiring or Hub selection refresh state.
+- Keep URL navigation focused in `useWorkspaceNavigation`; it should navigate panes and synchronize route-derived state, not own feature UI state such as member menus or channel tools.
+- Controller hooks may call API functions and update query/local state, but pure parsing, normalization, serialization, and route helpers should stay in `src/models/` or `src/shared/`.
+- When adding a new workspace feature, first decide which controller owns the user-visible workflow. Add a new controller only when the feature has a distinct lifecycle or state surface that would otherwise bloat an existing one.
+
 ## i18n And Text
 
 - Keep user-facing strings in the existing i18n message structure when the text is translated.
