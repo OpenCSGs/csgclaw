@@ -31,7 +31,6 @@ pnpm --dir web/app install
 
 - Keep frontend source in `web/app/src`.
 - Treat `web/static-dist` as generated output for Go embedding.
-- Keep legacy comparison assets in `web/static` unless the task explicitly targets them.
 - Prefer local conventions already present in `web/app` before adding new patterns or dependencies.
 
 ## Top-Level Structure

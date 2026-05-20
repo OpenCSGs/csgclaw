@@ -18,13 +18,6 @@ Chinese companion: `architecture.zh.md`.
   | web/app/src           | -----> | pnpm / make build-web | -----> | web/static-dist           |
   | edit here             |        | generated assets      |        | served by Go embed        |
   +-----------------------+        +-----------------------+        +---------------------------+
-            |
-            | compare only, do not edit by default
-            v
-  +-----------------------+
-  | Legacy Frontend       |
-  | web/static            |
-  +-----------------------+
 
 
   Runtime Boundary

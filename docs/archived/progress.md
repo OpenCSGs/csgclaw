@@ -202,7 +202,7 @@
 ### A15. Web UI 目录与目标设计不一致
 
 - `目标`：前端在独立 `web/` 工程目录中构建，再由服务端托管构建产物。
-- `现状`：当前静态资源已迁到 [`web/static/index.html`](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/web/static/index.html)、[`web/static/app.js`](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/web/static/app.js)、[`web/static/styles.css`](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/web/static/styles.css)，并通过 [`web/ui.go`](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/web/ui.go) 继续由服务端 embed 托管；但还没有独立前端构建脚手架。
+- `现状`：当前前端源码位于 `web/app`，构建产物输出到 `web/static-dist`，并继续通过 Go embed 托管。
 - `影响`：只要前端继续迭代，这个目录迟早会成为构建和测试瓶颈；但它不应该阻塞 API/CLI 对齐。
 - `推荐增量步骤`：
   - [ ] A15-1 先保持 UI 资源不动，只补对新 API 的兼容。

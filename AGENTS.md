@@ -20,7 +20,6 @@ internal/api/           HTTP handlers and router
 internal/im/            IM service and PicoClaw bridge
 internal/server/        HTTP server and UI wiring
 web/app/                Web UI development source and Vite project
-web/static/             legacy frontend assets retained for comparison
 web/static-dist/        generated Web UI assets for Go embed; run make web-build
 ```
 

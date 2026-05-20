@@ -13,13 +13,12 @@
 - 当前版本接口已经存在：`GET /api/v1/version`
   - 代码位置：[internal/api/handler.go](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/internal/api/handler.go:142)
   - 前端已在 sidebar footer 展示版本号：
-    - [web/static/app.js](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/web/static/app.js:1309)
-    - [web/static/app.js](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/web/static/app.js:2438)
-    - [web/static/styles.css](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/web/static/styles.css:2164)
+    - `web/app/src/pages/WorkspacePage/components/WorkspaceSidebar/SidebarFooter.tsx`
+    - `web/app/src/pages/WorkspacePage/components/WorkspaceSidebar/WorkspaceSidebar.css`
 - 服务端已经有 SSE 事件通道，可用于向 UI 推送更新状态：
   - 事件总线：[internal/im/events.go](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/internal/im/events.go:5)
   - SSE 接口：[internal/api/handler.go](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/internal/api/handler.go:1033)
-  - 前端订阅逻辑：[web/static/app.js](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/web/static/app.js:37)
+  - 前端订阅逻辑：`web/app/src/shared/realtime/imEvents.ts`
 - 升级检查与安装逻辑已经存在：
   - 检查最新版本：[internal/upgrade/upgrade.go](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/internal/upgrade/upgrade.go:39)
   - 下载与解压：[internal/upgrade/download.go](/Users/russellluo/Projects/work/opencsg/projects/csgclaw/internal/upgrade/download.go:21)
@@ -157,8 +156,10 @@
   - `internal/server/http.go`
   - `cli/serve/serve.go`
 - 前端
-  - `web/static/app.js`
-  - `web/static/styles.css`
+  - `web/app/src/hooks/workspace/useUpgradeController.ts`
+  - `web/app/src/pages/WorkspacePage/components/WorkspaceSidebar/SidebarFooter.tsx`
+  - `web/app/src/pages/WorkspacePage/components/WorkspaceModals/UpgradeModal.tsx`
+  - `web/app/src/pages/WorkspacePage/components/WorkspaceModals/WorkspaceModals.css`
 
 ## 8. 测试建议
 

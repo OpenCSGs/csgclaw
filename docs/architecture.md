@@ -68,7 +68,6 @@ internal/im/            built-in csgclaw IM and PicoClaw bridge
 internal/channel/       external channel integrations, including Feishu
 internal/config/        config defaults, load/save
 web/app/                Web UI development source and Vite project
-web/static/             legacy frontend assets retained for comparison
 web/static-dist/        generated Web UI assets for Go embed; run make build-web
 ```
 

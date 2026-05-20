@@ -31,7 +31,6 @@ pnpm --dir web/app install
 
 - 前端源码放在 `web/app/src`。
 - `web/static-dist` 是给 Go embed 使用的构建产物。
-- `web/static` 是 legacy 前端对照资产，除非任务明确要求，否则不要修改。
 - 新增模式或依赖前，优先沿用 `web/app` 里已有的约定。
 
 ## 顶层结构
