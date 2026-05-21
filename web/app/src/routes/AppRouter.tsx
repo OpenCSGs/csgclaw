@@ -1,11 +1,13 @@
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import type { ReactElement } from "react";
+import { createHashRouter, RouterProvider } from "react-router-dom";
+import type { RouteObject } from "react-router-dom";
 import { AgentPage } from "@/pages/AgentPage";
 import { ComputerPage } from "@/pages/ComputerPage";
 import { ConversationPage } from "@/pages/ConversationPage";
 import { HubPage } from "@/pages/HubPage";
 import { WorkspacePage } from "@/pages/WorkspacePage/WorkspacePage";
 
-const router = createBrowserRouter([
+const routes: RouteObject[] = [
   {
     path: "/",
     element: <WorkspacePage />,
@@ -26,8 +28,10 @@ const router = createBrowserRouter([
       { path: "*", element: <ConversationPage /> },
     ],
   },
-]);
+];
 
-export function AppRouter() {
+const router = createHashRouter(routes);
+
+export function AppRouter(): ReactElement {
   return <RouterProvider router={router} />;
 }

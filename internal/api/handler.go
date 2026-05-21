@@ -866,8 +866,11 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleHubTemplateByID(w http.ResponseWriter, r *http.Request) {
-	id := hubTemplateIDFromPathValues(r)
+func (h *Handler) handleHubTemplateByRegistryName(w http.ResponseWriter, r *http.Request) {
+	h.handleHubTemplateByResolvedID(w, r, hubTemplateIDFromRegistryNamePathValues(r))
+}
+
+func (h *Handler) handleHubTemplateByResolvedID(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -901,8 +904,8 @@ func (h *Handler) handleHubTemplateByID(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, presented)
 }
 
-func (h *Handler) handleHubTemplateWorkspaceFileByID(w http.ResponseWriter, r *http.Request) {
-	id := hubTemplateIDFromPathValues(r)
+func (h *Handler) handleHubTemplateWorkspaceFileByRegistryName(w http.ResponseWriter, r *http.Request) {
+	id := hubTemplateIDFromRegistryNamePathValues(r)
 	h.handleHubTemplateWorkspaceFile(w, r, id)
 }
 
@@ -1545,8 +1548,13 @@ func (r addRoomMembersRequest) toServiceRequest() (im.AddRoomMembersRequest, err
 	}, nil
 }
 
-func hubTemplateIDFromPathValues(r *http.Request) string {
-	return pathValue(r, "id")
+func hubTemplateIDFromRegistryNamePathValues(r *http.Request) string {
+	registry := pathValue(r, "registry")
+	name := pathValue(r, "name")
+	if registry == "" || name == "" {
+		return ""
+	}
+	return registry + "/" + name
 }
 
 func (h *Handler) reloadIM() error {

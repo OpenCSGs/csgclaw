@@ -13,7 +13,7 @@ function readSourceTree(dir: string): string {
     .join("\n");
 }
 
-const source = readSourceTree(resolve(process.cwd(), "src"));
+const source: string = readSourceTree(resolve(process.cwd(), "src"));
 
 describe("legacy UI contract", () => {
   it("keeps the manager rebuild action card contract", () => {
@@ -72,7 +72,8 @@ describe("legacy UI contract", () => {
     expect(source).toContain('agentPublish: "发布"');
     expect(source).toContain("async function publishAgentPage()");
     expect(source).toContain("function publishAgentTemplateRequest");
-    expect(source).toContain('post("/api/v1/hub/templates", {');
+    expect(source).toContain('const HUB_TEMPLATES_PATH = "/api/v1/hub/templates";');
+    expect(source).toContain("post<HubTemplate>(HUB_TEMPLATES_PATH, payload)");
     expect(source).toContain("publishAgentTemplateRequest(selectedAgentForPage.id)");
     expect(source).toContain("agent_id: agentID");
     expect(source).toContain("setSelectedHubTemplateId(published.id);");

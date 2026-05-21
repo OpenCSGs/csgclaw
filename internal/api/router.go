@@ -38,8 +38,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Route("/hub/templates", func(r chi.Router) {
 			r.Get("/", h.listHubTemplates)
 			r.Post("/", h.createHubTemplate)
-			r.Get("/{id}", h.getHubTemplate)
-			r.Get("/{id}/workspace/file", h.getHubTemplateWorkspaceFile)
+			r.Get("/{registry}/{name}", h.getHubTemplateByRegistryName)
+			r.Get("/{registry}/{name}/workspace/file", h.getHubTemplateWorkspaceFileByRegistryName)
 		})
 		r.Route("/cliproxy/auth", func(r chi.Router) {
 			r.Get("/status", h.handleCLIProxyAuthStatus)

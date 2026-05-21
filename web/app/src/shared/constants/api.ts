@@ -1,4 +1,4 @@
-export const API_BASE_PATH = "/api/v1";
+export const API_BASE_PATH = "api/v1";
 
 export const ApiEndpoints = {
   imEvents: `${API_BASE_PATH}/events`,
@@ -8,4 +8,4 @@ export const ApiEndpoints = {
   notifierRelayWebhookIngress: `${API_BASE_PATH}/webhooks/ingress`,
 } as const;
 
-export const IM_EVENTS_SHARED_WORKER_PATH = "/sse-shared-worker.js";
+export const IM_EVENTS_SHARED_WORKER_PATH = "sse-shared-worker.js";

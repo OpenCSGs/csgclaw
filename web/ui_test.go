@@ -88,7 +88,7 @@ func TestHandlerSetsCacheHeaders(t *testing.T) {
 		}
 		return
 	}
-	t.Fatal("index.html does not reference a Vite /assets/ file")
+	t.Fatal("index.html does not reference a Vite assets file")
 }
 
 func TestHandlerReportsMissingWebBuild(t *testing.T) {
@@ -135,6 +135,7 @@ func assetPaths(index string) []string {
 		if strings.HasPrefix(value, "#") {
 			continue
 		}
+		value = strings.TrimPrefix(value, "./")
 		if !strings.HasPrefix(value, "/") {
 			value = "/" + value
 		}

@@ -1,21 +1,21 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import type { PluginOption } from "vite";
 import path from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 
+const keepStaticDistPlaceholderPlugin: PluginOption = {
+  name: "keep-static-dist-placeholder",
+  closeBundle(): void {
+    const outDir = path.resolve(__dirname, "../static-dist");
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(path.join(outDir, ".gitkeep"), "");
+  },
+};
+
 export default defineConfig({
-  plugins: [
-    react(),
-    {
-      name: "keep-static-dist-placeholder",
-      closeBundle() {
-        const outDir = path.resolve(__dirname, "../static-dist");
-        mkdirSync(outDir, { recursive: true });
-        writeFileSync(path.join(outDir, ".gitkeep"), "");
-      },
-    },
-  ],
-  base: "/",
+  plugins: [react(), keepStaticDistPlaceholderPlugin],
+  base: "./",
   publicDir: "public",
   resolve: {
     alias: {
