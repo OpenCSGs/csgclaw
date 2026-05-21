@@ -878,8 +878,32 @@
 .sidebar-brand-lockup {
   min-width: 0;
   flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
+  position: relative;
+  display: inline-block;
+  width: 116px;
+  height: 31px;
+}
+
+.sidebar-brand-logo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.sidebar-brand-logo-dark {
+  display: none;
+}
+
+:root[data-theme="dark"] .sidebar-brand-logo-light {
+  display: none;
+}
+
+:root[data-theme="dark"] .sidebar-brand-logo-dark {
+  display: block;
 }
 
 .sidebar-brand-mark {
@@ -1400,6 +1424,8 @@
 .sidebar-header.workspace-header .sidebar-brand-lockup {
   min-width: 0;
   justify-self: start;
+  width: min(116px, 100%);
+  height: 31px;
 }
 
 .sidebar-header.workspace-header .sidebar-brand-wordmark {

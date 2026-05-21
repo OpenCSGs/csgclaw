@@ -16,9 +16,18 @@ export function SidebarHeader({
     <div className="sidebar-header workspace-header">
       <div className="sidebar-brand-row">
         <div className="sidebar-brand-lockup" aria-label="CSGClaw">
-          <div className="sidebar-brand-mark sidebar-brand-wordmark" aria-hidden="true">
-            CSGClaw
-          </div>
+          <img
+            className="sidebar-brand-logo sidebar-brand-logo-light"
+            src="/brand/csgclaw-logo-light.svg"
+            alt=""
+            aria-hidden="true"
+          />
+          <img
+            className="sidebar-brand-logo sidebar-brand-logo-dark"
+            src="/brand/csgclaw-logo-dark.svg"
+            alt=""
+            aria-hidden="true"
+          />
         </div>
         <div className="sidebar-controls">
           <div className="theme-switch" role="group" aria-label={t("themeSwitcher")}>
