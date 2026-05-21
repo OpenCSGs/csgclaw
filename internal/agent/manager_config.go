@@ -30,11 +30,7 @@ func managerPicoClawRoot() (string, error) {
 }
 
 func agentWorkspacePicoClawConfigRoot(agentName string) (string, error) {
-	workspaceRoot, err := agentWorkspaceRoot(agentName)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(workspaceRoot, filepath.FromSlash(picoclawsandbox.HostPicoClawStateDir)), nil
+	return agentPicoClawRoot(agentName)
 }
 
 func agentPicoClawRoot(agentName string) (string, error) {

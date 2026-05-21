@@ -17,18 +17,38 @@ var defaultGatewayConfig []byte
 //go:embed defaults/manager-security.yml
 var defaultSecurityConfig string
 
+const (
+	HostDir           = ".picoclaw"
+	HostConfig        = "config.json"
+	HostSecurity      = ".security.yml"
+	HostWorkspaceDir  = "workspace"
+	BoxUserHome       = "/home/picoclaw"
+	BoxDir            = BoxUserHome + "/.picoclaw"
+	BoxWorkspaceDir   = BoxDir + "/workspace"
+	BoxProjectsDir    = BoxDir + "/workspace/projects"
+	BoxGatewayLogPath = BoxDir + "/gateway.log"
+)
+
 type BaseURLResolver func(config.ServerConfig) string
 
 func Root(agentHome string) string {
-	return filepath.Join(agentHome, HostPicoClawDir)
+	return filepath.Join(agentHome, HostDir)
+}
+
+func WorkspaceRoot(agentHome string) string {
+	return filepath.Join(Root(agentHome), HostWorkspaceDir)
+}
+
+func HostGatewayLogPath(agentHome string) string {
+	return filepath.Join(Root(agentHome), "gateway.log")
 }
 
 func WorkspaceConfigRoot(agentHome string) string {
-	return filepath.Join(filepath.Join(agentHome, "workspace"), filepath.FromSlash(HostPicoClawStateDir))
+	return Root(agentHome)
 }
 
 func EnsureConfig(agentHome, botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) (string, error) {
-	hostRoot := WorkspaceConfigRoot(agentHome)
+	hostRoot := Root(agentHome)
 	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create picoclaw config dir: %w", err)
 	}
@@ -37,12 +57,12 @@ func EnsureConfig(agentHome, botID string, server config.ServerConfig, model con
 	if err != nil {
 		return "", err
 	}
-	configPath := filepath.Join(hostRoot, HostPicoClawConfig)
+	configPath := filepath.Join(hostRoot, HostConfig)
 	if err := os.WriteFile(configPath, append(data, '\n'), 0o600); err != nil {
 		return "", fmt.Errorf("write manager picoclaw config: %w", err)
 	}
 	securityData := RenderSecurityConfig(server, model)
-	securityPath := filepath.Join(hostRoot, HostPicoClawSecurity)
+	securityPath := filepath.Join(hostRoot, HostSecurity)
 	if err := os.WriteFile(securityPath, []byte(securityData), 0o600); err != nil {
 		return "", fmt.Errorf("write manager security config: %w", err)
 	}

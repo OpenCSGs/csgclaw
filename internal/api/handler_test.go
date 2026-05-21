@@ -24,6 +24,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/sandboxtest"
 )
@@ -1244,7 +1245,7 @@ func TestHandleAgentLogsStreamsGatewayLog(t *testing.T) {
 	if gotCmd != "tail" {
 		t.Fatalf("command = %q, want %q", gotCmd, "tail")
 	}
-	if strings.Join(gotArgs, " ") != "-n 80 /home/picoclaw/.picoclaw/workspace/gateway.log" {
+	if strings.Join(gotArgs, " ") != "-n 80 "+picoclawsandbox.BoxGatewayLogPath {
 		t.Fatalf("args = %q", gotArgs)
 	}
 	if rec.Body.String() != "hello\nworld\n" {

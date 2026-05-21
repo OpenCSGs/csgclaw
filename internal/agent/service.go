@@ -9,7 +9,6 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,6 +18,7 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/utils"
 )
@@ -1686,11 +1686,11 @@ func (s *Service) StreamLogs(ctx context.Context, id string, follow bool, lines 
 }
 
 func streamHostGatewayLog(ctx context.Context, agentName string, follow bool, lines int, w io.Writer) error {
-	logPaths, err := agentGatewayLogPaths(agentName)
+	logPath, err := agentGatewayLogPath(agentName)
 	if err != nil {
 		return err
 	}
-	return streamHostGatewayLogPaths(ctx, logPaths, follow, lines, w)
+	return streamHostGatewayLogPaths(ctx, []string{logPath}, follow, lines, w)
 }
 
 func streamHostGatewayLogPaths(ctx context.Context, logPaths []string, follow bool, lines int, w io.Writer) error {
@@ -1707,34 +1707,11 @@ func streamHostGatewayLogPaths(ctx context.Context, logPaths []string, follow bo
 }
 
 func agentGatewayLogPath(agentName string) (string, error) {
-	root, err := agentWorkspaceRoot(agentName)
+	agentHome, err := agentHomeDir(agentName)
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(root, "gateway.log"), nil
-}
-
-func agentGatewayLogPaths(agentName string) ([]string, error) {
-	primary, err := agentGatewayLogPath(agentName)
-	if err != nil {
-		return nil, err
-	}
-	legacy, err := legacyAgentGatewayLogPath(agentName)
-	if err != nil {
-		return nil, err
-	}
-	if legacy == primary {
-		return []string{primary}, nil
-	}
-	return []string{primary, legacy}, nil
-}
-
-func legacyAgentGatewayLogPath(agentName string) (string, error) {
-	root, err := agentPicoClawRoot(agentName)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(root, "gateway.log"), nil
+	return picoclawsandbox.HostGatewayLogPath(agentHome), nil
 }
 
 func streamGatewayLogFile(ctx context.Context, logPaths []string, follow bool, lines int, w io.Writer) error {

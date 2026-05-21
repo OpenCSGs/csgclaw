@@ -74,7 +74,7 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 }
 
 func GatewayRunCommand() string {
-	return "node /app/openclaw.mjs gateway stop 2>/dev/null; sleep 2; exec node /app/openclaw.mjs gateway --allow-unconfigured --bind lan --port 18789 1>>" + BoxGatewayLogPath + " 2>&1"
+	return "exec node /app/openclaw.mjs gateway --allow-unconfigured --bind lan --port 18789 1>" + BoxGatewayLogPath + " 2>&1"
 }
 
 func fixedBaseURL(baseURL string) BaseURLResolver {

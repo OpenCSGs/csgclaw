@@ -15,17 +15,15 @@ import (
 var defaultOpenClawGatewayConfig []byte
 
 const (
-	HostDir                 = ".openclaw"
-	HostConfig              = "openclaw.json"
-	HostExecApproval        = "exec-approvals.json"
-	HostLogs                = "logs"
-	HostWorkspaceDir        = "workspace"
-	WorkspaceTemplateWorker = "embed/openclaw-worker"
-	BoxUserHome             = "/home/node"
-	BoxDir                  = "/home/node/.openclaw"
-	BoxWorkspaceDir         = BoxDir + "/workspace"
-	BoxProjectsDir          = BoxDir + "/workspace/projects"
-	BoxGatewayLogPath       = BoxDir + "/gateway.log"
+	HostDir           = ".openclaw"
+	HostConfig        = "openclaw.json"
+	HostExecApproval  = "exec-approvals.json"
+	HostWorkspaceDir  = "workspace"
+	BoxUserHome       = "/home/node"
+	BoxDir            = "/home/node/.openclaw"
+	BoxWorkspaceDir   = BoxDir + "/workspace"
+	BoxProjectsDir    = BoxDir + "/workspace/projects"
+	BoxGatewayLogPath = BoxDir + "/gateway.log"
 
 	openClawBridgeProviderID = "csgclaw-llm"
 )
@@ -46,8 +44,8 @@ func HostGatewayLogPath(agentHome string) string {
 
 func EnsureConfig(agentHome, botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) (string, error) {
 	hostRoot := Root(agentHome)
-	if err := os.MkdirAll(filepath.Join(hostRoot, HostLogs), 0o755); err != nil {
-		return "", fmt.Errorf("create openclaw logs dir: %w", err)
+	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
+		return "", fmt.Errorf("create openclaw config dir: %w", err)
 	}
 	data, err := renderConfig(botID, server, model, resolveBaseURL)
 	if err != nil {

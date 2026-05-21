@@ -95,7 +95,7 @@ func TestPicoclawBridgeModelIDPrefixesOpenAIForSlashModelNames(t *testing.T) {
 	}
 }
 
-func TestEnsureAgentPicoClawConfigUsesWorkspaceStateDir(t *testing.T) {
+func TestEnsureAgentPicoClawConfigUsesRuntimeRoot(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -109,7 +109,7 @@ func TestEnsureAgentPicoClawConfigUsesWorkspaceStateDir(t *testing.T) {
 		t.Fatalf("ensureAgentPicoClawConfig() error = %v", err)
 	}
 
-	wantRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "ux", hostWorkspaceDir, filepath.FromSlash(picoclawsandbox.HostPicoClawStateDir))
+	wantRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "ux", picoclawsandbox.HostDir)
 	if root != wantRoot {
 		t.Fatalf("ensureAgentPicoClawConfig() = %q, want %q", root, wantRoot)
 	}
@@ -119,8 +119,8 @@ func TestEnsureAgentPicoClawConfigUsesWorkspaceStateDir(t *testing.T) {
 		t.Fatalf("config root %q is not a directory", root)
 	}
 	for _, path := range []string{
-		filepath.Join(root, picoclawsandbox.HostPicoClawConfig),
-		filepath.Join(root, picoclawsandbox.HostPicoClawSecurity),
+		filepath.Join(root, picoclawsandbox.HostConfig),
+		filepath.Join(root, picoclawsandbox.HostSecurity),
 	} {
 		if info, err := os.Stat(path); err != nil {
 			t.Fatalf("os.Stat(%q) error = %v", path, err)

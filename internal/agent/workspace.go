@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/templates"
 )
 
@@ -70,7 +71,7 @@ func agentWorkspaceRoot(agentName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(agentHome, hostWorkspaceDir), nil
+	return picoclawsandbox.WorkspaceRoot(agentHome), nil
 }
 
 func copyEmbeddedTree(templateRoot, dstRoot string) error {

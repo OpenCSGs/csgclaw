@@ -3369,7 +3369,7 @@ func TestStartRefreshesCompleteWorkerGatewayConfig(t *testing.T) {
 	if _, err := svc.Start(context.Background(), "u-alice"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", hostWorkspaceDir, filepath.FromSlash(picoclawsandbox.HostPicoClawStateDir), picoclawsandbox.HostPicoClawConfig)
+	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("ReadFile(worker config) error = %v", err)
@@ -4340,6 +4340,13 @@ func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testi
 	if err := os.WriteFile(stalePath, []byte("stale"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
+	currentSkillPath := filepath.Join(picoclawsandbox.WorkspaceRoot(managerHome), "skills", "say-hello", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(currentSkillPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(current skill) error = %v", err)
+	}
+	if err := os.WriteFile(currentSkillPath, []byte("# Say Hello\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(current skill) error = %v", err)
+	}
 
 	var ensuredHomes []string
 	var closeRuntimeCalls int
@@ -4356,6 +4363,9 @@ func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testi
 	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 		if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
 			t.Fatalf("stale manager file still exists before recreate: err=%v", err)
+		}
+		if _, err := os.Stat(currentSkillPath); !os.IsNotExist(err) {
+			t.Fatalf("current skill still exists before recreate: err=%v", err)
 		}
 		return &fakeInstance{}, sandbox.Info{
 			ID:        "box-new",
@@ -4788,26 +4798,27 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	}
 
 	wantAgentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")
-	wantWorkspaceRoot := filepath.Join(wantAgentHome, hostWorkspaceDir)
-	wantConfigRoot := filepath.Join(wantWorkspaceRoot, filepath.FromSlash(picoclawsandbox.HostPicoClawStateDir))
+	wantPicoClawRoot := picoclawsandbox.Root(wantAgentHome)
+	wantWorkspaceRoot := picoclawsandbox.WorkspaceRoot(wantAgentHome)
+	wantConfigRoot := wantPicoClawRoot
 	wantProjectsRoot := filepath.Join(homeDir, config.AppDirName, hostProjectsDir)
 	if len(spec.Mounts) != 2 {
 		t.Fatalf("gatewayCreateSpec() mounts = %+v, want 2 mounts", spec.Mounts)
 	}
-	if spec.Mounts[0].HostPath != wantWorkspaceRoot || spec.Mounts[0].GuestPath != picoclawsandbox.BoxWorkspaceDir {
-		t.Fatalf("workspace mount = %+v, want host %q guest %q", spec.Mounts[0], wantWorkspaceRoot, picoclawsandbox.BoxWorkspaceDir)
+	if spec.Mounts[0].HostPath != wantPicoClawRoot || spec.Mounts[0].GuestPath != picoclawsandbox.BoxDir {
+		t.Fatalf("runtime root mount = %+v, want host %q guest %q", spec.Mounts[0], wantPicoClawRoot, picoclawsandbox.BoxDir)
 	}
 	if spec.Mounts[1].HostPath != wantProjectsRoot || spec.Mounts[1].GuestPath != picoclawsandbox.BoxProjectsDir {
 		t.Fatalf("projects mount = %+v, want host %q guest %q", spec.Mounts[1], wantProjectsRoot, picoclawsandbox.BoxProjectsDir)
 	}
-	if _, err := os.Stat(filepath.Join(wantConfigRoot, picoclawsandbox.HostPicoClawConfig)); err != nil {
+	if _, err := os.Stat(filepath.Join(wantConfigRoot, picoclawsandbox.HostConfig)); err != nil {
 		t.Fatalf("worker PicoClaw config was not written: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(wantWorkspaceRoot, "AGENT.md")); err != nil {
 		t.Fatalf("worker workspace was not written: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(wantAgentHome, picoclawsandbox.HostPicoClawDir)); !os.IsNotExist(err) {
-		t.Fatalf("picoclaw host dir stat error = %v, want not exist", err)
+	if _, err := os.Stat(filepath.Join(wantAgentHome, hostWorkspaceDir)); !os.IsNotExist(err) {
+		t.Fatalf("legacy workspace stat error = %v, want not exist", err)
 	}
 }
 
