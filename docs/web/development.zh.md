@@ -95,7 +95,8 @@ pnpm --dir web/app install
 - 不要把页面私有组件放进 `src/components/`。
 - 纯图标组件放在 `src/components/ui/Icons/`。
 - 当组件把 UI 基础件与业务状态、文案、动作或 API 数据组合起来时，它就是业务组件。
-- 新增或修改 UI 基础件、Radix wrapper、表单控件、浮层层级或组件库 export 时，遵循 `docs/web/ui-components.md` 或 `docs/web/ui-components.zh.md`。
+- 新增页面功能时，先查已有 `src/components/ui` 和 `src/components/business` 是否能组合实现；不要在页面里重复实现基础按钮、表单、选择器、浮层或 tooltip 交互。
+- 新增或修改 UI 基础件、Radix wrapper、表单控件、浮层层级或组件库 export 时，遵循 `docs/web/ui-components.md` 或 `docs/web/ui-components.zh.md`。当你需要判断“应该用现有组件、直接用 Radix、还是抽一个新的本地组件”时，也先看该组件库规范。
 
 ## 组件命名
 
@@ -136,6 +137,7 @@ src/pages/WorkspacePage/components/
 - feature 级共享 CSS 可以放在该 feature 的 components 目录，例如 `WorkspaceComponents.css`。
 - 全局样式和设计 token 放在 `src/shared/styles/`。
 - 新增颜色、间距、阴影前优先使用已有 CSS 变量和 token。
+- Tailwind CSS utility class 可以用于少量布局和通用样式；稳定的组件外观仍应沉淀到组件 CSS、共享 token 或组件库封装中。
 - CSS class 名应绑定组件或 feature 语义，避免容易全局冲突的泛用名称。
 - 不要把页面专属样式放进 `src/shared/styles/`。
 - 跨组件浮层必须使用 `src/shared/styles/tokens.css` 中的 z-index token；modal、popover、portal 和 tooltip 的层级模型见 `docs/web/ui-components.md` 或 `docs/web/ui-components.zh.md`。

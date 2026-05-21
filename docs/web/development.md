@@ -95,7 +95,8 @@ If a subdirectory later needs its own rules, add a short README in that subdirec
 - Do not put page-private components in `src/components/`.
 - Pure icon components belong under `src/components/ui/Icons/`.
 - A component becomes business UI when it combines UI primitives with business state, labels, actions, or API-backed data.
-- Follow `docs/web/ui-components.md` when adding or changing UI primitives, Radix wrappers, form controls, overlay layers, or component-library exports.
+- When adding page functionality, first check whether existing `src/components/ui` and `src/components/business` packages can be composed for the need. Do not duplicate base button, form, select, overlay, or tooltip interactions inside pages.
+- Follow `docs/web/ui-components.md` when adding or changing UI primitives, Radix wrappers, form controls, overlay layers, or component-library exports. Also read it when deciding whether to use an existing component, wrap a Radix primitive, or extract a new local component.
 
 ## Component Naming
 
@@ -136,6 +137,7 @@ src/pages/WorkspacePage/components/
 - Feature-level shared CSS can live in the feature components folder, such as `WorkspaceComponents.css`.
 - Global styles and design tokens stay in `src/shared/styles/`.
 - Prefer existing CSS variables and tokens before introducing new color, spacing, or shadow values.
+- Tailwind CSS utility classes may be used for small layout and common styling details; stable component presentation should still be captured in component CSS, shared tokens, or component-library wrappers.
 - Keep CSS class names tied to component or feature semantics; avoid generic class names that can collide globally.
 - Do not put page-specific styles in `src/shared/styles/`.
 - Cross-component overlay layers must use the z-index tokens in `src/shared/styles/tokens.css`; see `docs/web/ui-components.md` for the modal, popover, portal, and tooltip layering model.

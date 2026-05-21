@@ -10,6 +10,17 @@ Chinese companion: `ui-components.zh.md`.
 
 Business-aware shared components belong in `src/components/business`. Page-private components belong under the owning page directory.
 
+## Component Layering
+
+Business features should prefer the project's existing component library instead of rebuilding primitive interactions or styles inside pages:
+
+1. Page and feature code should compose `src/components/business` and `src/components/ui` first.
+2. `src/components/business` may combine UI primitives with business labels, state, and actions, but should not reinvent base controls.
+3. `src/components/ui` wraps reusable presentation primitives and turns Radix primitive behavior into CSGClaw-local APIs and visual conventions.
+4. Radix primitives are the interaction foundation for the component library, not the default direct dependency for business pages.
+
+If a page needs a new highly customized UI, start with a page-private component. Promote it to `src/components/ui` or `src/components/business` when it has cross-page reuse, a stable interaction contract, or repeated copies across pages. Update this guide or the styling/component rules in `docs/web/development.md` when extracting the pattern.
+
 ## Package Shape
 
 - Use one PascalCase folder per exported component package.
@@ -22,9 +33,10 @@ Business-aware shared components belong in `src/components/business`. Page-priva
 
 - Prefer tokens from `src/shared/styles/tokens.css` for color, radius, shadow, focus rings, and shared layer values.
 - Keep component-owned styles beside the component.
-- Utility classes are fine for small layout details, but stable component styling should use component-owned class names.
+- Tailwind CSS utility classes are fine for small layout details, but stable component styling should use component-owned class names.
 - Do not use raw global color, shadow, or z-index values in UI components when a token exists.
 - Keep UI primitives visually neutral enough for reuse across pages. Business-specific layout and copy should stay outside `src/components/ui`.
+- Shared styling will be gradually moved into Tailwind CSS and shared tokens. Page-specific styling may start near the page or feature CSS, then be extracted after its reuse value is clear.
 
 ## Overlay Layers
 
@@ -42,9 +54,13 @@ When adding a Radix component with a portal, expose a container escape hatch whe
 
 ## Radix Primitives
 
+- Radix Primitives documentation: <https://www.radix-ui.com/primitives/docs/overview/introduction>.
+- Radix primitives provide accessibility, keyboard navigation, focus management, controlled/uncontrolled state, portals, and other interaction behavior. They are unstyled by default; CSGClaw local components own styling.
 - Wrap Radix primitives behind local UI components before using them broadly.
 - Keep the Radix interaction contract intact, and compose CSGClaw styling around it.
 - Prefer data-driven APIs for common form controls, with compound exports available only for custom layouts.
+- Pages and business components should not depend on Radix primitives directly unless it is an explicit page-private exploration. Extract the wrapper to `src/components/ui` once the interaction needs reuse or becomes a stable convention.
+- When adding Radix dependencies, follow the project's existing dependency style and keep Radix-related package versions aligned when practical to avoid duplicate shared dependencies.
 - If jsdom lacks browser APIs needed by a Radix primitive, add the smallest stable polyfill in `web/app/tests/setup.ts` and keep component tests focused on user-visible behavior.
 
 ## Select
