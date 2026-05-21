@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui";
+import { Button, Select } from "@/components/ui";
 import { defaultManagerRebuildImageForRuntime, formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
 
 export function ManagerRebuildModal({
@@ -35,10 +35,10 @@ export function ManagerRebuildModal({
             <div className="profile-grid profile-grid-compact manager-rebuild-grid">
               <label className="field manager-rebuild-runtime-field">
                 <span>{t("profileRuntimeKind")}</span>
-                <select
+                <Select
                   value={selectedRuntimeKind}
-                  onChange={(event) => {
-                    const nextRuntimeKind = normalizeRuntimeKind(event.currentTarget.value);
+                  onValueChange={(value) => {
+                    const nextRuntimeKind = normalizeRuntimeKind(value);
                     onRuntimeKindChange(nextRuntimeKind);
                     onImageChange(
                       defaultManagerRebuildImageForRuntime(
@@ -49,13 +49,12 @@ export function ManagerRebuildModal({
                       ),
                     );
                   }}
-                >
-                  {runtimeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {formatRuntimeKindLabel(option.value, t)}
-                    </option>
-                  ))}
-                </select>
+                  triggerProps={{ "aria-label": t("profileRuntimeKind") }}
+                  options={runtimeOptions.map((option) => ({
+                    value: option.value,
+                    label: formatRuntimeKindLabel(option.value, t),
+                  }))}
+                />
               </label>
               <label className="field manager-rebuild-image-field">
                 <span>{t("agentImage")}</span>

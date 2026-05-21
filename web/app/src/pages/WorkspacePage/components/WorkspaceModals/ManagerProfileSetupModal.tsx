@@ -6,7 +6,7 @@ import {
   profileBaseURLMissing,
   requiredFieldLabel,
 } from "@/components/business/ProfileControls";
-import { Button } from "@/components/ui";
+import { Button, Select } from "@/components/ui";
 import {
   formatProviderLabel,
   formatRuntimeKindLabel,
@@ -56,68 +56,58 @@ export function ManagerProfileSetupModal({
             <div className="profile-runtime-grid">
               <label className="field">
                 <span>{t("profileRuntimeKind")}</span>
-                <select
+                <Select
                   value={normalizeRuntimeKind(profileDraft.runtime_kind || bootstrapConfig?.runtime_kind)}
-                  onChange={(event) =>
-                    onProfileDraftChange({ ...profileDraft, runtime_kind: event.currentTarget.value })
-                  }
-                >
-                  {GATEWAY_RUNTIME_KIND_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {formatRuntimeKindLabel(option.value, t)}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(value) => onProfileDraftChange({ ...profileDraft, runtime_kind: value })}
+                  triggerProps={{ "aria-label": t("profileRuntimeKind") }}
+                  options={GATEWAY_RUNTIME_KIND_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: formatRuntimeKindLabel(option.value, t),
+                  }))}
+                />
               </label>
               <label className="field">
                 <span>{t("profileProvider")}</span>
-                <select
+                <Select
                   value={profileDraft.provider}
-                  onChange={(event) => {
-                    onProfileDraftChange({ ...profileDraft, provider: event.currentTarget.value, model_id: "" });
+                  onValueChange={(value) => {
+                    onProfileDraftChange({ ...profileDraft, provider: value, model_id: "" });
                     onProfileModelsReset();
                   }}
-                >
-                  {["csghub_lite", "codex", "claude_code", "api"].map((provider) => (
-                    <option key={provider} value={provider}>
-                      {formatProviderLabel(provider)}
-                    </option>
-                  ))}
-                </select>
+                  triggerProps={{ "aria-label": t("profileProvider") }}
+                  options={["csghub_lite", "codex", "claude_code", "api"].map((provider) => ({
+                    value: provider,
+                    label: formatProviderLabel(provider),
+                  }))}
+                />
               </label>
               <label className="field">
                 {requiredFieldLabel(t("profileModel"))}
-                <select
+                <Select
                   value={profileDraft.model_id}
                   required
-                  aria-required="true"
-                  onChange={(event) => onProfileDraftChange({ ...profileDraft, model_id: event.currentTarget.value })}
-                >
-                  <option value="">{profileModelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
-                  {profileModels.map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                  {profileDraft.model_id && !profileModels.includes(profileDraft.model_id) ? (
-                    <option value={profileDraft.model_id}>{profileDraft.model_id}</option>
-                  ) : null}
-                </select>
+                  onValueChange={(value) => onProfileDraftChange({ ...profileDraft, model_id: value })}
+                  triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
+                  options={[
+                    { value: "", label: profileModelBusy ? t("profileLoadingModels") : t("profileSelectModel") },
+                    ...profileModels.map((model) => ({ value: model, label: model })),
+                    ...(profileDraft.model_id && !profileModels.includes(profileDraft.model_id)
+                      ? [{ value: profileDraft.model_id, label: profileDraft.model_id }]
+                      : []),
+                  ]}
+                />
               </label>
               <label className="field">
                 <span>{t("profileReasoning")}</span>
-                <select
+                <Select
                   value={profileDraft.reasoning_effort}
-                  onChange={(event) =>
-                    onProfileDraftChange({ ...profileDraft, reasoning_effort: event.currentTarget.value })
-                  }
-                >
-                  {["low", "medium", "high", "xhigh"].map((effort) => (
-                    <option key={effort} value={effort}>
-                      {effort}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(value) => onProfileDraftChange({ ...profileDraft, reasoning_effort: value })}
+                  triggerProps={{ "aria-label": t("profileReasoning") }}
+                  options={["low", "medium", "high", "xhigh"].map((effort) => ({
+                    value: effort,
+                    label: effort,
+                  }))}
+                />
               </label>
               <label className="selection-item compact-toggle-row">
                 <input

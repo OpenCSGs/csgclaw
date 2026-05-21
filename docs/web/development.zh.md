@@ -48,25 +48,25 @@ pnpm --dir web/app install
 
 创建、移动或重组 `web/app/src` 下的文件时，使用这张表判断归属。
 
-| 路径 | 职责 | 避免 |
-| --- | --- | --- |
-| `src/main.tsx` | React 入口。 | 应用逻辑、路由规则或 provider 细节。 |
-| `src/bootstrap/` | 应用启动、providers、根装配、错误边界和共享 client。 | 页面私有行为、feature 专属 helper 或万能 constants 文件。 |
-| `src/routes/` | 路由声明和 route 到 page 的装配。 | 页面实现细节。 |
-| `src/api/` | HTTP client、请求封装、endpoint 类型和传输边界。 | 渲染逻辑、页面状态或可复用数据归一化。 |
-| `src/models/` | 可共享或可独立测试的纯数据整理、格式化、解析、路由和领域 helper。 | React hooks、浏览器存储、fetch 调用或 UI 状态。 |
-| `src/hooks/` | 复用型 React hooks，用于组合共享应用数据或 controller 状态。 | 只属于单个页面的 hooks；这类 hooks 放页面附近。 |
-| `src/components/ui/` | 展示型基础组件、布局基础件、表单控件、按钮和图标。 | CSGClaw 业务状态或 API 数据行为。 |
-| `src/components/business/` | 跨页面复用的业务组件，组合 UI 基础件和业务文案、状态、动作或 API 数据。 | 只被单个页面使用的组件。 |
-| `src/pages/<PageName>/` | 路由页面和该页面拥有的模块。 | 没有真实复用前提前抽跨页面抽象。 |
-| `src/pages/<PageName>/components/` | 页面私有组件。 | 从其它页面导入私有模块。 |
-| `src/shared/constants/` | 小而明确的跨模块稳定契约常量，例如 API endpoint、agent 默认值、结构化消息 type 字符串。 | 单个万能 constants 文件、页面私有值或领域逻辑。 |
-| `src/shared/i18n/` | 文案表、语言选择和翻译 helper。 | 只属于单个未国际化路径的一次性文案。 |
-| `src/shared/storage/` | storage key 和 local/session storage 封装。 | 页面专属持久化策略。 |
-| `src/shared/realtime/` | event bus、SSE/shared worker、实时事件解析和订阅 helper。 | 页面渲染或组件私有 effect。 |
-| `src/shared/theme/` | 主题选择和主题相关共享逻辑。 | 组件 CSS 或页面专属视觉规则。 |
-| `src/shared/styles/` | 全局 CSS、reset、设计 token 和全局 CSS 变量。 | 组件或页面自有样式。 |
-| `src/shared/lib/` | 不依赖 React、API、storage 或页面的小型通用 helper。 | 应放进 `src/models/` 的领域 helper。 |
+| 路径                               | 职责                                                                                    | 避免                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `src/main.tsx`                     | React 入口。                                                                            | 应用逻辑、路由规则或 provider 细节。                      |
+| `src/bootstrap/`                   | 应用启动、providers、根装配、错误边界和共享 client。                                    | 页面私有行为、feature 专属 helper 或万能 constants 文件。 |
+| `src/routes/`                      | 路由声明和 route 到 page 的装配。                                                       | 页面实现细节。                                            |
+| `src/api/`                         | HTTP client、请求封装、endpoint 类型和传输边界。                                        | 渲染逻辑、页面状态或可复用数据归一化。                    |
+| `src/models/`                      | 可共享或可独立测试的纯数据整理、格式化、解析、路由和领域 helper。                       | React hooks、浏览器存储、fetch 调用或 UI 状态。           |
+| `src/hooks/`                       | 复用型 React hooks，用于组合共享应用数据或 controller 状态。                            | 只属于单个页面的 hooks；这类 hooks 放页面附近。           |
+| `src/components/ui/`               | 展示型基础组件、布局基础件、表单控件、按钮和图标。                                      | CSGClaw 业务状态或 API 数据行为。                         |
+| `src/components/business/`         | 跨页面复用的业务组件，组合 UI 基础件和业务文案、状态、动作或 API 数据。                 | 只被单个页面使用的组件。                                  |
+| `src/pages/<PageName>/`            | 路由页面和该页面拥有的模块。                                                            | 没有真实复用前提前抽跨页面抽象。                          |
+| `src/pages/<PageName>/components/` | 页面私有组件。                                                                          | 从其它页面导入私有模块。                                  |
+| `src/shared/constants/`            | 小而明确的跨模块稳定契约常量，例如 API endpoint、agent 默认值、结构化消息 type 字符串。 | 单个万能 constants 文件、页面私有值或领域逻辑。           |
+| `src/shared/i18n/`                 | 文案表、语言选择和翻译 helper。                                                         | 只属于单个未国际化路径的一次性文案。                      |
+| `src/shared/storage/`              | storage key 和 local/session storage 封装。                                             | 页面专属持久化策略。                                      |
+| `src/shared/realtime/`             | event bus、SSE/shared worker、实时事件解析和订阅 helper。                               | 页面渲染或组件私有 effect。                               |
+| `src/shared/theme/`                | 主题选择和主题相关共享逻辑。                                                            | 组件 CSS 或页面专属视觉规则。                             |
+| `src/shared/styles/`               | 全局 CSS、reset、设计 token 和全局 CSS 变量。                                           | 组件或页面自有样式。                                      |
+| `src/shared/lib/`                  | 不依赖 React、API、storage 或页面的小型通用 helper。                                    | 应放进 `src/models/` 的领域 helper。                      |
 
 默认把代码放在最接近 owner 的地方。只有出现真实跨页面复用，或边界确实共享时，才提升到 `src/components`、`src/models`、`src/hooks` 或 `src/shared`。
 
@@ -95,6 +95,7 @@ pnpm --dir web/app install
 - 不要把页面私有组件放进 `src/components/`。
 - 纯图标组件放在 `src/components/ui/Icons/`。
 - 当组件把 UI 基础件与业务状态、文案、动作或 API 数据组合起来时，它就是业务组件。
+- 新增或修改 UI 基础件、Radix wrapper、表单控件、浮层层级或组件库 export 时，遵循 `docs/web/ui-components.md` 或 `docs/web/ui-components.zh.md`。
 
 ## 组件命名
 
@@ -137,6 +138,7 @@ src/pages/WorkspacePage/components/
 - 新增颜色、间距、阴影前优先使用已有 CSS 变量和 token。
 - CSS class 名应绑定组件或 feature 语义，避免容易全局冲突的泛用名称。
 - 不要把页面专属样式放进 `src/shared/styles/`。
+- 跨组件浮层必须使用 `src/shared/styles/tokens.css` 中的 z-index token；modal、popover、portal 和 tooltip 的层级模型见 `docs/web/ui-components.md` 或 `docs/web/ui-components.zh.md`。
 
 ## 状态与数据
 

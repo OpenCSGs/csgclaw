@@ -227,7 +227,7 @@
 
 .field-help-flyout {
   position: fixed;
-  z-index: 10060;
+  z-index: var(--z-tooltip);
   max-width: min(380px, calc(100vw - 20px));
   max-height: min(280px, 42vh);
   overflow: auto;

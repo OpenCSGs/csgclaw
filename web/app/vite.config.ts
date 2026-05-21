@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import type { PluginOption } from "vite";
 import path from "node:path";
@@ -14,7 +15,7 @@ const keepStaticDistPlaceholderPlugin: PluginOption = {
 };
 
 export default defineConfig({
-  plugins: [react(), keepStaticDistPlaceholderPlugin],
+  plugins: [tailwindcss(), react(), keepStaticDistPlaceholderPlugin],
   base: "./",
   publicDir: "public",
   resolve: {

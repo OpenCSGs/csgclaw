@@ -48,25 +48,25 @@ Do not create new top-level directories unless a module is clearly cross-cutting
 
 Use this map when creating, moving, or reorganizing files under `web/app/src`.
 
-| Path | Owns | Avoid |
-| --- | --- | --- |
-| `src/main.tsx` | React entrypoint only. | App logic, routing rules, or provider setup details. |
-| `src/bootstrap/` | App startup, providers, root app assembly, error boundaries, and shared clients. | Page-private behavior, feature-specific helpers, or catch-all constants. |
-| `src/routes/` | Route declarations and route-to-page wiring. | Page implementation details. |
-| `src/api/` | HTTP clients, request wrappers, endpoint types, and transport boundary code. | Rendering logic, page state, or reusable data normalization. |
-| `src/models/` | Pure data shaping, formatting, parsing, routing helpers, and domain helpers that are shared or independently testable. | React hooks, browser storage, fetch calls, or UI state. |
-| `src/hooks/` | Reusable React hooks that compose shared app data or controller state. | Hooks owned by one page only; keep those beside that page. |
-| `src/components/ui/` | Presentation primitives, layout primitives, form controls, buttons, and icons. | CSGClaw-specific business state or API-backed behavior. |
-| `src/components/business/` | Cross-page app-aware components that combine UI primitives with business labels, state, actions, or API data. | Components used by only one page. |
-| `src/pages/<PageName>/` | Route screens and modules owned by one page. | Cross-page abstractions before real reuse exists. |
-| `src/pages/<PageName>/components/` | Components private to that page. | Imports from another page's private modules. |
-| `src/shared/constants/` | Small, named constant modules for stable cross-cutting contracts such as API endpoints, agent defaults, or structured message type strings. | A single catch-all constants file, page-private values, or domain logic. |
-| `src/shared/i18n/` | Message catalogs, locale selection, and translation helpers. | One-off text that belongs to a single untranslated path. |
-| `src/shared/storage/` | Storage keys and local/session storage wrappers. | Page-specific persistence policy. |
-| `src/shared/realtime/` | Event bus, SSE/shared worker plumbing, realtime event parsing, and subscription helpers. | Page rendering or component-owned effects. |
-| `src/shared/theme/` | Theme selection and theme-related shared logic. | Component CSS or page-specific visual rules. |
-| `src/shared/styles/` | Global CSS, reset rules, design tokens, and app-wide CSS variables. | Component-owned or page-owned styles. |
-| `src/shared/lib/` | Small generic helpers with no React, API, storage, or page dependency. | Domain helpers that belong in `src/models/`. |
+| Path                               | Owns                                                                                                                                        | Avoid                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `src/main.tsx`                     | React entrypoint only.                                                                                                                      | App logic, routing rules, or provider setup details.                     |
+| `src/bootstrap/`                   | App startup, providers, root app assembly, error boundaries, and shared clients.                                                            | Page-private behavior, feature-specific helpers, or catch-all constants. |
+| `src/routes/`                      | Route declarations and route-to-page wiring.                                                                                                | Page implementation details.                                             |
+| `src/api/`                         | HTTP clients, request wrappers, endpoint types, and transport boundary code.                                                                | Rendering logic, page state, or reusable data normalization.             |
+| `src/models/`                      | Pure data shaping, formatting, parsing, routing helpers, and domain helpers that are shared or independently testable.                      | React hooks, browser storage, fetch calls, or UI state.                  |
+| `src/hooks/`                       | Reusable React hooks that compose shared app data or controller state.                                                                      | Hooks owned by one page only; keep those beside that page.               |
+| `src/components/ui/`               | Presentation primitives, layout primitives, form controls, buttons, and icons.                                                              | CSGClaw-specific business state or API-backed behavior.                  |
+| `src/components/business/`         | Cross-page app-aware components that combine UI primitives with business labels, state, actions, or API data.                               | Components used by only one page.                                        |
+| `src/pages/<PageName>/`            | Route screens and modules owned by one page.                                                                                                | Cross-page abstractions before real reuse exists.                        |
+| `src/pages/<PageName>/components/` | Components private to that page.                                                                                                            | Imports from another page's private modules.                             |
+| `src/shared/constants/`            | Small, named constant modules for stable cross-cutting contracts such as API endpoints, agent defaults, or structured message type strings. | A single catch-all constants file, page-private values, or domain logic. |
+| `src/shared/i18n/`                 | Message catalogs, locale selection, and translation helpers.                                                                                | One-off text that belongs to a single untranslated path.                 |
+| `src/shared/storage/`              | Storage keys and local/session storage wrappers.                                                                                            | Page-specific persistence policy.                                        |
+| `src/shared/realtime/`             | Event bus, SSE/shared worker plumbing, realtime event parsing, and subscription helpers.                                                    | Page rendering or component-owned effects.                               |
+| `src/shared/theme/`                | Theme selection and theme-related shared logic.                                                                                             | Component CSS or page-specific visual rules.                             |
+| `src/shared/styles/`               | Global CSS, reset rules, design tokens, and app-wide CSS variables.                                                                         | Component-owned or page-owned styles.                                    |
+| `src/shared/lib/`                  | Small generic helpers with no React, API, storage, or page dependency.                                                                      | Domain helpers that belong in `src/models/`.                             |
 
 Default to placing code near its owner. Promote code to `src/components`, `src/models`, `src/hooks`, or `src/shared` only after there is real cross-page reuse or a clear shared boundary.
 
@@ -95,6 +95,7 @@ If a subdirectory later needs its own rules, add a short README in that subdirec
 - Do not put page-private components in `src/components/`.
 - Pure icon components belong under `src/components/ui/Icons/`.
 - A component becomes business UI when it combines UI primitives with business state, labels, actions, or API-backed data.
+- Follow `docs/web/ui-components.md` when adding or changing UI primitives, Radix wrappers, form controls, overlay layers, or component-library exports.
 
 ## Component Naming
 
@@ -137,6 +138,7 @@ src/pages/WorkspacePage/components/
 - Prefer existing CSS variables and tokens before introducing new color, spacing, or shadow values.
 - Keep CSS class names tied to component or feature semantics; avoid generic class names that can collide globally.
 - Do not put page-specific styles in `src/shared/styles/`.
+- Cross-component overlay layers must use the z-index tokens in `src/shared/styles/tokens.css`; see `docs/web/ui-components.md` for the modal, popover, portal, and tooltip layering model.
 
 ## State And Data
 

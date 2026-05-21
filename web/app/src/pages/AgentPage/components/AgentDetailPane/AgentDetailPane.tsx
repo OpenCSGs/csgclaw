@@ -22,7 +22,7 @@ import {
   notifierFormIsComplete,
 } from "@/models/agents";
 import { AgentIcon } from "@/components/ui/Icons";
-import { Button } from "@/components/ui";
+import { Button, Select } from "@/components/ui";
 
 export function AgentDetailPane({
   item,
@@ -225,48 +225,40 @@ export function AgentDetailPane({
               <div className="profile-runtime-grid">
                 <label className="field">
                   <span>{t("profileProvider")}</span>
-                  <select
+                  <Select
                     value={draft.provider}
-                    onChange={(event) => updateDraft({ provider: event.currentTarget.value, model_id: "" })}
-                  >
-                    {PROVIDERS.map((provider) => (
-                      <option key={provider} value={provider}>
-                        {formatProviderLabel(provider)}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={(value) => updateDraft({ provider: value, model_id: "" })}
+                    triggerProps={{ "aria-label": t("profileProvider") }}
+                    options={PROVIDERS.map((provider) => ({
+                      value: provider,
+                      label: formatProviderLabel(provider),
+                    }))}
+                  />
                 </label>
                 <label className="field">
                   {requiredFieldLabel(t("profileModel"))}
-                  <select
+                  <Select
                     value={draft.model_id}
                     required
-                    aria-required="true"
-                    onChange={(event) => updateDraft({ model_id: event.currentTarget.value })}
-                  >
-                    <option value="">{modelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
-                    {models.map((model) => (
-                      <option key={model} value={model}>
-                        {model}
-                      </option>
-                    ))}
-                    {draft.model_id && !models.includes(draft.model_id) ? (
-                      <option value={draft.model_id}>{draft.model_id}</option>
-                    ) : null}
-                  </select>
+                    onValueChange={(value) => updateDraft({ model_id: value })}
+                    triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
+                    options={[
+                      { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileSelectModel") },
+                      ...models.map((model) => ({ value: model, label: model })),
+                      ...(draft.model_id && !models.includes(draft.model_id)
+                        ? [{ value: draft.model_id, label: draft.model_id }]
+                        : []),
+                    ]}
+                  />
                 </label>
                 <label className="field">
                   <span>{t("profileReasoning")}</span>
-                  <select
+                  <Select
                     value={draft.reasoning_effort}
-                    onChange={(event) => updateDraft({ reasoning_effort: event.currentTarget.value })}
-                  >
-                    {REASONING_EFFORTS.map((effort) => (
-                      <option key={effort} value={effort}>
-                        {effort}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={(value) => updateDraft({ reasoning_effort: value })}
+                    triggerProps={{ "aria-label": t("profileReasoning") }}
+                    options={REASONING_EFFORTS.map((effort) => ({ value: effort, label: effort }))}
+                  />
                 </label>
                 <label className="selection-item compact-toggle-row">
                   <input

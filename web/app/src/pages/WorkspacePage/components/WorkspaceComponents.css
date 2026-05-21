@@ -661,7 +661,7 @@
 
 .profile-preview-popover {
   position: fixed;
-  z-index: 40;
+  z-index: var(--z-page-overlay);
   display: grid;
   align-content: start;
   gap: 18px;

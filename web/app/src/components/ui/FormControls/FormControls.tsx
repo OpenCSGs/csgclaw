@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 import { classNames } from "@/shared/lib/classNames";
 
 export type FieldProps = {
@@ -31,10 +31,4 @@ export type TextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;
 
 export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(props, ref) {
   return <textarea ref={ref} {...props} />;
-});
-
-export type SelectProps = SelectHTMLAttributes<HTMLSelectElement>;
-
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(props, ref) {
-  return <select ref={ref} {...props} />;
 });

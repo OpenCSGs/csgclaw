@@ -1,5 +1,6 @@
 import { DEFAULT_NOTIFIER_POLL_INTERVAL, NOTIFIER_DELIVERY_OPTIONS } from "@/shared/constants/agents";
 import type { ReactNode } from "react";
+import { Select } from "@/components/ui";
 import {
   ensureNotifierPullSubscriptionDraft,
   notifierPushWebhookNotifyURL,
@@ -30,13 +31,7 @@ function FieldLabelWithHelp({ children, detail, summary }: { children: ReactNode
   );
 }
 
-export function NotifierControls({
-  agentID,
-  draft,
-  onPatch,
-  t,
-  webhookPublicOrigin,
-}: NotifierControlsProps) {
+export function NotifierControls({ agentID, draft, onPatch, t, webhookPublicOrigin }: NotifierControlsProps) {
   const deliveryMode = draft.notifier_delivery_mode || "webhook";
   const publicWebhookURL = notifierPushWebhookNotifyURL(
     webhookPublicOrigin,
@@ -63,13 +58,15 @@ export function NotifierControls({
       <div className="profile-grid profile-grid-compact">
         <label className="field span-2">
           <span>{t("notifierDeliveryMode")}</span>
-          <select value={deliveryMode} onChange={(event) => setDeliveryMode(event.currentTarget.value)}>
-            {NOTIFIER_DELIVERY_OPTIONS.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode === "webhook" ? t("notifierDeliveryWebhook") : t("notifierDeliveryRemotePull")}
-              </option>
-            ))}
-          </select>
+          <Select
+            value={deliveryMode}
+            onValueChange={setDeliveryMode}
+            triggerProps={{ "aria-label": t("notifierDeliveryMode") }}
+            options={NOTIFIER_DELIVERY_OPTIONS.map((mode) => ({
+              value: mode,
+              label: mode === "webhook" ? t("notifierDeliveryWebhook") : t("notifierDeliveryRemotePull"),
+            }))}
+          />
         </label>
 
         {deliveryMode === "webhook" ? (

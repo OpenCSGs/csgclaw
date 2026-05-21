@@ -57,6 +57,11 @@
   --shadow: var(--shadow-md);
   --shadow-soft: var(--shadow-xs);
   --focus-ring: 0 0 0 4px rgba(77, 106, 214, 0.24);
+  --z-page-popover: 20;
+  --z-page-overlay: 40;
+  --z-modal: 60;
+  --z-portal-popover: 10050;
+  --z-tooltip: 10060;
   --font-sans:
     "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
   --font-display:

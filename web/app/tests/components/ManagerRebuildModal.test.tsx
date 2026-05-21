@@ -10,6 +10,8 @@ const labels: Record<string, string> = {
   managerRebuildSubtitle: "Choose runtime and image.",
   managerRebuildTitle: "Recreate Manager",
   profileRuntimeKind: "Runtime",
+  runtimeOpenclaw: "OpenClaw",
+  runtimePicoclaw: "PicoClaw",
 };
 
 function t(key: string): string {
@@ -51,11 +53,14 @@ describe("ManagerRebuildModal", () => {
     );
 
     expect(screen.getByText("Recreate Manager")).toBeInTheDocument();
-    expect(screen.getByLabelText("Runtime")).toHaveValue("picoclaw_sandbox");
+    const runtimeSelect = screen.getByRole("combobox", { name: "Runtime" });
+
+    expect(runtimeSelect).toHaveTextContent("PicoClaw");
     expect(screen.getByLabelText("Image")).toHaveValue("picoclaw:manager");
     expect(document.querySelector('option[value="picoclaw:alternate"]')).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Runtime"), "openclaw_sandbox");
+    await user.click(runtimeSelect);
+    await user.click(await screen.findByRole("option", { name: "OpenClaw" }));
     expect(onRuntimeKindChange).toHaveBeenCalledWith("openclaw_sandbox");
     expect(onImageChange).toHaveBeenCalledWith("openclaw:template");
 

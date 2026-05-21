@@ -17,7 +17,7 @@ import {
   profileBaseURLMissing,
   requiredFieldLabel,
 } from "@/components/business/ProfileControls";
-import { Button } from "@/components/ui";
+import { Button, Select } from "@/components/ui";
 import {
   agentCreateTemplateLocked,
   applyTemplateToDraft,
@@ -156,24 +156,22 @@ export function AgentProfileModal({
               {isWorkerCreate ? (
                 <label className="field span-2">
                   <span>{t("templateLabel")}</span>
-                  <select
+                  <Select
                     value={agentDraft.from_template || ""}
-                    onChange={(event) => {
+                    onValueChange={(value) => {
                       const nextTemplate = normalizeTemplateSelection(
-                        hubTemplates.find((item) => item.id === event.currentTarget.value) || null,
+                        hubTemplates.find((item) => item.id === value) || null,
                       );
                       onAgentDraftChange((current) =>
                         applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || ""),
                       );
                     }}
-                  >
-                    <option value="">{t("templateNone")}</option>
-                    {hubTemplates.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name || item.id}
-                      </option>
-                    ))}
-                  </select>
+                    triggerProps={{ "aria-label": t("templateLabel") }}
+                    options={[
+                      { value: "", label: t("templateNone") },
+                      ...hubTemplates.map((item) => ({ value: item.id, label: item.name || item.id })),
+                    ]}
+                  />
                 </label>
               ) : null}
               <label className="field">
@@ -208,10 +206,10 @@ export function AgentProfileModal({
                         disabled
                       />
                     ) : (
-                      <select
+                      <Select
                         value={normalizeRuntimeKind(agentDraft.runtime_kind) || DEFAULT_RUNTIME_KIND}
-                        onChange={(event) => {
-                          const runtimeKind = normalizeRuntimeKind(event.currentTarget.value);
+                        onValueChange={(value) => {
+                          const runtimeKind = normalizeRuntimeKind(value);
                           const currentTemplate = normalizeTemplateSelection(
                             hubTemplates.find((item) => item.id === agentDraft.from_template) || null,
                           );
@@ -238,13 +236,12 @@ export function AgentProfileModal({
                           onAgentDraftChange(nextDraft);
                           onAgentModelsReset();
                         }}
-                      >
-                        {WORKER_RUNTIME_KIND_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {formatRuntimeKindLabel(option.value, t)}
-                          </option>
-                        ))}
-                      </select>
+                        triggerProps={{ "aria-label": t("profileRuntimeKind") }}
+                        options={WORKER_RUNTIME_KIND_OPTIONS.map((option) => ({
+                          value: option.value,
+                          label: formatRuntimeKindLabel(option.value, t),
+                        }))}
+                      />
                     )}
                   </label>
                   <label className="field">
@@ -284,53 +281,46 @@ export function AgentProfileModal({
                 <div className="profile-runtime-grid">
                   <label className="field">
                     <span>{t("profileProvider")}</span>
-                    <select
+                    <Select
                       value={agentDraft.provider}
-                      onChange={(event) => {
-                        onAgentDraftChange({ ...agentDraft, provider: event.currentTarget.value, model_id: "" });
+                      onValueChange={(value) => {
+                        onAgentDraftChange({ ...agentDraft, provider: value, model_id: "" });
                         onAgentModelsReset();
                       }}
-                    >
-                      {PROVIDERS.map((provider) => (
-                        <option key={provider} value={provider}>
-                          {formatProviderLabel(provider)}
-                        </option>
-                      ))}
-                    </select>
+                      triggerProps={{ "aria-label": t("profileProvider") }}
+                      options={PROVIDERS.map((provider) => ({
+                        value: provider,
+                        label: formatProviderLabel(provider),
+                      }))}
+                    />
                   </label>
                   <label className="field">
                     {requiredFieldLabel(t("profileModel"))}
-                    <select
+                    <Select
                       value={agentDraft.model_id}
                       required
-                      aria-required="true"
-                      onChange={(event) => onAgentDraftChange({ ...agentDraft, model_id: event.currentTarget.value })}
-                    >
-                      <option value="">{agentModelBusy ? t("profileLoadingModels") : t("profileSelectModel")}</option>
-                      {agentModels.map((model) => (
-                        <option key={model} value={model}>
-                          {model}
-                        </option>
-                      ))}
-                      {agentDraft.model_id && !agentModels.includes(agentDraft.model_id) ? (
-                        <option value={agentDraft.model_id}>{agentDraft.model_id}</option>
-                      ) : null}
-                    </select>
+                      onValueChange={(value) => onAgentDraftChange({ ...agentDraft, model_id: value })}
+                      triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
+                      options={[
+                        { value: "", label: agentModelBusy ? t("profileLoadingModels") : t("profileSelectModel") },
+                        ...agentModels.map((model) => ({ value: model, label: model })),
+                        ...(agentDraft.model_id && !agentModels.includes(agentDraft.model_id)
+                          ? [{ value: agentDraft.model_id, label: agentDraft.model_id }]
+                          : []),
+                      ]}
+                    />
                   </label>
                   <label className="field">
                     <span>{t("profileReasoning")}</span>
-                    <select
+                    <Select
                       value={agentDraft.reasoning_effort}
-                      onChange={(event) =>
-                        onAgentDraftChange({ ...agentDraft, reasoning_effort: event.currentTarget.value })
-                      }
-                    >
-                      {["low", "medium", "high", "xhigh"].map((effort) => (
-                        <option key={effort} value={effort}>
-                          {effort}
-                        </option>
-                      ))}
-                    </select>
+                      onValueChange={(value) => onAgentDraftChange({ ...agentDraft, reasoning_effort: value })}
+                      triggerProps={{ "aria-label": t("profileReasoning") }}
+                      options={["low", "medium", "high", "xhigh"].map((effort) => ({
+                        value: effort,
+                        label: effort,
+                      }))}
+                    />
                   </label>
                   <label className="selection-item compact-toggle-row">
                     <input
