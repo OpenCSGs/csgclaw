@@ -59,7 +59,7 @@ func (s *Service) SetIMBus(bus *im.Bus) {
 	s.imProv = im.NewProvisioner(s.im, bus)
 }
 
-func (s *Service) List(channel, role string) ([]Bot, error) {
+func (s *Service) List(channel, role, botType string) ([]Bot, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("bot store is required")
 	}
@@ -85,7 +85,7 @@ func (s *Service) List(channel, role string) ([]Bot, error) {
 
 	filtered := make([]Bot, 0, len(all))
 	for _, b := range all {
-		if IsNotificationBot(b) {
+		if !shouldIncludeBotInList(b, normalizedChannel, botType) {
 			continue
 		}
 		if normalizedChannel != "" && b.Channel != normalizedChannel {
@@ -390,12 +390,18 @@ func (s *Service) channelUserStillReferenced(target Bot) bool {
 	if userID == "" {
 		return false
 	}
+	deletingAgentID := strings.TrimSpace(target.AgentID)
+	if deletingAgentID == "" {
+		deletingAgentID = strings.TrimSpace(target.ID)
+	}
 	if s.agents != nil {
-		if _, ok := s.agents.Agent(userID); ok {
+		// The backing agent still exists in the store until deleteBackingAgent runs.
+		// Only treat other agents as references.
+		if _, ok := s.agents.Agent(userID); ok && userID != deletingAgentID {
 			return true
 		}
 		if botID := strings.TrimSpace(target.ID); botID != "" && botID != userID {
-			if _, ok := s.agents.Agent(botID); ok {
+			if _, ok := s.agents.Agent(botID); ok && botID != deletingAgentID {
 				return true
 			}
 		}

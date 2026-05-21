@@ -58,7 +58,7 @@ Do not call `POST /api/v1/agents/u-manager/recreate` for this flow.
 
 Notification bots are channel bots with `type=notification`. They do not create backing worker agents; delivery configuration is stored on `bot.runtime_options` in `bots.json`. Default bot id is `n-{name}` (separate from worker agent ids `u-{name}`); you may set `id` explicitly, but it must not collide with an existing agent or channel bot.
 
-- List: `GET /api/v1/channels/csgclaw/bots?type=notification`
+- List: `GET /api/v1/channels/csgclaw/bots` (includes `type=notification` bots; feishu bot list excludes them)
 - Create: `POST /api/v1/channels/csgclaw/bots` with `"type":"notification"` and flat `runtime_options` (`delivery_mode`, `webhook_token`, `remote_url`, …)
 - Update: `PATCH /api/v1/channels/csgclaw/bots/{id}`
 - Delete: `DELETE /api/v1/channels/csgclaw/bots/{id}`

@@ -898,14 +898,14 @@ func TestHandleBotByIDDeleteUsesChannel(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
-	bots, err := srv.botSvc.List(string(bot.ChannelCSGClaw), "")
+	bots, err := srv.botSvc.List(string(bot.ChannelCSGClaw), "", "")
 	if err != nil {
 		t.Fatalf("List(csgclaw) error = %v", err)
 	}
 	if len(bots) != 1 || bots[0].ID != "u-alice" {
 		t.Fatalf("csgclaw bots = %+v, want retained u-alice", bots)
 	}
-	bots, err = srv.botSvc.List(string(bot.ChannelFeishu), "")
+	bots, err = srv.botSvc.List(string(bot.ChannelFeishu), "", "")
 	if err != nil {
 		t.Fatalf("List(feishu) error = %v", err)
 	}
@@ -963,7 +963,7 @@ func TestHandleBotByIDDeleteRemovesCSGClawUser(t *testing.T) {
 	if _, ok := imSvc.Room("room-1"); ok {
 		t.Fatal("Room(room-1) ok = true, want false after removing DM user")
 	}
-	bots, err := botSvc.List(string(bot.ChannelCSGClaw), "")
+	bots, err := botSvc.List(string(bot.ChannelCSGClaw), "", "")
 	if err != nil {
 		t.Fatalf("List(csgclaw) error = %v", err)
 	}
@@ -2498,7 +2498,7 @@ func TestHandleUsersCreateWithBotServiceCreatesWorkerAgent(t *testing.T) {
 		t.Fatalf("agent = %+v, want qa worker", created)
 	}
 
-	bots, err := botSvc.List(string(bot.ChannelCSGClaw), string(bot.RoleWorker))
+	bots, err := botSvc.List(string(bot.ChannelCSGClaw), string(bot.RoleWorker), "")
 	if err != nil {
 		t.Fatalf("List(worker) error = %v", err)
 	}

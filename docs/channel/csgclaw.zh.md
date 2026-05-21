@@ -58,7 +58,7 @@ Content-Type: application/json
 
 通知机器人是 `type=notification` 的 channel bot，不创建 backing worker agent；投递配置保存在 `bots.json` 的 `bot.runtime_options` 中。默认 bot id 为 `n-{name}`（与 worker agent 的 `u-{name}` 区分）；创建时也可显式指定 `id`，但不得与已有 agent 或其它 channel bot 冲突。
 
-- 列表：`GET /api/v1/channels/csgclaw/bots?type=notification`
+- 列表：`GET /api/v1/channels/csgclaw/bots`（含 `type=notification`；feishu channel 列表不包含通知 bot）
 - 创建：`POST /api/v1/channels/csgclaw/bots`，请求体含 `"type":"notification"` 与扁平 `runtime_options`
 - 更新：`PATCH /api/v1/channels/csgclaw/bots/{id}`
 - 删除：`DELETE /api/v1/channels/csgclaw/bots/{id}`

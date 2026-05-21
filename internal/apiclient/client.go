@@ -45,11 +45,14 @@ func New(endpoint, token string, client HTTPClient) *Client {
 	}
 }
 
-func (c *Client) ListBots(ctx context.Context, channel, role string) ([]apitypes.Bot, error) {
+func (c *Client) ListBots(ctx context.Context, channel, role, botType string) ([]apitypes.Bot, error) {
 	var bots []apitypes.Bot
 	values := url.Values{}
 	if strings.TrimSpace(role) != "" {
 		values.Set("role", strings.TrimSpace(role))
+	}
+	if strings.TrimSpace(botType) != "" {
+		values.Set("type", strings.TrimSpace(botType))
 	}
 	path, err := botCollectionPath(channel)
 	if err != nil {

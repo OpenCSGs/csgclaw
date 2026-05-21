@@ -79,73 +79,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 
 func (h *Handler) registerChannelRoutes(router chi.Router) {
 	router.Route("/api/v1/channels", func(r chi.Router) {
-		r.Route("/csgclaw", func(r chi.Router) {
-			r.Route("/bots", func(r chi.Router) {
-				r.Get("/", h.listBots)
-				r.Post("/", h.createBot)
-			})
-			r.Route("/bots/{id}", func(r chi.Router) {
-				r.Get("/", h.handleBotByID)
-				r.Patch("/", h.handleBotByID)
-				r.Delete("/", h.deleteBot)
-				r.Post("/notifications", h.pushNotificationBot)
-			})
-			r.Route("/users", func(r chi.Router) {
-				r.Get("/", h.listUsers)
-				r.Post("/", h.createUser)
-				r.Delete("/{id}", h.deleteCsgclawUser)
-			})
-			r.Route("/rooms", func(r chi.Router) {
-				r.Get("/", h.listRooms)
-				r.Post("/", h.createRoom)
-				r.Route("/{id}", func(r chi.Router) {
-					r.Delete("/", h.deleteCsgclawRoom)
-					r.Route("/members", func(r chi.Router) {
-						r.Get("/", h.listCsgclawRoomMembers)
-						r.Post("/", h.addCsgclawRoomMembers)
-					})
-				})
-			})
-			r.Route("/messages", func(r chi.Router) {
-				r.Get("/", h.listMessages)
-				r.Post("/", h.createMessage)
-			})
-		})
-		r.Route("/feishu", func(r chi.Router) {
-			r.Route("/bots", func(r chi.Router) {
-				r.Get("/", h.listBots)
-				r.Post("/", h.createBot)
-			})
-			r.Route("/config", func(r chi.Router) {
-				r.Get("/", h.getFeishuConfig)
-				r.Put("/", h.updateFeishuConfig)
-				r.Post("/", h.reloadFeishuConfig)
-			})
-			r.Route("/bots/{id}", func(r chi.Router) {
-				r.Delete("/", h.deleteBot)
-				r.Get("/events", h.getFeishuBotEvents)
-			})
-			r.Route("/users", func(r chi.Router) {
-				r.Get("/", h.listFeishuUsers)
-				r.Post("/", h.createFeishuUser)
-				r.Delete("/{id}", h.deleteFeishuUser)
-			})
-			r.Route("/rooms", func(r chi.Router) {
-				r.Get("/", h.listFeishuRooms)
-				r.Post("/", h.createFeishuRoom)
-				r.Route("/{id}", func(r chi.Router) {
-					r.Delete("/", h.deleteFeishuRoom)
-					r.Route("/members", func(r chi.Router) {
-						r.Get("/", h.listFeishuRoomMembers)
-						r.Post("/", h.addFeishuRoomMembers)
-					})
-				})
-			})
-			r.Route("/messages", func(r chi.Router) {
-				r.Get("/", h.listFeishuMessages)
-				r.Post("/", h.createFeishuMessage)
-			})
-		})
+		// Generic bot CRUD for all channels.
 		r.Route("/{channel}/bots", func(r chi.Router) {
 			r.Get("/", h.listBots)
 			r.Post("/", h.createBot)
@@ -154,7 +88,59 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Get("/", h.handleBotByID)
 			r.Patch("/", h.handleBotByID)
 			r.Delete("/", h.deleteBot)
-			r.Post("/notifications", h.pushNotificationBot)
+		})
+
+		// Channel-specific bot actions (not exposed on generic /{channel}/bots/{id}).
+		r.Post("/csgclaw/bots/{id}/notifications", h.pushNotificationBot)
+		r.Get("/feishu/bots/{id}/events", h.getFeishuBotEvents)
+
+		// CSGClaw channel IM routes (flat paths so /csgclaw/bots stays on generic CRUD).
+		r.Route("/csgclaw/users", func(r chi.Router) {
+			r.Get("/", h.listUsers)
+			r.Post("/", h.createUser)
+			r.Delete("/{id}", h.deleteCsgclawUser)
+		})
+		r.Route("/csgclaw/rooms", func(r chi.Router) {
+			r.Get("/", h.listRooms)
+			r.Post("/", h.createRoom)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Delete("/", h.deleteCsgclawRoom)
+				r.Route("/members", func(r chi.Router) {
+					r.Get("/", h.listCsgclawRoomMembers)
+					r.Post("/", h.addCsgclawRoomMembers)
+				})
+			})
+		})
+		r.Route("/csgclaw/messages", func(r chi.Router) {
+			r.Get("/", h.listMessages)
+			r.Post("/", h.createMessage)
+		})
+
+		// Feishu channel routes (flat paths; bot list/CRUD uses generic /{channel}/bots).
+		r.Route("/feishu/config", func(r chi.Router) {
+			r.Get("/", h.getFeishuConfig)
+			r.Put("/", h.updateFeishuConfig)
+			r.Post("/", h.reloadFeishuConfig)
+		})
+		r.Route("/feishu/users", func(r chi.Router) {
+			r.Get("/", h.listFeishuUsers)
+			r.Post("/", h.createFeishuUser)
+			r.Delete("/{id}", h.deleteFeishuUser)
+		})
+		r.Route("/feishu/rooms", func(r chi.Router) {
+			r.Get("/", h.listFeishuRooms)
+			r.Post("/", h.createFeishuRoom)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Delete("/", h.deleteFeishuRoom)
+				r.Route("/members", func(r chi.Router) {
+					r.Get("/", h.listFeishuRoomMembers)
+					r.Post("/", h.addFeishuRoomMembers)
+				})
+			})
+		})
+		r.Route("/feishu/messages", func(r chi.Router) {
+			r.Get("/", h.listFeishuMessages)
+			r.Post("/", h.createFeishuMessage)
 		})
 	})
 }

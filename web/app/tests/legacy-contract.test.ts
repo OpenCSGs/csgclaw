@@ -58,7 +58,7 @@ describe("legacy UI contract", () => {
 
   it("keeps channel-scoped bot and notification bot frontend contracts", () => {
     expect(source).toContain('get<AgentLike[]>("api/v1/channels/csgclaw/bots")');
-    expect(source).toContain('get<AgentLike[]>("api/v1/channels/csgclaw/bots?type=notification")');
+    expect(source).toContain('get<AgentLike[]>("api/v1/channels/csgclaw/bots")');
     expect(source).toContain('post("api/v1/channels/csgclaw/bots", payload)');
     expect(source).toContain("patchNotificationBotRequest");
     expect(source).toContain("createNotificationBotRequest");

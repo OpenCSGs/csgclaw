@@ -19,28 +19,7 @@ func (s *Service) Reload() error {
 }
 
 func (s *Service) ListNotificationBots(channel string) ([]Bot, error) {
-	if s == nil || s.store == nil {
-		return nil, fmt.Errorf("bot store is required")
-	}
-	normalizedChannel := string(ChannelCSGClaw)
-	if strings.TrimSpace(channel) != "" {
-		normalized, err := NormalizeChannel(channel)
-		if err != nil {
-			return nil, err
-		}
-		normalizedChannel = string(normalized)
-	}
-	filtered := make([]Bot, 0)
-	for _, b := range s.store.List() {
-		if b.Channel != normalizedChannel {
-			continue
-		}
-		if !IsNotificationBot(b) {
-			continue
-		}
-		filtered = append(filtered, s.presentNotificationBot(b))
-	}
-	return filtered, nil
+	return s.List(channel, "", BotTypeNotification)
 }
 
 func (s *Service) LookupNotificationBotForDelivery(channel, id string) (runtimeOptions map[string]any, userID string, ok bool) {

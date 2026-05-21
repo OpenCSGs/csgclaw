@@ -61,27 +61,19 @@ func TestNotificationBotsCRUDAndListBotsFilter(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET bots status = %d", rec.Code)
 	}
-	var normalBots []apitypes.Bot
-	if err := json.Unmarshal(rec.Body.Bytes(), &normalBots); err != nil {
+	var listed []apitypes.Bot
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatalf("decode bots: %v", err)
 	}
-	for _, b := range normalBots {
-		if b.Type == bot.BotTypeNotification {
-			t.Fatalf("GET /bots included notification bot %q", b.ID)
+	var found bool
+	for _, b := range listed {
+		if b.ID == created.ID && b.Type == bot.BotTypeNotification {
+			found = true
+			break
 		}
 	}
-
-	rec = httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/bots?type=notification", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET notification-bots status = %d", rec.Code)
-	}
-	var nbots []apitypes.Bot
-	if err := json.Unmarshal(rec.Body.Bytes(), &nbots); err != nil {
-		t.Fatalf("decode notification-bots: %v", err)
-	}
-	if len(nbots) != 1 || nbots[0].ID != created.ID {
-		t.Fatalf("notification-bots = %+v, want one bot id %q", nbots, created.ID)
+	if !found {
+		t.Fatalf("GET /bots = %+v, want notification bot %q", listed, created.ID)
 	}
 
 	push := httptest.NewRecorder()

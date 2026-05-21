@@ -7,19 +7,6 @@ import (
 	"csgclaw/internal/apitypes"
 )
 
-func (c *Client) ListNotificationBots(ctx context.Context, channel string) ([]apitypes.Bot, error) {
-	var bots []apitypes.Bot
-	path, err := botCollectionPath(channel)
-	if err != nil {
-		return nil, err
-	}
-	path += "?type=notification"
-	if err := c.GetJSON(ctx, path, &bots); err != nil {
-		return nil, err
-	}
-	return bots, nil
-}
-
 func (c *Client) CreateNotificationBot(ctx context.Context, req apitypes.CreateBotRequest) (apitypes.Bot, error) {
 	var created apitypes.Bot
 	path, err := botCollectionPath(req.Channel)

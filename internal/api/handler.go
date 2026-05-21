@@ -200,7 +200,7 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 	resp := bootstrapConfigResponse{
 		DefaultManagerTemplate: cfg.Bootstrap.ResolvedDefaultManagerTemplate(),
 		DefaultWorkerTemplate:  cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
-		AdvertiseBaseURL:       config.AdvertiseBaseURLForClient(cfg.Server),
+		AdvertiseBaseURL:       config.ResolveAdvertiseBaseURL(cfg.Server),
 		SupportedRuntimeKinds: []string{
 			agent.RuntimeKindPicoClawSandbox,
 			agent.RuntimeKindOpenClawSandbox,
@@ -404,16 +404,7 @@ func (h *Handler) handleBots(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		if r.URL.Query().Get("type") == bot.BotTypeNotification {
-			bots, err := h.botSvc.ListNotificationBots(channelName)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			writeJSON(w, http.StatusOK, bots)
-			return
-		}
-		bots, err := h.botSvc.List(channelName, r.URL.Query().Get("role"))
+		bots, err := h.botSvc.List(channelName, r.URL.Query().Get("role"), r.URL.Query().Get("type"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -991,6 +982,7 @@ func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 		Role:        item.Role,
 		RuntimeKind: item.RuntimeKind,
 		Image:       item.Image,
+		Env:         item.Env,
 		UpdatedAt:   item.UpdatedAt,
 		Source: apitypes.HubTemplateSource{
 			Name: item.Source.Name,

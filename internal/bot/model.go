@@ -46,6 +46,39 @@ func IsNotificationBot(b Bot) bool {
 	return NormalizeBotType(b.Type) == BotTypeNotification
 }
 
+// notificationBotsAllowedForListChannel reports whether notification bots may appear in List results.
+func notificationBotsAllowedForListChannel(listChannel, botChannel string) bool {
+	if listChannel != "" {
+		return listChannel == string(ChannelCSGClaw)
+	}
+	return botChannel == string(ChannelCSGClaw)
+}
+
+// shouldIncludeBotInList applies channel and optional type list criteria.
+// Empty listType returns all bot types allowed for the channel (csgclaw: normal+notification; feishu: normal only).
+func shouldIncludeBotInList(b Bot, listChannel, listType string) bool {
+	normalizedType := ""
+	if t := strings.TrimSpace(listType); t != "" {
+		normalizedType = NormalizeBotType(t)
+	}
+	isNotification := IsNotificationBot(b)
+
+	switch normalizedType {
+	case BotTypeNormal:
+		return !isNotification
+	case BotTypeNotification:
+		if !isNotification {
+			return false
+		}
+		return notificationBotsAllowedForListChannel(listChannel, b.Channel)
+	default:
+		if isNotification {
+			return notificationBotsAllowedForListChannel(listChannel, b.Channel)
+		}
+		return true
+	}
+}
+
 func NormalizeCreateRequest(req CreateRequest) (CreateRequest, error) {
 	req.ID = strings.TrimSpace(req.ID)
 	req.Name = strings.TrimSpace(req.Name)

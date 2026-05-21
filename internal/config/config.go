@@ -316,8 +316,8 @@ func ListenPort(listenAddr string) string {
 	return port
 }
 
-// AdvertiseBaseURLForClient returns the base URL exposed to Web UI and external webhook callers.
-func AdvertiseBaseURLForClient(server ServerConfig) string {
+// ResolveAdvertiseBaseURL resolves server.advertise_base_url, falling back to a URL derived from listen_addr.
+func ResolveAdvertiseBaseURL(server ServerConfig) string {
 	if u := strings.TrimRight(strings.TrimSpace(server.AdvertiseBaseURL), "/"); u != "" {
 		return u
 	}

@@ -117,3 +117,50 @@ func TestDeleteNotificationBotSkipsSharedIMUser(t *testing.T) {
 		t.Fatal("IM user u-shared was deleted but is still referenced by a worker")
 	}
 }
+
+func TestServiceListIncludesNotificationBotsForCSGClawOnly(t *testing.T) {
+	botStore, err := NewMemoryStore([]Bot{
+		{ID: "u-worker", Name: "worker", Type: BotTypeNormal, Role: string(RoleWorker), Channel: string(ChannelCSGClaw), AgentID: "u-worker", UserID: "u-worker"},
+		{ID: "n-notify", Name: "notify", Type: BotTypeNotification, Role: string(RoleWorker), Channel: string(ChannelCSGClaw), UserID: "n-notify"},
+		{ID: "n-feishu", Name: "feishu-notify", Type: BotTypeNotification, Role: string(RoleWorker), Channel: string(ChannelFeishu), UserID: "n-feishu"},
+	})
+	if err != nil {
+		t.Fatalf("NewMemoryStore() error = %v", err)
+	}
+	botSvc, err := NewService(botStore)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	csgclaw, err := botSvc.List(string(ChannelCSGClaw), "", "")
+	if err != nil {
+		t.Fatalf("List(csgclaw) error = %v", err)
+	}
+	if len(csgclaw) != 2 {
+		t.Fatalf("List(csgclaw) len = %d, want worker + notification", len(csgclaw))
+	}
+	feishu, err := botSvc.List(string(ChannelFeishu), "", "")
+	if err != nil {
+		t.Fatalf("List(feishu) error = %v", err)
+	}
+	for _, b := range feishu {
+		if IsNotificationBot(b) {
+			t.Fatalf("List(feishu) included notification bot %q", b.ID)
+		}
+	}
+
+	notifyOnly, err := botSvc.List(string(ChannelCSGClaw), "", BotTypeNotification)
+	if err != nil {
+		t.Fatalf("List(csgclaw, notification) error = %v", err)
+	}
+	if len(notifyOnly) != 1 || notifyOnly[0].ID != "n-notify" {
+		t.Fatalf("List(csgclaw, notification) = %+v, want n-notify only", notifyOnly)
+	}
+	normalOnly, err := botSvc.List(string(ChannelCSGClaw), "", BotTypeNormal)
+	if err != nil {
+		t.Fatalf("List(csgclaw, normal) error = %v", err)
+	}
+	if len(normalOnly) != 1 || normalOnly[0].ID != "u-worker" {
+		t.Fatalf("List(csgclaw, normal) = %+v, want u-worker only", normalOnly)
+	}
+}

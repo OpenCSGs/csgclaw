@@ -50,15 +50,8 @@ export function saveManagerProfileRequest(profile: JSONRecord): Promise<AgentPro
 
 export async function fetchAgents(options: FetchAgentsOptions = {}): Promise<AgentLike[]> {
   void options;
-  const [normalBots, notificationBots] = await Promise.all([
-    get<AgentLike[]>("api/v1/channels/csgclaw/bots"),
-    get<AgentLike[]>("api/v1/channels/csgclaw/bots?type=notification"),
-  ]);
-  return [...(Array.isArray(normalBots) ? normalBots : []), ...(Array.isArray(notificationBots) ? notificationBots : [])];
-}
-
-export function fetchNotificationBots(): Promise<AgentLike[]> {
-  return get("api/v1/channels/csgclaw/bots?type=notification");
+  const bots = await get<AgentLike[]>("api/v1/channels/csgclaw/bots");
+  return Array.isArray(bots) ? bots : [];
 }
 
 export function fetchAgent(agentID: string): Promise<AgentLike> {

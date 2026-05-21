@@ -38,8 +38,6 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	switch args[0] {
 	case "list":
 		return c.runList(ctx, run, args[1:], globals)
-	case "notification":
-		return c.runNotification(ctx, run, args[1:], globals)
 	case "create":
 		return c.runCreate(ctx, run, args[1:], globals)
 	case "delete":
@@ -54,8 +52,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 
 func (c cmd) usage(run *command.Context) {
 	subcommands := []string{
-		"list               List normal bots (workers/manager; excludes notification bots)",
-		"notification list  List notification bots",
+		"list               List bots (--type normal|notification optional; csgclaw default includes notification)",
 		"create             Create a bot",
 		"delete <id>        Delete a bot",
 		"config             Manage bot channel config",
@@ -64,9 +61,10 @@ func (c cmd) usage(run *command.Context) {
 }
 
 func (c cmd) runList(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("bot list", run.Program+" bot list [flags]", "List normal bots (excludes notification bots).")
+	fs := run.NewFlagSet("bot list", run.Program+" bot list [flags]", "List bots (csgclaw includes notification bots; feishu lists normal bots only).")
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	role := fs.String("role", "", "bot role: manager or worker")
+	botType := fs.String("type", "", "bot type filter: normal or notification (default: all types allowed for channel)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -75,36 +73,11 @@ func (c cmd) runList(ctx context.Context, run *command.Context, args []string, g
 	}
 
 	client := run.APIClient(globals)
-	bots, err := client.ListBots(ctx, *channelName, *role)
-	if err != nil {
-		return err
+	typeFilter := strings.TrimSpace(*botType)
+	if typeFilter != "" {
+		typeFilter = botdomain.NormalizeBotType(typeFilter)
 	}
-	return renderBotList(run, globals, bots)
-}
-
-func (c cmd) runNotification(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	if len(args) == 0 || command.IsHelpArg(args[0]) {
-		fmt.Fprintf(run.Stderr, "usage: %s bot notification list [flags]\n", run.Program)
-		return flag.ErrHelp
-	}
-	switch args[0] {
-	case "list":
-		return c.runNotificationList(ctx, run, args[1:], globals)
-	default:
-		return fmt.Errorf("unknown bot notification subcommand %q", args[0])
-	}
-}
-
-func (c cmd) runNotificationList(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("bot notification list", run.Program+" bot notification list [flags]", "List notification bots.")
-	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if len(fs.Args()) != 0 {
-		return fmt.Errorf("bot notification list does not accept positional arguments")
-	}
-	bots, err := run.APIClient(globals).ListNotificationBots(ctx, *channelName)
+	bots, err := client.ListBots(ctx, *channelName, *role, typeFilter)
 	if err != nil {
 		return err
 	}
