@@ -8,6 +8,8 @@ import (
 
 const (
 	EventTypeMessageCreated           = "message.created"
+	EventTypeThreadCreated            = "thread.created"
+	EventTypeThreadUpdated            = "thread.updated"
 	EventTypeRoomCreated              = "room.created"
 	EventTypeRoomMembersAdded         = "room.members_added"
 	EventTypeConversationCreated      = "conversation.created"
@@ -23,6 +25,7 @@ type Event struct {
 	Room    *Room                   `json:"room,omitempty"`
 	User    *User                   `json:"user,omitempty"`
 	Message *Message                `json:"message,omitempty"`
+	Thread  *ThreadView             `json:"thread,omitempty"`
 	Sender  *User                   `json:"sender,omitempty"`
 	Upgrade *apitypes.UpgradeStatus `json:"upgrade,omitempty"`
 }

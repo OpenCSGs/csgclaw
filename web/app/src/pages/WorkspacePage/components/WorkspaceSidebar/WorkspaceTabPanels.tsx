@@ -1,13 +1,22 @@
 import { HubIcon } from "@/components/ui/Icons";
+import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
-import { WorkspaceAgentRow, WorkspaceComputerRow, WorkspaceConversationRow, WorkspaceGroup } from "../WorkspaceRows";
+import {
+  WorkspaceAgentRow,
+  WorkspaceComputerRow,
+  WorkspaceConversationRow,
+  WorkspaceGroup,
+  WorkspaceThreadRow,
+} from "../WorkspaceRows";
 
 export function WorkspaceTabPanels({
   workspaceTab,
   channels,
   directMessages,
+  threadGroups = [],
   activePane,
+  activeThreadRootID,
   currentUserID,
   usersById,
   locale,
@@ -21,6 +30,7 @@ export function WorkspaceTabPanels({
   onSelectHubTemplate,
   agentsError,
   onSelectConversation,
+  onSelectThread,
   onPreviewUser,
   agentItems,
   workerAgentItems = agentItems,
@@ -76,6 +86,7 @@ export function WorkspaceTabPanels({
               directMessages.map((conversation) => (
                 <WorkspaceConversationRow
                   key={conversation.id}
+                  agents={agentItems}
                   conversation={conversation}
                   active={activePane.type === WorkspacePaneTypes.conversation && activePane.id === conversation.id}
                   currentUserID={currentUserID}
@@ -90,6 +101,48 @@ export function WorkspaceTabPanels({
               <div className="workspace-empty">{t("noDirectMessages")}</div>
             )}
           </WorkspaceGroup>
+        </div>
+      ) : workspaceTab === WorkspaceTabs.threads ? (
+        <div className="workspace-tab-panel" role="tabpanel" aria-label={t("threadsTab")}>
+          {threadGroups.length ? (
+            threadGroups.map((group) => {
+              const displayUser = isDirectConversation(group.conversation)
+                ? resolveConversationUser(group.conversation, currentUserID, usersById)
+                : null;
+              const groupTitle = displayUser?.name || group.conversation.title;
+              return (
+                <WorkspaceGroup
+                  key={group.conversation.id}
+                  id={`threads-${group.conversation.id}`}
+                  title={groupTitle}
+                  count={group.threads.length}
+                  collapsed={Boolean(collapsedWorkspaceGroups[`threads-${group.conversation.id}`])}
+                  onToggle={() => onToggleWorkspaceGroup(`threads-${group.conversation.id}`)}
+                >
+                  {group.threads.map((thread) => {
+                    const rootID = thread.summary?.root_id || thread.root?.id;
+                    return (
+                      <WorkspaceThreadRow
+                        key={`${group.conversation.id}:${rootID}`}
+                        conversation={group.conversation}
+                        thread={thread}
+                        active={
+                          activePane.type === WorkspacePaneTypes.conversation &&
+                          activePane.id === group.conversation.id &&
+                          activeThreadRootID === rootID
+                        }
+                        locale={locale}
+                        t={t}
+                        onSelect={onSelectThread}
+                      />
+                    );
+                  })}
+                </WorkspaceGroup>
+              );
+            })
+          ) : (
+            <div className="workspace-empty">{t("noThreads")}</div>
+          )}
         </div>
       ) : workspaceTab === WorkspaceTabs.hub ? (
         <div className="workspace-tab-panel" role="tabpanel" aria-label={t("hubTab")}>

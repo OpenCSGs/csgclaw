@@ -15,13 +15,14 @@ export type WorkspacePaneType = ValueOf<typeof WorkspacePaneTypes>;
 
 export const WorkspaceTabs = {
   messages: "messages",
+  threads: "threads",
   agents: "agents",
   hub: "hub",
 } as const;
 
 export type WorkspaceTab = ValueOf<typeof WorkspaceTabs>;
 
-export const WORKSPACE_TABS = [WorkspaceTabs.messages, WorkspaceTabs.agents, WorkspaceTabs.hub] as const;
+export const WORKSPACE_TABS = [WorkspaceTabs.messages, WorkspaceTabs.threads, WorkspaceTabs.agents, WorkspaceTabs.hub] as const;
 
 export const DefaultWorkspacePaneIds = {
   computer: "local",

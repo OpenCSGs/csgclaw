@@ -450,7 +450,6 @@ export function useAgentController({
         name: "",
         description: "",
         bot_type: BOT_TYPE_NOTIFICATION,
-        notifier_delivery_mode: "webhook",
       }),
     );
     setAgentDraft(draft);

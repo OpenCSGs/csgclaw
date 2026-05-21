@@ -601,6 +601,8 @@ ok
 - `message.created`
 - `room.created`
 - `room.members_added`
+- `thread.created`
+- `thread.updated`
 - `upgrade.status_changed`
 
 事件 JSON 结构：
@@ -610,6 +612,7 @@ ok
 - `room`
 - `user`
 - `message`
+- `thread`
 - `sender`
 - `upgrade`
 
@@ -721,6 +724,9 @@ ok
 
 `room_id` 必填。
 
+默认不返回 thread reply，因此房间主时间线保持顶层消息。添加
+`include_thread_replies=true` 可把 thread reply 一起返回。
+
 ### `POST /api/v1/messages`
 
 发送消息。
@@ -741,6 +747,74 @@ ok
 - `room_id` 必填
 - 成功返回 `201 Created`
 - 发送成功后会向 `/api/v1/events` 发布 `message.created`
+- 发送 thread reply 时传入 `relates_to: {"rel_type":"m.thread","event_id":"<root_message_id>"}`
+- thread reply 还会发布 `thread.updated`
+
+### `POST /api/v1/rooms/{id}/threads`
+
+从已有顶层消息开启一个 thread。thread 的规范 ID 就是 root message ID，
+对应 Matrix `m.thread` 关系语义，但不占用原始 `/_matrix` namespace。
+
+请求体：
+
+```json
+{
+  "root_message_id": "msg-root"
+}
+```
+
+响应：
+
+- `201 Created`：创建了新的 thread state
+- `200 OK`：thread 已存在，幂等返回
+
+响应体是 `ThreadView`：
+
+```json
+{
+  "room_id": "room-1",
+  "root": { "id": "msg-root" },
+  "context": [],
+  "replies": [],
+  "summary": {
+    "root_id": "msg-root",
+    "reply_count": 0,
+    "participants": [],
+    "current_user_participated": true,
+    "context_summary": {
+      "root_excerpt": "root text",
+      "message_count": 1,
+      "before_count": 0,
+      "after_count": 0
+    }
+  }
+}
+```
+
+thread 开启时会固定一份上下文快照：root 之前最多 5 条顶层消息、root
+消息本身，以及 root 之后最多 2 条顶层消息，并受 payload 大小限制。这份
+context 不会被渲染成 thread 内消息；它是给 LLM-backed agent 使用的隐藏
+上下文，让 thread 能以干净的新会话开始，同时理解它从哪里开启。
+
+### `GET /api/v1/rooms/{id}/threads?include=all|participated&limit=&from=`
+
+列出房间 threads。`include` 默认是 `all`；`participated` 只返回当前用户
+作为 root 发送者或 reply 参与者的 threads。`limit` 与 `from` 是 offset
+风格分页。
+
+### `GET /api/v1/rooms/{id}/threads/{root_message_id}`
+
+返回一个 `ThreadView`，包含 root message、隐藏上下文窗口、replies 和 summary。
+
+### `GET /api/v1/rooms/{id}/relations/{event_id}/m.thread`
+
+返回 Matrix 风格的 thread 子事件：
+
+```json
+{
+  "chunk": []
+}
+```
 
 ## Channel API
 
@@ -766,6 +840,10 @@ ok
 - `DELETE /api/v1/channels/csgclaw/rooms/{id}`
 - `GET /api/v1/channels/csgclaw/rooms/{id}/members`
 - `POST /api/v1/channels/csgclaw/rooms/{id}/members`
+- `POST /api/v1/channels/csgclaw/rooms/{id}/threads`
+- `GET /api/v1/channels/csgclaw/rooms/{id}/threads`
+- `GET /api/v1/channels/csgclaw/rooms/{id}/threads/{root_message_id}`
+- `GET /api/v1/channels/csgclaw/rooms/{id}/relations/{event_id}/m.thread`
 
 ### 消息
 
@@ -930,8 +1008,12 @@ ok
 ```text
 id: msg-1
 event: message
-data: {"message_id":"msg-1","room_id":"room-1","sender_id":"u-admin","text":"hello"}
+data: {"message_id":"msg-1","room_id":"room-1","sender_id":"u-admin","text":"hello","thread_root_id":"msg-root","thread_context":{"root_message_id":"msg-root","context":[{"id":"msg-root","sender_id":"u-admin","content":"root text"}],"summary":{"root_excerpt":"root text","message_count":1,"before_count":0,"after_count":0}}}
 ```
+
+对于 thread replies，`thread_root_id` 是 root message ID，`thread_context`
+携带 thread 开启时记录的确定性隐藏上下文。Bot/LLM bridge 会把它作为
+prompt context 使用；它不是 thread reply 列表。
 
 ### `POST /api/bots/{id}/messages/send`
 
@@ -942,11 +1024,12 @@ data: {"message_id":"msg-1","room_id":"room-1","sender_id":"u-admin","text":"hel
 ```json
 {
   "room_id": "room-1",
-  "text": "hello"
+  "text": "hello",
+  "thread_root_id": "msg-root"
 }
 ```
 
-具体响应由兼容桥实现决定。
+`thread_root_id` 可选；传入时 bot 响应会发送到该 IM thread 中。具体响应由兼容桥实现决定。
 
 ### `GET /api/bots/{id}/llm/models`
 

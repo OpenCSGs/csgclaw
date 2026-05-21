@@ -1,18 +1,23 @@
 import {
   agentMatchesUser,
   applyIMEvent,
+  appendMessageToData,
+  conversationThreadViews,
   formatConversationPreview,
   formatEventMessage,
+  formatMessagePreviewText,
   isAgentRosterEvent,
   latestAt,
   removeUserFromData,
   sortConversations,
+  THREAD_RELATION_TYPE,
   userDisplayName,
 } from "@/models/conversations";
+import type { IMConversation, IMMessage } from "@/models/conversations";
 
 const t = (key: string) => key;
 
-function message(id: string, createdAt: string, senderID = "u-1") {
+function message(id: string, createdAt: string, senderID = "u-1"): IMMessage {
   return {
     content: `message ${id}`,
     created_at: createdAt,
@@ -21,7 +26,7 @@ function message(id: string, createdAt: string, senderID = "u-1") {
   };
 }
 
-function room(id: string, createdAt: string, extra: Record<string, unknown> = {}) {
+function room(id: string, createdAt: string, extra: Partial<IMConversation> = {}): IMConversation {
   return {
     description: "",
     id,
@@ -76,6 +81,13 @@ describe("conversation model helpers", () => {
     );
   });
 
+  it("strips markdown code fences from compact message previews", () => {
+    expect(formatMessagePreviewText("```text\nthread title should be plain\n```")).toBe("thread title should be plain");
+    expect(formatMessagePreviewText("```text thread title should be plain ```")).toBe("thread title should be plain");
+    expect(formatMessagePreviewText("``` thread title should stay plain ```")).toBe("thread title should stay plain");
+    expect(formatMessagePreviewText('Hi <at user_id="u-1">Alice</at>')).toBe("Hi @Alice");
+  });
+
   it("resolves display names and agent/user matches defensively", () => {
     const usersById = new Map([
       ["u-1", { id: "u-1", name: "Alice" }],
@@ -111,6 +123,56 @@ describe("conversation model helpers", () => {
       type: "message.created",
     });
     expect(duplicate.rooms[0].messages.filter((item) => item.id === "old-new-message")).toHaveLength(1);
+  });
+
+  it("keeps thread replies out of the main timeline", () => {
+    const current = {
+      rooms: [room("general", "2026-05-15T00:00:00Z")],
+      users: [],
+    };
+
+    const next = appendMessageToData(current, "general", {
+      ...message("reply-1", "2026-05-15T00:01:00Z"),
+      relates_to: {
+        rel_type: THREAD_RELATION_TYPE,
+        event_id: "general-message",
+      },
+    });
+
+    expect(next.rooms[0].messages.map((item) => item.id)).toEqual(["general-message"]);
+  });
+
+  it("applies thread event summaries to root messages and exposes thread views", () => {
+    const root = message("root-1", "2026-05-15T00:00:00Z");
+    const current = {
+      rooms: [
+        room("general", "2026-05-15T00:00:00Z", {
+          messages: [root],
+        }),
+      ],
+      users: [],
+    };
+
+    const next = applyIMEvent(current, {
+      room_id: "general",
+      thread: {
+        room_id: "general",
+        root,
+        replies: [message("reply-1", "2026-05-15T00:01:00Z")],
+        summary: {
+          context_summary: { root_excerpt: "Root excerpt", message_count: 1 },
+          reply_count: 1,
+          root_id: "root-1",
+        },
+      },
+      type: "thread.updated",
+    });
+
+    expect(next.rooms[0].messages[0].thread?.reply_count).toBe(1);
+    expect(next.rooms[0].threads?.[0].root_message_id).toBe("root-1");
+    const views = conversationThreadViews(next.rooms[0]);
+    expect(views).toHaveLength(1);
+    expect(views[0].summary?.context_summary?.root_excerpt).toBe("Root excerpt");
   });
 
   it("removes deleted users from users, room members, and their messages", () => {

@@ -2661,6 +2661,194 @@ func TestHandleMessagesPostCreatesMessage(t *testing.T) {
 	}
 }
 
+func TestHandleThreadRoutesAndMessageFiltering(t *testing.T) {
+	srv := &Handler{
+		im: im.NewServiceFromBootstrap(im.Bootstrap{
+			CurrentUserID: "u-admin",
+			Users: []im.User{
+				{ID: "u-admin", Name: "admin", Handle: "admin"},
+				{ID: "u-manager", Name: "manager", Handle: "manager"},
+			},
+			Rooms: []im.Room{
+				{
+					ID:      "room-1",
+					Title:   "Room One",
+					Members: []string{"u-admin", "u-manager"},
+					Messages: []im.Message{
+						{ID: "msg-1", SenderID: "u-admin", Content: "before", CreatedAt: time.Date(2026, 5, 20, 9, 0, 0, 0, time.UTC)},
+						{ID: "msg-root", SenderID: "u-admin", Content: "root", CreatedAt: time.Date(2026, 5, 20, 9, 1, 0, 0, time.UTC)},
+						{ID: "msg-2", SenderID: "u-manager", Content: "after", CreatedAt: time.Date(2026, 5, 20, 9, 2, 0, 0, time.UTC)},
+					},
+				},
+			},
+		}),
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms/room-1/threads", strings.NewReader(`{"root_message_id":"msg-root"}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("start thread status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var started im.ThreadView
+	if err := json.NewDecoder(rec.Body).Decode(&started); err != nil {
+		t.Fatalf("decode start thread response: %v", err)
+	}
+	if started.Root.ID != "msg-root" || len(started.Context) != 3 {
+		t.Fatalf("started thread = %+v, want root with context", started)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"room-1","sender_id":"u-manager","content":"thread reply","relates_to":{"rel_type":"m.thread","event_id":"msg-root"}}`))
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("reply status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var reply im.Message
+	if err := json.NewDecoder(rec.Body).Decode(&reply); err != nil {
+		t.Fatalf("decode reply response: %v", err)
+	}
+	if reply.RelatesTo == nil || reply.RelatesTo.EventID != "msg-root" {
+		t.Fatalf("reply.RelatesTo = %+v, want thread root", reply.RelatesTo)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/messages?room_id=room-1", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var timeline []im.Message
+	if err := json.NewDecoder(rec.Body).Decode(&timeline); err != nil {
+		t.Fatalf("decode timeline: %v", err)
+	}
+	if containsAPIMessageID(timeline, reply.ID) {
+		t.Fatalf("timeline = %+v, want thread reply hidden by default", timeline)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/rooms", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("rooms status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var rooms []im.Room
+	if err := json.NewDecoder(rec.Body).Decode(&rooms); err != nil {
+		t.Fatalf("decode rooms: %v", err)
+	}
+	if len(rooms) != 1 || containsAPIMessageID(rooms[0].Messages, reply.ID) {
+		t.Fatalf("rooms = %+v, want thread reply hidden by default", rooms)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/bootstrap", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bootstrap status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var bootstrap struct {
+		Rooms []im.Room `json:"rooms"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&bootstrap); err != nil {
+		t.Fatalf("decode bootstrap: %v", err)
+	}
+	if len(bootstrap.Rooms) != 1 || containsAPIMessageID(bootstrap.Rooms[0].Messages, reply.ID) {
+		t.Fatalf("bootstrap rooms = %+v, want thread reply hidden by default", bootstrap.Rooms)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/messages?room_id=room-1&include_thread_replies=true", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list include status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var fullTimeline []im.Message
+	if err := json.NewDecoder(rec.Body).Decode(&fullTimeline); err != nil {
+		t.Fatalf("decode full timeline: %v", err)
+	}
+	if !containsAPIMessageID(fullTimeline, reply.ID) {
+		t.Fatalf("full timeline = %+v, want thread reply included", fullTimeline)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/rooms/room-1/threads/msg-root", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get thread status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var gotThread im.ThreadView
+	if err := json.NewDecoder(rec.Body).Decode(&gotThread); err != nil {
+		t.Fatalf("decode get thread: %v", err)
+	}
+	if len(gotThread.Replies) != 1 || gotThread.Replies[0].ID != reply.ID {
+		t.Fatalf("thread replies = %+v, want reply %s", gotThread.Replies, reply.ID)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/rooms/room-1/relations/msg-root/m.thread", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("relations status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var relations im.ThreadRelationsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&relations); err != nil {
+		t.Fatalf("decode relations: %v", err)
+	}
+	if len(relations.Chunk) != 1 || relations.Chunk[0].ID != reply.ID {
+		t.Fatalf("relations = %+v, want reply %s", relations, reply.ID)
+	}
+}
+
+func TestHandleThreadEventsPublishCreatedAndUpdated(t *testing.T) {
+	bus := im.NewBus()
+	events, cancel := bus.Subscribe()
+	defer cancel()
+	srv := &Handler{
+		im: im.NewServiceFromBootstrapWithBus(im.Bootstrap{
+			CurrentUserID: "u-admin",
+			Users: []im.User{
+				{ID: "u-admin", Name: "admin", Handle: "admin"},
+				{ID: "u-manager", Name: "manager", Handle: "manager"},
+			},
+			Rooms: []im.Room{
+				{
+					ID:       "room-1",
+					Title:    "Room One",
+					Members:  []string{"u-admin", "u-manager"},
+					Messages: []im.Message{{ID: "msg-root", SenderID: "u-admin", Content: "root", CreatedAt: time.Date(2026, 5, 20, 9, 0, 0, 0, time.UTC)}},
+				},
+			},
+		}, bus),
+		imBus: bus,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms/room-1/threads", strings.NewReader(`{"root_message_id":"msg-root"}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("start thread status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	created := mustReceiveIMEvent(t, events)
+	if created.Type != im.EventTypeThreadCreated || created.Thread == nil || created.Thread.Root.ID != "msg-root" {
+		t.Fatalf("created event = %+v, want thread.created for msg-root", created)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"room-1","sender_id":"u-manager","content":"thread reply","relates_to":{"rel_type":"m.thread","event_id":"msg-root"}}`))
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("reply status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	messageCreated := mustReceiveIMEvent(t, events)
+	if messageCreated.Type != im.EventTypeMessageCreated || messageCreated.Message == nil || messageCreated.Message.RelatesTo == nil {
+		t.Fatalf("message event = %+v, want threaded message.created", messageCreated)
+	}
+	threadUpdated := mustReceiveIMEvent(t, events)
+	if threadUpdated.Type != im.EventTypeThreadUpdated || threadUpdated.Thread == nil || threadUpdated.Thread.Summary.ReplyCount != 1 {
+		t.Fatalf("thread updated event = %+v, want one reply", threadUpdated)
+	}
+}
+
 func TestHandleMessagesPostPrefixesMentionID(t *testing.T) {
 	srv := &Handler{
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
@@ -3897,6 +4085,15 @@ func containsMember(members []string, want string) bool {
 func containsUser(users []im.User, want string) bool {
 	for _, user := range users {
 		if user.ID == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAPIMessageID(messages []im.Message, want string) bool {
+	for _, message := range messages {
+		if message.ID == want {
 			return true
 		}
 	}

@@ -1,12 +1,28 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { createRoomRequest, deleteRoomRequest, inviteRoomUsersRequest, sendMessageRequest } from "@/api/im";
+import { errorMessage } from "@/api/client";
+import {
+  createRoomRequest,
+  deleteRoomRequest,
+  fetchThreadRequest,
+  inviteRoomUsersRequest,
+  sendMessageRequest,
+  startThreadRequest,
+} from "@/api/im";
 import {
   appendMessageToData,
+  appendReplyToThreadView,
   applyIMEvent,
+  applyThreadToData,
+  conversationThreadViews,
   isDirectConversation,
+  isThreadReply,
   isToolCallMessage,
   removeConversationFromData,
+  THREAD_RELATION_TYPE,
+  threadKey,
+  threadMessageKey,
+  threadViewKey,
   upsertConversationInData,
 } from "@/models/conversations";
 import {
@@ -28,7 +44,7 @@ import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
 import { localizeError } from "@/shared/i18n";
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
-import type { IMServerEvent, IMUser } from "@/models/conversations";
+import type { IMMessage, IMServerEvent, IMUser, ThreadView } from "@/models/conversations";
 import type { UseConversationControllerArgs } from "./types";
 
 type ComposerSegment =
@@ -50,6 +66,7 @@ type ComposerMentionState = {
 };
 
 type DraftsByConversationId = Record<string, ComposerSegment[]>;
+type DraftsByThreadKey = Record<string, string>;
 
 type OpenCreateRoomOptions = {
   description?: string;
@@ -84,6 +101,11 @@ export function useConversationController({
   messageActionError,
 }: UseConversationControllerArgs) {
   const [draftsByConversationId, setDraftsByConversationId] = useState<DraftsByConversationId>({});
+  const [threadDraftsByKey, setThreadDraftsByKey] = useState<DraftsByThreadKey>({});
+  const [activeThreadRootID, setActiveThreadRootID] = useState("");
+  const [activeThreadView, setActiveThreadView] = useState<ThreadView | null>(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadError, setThreadError] = useState("");
   const [composerMentionState, setComposerMentionState] = useState<ComposerMentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -105,6 +127,7 @@ export function useConversationController({
   const channelToolsRef = useRef<HTMLElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const autoScrollConversationRef = useRef(activeConversationId);
+  const activeThreadKeyRef = useRef("");
 
   const usersById = useMemo(() => {
     const result = new Map<string, IMUser>();
@@ -120,13 +143,26 @@ export function useConversationController({
     if (!activeConversation) {
       return [];
     }
-    if (showToolCalls) {
-      return activeConversation.messages;
-    }
-    return activeConversation.messages.filter((message) => !isToolCallMessage(message.content));
+    return activeConversation.messages.filter((message) => {
+      if (isThreadReply(message)) {
+        return false;
+      }
+      return showToolCalls || !isToolCallMessage(message.content);
+    });
   }, [activeConversation, showToolCalls]);
   const channels = useMemo(() => rooms.filter((room) => !isDirectConversation(room)), [rooms]);
   const directMessages = useMemo(() => rooms.filter((room) => isDirectConversation(room)), [rooms]);
+  const threadGroups = useMemo(
+    () =>
+      rooms
+        .map((room) => ({ conversation: room, threads: conversationThreadViews(room) }))
+        .filter((group) => group.threads.length > 0),
+    [rooms],
+  );
+  const threadCount = useMemo(
+    () => threadGroups.reduce((count, group) => count + group.threads.length, 0),
+    [threadGroups],
+  );
   const roomCount = rooms.length;
   const selectedConversation = activePane.type === WorkspacePaneTypes.conversation ? activeConversation : null;
   const activeChannel =
@@ -179,10 +215,26 @@ export function useConversationController({
     [draftsByConversationId, activeConversationId],
   );
   const draftText = useMemo(() => segmentsToPlainText(draftSegments), [draftSegments]);
+  const activeThreadDraftKey = activeThreadRootID ? threadKey(activeConversationId, activeThreadRootID) : "";
+  const activeThreadDraft = activeThreadDraftKey ? (threadDraftsByKey[activeThreadDraftKey] ?? "") : "";
+
+  useEffect(() => {
+    activeThreadKeyRef.current = activeThreadRootID ? threadKey(activeConversationId, activeThreadRootID) : "";
+  }, [activeConversationId, activeThreadRootID]);
 
   useEffect(() => {
     const unsubscribe = subscribeIMEvents((payload: IMServerEvent) => {
       setBootstrapData((current) => applyIMEvent(current, payload));
+      if ((payload?.type === "thread.created" || payload?.type === "thread.updated") && payload.thread) {
+        if (threadViewKey(payload.thread) === activeThreadKeyRef.current) {
+          setActiveThreadView(payload.thread);
+        }
+      }
+      if (payload?.type === "message.created" && payload.message) {
+        if (threadMessageKey(payload.room_id, payload.message) === activeThreadKeyRef.current) {
+          setActiveThreadView((current) => appendReplyToThreadView(current, payload.message));
+        }
+      }
       if (payload?.type === "upgrade.status_changed" && payload.upgrade) {
         onUpgradeStatusChange(payload.upgrade);
       }
@@ -397,6 +449,93 @@ export function useConversationController({
     } catch (_) {
       setComposerError(t("sendFailed"));
     }
+  }
+
+  async function openThreadInConversation(conversationID: string, message: IMMessage | null | undefined) {
+    if (!conversationID || !message?.id) {
+      return;
+    }
+    const rootID = isThreadReply(message) ? message.relates_to?.event_id : message.id;
+    if (!rootID) {
+      return;
+    }
+
+    if (conversationID !== activeConversationId) {
+      selectConversation(conversationID);
+    }
+    setThreadError("");
+    setThreadLoading(true);
+    setActiveThreadRootID(rootID);
+    try {
+      const view = await startThreadRequest(conversationID, { root_message_id: rootID });
+      setActiveThreadView(view);
+      setBootstrapData((current) => applyThreadToData(current, conversationID, view));
+    } catch (err) {
+      setThreadError(errorMessage(err, t("threadLoadFailed")));
+    } finally {
+      setThreadLoading(false);
+    }
+  }
+
+  async function openThread(message: IMMessage | null | undefined) {
+    if (!activeConversation) {
+      return;
+    }
+    await openThreadInConversation(activeConversation.id, message);
+  }
+
+  async function refreshThreadView(roomID: string, rootID: string) {
+    const view = await fetchThreadRequest(roomID, rootID);
+    setActiveThreadView(view);
+    setBootstrapData((current) => applyThreadToData(current, roomID, view));
+    return view;
+  }
+
+  async function sendThreadReply(): Promise<void> {
+    if (managerProfileIncomplete) {
+      setThreadError(t("profileIncomplete"));
+      return;
+    }
+    const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
+    if (providerNeedsAuth(managerProvider) && authStatuses[managerProvider]?.authenticated === false) {
+      setThreadError(t("authRequired"));
+      return;
+    }
+    const text = activeThreadDraft.trim();
+    if (!data || !activeConversation || !activeThreadRootID || !text) {
+      return;
+    }
+
+    setThreadError("");
+    try {
+      const created = await sendMessageRequest({
+        room_id: activeConversation.id,
+        sender_id: data.current_user_id,
+        content: text,
+        relates_to: {
+          rel_type: THREAD_RELATION_TYPE,
+          event_id: activeThreadRootID,
+        },
+      });
+      setThreadDraftsByKey((current) => ({ ...current, [activeThreadDraftKey]: "" }));
+      setActiveThreadView((current) => appendReplyToThreadView(current, created));
+      setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
+      await refreshThreadView(activeConversation.id, activeThreadRootID);
+    } catch (err) {
+      setThreadError(errorMessage(err, t("sendFailed")));
+    }
+  }
+
+  function closeThread() {
+    setActiveThreadRootID("");
+    setActiveThreadView(null);
+    setThreadLoading(false);
+    setThreadError("");
+  }
+
+  function selectConversationAndCloseThread(id: string) {
+    closeThread();
+    selectConversation(id);
   }
 
   async function createRoom(): Promise<void> {
@@ -623,12 +762,17 @@ export function useConversationController({
     activeChannel,
     activeConversation,
     activeConversationMembers,
+    activeThreadRootID,
     channels,
     closeConversationTools,
     directMessages,
+    openThreadInConversation,
     roomCount,
     selectedConversation,
     selectedMessageCount,
+    selectConversationAndCloseThread,
+    threadCount,
+    threadGroups,
     usersById,
     visibleMessages,
     clearComposerError,
@@ -676,6 +820,20 @@ export function useConversationController({
       messageActionBusy,
       messageActionError,
       onMessageAction,
+      activeThreadRootID,
+      activeThreadView,
+      threadLoading,
+      threadError,
+      threadDraft: activeThreadDraft,
+      onOpenThread: openThread,
+      onCloseThread: closeThread,
+      onThreadDraftChange: (value: string) => {
+        if (!activeThreadDraftKey) {
+          return;
+        }
+        setThreadDraftsByKey((current) => ({ ...current, [activeThreadDraftKey]: value }));
+      },
+      onSendThreadReply: sendThreadReply,
     },
     createRoomModalProps:
       showCreateRoom && data

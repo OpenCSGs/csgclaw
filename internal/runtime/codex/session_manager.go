@@ -18,12 +18,40 @@ import (
 )
 
 type liveSession struct {
-	session *Session
-	conn    *acp.ClientSideConnection
-	client  *sessionClient
-	cmd     *exec.Cmd
-	stderr  *os.File
-	done    chan struct{}
+	mu                   sync.Mutex
+	session              *Session
+	conn                 *acp.ClientSideConnection
+	client               *sessionClient
+	cmd                  *exec.Cmd
+	stderr               *os.File
+	done                 chan struct{}
+	conversationSessions map[string]string
+}
+
+func (s *liveSession) sessionIDs() []string {
+	if s == nil || s.session == nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var ids []string
+	add := func(sessionID string) {
+		sessionID = strings.TrimSpace(sessionID)
+		if sessionID == "" {
+			return
+		}
+		if _, ok := seen[sessionID]; ok {
+			return
+		}
+		seen[sessionID] = struct{}{}
+		ids = append(ids, sessionID)
+	}
+	add(s.session.SessionID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sessionID := range s.conversationSessions {
+		add(sessionID)
+	}
+	return ids
 }
 
 func (m *acpManager) Start(ctx context.Context, spec SessionSpec) (*Session, error) {
@@ -127,12 +155,13 @@ func (m *acpManager) Start(ctx context.Context, spec SessionSpec) (*Session, err
 	}
 
 	live := &liveSession{
-		session: session,
-		conn:    conn,
-		client:  client,
-		cmd:     cmd,
-		stderr:  stderrFile,
-		done:    make(chan struct{}),
+		session:              session,
+		conn:                 conn,
+		client:               client,
+		cmd:                  cmd,
+		stderr:               stderrFile,
+		done:                 make(chan struct{}),
+		conversationSessions: make(map[string]string),
 	}
 	m.mu.Lock()
 	m.sessions[spec.RuntimeID] = live
@@ -154,9 +183,11 @@ func (m *acpManager) Stop(ctx context.Context, handle SessionHandle) error {
 	}
 
 	if live.conn != nil && live.session != nil {
-		_, _ = live.conn.CloseSession(ctx, acp.CloseSessionRequest{
-			SessionId: acp.SessionId(live.session.SessionID),
-		})
+		for _, sessionID := range live.sessionIDs() {
+			_, _ = live.conn.CloseSession(ctx, acp.CloseSessionRequest{
+				SessionId: acp.SessionId(sessionID),
+			})
+		}
 	}
 	if live.client != nil {
 		live.client.shutdownTerminals()
@@ -197,17 +228,53 @@ func (m *acpManager) Prompt(ctx context.Context, handle SessionHandle, req acp.P
 	if req.SessionId == "" {
 		req.SessionId = acp.SessionId(live.session.SessionID)
 	}
+	sessionID := strings.TrimSpace(string(req.SessionId))
 	resp, err := live.conn.Prompt(ctx, req)
 	if err != nil {
 		if m.deps.EventSink != nil {
-			m.deps.EventSink.Publish(promptFailedEvent(runtimeID, live.session.SessionID, err))
+			m.deps.EventSink.Publish(promptFailedEvent(runtimeID, sessionID, err))
 		}
 		return acp.PromptResponse{}, err
 	}
 	if m.deps.EventSink != nil {
-		m.deps.EventSink.Publish(promptCompletedEvent(runtimeID, live.session.SessionID, resp))
+		m.deps.EventSink.Publish(promptCompletedEvent(runtimeID, sessionID, resp))
 	}
 	return resp, nil
+}
+
+func (m *acpManager) EnsureSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, error) {
+	runtimeID := strings.TrimSpace(handle.RuntimeID)
+	m.mu.RLock()
+	live := m.sessions[runtimeID]
+	m.mu.RUnlock()
+	if live == nil || live.conn == nil || live.session == nil {
+		return "", os.ErrNotExist
+	}
+
+	conversationKey = strings.TrimSpace(conversationKey)
+	if conversationKey == "" {
+		return strings.TrimSpace(live.session.SessionID), nil
+	}
+
+	live.mu.Lock()
+	defer live.mu.Unlock()
+	if sessionID := strings.TrimSpace(live.conversationSessions[conversationKey]); sessionID != "" {
+		return sessionID, nil
+	}
+
+	newSession, err := live.conn.NewSession(ctx, acp.NewSessionRequest{
+		Cwd:        live.session.WorkspaceDir,
+		McpServers: []acp.McpServer{},
+	})
+	if err != nil {
+		return "", err
+	}
+	sessionID := strings.TrimSpace(string(newSession.SessionId))
+	if sessionID == "" {
+		return "", fmt.Errorf("create codex conversation session: empty session id")
+	}
+	live.conversationSessions[conversationKey] = sessionID
+	return sessionID, nil
 }
 
 func (m *acpManager) waitSession(runtimeID string, live *liveSession) {

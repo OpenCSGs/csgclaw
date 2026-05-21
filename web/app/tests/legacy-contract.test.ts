@@ -1,19 +1,20 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-function readSourceTree(dir: string): string {
+function readTree(dir: string, pattern: RegExp): string {
   return readdirSync(dir)
     .flatMap((entry) => {
       const path = resolve(dir, entry);
       if (statSync(path).isDirectory()) {
-        return readSourceTree(path);
+        return readTree(path, pattern);
       }
-      return /\.(js|jsx|ts|tsx)$/.test(entry) ? readFileSync(path, "utf8") : "";
+      return pattern.test(entry) ? readFileSync(path, "utf8") : "";
     })
     .join("\n");
 }
 
-const source: string = readSourceTree(resolve(process.cwd(), "src"));
+const source: string = readTree(resolve(process.cwd(), "src"), /\.(js|jsx|ts|tsx)$/);
+const styles: string = readTree(resolve(process.cwd(), "src"), /\.css$/);
 
 describe("legacy UI contract", () => {
   it("keeps the manager rebuild action card contract", () => {
@@ -58,8 +59,7 @@ describe("legacy UI contract", () => {
 
   it("keeps channel-scoped bot and notification bot frontend contracts", () => {
     expect(source).toContain('get<AgentLike[]>("api/v1/channels/csgclaw/bots")');
-    expect(source).toContain('get<AgentLike[]>("api/v1/channels/csgclaw/bots")');
-    expect(source).toContain('post("api/v1/channels/csgclaw/bots", payload)');
+    expect(source).toContain('post("api/v1/channels/csgclaw/bots", { ...payload, type: BOT_TYPE_NOTIFICATION })');
     expect(source).toContain("patchNotificationBotRequest");
     expect(source).toContain("createNotificationBotRequest");
     expect(source).toContain("del(`api/v1/channels/csgclaw/bots/${encodeURIComponent(botID)}`)");
@@ -85,5 +85,42 @@ describe("legacy UI contract", () => {
     expect(source).toContain(
       'const canPublish = runtimeKind === "picoclaw_sandbox" || runtimeKind === "openclaw_sandbox";',
     );
+  });
+
+  it("keeps thread context hidden and shows the thread affordance as a message hover toolbar", () => {
+    expect(source).toContain("message-hover-actions");
+    expect(source).toContain("thread-hover-button");
+    expect(source).toContain("thread-action-tooltip");
+    expect(source).toContain('threads: "threads"');
+    expect(source).toContain("WorkspaceThreadRow");
+    expect(source).toContain('threadsTab: "Threads"');
+    expect(source).toContain('noThreads: "No threads yet."');
+    expect(source).not.toContain('className="thread-strip"');
+    expect(source).not.toContain('className="thread-context"');
+    expect(source).not.toContain('t("threadContext")');
+    expect(styles).toContain(".message-row:hover .message-hover-actions");
+    expect(styles).toContain(".thread-hover-button:hover .thread-action-tooltip");
+    expect(source).toContain("message-thread-actions has-thread-summary");
+    expect(source).toContain("const threadBodyRef = useRef<HTMLDivElement | null>(null);");
+    expect(source).toContain("threadBody.scrollTop = threadBody.scrollHeight;");
+    expect(source).toContain("[root?.id, replies.length, latestReplyID, loading]");
+  });
+
+  it("keeps the message timeline from exposing horizontal scroll", () => {
+    expect(styles).toMatch(/\.messages\s*\{[\s\S]*overflow-x:\s*hidden;/);
+    expect(styles).toContain(".chat-panel.has-thread-panel > .messages");
+    expect(styles).toMatch(/\.chat-panel\.has-thread-panel > \.messages[\s\S]*min-width:\s*0;/);
+    expect(styles).toMatch(/\.message-row\s*\{[\s\S]*max-width:\s*min\(100%, 76%, 840px\);/);
+    expect(styles).toMatch(/\.messages\s*\{[\s\S]*scrollbar-width:\s*thin;/);
+    expect(styles).toContain(".messages::-webkit-scrollbar");
+    expect(styles).toContain("width: 6px;");
+  });
+
+  it("shows agent running status dots in direct message rows", () => {
+    expect(source).toContain(
+      "const directAgent = isDirect && displayUser ? agents.find((item) => agentMatchesUser(item, displayUser)) : null;",
+    );
+    expect(source).toContain('className={`workspace-status-dot ${directAgentRunning ? "online" : ""}`}');
+    expect(source).toMatch(/directMessages\.map[\s\S]*agents=\{agentItems\}/);
   });
 });

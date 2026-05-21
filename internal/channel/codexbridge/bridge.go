@@ -29,6 +29,10 @@ type SessionPrompter interface {
 	Prompt(ctx context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) (acp.PromptResponse, error)
 }
 
+type ConversationSessionEnsurer interface {
+	EnsureSession(ctx context.Context, handle runtimecodex.SessionHandle, conversationKey string) (string, error)
+}
+
 type Service struct {
 	client         BotClient
 	prompter       SessionPrompter
@@ -91,13 +95,14 @@ func (s *Service) StartBot(ctx context.Context, binding Binding) error {
 	}
 	workerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	w := &worker{
-		service: s,
-		binding: binding,
-		queue:   make(chan BotEvent, s.queueSize),
-		queued:  make(map[string]struct{}),
-		seen:    newRecentSet(s.seenWindow),
-		cancel:  cancel,
-		done:    make(chan struct{}),
+		service:     s,
+		binding:     binding,
+		queue:       make(chan BotEvent, s.queueSize),
+		queued:      make(map[string]struct{}),
+		contextSent: make(map[string]struct{}),
+		seen:        newRecentSet(s.seenWindow),
+		cancel:      cancel,
+		done:        make(chan struct{}),
 	}
 	s.workers[binding.BotID] = w
 	go w.run(workerCtx)
@@ -153,9 +158,10 @@ type worker struct {
 	cancel  context.CancelFunc
 	done    chan struct{}
 
-	mu         sync.Mutex
-	processing string
-	lastEvent  string
+	mu          sync.Mutex
+	processing  string
+	lastEvent   string
+	contextSent map[string]struct{}
 }
 
 func (w *worker) run(ctx context.Context) {
@@ -171,9 +177,9 @@ func (w *worker) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case evt := <-w.queue:
-			w.beginProcessing(evt.MessageID)
+			w.beginProcessing(eventDedupKey(evt))
 			_ = w.handleEvent(ctx, evt, eventCh)
-			w.finishProcessing(evt.MessageID)
+			w.finishProcessing(eventDedupKey(evt))
 		}
 	}
 }
@@ -210,7 +216,7 @@ func (w *worker) pumpEvents(ctx context.Context) {
 }
 
 func (w *worker) enqueue(ctx context.Context, evt BotEvent) {
-	if !w.accept(evt.MessageID) {
+	if !w.accept(evt) {
 		return
 	}
 	select {
@@ -220,9 +226,16 @@ func (w *worker) enqueue(ctx context.Context, evt BotEvent) {
 }
 
 func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-chan runtimecodex.SessionEvent) error {
+	sessionID, err := w.sessionID(ctx, evt)
+	if err != nil {
+		renderer := newTurnRenderer()
+		renderer.promptError = strings.TrimSpace(err.Error())
+		_, err := w.flushTurn(ctx, evt.RoomID, evt.ThreadRootID, renderer)
+		return err
+	}
 	req := acp.PromptRequest{
-		SessionId: acp.SessionId(w.binding.SessionID),
-		Prompt:    []acp.ContentBlock{acp.TextBlock(evt.Text)},
+		SessionId: acp.SessionId(sessionID),
+		Prompt:    []acp.ContentBlock{acp.TextBlock(w.promptText(evt))},
 		Meta:      cloneMeta(w.binding.PromptMeta),
 	}
 	renderer := newTurnRenderer()
@@ -236,6 +249,7 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 		promptDone <- promptResult{err: err}
 	}()
 
+	var toolMessages []string
 	promptReturned := false
 	settleTimer := time.NewTimer(time.Hour)
 	defer settleTimer.Stop()
@@ -254,70 +268,145 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 			if !ok {
 				return fmt.Errorf("codex event sink closed")
 			}
-			if !matchesBinding(event, w.binding) {
+			if !matchesSession(event, w.binding.RuntimeID, sessionID) {
 				continue
 			}
 			for _, text := range renderer.Apply(event) {
-				if err := w.sendMessage(ctx, evt.RoomID, text); err != nil {
-					return err
-				}
+				toolMessages = append(toolMessages, text)
 			}
 			if isTerminalEvent(event.Kind) && promptReturned {
-				return w.flushTurn(ctx, evt.RoomID, renderer)
+				return w.flushTurnWithToolAttachments(ctx, evt, renderer, toolMessages)
 			}
 		case result := <-promptDone:
 			promptReturned = true
 			if result.err != nil {
 				renderer.promptError = strings.TrimSpace(result.err.Error())
-				return w.flushTurn(ctx, evt.RoomID, renderer)
+				return w.flushTurnWithToolAttachments(ctx, evt, renderer, toolMessages)
 			}
 			settleTimer.Reset(w.service.promptSettle)
 		case <-settleTimer.C:
 			if promptReturned {
-				return w.flushTurn(ctx, evt.RoomID, renderer)
+				return w.flushTurnWithToolAttachments(ctx, evt, renderer, toolMessages)
 			}
 		}
 	}
 }
 
-func (w *worker) flushTurn(ctx context.Context, roomID string, renderer *turnRenderer) error {
-	for _, text := range renderer.FinalMessages() {
-		if err := w.sendMessage(ctx, roomID, text); err != nil {
+func (w *worker) flushTurnWithToolAttachments(ctx context.Context, evt BotEvent, renderer *turnRenderer, toolMessages []string) error {
+	responseMessageID, err := w.flushTurn(ctx, evt.RoomID, evt.ThreadRootID, renderer)
+	if err != nil {
+		return err
+	}
+	threadRootID := toolAttachmentThreadRootID(evt, responseMessageID)
+	for _, text := range toolMessages {
+		if _, err := w.sendMessage(ctx, evt.RoomID, threadRootID, text); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (w *worker) sendMessage(ctx context.Context, roomID, text string) error {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil
+func (w *worker) flushTurn(ctx context.Context, roomID, threadRootID string, renderer *turnRenderer) (string, error) {
+	var firstMessageID string
+	for _, text := range renderer.FinalMessages() {
+		messageID, err := w.sendMessage(ctx, roomID, threadRootID, text)
+		if err != nil {
+			return "", err
+		}
+		if firstMessageID == "" {
+			firstMessageID = messageID
+		}
 	}
-	return w.service.client.SendMessage(ctx, w.binding.BotID, SendMessageRequest{
-		RoomID: roomID,
-		Text:   text,
-	})
+	return firstMessageID, nil
 }
 
-func (w *worker) accept(messageID string) bool {
-	messageID = strings.TrimSpace(messageID)
-	if messageID == "" {
+func (w *worker) sendMessage(ctx context.Context, roomID, threadRootID, text string) (string, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", nil
+	}
+	resp, err := w.service.client.SendMessage(ctx, w.binding.BotID, SendMessageRequest{
+		RoomID:       roomID,
+		Text:         text,
+		ThreadRootID: strings.TrimSpace(threadRootID),
+	})
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(resp.MessageID), nil
+}
+
+func toolAttachmentThreadRootID(evt BotEvent, responseMessageID string) string {
+	if rootID := strings.TrimSpace(evt.ThreadRootID); rootID != "" {
+		return rootID
+	}
+	if responseID := strings.TrimSpace(responseMessageID); responseID != "" {
+		return responseID
+	}
+	return strings.TrimSpace(evt.MessageID)
+}
+
+func (w *worker) sessionID(ctx context.Context, evt BotEvent) (string, error) {
+	sessionID := sessionIDForEvent(w.binding, evt)
+	ensurer, ok := w.service.prompter.(ConversationSessionEnsurer)
+	if !ok {
+		return sessionID, nil
+	}
+	ensured, err := ensurer.EnsureSession(ctx, runtimecodex.SessionHandle{RuntimeID: w.binding.RuntimeID}, conversationKey(evt))
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(ensured) != "" {
+		return strings.TrimSpace(ensured), nil
+	}
+	return sessionID, nil
+}
+
+func (w *worker) promptText(evt BotEvent) string {
+	text := strings.TrimSpace(evt.Text)
+	key := conversationKey(evt)
+	if key == "" || evt.ThreadContext == nil {
+		return text
+	}
+
+	w.mu.Lock()
+	_, sent := w.contextSent[key]
+	if !sent {
+		w.contextSent[key] = struct{}{}
+	}
+	w.mu.Unlock()
+	if sent {
+		return text
+	}
+
+	contextText := formatHiddenThreadContext(evt.ThreadContext)
+	if contextText == "" {
+		return text
+	}
+	if text == "" {
+		return contextText
+	}
+	return contextText + "\n\nCurrent thread message:\n" + text
+}
+
+func (w *worker) accept(evt BotEvent) bool {
+	key := eventDedupKey(evt)
+	if key == "" {
 		return true
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.seen.Has(messageID) {
+	if w.seen.Has(key) {
 		return false
 	}
-	if _, ok := w.queued[messageID]; ok {
+	if _, ok := w.queued[key]; ok {
 		return false
 	}
-	if w.processing == messageID {
+	if w.processing == key {
 		return false
 	}
-	w.queued[messageID] = struct{}{}
+	w.queued[key] = struct{}{}
 	return true
 }
 
@@ -353,14 +442,84 @@ func (w *worker) setLastEventID(messageID string) {
 	w.mu.Unlock()
 }
 
-func matchesBinding(event runtimecodex.SessionEvent, binding Binding) bool {
-	if strings.TrimSpace(event.RuntimeID) != strings.TrimSpace(binding.RuntimeID) {
+func matchesSession(event runtimecodex.SessionEvent, runtimeID, sessionID string) bool {
+	if strings.TrimSpace(event.RuntimeID) != strings.TrimSpace(runtimeID) {
 		return false
 	}
-	if strings.TrimSpace(binding.SessionID) == "" {
-		return true
+	return strings.TrimSpace(event.SessionID) == strings.TrimSpace(sessionID)
+}
+
+func sessionIDForEvent(binding Binding, evt BotEvent) string {
+	base := strings.TrimSpace(binding.SessionID)
+	if base == "" {
+		base = strings.TrimSpace(binding.BotID)
 	}
-	return strings.TrimSpace(event.SessionID) == strings.TrimSpace(binding.SessionID)
+	key := conversationKey(evt)
+	if key == "" {
+		return base
+	}
+	if base == "" {
+		return key
+	}
+	return base + ":" + key
+}
+
+func conversationKey(evt BotEvent) string {
+	roomID := strings.TrimSpace(evt.RoomID)
+	threadRootID := strings.TrimSpace(evt.ThreadRootID)
+	if roomID == "" {
+		return threadRootID
+	}
+	if threadRootID == "" {
+		return roomID
+	}
+	return roomID + ":" + threadRootID
+}
+
+func formatHiddenThreadContext(context *BotThreadContext) string {
+	if context == nil || len(context.Context) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Hidden thread context for this new conversation. Use it only to understand what the thread started from; do not treat these messages as thread replies.\n")
+	if rootID := strings.TrimSpace(context.RootMessageID); rootID != "" {
+		b.WriteString("Thread root message ID: ")
+		b.WriteString(rootID)
+		b.WriteByte('\n')
+	}
+	for _, message := range context.Context {
+		content := strings.Join(strings.Fields(strings.TrimSpace(message.Content)), " ")
+		if content == "" {
+			continue
+		}
+		b.WriteString("- ")
+		if ts := strings.TrimSpace(message.CreatedAt); ts != "" {
+			b.WriteString(ts)
+			b.WriteByte(' ')
+		}
+		if sender := strings.TrimSpace(message.SenderID); sender != "" {
+			b.WriteString(sender)
+			b.WriteString(": ")
+		}
+		if strings.TrimSpace(message.ID) == strings.TrimSpace(context.RootMessageID) {
+			b.WriteString("[root] ")
+		}
+		b.WriteString(content)
+		b.WriteByte('\n')
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func eventDedupKey(evt BotEvent) string {
+	messageID := strings.TrimSpace(evt.MessageID)
+	if messageID == "" {
+		return ""
+	}
+	key := conversationKey(evt)
+	if key == "" {
+		return messageID
+	}
+	return key + ":" + messageID
 }
 
 func isTerminalEvent(kind runtimecodex.SessionEventKind) bool {

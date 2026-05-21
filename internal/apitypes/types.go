@@ -71,20 +71,73 @@ type Mention struct {
 }
 
 type Message struct {
-	ID        string        `json:"id"`
-	SenderID  string        `json:"sender_id"`
-	Kind      string        `json:"kind,omitempty"`
-	Content   string        `json:"content"`
-	Event     *EventPayload `json:"event,omitempty"`
-	CreatedAt time.Time     `json:"created_at"`
-	Mentions  []Mention     `json:"mentions"`
+	ID        string           `json:"id"`
+	SenderID  string           `json:"sender_id"`
+	Kind      string           `json:"kind,omitempty"`
+	Content   string           `json:"content"`
+	Event     *EventPayload    `json:"event,omitempty"`
+	CreatedAt time.Time        `json:"created_at"`
+	Mentions  []Mention        `json:"mentions"`
+	RelatesTo *MessageRelation `json:"relates_to,omitempty"`
+	Thread    *ThreadSummary   `json:"thread,omitempty"`
 }
 
 type CreateMessageRequest struct {
-	RoomID    string `json:"room_id"`
-	SenderID  string `json:"sender_id"`
-	Content   string `json:"content"`
-	MentionID string `json:"mention_id,omitempty"`
+	RoomID    string           `json:"room_id"`
+	SenderID  string           `json:"sender_id"`
+	Content   string           `json:"content"`
+	MentionID string           `json:"mention_id,omitempty"`
+	RelatesTo *MessageRelation `json:"relates_to,omitempty"`
+}
+
+type MessageRelation struct {
+	RelType string `json:"rel_type"`
+	EventID string `json:"event_id"`
+}
+
+type ThreadSummary struct {
+	RootID                  string               `json:"root_id"`
+	ReplyCount              int                  `json:"reply_count"`
+	LatestReply             *Message             `json:"latest_reply,omitempty"`
+	Participants            []Mention            `json:"participants,omitempty"`
+	CurrentUserParticipated bool                 `json:"current_user_participated"`
+	Context                 ThreadContextSummary `json:"context_summary"`
+}
+
+type ThreadContextSummary struct {
+	RootExcerpt  string `json:"root_excerpt"`
+	MessageCount int    `json:"message_count"`
+	BeforeCount  int    `json:"before_count"`
+	AfterCount   int    `json:"after_count"`
+}
+
+type ThreadState struct {
+	RootMessageID string               `json:"root_message_id"`
+	CreatedAt     time.Time            `json:"created_at"`
+	Context       []Message            `json:"context"`
+	Summary       ThreadContextSummary `json:"summary"`
+}
+
+type StartThreadRequest struct {
+	RoomID        string `json:"room_id,omitempty"`
+	RootMessageID string `json:"root_message_id"`
+}
+
+type ThreadView struct {
+	RoomID  string        `json:"room_id"`
+	Root    Message       `json:"root"`
+	Context []Message     `json:"context,omitempty"`
+	Replies []Message     `json:"replies,omitempty"`
+	Summary ThreadSummary `json:"summary"`
+}
+
+type ThreadListResponse struct {
+	Threads  []ThreadView `json:"threads"`
+	NextFrom string       `json:"next_from,omitempty"`
+}
+
+type ThreadRelationsResponse struct {
+	Chunk []Message `json:"chunk"`
 }
 
 type EventPayload struct {
@@ -95,13 +148,14 @@ type EventPayload struct {
 }
 
 type Room struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	Subtitle    string    `json:"subtitle"`
-	Description string    `json:"description,omitempty"`
-	IsDirect    bool      `json:"is_direct,omitempty"`
-	Members     []string  `json:"members"`
-	Messages    []Message `json:"messages"`
+	ID          string        `json:"id"`
+	Title       string        `json:"title"`
+	Subtitle    string        `json:"subtitle"`
+	Description string        `json:"description,omitempty"`
+	IsDirect    bool          `json:"is_direct,omitempty"`
+	Members     []string      `json:"members"`
+	Messages    []Message     `json:"messages"`
+	Threads     []ThreadState `json:"threads,omitempty"`
 }
 
 type CreateRoomRequest struct {

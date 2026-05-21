@@ -49,6 +49,7 @@ export type UseWorkspaceShellControllerArgs = {
   selectConversation: WorkspaceNavigationController["selectConversation"];
   selectHub: WorkspaceNavigationController["selectHub"];
   setCollapsedWorkspaceGroups: WorkspaceUiState["setCollapsedWorkspaceGroups"];
+  setWorkspaceTab: WorkspaceUiState["setWorkspaceTab"];
   t: TranslateFn;
   theme: ThemeMode;
   workspaceTab: WorkspaceTab;

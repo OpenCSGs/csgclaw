@@ -13,21 +13,48 @@ import (
 )
 
 type BotEvent struct {
-	MessageID string   `json:"message_id"`
-	RoomID    string   `json:"room_id"`
-	ChatType  string   `json:"chat_type"`
-	Text      string   `json:"text"`
-	Mentions  []string `json:"mentions,omitempty"`
+	MessageID     string            `json:"message_id"`
+	RoomID        string            `json:"room_id"`
+	ChatType      string            `json:"chat_type"`
+	Text          string            `json:"text"`
+	Mentions      []string          `json:"mentions,omitempty"`
+	ThreadRootID  string            `json:"thread_root_id,omitempty"`
+	ThreadContext *BotThreadContext `json:"thread_context,omitempty"`
+}
+
+type BotThreadContext struct {
+	RootMessageID string                    `json:"root_message_id"`
+	Context       []BotThreadContextMessage `json:"context,omitempty"`
+	Summary       BotThreadContextSummary   `json:"summary"`
+}
+
+type BotThreadContextMessage struct {
+	ID        string `json:"id,omitempty"`
+	SenderID  string `json:"sender_id,omitempty"`
+	Content   string `json:"content,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+}
+
+type BotThreadContextSummary struct {
+	RootExcerpt  string `json:"root_excerpt,omitempty"`
+	MessageCount int    `json:"message_count,omitempty"`
+	BeforeCount  int    `json:"before_count,omitempty"`
+	AfterCount   int    `json:"after_count,omitempty"`
 }
 
 type SendMessageRequest struct {
-	RoomID string `json:"room_id"`
-	Text   string `json:"text"`
+	RoomID       string `json:"room_id"`
+	Text         string `json:"text"`
+	ThreadRootID string `json:"thread_root_id,omitempty"`
+}
+
+type SendMessageResponse struct {
+	MessageID string `json:"message_id"`
 }
 
 type BotClient interface {
 	StreamEvents(ctx context.Context, botID, lastEventID string) (<-chan BotEvent, <-chan error)
-	SendMessage(ctx context.Context, botID string, req SendMessageRequest) error
+	SendMessage(ctx context.Context, botID string, req SendMessageRequest) (SendMessageResponse, error)
 }
 
 type HTTPClient struct {
@@ -84,14 +111,14 @@ func (c *HTTPClient) StreamEvents(ctx context.Context, botID, lastEventID string
 	return events, errs
 }
 
-func (c *HTTPClient) SendMessage(ctx context.Context, botID string, req SendMessageRequest) error {
+func (c *HTTPClient) SendMessage(ctx context.Context, botID string, req SendMessageRequest) (SendMessageResponse, error) {
 	payload, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("marshal send message request: %w", err)
+		return SendMessageResponse{}, fmt.Errorf("marshal send message request: %w", err)
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/api/bots/"+strings.TrimSpace(botID)+"/messages/send", bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return SendMessageResponse{}, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	if token := strings.TrimSpace(c.Token); token != "" {
@@ -100,14 +127,18 @@ func (c *HTTPClient) SendMessage(ctx context.Context, botID string, req SendMess
 
 	resp, err := c.httpClient().Do(httpReq)
 	if err != nil {
-		return err
+		return SendMessageResponse{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("send bot message: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return SendMessageResponse{}, fmt.Errorf("send bot message: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	return nil
+	var sendResp SendMessageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sendResp); err != nil {
+		return SendMessageResponse{}, fmt.Errorf("decode send message response: %w", err)
+	}
+	return sendResp, nil
 }
 
 func (c *HTTPClient) httpClient() *http.Client {

@@ -18,13 +18,15 @@ type BotBridge struct {
 const maxPendingBotEventsPerBot = 64
 
 type BotEvent struct {
-	MessageID string    `json:"message_id"`
-	RoomID    string    `json:"room_id"`
-	ChatType  string    `json:"chat_type"`
-	Sender    BotSender `json:"sender"`
-	Text      string    `json:"text"`
-	Timestamp string    `json:"timestamp"`
-	Mentions  []string  `json:"mentions,omitempty"`
+	MessageID     string            `json:"message_id"`
+	RoomID        string            `json:"room_id"`
+	ChatType      string            `json:"chat_type"`
+	Sender        BotSender         `json:"sender"`
+	Text          string            `json:"text"`
+	Timestamp     string            `json:"timestamp"`
+	Mentions      []string          `json:"mentions,omitempty"`
+	ThreadRootID  string            `json:"thread_root_id,omitempty"`
+	ThreadContext *BotThreadContext `json:"thread_context,omitempty"`
 }
 
 type BotSender struct {
@@ -33,9 +35,16 @@ type BotSender struct {
 	DisplayName string `json:"display_name,omitempty"`
 }
 
+type BotThreadContext struct {
+	RootMessageID string               `json:"root_message_id"`
+	Context       []Message            `json:"context,omitempty"`
+	Summary       ThreadContextSummary `json:"summary"`
+}
+
 type BotSendMessageRequest struct {
-	RoomID string `json:"room_id"`
-	Text   string `json:"text"`
+	RoomID       string `json:"room_id"`
+	Text         string `json:"text"`
+	ThreadRootID string `json:"thread_root_id,omitempty"`
 }
 
 func NewBotBridge(string) *BotBridge {
@@ -262,18 +271,37 @@ func (b *BotBridge) markSeenLocked(botID, messageID string) {
 }
 
 func messageEventForBot(room Room, sender User, message Message, botID string) BotEvent {
+	threadRootID := threadRootID(message)
 	return BotEvent{
-		MessageID: message.ID,
-		RoomID:    room.ID,
-		ChatType:  chatTypeForRoom(room),
+		MessageID:    message.ID,
+		RoomID:       room.ID,
+		ChatType:     chatTypeForRoom(room),
+		ThreadRootID: threadRootID,
 		Sender: BotSender{
 			ID:          sender.ID,
 			Username:    sender.Handle,
 			DisplayName: sender.Name,
 		},
-		Text:      message.Content,
-		Timestamp: fmt.Sprintf("%d", message.CreatedAt.UnixMilli()),
-		Mentions:  mentionsForBot(message.Mentions, botID),
+		Text:          message.Content,
+		Timestamp:     fmt.Sprintf("%d", message.CreatedAt.UnixMilli()),
+		Mentions:      mentionsForBot(message.Mentions, botID),
+		ThreadContext: botThreadContext(room, threadRootID),
+	}
+}
+
+func botThreadContext(room Room, rootMessageID string) *BotThreadContext {
+	rootMessageID = strings.TrimSpace(rootMessageID)
+	if rootMessageID == "" {
+		return nil
+	}
+	state, ok := threadStateByRoot(room.Threads, rootMessageID)
+	if !ok {
+		return nil
+	}
+	return &BotThreadContext{
+		RootMessageID: rootMessageID,
+		Context:       cloneMessages(state.Context),
+		Summary:       state.Summary,
 	}
 }
 

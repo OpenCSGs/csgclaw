@@ -89,6 +89,58 @@ func TestPublishMessageEventUsesGroupChatTypeForTwoMemberGroup(t *testing.T) {
 	}
 }
 
+func TestPublishMessageEventIncludesThreadRootAndContext(t *testing.T) {
+	bridge := NewBotBridge("")
+	events, cancel := bridge.Subscribe("u-bot")
+	defer cancel()
+
+	root := Message{
+		ID:        "msg-root",
+		SenderID:  "u-admin",
+		Content:   "root context",
+		CreatedAt: time.Now().UTC(),
+	}
+	reply := Message{
+		ID:        "msg-reply",
+		SenderID:  "u-admin",
+		Content:   "thread reply",
+		CreatedAt: time.Now().UTC().Add(time.Second),
+		RelatesTo: &MessageRelation{
+			RelType: RelationTypeThread,
+			EventID: root.ID,
+		},
+	}
+	room := Room{
+		ID:       "room-group",
+		IsDirect: false,
+		Members:  []string{"u-admin", "u-bot"},
+		Messages: []Message{root, reply},
+		Threads: []ThreadState{{
+			RootMessageID: root.ID,
+			Context:       []Message{root},
+			Summary: ThreadContextSummary{
+				RootExcerpt:  "root context",
+				MessageCount: 1,
+			},
+		}},
+	}
+	sender := User{ID: "u-admin", Name: "Admin", Handle: "admin"}
+
+	bridge.PublishMessageEvent(room, sender, reply)
+
+	select {
+	case evt := <-events:
+		if evt.ThreadRootID != root.ID {
+			t.Fatalf("ThreadRootID = %q, want %q", evt.ThreadRootID, root.ID)
+		}
+		if evt.ThreadContext == nil || evt.ThreadContext.RootMessageID != root.ID || len(evt.ThreadContext.Context) != 1 {
+			t.Fatalf("ThreadContext = %+v, want root context", evt.ThreadContext)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("PublishMessageEvent() timed out waiting for event")
+	}
+}
+
 func TestPublishMessageEventQueuesUntilBotSubscribes(t *testing.T) {
 	bridge := NewBotBridge("")
 	room := Room{

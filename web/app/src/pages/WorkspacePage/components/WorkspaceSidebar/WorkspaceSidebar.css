@@ -1,3 +1,26 @@
+.workspace-nav,
+.workspace-tab-panel {
+  scrollbar-width: thin;
+  scrollbar-color: var(--portal-gray-400) transparent;
+}
+
+.workspace-nav::-webkit-scrollbar,
+.workspace-tab-panel::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.workspace-nav::-webkit-scrollbar-track,
+.workspace-tab-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.workspace-nav::-webkit-scrollbar-thumb,
+.workspace-tab-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
+}
+
 .sidebar-slot {
   position: relative;
   z-index: var(--z-page-popover);

@@ -23,6 +23,7 @@ export function useWorkspaceShellController({
   selectConversation,
   selectHub,
   setCollapsedWorkspaceGroups,
+  setWorkspaceTab,
   t,
   theme,
   workspaceTab,
@@ -39,6 +40,19 @@ export function useWorkspaceShellController({
     () => workspaceTab ?? workspaceTabForPane(activePane),
     [activePane, workspaceTab],
   );
+
+  useEffect(() => {
+    const routeTab = workspaceTabForPane(activePane);
+    if (routeTab === WorkspaceTabs.messages) {
+      if (workspaceTab !== WorkspaceTabs.messages && workspaceTab !== WorkspaceTabs.threads) {
+        setWorkspaceTab(WorkspaceTabs.messages);
+      }
+      return;
+    }
+    if (workspaceTab !== routeTab) {
+      setWorkspaceTab(routeTab);
+    }
+  }, [activePane, setWorkspaceTab, workspaceTab]);
 
   useEffect(() => {
     const messageLocale = locale === "zh" ? "zh" : "en";
@@ -66,6 +80,7 @@ export function useWorkspaceShellController({
     if (tab === resolvedWorkspaceTab) {
       return;
     }
+    setWorkspaceTab(tab);
     if (tab === WorkspaceTabs.hub) {
       selectHub();
       return;

@@ -10,6 +10,7 @@ export function SidebarRail({
   onWorkspaceTabChange,
   onSelectHub,
   roomCount,
+  threadCount,
   agentCount,
   theme,
   onThemeChange,
@@ -35,6 +36,7 @@ export function SidebarRail({
           workspaceTab={workspaceTab}
           onWorkspaceTabChange={onWorkspaceTabChange}
           roomCount={roomCount}
+          threadCount={threadCount}
           agentCount={agentCount}
           onSelectHub={onSelectHub}
           t={t}

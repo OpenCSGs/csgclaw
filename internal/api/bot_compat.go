@@ -209,7 +209,7 @@ func (h *Handler) replayRecentBotMessages(botID, lastEventID string) {
 	if h == nil || h.im == nil || h.botBridge == nil {
 		return
 	}
-	rooms := h.im.ListRooms()
+	rooms := h.im.ListRoomsWithOptions(im.ListMessagesOptions{IncludeThreadReplies: true})
 	cutoff := time.Now().UTC().Add(-botReplayWindow)
 	replayAfter, hasReplayCursor := replayCursor(rooms, lastEventID)
 	for _, room := range rooms {
@@ -359,15 +359,17 @@ func (h *Handler) handleBotSendMessage(w http.ResponseWriter, r *http.Request, b
 	}
 
 	message, err := h.im.DeliverMessage(im.DeliverMessageRequest{
-		RoomID:   req.RoomID,
-		SenderID: botID,
-		Content:  req.Text,
+		RoomID:       req.RoomID,
+		SenderID:     botID,
+		Content:      req.Text,
+		ThreadRootID: req.ThreadRootID,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	h.publishMessageCreated(req.RoomID, botID, message)
+	h.publishThreadUpdated(req.RoomID, message)
 	writeJSON(w, http.StatusOK, map[string]string{"message_id": message.ID})
 }
 

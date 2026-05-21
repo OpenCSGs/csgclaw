@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createTranslator } from "@/shared/i18n";
-import { paneFromLocation, workspaceTabForPane } from "@/models/routing";
+import { paneFromLocation } from "@/models/routing";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
 import { useWorkspaceData } from "./useWorkspaceData";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
@@ -78,6 +78,8 @@ export function useWorkspaceController() {
   const setCollapsedWorkspaceGroups = useWorkspaceUiStore((state) => state.setCollapsedWorkspaceGroups);
   const activeConversationId = useWorkspaceUiStore((state) => state.activeConversationId);
   const setActiveConversationId = useWorkspaceUiStore((state) => state.setActiveConversationId);
+  const workspaceTab = useWorkspaceUiStore((state) => state.workspaceTab);
+  const setWorkspaceTab = useWorkspaceUiStore((state) => state.setWorkspaceTab);
   const {
     bootstrapQuery,
     agentsQuery,
@@ -106,7 +108,6 @@ export function useWorkspaceController() {
   const t = useMemo(() => createTranslator(locale), [locale]);
   const displayData = useMemo(() => withLocalIdentity(data, t("localIdentityFallback")), [data, t]);
   const activePane = useMemo(() => paneFromLocation(location.pathname), [location.pathname]);
-  const workspaceTab = useMemo(() => workspaceTabForPane(activePane), [activePane]);
   const rooms = useMemo(() => displayData?.rooms ?? [], [displayData]);
   const loadingError = bootstrapQuery.isError ? t("loadingFailed") : "";
   const { navigatePane, selectConversation, selectAgent, selectComputer, selectHub } = useWorkspaceNavigation({
@@ -128,6 +129,7 @@ export function useWorkspaceController() {
     selectConversation,
     selectHub,
     setCollapsedWorkspaceGroups,
+    setWorkspaceTab,
     t,
     theme,
     workspaceTab,
@@ -230,6 +232,7 @@ export function useWorkspaceController() {
     ready: true,
     loadingText: "",
     shellClassName: shell.shellClassName,
+    mainPanelHasThread: Boolean(conversation.activeThreadRootID && conversation.selectedConversation),
     activePane,
     sidebarProps: {
       isSidebarCollapsed,
@@ -248,9 +251,12 @@ export function useWorkspaceController() {
       workspaceTab: shell.workspaceTab,
       onWorkspaceTabChange: shell.selectWorkspaceTab,
       roomCount: conversation.roomCount,
+      threadCount: conversation.threadCount,
       channels: conversation.channels,
       directMessages: conversation.directMessages,
+      threadGroups: conversation.threadGroups,
       activePane,
+      activeThreadRootID: conversation.activeThreadRootID,
       currentUserID: displayData.current_user_id,
       usersById: conversation.usersById,
       collapsedWorkspaceGroups,
@@ -262,7 +268,8 @@ export function useWorkspaceController() {
       onSelectHubTemplate: selectHubTemplate,
       onSelectHub: selectHub,
       agentsError: agent.agentsDisplayError,
-      onSelectConversation: selectConversation,
+      onSelectConversation: conversation.selectConversationAndCloseThread,
+      onSelectThread: conversation.openThreadInConversation,
       onPreviewUser: profilePreview.openParticipantPreview,
       onSelectAgent: selectAgent,
       onPreviewAgent: profilePreview.openAgentPreview,

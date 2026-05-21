@@ -14,12 +14,41 @@ export type IMUser = {
 };
 
 export type MessageMention = string | { id?: string | null };
+export const THREAD_RELATION_TYPE = "m.thread";
 
 export type IMMessageEvent = {
   actor_id?: string | null;
   key?: string | null;
   target_ids?: string[] | null;
   title?: string | null;
+};
+
+export type MessageRelation = {
+  event_id?: string | null;
+  rel_type?: string | null;
+};
+
+export type ThreadContextSummary = {
+  after_count?: number;
+  before_count?: number;
+  message_count?: number;
+  root_excerpt?: string;
+};
+
+export type ThreadSummary = {
+  context_summary?: ThreadContextSummary;
+  current_user_participated?: boolean;
+  latest_reply?: IMMessage | null;
+  participants?: { id?: string | null; name?: string | null }[] | null;
+  reply_count?: number;
+  root_id?: string;
+};
+
+export type ThreadState = {
+  context?: IMMessage[] | null;
+  created_at?: string;
+  root_message_id?: string;
+  summary?: ThreadContextSummary;
 };
 
 export type IMMessage = {
@@ -29,7 +58,9 @@ export type IMMessage = {
   event?: IMMessageEvent | null;
   kind?: string | null;
   mentions?: MessageMention[] | null;
+  relates_to?: MessageRelation | null;
   sender_id?: string | null;
+  thread?: ThreadSummary | null;
 };
 
 export type IMConversation = {
@@ -38,6 +69,7 @@ export type IMConversation = {
   is_direct?: boolean | null;
   members: string[];
   messages: IMMessage[];
+  threads?: ThreadState[] | null;
   title?: string | null;
 };
 
@@ -51,9 +83,18 @@ export type IMServerEvent = {
   message?: IMMessage | null;
   room?: Partial<IMConversation> | null;
   room_id?: string | null;
+  thread?: ThreadView | null;
   type?: string | null;
   upgrade?: unknown;
   user?: IMUser | null;
+};
+
+export type ThreadView = {
+  context?: IMMessage[] | null;
+  replies?: IMMessage[] | null;
+  room_id?: string;
+  root?: IMMessage | null;
+  summary?: ThreadSummary | null;
 };
 
 export type UsersById = Map<string, IMUser>;
@@ -62,6 +103,17 @@ export function isToolCallMessage(content: unknown): boolean {
   return String(content ?? "")
     .trimStart()
     .startsWith("🔧 ");
+}
+
+export function isThreadReply(message: IMMessage | null | undefined): boolean {
+  return Boolean(threadRootID(message));
+}
+
+export function threadRootID(message: IMMessage | null | undefined): string {
+  if (message?.relates_to?.rel_type !== THREAD_RELATION_TYPE) {
+    return "";
+  }
+  return String(message.relates_to.event_id || "").trim();
 }
 
 export function isEventMessage(message: IMMessage | null | undefined): boolean {
@@ -83,9 +135,72 @@ export function formatConversationPreview(
     if (isEventMessage(message)) {
       return formatEventMessage(message, usersById, locale);
     }
-    return flattenMentionText(message.content);
+    return formatMessagePreviewText(message.content);
   }
   return getConversationSubtitle(conversation, currentUserID, usersById, locale, t);
+}
+
+export function formatMessagePreviewText(content: unknown): string {
+  return collapsePreviewWhitespace(stripPreviewCodeFence(flattenMentionText(content)));
+}
+
+function stripPreviewCodeFence(content: string): string {
+  let text = content.trim();
+  if (!text.startsWith("```")) {
+    return text;
+  }
+
+  text = text.slice(3).trimStart();
+  const lineBreakIndex = text.search(/\r?\n/);
+  if (lineBreakIndex >= 0) {
+    text = text.slice(lineBreakIndex).trimStart();
+  } else {
+    text = text.replace(
+      /^(?:text|txt|plain|json|jsonc|yaml|yml|toml|go|ts|tsx|js|jsx|bash|sh|zsh|fish|python|py|html|css|sql|md|markdown|diff|xml|dockerfile|makefile|ini|env|csv)\b\s+/i,
+      "",
+    );
+  }
+  return text.replace(/\s*```\s*$/, "").trim();
+}
+
+function collapsePreviewWhitespace(content: string): string {
+  return content.replace(/\s+/g, " ").trim();
+}
+
+export function threadKey(roomID: string | null | undefined, rootID: string | null | undefined): string {
+  return `${String(roomID || "").trim()}:${String(rootID || "").trim()}`;
+}
+
+export function threadMessageKey(roomID: string | null | undefined, message: IMMessage | null | undefined): string {
+  return threadKey(roomID, threadRootID(message));
+}
+
+export function threadViewKey(thread: ThreadView | null | undefined): string {
+  return threadKey(thread?.room_id, thread?.summary?.root_id || thread?.root?.id);
+}
+
+export function formatThreadReplyCount(count: number | null | undefined, t: TranslateFn): string {
+  return t("threadReplies", { count: Number(count) || 0 });
+}
+
+export function conversationThreadViews(conversation: IMConversation | null | undefined): ThreadView[] {
+  if (!conversation?.messages?.length) {
+    return [];
+  }
+  return conversation.messages
+    .filter((message) => message.thread)
+    .map((message) => ({
+      room_id: conversation.id,
+      root: message,
+      summary: message.thread,
+    }))
+    .sort((a, b) => latestThreadTimestamp(b) - latestThreadTimestamp(a));
+}
+
+export function latestThreadTimestamp(thread: ThreadView | null | undefined): number {
+  const value = thread?.summary?.latest_reply?.created_at || thread?.root?.created_at;
+  const ms = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(ms) ? ms : 0;
 }
 
 export function formatEventMessage(
@@ -256,6 +371,9 @@ export function applyIMEvent<T extends IMData | null | undefined>(
   if (event.type === "message.created" && event.message) {
     return appendMessageToData(current, event.room_id, event.message);
   }
+  if ((event.type === "thread.created" || event.type === "thread.updated") && event.thread) {
+    return applyThreadToData(current, event.room_id || event.thread.room_id, event.thread);
+  }
   if (
     (event.type === "conversation.created" ||
       event.type === "conversation.members_added" ||
@@ -289,6 +407,9 @@ export function appendMessageToData<T extends IMData | null | undefined>(
   if (!current || !conversationID || !message) {
     return current;
   }
+  if (isThreadReply(message)) {
+    return current;
+  }
 
   const rooms = current.rooms.map((room) => {
     if (room.id !== conversationID) {
@@ -302,6 +423,70 @@ export function appendMessageToData<T extends IMData | null | undefined>(
   return { ...current, rooms: sortConversations(rooms) };
 }
 
+export function applyThreadToData<T extends IMData | null | undefined>(
+  current: T,
+  conversationID: string | null | undefined,
+  thread: ThreadView | null | undefined,
+): T | IMData {
+  const rootID = thread?.summary?.root_id || thread?.root?.id;
+  if (!current || !conversationID || !rootID || !thread?.summary) {
+    return current;
+  }
+
+  const rooms = current.rooms.map((room) => {
+    if (room.id !== conversationID) {
+      return room;
+    }
+    const messages = room.messages.map((message) =>
+      message.id === rootID ? { ...message, thread: thread.summary } : message,
+    );
+    const threads = upsertThreadState(room.threads ?? [], thread);
+    return { ...room, messages, threads };
+  });
+  return { ...current, rooms: sortConversations(rooms) };
+}
+
+export function upsertThreadState(states: readonly ThreadState[], thread: ThreadView): ThreadState[] {
+  const rootID = thread?.summary?.root_id || thread?.root?.id;
+  if (!rootID) {
+    return [...states];
+  }
+  const state: ThreadState = {
+    root_message_id: rootID,
+    created_at: thread?.root?.created_at || new Date().toISOString(),
+    context: thread?.context ?? [],
+    summary: thread?.summary?.context_summary ?? {},
+  };
+  const existing = states.some((item) => item.root_message_id === rootID);
+  return existing
+    ? states.map((item) => (item.root_message_id === rootID ? { ...item, ...state } : item))
+    : [...states, state];
+}
+
+export function appendReplyToThreadView(
+  current: ThreadView | null | undefined,
+  message: IMMessage | null | undefined,
+): ThreadView | null | undefined {
+  if (!current || !message || threadRootID(message) !== (current.summary?.root_id || current.root?.id)) {
+    return current;
+  }
+  if (current.replies?.some((item) => item.id === message.id)) {
+    return current;
+  }
+  const replies = [...(current.replies ?? []), message];
+  const summary = {
+    ...(current.summary ?? {}),
+    reply_count: replies.length,
+    latest_reply: message,
+  };
+  return {
+    ...current,
+    root: current.root ? { ...current.root, thread: summary } : current.root,
+    replies,
+    summary,
+  };
+}
+
 export function upsertConversationInData<T extends IMData | null | undefined>(
   current: T,
   conversation: IMConversation | null | undefined,
@@ -311,9 +496,10 @@ export function upsertConversationInData<T extends IMData | null | undefined>(
   }
 
   const existing = current.rooms.some((item) => item.id === conversation.id);
+  const normalized = normalizeRoom(conversation);
   const rooms = existing
-    ? current.rooms.map((item) => (item.id === conversation.id ? conversation : item))
-    : [conversation, ...current.rooms];
+    ? current.rooms.map((item) => (item.id === conversation.id ? normalized : item))
+    : [normalized, ...current.rooms];
   return { ...current, rooms: sortConversations(rooms) };
 }
 
@@ -378,5 +564,13 @@ export function normalizeIMData<T extends Partial<IMData> | null | undefined>(pa
   if (!payload) {
     return payload;
   }
-  return { ...payload, rooms: payload.rooms ?? [], users: payload.users ?? [] } as T | IMData;
+  return { ...payload, rooms: (payload.rooms ?? []).map(normalizeRoom), users: payload.users ?? [] } as T | IMData;
+}
+
+export function normalizeRoom(room: IMConversation): IMConversation {
+  return {
+    ...room,
+    messages: room.messages ?? [],
+    threads: room.threads ?? [],
+  };
 }

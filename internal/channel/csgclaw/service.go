@@ -50,9 +50,16 @@ func (s *Service) ListMessages(roomID string) ([]im.Message, error) {
 	return s.im.ListMessages(roomID)
 }
 
+func (s *Service) ListMessagesWithOptions(roomID string, opts im.ListMessagesOptions) ([]im.Message, error) {
+	return s.im.ListMessagesWithOptions(roomID, opts)
+}
+
 func (s *Service) SendMessage(req apitypes.CreateMessageRequest) (im.Message, error) {
 	req.SenderID = botIDToUserID(req.SenderID)
 	req.MentionID = botIDToUserID(req.MentionID)
+	if req.RelatesTo != nil {
+		req.RelatesTo.EventID = botIDToUserID(req.RelatesTo.EventID)
+	}
 	return s.im.CreateMessage(req)
 }
 

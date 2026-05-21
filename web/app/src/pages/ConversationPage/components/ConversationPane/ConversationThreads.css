@@ -1,0 +1,360 @@
+.messages {
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--portal-gray-400) transparent;
+}
+
+.messages::-webkit-scrollbar,
+.thread-panel-body::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.messages::-webkit-scrollbar-track,
+.thread-panel-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages::-webkit-scrollbar-thumb,
+.thread-panel-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
+}
+
+.chat-panel {
+  position: relative;
+}
+
+.chat-panel.has-thread-panel {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 29vw);
+}
+
+.chat-panel.has-thread-panel > .chat-header,
+.chat-panel.has-thread-panel > .messages,
+.chat-panel.has-thread-panel > .composer {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.chat-panel.has-thread-panel > .thread-panel {
+  grid-column: 2;
+  grid-row: 1 / 4;
+}
+
+.message-row {
+  max-width: min(100%, 76%, 840px);
+}
+
+.message-card {
+  position: relative;
+}
+
+.message-hover-actions {
+  position: absolute;
+  top: 32px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.message-row:hover .message-hover-actions,
+.message-row:focus-within .message-hover-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.thread-hover-button,
+.thread-action-button,
+.thread-latest-reply {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.thread-hover-button:hover,
+.thread-hover-button:focus-visible,
+.thread-action-button:hover,
+.thread-latest-reply:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.thread-hover-button {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.thread-hover-icon,
+.thread-hover-button .svg-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.thread-action-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  min-height: 34px;
+  padding: 7px 11px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-md);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.thread-action-tooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 8px;
+  height: 8px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: inherit;
+  transform: translate(-50%, -4px) rotate(45deg);
+}
+
+.thread-hover-button:hover .thread-action-tooltip,
+.thread-hover-button:focus-visible .thread-action-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.message-thread-actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.message-row.own .message-thread-actions {
+  justify-content: flex-end;
+}
+
+.thread-action-button {
+  min-height: 30px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.thread-action-button .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.thread-latest-reply {
+  min-width: 0;
+  min-height: 30px;
+  max-width: min(320px, 100%);
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.thread-latest-reply span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.thread-latest-reply strong {
+  min-width: 0;
+  font-weight: 650;
+}
+
+.thread-panel {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: -12px 0 28px oklch(0.08 0.01 248 / 0.18);
+  z-index: 3;
+}
+
+.thread-panel-header {
+  min-width: 0;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.thread-panel-kicker,
+.thread-section-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.thread-panel-title {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.thread-panel-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--portal-gray-400) transparent;
+}
+
+.thread-root,
+.thread-replies {
+  display: grid;
+  gap: 10px;
+}
+
+.thread-message {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.thread-message.compact {
+  opacity: 0.86;
+}
+
+.thread-message-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  color: var(--avatar-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.thread-message-main {
+  min-width: 0;
+}
+
+.thread-message-bubble {
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--message-border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--text);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.thread-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.thread-composer {
+  padding: 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  display: grid;
+  gap: 8px;
+}
+
+.thread-composer textarea {
+  width: 100%;
+  min-height: 84px;
+  max-height: 160px;
+  resize: vertical;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+  outline: none;
+}
+
+.thread-composer textarea:focus {
+  border-color: var(--portal-brand-500);
+  box-shadow: var(--focus-ring);
+}
+
+.thread-send-button {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.thread-send-button .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 960px) {
+  .chat-panel.has-thread-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chat-panel.has-thread-panel > .thread-panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(420px, 100%);
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .chat-panel.has-thread-panel > .thread-panel {
+    width: 100%;
+  }
+}

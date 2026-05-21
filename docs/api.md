@@ -601,6 +601,8 @@ Currently observed event types include:
 - `message.created`
 - `room.created`
 - `room.members_added`
+- `thread.created`
+- `thread.updated`
 - `upgrade.status_changed`
 
 Event JSON fields:
@@ -610,6 +612,7 @@ Event JSON fields:
 - `room`
 - `user`
 - `message`
+- `thread`
 - `sender`
 - `upgrade`
 
@@ -721,6 +724,10 @@ Returns the message list for the specified room.
 
 `room_id` is required.
 
+By default, thread replies are excluded from the room timeline. Add
+`include_thread_replies=true` to include threaded replies in the returned
+message list.
+
 ### `POST /api/v1/messages`
 
 Sends a message.
@@ -741,6 +748,77 @@ Notes:
 - `room_id` is required
 - Returns `201 Created` on success
 - A successful send also publishes `message.created` to `/api/v1/events`
+- To send a thread reply, include `relates_to: {"rel_type":"m.thread","event_id":"<root_message_id>"}`
+- A thread reply also publishes `thread.updated`
+
+### `POST /api/v1/rooms/{id}/threads`
+
+Starts a thread from an existing top-level message. The thread identity is the
+root message ID, matching Matrix `m.thread` relationship semantics without
+using the raw `/_matrix` namespace.
+
+Request body:
+
+```json
+{
+  "root_message_id": "msg-root"
+}
+```
+
+Responses:
+
+- `201 Created`: a new thread state was created
+- `200 OK`: the thread already existed and was returned idempotently
+
+The response is a `ThreadView`:
+
+```json
+{
+  "room_id": "room-1",
+  "root": { "id": "msg-root" },
+  "context": [],
+  "replies": [],
+  "summary": {
+    "root_id": "msg-root",
+    "reply_count": 0,
+    "participants": [],
+    "current_user_participated": true,
+    "context_summary": {
+      "root_excerpt": "root text",
+      "message_count": 1,
+      "before_count": 0,
+      "after_count": 0
+    }
+  }
+}
+```
+
+Thread context is snapshotted when the thread starts: up to five top-level
+messages before the root, the root message, and up to two top-level messages
+after it, capped by payload size. This context is not rendered as thread
+messages; it is hidden context for LLM-backed agents so a thread can begin with
+a clean conversation while still understanding what it was started from.
+
+### `GET /api/v1/rooms/{id}/threads?include=all|participated&limit=&from=`
+
+Lists room threads. `include` defaults to `all`; `participated` returns only
+threads where the current user is the root sender or a reply participant.
+`limit` and `from` implement offset-style pagination.
+
+### `GET /api/v1/rooms/{id}/threads/{root_message_id}`
+
+Returns one `ThreadView`, including the root message, hidden context window,
+replies, and summary.
+
+### `GET /api/v1/rooms/{id}/relations/{event_id}/m.thread`
+
+Returns Matrix-style child events for a thread root:
+
+```json
+{
+  "chunk": []
+}
+```
 
 ## Channel API
 
@@ -766,6 +844,10 @@ Notes:
 - `DELETE /api/v1/channels/csgclaw/rooms/{id}`
 - `GET /api/v1/channels/csgclaw/rooms/{id}/members`
 - `POST /api/v1/channels/csgclaw/rooms/{id}/members`
+- `POST /api/v1/channels/csgclaw/rooms/{id}/threads`
+- `GET /api/v1/channels/csgclaw/rooms/{id}/threads`
+- `GET /api/v1/channels/csgclaw/rooms/{id}/threads/{root_message_id}`
+- `GET /api/v1/channels/csgclaw/rooms/{id}/relations/{event_id}/m.thread`
 
 ### Messages
 
@@ -930,8 +1012,13 @@ Example single event:
 ```text
 id: msg-1
 event: message
-data: {"message_id":"msg-1","room_id":"room-1","sender_id":"u-admin","text":"hello"}
+data: {"message_id":"msg-1","room_id":"room-1","sender_id":"u-admin","text":"hello","thread_root_id":"msg-root","thread_context":{"root_message_id":"msg-root","context":[{"id":"msg-root","sender_id":"u-admin","content":"root text"}],"summary":{"root_excerpt":"root text","message_count":1,"before_count":0,"after_count":0}}}
 ```
+
+For thread replies, `thread_root_id` is the root message ID and
+`thread_context` carries the deterministic hidden context captured when the
+thread was started. Bot/LLM bridges use it as prompt context; it is not a list
+of thread replies.
 
 ### `POST /api/bots/{id}/messages/send`
 
@@ -942,11 +1029,14 @@ Example request body:
 ```json
 {
   "room_id": "room-1",
-  "text": "hello"
+  "text": "hello",
+  "thread_root_id": "msg-root"
 }
 ```
 
-The detailed response behavior depends on the compatibility bridge implementation.
+`thread_root_id` is optional. When present, the bot response is sent as a reply
+inside that IM thread. The detailed response behavior depends on the
+compatibility bridge implementation.
 
 ### `GET /api/bots/{id}/llm/models`
 

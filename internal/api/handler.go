@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,6 +73,7 @@ type imEventResponse struct {
 	Room    *im.Room                `json:"room,omitempty"`
 	User    *im.User                `json:"user,omitempty"`
 	Message *im.Message             `json:"message,omitempty"`
+	Thread  *im.ThreadView          `json:"thread,omitempty"`
 	Sender  *im.User                `json:"sender,omitempty"`
 	Upgrade *apitypes.UpgradeStatus `json:"upgrade,omitempty"`
 }
@@ -234,10 +236,11 @@ func bootstrapRuntimeKind(runtime string) string {
 }
 
 type createMessageRequest struct {
-	RoomID    string `json:"room_id"`
-	SenderID  string `json:"sender_id"`
-	Content   string `json:"content"`
-	MentionID string `json:"mention_id,omitempty"`
+	RoomID    string              `json:"room_id"`
+	SenderID  string              `json:"sender_id"`
+	Content   string              `json:"content"`
+	MentionID string              `json:"mention_id,omitempty"`
+	RelatesTo *im.MessageRelation `json:"relates_to,omitempty"`
 }
 
 type addRoomMembersRequest struct {
@@ -1093,7 +1096,9 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		messages, err := channel.ListMessages(roomID)
+		messages, err := channel.ListMessagesWithOptions(roomID, im.ListMessagesOptions{
+			IncludeThreadReplies: parseBoolQuery(r.URL.Query().Get("include_thread_replies")),
+		})
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				http.Error(w, err.Error(), http.StatusNotFound)
@@ -1108,6 +1113,140 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (h *Handler) handleThreadsByRoomID(w http.ResponseWriter, r *http.Request) {
+	roomID := pathValue(r, "id")
+	if roomID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if h.im == nil {
+		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		if err := h.reloadIM(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		opts, err := threadListOptionsFromQuery(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		threads, err := h.im.ListThreads(roomID, opts)
+		if err != nil {
+			writeIMError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, threads)
+	case http.MethodPost:
+		var req im.StartThreadRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+			return
+		}
+		req.RoomID = roomID
+		thread, created, err := h.im.StartThread(req)
+		if err != nil {
+			writeIMError(w, err)
+			return
+		}
+		if created {
+			h.publishThreadEvent(im.EventTypeThreadCreated, thread)
+			writeJSON(w, http.StatusCreated, thread)
+			return
+		}
+		writeJSON(w, http.StatusOK, thread)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) handleThreadByID(w http.ResponseWriter, r *http.Request) {
+	roomID := pathValue(r, "id")
+	rootID := pathValue(r, "thread_id")
+	if roomID == "" || rootID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if h.im == nil {
+		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := h.reloadIM(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	thread, err := h.im.GetThread(roomID, rootID)
+	if err != nil {
+		writeIMError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, thread)
+}
+
+func (h *Handler) handleThreadRelationsByID(w http.ResponseWriter, r *http.Request) {
+	roomID := pathValue(r, "id")
+	rootID := pathValue(r, "event_id")
+	if roomID == "" || rootID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if h.im == nil {
+		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := h.reloadIM(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	relations, err := h.im.ListThreadRelations(roomID, rootID)
+	if err != nil {
+		writeIMError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, relations)
+}
+
+func threadListOptionsFromQuery(r *http.Request) (im.ThreadListOptions, error) {
+	opts := im.ThreadListOptions{
+		Include: strings.TrimSpace(r.URL.Query().Get("include")),
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 {
+			return im.ThreadListOptions{}, fmt.Errorf("invalid limit")
+		}
+		opts.Limit = value
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("from")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 {
+			return im.ThreadListOptions{}, fmt.Errorf("invalid from")
+		}
+		opts.From = value
+	}
+	return opts, nil
+}
+
+func writeIMError(w http.ResponseWriter, err error) {
+	if strings.Contains(err.Error(), "not found") {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusBadRequest)
 }
 
 func (h *Handler) handleRoomByID(w http.ResponseWriter, r *http.Request) {
@@ -1321,6 +1460,7 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.publishMessageCreated(serviceReq.RoomID, message.SenderID, message)
+	h.publishThreadUpdated(serviceReq.RoomID, message)
 	writeJSON(w, http.StatusCreated, message)
 }
 
@@ -1574,6 +1714,7 @@ func presentEvent(evt im.Event) imEventResponse {
 		Room:    evt.Room,
 		User:    evt.User,
 		Message: evt.Message,
+		Thread:  evt.Thread,
 		Sender:  evt.Sender,
 		Upgrade: evt.Upgrade,
 	}
@@ -1590,6 +1731,7 @@ func (r createMessageRequest) toServiceRequest() (im.CreateMessageRequest, error
 		SenderID:  r.SenderID,
 		Content:   r.Content,
 		MentionID: r.MentionID,
+		RelatesTo: r.RelatesTo,
 	}, nil
 }
 
@@ -1638,6 +1780,29 @@ func (h *Handler) publishMessageCreated(conversationID, senderID string, message
 		RoomID:  conversationID,
 		Message: &messageCopy,
 		Sender:  &senderCopy,
+	})
+}
+
+func (h *Handler) publishThreadUpdated(roomID string, message im.Message) {
+	if h.imBus == nil || h.im == nil || message.RelatesTo == nil || strings.TrimSpace(message.RelatesTo.RelType) != im.RelationTypeThread {
+		return
+	}
+	thread, err := h.im.GetThread(roomID, message.RelatesTo.EventID)
+	if err != nil {
+		return
+	}
+	h.publishThreadEvent(im.EventTypeThreadUpdated, thread)
+}
+
+func (h *Handler) publishThreadEvent(eventType string, thread im.ThreadView) {
+	if h.imBus == nil {
+		return
+	}
+	threadCopy := thread
+	h.imBus.Publish(im.Event{
+		Type:   eventType,
+		RoomID: thread.RoomID,
+		Thread: &threadCopy,
 	})
 }
 

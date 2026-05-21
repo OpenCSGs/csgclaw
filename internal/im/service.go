@@ -25,6 +25,20 @@ type Mention = apitypes.Mention
 
 type EventPayload = apitypes.EventPayload
 
+type MessageRelation = apitypes.MessageRelation
+
+type ThreadSummary = apitypes.ThreadSummary
+
+type ThreadContextSummary = apitypes.ThreadContextSummary
+
+type ThreadState = apitypes.ThreadState
+
+type ThreadView = apitypes.ThreadView
+
+type ThreadListResponse = apitypes.ThreadListResponse
+
+type ThreadRelationsResponse = apitypes.ThreadRelationsResponse
+
 type Room = apitypes.Room
 
 type Conversation = Room
@@ -38,11 +52,35 @@ type Bootstrap struct {
 
 type CreateMessageRequest = apitypes.CreateMessageRequest
 
+type StartThreadRequest = apitypes.StartThreadRequest
+
+const (
+	RelationTypeThread = "m.thread"
+)
+
+const maxThreadContextSnapshotBytes = 32 * 1024
+
+const (
+	ThreadListIncludeAll          = "all"
+	ThreadListIncludeParticipated = "participated"
+)
+
+type ListMessagesOptions struct {
+	IncludeThreadReplies bool
+}
+
+type ThreadListOptions struct {
+	Include string
+	Limit   int
+	From    int
+}
+
 type DeliverMessageRequest struct {
-	RoomID    string `json:"room_id"`
-	SenderID  string `json:"sender_id,omitempty"`
-	Content   string `json:"text"`
-	MessageID string `json:"message_id,omitempty"`
+	RoomID       string `json:"room_id"`
+	SenderID     string `json:"sender_id,omitempty"`
+	Content      string `json:"text"`
+	MessageID    string `json:"message_id,omitempty"`
+	ThreadRootID string `json:"thread_root_id,omitempty"`
 }
 
 type CreateRoomRequest = apitypes.CreateRoomRequest
@@ -92,13 +130,14 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Subtitle    string   `json:"subtitle"`
-	Description string   `json:"description,omitempty"`
-	IsDirect    bool     `json:"is_direct,omitempty"`
-	Members     []string `json:"members"`
-	Messages    string   `json:"messages"`
+	ID          string        `json:"id"`
+	Title       string        `json:"title"`
+	Subtitle    string        `json:"subtitle"`
+	Description string        `json:"description,omitempty"`
+	IsDirect    bool          `json:"is_direct,omitempty"`
+	Members     []string      `json:"members"`
+	Messages    string        `json:"messages"`
+	Threads     []ThreadState `json:"threads,omitempty"`
 }
 
 func (r *persistedRoom) UnmarshalJSON(data []byte) error {
@@ -260,6 +299,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			IsDirect:    room.IsDirect,
 			Members:     append([]string(nil), room.Members...),
 			Messages:    messages,
+			Threads:     cloneThreadStates(room.Threads),
 		})
 	}
 	return loaded, nil
@@ -343,6 +383,7 @@ func savePersistedRooms(statePath string, rooms []Room) ([]persistedRoom, error)
 			IsDirect:    room.IsDirect,
 			Members:     append([]string(nil), room.Members...),
 			Messages:    relativePath,
+			Threads:     cloneThreadStates(room.Threads),
 		})
 	}
 	return persisted, nil
@@ -612,12 +653,20 @@ func (s *Service) Bootstrap() Bootstrap {
 }
 
 func (s *Service) ListRooms() []Room {
+	return s.ListRoomsWithOptions(ListMessagesOptions{})
+}
+
+func (s *Service) ListRoomsWithOptions(opts ListMessagesOptions) []Room {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	rooms := make([]Room, 0, len(s.rooms))
 	for _, room := range s.rooms {
-		rooms = append(rooms, s.presentRoomLocked(*room))
+		presented := s.presentRoomLocked(*room)
+		if opts.IncludeThreadReplies {
+			presented.Messages = s.presentMessagesLocked(*room, true)
+		}
+		rooms = append(rooms, presented)
 	}
 	slices.SortFunc(rooms, func(a, b Room) int {
 		return latestRoomMessageAt(b).Compare(latestRoomMessageAt(a))
@@ -681,6 +730,10 @@ func (s *Service) RoomIDsForMember(userID string) []string {
 }
 
 func (s *Service) ListMessages(roomID string) ([]Message, error) {
+	return s.ListMessagesWithOptions(roomID, ListMessagesOptions{})
+}
+
+func (s *Service) ListMessagesWithOptions(roomID string, opts ListMessagesOptions) ([]Message, error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
 		return nil, fmt.Errorf("room_id is required")
@@ -693,7 +746,136 @@ func (s *Service) ListMessages(roomID string) ([]Message, error) {
 	if !ok {
 		return nil, fmt.Errorf("room not found")
 	}
-	return append([]Message(nil), room.Messages...), nil
+	return s.presentMessagesLocked(*room, opts.IncludeThreadReplies), nil
+}
+
+func (s *Service) StartThread(req StartThreadRequest) (ThreadView, bool, error) {
+	roomID := strings.TrimSpace(req.RoomID)
+	rootID := strings.TrimSpace(req.RootMessageID)
+	if roomID == "" {
+		return ThreadView{}, false, fmt.Errorf("room_id is required")
+	}
+	if rootID == "" {
+		return ThreadView{}, false, fmt.Errorf("root_message_id is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	room, ok := s.rooms[roomID]
+	if !ok {
+		return ThreadView{}, false, fmt.Errorf("room not found")
+	}
+	rootIndex := messageIndexByID(room.Messages, rootID)
+	if rootIndex < 0 {
+		return ThreadView{}, false, fmt.Errorf("root message not found")
+	}
+	if isThreadReply(room.Messages[rootIndex]) {
+		return ThreadView{}, false, fmt.Errorf("cannot start a thread from a thread reply")
+	}
+
+	created := false
+	if threadIndexByRoot(room.Threads, rootID) < 0 {
+		room.Threads = append(room.Threads, s.newThreadStateLocked(*room, rootIndex))
+		created = true
+		if err := s.saveLocked(); err != nil {
+			return ThreadView{}, false, err
+		}
+	}
+
+	view, err := s.threadViewLocked(*room, rootID, true)
+	if err != nil {
+		return ThreadView{}, false, err
+	}
+	return view, created, nil
+}
+
+func (s *Service) ListThreads(roomID string, opts ThreadListOptions) (ThreadListResponse, error) {
+	roomID = strings.TrimSpace(roomID)
+	if roomID == "" {
+		return ThreadListResponse{}, fmt.Errorf("room_id is required")
+	}
+	include := strings.TrimSpace(strings.ToLower(opts.Include))
+	if include == "" {
+		include = ThreadListIncludeAll
+	}
+	if include != ThreadListIncludeAll && include != ThreadListIncludeParticipated {
+		return ThreadListResponse{}, fmt.Errorf("invalid include")
+	}
+	if opts.From < 0 {
+		return ThreadListResponse{}, fmt.Errorf("invalid from")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	room, ok := s.rooms[roomID]
+	if !ok {
+		return ThreadListResponse{}, fmt.Errorf("room not found")
+	}
+
+	views := make([]ThreadView, 0, len(room.Threads))
+	for _, state := range room.Threads {
+		rootID := strings.TrimSpace(state.RootMessageID)
+		if rootID == "" {
+			continue
+		}
+		view, err := s.threadViewLocked(*room, rootID, false)
+		if err != nil {
+			continue
+		}
+		if include == ThreadListIncludeParticipated && !view.Summary.CurrentUserParticipated {
+			continue
+		}
+		views = append(views, view)
+	}
+	slices.SortFunc(views, func(a, b ThreadView) int {
+		return threadLatestAt(b).Compare(threadLatestAt(a))
+	})
+
+	start := opts.From
+	if start > len(views) {
+		start = len(views)
+	}
+	end := len(views)
+	if opts.Limit > 0 && start+opts.Limit < end {
+		end = start + opts.Limit
+	}
+	resp := ThreadListResponse{
+		Threads: append([]ThreadView(nil), views[start:end]...),
+	}
+	if end < len(views) {
+		resp.NextFrom = fmt.Sprintf("%d", end)
+	}
+	return resp, nil
+}
+
+func (s *Service) GetThread(roomID, rootMessageID string) (ThreadView, error) {
+	roomID = strings.TrimSpace(roomID)
+	rootMessageID = strings.TrimSpace(rootMessageID)
+	if roomID == "" {
+		return ThreadView{}, fmt.Errorf("room_id is required")
+	}
+	if rootMessageID == "" {
+		return ThreadView{}, fmt.Errorf("root_message_id is required")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	room, ok := s.rooms[roomID]
+	if !ok {
+		return ThreadView{}, fmt.Errorf("room not found")
+	}
+	return s.threadViewLocked(*room, rootMessageID, true)
+}
+
+func (s *Service) ListThreadRelations(roomID, rootMessageID string) (ThreadRelationsResponse, error) {
+	view, err := s.GetThread(roomID, rootMessageID)
+	if err != nil {
+		return ThreadRelationsResponse{}, err
+	}
+	return ThreadRelationsResponse{Chunk: view.Replies}, nil
 }
 
 func (s *Service) DeleteRoom(roomID string) error {
@@ -758,6 +940,7 @@ func (s *Service) DeleteUser(userID string) error {
 
 		room.Members = members
 		room.Messages = messages
+		s.rebuildThreadStatesLocked(room)
 		room.Subtitle = formatRoomSubtitle(len(members))
 	}
 
@@ -865,13 +1048,21 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	if !ok {
 		return Message{}, fmt.Errorf("room not found")
 	}
+	relatesTo, err := s.normalizeMessageRelationLocked(*room, req.RelatesTo)
+	if err != nil {
+		return Message{}, err
+	}
+	if relatesTo != nil && relatesTo.RelType == RelationTypeThread {
+		s.ensureThreadStateLocked(room, relatesTo.EventID)
+	}
 
 	message := s.newMessage("", req.SenderID, MessageKindMessage, content)
+	message.RelatesTo = relatesTo
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
 		return Message{}, err
 	}
-	return message, nil
+	return s.presentMessageLocked(*room, message), nil
 }
 
 func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
@@ -898,13 +1089,25 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	if !ok {
 		return Message{}, fmt.Errorf("room not found")
 	}
+	var relation *MessageRelation
+	if rootID := strings.TrimSpace(req.ThreadRootID); rootID != "" {
+		relation = &MessageRelation{RelType: RelationTypeThread, EventID: rootID}
+	}
+	relatesTo, err := s.normalizeMessageRelationLocked(*room, relation)
+	if err != nil {
+		return Message{}, err
+	}
+	if relatesTo != nil && relatesTo.RelType == RelationTypeThread {
+		s.ensureThreadStateLocked(room, relatesTo.EventID)
+	}
 
 	message := s.newMessage(req.MessageID, senderID, MessageKindMessage, content)
+	message.RelatesTo = relatesTo
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
 		return Message{}, err
 	}
-	return message, nil
+	return s.presentMessageLocked(*room, message), nil
 }
 
 func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
@@ -1216,6 +1419,7 @@ func formatConversationSubtitle(count int) string {
 
 func (s *Service) presentRoomLocked(room Room) Room {
 	cloned := cloneRoom(room)
+	cloned.Messages = s.presentMessagesLocked(room, false)
 	if !cloned.IsDirect || len(cloned.Members) != 2 {
 		return cloned
 	}
@@ -1237,12 +1441,438 @@ func (s *Service) presentConversationLocked(conv Conversation) Conversation {
 func cloneRoom(room Room) Room {
 	cloned := room
 	cloned.Members = append([]string(nil), room.Members...)
-	cloned.Messages = append([]Message(nil), room.Messages...)
+	cloned.Messages = cloneMessages(room.Messages)
+	cloned.Threads = cloneThreadStates(room.Threads)
 	return cloned
 }
 
 func cloneConversation(conv Conversation) Conversation {
 	return cloneRoom(conv)
+}
+
+func cloneMessages(messages []Message) []Message {
+	if len(messages) == 0 {
+		return nil
+	}
+	cloned := make([]Message, 0, len(messages))
+	for _, message := range messages {
+		cloned = append(cloned, cloneMessage(message))
+	}
+	return cloned
+}
+
+func cloneMessage(message Message) Message {
+	cloned := message
+	cloned.Mentions = append([]Mention(nil), message.Mentions...)
+	if message.RelatesTo != nil {
+		rel := *message.RelatesTo
+		cloned.RelatesTo = &rel
+	}
+	if message.Thread != nil {
+		summary := cloneThreadSummary(*message.Thread)
+		cloned.Thread = &summary
+	}
+	return cloned
+}
+
+func cloneThreadStates(states []ThreadState) []ThreadState {
+	if len(states) == 0 {
+		return nil
+	}
+	cloned := make([]ThreadState, 0, len(states))
+	for _, state := range states {
+		cloned = append(cloned, ThreadState{
+			RootMessageID: strings.TrimSpace(state.RootMessageID),
+			CreatedAt:     state.CreatedAt,
+			Context:       cloneMessages(state.Context),
+			Summary:       state.Summary,
+		})
+	}
+	return cloned
+}
+
+func cloneThreadSummary(summary ThreadSummary) ThreadSummary {
+	cloned := summary
+	cloned.Participants = append([]Mention(nil), summary.Participants...)
+	if summary.LatestReply != nil {
+		latest := cloneMessage(*summary.LatestReply)
+		latest.Thread = nil
+		cloned.LatestReply = &latest
+	}
+	return cloned
+}
+
+func (s *Service) presentMessagesLocked(room Room, includeThreadReplies bool) []Message {
+	messages := make([]Message, 0, len(room.Messages))
+	for _, message := range room.Messages {
+		if !includeThreadReplies && isThreadReply(message) {
+			continue
+		}
+		messages = append(messages, s.presentMessageLocked(room, message))
+	}
+	return messages
+}
+
+func (s *Service) presentMessageLocked(room Room, message Message) Message {
+	cloned := cloneMessage(message)
+	if isThreadReply(cloned) {
+		cloned.Thread = nil
+		return cloned
+	}
+	if threadIndexByRoot(room.Threads, cloned.ID) >= 0 {
+		if summary, ok := s.threadSummaryLocked(room, cloned.ID); ok {
+			cloned.Thread = &summary
+		}
+	}
+	return cloned
+}
+
+func (s *Service) normalizeMessageRelationLocked(room Room, relation *MessageRelation) (*MessageRelation, error) {
+	if relation == nil {
+		return nil, nil
+	}
+	relType := strings.TrimSpace(relation.RelType)
+	eventID := strings.TrimSpace(relation.EventID)
+	if relType == "" && eventID == "" {
+		return nil, nil
+	}
+	if relType != RelationTypeThread {
+		return nil, fmt.Errorf("unsupported relation type")
+	}
+	if eventID == "" {
+		return nil, fmt.Errorf("relation event_id is required")
+	}
+	rootIndex := messageIndexByID(room.Messages, eventID)
+	if rootIndex < 0 {
+		return nil, fmt.Errorf("thread root message not found")
+	}
+	if isThreadReply(room.Messages[rootIndex]) {
+		return nil, fmt.Errorf("cannot reply to a thread reply")
+	}
+	return &MessageRelation{RelType: RelationTypeThread, EventID: eventID}, nil
+}
+
+func (s *Service) ensureThreadStateLocked(room *Room, rootMessageID string) {
+	if room == nil {
+		return
+	}
+	rootIndex := messageIndexByID(room.Messages, rootMessageID)
+	if rootIndex < 0 || isThreadReply(room.Messages[rootIndex]) {
+		return
+	}
+	if threadIndexByRoot(room.Threads, rootMessageID) >= 0 {
+		return
+	}
+	room.Threads = append(room.Threads, s.newThreadStateLocked(*room, rootIndex))
+}
+
+func (s *Service) rebuildThreadStatesLocked(room *Room) {
+	if room == nil || len(room.Threads) == 0 {
+		return
+	}
+	rebuilt := make([]ThreadState, 0, len(room.Threads))
+	for _, state := range room.Threads {
+		rootIndex := messageIndexByID(room.Messages, state.RootMessageID)
+		if rootIndex < 0 || isThreadReply(room.Messages[rootIndex]) {
+			continue
+		}
+		next := s.newThreadStateLocked(*room, rootIndex)
+		if !state.CreatedAt.IsZero() {
+			next.CreatedAt = state.CreatedAt
+		}
+		rebuilt = append(rebuilt, next)
+	}
+	room.Threads = rebuilt
+}
+
+func (s *Service) newThreadStateLocked(room Room, rootIndex int) ThreadState {
+	context, before, after := threadContextWindow(room.Messages, rootIndex)
+	root := room.Messages[rootIndex]
+	return ThreadState{
+		RootMessageID: root.ID,
+		CreatedAt:     time.Now().UTC(),
+		Context:       context,
+		Summary: ThreadContextSummary{
+			RootExcerpt:  excerpt(root.Content, 160),
+			MessageCount: len(context),
+			BeforeCount:  before,
+			AfterCount:   after,
+		},
+	}
+}
+
+func (s *Service) threadViewLocked(room Room, rootMessageID string, includeContext bool) (ThreadView, error) {
+	rootIndex := messageIndexByID(room.Messages, rootMessageID)
+	if rootIndex < 0 {
+		return ThreadView{}, fmt.Errorf("thread root message not found")
+	}
+	if isThreadReply(room.Messages[rootIndex]) {
+		return ThreadView{}, fmt.Errorf("thread root message is a thread reply")
+	}
+	if threadIndexByRoot(room.Threads, rootMessageID) < 0 {
+		return ThreadView{}, fmt.Errorf("thread not found")
+	}
+	summary, _ := s.threadSummaryLocked(room, rootMessageID)
+	root := s.presentMessageLocked(room, room.Messages[rootIndex])
+	root.Thread = &summary
+	view := ThreadView{
+		RoomID:  room.ID,
+		Root:    root,
+		Replies: s.threadRepliesLocked(room, rootMessageID),
+		Summary: summary,
+	}
+	if includeContext {
+		if state, ok := threadStateByRoot(room.Threads, rootMessageID); ok {
+			view.Context = cloneMessages(state.Context)
+		}
+	}
+	return view, nil
+}
+
+func (s *Service) threadSummaryLocked(room Room, rootMessageID string) (ThreadSummary, bool) {
+	state, ok := threadStateByRoot(room.Threads, rootMessageID)
+	if !ok {
+		return ThreadSummary{}, false
+	}
+	replies := s.threadRepliesLocked(room, rootMessageID)
+	var latest *Message
+	if len(replies) > 0 {
+		msg := cloneMessage(replies[len(replies)-1])
+		msg.Thread = nil
+		latest = &msg
+	}
+	return ThreadSummary{
+		RootID:                  rootMessageID,
+		ReplyCount:              len(replies),
+		LatestReply:             latest,
+		Participants:            s.threadParticipantsLocked(room, rootMessageID, replies),
+		CurrentUserParticipated: s.threadUserParticipatedLocked(room, rootMessageID, replies, s.currentUserID),
+		Context:                 state.Summary,
+	}, true
+}
+
+func (s *Service) threadRepliesLocked(room Room, rootMessageID string) []Message {
+	replies := make([]Message, 0)
+	for _, message := range room.Messages {
+		if threadRootID(message) != rootMessageID {
+			continue
+		}
+		reply := cloneMessage(message)
+		reply.Thread = nil
+		replies = append(replies, reply)
+	}
+	slices.SortFunc(replies, func(a, b Message) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return replies
+}
+
+func (s *Service) threadParticipantsLocked(room Room, rootMessageID string, replies []Message) []Mention {
+	seen := make(map[string]struct{}, len(replies)+1)
+	participants := make([]Mention, 0, len(replies)+1)
+	add := func(userID string) {
+		userID = strings.TrimSpace(userID)
+		if userID == "" {
+			return
+		}
+		if _, ok := seen[userID]; ok {
+			return
+		}
+		seen[userID] = struct{}{}
+		if user, ok := s.users[userID]; ok {
+			participants = append(participants, Mention{ID: userID, Name: s.userMentionName(user)})
+			return
+		}
+		participants = append(participants, Mention{ID: userID})
+	}
+	if idx := messageIndexByID(room.Messages, rootMessageID); idx >= 0 {
+		add(room.Messages[idx].SenderID)
+	}
+	for _, reply := range replies {
+		add(reply.SenderID)
+	}
+	return participants
+}
+
+func (s *Service) threadUserParticipatedLocked(room Room, rootMessageID string, replies []Message, userID string) bool {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return false
+	}
+	if idx := messageIndexByID(room.Messages, rootMessageID); idx >= 0 && room.Messages[idx].SenderID == userID {
+		return true
+	}
+	for _, reply := range replies {
+		if reply.SenderID == userID {
+			return true
+		}
+	}
+	return false
+}
+
+func messageIndexByID(messages []Message, id string) int {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return -1
+	}
+	for idx, message := range messages {
+		if message.ID == id {
+			return idx
+		}
+	}
+	return -1
+}
+
+func threadIndexByRoot(states []ThreadState, rootMessageID string) int {
+	rootMessageID = strings.TrimSpace(rootMessageID)
+	for idx, state := range states {
+		if strings.TrimSpace(state.RootMessageID) == rootMessageID {
+			return idx
+		}
+	}
+	return -1
+}
+
+func threadStateByRoot(states []ThreadState, rootMessageID string) (ThreadState, bool) {
+	if idx := threadIndexByRoot(states, rootMessageID); idx >= 0 {
+		return states[idx], true
+	}
+	return ThreadState{}, false
+}
+
+func isThreadReply(message Message) bool {
+	return threadRootID(message) != ""
+}
+
+func threadRootID(message Message) string {
+	if message.RelatesTo == nil || strings.TrimSpace(message.RelatesTo.RelType) != RelationTypeThread {
+		return ""
+	}
+	return strings.TrimSpace(message.RelatesTo.EventID)
+}
+
+func threadContextWindow(messages []Message, rootIndex int) ([]Message, int, int) {
+	if rootIndex < 0 || rootIndex >= len(messages) {
+		return nil, 0, 0
+	}
+	topLevel := make([]Message, 0, len(messages))
+	rootTopLevelIndex := -1
+	rootID := messages[rootIndex].ID
+	for _, message := range messages {
+		if isThreadReply(message) {
+			continue
+		}
+		if message.ID == rootID {
+			rootTopLevelIndex = len(topLevel)
+		}
+		topLevel = append(topLevel, message)
+	}
+	if rootTopLevelIndex < 0 {
+		return nil, 0, 0
+	}
+	start := rootTopLevelIndex - 5
+	if start < 0 {
+		start = 0
+	}
+	end := rootTopLevelIndex + 3
+	if end > len(topLevel) {
+		end = len(topLevel)
+	}
+	context := cloneMessages(topLevel[start:end])
+	before := rootTopLevelIndex - start
+	after := end - rootTopLevelIndex - 1
+	context, before, after = trimThreadContextToPayloadCap(context, before, after)
+	return context, before, after
+}
+
+func trimThreadContextToPayloadCap(context []Message, before, after int) ([]Message, int, int) {
+	for len(context) > 1 && threadContextPayloadSize(context) > maxThreadContextSnapshotBytes {
+		switch {
+		case before > after && before > 0:
+			context = context[1:]
+			before--
+		case after > 0:
+			context = context[:len(context)-1]
+			after--
+		case before > 0:
+			context = context[1:]
+			before--
+		default:
+			return context, before, after
+		}
+	}
+	return context, before, after
+}
+
+func threadContextPayloadSize(context []Message) int {
+	data, err := json.Marshal(context)
+	if err != nil {
+		return 0
+	}
+	return len(data)
+}
+
+func threadLatestAt(view ThreadView) time.Time {
+	if view.Summary.LatestReply != nil && !view.Summary.LatestReply.CreatedAt.IsZero() {
+		return view.Summary.LatestReply.CreatedAt
+	}
+	if !view.Root.CreatedAt.IsZero() {
+		return view.Root.CreatedAt
+	}
+	return time.Time{}
+}
+
+func excerpt(content string, maxRunes int) string {
+	content = previewText(content)
+	if maxRunes <= 0 || len([]rune(content)) <= maxRunes {
+		return content
+	}
+	runes := []rune(content)
+	return string(runes[:maxRunes])
+}
+
+func previewText(content string) string {
+	return strings.Join(strings.Fields(stripPreviewCodeFence(content)), " ")
+}
+
+func stripPreviewCodeFence(content string) string {
+	text := strings.TrimSpace(content)
+	if !strings.HasPrefix(text, "```") {
+		return text
+	}
+	text = strings.TrimLeft(strings.TrimPrefix(text, "```"), " \t")
+	if idx := strings.IndexAny(text, "\r\n"); idx >= 0 {
+		next := idx + 1
+		if text[idx] == '\r' && len(text) > next && text[next] == '\n' {
+			next++
+		}
+		text = text[next:]
+	} else {
+		fields := strings.Fields(text)
+		if len(fields) > 1 && isPreviewFenceLanguage(fields[0]) {
+			text = strings.Join(fields[1:], " ")
+		}
+	}
+	text = strings.TrimSpace(text)
+	if strings.HasSuffix(text, "```") {
+		text = strings.TrimSpace(strings.TrimSuffix(text, "```"))
+	}
+	return text
+}
+
+func isPreviewFenceLanguage(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "text", "txt", "plain",
+		"json", "jsonc", "yaml", "yml", "toml",
+		"go", "ts", "tsx", "js", "jsx",
+		"bash", "sh", "zsh", "fish",
+		"python", "py", "html", "css", "sql",
+		"md", "markdown", "diff", "xml",
+		"dockerfile", "makefile", "ini", "env", "csv":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) newMessage(messageID, senderID, kind, content string) Message {

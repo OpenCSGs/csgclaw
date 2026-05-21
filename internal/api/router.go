@@ -58,6 +58,10 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Post("/", h.createRoom)
 			r.Route("/{id}", func(r chi.Router) {
 				r.Delete("/", h.deleteRoom)
+				r.Get("/threads", h.listThreads)
+				r.Post("/threads", h.createThread)
+				r.Get("/threads/{thread_id}", h.getThread)
+				r.Get("/relations/{event_id}/m.thread", h.listThreadRelations)
 				r.Route("/members", func(r chi.Router) {
 					r.Get("/", h.listRoomMembers)
 					r.Post("/", h.addRoomMembers)
@@ -105,6 +109,10 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Post("/", h.createRoom)
 			r.Route("/{id}", func(r chi.Router) {
 				r.Delete("/", h.deleteCsgclawRoom)
+				r.Get("/threads", h.listThreads)
+				r.Post("/threads", h.createThread)
+				r.Get("/threads/{thread_id}", h.getThread)
+				r.Get("/relations/{event_id}/m.thread", h.listThreadRelations)
 				r.Route("/members", func(r chi.Router) {
 					r.Get("/", h.listCsgclawRoomMembers)
 					r.Post("/", h.addCsgclawRoomMembers)

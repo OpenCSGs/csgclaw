@@ -7,12 +7,15 @@ import {
   notificationBotMetaLabel,
 } from "@/models/agents";
 import {
+  agentMatchesUser,
   formatConversationPreview,
+  formatMessagePreviewText,
+  formatThreadReplyCount,
   formatTime,
   isDirectConversation,
   resolveConversationUser,
 } from "@/models/conversations";
-import { AgentIcon, ChevronIcon, ComputerIcon, RoomPlusIcon } from "@/components/ui/Icons";
+import { AgentIcon, ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
 import type { ReactNode } from "react";
 
@@ -102,7 +105,9 @@ export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notifi
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
   const running = isAgentRunning(item);
-  const meta = notification ? notificationBotMetaLabel(item, t) : `${formatProviderLabel(item.provider || item.agent_profile?.provider)} · ${agentModelID(item)}`;
+  const meta = notification
+    ? notificationBotMetaLabel(item, t)
+    : `${formatProviderLabel(item.provider || item.agent_profile?.provider)} · ${agentModelID(item)}`;
   return (
     <button
       className={`workspace-row agent-nav-row ${active ? "active" : ""} ${incomplete ? "warn" : ""}`.trim()}
@@ -143,6 +148,7 @@ export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notifi
 }
 
 export function WorkspaceConversationRow({
+  agents = [],
   conversation,
   active,
   currentUserID,
@@ -155,6 +161,8 @@ export function WorkspaceConversationRow({
   const lastMessage = conversation.messages[conversation.messages.length - 1];
   const isDirect = isDirectConversation(conversation);
   const displayUser = isDirect ? resolveConversationUser(conversation, currentUserID, usersById) : null;
+  const directAgent = isDirect && displayUser ? agents.find((item) => agentMatchesUser(item, displayUser)) : null;
+  const directAgentRunning = isAgentRunning(directAgent);
   const title = isDirect && displayUser ? displayUser.name : conversation.title;
   const icon = isDirect && displayUser ? displayUser.avatar : "#";
   return (
@@ -190,12 +198,48 @@ export function WorkspaceConversationRow({
         {icon}
       </span>
       <span className="workspace-row-main">
-        <span className="workspace-row-title truncate">{title}</span>
+        <span className="workspace-row-title-line">
+          <span className="workspace-row-title truncate">{title}</span>
+          {directAgent ? (
+            <span className={`workspace-status-dot ${directAgentRunning ? "online" : ""}`} aria-hidden="true"></span>
+          ) : null}
+        </span>
         <span className="workspace-row-meta truncate">
           {formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t)}
         </span>
       </span>
       <span className="workspace-row-time">{formatTime(lastMessage?.created_at, locale)}</span>
+    </button>
+  );
+}
+
+export function WorkspaceThreadRow({ conversation, thread, active, locale, t, onSelect }) {
+  const root = thread?.root;
+  const rootID = thread?.summary?.root_id || root?.id;
+  if (!root || !rootID) {
+    return null;
+  }
+  const latestReply = thread?.summary?.latest_reply;
+  const title = formatMessagePreviewText(thread?.summary?.context_summary?.root_excerpt || root.content);
+  const meta = latestReply
+    ? `${t("latestThreadReply")}: ${formatMessagePreviewText(latestReply.content)}`
+    : formatThreadReplyCount(thread?.summary?.reply_count, t);
+  const updatedAt = latestReply?.created_at || root.created_at;
+
+  return (
+    <button
+      className={`workspace-row thread-nav-row ${active ? "active" : ""}`}
+      title={title}
+      onClick={() => onSelect(conversation.id, root)}
+    >
+      <span className="workspace-row-icon">
+        <RoomsIcon />
+      </span>
+      <span className="workspace-row-main">
+        <span className="workspace-row-title truncate">{title}</span>
+        <span className="workspace-row-meta truncate">{meta}</span>
+      </span>
+      <span className="workspace-row-time">{formatTime(updatedAt, locale)}</span>
     </button>
   );
 }

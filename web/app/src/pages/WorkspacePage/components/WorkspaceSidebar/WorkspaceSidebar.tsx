@@ -23,9 +23,12 @@ export function WorkspaceSidebar({
   workspaceTab,
   onWorkspaceTabChange,
   roomCount,
+  threadCount,
   channels,
   directMessages,
+  threadGroups,
   activePane,
+  activeThreadRootID,
   currentUserID,
   usersById,
   collapsedWorkspaceGroups,
@@ -38,6 +41,7 @@ export function WorkspaceSidebar({
   onSelectHub,
   agentsError,
   onSelectConversation,
+  onSelectThread,
   onPreviewUser,
   onSelectAgent,
   onPreviewAgent,
@@ -66,6 +70,7 @@ export function WorkspaceSidebar({
                 workspaceTab={workspaceTab}
                 onWorkspaceTabChange={onWorkspaceTabChange}
                 roomCount={roomCount}
+                threadCount={threadCount}
                 agentCount={agentCount}
                 onSelectHub={onSelectHub}
                 t={t}
@@ -100,7 +105,9 @@ export function WorkspaceSidebar({
                 workspaceTab={workspaceTab}
                 channels={channels}
                 directMessages={directMessages}
+                threadGroups={threadGroups}
                 activePane={activePane}
+                activeThreadRootID={activeThreadRootID}
                 currentUserID={currentUserID}
                 usersById={usersById}
                 locale={locale}
@@ -114,6 +121,7 @@ export function WorkspaceSidebar({
                 onSelectHubTemplate={onSelectHubTemplate}
                 agentsError={agentsError}
                 onSelectConversation={onSelectConversation}
+                onSelectThread={onSelectThread}
                 onPreviewUser={onPreviewUser}
                 agentItems={agentItems}
                 workerAgentItems={workerAgentItems}
@@ -133,6 +141,7 @@ export function WorkspaceSidebar({
         onWorkspaceTabChange={onWorkspaceTabChange}
         onSelectHub={onSelectHub}
         roomCount={roomCount}
+        threadCount={threadCount}
         agentCount={agentCount}
         theme={theme}
         onThemeChange={onThemeChange}
