@@ -12,6 +12,56 @@ import { useAgentController } from "./useAgentController";
 import { useConversationController } from "./useConversationController";
 import { useProfilePreviewController } from "./useProfilePreviewController";
 import type { HubTemplate } from "@/models/hubWorkspace";
+import type { IMData, IMUser } from "@/models/conversations";
+
+function isBootstrapAdminUser(user: IMUser | null | undefined) {
+  return (
+    user?.id === "u-admin" ||
+    String(user?.handle ?? "").toLowerCase() === "admin" ||
+    String(user?.name ?? "").toLowerCase() === "admin"
+  );
+}
+
+function initialsForIdentity(name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return "ME";
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length > 1) {
+    return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
+  }
+  return trimmed.slice(0, 2).toUpperCase();
+}
+
+function withLocalIdentity(data: IMData | null, fallbackName: string): IMData | null {
+  if (!data?.current_user_id) {
+    return data;
+  }
+
+  const currentUser = data.users.find((user) => user.id === data.current_user_id);
+  if (!currentUser) {
+    return data;
+  }
+
+  const displayName = isBootstrapAdminUser(currentUser) ? fallbackName : currentUser.name;
+  if (!displayName || displayName === currentUser.name) {
+    return data;
+  }
+
+  return {
+    ...data,
+    users: data.users.map((user) =>
+      user.id === data.current_user_id
+        ? {
+            ...user,
+            avatar: initialsForIdentity(displayName),
+            name: displayName,
+          }
+        : user,
+    ),
+  };
+}
 
 export function useWorkspaceController() {
   const location = useLocation();
@@ -54,14 +104,15 @@ export function useWorkspaceController() {
     refreshWorkspaceHubTemplates,
   } = useWorkspaceData();
   const t = useMemo(() => createTranslator(locale), [locale]);
+  const displayData = useMemo(() => withLocalIdentity(data, t("localIdentityFallback")), [data, t]);
   const activePane = useMemo(() => paneFromLocation(location.pathname), [location.pathname]);
   const workspaceTab = useMemo(() => workspaceTabForPane(activePane), [activePane]);
-  const rooms = useMemo(() => data?.rooms ?? [], [data]);
+  const rooms = useMemo(() => displayData?.rooms ?? [], [displayData]);
   const loadingError = bootstrapQuery.isError ? t("loadingFailed") : "";
   const { navigatePane, selectConversation, selectAgent, selectComputer, selectHub } = useWorkspaceNavigation({
     location,
     navigate,
-    dataReady: Boolean(data),
+    dataReady: Boolean(displayData),
     setActiveConversationId,
     rooms,
   });
@@ -105,7 +156,7 @@ export function useWorkspaceController() {
     agentsLoaded,
     agentsQuery,
     bootstrapConfig,
-    data,
+    data: displayData,
     hubTemplates,
     locale,
     managerProfile,
@@ -127,7 +178,7 @@ export function useWorkspaceController() {
     activePane,
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
-    data,
+    data: displayData,
     locale,
     managerProfile,
     managerProfileIncomplete: agent.managerProfileIncomplete,
@@ -168,7 +219,7 @@ export function useWorkspaceController() {
     selectHub();
   }
 
-  if (!data) {
+  if (!displayData) {
     return {
       ready: false,
       loadingText: loadingError || t("loading"),
@@ -200,7 +251,7 @@ export function useWorkspaceController() {
       channels: conversation.channels,
       directMessages: conversation.directMessages,
       activePane,
-      currentUserID: data.current_user_id,
+      currentUserID: displayData.current_user_id,
       usersById: conversation.usersById,
       collapsedWorkspaceGroups,
       onToggleWorkspaceGroup: shell.toggleWorkspaceGroup,

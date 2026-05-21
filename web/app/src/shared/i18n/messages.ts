@@ -1,6 +1,9 @@
 export const messages = {
   zh: {
     pageTitle: "CSGClaw",
+    localIdentityFallback: "本地用户",
+    settings: "设置",
+    appearanceSettings: "外观与语言",
     localAgentConsole: "本地 Agent 控制台",
     loading: "正在加载 IM 工作区...",
     loadingFailed: "加载失败，请稍后重试。",
@@ -291,6 +294,9 @@ export const messages = {
   },
   en: {
     pageTitle: "CSGClaw",
+    localIdentityFallback: "Local user",
+    settings: "Settings",
+    appearanceSettings: "Appearance and language",
     localAgentConsole: "Local agent console",
     loading: "Loading IM workspace...",
     loadingFailed: "Failed to load the workspace. Please try again.",

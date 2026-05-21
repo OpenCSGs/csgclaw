@@ -6,12 +6,19 @@
   box-shadow: var(--shadow-xs);
   font: inherit;
   outline: none;
+  text-align: left;
   transition:
     background-color 160ms ease,
     border-color 160ms ease,
     box-shadow 160ms ease,
     color 160ms ease,
     opacity 160ms ease;
+}
+
+.csg-select-value,
+.csg-select-value span {
+  min-width: 0;
+  text-align: left;
 }
 
 .csg-select-trigger-sm {

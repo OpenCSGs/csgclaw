@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui";
 import { HubIcon, RoomPlusIcon, RoomsIcon, SidebarToggleIcon, UsersIcon } from "@/components/ui/Icons";
 import { WorkspaceTabs } from "@/models/routing";
+import { SidebarUserButton } from "./SidebarUserButton";
 
 export function SidebarRail({
   isSidebarCollapsed,
@@ -9,6 +10,10 @@ export function SidebarRail({
   onWorkspaceTabChange,
   onSelectHub,
   onCreateRoom,
+  theme,
+  onThemeChange,
+  locale,
+  onLocaleChange,
   t,
 }) {
   return (
@@ -77,6 +82,17 @@ export function SidebarRail({
           </span>
         </Button>
       </nav>
+      <div className="sidebar-rail-bottom">
+        <SidebarUserButton
+          theme={theme}
+          onThemeChange={onThemeChange}
+          locale={locale}
+          onLocaleChange={onLocaleChange}
+          onCollapseSidebar={onExpandSidebar}
+          sidebarActionLabel={t("expandSidebar")}
+          t={t}
+        />
+      </div>
     </div>
   );
 }
