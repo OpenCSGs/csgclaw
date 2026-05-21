@@ -117,19 +117,26 @@ export function useUpgradeController({
       }));
       startUpgradeReconnectPoll(upgradeStatus?.latest_version);
       setShowUpgradeModal(false);
-    } catch (err) {
+    } catch (err: unknown) {
       setUpgradeBusy(false);
       setUpgradePhase("error");
-      const detail = err?.message && err.message !== "upgrade apply failed" ? ` ${err.message}` : "";
+      const detail = upgradeErrorDetail(err);
       setUpgradeError(`${t("upgradeApplyFailed")}${detail}`);
     }
   }, [appVersion, setUpgradeStatusData, startUpgradeReconnectPoll, t, upgradeBusy, upgradeStatus]);
 
   const openUpgradeModal = useCallback(() => {
-    setUpgradeError("");
-    setUpgradePhase(upgradeBusy || upgradeStatus?.upgrading ? "restarting" : "idle");
+    if (upgradePhase !== "error") {
+      setUpgradeError("");
+    }
+    setUpgradePhase((phase) => {
+      if (phase === "done" || phase === "error") {
+        return phase;
+      }
+      return upgradeBusy || upgradeStatus?.upgrading ? "restarting" : "idle";
+    });
     setShowUpgradeModal(true);
-  }, [upgradeBusy, upgradeStatus?.upgrading]);
+  }, [upgradeBusy, upgradePhase, upgradeStatus?.upgrading]);
 
   useEffect(() => {
     return () => {
@@ -158,4 +165,9 @@ export function useUpgradeController({
         }
       : null,
   };
+}
+
+function upgradeErrorDetail(err: unknown): string {
+  const message = err instanceof Error ? err.message : "";
+  return message && message !== "upgrade apply failed" ? ` ${message}` : "";
 }

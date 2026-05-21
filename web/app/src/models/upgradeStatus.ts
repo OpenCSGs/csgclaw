@@ -51,3 +51,18 @@ export function upgradeStatusLabel(phase: UpgradePhase, t: TranslateFn): string 
       return t("upgradeStatusReady");
   }
 }
+
+export function hasUpgradeAttention(
+  status: UpgradeStatus | null | undefined,
+  phase: UpgradePhase,
+  busy = false,
+): boolean {
+  return Boolean(
+    status?.update_available ||
+    status?.upgrading ||
+    status?.last_error ||
+    busy ||
+    phase === "done" ||
+    phase === "error",
+  );
+}

@@ -4,6 +4,7 @@ export const messages = {
     localIdentityFallback: "本地用户",
     settings: "设置",
     appearanceSettings: "外观与语言",
+    versionSettings: "版本与更新",
     localAgentConsole: "本地 Agent 控制台",
     loading: "正在加载 IM 工作区...",
     loadingFailed: "加载失败，请稍后重试。",
@@ -273,6 +274,7 @@ export const messages = {
     upgradeBackground: "后台升级中",
     upgradeViewProgress: "查看进度",
     upgradeContinueUsing: "升级已在后台运行，你可以继续使用产品。",
+    upgradeUpToDate: "已是最新",
     roles: {
       admin: "管理员",
       manager: "经理",
@@ -297,6 +299,7 @@ export const messages = {
     localIdentityFallback: "Local user",
     settings: "Settings",
     appearanceSettings: "Appearance and language",
+    versionSettings: "Version and updates",
     localAgentConsole: "Local agent console",
     loading: "Loading IM workspace...",
     loadingFailed: "Failed to load the workspace. Please try again.",
@@ -571,6 +574,7 @@ export const messages = {
     upgradeBackground: "Updating in background",
     upgradeViewProgress: "View progress",
     upgradeContinueUsing: "The upgrade is running in the background. You can keep using the product.",
+    upgradeUpToDate: "Up to date",
     roles: {
       admin: "admin",
       manager: "manager",

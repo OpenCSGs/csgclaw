@@ -25,6 +25,10 @@
   align-items: center;
 }
 
+.modal-header > div:first-child {
+  min-width: 0;
+}
+
 .eyebrow,
 .section-label {
   display: block;
@@ -409,6 +413,8 @@
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+  flex: 0 0 auto;
+  white-space: nowrap;
   transition:
     transform 160ms ease,
     background 160ms ease,

@@ -1,9 +1,10 @@
-import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarRail } from "./SidebarRail";
+import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
 import { WorkspaceTabBar } from "./WorkspaceTabBar";
 import { WorkspaceTabPanels } from "./WorkspaceTabPanels";
+import type { WorkspaceSidebarProps } from "./types";
 
 export function WorkspaceSidebar({
   isSidebarCollapsed,
@@ -47,7 +48,7 @@ export function WorkspaceSidebar({
   upgradePhase,
   upgradeError,
   onOpenUpgrade,
-}) {
+}: WorkspaceSidebarProps) {
   const agentCount = agentItems.length || 0;
 
   return (
@@ -71,12 +72,18 @@ export function WorkspaceSidebar({
               />
             </div>
             <div className="workspace-side-rail-bottom">
+              <SidebarRailControlButton label={t("collapseSidebar")} mode="collapse" onClick={onCollapseSidebar} />
               <SidebarUserButton
                 theme={theme}
                 onThemeChange={onThemeChange}
                 locale={locale}
                 onLocaleChange={onLocaleChange}
-                onCollapseSidebar={onCollapseSidebar}
+                appVersion={appVersion}
+                upgradeStatus={upgradeStatus}
+                upgradeBusy={upgradeBusy}
+                upgradePhase={upgradePhase}
+                upgradeError={upgradeError}
+                onOpenUpgrade={onOpenUpgrade}
                 t={t}
               />
             </div>
@@ -116,15 +123,6 @@ export function WorkspaceSidebar({
                 onSelectComputer={onSelectComputer}
               />
             </nav>
-            <SidebarFooter
-              appVersion={appVersion}
-              upgradeStatus={upgradeStatus}
-              upgradeBusy={upgradeBusy}
-              upgradePhase={upgradePhase}
-              upgradeError={upgradeError}
-              onOpenUpgrade={onOpenUpgrade}
-              t={t}
-            />
           </div>
         </div>
       </aside>
@@ -134,11 +132,18 @@ export function WorkspaceSidebar({
         workspaceTab={workspaceTab}
         onWorkspaceTabChange={onWorkspaceTabChange}
         onSelectHub={onSelectHub}
-        onCreateRoom={onCreateRoom}
+        roomCount={roomCount}
+        agentCount={agentCount}
         theme={theme}
         onThemeChange={onThemeChange}
         locale={locale}
         onLocaleChange={onLocaleChange}
+        appVersion={appVersion}
+        upgradeStatus={upgradeStatus}
+        upgradeBusy={upgradeBusy}
+        upgradePhase={upgradePhase}
+        upgradeError={upgradeError}
+        onOpenUpgrade={onOpenUpgrade}
         t={t}
       />
     </div>

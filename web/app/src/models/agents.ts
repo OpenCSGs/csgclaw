@@ -48,6 +48,7 @@ export type AgentProfileLike = {
 
 export type AgentLike = AgentProfileLike & {
   agent_profile?: AgentProfileLike | null;
+  bot_type?: BotType | null;
   default_image?: string | null;
   from_template?: string | null;
   handle?: string | null;
@@ -96,6 +97,8 @@ export type AgentDraft = {
   runtime_kind: RuntimeKind;
   template_name?: string;
 };
+
+export type AgentDraftSource = AgentLike & Partial<AgentDraft>;
 
 export type AgentTemplateLike = {
   description?: string | null;
@@ -242,7 +245,9 @@ export function notifierPushWebhookPathForAgent(botID: unknown): string {
 
 /** Public webhook base URL from bootstrap (server resolves empty advertise_base_url via listen_addr). */
 export function resolvedNotifierWebhookOrigin(bootstrap: RuntimeBootstrapConfig | null | undefined): string {
-  return String(bootstrap?.advertise_base_url ?? "").trim().replace(/\/+$/, "");
+  return String(bootstrap?.advertise_base_url ?? "")
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 export function notificationPushWebhookNotifyURL(
@@ -572,9 +577,9 @@ export function notifierDeliveryConfiguredInProfile(
   return notifierConfiguredFromFlatDetails(notifierFlatFromSources(profile, agent));
 }
 
-export function agentToDraft(agent: AgentLike | null | undefined): AgentDraft {
+export function agentToDraft(agent: AgentDraftSource | null | undefined): AgentDraft {
   const profile = agent?.agent_profile || agent || {};
-  const botType = normalizeBotType(agent?.type);
+  const botType = normalizeBotType(agent?.type ?? agent?.bot_type);
   return {
     agent_id: agent?.id || "",
     name: agent?.name || "",
@@ -973,10 +978,7 @@ export function isNotificationBotDraftContext(
 }
 
 /** When a hub template is selected on create, runtime and image come from the template. */
-export function agentCreateTemplateLocked(
-  draft: Partial<AgentDraft> | null | undefined,
-  modalMode: string,
-): boolean {
+export function agentCreateTemplateLocked(draft: Partial<AgentDraft> | null | undefined, modalMode: string): boolean {
   if (modalMode !== "create") {
     return false;
   }

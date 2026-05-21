@@ -1,7 +1,7 @@
-import { Button } from "@/components/ui";
-import { HubIcon, RoomPlusIcon, RoomsIcon, SidebarToggleIcon, UsersIcon } from "@/components/ui/Icons";
-import { WorkspaceTabs } from "@/models/routing";
+import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
+import { WorkspaceTabBar } from "./WorkspaceTabBar";
+import type { SidebarRailProps } from "./types";
 
 export function SidebarRail({
   isSidebarCollapsed,
@@ -9,87 +9,50 @@ export function SidebarRail({
   workspaceTab,
   onWorkspaceTabChange,
   onSelectHub,
-  onCreateRoom,
+  roomCount,
+  agentCount,
   theme,
   onThemeChange,
   locale,
   onLocaleChange,
+  appVersion,
+  upgradeStatus,
+  upgradeBusy,
+  upgradePhase,
+  upgradeError,
+  onOpenUpgrade,
   t,
-}) {
+}: SidebarRailProps) {
   return (
     <div
       className={`sidebar-rail ${isSidebarCollapsed ? "visible" : ""}`}
       aria-hidden={!isSidebarCollapsed}
       inert={!isSidebarCollapsed}
     >
-      <Button
-        variant="ghost"
-        className="sidebar-expand-button"
-        aria-label={t("expandSidebar")}
-        title={t("expandSidebar")}
-        onClick={onExpandSidebar}
-      >
-        <span className="sidebar-toggle-mark">
-          <SidebarToggleIcon />
-        </span>
-      </Button>
       <nav className="sidebar-rail-nav" aria-label="Workspace">
-        <Button
-          variant="ghost"
-          className="sidebar-rail-button"
-          active={workspaceTab === WorkspaceTabs.messages}
-          aria-label={t("messagesTab")}
-          title={t("messagesTab")}
-          onClick={() => onWorkspaceTabChange(WorkspaceTabs.messages)}
-        >
-          <span className="sidebar-rail-icon" aria-hidden="true">
-            <RoomsIcon />
-          </span>
-        </Button>
-        <Button
-          variant="ghost"
-          className="sidebar-rail-button"
-          active={workspaceTab === WorkspaceTabs.agents}
-          aria-label={t("agentsTab")}
-          title={t("agentsTab")}
-          onClick={() => onWorkspaceTabChange(WorkspaceTabs.agents)}
-        >
-          <span className="sidebar-rail-icon" aria-hidden="true">
-            <UsersIcon />
-          </span>
-        </Button>
-        <Button
-          variant="ghost"
-          className="sidebar-rail-button"
-          active={workspaceTab === WorkspaceTabs.hub}
-          aria-label={t("hubTab")}
-          title={t("hubTab")}
-          onClick={() => onSelectHub()}
-        >
-          <span className="sidebar-rail-icon" aria-hidden="true">
-            <HubIcon />
-          </span>
-        </Button>
-        <Button
-          variant="ghost"
-          className="sidebar-rail-button"
-          aria-label={t("createRoom")}
-          title={t("createRoom")}
-          onClick={() => onCreateRoom()}
-        >
-          <span className="sidebar-rail-icon" aria-hidden="true">
-            <RoomPlusIcon />
-          </span>
-        </Button>
+        <WorkspaceTabBar
+          variant="rail"
+          workspaceTab={workspaceTab}
+          onWorkspaceTabChange={onWorkspaceTabChange}
+          roomCount={roomCount}
+          agentCount={agentCount}
+          onSelectHub={onSelectHub}
+          t={t}
+        />
       </nav>
       <div className="sidebar-rail-bottom">
+        <SidebarRailControlButton label={t("expandSidebar")} mode="expand" onClick={onExpandSidebar} />
         <SidebarUserButton
           theme={theme}
           onThemeChange={onThemeChange}
           locale={locale}
           onLocaleChange={onLocaleChange}
-          onCollapseSidebar={onExpandSidebar}
-          sidebarActionLabel={t("expandSidebar")}
+          appVersion={appVersion}
+          upgradeStatus={upgradeStatus}
+          upgradeBusy={upgradeBusy}
+          upgradePhase={upgradePhase}
+          upgradeError={upgradeError}
+          onOpenUpgrade={onOpenUpgrade}
           t={t}
         />
       </div>

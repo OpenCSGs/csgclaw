@@ -378,71 +378,6 @@
   white-space: nowrap;
 }
 
-.sidebar-upgrade-button {
-  flex: 0 0 auto;
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in oklab, var(--danger) 30%, var(--line));
-  background: color-mix(in oklab, var(--danger) 8%, var(--field));
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  transition:
-    transform 160ms ease,
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease;
-}
-
-.sidebar-upgrade-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  background: color-mix(in oklab, var(--danger) 12%, var(--field));
-  border-color: color-mix(in oklab, var(--danger) 44%, var(--line));
-}
-
-.sidebar-upgrade-button:disabled {
-  opacity: 0.72;
-  cursor: wait;
-}
-
-.sidebar-upgrade-button.is-running {
-  border-color: color-mix(in oklab, var(--primary) 36%, var(--line));
-  background: var(--primary-soft);
-  color: var(--text);
-}
-
-.sidebar-upgrade-button.is-done {
-  border-color: color-mix(in oklab, var(--portal-success-700) 36%, var(--line));
-  background: var(--portal-success-50);
-  color: var(--portal-success-700);
-}
-
-.sidebar-upgrade-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--danger);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 16%, transparent);
-  flex: 0 0 auto;
-}
-
-.sidebar-upgrade-button.is-running .sidebar-upgrade-dot {
-  background: var(--primary);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent);
-  animation: upgrade-pulse 1.4s ease-in-out infinite;
-}
-
-.sidebar-upgrade-button.is-done .sidebar-upgrade-dot {
-  background: var(--portal-success-700);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--portal-success-700) 16%, transparent);
-}
-
 .upgrade-modal {
   width: min(520px, 100%);
 }
@@ -768,12 +703,6 @@
 :root[data-theme="dark"] .upgrade-status-card.done {
   border-color: rgba(23, 178, 106, 0.38);
   background: rgba(23, 178, 106, 0.12);
-}
-
-:root[data-theme="dark"] .sidebar-upgrade-button.is-done {
-  border-color: rgba(23, 178, 106, 0.38);
-  background: rgba(23, 178, 106, 0.12);
-  color: #d0d5dd;
 }
 
 :root[data-theme="dark"] .upgrade-status-card.error {

@@ -32,16 +32,12 @@ export function WorkspaceTabBar({
         <span className="workspace-tab-icon" aria-hidden="true">
           <RoomsIcon />
         </span>
-        {rail ? (
-          <span className="workspace-tab-rail-count" aria-hidden="true">
-            {roomCount}
-          </span>
-        ) : (
+        {!rail ? (
           <span className="workspace-tab-copy">
             <strong>{t("messagesTab")}</strong>
             <small>{roomCount}</small>
           </span>
-        )}
+        ) : null}
       </Button>
       <Button
         className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
@@ -55,16 +51,12 @@ export function WorkspaceTabBar({
         <span className="workspace-tab-icon" aria-hidden="true">
           <UsersIcon />
         </span>
-        {rail ? (
-          <span className="workspace-tab-rail-count" aria-hidden="true">
-            {agentCount}
-          </span>
-        ) : (
+        {!rail ? (
           <span className="workspace-tab-copy">
             <strong>{t("agentsTab")}</strong>
             <small>{agentCount}</small>
           </span>
-        )}
+        ) : null}
       </Button>
       <Button
         className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
