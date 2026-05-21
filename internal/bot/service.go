@@ -97,7 +97,7 @@ func (s *Service) List(channel, role, botType string) ([]Bot, error) {
 		filtered = append(filtered, b)
 	}
 	filtered = s.refreshBotAvailability(filtered)
-	if normalizedChannel == string(ChannelFeishu) {
+	if normalizedChannel == string(ChannelFeishu) && NormalizeBotType(botType) != BotTypeNotification {
 		var err error
 		filtered, err = s.appendConfiguredFeishuBots(context.Background(), filtered, normalizedRole)
 		if err != nil {

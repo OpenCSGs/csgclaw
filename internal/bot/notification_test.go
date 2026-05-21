@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
 )
 
@@ -162,5 +163,32 @@ func TestServiceListIncludesNotificationBotsForCSGClawOnly(t *testing.T) {
 	}
 	if len(normalOnly) != 1 || normalOnly[0].ID != "u-worker" {
 		t.Fatalf("List(csgclaw, normal) = %+v, want u-worker only", normalOnly)
+	}
+}
+
+func TestServiceListFeishuSkipsConfiguredBotsForNotificationType(t *testing.T) {
+	store, err := NewMemoryStore(nil)
+	if err != nil {
+		t.Fatalf("NewMemoryStore() error = %v", err)
+	}
+	feishuSvc := feishu.NewServiceWithBotOpenIDResolver(
+		map[string]feishu.AppConfig{
+			"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"},
+		},
+		func(_ context.Context, app feishu.AppConfig) (feishu.BotInfo, error) {
+			return feishu.BotInfo{OpenID: "ou_manager", AppName: "Manager Bot"}, nil
+		},
+	)
+	svc, err := NewServiceWithDependencies(store, nil, nil, feishuSvc)
+	if err != nil {
+		t.Fatalf("NewServiceWithDependencies() error = %v", err)
+	}
+
+	got, err := svc.List(string(ChannelFeishu), "", BotTypeNotification)
+	if err != nil {
+		t.Fatalf("List(feishu, notification) error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("List(feishu, notification) = %+v, want empty (no configured feishu bots)", got)
 	}
 }

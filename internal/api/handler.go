@@ -982,7 +982,6 @@ func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 		Role:        item.Role,
 		RuntimeKind: item.RuntimeKind,
 		Image:       item.Image,
-		Env:         item.Env,
 		UpdatedAt:   item.UpdatedAt,
 		Source: apitypes.HubTemplateSource{
 			Name: item.Source.Name,
