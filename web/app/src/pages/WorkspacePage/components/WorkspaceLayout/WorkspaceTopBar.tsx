@@ -4,13 +4,13 @@ export function WorkspaceTopBar() {
       <div className="workspace-topbar-brand" aria-label="CSGClaw">
         <img
           className="workspace-topbar-logo workspace-topbar-logo-light"
-          src="/brand/csgclaw-logo-light.svg"
+          src="brand/csgclaw-logo-light.svg"
           alt=""
           aria-hidden="true"
         />
         <img
           className="workspace-topbar-logo workspace-topbar-logo-dark"
-          src="/brand/csgclaw-logo-dark.svg"
+          src="brand/csgclaw-logo-dark.svg"
           alt=""
           aria-hidden="true"
         />

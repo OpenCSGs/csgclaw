@@ -33,6 +33,13 @@ pnpm --dir web/app install
 - `web/static-dist` 是给 Go embed 使用的构建产物。
 - 新增模式或依赖前，优先沿用 `web/app` 里已有的约定。
 
+## 静态资源与部署路径
+
+- 引用 `web/app/public` 资源时用部署相对路径，例如 `brand/logo.svg` 或 `icons/users.svg`。
+- 不要写 `/brand/...`、`/icons/...`、`/favicon.ico` 这类根路径 public 资源；云端可能挂在子路径。
+- `src` 里的打包资源用 ESM import 或 `new URL("./asset.svg", import.meta.url)`。
+- 改资源路径后跑一次临时 Vite build，确认没有新增根路径 public 资源引用。
+
 ## 顶层结构
 
 - `src/api/`: HTTP 请求封装和 API 边界代码。

@@ -33,6 +33,13 @@ pnpm --dir web/app install
 - Treat `web/static-dist` as generated output for Go embedding.
 - Prefer local conventions already present in `web/app` before adding new patterns or dependencies.
 
+## Static Assets And Deployment Paths
+
+- Reference `web/app/public` assets with deployment-relative paths, for example `brand/logo.svg` or `icons/users.svg`.
+- Do not use root-absolute public asset URLs such as `/brand/...`, `/icons/...`, or `/favicon.ico`; cloud deployments may serve the Web UI from a subpath.
+- For bundled `src` assets, use ESM imports or `new URL("./asset.svg", import.meta.url)`.
+- After changing asset paths, run the temporary Vite build and check that no new root-absolute public asset URL was introduced.
+
 ## Top-Level Structure
 
 - `src/api/`: HTTP request wrappers and API boundary code.
