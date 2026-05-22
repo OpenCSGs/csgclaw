@@ -49,6 +49,20 @@ The Web UI is served by the local HTTP server and uses the same API surface as t
 
 ---
 
+## IM Threads
+
+The built-in IM thread model is documented in [im-threads.md](./im-threads.md).
+Threads are root-message-anchored sub-conversations inside a room or DM. They
+use Matrix-shaped `m.thread` relation metadata while staying inside the existing
+CSGClaw IM API surface.
+
+Thread replies are hidden from the main room timeline by default. Bot and Codex
+runtime bridges scope normal conversations by `room_id` and thread conversations
+by `room_id:thread_root_id`, so each thread starts with clean runtime context
+plus the hidden root context snapshot.
+
+---
+
 ## Package Layout
 
 ```text
@@ -127,6 +141,10 @@ GET    /api/v1/users                 List users
 DELETE /api/v1/users/{id}            Kick a user
 GET    /api/v1/messages              Fetch message history
 POST   /api/v1/messages              Send a message
+POST   /api/v1/rooms/{id}/threads    Start a thread
+GET    /api/v1/rooms/{id}/threads    List room threads
+GET    /api/v1/rooms/{id}/threads/{root_message_id}  Get a thread
+GET    /api/v1/rooms/{id}/relations/{event_id}/m.thread  List thread relations
 
 # Feishu channel
 GET    /api/v1/channels/feishu/users

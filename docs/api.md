@@ -569,6 +569,9 @@ Notes:
 
 These endpoints expose CSGClaw local IM data.
 
+For the thread model, invariants, hidden context behavior, and bridge rules, see
+[im-threads.md](./im-threads.md).
+
 ### `GET /api/v1/bootstrap`
 
 Returns IM bootstrap data.
@@ -579,6 +582,9 @@ Response fields:
 - `users`
 - `rooms`
 - `invite_draft_user_ids`
+
+Room message lists in the bootstrap response follow the default timeline
+contract: top-level messages only; thread replies are hidden.
 
 ### `GET /api/v1/events`
 
@@ -646,6 +652,11 @@ Notes:
 
 Deletes a local IM user.
 
+Deleting a user also rebuilds thread state from the surviving room messages.
+Thread roots sent by the deleted user are removed, hidden context snapshots are
+regenerated without deleted-user messages, and surviving thread creation times
+are preserved where possible.
+
 Common responses:
 
 - `204`: deleted successfully
@@ -655,6 +666,9 @@ Common responses:
 ### `GET /api/v1/rooms`
 
 Lists local IM rooms.
+
+Room message lists exclude thread replies by default. Root messages still expose
+their thread summaries when a thread exists.
 
 ### `POST /api/v1/rooms`
 
@@ -749,6 +763,8 @@ Notes:
 - Returns `201 Created` on success
 - A successful send also publishes `message.created` to `/api/v1/events`
 - To send a thread reply, include `relates_to: {"rel_type":"m.thread","event_id":"<root_message_id>"}`
+- `relates_to.rel_type` currently supports `m.thread`; the root must be a
+  top-level message in the same room
 - A thread reply also publishes `thread.updated`
 
 ### `POST /api/v1/rooms/{id}/threads`
@@ -792,6 +808,10 @@ The response is a `ThreadView`:
   }
 }
 ```
+
+`ThreadView.root` is the visible root message, `context` is the hidden snapshot
+for LLM context, `replies` is the visible thread reply list, and `summary` is
+the root-level thread summary used by timelines and thread lists.
 
 Thread context is snapshotted when the thread starts: up to five top-level
 messages before the root, the root message, and up to two top-level messages
@@ -993,6 +1013,9 @@ Example send-message request:
 ## Bot Compatibility API
 
 These endpoints live under `/api/bots/{id}` and exist for compatibility with the older PicoClaw bot integration.
+
+For thread/session isolation rules used by the bot and Codex bridges, see
+[im-threads.md](./im-threads.md).
 
 ### `GET /api/bots/{id}/events`
 
