@@ -19,6 +19,7 @@ Agent template = runnable OCI image + runtime declaration + image env contract +
 标准 Agent Template 应满足以下目标：
 
 - 有明确的模板身份信息，例如稳定 ID、模板版本、名称、描述和更新时间。
+- 可以通过模板 ID、版本和创建时解析的来源信息支持版本选择、固定和显式升级。
 - 有明确的创建角色，例如 `manager` 或 `worker`。
 - 有明确的 runtime 类型，例如 `picoclaw_sandbox` 或 `openclaw_sandbox`。
 - 可以声明 runtime 版本或 runtime contract 版本，用于兼容性提示和 workspace layout 预期。
@@ -39,6 +40,7 @@ Agent template = runnable OCI image + runtime declaration + image env contract +
 - 不发布或保存真实环境变量 secret。
 - 不标准化依赖用户本机已安装工具、认证状态或本地文件路径的纯本地 runtime。
 - 不描述 marketplace 排名、签名、审计、扫描、版本历史或回滚策略。
+- 不规定多版本在 registry、Git 仓库或文件目录中的物理存储方式。
 - 不保证第三方 image 可信。
 - 不定义 agent 内部协议、LLM 调用协议或工具调用协议。
 
@@ -62,7 +64,8 @@ standard agent template = valid Agentfile.toml + runnable image.ref + optional w
 描述如何运行一个标准 agent template，
 不描述如何构建 image，
 不保存真实 secret，
-不把 workspace-only/local preset/source template 混入标准 runnable template。
+不把 workspace-only/local preset/source template 混入标准 runnable template，
+不把多版本分发机制写入主 manifest 格式。
 ```
 
 缺少可用 `[image].ref` 的目录不是标准 Agentfile v1 template。source template、build-required template、workspace template 和 local preset 等非标准形态见附录 A。
@@ -725,14 +728,15 @@ Template registry、官方模板发布流程或 CI 可以比基础协议更严�
 1. 读取 `Agentfile.toml`。
 2. 校验 manifest。
 3. 读取 `name`、`description`、`role`、`runtime.kind`、`runtime.version` 和 `image.ref` 作为创建请求的默认值或兼容性元数据。
-4. 如果创建请求显式传入字段，则显式字段优先。
-5. 根据 `[[image.env]]` 生成需要用户确认或填写的环境变量。
-6. 合并来自用户输入、agent profile、workspace profile、secret storage 或其他配置来源的 env 值。
-7. 校验 required env、choices、pattern 和 secret 规则。
-8. 把最终 env 值写入 agent profile、secret storage 或 runtime create spec，不写回 `Agentfile.toml`。
-9. 如果 workspace 存在，则读取 `workspace.ignore_file` 并计算需要应用的 workspace overlay 文件集合。
-10. 按照 `[workspace]` 配置把过滤后的 workspace overlay 应用到 agent runtime workspace。
-11. 创建 runtime environment 时只消费最终解析出的 `image.ref` 和 runtime create spec。
+4. 如果 template 来源于 Hub、registry、bundle 或 Git source，记录创建时解析后的 template origin metadata。
+5. 如果创建请求显式传入字段，则显式字段优先。
+6. 根据 `[[image.env]]` 生成需要用户确认或填写的环境变量。
+7. 合并来自用户输入、agent profile、workspace profile、secret storage 或其他配置来源的 env 值。
+8. 校验 required env、choices、pattern 和 secret 规则。
+9. 把最终 env 值写入 agent profile、secret storage 或 runtime create spec，不写回 `Agentfile.toml`。
+10. 如果 workspace 存在，则读取 `workspace.ignore_file` 并计算需要应用的 workspace overlay 文件集合。
+11. 按照 `[workspace]` 配置把过滤后的 workspace overlay 应用到 agent runtime workspace。
+12. 创建 runtime environment 时只消费最终解析出的 `image.ref` 和 runtime create spec。
 
 字段优先级建议：
 
@@ -754,9 +758,52 @@ Logs and UI must redact secret values.
 
 ---
 
-## 8. 向后兼容与版本演进
+## 8. 模板版本引用与来源语义
 
-### 8.1 兼容策略
+`Agentfile.toml` 描述的是某一个 template revision。它不定义同一模板的多个版本如何在 Git、registry 或文件目录中物理存储和分发。
+
+对于 Hub 或 registry 发布的 template，`id` 和 `version` 用于标识逻辑模板和模板内容版本。Template registry 可以向用户暴露以下引用形式：
+
+```text
+<namespace>/<slug>@<version>
+<namespace>/<slug>@latest
+<namespace>/<slug>
+```
+
+当省略版本时，registry 可以把该引用解析为 `@latest`。
+
+`latest` 是 registry 维护的元数据，不得只根据 `updated_at` 推断。`updated_at` 只适合展示、排序和同步提示，不适合作为唯一升级依据。
+
+当 agent 从 template reference 创建时，实现应记录创建时解析后的 template origin metadata。已有 agent 默认固定到创建时解析出的 template revision，不应自动跟随未来的 `latest` 或其他版本变化。
+
+示例 origin metadata：
+
+```toml
+[template_origin]
+ref = "opencsg/picoclaw-worker@0.1.0"
+id = "opencsg.picoclaw-worker"
+version = "0.1.0"
+source = "bundle"
+bundle_digest = "sha256:..."
+image_ref = "registry.example.com/team/picoclaw-worker:1.0.0"
+image_digest = "sha256:..."
+```
+
+`template_origin` 是 agent profile、agent state 或 registry metadata 中的来源记录，不是 `Agentfile.toml` 的主协议字段，也不是 runtime 正常启动配置。
+
+它可以用于：
+
+- 展示 agent 创建来源。
+- 检查是否存在可升级版本。
+- 执行显式升级。
+- recreate agent 时复用原始模板来源。
+- rollback、调试、审计和复现。
+
+显式升级时，实现应重新解析目标 template reference，读取新的 `Agentfile.toml`，重新执行 env、workspace 和 runtime 兼容性校验，并记录新的 resolved origin。
+
+## 9. 向后兼容与版本演进
+
+### 9.1 兼容策略
 
 标准 Agentfile v1 只定义 `Agentfile.toml`。
 
@@ -764,7 +811,7 @@ Logs and UI must redact secret values.
 
 例如，某个实现可以把旧的 `agent.toml` 映射为 Agentfile v1 内部结构，但被映射后的结果必须满足标准 Agentfile v1 校验规则，才能被视为标准 Agentfile v1 template。
 
-### 8.2 版本演进
+### 9.2 版本演进
 
 版本演进建议：
 
@@ -776,9 +823,9 @@ Logs and UI must redact secret values.
 
 ---
 
-## 9. 字段汇总
+## 10. 字段汇总
 
-### 9.1 顶层字段
+### 10.1 顶层字段
 
 | 字段             | 类型   | 必填 | 说明                                      |
 | ---------------- | ------ | ---- | ----------------------------------------- |
@@ -790,14 +837,14 @@ Logs and UI must redact secret values.
 | `role`           | string | 是   | 创建角色：`manager` 或 `worker`           |
 | `updated_at`     | string | 否   | RFC3339 更新时间，用于展示和排序          |
 
-### 9.2 `[runtime]`
+### 10.2 `[runtime]`
 
 | 字段      | 类型   | 必填 | 说明                                     |
 | --------- | ------ | ---- | ---------------------------------------- |
 | `kind`    | string | 是   | runtime 类型，例如 `openclaw_sandbox`    |
 | `version` | string | 否   | runtime 实现版本或 runtime contract 版本 |
 
-### 9.3 `[image]`
+### 10.3 `[image]`
 
 | 字段        | 类型            | 必填 | 说明           |
 | ----------- | --------------- | ---- | -------------- |
@@ -805,7 +852,7 @@ Logs and UI must redact secret values.
 | `digest`    | string          | 否   | image digest   |
 | `platforms` | array of string | 否   | 支持的平台列表 |
 
-### 9.4 `[[image.env]]`
+### 10.4 `[[image.env]]`
 
 | 字段          | 类型            | 必填 | 默认值  | 说明               |
 | ------------- | --------------- | ---- | ------- | ------------------ |
@@ -819,7 +866,7 @@ Logs and UI must redact secret values.
 | `example`     | string          | 否   | 无      | 示例值             |
 | `placeholder` | string          | 否   | 无      | UI 占位提示        |
 
-### 9.5 `[workspace]`
+### 10.5 `[workspace]`
 
 | 字段           | 类型   | 必填 | 默认值             | 说明                                             |
 | -------------- | ------ | ---- | ------------------ | ------------------------------------------------ |
@@ -828,7 +875,7 @@ Logs and UI must redact secret values.
 | `merge_policy` | string | 否   | `fail_on_conflict` | overlay 冲突处理策略                             |
 | `ignore_file`  | string | 否   | `.gitignore`       | overlay ignore 文件，路径相对于 `workspace.path` |
 
-### 9.6 `[x.<vendor>]`
+### 10.6 `[x.<vendor>]`
 
 | 字段     | 类型                   | 必填 | 说明                                                  |
 | -------- | ---------------------- | ---- | ----------------------------------------------------- |
@@ -1090,6 +1137,7 @@ symlink_policy = reject_unsafe_symlink
 - workspace symlink 安全处理。
 - workspace merge policy。
 - 创建 agent 时的字段优先级合并。
+- 创建来源记录和 template revision pinning。
 - secret 脱敏输出。
 - vendor extension 的忽略或读取机制。
 
@@ -1160,6 +1208,134 @@ tmp/
 
 ---
 
+# 附录 G：推荐多版本分发模型
+
+本附录描述一种推荐的 registry/distribution 实现方式。它是实现建议，不属于 `Agentfile.toml` 主 manifest 格式。
+
+推荐作者侧管理方式：
+
+```text
+one repository = one template
+one Git tag = one template version
+```
+
+示例仓库：
+
+```text
+picoclaw-worker-template/
+  Agentfile.toml
+  workspace/
+  README.md
+```
+
+示例 release tags：
+
+```text
+v0.1.0
+v0.2.0
+```
+
+Git tag 表达的版本应与 `Agentfile.toml` 中的 `version` 保持一致。
+
+推荐分发方式：
+
+```text
+Git tag -> immutable template bundle -> bundle URL + digest
+```
+
+Template bundle 是一个包含完整 template snapshot 的归档文件。例如：
+
+```text
+Agentfile.toml
+workspace/
+README.md
+```
+
+示例 registry artifact metadata：
+
+```toml
+id = "opencsg.picoclaw-worker"
+slug = "picoclaw-worker"
+latest = "0.2.0"
+
+[source]
+type = "git"
+repo = "https://github.com/OpenCSGs/picoclaw-worker-template.git"
+
+[[artifacts]]
+kind = "standard"
+version = "0.1.0"
+source_ref = "v0.1.0"
+source_commit = "abc1234"
+bundle_url = "https://hub.example.com/templates/picoclaw-worker/0.1.0.tgz"
+bundle_digest = "sha256:..."
+```
+
+Client 不要求依赖 Git。它可以解析 registry reference，下载 bundle，校验 digest，解包后读取 `Agentfile.toml`，再按标准 Agentfile v1 创建 agent。
+
+这种方式兼顾了：
+
+- 作者侧使用 Git tag 管理版本。
+- Registry 侧通过 immutable bundle 提供稳定分发 artifact。
+- Client 侧不强依赖 Git。
+- 创建后的 agent 可以固定到具体 bundle digest 和 template version。
+- 未来可以自然扩展 source template，而不改变 Agentfile 主协议。
+
+Source template 也可以使用同一套 artifact metadata 表达：
+
+```toml
+[[artifacts]]
+kind = "source"
+version = "0.1.0"
+source_ref = "v0.1.0"
+source_commit = "abc1234"
+bundle_url = "https://hub.example.com/templates/picoclaw-worker/0.1.0-source.tgz"
+bundle_digest = "sha256:..."
+build_required = true
+build_hint = "image-build.toml"
+```
+
+其中：
+
+```text
+kind = "standard"  可以直接 create agent
+kind = "source"    需要显式 build，得到 image.ref 后再进入标准 Agentfile 创建流程
+```
+
+如果实现支持 direct Git source ref，也应在创建时解析到具体 commit，并记录到 `template_origin`。例如：
+
+```toml
+[template_origin]
+ref = "git+https://github.com/OpenCSGs/picoclaw-worker-template.git@v0.1.0"
+id = "opencsg.picoclaw-worker"
+version = "0.1.0"
+source = "git"
+source_ref = "v0.1.0"
+source_commit = "abc1234"
+image_ref = "registry.example.com/team/picoclaw-worker:1.0.0"
+image_digest = "sha256:..."
+```
+
+Direct Git source ref 是高级用法。Registry 和普通 client 更推荐使用 immutable bundle，因为 bundle digest 更容易校验、缓存和复现。
+
+文件型 registry 或本地 cache 可以使用 versioned directories 作为 fallback：
+
+```text
+templates/
+  picoclaw-worker/
+    latest -> 0.2.0
+    0.1.0/
+      Agentfile.toml
+      workspace/
+    0.2.0/
+      Agentfile.toml
+      workspace/
+```
+
+该布局适合本地导入、离线 cache、测试和简单私有 registry。但正式分发仍推荐为每个版本生成 immutable bundle，并记录 digest。
+
+---
+
 ## 总结
 
 `Agentfile.toml` v1 应保持主协议收敛：
@@ -1169,6 +1345,9 @@ tmp/
 标准模板必须声明 runnable image.ref；
 标准模板必须声明稳定 id 和 version；
 runtime.version 描述 runtime 实现版本或 runtime contract 版本；
+template reference 解析后应固定到具体 template revision；
+created agent 默认不自动跟随 latest；
+Git tag + immutable bundle 是推荐的多版本分发方式，但不属于主 manifest 格式；
 workspace.ignore_file 默认使用 .gitignore 过滤 overlay 源文件；
 构建、源码分发、workspace-only、本地 preset 都是协议外形态；
 具体平台版本约束、Hub policy、legacy 迁移和安全策略可以通过扩展或附录补充。
