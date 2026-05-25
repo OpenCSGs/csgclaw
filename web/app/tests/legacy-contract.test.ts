@@ -122,5 +122,9 @@ describe("legacy UI contract", () => {
     );
     expect(source).toContain('className={`workspace-status-dot ${directAgentRunning ? "online" : ""}`}');
     expect(source).toMatch(/directMessages\.map[\s\S]*agents=\{agentItems\}/);
+    expect(source).toContain("const messageAgent = agents.find((item) => agentMatchesUser(item, user));");
+    expect(source).toContain('className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`}');
+    expect(source).toContain("agents: agent.agentItems,");
+    expect(styles).toContain(".message-avatar-status.online");
   });
 });

@@ -299,6 +299,7 @@ export function useWorkspaceController() {
     },
     conversationViewProps: {
       ...conversation.conversationViewProps,
+      agents: agent.agentItems,
       onPreviewUser: profilePreview.openParticipantPreview,
     },
     profilePreviewProps: profilePreview.profilePreviewProps,
