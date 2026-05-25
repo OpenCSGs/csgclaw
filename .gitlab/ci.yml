@@ -8,7 +8,7 @@
 #
 # Required CI/CD variables:
 #   REMOTE_SSH – e.g. root@cdn.example.com
-#   ACR_REGISTRY – registry hostname only (no scheme); CI images are mirrored under ${ACR_REGISTRY}/opencsg_public/
+#   ACR_REGISTRY – registry hostname only (no scheme); CI images are mirrored under ${ACR_REGISTRY}/opencsg_public/ and ${ACR_REGISTRY}/opencsghq/
 #
 # Recommended:
 #   SSH_PRIVATE_KEY – PEM text (Variable) OR GitLab “File” variable (value is a path in the job; script copies to ~/.ssh/id_rsa)
@@ -25,11 +25,14 @@
 #
 # Go modules: GOPROXY defaults below (mainland-friendly). Override in CI/CD Variables if needed.
 #
-# CI image: Alibaba Cloud ACR mirror of golang:bookworm (Runner cannot use docker.io).
-# Set ACR_REGISTRY in CI/CD Variables. Push mirror once, e.g.:
+# CI images: Alibaba Cloud ACR mirrors (Runner cannot use docker.io).
+# Set ACR_REGISTRY in CI/CD Variables. Push mirrors once, e.g.:
 #   docker login ${ACR_REGISTRY}
 #   docker tag golang:bookworm ${ACR_REGISTRY}/opencsg_public/golang:bookworm
 #   docker push ${ACR_REGISTRY}/opencsg_public/golang:bookworm
+#   docker pull --platform linux/amd64 node:22.13.0-bookworm-slim
+#   docker tag node:22.13.0-bookworm-slim ${ACR_REGISTRY}/opencsghq/node:22.13.0-bookworm-slim
+#   docker push ${ACR_REGISTRY}/opencsghq/node:22.13.0-bookworm-slim
 
 variables:
   GIT_STRATEGY: clone
@@ -55,20 +58,17 @@ stages:
   image:
     name: ${ACR_REGISTRY}/opencsg_public/golang:bookworm
 
+.web_image:
+  image:
+    name: ${ACR_REGISTRY}/opencsghq/node:22.13.0-bookworm-slim
+
 web-build:
   extends:
-    - .release_image
+    - .web_image
     - .release_rules
   stage: web
   before_script:
-    - chmod +x .gitlab/bookworm-mirror.sh
-    - bash .gitlab/bookworm-mirror.sh
-    - apt-get update -qq && apt-get install -y --no-install-recommends ca-certificates curl xz-utils
-    - curl -fsSL https://nodejs.org/dist/v22.13.0/node-v22.13.0-linux-x64.tar.xz -o /tmp/node-v22.13.0-linux-x64.tar.xz
-    - tar -xJf /tmp/node-v22.13.0-linux-x64.tar.xz -C /tmp
-    - export PATH="/tmp/node-v22.13.0-linux-x64/bin:$PATH"
     - npm install -g pnpm@11.1.3
-    - hash -r
     - node --version
     - pnpm --version
   script:
