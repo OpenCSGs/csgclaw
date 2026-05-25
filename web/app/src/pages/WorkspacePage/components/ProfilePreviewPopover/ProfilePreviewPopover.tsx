@@ -71,7 +71,7 @@ export function ProfilePreviewPopover({
     >
       <div className="preview-header">
         <div className="preview-title">{agent ? t("profilePreview") : t("personProfile")}</div>
-        <Button className="modal-close" aria-label={t("close")} onClick={onClose}>
+        <Button variant="secondaryGray" size="md" className="modal-close" aria-label={t("close")} onClick={onClose}>
           <span aria-hidden="true">×</span>
         </Button>
       </div>
@@ -124,25 +124,16 @@ export function ProfilePreviewPopover({
             {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
           </div>
           <div className="preview-actions">
-            <Button
-              variant="primary"
-              className="preview-action-button preview-action-button-primary"
-              onClick={() => onOpenAgent(agent)}
-            >
+            <Button variant="primary" size="md" onClick={() => onOpenAgent(agent)}>
               {t("openProfile")}
             </Button>
             {canOpenDM ? (
-              <Button className="preview-action-button" onClick={() => onOpenDM(agent)}>
+              <Button variant="secondaryGray" size="md" onClick={() => onOpenDM(agent)}>
                 {t("openDM")}
               </Button>
             ) : null}
             {agent.role !== "manager" && agent.id !== "u-manager" ? (
-              <Button
-                variant="outlineDanger"
-                className="preview-action-button preview-action-button-danger preview-actions-delete"
-                disabled={deleteBusy}
-                onClick={() => onDelete(agent)}
-              >
+              <Button variant="danger" size="md" disabled={deleteBusy} onClick={() => onDelete(agent)}>
                 {t("agentDelete")}
               </Button>
             ) : null}

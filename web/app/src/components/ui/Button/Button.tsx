@@ -2,9 +2,21 @@ import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { classNames } from "@/shared/lib/classNames";
 
-export type ButtonVariant = "primary" | "secondaryGray" | "secondaryColor" | "danger" | "outlineDanger" | "ghost";
+export type ButtonVariant =
+  | "primary"
+  | "secondaryGray"
+  | "secondaryColor"
+  | "tertiaryGray"
+  | "tertiaryColor"
+  | "linkGray"
+  | "linkColor"
+  | "danger"
+  | "outlineDanger"
+  | "tertiaryDanger"
+  | "linkDanger"
+  | "ghost";
 
-export type ButtonSize = "sm" | "md" | "lg";
+export type ButtonSize = "sm" | "md" | "lg" | "xl" | "2xl";
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   active?: boolean;
@@ -17,15 +29,23 @@ const variantClassNames: Record<ButtonVariant, string> = {
   primary: "btn-primary",
   secondaryGray: "btn-secondary-gray",
   secondaryColor: "btn-secondary-color",
+  tertiaryGray: "btn-tertiary-gray",
+  tertiaryColor: "btn-tertiary-color",
+  linkGray: "btn-link-gray",
+  linkColor: "btn-link-color",
   danger: "btn-danger",
   outlineDanger: "btn-outline-danger",
-  ghost: "btn-ghost",
+  tertiaryDanger: "btn-tertiary-danger",
+  linkDanger: "btn-link-danger",
+  ghost: "btn-tertiary-gray",
 };
 
 const sizeClassNames: Record<ButtonSize, string> = {
   sm: "btn-sm",
   md: "btn-md",
   lg: "btn-lg",
+  xl: "btn-xl",
+  "2xl": "btn-2xl",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(

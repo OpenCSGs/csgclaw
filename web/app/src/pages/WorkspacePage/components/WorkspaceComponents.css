@@ -1392,7 +1392,7 @@
   justify-content: center;
   gap: 4px;
   font: inherit;
-  font-weight: 400;
+  font-weight: 500;
   text-align: center;
   cursor: pointer;
   box-shadow: var(--shadow-xs);
@@ -1420,8 +1420,8 @@
 
 .btn-sm,
 .csg-button-sm {
-  min-height: 36px;
-  padding: 8px 12px;
+  min-height: 34px;
+  padding: 7px 12px;
   font-size: 12px;
   line-height: 18px;
 }
@@ -1429,8 +1429,7 @@
 .btn-md,
 .csg-button-md {
   min-height: 42px;
-  padding: 10px 14px;
-  border-radius: 10px;
+  padding: 9px 14px;
   font-size: 14px;
   line-height: 22px;
 }
@@ -1438,7 +1437,7 @@
 .btn-lg,
 .csg-button-lg {
   min-height: 44px;
-  padding: 10px 16px;
+  padding: 9px 16px;
   font-size: 16px;
   line-height: 24px;
 }
@@ -1528,7 +1527,7 @@
 .member-badge-button.active,
 .workspace-tab.active {
   border-color: var(--portal-brand-300);
-  background: var(--portal-brand-25);
+  background: var(--portal-white);
   color: var(--portal-brand-700);
   box-shadow: var(--shadow-xs);
 }
@@ -1539,7 +1538,7 @@
 .member-badge-button.active:hover:not(:disabled) {
   border-color: var(--portal-brand-300);
   background: var(--portal-brand-50);
-  color: var(--portal-brand-700);
+  color: var(--portal-brand-800);
   box-shadow: var(--shadow-xs);
 }
 
@@ -1676,6 +1675,18 @@ button[disabled],
   opacity: 1;
 }
 
+.btn-tertiary-gray:disabled,
+.btn-tertiary-color:disabled,
+.btn-link-gray:disabled,
+.btn-link-color:disabled,
+.btn-tertiary-danger:disabled,
+.btn-link-danger:disabled {
+  border-color: transparent;
+  background: transparent;
+  color: var(--portal-gray-400);
+  box-shadow: none;
+}
+
 :root[data-theme="dark"] .btn-secondary-gray,
 :root[data-theme="dark"] .csg-button-secondary-gray,
 :root[data-theme="dark"] .secondary-button,
@@ -1751,6 +1762,18 @@ button[disabled],
 :root[data-theme="dark"] .danger-button:disabled {
   border-color: rgba(208, 213, 221, 0.12);
   background: rgba(208, 213, 221, 0.08);
+  color: var(--portal-gray-500);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .btn-tertiary-gray:disabled,
+:root[data-theme="dark"] .btn-tertiary-color:disabled,
+:root[data-theme="dark"] .btn-link-gray:disabled,
+:root[data-theme="dark"] .btn-link-color:disabled,
+:root[data-theme="dark"] .btn-tertiary-danger:disabled,
+:root[data-theme="dark"] .btn-link-danger:disabled {
+  border-color: transparent;
+  background: transparent;
   color: var(--portal-gray-500);
   box-shadow: none;
 }

@@ -29,7 +29,7 @@ export function CreateRoomModal({
             <div className="modal-title">{t("createRoomTitle")}</div>
             <div className="modal-subtitle">{t("createRoomSubtitle")}</div>
           </div>
-          <Button className="modal-close" onClick={onClose}>
+          <Button variant="secondaryGray" size="md" onClick={onClose}>
             {t("close")}
           </Button>
         </div>
@@ -90,10 +90,10 @@ export function CreateRoomModal({
         </div>
         {submitError ? <div className="form-error">{submitError}</div> : null}
         <div className="modal-actions">
-          <Button className="secondary-button" onClick={onClose}>
+          <Button variant="secondaryGray" size="md" onClick={onClose}>
             {t("cancel")}
           </Button>
-          <Button variant="primary" className="send-button" disabled={isBlank(roomTitle)} onClick={onCreate}>
+          <Button variant="primary" size="md" disabled={isBlank(roomTitle)} onClick={onCreate}>
             {t("create")}
           </Button>
         </div>

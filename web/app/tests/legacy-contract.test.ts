@@ -81,7 +81,7 @@ describe("legacy UI contract", () => {
     expect(source).toContain("publishAgentTemplateRequest(selectedAgentForPage.id)");
     expect(source).toContain("agent_id: agentID");
     expect(source).toContain("setSelectedHubTemplateId(published.id);");
-    expect(source).toContain("preview-action-button-primary entity-toolbar-publish");
+    expect(source).toContain('className="entity-toolbar-publish"');
     expect(source).toContain(
       'const canPublish = runtimeKind === "picoclaw_sandbox" || runtimeKind === "openclaw_sandbox";',
     );

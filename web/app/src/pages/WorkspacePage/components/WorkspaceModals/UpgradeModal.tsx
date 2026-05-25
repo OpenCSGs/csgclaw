@@ -19,7 +19,7 @@ export function UpgradeModal({
             <div className="modal-title">{t("upgradeTitle")}</div>
             <div className="modal-subtitle">{t("upgradeSubtitle")}</div>
           </div>
-          <Button className="modal-close" onClick={onClose}>
+          <Button variant="secondaryGray" size="md" onClick={onClose}>
             {t("close")}
           </Button>
         </div>
@@ -52,17 +52,17 @@ export function UpgradeModal({
         ) : null}
         <div className="modal-actions">
           {upgradePhase === "done" ? (
-            <Button variant="primary" className="send-button" onClick={() => window.location.reload()}>
+            <Button variant="primary" size="md" onClick={() => window.location.reload()}>
               {t("upgradeRefresh")}
             </Button>
           ) : (
             <>
-              <Button className="secondary-button" onClick={onClose}>
+              <Button variant="secondaryGray" size="md" onClick={onClose}>
                 {upgradeBusy || upgradeStatus?.upgrading ? t("close") : t("upgradeLater")}
               </Button>
               <Button
                 variant="primary"
-                className="send-button"
+                size="md"
                 disabled={upgradeBusy || upgradeStatus?.upgrading || !upgradeStatus?.update_available}
                 onClick={onApply}
               >

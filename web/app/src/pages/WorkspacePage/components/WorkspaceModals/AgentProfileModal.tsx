@@ -115,7 +115,7 @@ export function AgentProfileModal({
                 : t("editAgentSubtitle")}
             </div>
           </div>
-          <Button className="modal-close" onClick={onClose}>
+          <Button variant="secondaryGray" size="md" onClick={onClose}>
             {t("close")}
           </Button>
         </div>
@@ -404,12 +404,12 @@ export function AgentProfileModal({
         {agentError ? <div className="form-error">{agentError}</div> : null}
         <AgentCreateProgress progress={agentProgress} t={t} />
         <div className="modal-actions">
-          <Button className="secondary-button" onClick={onClose}>
+          <Button variant="secondaryGray" size="md" onClick={onClose}>
             {t("cancel")}
           </Button>
           <Button
             variant="primary"
-            className="send-button"
+            size="md"
             disabled={
               agentBusy ||
               isBlank(agentDraft.name) ||

@@ -77,7 +77,7 @@ export function AgentDetailPane({
       <div className="entity-toolbar">
         <Button
           variant="primary"
-          className="preview-action-button preview-action-button-primary"
+          size="md"
           disabled={
             saving ||
             isBlank(draft?.name) ||
@@ -91,7 +91,8 @@ export function AgentDetailPane({
         </Button>
         {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
           <Button
-            className="preview-action-button"
+            variant="secondaryGray"
+            size="md"
             disabled={busyKey.startsWith(busyPrefix) || incomplete}
             onClick={() => (running ? onStop(item) : onStart(item))}
           >
@@ -99,15 +100,16 @@ export function AgentDetailPane({
           </Button>
         ) : null}
         <Button
-          className="preview-action-button"
+          variant="secondaryGray"
+          size="md"
           disabled={busyKey.startsWith(busyPrefix)}
           onClick={() => onOpenDM(item)}
         >
           {t("openDM")}
         </Button>
         <Button
-          variant="outlineDanger"
-          className="preview-action-button preview-action-button-danger"
+          variant="danger"
+          size="md"
           disabled={busyKey.startsWith(busyPrefix) || incomplete}
           onClick={() => onRecreate(item)}
         >
@@ -115,7 +117,8 @@ export function AgentDetailPane({
         </Button>
         {SHOW_AGENT_LIFECYCLE_ACTIONS && activeRoom && !isManager ? (
           <Button
-            className="preview-action-button"
+            variant="secondaryGray"
+            size="md"
             disabled={busyKey.startsWith(busyPrefix)}
             onClick={() => onInvite(item)}
           >
@@ -123,19 +126,15 @@ export function AgentDetailPane({
           </Button>
         ) : null}
         {!isManager ? (
-          <Button
-            variant="outlineDanger"
-            className="preview-action-button preview-action-button-danger"
-            disabled={busyKey.startsWith(busyPrefix)}
-            onClick={() => onDelete(item)}
-          >
+          <Button variant="danger" size="md" disabled={busyKey.startsWith(busyPrefix)} onClick={() => onDelete(item)}>
             {t("agentDelete")}
           </Button>
         ) : null}
         {canPublish ? (
           <Button
             variant="primary"
-            className="preview-action-button preview-action-button-primary entity-toolbar-publish"
+            size="md"
+            className="entity-toolbar-publish"
             disabled={publishBusy}
             onClick={onPublish}
           >

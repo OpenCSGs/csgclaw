@@ -26,7 +26,7 @@ export function ManagerRebuildModal({
             <div className="modal-title">{t("managerRebuildTitle")}</div>
             <div className="modal-subtitle">{t("managerRebuildSubtitle")}</div>
           </div>
-          <Button className="modal-close" onClick={onClose}>
+          <Button variant="secondaryGray" size="md" onClick={onClose}>
             {t("close")}
           </Button>
         </div>
@@ -74,10 +74,10 @@ export function ManagerRebuildModal({
           </section>
           {error ? <div className="form-error">{error}</div> : null}
           <div className="modal-actions">
-            <Button className="secondary-button" disabled={busy} onClick={onClose}>
+            <Button variant="secondaryGray" size="md" disabled={busy} onClick={onClose}>
               {t("close")}
             </Button>
-            <Button variant="primary" className="send-button" disabled={busy} onClick={onConfirm}>
+            <Button variant="primary" size="md" disabled={busy} onClick={onConfirm}>
               {busy ? t("profileLoadingModels") : t("managerRebuildAction")}
             </Button>
           </div>

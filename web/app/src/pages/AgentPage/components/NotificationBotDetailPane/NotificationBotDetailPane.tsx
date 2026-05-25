@@ -46,25 +46,21 @@ export function NotificationBotDetailPane({
       <div className="entity-toolbar">
         <Button
           variant="primary"
-          className="preview-action-button preview-action-button-primary"
+          size="md"
           disabled={saving || !draft || !notifierFormIsComplete(draft, item)}
           onClick={onSave}
         >
           {saving ? t("profileLoadingModels") : t("agentUpdateSave")}
         </Button>
         <Button
-          className="preview-action-button"
+          variant="secondaryGray"
+          size="md"
           disabled={busyKey.startsWith(busyPrefix)}
           onClick={() => onOpenDM(item)}
         >
           {t("openDM")}
         </Button>
-        <Button
-          variant="outlineDanger"
-          className="preview-action-button preview-action-button-danger"
-          disabled={busyKey.startsWith(busyPrefix)}
-          onClick={() => onDelete(item)}
-        >
+        <Button variant="danger" size="md" disabled={busyKey.startsWith(busyPrefix)} onClick={() => onDelete(item)}>
           {t("agentDelete")}
         </Button>
       </div>
