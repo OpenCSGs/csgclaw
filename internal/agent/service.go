@@ -194,7 +194,7 @@ func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
 	if !ok {
 		return hub.PublishSpec{}, fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
 	}
-	workspaceRoot, err := agentWorkspaceRoot(got.Name)
+	workspaceRoot, err := agentWorkspaceRoot(got.Name, got.RuntimeKind)
 	if err != nil {
 		return hub.PublishSpec{}, err
 	}
