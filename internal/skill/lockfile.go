@@ -1,4 +1,4 @@
-package clawhub
+package skill
 
 import (
 	"encoding/json"
@@ -53,7 +53,7 @@ func writeLockRecord(skillsRoot string, record InstallRecord) error {
 
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".skillhub-lock-*.tmp")
+	tmp, err := os.CreateTemp(dir, ".skill-lock-*.tmp")
 	if err != nil {
 		return fmt.Errorf("create temporary skill lock file: %w", err)
 	}

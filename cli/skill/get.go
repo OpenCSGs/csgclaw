@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"csgclaw/cli/command"
-	"csgclaw/internal/clawhub"
+	skillapi "csgclaw/internal/skill"
 )
 
 func (c cmd) runGet(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
@@ -21,7 +21,7 @@ func (c cmd) runGet(ctx context.Context, run *command.Context, args []string, gl
 		return fmt.Errorf("skill get requires exactly one skill slug")
 	}
 	slug := strings.TrimSpace(rest[0])
-	registryID, err := clawhub.ParseRegistry(*registry)
+	registryID, err := skillapi.ParseRegistry(*registry)
 	if err != nil {
 		return err
 	}

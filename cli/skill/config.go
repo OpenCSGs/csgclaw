@@ -9,7 +9,7 @@ import (
 	"csgclaw/internal/config"
 )
 
-func resolveClawHubConfig(globals command.GlobalOptions) (config.ClawHubConfig, error) {
+func resolveSkillConfig(globals command.GlobalOptions) (config.SkillConfig, error) {
 	path := strings.TrimSpace(globals.Config)
 	explicit := path != ""
 	if !explicit {
@@ -18,20 +18,20 @@ func resolveClawHubConfig(globals command.GlobalOptions) (config.ClawHubConfig, 
 		}
 	}
 	if path == "" {
-		return config.ClawHubConfig{NonSuspiciousOnly: true}.Resolved(), nil
+		return config.SkillConfig{NonSuspiciousOnly: true}.Resolved(), nil
 	}
 	if _, err := os.Stat(path); err != nil {
 		if explicit {
-			return config.ClawHubConfig{}, fmt.Errorf("load config %q: %w", path, err)
+			return config.SkillConfig{}, fmt.Errorf("load config %q: %w", path, err)
 		}
 		if os.IsNotExist(err) {
-			return config.ClawHubConfig{NonSuspiciousOnly: true}.Resolved(), nil
+			return config.SkillConfig{NonSuspiciousOnly: true}.Resolved(), nil
 		}
-		return config.ClawHubConfig{}, fmt.Errorf("stat config %q: %w", path, err)
+		return config.SkillConfig{}, fmt.Errorf("stat config %q: %w", path, err)
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
-		return config.ClawHubConfig{}, fmt.Errorf("load config %q: %w", path, err)
+		return config.SkillConfig{}, fmt.Errorf("load config %q: %w", path, err)
 	}
-	return cfg.ClawHub, nil
+	return cfg.Skill, nil
 }

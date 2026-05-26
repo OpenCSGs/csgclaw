@@ -9,7 +9,7 @@ import (
 	"text/tabwriter"
 
 	"csgclaw/cli/command"
-	"csgclaw/internal/clawhub"
+	skillapi "csgclaw/internal/skill"
 )
 
 type cmd struct{}
@@ -60,15 +60,15 @@ func (c cmd) usage(run *command.Context) {
 	})
 }
 
-func newService(globals command.GlobalOptions, run *command.Context) (*clawhub.Service, error) {
-	cfg, err := resolveClawHubConfig(globals)
+func newService(globals command.GlobalOptions, run *command.Context) (*skillapi.Service, error) {
+	cfg, err := resolveSkillConfig(globals)
 	if err != nil {
 		return nil, err
 	}
-	return clawhub.NewService(cfg, run.HTTPClient), nil
+	return skillapi.NewService(cfg, run.HTTPClient), nil
 }
 
-func renderSearchResults(output string, w io.Writer, items []clawhub.SearchResult) error {
+func renderSearchResults(output string, w io.Writer, items []skillapi.SearchResult) error {
 	switch output {
 	case "", "table":
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
@@ -91,7 +91,7 @@ func renderSearchResults(output string, w io.Writer, items []clawhub.SearchResul
 	}
 }
 
-func renderSkillDetail(output string, w io.Writer, detail clawhub.SkillDetail) error {
+func renderSkillDetail(output string, w io.Writer, detail skillapi.SkillDetail) error {
 	switch output {
 	case "", "table":
 		version := ""
@@ -118,7 +118,7 @@ func renderSkillDetail(output string, w io.Writer, detail clawhub.SkillDetail) e
 	}
 }
 
-func renderSkillVersion(output string, w io.Writer, detail clawhub.SkillVersionDetail) error {
+func renderSkillVersion(output string, w io.Writer, detail skillapi.SkillVersionDetail) error {
 	switch output {
 	case "", "table":
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
@@ -136,7 +136,7 @@ func renderSkillVersion(output string, w io.Writer, detail clawhub.SkillVersionD
 	}
 }
 
-func renderInstallResult(output string, w io.Writer, result clawhub.InstallResult) error {
+func renderInstallResult(output string, w io.Writer, result skillapi.InstallResult) error {
 	switch output {
 	case "", "table":
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)

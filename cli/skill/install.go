@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"csgclaw/cli/command"
-	"csgclaw/internal/clawhub"
+	skillapi "csgclaw/internal/skill"
 )
 
 func (c cmd) runInstall(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
@@ -24,12 +24,12 @@ func (c cmd) runInstall(ctx context.Context, run *command.Context, args []string
 		return fmt.Errorf("skill install requires exactly one skill slug")
 	}
 
-	skillsRoot, err := clawhub.ResolveSkillsRoot(*skillsDir)
+	skillsRoot, err := skillapi.ResolveSkillsRoot(*skillsDir)
 	if err != nil {
 		return err
 	}
 
-	registryID, err := clawhub.ParseRegistry(*registry)
+	registryID, err := skillapi.ParseRegistry(*registry)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (c cmd) runInstall(ctx context.Context, run *command.Context, args []string
 	}
 	result, err := svc.Install(ctx, strings.TrimSpace(rest[0]), *version, registryID, skillsRoot, *force)
 	if err != nil {
-		if errors.Is(err, clawhub.ErrSkillDirExists) {
+		if errors.Is(err, skillapi.ErrSkillDirExists) {
 			return fmt.Errorf("%w; use --force to overwrite", err)
 		}
 		return err

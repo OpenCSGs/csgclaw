@@ -260,9 +260,9 @@ Field behavior:
 
 The built-in registry is read-only. Use a writable `local` or `remote` registry as the publish target.
 
-## ClawHub Configuration
+## Skill registry configuration
 
-`csgclaw skill` uses two ClawHub-compatible registries by default:
+`csgclaw skill` uses two skill registries by default:
 
 - **opencsg** (primary): `https://claw.opencsg.com`
 - **clawhub** (official): `https://clawhub.ai`
@@ -282,16 +282,17 @@ Supported registry APIs:
 Browse skills with `search`; there is no catalog list endpoint on the current registry.
 
 ```toml
-[clawhub]
+[skill]
 base_url = "https://claw.opencsg.com"
 official_base_url = "https://clawhub.ai"
-token = "${CLAWHUB_TOKEN}"
+token = "${SKILL_TOKEN}"
 non_suspicious_only = true
 ```
 
-- `base_url` is the primary (opencsg) registry. You can also set `CLAWHUB_BASE_URL`.
-- `official_base_url` is the secondary (clawhub.ai) registry. Defaults to `https://clawhub.ai`. Set to `""` to disable dual-registry search. Override with `CLAWHUB_OFFICIAL_BASE_URL`.
-- `token` is optional for read-only commands and required for future publish flows. You can also set `CLAWHUB_TOKEN`.
+- `base_url` is the primary (opencsg) registry. You can also set `SKILL_BASE_URL` (legacy: `CLAWHUB_BASE_URL`).
+- `official_base_url` is the secondary (clawhub.ai) registry. Defaults to `https://clawhub.ai`. Set to `""` to disable dual-registry search. Override with `SKILL_OFFICIAL_BASE_URL` (legacy: `CLAWHUB_OFFICIAL_BASE_URL`).
+- `token` is optional for read-only commands and required for future publish flows. You can also set `SKILL_TOKEN` (legacy: `CLAWHUB_TOKEN`).
+- The legacy `[clawhub]` section is still read for backward compatibility.
 - `non_suspicious_only` defaults to `true` when omitted.
 
 ## Channel Configuration

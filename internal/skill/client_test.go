@@ -1,4 +1,4 @@
-package clawhub
+package skill
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func TestClientSearch(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(config.ClawHubConfig{BaseURL: srv.URL, NonSuspiciousOnly: true}, srv.Client())
+	client := NewClient(config.SkillConfig{BaseURL: srv.URL, NonSuspiciousOnly: true}, srv.Client())
 	items, err := client.Search(context.Background(), "postgres", 10)
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
@@ -45,7 +45,7 @@ func TestClientGetSkillPreservesSlugCase(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(config.ClawHubConfig{BaseURL: srv.URL}, srv.Client())
+	client := NewClient(config.SkillConfig{BaseURL: srv.URL}, srv.Client())
 	detail, err := client.Get(context.Background(), "AIWizards--gitlab-fullstack-pro")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
@@ -66,7 +66,7 @@ func TestClientGetSkill(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(config.ClawHubConfig{BaseURL: srv.URL}, srv.Client())
+	client := NewClient(config.SkillConfig{BaseURL: srv.URL}, srv.Client())
 	detail, err := client.Get(context.Background(), "demo-skill")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
@@ -96,7 +96,7 @@ func TestClientDownloadPathFallback(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(config.ClawHubConfig{BaseURL: srv.URL}, srv.Client())
+	client := NewClient(config.SkillConfig{BaseURL: srv.URL}, srv.Client())
 	body, err := client.Download(context.Background(), "demo-skill", "1.0.0", "")
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
@@ -117,7 +117,7 @@ func TestClientGetNotFound(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(config.ClawHubConfig{BaseURL: srv.URL}, srv.Client())
+	client := NewClient(config.SkillConfig{BaseURL: srv.URL}, srv.Client())
 	_, err := client.Get(context.Background(), "missing")
 	if err == nil || !IsNotFound(err) {
 		t.Fatalf("Get() error = %v, want ErrSkillNotFound", err)
@@ -135,7 +135,7 @@ func TestClientGetVersionPath(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(config.ClawHubConfig{BaseURL: srv.URL}, srv.Client())
+	client := NewClient(config.SkillConfig{BaseURL: srv.URL}, srv.Client())
 	detail, err := client.GetVersion(context.Background(), "demo-skill", "1.0.0")
 	if err != nil {
 		t.Fatalf("GetVersion() error = %v", err)
@@ -153,7 +153,7 @@ func TestClientSearchRegistryUnavailable(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(config.ClawHubConfig{BaseURL: srv.URL}, srv.Client())
+	client := NewClient(config.SkillConfig{BaseURL: srv.URL}, srv.Client())
 	_, err := client.Search(context.Background(), "git", 10)
 	if err == nil || !strings.Contains(err.Error(), "registry API not found") {
 		t.Fatalf("Search() error = %v, want registry unavailable", err)

@@ -1,4 +1,4 @@
-package clawhub
+package skill
 
 import (
 	"fmt"
@@ -38,7 +38,7 @@ func (id RegistryID) String() string {
 	return string(id)
 }
 
-func buildRegistries(cfg config.ClawHubConfig, httpClient apiclient.HTTPClient) []registryEntry {
+func buildRegistries(cfg config.SkillConfig, httpClient apiclient.HTTPClient) []registryEntry {
 	resolved := cfg.Resolved()
 	var entries []registryEntry
 
@@ -46,7 +46,7 @@ func buildRegistries(cfg config.ClawHubConfig, httpClient apiclient.HTTPClient) 
 	if primaryURL != "" {
 		entries = append(entries, registryEntry{
 			id: RegistryOpenCSG,
-			client: NewClient(config.ClawHubConfig{
+			client: NewClient(config.SkillConfig{
 				BaseURL:           primaryURL,
 				Token:             resolved.Token,
 				NonSuspiciousOnly: resolved.NonSuspiciousOnly,
@@ -58,7 +58,7 @@ func buildRegistries(cfg config.ClawHubConfig, httpClient apiclient.HTTPClient) 
 	if officialURL != "" && !registryURLsEqual(officialURL, primaryURL) {
 		entries = append(entries, registryEntry{
 			id: RegistryClawHub,
-			client: NewClient(config.ClawHubConfig{
+			client: NewClient(config.SkillConfig{
 				BaseURL:           officialURL,
 				Token:             resolved.Token,
 				NonSuspiciousOnly: resolved.NonSuspiciousOnly,

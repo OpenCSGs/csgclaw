@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"csgclaw/cli/command"
-	"csgclaw/internal/clawhub"
+	skillapi "csgclaw/internal/skill"
 )
 
 func (c cmd) runVersions(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
@@ -23,7 +23,7 @@ func (c cmd) runVersions(ctx context.Context, run *command.Context, args []strin
 	if len(rest) != 1 {
 		return fmt.Errorf("skill versions requires exactly one skill slug")
 	}
-	registryID, err := clawhub.ParseRegistry(*registry)
+	registryID, err := skillapi.ParseRegistry(*registry)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (c cmd) runVersions(ctx context.Context, run *command.Context, args []strin
 	return renderSkillVersions(globals.Output, run.Stdout, list)
 }
 
-func renderSkillVersions(output string, w io.Writer, list clawhub.SkillVersionsList) error {
+func renderSkillVersions(output string, w io.Writer, list skillapi.SkillVersionsList) error {
 	switch output {
 	case "", "table":
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)

@@ -1,4 +1,4 @@
-package clawhub
+package skill
 
 import (
 	"fmt"

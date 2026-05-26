@@ -1,4 +1,4 @@
-package clawhub
+package skill
 
 import (
 	"context"
@@ -31,7 +31,7 @@ type Client struct {
 	maxArchive        int64
 }
 
-func NewClient(cfg config.ClawHubConfig, httpClient apiclient.HTTPClient) *Client {
+func NewClient(cfg config.SkillConfig, httpClient apiclient.HTTPClient) *Client {
 	resolved := cfg.Resolved()
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: defaultHTTPTimeout}

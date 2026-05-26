@@ -1,4 +1,4 @@
-package clawhub
+package skill
 
 import (
 	"archive/zip"
@@ -14,8 +14,8 @@ import (
 	"csgclaw/internal/config"
 )
 
-func singleRegistryConfig(baseURL string) config.ClawHubConfig {
-	return config.ClawHubConfig{
+func singleRegistryConfig(baseURL string) config.SkillConfig {
+	return config.SkillConfig{
 		BaseURL:            baseURL,
 		OfficialBaseURLSet: true,
 	}
@@ -40,7 +40,7 @@ func TestServiceSearchReturnsOpenCSGWithoutQueryingClawHub(t *testing.T) {
 	}))
 	t.Cleanup(official.Close)
 
-	svc := NewService(config.ClawHubConfig{
+	svc := NewService(config.SkillConfig{
 		BaseURL:            primary.URL,
 		OfficialBaseURL:    official.URL,
 		OfficialBaseURLSet: true,
@@ -79,7 +79,7 @@ func TestServiceSearchFallsBackToClawHubWhenOpenCSGEmpty(t *testing.T) {
 	}))
 	t.Cleanup(official.Close)
 
-	svc := NewService(config.ClawHubConfig{
+	svc := NewService(config.SkillConfig{
 		BaseURL:            primary.URL,
 		OfficialBaseURL:    official.URL,
 		OfficialBaseURLSet: true,

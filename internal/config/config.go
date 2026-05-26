@@ -20,7 +20,7 @@ type Config struct {
 	Bootstrap BootstrapConfig
 	Sandbox   SandboxConfig
 	Hub       HubConfig
-	ClawHub   ClawHubConfig
+	Skill     SkillConfig
 
 	raw rawConfigValues
 }
@@ -237,7 +237,7 @@ type rawConfigValues struct {
 	bootstrap     BootstrapConfig
 	sandbox       SandboxConfig
 	hub           rawHubConfig
-	clawhub       rawClawHubConfig
+	skill         rawSkillConfig
 	modelsDefault string
 	models        map[string]rawProviderConfig
 	resolved      *rawConfigValues
@@ -528,27 +528,27 @@ func Load(path string) (Config, error) {
 			case "default_manager_template", "default_worker_template":
 				// Bootstrap template defaults now live only under [bootstrap].
 			}
-		case section == "clawhub":
+		case section == "skill", section == "clawhub":
 			switch key {
 			case "base_url":
-				cfg.raw.clawhub.BaseURL = parseRawStringValue(rawValue)
-				cfg.ClawHub.BaseURL = strings.TrimRight(value, "/")
+				cfg.raw.skill.BaseURL = parseRawStringValue(rawValue)
+				cfg.Skill.BaseURL = strings.TrimRight(value, "/")
 			case "official_base_url":
-				cfg.raw.clawhub.OfficialBaseURLSet = true
-				cfg.raw.clawhub.OfficialBaseURL = parseRawStringValue(rawValue)
-				cfg.ClawHub.OfficialBaseURLSet = true
-				cfg.ClawHub.OfficialBaseURL = strings.TrimRight(value, "/")
+				cfg.raw.skill.OfficialBaseURLSet = true
+				cfg.raw.skill.OfficialBaseURL = parseRawStringValue(rawValue)
+				cfg.Skill.OfficialBaseURLSet = true
+				cfg.Skill.OfficialBaseURL = strings.TrimRight(value, "/")
 			case "token":
-				cfg.raw.clawhub.Token = parseRawStringValue(rawValue)
-				cfg.ClawHub.Token = value
+				cfg.raw.skill.Token = parseRawStringValue(rawValue)
+				cfg.Skill.Token = value
 			case "non_suspicious_only":
 				enabled, err := parseBoolValue(rawValue)
 				if err != nil {
-					return Config{}, fmt.Errorf("parse clawhub.non_suspicious_only: %w", err)
+					return Config{}, fmt.Errorf("parse %s.non_suspicious_only: %w", section, err)
 				}
-				cfg.raw.clawhub.NonSuspiciousOnlySet = true
-				cfg.raw.clawhub.NonSuspiciousOnly = enabled
-				cfg.ClawHub.NonSuspiciousOnly = enabled
+				cfg.raw.skill.NonSuspiciousOnlySet = true
+				cfg.raw.skill.NonSuspiciousOnly = enabled
+				cfg.Skill.NonSuspiciousOnly = enabled
 			}
 		case section == "hub.registries":
 			if hubRegistryIndex < 0 || hubRegistryIndex >= len(cfg.Hub.Registries) {
@@ -632,9 +632,9 @@ func Load(path string) (Config, error) {
 		}
 	}
 	cfg.Hub = cfg.Hub.Resolved()
-	cfg.ClawHub = cfg.ClawHub.Resolved()
-	if !cfg.raw.clawhub.NonSuspiciousOnlySet {
-		cfg.ClawHub.NonSuspiciousOnly = true
+	cfg.Skill = cfg.Skill.Resolved()
+	if !cfg.raw.skill.NonSuspiciousOnlySet {
+		cfg.Skill.NonSuspiciousOnly = true
 	}
 
 	if !modelsCfg.IsZero() {
@@ -710,20 +710,20 @@ kind = %q
 		}
 		fmt.Fprintf(&b, "enabled = %t\n", registry.Enabled)
 	}
-	resolvedClawHub := cfg.ClawHub.Resolved()
-	if cfg.raw.clawhub.BaseURL != "" || cfg.raw.clawhub.OfficialBaseURLSet || cfg.raw.clawhub.Token != "" || cfg.raw.clawhub.NonSuspiciousOnlySet {
+	resolvedSkill := cfg.Skill.Resolved()
+	if cfg.raw.skill.BaseURL != "" || cfg.raw.skill.OfficialBaseURLSet || cfg.raw.skill.Token != "" || cfg.raw.skill.NonSuspiciousOnlySet {
 		fmt.Fprintf(&b, `
-[clawhub]
+[skill]
 base_url = %q
-`, cfg.rawOrResolvedString(cfg.raw.clawhub.BaseURL, loadedRaw.clawhub.BaseURL, resolvedClawHub.BaseURL))
-		if cfg.raw.clawhub.OfficialBaseURLSet {
-			fmt.Fprintf(&b, "official_base_url = %q\n", cfg.rawOrResolvedString(cfg.raw.clawhub.OfficialBaseURL, loadedRaw.clawhub.OfficialBaseURL, resolvedClawHub.OfficialBaseURL))
+`, cfg.rawOrResolvedString(cfg.raw.skill.BaseURL, loadedRaw.skill.BaseURL, resolvedSkill.BaseURL))
+		if cfg.raw.skill.OfficialBaseURLSet {
+			fmt.Fprintf(&b, "official_base_url = %q\n", cfg.rawOrResolvedString(cfg.raw.skill.OfficialBaseURL, loadedRaw.skill.OfficialBaseURL, resolvedSkill.OfficialBaseURL))
 		}
-		if cfg.raw.clawhub.Token != "" || loadedRaw.clawhub.Token != "" {
-			fmt.Fprintf(&b, "token = %q\n", cfg.rawOrResolvedString(cfg.raw.clawhub.Token, loadedRaw.clawhub.Token, resolvedClawHub.Token))
+		if cfg.raw.skill.Token != "" || loadedRaw.skill.Token != "" {
+			fmt.Fprintf(&b, "token = %q\n", cfg.rawOrResolvedString(cfg.raw.skill.Token, loadedRaw.skill.Token, resolvedSkill.Token))
 		}
-		if cfg.raw.clawhub.NonSuspiciousOnlySet {
-			fmt.Fprintf(&b, "non_suspicious_only = %t\n", resolvedClawHub.NonSuspiciousOnly)
+		if cfg.raw.skill.NonSuspiciousOnlySet {
+			fmt.Fprintf(&b, "non_suspicious_only = %t\n", resolvedSkill.NonSuspiciousOnly)
 		}
 	}
 	if writeModels {
@@ -1099,19 +1099,19 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 		}
 		out.hub.Registries = append(out.hub.Registries, loadedRegistry)
 	}
-	if c.raw.clawhub.BaseURL != "" {
-		out.clawhub.BaseURL = c.ClawHub.BaseURL
+	if c.raw.skill.BaseURL != "" {
+		out.skill.BaseURL = c.Skill.BaseURL
 	}
-	if c.raw.clawhub.OfficialBaseURLSet {
-		out.clawhub.OfficialBaseURL = c.ClawHub.OfficialBaseURL
-		out.clawhub.OfficialBaseURLSet = true
+	if c.raw.skill.OfficialBaseURLSet {
+		out.skill.OfficialBaseURL = c.Skill.OfficialBaseURL
+		out.skill.OfficialBaseURLSet = true
 	}
-	if c.raw.clawhub.Token != "" {
-		out.clawhub.Token = c.ClawHub.Token
+	if c.raw.skill.Token != "" {
+		out.skill.Token = c.Skill.Token
 	}
-	if c.raw.clawhub.NonSuspiciousOnlySet {
-		out.clawhub.NonSuspiciousOnly = c.ClawHub.NonSuspiciousOnly
-		out.clawhub.NonSuspiciousOnlySet = true
+	if c.raw.skill.NonSuspiciousOnlySet {
+		out.skill.NonSuspiciousOnly = c.Skill.NonSuspiciousOnly
+		out.skill.NonSuspiciousOnlySet = true
 	}
 	if c.raw.modelsDefault != "" {
 		out.modelsDefault = c.Models.Default

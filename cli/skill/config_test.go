@@ -10,30 +10,30 @@ import (
 	"csgclaw/internal/config"
 )
 
-func TestResolveClawHubConfigUsesDefaultsWhenConfigMissing(t *testing.T) {
+func TestResolveSkillConfigUsesDefaultsWhenConfigMissing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	got, err := resolveClawHubConfig(command.GlobalOptions{})
+	got, err := resolveSkillConfig(command.GlobalOptions{})
 	if err != nil {
-		t.Fatalf("resolveClawHubConfig() error = %v", err)
+		t.Fatalf("resolveSkillConfig() error = %v", err)
 	}
-	want := config.ClawHubConfig{NonSuspiciousOnly: true}.Resolved()
+	want := config.SkillConfig{NonSuspiciousOnly: true}.Resolved()
 	if got.BaseURL != want.BaseURL || got.OfficialBaseURL != want.OfficialBaseURL {
 		t.Fatalf("config = %#v, want defaults %#v", got, want)
 	}
 }
 
-func TestResolveClawHubConfigReturnsErrorForExplicitMissingConfig(t *testing.T) {
+func TestResolveSkillConfigReturnsErrorForExplicitMissingConfig(t *testing.T) {
 	t.Parallel()
 
-	_, err := resolveClawHubConfig(command.GlobalOptions{Config: filepath.Join(t.TempDir(), "missing.toml")})
+	_, err := resolveSkillConfig(command.GlobalOptions{Config: filepath.Join(t.TempDir(), "missing.toml")})
 	if err == nil || !strings.Contains(err.Error(), "load config") {
-		t.Fatalf("resolveClawHubConfig() error = %v, want load config error", err)
+		t.Fatalf("resolveSkillConfig() error = %v, want load config error", err)
 	}
 }
 
-func TestResolveClawHubConfigReturnsErrorForInvalidConfigFile(t *testing.T) {
+func TestResolveSkillConfigReturnsErrorForInvalidConfigFile(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
@@ -41,13 +41,13 @@ func TestResolveClawHubConfigReturnsErrorForInvalidConfigFile(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	_, err := resolveClawHubConfig(command.GlobalOptions{Config: path})
+	_, err := resolveSkillConfig(command.GlobalOptions{Config: path})
 	if err == nil || !strings.Contains(err.Error(), "load config") {
-		t.Fatalf("resolveClawHubConfig() error = %v, want load config error", err)
+		t.Fatalf("resolveSkillConfig() error = %v, want load config error", err)
 	}
 }
 
-func TestResolveClawHubConfigLoadsExplicitConfig(t *testing.T) {
+func TestResolveSkillConfigLoadsExplicitConfig(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -55,7 +55,7 @@ func TestResolveClawHubConfigLoadsExplicitConfig(t *testing.T) {
 	content := `[server]
 listen_addr = "127.0.0.1:18080"
 
-[clawhub]
+[skill]
 base_url = "https://claw.example.com"
 official_base_url = ""
 
@@ -75,9 +75,9 @@ models = ["minimax-m2.7"]
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	got, err := resolveClawHubConfig(command.GlobalOptions{Config: path})
+	got, err := resolveSkillConfig(command.GlobalOptions{Config: path})
 	if err != nil {
-		t.Fatalf("resolveClawHubConfig() error = %v", err)
+		t.Fatalf("resolveSkillConfig() error = %v", err)
 	}
 	if got.BaseURL != "https://claw.example.com" {
 		t.Fatalf("BaseURL = %q, want https://claw.example.com", got.BaseURL)

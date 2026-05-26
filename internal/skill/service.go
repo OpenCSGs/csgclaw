@@ -1,4 +1,4 @@
-package clawhub
+package skill
 
 import (
 	"context"
@@ -17,13 +17,13 @@ type Service struct {
 	registries []registryEntry
 }
 
-func NewService(cfg config.ClawHubConfig, httpClient apiclient.HTTPClient) *Service {
+func NewService(cfg config.SkillConfig, httpClient apiclient.HTTPClient) *Service {
 	return &Service{registries: buildRegistries(cfg, httpClient)}
 }
 
 func (s *Service) Search(ctx context.Context, query string, limit int) ([]SearchResult, error) {
 	if len(s.registries) == 0 {
-		return nil, fmt.Errorf("no clawhub registries configured")
+		return nil, fmt.Errorf("no skill registries configured")
 	}
 	perRegistryLimit := limit
 	if perRegistryLimit <= 0 {

@@ -260,9 +260,9 @@ enabled = true
 
 内置 `builtin` registry 是只读的。发布模板时应选择可写的 `local` 或 `remote` registry。
 
-## ClawHub 配置
+## Skill 注册表配置
 
-`csgclaw skill` 默认同时搜索两个 ClawHub 兼容注册表：
+`csgclaw skill` 默认同时搜索两个 skill 注册表：
 
 - **opencsg**（主）：`https://claw.opencsg.com`，优先
 - **clawhub**（官方）：`https://clawhub.ai`
@@ -282,16 +282,17 @@ enabled = true
 请用 `search` 浏览 skill；当前 registry 没有 catalog 列表接口（无 `GET /api/v1/skills`）。
 
 ```toml
-[clawhub]
+[skill]
 base_url = "https://claw.opencsg.com"
 official_base_url = "https://clawhub.ai"
-token = "${CLAWHUB_TOKEN}"
+token = "${SKILL_TOKEN}"
 non_suspicious_only = true
 ```
 
-- `base_url`：主注册表（opencsg）；也可通过 `CLAWHUB_BASE_URL` 覆盖。
-- `official_base_url`：次注册表（clawhub.ai），默认 `https://clawhub.ai`；设为 `""` 可关闭双库搜索；也可通过 `CLAWHUB_OFFICIAL_BASE_URL` 覆盖。
-- `token`：只读命令可选，后续 publish 需要；也可通过 `CLAWHUB_TOKEN` 设置。
+- `base_url`：主注册表（opencsg）；也可通过 `SKILL_BASE_URL` 覆盖（兼容旧名 `CLAWHUB_BASE_URL`）。
+- `official_base_url`：次注册表（clawhub.ai），默认 `https://clawhub.ai`；设为 `""` 可关闭双库搜索；也可通过 `SKILL_OFFICIAL_BASE_URL` 覆盖（兼容 `CLAWHUB_OFFICIAL_BASE_URL`）。
+- `token`：只读命令可选，后续 publish 需要；也可通过 `SKILL_TOKEN` 设置（兼容 `CLAWHUB_TOKEN`）。
+- 旧版 `[clawhub]` 配置段仍可读取，用于兼容。
 - `non_suspicious_only`：省略时默认为 `true`。
 
 ## Channel 配置
