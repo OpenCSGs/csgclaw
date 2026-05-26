@@ -49,7 +49,7 @@ const sizeClassNames: Record<ButtonSize, string> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { active, className, iconOnly = false, size = "sm", type = "button", variant = "secondaryGray", ...props },
+  { active, className, iconOnly = false, size = "md", type = "button", variant = "secondaryGray", ...props },
   ref,
 ) {
   return (

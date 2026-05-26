@@ -20,14 +20,14 @@ describe("Button", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toHaveClass("btn-link-danger", "btn-2xl");
   });
 
-  it("keeps legacy ghost usage aligned with tertiary gray styling", () => {
+  it("defaults buttons to the medium design-system size", () => {
     render(<Button variant="ghost">Open</Button>);
 
-    expect(screen.getByRole("button", { name: "Open" })).toHaveClass("btn-tertiary-gray");
+    expect(screen.getByRole("button", { name: "Open" })).toHaveClass("btn-tertiary-gray", "btn-md");
   });
 
-  it("provides an accessible name for icon-only button variants", () => {
-    render(<IconButton icon={<span>+</span>} label="Create" variant="danger" size="md" />);
+  it("provides an accessible name and medium default for icon-only button variants", () => {
+    render(<IconButton icon={<span>+</span>} label="Create" variant="danger" />);
 
     expect(screen.getByRole("button", { name: "Create" })).toHaveClass("btn-danger", "btn-md", "csg-icon-button");
   });
