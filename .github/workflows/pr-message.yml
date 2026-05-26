@@ -24,10 +24,26 @@ jobs:
               .replace(/\r\n/g, "\n")
               .trim();
 
-            // Conventional Commits v1.0.0 title/header:
+            const allowedTypes = [
+              "feat",
+              "fix",
+              "docs",
+              "style",
+              "refactor",
+              "perf",
+              "test",
+              "build",
+              "ci",
+              "chore",
+              "revert",
+            ];
+
+            // Conventional Commits v1.0.0 title/header with this repo's type allowlist:
             // <type>[optional scope][optional !]: <description>
-            const titleRe =
-              /^[a-z][a-z0-9-]*(\([a-z0-9._-]+\))?!?: \S.*$/i;
+            const titleRe = new RegExp(
+              `^(${allowedTypes.join("|")})(\\([a-z0-9._-]+\\))?!?: \\S.*$`,
+              "i"
+            );
 
             if (!titleRe.test(title)) {
               core.setFailed(
@@ -37,12 +53,13 @@ jobs:
                   "Expected Conventional Commit title format:",
                   "  <type>[optional scope][optional !]: <description>",
                   "",
+                  `Allowed types: ${allowedTypes.join(", ")}`,
+                  "Type matching is case-insensitive.",
+                  "",
                   "Examples:",
                   "  feat(scope): add agent picker",
                   "  fix(api)!: reject bad token",
                   "  docs: update README",
-                  "",
-                  "Types are case-insensitive and custom types are allowed.",
                   "",
                   `Actual: ${title}`,
                 ].join("\n")
