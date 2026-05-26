@@ -9,6 +9,7 @@ import {
   requiredFieldLabel,
 } from "@/components/business/ProfileControls";
 import {
+  agentStatusLabel,
   agentModelID,
   agentToDraft,
   formatProviderLabel,
@@ -69,79 +70,89 @@ export function AgentDetailPane({
         <div className="entity-heading">
           <div className="entity-title-row">
             <h1>{item.name}</h1>
-            <span className={`status-pill ${running ? "online" : ""}`}>{item.status || "unknown"}</span>
+            <span className={`status-pill ${running ? "online" : ""}`}>{agentStatusLabel(item.status, t)}</span>
+            <span className={`status-pill profile-state-pill ${incomplete ? "warn" : "ready"}`}>
+              {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
+            </span>
+            {restartNeeded ? (
+              <span className="status-pill profile-state-pill warn">{t("profileRestartRequired")}</span>
+            ) : null}
           </div>
           <p>{item.description || item.agent_profile?.description || ""}</p>
         </div>
-      </header>
-      <div className="entity-toolbar">
-        <Button
-          variant="primary"
-          size="md"
-          disabled={
-            saving ||
-            isBlank(draft?.name) ||
-            (isNotifierRuntimeDraftOnAgentPage(draft, item)
-              ? !notifierFormIsComplete(draft, item)
-              : !draft?.model_id || profileBaseURLMissing(draft))
-          }
-          onClick={onSave}
-        >
-          {saving ? t("profileLoadingModels") : t("agentUpdateSave")}
-        </Button>
-        {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
+        <div className="entity-toolbar">
           <Button
-            variant="secondaryGray"
+            variant="primary"
             size="md"
-            disabled={busyKey.startsWith(busyPrefix) || incomplete}
-            onClick={() => (running ? onStop(item) : onStart(item))}
+            loading={saving}
+            loadingLabel={t("profileLoadingModels")}
+            disabled={
+              saving ||
+              isBlank(draft?.name) ||
+              (isNotifierRuntimeDraftOnAgentPage(draft, item)
+                ? !notifierFormIsComplete(draft, item)
+                : !draft?.model_id || profileBaseURLMissing(draft))
+            }
+            onClick={onSave}
           >
-            {running ? t("agentStop") : t("agentStart")}
+            {t("agentUpdateSave")}
           </Button>
-        ) : null}
-        <Button
-          variant="secondaryGray"
-          size="md"
-          disabled={busyKey.startsWith(busyPrefix)}
-          onClick={() => onOpenDM(item)}
-        >
-          {t("openDM")}
-        </Button>
-        <Button
-          variant="danger"
-          size="md"
-          disabled={busyKey.startsWith(busyPrefix) || incomplete}
-          onClick={() => onRecreate(item)}
-        >
-          {t("agentRecreate")}
-        </Button>
-        {SHOW_AGENT_LIFECYCLE_ACTIONS && activeRoom && !isManager ? (
+          {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
+            <Button
+              variant="secondaryGray"
+              size="md"
+              disabled={busyKey.startsWith(busyPrefix) || incomplete}
+              onClick={() => (running ? onStop(item) : onStart(item))}
+            >
+              {running ? t("agentStop") : t("agentStart")}
+            </Button>
+          ) : null}
           <Button
             variant="secondaryGray"
             size="md"
             disabled={busyKey.startsWith(busyPrefix)}
-            onClick={() => onInvite(item)}
+            onClick={() => onOpenDM(item)}
           >
-            {t("inviteToRoom")}
+            {t("openDM")}
           </Button>
-        ) : null}
-        {!isManager ? (
-          <Button variant="danger" size="md" disabled={busyKey.startsWith(busyPrefix)} onClick={() => onDelete(item)}>
-            {t("agentDelete")}
-          </Button>
-        ) : null}
-        {canPublish ? (
           <Button
-            variant="primary"
+            variant="danger"
             size="md"
-            className="entity-toolbar-publish"
-            disabled={publishBusy}
-            onClick={onPublish}
+            disabled={busyKey.startsWith(busyPrefix) || incomplete}
+            onClick={() => onRecreate(item)}
           >
-            {publishBusy ? t("agentPublishing") : t("agentPublish")}
+            {t("agentRecreate")}
           </Button>
-        ) : null}
-      </div>
+          {SHOW_AGENT_LIFECYCLE_ACTIONS && activeRoom && !isManager ? (
+            <Button
+              variant="secondaryGray"
+              size="md"
+              disabled={busyKey.startsWith(busyPrefix)}
+              onClick={() => onInvite(item)}
+            >
+              {t("inviteToRoom")}
+            </Button>
+          ) : null}
+          {!isManager ? (
+            <Button variant="danger" size="md" disabled={busyKey.startsWith(busyPrefix)} onClick={() => onDelete(item)}>
+              {t("agentDelete")}
+            </Button>
+          ) : null}
+          {canPublish ? (
+            <Button
+              variant="primary"
+              size="md"
+              className="entity-toolbar-publish"
+              loading={publishBusy}
+              loadingLabel={t("agentPublishing")}
+              disabled={publishBusy}
+              onClick={onPublish}
+            >
+              {t("agentPublish")}
+            </Button>
+          ) : null}
+        </div>
+      </header>
       {error ? <div className="form-error">{error}</div> : null}
       {saveError ? <div className="form-error">{saveError}</div> : null}
       {!draft ? (
@@ -168,12 +179,6 @@ export function AgentDetailPane({
           </div>
         </div>
       ) : null}
-      <div className="entity-badge-row">
-        <span className={`agent-badge ${incomplete ? "warn" : ""}`}>
-          {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
-        </span>
-        {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
-      </div>
       {draft ? (
         <div className="profile-editor-shell agent-page-editor">
           <section className="profile-section">
@@ -323,7 +328,7 @@ export function AgentDetailPane({
             <div className="profile-section-title">{t("profileAdvanced")}</div>
             <div className="profile-advanced-grid">
               {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-                <label className="field">
+                <label className="field profile-json-field">
                   <span>{t("profileRequestOptions")}</span>
                   <textarea
                     className="compact-json"
@@ -332,7 +337,7 @@ export function AgentDetailPane({
                   />
                 </label>
               ) : null}
-              <div className="field">
+              <div className="field profile-env-field">
                 <span>{t("profileEnv")}</span>
                 <EnvKeyValueEditor rows={draft.envRows} t={t} onChange={(rows) => updateDraft({ envRows: rows })} />
               </div>

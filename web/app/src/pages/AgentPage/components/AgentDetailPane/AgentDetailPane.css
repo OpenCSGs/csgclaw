@@ -1,14 +1,206 @@
 .agent-page-editor {
   margin-top: 0;
+  display: grid;
+  gap: var(--agent-detail-section-gap);
 }
 
 .entity-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
 }
 
 .entity-toolbar-publish {
-  margin-left: auto;
+  margin-left: 0;
+}
+
+.agent-detail-pane {
+  --agent-detail-section-gap: 14px;
+  --agent-detail-content-width: min(100%, 1520px);
+
+  gap: var(--agent-detail-section-gap);
+  justify-items: center;
+  padding: 24px 32px 28px;
+  background:
+    linear-gradient(180deg, var(--portal-white) 0, var(--portal-white) 138px, transparent 138px), var(--portal-gray-25);
+}
+
+.agent-detail-pane .profile-editor-shell.agent-page-editor {
+  width: var(--agent-detail-content-width);
+  margin-top: 0;
+  gap: var(--agent-detail-section-gap);
+}
+
+.agent-detail-pane > .entity-header,
+.agent-detail-pane > .entity-grid,
+.agent-detail-pane > .form-error {
+  width: var(--agent-detail-content-width);
+}
+
+.agent-detail-pane .entity-header {
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-detail-pane .entity-toolbar .btn {
+  --btn-height: 40px;
+  --btn-min-width: 80px;
+  --btn-padding-x: 16px;
+
+  border-radius: 10px;
+}
+
+.agent-detail-pane .entity-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+}
+
+.agent-detail-pane .entity-avatar svg,
+.agent-detail-pane .entity-avatar .svg-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.agent-detail-pane .entity-title-row h1 {
+  font-size: 23px;
+  line-height: 30px;
+}
+
+.agent-detail-pane .entity-title-row {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.agent-detail-pane .status-pill {
+  min-height: 26px;
+  padding: 3px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.agent-detail-pane .profile-state-pill.ready {
+  border-color: rgba(23, 178, 106, 0.28);
+  background: var(--portal-success-50);
+  color: var(--portal-success-700);
+}
+
+.agent-detail-pane .profile-state-pill.warn {
+  border-color: color-mix(in oklab, var(--portal-warning-700) 28%, var(--line));
+  background: var(--portal-warning-50);
+  color: var(--portal-warning-700);
+}
+
+.agent-detail-pane .profile-section {
+  padding: 14px 16px 16px;
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.agent-detail-pane .profile-section-title {
+  margin-bottom: 0;
+}
+
+.agent-detail-pane .field {
+  margin-top: 0;
+}
+
+.agent-detail-pane .profile-grid-compact,
+.agent-detail-pane .profile-runtime-grid,
+.agent-detail-pane .profile-api-grid,
+.agent-detail-pane .profile-advanced-grid {
+  align-items: start;
+  gap: 12px;
+}
+
+.agent-detail-pane .profile-runtime-grid {
+  grid-template-columns: minmax(180px, 0.95fr) minmax(240px, 1.35fr) minmax(140px, 0.8fr) minmax(150px, 0.7fr);
+}
+
+.agent-detail-pane .field input,
+.agent-detail-pane .field textarea,
+.agent-detail-pane .csg-select-trigger {
+  min-height: 42px;
+  border-radius: 10px;
+}
+
+.agent-detail-pane .profile-section .field textarea.compact-textarea {
+  min-height: 78px;
+}
+
+.agent-detail-pane .profile-section .field textarea.compact-json {
+  min-height: 142px;
+}
+
+.agent-detail-pane .profile-advanced-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.92fr);
+}
+
+.agent-detail-pane .profile-json-field,
+.agent-detail-pane .profile-env-field {
+  align-self: start;
+}
+
+.agent-detail-pane .profile-env-field .env-editor {
+  max-height: 142px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--portal-gray-400) transparent;
+}
+
+.agent-detail-pane .profile-env-field .env-editor::-webkit-scrollbar {
+  width: 6px;
+}
+
+.agent-detail-pane .profile-env-field .env-editor::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agent-detail-pane .profile-env-field .env-editor::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
+}
+
+.agent-detail-pane .env-row {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) auto;
+  align-items: start;
+}
+
+.agent-detail-pane .env-remove-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+}
+
+:root[data-theme="dark"] .agent-detail-pane {
+  background: linear-gradient(180deg, var(--panel) 0, var(--panel) 138px, transparent 138px), var(--bg);
+}
+
+@media (max-width: 1100px) {
+  .agent-detail-pane .entity-header {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .agent-detail-pane .entity-toolbar {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .agent-detail-pane .profile-runtime-grid,
+  .agent-detail-pane .profile-advanced-grid {
+    grid-template-columns: 1fr;
+  }
 }

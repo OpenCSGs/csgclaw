@@ -1,5 +1,6 @@
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
+  agentStatusLabel,
   agentModelID,
   formatProviderLabel,
   isAgentIncomplete,
@@ -82,7 +83,7 @@ export function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop
       <div className="agent-row-main">
         <div className="agent-row-top">
           <span className="agent-name truncate">{item.name}</span>
-          <span className={`agent-status ${running ? "running" : ""}`}>{item.status || "unknown"}</span>
+          <span className={`agent-status ${running ? "running" : ""}`}>{agentStatusLabel(item.status, t)}</span>
         </div>
         <div className="agent-meta truncate">
           {formatProviderLabel(item.provider || item.agent_profile?.provider)} · {agentModelID(item)}

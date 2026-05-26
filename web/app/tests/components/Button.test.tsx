@@ -31,4 +31,17 @@ describe("Button", () => {
 
     expect(screen.getByRole("button", { name: "Create" })).toHaveClass("btn-danger", "btn-md", "csg-icon-button");
   });
+
+  it("renders a stable loading state", () => {
+    render(
+      <Button loading loadingLabel="Saving" disabled>
+        Save
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Saving" });
+    expect(button).toHaveClass("btn-loading");
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button.querySelector(".btn-loading-spinner")).toBeInTheDocument();
+  });
 });

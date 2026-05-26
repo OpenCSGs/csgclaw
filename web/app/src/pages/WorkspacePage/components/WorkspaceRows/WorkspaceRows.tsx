@@ -17,15 +17,22 @@ import {
 } from "@/models/conversations";
 import { AgentIcon, ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
-import type { ReactNode } from "react";
+import type { DragEvent, ReactNode } from "react";
 
 export type WorkspaceGroupProps = {
   addLabel?: string;
   children: ReactNode;
   collapsed: boolean;
   count: number;
+  dragOver?: boolean;
+  dragging?: boolean;
   id: string;
   onAdd?: () => void;
+  onDragEnd?: (event: DragEvent<HTMLElement>) => void;
+  onDragLeave?: (event: DragEvent<HTMLElement>) => void;
+  onDragOver?: (event: DragEvent<HTMLElement>) => void;
+  onDragStart?: (event: DragEvent<HTMLElement>) => void;
+  onDrop?: (event: DragEvent<HTMLElement>) => void;
   onToggle: () => void;
   title: string;
 };
@@ -35,15 +42,30 @@ export function WorkspaceGroup({
   title,
   count,
   collapsed,
+  dragging = false,
+  dragOver = false,
   onToggle,
   onAdd,
   addLabel,
+  onDragEnd,
+  onDragLeave,
+  onDragOver,
+  onDragStart,
+  onDrop,
   children,
 }: WorkspaceGroupProps) {
   const itemsID = `workspace-group-items-${id || String(title).toLowerCase().replace(/\s+/g, "-")}`;
+  const draggable = Boolean(onDragStart);
   return (
-    <section className={`workspace-group ${collapsed ? "collapsed" : ""}`}>
-      <div className="workspace-group-head">
+    <section
+      className={`workspace-group ${collapsed ? "collapsed" : ""} ${draggable ? "workspace-group-sortable" : ""} ${
+        dragging ? "dragging" : ""
+      } ${dragOver ? "drag-over" : ""}`.trim()}
+      onDragLeave={onDragLeave}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
+      <div className="workspace-group-head" draggable={draggable} onDragEnd={onDragEnd} onDragStart={onDragStart}>
         <button
           className="workspace-group-toggle"
           type="button"
@@ -59,23 +81,27 @@ export function WorkspaceGroup({
             <small>{count}</small>
           </span>
         </button>
-        {onAdd ? (
-          <Button
-            variant="ghost"
-            className="workspace-add-button"
-            aria-label={addLabel || title}
-            title={addLabel || title}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onAdd?.();
-            }}
-          >
-            <span className="icon-button-mark" aria-hidden="true">
-              <RoomPlusIcon />
-            </span>
-          </Button>
-        ) : null}
+        <div className="workspace-group-actions">
+          {onAdd ? (
+            <Button
+              variant="ghost"
+              className="workspace-add-button"
+              draggable={false}
+              aria-label={addLabel || title}
+              title={addLabel || title}
+              onDragStart={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onAdd?.();
+              }}
+            >
+              <span className="icon-button-mark" aria-hidden="true">
+                <RoomPlusIcon />
+              </span>
+            </Button>
+          ) : null}
+        </div>
       </div>
       {collapsed ? null : (
         <div id={itemsID} className="workspace-group-items">

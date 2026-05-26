@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState } from "react";
 import {
+  agentStatusLabel,
   agentModelID,
   formatProviderLabel,
   isAgentIncomplete,
@@ -10,21 +11,26 @@ import { localizeRole } from "@/shared/i18n";
 import { AgentIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
 
-export function profilePreviewStyle(anchorRect, cardHeight = 420) {
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function profilePreviewStyle(anchorRect, cardHeight = 420) {
   const offset = 12;
-  const viewportPadding = 12;
-  const width = Math.min(360, window.innerWidth - 24);
-  const preferRight = anchorRect ? anchorRect.right + offset + width <= window.innerWidth - viewportPadding : true;
-  const left = anchorRect
-    ? preferRight
-      ? Math.max(viewportPadding, anchorRect.right + offset)
-      : Math.max(viewportPadding, anchorRect.left - width - offset)
-    : viewportPadding;
-  const maxTop = Math.max(
-    viewportPadding,
-    window.innerHeight - viewportPadding - Math.min(cardHeight, window.innerHeight - viewportPadding * 2),
-  );
-  const top = anchorRect ? Math.min(Math.max(viewportPadding, anchorRect.top - 12), maxTop) : viewportPadding;
+  const viewportPadding = 16;
+  const width = Math.min(360, window.innerWidth - viewportPadding * 2);
+  const maxLeft = Math.max(viewportPadding, window.innerWidth - viewportPadding - width);
+  const visibleHeight = Math.min(cardHeight, window.innerHeight - viewportPadding * 2);
+  const maxTop = Math.max(viewportPadding, window.innerHeight - viewportPadding - visibleHeight);
+
+  if (!anchorRect) {
+    return { top: `${viewportPadding}px`, left: `${viewportPadding}px`, width: `${width}px` };
+  }
+
+  const hasRoomRight = anchorRect.right + offset + width <= window.innerWidth - viewportPadding;
+  const preferredLeft = hasRoomRight ? anchorRect.right + offset : anchorRect.left - width - offset;
+  const left = clamp(preferredLeft, viewportPadding, maxLeft);
+  const top = clamp(anchorRect.top - 12, viewportPadding, maxTop);
   return { top: `${top}px`, left: `${left}px`, width: `${width}px` };
 }
 
@@ -95,13 +101,13 @@ export function ProfilePreviewPopover({
           </div>
         </div>
       </div>
-      {agent?.description || user?.name ? <p className="preview-description">{agent?.description || ""}</p> : null}
+      {agent?.description ? <p className="preview-description">{agent.description}</p> : null}
       {agent ? (
         <>
           <div className="preview-fields">
             <div className="entity-field">
               <span>{t("status")}</span>
-              <strong>{agent.status || "unknown"}</strong>
+              <strong>{agentStatusLabel(agent.status, t)}</strong>
             </div>
             <div className="entity-field">
               <span>{t("profileProvider")}</span>

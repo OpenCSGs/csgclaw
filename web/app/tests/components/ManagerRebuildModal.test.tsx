@@ -7,6 +7,7 @@ const labels: Record<string, string> = {
   agentImagePlaceholder: "Uses the manager image by default",
   close: "Close",
   managerRebuildAction: "Recreate",
+  managerRebuildBusy: "Recreating...",
   managerRebuildSubtitle: "Choose runtime and image.",
   managerRebuildTitle: "Recreate Manager",
   profileRuntimeKind: "Runtime",
@@ -23,9 +24,10 @@ describe("ManagerRebuildModal", () => {
     const user = userEvent.setup();
     const onRuntimeKindChange = vi.fn();
     const onImageChange = vi.fn();
+    const onClose = vi.fn();
     const onConfirm = vi.fn();
 
-    render(
+    const { container } = render(
       <ManagerRebuildModal
         t={t}
         runtimeOptions={[{ value: "picoclaw_sandbox" }, { value: "openclaw_sandbox" }]}
@@ -47,7 +49,7 @@ describe("ManagerRebuildModal", () => {
         error=""
         onRuntimeKindChange={onRuntimeKindChange}
         onImageChange={onImageChange}
-        onClose={vi.fn()}
+        onClose={onClose}
         onConfirm={onConfirm}
       />,
     );
@@ -66,5 +68,13 @@ describe("ManagerRebuildModal", () => {
 
     await user.click(screen.getByRole("button", { name: "Recreate" }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
+
+    const backdrop = container.querySelector(".modal-backdrop");
+    expect(backdrop).toBeInstanceOf(HTMLElement);
+    await user.click(backdrop as HTMLElement);
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.click(screen.getAllByRole("button", { name: "Close" })[0]);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

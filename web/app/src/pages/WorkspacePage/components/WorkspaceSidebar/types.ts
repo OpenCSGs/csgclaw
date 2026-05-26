@@ -76,7 +76,6 @@ export type SidebarRailProps = Pick<
   | "roomCount"
   | "t"
   | "theme"
-  | "threadCount"
   | "upgradeBusy"
   | "upgradeError"
   | "upgradePhase"
