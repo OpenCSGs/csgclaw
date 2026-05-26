@@ -28,7 +28,11 @@ func (c cmd) runVersions(ctx context.Context, run *command.Context, args []strin
 		return err
 	}
 
-	list, err := newService(globals, run).ListVersions(ctx, strings.TrimSpace(rest[0]), registryID, *limit)
+	svc, err := newService(globals, run)
+	if err != nil {
+		return err
+	}
+	list, err := svc.ListVersions(ctx, strings.TrimSpace(rest[0]), registryID, *limit)
 	if err != nil {
 		return err
 	}

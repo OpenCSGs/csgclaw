@@ -45,7 +45,7 @@ func buildRegistries(cfg config.ClawHubConfig, httpClient apiclient.HTTPClient) 
 	primaryURL := strings.TrimSpace(resolved.BaseURL)
 	if primaryURL != "" {
 		entries = append(entries, registryEntry{
-			id:     RegistryOpenCSG,
+			id: RegistryOpenCSG,
 			client: NewClient(config.ClawHubConfig{
 				BaseURL:           primaryURL,
 				Token:             resolved.Token,
@@ -57,7 +57,7 @@ func buildRegistries(cfg config.ClawHubConfig, httpClient apiclient.HTTPClient) 
 	officialURL := strings.TrimSpace(resolved.OfficialBaseURL)
 	if officialURL != "" && !registryURLsEqual(officialURL, primaryURL) {
 		entries = append(entries, registryEntry{
-			id:     RegistryClawHub,
+			id: RegistryClawHub,
 			client: NewClient(config.ClawHubConfig{
 				BaseURL:           officialURL,
 				Token:             resolved.Token,

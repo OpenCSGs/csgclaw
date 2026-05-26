@@ -60,8 +60,12 @@ func (c cmd) usage(run *command.Context) {
 	})
 }
 
-func newService(globals command.GlobalOptions, run *command.Context) *clawhub.Service {
-	return clawhub.NewService(resolveClawHubConfig(globals), run.HTTPClient)
+func newService(globals command.GlobalOptions, run *command.Context) (*clawhub.Service, error) {
+	cfg, err := resolveClawHubConfig(globals)
+	if err != nil {
+		return nil, err
+	}
+	return clawhub.NewService(cfg, run.HTTPClient), nil
 }
 
 func renderSearchResults(output string, w io.Writer, items []clawhub.SearchResult) error {

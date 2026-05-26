@@ -100,12 +100,20 @@ func (s *Service) Install(ctx context.Context, slug, version string, registry Re
 	if slug == "" {
 		return InstallResult{}, fmt.Errorf("skill slug is required")
 	}
+	if err := validateSkillSlug(slug); err != nil {
+		return InstallResult{}, err
+	}
 	skillsRoot = strings.TrimSpace(skillsRoot)
 	if skillsRoot == "" {
 		return InstallResult{}, fmt.Errorf("skills directory is required")
 	}
+	skillsRoot = filepath.Clean(skillsRoot)
 
 	reg, detail, err := s.resolveSkill(ctx, slug, registry)
+	if err != nil {
+		return InstallResult{}, err
+	}
+	installSlug, err := installSlugFromDetail(detail, slug)
 	if err != nil {
 		return InstallResult{}, err
 	}
@@ -117,15 +125,18 @@ func (s *Service) Install(ctx context.Context, slug, version string, registry Re
 	var resolvedVersion string
 	switch {
 	case requestedVersion != "":
-		if _, err := reg.client.GetVersion(ctx, slug, requestedVersion); err != nil {
-			return InstallResult{}, fmt.Errorf("skill %q version %q (%s): %w", slug, requestedVersion, reg.id, err)
+		if _, err := reg.client.GetVersion(ctx, installSlug, requestedVersion); err != nil {
+			return InstallResult{}, fmt.Errorf("skill %q version %q (%s): %w", installSlug, requestedVersion, reg.id, err)
 		}
 		resolvedVersion = requestedVersion
 	default:
 		resolvedVersion = resolveInstallVersion(detail)
 	}
 
-	destDir := filepath.Join(skillsRoot, slug)
+	destDir := filepath.Join(skillsRoot, installSlug)
+	if err := ensurePathInsideRoot(skillsRoot, destDir); err != nil {
+		return InstallResult{}, err
+	}
 	if info, err := os.Stat(destDir); err == nil {
 		if info.IsDir() && !force {
 			return InstallResult{}, fmt.Errorf("%w: %s", ErrSkillDirExists, destDir)
@@ -139,9 +150,9 @@ func (s *Service) Install(ctx context.Context, slug, version string, registry Re
 		}
 	}
 
-	archive, err := reg.client.Download(ctx, slug, resolvedVersion, "")
+	archive, err := reg.client.Download(ctx, installSlug, resolvedVersion, "")
 	if err != nil && resolvedVersion == "" {
-		return InstallResult{}, fmt.Errorf("skill %q has no installable version (%s)", slug, reg.id)
+		return InstallResult{}, fmt.Errorf("skill %q has no installable version (%s)", installSlug, reg.id)
 	}
 	if err != nil {
 		return InstallResult{}, err
@@ -151,13 +162,13 @@ func (s *Service) Install(ctx context.Context, slug, version string, registry Re
 		_ = os.RemoveAll(destDir)
 		return InstallResult{}, err
 	}
-	if err := writeLockRecord(skillsRoot, newInstallRecord(reg.id, slug, resolvedVersion, sha256)); err != nil {
+	if err := writeLockRecord(skillsRoot, newInstallRecord(reg.id, installSlug, resolvedVersion, sha256)); err != nil {
 		_ = os.RemoveAll(destDir)
 		return InstallResult{}, err
 	}
 	return InstallResult{
 		Registry:  reg.id,
-		Slug:      slug,
+		Slug:      installSlug,
 		Version:   resolvedVersion,
 		SkillsDir: destDir,
 	}, nil
@@ -275,4 +286,32 @@ func latestVersion(version *SkillVersion) string {
 
 func IsNotFound(err error) bool {
 	return errors.Is(err, ErrSkillNotFound)
+}
+
+func installSlugFromDetail(detail SkillGetResponse, requested string) (string, error) {
+	canonical := normalizeSlug(detail.Skill.Slug)
+	if canonical == "" {
+		canonical = normalizeSlug(requested)
+	}
+	if err := validateSkillSlug(canonical); err != nil {
+		return "", err
+	}
+	return canonical, nil
+}
+
+func validateSkillSlug(slug string) error {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return fmt.Errorf("skill slug is required")
+	}
+	if filepath.IsAbs(slug) {
+		return fmt.Errorf("%w: %s", ErrWorkspacePathUnsafe, slug)
+	}
+	if strings.Contains(slug, "..") {
+		return fmt.Errorf("%w: %s", ErrWorkspacePathUnsafe, slug)
+	}
+	if strings.ContainsAny(slug, `/\`) {
+		return fmt.Errorf("%w: %s", ErrWorkspacePathUnsafe, slug)
+	}
+	return nil
 }

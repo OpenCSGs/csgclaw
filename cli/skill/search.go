@@ -23,7 +23,11 @@ func (c cmd) runSearch(ctx context.Context, run *command.Context, args []string,
 		return fmt.Errorf("skill search requires a query")
 	}
 
-	items, err := newService(globals, run).Search(ctx, query, *limit)
+	svc, err := newService(globals, run)
+	if err != nil {
+		return err
+	}
+	items, err := svc.Search(ctx, query, *limit)
 	if err != nil {
 		return err
 	}

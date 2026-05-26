@@ -33,7 +33,11 @@ func (c cmd) runInstall(ctx context.Context, run *command.Context, args []string
 	if err != nil {
 		return err
 	}
-	result, err := newService(globals, run).Install(ctx, strings.TrimSpace(rest[0]), *version, registryID, skillsRoot, *force)
+	svc, err := newService(globals, run)
+	if err != nil {
+		return err
+	}
+	result, err := svc.Install(ctx, strings.TrimSpace(rest[0]), *version, registryID, skillsRoot, *force)
 	if err != nil {
 		if errors.Is(err, clawhub.ErrSkillDirExists) {
 			return fmt.Errorf("%w; use --force to overwrite", err)

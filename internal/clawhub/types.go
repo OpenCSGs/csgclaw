@@ -17,12 +17,12 @@ type SearchResult struct {
 }
 
 type SkillDetail struct {
-	Registry RegistryID       `json:"registry"`
+	Registry RegistryID `json:"registry"`
 	SkillGetResponse
 }
 
 type SkillVersionDetail struct {
-	Registry RegistryID              `json:"registry"`
+	Registry RegistryID `json:"registry"`
 	SkillVersionGetResponse
 }
 

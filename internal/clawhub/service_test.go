@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/config"
@@ -194,6 +195,49 @@ func TestServiceInstall(t *testing.T) {
 		t.Fatalf("Version = %q, want 1.0.0", result.Version)
 	}
 	if _, err := os.Stat(filepath.Join(skillsRoot, "demo-skill", "SKILL.md")); err != nil {
+		t.Fatalf("installed skill missing: %v", err)
+	}
+}
+
+func TestServiceInstallRejectsUnsafeSlug(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(singleRegistryConfig("http://example.test"), http.DefaultClient)
+	_, err := svc.Install(context.Background(), "../escape", "", "", t.TempDir(), false)
+	if err == nil || !strings.Contains(err.Error(), ErrWorkspacePathUnsafe.Error()) {
+		t.Fatalf("Install() error = %v, want unsafe slug error", err)
+	}
+}
+
+func TestServiceInstallUsesCanonicalSlugFromRegistry(t *testing.T) {
+	t.Parallel()
+
+	zipBytes := mustServiceZip(t, map[string]string{
+		"SKILL.md": "# Demo\n",
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/skills/AIWizards--gitlab-fullstack-pro":
+			_, _ = w.Write([]byte(`{"skill":{"slug":"AIWizards--gitlab-fullstack-pro","displayName":"Demo"},"latestVersion":{"version":"1.0.0"}}`))
+		case "/api/v1/download/AIWizards--gitlab-fullstack-pro":
+			_, _ = w.Write(zipBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	svc := NewService(singleRegistryConfig(srv.URL), srv.Client())
+	skillsRoot := t.TempDir()
+	result, err := svc.Install(context.Background(), "AIWizards--gitlab-fullstack-pro", "", "", skillsRoot, false)
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if result.Slug != "AIWizards--gitlab-fullstack-pro" {
+		t.Fatalf("Slug = %q", result.Slug)
+	}
+	if _, err := os.Stat(filepath.Join(skillsRoot, "AIWizards--gitlab-fullstack-pro", "SKILL.md")); err != nil {
 		t.Fatalf("installed skill missing: %v", err)
 	}
 }

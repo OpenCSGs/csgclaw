@@ -25,7 +25,10 @@ func (c cmd) runGet(ctx context.Context, run *command.Context, args []string, gl
 	if err != nil {
 		return err
 	}
-	svc := newService(globals, run)
+	svc, err := newService(globals, run)
+	if err != nil {
+		return err
+	}
 
 	if strings.TrimSpace(*version) != "" {
 		detail, err := svc.GetVersion(ctx, slug, *version, registryID)
