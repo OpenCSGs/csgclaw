@@ -11,6 +11,10 @@ import {
 import { WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY } from "@/shared/storage/keys";
 
 describe("routing model helpers", () => {
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
   it("parses workspace panes from paths", () => {
     expect(paneFromLocation("/computer")).toEqual({
       type: WorkspacePaneTypes.computer,
@@ -49,13 +53,32 @@ describe("routing model helpers", () => {
   });
 
   it("reads collapsed groups from localStorage defensively", () => {
+    expect(readCollapsedWorkspaceGroups()).toEqual({
+      "direct-messages": false,
+      rooms: true,
+      threads: true,
+    });
+
     window.localStorage.setItem(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY, '{"agents":true}');
-    expect(readCollapsedWorkspaceGroups()).toEqual({ agents: true });
+    expect(readCollapsedWorkspaceGroups()).toEqual({
+      "direct-messages": false,
+      agents: true,
+      rooms: true,
+      threads: true,
+    });
 
     window.localStorage.setItem(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY, "[]");
-    expect(readCollapsedWorkspaceGroups()).toEqual({});
+    expect(readCollapsedWorkspaceGroups()).toEqual({
+      "direct-messages": false,
+      rooms: true,
+      threads: true,
+    });
 
     window.localStorage.setItem(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY, "{bad json");
-    expect(readCollapsedWorkspaceGroups()).toEqual({});
+    expect(readCollapsedWorkspaceGroups()).toEqual({
+      "direct-messages": false,
+      rooms: true,
+      threads: true,
+    });
   });
 });

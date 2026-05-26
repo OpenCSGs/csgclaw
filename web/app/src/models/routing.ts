@@ -22,7 +22,12 @@ export const WorkspaceTabs = {
 
 export type WorkspaceTab = ValueOf<typeof WorkspaceTabs>;
 
-export const WORKSPACE_TABS = [WorkspaceTabs.messages, WorkspaceTabs.threads, WorkspaceTabs.agents, WorkspaceTabs.hub] as const;
+export const WORKSPACE_TABS = [
+  WorkspaceTabs.messages,
+  WorkspaceTabs.threads,
+  WorkspaceTabs.agents,
+  WorkspaceTabs.hub,
+] as const;
 
 export const DefaultWorkspacePaneIds = {
   computer: "local",
@@ -62,6 +67,12 @@ export type WorkspacePane = {
 };
 
 export type CollapsedWorkspaceGroups = Record<string, boolean>;
+
+const DEFAULT_COLLAPSED_WORKSPACE_GROUPS: CollapsedWorkspaceGroups = {
+  "direct-messages": false,
+  rooms: true,
+  threads: true,
+};
 
 export function paneFromLocation(pathname = window.location.pathname): WorkspacePane {
   const parts = String(pathname || "/")
@@ -132,10 +143,10 @@ export function readCollapsedWorkspaceGroups(): CollapsedWorkspaceGroups {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY) || "{}");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
+      return { ...DEFAULT_COLLAPSED_WORKSPACE_GROUPS };
     }
-    return parsed as CollapsedWorkspaceGroups;
+    return { ...DEFAULT_COLLAPSED_WORKSPACE_GROUPS, ...(parsed as CollapsedWorkspaceGroups) };
   } catch (_) {
-    return {};
+    return { ...DEFAULT_COLLAPSED_WORKSPACE_GROUPS };
   }
 }

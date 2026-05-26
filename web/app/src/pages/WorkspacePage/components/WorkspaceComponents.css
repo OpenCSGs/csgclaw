@@ -2713,8 +2713,12 @@ select,
   min-height: 34px;
   padding: 0;
   border-radius: 10px;
-  font-size: 22px;
-  line-height: 1;
+}
+
+.preview-header .modal-close-icon,
+.preview-header .modal-close-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
 .preview-hero {
@@ -2761,10 +2765,15 @@ select,
 
 .preview-actions {
   gap: 10px;
+  justify-content: stretch;
+  padding-top: 4px;
 }
 
 .preview-actions .btn {
+  flex: 1 1 0;
   min-height: 40px;
+  min-width: 0;
+  justify-content: center;
 }
 
 :root[data-theme="dark"] .preview-title,

@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState } from "react";
+import { X } from "lucide-react";
 import {
   agentStatusLabel,
   agentModelID,
@@ -9,7 +10,7 @@ import {
 } from "@/models/agents";
 import { localizeRole } from "@/shared/i18n";
 import { AgentIcon } from "@/components/ui/Icons";
-import { Button } from "@/components/ui";
+import { Button, IconButton } from "@/components/ui";
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -77,9 +78,14 @@ export function ProfilePreviewPopover({
     >
       <div className="preview-header">
         <div className="preview-title">{agent ? t("profilePreview") : t("personProfile")}</div>
-        <Button variant="secondaryGray" size="md" className="modal-close" aria-label={t("close")} onClick={onClose}>
-          <span aria-hidden="true">×</span>
-        </Button>
+        <IconButton
+          className="modal-close"
+          icon={<X size={20} strokeWidth={2} />}
+          label={t("close")}
+          markClassName="modal-close-icon"
+          onClick={onClose}
+          variant="tertiaryGray"
+        />
       </div>
       <div className="preview-hero">
         {agent ? (

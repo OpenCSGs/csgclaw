@@ -29,14 +29,25 @@ const SectionPanels = {
   agents: "agents",
 } as const;
 
+const LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS = [
+  [MessageSectionIds.rooms, MessageSectionIds.directMessages, MessageSectionIds.threads],
+];
+
 const DEFAULT_SECTION_ORDERS = {
-  [SectionPanels.messages]: [MessageSectionIds.rooms, MessageSectionIds.directMessages, MessageSectionIds.threads],
+  [SectionPanels.messages]: [MessageSectionIds.directMessages, MessageSectionIds.rooms, MessageSectionIds.threads],
   [SectionPanels.agents]: [AgentSectionIds.agents, AgentSectionIds.computers, AgentSectionIds.notifications],
 } as const;
 
-function normalizeSectionOrder(value, defaults) {
+function orderEquals(left, right) {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
+}
+
+function normalizeSectionOrder(value, defaults, legacyDefaults = []) {
   const allowed = new Set(defaults);
   const ordered = Array.isArray(value) ? value.filter((item) => allowed.has(item)) : [];
+  if (legacyDefaults.some((legacyDefault) => orderEquals(ordered, legacyDefault))) {
+    return [...defaults];
+  }
   return [...ordered, ...defaults.filter((item) => !ordered.includes(item))];
 }
 
@@ -47,6 +58,7 @@ function readSectionOrders() {
       [SectionPanels.messages]: normalizeSectionOrder(
         parsed?.[SectionPanels.messages],
         DEFAULT_SECTION_ORDERS.messages,
+        LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS,
       ),
       [SectionPanels.agents]: normalizeSectionOrder(parsed?.[SectionPanels.agents], DEFAULT_SECTION_ORDERS.agents),
     };
