@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui";
-import { upgradeStatusLabel } from "@/models/upgradeStatus";
+import { formatSidebarVersionLabel, upgradeStatusLabel } from "@/models/upgradeStatus";
 
 export function UpgradeModal({
   t,
@@ -26,11 +26,15 @@ export function UpgradeModal({
         <div className="upgrade-summary">
           <div className="upgrade-summary-row">
             <span>{t("upgradeCurrentVersion")}</span>
-            <strong>{upgradeStatus?.current_version || appVersion || "dev"}</strong>
+            <strong>{formatSidebarVersionLabel(upgradeStatus?.current_version || appVersion || "dev")}</strong>
           </div>
           <div className="upgrade-summary-row">
             <span>{t("upgradeLatestVersion")}</span>
-            <strong>{upgradeStatus?.latest_version || t("upgradeNoLatest")}</strong>
+            <strong>
+              {upgradeStatus?.latest_version
+                ? formatSidebarVersionLabel(upgradeStatus.latest_version)
+                : t("upgradeNoLatest")}
+            </strong>
           </div>
           <div className="upgrade-summary-row">
             <span>{t("upgradeStatus")}</span>
@@ -40,11 +44,16 @@ export function UpgradeModal({
         <div className={`upgrade-status-card ${upgradePhase}`}>
           <span className="upgrade-status-dot" aria-hidden="true"></span>
           <p>
-            {upgradePhase === "done"
-              ? t("upgradeDoneBody")
-              : upgradePhase === "restarting" || upgradePhase === "starting" || upgradeBusy || upgradeStatus?.upgrading
-                ? t("upgradeContinueUsing")
-                : t("upgradeConfirmBody")}
+            {upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required
+              ? t("upgradeManualRestartBody")
+              : upgradePhase === "done"
+                ? t("upgradeDoneBody")
+                : upgradePhase === "restarting" ||
+                    upgradePhase === "starting" ||
+                    upgradeBusy ||
+                    upgradeStatus?.upgrading
+                  ? t("upgradeContinueUsing")
+                  : t("upgradeConfirmBody")}
           </p>
         </div>
         {upgradeError || upgradeStatus?.last_error ? (
@@ -54,6 +63,10 @@ export function UpgradeModal({
           {upgradePhase === "done" ? (
             <Button variant="primary" size="md" onClick={() => window.location.reload()}>
               {t("upgradeRefresh")}
+            </Button>
+          ) : upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required ? (
+            <Button variant="secondaryGray" size="md" onClick={onClose}>
+              {t("close")}
             </Button>
           ) : (
             <>

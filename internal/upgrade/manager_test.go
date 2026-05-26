@@ -249,3 +249,41 @@ func TestManagerRefreshSkipsNotificationWhenOnlyCheckedAtChanges(t *testing.T) {
 	default:
 	}
 }
+
+func TestManagerMarkManualRestartRequired(t *testing.T) {
+	notifications := make(chan apitypes.UpgradeStatus, 2)
+	manager := NewManager(fakeChecker{
+		check: func(_ context.Context, _ string) (CheckResult, error) {
+			return CheckResult{}, nil
+		},
+	}, "v0.2.5", ManagerOptions{
+		OnStatusChange: func(status apitypes.UpgradeStatus) {
+			notifications <- status
+		},
+	})
+
+	manager.MarkUpgrading()
+	status := manager.MarkManualRestartRequired()
+
+	if status.Upgrading {
+		t.Fatal("Upgrading = true, want false")
+	}
+	if !status.ManualRestartRequired {
+		t.Fatal("ManualRestartRequired = false, want true")
+	}
+
+	select {
+	case <-notifications:
+	case <-time.After(time.Second):
+		t.Fatal("expected upgrading notification")
+	}
+
+	select {
+	case got := <-notifications:
+		if !got.ManualRestartRequired {
+			t.Fatal("notification ManualRestartRequired = false, want true")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected manual restart notification")
+	}
+}

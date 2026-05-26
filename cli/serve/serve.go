@@ -460,10 +460,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		},
 	})
 	configureFeishuService(feishuSvc, svc)
-	if message, err := upgrade.ConsumeApplyFailure(configPath); err != nil {
+	if outcome, err := upgrade.ConsumeApplyStatus(configPath); err != nil {
 		slog.Warn("load upgrade helper failure", "error", err)
-	} else if message != "" {
-		upgradeManager.MarkUpgradeFailed(errors.New(message))
+	} else if outcome.Status == upgrade.ApplyStatusFailed && outcome.Message != "" {
+		upgradeManager.MarkUpgradeFailed(errors.New(outcome.Message))
 	}
 	hubSvc, err := newAgentTemplateHubService(cfg.Hub)
 	if err != nil {

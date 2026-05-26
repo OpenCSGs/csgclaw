@@ -275,10 +275,13 @@ export const messages = {
     upgradeStatusReady: "准备升级",
     upgradeStatusStarting: "正在启动升级",
     upgradeStatusRestarting: "正在升级并等待服务重启",
+    upgradeStatusManualRestart: "需要手动重启",
     upgradeStatusDone: "升级完成",
     upgradeStatusError: "升级失败",
     upgradeConfirmBody: "点击更新后会运行 csgclaw upgrade，并在完成后重启本地服务。",
     upgradeRestartingBody: "升级 helper 已启动。页面会自动等待服务恢复，期间连接短暂中断是正常现象。",
+    upgradeManualRestartBody:
+      "升级已经完成，但当前服务不会自动重启。请手动重新执行 csgclaw serve，然后刷新页面进入新版本。",
     upgradeDoneBody: "服务已经恢复，刷新页面后即可使用新版本。",
     upgradeNoLatest: "未知",
     upgradeRefresh: "刷新页面",
@@ -587,11 +590,14 @@ export const messages = {
     upgradeStatusReady: "Ready to update",
     upgradeStatusStarting: "Starting upgrade",
     upgradeStatusRestarting: "Upgrading and waiting for service restart",
+    upgradeStatusManualRestart: "Manual restart required",
     upgradeStatusDone: "Upgrade complete",
     upgradeStatusError: "Upgrade failed",
     upgradeConfirmBody: "Updating runs csgclaw upgrade and restarts the local service when it finishes.",
     upgradeRestartingBody:
       "The upgrade helper has started. This page will wait for the service to come back; a brief disconnect is normal.",
+    upgradeManualRestartBody:
+      "The upgrade has finished, but this service will not restart automatically. Run csgclaw serve manually, then refresh this page to use the new version.",
     upgradeDoneBody: "The service is back. Refresh the page to use the new version.",
     upgradeNoLatest: "Unknown",
     upgradeRefresh: "Refresh page",

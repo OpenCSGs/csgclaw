@@ -374,6 +374,19 @@ func (h *Handler) handleUpgradeStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upgrade manager is not configured", http.StatusServiceUnavailable)
 		return
 	}
+	if outcome, err := upgrade.ConsumeApplyStatus(h.upgradeConfigPath); err != nil {
+		http.Error(w, fmt.Sprintf("read upgrade helper status: %v", err), http.StatusInternalServerError)
+		return
+	} else {
+		switch outcome.Status {
+		case upgrade.ApplyStatusFailed:
+			if outcome.Message != "" {
+				h.upgradeManager.MarkUpgradeFailed(errors.New(outcome.Message))
+			}
+		case upgrade.ApplyStatusManualRestartRequired:
+			h.upgradeManager.MarkManualRestartRequired()
+		}
+	}
 	writeJSON(w, http.StatusOK, h.upgradeManager.Status())
 }
 

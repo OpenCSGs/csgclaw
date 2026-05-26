@@ -30,7 +30,11 @@ export function useUpgradeController({
     (payload: unknown) => {
       const next = normalizeUpgradeStatus(payload);
       setUpgradeStatusData(next);
-      if (next?.upgrading) {
+      if (next?.manual_restart_required) {
+        setUpgradeBusy(false);
+        setUpgradePhase("manual_restart");
+        setShowUpgradeModal(true);
+      } else if (next?.upgrading) {
         setUpgradeBusy(true);
         setUpgradePhase((phase) => (phase === "done" ? phase : "restarting"));
       } else if (!next?.update_available) {
@@ -42,7 +46,11 @@ export function useUpgradeController({
 
   const refreshUpgradeStatus = useCallback(async () => {
     const payload = await refreshWorkspaceUpgradeStatus();
-    if (payload?.upgrading) {
+    if (payload?.manual_restart_required) {
+      setUpgradeBusy(false);
+      setUpgradePhase("manual_restart");
+      setShowUpgradeModal(true);
+    } else if (payload?.upgrading) {
       setUpgradeBusy(true);
       setUpgradePhase((phase) => (phase === "done" ? phase : "restarting"));
     } else if (!payload?.update_available) {
@@ -71,9 +79,26 @@ export function useUpgradeController({
               last_checked_at: current?.last_checked_at ?? "",
               update_available: false,
               checking: false,
+              manual_restart_required: false,
               upgrading: false,
               last_error: "",
             }));
+            return;
+          }
+          const latest = await refreshUpgradeStatus();
+          if (latest?.manual_restart_required) {
+            stopUpgradePoll();
+            setUpgradeBusy(false);
+            setUpgradePhase("manual_restart");
+            setShowUpgradeModal(true);
+            return;
+          }
+          if (latest?.last_error) {
+            stopUpgradePoll();
+            setUpgradeBusy(false);
+            setUpgradePhase("error");
+            setShowUpgradeModal(true);
+            setUpgradeError(`${t("upgradeApplyFailed")} ${latest.last_error}`.trim());
             return;
           }
         } catch (_) {
@@ -83,6 +108,7 @@ export function useUpgradeController({
           stopUpgradePoll();
           setUpgradeBusy(false);
           setUpgradePhase("error");
+          setShowUpgradeModal(true);
           const latest = await refreshUpgradeStatus();
           const detail = latest?.last_error ? ` ${latest.last_error}` : "";
           setUpgradeError(`${t("upgradeApplyFailed")}${detail}`);
@@ -112,6 +138,7 @@ export function useUpgradeController({
         update_available: current?.update_available ?? Boolean(upgradeStatus?.update_available),
         checking: current?.checking ?? false,
         last_checked_at: current?.last_checked_at ?? "",
+        manual_restart_required: false,
         upgrading: true,
         last_error: "",
       }));
@@ -130,13 +157,16 @@ export function useUpgradeController({
       setUpgradeError("");
     }
     setUpgradePhase((phase) => {
-      if (phase === "done" || phase === "error") {
+      if (phase === "done" || phase === "error" || phase === "manual_restart") {
         return phase;
+      }
+      if (upgradeStatus?.manual_restart_required) {
+        return "manual_restart";
       }
       return upgradeBusy || upgradeStatus?.upgrading ? "restarting" : "idle";
     });
     setShowUpgradeModal(true);
-  }, [upgradeBusy, upgradePhase, upgradeStatus?.upgrading]);
+  }, [upgradeBusy, upgradePhase, upgradeStatus?.manual_restart_required, upgradeStatus?.upgrading]);
 
   useEffect(() => {
     return () => {

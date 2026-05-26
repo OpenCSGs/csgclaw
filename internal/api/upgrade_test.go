@@ -63,6 +63,39 @@ func TestHandleUpgradeStatus(t *testing.T) {
 	}
 }
 
+func TestHandleUpgradeStatusConsumesManualRestartRequired(t *testing.T) {
+	dir := t.TempDir()
+	configPath := dir + "/config.toml"
+	artifacts, err := upgrade.ResolveApplyArtifacts(configPath)
+	if err != nil {
+		t.Fatalf("ResolveApplyArtifacts() error = %v", err)
+	}
+	if err := artifacts.RecordManualRestartRequired("manual restart required"); err != nil {
+		t.Fatalf("RecordManualRestartRequired() error = %v", err)
+	}
+
+	manager := upgrade.NewManager(stubUpgradeChecker{err: errors.New("unused")}, "v0.2.5", upgrade.ManagerOptions{})
+	srv := &Handler{}
+	srv.SetUpgradeManager(manager)
+	srv.SetUpgradeConfigPath(configPath)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/upgrade/status", nil)
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var got apitypes.UpgradeStatus
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !got.ManualRestartRequired {
+		t.Fatalf("ManualRestartRequired = false, want true")
+	}
+}
+
 func TestHandleUpgradeStatusServiceUnavailable(t *testing.T) {
 	srv := &Handler{}
 

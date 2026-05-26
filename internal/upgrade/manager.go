@@ -145,6 +145,7 @@ func (m *Manager) MarkUpgrading() apitypes.UpgradeStatus {
 	m.mu.Lock()
 	previous := copyStatus(m.status)
 	m.status.Upgrading = true
+	m.status.ManualRestartRequired = false
 	m.stickyError = ""
 	m.status.LastError = ""
 	updated := copyStatus(m.status)
@@ -165,11 +166,33 @@ func (m *Manager) MarkUpgradeFailed(err error) apitypes.UpgradeStatus {
 	m.mu.Lock()
 	previous := copyStatus(m.status)
 	m.status.Upgrading = false
+	m.status.ManualRestartRequired = false
 	m.stickyError = ""
 	if err != nil {
 		m.stickyError = err.Error()
 		m.status.LastError = m.stickyError
 	}
+	updated := copyStatus(m.status)
+	notify := shouldNotifyStatusChange(previous, updated)
+	callback := m.onStatusChange
+	m.mu.Unlock()
+	if notify && callback != nil {
+		callback(updated)
+	}
+	return updated
+}
+
+func (m *Manager) MarkManualRestartRequired() apitypes.UpgradeStatus {
+	if m == nil {
+		return apitypes.UpgradeStatus{}
+	}
+
+	m.mu.Lock()
+	previous := copyStatus(m.status)
+	m.status.Upgrading = false
+	m.status.ManualRestartRequired = true
+	m.stickyError = ""
+	m.status.LastError = ""
 	updated := copyStatus(m.status)
 	notify := shouldNotifyStatusChange(previous, updated)
 	callback := m.onStatusChange
@@ -193,5 +216,6 @@ func shouldNotifyStatusChange(previous, current apitypes.UpgradeStatus) bool {
 		previous.LatestVersion != current.LatestVersion ||
 		previous.UpdateAvailable != current.UpdateAvailable ||
 		previous.Upgrading != current.Upgrading ||
+		previous.ManualRestartRequired != current.ManualRestartRequired ||
 		previous.LastError != current.LastError
 }
