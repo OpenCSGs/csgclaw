@@ -357,20 +357,26 @@ func (h *Handler) handleBotSendMessage(w http.ResponseWriter, r *http.Request, b
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
+	roomID := req.ResolvedRoomID()
+	text := req.ResolvedText()
+	threadRootID := req.ResolvedThreadRootID()
+	if threadRootID == "" && h.botBridge != nil {
+		threadRootID = h.botBridge.ThreadRootForReply(botID, roomID)
+	}
 
 	message, err := h.im.DeliverMessage(im.DeliverMessageRequest{
-		RoomID:       req.RoomID,
+		RoomID:       roomID,
 		SenderID:     botID,
-		Content:      req.Text,
+		Content:      text,
 		MessageID:    req.MessageID,
-		ThreadRootID: req.ThreadRootID,
+		ThreadRootID: threadRootID,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.publishMessageCreated(req.RoomID, botID, message)
-	h.publishThreadUpdated(req.RoomID, message)
+	h.publishMessageCreated(roomID, botID, message)
+	h.publishThreadUpdated(roomID, message)
 	writeJSON(w, http.StatusOK, map[string]string{"message_id": message.ID})
 }
 

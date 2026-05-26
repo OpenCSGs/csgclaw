@@ -1,6 +1,10 @@
 {
   "session": {
-    "dm_scope": "per-channel-peer"
+    "dm_scope": "per-channel-peer",
+    "dimensions": [
+      "chat",
+      "topic"
+    ]
   },
   "version": 1,
   "agents": {

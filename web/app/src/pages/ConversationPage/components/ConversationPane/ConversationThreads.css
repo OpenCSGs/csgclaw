@@ -300,11 +300,20 @@
 }
 
 .thread-composer {
+  position: relative;
   padding: 14px;
   border-top: 1px solid var(--line);
   background: var(--surface);
   display: grid;
   gap: 8px;
+}
+
+.thread-mention-picker {
+  left: 14px;
+  right: 14px;
+  bottom: calc(100% - 4px);
+  width: auto;
+  z-index: 5;
 }
 
 .thread-composer textarea {

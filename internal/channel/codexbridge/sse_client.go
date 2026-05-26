@@ -103,7 +103,7 @@ func (c *HTTPClient) StreamEvents(ctx context.Context, botID, lastEventID string
 			if strings.TrimSpace(event.ChatType) != "group" {
 				return true
 			}
-			return hasInboundBotAtMention(event.Text, botID)
+			return botEventMentions(event, botID) || hasInboundBotAtMention(event.Text, botID)
 		}); err != nil && ctx.Err() == nil {
 			errs <- err
 		}
@@ -208,6 +208,19 @@ func emitSSEEvent(eventName string, dataLines []string, events chan<- BotEvent, 
 	}
 	events <- event
 	return nil
+}
+
+func botEventMentions(event BotEvent, botID string) bool {
+	botID = strings.TrimSpace(botID)
+	if botID == "" {
+		return false
+	}
+	for _, mention := range event.Mentions {
+		if strings.TrimSpace(mention) == botID {
+			return true
+		}
+	}
+	return false
 }
 
 func hasInboundBotAtMention(content, botID string) bool {

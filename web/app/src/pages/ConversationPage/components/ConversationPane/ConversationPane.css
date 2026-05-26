@@ -392,12 +392,31 @@
   left: 24px;
   bottom: 124px;
   width: 280px;
+  max-height: min(360px, 48vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--portal-gray-400) transparent;
   padding: 8px;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 18px;
   box-shadow: var(--shadow);
   animation: rise-in 180ms ease both;
+}
+
+.mention-picker::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.mention-picker::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mention-picker::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
 }
 
 .mention-option {
