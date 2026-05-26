@@ -22,6 +22,7 @@
   --portal-brand-800: #17308f;
   --portal-error-50: #fef3f2;
   --portal-error-300: #fda29b;
+  --portal-error-500: #f04438;
   --portal-error-600: #d92d20;
   --portal-error-700: #b42318;
   --portal-error-800: #912018;
@@ -61,6 +62,7 @@
   --shadow: var(--shadow-md);
   --shadow-soft: var(--shadow-xs);
   --focus-ring: 0 0 0 4px rgba(77, 106, 214, 0.24);
+  --error-focus-ring: 0 0 0 4px rgba(240, 68, 56, 0.24);
   --z-page-popover: 20;
   --z-page-overlay: 40;
   --z-modal: 60;

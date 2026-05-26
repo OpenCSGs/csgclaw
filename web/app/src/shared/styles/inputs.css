@@ -1,0 +1,371 @@
+/* Untitled UI input field: edit these properties to update text inputs globally. */
+:root {
+  --input-height-md: 44px;
+  --input-padding-md: 10px 14px;
+  --input-radius: var(--radius-md);
+  --input-background: var(--portal-white);
+  --input-background-disabled: var(--portal-gray-50);
+  --input-border: var(--portal-gray-300);
+  --input-border-hover: var(--portal-gray-400);
+  --input-border-focus: var(--portal-brand-300);
+  --input-border-error: var(--portal-error-300);
+  --input-text: var(--portal-gray-900);
+  --input-text-placeholder: var(--portal-gray-500);
+  --input-text-disabled: var(--portal-gray-500);
+  --input-shadow: var(--shadow-xs);
+  --input-shadow-focus: var(--shadow-xs), var(--focus-ring);
+  --input-shadow-error-focus: var(--shadow-xs), var(--error-focus-ring);
+}
+
+:root[data-theme="dark"] {
+  --input-background: var(--field);
+  --input-background-disabled: var(--panel-strong);
+  --input-border: var(--line);
+  --input-border-hover: var(--portal-gray-600);
+  --input-text: var(--text);
+  --input-shadow: none;
+  --input-shadow-focus: var(--focus-ring);
+  --input-shadow-error-focus: var(--error-focus-ring);
+}
+
+:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ) {
+  width: 100%;
+  height: var(--input-height-md);
+  min-height: var(--input-height-md);
+  padding: var(--input-padding-md);
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  background-color: var(--input-background);
+  box-shadow: var(--input-shadow);
+  color: var(--input-text);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  )::placeholder {
+  color: var(--input-text-placeholder);
+}
+
+:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ):hover:not(:disabled, [aria-invalid="true"]) {
+  border-color: var(--input-border-hover);
+}
+
+:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ):focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
+
+:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ):disabled {
+  border-color: var(--input-border);
+  background-color: var(--input-background-disabled);
+  color: var(--input-text-disabled);
+  cursor: not-allowed;
+}
+
+:root[data-theme="dark"]
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ):disabled {
+  border-color: var(--input-border);
+  background-color: var(--input-background-disabled);
+  color: var(--input-text-disabled);
+}
+
+:root
+  body
+  :where(.field[data-invalid="true"])
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ),
+:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  )[aria-invalid="true"] {
+  border-color: var(--input-border-error);
+}
+
+:root[data-theme="dark"]
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  )[aria-invalid="true"] {
+  border-color: var(--input-border-error);
+}
+
+:root
+  body
+  :where(.field[data-invalid="true"])
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ):focus,
+:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  )[aria-invalid="true"]:focus {
+  box-shadow: var(--input-shadow-error-focus);
+}
+
+:root[data-theme="dark"]
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  )[aria-invalid="true"]:focus {
+  box-shadow: var(--input-shadow-error-focus);
+}
+
+:root body :where(.field[data-invalid="true"]) .form-error {
+  margin-top: 0;
+  color: var(--portal-error-500);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+}
+
+/* Keep late-loaded feature styles from suppressing dark theme input states. */
+:root[data-theme="dark"]:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ) {
+  border-color: var(--input-border);
+  background-color: var(--input-background);
+  box-shadow: var(--input-shadow);
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"]:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ):hover:not(:disabled, [aria-invalid="true"]) {
+  border-color: var(--input-border-hover);
+}
+
+:root[data-theme="dark"]:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ):disabled {
+  border-color: var(--input-border);
+  background-color: var(--input-background-disabled);
+  color: var(--input-text-disabled);
+}
+
+:root[data-theme="dark"]:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  ):focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
+
+:root[data-theme="dark"]:root body .field[data-invalid="true"] input:not([type="checkbox"], [type="radio"]),
+:root[data-theme="dark"]:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  )[aria-invalid="true"] {
+  border-color: var(--input-border-error);
+}
+
+:root[data-theme="dark"]:root body .field[data-invalid="true"] input:not([type="checkbox"], [type="radio"]):focus,
+:root[data-theme="dark"]:root
+  body
+  input:not(
+    [type="button"],
+    [type="checkbox"],
+    [type="color"],
+    [type="file"],
+    [type="hidden"],
+    [type="image"],
+    [type="radio"],
+    [type="range"],
+    [type="reset"],
+    [type="submit"]
+  )[aria-invalid="true"]:focus {
+  box-shadow: var(--input-shadow-error-focus);
+}
