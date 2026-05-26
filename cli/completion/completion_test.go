@@ -9,7 +9,7 @@ import (
 func TestCompleteFullTopLevel(t *testing.T) {
 	got := Complete(FullSpec(), "csgclaw", []string{"csgclaw", ""})
 
-	assertContainsAll(t, got, "serve", "upgrade", "agent", "hub", "model", "bot", "completion", "--endpoint", "--config", "-V")
+	assertContainsAll(t, got, "serve", "upgrade", "agent", "hub", "skill", "model", "bot", "completion", "--endpoint", "--config", "-V")
 	assertContainsNone(t, got, "_serve", "__complete")
 }
 

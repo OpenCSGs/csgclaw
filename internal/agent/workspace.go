@@ -68,6 +68,11 @@ func ensureWorkspaceAtRoot(hostRoot, template string) (string, error) {
 	return hostRoot, nil
 }
 
+// WorkspaceRoot returns the agent workspace directory for the given runtime kind.
+func WorkspaceRoot(agentName, runtimeKind string) (string, error) {
+	return agentWorkspaceRoot(agentName, runtimeKind)
+}
+
 func agentWorkspaceRoot(agentName, runtimeKind string) (string, error) {
 	agentHome, err := agentHomeDir(agentName)
 	if err != nil {

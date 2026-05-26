@@ -83,6 +83,7 @@ func FullSpec() CommandSpec {
 			},
 			agentSpec(),
 			hubSpec(),
+			skillSpec(),
 			modelSpec(),
 			userSpec(),
 			botSpec(),
@@ -103,6 +104,7 @@ func LiteSpec() CommandSpec {
 			roomSpec(),
 			memberSpec(),
 			messageSpec(),
+			skillSpec(),
 			completionSpec(),
 		},
 	}
@@ -273,6 +275,32 @@ func hubSpec() CommandSpec {
 				Flags: []FlagSpec{
 					{Name: "agent", TakesValue: true},
 					{Name: "registry", TakesValue: true},
+				},
+			},
+		},
+	}
+}
+
+func skillSpec() CommandSpec {
+	return CommandSpec{
+		Name:    "skill",
+		Summary: "Discover and install ClawHub skills.",
+		Children: []CommandSpec{
+			{
+				Name:    "search",
+				Summary: "Search skills on ClawHub",
+				Flags:   []FlagSpec{{Name: "limit", TakesValue: true}},
+			},
+			{Name: "get", Summary: "Show one ClawHub skill", Flags: []FlagSpec{{Name: "version", TakesValue: true}, {Name: "registry", TakesValue: true}}},
+			{Name: "versions", Summary: "List published skill versions", Flags: []FlagSpec{{Name: "limit", TakesValue: true}, {Name: "registry", TakesValue: true}}},
+			{
+				Name:    "install",
+				Summary: "Install a skill into the local workspace skills directory",
+				Flags: []FlagSpec{
+					{Name: "skills-dir", TakesValue: true},
+					{Name: "version", TakesValue: true},
+					{Name: "registry", TakesValue: true},
+					{Name: "force"},
 				},
 			},
 		},

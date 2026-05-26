@@ -197,6 +197,15 @@ python scripts/manager_worker_api.py stop-tracking --todo-path ~/.openclaw/works
 
 If you need to direct the human user to the project files on their Mac, point them to the host-side path such as `~/.csgclaw/projects/demo/todo.json`, not the in-box `/home/node/...` path.
 
+## Single-worker handoff (one task, no tracking)
+
+Use this when exactly one worker should act (for example install a ClawHub skill, run one GitLab job) and you do **not** need multi-step `todo.json` sequencing.
+
+1. Use the `basics` skill: `bot list`, confirm room membership, then `message create --mention-id <worker-bot-id>`.
+2. Do **not** reply in the room with plain `@worker-name` after `skill search` or other tools — that does not wake workers under `mention_only`.
+3. Verify with `csgclaw-cli message list` that the dispatch message contains `<at user_id="...">`.
+4. Use `start-tracking` only when multiple workers or ordered handoff is required.
+
 ## Operating Rules
 
 - Reuse available workers before creating new ones.

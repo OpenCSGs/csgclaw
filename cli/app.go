@@ -19,6 +19,7 @@ import (
 	modelcmd "csgclaw/cli/model"
 	"csgclaw/cli/room"
 	servecmd "csgclaw/cli/serve"
+	skillcmd "csgclaw/cli/skill"
 	upgradecmd "csgclaw/cli/upgrade"
 	usercmd "csgclaw/cli/user"
 	appversion "csgclaw/internal/version"
@@ -75,6 +76,7 @@ func (a *App) registerDefaultCommands() {
 		servecmd.NewStopCmd(),
 		agentcmd.NewCmd(),
 		hubcmd.NewCmd(),
+		skillcmd.NewCmd(),
 		modelcmd.NewCmd(),
 		usercmd.NewCmd(),
 		bot.NewCmd(),
@@ -213,6 +215,7 @@ func (a *App) usage() {
 	fmt.Fprintln(a.stderr, "  csgclaw serve -h")
 	fmt.Fprintln(a.stderr, "  csgclaw agent -h")
 	fmt.Fprintln(a.stderr, "  csgclaw hub -h")
+	fmt.Fprintln(a.stderr, "  csgclaw skill -h")
 	fmt.Fprintln(a.stderr, "  csgclaw agent create -h")
 	fmt.Fprintln(a.stderr, "  csgclaw message create --channel csgclaw --room-id room-1 --sender-id u-admin --content hello")
 	fmt.Fprintln(a.stderr)

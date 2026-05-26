@@ -20,6 +20,7 @@ type Config struct {
 	Bootstrap BootstrapConfig
 	Sandbox   SandboxConfig
 	Hub       HubConfig
+	ClawHub   ClawHubConfig
 
 	raw rawConfigValues
 }
@@ -236,6 +237,7 @@ type rawConfigValues struct {
 	bootstrap     BootstrapConfig
 	sandbox       SandboxConfig
 	hub           rawHubConfig
+	clawhub       rawClawHubConfig
 	modelsDefault string
 	models        map[string]rawProviderConfig
 	resolved      *rawConfigValues
@@ -526,6 +528,28 @@ func Load(path string) (Config, error) {
 			case "default_manager_template", "default_worker_template":
 				// Bootstrap template defaults now live only under [bootstrap].
 			}
+		case section == "clawhub":
+			switch key {
+			case "base_url":
+				cfg.raw.clawhub.BaseURL = parseRawStringValue(rawValue)
+				cfg.ClawHub.BaseURL = strings.TrimRight(value, "/")
+			case "official_base_url":
+				cfg.raw.clawhub.OfficialBaseURLSet = true
+				cfg.raw.clawhub.OfficialBaseURL = parseRawStringValue(rawValue)
+				cfg.ClawHub.OfficialBaseURLSet = true
+				cfg.ClawHub.OfficialBaseURL = strings.TrimRight(value, "/")
+			case "token":
+				cfg.raw.clawhub.Token = parseRawStringValue(rawValue)
+				cfg.ClawHub.Token = value
+			case "non_suspicious_only":
+				enabled, err := parseBoolValue(rawValue)
+				if err != nil {
+					return Config{}, fmt.Errorf("parse clawhub.non_suspicious_only: %w", err)
+				}
+				cfg.raw.clawhub.NonSuspiciousOnlySet = true
+				cfg.raw.clawhub.NonSuspiciousOnly = enabled
+				cfg.ClawHub.NonSuspiciousOnly = enabled
+			}
 		case section == "hub.registries":
 			if hubRegistryIndex < 0 || hubRegistryIndex >= len(cfg.Hub.Registries) {
 				return Config{}, fmt.Errorf("hub registry entry found before [[hub.registries]] header")
@@ -608,6 +632,10 @@ func Load(path string) (Config, error) {
 		}
 	}
 	cfg.Hub = cfg.Hub.Resolved()
+	cfg.ClawHub = cfg.ClawHub.Resolved()
+	if !cfg.raw.clawhub.NonSuspiciousOnlySet {
+		cfg.ClawHub.NonSuspiciousOnly = true
+	}
 
 	if !modelsCfg.IsZero() {
 		cfg.Models = modelsCfg.Normalized()
@@ -681,6 +709,22 @@ kind = %q
 			fmt.Fprintf(&b, "token = %q\n", cfg.rawOrResolvedString(rawRegistry.Token, loadedRegistry.Token, registry.Token))
 		}
 		fmt.Fprintf(&b, "enabled = %t\n", registry.Enabled)
+	}
+	resolvedClawHub := cfg.ClawHub.Resolved()
+	if cfg.raw.clawhub.BaseURL != "" || cfg.raw.clawhub.OfficialBaseURLSet || cfg.raw.clawhub.Token != "" || cfg.raw.clawhub.NonSuspiciousOnlySet {
+		fmt.Fprintf(&b, `
+[clawhub]
+base_url = %q
+`, cfg.rawOrResolvedString(cfg.raw.clawhub.BaseURL, loadedRaw.clawhub.BaseURL, resolvedClawHub.BaseURL))
+		if cfg.raw.clawhub.OfficialBaseURLSet {
+			fmt.Fprintf(&b, "official_base_url = %q\n", cfg.rawOrResolvedString(cfg.raw.clawhub.OfficialBaseURL, loadedRaw.clawhub.OfficialBaseURL, resolvedClawHub.OfficialBaseURL))
+		}
+		if cfg.raw.clawhub.Token != "" || loadedRaw.clawhub.Token != "" {
+			fmt.Fprintf(&b, "token = %q\n", cfg.rawOrResolvedString(cfg.raw.clawhub.Token, loadedRaw.clawhub.Token, resolvedClawHub.Token))
+		}
+		if cfg.raw.clawhub.NonSuspiciousOnlySet {
+			fmt.Fprintf(&b, "non_suspicious_only = %t\n", resolvedClawHub.NonSuspiciousOnly)
+		}
 	}
 	if writeModels {
 		llmCfg := cfg.effectiveLLMConfig()
@@ -1054,6 +1098,20 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 			loadedRegistry.Token = registry.Token
 		}
 		out.hub.Registries = append(out.hub.Registries, loadedRegistry)
+	}
+	if c.raw.clawhub.BaseURL != "" {
+		out.clawhub.BaseURL = c.ClawHub.BaseURL
+	}
+	if c.raw.clawhub.OfficialBaseURLSet {
+		out.clawhub.OfficialBaseURL = c.ClawHub.OfficialBaseURL
+		out.clawhub.OfficialBaseURLSet = true
+	}
+	if c.raw.clawhub.Token != "" {
+		out.clawhub.Token = c.ClawHub.Token
+	}
+	if c.raw.clawhub.NonSuspiciousOnlySet {
+		out.clawhub.NonSuspiciousOnly = c.ClawHub.NonSuspiciousOnly
+		out.clawhub.NonSuspiciousOnlySet = true
 	}
 	if c.raw.modelsDefault != "" {
 		out.modelsDefault = c.Models.Default
