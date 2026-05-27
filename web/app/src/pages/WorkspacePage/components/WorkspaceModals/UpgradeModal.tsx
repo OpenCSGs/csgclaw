@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui";
 import { formatSidebarVersionLabel, isLocalBuildVersion, upgradeStatusLabel } from "@/models/upgradeStatus";
-import { ModalCloseButton } from "./ModalCloseButton";
 
 export function UpgradeModal({
   t,
@@ -24,7 +23,9 @@ export function UpgradeModal({
             <div className="modal-title">{t("upgradeTitle")}</div>
             <div className="modal-subtitle">{t("upgradeSubtitle")}</div>
           </div>
-          <ModalCloseButton label={t("close")} onClose={onClose} />
+          <Button className="upgrade-modal-close-text" variant="secondaryGray" onClick={onClose}>
+            {t("close")}
+          </Button>
         </div>
         <div className="upgrade-summary">
           <div className="upgrade-summary-row">

@@ -180,6 +180,11 @@
   height: 20px;
 }
 
+.upgrade-modal .upgrade-modal-close-text {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .modal-card .modal-header .modal-close:hover:not(:disabled),
 .modal-card .modal-header .modal-close:active:not(:disabled) {
   border: 0;
