@@ -1339,6 +1339,14 @@ func TestAPIBaseURLDefaultsToLocalhost(t *testing.T) {
 	}
 }
 
+func TestAPIBaseURLKeepsExplicitListenHost(t *testing.T) {
+	got := apiBaseURL(config.ServerConfig{ListenAddr: "192.168.2.52:19090"})
+	want := "http://192.168.2.52:19090"
+	if got != want {
+		t.Fatalf("apiBaseURL() = %q, want %q", got, want)
+	}
+}
+
 func TestAPIBaseURLPrefersAdvertiseBaseURL(t *testing.T) {
 	got := apiBaseURL(config.ServerConfig{
 		ListenAddr:       "0.0.0.0:19090",

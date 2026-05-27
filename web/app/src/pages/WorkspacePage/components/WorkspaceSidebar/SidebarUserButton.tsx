@@ -4,7 +4,7 @@ import { Button } from "@/components/ui";
 import { MoonIcon, SunIcon } from "@/components/ui/Icons";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
-import { formatSidebarVersionLabel, hasUpgradeAttention, upgradeStatusLabel } from "@/models/upgradeStatus";
+import { formatSidebarVersionLabel, hasUpgradeAttention, isLocalBuildVersion, upgradeStatusLabel } from "@/models/upgradeStatus";
 import { classNames } from "@/shared/lib/classNames";
 import type { ThemeMode } from "@/shared/theme/theme";
 
@@ -46,6 +46,8 @@ export function SidebarUserButton({
     running: upgradeRunning,
     issue: upgradeIssue,
     known: Boolean(upgradeStatus),
+    currentVersion: upgradeStatus?.current_version || appVersion,
+    manualRestartRequired: Boolean(upgradeStatus?.manual_restart_required),
     updateAvailable: Boolean(upgradeStatus?.update_available),
     t,
   });
@@ -53,6 +55,7 @@ export function SidebarUserButton({
     phase: upgradePhase,
     running: upgradeRunning,
     issue: upgradeIssue,
+    manualRestartRequired: Boolean(upgradeStatus?.manual_restart_required),
     t,
   });
 
@@ -193,6 +196,8 @@ function upgradeStatusText({
   running,
   issue,
   known,
+  currentVersion,
+  manualRestartRequired,
   updateAvailable,
   t,
 }: {
@@ -200,11 +205,16 @@ function upgradeStatusText({
   running: boolean;
   issue: string;
   known: boolean;
+  currentVersion: string;
+  manualRestartRequired: boolean;
   updateAvailable: boolean;
   t: TranslateFn;
 }): string {
   if (issue || phase === "error") {
     return t("upgradeStatusError");
+  }
+  if (phase === "manual_restart" || manualRestartRequired) {
+    return t("upgradeStatusManualRestart");
   }
   if (phase === "done") {
     return t("upgradeStatusDone");
@@ -215,6 +225,9 @@ function upgradeStatusText({
   if (!known) {
     return t("upgradeNoLatest");
   }
+  if (isLocalBuildVersion(currentVersion)) {
+    return t("upgradeStatusLocal");
+  }
   return updateAvailable ? t("upgradeAction") : t("upgradeUpToDate");
 }
 
@@ -222,15 +235,20 @@ function upgradeMenuActionText({
   phase,
   running,
   issue,
+  manualRestartRequired,
   t,
 }: {
   phase: UpgradePhase;
   running: boolean;
   issue: string;
+  manualRestartRequired: boolean;
   t: TranslateFn;
 }): string {
   if (phase === "done") {
     return t("upgradeRefresh");
+  }
+  if (phase === "manual_restart" || manualRestartRequired) {
+    return t("upgradeViewProgress");
   }
   if (running || phase === "starting" || phase === "restarting" || issue || phase === "error") {
     return t("upgradeViewProgress");

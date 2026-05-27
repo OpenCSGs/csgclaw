@@ -101,11 +101,85 @@ func TestClientCheckNoUpdate(t *testing.T) {
 	}
 }
 
-func TestClientCheckRejectsInvalidCurrentVersion(t *testing.T) {
+func TestClientCheckSkipsInvalidCurrentVersion(t *testing.T) {
 	client := Client{LatestURL: "https://example.test/releases/latest"}
-	_, err := client.Check(context.Background(), "dev")
-	if err == nil || !strings.Contains(err.Error(), "not a valid semver release") {
-		t.Fatalf("Check() error = %v, want semver validation error", err)
+	result, err := client.Check(context.Background(), "dev")
+	if err != nil {
+		t.Fatalf("Check() error = %v, want nil", err)
+	}
+	if got, want := result.CurrentVersion, "dev"; got != want {
+		t.Fatalf("CurrentVersion = %q, want %q", got, want)
+	}
+	if result.UpdateAvailable {
+		t.Fatal("UpdateAvailable = true, want false")
+	}
+	if got := result.LatestVersion; got != "" {
+		t.Fatalf("LatestVersion = %q, want empty", got)
+	}
+}
+
+func TestClientCheckLocalCurrentVersionReportsLatestWithoutUpgrade(t *testing.T) {
+	client := Client{
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(http.StatusOK, `{
+				"name":"v0.3.5",
+				"assets":[
+					{"name":"csgclaw_v0.3.5_darwin_arm64.tar.gz","browser_download_url":"http://csgclaw.opencsg.com/releases/v0.3.5/csgclaw_v0.3.5_darwin_arm64.tar.gz","size":123,"sha256":"abc"}
+				]
+			}`), nil
+		}),
+		LatestURL: "https://example.test/releases/latest",
+		GOOS:      "darwin",
+		GOARCH:    "arm64",
+	}
+	result, err := client.Check(context.Background(), "v0.3.5-test6+local")
+	if err != nil {
+		t.Fatalf("Check() error = %v, want nil", err)
+	}
+	if got, want := result.CurrentVersion, "v0.3.5-test6+local"; got != want {
+		t.Fatalf("CurrentVersion = %q, want %q", got, want)
+	}
+	if result.UpdateAvailable {
+		t.Fatal("UpdateAvailable = true, want false")
+	}
+	if got, want := result.LatestVersion, "v0.3.5"; got != want {
+		t.Fatalf("LatestVersion = %q, want %q", got, want)
+	}
+	if result.Asset != nil {
+		t.Fatalf("Asset = %#v, want nil", result.Asset)
+	}
+}
+
+func TestClientCheckAllowsPrereleaseTagCurrentVersion(t *testing.T) {
+	client := Client{
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(http.StatusOK, `{
+				"name":"v0.3.5",
+				"assets":[
+					{"name":"csgclaw_v0.3.5_darwin_arm64.tar.gz","browser_download_url":"http://csgclaw.opencsg.com/releases/v0.3.5/csgclaw_v0.3.5_darwin_arm64.tar.gz","size":123,"sha256":"abc"}
+				]
+			}`), nil
+		}),
+		LatestURL: "https://example.test/releases/latest",
+		GOOS:      "darwin",
+		GOARCH:    "arm64",
+	}
+
+	result, err := client.Check(context.Background(), "v0.3.5-test6")
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if got, want := result.CurrentVersion, "v0.3.5-test6"; got != want {
+		t.Fatalf("CurrentVersion = %q, want %q", got, want)
+	}
+	if got, want := result.LatestVersion, "v0.3.5"; got != want {
+		t.Fatalf("LatestVersion = %q, want %q", got, want)
+	}
+	if !result.UpdateAvailable {
+		t.Fatal("UpdateAvailable = false, want true")
+	}
+	if result.Asset == nil {
+		t.Fatal("Asset = nil, want matched asset")
 	}
 }
 
@@ -631,6 +705,44 @@ func TestCompareSemver(t *testing.T) {
 	for _, tt := range tests {
 		if got := compareSemver(tt.a, tt.b); got != tt.want {
 			t.Fatalf("compareSemver(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
+func TestIsUpdatableReleaseVersion(t *testing.T) {
+	cases := []struct {
+		version string
+		want    bool
+	}{
+		{version: "dev", want: false},
+		{version: "v0.3.5", want: true},
+		{version: "v0.3.5-test6", want: true},
+		{version: "v0.3.5+local", want: false},
+		{version: "v0.3.5-test6+local", want: false},
+	}
+
+	for _, tc := range cases {
+		if got := isUpdatableReleaseVersion(tc.version); got != tc.want {
+			t.Fatalf("isUpdatableReleaseVersion(%q) = %v, want %v", tc.version, got, tc.want)
+		}
+	}
+}
+
+func TestIsLocalBuildVersion(t *testing.T) {
+	cases := []struct {
+		version string
+		want    bool
+	}{
+		{version: "dev", want: false},
+		{version: "v0.3.5", want: false},
+		{version: "v0.3.5-test6", want: false},
+		{version: "v0.3.5+local", want: true},
+		{version: "v0.3.5-test6+local", want: true},
+	}
+
+	for _, tc := range cases {
+		if got := isLocalBuildVersion(tc.version); got != tc.want {
+			t.Fatalf("isLocalBuildVersion(%q) = %v, want %v", tc.version, got, tc.want)
 		}
 	}
 }

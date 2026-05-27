@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -460,10 +459,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		},
 	})
 	configureFeishuService(feishuSvc, svc)
-	if message, err := upgrade.ConsumeApplyFailure(configPath); err != nil {
+	if outcome, err := upgrade.ConsumeApplyStatus(configPath); err != nil {
 		slog.Warn("load upgrade helper failure", "error", err)
-	} else if message != "" {
-		upgradeManager.MarkUpgradeFailed(errors.New(message))
+	} else if outcome.Status == upgrade.ApplyStatusFailed && outcome.Message != "" {
+		upgradeManager.MarkUpgradeFailed(errors.New(outcome.Message))
 	}
 	hubSvc, err := newAgentTemplateHubService(cfg.Hub)
 	if err != nil {
@@ -654,21 +653,7 @@ func openBrowser(rawURL string) error {
 }
 
 func apiBaseURL(server config.ServerConfig) string {
-	if server.AdvertiseBaseURL != "" {
-		return strings.TrimRight(server.AdvertiseBaseURL, "/")
-	}
-
-	port := config.ListenPort(server.ListenAddr)
-	if server.ListenAddr == "" {
-		return config.DefaultAPIBaseURL()
-	}
-	host := "127.0.0.1"
-	if parsedHost, _, err := net.SplitHostPort(server.ListenAddr); err == nil {
-		if parsedHost != "" && parsedHost != "0.0.0.0" && parsedHost != "::" {
-			host = parsedHost
-		}
-	}
-	return fmt.Sprintf("http://%s:%s", host, port)
+	return config.ResolveAdvertiseBaseURL(server)
 }
 
 func printEffectiveConfig(run *command.Context, cfg config.Config, output string) {

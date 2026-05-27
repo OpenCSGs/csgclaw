@@ -150,15 +150,23 @@ Thread-aware bot events may include:
 
 - `thread_root_id`: root message ID when the event is inside a thread.
 - `thread_context`: hidden context snapshot and summary for the thread root.
+- `context.topic_id`: PicoClaw-native topic/session ID. For CSGClaw IM
+  threads this is the same value as `thread_root_id`.
 
 `thread_context` is prompt context, not visible thread history.
 
-Bot sends may include `thread_root_id`. When present, the message is sent as a
-reply in that thread.
+Bot sends may include either CSGClaw fields (`room_id`, `text`,
+`thread_root_id`) or PicoClaw outbound fields (`chat_id`, `content`,
+`context.topic_id`). When a thread root/topic is present, the message is sent as
+a reply in that thread. Bot sends that omit `thread_root_id`, `topic_id`, and
+`context.topic_id` are treated as top-level room/DM messages; CSGClaw does not
+infer a thread from the bot's most recent room event.
 
 This maps to PicoClaw/topic isolation requirements: a runtime should treat
 `room_id` as the normal conversation key and `room_id:thread_root_id` as the
-thread conversation key.
+thread conversation key. Generated PicoClaw configs set session dimensions to
+`["chat", "topic"]` so `context.topic_id` creates a separate PicoClaw session
+for every CSGClaw IM thread.
 
 ## Codex Bridge Session Isolation
 

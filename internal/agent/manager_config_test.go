@@ -2,11 +2,13 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"csgclaw/internal/config"
 	"csgclaw/internal/runtime/picoclawsandbox"
@@ -84,6 +86,41 @@ func TestRenderAgentPicoClawConfigUsesBridgeModelEndpoint(t *testing.T) {
 	if got, want := execTool["timeout_seconds"], float64(600); got != want {
 		t.Fatalf("tools.exec.timeout_seconds = %v, want %v", got, want)
 	}
+	session, ok := rendered["session"].(map[string]any)
+	if !ok {
+		t.Fatalf("renderAgentPicoClawConfig() missing session in:\n%s", text)
+	}
+	dimensions, ok := session["dimensions"].([]any)
+	if !ok {
+		t.Fatalf("session.dimensions = %T, want array in:\n%s", session["dimensions"], text)
+	}
+	if got, want := stringifyJSONList(dimensions), []string{"chat", "topic"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("session.dimensions = %v, want %v", got, want)
+	}
+}
+
+func stringifyJSONList(values []any) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		text, ok := value.(string)
+		if !ok {
+			continue
+		}
+		result = append(result, text)
+	}
+	return result
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestPicoclawBridgeModelIDPrefixesOpenAIForSlashModelNames(t *testing.T) {
@@ -202,3 +239,78 @@ func TestIPv4FromAddr(t *testing.T) {
 		})
 	}
 }
+
+func TestInterfaceIPv4PrefersPrivateNonPointToPointInterface(t *testing.T) {
+	ifaces := []net.Interface{
+		{Index: 1, Name: "utun4", Flags: net.FlagUp | net.FlagPointToPoint},
+		{Index: 2, Name: "en0", Flags: net.FlagUp | net.FlagBroadcast},
+	}
+	addrMap := map[int][]net.Addr{
+		1: {
+			&net.IPNet{IP: net.ParseIP("198.19.0.1"), Mask: net.CIDRMask(24, 32)},
+		},
+		2: {
+			&net.IPNet{IP: net.ParseIP("192.168.1.13"), Mask: net.CIDRMask(24, 32)},
+		},
+	}
+	detector := localIPDetector{
+		listInterfaces: func() ([]net.Interface, error) { return ifaces, nil },
+		interfaceAddrs: func(iface net.Interface) ([]net.Addr, error) { return addrMap[iface.Index], nil },
+	}
+
+	if got, want := detector.interfaceIPv4(), "192.168.1.13"; got != want {
+		t.Fatalf("detector.interfaceIPv4() = %q, want %q", got, want)
+	}
+}
+
+func TestInterfaceIPv4FallsBackToFirstNonPrivateAddress(t *testing.T) {
+	ifaces := []net.Interface{
+		{Index: 1, Name: "eth0", Flags: net.FlagUp | net.FlagBroadcast},
+		{Index: 2, Name: "eth1", Flags: net.FlagUp | net.FlagBroadcast},
+	}
+	addrMap := map[int][]net.Addr{
+		1: {
+			&net.IPNet{IP: net.ParseIP("100.64.0.2"), Mask: net.CIDRMask(10, 32)},
+		},
+		2: {
+			&net.IPNet{IP: net.ParseIP("203.0.113.8"), Mask: net.CIDRMask(24, 32)},
+		},
+	}
+	detector := localIPDetector{
+		listInterfaces: func() ([]net.Interface, error) { return ifaces, nil },
+		interfaceAddrs: func(iface net.Interface) ([]net.Addr, error) { return addrMap[iface.Index], nil },
+	}
+
+	if got, want := detector.interfaceIPv4(), "100.64.0.2"; got != want {
+		t.Fatalf("detector.interfaceIPv4() = %q, want %q", got, want)
+	}
+}
+
+func TestLocalIPv4FallsBackToOutboundWhenInterfacesUnavailable(t *testing.T) {
+	detector := localIPDetector{
+		listInterfaces: func() ([]net.Interface, error) { return nil, errors.New("boom") },
+		interfaceAddrs: func(net.Interface) ([]net.Addr, error) { return nil, nil },
+		dialUDP4: func() (net.Conn, error) {
+			return &fakeConn{
+				localAddr: &net.UDPAddr{IP: net.ParseIP("10.0.0.8"), Port: 34567},
+			}, nil
+		},
+	}
+
+	if got, want := detector.localIPv4(), "10.0.0.8"; got != want {
+		t.Fatalf("detector.localIPv4() = %q, want %q", got, want)
+	}
+}
+
+type fakeConn struct {
+	localAddr net.Addr
+}
+
+func (c *fakeConn) Read([]byte) (int, error)         { return 0, errors.New("not implemented") }
+func (c *fakeConn) Write([]byte) (int, error)        { return 0, errors.New("not implemented") }
+func (c *fakeConn) Close() error                     { return nil }
+func (c *fakeConn) LocalAddr() net.Addr              { return c.localAddr }
+func (c *fakeConn) RemoteAddr() net.Addr             { return &net.UDPAddr{} }
+func (c *fakeConn) SetDeadline(time.Time) error      { return nil }
+func (c *fakeConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *fakeConn) SetWriteDeadline(time.Time) error { return nil }

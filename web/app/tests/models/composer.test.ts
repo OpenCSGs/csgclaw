@@ -1,5 +1,6 @@
 import {
   getComposerMentionState,
+  getMentionCandidates,
   isComposerKeyboardEventComposing,
   normalizeComposerSegments,
   normalizeTextMentions,
@@ -83,6 +84,20 @@ describe("composer model helpers", () => {
       { type: "text", text: "Hi " },
       { type: "mention", userId: "u-1", userName: "Alice" },
     ]);
+  });
+
+  it("keeps all room mention candidates visible for an empty mention query", () => {
+    const users = [
+      { handle: "admin", id: "u-admin", name: "Admin" },
+      { handle: "manager", id: "u-manager", name: "manager" },
+      { handle: "dev", id: "u-dev", name: "dev" },
+      { handle: "ux", id: "u-ux", name: "ux" },
+      { handle: "qa", id: "u-qa", name: "qa" },
+      { handle: "sales", id: "u-sales", name: "sales" },
+    ];
+
+    expect(getMentionCandidates(users, "")).toEqual(users);
+    expect(getMentionCandidates(users, "s")).toEqual([users[5]]);
   });
 
   it("updates draft maps only when normalized segments change", () => {

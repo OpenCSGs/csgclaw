@@ -1,6 +1,7 @@
 import { isBlank, requiredFieldLabel } from "@/components/business/ProfileControls";
 import { Button } from "@/components/ui";
 import { toggleSelection } from "@/shared/lib/collections";
+import { ModalCloseButton } from "./ModalCloseButton";
 
 export function CreateRoomModal({
   t,
@@ -22,16 +23,14 @@ export function CreateRoomModal({
   const selectedMemberCount = candidateIDs.filter((id) => roomMemberIDs.includes(id)).length;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-card" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
             <div className="modal-title">{t("createRoomTitle")}</div>
             <div className="modal-subtitle">{t("createRoomSubtitle")}</div>
           </div>
-          <Button className="modal-close" onClick={onClose}>
-            {t("close")}
-          </Button>
+          <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
         <label className="field">
           {requiredFieldLabel(t("roomName"))}
@@ -90,10 +89,10 @@ export function CreateRoomModal({
         </div>
         {submitError ? <div className="form-error">{submitError}</div> : null}
         <div className="modal-actions">
-          <Button className="secondary-button" onClick={onClose}>
+          <Button variant="secondaryGray" size="md" onClick={onClose}>
             {t("cancel")}
           </Button>
-          <Button variant="primary" className="send-button" disabled={isBlank(roomTitle)} onClick={onCreate}>
+          <Button variant="primary" size="md" disabled={isBlank(roomTitle)} onClick={onCreate}>
             {t("create")}
           </Button>
         </div>

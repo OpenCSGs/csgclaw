@@ -6,16 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/config"
 )
-
-const DefaultHTTPPort = "18080"
 
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -28,7 +26,7 @@ type Client struct {
 }
 
 func DefaultAPIBaseURL() string {
-	return "http://" + net.JoinHostPort("127.0.0.1", DefaultHTTPPort)
+	return config.DefaultAPIBaseURL()
 }
 
 func New(endpoint, token string, client HTTPClient) *Client {

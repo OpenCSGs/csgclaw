@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui";
 import { toggleSelection } from "@/shared/lib/collections";
+import { ModalCloseButton } from "./ModalCloseButton";
 
 export function InviteMembersModal({
   t,
@@ -15,16 +16,14 @@ export function InviteMembersModal({
   const selectedMemberCount = candidateIDs.filter((id) => inviteUserIDs.includes(id)).length;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-card" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
             <div className="modal-title">{t("inviteTitle")}</div>
             <div className="modal-subtitle">{t("inviteSubtitle")}</div>
           </div>
-          <Button className="modal-close" onClick={onClose}>
-            {t("close")}
-          </Button>
+          <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
         <div className="field">
           <span>{t("inviteCandidates")}</span>
@@ -69,10 +68,10 @@ export function InviteMembersModal({
         </div>
         {submitError ? <div className="form-error">{submitError}</div> : null}
         <div className="modal-actions">
-          <Button className="secondary-button" onClick={onClose}>
+          <Button variant="secondaryGray" size="md" onClick={onClose}>
             {t("cancel")}
           </Button>
-          <Button variant="primary" className="send-button" disabled={inviteUserIDs.length === 0} onClick={onInvite}>
+          <Button variant="primary" size="md" disabled={inviteUserIDs.length === 0} onClick={onInvite}>
             {t("sendInvite")}
           </Button>
         </div>

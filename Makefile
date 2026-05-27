@@ -3,7 +3,7 @@ BIN_DIR ?= bin
 BIN ?= $(BIN_DIR)/$(APP)
 DIST_DIR ?= dist
 GOCACHE ?= $(CURDIR)/.gocache
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+VERSION ?= $(shell sh $(CURDIR)/scripts/version.sh)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 VERSION_PKG ?= csgclaw/internal/version
@@ -23,7 +23,7 @@ TARGET_ARCH ?= $(shell $(GO) env GOARCH)
 CLI_BIN ?= $(BIN_DIR)/csgclaw-cli
 
 IMAGE ?= opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw
-TAG ?= 2026.4.27.0
+TAG ?= 2026.5.27
 LOCAL_IMAGE ?= picoclaw:local
 
 .DEFAULT_GOAL := build-all

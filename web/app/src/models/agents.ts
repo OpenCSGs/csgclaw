@@ -219,7 +219,26 @@ export function notificationBotStatusLabel(item: AgentLike | null | undefined, t
   if (isNotificationBotAgent(item)) {
     return item?.available === true ? t("notificationBotReady") : t("notificationBotNotReady");
   }
-  return String(item?.status || "unknown");
+  return agentStatusLabel(item?.status, t);
+}
+
+export function agentStatusLabel(status: unknown, t: TranslateFn): string {
+  const normalized = String(status || "unknown")
+    .trim()
+    .toLowerCase();
+  if (normalized === "running" || normalized === "online") {
+    return t("online");
+  }
+  if (normalized === "offline" || normalized === "stopped") {
+    return t("offline");
+  }
+  if (normalized === "failed" || normalized === "error") {
+    return t("agentStatusFailed");
+  }
+  if (normalized === "done" || normalized === "complete" || normalized === "completed") {
+    return t("agentStatusDone");
+  }
+  return t("agentStatusUnknown");
 }
 
 export function notificationBotMetaLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
@@ -592,9 +611,7 @@ export function agentToDraft(agent: AgentDraftSource | null | undefined): AgentD
     from_template: agent?.from_template || "",
     template_name: agent?.template_name || "",
     ...base,
-    notifier_delivery_mode: normalizeNotifierDeliveryMode(
-      agent?.notifier_delivery_mode || base.notifier_delivery_mode,
-    ),
+    notifier_delivery_mode: normalizeNotifierDeliveryMode(agent?.notifier_delivery_mode || base.notifier_delivery_mode),
     runtime_kind: normalizeRuntimeKind(agent?.runtime_kind || profile.runtime_kind),
   };
 }

@@ -270,12 +270,25 @@
 .thread-message-avatar {
   width: 30px;
   height: 30px;
+  border: 0;
   border-radius: var(--radius-md);
+  padding: 0;
   display: grid;
   place-items: center;
   color: var(--avatar-text);
+  font: inherit;
   font-size: 11px;
   font-weight: 700;
+}
+
+button.thread-message-avatar {
+  cursor: pointer;
+}
+
+button.thread-message-avatar:hover,
+button.thread-message-avatar:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .thread-message-main {
@@ -300,11 +313,20 @@
 }
 
 .thread-composer {
+  position: relative;
   padding: 14px;
   border-top: 1px solid var(--line);
   background: var(--surface);
   display: grid;
   gap: 8px;
+}
+
+.thread-mention-picker {
+  left: 14px;
+  right: 14px;
+  bottom: calc(100% - 4px);
+  width: auto;
+  z-index: 5;
 }
 
 .thread-composer textarea {

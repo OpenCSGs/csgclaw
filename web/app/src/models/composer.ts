@@ -235,6 +235,24 @@ export function normalizeTextMentions(segments, mentionableUsersByHandle) {
   return normalizeComposerSegments(normalized);
 }
 
+export function getMentionCandidates(users, query, options: { limit?: number } = {}) {
+  const normalizedQuery = String(query ?? "")
+    .trim()
+    .toLowerCase();
+  const validUsers = (users ?? []).filter((user) => user?.id);
+  if (!normalizedQuery) {
+    return validUsers;
+  }
+  const limit = Number.isFinite(options.limit) ? options.limit : 5;
+  return validUsers
+    .filter((user) => {
+      const handle = String(user.handle ?? "").toLowerCase();
+      const name = String(user.name ?? "").toLowerCase();
+      return handle.includes(normalizedQuery) || name.includes(normalizedQuery);
+    })
+    .slice(0, limit);
+}
+
 export function getComposerMentionState(root) {
   if (!root) {
     return null;

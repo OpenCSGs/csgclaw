@@ -1,4 +1,3 @@
-import { SidebarHeader } from "./SidebarHeader";
 import { SidebarRail } from "./SidebarRail";
 import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
@@ -15,15 +14,12 @@ export function WorkspaceSidebar({
   locale,
   onLocaleChange,
   t,
-  currentWorkspaceLabel,
-  runningAgentCount,
   agentItems,
   workerAgentItems,
   notificationAgentItems,
   workspaceTab,
   onWorkspaceTabChange,
   roomCount,
-  threadCount,
   channels,
   directMessages,
   threadGroups,
@@ -70,7 +66,6 @@ export function WorkspaceSidebar({
                 workspaceTab={workspaceTab}
                 onWorkspaceTabChange={onWorkspaceTabChange}
                 roomCount={roomCount}
-                threadCount={threadCount}
                 agentCount={agentCount}
                 onSelectHub={onSelectHub}
                 t={t}
@@ -94,12 +89,6 @@ export function WorkspaceSidebar({
             </div>
           </div>
           <div className="sidebar-main-column">
-            <SidebarHeader
-              t={t}
-              currentWorkspaceLabel={currentWorkspaceLabel}
-              runningAgentCount={runningAgentCount}
-              agentCount={agentCount}
-            />
             <nav className="workspace-nav" aria-label="Workspace">
               <WorkspaceTabPanels
                 workspaceTab={workspaceTab}
@@ -141,7 +130,6 @@ export function WorkspaceSidebar({
         onWorkspaceTabChange={onWorkspaceTabChange}
         onSelectHub={onSelectHub}
         roomCount={roomCount}
-        threadCount={threadCount}
         agentCount={agentCount}
         theme={theme}
         onThemeChange={onThemeChange}

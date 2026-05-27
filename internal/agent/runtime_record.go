@@ -11,7 +11,7 @@ import (
 const (
 	RuntimeKindPicoClawSandbox = agentruntime.KindPicoClawSandbox
 	RuntimeKindOpenClawSandbox = agentruntime.KindOpenClawSandbox
-	RuntimeKindCodex = agentruntime.KindCodex
+	RuntimeKindCodex           = agentruntime.KindCodex
 )
 
 type RuntimeRecord struct {

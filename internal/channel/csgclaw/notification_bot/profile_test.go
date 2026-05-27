@@ -39,19 +39,19 @@ func TestProfileDeliveryComplete(t *testing.T) {
 		{
 			name: "both partial webhook only",
 			flat: map[string]any{
-				"delivery_mode":  "both",
-				"webhook_token":  "tok",
-				"remote_url":     "https://relay.example.com",
+				"delivery_mode": "both",
+				"webhook_token": "tok",
+				"remote_url":    "https://relay.example.com",
 			},
 			want: false,
 		},
 		{
 			name: "both ok",
 			flat: map[string]any{
-				"delivery_mode":  "both",
-				"webhook_token":  "tok",
-				"remote_url":     "https://relay.example.com",
-				"remote_token":   "secret",
+				"delivery_mode": "both",
+				"webhook_token": "tok",
+				"remote_url":    "https://relay.example.com",
+				"remote_token":  "secret",
 			},
 			want: true,
 		},

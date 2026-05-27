@@ -1,5 +1,6 @@
 import { Button, Select } from "@/components/ui";
 import { defaultManagerRebuildImageForRuntime, formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
+import { ModalCloseButton } from "./ModalCloseButton";
 
 export function ManagerRebuildModal({
   t,
@@ -19,16 +20,14 @@ export function ManagerRebuildModal({
 }) {
   const selectedRuntimeKind = normalizeRuntimeKind(runtimeKind) || runtimeOptions[0]?.value || "picoclaw_sandbox";
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card profile-modal" onClick={(event) => event.stopPropagation()}>
+    <div className="modal-backdrop">
+      <div className="modal-card profile-modal manager-rebuild-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
             <div className="modal-title">{t("managerRebuildTitle")}</div>
             <div className="modal-subtitle">{t("managerRebuildSubtitle")}</div>
           </div>
-          <Button className="modal-close" onClick={onClose}>
-            {t("close")}
-          </Button>
+          <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
         <div className="profile-editor-shell">
           <section className="profile-section">
@@ -74,11 +73,19 @@ export function ManagerRebuildModal({
           </section>
           {error ? <div className="form-error">{error}</div> : null}
           <div className="modal-actions">
-            <Button className="secondary-button" disabled={busy} onClick={onClose}>
+            <Button variant="secondaryGray" size="md" disabled={busy} onClick={onClose}>
               {t("close")}
             </Button>
-            <Button variant="primary" className="send-button" disabled={busy} onClick={onConfirm}>
-              {busy ? t("profileLoadingModels") : t("managerRebuildAction")}
+            <Button
+              className="manager-rebuild-submit"
+              variant="primary"
+              size="md"
+              disabled={busy}
+              loading={busy}
+              loadingLabel={t("managerRebuildBusy")}
+              onClick={onConfirm}
+            >
+              {t("managerRebuildAction")}
             </Button>
           </div>
         </div>

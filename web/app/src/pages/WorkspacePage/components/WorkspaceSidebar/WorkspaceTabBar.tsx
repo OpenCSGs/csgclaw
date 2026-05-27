@@ -6,7 +6,6 @@ export function WorkspaceTabBar({
   workspaceTab,
   onWorkspaceTabChange,
   roomCount,
-  threadCount,
   agentCount,
   onSelectHub,
   t,
@@ -36,25 +35,6 @@ export function WorkspaceTabBar({
           <span className="workspace-tab-copy">
             <strong>{t("messagesTab")}</strong>
             <small>{roomCount}</small>
-          </span>
-        ) : null}
-      </Button>
-      <Button
-        className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
-        active={workspaceTab === WorkspaceTabs.threads}
-        role="tab"
-        aria-selected={workspaceTab === WorkspaceTabs.threads}
-        aria-label={t("threadsTab")}
-        title={t("threadsTab")}
-        onClick={() => onWorkspaceTabChange(WorkspaceTabs.threads)}
-      >
-        <span className="workspace-tab-icon" aria-hidden="true">
-          <RoomsIcon />
-        </span>
-        {!rail ? (
-          <span className="workspace-tab-copy">
-            <strong>{t("threadsTab")}</strong>
-            <small>{threadCount}</small>
           </span>
         ) : null}
       </Button>

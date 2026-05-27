@@ -108,6 +108,72 @@ func TestManagerRefreshPreservesUpgradeFailure(t *testing.T) {
 	}
 }
 
+func TestManagerRefreshSkipsLocalDevVersionWithoutError(t *testing.T) {
+	now := time.Date(2026, 5, 6, 16, 0, 0, 0, time.UTC)
+	manager := NewManager(fakeChecker{
+		check: func(_ context.Context, currentVersion string) (CheckResult, error) {
+			if got, want := currentVersion, "dev"; got != want {
+				t.Fatalf("currentVersion = %q, want %q", got, want)
+			}
+			return CheckResult{CurrentVersion: currentVersion}, nil
+		},
+	}, "dev", ManagerOptions{
+		Now: func() time.Time { return now },
+	})
+
+	manager.Refresh(context.Background())
+
+	status := manager.Status()
+	if got, want := status.CurrentVersion, "dev"; got != want {
+		t.Fatalf("CurrentVersion = %q, want %q", got, want)
+	}
+	if got := status.LatestVersion; got != "" {
+		t.Fatalf("LatestVersion = %q, want empty", got)
+	}
+	if status.UpdateAvailable {
+		t.Fatal("UpdateAvailable = true, want false")
+	}
+	if got := status.LastError; got != "" {
+		t.Fatalf("LastError = %q, want empty", got)
+	}
+	if status.LastCheckedAt == nil || !status.LastCheckedAt.Equal(now) {
+		t.Fatalf("LastCheckedAt = %v, want %v", status.LastCheckedAt, now)
+	}
+}
+
+func TestManagerRefreshSkipsLocalVersionWithoutError(t *testing.T) {
+	now := time.Date(2026, 5, 26, 16, 0, 0, 0, time.UTC)
+	manager := NewManager(fakeChecker{
+		check: func(_ context.Context, currentVersion string) (CheckResult, error) {
+			if got, want := currentVersion, "v0.3.5-test6+local"; got != want {
+				t.Fatalf("currentVersion = %q, want %q", got, want)
+			}
+			return CheckResult{CurrentVersion: currentVersion}, nil
+		},
+	}, "v0.3.5-test6+local", ManagerOptions{
+		Now: func() time.Time { return now },
+	})
+
+	manager.Refresh(context.Background())
+
+	status := manager.Status()
+	if got, want := status.CurrentVersion, "v0.3.5-test6+local"; got != want {
+		t.Fatalf("CurrentVersion = %q, want %q", got, want)
+	}
+	if got := status.LatestVersion; got != "" {
+		t.Fatalf("LatestVersion = %q, want empty", got)
+	}
+	if status.UpdateAvailable {
+		t.Fatal("UpdateAvailable = true, want false")
+	}
+	if got := status.LastError; got != "" {
+		t.Fatalf("LastError = %q, want empty", got)
+	}
+	if status.LastCheckedAt == nil || !status.LastCheckedAt.Equal(now) {
+		t.Fatalf("LastCheckedAt = %v, want %v", status.LastCheckedAt, now)
+	}
+}
+
 func TestManagerStartChecksImmediatelyAndPeriodically(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -214,5 +280,43 @@ func TestManagerRefreshSkipsNotificationWhenOnlyCheckedAtChanges(t *testing.T) {
 	case status := <-notifications:
 		t.Fatalf("unexpected second notification: %+v", status)
 	default:
+	}
+}
+
+func TestManagerMarkManualRestartRequired(t *testing.T) {
+	notifications := make(chan apitypes.UpgradeStatus, 2)
+	manager := NewManager(fakeChecker{
+		check: func(_ context.Context, _ string) (CheckResult, error) {
+			return CheckResult{}, nil
+		},
+	}, "v0.2.5", ManagerOptions{
+		OnStatusChange: func(status apitypes.UpgradeStatus) {
+			notifications <- status
+		},
+	})
+
+	manager.MarkUpgrading()
+	status := manager.MarkManualRestartRequired()
+
+	if status.Upgrading {
+		t.Fatal("Upgrading = true, want false")
+	}
+	if !status.ManualRestartRequired {
+		t.Fatal("ManualRestartRequired = false, want true")
+	}
+
+	select {
+	case <-notifications:
+	case <-time.After(time.Second):
+		t.Fatal("expected upgrading notification")
+	}
+
+	select {
+	case got := <-notifications:
+		if !got.ManualRestartRequired {
+			t.Fatal("notification ManualRestartRequired = false, want true")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected manual restart notification")
 	}
 }

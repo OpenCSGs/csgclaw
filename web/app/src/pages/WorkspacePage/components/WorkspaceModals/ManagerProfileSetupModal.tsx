@@ -190,11 +190,12 @@ export function ManagerProfileSetupModal({
         <div className="modal-actions">
           <Button
             variant="primary"
-            className="send-button"
+            size="md"
             disabled={profileBusy || !profileDraft.model_id || profileBaseURLMissing(profileDraft)}
+            loading={profileBusy}
             onClick={onSave}
           >
-            {profileBusy ? "..." : t("profileSave")}
+            {t("profileSave")}
           </Button>
         </div>
       </div>

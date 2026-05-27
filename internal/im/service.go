@@ -1,11 +1,9 @@
 package im
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -313,36 +311,8 @@ func loadRoomMessages(statePath, roomID, relativePath string) ([]Message, error)
 	if filepath.Ext(relativePath) != ".jsonl" {
 		return nil, fmt.Errorf("decode room %s messages: expected jsonl session path", roomID)
 	}
-	return loadMessagesJSONL(filepath.Join(filepath.Dir(statePath), filepath.FromSlash(relativePath)))
-}
-
-func loadMessagesJSONL(path string) ([]Message, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("open im session: %w", err)
-	}
-	defer file.Close()
-
-	var messages []Message
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var message Message
-		if err := json.Unmarshal([]byte(line), &message); err != nil {
-			return nil, fmt.Errorf("decode im session line: %w", err)
-		}
-		messages = append(messages, message)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read im session: %w", err)
-	}
-	return messages, nil
+	sessionPath := filepath.Join(filepath.Dir(statePath), filepath.FromSlash(relativePath))
+	return loadMessagesJSONL(sessionPath, roomID)
 }
 
 func savePersistedBootstrap(statePath string, state Bootstrap) (persistedBootstrap, error) {
@@ -372,7 +342,7 @@ func savePersistedRooms(statePath string, rooms []Room) ([]persistedRoom, error)
 	persisted := make([]persistedRoom, 0, len(rooms))
 	for _, room := range rooms {
 		relativePath := sessionRelativePath(room.ID)
-		if err := saveMessagesJSONL(filepath.Join(filepath.Dir(statePath), filepath.FromSlash(relativePath)), room.Messages); err != nil {
+		if err := saveMessagesJSONL(filepath.Join(filepath.Dir(statePath), filepath.FromSlash(relativePath)), room.ID, room.Messages); err != nil {
 			return nil, err
 		}
 		persisted = append(persisted, persistedRoom{
@@ -387,32 +357,6 @@ func savePersistedRooms(statePath string, rooms []Room) ([]persistedRoom, error)
 		})
 	}
 	return persisted, nil
-}
-
-func saveMessagesJSONL(path string, messages []Message) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create im session dir: %w", err)
-	}
-
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create im session: %w", err)
-	}
-	defer file.Close()
-
-	for _, message := range messages {
-		data, err := json.Marshal(message)
-		if err != nil {
-			return fmt.Errorf("encode im session message: %w", err)
-		}
-		if _, err := file.Write(data); err != nil {
-			return fmt.Errorf("write im session: %w", err)
-		}
-		if _, err := io.WriteString(file, "\n"); err != nil {
-			return fmt.Errorf("write im session newline: %w", err)
-		}
-	}
-	return nil
 }
 
 func cleanupSessionFiles(statePath string, rooms []persistedRoom) error {
@@ -437,8 +381,41 @@ func cleanupSessionFiles(statePath string, rooms []persistedRoom) error {
 		if _, ok := keep[entry.Name()]; ok {
 			continue
 		}
+		roomID := strings.TrimSuffix(entry.Name(), ".jsonl")
 		if err := os.Remove(filepath.Join(sessionsDir, entry.Name())); err != nil {
 			return fmt.Errorf("remove stale im session: %w", err)
+		}
+		if err := removeRoomSessionBlobs(sessionsDir, roomID); err != nil {
+			return err
+		}
+	}
+	return cleanupStaleSessionBlobRooms(sessionsDir, rooms)
+}
+
+func cleanupStaleSessionBlobRooms(sessionsDir string, rooms []persistedRoom) error {
+	blobsRoot := filepath.Join(sessionsDir, sessionBlobsDirName)
+	entries, err := os.ReadDir(blobsRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read im session blobs dir: %w", err)
+	}
+
+	keepRooms := make(map[string]struct{}, len(rooms))
+	for _, room := range rooms {
+		keepRooms[room.ID] = struct{}{}
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, ok := keepRooms[entry.Name()]; ok {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(blobsRoot, entry.Name())); err != nil {
+			return fmt.Errorf("remove stale im session blobs dir: %w", err)
 		}
 	}
 	return nil

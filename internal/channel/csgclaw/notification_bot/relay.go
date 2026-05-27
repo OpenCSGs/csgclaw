@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	relayRouteInboxMessages    = "/inbox/messages"
-	relayRouteInboxAck       = "/inbox/ack"
+	relayRouteInboxMessages   = "/inbox/messages"
+	relayRouteInboxAck        = "/inbox/ack"
 	relayRouteWebhooksIngress = "/webhooks/ingress"
 )
 

@@ -93,7 +93,13 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	if err != nil {
 		return fail(err)
 	}
-	_ = applyArtifacts.ClearStatus()
+	if !*noRestart && !restarted.DaemonWasRunning {
+		if recordErr := applyArtifacts.RecordManualRestartRequired("manual restart required"); recordErr != nil {
+			return fmt.Errorf("record manual restart status: %w", recordErr)
+		}
+	} else {
+		_ = applyArtifacts.ClearStatus()
+	}
 	return renderInstallResult(globals.Output, run.Stdout, result, installed, restarted, run.Program, false)
 }
 

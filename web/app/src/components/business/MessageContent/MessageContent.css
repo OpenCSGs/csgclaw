@@ -367,13 +367,14 @@
 }
 
 .message-row:not(.own) .message-bubble .message-content p {
-  color: var(--portal-gray-700);
+  color: var(--portal-gray-900);
   font-size: 16px;
   font-weight: 300;
   line-height: 24px;
 }
 
 .message-row.own .message-bubble .message-content p {
+  color: var(--portal-gray-900);
   font-size: 16px;
   font-weight: 300;
   line-height: 24px;
@@ -382,7 +383,7 @@
 .message-row.own .message-bubble .message-content .message-mention,
 .message-row.own .message-bubble .message-content p > .message-mention,
 .message-row.admin.own .message-bubble .message-content .message-mention {
-  color: var(--portal-white);
+  color: var(--portal-brand-700);
 }
 
 :root[data-theme="dark"] .message-row:not(.own) .message-bubble .message-content p {

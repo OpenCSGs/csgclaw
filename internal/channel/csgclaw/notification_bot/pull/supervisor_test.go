@@ -22,8 +22,8 @@ func (s *stubBotLister) ListNotificationBots(string) ([]bot.Bot, error) {
 		ID:   "u-test",
 		Type: bot.BotTypeNotification,
 		RuntimeOptions: map[string]any{
-			"delivery_mode": "remote_pull",
-			"remote_url":    s.flat["remote_url"],
+			"delivery_mode":    "remote_pull",
+			"remote_url":       s.flat["remote_url"],
 			"remote_token_set": true,
 		},
 	}}, nil
@@ -80,11 +80,11 @@ func TestSupervisorPullUsesStoredTokenNotAPIView(t *testing.T) {
 	sup := &Supervisor{
 		Bots: &stubBotLister{
 			flat: map[string]any{
-				"delivery_mode":           "remote_pull",
-				"remote_url":              srv.URL,
-				"remote_token":            "secret-token",
-				"remote_subscription_id":  "sub-1",
-				"poll_interval":           "5s",
+				"delivery_mode":          "remote_pull",
+				"remote_url":             srv.URL,
+				"remote_token":           "secret-token",
+				"remote_subscription_id": "sub-1",
+				"poll_interval":          "5s",
 			},
 		},
 		Relay: relay,

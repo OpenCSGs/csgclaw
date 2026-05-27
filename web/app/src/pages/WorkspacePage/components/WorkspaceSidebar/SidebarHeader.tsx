@@ -1,17 +1,13 @@
 export function SidebarHeader({ t, currentWorkspaceLabel, runningAgentCount, agentCount }) {
   return (
     <div className="sidebar-header workspace-header">
-      <div className="workspace-signal-panel" aria-label={currentWorkspaceLabel}>
-        <div className="workspace-signal-copy">
-          <span>{currentWorkspaceLabel}</span>
+      <div className="workspace-presence-panel" aria-label={currentWorkspaceLabel}>
+        <span className="workspace-presence-dot" aria-hidden="true"></span>
+        <div className="workspace-presence-copy">
+          <span>{t("localAgentConsole")}</span>
           <strong>
             {runningAgentCount}/{agentCount} {t("activeNow")}
           </strong>
-        </div>
-        <div className="workspace-signal-meter" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
         </div>
       </div>
     </div>

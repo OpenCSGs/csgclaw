@@ -1,0 +1,4 @@
+interface:
+  display_name: "Conventional Commit"
+  short_description: "Draft commit messages from current git changes"
+  default_prompt: "Use $conventional-commit to generate Conventional Commit messages from the current repo changes. If I explicitly ask to commit, use Codex approval for the final git commit step."

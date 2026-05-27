@@ -10,8 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"csgclaw/internal/apiclient"
 )
 
 type Config struct {
@@ -274,7 +272,8 @@ const (
 	IMDirName       = "im"
 	ChannelsDirName = "channels"
 
-	DefaultHTTPPort                 = apiclient.DefaultHTTPPort
+	DefaultHTTPHost                 = "127.0.0.1"
+	DefaultHTTPPort                 = "18080"
 	DefaultAccessToken              = "your_access_token"
 	CSGHubProvider                  = "csghub"
 	DockerProvider                  = "docker"
@@ -301,7 +300,7 @@ func DefaultListenAddr() string {
 }
 
 func DefaultAPIBaseURL() string {
-	return apiclient.DefaultAPIBaseURL()
+	return "http://" + net.JoinHostPort(DefaultHTTPHost, DefaultHTTPPort)
 }
 
 func ListenPort(listenAddr string) string {
@@ -321,7 +320,14 @@ func ResolveAdvertiseBaseURL(server ServerConfig) string {
 	if u := strings.TrimRight(strings.TrimSpace(server.AdvertiseBaseURL), "/"); u != "" {
 		return u
 	}
-	return "http://" + net.JoinHostPort("127.0.0.1", ListenPort(server.ListenAddr))
+
+	host := DefaultHTTPHost
+	if listenHost, _, err := net.SplitHostPort(server.ListenAddr); err == nil {
+		if listenHost != "" && listenHost != "0.0.0.0" && listenHost != "::" {
+			host = listenHost
+		}
+	}
+	return "http://" + net.JoinHostPort(host, ListenPort(server.ListenAddr))
 }
 
 func DefaultDir() (string, error) {

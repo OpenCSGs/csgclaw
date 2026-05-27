@@ -168,7 +168,7 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
           <h1>{t("hubTitle")}</h1>
           <p>{t("hubSubtitle")}</p>
         </div>
-        <Button className="preview-action-button" onClick={onRetry}>
+        <Button variant="secondaryGray" size="md" onClick={onRetry}>
           {loaded ? t("hubRefresh") : t("hubLoading")}
         </Button>
       </header>
@@ -259,11 +259,7 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
                       </div>
                     </div>
                     <div className="hub-template-actions">
-                      <Button
-                        variant="primary"
-                        className="preview-action-button preview-action-button-primary"
-                        onClick={() => onCreateFromTemplate?.(selectedTemplate)}
-                      >
+                      <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
                         <span>{t("createAgent")}</span>
                       </Button>
                     </div>

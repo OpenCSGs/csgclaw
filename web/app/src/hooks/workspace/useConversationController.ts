@@ -27,6 +27,7 @@ import {
 } from "@/models/conversations";
 import {
   areComposerSegmentsEqual,
+  getMentionCandidates,
   getComposerMentionState,
   insertComposerLineBreak,
   isComposerKeyboardEventComposing,
@@ -182,14 +183,10 @@ export function useConversationController({
       return [];
     }
     const allowed = new Set(activeConversation?.members ?? []);
-    return data.users
-      .filter((user) => allowed.has(user.id))
-      .filter(
-        (user) =>
-          user.handle.toLowerCase().includes(composerMentionState.query.toLowerCase()) ||
-          user.name.toLowerCase().includes(composerMentionState.query.toLowerCase()),
-      )
-      .slice(0, 5);
+    return getMentionCandidates(
+      data.users.filter((user) => allowed.has(user.id)),
+      composerMentionState.query,
+    );
   }, [data, activeConversation, composerMentionState]);
   const mentionableUsersByHandle = useMemo(() => {
     const result = new Map<string, IMUser>();

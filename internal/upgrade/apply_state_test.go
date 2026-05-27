@@ -49,3 +49,29 @@ func TestConsumeApplyFailureReturnsMessageAndClearsStatus(t *testing.T) {
 		t.Fatalf("status file still exists; stat err = %v", err)
 	}
 }
+
+func TestConsumeApplyStatusReturnsManualRestartRequired(t *testing.T) {
+	dir := t.TempDir()
+	artifacts, err := ResolveApplyArtifacts(filepath.Join(dir, "config.toml"))
+	if err != nil {
+		t.Fatalf("ResolveApplyArtifacts() error = %v", err)
+	}
+
+	if err := artifacts.RecordManualRestartRequired("manual restart required"); err != nil {
+		t.Fatalf("RecordManualRestartRequired() error = %v", err)
+	}
+
+	got, err := ConsumeApplyStatus(filepath.Join(dir, "config.toml"))
+	if err != nil {
+		t.Fatalf("ConsumeApplyStatus() error = %v", err)
+	}
+	if got.Status != ApplyStatusManualRestartRequired {
+		t.Fatalf("Status = %q, want %q", got.Status, ApplyStatusManualRestartRequired)
+	}
+	if got.Message != "manual restart required" {
+		t.Fatalf("Message = %q, want manual restart text", got.Message)
+	}
+	if _, err := os.Stat(artifacts.StatusPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("status file still exists; stat err = %v", err)
+	}
+}

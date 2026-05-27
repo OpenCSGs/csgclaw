@@ -1,31 +1,57 @@
 import { useLayoutEffect, useState } from "react";
+import { X } from "lucide-react";
 import {
+  agentStatusLabel,
   agentModelID,
   formatProviderLabel,
+  formatRuntimeKindLabel,
   isAgentIncomplete,
   isAgentRestartNeeded,
   isAgentRunning,
 } from "@/models/agents";
 import { localizeRole } from "@/shared/i18n";
 import { AgentIcon } from "@/components/ui/Icons";
-import { Button } from "@/components/ui";
+import { Button, IconButton } from "@/components/ui";
 
-export function profilePreviewStyle(anchorRect, cardHeight = 420) {
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function profilePreviewStyle(anchorRect, cardHeight = 420) {
   const offset = 12;
-  const viewportPadding = 12;
-  const width = Math.min(360, window.innerWidth - 24);
-  const preferRight = anchorRect ? anchorRect.right + offset + width <= window.innerWidth - viewportPadding : true;
-  const left = anchorRect
-    ? preferRight
-      ? Math.max(viewportPadding, anchorRect.right + offset)
-      : Math.max(viewportPadding, anchorRect.left - width - offset)
-    : viewportPadding;
-  const maxTop = Math.max(
-    viewportPadding,
-    window.innerHeight - viewportPadding - Math.min(cardHeight, window.innerHeight - viewportPadding * 2),
-  );
-  const top = anchorRect ? Math.min(Math.max(viewportPadding, anchorRect.top - 12), maxTop) : viewportPadding;
+  const viewportPadding = 16;
+  const width = Math.min(360, window.innerWidth - viewportPadding * 2);
+  const maxLeft = Math.max(viewportPadding, window.innerWidth - viewportPadding - width);
+  const visibleHeight = Math.min(cardHeight, window.innerHeight - viewportPadding * 2);
+  const maxTop = Math.max(viewportPadding, window.innerHeight - viewportPadding - visibleHeight);
+
+  if (!anchorRect) {
+    return { top: `${viewportPadding}px`, left: `${viewportPadding}px`, width: `${width}px` };
+  }
+
+  const hasRoomRight = anchorRect.right + offset + width <= window.innerWidth - viewportPadding;
+  const preferredLeft = hasRoomRight ? anchorRect.right + offset : anchorRect.left - width - offset;
+  const left = clamp(preferredLeft, viewportPadding, maxLeft);
+  const top = clamp(anchorRect.top - 12, viewportPadding, maxTop);
   return { top: `${top}px`, left: `${left}px`, width: `${width}px` };
+}
+
+function previewFieldLabel(label) {
+  return String(label || "").toLocaleUpperCase();
+}
+
+function agentModelWithReasoning(agent) {
+  const model = agentModelID(agent);
+  const reasoning = agent?.reasoning_effort || agent?.agent_profile?.reasoning_effort || "medium";
+  return reasoning ? `${model}(${reasoning})` : model;
+}
+
+function isBootstrapAdminUser(user) {
+  return (
+    user?.id === "u-admin" ||
+    String(user?.handle ?? "").toLowerCase() === "admin" ||
+    String(user?.name ?? "").toLowerCase() === "admin"
+  );
 }
 
 export function ProfilePreviewPopover({
@@ -41,10 +67,17 @@ export function ProfilePreviewPopover({
   onOpenDM,
   onDelete,
 }) {
+  const localAdminPreview = !agent && isBootstrapAdminUser(user);
+  const showAgentMetadataFields = Boolean(agent || localAdminPreview);
   const running = agent ? isAgentRunning(agent) : false;
   const incomplete = agent ? isAgentIncomplete(agent) : false;
   const restartNeeded = agent ? isAgentRestartNeeded(agent) : false;
   const provider = agent?.provider || agent?.agent_profile?.provider;
+  const previewRuntime = agent
+    ? formatRuntimeKindLabel(agent.runtime_kind || agent.agent_profile?.runtime_kind, t)
+    : t("profileLocalRuntime");
+  const previewProvider = agent ? formatProviderLabel(provider) : t("profileLocalProvider");
+  const previewModel = agent ? agentModelWithReasoning(agent) : localizeRole(user?.role || "admin", t);
   const displayName = agent?.name || user?.name || "";
   const displayRole = agent ? agent.role || "worker" : user?.role;
   const deleteBusy = agent ? busyKey === `${agent.id}:delete-bot` : false;
@@ -70,10 +103,15 @@ export function ProfilePreviewPopover({
       aria-label={t("profilePreview")}
     >
       <div className="preview-header">
-        <div className="preview-title">{agent ? t("profilePreview") : t("personProfile")}</div>
-        <Button className="modal-close" aria-label={t("close")} onClick={onClose}>
-          <span aria-hidden="true">×</span>
-        </Button>
+        <div className="preview-title">{t("profilePreview")}</div>
+        <IconButton
+          className="modal-close"
+          icon={<X size={20} strokeWidth={2} />}
+          label={t("close")}
+          markClassName="modal-close-icon"
+          onClick={onClose}
+          variant="tertiaryGray"
+        />
       </div>
       <div className="preview-hero">
         {agent ? (
@@ -95,75 +133,70 @@ export function ProfilePreviewPopover({
           </div>
         </div>
       </div>
-      {agent?.description || user?.name ? <p className="preview-description">{agent?.description || ""}</p> : null}
-      {agent ? (
+      {agent?.description ? <p className="preview-description">{agent.description}</p> : null}
+      {showAgentMetadataFields ? (
         <>
           <div className="preview-fields">
             <div className="entity-field">
-              <span>{t("status")}</span>
-              <strong>{agent.status || "unknown"}</strong>
+              <span>{previewFieldLabel(t("status"))}</span>
+              <strong>{agent ? agentStatusLabel(agent.status, t) : t("online")}</strong>
             </div>
             <div className="entity-field">
-              <span>{t("profileProvider")}</span>
-              <strong>{formatProviderLabel(provider)}</strong>
+              <span>{previewFieldLabel(t("profileRuntimeKind"))}</span>
+              <strong>{previewRuntime}</strong>
             </div>
             <div className="entity-field">
-              <span>{t("profileModel")}</span>
-              <strong>{agentModelID(agent)}</strong>
+              <span>{previewFieldLabel(t("profileProvider"))}</span>
+              <strong>{previewProvider}</strong>
             </div>
             <div className="entity-field">
-              <span>{t("profileReasoning")}</span>
-              <strong>{agent.reasoning_effort || agent.agent_profile?.reasoning_effort || "medium"}</strong>
+              <span>{previewFieldLabel(t("profileModel"))}</span>
+              <strong>{previewModel}</strong>
             </div>
           </div>
-          <div className="entity-badge-row">
-            <span className={`agent-badge ${running ? "" : "warn"}`}>{running ? t("online") : t("offline")}</span>
-            <span className={`agent-badge ${incomplete ? "warn" : ""}`}>
-              {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
-            </span>
-            {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
-          </div>
-          <div className="preview-actions">
-            <Button
-              variant="primary"
-              className="preview-action-button preview-action-button-primary"
-              onClick={() => onOpenAgent(agent)}
-            >
-              {t("openProfile")}
-            </Button>
-            {canOpenDM ? (
-              <Button className="preview-action-button" onClick={() => onOpenDM(agent)}>
-                {t("openDM")}
-              </Button>
-            ) : null}
-            {agent.role !== "manager" && agent.id !== "u-manager" ? (
-              <Button
-                variant="outlineDanger"
-                className="preview-action-button preview-action-button-danger preview-actions-delete"
-                disabled={deleteBusy}
-                onClick={() => onDelete(agent)}
-              >
-                {t("agentDelete")}
-              </Button>
-            ) : null}
-          </div>
+          {agent ? (
+            <>
+              <div className="entity-badge-row">
+                <span className={`agent-badge ${running ? "" : "warn"}`}>{running ? t("online") : t("offline")}</span>
+                <span className={`agent-badge ${incomplete ? "warn" : ""}`}>
+                  {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
+                </span>
+                {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
+              </div>
+              <div className="preview-actions">
+                <Button variant="primary" size="md" onClick={() => onOpenAgent(agent)}>
+                  {t("openProfile")}
+                </Button>
+                {canOpenDM ? (
+                  <Button variant="secondaryGray" size="md" onClick={() => onOpenDM(agent)}>
+                    {t("openDM")}
+                  </Button>
+                ) : null}
+                {agent.role !== "manager" && agent.id !== "u-manager" ? (
+                  <Button variant="danger" size="md" disabled={deleteBusy} onClick={() => onDelete(agent)}>
+                    {t("agentDelete")}
+                  </Button>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </>
       ) : (
         <div className="preview-fields">
           <div className="entity-field">
-            <span>{t("status")}</span>
+            <span>{previewFieldLabel(t("status"))}</span>
             <strong>{t("online")}</strong>
           </div>
           <div className="entity-field">
-            <span>{t("roleLabel")}</span>
+            <span>{previewFieldLabel(t("roleLabel"))}</span>
             <strong>{localizeRole(user?.role, t)}</strong>
           </div>
           <div className="entity-field">
-            <span>{t("handleLabel")}</span>
+            <span>{previewFieldLabel(t("handleLabel"))}</span>
             <strong>{user?.handle ? `@${user.handle}` : "-"}</strong>
           </div>
           <div className="entity-field">
-            <span>{t("userIDLabel")}</span>
+            <span>{previewFieldLabel(t("userIDLabel"))}</span>
             <strong>{user?.id || ""}</strong>
           </div>
         </div>

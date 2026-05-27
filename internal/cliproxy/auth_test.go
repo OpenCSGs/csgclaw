@@ -158,6 +158,66 @@ func TestAuthStatusKeepsEquivalentCodexHomeAuth(t *testing.T) {
 	}
 }
 
+func TestAuthStatusDoesNotReimportDisabledCodexAuth(t *testing.T) {
+	home := t.TempDir()
+	authDir := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(authDirEnv, authDir)
+
+	existing := map[string]any{
+		"type":          "codex",
+		"access_token":  "old-access",
+		"refresh_token": "old-refresh",
+		"email":         "dev@example.test",
+		"disabled":      true,
+	}
+	fileName := authFileName(ProviderCodex, existing, "codex-imported")
+	raw, err := json.Marshal(existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(authDir, fileName), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	codexDir := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(codexDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{
+		"tokens": {
+			"access_token": "new-access",
+			"refresh_token": "new-refresh",
+			"email": "dev@example.test"
+		}
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := (&Service{}).AuthStatus(context.Background(), ProviderCodex)
+	if err != nil {
+		t.Fatalf("AuthStatus() error = %v", err)
+	}
+	if status.Authenticated || !status.LoginRequired {
+		t.Fatalf("status = %+v, want login required for disabled auth", status)
+	}
+
+	raw, err = os.ReadFile(filepath.Join(authDir, fileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if metadata["access_token"] != "old-access" || metadata["refresh_token"] != "old-refresh" {
+		t.Fatalf("metadata = %#v, want disabled auth preserved", metadata)
+	}
+	if disabled, _ := metadata["disabled"].(bool); !disabled {
+		t.Fatalf("metadata disabled = %#v, want true", metadata["disabled"])
+	}
+}
+
 func TestAuthStatusImportDoesNotRestartRunningService(t *testing.T) {
 	home := t.TempDir()
 	authDir := t.TempDir()

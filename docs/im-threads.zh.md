@@ -140,14 +140,22 @@ Thread-aware bot event 可能包含：
 
 - `thread_root_id`：事件位于 thread 内时的 root message ID。
 - `thread_context`：该 thread root 的隐藏上下文快照和 summary。
+- `context.topic_id`：PicoClaw 原生 topic/session ID。对 CSGClaw IM
+  threads 来说，它与 `thread_root_id` 相同。
 
 `thread_context` 是 prompt context，不是可见 thread 历史。
 
-Bot send 可以传入 `thread_root_id`。传入后，消息会作为该 thread 内的 reply
-发送。
+Bot send 可以传入 CSGClaw 字段（`room_id`、`text`、`thread_root_id`），
+也可以传入 PicoClaw outbound 字段（`chat_id`、`content`、
+`context.topic_id`）。存在 thread root/topic 时，消息会作为该 thread 内的
+reply 发送。如果 bot send 同时省略 `thread_root_id`、`topic_id` 和
+`context.topic_id`，CSGClaw 会按 room/DM 顶层消息处理，不会根据该 bot 在
+房间中最近收到的事件推断 thread。
 
 这对应 PicoClaw/topic 隔离需求：runtime 应把 `room_id` 视为普通会话 key，
-把 `room_id:thread_root_id` 视为 thread 会话 key。
+把 `room_id:thread_root_id` 视为 thread 会话 key。生成的 PicoClaw config
+会把 session dimensions 设为 `["chat", "topic"]`，因此
+`context.topic_id` 会为每个 CSGClaw IM thread 建立独立的 PicoClaw session。
 
 ## Codex Bridge 会话隔离
 

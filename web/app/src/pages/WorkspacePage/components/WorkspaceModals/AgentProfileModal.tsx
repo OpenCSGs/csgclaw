@@ -33,6 +33,7 @@ import {
   runtimeImageForKind,
   templateMatchesRuntime,
 } from "@/models/agents";
+import { ModalCloseButton } from "./ModalCloseButton";
 
 export function AgentProfileModal({
   t,
@@ -100,7 +101,7 @@ export function AgentProfileModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal-card profile-modal agent-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
@@ -115,9 +116,7 @@ export function AgentProfileModal({
                 : t("editAgentSubtitle")}
             </div>
           </div>
-          <Button className="modal-close" onClick={onClose}>
-            {t("close")}
-          </Button>
+          <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
         <div className="profile-editor-shell">
           {agentModalMode === "create" ? (
@@ -404,12 +403,12 @@ export function AgentProfileModal({
         {agentError ? <div className="form-error">{agentError}</div> : null}
         <AgentCreateProgress progress={agentProgress} t={t} />
         <div className="modal-actions">
-          <Button className="secondary-button" onClick={onClose}>
+          <Button variant="secondaryGray" size="md" onClick={onClose}>
             {t("cancel")}
           </Button>
           <Button
             variant="primary"
-            className="send-button"
+            size="md"
             disabled={
               agentBusy ||
               isBlank(agentDraft.name) ||
@@ -417,9 +416,10 @@ export function AgentProfileModal({
                 ? !notifierFormIsComplete(agentDraft, editingAgent)
                 : !agentDraft.model_id || profileBaseURLMissing(agentDraft))
             }
+            loading={agentBusy}
             onClick={onSave}
           >
-            {agentBusy ? "..." : agentModalMode === "create" ? t("agentCreateSave") : t("agentUpdateSave")}
+            {agentModalMode === "create" ? t("agentCreateSave") : t("agentUpdateSave")}
           </Button>
         </div>
       </div>

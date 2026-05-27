@@ -1469,6 +1469,21 @@ func TestResolveAdvertiseBaseURL(t *testing.T) {
 			want:   "http://127.0.0.1:19090",
 		},
 		{
+			name:   "empty keeps explicit listen host",
+			server: ServerConfig{ListenAddr: "192.168.2.52:19090"},
+			want:   "http://192.168.2.52:19090",
+		},
+		{
+			name:   "empty keeps localhost listen host",
+			server: ServerConfig{ListenAddr: "localhost:19090"},
+			want:   "http://localhost:19090",
+		},
+		{
+			name:   "wildcard listen host falls back to loopback",
+			server: ServerConfig{ListenAddr: "0.0.0.0:19090"},
+			want:   "http://127.0.0.1:19090",
+		},
+		{
 			name:   "empty uses default http port",
 			server: ServerConfig{},
 			want:   "http://127.0.0.1:" + DefaultHTTPPort,
