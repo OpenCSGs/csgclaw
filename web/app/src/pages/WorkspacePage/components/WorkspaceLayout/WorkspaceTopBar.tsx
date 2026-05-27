@@ -19,12 +19,20 @@ export function WorkspaceTopBar({
     <header className="workspace-topbar">
       <div className="workspace-topbar-brand" aria-label="CSGClaw">
         {isSidebarCollapsed ? (
-          <img
-            className="workspace-topbar-logo-collapsed"
-            src="brand/csgclaw-logo-collapsed.svg"
-            alt=""
-            aria-hidden="true"
-          />
+          <>
+            <img
+              className="workspace-topbar-logo-collapsed workspace-topbar-logo-collapsed-light"
+              src="brand/csgclaw-logo-collapsed.svg"
+              alt=""
+              aria-hidden="true"
+            />
+            <img
+              className="workspace-topbar-logo-collapsed workspace-topbar-logo-collapsed-dark"
+              src="brand/csgclaw-logo-collapsed-dark.svg"
+              alt=""
+              aria-hidden="true"
+            />
+          </>
         ) : (
           <>
             <img

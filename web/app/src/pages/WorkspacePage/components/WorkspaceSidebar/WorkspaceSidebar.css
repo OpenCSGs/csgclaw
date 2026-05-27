@@ -1914,6 +1914,10 @@
   object-fit: contain;
 }
 
+.workspace-topbar-logo-collapsed-dark {
+  display: none;
+}
+
 .workspace-topbar-toggle {
   flex: 0 0 auto;
   display: inline-flex;
@@ -2310,6 +2314,14 @@
 }
 
 :root[data-theme="dark"] .workspace-topbar-logo-dark {
+  display: block;
+}
+
+:root[data-theme="dark"] .workspace-topbar-logo-collapsed-light {
+  display: none;
+}
+
+:root[data-theme="dark"] .workspace-topbar-logo-collapsed-dark {
   display: block;
 }
 
