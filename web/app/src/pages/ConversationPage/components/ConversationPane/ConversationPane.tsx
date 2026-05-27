@@ -19,6 +19,7 @@ import {
   getConversationDescription,
   isDirectConversation,
   isEventMessage,
+  isToolCallMessage,
 } from "@/models/conversations";
 import { localizeRole } from "@/shared/i18n";
 
@@ -378,6 +379,7 @@ export function ConversationPane({
           usersById={usersById}
           locale={locale}
           theme={theme}
+          showToolCalls={showToolCalls}
           t={t}
           onClose={onCloseThread}
           onDraftChange={onThreadDraftChange}
@@ -435,6 +437,7 @@ function ThreadPanel({
   usersById,
   locale,
   theme,
+  showToolCalls,
   t,
   onClose,
   onDraftChange,
@@ -448,7 +451,9 @@ function ThreadPanel({
   const [mentionIndex, setMentionIndex] = useState(0);
   const root = thread?.root ?? null;
   const replies = thread?.replies ?? [];
-  const latestReplyID = replies[replies.length - 1]?.id || "";
+  const visibleRoot = showToolCalls || !isToolCallMessage(root) ? root : null;
+  const visibleReplies = showToolCalls ? replies : replies.filter((message) => !isToolCallMessage(message));
+  const latestReplyID = visibleReplies[visibleReplies.length - 1]?.id || "";
   const threadMentionCandidates = useMemo(() => {
     if (!mentionState) {
       return [];
@@ -467,7 +472,7 @@ function ThreadPanel({
     scrollToBottom();
     const frame = window.requestAnimationFrame(scrollToBottom);
     return () => window.cancelAnimationFrame(frame);
-  }, [root, replies.length, latestReplyID, loading]);
+  }, [root, visibleReplies.length, latestReplyID, loading]);
 
   function syncThreadMentionState(target = textareaRef.current) {
     if (!target) {
@@ -529,7 +534,9 @@ function ThreadPanel({
         <div>
           <div className="thread-panel-kicker">{t("threadPanelTitle")}</div>
           <div className="thread-panel-title truncate">
-            {formatMessagePreviewText(thread?.summary?.context_summary?.root_excerpt || root?.content || "")}
+            {visibleRoot
+              ? formatMessagePreviewText(thread?.summary?.context_summary?.root_excerpt || visibleRoot.content || "")
+              : t("noVisibleMessages")}
           </div>
         </div>
         <Button className="icon-button" aria-label={t("close")} title={t("close")} onClick={onClose}>
@@ -541,10 +548,10 @@ function ThreadPanel({
       <div ref={threadBodyRef} className="thread-panel-body">
         {loading && !root ? <div className="thread-empty">{t("loading")}</div> : null}
         {error ? <div className="form-error">{error}</div> : null}
-        {root ? (
+        {visibleRoot ? (
           <div className="thread-root">
             <ThreadMessage
-              message={root}
+              message={visibleRoot}
               usersById={usersById}
               locale={locale}
               theme={theme}
@@ -554,9 +561,9 @@ function ThreadPanel({
           </div>
         ) : null}
         <div className="thread-replies">
-          <div className="thread-section-title">{formatThreadReplyCount(replies.length, t)}</div>
-          {replies.length > 0 ? (
-            replies.map((message) => (
+          <div className="thread-section-title">{formatThreadReplyCount(visibleReplies.length, t)}</div>
+          {visibleReplies.length > 0 ? (
+            visibleReplies.map((message) => (
               <ThreadMessage
                 key={message.id}
                 message={message}

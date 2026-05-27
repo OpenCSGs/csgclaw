@@ -2,6 +2,7 @@ import { createRef, useState } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConversationPane } from "@/pages/ConversationPage/components/ConversationPane/ConversationPane";
+import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
 import type { IMConversation, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 
 const users: IMUser[] = [
@@ -62,6 +63,23 @@ const roomUsers: IMUser[] = [
 
 const usersById = new Map(users.map((user) => [user.id, user]));
 
+function toolActivityContent(summary: string) {
+  return JSON.stringify({
+    type: CSGCLAW_AGENT_ACTIVITY_TYPE,
+    content: {
+      msgtype: AgentActivityMsgTypes.tool,
+      body: "Tool running",
+      tool: {
+        id: "tool-1",
+        input_summary: summary,
+        kind: "execute",
+        status: "running",
+        title: "Run shell command",
+      },
+    },
+  });
+}
+
 const t: TranslateFn = (key, params = {}) => {
   const labels: Record<string, string> = {
     close: "Close",
@@ -81,7 +99,12 @@ const t: TranslateFn = (key, params = {}) => {
   return labels[key] ?? key;
 };
 
-function renderThreadPane(conversationMembers = users, onPreviewUser = vi.fn()) {
+function renderThreadPane({
+  conversationMembers = users,
+  onPreviewUser = vi.fn(),
+  replies = [],
+  showToolCalls = false,
+} = {}) {
   const root = {
     content: "Hi! How can I help you today?",
     created_at: "2026-05-25T08:13:00Z",
@@ -96,7 +119,7 @@ function renderThreadPane(conversationMembers = users, onPreviewUser = vi.fn()) 
     title: "manager",
   };
   const thread: ThreadView = {
-    replies: [],
+    replies,
     room_id: "room-1",
     root,
     summary: {
@@ -153,7 +176,7 @@ function renderThreadPane(conversationMembers = users, onPreviewUser = vi.fn()) 
         selectedMessageCount={1}
         showChannelTools={false}
         showMemberList={false}
-        showToolCalls={false}
+        showToolCalls={showToolCalls}
         t={t}
         theme="light"
         threadDraft={threadDraft}
@@ -196,7 +219,7 @@ describe("ConversationPane", () => {
     HTMLElement.prototype.scrollIntoView = scrollIntoView;
 
     try {
-      renderThreadPane(roomUsers);
+      renderThreadPane({ conversationMembers: roomUsers });
 
       await user.type(screen.getByPlaceholderText("Reply in thread"), "@");
       await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}");
@@ -211,11 +234,36 @@ describe("ConversationPane", () => {
   it("opens profile preview from thread message avatars", async () => {
     const user = userEvent.setup();
     const onPreviewUser = vi.fn();
-    renderThreadPane(users, onPreviewUser);
+    renderThreadPane({ conversationMembers: users, onPreviewUser });
 
     const threadPanel = screen.getByRole("complementary", { name: "Thread" });
     await user.click(within(threadPanel).getByRole("button", { name: "profilePreview manager" }));
 
     expect(onPreviewUser).toHaveBeenCalledWith(users[1], expect.any(HTMLElement));
+  });
+
+  it("hides tool-call replies in the thread panel when tool calls are off", () => {
+    renderThreadPane({
+      replies: [
+        {
+          content: toolActivityContent("hidden shell output"),
+          created_at: "2026-05-25T08:14:00Z",
+          id: "msg-tool",
+          sender_id: "u-manager",
+        },
+        {
+          content: "Visible answer",
+          created_at: "2026-05-25T08:15:00Z",
+          id: "msg-answer",
+          sender_id: "u-manager",
+        },
+      ],
+      showToolCalls: false,
+    });
+
+    const threadPanel = screen.getByRole("complementary", { name: "Thread" });
+    expect(within(threadPanel).queryByText("hidden shell output")).not.toBeInTheDocument();
+    expect(within(threadPanel).getByText("Visible answer")).toBeInTheDocument();
+    expect(within(threadPanel).getByText("1 replies")).toBeInTheDocument();
   });
 });
