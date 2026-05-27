@@ -1,0 +1,10 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g clip-path="url(#collapsed-logo-clip)">
+    <image href="csgclaw-logo-light.svg" x="29.6857" y="25.599" width="1743" height="461" />
+  </g>
+  <defs>
+    <clipPath id="collapsed-logo-clip">
+      <rect width="512" height="512" fill="white" />
+    </clipPath>
+  </defs>
+</svg>

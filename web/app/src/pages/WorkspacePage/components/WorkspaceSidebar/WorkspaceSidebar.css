@@ -1906,6 +1906,14 @@
   display: none;
 }
 
+.workspace-topbar-logo-collapsed {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: block;
+  object-fit: contain;
+}
+
 .workspace-topbar-toggle {
   flex: 0 0 auto;
   display: inline-flex;
