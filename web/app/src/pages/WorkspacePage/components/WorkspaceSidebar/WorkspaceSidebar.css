@@ -2360,15 +2360,6 @@
   }
 }
 
-.conversation-nav-row {
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-}
-
-.conversation-nav-row .workspace-row-icon {
-  width: 32px;
-  height: 32px;
-}
-
 .sidebar-main-column .workspace-nav {
   padding: 24px 22px 20px;
   gap: 0;
