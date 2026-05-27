@@ -1058,9 +1058,11 @@ Example request body:
 }
 ```
 
-`thread_root_id` is optional. When present, the bot response is sent as a reply
-inside that IM thread. The detailed response behavior depends on the
-compatibility bridge implementation.
+`thread_root_id`, `topic_id`, and `context.topic_id` are optional thread/topic
+identifiers. When one is present, the bot response is sent as a reply inside
+that IM thread. When all are omitted, the response is sent as a top-level room/DM
+message; the server does not infer a thread from the bot's most recent room
+event.
 
 PicoClaw outbound message shape is also accepted:
 

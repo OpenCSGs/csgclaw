@@ -382,6 +382,7 @@ export function ConversationPane({
           onClose={onCloseThread}
           onDraftChange={onThreadDraftChange}
           mentionableUsers={conversationMembers}
+          onPreviewUser={onPreviewUser}
           onSend={onSendThreadReply}
         />
       ) : null}
@@ -437,6 +438,7 @@ function ThreadPanel({
   t,
   onClose,
   onDraftChange,
+  onPreviewUser,
   mentionableUsers = [],
   onSend,
 }) {
@@ -541,14 +543,29 @@ function ThreadPanel({
         {error ? <div className="form-error">{error}</div> : null}
         {root ? (
           <div className="thread-root">
-            <ThreadMessage message={root} usersById={usersById} locale={locale} theme={theme} />
+            <ThreadMessage
+              message={root}
+              usersById={usersById}
+              locale={locale}
+              theme={theme}
+              t={t}
+              onPreviewUser={onPreviewUser}
+            />
           </div>
         ) : null}
         <div className="thread-replies">
           <div className="thread-section-title">{formatThreadReplyCount(replies.length, t)}</div>
           {replies.length > 0 ? (
             replies.map((message) => (
-              <ThreadMessage key={message.id} message={message} usersById={usersById} locale={locale} theme={theme} />
+              <ThreadMessage
+                key={message.id}
+                message={message}
+                usersById={usersById}
+                locale={locale}
+                theme={theme}
+                t={t}
+                onPreviewUser={onPreviewUser}
+              />
             ))
           ) : (
             <div className="thread-empty">{t("threadNoReplies")}</div>
@@ -623,21 +640,30 @@ function ThreadPanel({
   );
 }
 
-function ThreadMessage({ message, usersById, locale, theme, compact = false }) {
+function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, compact = false }) {
   const user = usersById.get(message.sender_id);
   const fallbackName = message.sender_id || "";
   const avatar = user?.avatar || fallbackName.slice(0, 1).toUpperCase();
   const name = user?.name || user?.handle || fallbackName;
+  const avatarStyle = { background: `linear-gradient(135deg, ${user?.accent_hex || "#4d6ad6"}, #10233f)` };
 
   return (
     <div className={`thread-message ${compact ? "compact" : ""}`.trim()}>
-      <div
-        className="thread-message-avatar"
-        style={{ background: `linear-gradient(135deg, ${user?.accent_hex || "#4d6ad6"}, #10233f)` }}
-        aria-hidden="true"
-      >
-        {avatar}
-      </div>
+      {user ? (
+        <button
+          type="button"
+          className="thread-message-avatar"
+          style={avatarStyle}
+          aria-label={`${t("profilePreview")} ${name}`}
+          onClick={(event) => onPreviewUser(user, event.currentTarget)}
+        >
+          {avatar}
+        </button>
+      ) : (
+        <div className="thread-message-avatar" style={avatarStyle} aria-hidden="true">
+          {avatar}
+        </div>
+      )}
       <div className="thread-message-main">
         <div className="message-meta">
           <span className="message-author">{name}</span>

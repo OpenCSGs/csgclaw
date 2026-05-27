@@ -23,7 +23,7 @@ TARGET_ARCH ?= $(shell $(GO) env GOARCH)
 CLI_BIN ?= $(BIN_DIR)/csgclaw-cli
 
 IMAGE ?= opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw
-TAG ?= 2026.4.27.0
+TAG ?= 2026.5.27
 LOCAL_IMAGE ?= picoclaw:local
 
 .DEFAULT_GOAL := build-all

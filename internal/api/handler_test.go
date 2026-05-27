@@ -3334,7 +3334,7 @@ func TestHandleBotSendMessageRequiresIMService(t *testing.T) {
 	}
 }
 
-func TestHandleBotSendMessageDefaultsToRecentThreadScope(t *testing.T) {
+func TestHandleBotSendMessageDoesNotInferRecentThreadScope(t *testing.T) {
 	now := time.Now().UTC()
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
@@ -3418,58 +3418,8 @@ func TestHandleBotSendMessageDefaultsToRecentThreadScope(t *testing.T) {
 	if reply.ID == "" {
 		t.Fatalf("sent message %q not found in room messages", sent.MessageID)
 	}
-	if reply.RelatesTo == nil || reply.RelatesTo.RelType != im.RelationTypeThread || reply.RelatesTo.EventID != "msg-root" {
-		t.Fatalf("reply.RelatesTo = %+v, want m.thread -> msg-root", reply.RelatesTo)
-	}
-
-	topLevel, err := imSvc.CreateMessage(im.CreateMessageRequest{
-		RoomID:   "room-1",
-		SenderID: "u-admin",
-		Content:  "top-level follow-up",
-	})
-	if err != nil {
-		t.Fatalf("CreateMessage(top-level follow-up) error = %v", err)
-	}
-	room, ok = imSvc.Room("room-1")
-	if !ok {
-		t.Fatal("Room(room-1) = false before top-level publish, want room")
-	}
-	bridge.PublishMessageEvent(room, sender, topLevel)
-	select {
-	case evt := <-events:
-		if evt.ThreadRootID != "" {
-			t.Fatalf("top-level bot event ThreadRootID = %q, want empty", evt.ThreadRootID)
-		}
-		bridge.Ack("u-manager", evt.MessageID)
-	case <-time.After(time.Second):
-		t.Fatal("PublishMessageEvent() timed out waiting for top-level event")
-	}
-
-	req = httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{"room_id":"room-1","text":"top-level answer"}`))
-	rec = httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("top-level response status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&sent); err != nil {
-		t.Fatalf("decode top-level send response: %v", err)
-	}
-	messages, err = imSvc.ListMessagesWithOptions("room-1", im.ListMessagesOptions{IncludeThreadReplies: true})
-	if err != nil {
-		t.Fatalf("ListMessagesWithOptions() after top-level response error = %v", err)
-	}
-	reply = im.Message{}
-	for _, message := range messages {
-		if message.ID == sent.MessageID {
-			reply = message
-			break
-		}
-	}
-	if reply.ID == "" {
-		t.Fatalf("top-level sent message %q not found in room messages", sent.MessageID)
-	}
 	if reply.RelatesTo != nil {
-		t.Fatalf("top-level reply.RelatesTo = %+v, want nil after top-level event reset", reply.RelatesTo)
+		t.Fatalf("reply.RelatesTo = %+v, want nil when bot send omits explicit thread/topic", reply.RelatesTo)
 	}
 }
 

@@ -606,7 +606,7 @@ func shouldKeepExistingAuth(path string, incoming map[string]any) bool {
 		return false
 	}
 	if disabled, _ := existing["disabled"].(bool); disabled {
-		return false
+		return true
 	}
 	if authMetadataEquivalent(existing, incoming) {
 		return true

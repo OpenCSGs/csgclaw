@@ -1,5 +1,5 @@
 import { createRef, useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConversationPane } from "@/pages/ConversationPage/components/ConversationPane/ConversationPane";
 import type { IMConversation, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
@@ -81,7 +81,7 @@ const t: TranslateFn = (key, params = {}) => {
   return labels[key] ?? key;
 };
 
-function renderThreadPane(conversationMembers = users) {
+function renderThreadPane(conversationMembers = users, onPreviewUser = vi.fn()) {
   const root = {
     content: "Hi! How can I help you today?",
     created_at: "2026-05-25T08:13:00Z",
@@ -143,7 +143,7 @@ function renderThreadPane(conversationMembers = users) {
         onMessageAction={() => {}}
         onOpenThread={() => {}}
         onProviderLogin={() => {}}
-        onPreviewUser={() => {}}
+        onPreviewUser={onPreviewUser}
         onSendMessage={() => {}}
         onSendThreadReply={() => {}}
         onSyncComposer={() => {}}
@@ -206,5 +206,16 @@ describe("ConversationPane", () => {
     } finally {
       HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
     }
+  });
+
+  it("opens profile preview from thread message avatars", async () => {
+    const user = userEvent.setup();
+    const onPreviewUser = vi.fn();
+    renderThreadPane(users, onPreviewUser);
+
+    const threadPanel = screen.getByRole("complementary", { name: "Thread" });
+    await user.click(within(threadPanel).getByRole("button", { name: "profilePreview manager" }));
+
+    expect(onPreviewUser).toHaveBeenCalledWith(users[1], expect.any(HTMLElement));
   });
 });

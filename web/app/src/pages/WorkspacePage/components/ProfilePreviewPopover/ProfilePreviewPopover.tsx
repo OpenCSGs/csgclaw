@@ -4,6 +4,7 @@ import {
   agentStatusLabel,
   agentModelID,
   formatProviderLabel,
+  formatRuntimeKindLabel,
   isAgentIncomplete,
   isAgentRestartNeeded,
   isAgentRunning,
@@ -35,6 +36,24 @@ function profilePreviewStyle(anchorRect, cardHeight = 420) {
   return { top: `${top}px`, left: `${left}px`, width: `${width}px` };
 }
 
+function previewFieldLabel(label) {
+  return String(label || "").toLocaleUpperCase();
+}
+
+function agentModelWithReasoning(agent) {
+  const model = agentModelID(agent);
+  const reasoning = agent?.reasoning_effort || agent?.agent_profile?.reasoning_effort || "medium";
+  return reasoning ? `${model}(${reasoning})` : model;
+}
+
+function isBootstrapAdminUser(user) {
+  return (
+    user?.id === "u-admin" ||
+    String(user?.handle ?? "").toLowerCase() === "admin" ||
+    String(user?.name ?? "").toLowerCase() === "admin"
+  );
+}
+
 export function ProfilePreviewPopover({
   previewRef,
   agent,
@@ -48,10 +67,17 @@ export function ProfilePreviewPopover({
   onOpenDM,
   onDelete,
 }) {
+  const localAdminPreview = !agent && isBootstrapAdminUser(user);
+  const showAgentMetadataFields = Boolean(agent || localAdminPreview);
   const running = agent ? isAgentRunning(agent) : false;
   const incomplete = agent ? isAgentIncomplete(agent) : false;
   const restartNeeded = agent ? isAgentRestartNeeded(agent) : false;
   const provider = agent?.provider || agent?.agent_profile?.provider;
+  const previewRuntime = agent
+    ? formatRuntimeKindLabel(agent.runtime_kind || agent.agent_profile?.runtime_kind, t)
+    : t("profileLocalRuntime");
+  const previewProvider = agent ? formatProviderLabel(provider) : t("profileLocalProvider");
+  const previewModel = agent ? agentModelWithReasoning(agent) : localizeRole(user?.role || "admin", t);
   const displayName = agent?.name || user?.name || "";
   const displayRole = agent ? agent.role || "worker" : user?.role;
   const deleteBusy = agent ? busyKey === `${agent.id}:delete-bot` : false;
@@ -77,7 +103,7 @@ export function ProfilePreviewPopover({
       aria-label={t("profilePreview")}
     >
       <div className="preview-header">
-        <div className="preview-title">{agent ? t("profilePreview") : t("personProfile")}</div>
+        <div className="preview-title">{t("profilePreview")}</div>
         <IconButton
           className="modal-close"
           icon={<X size={20} strokeWidth={2} />}
@@ -108,65 +134,69 @@ export function ProfilePreviewPopover({
         </div>
       </div>
       {agent?.description ? <p className="preview-description">{agent.description}</p> : null}
-      {agent ? (
+      {showAgentMetadataFields ? (
         <>
           <div className="preview-fields">
             <div className="entity-field">
-              <span>{t("status")}</span>
-              <strong>{agentStatusLabel(agent.status, t)}</strong>
+              <span>{previewFieldLabel(t("status"))}</span>
+              <strong>{agent ? agentStatusLabel(agent.status, t) : t("online")}</strong>
             </div>
             <div className="entity-field">
-              <span>{t("profileProvider")}</span>
-              <strong>{formatProviderLabel(provider)}</strong>
+              <span>{previewFieldLabel(t("profileRuntimeKind"))}</span>
+              <strong>{previewRuntime}</strong>
             </div>
             <div className="entity-field">
-              <span>{t("profileModel")}</span>
-              <strong>{agentModelID(agent)}</strong>
+              <span>{previewFieldLabel(t("profileProvider"))}</span>
+              <strong>{previewProvider}</strong>
             </div>
             <div className="entity-field">
-              <span>{t("profileReasoning")}</span>
-              <strong>{agent.reasoning_effort || agent.agent_profile?.reasoning_effort || "medium"}</strong>
+              <span>{previewFieldLabel(t("profileModel"))}</span>
+              <strong>{previewModel}</strong>
             </div>
           </div>
-          <div className="entity-badge-row">
-            <span className={`agent-badge ${running ? "" : "warn"}`}>{running ? t("online") : t("offline")}</span>
-            <span className={`agent-badge ${incomplete ? "warn" : ""}`}>
-              {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
-            </span>
-            {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
-          </div>
-          <div className="preview-actions">
-            <Button variant="primary" size="md" onClick={() => onOpenAgent(agent)}>
-              {t("openProfile")}
-            </Button>
-            {canOpenDM ? (
-              <Button variant="secondaryGray" size="md" onClick={() => onOpenDM(agent)}>
-                {t("openDM")}
-              </Button>
-            ) : null}
-            {agent.role !== "manager" && agent.id !== "u-manager" ? (
-              <Button variant="danger" size="md" disabled={deleteBusy} onClick={() => onDelete(agent)}>
-                {t("agentDelete")}
-              </Button>
-            ) : null}
-          </div>
+          {agent ? (
+            <>
+              <div className="entity-badge-row">
+                <span className={`agent-badge ${running ? "" : "warn"}`}>{running ? t("online") : t("offline")}</span>
+                <span className={`agent-badge ${incomplete ? "warn" : ""}`}>
+                  {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
+                </span>
+                {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
+              </div>
+              <div className="preview-actions">
+                <Button variant="primary" size="md" onClick={() => onOpenAgent(agent)}>
+                  {t("openProfile")}
+                </Button>
+                {canOpenDM ? (
+                  <Button variant="secondaryGray" size="md" onClick={() => onOpenDM(agent)}>
+                    {t("openDM")}
+                  </Button>
+                ) : null}
+                {agent.role !== "manager" && agent.id !== "u-manager" ? (
+                  <Button variant="danger" size="md" disabled={deleteBusy} onClick={() => onDelete(agent)}>
+                    {t("agentDelete")}
+                  </Button>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </>
       ) : (
         <div className="preview-fields">
           <div className="entity-field">
-            <span>{t("status")}</span>
+            <span>{previewFieldLabel(t("status"))}</span>
             <strong>{t("online")}</strong>
           </div>
           <div className="entity-field">
-            <span>{t("roleLabel")}</span>
+            <span>{previewFieldLabel(t("roleLabel"))}</span>
             <strong>{localizeRole(user?.role, t)}</strong>
           </div>
           <div className="entity-field">
-            <span>{t("handleLabel")}</span>
+            <span>{previewFieldLabel(t("handleLabel"))}</span>
             <strong>{user?.handle ? `@${user.handle}` : "-"}</strong>
           </div>
           <div className="entity-field">
-            <span>{t("userIDLabel")}</span>
+            <span>{previewFieldLabel(t("userIDLabel"))}</span>
             <strong>{user?.id || ""}</strong>
           </div>
         </div>

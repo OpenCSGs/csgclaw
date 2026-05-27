@@ -360,9 +360,6 @@ func (h *Handler) handleBotSendMessage(w http.ResponseWriter, r *http.Request, b
 	roomID := req.ResolvedRoomID()
 	text := req.ResolvedText()
 	threadRootID := req.ResolvedThreadRootID()
-	if threadRootID == "" && h.botBridge != nil {
-		threadRootID = h.botBridge.ThreadRootForReply(botID, roomID)
-	}
 
 	message, err := h.im.DeliverMessage(im.DeliverMessageRequest{
 		RoomID:       roomID,

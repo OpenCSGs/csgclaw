@@ -1051,7 +1051,10 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
 }
 ```
 
-`thread_root_id` 可选；传入时 bot 响应会发送到该 IM thread 中。具体响应由兼容桥实现决定。
+`thread_root_id`、`topic_id` 和 `context.topic_id` 都是可选的 thread/topic
+标识；传入任一字段时 bot 响应会发送到该 IM thread 中。全部省略时，
+响应会作为 room/DM 顶层消息发送；服务端不会根据 bot 在房间中最近收到的
+事件推断 thread。
 
 也接受 PicoClaw outbound message 形态：
 

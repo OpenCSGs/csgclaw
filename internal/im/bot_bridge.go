@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 )
 
 type BotBridge struct {
@@ -14,16 +13,9 @@ type BotBridge struct {
 	pending     map[string][]BotEvent
 	inflight    map[string]map[string]BotEvent
 	seen        map[string]map[string]struct{}
-	threadScope map[string]map[string]botThreadScope
 }
 
 const maxPendingBotEventsPerBot = 64
-const botThreadScopeTTL = 10 * time.Minute
-
-type botThreadScope struct {
-	RootID    string
-	UpdatedAt time.Time
-}
 
 type BotEvent struct {
 	MessageID     string            `json:"message_id"`
@@ -123,7 +115,6 @@ func NewBotBridge(string) *BotBridge {
 		pending:     make(map[string][]BotEvent),
 		inflight:    make(map[string]map[string]BotEvent),
 		seen:        make(map[string]map[string]struct{}),
-		threadScope: make(map[string]map[string]botThreadScope),
 	}
 }
 
@@ -237,28 +228,6 @@ func (b *BotBridge) Ack(botID, messageID string) {
 	b.markSeenLocked(botID, messageID)
 }
 
-func (b *BotBridge) ThreadRootForReply(botID, roomID string) string {
-	botID = strings.TrimSpace(botID)
-	roomID = strings.TrimSpace(roomID)
-	if botID == "" || roomID == "" {
-		return ""
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	scope, ok := b.threadScope[botID][roomID]
-	if !ok {
-		return ""
-	}
-	if scope.UpdatedAt.IsZero() || time.Since(scope.UpdatedAt) > botThreadScopeTTL {
-		delete(b.threadScope[botID], roomID)
-		if len(b.threadScope[botID]) == 0 {
-			delete(b.threadScope, botID)
-		}
-		return ""
-	}
-	return strings.TrimSpace(scope.RootID)
-}
-
 func (b *BotBridge) Requeue(botID string, evt BotEvent) {
 	botID = strings.TrimSpace(botID)
 	if botID == "" {
@@ -293,37 +262,11 @@ func (b *BotBridge) markInflightLocked(botID string, evt BotEvent) {
 	if messageID == "" || b.hasSeenLocked(botID, messageID) {
 		return
 	}
-	b.rememberThreadScopeLocked(botID, evt)
 	if b.inflight[botID] == nil {
 		b.inflight[botID] = make(map[string]BotEvent)
 	}
 	b.inflight[botID][messageID] = evt
 	b.removePendingLocked(botID, messageID)
-}
-
-func (b *BotBridge) rememberThreadScopeLocked(botID string, evt BotEvent) {
-	botID = strings.TrimSpace(botID)
-	roomID := strings.TrimSpace(evt.RoomID)
-	if botID == "" || roomID == "" {
-		return
-	}
-	rootID := strings.TrimSpace(evt.ThreadRootID)
-	if rootID == "" {
-		if scopes := b.threadScope[botID]; scopes != nil {
-			delete(scopes, roomID)
-			if len(scopes) == 0 {
-				delete(b.threadScope, botID)
-			}
-		}
-		return
-	}
-	if b.threadScope[botID] == nil {
-		b.threadScope[botID] = make(map[string]botThreadScope)
-	}
-	b.threadScope[botID][roomID] = botThreadScope{
-		RootID:    rootID,
-		UpdatedAt: time.Now().UTC(),
-	}
 }
 
 func (b *BotBridge) hasSeenOrInflightLocked(botID, messageID string) bool {

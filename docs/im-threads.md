@@ -158,7 +158,9 @@ Thread-aware bot events may include:
 Bot sends may include either CSGClaw fields (`room_id`, `text`,
 `thread_root_id`) or PicoClaw outbound fields (`chat_id`, `content`,
 `context.topic_id`). When a thread root/topic is present, the message is sent as
-a reply in that thread.
+a reply in that thread. Bot sends that omit `thread_root_id`, `topic_id`, and
+`context.topic_id` are treated as top-level room/DM messages; CSGClaw does not
+infer a thread from the bot's most recent room event.
 
 This maps to PicoClaw/topic isolation requirements: a runtime should treat
 `room_id` as the normal conversation key and `room_id:thread_root_id` as the
