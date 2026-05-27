@@ -1,6 +1,6 @@
 ---
 name: basics
-description: Handle the most common basic CSGClaw CLI administration tasks. Use when the Manager needs to create a room, list bots, create a bot, inspect room members, add a bot into a room, or notify a worker in IM (`message create --mention-id`, never plain @name). For registry skill search or install, use the skill-installer skill instead.
+description: Handle the most common basic CSGClaw CLI administration tasks. Use when the Manager needs to create a room, list bots, create a bot, inspect room members, add a bot into a room, or notify a worker in IM.
 ---
 
 # CSGClaw CLI Basics
@@ -26,9 +26,6 @@ Do not use this skill when the task requires any of the following:
 - break a request into multiple worker-owned tasks
 - orchestrate a multi-worker workflow
 - manage cross-worker sequencing or tracking state
-- search, inspect, or install ClawHub/registry skills (use `skill-installer` instead)
-
-For **installing** a registry skill into a **worker** sandbox, dispatch to that worker and have it follow `skill-installer` locally. The manager must not install into another agent's filesystem.
 
 ## Workflow
 
@@ -118,23 +115,23 @@ Minimal handoff flow:
 
 1. `csgclaw-cli bot list` — resolve the worker **bot ID** (e.g. `u-gitlab-worker`, not the display name).
 2. `csgclaw-cli member list` — confirm the worker is in the room; `member create` if missing.
-3. `csgclaw-cli message create` with `--mention-id` and the task body (reference `skill-installer` for install tasks).
+3. `csgclaw-cli message create` with `--mention-id` and the task body.
 4. `csgclaw-cli message list` — confirm the stored message contains `<at user_id="...">`.
 
 For multi-worker sequencing, use `manager-worker-dispatch` (`start-tracking`) instead of manual room messages.
 
-Example dispatch for a worker-owned skill install (replace room ID, worker ID, slug, and channel):
+Example worker handoff (replace room ID, worker ID, and channel):
 
 ```bash
 csgclaw-cli message create \
   --room-id <room_id> \
   --sender-id u-manager \
-  --mention-id u-gitlab-worker \
-  --content "Install registry skill AIWizards--gitlab-fullstack-pro. Follow skill-installer: run csgclaw-cli skill install AIWizards--gitlab-fullstack-pro --registry opencsg --version 1.0.0" \
+  --mention-id u-alex \
+  --content "Please implement the login page changes we discussed." \
   --channel <current_channel>
 ```
 
-Do **not** post `@gitlab-worker` plain text in the room instead of `--mention-id`.
+Do **not** post `@alex` plain text in the room instead of `--mention-id`.
 
 ## Operating Rules
 
