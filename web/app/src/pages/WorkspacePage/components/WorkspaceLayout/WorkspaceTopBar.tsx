@@ -17,7 +17,7 @@ export function WorkspaceTopBar({
 }: WorkspaceTopBarProps) {
   return (
     <header className="workspace-topbar">
-      <div className="workspace-topbar-brand" aria-label="CSGClaw">
+      <div className={`workspace-topbar-brand ${isSidebarCollapsed ? "" : "expanded"}`} aria-label="CSGClaw">
         {isSidebarCollapsed ? (
           <div className="workspace-topbar-toggle workspace-topbar-expand-trigger">
             <span className="workspace-topbar-collapsed-logo" aria-hidden="true">

@@ -1895,6 +1895,10 @@
   white-space: nowrap;
 }
 
+.workspace-topbar-brand.expanded {
+  justify-content: space-between;
+}
+
 .workspace-topbar-logo {
   width: 128px;
   height: 32px;
