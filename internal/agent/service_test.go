@@ -1707,6 +1707,80 @@ func TestCreateReplaceManagerUsesRequestedImage(t *testing.T) {
 	}
 }
 
+func TestCreateReplaceManagerClearsEnvRestartRequired(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			if image != "manager-image:1" {
+				t.Fatalf("createGatewayBox() image = %q, want manager-image:1", image)
+			}
+			return &fakeInstance{}, sandbox.Info{
+				ID:        "box-" + name,
+				Name:      name,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	)
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) error {
+		return nil
+	}
+	defer ResetTestHooks()
+
+	profile := AgentProfile{
+		Name:               ManagerName,
+		Provider:           ProviderCodex,
+		ModelID:            "gpt-5.5",
+		ProfileComplete:    true,
+		EnvRestartRequired: true,
+	}
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:1", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:              ManagerUserID,
+		Name:            ManagerName,
+		RuntimeID:       runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind:     RuntimeKindPicoClawSandbox,
+		Image:           "manager-image:1",
+		BoxID:           "box-manager-old",
+		Role:            RoleManager,
+		Status:          string(sandbox.StateRunning),
+		Profile:         profileSelector(profile),
+		AgentProfile:    profile,
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC),
+	}
+
+	replaced, err := svc.Create(context.Background(), CreateRequest{
+		Spec: CreateAgentSpec{
+			ID:   ManagerUserID,
+			Name: ManagerName,
+		},
+		Replace: true,
+	})
+	if err != nil {
+		t.Fatalf("Create() replace error = %v", err)
+	}
+	if replaced.AgentProfile.EnvRestartRequired {
+		t.Fatal("Create() replaced manager EnvRestartRequired = true, want false after successful recreate")
+	}
+	view, err := svc.AgentProfileView(ManagerUserID)
+	if err != nil {
+		t.Fatalf("AgentProfileView() error = %v", err)
+	}
+	if view.EnvRestartRequired {
+		t.Fatal("AgentProfileView().EnvRestartRequired = true, want false after successful recreate")
+	}
+}
+
 func TestCreateReplaceManagerReprovisionsWorkspaceAfterHomeRemoval(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)

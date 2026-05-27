@@ -544,6 +544,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 	}
 
 	var info sandbox.Info
+	createdBootstrapManagerBox := false
 	if box == nil {
 		log.Printf("bootstrap manager box %q not found, creating it with image %q", ManagerName, managerImage)
 		log.Printf("if the image is not present locally, the first pull may take a while")
@@ -566,6 +567,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		if err != nil {
 			return Agent{}, fmt.Errorf("create bootstrap manager box: %w", err)
 		}
+		createdBootstrapManagerBox = true
 		log.Printf("bootstrap manager box %q created", ManagerName)
 	} else {
 		info, err = s.boxInfo(ctx, box)
@@ -589,6 +591,9 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if createdBootstrapManagerBox {
+		startProfile.EnvRestartRequired = false
+	}
 	manager := Agent{
 		ID:               ManagerUserID,
 		Name:             ManagerName,
