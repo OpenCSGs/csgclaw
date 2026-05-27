@@ -7,7 +7,7 @@ description: Use this skill only for manager-led multi-worker coordination in CS
 
 Break a multi-worker admin request into clear tasks, choose workers by capability, and dispatch them through CSGClaw's real local interfaces in sequence.
 
-Use the `basics` skill for room, bot, member, and ClawHub skill registry operations that support the dispatch flow (`csgclaw-cli skill`, not `find_skills`).
+Use the `basics` skill for room, bot, and member operations that support the dispatch flow. Use `skill-installer` for registry skill search; workers use `skill-installer` for install (not `find_skills`).
 Use `scripts/manager_worker_api.py` only for `start-tracking` and `stop-tracking`.
 Check the current CLI surface through the `basics` skill instead of writing ad hoc API requests.
 
@@ -199,10 +199,10 @@ If you need to direct the human user to the project files on their Mac, point th
 
 ## Single-worker handoff (one task, no tracking)
 
-Use this when exactly one worker should act (for example install a ClawHub skill, run one GitLab job) and you do **not** need multi-step `todo.json` sequencing.
+Use this when exactly one worker should act (for example install a registry skill via `skill-installer`, run one GitLab job) and you do **not** need multi-step `todo.json` sequencing.
 
 1. Use the `basics` skill: `bot list`, confirm room membership, then `message create --mention-id <worker-bot-id>`.
-2. Do **not** reply in the room with plain `@worker-name` after `skill search` or other tools — that does not wake workers under `mention_only`.
+2. Do **not** reply in the room with plain `@worker-name` after registry skill discovery or other tools — that does not wake workers under `mention_only`.
 3. Verify with `csgclaw-cli message list` that the dispatch message contains `<at user_id="...">`.
 4. Use `start-tracking` only when multiple workers or ordered handoff is required.
 

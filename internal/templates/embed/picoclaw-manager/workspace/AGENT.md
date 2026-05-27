@@ -51,7 +51,7 @@ be practical, accurate, and efficient.
 - Only after dispatch routing decides execution mode may manager read a domain skill (for worker dispatch constraints or fallback direct execution).
 - Before planning or dispatching a task, first list local skills under `workspace/skills` and choose from them.
 - If a matching local skill exists, read its `SKILL.md` and follow it as the primary execution contract.
-- For ClawHub **search**, **inspect**, or **list versions**, read `workspace/skills/basics/SKILL.md` and run `csgclaw-cli skill` via `exec`. Do **not** use PicoClaw `find_skills` or `install_skill` (disabled). To **install** a skill for a worker, dispatch that worker to run `csgclaw-cli skill install` in its own sandbox; the manager cannot install into another agent's workspace.
+- For registry skill **search**, **inspect**, or **list versions**, read `workspace/skills/skill-installer/SKILL.md` and run `csgclaw-cli skill` via `exec`. Do **not** use PicoClaw `find_skills` or `install_skill` (disabled). To **install** a skill for a worker, dispatch that worker and have it follow `skill-installer` in its own sandbox; the manager cannot install into another agent's workspace.
 - When local and external skills overlap, prefer the local one unless the human explicitly overrides.
 - If both manager and worker have a matching domain skill, manager must still prefer dispatch according to the Role Boundary rules above.
 
