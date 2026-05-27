@@ -1864,17 +1864,17 @@
 }
 
 .app-shell {
-  grid-template-rows: 56px minmax(0, 1fr);
+  grid-template-rows: 61px minmax(0, 1fr);
 }
 
 .workspace-topbar {
-  grid-column: 1 / -1;
+  grid-column: 1;
   grid-row: 1;
   min-width: 0;
   border-bottom: 1px solid var(--line);
   background: color-mix(in oklab, var(--surface) 96%, transparent);
   display: grid;
-  grid-template-columns: minmax(0, var(--sidebar-slot-width)) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   justify-items: start;
   position: relative;
@@ -1913,8 +1913,8 @@
 }
 
 .workspace-topbar-logo-collapsed {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: block;
   object-fit: contain;
 }
@@ -1930,15 +1930,15 @@
 }
 
 .workspace-topbar-expand-trigger {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   justify-content: center;
   position: relative;
 }
 
 .workspace-topbar-collapsed-logo {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2003,7 +2003,7 @@
 
 .chat-panel {
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 1 / span 2;
 }
 
 .sidebar-header.workspace-header {
