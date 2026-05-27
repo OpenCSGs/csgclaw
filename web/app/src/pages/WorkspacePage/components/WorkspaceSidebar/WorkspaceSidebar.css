@@ -1909,7 +1909,6 @@
 .workspace-topbar-logo-collapsed {
   width: 32px;
   height: 32px;
-  flex: 0 0 auto;
   display: block;
   object-fit: contain;
 }
@@ -1922,6 +1921,39 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
+}
+
+.workspace-topbar-expand-trigger {
+  width: 34px;
+  height: 34px;
+  justify-content: center;
+  position: relative;
+}
+
+.workspace-topbar-collapsed-logo {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 120ms ease-out;
+}
+
+.workspace-topbar-expand-trigger .sidebar-rail-control-button {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.workspace-topbar-expand-trigger:hover .workspace-topbar-collapsed-logo,
+.workspace-topbar-expand-trigger:focus-within .workspace-topbar-collapsed-logo {
+  opacity: 0;
+}
+
+.workspace-topbar-expand-trigger:hover .sidebar-rail-control-button,
+.workspace-topbar-expand-trigger:focus-within .sidebar-rail-control-button {
+  opacity: 1;
 }
 
 .workspace-topbar-toggle .sidebar-rail-control-button:not(:focus-visible) {
@@ -1949,6 +1981,13 @@
 .workspace-topbar-toggle .sidebar-rail-control-button:hover::after,
 .workspace-topbar-toggle .sidebar-rail-control-button:focus-visible::after {
   transform: translate(-50%, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-topbar-collapsed-logo,
+  .workspace-topbar-expand-trigger .sidebar-rail-control-button {
+    transition: none;
+  }
 }
 
 .sidebar-slot {

@@ -19,20 +19,21 @@ export function WorkspaceTopBar({
     <header className="workspace-topbar">
       <div className="workspace-topbar-brand" aria-label="CSGClaw">
         {isSidebarCollapsed ? (
-          <>
-            <img
-              className="workspace-topbar-logo-collapsed workspace-topbar-logo-collapsed-light"
-              src="brand/csgclaw-logo-collapsed.svg"
-              alt=""
-              aria-hidden="true"
-            />
-            <img
-              className="workspace-topbar-logo-collapsed workspace-topbar-logo-collapsed-dark"
-              src="brand/csgclaw-logo-collapsed-dark.svg"
-              alt=""
-              aria-hidden="true"
-            />
-          </>
+          <div className="workspace-topbar-toggle workspace-topbar-expand-trigger">
+            <span className="workspace-topbar-collapsed-logo" aria-hidden="true">
+              <img
+                className="workspace-topbar-logo-collapsed workspace-topbar-logo-collapsed-light"
+                src="brand/csgclaw-logo-collapsed.svg"
+                alt=""
+              />
+              <img
+                className="workspace-topbar-logo-collapsed workspace-topbar-logo-collapsed-dark"
+                src="brand/csgclaw-logo-collapsed-dark.svg"
+                alt=""
+              />
+            </span>
+            <SidebarRailControlButton label={expandSidebarLabel} mode="expand" onClick={onExpandSidebar} />
+          </div>
         ) : (
           <>
             <img
@@ -47,15 +48,11 @@ export function WorkspaceTopBar({
               alt=""
               aria-hidden="true"
             />
+            <div className="workspace-topbar-toggle">
+              <SidebarRailControlButton label={collapseSidebarLabel} mode="collapse" onClick={onCollapseSidebar} />
+            </div>
           </>
         )}
-        <div className="workspace-topbar-toggle">
-          <SidebarRailControlButton
-            label={isSidebarCollapsed ? expandSidebarLabel : collapseSidebarLabel}
-            mode={isSidebarCollapsed ? "expand" : "collapse"}
-            onClick={isSidebarCollapsed ? onExpandSidebar : onCollapseSidebar}
-          />
-        </div>
       </div>
     </header>
   );
