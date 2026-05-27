@@ -1,11 +1,9 @@
-import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
 import { WorkspaceTabBar } from "./WorkspaceTabBar";
 import type { SidebarRailProps } from "./types";
 
 export function SidebarRail({
   isSidebarCollapsed,
-  onExpandSidebar,
   workspaceTab,
   onWorkspaceTabChange,
   onSelectHub,
@@ -41,7 +39,6 @@ export function SidebarRail({
         />
       </nav>
       <div className="sidebar-rail-bottom">
-        <SidebarRailControlButton label={t("expandSidebar")} mode="expand" onClick={onExpandSidebar} />
         <SidebarUserButton
           theme={theme}
           onThemeChange={onThemeChange}

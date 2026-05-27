@@ -67,7 +67,6 @@ export type SidebarRailProps = Pick<
   | "appVersion"
   | "isSidebarCollapsed"
   | "locale"
-  | "onExpandSidebar"
   | "onLocaleChange"
   | "onOpenUpgrade"
   | "onSelectHub"

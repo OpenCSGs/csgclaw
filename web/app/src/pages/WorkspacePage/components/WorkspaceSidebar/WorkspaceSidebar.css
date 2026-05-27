@@ -40,8 +40,8 @@
   transform-origin: left center;
   will-change: opacity, transform;
   transition:
-    opacity 180ms ease,
-    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 160ms ease-out,
+    transform 200ms ease-out,
     visibility 0s linear 0s;
   opacity: 1;
   transform: translateX(0);
@@ -52,7 +52,7 @@
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition-delay: 0s, 0s, 240ms;
+  transition-delay: 0s, 0s, 200ms;
 }
 
 .sidebar-rail {
@@ -75,9 +75,9 @@
   pointer-events: none;
   will-change: opacity, transform;
   transition:
-    opacity 180ms ease,
-    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
-    visibility 0s linear 180ms;
+    opacity 160ms ease-out,
+    transform 200ms ease-out,
+    visibility 0s linear 160ms;
 }
 
 .sidebar-rail.visible {
@@ -1570,6 +1570,7 @@
 
 .app-shell {
   --sidebar-slot-width: 388px;
+  --sidebar-expanded-width: var(--sidebar-slot-width);
   --workspace-rail-width: 72px;
   --workspace-logo-mark-center: 17px;
   --workspace-logo-left: calc((var(--workspace-rail-width) / 2) - var(--workspace-logo-mark-center));
@@ -1587,11 +1588,39 @@
 }
 
 .sidebar-main-column {
-  min-width: 0;
+  width: calc(var(--sidebar-expanded-width) - var(--workspace-rail-width));
+  min-width: calc(var(--sidebar-expanded-width) - var(--workspace-rail-width));
   min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--sidebar);
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 160ms ease-out,
+    transform 200ms ease-out;
+}
+
+.sidebar:not(.collapsed) .sidebar-main-column {
+  animation: sidebar-main-column-enter 200ms ease-out both;
+}
+
+.sidebar.collapsed .sidebar-main-column {
+  animation: none;
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+@keyframes sidebar-main-column-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .workspace-side-rail {
@@ -1732,71 +1761,6 @@
 
 .sidebar-rail-control-button {
   position: relative;
-  width: 48px;
-  min-width: 48px;
-  height: 48px;
-  min-height: 48px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 16px;
-  background: transparent;
-  color: var(--portal-gray-500);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: none;
-  transition:
-    color 180ms ease,
-    background-color 180ms ease,
-    border-color 180ms ease,
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 180ms ease;
-}
-
-.sidebar-rail-control-button:hover:not(:disabled),
-.sidebar-rail-control-button:focus-visible {
-  border-color: var(--line);
-  background: var(--portal-gray-50);
-  color: var(--primary-strong);
-  transform: translateY(-1px);
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(77, 106, 214, 0.12);
-}
-
-.sidebar-rail-control-button:active:not(:disabled) {
-  transform: translateY(0) scale(0.96);
-}
-
-.sidebar-rail-control-mark {
-  width: 38px;
-  height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
-  color: currentColor;
-  display: grid;
-  place-items: center;
-  box-shadow:
-    inset 0 0 0 1px color-mix(in oklab, var(--portal-white) 60%, transparent),
-    0 8px 18px rgba(16, 24, 40, 0.08);
-  transition:
-    border-color 180ms ease,
-    background-color 180ms ease,
-    box-shadow 180ms ease;
-}
-
-.sidebar-rail-control-mark svg,
-.sidebar-rail-control-mark .svg-icon {
-  width: 22px;
-  height: 22px;
-  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.sidebar-rail-control-button:hover:not(:disabled) .sidebar-rail-control-mark svg,
-.sidebar-rail-control-button:focus-visible .sidebar-rail-control-mark svg,
-.sidebar-rail-control-button:hover:not(:disabled) .sidebar-rail-control-mark .svg-icon,
-.sidebar-rail-control-button:focus-visible .sidebar-rail-control-mark .svg-icon {
-  transform: scale(1.04);
 }
 
 .sidebar-user-button {
@@ -1896,8 +1860,6 @@
 }
 
 :root[data-theme="dark"] .sidebar-user-button:hover:not(:disabled),
-:root[data-theme="dark"] .sidebar-rail-control-button:hover:not(:disabled),
-:root[data-theme="dark"] .sidebar-rail-control-button:focus-visible,
 :root[data-theme="dark"] .sidebar-user-button:focus-visible {
   border-color: rgba(208, 213, 221, 0.24);
   background: var(--panel-strong);
@@ -1934,7 +1896,7 @@
   align-items: center;
   justify-items: start;
   position: relative;
-  z-index: 3;
+  z-index: var(--z-page-overlay);
 }
 
 .workspace-topbar-brand {
@@ -1944,6 +1906,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
+  gap: 12px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -1951,6 +1914,7 @@
 .workspace-topbar-logo {
   width: 128px;
   height: 32px;
+  flex: 0 0 auto;
   display: block;
   object-fit: contain;
   object-position: center;
@@ -1958,6 +1922,39 @@
 
 .workspace-topbar-logo-dark {
   display: none;
+}
+
+.workspace-topbar-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.workspace-topbar-toggle .sidebar-rail-control-button:not(:focus-visible) {
+  box-shadow: none;
+}
+
+.workspace-topbar-toggle .sidebar-rail-control-mark {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-topbar-toggle .sidebar-rail-control-mark svg {
+  display: block;
+}
+
+.workspace-topbar-toggle .sidebar-rail-control-button::after {
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translate(-50%, -4px);
+}
+
+.workspace-topbar-toggle .sidebar-rail-control-button:hover::after,
+.workspace-topbar-toggle .sidebar-rail-control-button:focus-visible::after {
+  transform: translate(-50%, 0);
 }
 
 .sidebar-slot {

@@ -1,5 +1,4 @@
 import { SidebarRail } from "./SidebarRail";
-import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
 import { WorkspaceTabBar } from "./WorkspaceTabBar";
 import { WorkspaceTabPanels } from "./WorkspaceTabPanels";
@@ -7,8 +6,6 @@ import type { WorkspaceSidebarProps } from "./types";
 
 export function WorkspaceSidebar({
   isSidebarCollapsed,
-  onCollapseSidebar,
-  onExpandSidebar,
   theme,
   onThemeChange,
   locale,
@@ -72,7 +69,6 @@ export function WorkspaceSidebar({
               />
             </div>
             <div className="workspace-side-rail-bottom">
-              <SidebarRailControlButton label={t("collapseSidebar")} mode="collapse" onClick={onCollapseSidebar} />
               <SidebarUserButton
                 theme={theme}
                 onThemeChange={onThemeChange}
@@ -125,7 +121,6 @@ export function WorkspaceSidebar({
       </aside>
       <SidebarRail
         isSidebarCollapsed={isSidebarCollapsed}
-        onExpandSidebar={onExpandSidebar}
         workspaceTab={workspaceTab}
         onWorkspaceTabChange={onWorkspaceTabChange}
         onSelectHub={onSelectHub}

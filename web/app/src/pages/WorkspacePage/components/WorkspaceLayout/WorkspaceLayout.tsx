@@ -111,16 +111,23 @@ export function WorkspaceLayout() {
 
   const baseShellClassName = controller.ready ? controller.shellClassName : "";
   const shellClassName = `${baseShellClassName} ${isSidebarResizing ? "sidebar-resizing" : ""}`.trim();
-  const shellStyle = isSidebarCollapsed
-    ? undefined
-    : ({
-        "--sidebar-slot-width": `${sidebarWidth}px`,
-      } as CSSProperties);
+  const shellStyle = {
+    "--sidebar-expanded-width": `${sidebarWidth}px`,
+    ...(isSidebarCollapsed ? {} : { "--sidebar-slot-width": `${sidebarWidth}px` }),
+  } as CSSProperties;
 
   return (
     <AppLayout ready={controller.ready} loadingFallback={<AppLayoutLoading>{controller.loadingText}</AppLayoutLoading>}>
       <AppLayoutShell className={shellClassName} style={shellStyle}>
-        {controller.ready ? <WorkspaceTopBar /> : null}
+        {controller.ready ? (
+          <WorkspaceTopBar
+            isSidebarCollapsed={isSidebarCollapsed}
+            onCollapseSidebar={controller.sidebarProps.onCollapseSidebar}
+            onExpandSidebar={controller.sidebarProps.onExpandSidebar}
+            collapseSidebarLabel={controller.sidebarProps.t("collapseSidebar")}
+            expandSidebarLabel={controller.sidebarProps.t("expandSidebar")}
+          />
+        ) : null}
         <AppLayoutSidebar>
           <WorkspaceSidebar {...controller.sidebarProps} />
         </AppLayoutSidebar>
