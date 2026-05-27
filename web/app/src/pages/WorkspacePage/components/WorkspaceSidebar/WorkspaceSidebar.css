@@ -1884,6 +1884,7 @@
 .workspace-topbar-brand {
   min-width: 0;
   width: 100%;
+  border-right: 1px solid var(--line);
   padding: 0 24px 0 var(--workspace-logo-left);
   display: inline-flex;
   align-items: center;
