@@ -61,25 +61,3 @@ export type WorkspaceSidebarProps = {
   workerAgentItems: AgentLike[];
   workspaceTab: WorkspaceTab;
 };
-
-export type SidebarRailProps = Pick<
-  WorkspaceSidebarProps,
-  | "appVersion"
-  | "isSidebarCollapsed"
-  | "locale"
-  | "onLocaleChange"
-  | "onOpenUpgrade"
-  | "onSelectHub"
-  | "onThemeChange"
-  | "onWorkspaceTabChange"
-  | "roomCount"
-  | "t"
-  | "theme"
-  | "upgradeBusy"
-  | "upgradeError"
-  | "upgradePhase"
-  | "upgradeStatus"
-  | "workspaceTab"
-> & {
-  agentCount: number;
-};

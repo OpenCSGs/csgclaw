@@ -1,4 +1,3 @@
-import { SidebarRail } from "./SidebarRail";
 import { SidebarUserButton } from "./SidebarUserButton";
 import { WorkspaceTabBar } from "./WorkspaceTabBar";
 import { WorkspaceTabPanels } from "./WorkspaceTabPanels";
@@ -50,94 +49,71 @@ export function WorkspaceSidebar({
 
   return (
     <div className="sidebar-slot">
+      <div className="workspace-side-rail" aria-label="Workspace shortcuts">
+        <div className="workspace-side-rail-nav">
+          <WorkspaceTabBar
+            variant="rail"
+            workspaceTab={workspaceTab}
+            onWorkspaceTabChange={onWorkspaceTabChange}
+            roomCount={roomCount}
+            agentCount={agentCount}
+            onSelectHub={onSelectHub}
+            t={t}
+          />
+        </div>
+        <div className="workspace-side-rail-bottom">
+          <SidebarUserButton
+            theme={theme}
+            onThemeChange={onThemeChange}
+            locale={locale}
+            onLocaleChange={onLocaleChange}
+            appVersion={appVersion}
+            upgradeStatus={upgradeStatus}
+            upgradeBusy={upgradeBusy}
+            upgradePhase={upgradePhase}
+            upgradeError={upgradeError}
+            onOpenUpgrade={onOpenUpgrade}
+            t={t}
+          />
+        </div>
+      </div>
       <aside
-        className={`sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}
+        className={`sidebar-main-column ${isSidebarCollapsed ? "collapsed" : ""}`}
         aria-hidden={isSidebarCollapsed}
         inert={isSidebarCollapsed}
       >
-        <div className="sidebar-shell">
-          <div className="workspace-side-rail" aria-label="Workspace shortcuts">
-            <div className="workspace-side-rail-nav">
-              <WorkspaceTabBar
-                variant="rail"
-                workspaceTab={workspaceTab}
-                onWorkspaceTabChange={onWorkspaceTabChange}
-                roomCount={roomCount}
-                agentCount={agentCount}
-                onSelectHub={onSelectHub}
-                t={t}
-              />
-            </div>
-            <div className="workspace-side-rail-bottom">
-              <SidebarUserButton
-                theme={theme}
-                onThemeChange={onThemeChange}
-                locale={locale}
-                onLocaleChange={onLocaleChange}
-                appVersion={appVersion}
-                upgradeStatus={upgradeStatus}
-                upgradeBusy={upgradeBusy}
-                upgradePhase={upgradePhase}
-                upgradeError={upgradeError}
-                onOpenUpgrade={onOpenUpgrade}
-                t={t}
-              />
-            </div>
-          </div>
-          <div className="sidebar-main-column">
-            <nav className="workspace-nav" aria-label="Workspace">
-              <WorkspaceTabPanels
-                workspaceTab={workspaceTab}
-                channels={channels}
-                directMessages={directMessages}
-                threadGroups={threadGroups}
-                activePane={activePane}
-                activeThreadRootID={activeThreadRootID}
-                currentUserID={currentUserID}
-                usersById={usersById}
-                locale={locale}
-                t={t}
-                collapsedWorkspaceGroups={collapsedWorkspaceGroups}
-                onToggleWorkspaceGroup={onToggleWorkspaceGroup}
-                onCreateRoom={onCreateRoom}
-                onCreateAgent={onCreateAgent}
-                onCreateNotificationBot={onCreateNotificationBot}
-                hub={hub}
-                onSelectHubTemplate={onSelectHubTemplate}
-                agentsError={agentsError}
-                onSelectConversation={onSelectConversation}
-                onSelectThread={onSelectThread}
-                onPreviewUser={onPreviewUser}
-                agentItems={agentItems}
-                workerAgentItems={workerAgentItems}
-                notificationAgentItems={notificationAgentItems}
-                onSelectAgent={onSelectAgent}
-                onPreviewAgent={onPreviewAgent}
-                onSelectComputer={onSelectComputer}
-              />
-            </nav>
-          </div>
-        </div>
+        <nav className="workspace-nav" aria-label="Workspace">
+          <WorkspaceTabPanels
+            workspaceTab={workspaceTab}
+            channels={channels}
+            directMessages={directMessages}
+            threadGroups={threadGroups}
+            activePane={activePane}
+            activeThreadRootID={activeThreadRootID}
+            currentUserID={currentUserID}
+            usersById={usersById}
+            locale={locale}
+            t={t}
+            collapsedWorkspaceGroups={collapsedWorkspaceGroups}
+            onToggleWorkspaceGroup={onToggleWorkspaceGroup}
+            onCreateRoom={onCreateRoom}
+            onCreateAgent={onCreateAgent}
+            onCreateNotificationBot={onCreateNotificationBot}
+            hub={hub}
+            onSelectHubTemplate={onSelectHubTemplate}
+            agentsError={agentsError}
+            onSelectConversation={onSelectConversation}
+            onSelectThread={onSelectThread}
+            onPreviewUser={onPreviewUser}
+            agentItems={agentItems}
+            workerAgentItems={workerAgentItems}
+            notificationAgentItems={notificationAgentItems}
+            onSelectAgent={onSelectAgent}
+            onPreviewAgent={onPreviewAgent}
+            onSelectComputer={onSelectComputer}
+          />
+        </nav>
       </aside>
-      <SidebarRail
-        isSidebarCollapsed={isSidebarCollapsed}
-        workspaceTab={workspaceTab}
-        onWorkspaceTabChange={onWorkspaceTabChange}
-        onSelectHub={onSelectHub}
-        roomCount={roomCount}
-        agentCount={agentCount}
-        theme={theme}
-        onThemeChange={onThemeChange}
-        locale={locale}
-        onLocaleChange={onLocaleChange}
-        appVersion={appVersion}
-        upgradeStatus={upgradeStatus}
-        upgradeBusy={upgradeBusy}
-        upgradePhase={upgradePhase}
-        upgradeError={upgradeError}
-        onOpenUpgrade={onOpenUpgrade}
-        t={t}
-      />
     </div>
   );
 }
