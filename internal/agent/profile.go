@@ -162,7 +162,11 @@ func normalizeStringMap(values map[string]string) map[string]string {
 		if key == "" {
 			continue
 		}
-		out[key] = strings.TrimSpace(value)
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out[key] = value
 	}
 	if len(out) == 0 {
 		return nil

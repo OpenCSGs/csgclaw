@@ -141,7 +141,8 @@ func addFeishuBoxEnvVars(envVars map[string]string, botID string, provider feish
 func agentAddProfileEnv(envVars map[string]string, profileEnv map[string]string) {
 	for key, value := range profileEnv {
 		key = strings.TrimSpace(key)
-		if key == "" || isReservedSandboxEnvKey(key) {
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" || isReservedSandboxEnvKey(key) {
 			continue
 		}
 		envVars[key] = value

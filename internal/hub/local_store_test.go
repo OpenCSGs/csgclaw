@@ -186,7 +186,7 @@ func TestLocalStorePublishRequiresImageForGatewayRuntime(t *testing.T) {
 		RuntimeKind:  runtime.KindPicoClawSandbox,
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
 	})
-	if err == nil || err.Error() != `image is required for runtime_kind "picoclaw_sandbox"` {
+	if err == nil || err.Error() != `image.ref is required for runtime_kind "picoclaw_sandbox"` {
 		t.Fatalf("Publish() error = %v, want missing image error", err)
 	}
 }
@@ -204,7 +204,7 @@ func TestLocalStoreGetRejectsGatewayRuntimeWithoutImage(t *testing.T) {
 
 	store := NewLocalStore(registryRoot)
 	_, err := store.Get(context.Background(), "gateway-worker")
-	if err == nil || err.Error() != `validate local hub manifest "gateway-worker": image is required for runtime_kind "picoclaw_sandbox"` {
+	if err == nil || err.Error() != `validate local hub manifest "gateway-worker": image.ref is required for runtime_kind "picoclaw_sandbox"` {
 		t.Fatalf("Get() error = %v, want missing image validation error", err)
 	}
 }

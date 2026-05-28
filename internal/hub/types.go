@@ -1,6 +1,10 @@
 package hub
 
-import "time"
+import (
+	"time"
+
+	"csgclaw/internal/apitypes"
+)
 
 const (
 	RegistryKindBuiltin = "builtin"
@@ -18,6 +22,7 @@ type Template struct {
 	Role         string
 	RuntimeKind  string
 	Image        string
+	ImageEnv     []apitypes.ImageEnvContract
 	WorkspaceRef WorkspaceRef
 	Source       RegistryRef
 	UpdatedAt    time.Time

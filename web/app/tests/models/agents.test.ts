@@ -76,7 +76,7 @@ describe("agent model helpers", () => {
         { key: "", value: "" },
         { key: "BAR", value: "" },
       ]),
-    ).toEqual({ FOO: "one", BAR: "" });
+    ).toEqual({ FOO: "one" });
 
     expect(() => envRowsToMap([{ key: "", value: "set" }])).toThrow("Environment variable key is required");
     expect(() =>
@@ -168,6 +168,40 @@ describe("agent model helpers", () => {
       runtime_kind: "openclaw_sandbox",
       template_name: "openclaw-worker",
     });
+  });
+
+  it("applies template image_env contracts to draft env rows", () => {
+    expect(
+      applyTemplateToDraft(
+        {
+          api_key: "",
+          api_key_preview: "",
+          api_key_set: false,
+          base_url: "",
+          enable_fast_mode: false,
+          envRows: [{ key: "OLD", value: "keep" }],
+          headersText: "{}",
+          model_id: "",
+          provider: "csghub_lite",
+          reasoning_effort: "medium",
+          requestOptionsText: "{}",
+          runtime_kind: "picoclaw_sandbox",
+        },
+        {
+          id: "custom/gitlab",
+          name: "gitlab-assistant",
+          runtime_kind: "picoclaw_sandbox",
+          image_env: [
+            { name: "GITLAB_TOKEN", required: true, secret: true },
+            { name: "GITLAB_URL", default: "https://gitlab.example.com" },
+          ],
+        },
+        null,
+      )?.envRows,
+    ).toEqual([
+      { key: "GITLAB_TOKEN", value: "" },
+      { key: "GITLAB_URL", value: "https://gitlab.example.com" },
+    ]);
   });
 
   it("filters manager rebuild runtime options to gateway runtimes", () => {

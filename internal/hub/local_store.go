@@ -86,7 +86,8 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 		Description:  manifest.Description,
 		Role:         normalizeTemplateRole(manifest.Role),
 		RuntimeKind:  manifest.RuntimeKind,
-		Image:        manifest.Image,
+		Image:        manifestImageRef(manifest.Image),
+		ImageEnv:     manifestImageEnv(manifest.Image),
 		WorkspaceRef: s.workspaceRef(id),
 		UpdatedAt:    updatedAt,
 	}, nil
@@ -195,8 +196,10 @@ func (s *LocalStore) writeManifest(path string, spec PublishSpec) error {
 		Description: spec.Description,
 		Role:        spec.Role,
 		RuntimeKind: spec.RuntimeKind,
-		Image:       spec.Image,
-		UpdatedAt:   spec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		Image: templateImageSection{
+			Ref: spec.Image,
+		},
+		UpdatedAt: spec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 	data, err := toml.Marshal(manifest)
 	if err != nil {
@@ -232,7 +235,7 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 		return PublishSpec{}, ErrRuntimeKindRequired
 	}
 	if requiresTemplateImage(spec.RuntimeKind) && spec.Image == "" {
-		return PublishSpec{}, fmt.Errorf("image is required for runtime_kind %q", spec.RuntimeKind)
+		return PublishSpec{}, fmt.Errorf("image.ref is required for runtime_kind %q", spec.RuntimeKind)
 	}
 	spec.WorkspaceRef.Kind = strings.TrimSpace(spec.WorkspaceRef.Kind)
 	spec.WorkspaceRef.Path = strings.TrimSpace(spec.WorkspaceRef.Path)

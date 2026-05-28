@@ -26,6 +26,18 @@ export type EnvKeyValueRow = {
   value: string;
 };
 
+export type ImageEnvContract = {
+  name: string;
+  required?: boolean;
+  secret?: boolean;
+  default?: string | null;
+  description?: string | null;
+  choices?: string[] | null;
+  pattern?: string | null;
+  example?: string | null;
+  placeholder?: string | null;
+};
+
 export type AgentProfileLike = {
   api_key_preview?: string | null;
   api_key_set?: boolean | null;
@@ -104,6 +116,7 @@ export type AgentTemplateLike = {
   description?: string | null;
   id?: string | null;
   image?: string | null;
+  image_env?: ImageEnvContract[] | null;
   name?: string | null;
   role?: string | null;
   runtime_kind?: string | null;
@@ -701,6 +714,7 @@ export function applyTemplateToDraft(
     image:
       template.image || runtimeImageForKind(runtimeKind, bootstrapConfig, fallbackImage || draft.default_image || ""),
     description: template.description || draft.description || "",
+    envRows: mapImageEnvToRows(template.image_env),
   };
 }
 
@@ -838,6 +852,16 @@ export function mapToEnvRows(value: unknown): EnvKeyValueRow[] {
   return entries.map(([key, val]) => ({ key, value: String(val ?? "") }));
 }
 
+export function mapImageEnvToRows(contracts: readonly ImageEnvContract[] | null | undefined): EnvKeyValueRow[] {
+  if (!contracts?.length) {
+    return [{ key: "", value: "" }];
+  }
+  return contracts.map((contract) => ({
+    key: String(contract.name || "").trim(),
+    value: contract.secret ? "" : String(contract.default ?? ""),
+  }));
+}
+
 export function envRowsToMap(rows: readonly EnvKeyValueRow[] | null | undefined): Record<string, string> {
   const result: Record<string, string> = {};
   const seen = new Set();
@@ -849,6 +873,9 @@ export function envRowsToMap(rows: readonly EnvKeyValueRow[] | null | undefined)
     }
     if (!key) {
       throw new Error("Environment variable key is required");
+    }
+    if (!value.trim()) {
+      continue;
     }
     const normalized = key.toUpperCase();
     if (seen.has(normalized)) {
