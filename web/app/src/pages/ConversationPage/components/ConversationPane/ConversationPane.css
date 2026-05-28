@@ -1114,6 +1114,8 @@
 
 .message-row {
   gap: 10px;
+  width: min(76%, 840px);
+  max-width: 100%;
 }
 
 .message-row .avatar {
@@ -1253,8 +1255,7 @@
 }
 
 .message-row:not(.own) {
-  width: min(560px, 100%);
-  max-width: min(560px, 100%);
+  align-self: flex-start;
 }
 
 .message-row > .avatar.avatar-button {
@@ -1283,14 +1284,15 @@
 }
 
 .message-row:not(.own) .message-card {
-  flex: 1 1 auto;
-  width: min(508px, calc(100% - 52px));
-  max-width: min(508px, calc(100% - 52px));
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: min(760px, calc(100% - 52px));
 }
 
 .message-row:not(.own) .message-meta {
-  width: 100%;
-  justify-content: space-between;
+  width: fit-content;
+  max-width: 100%;
+  justify-content: flex-start;
   gap: 8px;
   margin-bottom: 6px;
   color: var(--portal-gray-600);
@@ -1301,30 +1303,32 @@
 }
 
 .message-row:not(.own) .message-bubble {
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
   box-sizing: border-box;
   padding: 10px 14px;
-  border-color: var(--message-border);
+  border-color: transparent;
   border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
-  background: var(--panel-strong);
+  background: color-mix(in oklab, var(--portal-gray-100) 72%, var(--portal-gray-200));
   color: var(--admin-text);
   box-shadow: none;
 }
 
 .message-row.own {
-  width: min(382px, 100%);
-  max-width: min(382px, 100%);
+  align-self: flex-end;
 }
 
 .message-row.own .message-card {
-  flex: 1 1 330px;
-  width: min(330px, calc(100% - 52px));
-  max-width: min(330px, calc(100% - 52px));
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: min(760px, calc(100% - 52px));
 }
 
 .message-row.own .message-meta {
-  width: 100%;
-  justify-content: space-between;
+  width: fit-content;
+  max-width: 100%;
+  justify-content: flex-end;
+  justify-self: end;
   gap: 8px;
   margin-bottom: 6px;
   color: var(--portal-gray-600);
@@ -1335,13 +1339,14 @@
 }
 
 .message-row.own .message-bubble {
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
   box-sizing: border-box;
   padding: 10px 14px;
   border: 0;
   border-radius: var(--radius-md) 0 var(--radius-md) var(--radius-md);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  background: color-mix(in oklab, var(--portal-brand-50) 62%, var(--portal-white));
+  color: var(--portal-gray-900);
   box-shadow: none;
 }
 
@@ -1364,4 +1369,11 @@
 :root[data-theme="dark"] .message-row.own .message-bubble {
   background: var(--portal-brand-600);
   color: var(--portal-white);
+}
+
+@media (max-width: 720px) {
+  .message-row {
+    width: 94%;
+    max-width: 94%;
+  }
 }

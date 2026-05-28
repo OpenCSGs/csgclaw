@@ -240,7 +240,8 @@
 }
 
 .message-row.own .message-content :not(pre) > code {
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in oklab, var(--portal-brand-50) 44%, var(--portal-white));
+  color: var(--portal-brand-700);
 }
 
 .message-row.admin .message-content :not(pre) > code {
@@ -249,8 +250,8 @@
 }
 
 .message-row.own .structured-message-badge {
-  background: rgba(255, 255, 255, 0.16);
-  color: rgba(255, 255, 255, 0.92);
+  background: color-mix(in oklab, var(--portal-brand-50) 42%, transparent);
+  color: var(--portal-brand-700);
 }
 
 .message-row.admin .structured-message-badge {
@@ -259,7 +260,7 @@
 }
 
 .message-row.own .structured-message-subtitle {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--portal-gray-600);
 }
 
 .message-row.admin .structured-message-subtitle {
@@ -267,8 +268,8 @@
 }
 
 .message-row.own .structured-message-details {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: color-mix(in oklab, var(--portal-white) 56%, var(--portal-brand-25));
+  border-color: color-mix(in oklab, var(--portal-brand-300) 24%, transparent);
 }
 
 .message-row.admin .structured-message-details {
@@ -277,7 +278,7 @@
 }
 
 .message-row.own .structured-message-details summary {
-  color: rgba(255, 255, 255, 0.86);
+  color: var(--portal-gray-700);
 }
 
 .message-row.admin .structured-message-details summary {
@@ -285,8 +286,8 @@
 }
 
 .message-row.own .message-content blockquote {
-  color: rgba(255, 255, 255, 0.8);
-  border-left-color: rgba(255, 255, 255, 0.35);
+  color: var(--portal-gray-700);
+  border-left-color: color-mix(in oklab, var(--portal-brand-600) 32%, transparent);
 }
 
 .message-row.admin .message-content blockquote {
@@ -295,7 +296,7 @@
 }
 
 .message-row.own .message-content th {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in oklab, var(--portal-brand-50) 32%, transparent);
 }
 
 .message-row.admin .message-content th {
@@ -304,12 +305,42 @@
 
 .message-row.own .message-content th,
 .message-row.own .message-content td {
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: color-mix(in oklab, var(--portal-brand-300) 22%, transparent);
 }
 
 .message-row.admin .message-content th,
 .message-row.admin .message-content td {
   border-color: rgba(148, 163, 184, 0.28);
+}
+
+.message-row.admin.own .message-content :not(pre) > code {
+  background: color-mix(in oklab, var(--portal-brand-50) 44%, var(--portal-white));
+  color: var(--portal-brand-700);
+}
+
+.message-row.admin.own .structured-message-badge {
+  background: color-mix(in oklab, var(--portal-brand-50) 42%, transparent);
+  color: var(--portal-brand-700);
+}
+
+.message-row.admin.own .structured-message-subtitle,
+.message-row.admin.own .structured-message-details summary,
+.message-row.admin.own .message-content blockquote {
+  color: var(--portal-gray-700);
+}
+
+.message-row.admin.own .structured-message-details {
+  background: color-mix(in oklab, var(--portal-white) 56%, var(--portal-brand-25));
+  border-color: color-mix(in oklab, var(--portal-brand-300) 24%, transparent);
+}
+
+.message-row.admin.own .message-content th {
+  background: color-mix(in oklab, var(--portal-brand-50) 32%, transparent);
+}
+
+.message-row.admin.own .message-content th,
+.message-row.admin.own .message-content td {
+  border-color: color-mix(in oklab, var(--portal-brand-300) 22%, transparent);
 }
 
 .message-content code,
@@ -352,13 +383,21 @@
 .structured-message-json {
   border-radius: var(--radius-md);
   border-color: var(--line);
-  background: var(--portal-gray-950);
+  background: color-mix(in oklab, var(--portal-white) 84%, var(--portal-gray-200));
+  color: var(--portal-gray-900);
 }
 
 .structured-message-details,
 .message-content .mermaid {
   border-radius: var(--radius-md);
   background: var(--portal-gray-50);
+}
+
+:root[data-theme="dark"] .message-content pre,
+:root[data-theme="dark"] .structured-message-code,
+:root[data-theme="dark"] .structured-message-json {
+  background: var(--panel-soft);
+  color: var(--text);
 }
 
 :root[data-theme="dark"] .structured-message-details,
@@ -374,7 +413,7 @@
 }
 
 .message-row.own .message-bubble .message-content p {
-  color: var(--portal-white);
+  color: var(--portal-gray-900);
   font-size: 16px;
   font-weight: 300;
   line-height: 24px;
@@ -383,7 +422,7 @@
 .message-row.own .message-bubble .message-content .message-mention,
 .message-row.own .message-bubble .message-content p > .message-mention,
 .message-row.admin.own .message-bubble .message-content .message-mention {
-  color: var(--portal-white);
+  color: var(--portal-brand-700);
 }
 
 :root[data-theme="dark"] .message-row:not(.own) .message-bubble .message-content p {
@@ -393,7 +432,33 @@
 :root[data-theme="dark"] .message-row.own .message-bubble .message-content p,
 :root[data-theme="dark"] .message-row.own .message-bubble .message-content .message-mention,
 :root[data-theme="dark"] .message-row.own .message-bubble .message-content p > .message-mention {
-  color: #ffffff;
+  color: var(--on-primary);
+}
+
+:root[data-theme="dark"] .message-row.own .message-content :not(pre) > code,
+:root[data-theme="dark"] .message-row.own .structured-message-badge {
+  background: color-mix(in oklab, var(--portal-white) 14%, transparent);
+  color: color-mix(in oklab, var(--portal-white) 92%, transparent);
+}
+
+:root[data-theme="dark"] .message-row.own .structured-message-subtitle,
+:root[data-theme="dark"] .message-row.own .structured-message-details summary,
+:root[data-theme="dark"] .message-row.own .message-content blockquote {
+  color: color-mix(in oklab, var(--portal-white) 82%, transparent);
+}
+
+:root[data-theme="dark"] .message-row.own .structured-message-details {
+  background: color-mix(in oklab, var(--portal-white) 8%, transparent);
+  border-color: color-mix(in oklab, var(--portal-white) 14%, transparent);
+}
+
+:root[data-theme="dark"] .message-row.own .message-content th {
+  background: color-mix(in oklab, var(--portal-white) 12%, transparent);
+}
+
+:root[data-theme="dark"] .message-row.own .message-content th,
+:root[data-theme="dark"] .message-row.own .message-content td {
+  border-color: color-mix(in oklab, var(--portal-white) 16%, transparent);
 }
 
 .agent-activity-card {
@@ -512,20 +577,35 @@
 }
 
 .message-row.own .agent-activity-card {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: color-mix(in oklab, var(--portal-brand-300) 22%, transparent);
+  background: color-mix(in oklab, var(--portal-white) 54%, var(--portal-brand-25));
 }
 
 .message-row.own .agent-activity-icon,
 .message-row.own .agent-activity-badge {
-  background: rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.92);
+  background: color-mix(in oklab, var(--portal-brand-600) 12%, transparent);
+  color: var(--portal-brand-700);
 }
 
 .message-row.own .agent-activity-subtitle {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--portal-gray-600);
 }
 
 :root[data-theme="dark"] .agent-activity-card {
   background: var(--panel-strong);
+}
+
+:root[data-theme="dark"] .message-row.own .agent-activity-card {
+  border-color: color-mix(in oklab, var(--portal-white) 16%, transparent);
+  background: color-mix(in oklab, var(--portal-white) 8%, transparent);
+}
+
+:root[data-theme="dark"] .message-row.own .agent-activity-icon,
+:root[data-theme="dark"] .message-row.own .agent-activity-badge {
+  background: color-mix(in oklab, var(--portal-white) 14%, transparent);
+  color: color-mix(in oklab, var(--portal-white) 92%, transparent);
+}
+
+:root[data-theme="dark"] .message-row.own .agent-activity-subtitle {
+  color: color-mix(in oklab, var(--portal-white) 78%, transparent);
 }
