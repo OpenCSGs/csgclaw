@@ -126,13 +126,15 @@ schema_version = "agentfile/v1"
 id = "opencsg.openclaw-worker"
 version = "0.1.0"
 name = "OpenClaw Worker"
-role = "worker"
 
 [runtime]
 kind = "openclaw_sandbox"
 
 [image]
 ref = "registry.example.com/team/openclaw-worker:1.0.0"
+
+[x.csgclaw]
+role = "worker"
 ```
 
 这是标准 Agentfile v1 的最小合法格式。
@@ -143,9 +145,9 @@ ref = "registry.example.com/team/openclaw-worker:1.0.0"
 - `id` 是稳定模板 ID。
 - `version` 是模板自身版本。
 - `name` 是展示名称。
-- `role` 是创建角色。
 - `[runtime].kind` 声明 runtime 类型。
 - `[image].ref` 声明可运行 OCI image。
+- `[x.csgclaw].role` 是 CSGClaw 要求的创建角色扩展字段。
 
 完整推荐发布示例见附录 F。
 
@@ -164,7 +166,6 @@ ref = "registry.example.com/team/openclaw-worker:1.0.0"
 | `version`        | string | 是   | 模板自身版本                                 |
 | `name`           | string | 是   | 模板显示名称，也可作为缺省 agent name 的来源 |
 | `description`    | string | 否   | 模板说明文字                                 |
-| `role`           | string | 是   | 创建角色，例如 `manager` 或 `worker`         |
 | `updated_at`     | string | 否   | RFC3339 更新时间，用于展示和排序             |
 
 #### `schema_version`
@@ -253,28 +254,6 @@ name = "OpenClaw Worker"
 ```toml
 description = "OpenClaw worker template"
 ```
-
-#### `role`
-
-`role` 描述该 template 适用的创建角色。
-
-允许值：
-
-```text
-manager
-worker
-```
-
-`role` 用于判断 template 适用于 manager 还是 worker 创建流程。默认 manager template 应声明 `manager`，默认 worker template 应声明 `worker`。
-
-注意：
-
-```text
-role describes the creation role this template is intended for,
-not the full semantic role or capability model of the agent.
-```
-
-也就是说，`role` 不是通用 agent taxonomy。后续如果引入 notification bot、A2A bot、reviewer、tool agent 等概念，不应直接复用该字段表达所有语义角色。
 
 #### `updated_at`
 
@@ -651,6 +630,7 @@ Agentfile v1 主协议不包含特定实现的版本约束、Hub policy 或产�
 
 ```toml
 [x.csgclaw]
+role = "worker"
 min_version = "0.3.2"
 ```
 
@@ -660,6 +640,26 @@ min_version = "0.3.2"
 - 具体实现可以读取自己的 `x.<vendor>` 段。
 - `x.*` 不得改变标准字段的基础语义。
 - 标准字段与 vendor extension 冲突时，应以标准字段为准。
+
+对于 CSGClaw，实现约定 `[x.csgclaw].role` 为必填字段，用于描述该 template 适用的创建角色。
+
+允许值：
+
+```text
+manager
+worker
+```
+
+`x.csgclaw.role` 用于判断 template 适用于 manager 还是 worker 创建流程。默认 manager template 应声明 `manager`，默认 worker template 应声明 `worker`。
+
+注意：
+
+```text
+role describes the creation role this template is intended for,
+not the full semantic role or capability model of the agent.
+```
+
+也就是说，`x.csgclaw.role` 不是通用 agent taxonomy。后续如果引入 notification bot、A2A bot、reviewer、tool agent 等概念，不应直接复用该字段表达所有语义角色。
 
 ---
 
@@ -673,13 +673,13 @@ min_version = "0.3.2"
 - `id` 必须存在且 trim 后非空。
 - `version` 必须存在且 trim 后非空。
 - `name` 必须存在且 trim 后非空。
-- `role` 必须是 `manager` 或 `worker`。
 - `[runtime]` 必须存在。
 - `runtime.kind` 必须存在且为实现支持的 runtime kind。
 - `runtime.version` 如果存在，trim 后必须非空。
 - `[image]` 必须存在。
 - `image.ref` 必须存在且 trim 后非空。
 - `updated_at` 存在时必须是 RFC3339 时间戳。
+- 对于 CSGClaw，实现必须要求 `[x.csgclaw]` 存在，且 `x.csgclaw.role` 必须是 `manager` 或 `worker`。
 
 ### 6.2 Image 校验
 
@@ -727,7 +727,7 @@ Template registry、官方模板发布流程或 CI 可以比基础协议更严�
 
 1. 读取 `Agentfile.toml`。
 2. 校验 manifest。
-3. 读取 `name`、`description`、`role`、`runtime.kind`、`runtime.version` 和 `image.ref` 作为创建请求的默认值或兼容性元数据。
+3. 读取 `name`、`description`、`x.csgclaw.role`、`runtime.kind`、`runtime.version` 和 `image.ref` 作为创建请求的默认值或兼容性元数据。
 4. 如果 template 来源于 Hub、registry、bundle 或 Git source，记录创建时解析后的 template origin metadata。
 5. 如果创建请求显式传入字段，则显式字段优先。
 6. 根据 `[[image.env]]` 生成需要用户确认或填写的环境变量。
@@ -834,7 +834,6 @@ image_digest = "sha256:..."
 | `version`        | string | 是   | 模板自身版本                              |
 | `name`           | string | 是   | 模板显示名称                              |
 | `description`    | string | 否   | 模板说明                                  |
-| `role`           | string | 是   | 创建角色：`manager` 或 `worker`           |
 | `updated_at`     | string | 否   | RFC3339 更新时间，用于展示和排序          |
 
 ### 10.2 `[runtime]`
@@ -879,7 +878,8 @@ image_digest = "sha256:..."
 
 | 字段     | 类型                   | 必填 | 说明                                                  |
 | -------- | ---------------------- | ---- | ----------------------------------------------------- |
-| 任意字段 | implementation-defined | 否   | vendor-specific extension，不属于 Agentfile v1 主协议 |
+| `role`   | string                 | 对 CSGClaw 是 | CSGClaw 创建角色：`manager` 或 `worker`               |
+| `...`    | vendor-defined fields  | 否   | 其他实现私有扩展字段                                  |
 
 ---
 
@@ -1027,7 +1027,6 @@ id = "example.openclaw-worker"
 version = "0.1.0"
 name = "openclaw-worker"
 description = "OpenClaw worker template"
-role = "worker"
 updated_at = "2026-05-18T00:00:00Z"
 
 [runtime]
@@ -1042,6 +1041,9 @@ path = "workspace"
 optional = true
 merge_policy = "fail_on_conflict"
 ignore_file = ".gitignore"
+
+[x.csgclaw]
+role = "worker"
 ```
 
 注意：
@@ -1124,7 +1126,8 @@ symlink_policy = reject_unsafe_symlink
 
 - `Agentfile.toml` 解析。
 - schema version 校验。
-- `id`、`version`、`name`、`role`、`runtime.kind`、`image.ref` 必填校验。
+- `id`、`version`、`name`、`runtime.kind`、`image.ref` 必填校验。
+- 对 CSGClaw 额外执行 `x.csgclaw.role` 必填校验。
 - `runtime.version` 读取和展示。
 - `updated_at` RFC3339 校验。
 - env name 去重。
@@ -1152,7 +1155,6 @@ id = "opencsg.openclaw-worker"
 version = "0.1.0"
 name = "OpenClaw Worker"
 description = "OpenClaw worker template"
-role = "worker"
 updated_at = "2026-05-18T00:00:00Z"
 
 [runtime]
@@ -1178,6 +1180,7 @@ merge_policy = "fail_on_conflict"
 ignore_file = ".gitignore"
 
 [x.csgclaw]
+role = "worker"
 min_version = "0.3.2"
 ```
 
