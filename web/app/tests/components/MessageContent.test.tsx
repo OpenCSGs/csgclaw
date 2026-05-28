@@ -103,6 +103,20 @@ describe("MessageContent", () => {
     expect(screen.getByText("feature -> main")).toBeInTheDocument();
   });
 
+  it("keeps PicoClaw legacy tool feedback in markdown form", () => {
+    render(
+      <MessageContent
+        content={`🔧 \`read_file\`
+\`\`\`json
+{"path":"README.md"}
+\`\`\``}
+      />,
+    );
+
+    expect(screen.getByText("read_file")).toBeInTheDocument();
+    expect(screen.queryByText("查看原始 JSON · 1 个字段")).not.toBeInTheDocument();
+  });
+
   it("renders Codex tool activity in the structured tool output style", () => {
     render(
       <MessageContent

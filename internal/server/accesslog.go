@@ -203,10 +203,11 @@ type loggingResponseWriter struct {
 }
 
 func (w *loggingResponseWriter) WriteHeader(status int) {
-	if !w.wroteHeader {
-		w.status = status
-		w.wroteHeader = true
+	if w.wroteHeader {
+		return
 	}
+	w.status = status
+	w.wroteHeader = true
 	w.ResponseWriter.WriteHeader(status)
 }
 
@@ -220,6 +221,9 @@ func (w *loggingResponseWriter) Write(p []byte) (int, error) {
 }
 
 func (w *loggingResponseWriter) Flush() {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}

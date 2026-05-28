@@ -155,6 +155,7 @@ export type ProfilePreviewController = {
 export type UseConversationControllerArgs = {
   activeConversationId: string;
   activePane: WorkspacePane;
+  agents: AgentLike[];
   authBusyProvider: string;
   authStatuses: CLIProxyAuthStatusMap;
   data: IMData | null;

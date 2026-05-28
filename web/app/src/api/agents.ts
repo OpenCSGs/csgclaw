@@ -1,4 +1,4 @@
-import { del, get, patch, post, put } from "@/api/client";
+import { del, get, patch, post, put, requestText } from "@/api/client";
 import { BOT_TYPE_NOTIFICATION, MANAGER_AGENT_ID } from "@/shared/constants/agents";
 import type { AgentLike, AgentProfileLike, AgentProfileModelsResponse, JSONRecord, RuntimeKind } from "@/models/agents";
 
@@ -17,6 +17,10 @@ export type FetchAgentsOptions = {
 export type CreateManagerAgentOptions = {
   image?: string;
   runtime_kind?: RuntimeKind;
+};
+
+export type FetchAgentLogsOptions = {
+  lines?: number;
 };
 
 export type AgentUpdatePayload = {
@@ -56,6 +60,15 @@ export async function fetchAgents(options: FetchAgentsOptions = {}): Promise<Age
 
 export function fetchAgent(agentID: string): Promise<AgentLike> {
   return get(`api/v1/agents/${encodeURIComponent(agentID)}`);
+}
+
+export function fetchAgentLogsRequest(agentID: string, options: FetchAgentLogsOptions = {}): Promise<string> {
+  const params = new URLSearchParams();
+  const lines = Number(options.lines ?? 400);
+  if (Number.isFinite(lines) && lines > 0) {
+    params.set("lines", String(Math.floor(lines)));
+  }
+  return requestText(`api/v1/agents/${encodeURIComponent(agentID)}/logs?${params.toString()}`);
 }
 
 export function createManagerAgentRequest(options: CreateManagerAgentOptions = {}): Promise<AgentLike> {

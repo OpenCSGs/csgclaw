@@ -48,6 +48,40 @@ export async function request<T>(path: string, options: ApiRequestOptions = {}):
   return JSON.parse(text) as T;
 }
 
+export async function requestText(path: string, options: ApiRequestOptions = {}): Promise<string> {
+  const { json, ...requestOptions } = options;
+  const headers = new Headers(requestOptions.headers);
+  let body = requestOptions.body;
+
+  if (json !== undefined) {
+    body = JSON.stringify(json);
+  }
+
+  if (body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "text/plain");
+  }
+
+  const response = await fetch(resolveRequestPath(path), {
+    ...requestOptions,
+    body,
+    headers,
+  });
+
+  if (!response.ok) {
+    const message = (await readResponseText(response)) || response.statusText;
+    throw { status: response.status, message } satisfies ApiError;
+  }
+
+  if (response.status === 204) {
+    return "";
+  }
+
+  return response.text();
+}
+
 function resolveRequestPath(path: string): string {
   const value = String(path || "").trim();
   if (!value || value.startsWith("#") || value.startsWith("//") || absoluteURLPattern.test(value)) {

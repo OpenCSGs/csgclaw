@@ -1,16 +1,29 @@
-import { useLayoutEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Logs, RefreshCw, X } from "lucide-react";
+import { fetchAgentLogsRequest } from "@/api/agents";
+import { errorMessage } from "@/api/client";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import { MessageContent } from "@/components/business/MessageContent";
-import { Button } from "@/components/ui";
+import {
+  Button,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+} from "@/components/ui";
 import { AddUserIcon, IconImage, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
 import {
   insertComposerSegmentsAtSelection,
   insertPlainTextAtSelection,
+  getMentionCandidates,
   normalizeTextMentions,
 } from "@/models/composer";
-import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
+import { isAgentRunning, normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
 import {
+  agentMatchesUser,
   formatEventMessage,
   formatMessagePreviewText,
   formatThreadReplyCount,
@@ -18,18 +31,27 @@ import {
   getConversationDescription,
   isDirectConversation,
   isEventMessage,
+  isToolCallMessage,
 } from "@/models/conversations";
 import { localizeRole } from "@/shared/i18n";
+
+type ThreadMentionState = {
+  end: number;
+  query: string;
+  start: number;
+};
 
 export function ConversationPane({
   conversation,
   visibleMessages,
   currentUserID,
   usersById,
+  agents = [],
   locale,
   t,
   theme,
   selectedMessageCount,
+  logAgent,
   conversationMembers,
   showMemberList,
   onToggleMemberList,
@@ -77,6 +99,39 @@ export function ConversationPane({
 }) {
   const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
   const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
+  const [logModalOpen, setLogModalOpen] = useState(false);
+  const [logContent, setLogContent] = useState("");
+  const [logError, setLogError] = useState("");
+  const [logLoading, setLogLoading] = useState(false);
+  const logAgentID = logAgent?.id || "";
+  const logAgentName = logAgent?.name || conversation.title;
+
+  useEffect(() => {
+    setLogModalOpen(false);
+    setLogContent("");
+    setLogError("");
+    setLogLoading(false);
+  }, [conversation.id, logAgentID]);
+
+  async function refreshAgentLogs() {
+    if (!logAgentID) {
+      return;
+    }
+    setLogLoading(true);
+    setLogError("");
+    try {
+      setLogContent(await fetchAgentLogsRequest(logAgentID, { lines: 400 }));
+    } catch (err) {
+      setLogError(errorMessage(err, t("agentLogsLoadFailed")));
+    } finally {
+      setLogLoading(false);
+    }
+  }
+
+  function openAgentLogs() {
+    setLogModalOpen(true);
+    void refreshAgentLogs();
+  }
 
   return (
     <>
@@ -139,6 +194,19 @@ export function ConversationPane({
               </div>
             </div>
             <div className="chat-title-actions">
+              {logAgent ? (
+                <Button
+                  className="icon-button"
+                  active={logModalOpen}
+                  aria-label={t("agentLogs")}
+                  title={t("agentLogs")}
+                  onClick={openAgentLogs}
+                >
+                  <span className="icon-button-mark" aria-hidden="true">
+                    <Logs size={18} strokeWidth={2} />
+                  </span>
+                </Button>
+              ) : null}
               <div ref={channelToolsRef} className="header-menu tools-menu">
                 <Button
                   className="icon-button"
@@ -230,6 +298,8 @@ export function ConversationPane({
           }
           const own = message.sender_id === currentUserID;
           const isAdmin = user?.role === "admin";
+          const messageAgent = agents.find((item) => agentMatchesUser(item, user));
+          const messageAgentRunning = isAgentRunning(messageAgent);
           const threadSummary = message.thread;
           const latestThreadReply = threadSummary?.latest_reply;
           return (
@@ -242,6 +312,9 @@ export function ConversationPane({
                 onClick={(event) => onPreviewUser(user, event.currentTarget)}
               >
                 {user.avatar}
+                {messageAgent ? (
+                  <span className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`} aria-hidden="true" />
+                ) : null}
               </button>
               <div className="message-card">
                 <div className="message-hover-actions">
@@ -300,28 +373,7 @@ export function ConversationPane({
 
       <footer className="composer">
         {mentionCandidates.length > 0 ? (
-          <div className="mention-picker">
-            {mentionCandidates.map((user, index) => (
-              <button
-                key={user.id}
-                className={`mention-option ${index === mentionIndex ? "active" : ""}`}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  onApplyMention(user);
-                }}
-              >
-                <span className="avatar" style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}>
-                  {user.avatar}
-                </span>
-                <div>
-                  <div className="message-author">{user.name}</div>
-                  <div className="conversation-preview">
-                    @{user.handle} · {localizeRole(user.role, t)}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
+          <MentionPicker users={mentionCandidates} activeIndex={mentionIndex} t={t} onSelect={onApplyMention} />
         ) : null}
         {managerProfile &&
         providerNeedsAuth(managerProfile.provider) &&
@@ -392,13 +444,117 @@ export function ConversationPane({
           usersById={usersById}
           locale={locale}
           theme={theme}
+          showToolCalls={showToolCalls}
           t={t}
           onClose={onCloseThread}
           onDraftChange={onThreadDraftChange}
+          mentionableUsers={conversationMembers}
+          onPreviewUser={onPreviewUser}
           onSend={onSendThreadReply}
         />
       ) : null}
+      {logModalOpen && logAgent ? (
+        <AgentLogsDialog
+          agentName={logAgentName}
+          content={logContent}
+          error={logError}
+          loading={logLoading}
+          t={t}
+          onClose={() => setLogModalOpen(false)}
+          onRefresh={refreshAgentLogs}
+        />
+      ) : null}
     </>
+  );
+}
+
+function MentionPicker({ users = [], activeIndex = 0, className = "", showRole = true, t, onSelect }) {
+  const activeOptionRef = useRef<HTMLButtonElement | null>(null);
+  const activeUserID = users[activeIndex]?.id || "";
+
+  useLayoutEffect(() => {
+    activeOptionRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, activeUserID, users.length]);
+
+  return (
+    <div className={`mention-picker ${className}`.trim()}>
+      {users.map((user, index) => (
+        <button
+          key={user.id}
+          ref={index === activeIndex ? activeOptionRef : null}
+          className={`mention-option ${index === activeIndex ? "active" : ""}`}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            onSelect(user);
+          }}
+        >
+          <span className="avatar" style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}>
+            {user.avatar}
+          </span>
+          <div>
+            <div className="message-author">{user.name}</div>
+            <div className="conversation-preview">
+              @{user.handle}
+              {showRole ? ` · ${localizeRole(user.role, t)}` : ""}
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AgentLogsDialog({ agentName, content, error, loading, t, onClose, onRefresh }) {
+  const logsViewerRef = useRef<HTMLPreElement | null>(null);
+  const displayContent = content || (loading ? t("agentLogsLoading") : t("agentLogsEmpty"));
+
+  useLayoutEffect(() => {
+    const viewer = logsViewerRef.current;
+    if (!viewer) {
+      return;
+    }
+    viewer.scrollTop = viewer.scrollHeight;
+  }, [content, error, loading]);
+
+  return (
+    <DialogRoot
+      open={true}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+    >
+      <DialogContent className="agent-logs-modal" overlayClassName="agent-logs-backdrop">
+        <DialogHeader className="agent-logs-header">
+          <div>
+            <DialogTitle>{t("agentLogsTitle")}</DialogTitle>
+            <DialogDescription>{agentName}</DialogDescription>
+          </div>
+          <div className="agent-logs-header-actions">
+            <Button
+              className="icon-button agent-logs-refresh"
+              aria-label={t("refreshLogs")}
+              title={t("refreshLogs")}
+              loading={loading}
+              loadingLabel={t("agentLogsLoading")}
+              onClick={onRefresh}
+            >
+              <span className="icon-button-mark" aria-hidden="true">
+                <RefreshCw size={18} strokeWidth={2} />
+              </span>
+            </Button>
+            <DialogCloseButton className="icon-button" label={t("close")} />
+          </div>
+        </DialogHeader>
+        <DialogBody className="agent-logs-body">
+          {error ? <div className="form-error agent-logs-error">{error}</div> : null}
+          <pre ref={logsViewerRef} className="agent-logs-viewer">
+            {displayContent}
+          </pre>
+        </DialogBody>
+      </DialogContent>
+    </DialogRoot>
   );
 }
 
@@ -411,15 +567,29 @@ function ThreadPanel({
   usersById,
   locale,
   theme,
+  showToolCalls,
   t,
   onClose,
   onDraftChange,
+  onPreviewUser,
+  mentionableUsers = [],
   onSend,
 }) {
   const threadBodyRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [mentionState, setMentionState] = useState<ThreadMentionState | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const root = thread?.root ?? null;
   const replies = thread?.replies ?? [];
-  const latestReplyID = replies[replies.length - 1]?.id || "";
+  const visibleRoot = showToolCalls || !isToolCallMessage(root) ? root : null;
+  const visibleReplies = showToolCalls ? replies : replies.filter((message) => !isToolCallMessage(message));
+  const latestReplyID = visibleReplies[visibleReplies.length - 1]?.id || "";
+  const threadMentionCandidates = useMemo(() => {
+    if (!mentionState) {
+      return [];
+    }
+    return getMentionCandidates(mentionableUsers, mentionState.query);
+  }, [mentionState, mentionableUsers]);
 
   useLayoutEffect(() => {
     const threadBody = threadBodyRef.current;
@@ -432,7 +602,61 @@ function ThreadPanel({
     scrollToBottom();
     const frame = window.requestAnimationFrame(scrollToBottom);
     return () => window.cancelAnimationFrame(frame);
-  }, [root?.id, replies.length, latestReplyID, loading]);
+  }, [root, visibleReplies.length, latestReplyID, loading]);
+
+  function syncThreadMentionState(target = textareaRef.current) {
+    if (!target) {
+      setMentionState(null);
+      return;
+    }
+    const cursor = target.selectionStart ?? 0;
+    const beforeCursor = target.value.slice(0, cursor);
+    const match = beforeCursor.match(/(^|\s)@([a-zA-Z0-9._-]*)$/);
+    if (!match) {
+      setMentionState(null);
+      setMentionIndex(0);
+      return;
+    }
+    const nextMentionState = {
+      end: cursor,
+      query: match[2] || "",
+      start: cursor - (match[2] || "").length - 1,
+    };
+    const mentionChanged =
+      !mentionState ||
+      mentionState.start !== nextMentionState.start ||
+      mentionState.end !== nextMentionState.end ||
+      mentionState.query !== nextMentionState.query;
+    setMentionState(nextMentionState);
+    if (mentionChanged) {
+      setMentionIndex(0);
+    }
+  }
+
+  function insertThreadMention(user) {
+    const target = textareaRef.current;
+    if (!target || !mentionState || !user) {
+      return;
+    }
+    const handle = String(user.handle || user.name || user.id || "").trim();
+    if (!handle) {
+      return;
+    }
+    const text = String(draft || "");
+    const mentionText = `@${handle} `;
+    const next = text.slice(0, mentionState.start) + mentionText + text.slice(mentionState.end);
+    const caret = mentionState.start + mentionText.length;
+    onDraftChange(next);
+    setMentionState(null);
+    setMentionIndex(0);
+    requestAnimationFrame(() => {
+      if (textareaRef.current !== target) {
+        return;
+      }
+      target.focus();
+      target.setSelectionRange(caret, caret);
+    });
+  }
 
   return (
     <aside className="thread-panel" aria-label={t("threadPanelTitle")}>
@@ -440,7 +664,9 @@ function ThreadPanel({
         <div>
           <div className="thread-panel-kicker">{t("threadPanelTitle")}</div>
           <div className="thread-panel-title truncate">
-            {formatMessagePreviewText(thread?.summary?.context_summary?.root_excerpt || root?.content || "")}
+            {visibleRoot
+              ? formatMessagePreviewText(thread?.summary?.context_summary?.root_excerpt || visibleRoot.content || "")
+              : t("noVisibleMessages")}
           </div>
         </div>
         <Button className="icon-button" aria-label={t("close")} title={t("close")} onClick={onClose}>
@@ -452,16 +678,31 @@ function ThreadPanel({
       <div ref={threadBodyRef} className="thread-panel-body">
         {loading && !root ? <div className="thread-empty">{t("loading")}</div> : null}
         {error ? <div className="form-error">{error}</div> : null}
-        {root ? (
+        {visibleRoot ? (
           <div className="thread-root">
-            <ThreadMessage message={root} usersById={usersById} locale={locale} theme={theme} />
+            <ThreadMessage
+              message={visibleRoot}
+              usersById={usersById}
+              locale={locale}
+              theme={theme}
+              t={t}
+              onPreviewUser={onPreviewUser}
+            />
           </div>
         ) : null}
         <div className="thread-replies">
-          <div className="thread-section-title">{formatThreadReplyCount(replies.length, t)}</div>
-          {replies.length > 0 ? (
-            replies.map((message) => (
-              <ThreadMessage key={message.id} message={message} usersById={usersById} locale={locale} theme={theme} />
+          <div className="thread-section-title">{formatThreadReplyCount(visibleReplies.length, t)}</div>
+          {visibleReplies.length > 0 ? (
+            visibleReplies.map((message) => (
+              <ThreadMessage
+                key={message.id}
+                message={message}
+                usersById={usersById}
+                locale={locale}
+                theme={theme}
+                t={t}
+                onPreviewUser={onPreviewUser}
+              />
             ))
           ) : (
             <div className="thread-empty">{t("threadNoReplies")}</div>
@@ -469,17 +710,58 @@ function ThreadPanel({
         </div>
       </div>
       <div className="thread-composer">
+        {threadMentionCandidates.length > 0 ? (
+          <MentionPicker
+            users={threadMentionCandidates}
+            activeIndex={mentionIndex}
+            className="thread-mention-picker"
+            showRole={false}
+            t={t}
+            onSelect={insertThreadMention}
+          />
+        ) : null}
         <textarea
+          ref={textareaRef}
           value={draft}
           placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
           disabled={disabled}
-          onChange={(event) => onDraftChange(event.target.value)}
+          onChange={(event) => {
+            onDraftChange(event.target.value);
+            syncThreadMentionState(event.target);
+          }}
+          onClick={(event) => syncThreadMentionState(event.currentTarget)}
           onKeyDown={(event) => {
+            if (threadMentionCandidates.length > 0) {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setMentionIndex((value) => (value + 1) % threadMentionCandidates.length);
+                return;
+              }
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setMentionIndex(
+                  (value) => (value - 1 + threadMentionCandidates.length) % threadMentionCandidates.length,
+                );
+                return;
+              }
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                insertThreadMention(threadMentionCandidates[mentionIndex]);
+                return;
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setMentionState(null);
+                setMentionIndex(0);
+                return;
+              }
+            }
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               onSend();
             }
           }}
+          onKeyUp={(event) => syncThreadMentionState(event.currentTarget)}
         />
         <Button
           variant="primary"
@@ -495,21 +777,30 @@ function ThreadPanel({
   );
 }
 
-function ThreadMessage({ message, usersById, locale, theme, compact = false }) {
+function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, compact = false }) {
   const user = usersById.get(message.sender_id);
   const fallbackName = message.sender_id || "";
   const avatar = user?.avatar || fallbackName.slice(0, 1).toUpperCase();
   const name = user?.name || user?.handle || fallbackName;
+  const avatarStyle = { background: `linear-gradient(135deg, ${user?.accent_hex || "#4d6ad6"}, #10233f)` };
 
   return (
     <div className={`thread-message ${compact ? "compact" : ""}`.trim()}>
-      <div
-        className="thread-message-avatar"
-        style={{ background: `linear-gradient(135deg, ${user?.accent_hex || "#4d6ad6"}, #10233f)` }}
-        aria-hidden="true"
-      >
-        {avatar}
-      </div>
+      {user ? (
+        <button
+          type="button"
+          className="thread-message-avatar"
+          style={avatarStyle}
+          aria-label={`${t("profilePreview")} ${name}`}
+          onClick={(event) => onPreviewUser(user, event.currentTarget)}
+        >
+          {avatar}
+        </button>
+      ) : (
+        <div className="thread-message-avatar" style={avatarStyle} aria-hidden="true">
+          {avatar}
+        </div>
+      )}
       <div className="thread-message-main">
         <div className="message-meta">
           <span className="message-author">{name}</span>

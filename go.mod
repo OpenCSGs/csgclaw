@@ -5,10 +5,10 @@ go 1.26.2
 require github.com/larksuite/oapi-sdk-go/v3 v3.5.3
 
 require (
-	github.com/go-chi/chi/v5 v5.2.5
 	github.com/gin-gonic/gin v1.10.1
-	github.com/router-for-me/CLIProxyAPI/v6 v6.9.40
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/pelletier/go-toml/v2 v2.2.2
+	github.com/router-for-me/CLIProxyAPI/v6 v6.10.9
 	golang.org/x/term v0.37.0
 )
 

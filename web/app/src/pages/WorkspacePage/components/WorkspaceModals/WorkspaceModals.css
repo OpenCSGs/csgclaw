@@ -908,14 +908,18 @@
   gap: 22px;
   margin-top: 0;
   padding: 24px 28px 26px;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .manager-rebuild-modal .profile-section {
+  min-width: 0;
   padding: 18px;
   background: var(--panel);
 }
 
 .manager-rebuild-modal .manager-rebuild-grid {
+  min-width: 0;
   gap: 18px;
 }
 
@@ -928,6 +932,13 @@
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
+}
+
+.manager-rebuild-modal .form-error {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .manager-rebuild-modal .modal-actions {

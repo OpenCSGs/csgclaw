@@ -1,4 +1,4 @@
-# GitLab CI: on tag v*, build release archives in parallel, then upload to SSH storage.
+# GitLab CI: on tag v*, build release archives and a Docker image, then upload archives to SSH storage.
 #
 # Platform list: scripts/release-platforms.txt — keep parallel.matrix below in sync (same GOOS/GOARCH rows).
 #
@@ -9,6 +9,7 @@
 # Required CI/CD variables:
 #   REMOTE_SSH – e.g. root@cdn.example.com
 #   ACR_REGISTRY – registry hostname only (no scheme); CI images are mirrored under ${ACR_REGISTRY}/opencsg_public/ and ${ACR_REGISTRY}/opencsghq/
+#   ACR_USERNAME / ACR_PASSWORD – credentials with push access to ${ACR_REGISTRY}/opencsghq/csgclaw
 #
 # Recommended:
 #   SSH_PRIVATE_KEY – PEM text (Variable) OR GitLab “File” variable (value is a path in the job; script copies to ~/.ssh/id_rsa)
@@ -30,9 +31,18 @@
 #   docker login ${ACR_REGISTRY}
 #   docker tag golang:bookworm ${ACR_REGISTRY}/opencsg_public/golang:bookworm
 #   docker push ${ACR_REGISTRY}/opencsg_public/golang:bookworm
+#   docker tag golang:1.26.2-alpine ${ACR_REGISTRY}/opencsg_public/golang:1.26.2-alpine
+#   docker push ${ACR_REGISTRY}/opencsg_public/golang:1.26.2-alpine
+#   docker tag alpine:3.23 ${ACR_REGISTRY}/opencsg_public/alpine:3.23
+#   docker push ${ACR_REGISTRY}/opencsg_public/alpine:3.23
 #   docker pull --platform linux/amd64 node:22.13.0-bookworm-slim
 #   docker tag node:22.13.0-bookworm-slim ${ACR_REGISTRY}/opencsghq/node:22.13.0-bookworm-slim
 #   docker push ${ACR_REGISTRY}/opencsghq/node:22.13.0-bookworm-slim
+#   docker pull --platform linux/amd64 node:22.13.0-alpine
+#   docker tag node:22.13.0-alpine ${ACR_REGISTRY}/opencsghq/node:22.13.0-alpine
+#   docker push ${ACR_REGISTRY}/opencsghq/node:22.13.0-alpine
+#   docker tag gcr.io/kaniko-project/executor:debug ${ACR_REGISTRY}/opencsg_public/kaniko-executor:debug
+#   docker push ${ACR_REGISTRY}/opencsg_public/kaniko-executor:debug
 
 variables:
   GIT_STRATEGY: clone
@@ -48,6 +58,7 @@ variables:
 stages:
   - web
   - build
+  - image
   - upload
 
 .release_rules:
@@ -61,6 +72,11 @@ stages:
 .web_image:
   image:
     name: ${ACR_REGISTRY}/opencsghq/node:22.13.0-bookworm-slim
+
+.kaniko_image:
+  image:
+    name: ${ACR_REGISTRY}/opencsg_public/kaniko-executor:debug
+    entrypoint: [""]
 
 web-build:
   extends:
@@ -120,6 +136,34 @@ release-build:
       - dist/
     expire_in: 1 day
 
+docker-build-amd64:
+  extends:
+    - .kaniko_image
+    - .release_rules
+  stage: image
+  script:
+    - test -n "${ACR_REGISTRY}"
+    - test -n "${ACR_USERNAME}"
+    - test -n "${ACR_PASSWORD}"
+    - mkdir -p /kaniko/.docker
+    - export ACR_AUTH="$(printf '%s:%s' "$ACR_USERNAME" "$ACR_PASSWORD" | base64 | tr -d '\n')"
+    - printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$ACR_REGISTRY" "$ACR_AUTH" > /kaniko/.docker/config.json
+    - export COMMIT="$(git rev-parse --short HEAD)"
+    - export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "${CI_PROJECT_DIR}/Dockerfile" \
+        --custom-platform linux/amd64 \
+        --destination "${ACR_REGISTRY}/opencsghq/csgclaw:${CI_COMMIT_TAG}" \
+        --build-arg GO_IMAGE="${ACR_REGISTRY}/opencsg_public/golang:1.26.2-alpine" \
+        --build-arg NODE_IMAGE="${ACR_REGISTRY}/opencsghq/node:22.13.0-alpine" \
+        --build-arg RUNTIME_IMAGE="${ACR_REGISTRY}/opencsg_public/alpine:3.23" \
+        --build-arg GOPROXY="${GOPROXY}" \
+        --build-arg VERSION="${CI_COMMIT_TAG}" \
+        --build-arg COMMIT="${COMMIT}" \
+        --build-arg BUILD_TIME="${BUILD_TIME}"
+
 release-upload:
   extends:
     - .release_image
@@ -128,6 +172,8 @@ release-upload:
   needs:
     - job: release-build
       artifacts: true
+    - job: docker-build-amd64
+      artifacts: false
   before_script:
     - chmod +x .gitlab/bookworm-mirror.sh
     - bash .gitlab/bookworm-mirror.sh

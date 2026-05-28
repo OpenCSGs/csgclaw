@@ -1707,6 +1707,80 @@ func TestCreateReplaceManagerUsesRequestedImage(t *testing.T) {
 	}
 }
 
+func TestCreateReplaceManagerClearsEnvRestartRequired(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			if image != "manager-image:1" {
+				t.Fatalf("createGatewayBox() image = %q, want manager-image:1", image)
+			}
+			return &fakeInstance{}, sandbox.Info{
+				ID:        "box-" + name,
+				Name:      name,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	)
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) error {
+		return nil
+	}
+	defer ResetTestHooks()
+
+	profile := AgentProfile{
+		Name:               ManagerName,
+		Provider:           ProviderCodex,
+		ModelID:            "gpt-5.5",
+		ProfileComplete:    true,
+		EnvRestartRequired: true,
+	}
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:1", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:              ManagerUserID,
+		Name:            ManagerName,
+		RuntimeID:       runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind:     RuntimeKindPicoClawSandbox,
+		Image:           "manager-image:1",
+		BoxID:           "box-manager-old",
+		Role:            RoleManager,
+		Status:          string(sandbox.StateRunning),
+		Profile:         profileSelector(profile),
+		AgentProfile:    profile,
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC),
+	}
+
+	replaced, err := svc.Create(context.Background(), CreateRequest{
+		Spec: CreateAgentSpec{
+			ID:   ManagerUserID,
+			Name: ManagerName,
+		},
+		Replace: true,
+	})
+	if err != nil {
+		t.Fatalf("Create() replace error = %v", err)
+	}
+	if replaced.AgentProfile.EnvRestartRequired {
+		t.Fatal("Create() replaced manager EnvRestartRequired = true, want false after successful recreate")
+	}
+	view, err := svc.AgentProfileView(ManagerUserID)
+	if err != nil {
+		t.Fatalf("AgentProfileView() error = %v", err)
+	}
+	if view.EnvRestartRequired {
+		t.Fatal("AgentProfileView().EnvRestartRequired = true, want false after successful recreate")
+	}
+}
+
 func TestCreateReplaceManagerReprovisionsWorkspaceAfterHomeRemoval(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -4605,11 +4679,13 @@ func TestLookupBootstrapManagerUsesPerAgentHome(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	var gotHome string
-	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
-		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	var removed []string
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		removed = append(removed, idOrName)
+		return fmt.Errorf("%w: missing", sandbox.ErrNotFound)
 	}
 	defer func() {
-		testGetBoxHook = nil
+		testForceRemoveBoxHook = nil
 	}()
 
 	provider := fakeProvider{
@@ -4649,6 +4725,54 @@ func TestLookupBootstrapManagerUsesPerAgentHome(t *testing.T) {
 	}
 	if got, want := gotHome, wantHome; got != want {
 		t.Fatalf("resolved manager runtime home = %q, want %q", got, want)
+	}
+	if len(removed) != 1 || removed[0] != ManagerName {
+		t.Fatalf("removed stale manager boxes = %#v, want [%q]", removed, ManagerName)
+	}
+}
+
+func TestLookupBootstrapManagerRemovesOrphanManagerWhenNoRecord(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	var removed []string
+	testEnsureRuntimeAtHomeHook = func(_ *Service, homeDir string) (sandbox.Runtime, error) {
+		if homeDir == "" {
+			t.Fatalf("ensureRuntimeAtHome() homeDir = %q, want non-empty", homeDir)
+		}
+		return &fakeRuntime{}, nil
+	}
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		removed = append(removed, idOrName)
+		return nil
+	}
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		t.Fatalf("lookupBootstrapManager() should not reuse orphan manager box %q", idOrName)
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	defer func() {
+		testEnsureRuntimeAtHomeHook = nil
+		testForceRemoveBoxHook = nil
+		testGetBoxHook = nil
+	}()
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	rt, box, err := svc.lookupBootstrapManager(context.Background())
+	if err != nil {
+		t.Fatalf("lookupBootstrapManager() error = %v", err)
+	}
+	if rt == nil {
+		t.Fatal("lookupBootstrapManager() runtime = nil, want non-nil")
+	}
+	if box != nil {
+		t.Fatalf("lookupBootstrapManager() box = %#v, want nil", box)
+	}
+	if len(removed) != 1 || removed[0] != ManagerName {
+		t.Fatalf("removed stale manager boxes = %#v, want [%q]", removed, ManagerName)
 	}
 }
 
@@ -4824,9 +4948,12 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	if spec.AutoRemove {
 		t.Fatal("gatewayCreateSpec() auto_remove = true, want false")
 	}
-	wantCmd := "/bin/sh -c " + picoclawsandbox.GatewayRunCommand()
-	if strings.Join(spec.Cmd, " ") != wantCmd {
-		t.Fatalf("gatewayCreateSpec() cmd = %q, want %q", spec.Cmd, wantCmd)
+	cmd := strings.Join(spec.Cmd, " ")
+	if strings.Contains(cmd, "/csgclaw-projects") || strings.Contains(cmd, "ln -sfn") {
+		t.Fatalf("gatewayCreateSpec() cmd = %q, want direct projects mount without symlink setup", spec.Cmd)
+	}
+	if !strings.HasSuffix(cmd, picoclawsandbox.GatewayRunCommand()) {
+		t.Fatalf("gatewayCreateSpec() cmd = %q, want suffix %q", spec.Cmd, picoclawsandbox.GatewayRunCommand())
 	}
 	if got, want := spec.Env["HOME"], "/home/picoclaw"; got != want {
 		t.Fatalf("HOME env = %q, want %q", got, want)

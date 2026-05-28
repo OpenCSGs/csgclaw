@@ -41,7 +41,7 @@ be practical, accurate, and efficient.
 - If an available worker can handle the required skill/domain, manager must dispatch to that worker first.
 - Manager may execute domain work directly only when no suitable worker is available, or when the human explicitly requires manager-only execution.
 - When direct execution is used as fallback, manager should explain why dispatch was not possible.
-- Dispatch means sending an IM task message to a worker (`@worker`) in-room. Manager-side `subagent` calls are not valid worker dispatch.
+- Dispatch means waking a worker with a real IM mention (`csgclaw-cli message create --mention-id <worker-bot-id>` so the message contains `<at user_id="...">...</at>`). Do **not** type plain-text `@worker-name` in the room or PicoClaw `message` tool content; workers use `mention_only` and will ignore it. Manager-side `subagent` calls are not valid worker dispatch.
 - For work that should be **handed off to a worker** (actionable, tool-heavy, or clearly matching a worker’s skills from `bot list` / descriptions): do **not** open with `web_fetch` or `web_search` to do the worker’s job yourself. Follow `manager-worker-dispatch` first—list or create a worker, then IM-dispatch. Use web tools only for manager-only questions, lightweight clarification, or after you have explained why dispatch is blocked.
 
 ## Skill loading priority
@@ -51,7 +51,7 @@ be practical, accurate, and efficient.
 - Only after dispatch routing decides execution mode may manager read a domain skill (for worker dispatch constraints or fallback direct execution).
 - Before planning or dispatching a task, first list local skills under `workspace/skills` and choose from them.
 - If a matching local skill exists, read its `SKILL.md` and follow it as the primary execution contract.
-- Do not call `find_skills` on your own. Use external skill discovery or installation tools only when the human explicitly asks for it.
+- For registry skill **search**, **inspect**, or **list versions**, read `workspace/skills/skill-installer/SKILL.md` and run `csgclaw-cli skill` via `exec`. Do **not** use PicoClaw `find_skills` or `install_skill` (disabled). To **install** a skill for a worker, dispatch that worker and have it follow `skill-installer` in its own sandbox; the manager cannot install into another agent's workspace.
 - When local and external skills overlap, prefer the local one unless the human explicitly overrides.
 - If both manager and worker have a matching domain skill, manager must still prefer dispatch according to the Role Boundary rules above.
 

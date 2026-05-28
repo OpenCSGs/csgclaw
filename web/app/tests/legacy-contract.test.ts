@@ -103,7 +103,10 @@ describe("legacy UI contract", () => {
     expect(source).toContain("message-thread-actions has-thread-summary");
     expect(source).toContain("const threadBodyRef = useRef<HTMLDivElement | null>(null);");
     expect(source).toContain("threadBody.scrollTop = threadBody.scrollHeight;");
-    expect(source).toContain("[root?.id, replies.length, latestReplyID, loading]");
+    expect(source).toContain("const visibleReplies = showToolCalls ? replies : replies.filter");
+    expect(source).toContain("[root, visibleReplies.length, latestReplyID, loading]");
+    expect(source).toContain("mentionableUsers={conversationMembers}");
+    expect(source).toContain("thread-mention-picker");
   });
 
   it("keeps the message timeline from exposing horizontal scroll", () => {
@@ -116,11 +119,21 @@ describe("legacy UI contract", () => {
     expect(styles).toContain("width: 6px;");
   });
 
+  it("keeps the mention picker scrollbar slim", () => {
+    expect(styles).toMatch(/\.mention-picker\s*\{[\s\S]*scrollbar-width:\s*thin;/);
+    expect(styles).toContain(".mention-picker::-webkit-scrollbar");
+    expect(styles).toContain(".mention-picker::-webkit-scrollbar-thumb");
+  });
+
   it("shows agent running status dots in direct message rows", () => {
     expect(source).toContain(
       "const directAgent = isDirect && displayUser ? agents.find((item) => agentMatchesUser(item, displayUser)) : null;",
     );
     expect(source).toContain('className={`workspace-status-dot ${directAgentRunning ? "online" : ""}`}');
     expect(source).toMatch(/directMessages\.map[\s\S]*agents=\{agentItems\}/);
+    expect(source).toContain("const messageAgent = agents.find((item) => agentMatchesUser(item, user));");
+    expect(source).toContain('className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`}');
+    expect(source).toContain("agents: agent.agentItems,");
+    expect(styles).toContain(".message-avatar-status.online");
   });
 });

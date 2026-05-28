@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/channel/feishu"
@@ -99,5 +100,9 @@ func TestGatewayCreateSpecMountsPicoClawRuntimeRoot(t *testing.T) {
 	}
 	if got, want := spec.Mounts[1].GuestPath, BoxProjectsDir; got != want {
 		t.Fatalf("projects mount guest = %q, want %q", got, want)
+	}
+	cmd := strings.Join(spec.Cmd, " ")
+	if strings.Contains(cmd, "/csgclaw-projects") || strings.Contains(cmd, "ln -sfn") {
+		t.Fatalf("GatewayCreateSpec() cmd = %q, want direct projects mount without symlink setup", spec.Cmd)
 	}
 }

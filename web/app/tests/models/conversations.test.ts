@@ -6,6 +6,7 @@ import {
   formatConversationPreview,
   formatEventMessage,
   formatMessagePreviewText,
+  formatTime,
   isAgentRosterEvent,
   isToolCallMessage,
   latestAt,
@@ -16,6 +17,7 @@ import {
 } from "@/models/conversations";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
 import type { IMConversation, IMMessage } from "@/models/conversations";
+import { vi } from "vitest";
 
 const t = (key: string) => key;
 
@@ -88,6 +90,25 @@ describe("conversation model helpers", () => {
     expect(formatMessagePreviewText("```text thread title should be plain ```")).toBe("thread title should be plain");
     expect(formatMessagePreviewText("``` thread title should stay plain ```")).toBe("thread title should stay plain");
     expect(formatMessagePreviewText('Hi <at user_id="u-1">Alice</at>')).toBe("Hi @Alice");
+  });
+
+  it("formats message timestamps with the browser local timezone", () => {
+    const spy = vi.spyOn(Date.prototype, "toLocaleTimeString").mockReturnValue("local time");
+    try {
+      expect(formatTime("2026-05-26T07:44:00Z", "en")).toBe("local time");
+      expect(formatTime("2026-05-26T07:44:00Z", "zh")).toBe("local time");
+
+      expect(spy).toHaveBeenNthCalledWith(1, "en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      expect(spy).toHaveBeenNthCalledWith(2, "zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("resolves display names and agent/user matches defensively", () => {

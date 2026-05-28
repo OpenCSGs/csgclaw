@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1101,6 +1102,34 @@ func TestExecuteHubListUsesHTTPClient(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"id": "builtin/frontend-alice"`) {
 		t.Fatalf("stdout = %q, want template id", stdout.String())
+	}
+}
+
+func TestExecuteSkillSearchUsesHTTPClient(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/search" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("q"); got != "postgres" {
+			t.Fatalf("q = %q", got)
+		}
+		_, _ = w.Write([]byte(`{"results":[{"slug":"pg-backup","displayName":"PG Backup","summary":"backup","version":"1.0.0","score":0.9}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("CLAWHUB_BASE_URL", srv.URL)
+
+	var stdout bytes.Buffer
+	app := &App{
+		stdout:     &stdout,
+		stderr:     &bytes.Buffer{},
+		httpClient: srv.Client(),
+	}
+
+	if err := app.Execute(context.Background(), []string{"--output", "json", "skill", "search", "postgres"}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"slug": "pg-backup"`) {
+		t.Fatalf("stdout = %q, want skill slug", stdout.String())
 	}
 }
 

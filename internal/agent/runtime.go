@@ -59,6 +59,15 @@ func (s *Service) lookupBootstrapManager(ctx context.Context) (sandbox.Runtime, 
 	if err != nil {
 		return nil, nil, err
 	}
+	if !s.hasBootstrapManagerRecord() {
+		if err := s.forceRemoveBox(ctx, rt, ManagerName); err != nil {
+			if sandbox.IsNotFound(err) {
+				return rt, nil, nil
+			}
+			return nil, nil, fmt.Errorf("remove stale bootstrap manager box %q: %w", ManagerName, err)
+		}
+		return rt, nil, nil
+	}
 	for _, key := range s.bootstrapManagerLookupKeys() {
 		box, err := s.getBox(ctx, rt, key)
 		if err == nil {
@@ -69,6 +78,20 @@ func (s *Service) lookupBootstrapManager(ctx context.Context) (sandbox.Runtime, 
 		}
 	}
 	return rt, nil, nil
+}
+
+func (s *Service) hasBootstrapManagerRecord() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, a := range s.agents {
+		if isManagerAgent(a) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) getBox(ctx context.Context, rt sandbox.Runtime, idOrName string) (sandbox.Instance, error) {

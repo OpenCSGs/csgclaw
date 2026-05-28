@@ -260,6 +260,41 @@ enabled = true
 
 内置 `builtin` registry 是只读的。发布模板时应选择可写的 `local` 或 `remote` registry。
 
+## Skill 注册表配置
+
+`csgclaw skill` 默认同时搜索两个 skill 注册表：
+
+- **opencsg**（主）：`https://claw.opencsg.com`，优先
+- **clawhub**（官方）：`https://clawhub.ai`
+
+`skill search` 先查 opencsg，有结果即返回；仅当 opencsg 无结果时才查 clawhub.ai。
+
+`get` / `install` 可用 `--registry opencsg` 或 `--registry clawhub` 指定；省略时先查 opencsg，再查 clawhub。
+
+当前 registry 支持的 API：
+
+- `GET /api/v1/search` — `csgclaw skill search`
+- `GET /api/v1/skills/:slug` — `csgclaw skill get`（OpenCSG 响应含 `versions[]`）
+- `GET /api/v1/skills/:slug/versions` — `csgclaw skill versions`（clawhub.ai 分页；OpenCSG 回退到 get 的 `versions[]`）
+- `GET /api/v1/skills/:slug/versions/:version` — `csgclaw skill get --version`
+- `GET /api/v1/download/:slug` 或 `GET /api/v1/download?slug=` — 安装时下载
+
+请用 `search` 浏览 skill；当前 registry 没有 catalog 列表接口（无 `GET /api/v1/skills`）。
+
+```toml
+[skill]
+base_url = "https://claw.opencsg.com"
+official_base_url = "https://clawhub.ai"
+token = "${SKILL_TOKEN}"
+non_suspicious_only = true
+```
+
+- `base_url`：主注册表（opencsg）；也可通过 `SKILL_BASE_URL` 覆盖（兼容旧名 `CLAWHUB_BASE_URL`）。
+- `official_base_url`：次注册表（clawhub.ai），默认 `https://clawhub.ai`；设为 `""` 可关闭双库搜索；也可通过 `SKILL_OFFICIAL_BASE_URL` 覆盖（兼容 `CLAWHUB_OFFICIAL_BASE_URL`）。
+- `token`：只读命令可选，后续 publish 需要；也可通过 `SKILL_TOKEN` 设置（兼容 `CLAWHUB_TOKEN`）。
+- 旧版 `[clawhub]` 配置段仍可读取，用于兼容。
+- `non_suspicious_only`：省略时默认为 `true`。
+
 ## Channel 配置
 
 Channel 集成是可选的。默认情况下，CSGClaw 直接使用内置 Web UI；只有在你需要接入飞书等外部消息平台时，才需要增加 channel 配置。

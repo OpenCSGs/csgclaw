@@ -96,7 +96,7 @@ func TestPublishMessageEventIncludesThreadRootAndContext(t *testing.T) {
 
 	root := Message{
 		ID:        "msg-root",
-		SenderID:  "u-admin",
+		SenderID:  "u-ux",
 		Content:   "root context",
 		CreatedAt: time.Now().UTC(),
 	}
@@ -105,6 +105,7 @@ func TestPublishMessageEventIncludesThreadRootAndContext(t *testing.T) {
 		SenderID:  "u-admin",
 		Content:   "thread reply",
 		CreatedAt: time.Now().UTC().Add(time.Second),
+		Mentions:  []Mention{{ID: "u-bot", Name: "bot"}},
 		RelatesTo: &MessageRelation{
 			RelType: RelationTypeThread,
 			EventID: root.ID,
@@ -113,7 +114,7 @@ func TestPublishMessageEventIncludesThreadRootAndContext(t *testing.T) {
 	room := Room{
 		ID:       "room-group",
 		IsDirect: false,
-		Members:  []string{"u-admin", "u-bot"},
+		Members:  []string{"u-admin", "u-ux", "u-bot"},
 		Messages: []Message{root, reply},
 		Threads: []ThreadState{{
 			RootMessageID: root.ID,
@@ -133,8 +134,74 @@ func TestPublishMessageEventIncludesThreadRootAndContext(t *testing.T) {
 		if evt.ThreadRootID != root.ID {
 			t.Fatalf("ThreadRootID = %q, want %q", evt.ThreadRootID, root.ID)
 		}
+		if len(evt.Mentions) != 1 || evt.Mentions[0] != "u-bot" {
+			t.Fatalf("Mentions = %+v, want [u-bot]", evt.Mentions)
+		}
+		if evt.Channel != "csgclaw" || evt.ChatID != room.ID {
+			t.Fatalf("PicoClaw event address = channel %q chat_id %q, want csgclaw %q", evt.Channel, evt.ChatID, room.ID)
+		}
+		if evt.Context.Channel != "csgclaw" ||
+			evt.Context.ChatID != room.ID ||
+			evt.Context.ChatType != "group" ||
+			evt.Context.TopicID != root.ID ||
+			evt.Context.MessageID != reply.ID ||
+			evt.Context.SenderID != sender.ID {
+			t.Fatalf("PicoClaw context = %+v, want thread topic context", evt.Context)
+		}
 		if evt.ThreadContext == nil || evt.ThreadContext.RootMessageID != root.ID || len(evt.ThreadContext.Context) != 1 {
 			t.Fatalf("ThreadContext = %+v, want root context", evt.ThreadContext)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("PublishMessageEvent() timed out waiting for event")
+	}
+}
+
+func TestPublishMessageEventNormalizesPlainThreadMentionForPicoClaw(t *testing.T) {
+	bridge := NewBotBridge("")
+	events, cancel := bridge.Subscribe("u-qa")
+	defer cancel()
+
+	root := Message{
+		ID:        "msg-root",
+		SenderID:  "u-manager",
+		Content:   "root context",
+		CreatedAt: time.Now().UTC(),
+	}
+	reply := Message{
+		ID:        "msg-reply",
+		SenderID:  "u-admin",
+		Content:   "@qa please check this",
+		CreatedAt: time.Now().UTC().Add(time.Second),
+		Mentions:  []Mention{{ID: "u-qa", Name: "qa"}},
+		RelatesTo: &MessageRelation{
+			RelType: RelationTypeThread,
+			EventID: root.ID,
+		},
+	}
+	room := Room{
+		ID:       "room-group",
+		IsDirect: false,
+		Members:  []string{"u-admin", "u-manager", "u-qa"},
+		Messages: []Message{root, reply},
+		Threads: []ThreadState{{
+			RootMessageID: root.ID,
+			Context:       []Message{root},
+		}},
+	}
+	sender := User{ID: "u-admin", Name: "Admin", Handle: "admin"}
+
+	bridge.PublishMessageEvent(room, sender, reply)
+
+	select {
+	case evt := <-events:
+		if evt.ThreadRootID != root.ID {
+			t.Fatalf("ThreadRootID = %q, want %q", evt.ThreadRootID, root.ID)
+		}
+		if evt.Text != `<at user_id="u-qa">qa</at> please check this` {
+			t.Fatalf("Text = %q, want PicoClaw mention tag", evt.Text)
+		}
+		if len(evt.Mentions) != 1 || evt.Mentions[0] != "u-qa" || !evt.Context.Mentioned {
+			t.Fatalf("Mentions = %+v context = %+v, want u-qa mentioned", evt.Mentions, evt.Context)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("PublishMessageEvent() timed out waiting for event")

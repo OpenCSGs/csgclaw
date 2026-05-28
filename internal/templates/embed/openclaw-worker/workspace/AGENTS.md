@@ -38,6 +38,9 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
 - Before using a skill, check the local `skills/` directory and read the
   matching `SKILL.md`.
 - Prefer local workspace skills over external discovery.
+- Do not use OpenClaw `find_skills` or `install_skill` when disabled. For registry
+  skill search, inspect, versions, or install, read `skills/skill-installer/SKILL.md`
+  and run `csgclaw-cli skill` via `exec` in this sandbox.
 - Use `TOOLS.md` for local tool notes and operational details.
 
 ## Working Principles

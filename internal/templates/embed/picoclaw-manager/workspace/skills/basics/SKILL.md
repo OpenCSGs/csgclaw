@@ -1,6 +1,6 @@
 ---
 name: basics
-description: Handle the most common basic CSGClaw CLI administration tasks. Use when the Manager needs to create a room, list bots, create a bot, inspect room members, add a bot into a room, or perform similar direct `csgclaw-cli` operations for routine room, bot, and membership management.
+description: Handle the most common basic CSGClaw CLI administration tasks. Use when the Manager needs to create a room, list bots, create a bot, inspect room members, add a bot into a room, or notify a worker in IM.
 ---
 
 # CSGClaw CLI Basics
@@ -101,6 +101,38 @@ Send a message with a mention. Use the mentioned bot ID for `--mention-id`:
 csgclaw-cli message create --room-id oc_xxx --sender-id u-manager --content "Please take a look." --mention-id u-alex --channel <current_channel>
 ```
 
+## Notifying workers in IM (critical)
+
+Workers are configured with **`mention_only`**: they only process group messages that contain a structured mention tag, not plain text like `@gitlab-worker`.
+
+| Do | Do not |
+|----|--------|
+| `csgclaw-cli message create ... --mention-id u-gitlab-worker` (ID from `bot list`) | Type `@gitlab-worker` or `@worker-name` in `--content`, room replies, or the PicoClaw `message` tool |
+| Verify delivery with `message list` — content must include `<at user_id="u-...">` | Assume a human-style `@` in prose wakes the worker |
+| Run `bot list` and `member list` before the first dispatch | Skip membership checks and post assignment text only |
+
+Minimal handoff flow:
+
+1. `csgclaw-cli bot list` — resolve the worker **bot ID** (e.g. `u-gitlab-worker`, not the display name).
+2. `csgclaw-cli member list` — confirm the worker is in the room; `member create` if missing.
+3. `csgclaw-cli message create` with `--mention-id` and the task body.
+4. `csgclaw-cli message list` — confirm the stored message contains `<at user_id="...">`.
+
+For multi-worker sequencing, use `manager-worker-dispatch` (`start-tracking`) instead of manual room messages.
+
+Example worker handoff (replace room ID, worker ID, and channel):
+
+```bash
+csgclaw-cli message create \
+  --room-id <room_id> \
+  --sender-id u-manager \
+  --mention-id u-alex \
+  --content "Please implement the login page changes we discussed." \
+  --channel <current_channel>
+```
+
+Do **not** post `@alex` plain text in the room instead of `--mention-id`.
+
 ## Operating Rules
 
 - Prefer direct `csgclaw-cli` commands over ad hoc HTTP calls.
@@ -109,5 +141,6 @@ csgclaw-cli message create --room-id oc_xxx --sender-id u-manager --content "Ple
 - Verify room membership with `member list` after adding a member when room presence matters.
 - A direct room cannot accept an added bot as a new member. Create a new room with `--member-ids` containing the existing DM bots and the new bot.
 - Keep `csgclaw-cli` parameters bot-facing across channels: use bot IDs such as `u-manager`, `u-dev`, and `u-alex`.
+- Never notify a worker with plain-text `@name`; always use `message create --mention-id` and verify `<at user_id="...">` in `message list`.
 - Keep the response focused on the concrete CLI result instead of introducing external planning artifacts.
 - Hand off to `manager-worker-dispatch` only if the user explicitly needs manager orchestration or multi-worker sequencing.

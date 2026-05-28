@@ -1,0 +1,74 @@
+.csg-dialog-overlay {
+  position: fixed;
+  z-index: var(--z-modal);
+  inset: 0;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.csg-dialog-content {
+  position: fixed;
+  z-index: calc(var(--z-modal) + 1);
+  top: 50%;
+  left: 50%;
+  width: min(560px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  outline: none;
+  transform: translate(-50%, -50%);
+}
+
+.csg-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in oklab, var(--panel) 96%, transparent);
+}
+
+.csg-dialog-body {
+  padding: 20px;
+}
+
+.csg-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.csg-dialog-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 26px;
+}
+
+.csg-dialog-description {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.csg-dialog-close {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+:root[data-theme="dark"] .csg-dialog-overlay {
+  background: rgba(2, 6, 23, 0.58);
+}

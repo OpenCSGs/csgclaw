@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	testBuiltinPicoClawImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.22"
-	testBuiltinOpenClawImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260518.1-csgclaw"
+	testBuiltinPicoClawImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27"
+	testBuiltinOpenClawImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260527.2-csgclaw"
 )
 
 func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {

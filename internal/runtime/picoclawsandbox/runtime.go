@@ -31,6 +31,12 @@ func New(deps Dependencies) *Runtime {
 	if deps.GatewayCommand == nil {
 		deps.GatewayCommand = GatewayRunCommand
 	}
+	if strings.TrimSpace(deps.ReadinessProbe.Name) == "" {
+		deps.ReadinessProbe = sandboxgateway.GatewayReadinessProbe{
+			Name: "wget",
+			Args: []string{"-q", "--spider", "-T", "2", "http://127.0.0.1:18790/health"},
+		}
+	}
 	return &Runtime{
 		Runtime: sandboxgateway.New(deps),
 		deps:    deps,

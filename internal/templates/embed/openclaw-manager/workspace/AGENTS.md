@@ -41,6 +41,13 @@ execution is the right path. Stay practical, accurate, and concise.
 - Prefer local workspace skills over external discovery.
 - Treat `skills/manager-worker-dispatch/SKILL.md` as the manager routing
   contract when dispatching worker-owned tasks.
+- For registry skill search, inspect, or list versions, read
+  `skills/skill-installer/SKILL.md` and run `csgclaw-cli skill`. Install skills
+  by dispatching the target worker to follow `skill-installer` in its own
+  sandbox (not from the manager).
+- To wake a worker in a group room, use `csgclaw-cli message create --mention-id`
+  (see `skills/basics/SKILL.md` — **Notifying workers in IM**). Plain-text
+  `@worker-name` does not satisfy `mention_only` and the worker will not respond.
 - Use `TOOLS.md` for local tool notes and operational details.
 
 ## Working Principles

@@ -1,6 +1,10 @@
 {
   "session": {
-    "dm_scope": "per-channel-peer"
+    "dm_scope": "per-channel-peer",
+    "dimensions": [
+      "chat",
+      "topic"
+    ]
   },
   "version": 1,
   "agents": {
@@ -192,13 +196,13 @@
       "enabled": true
     },
     "find_skills": {
-      "enabled": true
+      "enabled": false
     },
     "i2c": {
       "enabled": false
     },
     "install_skill": {
-      "enabled": true
+      "enabled": false
     },
     "list_dir": {
       "enabled": true

@@ -1035,13 +1035,14 @@ Example single event:
 ```text
 id: msg-1
 event: message
-data: {"message_id":"msg-1","room_id":"room-1","sender_id":"u-admin","text":"hello","thread_root_id":"msg-root","thread_context":{"root_message_id":"msg-root","context":[{"id":"msg-root","sender_id":"u-admin","content":"root text"}],"summary":{"root_excerpt":"root text","message_count":1,"before_count":0,"after_count":0}}}
+data: {"message_id":"msg-1","room_id":"room-1","channel":"csgclaw","chat_id":"room-1","sender_id":"u-admin","text":"hello","thread_root_id":"msg-root","context":{"channel":"csgclaw","chat_id":"room-1","chat_type":"direct","topic_id":"msg-root","sender_id":"u-admin","message_id":"msg-1"},"thread_context":{"root_message_id":"msg-root","context":[{"id":"msg-root","sender_id":"u-admin","content":"root text"}],"summary":{"root_excerpt":"root text","message_count":1,"before_count":0,"after_count":0}}}
 ```
 
 For thread replies, `thread_root_id` is the root message ID and
 `thread_context` carries the deterministic hidden context captured when the
 thread was started. Bot/LLM bridges use it as prompt context; it is not a list
-of thread replies.
+of thread replies. PicoClaw-native clients can use `context.topic_id` as the
+same thread/session identifier.
 
 ### `POST /api/bots/{id}/messages/send`
 
@@ -1057,9 +1058,25 @@ Example request body:
 }
 ```
 
-`thread_root_id` is optional. When present, the bot response is sent as a reply
-inside that IM thread. The detailed response behavior depends on the
-compatibility bridge implementation.
+`thread_root_id`, `topic_id`, and `context.topic_id` are optional thread/topic
+identifiers. When one is present, the bot response is sent as a reply inside
+that IM thread. When all are omitted, the response is sent as a top-level room/DM
+message; the server does not infer a thread from the bot's most recent room
+event.
+
+PicoClaw outbound message shape is also accepted:
+
+```json
+{
+  "chat_id": "room-1",
+  "content": "hello",
+  "context": {
+    "channel": "csgclaw",
+    "chat_id": "room-1",
+    "topic_id": "msg-root"
+  }
+}
+```
 
 ### `GET /api/bots/{id}/llm/models`
 

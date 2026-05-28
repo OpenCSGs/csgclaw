@@ -1,3 +1,4 @@
+import { AgentCreateProgress } from "@/components/business/ProfileControls";
 import { Button, Select } from "@/components/ui";
 import { defaultManagerRebuildImageForRuntime, formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
 import { ModalCloseButton } from "./ModalCloseButton";
@@ -13,6 +14,7 @@ export function ManagerRebuildModal({
   managerAgent,
   busy,
   error,
+  progress = null,
   onRuntimeKindChange,
   onImageChange,
   onClose,
@@ -72,6 +74,7 @@ export function ManagerRebuildModal({
             </div>
           </section>
           {error ? <div className="form-error">{error}</div> : null}
+          <AgentCreateProgress progress={progress} t={t} />
           <div className="modal-actions">
             <Button variant="secondaryGray" size="md" disabled={busy} onClick={onClose}>
               {t("close")}

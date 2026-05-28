@@ -15,6 +15,7 @@ import (
 	"csgclaw/cli/member"
 	"csgclaw/cli/message"
 	"csgclaw/cli/room"
+	skillcmd "csgclaw/cli/skill"
 	"csgclaw/internal/apiclient"
 	appversion "csgclaw/internal/version"
 )
@@ -69,6 +70,7 @@ func (a *App) registerDefaultCommands() {
 		room.NewCmd(),
 		member.NewCmd(),
 		message.NewCmd(),
+		skillcmd.NewCmd(),
 		completioncmd.NewCmd("csgclaw-cli", completioncmd.LiteSpec()),
 		completioncmd.NewCompleteCmd("csgclaw-cli", completioncmd.LiteSpec()),
 	)

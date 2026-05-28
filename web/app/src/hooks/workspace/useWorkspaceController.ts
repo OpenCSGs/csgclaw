@@ -178,6 +178,7 @@ export function useWorkspaceController() {
   const conversation = useConversationController({
     activeConversationId,
     activePane,
+    agents,
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
     data: displayData,
@@ -299,6 +300,7 @@ export function useWorkspaceController() {
     },
     conversationViewProps: {
       ...conversation.conversationViewProps,
+      agents: agent.agentItems,
       onPreviewUser: profilePreview.openParticipantPreview,
     },
     profilePreviewProps: profilePreview.profilePreviewProps,

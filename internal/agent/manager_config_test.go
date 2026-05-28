@@ -86,6 +86,41 @@ func TestRenderAgentPicoClawConfigUsesBridgeModelEndpoint(t *testing.T) {
 	if got, want := execTool["timeout_seconds"], float64(600); got != want {
 		t.Fatalf("tools.exec.timeout_seconds = %v, want %v", got, want)
 	}
+	session, ok := rendered["session"].(map[string]any)
+	if !ok {
+		t.Fatalf("renderAgentPicoClawConfig() missing session in:\n%s", text)
+	}
+	dimensions, ok := session["dimensions"].([]any)
+	if !ok {
+		t.Fatalf("session.dimensions = %T, want array in:\n%s", session["dimensions"], text)
+	}
+	if got, want := stringifyJSONList(dimensions), []string{"chat", "topic"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("session.dimensions = %v, want %v", got, want)
+	}
+}
+
+func stringifyJSONList(values []any) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		text, ok := value.(string)
+		if !ok {
+			continue
+		}
+		result = append(result, text)
+	}
+	return result
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestPicoclawBridgeModelIDPrefixesOpenAIForSlashModelNames(t *testing.T) {
@@ -146,7 +181,7 @@ func TestEnsureAgentWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 		filepath.Join(root, "AGENT.md"),
 		filepath.Join(root, "SOUL.md"),
 		filepath.Join(root, "memory", "MEMORY.md"),
-		filepath.Join(root, "skills", "skill-installer", "SKILL.md"),
+		filepath.Join(root, "skills", "skill-creator", "SKILL.md"),
 	} {
 		if info, err := os.Stat(path); err != nil {
 			t.Fatalf("os.Stat(%q) error = %v", path, err)

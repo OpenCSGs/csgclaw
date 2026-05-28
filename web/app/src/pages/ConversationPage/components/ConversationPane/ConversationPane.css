@@ -392,12 +392,31 @@
   left: 24px;
   bottom: 124px;
   width: 280px;
+  max-height: min(360px, 48vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--portal-gray-400) transparent;
   padding: 8px;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 18px;
   box-shadow: var(--shadow);
   animation: rise-in 180ms ease both;
+}
+
+.mention-picker::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.mention-picker::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mention-picker::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
 }
 
 .mention-option {
@@ -983,6 +1002,109 @@
   border-color: var(--panel);
 }
 
+.agent-logs-backdrop {
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.csg-dialog-content.agent-logs-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(1440px, calc(100vw - 64px));
+  height: min(860px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+}
+
+.csg-dialog-content.agent-logs-modal .agent-logs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in oklab, var(--panel) 96%, transparent);
+}
+
+.csg-dialog-content.agent-logs-modal .agent-logs-header .csg-dialog-description {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.csg-dialog-content.agent-logs-modal .agent-logs-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.csg-dialog-content.agent-logs-modal .agent-logs-header-actions .icon-button {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.csg-dialog-content.agent-logs-modal .agent-logs-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 12px 0 0;
+  background: var(--surface);
+}
+
+.csg-dialog-content.agent-logs-modal .agent-logs-error {
+  margin: 0 18px;
+}
+
+.csg-dialog-content.agent-logs-modal .agent-logs-viewer {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 14px 16px;
+  border: 0;
+  border-top: 1px solid color-mix(in oklab, var(--line) 72%, transparent);
+  border-radius: 0;
+  background: #101828;
+  color: #e4e7ec;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.csg-dialog-content.agent-logs-modal .agent-logs-viewer::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.csg-dialog-content.agent-logs-modal .agent-logs-viewer::-webkit-scrollbar-track {
+  background: #1d2939;
+}
+
+.csg-dialog-content.agent-logs-modal .agent-logs-viewer::-webkit-scrollbar-thumb {
+  border: 2px solid #1d2939;
+  border-radius: 999px;
+  background: #667085;
+}
+
+:root[data-theme="dark"] .agent-logs-backdrop {
+  background: rgba(2, 6, 23, 0.58);
+}
+
+:root[data-theme="dark"] .csg-dialog-content.agent-logs-modal .agent-logs-viewer {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: #0f172a;
+  color: #dbeafe;
+}
+
 .messages,
 :root[data-theme="light"] .messages {
   padding: 26px 28px 24px;
@@ -992,6 +1114,8 @@
 
 .message-row {
   gap: 10px;
+  width: min(76%, 840px);
+  max-width: 100%;
 }
 
 .message-row .avatar {
@@ -1123,4 +1247,133 @@
 .mention-option .conversation-preview {
   font-size: 12px;
   line-height: 18px;
+}
+
+/* Preserve the message display design after the latest main refinements. */
+:root[data-theme="light"] .messages {
+  background: var(--portal-white);
+}
+
+.message-row:not(.own) {
+  align-self: flex-start;
+}
+
+.message-row > .avatar.avatar-button {
+  position: relative;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 13px;
+}
+
+.message-avatar-status {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--portal-gray-500);
+  outline: 1.5px solid var(--portal-white);
+  outline-offset: 0;
+}
+
+.message-avatar-status.online {
+  background: var(--portal-success-500);
+}
+
+.message-row:not(.own) .message-card {
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: min(760px, calc(100% - 52px));
+}
+
+.message-row:not(.own) .message-meta {
+  width: fit-content;
+  max-width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--portal-gray-600);
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.message-row:not(.own) .message-bubble {
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border-color: transparent;
+  border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
+  background: color-mix(in oklab, var(--portal-gray-100) 72%, var(--portal-gray-200));
+  color: var(--admin-text);
+  box-shadow: none;
+}
+
+.message-row.own {
+  align-self: flex-end;
+}
+
+.message-row.own .message-card {
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: min(760px, calc(100% - 52px));
+}
+
+.message-row.own .message-meta {
+  width: fit-content;
+  max-width: 100%;
+  justify-content: flex-end;
+  justify-self: end;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--portal-gray-600);
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.message-row.own .message-bubble {
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: var(--radius-md) 0 var(--radius-md) var(--radius-md);
+  background: color-mix(in oklab, var(--portal-brand-50) 62%, var(--portal-white));
+  color: var(--portal-gray-900);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .message-row:not(.own) .message-bubble {
+  border-color: var(--message-border);
+  background: var(--panel-strong);
+  color: var(--admin-text);
+}
+
+:root[data-theme="dark"] .message-row:not(.own) .message-meta,
+:root[data-theme="dark"] .message-row.own .message-meta {
+  color: var(--portal-gray-400);
+}
+
+:root[data-theme="dark"] .message-row:not(.own) .message-meta .message-author,
+:root[data-theme="dark"] .message-row.own .message-meta .message-author {
+  color: var(--portal-gray-300);
+}
+
+:root[data-theme="dark"] .message-row.own .message-bubble {
+  background: var(--portal-brand-600);
+  color: var(--portal-white);
+}
+
+@media (max-width: 720px) {
+  .message-row {
+    width: 94%;
+    max-width: 94%;
+  }
 }

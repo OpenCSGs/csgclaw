@@ -34,6 +34,7 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
 		"message  Manage IM messages.",
+		"skill    Discover and install ClawHub skills.",
 		"completion Generate shell completion scripts.",
 	} {
 		if !strings.Contains(got, want) {

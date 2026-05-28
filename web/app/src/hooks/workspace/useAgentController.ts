@@ -214,15 +214,17 @@ export function useAgentController({
     );
   }, [bootstrapConfig?.runtime_kind]);
 
+  const progressBusy = agentBusy || agentActionBusy === `${MANAGER_AGENT_ID}:recreate`;
+
   useEffect(() => {
-    if (!agentBusy || !agentProgress?.steps?.length) {
+    if (!progressBusy || !agentProgress?.steps?.length) {
       return undefined;
     }
     const timer = window.setInterval(() => {
       setAgentProgress((current) => advanceAgentProgress(current));
     }, 1200);
     return () => window.clearInterval(timer);
-  }, [agentBusy, agentProgress?.startedAt, agentProgress?.steps?.length]);
+  }, [progressBusy, agentProgress?.startedAt, agentProgress?.steps?.length]);
 
   useEffect(() => {
     if (!managerProfile) {
@@ -337,10 +339,23 @@ export function useAgentController({
   async function rebuildManagerFromBrowser(options: ManagerRebuildOptions = {}): Promise<boolean> {
     setAgentActionBusy(`${MANAGER_AGENT_ID}:recreate`);
     setAgentsError("");
+    const runtimeKind = normalizeRuntimeKind(
+      options.runtimeKind ||
+        managerAgent?.runtime_kind ||
+        bootstrapConfig?.runtime_kind ||
+        managerRuntimeOptions[0]?.value,
+    );
+    setAgentProgress(startAgentCreateProgress(runtimeKind));
     try {
       await requestManagerRebuild(options);
+      setAgentProgress((current) =>
+        current
+          ? { ...current, percent: 100, status: "done", index: Math.max(0, (current.steps?.length || 1) - 1) }
+          : current,
+      );
       return true;
     } catch (err) {
+      setAgentProgress((current) => (current ? { ...current, status: "failed" } : current));
       setAgentsError(err.message || t("agentActionFailed"));
       return false;
     } finally {
@@ -360,6 +375,7 @@ export function useAgentController({
     const rebuilt = await rebuildManagerFromBrowser({ runtimeKind: selectedRuntimeKind, image: selectedImage });
     if (rebuilt) {
       setShowManagerRebuildModal(false);
+      setAgentProgress(null);
     }
   }
 
@@ -920,9 +936,13 @@ export function useAgentController({
           managerAgent,
           busy: agentActionBusy === `${MANAGER_AGENT_ID}:recreate`,
           error: agentsError,
+          progress: agentProgress,
           onRuntimeKindChange: setManagerRebuildRuntimeKind,
           onImageChange: setManagerRebuildImage,
-          onClose: () => setShowManagerRebuildModal(false),
+          onClose: () => {
+            setShowManagerRebuildModal(false);
+            setAgentProgress(null);
+          },
           onConfirm: confirmManagerRebuild,
         }
       : null,

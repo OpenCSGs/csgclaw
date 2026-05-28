@@ -12,6 +12,9 @@ export function parseStructuredMessage(content: unknown): ParsedStructuredMessag
   if (!cleaned) {
     return null;
   }
+  if (isLegacyToolFeedback(cleaned)) {
+    return null;
+  }
 
   const fencedJSON = cleaned.match(/^```(?:json|javascript|js)?\s*([\s\S]+?)\s*```$/i);
   const rawJSON = fencedJSON ? fencedJSON[1].trim() : cleaned;
@@ -21,7 +24,7 @@ export function parseStructuredMessage(content: unknown): ParsedStructuredMessag
   }
 
   const extracted = extractTopLevelJSONObject(cleaned);
-  const fromExtracted = structuredPayloadFromParsed(tryParseJSON(extracted));
+  const fromExtracted = structuredEnvelopePayloadFromParsed(tryParseJSON(extracted));
   if (fromExtracted) {
     return fromExtracted;
   }
@@ -38,16 +41,31 @@ export function structuredPayloadFromParsed(parsed: unknown): ParsedStructuredMe
   if (!parsed) {
     return null;
   }
+  const envelope = structuredEnvelopePayloadFromParsed(parsed);
+  if (envelope) {
+    return envelope;
+  }
+  if (isStructuredPayload(parsed)) {
+    return buildStructuredPayload(parsed);
+  }
+  return null;
+}
+
+function structuredEnvelopePayloadFromParsed(parsed: unknown): ParsedStructuredMessage | null {
+  if (!parsed) {
+    return null;
+  }
   if (isNotifyCardPayload(parsed)) {
     return buildNotifyCardPayload(parsed);
   }
   if (isActionCardPayload(parsed)) {
     return buildActionCardPayload(parsed);
   }
-  if (isStructuredPayload(parsed)) {
-    return buildStructuredPayload(parsed);
-  }
   return null;
+}
+
+function isLegacyToolFeedback(content: string): boolean {
+  return content.trimStart().startsWith("🔧 ");
 }
 
 export function tryParseJSON(input: string | null): unknown | null {

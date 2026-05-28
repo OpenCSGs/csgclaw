@@ -42,10 +42,11 @@ func WithOpenClawSandboxRuntime() agent.ServiceOption {
 func withSandboxRuntimeHost(host agent.PicoClawRuntimeHost, feishuProvider feishu.BotCredentialProvider, newRuntime func(sandboxgateway.Dependencies) agentruntime.Runtime) agent.ServiceOption {
 	return func(s *agent.Service) error {
 		return agent.WithRuntime(newRuntime(sandboxgateway.Dependencies{
-			FeishuProvider: feishuProvider,
-			EnsureRuntime:  host.EnsureRuntime,
-			RuntimeHome:    host.RuntimeHome,
-			CloseRuntime:   host.CloseRuntime,
+			FeishuProvider:      feishuProvider,
+			SandboxProviderName: host.SandboxProviderName,
+			EnsureRuntime:       host.EnsureRuntime,
+			RuntimeHome:         host.RuntimeHome,
+			CloseRuntime:        host.CloseRuntime,
 			ResolveBox: func(ctx context.Context, rt sandbox.Runtime, got sandboxgateway.AgentRef) (sandbox.Instance, string, error) {
 				return host.ResolveBox(ctx, rt, agent.Agent{
 					ID:        got.ID,

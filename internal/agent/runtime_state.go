@@ -30,6 +30,7 @@ type gatewayBoxFactory interface {
 }
 
 type PicoClawRuntimeHost struct {
+	SandboxProviderName   func() string
 	EnsureRuntime         func(agentName string) (sandbox.Runtime, error)
 	AgentHome             func(agentName string) (string, error)
 	RuntimeHome           func(agentName string) (string, error)
@@ -50,10 +51,11 @@ type PicoClawRuntimeHost struct {
 
 func (s *Service) PicoClawRuntimeHost() PicoClawRuntimeHost {
 	return PicoClawRuntimeHost{
-		EnsureRuntime: s.ensureRuntime,
-		AgentHome:     agentHomeDir,
-		RuntimeHome:   s.sandboxRuntimeHome,
-		CloseRuntime:  s.closeRuntime,
+		SandboxProviderName: s.sandboxProviderName,
+		EnsureRuntime:       s.ensureRuntime,
+		AgentHome:           agentHomeDir,
+		RuntimeHome:         s.sandboxRuntimeHome,
+		CloseRuntime:        s.closeRuntime,
 		ResolveBox: func(ctx context.Context, rt sandbox.Runtime, got Agent) (sandbox.Instance, string, error) {
 			return s.resolveAgentBox(ctx, rt, got)
 		},
@@ -79,6 +81,13 @@ func (s *Service) PicoClawRuntimeHost() PicoClawRuntimeHost {
 
 func (s *Service) OpenClawRuntimeHost() PicoClawRuntimeHost {
 	return s.PicoClawRuntimeHost()
+}
+
+func (s *Service) sandboxProviderName() string {
+	if s == nil || s.sandbox == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.sandbox.Name())
 }
 
 func (s *Service) setGatewayWorkPhase(p uint32) {

@@ -20,6 +20,7 @@ type Config struct {
 	Bootstrap BootstrapConfig
 	Sandbox   SandboxConfig
 	Hub       HubConfig
+	Skill     SkillConfig
 
 	raw rawConfigValues
 }
@@ -236,6 +237,7 @@ type rawConfigValues struct {
 	bootstrap     BootstrapConfig
 	sandbox       SandboxConfig
 	hub           rawHubConfig
+	skill         rawSkillConfig
 	modelsDefault string
 	models        map[string]rawProviderConfig
 	resolved      *rawConfigValues
@@ -526,6 +528,28 @@ func Load(path string) (Config, error) {
 			case "default_manager_template", "default_worker_template":
 				// Bootstrap template defaults now live only under [bootstrap].
 			}
+		case section == "skill", section == "clawhub":
+			switch key {
+			case "base_url":
+				cfg.raw.skill.BaseURL = parseRawStringValue(rawValue)
+				cfg.Skill.BaseURL = strings.TrimRight(value, "/")
+			case "official_base_url":
+				cfg.raw.skill.OfficialBaseURLSet = true
+				cfg.raw.skill.OfficialBaseURL = parseRawStringValue(rawValue)
+				cfg.Skill.OfficialBaseURLSet = true
+				cfg.Skill.OfficialBaseURL = strings.TrimRight(value, "/")
+			case "token":
+				cfg.raw.skill.Token = parseRawStringValue(rawValue)
+				cfg.Skill.Token = value
+			case "non_suspicious_only":
+				enabled, err := parseBoolValue(rawValue)
+				if err != nil {
+					return Config{}, fmt.Errorf("parse %s.non_suspicious_only: %w", section, err)
+				}
+				cfg.raw.skill.NonSuspiciousOnlySet = true
+				cfg.raw.skill.NonSuspiciousOnly = enabled
+				cfg.Skill.NonSuspiciousOnly = enabled
+			}
 		case section == "hub.registries":
 			if hubRegistryIndex < 0 || hubRegistryIndex >= len(cfg.Hub.Registries) {
 				return Config{}, fmt.Errorf("hub registry entry found before [[hub.registries]] header")
@@ -608,6 +632,10 @@ func Load(path string) (Config, error) {
 		}
 	}
 	cfg.Hub = cfg.Hub.Resolved()
+	cfg.Skill = cfg.Skill.Resolved()
+	if !cfg.raw.skill.NonSuspiciousOnlySet {
+		cfg.Skill.NonSuspiciousOnly = true
+	}
 
 	if !modelsCfg.IsZero() {
 		cfg.Models = modelsCfg.Normalized()
@@ -681,6 +709,22 @@ kind = %q
 			fmt.Fprintf(&b, "token = %q\n", cfg.rawOrResolvedString(rawRegistry.Token, loadedRegistry.Token, registry.Token))
 		}
 		fmt.Fprintf(&b, "enabled = %t\n", registry.Enabled)
+	}
+	resolvedSkill := cfg.Skill.Resolved()
+	if cfg.raw.skill.BaseURL != "" || cfg.raw.skill.OfficialBaseURLSet || cfg.raw.skill.Token != "" || cfg.raw.skill.NonSuspiciousOnlySet {
+		fmt.Fprintf(&b, `
+[skill]
+base_url = %q
+`, cfg.rawOrResolvedString(cfg.raw.skill.BaseURL, loadedRaw.skill.BaseURL, resolvedSkill.BaseURL))
+		if cfg.raw.skill.OfficialBaseURLSet {
+			fmt.Fprintf(&b, "official_base_url = %q\n", cfg.rawOrResolvedString(cfg.raw.skill.OfficialBaseURL, loadedRaw.skill.OfficialBaseURL, resolvedSkill.OfficialBaseURL))
+		}
+		if cfg.raw.skill.Token != "" || loadedRaw.skill.Token != "" {
+			fmt.Fprintf(&b, "token = %q\n", cfg.rawOrResolvedString(cfg.raw.skill.Token, loadedRaw.skill.Token, resolvedSkill.Token))
+		}
+		if cfg.raw.skill.NonSuspiciousOnlySet {
+			fmt.Fprintf(&b, "non_suspicious_only = %t\n", resolvedSkill.NonSuspiciousOnly)
+		}
 	}
 	if writeModels {
 		llmCfg := cfg.effectiveLLMConfig()
@@ -1054,6 +1098,20 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 			loadedRegistry.Token = registry.Token
 		}
 		out.hub.Registries = append(out.hub.Registries, loadedRegistry)
+	}
+	if c.raw.skill.BaseURL != "" {
+		out.skill.BaseURL = c.Skill.BaseURL
+	}
+	if c.raw.skill.OfficialBaseURLSet {
+		out.skill.OfficialBaseURL = c.Skill.OfficialBaseURL
+		out.skill.OfficialBaseURLSet = true
+	}
+	if c.raw.skill.Token != "" {
+		out.skill.Token = c.Skill.Token
+	}
+	if c.raw.skill.NonSuspiciousOnlySet {
+		out.skill.NonSuspiciousOnly = c.Skill.NonSuspiciousOnly
+		out.skill.NonSuspiciousOnlySet = true
 	}
 	if c.raw.modelsDefault != "" {
 		out.modelsDefault = c.Models.Default

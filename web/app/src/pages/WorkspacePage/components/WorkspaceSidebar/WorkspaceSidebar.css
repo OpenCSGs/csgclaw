@@ -2998,3 +2998,13 @@
     line-height: 18px;
   }
 }
+
+/* Keep conversation avatars at the requested size after compact sidebar rules. */
+.conversation-nav-row {
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+}
+
+.conversation-nav-row .workspace-row-icon {
+  width: 32px;
+  height: 32px;
+}

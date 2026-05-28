@@ -1029,12 +1029,13 @@ Bot 和 Codex bridge 使用的 thread/session 隔离规则见
 ```text
 id: msg-1
 event: message
-data: {"message_id":"msg-1","room_id":"room-1","sender_id":"u-admin","text":"hello","thread_root_id":"msg-root","thread_context":{"root_message_id":"msg-root","context":[{"id":"msg-root","sender_id":"u-admin","content":"root text"}],"summary":{"root_excerpt":"root text","message_count":1,"before_count":0,"after_count":0}}}
+data: {"message_id":"msg-1","room_id":"room-1","channel":"csgclaw","chat_id":"room-1","sender_id":"u-admin","text":"hello","thread_root_id":"msg-root","context":{"channel":"csgclaw","chat_id":"room-1","chat_type":"direct","topic_id":"msg-root","sender_id":"u-admin","message_id":"msg-1"},"thread_context":{"root_message_id":"msg-root","context":[{"id":"msg-root","sender_id":"u-admin","content":"root text"}],"summary":{"root_excerpt":"root text","message_count":1,"before_count":0,"after_count":0}}}
 ```
 
 对于 thread replies，`thread_root_id` 是 root message ID，`thread_context`
 携带 thread 开启时记录的确定性隐藏上下文。Bot/LLM bridge 会把它作为
-prompt context 使用；它不是 thread reply 列表。
+prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client 可以把
+`context.topic_id` 当作同一个 thread/session 标识。
 
 ### `POST /api/bots/{id}/messages/send`
 
@@ -1050,7 +1051,24 @@ prompt context 使用；它不是 thread reply 列表。
 }
 ```
 
-`thread_root_id` 可选；传入时 bot 响应会发送到该 IM thread 中。具体响应由兼容桥实现决定。
+`thread_root_id`、`topic_id` 和 `context.topic_id` 都是可选的 thread/topic
+标识；传入任一字段时 bot 响应会发送到该 IM thread 中。全部省略时，
+响应会作为 room/DM 顶层消息发送；服务端不会根据 bot 在房间中最近收到的
+事件推断 thread。
+
+也接受 PicoClaw outbound message 形态：
+
+```json
+{
+  "chat_id": "room-1",
+  "content": "hello",
+  "context": {
+    "channel": "csgclaw",
+    "chat_id": "room-1",
+    "topic_id": "msg-root"
+  }
+}
+```
 
 ### `GET /api/bots/{id}/llm/models`
 

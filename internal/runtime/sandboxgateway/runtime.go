@@ -1,6 +1,7 @@
 package sandboxgateway
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
@@ -33,18 +35,19 @@ type Dependencies struct {
 	RuntimeKind    string
 	FeishuProvider feishu.BotCredentialProvider
 
-	EnsureRuntime    func(agentName string) (sandbox.Runtime, error)
-	RuntimeHome      func(agentName string) (string, error)
-	CloseRuntime     func(homeDir string, rt sandbox.Runtime) error
-	ResolveBox       func(ctx context.Context, rt sandbox.Runtime, got AgentRef) (sandbox.Instance, string, error)
-	CreateGatewayBox func(ctx context.Context, rt sandbox.Runtime, image, name, botID string, profile agentruntime.Profile) (sandbox.Instance, sandbox.Info, error)
-	CreateBox        func(ctx context.Context, rt sandbox.Runtime, spec sandbox.CreateSpec) (sandbox.Instance, error)
-	StartBox         func(ctx context.Context, box sandbox.Instance) error
-	StopBox          func(ctx context.Context, box sandbox.Instance, opts sandbox.StopOptions) error
-	BoxInfo          func(ctx context.Context, box sandbox.Instance) (sandbox.Info, error)
-	ForceRemoveBox   func(ctx context.Context, rt sandbox.Runtime, idOrName string) error
-	CloseBox         func(box sandbox.Instance) error
-	RunBoxCommand    func(ctx context.Context, box sandbox.Instance, name string, args []string, w io.Writer) (int, error)
+	SandboxProviderName func() string
+	EnsureRuntime       func(agentName string) (sandbox.Runtime, error)
+	RuntimeHome         func(agentName string) (string, error)
+	CloseRuntime        func(homeDir string, rt sandbox.Runtime) error
+	ResolveBox          func(ctx context.Context, rt sandbox.Runtime, got AgentRef) (sandbox.Instance, string, error)
+	CreateGatewayBox    func(ctx context.Context, rt sandbox.Runtime, image, name, botID string, profile agentruntime.Profile) (sandbox.Instance, sandbox.Info, error)
+	CreateBox           func(ctx context.Context, rt sandbox.Runtime, spec sandbox.CreateSpec) (sandbox.Instance, error)
+	StartBox            func(ctx context.Context, box sandbox.Instance) error
+	StopBox             func(ctx context.Context, box sandbox.Instance, opts sandbox.StopOptions) error
+	BoxInfo             func(ctx context.Context, box sandbox.Instance) (sandbox.Info, error)
+	ForceRemoveBox      func(ctx context.Context, rt sandbox.Runtime, idOrName string) error
+	CloseBox            func(box sandbox.Instance) error
+	RunBoxCommand       func(ctx context.Context, box sandbox.Instance, name string, args []string, w io.Writer) (int, error)
 
 	ResolveAgent       func(h agentruntime.Handle) (AgentRef, error)
 	SyncHandle         func(h agentruntime.Handle) error
@@ -56,8 +59,18 @@ type Dependencies struct {
 	ProjectsGuestPath  string
 	GatewayLogPath     string
 	GatewayCommand     func() string
+	ReadinessProbe     GatewayReadinessProbe
 	StreamLogs         func(ctx context.Context, agentID string, follow bool, lines int, w io.Writer) error
 }
+
+type GatewayReadinessProbe struct {
+	Name     string
+	Args     []string
+	Timeout  time.Duration
+	Interval time.Duration
+}
+
+const defaultGatewayReadinessTimeout = 5 * time.Minute
 
 type Runtime struct {
 	mu       sync.RWMutex
@@ -147,9 +160,15 @@ func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntim
 		return agentruntime.StateUnknown, err
 	}
 	if info.State == agentruntime.StateRunning {
+		if err := r.waitForGatewayReady(ctx, box); err != nil {
+			return agentruntime.StateUnknown, err
+		}
 		return info.State, nil
 	}
 	if err := r.deps.StartBox(ctx, box); err != nil {
+		return agentruntime.StateUnknown, err
+	}
+	if err := r.waitForGatewayReady(ctx, box); err != nil {
 		return agentruntime.StateUnknown, err
 	}
 	info, err = r.infoForBox(ctx, h, box)
@@ -297,6 +316,10 @@ func (r *Runtime) CreateGatewayBox(ctx context.Context, rt sandbox.Runtime, imag
 	if err != nil {
 		_ = r.deps.CloseBox(box)
 		return nil, sandbox.Info{}, fmt.Errorf("read gateway box info: %w", err)
+	}
+	if err := r.waitForGatewayReady(ctx, box); err != nil {
+		_ = r.deps.CloseBox(box)
+		return nil, sandbox.Info{}, err
 	}
 	return box, info, nil
 }
@@ -546,6 +569,84 @@ func (r *Runtime) syncHandle(h agentruntime.Handle) error {
 		return nil
 	}
 	return r.deps.SyncHandle(h)
+}
+
+func (r *Runtime) waitForGatewayReady(ctx context.Context, box sandbox.Instance) error {
+	if r == nil || box == nil || r.deps.RunBoxCommand == nil {
+		return nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(r.sandboxProviderName()), "docker") {
+		return nil
+	}
+	probe := r.deps.ReadinessProbe
+	probe.Name = strings.TrimSpace(probe.Name)
+	if probe.Name == "" {
+		return nil
+	}
+	timeout := probe.Timeout
+	if timeout <= 0 {
+		timeout = defaultGatewayReadinessTimeout
+	}
+	interval := probe.Interval
+	if interval <= 0 {
+		interval = time.Second
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	var lastErr error
+	for {
+		var out bytes.Buffer
+		exitCode, err := r.deps.RunBoxCommand(waitCtx, box, probe.Name, probe.Args, &out)
+		if err == nil && exitCode == 0 {
+			return nil
+		}
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf("%s exited with code %d: %s", probe.Name, exitCode, strings.TrimSpace(out.String()))
+		}
+		if stoppedErr := r.gatewayStoppedError(waitCtx, box, lastErr); stoppedErr != nil {
+			return stoppedErr
+		}
+
+		select {
+		case <-waitCtx.Done():
+			if lastErr != nil {
+				return fmt.Errorf("wait %s gateway ready: %w", r.Kind(), lastErr)
+			}
+			return fmt.Errorf("wait %s gateway ready exceeded deadline (%s): %w", r.Kind(), timeout, waitCtx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func (r *Runtime) gatewayStoppedError(ctx context.Context, box sandbox.Instance, lastErr error) error {
+	if r == nil || r.deps.BoxInfo == nil || box == nil {
+		return nil
+	}
+	info, err := r.deps.BoxInfo(ctx, box)
+	if err != nil {
+		return nil
+	}
+	if info.State != sandbox.StateStopped && info.State != sandbox.StateExited {
+		return nil
+	}
+	if lastErr != nil {
+		return fmt.Errorf("wait %s gateway ready: sandbox %s before ready: %w", r.Kind(), info.State, lastErr)
+	}
+	return fmt.Errorf("wait %s gateway ready: sandbox %s before ready", r.Kind(), info.State)
+}
+
+func (r *Runtime) sandboxProviderName() string {
+	if r == nil || r.deps.SandboxProviderName == nil {
+		return ""
+	}
+	return strings.TrimSpace(r.deps.SandboxProviderName())
 }
 
 func stateFromSandboxState(state sandbox.State) agentruntime.State {

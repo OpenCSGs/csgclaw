@@ -20,19 +20,40 @@ const maxPendingBotEventsPerBot = 64
 type BotEvent struct {
 	MessageID     string            `json:"message_id"`
 	RoomID        string            `json:"room_id"`
+	Channel       string            `json:"channel,omitempty"`
+	ChatID        string            `json:"chat_id,omitempty"`
 	ChatType      string            `json:"chat_type"`
 	Sender        BotSender         `json:"sender"`
+	SenderID      string            `json:"sender_id,omitempty"`
 	Text          string            `json:"text"`
 	Timestamp     string            `json:"timestamp"`
 	Mentions      []string          `json:"mentions,omitempty"`
 	ThreadRootID  string            `json:"thread_root_id,omitempty"`
 	ThreadContext *BotThreadContext `json:"thread_context,omitempty"`
+	Context       BotMessageContext `json:"context,omitempty"`
 }
 
 type BotSender struct {
 	ID          string `json:"id"`
 	Username    string `json:"username,omitempty"`
 	DisplayName string `json:"display_name,omitempty"`
+}
+
+type BotMessageContext struct {
+	Channel          string            `json:"channel,omitempty"`
+	Account          string            `json:"account,omitempty"`
+	ChatID           string            `json:"chat_id,omitempty"`
+	ChatType         string            `json:"chat_type,omitempty"`
+	TopicID          string            `json:"topic_id,omitempty"`
+	SpaceID          string            `json:"space_id,omitempty"`
+	SpaceType        string            `json:"space_type,omitempty"`
+	SenderID         string            `json:"sender_id,omitempty"`
+	MessageID        string            `json:"message_id,omitempty"`
+	Mentioned        bool              `json:"mentioned,omitempty"`
+	ReplyToMessageID string            `json:"reply_to_message_id,omitempty"`
+	ReplyToSenderID  string            `json:"reply_to_sender_id,omitempty"`
+	ReplyHandles     map[string]string `json:"reply_handles,omitempty"`
+	Raw              map[string]string `json:"raw,omitempty"`
 }
 
 type BotThreadContext struct {
@@ -42,10 +63,50 @@ type BotThreadContext struct {
 }
 
 type BotSendMessageRequest struct {
-	RoomID       string `json:"room_id"`
-	Text         string `json:"text"`
-	MessageID    string `json:"message_id,omitempty"`
-	ThreadRootID string `json:"thread_root_id,omitempty"`
+	RoomID       string             `json:"room_id"`
+	ChatID       string             `json:"chat_id,omitempty"`
+	Text         string             `json:"text"`
+	Content      string             `json:"content,omitempty"`
+	MessageID    string             `json:"message_id,omitempty"`
+	ThreadRootID string             `json:"thread_root_id,omitempty"`
+	TopicID      string             `json:"topic_id,omitempty"`
+	Context      *BotMessageContext `json:"context,omitempty"`
+}
+
+func (r BotSendMessageRequest) ResolvedRoomID() string {
+	if roomID := strings.TrimSpace(r.RoomID); roomID != "" {
+		return roomID
+	}
+	if chatID := strings.TrimSpace(r.ChatID); chatID != "" {
+		return chatID
+	}
+	if r.Context != nil {
+		return strings.TrimSpace(r.Context.ChatID)
+	}
+	return ""
+}
+
+func (r BotSendMessageRequest) ResolvedText() string {
+	if text := strings.TrimSpace(r.Text); text != "" {
+		return r.Text
+	}
+	if content := strings.TrimSpace(r.Content); content != "" {
+		return r.Content
+	}
+	return ""
+}
+
+func (r BotSendMessageRequest) ResolvedThreadRootID() string {
+	if rootID := strings.TrimSpace(r.ThreadRootID); rootID != "" {
+		return rootID
+	}
+	if topicID := strings.TrimSpace(r.TopicID); topicID != "" {
+		return topicID
+	}
+	if r.Context != nil {
+		return strings.TrimSpace(r.Context.TopicID)
+	}
+	return ""
 }
 
 func NewBotBridge(string) *BotBridge {
@@ -273,21 +334,132 @@ func (b *BotBridge) markSeenLocked(botID, messageID string) {
 
 func messageEventForBot(room Room, sender User, message Message, botID string) BotEvent {
 	threadRootID := threadRootID(message)
+	chatType := chatTypeForRoom(room)
+	mentions := mentionsForBot(message.Mentions, botID)
+	text := textForBotEvent(message, botID)
 	return BotEvent{
 		MessageID:    message.ID,
 		RoomID:       room.ID,
-		ChatType:     chatTypeForRoom(room),
+		Channel:      "csgclaw",
+		ChatID:       room.ID,
+		ChatType:     chatType,
 		ThreadRootID: threadRootID,
 		Sender: BotSender{
 			ID:          sender.ID,
 			Username:    sender.Handle,
 			DisplayName: sender.Name,
 		},
-		Text:          message.Content,
+		SenderID:      sender.ID,
+		Text:          text,
 		Timestamp:     fmt.Sprintf("%d", message.CreatedAt.UnixMilli()),
-		Mentions:      mentionsForBot(message.Mentions, botID),
+		Mentions:      mentions,
 		ThreadContext: botThreadContext(room, threadRootID),
+		Context: BotMessageContext{
+			Channel:   "csgclaw",
+			Account:   strings.TrimSpace(botID),
+			ChatID:    room.ID,
+			ChatType:  chatType,
+			TopicID:   threadRootID,
+			SenderID:  sender.ID,
+			MessageID: message.ID,
+			Mentioned: len(mentions) > 0,
+			Raw: map[string]string{
+				"room_id":        room.ID,
+				"thread_root_id": threadRootID,
+			},
+		},
 	}
+}
+
+func textForBotEvent(message Message, botID string) string {
+	content := message.Content
+	botID = strings.TrimSpace(botID)
+	if content == "" || botID == "" || hasMentionTagForUser(content, botID) {
+		return content
+	}
+	for _, mention := range message.Mentions {
+		if strings.TrimSpace(mention.ID) == botID {
+			return replaceMentionHandleWithTag(content, mention)
+		}
+	}
+	return content
+}
+
+func hasMentionTagForUser(content, userID string) bool {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return false
+	}
+	for _, match := range mentionTagPattern.FindAllStringSubmatch(content, -1) {
+		if len(match) > 1 && strings.TrimSpace(match[1]) == userID {
+			return true
+		}
+	}
+	return false
+}
+
+func replaceMentionHandleWithTag(content string, mention Mention) string {
+	candidates := mentionHandleCandidates(mention)
+	if len(candidates) == 0 {
+		return content
+	}
+	tag := fmt.Sprintf(`<at user_id="%s">%s</at>`, strings.TrimSpace(mention.ID), mentionDisplayName(mention))
+	matches := mentionPattern.FindAllStringSubmatchIndex(content, -1)
+	if len(matches) == 0 {
+		return content
+	}
+
+	var out strings.Builder
+	last := 0
+	replaced := false
+	for _, match := range matches {
+		if len(match) < 6 || match[4] < 0 || match[5] < 0 {
+			continue
+		}
+		handle := strings.ToLower(strings.TrimSpace(content[match[4]:match[5]]))
+		if _, ok := candidates[handle]; !ok {
+			continue
+		}
+		replaced = true
+		out.WriteString(content[last:match[0]])
+		if match[2] >= 0 && match[3] >= 0 {
+			out.WriteString(content[match[2]:match[3]])
+		}
+		out.WriteString(tag)
+		last = match[1]
+	}
+	if !replaced {
+		return content
+	}
+	out.WriteString(content[last:])
+	return out.String()
+}
+
+func mentionHandleCandidates(mention Mention) map[string]struct{} {
+	candidates := make(map[string]struct{}, 2)
+	if name := normalizeMentionHandle(mention.Name); name != "" {
+		candidates[name] = struct{}{}
+	}
+	if idHandle := strings.TrimPrefix(strings.TrimSpace(mention.ID), "u-"); idHandle != "" {
+		candidates[strings.ToLower(idHandle)] = struct{}{}
+	}
+	return candidates
+}
+
+func normalizeMentionHandle(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.TrimPrefix(value, "@")
+	return value
+}
+
+func mentionDisplayName(mention Mention) string {
+	if name := strings.TrimSpace(mention.Name); name != "" {
+		return name
+	}
+	if id := strings.TrimSpace(mention.ID); id != "" {
+		return id
+	}
+	return "user"
 }
 
 func botThreadContext(room Room, rootMessageID string) *BotThreadContext {

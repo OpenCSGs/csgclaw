@@ -118,6 +118,48 @@ func TestAccessLogPreservesFlusher(t *testing.T) {
 	}
 }
 
+func TestAccessLogFlushBeforeWriteDoesNotWriteHeaderTwice(t *testing.T) {
+	handler := accessLog(slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.(http.Flusher).Flush()
+		_, _ = w.Write([]byte("ok"))
+	}))
+
+	rec := &headerCountFlusher{header: make(http.Header)}
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager/logs", nil))
+
+	if rec.writeHeaderCalls != 1 {
+		t.Fatalf("WriteHeader calls = %d, want 1", rec.writeHeaderCalls)
+	}
+	if rec.status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.status, http.StatusOK)
+	}
+	if rec.body.String() != "ok" {
+		t.Fatalf("body = %q, want ok", rec.body.String())
+	}
+}
+
+type headerCountFlusher struct {
+	header           http.Header
+	body             bytes.Buffer
+	status           int
+	writeHeaderCalls int
+}
+
+func (w *headerCountFlusher) Header() http.Header {
+	return w.header
+}
+
+func (w *headerCountFlusher) WriteHeader(status int) {
+	w.status = status
+	w.writeHeaderCalls++
+}
+
+func (w *headerCountFlusher) Write(p []byte) (int, error) {
+	return w.body.Write(p)
+}
+
+func (w *headerCountFlusher) Flush() {}
+
 func TestAccessLogColorsTerminalOutput(t *testing.T) {
 	origStderr := accessLogStderr
 	origWriter := accessLogWriter

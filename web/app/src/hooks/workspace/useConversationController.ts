@@ -10,6 +10,7 @@ import {
   startThreadRequest,
 } from "@/api/im";
 import {
+  agentMatchesUser,
   appendMessageToData,
   appendReplyToThreadView,
   applyIMEvent,
@@ -19,6 +20,7 @@ import {
   isThreadReply,
   isToolCallMessage,
   removeConversationFromData,
+  resolveConversationUser,
   THREAD_RELATION_TYPE,
   threadKey,
   threadMessageKey,
@@ -27,6 +29,7 @@ import {
 } from "@/models/conversations";
 import {
   areComposerSegmentsEqual,
+  getMentionCandidates,
   getComposerMentionState,
   insertComposerLineBreak,
   isComposerKeyboardEventComposing,
@@ -40,7 +43,7 @@ import {
   updateDrafts,
 } from "@/models/composer";
 import { WorkspacePaneTypes } from "@/models/routing";
-import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
+import { normalizeAuthProviderName, normalizeRuntimeKind, providerNeedsAuth } from "@/models/agents";
 import { localizeError } from "@/shared/i18n";
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
@@ -78,6 +81,7 @@ type OpenCreateRoomOptions = {
 export function useConversationController({
   activeConversationId,
   activePane,
+  agents,
   authBusyProvider,
   authStatuses,
   data,
@@ -134,7 +138,6 @@ export function useConversationController({
     data?.users.forEach((user) => result.set(user.id, user));
     return result;
   }, [data]);
-
   const activeConversation = useMemo(
     () => data?.rooms.find((item) => item.id === activeConversationId) ?? null,
     [data, activeConversationId],
@@ -168,6 +171,17 @@ export function useConversationController({
   const activeChannel =
     selectedConversation && !isDirectConversation(selectedConversation) ? selectedConversation : null;
   const selectedMessageCount = selectedConversation?.messages?.length ?? 0;
+  const logAgent = useMemo(() => {
+    if (!selectedConversation || !isDirectConversation(selectedConversation) || !data?.current_user_id) {
+      return null;
+    }
+    const directUser = resolveConversationUser(selectedConversation, data.current_user_id, usersById);
+    const agentID =
+      directUser?.id || selectedConversation.members.find((id) => id && id !== data.current_user_id) || "";
+    const agent = agents.find((item) => item.id === agentID || agentMatchesUser(item, directUser));
+    const runtimeKind = normalizeRuntimeKind(agent?.runtime_kind);
+    return runtimeKind === "openclaw_sandbox" || runtimeKind === "picoclaw_sandbox" ? agent : null;
+  }, [agents, data?.current_user_id, selectedConversation, usersById]);
   const activeConversationMembers = activeConversation
     ? activeConversation.members.map((id) => usersById.get(id)).filter(Boolean)
     : [];
@@ -182,14 +196,10 @@ export function useConversationController({
       return [];
     }
     const allowed = new Set(activeConversation?.members ?? []);
-    return data.users
-      .filter((user) => allowed.has(user.id))
-      .filter(
-        (user) =>
-          user.handle.toLowerCase().includes(composerMentionState.query.toLowerCase()) ||
-          user.name.toLowerCase().includes(composerMentionState.query.toLowerCase()),
-      )
-      .slice(0, 5);
+    return getMentionCandidates(
+      data.users.filter((user) => allowed.has(user.id)),
+      composerMentionState.query,
+    );
   }, [data, activeConversation, composerMentionState]);
   const mentionableUsersByHandle = useMemo(() => {
     const result = new Map<string, IMUser>();
@@ -786,6 +796,7 @@ export function useConversationController({
       t,
       theme,
       selectedMessageCount,
+      logAgent,
       conversationMembers: activeConversationMembers,
       showMemberList,
       onToggleMemberList: setShowMemberList,

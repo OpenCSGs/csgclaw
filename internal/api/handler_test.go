@@ -3334,6 +3334,163 @@ func TestHandleBotSendMessageRequiresIMService(t *testing.T) {
 	}
 }
 
+func TestHandleBotSendMessageDoesNotInferRecentThreadScope(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-manager", Name: "manager", Handle: "manager"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-1",
+				IsDirect: true,
+				Members:  []string{"u-admin", "u-manager"},
+				Messages: []im.Message{
+					{ID: "msg-root", SenderID: "u-manager", Content: "How can I help?", CreatedAt: now},
+				},
+			},
+		},
+	})
+	if _, _, err := imSvc.StartThread(im.StartThreadRequest{RoomID: "room-1", RootMessageID: "msg-root"}); err != nil {
+		t.Fatalf("StartThread() error = %v", err)
+	}
+	inbound, err := imSvc.CreateMessage(im.CreateMessageRequest{
+		RoomID:   "room-1",
+		SenderID: "u-admin",
+		Content:  "thread question",
+		RelatesTo: &im.MessageRelation{
+			RelType: im.RelationTypeThread,
+			EventID: "msg-root",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateMessage(thread question) error = %v", err)
+	}
+	room, ok := imSvc.Room("room-1")
+	if !ok {
+		t.Fatal("Room(room-1) = false, want room")
+	}
+	sender, ok := imSvc.User("u-admin")
+	if !ok {
+		t.Fatal("User(u-admin) = false, want user")
+	}
+	bridge := im.NewBotBridge("")
+	events, cancel := bridge.Subscribe("u-manager")
+	defer cancel()
+	bridge.PublishMessageEvent(room, sender, inbound)
+	select {
+	case evt := <-events:
+		if evt.ThreadRootID != "msg-root" {
+			t.Fatalf("bot event ThreadRootID = %q, want msg-root", evt.ThreadRootID)
+		}
+		bridge.Ack("u-manager", evt.MessageID)
+	case <-time.After(time.Second):
+		t.Fatal("PublishMessageEvent() timed out waiting for threaded event")
+	}
+
+	srv := &Handler{im: imSvc, botBridge: bridge, serverNoAuth: true}
+	req := httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{"room_id":"room-1","text":"thread answer"}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var sent struct {
+		MessageID string `json:"message_id"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&sent); err != nil {
+		t.Fatalf("decode send response: %v", err)
+	}
+	messages, err := imSvc.ListMessagesWithOptions("room-1", im.ListMessagesOptions{IncludeThreadReplies: true})
+	if err != nil {
+		t.Fatalf("ListMessagesWithOptions() error = %v", err)
+	}
+	var reply im.Message
+	for _, message := range messages {
+		if message.ID == sent.MessageID {
+			reply = message
+			break
+		}
+	}
+	if reply.ID == "" {
+		t.Fatalf("sent message %q not found in room messages", sent.MessageID)
+	}
+	if reply.RelatesTo != nil {
+		t.Fatalf("reply.RelatesTo = %+v, want nil when bot send omits explicit thread/topic", reply.RelatesTo)
+	}
+}
+
+func TestHandleBotSendMessageAcceptsPicoClawThreadContext(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-manager", Name: "manager", Handle: "manager"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-1",
+				IsDirect: true,
+				Members:  []string{"u-admin", "u-manager"},
+				Messages: []im.Message{
+					{ID: "msg-root", SenderID: "u-manager", Content: "How can I help?", CreatedAt: now},
+				},
+			},
+		},
+	})
+	if _, _, err := imSvc.StartThread(im.StartThreadRequest{RoomID: "room-1", RootMessageID: "msg-root"}); err != nil {
+		t.Fatalf("StartThread() error = %v", err)
+	}
+
+	srv := &Handler{im: imSvc, botBridge: im.NewBotBridge(""), serverNoAuth: true}
+	req := httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{
+		"chat_id": "room-1",
+		"content": "direct PicoClaw thread answer",
+		"context": {
+			"channel": "csgclaw",
+			"chat_id": "room-1",
+			"chat_type": "direct",
+			"topic_id": "msg-root"
+		}
+	}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var sent struct {
+		MessageID string `json:"message_id"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&sent); err != nil {
+		t.Fatalf("decode send response: %v", err)
+	}
+	messages, err := imSvc.ListMessagesWithOptions("room-1", im.ListMessagesOptions{IncludeThreadReplies: true})
+	if err != nil {
+		t.Fatalf("ListMessagesWithOptions() error = %v", err)
+	}
+	var reply im.Message
+	for _, message := range messages {
+		if message.ID == sent.MessageID {
+			reply = message
+			break
+		}
+	}
+	if reply.ID == "" {
+		t.Fatalf("sent message %q not found in room messages", sent.MessageID)
+	}
+	if reply.Content != "direct PicoClaw thread answer" {
+		t.Fatalf("reply.Content = %q, want direct PicoClaw thread answer", reply.Content)
+	}
+	if reply.RelatesTo == nil || reply.RelatesTo.RelType != im.RelationTypeThread || reply.RelatesTo.EventID != "msg-root" {
+		t.Fatalf("reply.RelatesTo = %+v, want m.thread -> msg-root", reply.RelatesTo)
+	}
+}
+
 func TestPublishBotEventQueuesUntilBotSubscribes(t *testing.T) {
 	now := time.Now().UTC()
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{

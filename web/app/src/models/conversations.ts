@@ -356,7 +356,6 @@ export function formatTime(value: string | number | Date | null | undefined, loc
   return new Date(value).toLocaleTimeString(locale === "zh" ? "zh-CN" : "en-US", {
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: locale === "zh" ? "Asia/Shanghai" : "UTC",
   });
 }
 

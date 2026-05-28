@@ -260,6 +260,41 @@ Field behavior:
 
 The built-in registry is read-only. Use a writable `local` or `remote` registry as the publish target.
 
+## Skill registry configuration
+
+`csgclaw skill` uses two skill registries by default:
+
+- **opencsg** (primary): `https://claw.opencsg.com`
+- **clawhub** (official): `https://clawhub.ai`
+
+`skill search` queries opencsg first and returns immediately when there are hits; it only queries clawhub.ai when opencsg returns no results.
+
+Use `--registry opencsg` or `--registry clawhub` on `get` / `install` to target one registry. Omit it to try opencsg first, then clawhub.
+
+Supported registry APIs:
+
+- `GET /api/v1/search` — `csgclaw skill search`
+- `GET /api/v1/skills/:slug` — `csgclaw skill get` (includes `versions[]` on OpenCSG)
+- `GET /api/v1/skills/:slug/versions` — `csgclaw skill versions` (paginated on clawhub.ai; OpenCSG falls back to `versions[]` on get)
+- `GET /api/v1/skills/:slug/versions/:version` — `csgclaw skill get --version`
+- `GET /api/v1/download/:slug` or `GET /api/v1/download?slug=` — install download
+
+Browse skills with `search`; there is no catalog list endpoint on the current registry.
+
+```toml
+[skill]
+base_url = "https://claw.opencsg.com"
+official_base_url = "https://clawhub.ai"
+token = "${SKILL_TOKEN}"
+non_suspicious_only = true
+```
+
+- `base_url` is the primary (opencsg) registry. You can also set `SKILL_BASE_URL` (legacy: `CLAWHUB_BASE_URL`).
+- `official_base_url` is the secondary (clawhub.ai) registry. Defaults to `https://clawhub.ai`. Set to `""` to disable dual-registry search. Override with `SKILL_OFFICIAL_BASE_URL` (legacy: `CLAWHUB_OFFICIAL_BASE_URL`).
+- `token` is optional for read-only commands and required for future publish flows. You can also set `SKILL_TOKEN` (legacy: `CLAWHUB_TOKEN`).
+- The legacy `[clawhub]` section is still read for backward compatibility.
+- `non_suspicious_only` defaults to `true` when omitted.
+
 ## Channel Configuration
 
 Channel integration is optional. CSGClaw works with the built-in Web UI by default, and you only need channel config when you want to connect external messaging platforms such as Feishu.

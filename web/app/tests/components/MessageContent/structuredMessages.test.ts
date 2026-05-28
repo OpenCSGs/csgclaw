@@ -37,16 +37,42 @@ describe("structured message helpers", () => {
     });
   });
 
-  it("extracts a top-level JSON object from surrounding assistant text", () => {
+  it("does not promote embedded generic JSON into a structured payload", () => {
     const extracted = extractTopLevelJSONObject('Before {"tool":"read_file","arguments":{"path":"README.md"}} after');
 
     expect(extracted).toBe('{"tool":"read_file","arguments":{"path":"README.md"}}');
-    expect(parseStructuredMessage(`Assistant result: ${extracted}`)).toMatchObject({
-      badge: "Tool",
-      payloadSummary: "查看原始 JSON · 2 个字段",
-      summary: "参数: path",
-      title: "read_file",
+    expect(parseStructuredMessage(`Assistant result: ${extracted}`)).toBeNull();
+  });
+
+  it("extracts action-card JSON from surrounding assistant text", () => {
+    const parsed = parseStructuredMessage(`Manager setup complete:
+{
+  "type": "${CSGCLAW_ACTION_CARD_TYPE}",
+  "title": "Manager needs rebuild",
+  "actions": [
+    { "id": "${ACTION_REBUILD_MANAGER}", "label": "Rebuild manager" }
+  ]
+}`);
+
+    expect(parsed).toMatchObject({
+      actions: [
+        {
+          id: ACTION_REBUILD_MANAGER,
+          label: "Rebuild manager",
+        },
+      ],
+      kind: "action_card",
+      title: "Manager needs rebuild",
     });
+  });
+
+  it("leaves legacy PicoClaw tool feedback as markdown", () => {
+    expect(
+      parseStructuredMessage(`🔧 \`read_file\`
+\`\`\`json
+{"path":"README.md"}
+\`\`\``),
+    ).toBeNull();
   });
 
   it("parses notifier notify-card payloads with links and meta rows", () => {
