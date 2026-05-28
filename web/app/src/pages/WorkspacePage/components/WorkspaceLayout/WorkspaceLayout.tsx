@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { SIDEBAR_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
-import {
-  AppLayout,
-  AppLayoutLoading,
-  AppLayoutMain,
-  AppLayoutOverlays,
-  AppLayoutShell,
-  AppLayoutSidebar,
-} from "@/components/ui";
+import { AppLayout, AppLayoutLoading, AppLayoutMain, AppLayoutOverlays, AppLayoutShell } from "@/components/ui";
 import { WorkspaceMainPanel } from "../WorkspaceMainPanel";
 import { WorkspaceOverlays } from "../WorkspaceOverlays";
 import { WorkspaceSidebar } from "../WorkspaceSidebar";
@@ -119,18 +112,18 @@ export function WorkspaceLayout() {
   return (
     <AppLayout ready={controller.ready} loadingFallback={<AppLayoutLoading>{controller.loadingText}</AppLayoutLoading>}>
       <AppLayoutShell className={shellClassName} style={shellStyle}>
-        {controller.ready ? (
-          <WorkspaceTopBar
-            isSidebarCollapsed={isSidebarCollapsed}
-            onCollapseSidebar={controller.sidebarProps.onCollapseSidebar}
-            onExpandSidebar={controller.sidebarProps.onExpandSidebar}
-            collapseSidebarLabel={controller.sidebarProps.t("collapseSidebar")}
-            expandSidebarLabel={controller.sidebarProps.t("expandSidebar")}
-          />
-        ) : null}
-        <AppLayoutSidebar>
+        <div className="workspace-sidebar-shell">
+          {controller.ready ? (
+            <WorkspaceTopBar
+              isSidebarCollapsed={isSidebarCollapsed}
+              onCollapseSidebar={controller.sidebarProps.onCollapseSidebar}
+              onExpandSidebar={controller.sidebarProps.onExpandSidebar}
+              collapseSidebarLabel={controller.sidebarProps.t("collapseSidebar")}
+              expandSidebarLabel={controller.sidebarProps.t("expandSidebar")}
+            />
+          ) : null}
           <WorkspaceSidebar {...controller.sidebarProps} />
-        </AppLayoutSidebar>
+        </div>
         {controller.ready ? (
           <div
             className="workspace-sidebar-resizer"
