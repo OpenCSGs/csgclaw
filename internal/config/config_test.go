@@ -460,8 +460,21 @@ models = ["minimax-m2.7"]
 }
 
 func TestSandboxEffectiveDockerCLIPathDefault(t *testing.T) {
+	defer func(orig func() string) { defaultContainerCLIPath = orig }(defaultContainerCLIPath)
+	defaultContainerCLIPath = func() string { return "docker" }
+
 	cfg := SandboxConfig{Provider: DockerProvider}.Resolved()
 	if got, want := cfg.EffectiveDockerCLIPath(), "docker"; got != want {
+		t.Fatalf("EffectiveDockerCLIPath() = %q, want %q", got, want)
+	}
+}
+
+func TestSandboxEffectiveDockerCLIPathDefaultsToPodmanWhenDockerNotFound(t *testing.T) {
+	defer func(orig func() string) { defaultContainerCLIPath = orig }(defaultContainerCLIPath)
+	defaultContainerCLIPath = func() string { return "podman" }
+
+	cfg := SandboxConfig{Provider: DockerProvider}.Resolved()
+	if got, want := cfg.EffectiveDockerCLIPath(), "podman"; got != want {
 		t.Fatalf("EffectiveDockerCLIPath() = %q, want %q", got, want)
 	}
 }

@@ -108,6 +108,7 @@ func UpdatePicoClawFeishuProvider(svc *agent.Service, provider feishu.BotCredent
 
 func picoClawBoxEnvVars(baseURL, accessToken, botID, llmBaseURL, modelID string) map[string]string {
 	env := bridgeLLMEnvVars(llmBaseURL, accessToken, modelID)
+	env["NO_PROXY"] = "127.0.0.1,localhost"
 	picoclawModelID := picoclawBridgeModelID(modelID)
 	env["CSGCLAW_BASE_URL"] = baseURL
 	env["CSGCLAW_ACCESS_TOKEN"] = accessToken

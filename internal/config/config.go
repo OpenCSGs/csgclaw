@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -222,12 +223,26 @@ func (c SandboxConfig) EffectiveDebianRegistries() []string {
 	return append([]string(nil), c.DebianRegistriesOverride...)
 }
 
-// EffectiveDockerCLIPath returns the docker binary path for [sandbox].provider = docker.
+// EffectiveDockerCLIPath returns the container CLI binary path for [sandbox].provider = docker.
 // When unset, it defaults to "docker" (PATH lookup).
+// If docker is not found on PATH, it falls back to "podman".
 func (c SandboxConfig) EffectiveDockerCLIPath() string {
 	p := strings.TrimSpace(c.DockerCLIPath)
 	if p != "" {
 		return p
+	}
+	return defaultContainerCLIPath()
+}
+
+// defaultContainerCLIPath is a test-overridable variable that resolves the
+// container CLI binary path when none is explicitly configured. It tries
+// "docker" first, then "podman", falling back to "docker".
+var defaultContainerCLIPath = func() string {
+	if _, err := exec.LookPath("docker"); err == nil {
+		return "docker"
+	}
+	if _, err := exec.LookPath("podman"); err == nil {
+		return "podman"
 	}
 	return "docker"
 }

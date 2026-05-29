@@ -22,7 +22,7 @@ type inspectContainer struct {
 func parseInspect(data []byte) (sandbox.Info, error) {
 	var containers []inspectContainer
 	if err := json.Unmarshal(data, &containers); err != nil {
-		return sandbox.Info{}, fmt.Errorf("parse docker inspect json: %w", err)
+		return sandbox.Info{}, fmt.Errorf("parse container inspect json: %w", err)
 	}
 	if len(containers) == 0 {
 		return sandbox.Info{}, sandbox.ErrNotFound
@@ -54,7 +54,7 @@ func parseCreatedAt(value string) (time.Time, error) {
 		createdAt, err = time.Parse(time.RFC3339, value)
 	}
 	if err != nil {
-		return time.Time{}, fmt.Errorf("parse docker created time %q: %w", value, err)
+		return time.Time{}, fmt.Errorf("parse container created time %q: %w", value, err)
 	}
 	return createdAt, nil
 }

@@ -31,14 +31,14 @@ type execRunner struct{}
 
 func (execRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
 	if req.Path == "" {
-		return CommandResult{ExitCode: -1}, fmt.Errorf("docker path is required")
+		return CommandResult{ExitCode: -1}, fmt.Errorf("container runtime path is required")
 	}
 
 	cmd := exec.CommandContext(ctx, req.Path, req.Args...)
 	if len(req.Env) > 0 {
 		cmd.Env = append(cmd.Environ(), req.Env...)
 	}
-	slog.DebugContext(ctx, fmt.Sprintf("running docker command: %s", cmd.String()))
+	slog.DebugContext(ctx, fmt.Sprintf("running container command: %s", cmd.String()))
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -64,7 +64,7 @@ func (execRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, e
 		if result.ExitCode == 0 {
 			result.ExitCode = -1
 		}
-		return result, fmt.Errorf("docker command canceled: %w", ctxErr)
+		return result, fmt.Errorf("container command canceled: %w", ctxErr)
 	}
 	if err != nil {
 		if result.ExitCode == 0 {

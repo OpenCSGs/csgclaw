@@ -25,6 +25,7 @@ CLI_BIN ?= $(BIN_DIR)/csgclaw-cli
 IMAGE ?= opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw
 TAG ?= 2026.5.27
 LOCAL_IMAGE ?= picoclaw:local
+CONTAINER_TOOL ?= docker
 
 .DEFAULT_GOAL := build-all
 
@@ -156,9 +157,9 @@ clean:
 	rm -rf $(BIN_DIR) $(DIST_DIR) $(GOCACHE)
 
 tag:
-	docker tag $(LOCAL_IMAGE) $(IMAGE):$(TAG)
+	$(CONTAINER_TOOL) tag $(LOCAL_IMAGE) $(IMAGE):$(TAG)
 
 push:
-	docker push $(IMAGE):$(TAG)
+	$(CONTAINER_TOOL) push $(IMAGE):$(TAG)
 
 publish: tag push

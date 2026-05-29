@@ -22,9 +22,9 @@ func (e *ExitError) Error() string {
 		msg = "command failed"
 	}
 	if e.Op == "" {
-		return fmt.Sprintf("docker exited with code %d: %s", e.ExitCode, msg)
+		return fmt.Sprintf("container exited with code %d: %s", e.ExitCode, msg)
 	}
-	return fmt.Sprintf("%s: docker exited with code %d: %s", e.Op, e.ExitCode, msg)
+	return fmt.Sprintf("%s: container exited with code %d: %s", e.Op, e.ExitCode, msg)
 }
 
 func (e *ExitError) Unwrap() error {
