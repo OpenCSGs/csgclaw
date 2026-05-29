@@ -40,10 +40,7 @@ func TestDockerProviderFactoryUsesConfiguredPath(t *testing.T) {
 
 func TestDockerProviderFactoryDefaultsPath(t *testing.T) {
 	factory := factories[config.DockerProvider]
-	opt, err := factory(config.SandboxConfig{
-		Provider:      config.DockerProvider,
-		DockerCLIPath: "docker",
-	})
+	opt, err := factory(config.SandboxConfig{Provider: config.DockerProvider})
 	if err != nil {
 		t.Fatalf("factory() error = %v", err)
 	}

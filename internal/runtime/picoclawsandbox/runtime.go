@@ -33,8 +33,8 @@ func New(deps Dependencies) *Runtime {
 	}
 	if strings.TrimSpace(deps.ReadinessProbe.Name) == "" {
 		deps.ReadinessProbe = sandboxgateway.GatewayReadinessProbe{
-			Name: "curl",
-			Args: []string{"-sf", "-o", "/dev/null", "--max-time", "2", "http://127.0.0.1:18790/health"},
+			Name: "wget",
+			Args: []string{"-q", "--spider", "-T", "2", "http://127.0.0.1:18790/health"},
 		}
 	}
 	return &Runtime{

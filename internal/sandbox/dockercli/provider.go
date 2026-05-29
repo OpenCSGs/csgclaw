@@ -62,7 +62,7 @@ func (r *Runtime) Create(ctx context.Context, spec sandbox.CreateSpec) (sandbox.
 	}
 	result, err := r.run(ctx, args, nil, nil)
 	if err != nil {
-		return nil, wrapRunError("container run", result, err)
+		return nil, wrapRunError("docker run", result, err)
 	}
 	id := strings.TrimSpace(string(result.Stdout))
 	if id == "" {
@@ -91,7 +91,7 @@ func (r *Runtime) Remove(ctx context.Context, idOrName string, opts sandbox.Remo
 		return err
 	}
 	if strings.TrimSpace(idOrName) == "" {
-		return fmt.Errorf("container id or name is required")
+		return fmt.Errorf("docker container id or name is required")
 	}
 	args := []string{"rm"}
 	if opts.Force {
@@ -99,7 +99,7 @@ func (r *Runtime) Remove(ctx context.Context, idOrName string, opts sandbox.Remo
 	}
 	args = append(args, idOrName)
 	result, err := r.run(ctx, args, nil, nil)
-	return wrapRunError("container rm", result, err)
+	return wrapRunError("docker rm", result, err)
 }
 
 func (r *Runtime) Close() error {
@@ -108,26 +108,26 @@ func (r *Runtime) Close() error {
 
 func (r *Runtime) valid() error {
 	if r == nil || r.runner == nil {
-		return fmt.Errorf("invalid container runtime")
+		return fmt.Errorf("invalid docker runtime")
 	}
 	if strings.TrimSpace(r.path) == "" {
-		return fmt.Errorf("container runtime path is required")
+		return fmt.Errorf("docker path is required")
 	}
 	return nil
 }
 
 func (r *Runtime) inspect(ctx context.Context, idOrName string) (sandbox.Info, error) {
 	if strings.TrimSpace(idOrName) == "" {
-		return sandbox.Info{}, fmt.Errorf("container id or name is required")
+		return sandbox.Info{}, fmt.Errorf("docker container id or name is required")
 	}
 	result, err := r.run(ctx, []string{"inspect", idOrName}, nil, nil)
 	if err != nil {
-		return sandbox.Info{}, wrapRunError("container inspect", result, err)
+		return sandbox.Info{}, wrapRunError("docker inspect", result, err)
 	}
 	info, err := parseInspect(result.Stdout)
 	if err != nil {
 		if sandbox.IsNotFound(err) {
-			return sandbox.Info{}, fmt.Errorf("container inspect: %w", err)
+			return sandbox.Info{}, fmt.Errorf("docker inspect: %w", err)
 		}
 		return sandbox.Info{}, err
 	}
@@ -156,7 +156,7 @@ func (i *Instance) Start(ctx context.Context) error {
 		return err
 	}
 	result, err := i.runtime.run(ctx, []string{"start", i.idOrName}, nil, nil)
-	return wrapRunError("container start", result, err)
+	return wrapRunError("docker start", result, err)
 }
 
 func (i *Instance) Stop(ctx context.Context, opts sandbox.StopOptions) error {
@@ -165,7 +165,7 @@ func (i *Instance) Stop(ctx context.Context, opts sandbox.StopOptions) error {
 	}
 	if opts.Force {
 		result, err := i.runtime.run(ctx, []string{"kill", i.idOrName}, nil, nil)
-		return wrapRunError("container kill", result, err)
+		return wrapRunError("docker kill", result, err)
 	}
 	args := []string{"stop"}
 	if opts.Timeout > 0 {
@@ -177,7 +177,7 @@ func (i *Instance) Stop(ctx context.Context, opts sandbox.StopOptions) error {
 	}
 	args = append(args, i.idOrName)
 	result, err := i.runtime.run(ctx, args, nil, nil)
-	return wrapRunError("container stop", result, err)
+	return wrapRunError("docker stop", result, err)
 }
 
 func (i *Instance) Info(ctx context.Context) (sandbox.Info, error) {
@@ -199,7 +199,7 @@ func (i *Instance) Run(ctx context.Context, spec sandbox.CommandSpec) (sandbox.C
 	result, err := i.runtime.run(ctx, args, spec.Stdout, spec.Stderr)
 	out := sandbox.CommandResult{ExitCode: result.ExitCode}
 	if err != nil {
-		return out, wrapRunError("container exec", result, err)
+		return out, wrapRunError("docker exec", result, err)
 	}
 	return out, nil
 }
@@ -210,13 +210,13 @@ func (i *Instance) Close() error {
 
 func (i *Instance) valid() error {
 	if i == nil || i.runtime == nil {
-		return fmt.Errorf("invalid container instance")
+		return fmt.Errorf("invalid docker container")
 	}
 	if err := i.runtime.valid(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(i.idOrName) == "" {
-		return fmt.Errorf("container id or name is required")
+		return fmt.Errorf("docker container id or name is required")
 	}
 	return nil
 }
