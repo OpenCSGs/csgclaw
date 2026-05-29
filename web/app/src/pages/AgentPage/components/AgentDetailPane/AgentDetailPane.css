@@ -62,13 +62,22 @@
 .agent-detail-pane .entity-avatar {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
 }
 
 .agent-detail-pane .entity-avatar svg,
 .agent-detail-pane .entity-avatar .svg-icon {
   width: 24px;
   height: 24px;
+}
+
+.agent-detail-pane .entity-avatar .agent-avatar-image {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .agent-detail-pane .entity-title-row h1 {

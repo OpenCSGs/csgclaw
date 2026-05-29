@@ -125,6 +125,7 @@ func (s *Service) refreshBotAvailability(bots []Bot) []Bot {
 				b.Available = strings.EqualFold(strings.TrimSpace(a.Status), "running")
 				b.RuntimeKind = strings.TrimSpace(a.RuntimeKind)
 				b.Image = strings.TrimSpace(a.Image)
+				b.Avatar = strings.TrimSpace(a.Avatar)
 				b.Status = strings.TrimSpace(a.Status)
 				b.Provider = strings.TrimSpace(a.AgentProfile.Provider)
 				b.ModelID = strings.TrimSpace(a.AgentProfile.ModelID)
@@ -482,6 +483,7 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 				Name:           normalized.Name,
 				Description:    normalized.Description,
 				Image:          normalized.Image,
+				Avatar:         normalized.Avatar,
 				Role:           agent.RoleWorker,
 				RuntimeKind:    normalized.RuntimeKind,
 				FromTemplate:   normalized.FromTemplate,
@@ -512,6 +514,7 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 		ID:          created.ID,
 		Name:        created.Name,
 		Description: normalized.Description,
+		Avatar:      strings.TrimSpace(created.Avatar),
 		Role:        normalized.Role,
 		Channel:     normalized.Channel,
 		AgentID:     created.ID,
@@ -637,6 +640,7 @@ func (s *Service) ensureChannelUser(ctx context.Context, channelName string, cre
 			Description: created.Description,
 			Handle:      deriveAgentHandle(created),
 			Role:        displayRole(created),
+			Avatar:      created.Avatar,
 		})
 		if err != nil {
 			return "", time.Time{}, fmt.Errorf("failed to ensure im user: %w", err)
@@ -651,6 +655,7 @@ func (s *Service) ensureChannelUser(ctx context.Context, channelName string, cre
 			Name:   created.Name,
 			Handle: deriveAgentHandle(created),
 			Role:   displayRole(created),
+			Avatar: created.Avatar,
 		})
 		if err != nil {
 			return "", time.Time{}, fmt.Errorf("failed to ensure feishu user: %w", err)

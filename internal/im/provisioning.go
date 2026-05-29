@@ -13,6 +13,7 @@ type AgentIdentity struct {
 	Description string
 	Handle      string
 	Role        string
+	Avatar      string
 }
 
 type ProvisionResult struct {
@@ -44,6 +45,7 @@ func (p *Provisioner) EnsureAgentUser(_ context.Context, identity AgentIdentity)
 		Name:   identity.Name,
 		Handle: identity.Handle,
 		Role:   identity.Role,
+		Avatar: identity.Avatar,
 	})
 	if err != nil {
 		return ProvisionResult{}, err

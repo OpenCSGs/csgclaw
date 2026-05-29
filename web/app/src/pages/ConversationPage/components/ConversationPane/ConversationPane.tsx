@@ -4,6 +4,7 @@ import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import { MessageContent } from "@/components/business/MessageContent";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import {
   Button,
   DialogBody,
@@ -177,7 +178,7 @@ export function ConversationPane({
                               aria-label={`${t("profilePreview")} ${user.name}`}
                               onClick={(event) => onPreviewUser(user, event.currentTarget)}
                             >
-                              {user.avatar}
+                              <AgentAvatarContent avatar={user.avatar} fallback={user.avatar} />
                             </button>
                             <div className="member-row-main">
                               <div className="member-row-name">{user.name}</div>
@@ -311,7 +312,7 @@ export function ConversationPane({
                 aria-label={`${t("profilePreview")} ${user.name}`}
                 onClick={(event) => onPreviewUser(user, event.currentTarget)}
               >
-                {user.avatar}
+                <AgentAvatarContent avatar={user.avatar} fallback={user.avatar} />
                 {messageAgent ? (
                   <span className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`} aria-hidden="true" />
                 ) : null}
@@ -489,7 +490,7 @@ function MentionPicker({ users = [], activeIndex = 0, className = "", showRole =
           }}
         >
           <span className="avatar" style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}>
-            {user.avatar}
+            <AgentAvatarContent avatar={user.avatar} fallback={user.avatar} />
           </span>
           <div>
             <div className="message-author">{user.name}</div>
@@ -794,11 +795,11 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
           aria-label={`${t("profilePreview")} ${name}`}
           onClick={(event) => onPreviewUser(user, event.currentTarget)}
         >
-          {avatar}
+          <AgentAvatarContent avatar={avatar} fallback={avatar} />
         </button>
       ) : (
         <div className="thread-message-avatar" style={avatarStyle} aria-hidden="true">
-          {avatar}
+          <AgentAvatarContent avatar={avatar} fallback={avatar} />
         </div>
       )}
       <div className="thread-message-main">

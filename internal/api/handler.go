@@ -101,6 +101,7 @@ type agentResponse struct {
 	RuntimeID        string                         `json:"runtime_id,omitempty"`
 	RuntimeKind      string                         `json:"runtime_kind,omitempty"`
 	Image            string                         `json:"image,omitempty"`
+	Avatar           string                         `json:"avatar,omitempty"`
 	BoxID            string                         `json:"box_id,omitempty"`
 	Role             string                         `json:"role"`
 	Status           string                         `json:"status"`
@@ -508,6 +509,7 @@ func (h *Handler) handleBotByID(w http.ResponseWriter, r *http.Request) {
 		updated, err := h.botSvc.PatchNotificationBot(r.Context(), channelName, id, bot.CreateRequest{
 			Name:           patch.Name,
 			Description:    patch.Description,
+			Avatar:         patch.Avatar,
 			RuntimeOptions: patch.RuntimeOptions,
 		})
 		if err != nil {
@@ -891,6 +893,7 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 			Name:           req.Name,
 			Description:    req.Description,
 			Image:          req.Image,
+			Avatar:         req.Avatar,
 			RuntimeKind:    req.RuntimeKind,
 			FromTemplate:   req.FromTemplate,
 			Role:           req.Role,
@@ -1716,6 +1719,7 @@ func presentAgent(item agent.Agent) agentResponse {
 		RuntimeID:        item.RuntimeID,
 		RuntimeKind:      item.RuntimeKind,
 		Image:            item.Image,
+		Avatar:           item.Avatar,
 		BoxID:            item.BoxID,
 		Role:             item.Role,
 		Status:           item.Status,

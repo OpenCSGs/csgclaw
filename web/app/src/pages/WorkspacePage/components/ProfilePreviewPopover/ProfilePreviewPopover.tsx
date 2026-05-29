@@ -11,6 +11,7 @@ import {
 } from "@/models/agents";
 import { localizeRole } from "@/shared/i18n";
 import { AgentIcon } from "@/components/ui/Icons";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button, IconButton } from "@/components/ui";
 
 function clamp(value, min, max) {
@@ -123,7 +124,7 @@ export function ProfilePreviewPopover({
             className="avatar preview-avatar"
             style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}
           >
-            {user.avatar}
+            <AgentAvatarContent avatar={user.avatar} fallback={user.avatar} />
           </div>
         )}
         <div className="preview-identity">

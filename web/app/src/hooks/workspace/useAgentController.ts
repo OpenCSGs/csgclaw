@@ -69,6 +69,7 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { useProfileModelOptions } from "./useProfileModelOptions";
 import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
+import { defaultAgentAvatar } from "@/components/business/AgentAvatar";
 import type { IMConversation } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
 
@@ -465,6 +466,7 @@ export function useAgentController({
       agentToDraft({
         name: "",
         description: "",
+        avatar: defaultAgentAvatar(),
         bot_type: BOT_TYPE_NOTIFICATION,
       }),
     );
@@ -492,6 +494,7 @@ export function useAgentController({
           selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
         ) || DEFAULT_RUNTIME_KIND;
       let draft = agentToDraft({
+        avatar: defaultAgentAvatar(),
         image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
         bot_type: BOT_TYPE_NORMAL,
@@ -506,6 +509,7 @@ export function useAgentController({
           selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
         ) || DEFAULT_RUNTIME_KIND;
       let draft = agentToDraft({
+        avatar: defaultAgentAvatar(),
         image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
         bot_type: BOT_TYPE_NORMAL,
@@ -561,6 +565,7 @@ export function useAgentController({
         const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, { mergeNotifier: true });
         const payload: AgentUpdatePayload = {
           name: agentPageDraft.name,
+          avatar: agentPageDraft.avatar,
           description: agentPageDraft.description,
         };
         if (runtimeOptions) {
@@ -580,6 +585,7 @@ export function useAgentController({
       });
       const payload: AgentUpdatePayload = {
         name: agentPageDraft.name,
+        avatar: agentPageDraft.avatar,
         description: agentPageDraft.description,
         agent_profile: profile,
       };
@@ -639,6 +645,7 @@ export function useAgentController({
         const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, { mergeNotifier: true });
         const payload: AgentUpdatePayload = {
           name: agentDraft.name,
+          avatar: agentDraft.avatar,
           description: agentDraft.description,
         };
         if (runtimeOptions) {
@@ -669,6 +676,7 @@ export function useAgentController({
       });
       const payload: AgentUpdatePayload = {
         name: agentDraft.name,
+        avatar: agentDraft.avatar,
         role: WORKER_AGENT_ROLE,
         description: agentDraft.description,
         image: agentDraft.image,
@@ -683,6 +691,7 @@ export function useAgentController({
         ? await createBotRequest(payload)
         : await updateAgentRequest(editingAgent!.id, {
             name: payload.name,
+            avatar: payload.avatar,
             description: payload.description,
             agent_profile: payload.agent_profile,
             ...(payload.runtime_options ? { runtime_options: payload.runtime_options } : {}),

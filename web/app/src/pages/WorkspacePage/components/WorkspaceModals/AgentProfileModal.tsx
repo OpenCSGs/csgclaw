@@ -18,6 +18,7 @@ import {
   requiredFieldLabel,
 } from "@/components/business/ProfileControls";
 import { Button, Select } from "@/components/ui";
+import { AgentAvatarPicker, defaultAgentAvatar } from "@/components/business/AgentAvatar";
 import {
   agentCreateTemplateLocked,
   applyTemplateToDraft,
@@ -73,6 +74,7 @@ export function AgentProfileModal({
       onAgentDraftChange((current) =>
         ensureNotifierPullSubscriptionDraft({
           ...current,
+          avatar: current?.avatar || defaultAgentAvatar(),
           bot_type: BOT_TYPE_NOTIFICATION,
           from_template: "",
           template_name: "",
@@ -88,6 +90,7 @@ export function AgentProfileModal({
       return applyTemplateToDraft(
         {
           ...current,
+          avatar: current?.avatar || defaultAgentAvatar(),
           bot_type: BOT_TYPE_NORMAL,
           runtime_kind: runtimeKind,
           image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || current?.default_image || ""),
@@ -191,6 +194,14 @@ export function AgentProfileModal({
                   <input value={agentDraft.role || "worker"} readOnly disabled />
                 </label>
               ) : null}
+              <div className="field span-2 agent-avatar-field">
+                <span>{t("agentAvatar")}</span>
+                <AgentAvatarPicker
+                  value={agentDraft.avatar}
+                  t={t}
+                  onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
+                />
+              </div>
               {isWorkerCreate ? (
                 <>
                   <label className="field">

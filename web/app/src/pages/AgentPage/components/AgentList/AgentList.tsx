@@ -10,6 +10,7 @@ import {
 } from "@/models/agents";
 import { AgentIcon, PlayIcon, StopIcon, TrashIcon, WrenchIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
+import { AgentAvatarImage } from "@/components/business/AgentAvatar";
 
 export function AgentSection({
   title,
@@ -78,7 +79,7 @@ export function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop
   return (
     <div className={`agent-row ${isManager ? "manager" : ""} ${incomplete ? "incomplete" : ""}`.trim()}>
       <div className="agent-avatar" aria-hidden="true">
-        <AgentIcon />
+        <AgentAvatarImage avatar={item.avatar} alt="" />
       </div>
       <div className="agent-row-main">
         <div className="agent-row-top">

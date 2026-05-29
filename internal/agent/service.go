@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -913,6 +914,9 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 		if strings.TrimSpace(spec.Image) == "" {
 			spec.Image = existing.Image
 		}
+		if strings.TrimSpace(spec.Avatar) == "" {
+			spec.Avatar = existing.Avatar
+		}
 		if strings.TrimSpace(spec.RuntimeKind) == "" {
 			spec.RuntimeKind = existing.RuntimeKind
 		}
@@ -956,6 +960,7 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 		Name:           existing.Name,
 		Description:    existing.Description,
 		Image:          existing.Image,
+		Avatar:         existing.Avatar,
 		RuntimeKind:    existing.RuntimeKind,
 		Role:           existing.Role,
 		Status:         existing.Status,
@@ -977,6 +982,8 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 			merged.Description = next.Description
 		case "image":
 			merged.Image = next.Image
+		case "avatar":
+			merged.Avatar = next.Avatar
 		case "runtime_kind":
 			merged.RuntimeKind = next.RuntimeKind
 		case "role":
@@ -1045,13 +1052,25 @@ func (s *Service) agentSnapshot(id string) (Agent, bool) {
 }
 
 func (s *Service) resolveAgentBox(ctx context.Context, rt sandbox.Runtime, got Agent) (sandbox.Instance, string, error) {
-	keys := make([]string, 0, 2)
+	keys := make([]string, 0, 3)
 	if boxID := strings.TrimSpace(got.BoxID); boxID != "" {
 		keys = append(keys, boxID)
 	}
 	if name := strings.TrimSpace(got.Name); name != "" {
 		if len(keys) == 0 || keys[0] != name {
 			keys = append(keys, name)
+		}
+	}
+	if runtimeName := safeSandboxNameForAgent(got.ID, got.Name); runtimeName != "" {
+		duplicate := false
+		for _, key := range keys {
+			if key == runtimeName {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			keys = append(keys, runtimeName)
 		}
 	}
 	if len(keys) == 0 {
@@ -1211,11 +1230,12 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return fmt.Errorf("remove agent box: %w", err)
 		}
 	} else {
-		rt, ensureErr := s.ensureRuntime(existing.Name)
+		runtimeName := sandboxNameForAgent(existing)
+		rt, ensureErr := s.ensureRuntime(runtimeName)
 		if ensureErr != nil {
 			return ensureErr
 		}
-		runtimeHome, homeErr := s.sandboxRuntimeHome(existing.Name)
+		runtimeHome, homeErr := s.sandboxRuntimeHome(runtimeName)
 		if homeErr != nil {
 			return homeErr
 		}
@@ -1251,7 +1271,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	}
 	delete(s.agents, id)
 	s.deleteRuntimeRecordLocked(current.RuntimeID)
-	runtimeHome, err := s.sandboxRuntimeHome(current.Name)
+	runtimeHome, err := s.sandboxRuntimeHome(sandboxNameForAgent(current))
 	if err != nil {
 		s.mu.Unlock()
 		return err
@@ -1295,6 +1315,48 @@ func removeAllWithRetry(path string) error {
 
 func isRetryableRemoveAllError(err error) bool {
 	return errors.Is(err, syscall.ENOTEMPTY) || strings.Contains(strings.ToLower(err.Error()), "directory not empty")
+}
+
+func safeSandboxNameForAgent(id, name string) string {
+	name = strings.TrimSpace(name)
+	if isDockerSafeSandboxName(name) {
+		return name
+	}
+	id = strings.TrimSpace(id)
+	if isDockerSafeSandboxName(id) {
+		return id
+	}
+	seed := id
+	if seed == "" {
+		seed = name
+	}
+	if seed == "" {
+		seed = "agent"
+	}
+	sum := sha256.Sum256([]byte(seed))
+	return fmt.Sprintf("agent-%x", sum[:8])
+}
+
+func sandboxNameForAgent(got Agent) string {
+	return safeSandboxNameForAgent(got.ID, got.Name)
+}
+
+func isDockerSafeSandboxName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	for idx := 0; idx < len(name); idx++ {
+		ch := name[idx]
+		valid := (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')
+		if idx > 0 {
+			valid = valid || ch == '_' || ch == '.' || ch == '-'
+		}
+		if !valid {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) List() []Agent {
@@ -1371,6 +1433,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	name := strings.TrimSpace(spec.Name)
 	description := strings.TrimSpace(spec.Description)
 	image := strings.TrimSpace(spec.Image)
+	avatar := strings.TrimSpace(spec.Avatar)
 	runtimeKind := strings.TrimSpace(spec.RuntimeKind)
 	switch {
 	case name == "":
@@ -1414,6 +1477,10 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	if err := s.ensureCodexResponsesAPI(ctx, runtimeKind, resolvedProfile); err != nil {
 		return Agent{}, err
 	}
+	runtimeAgentName := name
+	if isGatewayRuntimeKind(runtimeKind) {
+		runtimeAgentName = safeSandboxNameForAgent(id, name)
+	}
 	runtimeProfile := s.runtimeProfileForKind(runtimeKind, id, name, description, resolvedProfile)
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
 		RuntimeID:        runtimeIDForAgentID(id),
@@ -1425,32 +1492,32 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		return Agent{}, fmt.Errorf("provision worker runtime: %w", err)
 	}
 	if testCreateGatewayBoxHook != nil && isGatewayRuntimeKind(runtimeKind) {
-		rt, err := s.ensureRuntime(name)
+		rt, err := s.ensureRuntime(runtimeAgentName)
 		if err != nil {
 			return Agent{}, err
 		}
-		runtimeHome, err := s.sandboxRuntimeHome(name)
+		runtimeHome, err := s.sandboxRuntimeHome(runtimeAgentName)
 		if err != nil {
 			return Agent{}, err
 		}
 		defer func() {
 			_ = s.closeRuntime(runtimeHome, rt)
 		}()
-		box, info, err := s.createGatewayBox(ctx, rt, image, name, id, resolvedProfile)
+		box, info, err := s.createGatewayBox(ctx, rt, image, runtimeAgentName, id, resolvedProfile)
 		if err != nil {
 			return Agent{}, fmt.Errorf("create worker box: %w", err)
 		}
 		defer func() {
 			_ = s.closeBox(box)
 		}()
-		return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, spec.RuntimeOptions, agentruntime.Info{
+		return s.persistCreatedWorker(ctx, id, name, description, image, avatar, runtimeKind, resolvedProfile, spec.RuntimeOptions, agentruntime.Info{
 			HandleID:  strings.TrimSpace(info.ID),
 			State:     agentruntime.State(info.State),
 			CreatedAt: info.CreatedAt.UTC(),
 		})
 	}
 	if runtimeKind == RuntimeKindCodex {
-		if err := s.persistStartingWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, spec.RuntimeOptions); err != nil {
+		if err := s.persistStartingWorker(ctx, id, name, description, image, avatar, runtimeKind, resolvedProfile, spec.RuntimeOptions); err != nil {
 			return Agent{}, err
 		}
 		defer func() {
@@ -1462,7 +1529,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	handle, err := runtimeImpl.New(ctx, agentruntime.Spec{
 		RuntimeID: runtimeIDForAgentID(id),
 		AgentID:   id,
-		AgentName: name,
+		AgentName: runtimeAgentName,
 		Image:     image,
 		Profile:   runtimeProfile,
 	})
@@ -1475,10 +1542,10 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		CreatedAt: time.Now().UTC(),
 	}
 
-	return s.persistCreatedWorker(ctx, id, name, description, image, runtimeKind, resolvedProfile, spec.RuntimeOptions, info)
+	return s.persistCreatedWorker(ctx, id, name, description, image, avatar, runtimeKind, resolvedProfile, spec.RuntimeOptions, info)
 }
 
-func (s *Service) persistStartingWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, runtimeOptions map[string]any) error {
+func (s *Service) persistStartingWorker(ctx context.Context, id, name, description, image, avatar, runtimeKind string, profile AgentProfile, runtimeOptions map[string]any) error {
 	s.mu.Lock()
 
 	if _, ok := s.agents[id]; ok {
@@ -1490,7 +1557,7 @@ func (s *Service) persistStartingWorker(ctx context.Context, id, name, descripti
 		return fmt.Errorf("agent name %q already exists", name)
 	}
 
-	worker := newWorkerAgent(id, name, description, image, runtimeKind, profile, runtimeOptions, agentruntime.Info{
+	worker := newWorkerAgent(id, name, description, image, avatar, runtimeKind, profile, runtimeOptions, agentruntime.Info{
 		State:     agentruntime.StateCreated,
 		CreatedAt: time.Now().UTC(),
 	})
@@ -1517,7 +1584,7 @@ func (s *Service) removeStartingWorker(ctx context.Context, id string) error {
 	return err
 }
 
-func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, image, runtimeKind string, profile AgentProfile, createRuntimeExt map[string]any, info agentruntime.Info) (Agent, error) {
+func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, image, avatar, runtimeKind string, profile AgentProfile, createRuntimeExt map[string]any, info agentruntime.Info) (Agent, error) {
 	s.mu.Lock()
 
 	if existing, ok := s.agents[id]; ok && !isStartingWorker(existing) {
@@ -1529,7 +1596,7 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 		return Agent{}, fmt.Errorf("agent name %q already exists", name)
 	}
 
-	worker := newWorkerAgent(id, name, description, image, runtimeKind, profile, createRuntimeExt, info)
+	worker := newWorkerAgent(id, name, description, image, avatar, runtimeKind, profile, createRuntimeExt, info)
 	s.agents[worker.ID] = worker
 	s.syncRuntimeRecordLocked(worker)
 	if worker.AgentProfile.ProfileComplete {
@@ -1549,7 +1616,7 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 	return created, nil
 }
 
-func newWorkerAgent(id, name, description, image, runtimeKind string, profile AgentProfile, runtimeOptions map[string]any, info agentruntime.Info) Agent {
+func newWorkerAgent(id, name, description, image, avatar, runtimeKind string, profile AgentProfile, runtimeOptions map[string]any, info agentruntime.Info) Agent {
 	createdAt := info.CreatedAt.UTC()
 	if info.CreatedAt.IsZero() {
 		createdAt = time.Now().UTC()
@@ -1569,6 +1636,7 @@ func newWorkerAgent(id, name, description, image, runtimeKind string, profile Ag
 		RuntimeID:       runtimeIDForAgentID(id),
 		RuntimeKind:     runtimeKind,
 		Image:           image,
+		Avatar:          strings.TrimSpace(avatar),
 		BoxID:           strings.TrimSpace(info.HandleID),
 		Description:     description,
 		Status:          string(state),

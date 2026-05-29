@@ -94,6 +94,7 @@ type EnsureAgentUserRequest struct {
 	Name   string `json:"name"`
 	Handle string `json:"handle"`
 	Role   string `json:"role"`
+	Avatar string `json:"avatar,omitempty"`
 }
 
 type EnsureWorkerUserRequest = EnsureAgentUserRequest
@@ -943,6 +944,7 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 	name := strings.ToLower(strings.TrimSpace(req.Name))
 	handle := strings.ToLower(strings.TrimSpace(req.Handle))
 	role := strings.ToLower(strings.TrimSpace(req.Role))
+	avatar := strings.TrimSpace(req.Avatar)
 	switch {
 	case id == "":
 		return User{}, nil, fmt.Errorf("id is required")
@@ -953,6 +955,9 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 	}
 	if role == "" {
 		role = "worker"
+	}
+	if avatar == "" {
+		avatar = initials(name)
 	}
 
 	s.mu.Lock()
@@ -974,7 +979,7 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 		Name:      name,
 		Handle:    handle,
 		Role:      role,
-		Avatar:    initials(name),
+		Avatar:    avatar,
 		IsOnline:  true,
 		AccentHex: accentHexForID(id),
 		CreatedAt: time.Now().UTC(),

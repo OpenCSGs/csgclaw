@@ -4,6 +4,7 @@ import {
   isDirectConversation,
   resolveConversationUser,
 } from "@/models/conversations";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { TrashIcon } from "@/components/ui/Icons";
 
 export function ConversationSection({
@@ -36,7 +37,7 @@ export function ConversationSection({
           >
             <button className="conversation-item-main" onClick={() => onSelect(conversation.id)}>
               <div className="avatar" style={{ background: `linear-gradient(135deg, ${color}, #10233f)` }}>
-                {avatar}
+                <AgentAvatarContent avatar={avatar} fallback={avatar} />
               </div>
               <div className="conversation-main">
                 <div className="conversation-head">

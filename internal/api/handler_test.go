@@ -536,7 +536,7 @@ func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 		imBus:  bus,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/bots", strings.NewReader(`{"name":"alice","description":"test lead","image":"agent-image:1","role":"worker","runtime_kind":"picoclaw_sandbox","agent_profile":{"provider":"csghub_lite","model_id":"glm-4.5","reasoning_effort":"high"}}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/bots", strings.NewReader(`{"name":"alice","description":"test lead","image":"agent-image:1","avatar":"avatar/cartoon-3.png","role":"worker","runtime_kind":"picoclaw_sandbox","agent_profile":{"provider":"csghub_lite","model_id":"glm-4.5","reasoning_effort":"high"}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -554,6 +554,9 @@ func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 	if created.Description != "test lead" {
 		t.Fatalf("created bot description = %q, want test lead", created.Description)
 	}
+	if created.Avatar != "avatar/cartoon-3.png" {
+		t.Fatalf("created bot avatar = %q, want avatar/cartoon-3.png", created.Avatar)
+	}
 
 	rec = httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/bots", nil))
@@ -569,6 +572,9 @@ func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 	}
 	if bots[0].Description != "test lead" {
 		t.Fatalf("bots[0].Description = %q, want test lead", bots[0].Description)
+	}
+	if bots[0].Avatar != "avatar/cartoon-3.png" {
+		t.Fatalf("bots[0].Avatar = %q, want avatar/cartoon-3.png", bots[0].Avatar)
 	}
 
 	rec = httptest.NewRecorder()
@@ -586,6 +592,9 @@ func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 	if agents[0]["image"] != "agent-image:1" {
 		t.Fatalf("agents[0].image = %#v, want agent-image:1", agents[0]["image"])
 	}
+	if agents[0]["avatar"] != "avatar/cartoon-3.png" {
+		t.Fatalf("agents[0].avatar = %#v, want avatar/cartoon-3.png", agents[0]["avatar"])
+	}
 	profile, ok := agents[0]["agent_profile"].(map[string]any)
 	if !ok || profile["provider"] != agent.ProviderCSGHubLite || profile["model_id"] != "glm-4.5" {
 		t.Fatalf("agent_profile = %#v, want csghub_lite/glm-4.5", agents[0]["agent_profile"])
@@ -602,6 +611,11 @@ func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
 	}
 	if !containsUser(users, "u-alice") {
 		t.Fatalf("users = %+v, want u-alice", users)
+	}
+	for _, user := range users {
+		if user.ID == "u-alice" && user.Avatar != "avatar/cartoon-3.png" {
+			t.Fatalf("user avatar = %q, want avatar/cartoon-3.png", user.Avatar)
+		}
 	}
 	rooms := imSvc.ListRooms()
 	if len(rooms) != 1 || !containsMember(rooms[0].Members, "u-admin") || !containsMember(rooms[0].Members, "u-alice") {
@@ -1775,6 +1789,7 @@ func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 		Name:         "alice",
 		RuntimeKind:  agent.RuntimeKindCodex,
 		FromTemplate: "builtin/frontend-alice",
+		Avatar:       "avatar/3D-1.png",
 		Profile:      "codex-fast",
 	})
 
@@ -1786,6 +1801,9 @@ func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 	}
 	if got.Spec.FromTemplate != "builtin/frontend-alice" {
 		t.Fatalf("Spec.FromTemplate = %q, want %q", got.Spec.FromTemplate, "builtin/frontend-alice")
+	}
+	if got.Spec.Avatar != "avatar/3D-1.png" {
+		t.Fatalf("Spec.Avatar = %q, want %q", got.Spec.Avatar, "avatar/3D-1.png")
 	}
 	if got.Spec.Profile != "codex-fast" {
 		t.Fatalf("Spec.Profile = %q, want %q", got.Spec.Profile, "codex-fast")

@@ -25,6 +25,7 @@ export type FetchAgentLogsOptions = {
 
 export type AgentUpdatePayload = {
   agent_profile?: JSONRecord;
+  avatar?: string;
   description?: string;
   image?: string;
   name?: string;

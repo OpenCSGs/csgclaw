@@ -21,6 +21,7 @@ type Agent struct {
 	RuntimeID        string                   `json:"runtime_id,omitempty"`
 	RuntimeKind      string                   `json:"runtime_kind,omitempty"`
 	Image            string                   `json:"image,omitempty"`
+	Avatar           string                   `json:"avatar,omitempty"`
 	BoxID            string                   `json:"box_id,omitempty"`
 	RuntimeOptions   map[string]any           `json:"runtime_options,omitempty"`
 	Role             string                   `json:"role"`
@@ -37,6 +38,7 @@ type CreateAgentSpec struct {
 	Name           string         `json:"name"`
 	Description    string         `json:"description,omitempty"`
 	Image          string         `json:"image,omitempty"`
+	Avatar         string         `json:"avatar,omitempty"`
 	RuntimeKind    string         `json:"runtime_kind,omitempty"`
 	FromTemplate   string         `json:"from_template,omitempty"`
 	Role           string         `json:"role,omitempty"`
@@ -51,6 +53,7 @@ type UpdateRequest struct {
 	Name           *string         `json:"name,omitempty"`
 	Description    *string         `json:"description,omitempty"`
 	Image          *string         `json:"image,omitempty"`
+	Avatar         *string         `json:"avatar,omitempty"`
 	RuntimeOptions *map[string]any `json:"runtime_options,omitempty"`
 	AgentProfile   *AgentProfile   `json:"agent_profile,omitempty"`
 }

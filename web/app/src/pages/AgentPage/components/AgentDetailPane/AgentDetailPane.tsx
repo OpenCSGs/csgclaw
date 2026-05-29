@@ -22,7 +22,7 @@ import {
   normalizeRuntimeKind,
   notifierFormIsComplete,
 } from "@/models/agents";
-import { AgentIcon } from "@/components/ui/Icons";
+import { AgentAvatarImage, AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { Button, Select } from "@/components/ui";
 
 export function AgentDetailPane({
@@ -65,7 +65,7 @@ export function AgentDetailPane({
     <section className="entity-pane agent-detail-pane">
       <header className="entity-header">
         <div className="entity-avatar">
-          <AgentIcon />
+          <AgentAvatarImage avatar={item.avatar} alt="" />
         </div>
         <div className="entity-heading">
           <div className="entity-title-row">
@@ -212,6 +212,10 @@ export function AgentDetailPane({
                   />
                 </label>
               ) : null}
+              <div className="field span-2 agent-avatar-field">
+                <span>{t("agentAvatar")}</span>
+                <AgentAvatarPicker value={draft.avatar} t={t} onChange={(avatar) => updateDraft({ avatar })} />
+              </div>
               <label className="field span-2">
                 <span>{t("agentDescription")}</span>
                 <textarea

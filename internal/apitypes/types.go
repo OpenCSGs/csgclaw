@@ -18,6 +18,7 @@ type Bot struct {
 	RuntimeOptions     map[string]any `json:"runtime_options,omitempty"`
 	RuntimeKind        string         `json:"runtime_kind,omitempty"`
 	Image              string         `json:"image,omitempty"`
+	Avatar             string         `json:"avatar,omitempty"`
 	Status             string         `json:"status,omitempty"`
 	Provider           string         `json:"provider,omitempty"`
 	ModelID            string         `json:"model_id,omitempty"`
@@ -32,6 +33,7 @@ type CreateBotRequest struct {
 	Description    string              `json:"description,omitempty"`
 	Type           string              `json:"type,omitempty"`
 	Image          string              `json:"image,omitempty"`
+	Avatar         string              `json:"avatar,omitempty"`
 	Role           string              `json:"role"`
 	Channel        string              `json:"channel,omitempty"`
 	RuntimeKind    string              `json:"runtime_kind,omitempty"`
@@ -43,6 +45,7 @@ type CreateBotRequest struct {
 type PatchNotificationBotRequest struct {
 	Name           string         `json:"name,omitempty"`
 	Description    string         `json:"description,omitempty"`
+	Avatar         string         `json:"avatar,omitempty"`
 	RuntimeOptions map[string]any `json:"runtime_options,omitempty"`
 }
 

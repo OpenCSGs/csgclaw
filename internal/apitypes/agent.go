@@ -9,6 +9,7 @@ type Agent struct {
 	RuntimeID   string    `json:"runtime_id,omitempty"`
 	RuntimeKind string    `json:"runtime_kind,omitempty"`
 	Image       string    `json:"image,omitempty"`
+	Avatar      string    `json:"avatar,omitempty"`
 	BoxID       string    `json:"box_id,omitempty"`
 	Role        string    `json:"role"`
 	Status      string    `json:"status"`
@@ -21,6 +22,7 @@ type CreateAgentRequest struct {
 	Name           string              `json:"name"`
 	Description    string              `json:"description,omitempty"`
 	Image          string              `json:"image,omitempty"`
+	Avatar         string              `json:"avatar,omitempty"`
 	RuntimeKind    string              `json:"runtime_kind,omitempty"`
 	FromTemplate   string              `json:"from_template,omitempty"`
 	Replace        bool                `json:"replace,omitempty"`

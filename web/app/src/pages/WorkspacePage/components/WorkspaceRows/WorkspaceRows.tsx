@@ -15,8 +15,9 @@ import {
   isDirectConversation,
   resolveConversationUser,
 } from "@/models/conversations";
-import { AgentIcon, ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
+import { ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
+import { AgentAvatarContent, AgentAvatarImage } from "@/components/business/AgentAvatar";
 import type { DragEvent, ReactNode } from "react";
 
 export type WorkspaceGroupProps = {
@@ -156,7 +157,7 @@ export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notifi
           }
         }}
       >
-        <AgentIcon />
+        <AgentAvatarImage avatar={item.avatar} alt="" />
       </span>
       <span className="workspace-row-main">
         <span className="workspace-row-title-line">
@@ -221,7 +222,7 @@ export function WorkspaceConversationRow({
             : undefined
         }
       >
-        {icon}
+        <AgentAvatarContent avatar={icon} fallback={icon} />
       </span>
       <span className="workspace-row-main">
         <span className="workspace-row-title-line">

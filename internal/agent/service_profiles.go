@@ -157,6 +157,9 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 	if req.Image != nil {
 		current.Image = strings.TrimSpace(*req.Image)
 	}
+	if req.Avatar != nil {
+		current.Avatar = strings.TrimSpace(*req.Avatar)
+	}
 	if req.AgentProfile != nil || req.RuntimeOptions != nil {
 		profileUpdated = true
 		profile := current.AgentProfile
@@ -323,11 +326,12 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 	}
 
 	if testCreateGatewayBoxHook != nil {
-		rt, err := s.ensureRuntime(got.Name)
+		runtimeName := sandboxNameForAgent(got)
+		rt, err := s.ensureRuntime(runtimeName)
 		if err != nil {
 			return Agent{}, err
 		}
-		runtimeHome, err := s.sandboxRuntimeHome(got.Name)
+		runtimeHome, err := s.sandboxRuntimeHome(runtimeName)
 		if err != nil {
 			return Agent{}, err
 		}
@@ -340,7 +344,7 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 				return Agent{}, fmt.Errorf("remove existing agent box: %w", deleteErr)
 			}
 		}
-		box, sandboxInfo, err := s.createGatewayBox(ctx, rt, image, got.Name, got.ID, profile)
+		box, sandboxInfo, err := s.createGatewayBox(ctx, rt, image, runtimeName, got.ID, profile)
 		if err != nil {
 			return Agent{}, fmt.Errorf("create agent box: %w", err)
 		}
@@ -366,17 +370,21 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 	}
 
 	runtimeProfile := s.runtimeProfileForKind(runtimeKind, got.ID, got.Name, got.Description, profile)
+	runtimeAgentName := got.Name
+	if isGatewayRuntimeKind(runtimeKind) {
+		runtimeAgentName = sandboxNameForAgent(got)
+	}
 	createSpec := agentruntime.Spec{
 		RuntimeID: normalizeRuntimeID(got.RuntimeID, got.ID),
 		AgentID:   got.ID,
-		AgentName: got.Name,
+		AgentName: runtimeAgentName,
 		Image:     image,
 		Profile:   runtimeProfile,
 	}
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
 		RuntimeID: createSpec.RuntimeID,
 		AgentID:   createSpec.AgentID,
-		AgentName: createSpec.AgentName,
+		AgentName: got.Name,
 		Profile:   runtimeProfile,
 	}); err != nil {
 		return Agent{}, fmt.Errorf("provision agent runtime: %w", err)

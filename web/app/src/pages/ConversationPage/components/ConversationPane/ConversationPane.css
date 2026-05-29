@@ -173,7 +173,7 @@
   width: 40px;
   height: 40px;
   flex-basis: 40px;
-  border-radius: 14px;
+  border-radius: 50%;
   font-size: 13px;
 }
 
@@ -1234,7 +1234,7 @@
   width: 38px;
   height: 38px;
   flex-basis: 38px;
-  border-radius: 12px;
+  border-radius: 50%;
   font-size: 13px;
 }
 

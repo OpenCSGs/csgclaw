@@ -78,6 +78,7 @@ func (s *Service) CreateNotificationBot(ctx context.Context, req CreateRequest) 
 		ID:          botID,
 		Name:        normalized.Name,
 		Description: normalized.Description,
+		Avatar:      normalized.Avatar,
 		Role:        "Worker",
 	})
 	if err != nil {
@@ -93,6 +94,7 @@ func (s *Service) CreateNotificationBot(ctx context.Context, req CreateRequest) 
 		ID:             botID,
 		Name:           normalized.Name,
 		Description:    normalized.Description,
+		Avatar:         normalized.Avatar,
 		Type:           BotTypeNotification,
 		Role:           string(RoleWorker),
 		Channel:        normalized.Channel,
@@ -122,6 +124,9 @@ func (s *Service) PatchNotificationBot(ctx context.Context, channel, id string, 
 	}
 	if desc := strings.TrimSpace(patch.Description); desc != "" {
 		existing.Description = desc
+	}
+	if avatar := strings.TrimSpace(patch.Avatar); avatar != "" {
+		existing.Avatar = avatar
 	}
 	if len(patch.RuntimeOptions) > 0 {
 		merged := notification_bot.MergeRuntimeOptionsPatch(
@@ -200,6 +205,7 @@ type channelBotIdentity struct {
 	Description string
 	Handle      string
 	Role        string
+	Avatar      string
 }
 
 func (s *Service) ensureChannelUserForBot(ctx context.Context, channelName string, identity channelBotIdentity) (string, time.Time, error) {
@@ -224,6 +230,7 @@ func (s *Service) ensureChannelUserForBot(ctx context.Context, channelName strin
 			Description: identity.Description,
 			Handle:      handle,
 			Role:        identity.Role,
+			Avatar:      identity.Avatar,
 		})
 		if err != nil {
 			return "", time.Time{}, fmt.Errorf("failed to ensure im user: %w", err)
