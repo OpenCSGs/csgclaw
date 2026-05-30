@@ -11,6 +11,7 @@ import { useUpgradeController } from "./useUpgradeController";
 import { useAgentController } from "./useAgentController";
 import { useConversationController } from "./useConversationController";
 import { useProfilePreviewController } from "./useProfilePreviewController";
+import { useTaskController } from "./useTaskController";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { IMData, IMUser } from "@/models/conversations";
 
@@ -110,13 +111,14 @@ export function useWorkspaceController() {
   const activePane = useMemo(() => paneFromLocation(location.pathname), [location.pathname]);
   const rooms = useMemo(() => displayData?.rooms ?? [], [displayData]);
   const loadingError = bootstrapQuery.isError ? t("loadingFailed") : "";
-  const { navigatePane, selectConversation, selectAgent, selectComputer, selectHub } = useWorkspaceNavigation({
-    location,
-    navigate,
-    dataReady: Boolean(displayData),
-    setActiveConversationId,
-    rooms,
-  });
+  const { navigatePane, selectConversation, selectAgent, selectComputer, selectHub, selectTasks } =
+    useWorkspaceNavigation({
+      location,
+      navigate,
+      dataReady: Boolean(displayData),
+      setActiveConversationId,
+      rooms,
+    });
   const shell = useWorkspaceShellController({
     activeConversationId,
     activePane,
@@ -128,6 +130,7 @@ export function useWorkspaceController() {
     selectComputer,
     selectConversation,
     selectHub,
+    selectTasks,
     setCollapsedWorkspaceGroups,
     setWorkspaceTab,
     t,
@@ -212,6 +215,12 @@ export function useWorkspaceController() {
     t,
     usersById: conversation.usersById,
   });
+  const task = useTaskController({
+    activePane,
+    t,
+    onSelectConversation: selectConversation,
+    onSelectTask: selectTasks,
+  });
 
   function selectHubTemplate(item: HubTemplate | null | undefined) {
     if (!item?.id) {
@@ -251,6 +260,7 @@ export function useWorkspaceController() {
       notificationAgentItems: agent.notificationAgentItems,
       workspaceTab: shell.workspaceTab,
       onWorkspaceTabChange: shell.selectWorkspaceTab,
+      taskCount: task.tasks.length,
       roomCount: conversation.roomCount,
       threadCount: conversation.threadCount,
       channels: conversation.channels,
@@ -304,6 +314,7 @@ export function useWorkspaceController() {
       agents: agent.agentItems,
       onPreviewUser: profilePreview.openParticipantPreview,
     },
+    taskViewProps: task.taskViewProps,
     profilePreviewProps: profilePreview.profilePreviewProps,
     createRoomModalProps: conversation.createRoomModalProps,
     inviteMembersModalProps: conversation.inviteMembersModalProps,

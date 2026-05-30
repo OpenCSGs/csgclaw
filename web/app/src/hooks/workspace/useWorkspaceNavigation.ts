@@ -57,6 +57,14 @@ export function useWorkspaceNavigation({
     [navigatePane, rooms],
   );
 
+  const selectTasks = useCallback(
+    (taskID = "", options: NavigatePaneOptions = {}) => {
+      const next: WorkspacePane = { type: WorkspacePaneTypes.task, id: taskID };
+      navigatePane(next, rooms, options);
+    },
+    [navigatePane, rooms],
+  );
+
   useEffect(() => {
     const next = paneFromLocation(location.pathname);
     if (next.type === WorkspacePaneTypes.conversation) {
@@ -84,5 +92,6 @@ export function useWorkspaceNavigation({
     selectAgent,
     selectComputer,
     selectHub,
+    selectTasks,
   };
 }

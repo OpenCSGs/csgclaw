@@ -48,6 +48,7 @@ export type WorkspaceSidebarProps = {
   onToggleWorkspaceGroup: (id: string) => void;
   onWorkspaceTabChange: (tab: WorkspaceTab) => void;
   onLocaleChange: (locale: LocaleCode) => void;
+  taskCount: number;
   roomCount: number;
   runningAgentCount: number;
   t: TranslateFn;

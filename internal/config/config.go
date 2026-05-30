@@ -365,6 +365,10 @@ func DefaultIMDir() (string, error) {
 	return DefaultDomainDir(IMDirName)
 }
 
+func DefaultTeamsDir() (string, error) {
+	return DefaultDomainDir("teams")
+}
+
 func DefaultHubRegistryPath() string {
 	dir, err := DefaultDomainDir(HubDirName)
 	if err != nil {

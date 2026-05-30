@@ -16,6 +16,7 @@ const rooms: IMConversation[] = [
 ];
 
 const t: TranslateFn = (key) => key;
+const selectTasks = vi.fn();
 
 function ShellHarness() {
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(WorkspaceTabs.messages);
@@ -31,6 +32,7 @@ function ShellHarness() {
     selectComputer: vi.fn(),
     selectConversation,
     selectHub: vi.fn(),
+    selectTasks,
     setCollapsedWorkspaceGroups: vi.fn(),
     setWorkspaceTab,
     t,
@@ -47,6 +49,9 @@ function ShellHarness() {
       <button type="button" onClick={() => shell.selectWorkspaceTab(WorkspaceTabs.messages)}>
         Messages
       </button>
+      <button type="button" onClick={() => shell.selectWorkspaceTab(WorkspaceTabs.tasks)}>
+        Tasks
+      </button>
     </>
   );
 }
@@ -54,6 +59,7 @@ function ShellHarness() {
 describe("useWorkspaceShellController", () => {
   afterEach(() => {
     window.localStorage.clear();
+    selectTasks.mockReset();
   });
 
   it("keeps the explicit Threads tab active on room routes", async () => {
@@ -69,6 +75,16 @@ describe("useWorkspaceShellController", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("workspace-tab")).toHaveTextContent(WorkspaceTabs.messages);
+    });
+  });
+
+  it("navigates to the tasks pane when requested", async () => {
+    render(<ShellHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+
+    await waitFor(() => {
+      expect(selectTasks).toHaveBeenCalledTimes(1);
     });
   });
 });

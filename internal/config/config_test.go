@@ -46,6 +46,17 @@ func TestDefaultIMStatePathUsesDomainSubdirectory(t *testing.T) {
 	}
 }
 
+func TestDefaultTeamsDirUsesDomainSubdirectory(t *testing.T) {
+	dir, err := DefaultTeamsDir()
+	if err != nil {
+		t.Fatalf("DefaultTeamsDir() error = %v", err)
+	}
+
+	if got, want := filepath.Base(dir), "teams"; got != want {
+		t.Fatalf("filepath.Base(DefaultTeamsDir()) = %q, want %q", got, want)
+	}
+}
+
 func TestLoadUsesDefaultBootstrapTemplatesWhenSectionIsEmpty(t *testing.T) {
 	restore := stubSandboxProviderExecutablePath(t, filepath.Join(t.TempDir(), "bin", "csgclaw"))
 	defer restore()

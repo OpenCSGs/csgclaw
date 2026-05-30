@@ -78,6 +78,30 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Get("/", h.listMessages)
 			r.Post("/", h.createMessage)
 		})
+		r.Route("/teams", func(r chi.Router) {
+			r.Get("/", h.listTeams)
+			r.Post("/", h.createTeam)
+			r.Post("/tasks/claim-next", h.claimNextTask)
+			r.Route("/{team_id}", func(r chi.Router) {
+				r.Get("/", h.getTeam)
+				r.Route("/tasks", func(r chi.Router) {
+					r.Get("/", h.listTeamTasks)
+					r.Post("/batch", h.createTeamTasksBatch)
+					r.Post("/claim-next", h.claimNextTask)
+					r.Route("/{task_id}", func(r chi.Router) {
+						r.Patch("/", h.updateTeamTask)
+						r.Post("/assign", h.assignTeamTask)
+					})
+				})
+				r.Route("/approvals", func(r chi.Router) {
+					r.Get("/", h.listTeamApprovals)
+					r.Post("/", h.createTeamApproval)
+					r.Post("/{approval_id}/resolve", h.resolveTeamApproval)
+				})
+				r.Get("/events", h.listTeamEvents)
+			})
+		})
+		r.Get("/tasks", h.listGlobalTasks)
 	})
 }
 

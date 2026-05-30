@@ -15,6 +15,7 @@ export function WorkspaceSidebar({
   notificationAgentItems,
   workspaceTab,
   onWorkspaceTabChange,
+  taskCount,
   roomCount,
   channels,
   directMessages,
@@ -56,6 +57,7 @@ export function WorkspaceSidebar({
             variant="rail"
             workspaceTab={workspaceTab}
             onWorkspaceTabChange={onWorkspaceTabChange}
+            taskCount={taskCount}
             roomCount={roomCount}
             agentCount={agentCount}
             onSelectHub={onSelectHub}
@@ -87,6 +89,7 @@ export function WorkspaceSidebar({
         <nav className="workspace-nav" aria-label="Workspace">
           <WorkspaceTabPanels
             workspaceTab={workspaceTab}
+            taskCount={taskCount}
             channels={channels}
             directMessages={directMessages}
             threadGroups={threadGroups}

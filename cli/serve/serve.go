@@ -43,6 +43,7 @@ import (
 	runtimecodex "csgclaw/internal/runtime/codex"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/server"
+	"csgclaw/internal/team"
 	"csgclaw/internal/upgrade"
 	appversion "csgclaw/internal/version"
 )
@@ -54,6 +55,7 @@ var (
 	NewIMService       = newIMService
 	NewFeishuService   = newFeishuService
 	NewLLMService      = newLLMService
+	NewTeamService     = newTeamService
 	CheckModelProvider = checkModelProvider
 	EnsureCLIProxy     = func(ctx context.Context) error {
 		return cliproxy.Default().EnsureStarted(ctx)
@@ -468,6 +470,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
+	teamSvc, teamAdapter, err := NewTeamService(imSvc)
+	if err != nil {
+		return err
+	}
 	return RunServer(server.Options{
 		ListenAddr:      cfg.Server.ListenAddr,
 		Service:         svc,
@@ -478,6 +484,8 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		BotBridge:       im.NewBotBridge(cfg.Server.AccessToken),
 		Feishu:          feishuSvc,
 		LLM:             llmSvc,
+		Team:            teamSvc,
+		TeamAdapter:     teamAdapter,
 		Upgrade:         upgradeManager,
 		ActivityDecider: channelActivityDecider(codexBridgeMgr),
 		ConfigPath:      configPath,
@@ -1024,6 +1032,20 @@ func newBotService() (*bot.Service, error) {
 		return nil, err
 	}
 	return bot.NewService(store)
+}
+
+func newTeamService(imSvc *im.Service) (*team.Service, team.TeamChannelAdapter, error) {
+	teamsDir, err := config.DefaultTeamsDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	store, err := team.NewStore(teamsDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	adapter := team.NewCSGClawAdapter(imSvc)
+	projector := team.NewProjector(adapter, nil)
+	return team.NewService(team.WithStore(store), team.WithProjector(projector)), adapter, nil
 }
 
 func buildFeishuComponents(configPath string) (feishu.Provider, *feishu.Service, error) {

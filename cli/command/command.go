@@ -229,6 +229,39 @@ func RenderMessages(output string, w io.Writer, messages []apitypes.Message) err
 	}
 }
 
+func RenderTeams(output string, w io.Writer, teams []apitypes.Team) error {
+	switch output {
+	case "", "table":
+		return RenderTeamsTable(w, teams)
+	case "json":
+		return WriteJSON(w, teams)
+	default:
+		return fmt.Errorf("unsupported output format %q", output)
+	}
+}
+
+func RenderTeamTasks(output string, w io.Writer, tasks []apitypes.TeamTask) error {
+	switch output {
+	case "", "table":
+		return RenderTeamTasksTable(w, tasks)
+	case "json":
+		return WriteJSON(w, tasks)
+	default:
+		return fmt.Errorf("unsupported output format %q", output)
+	}
+}
+
+func RenderTeamApprovals(output string, w io.Writer, approvals []apitypes.TeamApproval) error {
+	switch output {
+	case "", "table":
+		return RenderTeamApprovalsTable(w, approvals)
+	case "json":
+		return WriteJSON(w, approvals)
+	default:
+		return fmt.Errorf("unsupported output format %q", output)
+	}
+}
+
 func RenderAgentsTable(w io.Writer, agents []apitypes.Agent) error {
 	tw := NewTableWriter(w)
 	fmt.Fprintln(tw, "ID\tNAME\tROLE\tSTATUS\tRUNTIME\tPROFILE\tIMAGE")
@@ -358,6 +391,33 @@ func RenderMessagesTable(w io.Writer, messages []apitypes.Message) error {
 	fmt.Fprintln(tw, "ID\tSENDER\tKIND\tCONTENT")
 	for _, message := range messages {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", message.ID, message.SenderID, message.Kind, message.Content)
+	}
+	return tw.Flush()
+}
+
+func RenderTeamsTable(w io.Writer, teams []apitypes.Team) error {
+	tw := NewTableWriter(w)
+	fmt.Fprintln(tw, "ID\tROOM\tCHANNEL\tLEAD\tSTATUS\tTITLE")
+	for _, item := range teams {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", displayBotField(item.ID), displayBotField(item.RoomID), displayBotField(item.Channel), displayBotField(item.LeadBotID), displayBotField(item.Status), displayBotField(item.Title))
+	}
+	return tw.Flush()
+}
+
+func RenderTeamTasksTable(w io.Writer, tasks []apitypes.TeamTask) error {
+	tw := NewTableWriter(w)
+	fmt.Fprintln(tw, "ID\tTEAM\tSTATUS\tASSIGNED\tCLAIMED\tPRIORITY\tTITLE")
+	for _, item := range tasks {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", displayBotField(item.ID), displayBotField(item.TeamID), displayBotField(item.Status), displayBotField(item.AssignedTo), displayBotField(item.ClaimedBy), item.Priority, displayBotField(item.Title))
+	}
+	return tw.Flush()
+}
+
+func RenderTeamApprovalsTable(w io.Writer, approvals []apitypes.TeamApproval) error {
+	tw := NewTableWriter(w)
+	fmt.Fprintln(tw, "ID\tTEAM\tTASK\tSTATUS\tREQUESTED_BY\tAPPROVER\tSUMMARY")
+	for _, item := range approvals {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", displayBotField(item.ID), displayBotField(item.TeamID), displayBotField(item.TaskID), displayBotField(item.Status), displayBotField(item.RequestedBy), displayBotField(item.ApproverID), displayBotField(item.Summary))
 	}
 	return tw.Flush()
 }

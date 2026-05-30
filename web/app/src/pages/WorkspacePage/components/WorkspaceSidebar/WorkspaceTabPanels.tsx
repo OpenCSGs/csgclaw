@@ -27,6 +27,7 @@ const AgentSectionIds = {
 const SectionPanels = {
   messages: "messages",
   agents: "agents",
+  tasks: "tasks",
 } as const;
 
 const LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS = [
@@ -81,6 +82,7 @@ function reorderSection(order, sourceId, targetId) {
 
 export function WorkspaceTabPanels({
   workspaceTab,
+  taskCount = 0,
   channels,
   directMessages,
   threadGroups = [],
@@ -442,6 +444,19 @@ export function WorkspaceTabPanels({
                 </button>
               ))
             )}
+          </WorkspaceGroup>
+        </div>
+      ) : workspaceTab === WorkspaceTabs.tasks ? (
+        <div className="workspace-tab-panel" role="tabpanel" aria-label={t("tasksTab")}>
+          <WorkspaceGroup
+            id="global-tasks"
+            title={t("tasksTab")}
+            count={taskCount}
+            collapsed={false}
+            onToggle={() => {}}
+            {...sectionDragProps(SectionPanels.tasks, "global-tasks")}
+          >
+            <div className="workspace-empty">{t("tasksSidebarHint")}</div>
           </WorkspaceGroup>
         </div>
       ) : (

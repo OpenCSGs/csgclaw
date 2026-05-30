@@ -1936,6 +1936,7 @@ func TestUsageIncludesTopLevelCommandIndex(t *testing.T) {
 		"bot      Manage bots",
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
+		"team     Manage agent teams.",
 		"user     Manage IM users",
 		"completion Generate shell completion scripts.",
 	} {
@@ -1966,6 +1967,7 @@ func TestRootHelpIncludesAvailableCommands(t *testing.T) {
 		"bot      Manage bots",
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
+		"team     Manage agent teams.",
 		"user     Manage IM users",
 		"completion Generate shell completion scripts.",
 	} {
@@ -2020,7 +2022,7 @@ func TestExecuteHiddenCompleteUsesFullCommandSet(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"agent\n", "model\n", "upgrade\n", "completion\n"} {
+	for _, want := range []string{"agent\n", "model\n", "team\n", "upgrade\n", "completion\n"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stdout = %q, want substring %q", got, want)
 		}

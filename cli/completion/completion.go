@@ -90,6 +90,7 @@ func FullSpec() CommandSpec {
 			roomSpec(),
 			memberSpec(),
 			messageSpec(),
+			teamSpec(),
 			completionSpec(),
 		},
 	}
@@ -104,6 +105,7 @@ func LiteSpec() CommandSpec {
 			roomSpec(),
 			memberSpec(),
 			messageSpec(),
+			teamSpec(),
 			skillSpec(),
 			completionSpec(),
 		},
@@ -457,6 +459,113 @@ func messageSpec() CommandSpec {
 					FlagSpec{Name: "content", TakesValue: true},
 					FlagSpec{Name: "mention-id", TakesValue: true},
 				),
+			},
+		},
+	}
+}
+
+func teamSpec() CommandSpec {
+	return CommandSpec{
+		Name:    "team",
+		Summary: "Manage agent teams.",
+		Children: []CommandSpec{
+			{Name: "list", Summary: "List teams"},
+			{
+				Name:    "create",
+				Summary: "Create a team",
+				Flags: []FlagSpec{
+					{Name: "channel", TakesValue: true, Values: []string{"csgclaw"}},
+					{Name: "room-id", TakesValue: true},
+					{Name: "title", TakesValue: true},
+					{Name: "lead-bot-id", TakesValue: true},
+					{Name: "member-bot-ids", TakesValue: true},
+				},
+			},
+			{
+				Name:    "task",
+				Summary: "Manage team tasks",
+				Children: []CommandSpec{
+					{
+						Name:    "list",
+						Summary: "List tasks for a team",
+						Flags:   []FlagSpec{{Name: "team", TakesValue: true}},
+					},
+					{
+						Name:    "create-batch",
+						Summary: "Create tasks from a JSON file",
+						Flags: []FlagSpec{
+							{Name: "team", TakesValue: true},
+							{Name: "created-by", TakesValue: true},
+							{Name: "file", TakesValue: true},
+						},
+					},
+					{
+						Name:    "assign",
+						Summary: "Reassign a task to a worker",
+						Flags: []FlagSpec{
+							{Name: "team", TakesValue: true},
+							{Name: "task", TakesValue: true},
+							{Name: "bot-id", TakesValue: true},
+							{Name: "actor-id", TakesValue: true},
+						},
+					},
+					{
+						Name:    "claim-next",
+						Summary: "Claim the next available task",
+						Flags: []FlagSpec{
+							{Name: "team", TakesValue: true},
+							{Name: "bot-id", TakesValue: true},
+						},
+					},
+					{
+						Name:    "update",
+						Summary: "Update a task status",
+						Flags: []FlagSpec{
+							{Name: "team", TakesValue: true},
+							{Name: "task", TakesValue: true},
+							{Name: "actor-id", TakesValue: true},
+							{Name: "status", TakesValue: true, Values: []string{"blocked", "completed", "failed"}},
+							{Name: "result", TakesValue: true},
+							{Name: "error", TakesValue: true},
+							{Name: "reason", TakesValue: true},
+						},
+					},
+				},
+			},
+			{
+				Name:    "approval",
+				Summary: "Manage team approvals",
+				Children: []CommandSpec{
+					{
+						Name:    "list",
+						Summary: "List approvals",
+						Flags:   []FlagSpec{{Name: "team", TakesValue: true}},
+					},
+					{
+						Name:    "create",
+						Summary: "Create an approval request",
+						Flags: []FlagSpec{
+							{Name: "team", TakesValue: true},
+							{Name: "task-id", TakesValue: true},
+							{Name: "requested-by", TakesValue: true},
+							{Name: "approver-id", TakesValue: true},
+							{Name: "kind", TakesValue: true},
+							{Name: "summary", TakesValue: true},
+							{Name: "payload", TakesValue: true},
+						},
+					},
+					{
+						Name:    "resolve",
+						Summary: "Resolve an approval request",
+						Flags: []FlagSpec{
+							{Name: "team", TakesValue: true},
+							{Name: "approval", TakesValue: true},
+							{Name: "approver-id", TakesValue: true},
+							{Name: "status", TakesValue: true, Values: []string{"approved", "rejected", "cancelled"}},
+							{Name: "reason", TakesValue: true},
+						},
+					},
+				},
 			},
 		},
 	}

@@ -34,6 +34,7 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
 		"message  Manage IM messages.",
+		"team     Manage agent teams.",
 		"skill    Discover and install ClawHub skills.",
 		"completion Generate shell completion scripts.",
 	} {
@@ -78,7 +79,7 @@ func TestExecuteHiddenCompleteUsesLiteCommandSet(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"bot\n", "room\n", "member\n", "message\n", "completion\n"} {
+	for _, want := range []string{"bot\n", "room\n", "member\n", "message\n", "team\n", "completion\n"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stdout = %q, want substring %q", got, want)
 		}
@@ -131,6 +132,11 @@ func TestExecuteBotIdentityHelpUsesBotIDSemantics(t *testing.T) {
 			args: []string{"message", "create", "--help"},
 			want: []string{"sender bot id", "mentioned bot id"},
 		},
+		{
+			name: "team create",
+			args: []string{"team", "create", "--help"},
+			want: []string{"lead bot id", "worker bot ids"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -155,6 +161,54 @@ func TestExecuteBotIdentityHelpUsesBotIDSemantics(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestExecuteTeamCreateUsesHTTPClient(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodPost {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
+			}
+			if req.URL.String() != "http://example.test/api/v1/teams" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/teams")
+			}
+			return jsonResponse(http.StatusCreated, `{"id":"room-1","room_id":"room-1","channel":"csgclaw","title":"release","lead_bot_id":"bot-manager","status":"active","created_at":"2026-05-30T00:00:00Z","updated_at":"2026-05-30T00:00:00Z"}`), nil
+		}),
+	}
+
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "team", "create", "--lead-bot-id", "bot-manager", "--title", "release"}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "room-1") || !strings.Contains(stdout.String(), "bot-manager") {
+		t.Fatalf("stdout = %q, want rendered team row", stdout.String())
+	}
+}
+
+func TestExecuteTeamTaskListUsesHTTPClient(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodGet {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
+			}
+			if req.URL.String() != "http://example.test/api/v1/teams/team-1/tasks" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/teams/team-1/tasks")
+			}
+			return jsonResponse(http.StatusOK, `[{"id":"task-1","team_id":"team-1","room_id":"room-1","title":"Run tests","status":"blocked","created_by":"bot-manager","assigned_to":"bot-worker","claimed_by":"bot-worker","error":"need approval","created_at":"2026-05-30T00:00:00Z","updated_at":"2026-05-30T00:01:00Z"}]`), nil
+		}),
+	}
+
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "team", "task", "list", "--team", "team-1"}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "task-1") || !strings.Contains(stdout.String(), "blocked") {
+		t.Fatalf("stdout = %q, want rendered task row", stdout.String())
 	}
 }
 

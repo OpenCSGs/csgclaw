@@ -16,6 +16,7 @@ import (
 	"csgclaw/cli/message"
 	"csgclaw/cli/room"
 	skillcmd "csgclaw/cli/skill"
+	teamcmd "csgclaw/cli/team"
 	"csgclaw/internal/apiclient"
 	appversion "csgclaw/internal/version"
 )
@@ -70,6 +71,7 @@ func (a *App) registerDefaultCommands() {
 		room.NewCmd(),
 		member.NewCmd(),
 		message.NewCmd(),
+		teamcmd.NewCmd(),
 		skillcmd.NewCmd(),
 		completioncmd.NewCmd("csgclaw-cli", completioncmd.LiteSpec()),
 		completioncmd.NewCompleteCmd("csgclaw-cli", completioncmd.LiteSpec()),
@@ -167,7 +169,7 @@ func consumesValue(arg string) bool {
 
 func (a *App) usage() {
 	a.ensureDefaultCommands()
-	fmt.Fprintln(a.stderr, "csgclaw-cli is a lite CSGClaw CLI for bots, rooms, and members.")
+	fmt.Fprintln(a.stderr, "csgclaw-cli is a lite CSGClaw CLI for bots, rooms, messages, and teams.")
 	fmt.Fprintln(a.stderr)
 	fmt.Fprintln(a.stderr, "Usage:")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli [global-flags] <command> [args]")
@@ -183,6 +185,7 @@ func (a *App) usage() {
 	fmt.Fprintln(a.stderr, "  csgclaw-cli bot list --channel feishu")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli bot config --channel feishu --get --bot-id u-dev")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli message create --channel feishu --room-id oc_x --sender-id u-manager --content hello")
+	fmt.Fprintln(a.stderr, "  csgclaw-cli team create --lead-bot-id bot-manager --title release")
 	fmt.Fprintln(a.stderr)
 	fmt.Fprintln(a.stderr, "Global flags:")
 	fmt.Fprintf(a.stderr, "  --endpoint string   HTTP server endpoint (default %s)\n", envBaseURL)

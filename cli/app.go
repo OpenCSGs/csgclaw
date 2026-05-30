@@ -20,6 +20,7 @@ import (
 	"csgclaw/cli/room"
 	servecmd "csgclaw/cli/serve"
 	skillcmd "csgclaw/cli/skill"
+	teamcmd "csgclaw/cli/team"
 	upgradecmd "csgclaw/cli/upgrade"
 	usercmd "csgclaw/cli/user"
 	appversion "csgclaw/internal/version"
@@ -83,6 +84,7 @@ func (a *App) registerDefaultCommands() {
 		room.NewCmd(),
 		member.NewCmd(),
 		message.NewCmd(),
+		teamcmd.NewCmd(),
 		upgradecmd.NewCmd(),
 		completioncmd.NewCmd("csgclaw", completioncmd.FullSpec()),
 		completioncmd.NewCompleteCmd("csgclaw", completioncmd.FullSpec()),

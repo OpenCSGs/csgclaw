@@ -23,6 +23,7 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/team"
 	"csgclaw/internal/upgrade"
 	"csgclaw/internal/utils"
 	"csgclaw/internal/version"
@@ -39,6 +40,8 @@ type Handler struct {
 	feishu              *feishu.Service
 	llm                 *llm.Service
 	hub                 *hub.Service
+	teamSvc             *team.Service
+	teamAdapter         team.TeamChannelAdapter
 	configPath          string
 	serverAccessToken   string
 	serverNoAuth        bool
@@ -325,6 +328,18 @@ func (h *Handler) SetUpgradeManager(manager *upgrade.Manager) {
 
 func (h *Handler) SetHubService(svc *hub.Service) {
 	h.hub = svc
+}
+
+func (h *Handler) SetTeamService(svc *team.Service) {
+	if h != nil {
+		h.teamSvc = svc
+	}
+}
+
+func (h *Handler) SetTeamAdapter(adapter team.TeamChannelAdapter) {
+	if h != nil {
+		h.teamAdapter = adapter
+	}
 }
 
 func (h *Handler) SetUpgradeConfigPath(configPath string) {
@@ -1485,6 +1500,7 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publishMessageCreated(serviceReq.RoomID, message.SenderID, message)
 	h.publishThreadUpdated(serviceReq.RoomID, message)
+	h.handleTeamRoomCommand(r.Context(), serviceReq.RoomID, message.SenderID, message.Content)
 	writeJSON(w, http.StatusCreated, message)
 }
 
@@ -1805,6 +1821,23 @@ func (h *Handler) publishMessageCreated(conversationID, senderID string, message
 		Message: &messageCopy,
 		Sender:  &senderCopy,
 	})
+}
+
+func (h *Handler) handleTeamRoomCommand(ctx context.Context, roomID string, senderID string, content string) {
+	if h == nil || h.teamSvc == nil || h.teamAdapter == nil {
+		return
+	}
+	parser := team.NewCommandParser(h.teamSvc, h.teamAdapter, func(id string) bool {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return false
+		}
+		if strings.HasPrefix(strings.ToLower(id), "bot-") {
+			return false
+		}
+		return !h.isAgentSender(id)
+	})
+	parser.HandleMessage(ctx, roomID, senderID, content)
 }
 
 func (h *Handler) publishThreadUpdated(roomID string, message im.Message) {
