@@ -27,6 +27,9 @@
       }
     }
   },
+  "update": {
+    "checkOnStart": false
+  },
   "agents": {
     "defaults": {
       "model": {
@@ -88,7 +91,7 @@
   },
   "plugins": {
     "load": {
-      "paths": ["/home/node/openclaw-plugins/csgclaw-extension"]
+      "paths": ["/home/node/openclaw-plugins"]
     },
     "entries": {
       "csgclaw": {

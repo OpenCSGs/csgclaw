@@ -489,6 +489,12 @@ func TestFeishuSendMessageWithMentionPublishesMessageEvent(t *testing.T) {
 		if evt.RoomID != "oc_alpha" {
 			t.Fatalf("event room_id = %q, want oc_alpha", evt.RoomID)
 		}
+		if evt.SenderBotID != "u-manager" {
+			t.Fatalf("event sender_bot_id = %q, want u-manager", evt.SenderBotID)
+		}
+		if evt.MentionBotID != "u-dev" {
+			t.Fatalf("event mention_bot_id = %q, want u-dev", evt.MentionBotID)
+		}
 		if evt.Message == nil || evt.Message.ID != message.ID {
 			t.Fatalf("event message = %+v, want message %q", evt.Message, message.ID)
 		}

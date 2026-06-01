@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	feishuchannel "csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 )
 
@@ -17,7 +18,7 @@ func TestRenderAgentOpenClawConfigUsesOpenAICompatForMinimaxBaseURL(t *testing.T
 		BaseURL: "https://api.minimaxi.com/v1",
 		APIKey:  "sk-minimax-test",
 		ModelID: "MiniMax-M2.7",
-	}, testBaseURLResolver)
+	}, testBaseURLResolver, nil)
 	if err != nil {
 		t.Fatalf("renderAgentOpenClawConfig() error = %v", err)
 	}
@@ -63,7 +64,7 @@ func TestRenderAgentOpenClawConfigUsesOpenAICompatForInfiniMaaS(t *testing.T) {
 		BaseURL: "https://cloud.infini-ai.com/maas/v1",
 		APIKey:  "sk-infini-test",
 		ModelID: "minimax-m2.5",
-	}, testBaseURLResolver)
+	}, testBaseURLResolver, nil)
 	if err != nil {
 		t.Fatalf("renderAgentOpenClawConfig() error = %v", err)
 	}
@@ -110,7 +111,7 @@ func TestRenderAgentOpenClawConfigUsesBridgeWhenBaseURLEmpty(t *testing.T) {
 		AccessToken:      "shared-token",
 	}, config.ModelConfig{
 		ModelID: "MiniMax-M2.7",
-	}, testBaseURLResolver)
+	}, testBaseURLResolver, nil)
 	if err != nil {
 		t.Fatalf("renderAgentOpenClawConfig() error = %v", err)
 	}
@@ -131,6 +132,27 @@ func TestRenderAgentOpenClawConfigUsesBridgeWhenBaseURLEmpty(t *testing.T) {
 	}
 }
 
+func TestRenderAgentOpenClawConfigDisablesStartupUpdateCheck(t *testing.T) {
+	data, err := renderConfig("u-manager", config.ServerConfig{
+		ListenAddr:       "127.0.0.1:18080",
+		AdvertiseBaseURL: "http://127.0.0.1:18080",
+		AccessToken:      "shared-token",
+	}, config.ModelConfig{
+		ModelID: "MiniMax-M2.7",
+	}, testBaseURLResolver, nil)
+	if err != nil {
+		t.Fatalf("renderAgentOpenClawConfig() error = %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	update := cfg["update"].(map[string]any)
+	if got, want := update["checkOnStart"], false; got != want {
+		t.Fatalf("update.checkOnStart = %v, want %v", got, want)
+	}
+}
+
 func TestRenderAgentOpenClawConfigDefaultsCsgclawGroupsToMentionOnly(t *testing.T) {
 	data, err := renderConfig("u-manager", config.ServerConfig{
 		ListenAddr:       "127.0.0.1:18080",
@@ -138,7 +160,7 @@ func TestRenderAgentOpenClawConfigDefaultsCsgclawGroupsToMentionOnly(t *testing.
 		AccessToken:      "shared-token",
 	}, config.ModelConfig{
 		ModelID: "MiniMax-M2.7",
-	}, testBaseURLResolver)
+	}, testBaseURLResolver, nil)
 	if err != nil {
 		t.Fatalf("renderAgentOpenClawConfig() error = %v", err)
 	}
@@ -157,6 +179,61 @@ func TestRenderAgentOpenClawConfigDefaultsCsgclawGroupsToMentionOnly(t *testing.
 	if got, want := defaultGroup["requireMention"], true; got != want {
 		t.Fatalf("groups.*.requireMention = %v, want %v", got, want)
 	}
+	if _, ok := channels["feishu"]; ok {
+		t.Fatalf("feishu channel should not be rendered without bot credentials")
+	}
+}
+
+func TestRenderAgentOpenClawConfigAddsFeishuChannelWhenConfigured(t *testing.T) {
+	data, err := renderConfig("u-manager", config.ServerConfig{
+		ListenAddr:       "127.0.0.1:18080",
+		AdvertiseBaseURL: "http://127.0.0.1:18080",
+		AccessToken:      "shared-token",
+	}, config.ModelConfig{
+		ModelID: "MiniMax-M2.7",
+	}, testBaseURLResolver, staticFeishuProvider{
+		bots: map[string]feishuchannel.AppConfig{
+			"u-manager": {
+				AppID:     "cli_a_test",
+				AppSecret: "secret-test",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("renderAgentOpenClawConfig() error = %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	channels := cfg["channels"].(map[string]any)
+	feishuCfg := channels["feishu"].(map[string]any)
+	if got, want := feishuCfg["enabled"], true; got != want {
+		t.Fatalf("feishu.enabled = %v, want %v", got, want)
+	}
+	if got, want := feishuCfg["connectionMode"], "websocket"; got != want {
+		t.Fatalf("feishu.connectionMode = %v, want %v", got, want)
+	}
+	if got, want := feishuCfg["defaultAccount"], "u-manager"; got != want {
+		t.Fatalf("feishu.defaultAccount = %v, want %v", got, want)
+	}
+	if got, want := feishuCfg["requireMention"], true; got != want {
+		t.Fatalf("feishu.requireMention = %v, want %v", got, want)
+	}
+	accounts := feishuCfg["accounts"].(map[string]any)
+	account := accounts["u-manager"].(map[string]any)
+	if got, want := account["appId"], "cli_a_test"; got != want {
+		t.Fatalf("feishu account appId = %v, want %v", got, want)
+	}
+	if got, want := account["appSecret"], "secret-test"; got != want {
+		t.Fatalf("feishu account appSecret = %v, want %v", got, want)
+	}
+	plugins := cfg["plugins"].(map[string]any)
+	entries := plugins["entries"].(map[string]any)
+	feishuPlugin := entries["feishu"].(map[string]any)
+	if got, want := feishuPlugin["enabled"], true; got != want {
+		t.Fatalf("plugins.entries.feishu.enabled = %v, want %v", got, want)
+	}
 }
 
 func TestRenderAgentOpenClawConfigPassesThroughDockerHostAlias(t *testing.T) {
@@ -168,7 +245,7 @@ func TestRenderAgentOpenClawConfigPassesThroughDockerHostAlias(t *testing.T) {
 		BaseURL: "https://api.minimaxi.com/v1",
 		APIKey:  "sk-minimax-test",
 		ModelID: "MiniMax-M2.7",
-	}, testBaseURLResolver)
+	}, testBaseURLResolver, nil)
 	if err != nil {
 		t.Fatalf("renderAgentOpenClawConfig() error = %v", err)
 	}
@@ -183,4 +260,13 @@ func TestRenderAgentOpenClawConfigPassesThroughDockerHostAlias(t *testing.T) {
 
 func testBaseURLResolver(server config.ServerConfig) string {
 	return strings.TrimRight(server.AdvertiseBaseURL, "/")
+}
+
+type staticFeishuProvider struct {
+	bots map[string]feishuchannel.AppConfig
+}
+
+func (p staticFeishuProvider) BotConfig(botID string) (feishuchannel.AppConfig, bool) {
+	app, ok := p.bots[botID]
+	return app, ok
 }

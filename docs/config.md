@@ -137,7 +137,7 @@ CSGClaw defaults to PicoClaw for the bootstrap manager. To create a sandboxed Op
 csgclaw agent create --name alice --runtime openclaw_sandbox
 ```
 
-The recommended image shape is a slim OpenClaw base image with the CSGClaw channel plugin baked under `/home/node/openclaw-plugins/csgclaw-extension`. Runtime state still comes from `~/.csgclaw/agents/<agent>/.openclaw/openclaw.json`; do not mount an empty host directory over `/home/node/openclaw-plugins`, because that hides baked plugins.
+The recommended image shape is a slim OpenClaw base image with CSGClaw-managed plugins baked under `/home/node/openclaw-plugins` (for example, `csgclaw-extension` and external channel plugins). Runtime state still comes from `~/.csgclaw/agents/<agent>/.openclaw/openclaw.json`; do not mount an empty host directory over `/home/node/openclaw-plugins`, because that hides baked plugins.
 
 ## Sandbox Providers
 

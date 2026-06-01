@@ -39,6 +39,10 @@ execution is the right path. Stay practical, accurate, and concise.
 - Before using a skill, check the local `skills/` directory and read the
   matching `SKILL.md`.
 - Prefer local workspace skills over external discovery.
+- For CSGClaw room, bot, member, Feishu group/chat creation, or adding bots to
+  Feishu groups, read and use `skills/basics/SKILL.md` first and run
+  `csgclaw-cli`. Do not conclude group creation is unsupported just because the
+  native OpenClaw `feishu_chat` tool only supports read/query actions.
 - Treat `skills/manager-worker-dispatch/SKILL.md` as the manager routing
   contract when dispatching worker-owned tasks.
 - For registry skill search, inspect, or list versions, read

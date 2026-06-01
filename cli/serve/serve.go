@@ -526,7 +526,14 @@ func configureFeishuService(feishuSvc *feishu.Service, svc *agent.Service) {
 	if feishuSvc == nil {
 		return
 	}
-	runtimewiring.UpdatePicoClawFeishuProvider(svc, feishuSvc.ConfigProvider())
+	update := func(feishuProvider feishu.BotCredentialProvider) {
+		runtimewiring.UpdatePicoClawFeishuProvider(svc, feishuProvider)
+		runtimewiring.UpdateOpenClawFeishuProvider(svc, feishuProvider)
+	}
+	update(feishuSvc.ConfigProvider())
+	feishuSvc.SetConfigReloadHook(func(feishu.Snapshot) {
+		update(feishuSvc.ConfigProvider())
+	})
 }
 
 func preflightDefaultModelProvider(ctx context.Context, cfg config.Config) error {
@@ -803,7 +810,7 @@ func newAgentService(cfg config.Config, feishuProvider feishu.BotCredentialProvi
 	}
 	opts = append(opts,
 		runtimewiring.WithPicoClawSandboxRuntime(feishuProvider),
-		runtimewiring.WithOpenClawSandboxRuntime(),
+		runtimewiring.WithOpenClawSandboxRuntime(feishuProvider),
 		runtimewiring.WithCodexRuntime(),
 		agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),

@@ -43,7 +43,7 @@ func init() {
 		if err := runtimewiring.WithPicoClawSandboxRuntime(nil)(s); err != nil {
 			return err
 		}
-		return runtimewiring.WithOpenClawSandboxRuntime()(s)
+		return runtimewiring.WithOpenClawSandboxRuntime(nil)(s)
 	})
 	_ = agent.TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
 		return nil
@@ -3006,8 +3006,10 @@ func TestHandleFeishuEventsStreamsMessageBusEvents(t *testing.T) {
 		},
 	})
 	feishuSvc.MessageBus().Publish(feishu.MessageEvent{
-		Type:   feishu.MessageEventTypeMessageCreated,
-		RoomID: "oc_alpha",
+		Type:         feishu.MessageEventTypeMessageCreated,
+		RoomID:       "oc_alpha",
+		SenderBotID:  "u-worker",
+		MentionBotID: "u-manager",
 		Message: &im.Message{
 			ID:       "om_1",
 			SenderID: "ou_manager",
@@ -3026,11 +3028,44 @@ func TestHandleFeishuEventsStreamsMessageBusEvents(t *testing.T) {
 	if !strings.Contains(body, `"room_id":"oc_alpha"`) {
 		t.Fatalf("body = %q, want room_id", body)
 	}
+	if !strings.Contains(body, `"sender_bot_id":"u-worker"`) || !strings.Contains(body, `"mention_bot_id":"u-manager"`) {
+		t.Fatalf("body = %q, want bot id bridge metadata", body)
+	}
 	if strings.Contains(body, "om_ignored") || strings.Contains(body, "oc_ignored") {
 		t.Fatalf("body = %q, want only u-manager events", body)
 	}
 	if !strings.Contains(body, `"id":"om_1"`) {
 		t.Fatalf("body = %q, want message id", body)
+	}
+}
+
+func TestHandleFeishuEventsSendsHeartbeat(t *testing.T) {
+	oldInterval := sseHeartbeatInterval
+	sseHeartbeatInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		sseHeartbeatInterval = oldInterval
+	})
+
+	feishuSvc := feishu.NewService()
+	srv := &Handler{feishu: feishuSvc, serverAccessToken: "secret"}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/bots/u-manager/events", nil).WithContext(ctx)
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		srv.Routes().ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	<-done
+
+	if body := rec.Body.String(); !strings.Contains(body, ": ping\n\n") {
+		t.Fatalf("body = %q, want heartbeat ping", body)
 	}
 }
 

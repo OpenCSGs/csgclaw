@@ -162,7 +162,7 @@ func init() {
 		if err := runtimewiring.WithPicoClawSandboxRuntime(nil)(s); err != nil {
 			return err
 		}
-		return runtimewiring.WithOpenClawSandboxRuntime()(s)
+		return runtimewiring.WithOpenClawSandboxRuntime(nil)(s)
 	})
 }
 

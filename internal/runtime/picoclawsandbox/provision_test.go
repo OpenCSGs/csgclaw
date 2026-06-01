@@ -54,6 +54,11 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 	if got, want := string(data), "overlay user\n"; got != want {
 		t.Fatalf("USER.md = %q, want %q", got, want)
 	}
+	if info, err := os.Stat(filepath.Join(WorkspaceRoot(agentHome), "projects")); err != nil {
+		t.Fatalf("stat workspace projects mountpoint: %v", err)
+	} else if !info.IsDir() {
+		t.Fatalf("workspace projects mountpoint is not a directory")
+	}
 }
 
 func TestGatewayCreateSpecMountsPicoClawRuntimeRoot(t *testing.T) {

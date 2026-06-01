@@ -99,7 +99,8 @@ func (r *Runtime) SetFeishuProvider(provider feishu.BotCredentialProvider) {
 	r.deps.FeishuProvider = provider
 }
 
-func (r *Runtime) feishuProvider() feishu.BotCredentialProvider {
+// CurrentFeishuProvider returns the provider used when provisioning or creating gateway boxes.
+func (r *Runtime) CurrentFeishuProvider() feishu.BotCredentialProvider {
 	if r == nil {
 		return nil
 	}
@@ -339,7 +340,7 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 	profile = prepared.Profile
 	workspaceLayout := prepared.WorkspaceLayout
 	projectsRoot := prepared.ProjectsRoot
-	envVars := r.deps.BuildRuntimeEnv(managerBaseURL, prepared.Server.AccessToken, botID, llmBaseURL, modelID, r.feishuProvider())
+	envVars := r.deps.BuildRuntimeEnv(managerBaseURL, prepared.Server.AccessToken, botID, llmBaseURL, modelID, r.CurrentFeishuProvider())
 	r.deps.AddProfileEnv(envVars, profile.Env)
 	homeEnv := r.homeEnv()
 	projectsGuestPath := r.projectsGuestPath()

@@ -299,6 +299,16 @@ func (r *agentBoxliteCLIRunner) Run(_ context.Context, req boxlitecli.CommandReq
 		r.boxes[box.ID] = box
 		r.boxes[box.Name] = box
 		return boxlitecli.CommandResult{}, nil
+	case "stop":
+		idOrName := req.Args[len(req.Args)-1]
+		box, ok := r.boxes[idOrName]
+		if !ok {
+			return boxlitecli.CommandResult{ExitCode: 1, Stderr: []byte("Error: no such box: " + idOrName)}, fmt.Errorf("exit status 1")
+		}
+		box.Status = "stopped"
+		r.boxes[box.ID] = box
+		r.boxes[box.Name] = box
+		return boxlitecli.CommandResult{}, nil
 	case "exec":
 		if len(req.Args) > 6 && req.Args[5] == "tail" && req.Stdout != nil {
 			_, _ = req.Stdout.Write([]byte("gateway line\n"))

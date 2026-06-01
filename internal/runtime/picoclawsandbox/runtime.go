@@ -66,6 +66,9 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 	if err := sandboxgateway.EnsureEmbeddedWorkspace(gateway.WorkspaceTemplate, workspaceRoot); err != nil {
 		return err
 	}
+	if err := sandboxgateway.EnsureWorkspaceProjectsMountpoint(workspaceRoot); err != nil {
+		return err
+	}
 	prepared, err := sandboxgateway.FinalizePreparedGatewayProvision(req, WorkspaceLayout{
 		MountHostPath:      Root(agentHome),
 		MountGuestPath:     BoxDir,

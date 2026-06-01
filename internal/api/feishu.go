@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
@@ -55,10 +56,18 @@ func (h *Handler) handleFeishuEvents(w http.ResponseWriter, r *http.Request, bot
 	_, _ = io.WriteString(w, ": connected\n\n")
 	flusher.Flush()
 
+	ticker := time.NewTicker(sseHeartbeatInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-ticker.C:
+			if _, err := io.WriteString(w, ": ping\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
 		case evt, ok := <-events:
 			if !ok {
 				return

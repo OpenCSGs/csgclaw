@@ -1,6 +1,6 @@
 ---
 name: basics
-description: Handle the most common basic CSGClaw CLI administration tasks. Use when the Manager needs to create a room, list bots, create a bot, inspect room members, add a bot into a room, or notify a worker in IM.
+description: Handle the most common basic CSGClaw CLI administration tasks. Use when the Manager needs to create a room or Feishu group/chat, list bots, create a bot, inspect room members, add a bot into a room, or perform similar direct `csgclaw-cli` operations for routine room, bot, and membership management.
 ---
 
 # CSGClaw CLI Basics
@@ -13,6 +13,7 @@ Prefer this skill whenever the user is asking for basic room, bot, or member man
 This skill covers direct CLI actions such as:
 
 - create a room
+- create a Feishu group/chat through CSGClaw
 - list rooms
 - list all bots
 - create a bot
@@ -43,7 +44,7 @@ Create a room:
 csgclaw-cli room create --title test-room --creator-id u-manager --member-ids u-manager,u-dev --channel <current_channel>
 ```
 
-Use CSGClaw bot IDs in room, member, and message commands.
+Use CSGClaw bot IDs in room, member, and message commands. For Feishu room creation, keep the same bot ID parameters; CSGClaw converts configured bot IDs to Feishu app IDs and sends them as `bot_id_list`.
 
 List rooms and check whether a room is direct:
 
@@ -140,6 +141,7 @@ Do **not** post `@alex` plain text in the room instead of `--mention-id`.
 - When creating a bot, always pass a meaningful `--description` so later matching and reuse remain clear.
 - Verify room membership with `member list` after adding a member when room presence matters.
 - A direct room cannot accept an added bot as a new member. Create a new room with `--member-ids` containing the existing DM bots and the new bot.
+- For Feishu, prefer `room create --member-ids` for new groups after bot configs exist. Use `member create` only for an existing Feishu group; that path requires manager app scopes such as `im:chat.members:write_only` or `im:chat`.
 - Keep `csgclaw-cli` parameters bot-facing across channels: use bot IDs such as `u-manager`, `u-dev`, and `u-alex`.
 - Never notify a worker with plain-text `@name`; always use `message create --mention-id` and verify `<at user_id="...">` in `message list`.
 - Keep the response focused on the concrete CLI result instead of introducing external planning artifacts.

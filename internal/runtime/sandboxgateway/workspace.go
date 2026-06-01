@@ -47,6 +47,18 @@ func EnsureEmbeddedWorkspace(templateRoot, dstRoot string) error {
 	return copyWorkspaceFS(templates.FS(), templates.WorkspacePath(templateRoot), dstRoot, "embedded workspace", false)
 }
 
+func EnsureWorkspaceProjectsMountpoint(workspaceRoot string) error {
+	workspaceRoot = strings.TrimSpace(workspaceRoot)
+	if workspaceRoot == "" {
+		return fmt.Errorf("workspace root is required")
+	}
+	// Keep the nested projects bind mount target present after the runtime root mount hides image defaults.
+	if err := os.MkdirAll(filepath.Join(workspaceRoot, "projects"), 0o755); err != nil {
+		return fmt.Errorf("create workspace projects mountpoint: %w", err)
+	}
+	return nil
+}
+
 func copyWorkspaceFS(srcFS fs.FS, root, dstRoot, label string, overwrite bool) error {
 	dstRoot = strings.TrimSpace(dstRoot)
 	if dstRoot == "" {

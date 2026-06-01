@@ -1077,9 +1077,11 @@ func (s *Service) SendMessage(req im.CreateMessageRequest) (im.Message, error) {
 
 	if len(message.Mentions) > 0 {
 		s.messageBus.Publish(MessageEvent{
-			Type:    MessageEventTypeMessageCreated,
-			RoomID:  roomID,
-			Message: &message,
+			Type:         MessageEventTypeMessageCreated,
+			RoomID:       roomID,
+			SenderBotID:  senderID,
+			MentionBotID: mentionID,
+			Message:      &message,
 		})
 	}
 	return message, nil
