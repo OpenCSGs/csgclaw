@@ -1206,6 +1206,8 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("agent %q not found", id)
 	}
 
+	s.stopLifecycleAgent(id)
+
 	if runtimeImpl, err := s.runtimeForKind(strings.TrimSpace(existing.RuntimeKind)); err == nil && strings.TrimSpace(existing.BoxID) != "" {
 		if err := runtimeImpl.Delete(ctx, runtimeHandleForAgent(existing)); err != nil && !sandbox.IsNotFound(err) {
 			return fmt.Errorf("remove agent box: %w", err)
@@ -1220,15 +1222,8 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return homeErr
 		}
 		if rt != nil {
-			boxIDOrName := strings.TrimSpace(existing.BoxID)
-			if boxIDOrName == "" {
-				boxIDOrName = existing.Name
-			}
-			if _, resolvedKey, resolveErr := s.resolveAgentBox(ctx, rt, existing); resolveErr == nil && strings.TrimSpace(resolvedKey) != "" {
-				boxIDOrName = resolvedKey
-			}
-			if err := s.forceRemoveBox(ctx, rt, boxIDOrName); err != nil && !sandbox.IsNotFound(err) {
-				return fmt.Errorf("remove agent box: %w", err)
+			if err := s.stopAndForceRemoveBox(ctx, rt, existing); err != nil {
+				return err
 			}
 			_ = s.closeRuntime(runtimeHome, rt)
 		}
@@ -1264,7 +1259,30 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	s.mu.Unlock()
-	s.stopLifecycleAgent(id)
+	return nil
+}
+
+func (s *Service) stopAndForceRemoveBox(ctx context.Context, rt sandbox.Runtime, got Agent) error {
+	boxIDOrName := strings.TrimSpace(got.BoxID)
+	if boxIDOrName == "" {
+		boxIDOrName = strings.TrimSpace(got.Name)
+	}
+	box, resolvedKey, err := s.resolveAgentBox(ctx, rt, got)
+	if err == nil && box != nil {
+		if key := strings.TrimSpace(resolvedKey); key != "" {
+			boxIDOrName = key
+		}
+		if stopErr := s.stopBox(ctx, box, sandbox.StopOptions{}); stopErr != nil && !sandbox.IsNotFound(stopErr) {
+			_ = s.closeBox(box)
+			return fmt.Errorf("stop agent box: %w", stopErr)
+		}
+		_ = s.closeBox(box)
+	} else if err != nil && !sandbox.IsNotFound(err) {
+		return fmt.Errorf("resolve agent box: %w", err)
+	}
+	if err := s.forceRemoveBox(ctx, rt, boxIDOrName); err != nil && !sandbox.IsNotFound(err) {
+		return fmt.Errorf("remove agent box: %w", err)
+	}
 	return nil
 }
 
@@ -1294,7 +1312,11 @@ func removeAllWithRetry(path string) error {
 }
 
 func isRetryableRemoveAllError(err error) bool {
-	return errors.Is(err, syscall.ENOTEMPTY) || strings.Contains(strings.ToLower(err.Error()), "directory not empty")
+	if errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EACCES) {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "directory not empty") || strings.Contains(lower, "permission denied")
 }
 
 func (s *Service) List() []Agent {

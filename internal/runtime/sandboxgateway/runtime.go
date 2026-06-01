@@ -212,6 +212,10 @@ func (r *Runtime) Delete(ctx context.Context, h agentruntime.Handle) error {
 	boxIDOrName := ""
 	box, resolvedKey, err := r.deps.ResolveBox(ctx, rt, got)
 	if err == nil {
+		if stopErr := r.deps.StopBox(ctx, box, sandbox.StopOptions{}); stopErr != nil && !sandbox.IsNotFound(stopErr) {
+			_ = r.deps.CloseBox(box)
+			return stopErr
+		}
 		info, infoErr := r.infoForBox(ctx, h, box)
 		_ = r.deps.CloseBox(box)
 		if infoErr != nil {

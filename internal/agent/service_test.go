@@ -2569,16 +2569,29 @@ func TestDeletePrefersBoxIDOverName(t *testing.T) {
 	defer ResetTestHooks()
 
 	var removed string
+	var calls []string
+	testStopBoxHook = func(_ *Service, _ context.Context, _ sandbox.Instance, opts sandbox.StopOptions) error {
+		calls = append(calls, "stop")
+		return nil
+	}
 	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		calls = append(calls, "remove")
 		removed = idOrName
 		return nil
 	}
-	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		if idOrName == "box-123" {
+			return &fakeInstance{}, nil
+		}
 		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
 	}
 	defer func() {
+		testStopBoxHook = nil
 		testForceRemoveBoxHook = nil
 	}()
+
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
 
 	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
 	if err != nil {
@@ -2599,6 +2612,68 @@ func TestDeletePrefersBoxIDOverName(t *testing.T) {
 	}
 	if removed != "box-123" {
 		t.Fatalf("ForceRemove() target = %q, want %q", removed, "box-123")
+	}
+	if strings.Join(calls, ",") != "stop,remove" {
+		t.Fatalf("Delete() sandbox calls = %q, want stop then remove", strings.Join(calls, ","))
+	}
+}
+
+func TestDeleteStopsBoxBeforeRemoveOnLegacyPath(t *testing.T) {
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
+		nil,
+	)
+	defer ResetTestHooks()
+
+	var calls []string
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		if idOrName == "alice" {
+			return &fakeInstance{}, nil
+		}
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	testStopBoxHook = func(_ *Service, _ context.Context, _ sandbox.Instance, _ sandbox.StopOptions) error {
+		calls = append(calls, "stop")
+		return nil
+	}
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		calls = append(calls, "remove:"+idOrName)
+		return nil
+	}
+	defer func() {
+		testGetBoxHook = nil
+		testStopBoxHook = nil
+		testForceRemoveBoxHook = nil
+	}()
+
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:        "u-alice",
+		Name:      "alice",
+		Role:      RoleWorker,
+		Status:    "running",
+		CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+	}
+
+	agentHome, err := agentHomeDir("alice")
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(agentHome, config.RuntimeHomeDirName), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(agent runtime) error = %v", err)
+	}
+
+	if err := svc.Delete(context.Background(), "u-alice"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if strings.Join(calls, ",") != "stop,remove:alice" {
+		t.Fatalf("Delete() sandbox calls = %q, want stop then remove:alice", strings.Join(calls, ","))
 	}
 }
 
