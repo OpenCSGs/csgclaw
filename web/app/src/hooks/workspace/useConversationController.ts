@@ -188,8 +188,7 @@ export function useConversationController({
   const inviteCandidates = activeConversation
     ? data?.users.filter((user) => !activeConversation.members.includes(user.id)) || []
     : [];
-  const inviteActionLabel =
-    activeConversation && isDirectConversation(activeConversation) ? t("createRoomFromDM") : t("inviteMembers");
+  const inviteActionLabel = t("inviteMembers");
 
   const mentionCandidates = useMemo(() => {
     if (!data || !composerMentionState) {
@@ -589,13 +588,6 @@ export function useConversationController({
 
   function handleInviteAction() {
     if (!activeConversation) {
-      return;
-    }
-    if (isDirectConversation(activeConversation)) {
-      openCreateRoomModal({
-        preselectedMemberIDs: activeConversation.members,
-        lockedMemberIDs: activeConversation.members,
-      });
       return;
     }
     setSubmitError("");

@@ -1,4 +1,5 @@
-import { Button } from "@/components/ui";
+import { Button as CSGButton } from "@/components/ui/Button";
+import { useEffect, useRef, useState } from "react";
 import { toggleSelection } from "@/shared/lib/collections";
 import { ModalCloseButton } from "./ModalCloseButton";
 
@@ -40,9 +41,38 @@ export function InviteMembersModal({
   onClose,
   onInvite,
 }) {
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimerRef = useRef<number | null>(null);
   const candidateIDs = candidates.map((user) => user.id).filter(Boolean);
   const allCandidatesSelected = candidateIDs.length > 0 && candidateIDs.every((id) => inviteUserIDs.includes(id));
   const selectedMemberCount = candidateIDs.filter((id) => inviteUserIDs.includes(id)).length;
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (scrollTimerRef.current) {
+        window.clearTimeout(scrollTimerRef.current);
+      }
+    };
+  }, [onClose]);
+
+  function onScrollContent() {
+    setIsScrolling(true);
+    if (scrollTimerRef.current) {
+      window.clearTimeout(scrollTimerRef.current);
+    }
+    scrollTimerRef.current = window.setTimeout(() => {
+      setIsScrolling(false);
+      scrollTimerRef.current = null;
+    }, 700);
+  }
 
   return (
     <div className="modal-backdrop">
@@ -54,13 +84,13 @@ export function InviteMembersModal({
           </div>
           <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
-        <div className="invite-members-content">
+        <div className={`invite-members-content${isScrolling ? " is-scrolling" : ""}`} onScroll={onScrollContent}>
           <div className="field">
             <span>{t("inviteCandidates")}</span>
             <div className="selection-list create-room-member-list">
               {candidates.length > 0 ? (
                 <>
-                  <label className="selection-item create-room-member-row">
+                  <label className="selection-item create-room-member-row selection-all-item">
                     <input
                       type="checkbox"
                       checked={allCandidatesSelected}
@@ -105,12 +135,12 @@ export function InviteMembersModal({
           {submitError ? <div className="form-error">{submitError}</div> : null}
         </div>
         <div className="modal-actions">
-          <Button variant="secondaryGray" size="md" onClick={onClose}>
+          <CSGButton variant="secondaryGray" size="md" onClick={onClose}>
             {t("cancel")}
-          </Button>
-          <Button variant="primary" size="md" disabled={inviteUserIDs.length === 0} onClick={onInvite}>
+          </CSGButton>
+          <CSGButton variant="primary" size="md" disabled={inviteUserIDs.length === 0} onClick={onInvite}>
             {t("sendInvite")}
-          </Button>
+          </CSGButton>
         </div>
       </div>
     </div>

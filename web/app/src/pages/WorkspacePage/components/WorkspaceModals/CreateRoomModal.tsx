@@ -1,5 +1,6 @@
 import { isBlank } from "@/components/business/ProfileControls";
-import { Button } from "@/components/ui";
+import { Button as CSGButton } from "@/components/ui/Button";
+import { useEffect } from "react";
 import { toggleSelection } from "@/shared/lib/collections";
 import { ModalCloseButton } from "./ModalCloseButton";
 
@@ -48,6 +49,17 @@ export function CreateRoomModal({
   const selectableMemberIDs = candidateIDs.filter((id) => !lockedRoomMemberIDs.includes(id));
   const allMembersSelected = candidateIDs.length > 0 && candidateIDs.every((id) => roomMemberIDs.includes(id));
   const selectedMemberCount = candidateIDs.filter((id) => roomMemberIDs.includes(id)).length;
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   return (
     <div className="modal-backdrop">
@@ -133,12 +145,12 @@ export function CreateRoomModal({
           {submitError ? <div className="form-error create-room-error">{submitError}</div> : null}
         </div>
         <div className="modal-actions">
-          <Button variant="secondaryGray" size="md" onClick={onClose}>
+          <CSGButton variant="secondaryGray" size="md" onClick={onClose}>
             {t("cancel")}
-          </Button>
-          <Button variant="primary" size="md" disabled={isBlank(roomTitle)} onClick={onCreate}>
+          </CSGButton>
+          <CSGButton variant="primary" size="md" disabled={isBlank(roomTitle)} onClick={onCreate}>
             {t("create")}
-          </Button>
+          </CSGButton>
         </div>
       </div>
     </div>
