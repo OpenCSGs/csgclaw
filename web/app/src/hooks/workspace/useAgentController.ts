@@ -156,15 +156,19 @@ export function useAgentController({
   }, [selectedAgentForPage?.runtime_kind]);
   const workspaceAgentID = selectedAgentWorkspaceSupported ? selectedAgentForPage?.id || "" : "";
   const agentWorkspaceQuery = useWorkspaceAgentWorkspaceQuery(workspaceAgentID);
+  const agentWorkspaceEntries = agentWorkspaceQuery.data?.entries ?? null;
   const agentWorkspaceError = agentWorkspaceQuery.error
     ? errorMessage(agentWorkspaceQuery.error, t("agentWorkspaceLoadFailed"))
     : "";
-  const agentWorkspaceFileQuery = useWorkspaceAgentWorkspaceFileQuery(workspaceAgentID, selectedAgentWorkspacePath);
+  const selectedAgentWorkspaceFilePath = hasWorkspaceFilePath(agentWorkspaceEntries, selectedAgentWorkspacePath)
+    ? selectedAgentWorkspacePath
+    : "";
+  const agentWorkspaceFileQuery = useWorkspaceAgentWorkspaceFileQuery(workspaceAgentID, selectedAgentWorkspaceFilePath);
   const agentWorkspaceFileError = agentWorkspaceFileQuery.error
     ? errorMessage(agentWorkspaceFileQuery.error, t("agentWorkspaceFileLoadFailed"))
     : "";
   useEffect(() => {
-    const entries = agentWorkspaceQuery.data?.entries ?? [];
+    const entries = agentWorkspaceEntries ?? [];
     if (!selectedAgentWorkspaceSupported || !selectedAgentForPage?.id || !entries.length) {
       if (selectedAgentWorkspacePath) {
         setSelectedAgentWorkspacePath("");
@@ -178,7 +182,7 @@ export function useAgentController({
       }
     }
   }, [
-    agentWorkspaceQuery.data?.entries,
+    agentWorkspaceEntries,
     selectedAgentForPage?.id,
     selectedAgentWorkspacePath,
     selectedAgentWorkspaceSupported,
