@@ -130,6 +130,7 @@ export function useAgentController({
   const [messageActionBusy] = useState("");
   const [messageActionError, setMessageActionError] = useState<MessageActionError>({ key: "", message: "" });
   const [agentPageDraft, setAgentPageDraft] = useState<AgentDraft | null>(null);
+  const [agentPageOriginalDraft, setAgentPageOriginalDraft] = useState<AgentDraft | null>(null);
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPageError, setAgentPageError] = useState("");
@@ -256,6 +257,7 @@ export function useAgentController({
   useEffect(() => {
     if (!selectedAgentForPage) {
       setAgentPageDraft(null);
+      setAgentPageOriginalDraft(null);
       setAgentPageError("");
       setAgentPagePublishBusy(false);
       return;
@@ -546,11 +548,60 @@ export function useAgentController({
     try {
       const draft = await agentDraftFromItem(item);
       setAgentPageDraft(draft);
+      setAgentPageOriginalDraft(draft);
     } catch (err) {
       setAgentPageError(err.message || t("agentActionFailed"));
       const draft = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
       setAgentPageDraft(draft);
+      setAgentPageOriginalDraft(draft);
     }
+  }
+
+  function normalizeDraftForCompare(draft: AgentDraft | null | undefined): AgentDraft | null {
+    if (!draft) {
+      return null;
+    }
+    return ensureNotifierPullSubscriptionDraft(draft);
+  }
+
+  function profilePayloadForCompare(draft: AgentDraft | null | undefined): string {
+    const normalized = normalizeDraftForCompare(draft);
+    if (!normalized) {
+      return "";
+    }
+    return JSON.stringify(
+      draftToProfile(normalized, {
+        name: normalized.name,
+        description: normalized.description,
+      }),
+    );
+  }
+
+  function runtimeOptionsPayloadForCompare(draft: AgentDraft | null | undefined): string {
+    const normalized = normalizeDraftForCompare(draft);
+    if (!normalized) {
+      return "";
+    }
+    const runtimeOptions = draftNotifierRuntimeOptionsForSave(normalized, {
+      mergeNotifier: false,
+    });
+    return JSON.stringify(runtimeOptions || {});
+  }
+
+  function hasObjectValues(value: unknown): value is Record<string, unknown> {
+    return Boolean(value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0);
+  }
+
+  function debugAgentPageSavePayload(mode: "meta-only" | "full", payload: AgentUpdatePayload): void {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+    // Dev-only trace to verify whether avatar-only saves include profile/runtime payloads.
+    console.info("[agent-page-save]", {
+      agent_id: selectedAgentForPage?.id || "",
+      mode,
+      payload,
+    });
   }
 
   async function saveAgentPage(): Promise<void> {
@@ -573,7 +624,10 @@ export function useAgentController({
         }
         const saved = await patchNotificationBotRequest(selectedAgentForPage.id, payload);
         await refreshAgents();
-        setAgentPageDraft(agentToDraft(saved));
+        await refreshWorkspaceBootstrap();
+        const nextDraft = agentToDraft(saved);
+        setAgentPageDraft(nextDraft);
+        setAgentPageOriginalDraft(nextDraft);
         return;
       }
       const profile = draftToProfile(draft, {
@@ -583,21 +637,45 @@ export function useAgentController({
       const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, {
         mergeNotifier: false,
       });
+      const profileChanged = profilePayloadForCompare(agentPageDraft) !== profilePayloadForCompare(agentPageOriginalDraft);
+      const runtimeOptionsChanged =
+        runtimeOptionsPayloadForCompare(agentPageDraft) !== runtimeOptionsPayloadForCompare(agentPageOriginalDraft);
+      const hasProfileOrRuntimeChange = profileChanged || (runtimeOptionsChanged && hasObjectValues(runtimeOptions));
+
       const payload: AgentUpdatePayload = {
         name: agentPageDraft.name,
         avatar: agentPageDraft.avatar,
         description: agentPageDraft.description,
-        agent_profile: profile,
       };
-      if (runtimeOptions) {
+      if (profileChanged) {
+        payload.agent_profile = profile;
+      }
+      if (runtimeOptionsChanged && hasObjectValues(runtimeOptions)) {
         payload.runtime_options = runtimeOptions;
       }
+      if (!hasProfileOrRuntimeChange) {
+        debugAgentPageSavePayload("meta-only", payload);
+        const savedMetaOnly = await updateAgentRequest(selectedAgentForPage.id, payload);
+        await refreshAgents();
+        await refreshWorkspaceBootstrap();
+        if (savedMetaOnly.id === MANAGER_AGENT_ID) {
+          await refreshManagerProfile();
+        }
+        const nextDraft = await agentDraftFromItem(savedMetaOnly);
+        setAgentPageDraft(nextDraft);
+        setAgentPageOriginalDraft(nextDraft);
+        return;
+      }
+      debugAgentPageSavePayload("full", payload);
       const saved = await updateAgentRequest(selectedAgentForPage.id, payload);
       await refreshAgents();
+      await refreshWorkspaceBootstrap();
       if (saved.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }
-      setAgentPageDraft(await agentDraftFromItem(saved));
+      const nextDraft = await agentDraftFromItem(saved);
+      setAgentPageDraft(nextDraft);
+      setAgentPageOriginalDraft(nextDraft);
     } catch (err) {
       setAgentPageError(err.message || t("agentActionFailed"));
     } finally {
@@ -655,6 +733,7 @@ export function useAgentController({
           ? await createNotificationBotRequest(payload)
           : await patchNotificationBotRequest(editingAgent!.id, payload);
         await refreshAgents();
+        await refreshWorkspaceBootstrap();
         if (isCreate) {
           setAgentProgress((current) =>
             current
@@ -697,9 +776,7 @@ export function useAgentController({
             ...(payload.runtime_options ? { runtime_options: payload.runtime_options } : {}),
           });
       await refreshAgents();
-      if (isCreate) {
-        await refreshWorkspaceBootstrap();
-      }
+      await refreshWorkspaceBootstrap();
       if (saved.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }

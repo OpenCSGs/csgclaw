@@ -1171,6 +1171,7 @@ func TestRecreateTriggersLifecycleObserver(t *testing.T) {
 	svc.agents["u-alice"] = Agent{
 		ID:          "u-alice",
 		Name:        "alice",
+		Avatar:      "avatar/cartoon-7.png",
 		Role:        RoleWorker,
 		RuntimeID:   "rt-u-alice",
 		RuntimeKind: RuntimeKindCodex,
@@ -1193,6 +1194,9 @@ func TestRecreateTriggersLifecycleObserver(t *testing.T) {
 	}
 	if got.BoxID != "codex-session-alice-new" {
 		t.Fatalf("Recreate().BoxID = %q, want %q", got.BoxID, "codex-session-alice-new")
+	}
+	if got.Avatar != "avatar/cartoon-7.png" {
+		t.Fatalf("Recreate().Avatar = %q, want %q", got.Avatar, "avatar/cartoon-7.png")
 	}
 	if len(observer.ensureCalls) != 1 || observer.ensureCalls[0].ID != "u-alice" {
 		t.Fatalf("EnsureAgent() calls = %+v, want one call for u-alice", observer.ensureCalls)
@@ -1683,7 +1687,6 @@ func TestCreateReplaceManagerUsesRequestedImage(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed Create() error = %v", err)
 	}
-
 	replaced, err := svc.Create(context.Background(), CreateRequest{
 		Spec: CreateAgentSpec{
 			ID:    ManagerUserID,
@@ -2024,6 +2027,10 @@ func TestCreateReplaceManagerSwitchesRuntimeKindUsesRequestedImage(t *testing.T)
 	}); err != nil {
 		t.Fatalf("seed Create() error = %v", err)
 	}
+	avatar := "avatar/cartoon-6.png"
+	if _, err := svc.Update(context.Background(), ManagerUserID, UpdateRequest{Avatar: &avatar}); err != nil {
+		t.Fatalf("Update() avatar error = %v", err)
+	}
 
 	const requestedImage = "openclaw-manager:requested"
 	replaced, err := svc.Create(context.Background(), CreateRequest{
@@ -2043,6 +2050,9 @@ func TestCreateReplaceManagerSwitchesRuntimeKindUsesRequestedImage(t *testing.T)
 	}
 	if got, want := replaced.Image, requestedImage; got != want {
 		t.Fatalf("Create() image = %q, want %q", got, want)
+	}
+	if got, want := replaced.Avatar, avatar; got != want {
+		t.Fatalf("Create() avatar = %q, want %q", got, want)
 	}
 	if got, want := svc.managerImage, requestedImage; got != want {
 		t.Fatalf("managerImage = %q, want %q", got, want)

@@ -383,6 +383,7 @@ describe("agent model helpers", () => {
     expect(workerAgentItems.map((item) => item.id)).toEqual(["u-manager", "u-worker"]);
     expect(notificationAgentItems.map((item) => item.id)).toEqual(["u-notify"]);
     expect(isNotificationBotAgent({ type: "notification" })).toBe(true);
+    expect(isNotificationBotAgent({ bot_type: "notification" })).toBe(true);
   });
 
   it("uses bootstrap advertise_base_url for notifier webhook origin", () => {

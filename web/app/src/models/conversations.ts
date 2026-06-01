@@ -373,7 +373,7 @@ export function applyIMEvent<T extends IMData | null | undefined>(
     return current;
   }
 
-  if (event.type === "user.created" && event.user) {
+  if ((event.type === "user.created" || event.type === "user.updated") && event.user) {
     return upsertUserInData(current, event.user);
   }
   if (event.type === "user.deleted" && event.user) {
@@ -401,7 +401,7 @@ export function isAgentRosterEvent(event: IMServerEvent | null | undefined): boo
   if (!event?.type) {
     return false;
   }
-  if (event.type === "user.created" || event.type === "user.deleted") {
+  if (event.type === "user.created" || event.type === "user.updated" || event.type === "user.deleted") {
     return true;
   }
   if (event.type === "conversation.created" || event.type === "room.created") {

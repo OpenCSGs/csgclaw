@@ -432,6 +432,19 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 	if s == nil {
 		return Agent{}, fmt.Errorf("agent service is required")
 	}
+	managerAvatar := ""
+	s.mu.RLock()
+	if existing, ok := s.agents[ManagerUserID]; ok {
+		managerAvatar = strings.TrimSpace(existing.Avatar)
+	} else {
+		for _, existing := range s.agents {
+			if isManagerAgent(existing) {
+				managerAvatar = strings.TrimSpace(existing.Avatar)
+				break
+			}
+		}
+	}
+	s.mu.RUnlock()
 	runtimeKind := runtimeKindForGatewayRuntime(runtimeOverride)
 	if strings.TrimSpace(runtimeOverride) != "" && runtimeKind == "" {
 		return Agent{}, fmt.Errorf("gateway runtime %q is not supported", runtimeOverride)
@@ -523,6 +536,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 				RuntimeID:   runtimeIDForAgentID(ManagerUserID),
 				RuntimeKind: runtimeKind,
 				Image:       managerImage,
+				Avatar:      managerAvatar,
 				Status:      "profile_incomplete",
 				CreatedAt:   now,
 				Role:        RoleManager,
@@ -601,6 +615,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		RuntimeID:        runtimeIDForAgentID(ManagerUserID),
 		RuntimeKind:      s.gatewayRuntimeKind(),
 		Image:            managerImage,
+		Avatar:           managerAvatar,
 		BoxID:            info.ID,
 		Status:           string(info.State),
 		CreatedAt:        info.CreatedAt.UTC(),

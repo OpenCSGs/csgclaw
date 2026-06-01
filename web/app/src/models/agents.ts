@@ -216,7 +216,7 @@ export function normalizeBotType(value: unknown): BotType {
 }
 
 export function isNotificationBotAgent(item: AgentLike | null | undefined): boolean {
-  return normalizeBotType(item?.type) === BOT_TYPE_NOTIFICATION;
+  return normalizeBotType(item?.bot_type ?? item?.type) === BOT_TYPE_NOTIFICATION;
 }
 
 export function partitionWorkspaceAgentItems(

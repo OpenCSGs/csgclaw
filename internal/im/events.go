@@ -15,6 +15,7 @@ const (
 	EventTypeConversationCreated      = "conversation.created"
 	EventTypeConversationMembersAdded = "conversation.members_added"
 	EventTypeUserCreated              = "user.created"
+	EventTypeUserUpdated              = "user.updated"
 	EventTypeUserDeleted              = "user.deleted"
 	EventTypeUpgradeStatusChanged     = "upgrade.status_changed"
 )

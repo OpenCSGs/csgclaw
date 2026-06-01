@@ -516,6 +516,7 @@ func (h *Handler) handleBotByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		h.publishUpdatedBotUser(updated)
 		writeJSON(w, http.StatusOK, updated)
 	case http.MethodDelete:
 		if err := h.botSvc.Delete(r.Context(), channelName, id); err != nil {
@@ -603,6 +604,7 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), status)
 			return
 		}
+		h.publishUpdatedAgentUser(updated)
 		writeJSON(w, http.StatusOK, presentAgent(updated))
 	case http.MethodDelete:
 		if err := h.svc.Delete(r.Context(), id); err != nil {
@@ -616,6 +618,54 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) publishUpdatedAgentUser(updated agent.Agent) {
+	if h == nil || h.im == nil {
+		return
+	}
+	user, ok, err := h.im.UpdateAgentUser(im.UpdateAgentUserRequest{
+		ID:     updated.ID,
+		Name:   updated.Name,
+		Role:   updated.Role,
+		Avatar: updated.Avatar,
+	})
+	if err != nil || !ok {
+		return
+	}
+	if h.imBus != nil {
+		userCopy := user
+		h.imBus.Publish(im.Event{
+			Type: im.EventTypeUserUpdated,
+			User: &userCopy,
+		})
+	}
+}
+
+func (h *Handler) publishUpdatedBotUser(updated bot.Bot) {
+	if h == nil || h.im == nil {
+		return
+	}
+	id := strings.TrimSpace(updated.UserID)
+	if id == "" {
+		id = strings.TrimSpace(updated.ID)
+	}
+	user, ok, err := h.im.UpdateAgentUser(im.UpdateAgentUserRequest{
+		ID:     id,
+		Name:   updated.Name,
+		Role:   updated.Role,
+		Avatar: updated.Avatar,
+	})
+	if err != nil || !ok {
+		return
+	}
+	if h.imBus != nil {
+		userCopy := user
+		h.imBus.Publish(im.Event{
+			Type: im.EventTypeUserUpdated,
+			User: &userCopy,
+		})
 	}
 }
 

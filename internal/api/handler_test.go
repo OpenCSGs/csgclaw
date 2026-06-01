@@ -1152,9 +1152,22 @@ func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 			CreatedAt:       time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC),
 		},
 	})
+	imSvc := im.NewService()
+	if _, _, err := imSvc.EnsureAgentUser(im.EnsureAgentUserRequest{
+		ID:     "u-alice",
+		Name:   "alice",
+		Handle: "alice",
+		Role:   agent.RoleWorker,
+		Avatar: "avatar/3D-1.png",
+	}); err != nil {
+		t.Fatalf("EnsureAgentUser() error = %v", err)
+	}
+	bus := im.NewBus()
+	events, cancel := bus.Subscribe()
+	defer cancel()
 
-	srv := &Handler{svc: svc}
-	body := `{"description":"new role","agent_profile":{"name":"alice","provider":"csghub_lite","model_id":"new-model","env":{"A":"B"}}}`
+	srv := &Handler{svc: svc, im: imSvc, imBus: bus}
+	body := `{"description":"new role","avatar":"avatar/cartoon-4.png","agent_profile":{"name":"alice","provider":"csghub_lite","model_id":"new-model","env":{"A":"B"}}}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-alice", strings.NewReader(body))
 	rec := httptest.NewRecorder()
 
@@ -1170,9 +1183,23 @@ func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 	if got["description"] != "new role" {
 		t.Fatalf("agent = %#v, want updated description", got)
 	}
+	if got["avatar"] != "avatar/cartoon-4.png" {
+		t.Fatalf("agent avatar = %#v, want updated avatar", got["avatar"])
+	}
 	profile, ok := got["agent_profile"].(map[string]any)
 	if !ok || profile["env_restart_required"] != true || profile["model_id"] != "new-model" {
 		t.Fatalf("agent_profile = %#v, want env_restart_required true", got["agent_profile"])
+	}
+	user, ok := imSvc.User("u-alice")
+	if !ok {
+		t.Fatal("User(u-alice) ok = false, want true")
+	}
+	if user.Avatar != "avatar/cartoon-4.png" {
+		t.Fatalf("user avatar = %q, want avatar/cartoon-4.png", user.Avatar)
+	}
+	evt := mustReceiveIMEvent(t, events)
+	if evt.Type != im.EventTypeUserUpdated || evt.User == nil || evt.User.Avatar != "avatar/cartoon-4.png" {
+		t.Fatalf("event = %+v, want user.updated with updated avatar", evt)
 	}
 }
 

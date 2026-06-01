@@ -194,6 +194,18 @@
   min-height: 34px;
 }
 
+.agent-detail-pane .agent-avatar-option {
+  width: 54px;
+  min-width: 54px;
+  height: 54px;
+  min-height: 54px;
+}
+
+.agent-detail-pane .agent-avatar-option img {
+  width: 48px;
+  height: 48px;
+}
+
 :root[data-theme="dark"] .agent-detail-pane {
   background: linear-gradient(180deg, var(--panel) 0, var(--panel) 138px, transparent 138px), var(--bg);
 }

@@ -99,6 +99,13 @@ type EnsureAgentUserRequest struct {
 
 type EnsureWorkerUserRequest = EnsureAgentUserRequest
 
+type UpdateAgentUserRequest struct {
+	ID     string `json:"id"`
+	Name   string `json:"name,omitempty"`
+	Role   string `json:"role,omitempty"`
+	Avatar string `json:"avatar,omitempty"`
+}
+
 type AddAgentToConversationRequest struct {
 	AgentID   string `json:"agent_id"`
 	RoomID    string `json:"room_id,omitempty"`
@@ -1000,6 +1007,62 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 
 func (s *Service) EnsureWorkerUser(req EnsureWorkerUserRequest) (User, *Room, error) {
 	return s.EnsureAgentUser(req)
+}
+
+func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error) {
+	id := strings.TrimSpace(req.ID)
+	if id == "" {
+		return User{}, false, fmt.Errorf("id is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	user, ok := s.users[id]
+	if !ok {
+		name := strings.TrimSpace(req.Name)
+		if name == "" {
+			name = strings.TrimSpace(strings.TrimPrefix(id, "u-"))
+			if name == "" {
+				name = id
+			}
+		}
+		handle := strings.ToLower(strings.TrimSpace(name))
+		handle = strings.ReplaceAll(handle, " ", "-")
+		role := strings.ToLower(strings.TrimSpace(req.Role))
+		if role == "" {
+			role = "worker"
+		}
+		user = User{
+			ID:        id,
+			Name:      name,
+			Handle:    handle,
+			Role:      role,
+			Avatar:    strings.TrimSpace(req.Avatar),
+			IsOnline:  true,
+			AccentHex: accentHexForID(id),
+			CreatedAt: time.Now().UTC(),
+		}
+		ok = true
+	}
+	if name := strings.TrimSpace(req.Name); name != "" {
+		user.Name = name
+	}
+	if role := strings.TrimSpace(req.Role); role != "" {
+		user.Role = role
+	}
+	if avatar := strings.TrimSpace(req.Avatar); avatar != "" {
+		user.Avatar = avatar
+	}
+	user = normalizeUser(user)
+	if strings.TrimSpace(user.Avatar) == "" {
+		user.Avatar = initials(user.Name)
+	}
+	s.users[id] = user
+	if err := s.saveLocked(); err != nil {
+		return User{}, false, err
+	}
+	return user, true, nil
 }
 
 func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {

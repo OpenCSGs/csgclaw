@@ -28,7 +28,13 @@ export function defaultAgentAvatar(): string {
 
 export function normalizeAgentAvatarPath(value: unknown): string {
   const avatar = String(value ?? "").trim();
-  return AGENT_AVATAR_VALUE_SET.has(avatar) ? avatar : "";
+  if (AGENT_AVATAR_VALUE_SET.has(avatar)) {
+    return avatar;
+  }
+  if (/^(https?:\/\/|\/|data:)/i.test(avatar)) {
+    return avatar;
+  }
+  return "";
 }
 
 export function AgentAvatarImage({ avatar, alt = "" }: { avatar?: string | null; alt?: string }) {

@@ -154,6 +154,20 @@ describe("conversation model helpers", () => {
     );
   });
 
+  it("applies user update events to existing users", () => {
+    const current = {
+      rooms: [],
+      users: [{ avatar: "avatar/3D-1.png", id: "u-alice", name: "alice" }],
+    };
+
+    const next = applyIMEvent(current, {
+      type: "user.updated",
+      user: { avatar: "avatar/cartoon-4.png", id: "u-alice", name: "alice" },
+    });
+
+    expect(next.users).toEqual([{ avatar: "avatar/cartoon-4.png", id: "u-alice", name: "alice" }]);
+  });
+
   it("keeps thread replies out of the main timeline", () => {
     const current = {
       rooms: [room("general", "2026-05-15T00:00:00Z")],
@@ -235,6 +249,7 @@ describe("conversation model helpers", () => {
 
   it("classifies agent roster events and latest timestamps", () => {
     expect(isAgentRosterEvent({ type: "user.created" })).toBe(true);
+    expect(isAgentRosterEvent({ type: "user.updated" })).toBe(true);
     expect(isAgentRosterEvent({ room: { is_direct: true }, type: "room.created" })).toBe(true);
     expect(isAgentRosterEvent({ room: { is_direct: false }, type: "room.created" })).toBe(false);
     expect(latestAt({ messages: [] })).toBe(0);

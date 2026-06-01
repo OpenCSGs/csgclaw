@@ -10,7 +10,6 @@ import {
   isAgentRunning,
 } from "@/models/agents";
 import { localizeRole } from "@/shared/i18n";
-import { AgentIcon } from "@/components/ui/Icons";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button, IconButton } from "@/components/ui";
 
@@ -102,6 +101,8 @@ export function ProfilePreviewPopover({
       className="profile-preview-popover"
       style={profilePreviewStyle(anchorRect, cardHeight)}
       aria-label={t("profilePreview")}
+      role="dialog"
+      aria-modal="false"
     >
       <div className="preview-header">
         <div className="preview-title">{t("profilePreview")}</div>
@@ -117,7 +118,7 @@ export function ProfilePreviewPopover({
       <div className="preview-hero">
         {agent ? (
           <div className="entity-avatar preview-avatar">
-            <AgentIcon />
+            <AgentAvatarContent avatar={agent.avatar} fallback={displayName.slice(0, 2).toUpperCase()} alt="" />
           </div>
         ) : (
           <div
