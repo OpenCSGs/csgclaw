@@ -173,6 +173,36 @@
   background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
 }
 
+.agent-detail-pane .agent-workspace-section {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-detail-pane .agent-workspace-panels {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 420px;
+}
+
+.agent-detail-pane .agent-workspace-section .workspace-file-tree,
+.agent-detail-pane .agent-workspace-preview {
+  min-height: 340px;
+  max-height: 520px;
+  background: color-mix(in srgb, var(--panel-strong) 88%, var(--surface) 12%);
+}
+
+.agent-detail-pane .agent-workspace-preview {
+  --workspace-preview-bg: color-mix(in srgb, var(--panel-strong) 88%, var(--surface) 12%);
+  --workspace-preview-border: var(--line);
+  --workspace-preview-code-line-height: 1.6;
+  --workspace-preview-code-padding: 12px;
+  --workspace-preview-code-size: 12px;
+  --workspace-preview-header-padding: 10px 12px;
+  --workspace-preview-muted: var(--muted);
+  --workspace-preview-text: var(--text);
+}
+
 .agent-detail-pane .env-row {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) auto;
   align-items: start;
@@ -200,7 +230,8 @@
   }
 
   .agent-detail-pane .profile-runtime-grid,
-  .agent-detail-pane .profile-advanced-grid {
+  .agent-detail-pane .profile-advanced-grid,
+  .agent-detail-pane .agent-workspace-panels {
     grid-template-columns: 1fr;
   }
 }

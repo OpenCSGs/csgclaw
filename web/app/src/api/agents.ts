@@ -1,6 +1,7 @@
 import { del, get, patch, post, put, requestText } from "@/api/client";
 import { BOT_TYPE_NOTIFICATION, MANAGER_AGENT_ID } from "@/shared/constants/agents";
 import type { AgentLike, AgentProfileLike, AgentProfileModelsResponse, JSONRecord, RuntimeKind } from "@/models/agents";
+import type { WorkspaceFile, WorkspaceListing } from "@/models/workspace";
 
 export type AgentProfileModelRequest = {
   agent_id?: string;
@@ -69,6 +70,20 @@ export function fetchAgentLogsRequest(agentID: string, options: FetchAgentLogsOp
     params.set("lines", String(Math.floor(lines)));
   }
   return requestText(`api/v1/agents/${encodeURIComponent(agentID)}/logs?${params.toString()}`);
+}
+
+export function fetchAgentWorkspace(agentID: string, workspacePath = ""): Promise<WorkspaceListing> {
+  const params = new URLSearchParams();
+  if (workspacePath.trim()) {
+    params.set("path", workspacePath.trim());
+  }
+  const query = params.toString();
+  return get(`api/v1/agents/${encodeURIComponent(agentID)}/workspace${query ? `?${query}` : ""}`);
+}
+
+export function fetchAgentWorkspaceFile(agentID: string, workspacePath: string): Promise<WorkspaceFile> {
+  const params = new URLSearchParams({ path: workspacePath });
+  return get(`api/v1/agents/${encodeURIComponent(agentID)}/workspace/file?${params.toString()}`);
 }
 
 export function createManagerAgentRequest(options: CreateManagerAgentOptions = {}): Promise<AgentLike> {

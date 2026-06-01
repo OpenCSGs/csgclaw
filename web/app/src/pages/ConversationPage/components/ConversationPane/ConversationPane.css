@@ -1249,6 +1249,25 @@
   line-height: 18px;
 }
 
+.skill-picker-empty {
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.skill-option-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 8px;
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  font-weight: 700;
+}
+
 /* Preserve the message display design after the latest main refinements. */
 :root[data-theme="light"] .messages {
   background: var(--portal-white);

@@ -9,6 +9,7 @@ import {
   sendMessageRequest,
   startThreadRequest,
 } from "@/api/im";
+import { fetchAgentWorkspace } from "@/api/agents";
 import {
   agentMatchesUser,
   appendMessageToData,
@@ -112,6 +113,10 @@ export function useConversationController({
   const [threadError, setThreadError] = useState("");
   const [composerMentionState, setComposerMentionState] = useState<ComposerMentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [skillNames, setSkillNames] = useState<string[]>([]);
+  const [skillIndex, setSkillIndex] = useState(0);
+  const [skillLoading, setSkillLoading] = useState(false);
+  const [skillPickerDismissed, setSkillPickerDismissed] = useState(false);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
@@ -225,6 +230,17 @@ export function useConversationController({
     [draftsByConversationId, activeConversationId],
   );
   const draftText = useMemo(() => segmentsToPlainText(draftSegments), [draftSegments]);
+  const slashSkillQuery = useMemo(() => {
+    const trimmed = draftText.trimStart();
+    return logAgent && trimmed.startsWith("/") ? trimmed.slice(1).trim().toLowerCase() : "";
+  }, [draftText, logAgent]);
+  const slashSkillActive = Boolean(logAgent && draftText.trimStart().startsWith("/") && !skillPickerDismissed);
+  const skillCandidates = useMemo(() => {
+    if (!slashSkillActive) {
+      return [];
+    }
+    return skillNames.filter((name) => fuzzySkillMatch(name, slashSkillQuery));
+  }, [skillNames, slashSkillActive, slashSkillQuery]);
   const activeThreadDraftKey = activeThreadRootID ? threadKey(activeConversationId, activeThreadRootID) : "";
   const activeThreadDraft = activeThreadDraftKey ? (threadDraftsByKey[activeThreadDraftKey] ?? "") : "";
 
@@ -258,6 +274,50 @@ export function useConversationController({
   useEffect(() => {
     setMentionIndex(0);
   }, [activeConversationId, composerMentionState?.query, draftText]);
+
+  useEffect(() => {
+    setSkillPickerDismissed(false);
+  }, [draftText]);
+
+  useEffect(() => {
+    setSkillNames([]);
+    setSkillIndex(0);
+    setSkillPickerDismissed(false);
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    setSkillIndex(0);
+  }, [slashSkillQuery, skillNames]);
+
+  useEffect(() => {
+    if (!slashSkillActive || !logAgent?.id) {
+      setSkillNames([]);
+      setSkillLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSkillLoading(true);
+    fetchAgentWorkspace(logAgent.id, "skills")
+      .then((workspace) => {
+        if (cancelled) {
+          return;
+        }
+        setSkillNames(skillNamesFromWorkspace(workspace.entries || []));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSkillNames([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSkillLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [logAgent?.id, slashSkillActive]);
 
   useEffect(() => {
     if (!managerProfileIncomplete) {
@@ -671,6 +731,21 @@ export function useConversationController({
     syncComposerFromEditor();
   }
 
+  function applySkillCandidate(name: string | null | undefined) {
+    const skillName = String(name || "").trim();
+    const editor = editorRef.current;
+    if (!skillName || !editor || !activeConversationId) {
+      return;
+    }
+    const nextText = `使用 ${skillName} `;
+    editor.textContent = nextText;
+    placeCaretAtEnd(editor);
+    setDraftsByConversationId((current) =>
+      updateDrafts(current, activeConversationId, [{ type: "text", text: nextText }]),
+    );
+    setSkillIndex(0);
+  }
+
   function onComposerKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (
       isComposerKeyboardEventComposing(event) ||
@@ -678,6 +753,30 @@ export function useConversationController({
       (event.key === "Enter" && composerJustEndedCompositionRef.current)
     ) {
       return;
+    }
+
+    if (slashSkillActive) {
+      if (event.key === "ArrowDown" && skillCandidates.length > 0) {
+        event.preventDefault();
+        setSkillIndex((value) => (value + 1) % skillCandidates.length);
+        return;
+      }
+      if (event.key === "ArrowUp" && skillCandidates.length > 0) {
+        event.preventDefault();
+        setSkillIndex((value) => (value - 1 + skillCandidates.length) % skillCandidates.length);
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey && skillCandidates.length > 0) {
+        event.preventDefault();
+        applySkillCandidate(skillCandidates[skillIndex] ?? skillCandidates[0]);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSkillPickerDismissed(true);
+        setSkillIndex(0);
+        return;
+      }
     }
 
     if (mentionCandidates.length > 0) {
@@ -814,6 +913,11 @@ export function useConversationController({
       mentionCandidates,
       mentionIndex,
       onApplyMention: applyMention,
+      skillCandidates,
+      skillIndex,
+      skillLoading,
+      skillPickerOpen: slashSkillActive,
+      onApplySkillCandidate: applySkillCandidate,
       managerProfile,
       managerProfileIncomplete,
       authStatuses,
@@ -876,4 +980,43 @@ export function useConversationController({
           }
         : null,
   };
+}
+
+function skillNamesFromWorkspace(entries: readonly { name?: string; path?: string; type?: string }[]): string[] {
+  const skillDirs = new Set<string>();
+  const dirs = new Set<string>();
+  entries.forEach((entry) => {
+    const path = String(entry.path || "").trim();
+    if (!path.startsWith("skills/")) {
+      return;
+    }
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length === 2 && entry.type === "dir") {
+      dirs.add(path);
+    }
+    if (parts.length === 3 && parts[2] === "SKILL.md") {
+      skillDirs.add(parts.slice(0, 2).join("/"));
+    }
+  });
+  return [...dirs]
+    .filter((path) => skillDirs.has(path))
+    .map((path) => path.split("/").pop() || "")
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function fuzzySkillMatch(name: string, query: string): boolean {
+  if (!query) {
+    return true;
+  }
+  const text = name.toLowerCase();
+  let offset = 0;
+  for (const char of query.toLowerCase()) {
+    offset = text.indexOf(char, offset);
+    if (offset < 0) {
+      return false;
+    }
+    offset += 1;
+  }
+  return true;
 }

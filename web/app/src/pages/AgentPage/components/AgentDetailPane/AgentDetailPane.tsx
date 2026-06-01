@@ -8,6 +8,7 @@ import {
   profileBaseURLMissing,
   requiredFieldLabel,
 } from "@/components/business/ProfileControls";
+import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import {
   agentStatusLabel,
   agentModelID,
@@ -40,6 +41,15 @@ export function AgentDetailPane({
   authStatuses,
   authBusyProvider,
   notifierWebhookPublicOrigin,
+  workspaceEntries = [],
+  workspaceLoading = false,
+  workspaceError = "",
+  workspaceSupported = false,
+  selectedWorkspacePath = "",
+  workspaceFile = null,
+  workspaceFileLoading = false,
+  workspaceFileError = "",
+  onSelectWorkspaceFile = () => {},
   onDraftChange,
   onSave,
   onPublish,
@@ -343,6 +353,35 @@ export function AgentDetailPane({
               </div>
             </div>
           </section>
+
+          {workspaceSupported ? (
+            <section className="profile-section agent-workspace-section">
+              <div className="profile-section-title">{t("agentWorkspaceTitle")}</div>
+              {workspaceError ? <div className="form-error">{workspaceError}</div> : null}
+              <div className="agent-workspace-panels">
+                <WorkspaceFileTree
+                  entries={workspaceEntries}
+                  loading={workspaceLoading}
+                  loadingText={t("agentWorkspaceLoading")}
+                  emptyText={t("agentWorkspaceEmpty")}
+                  selectedPath={selectedWorkspacePath}
+                  onSelectFile={onSelectWorkspaceFile}
+                />
+                <WorkspaceFilePreview
+                  className="agent-workspace-preview"
+                  file={workspaceFile}
+                  loading={workspaceFileLoading}
+                  error={workspaceFileError}
+                  loadingText={t("agentWorkspaceFileLoading")}
+                  emptyTitle={t("agentWorkspacePreviewTitle")}
+                  emptyHint={t("agentWorkspacePreviewHint")}
+                  binaryText={t("agentWorkspaceBinary")}
+                  emptyFileText={t("agentWorkspaceEmptyFile")}
+                  truncatedText={t("workspacePreviewTruncated")}
+                />
+              </div>
+            </section>
+          ) : null}
         </div>
       ) : null}
     </section>

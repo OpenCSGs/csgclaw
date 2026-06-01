@@ -70,6 +70,11 @@ export function ConversationPane({
   mentionCandidates,
   mentionIndex,
   onApplyMention,
+  skillCandidates = [],
+  skillIndex = 0,
+  skillLoading = false,
+  skillPickerOpen = false,
+  onApplySkillCandidate = (_name) => {},
   managerProfile,
   managerProfileIncomplete,
   authStatuses,
@@ -372,6 +377,15 @@ export function ConversationPane({
       </section>
 
       <footer className="composer">
+        {skillPickerOpen ? (
+          <SkillPicker
+            candidates={skillCandidates}
+            activeIndex={skillIndex}
+            loading={skillLoading}
+            t={t}
+            onSelect={(name) => onApplySkillCandidate?.(name)}
+          />
+        ) : null}
         {mentionCandidates.length > 0 ? (
           <MentionPicker users={mentionCandidates} activeIndex={mentionIndex} t={t} onSelect={onApplyMention} />
         ) : null}
@@ -497,6 +511,40 @@ function MentionPicker({ users = [], activeIndex = 0, className = "", showRole =
               @{user.handle}
               {showRole ? ` · ${localizeRole(user.role, t)}` : ""}
             </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SkillPicker({ candidates = [], activeIndex = 0, loading = false, t, onSelect }) {
+  const activeOptionRef = useRef<HTMLButtonElement | null>(null);
+  const activeSkill = candidates[activeIndex] || "";
+
+  useLayoutEffect(() => {
+    activeOptionRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, activeSkill, candidates.length]);
+
+  return (
+    <div className="mention-picker skill-picker">
+      {loading ? <div className="skill-picker-empty">{t("agentWorkspaceLoading")}</div> : null}
+      {!loading && candidates.length === 0 ? <div className="skill-picker-empty">{t("skillPickerEmpty")}</div> : null}
+      {candidates.map((name, index) => (
+        <button
+          key={name}
+          ref={index === activeIndex ? activeOptionRef : null}
+          className={`mention-option skill-option ${index === activeIndex ? "active" : ""}`}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            onSelect(name);
+          }}
+        >
+          <span className="skill-option-mark" aria-hidden="true">
+            /
+          </span>
+          <div>
+            <div className="message-author">{name}</div>
           </div>
         </button>
       ))}

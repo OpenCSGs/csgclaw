@@ -1923,6 +1923,54 @@ func TestHandleHubTemplateWorkspaceFileByRegistryNameReturnsContent(t *testing.T
 	}
 }
 
+func TestHandleAgentWorkspaceFileReturnsContent(t *testing.T) {
+	svc := mustNewService(t)
+	created, err := svc.Create(context.Background(), agent.CreateRequest{
+		Spec: agent.CreateAgentSpec{
+			Name:        "alice",
+			Role:        agent.RoleWorker,
+			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			Image:       "worker-image:test",
+			AgentProfile: agent.AgentProfile{
+				ProfileComplete: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	workspaceRoot, err := agent.WorkspaceRoot(created.Name, created.RuntimeKind)
+	if err != nil {
+		t.Fatalf("WorkspaceRoot() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(workspaceRoot, "skills", "custom"), 0o755); err != nil {
+		t.Fatalf("create skill dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "skills", "custom", "SKILL.md"), []byte("# Custom\n"), 0o644); err != nil {
+		t.Fatalf("write skill file: %v", err)
+	}
+
+	srv := &Handler{svc: svc}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+created.ID+"/workspace/file?path=skills/custom/SKILL.md", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got apitypes.WorkspaceFile
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Path != "skills/custom/SKILL.md" {
+		t.Fatalf("path = %q, want %q", got.Path, "skills/custom/SKILL.md")
+	}
+	if strings.TrimSpace(got.Content) != "# Custom" {
+		t.Fatalf("content = %q, want %q", strings.TrimSpace(got.Content), "# Custom")
+	}
+}
+
 func TestHandleHubTemplateWithoutWorkspaceOmitsEntriesAndFilePreview(t *testing.T) {
 	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "review-bot", hub.Template{
 		ID:          "review-bot",

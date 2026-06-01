@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { fetchAgentProfileModels, fetchAgents } from "@/api/agents";
+import { fetchAgentProfileModels, fetchAgentWorkspace, fetchAgentWorkspaceFile, fetchAgents } from "@/api/agents";
 import type { AgentProfileModelRequest } from "@/api/agents";
 import { fetchBootstrap, fetchBootstrapConfig, fetchVersion } from "@/api/app";
 import type { FetchVersionOptions } from "@/api/app";
@@ -12,6 +12,7 @@ import type { AgentLike, AgentProfileLike, AgentProfileModelsResponse, RuntimeBo
 import { normalizeIMData } from "@/models/conversations";
 import type { IMData } from "@/models/conversations";
 import type { HubTemplate, HubWorkspaceFile } from "@/models/hubWorkspace";
+import type { WorkspaceFile, WorkspaceListing } from "@/models/workspace";
 import { normalizeUpgradeStatus } from "@/models/upgradeStatus";
 import type { UpgradeStatus } from "@/models/upgradeStatus";
 
@@ -27,6 +28,10 @@ export const workspaceQueryKeys = {
     [WORKSPACE_QUERY_SCOPE, "hub-template", templateID || ""] as const,
   hubWorkspaceFile: (templateID: string | null | undefined, workspacePath: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-workspace-file", templateID || "", workspacePath || ""] as const,
+  agentWorkspace: (agentID: string | null | undefined, workspacePath: string | null | undefined) =>
+    [WORKSPACE_QUERY_SCOPE, "agent-workspace", agentID || "", workspacePath || ""] as const,
+  agentWorkspaceFile: (agentID: string | null | undefined, workspacePath: string | null | undefined) =>
+    [WORKSPACE_QUERY_SCOPE, "agent-workspace-file", agentID || "", workspacePath || ""] as const,
   agentProfileModels: (requestKey: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "agent-profile-models", requestKey || ""] as const,
   cliProxyAuthStatus: (provider: string | null | undefined) =>
@@ -130,6 +135,28 @@ export function useWorkspaceHubWorkspaceFileQuery(
     queryKey: workspaceQueryKeys.hubWorkspaceFile(templateID, workspacePath),
     queryFn: () => fetchHubWorkspaceFile(templateID, workspacePath),
     enabled: Boolean(templateID && workspacePath),
+  });
+}
+
+export function useWorkspaceAgentWorkspaceQuery(
+  agentID: string | null | undefined,
+  workspacePath = "",
+): UseQueryResult<WorkspaceListing> {
+  return useQuery<WorkspaceListing>({
+    queryKey: workspaceQueryKeys.agentWorkspace(agentID, workspacePath),
+    queryFn: () => fetchAgentWorkspace(String(agentID || ""), workspacePath),
+    enabled: Boolean(agentID),
+  });
+}
+
+export function useWorkspaceAgentWorkspaceFileQuery(
+  agentID: string | null | undefined,
+  workspacePath: string | null | undefined,
+): UseQueryResult<WorkspaceFile> {
+  return useQuery<WorkspaceFile>({
+    queryKey: workspaceQueryKeys.agentWorkspaceFile(agentID, workspacePath),
+    queryFn: () => fetchAgentWorkspaceFile(String(agentID || ""), String(workspacePath || "")),
+    enabled: Boolean(agentID && workspacePath),
   });
 }
 
