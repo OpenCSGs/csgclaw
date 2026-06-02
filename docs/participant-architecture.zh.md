@@ -4,13 +4,27 @@
 
 - 核心变化是把 `Participant`、`Agent`、`ChannelUser` 和产品文案里的 `Bot` 拆开：Participant 是 room/message/member/mention 使用的协作身份；Agent 是 runtime 执行实体；ChannelUser 是 channel 内部 identity/profile；Bot 不再是后端 API 和存储模型。
 - UI 创建一个能出现在 CSGClaw 自带 IM 里的 Agent 时，应调用 `POST /api/v1/channels/csgclaw/participants`，使用 `type=agent` 和 `agent_binding.mode=create`，由服务端一次性创建 Agent、ChannelUser 和 Participant。
-- 跨 channel 复用不再依赖 ID 相等。同一个 Agent 可以有多个 participant，例如 `csgclaw:u-qa -> agent:u-qa` 和 `feishu:u-test -> agent:u-qa`。
+- 新建 agent-backed participant 的 Agent ID 生成关系保持旧约定：`agent_id = u-{participant_id}`。Participant ID 应来自显式 `id` 或稳定 key，不能从后续可修改的 `name` 派生。
+- 跨 channel 复用不再依赖 ID 相等。同一个 Agent 可以有多个 participant，例如 `csgclaw:qa -> agent:u-qa` 和 `feishu:test -> agent:u-qa`。
 - Mention 走 participant 身份层。Feishu 真人 mention 使用 `channel_user_ref` 加 `channel_app_ref` / `channel_user_kind` 显式解析，不要求真人拥有 bot app/config。
 - Notification 是 `type=notification` 的 participant，表示 webhook、系统事件或 pull relay 这类通知来源；默认不绑定 Agent，也不暴露 LLM bridge。
 - Message 新 API 使用 `mentions` / `mention_ids` 数组；room membership 从 `user_ids` 迁移到 `participant_ids` 或结构化 `ParticipantRef`。
 - 删除 participant 默认只删除 channel 身份绑定，不删除底层 Agent；只有显式 `delete_agent=if_unreferenced` 这类语义才允许清理未被引用的 Agent。
-- 这次是前后端、runtime bridge 和内置模板同步更新的 breaking API 调整：旧 bot 路由、公开 `/users` 路由不保留兼容别名。
+- 这次是前后端、runtime bridge、CLI 和内置模板同步更新的 breaking API 调整：API 兼容性不是迁移重点，旧 bot 路由、公开 `/users` 路由不保留兼容别名。
+- 旧 `bots.json` 等磁盘数据仍应可迁移；只要发现 runtime image/template contract 过旧，就在 UI 上提醒 recreate；当前 recreate 只承诺保留用户安装的 skills。
 - Matrix 对齐只覆盖本次涉及的 identity、membership、message、mention 和 thread 形状，不实现完整 Matrix homeserver 或 Client-Server API。
+
+## 迁移优先事项
+
+这次前后端一起发布，API breaking 不作为迁移风险；迁移重点是本地磁盘状态和旧 runtime image。
+
+- **`bots.json`**：旧 bot 记录仍要能读取，并迁移成 participant 记录。普通 bot 迁移为 `type=agent` participant，保留原 `agent_id` / `channel_user_ref`；notification bot 迁移为 `type=notification` participant。
+- **IM state**：`im/state.json` 和 `im/sessions/*.jsonl` 里的旧 `users`、room `members`、message `sender_id`、`mentions`、thread context 等身份引用，需要从旧 user/bot ID 映射到 participant ID。
+- **Feishu config**：`channels/feishu.toml` 里按旧 `bot_id` 保存的 app/config，要迁移到 participant/channel app 语义，避免飞书发送和 mention 解析丢配置。
+- **Team state**：`teams/*` 下的 `lead_bot_id`、`member_bot_ids`、`bot_id`、`actor_id`、`created_by`、`assigned_to`、`requested_by`、`approver_id` 等字段，要迁移为 participant ID。
+- **Agents state**：`agents/state.json` 的 Agent ID 不需要改写；新 participant 记录继续通过 `agent_id` 指向原 Agent。
+- **旧镜像提醒**：只要发现 runtime image/template contract 过旧，就在 UI 上提醒用户 recreate。
+- **recreate 保留 skills**：当前 recreate 只承诺保留用户安装的 skills；不在这次计划里扩展为保留 workspace/project 状态。
 
 ## 背景
 
@@ -18,7 +32,7 @@ CSGClaw 目前的 `bot`、`agent` 和 channel `user` 概念在最早的本地多
 
 最直接的问题是 mention 身份。Agent 需要在 CSGClaw 自带 IM、飞书以及未来其他 IM 里 @ 真人。当前 bot 模型默认消息发送者和 mention 对象都是 bot 类身份。在飞书里，这会导致 mention 通过已配置 bot app 身份解析，Agent 无法自然地 @ 一个真人 open_id。
 
-还有一个命名和归属问题。UI 里很多操作叫 Agent 管理，但部分客户端实际调用 channel bot API。与此同时，底层 runtime agent 本来就可以跨 channel 复用。例如，Feishu bot 可以建模为“飞书 channel 身份 + 一个原本从 CSGClaw channel 创建的底层 Agent”。现在这种复用主要依赖 `u-manager` 这类相同 ID 约定。如果 CSGClaw 里的 agent 是 `u-qa`，但飞书侧 bot 叫 `u-test`，这个关系就无法清晰表达。
+还有一个命名和归属问题。UI 里很多操作叫 Agent 管理，但部分客户端实际调用 channel bot API。与此同时，底层 runtime agent 本来就可以跨 channel 复用。例如，Feishu bot 可以建模为“飞书 channel 身份 + 一个原本从 CSGClaw channel 创建的底层 Agent”。现在这种复用主要依赖 `u-manager` 这类相同 ID 约定。如果 CSGClaw 里的 agent 是 `u-qa`，但飞书侧 participant 叫 `test`，这个关系就无法清晰表达。
 
 目标设计是拆开这些概念：
 
@@ -65,6 +79,8 @@ Agent
 规则：
 
 - Agent ID 全局唯一。
+- 新建 agent-backed participant 时，如果请求未显式指定 Agent ID，服务端按 `u-{participant_id}` 生成 Agent ID。这个关系保持旧 worker/bot ID 的习惯，例如 participant `qa` 对应 agent `u-qa`。
+- 如果调用方显式指定 Agent ID，仍必须满足全局唯一，并且不要求和 participant ID 相同；跨 channel 复用时通常显式传已有 `agent_id`。
 - Agent 生命周期操作继续放在 `/api/v1/agents`。
 - Agent profile、model、runtime、日志、start、stop、restart、recreate 仍由 agent service 管理。
 
@@ -104,10 +120,33 @@ Participant
 - 一个 Agent 可以跨 channel 拥有多个 participant：
 
 ```text
-csgclaw:u-qa   -> agent:u-qa
-feishu:u-test  -> agent:u-qa
+csgclaw:qa     -> agent:u-qa
+feishu:test    -> agent:u-qa
 matrix:qa-bot  -> agent:u-qa
 ```
+
+### Participant ID 生成规则
+
+Participant ID 是用户和 CLI 经常看到的 channel 身份 ID，应优先可读且稳定，而不是默认使用裸 UUID。UUID 可以作为内部随机源或兜底值，但直接暴露给用户会降低可读性，也不利于 room membership、mention 和 CLI 操作。
+
+Participant ID 不能从 `name` 生成。`name` 是显示名，后续可能支持修改；ID 一旦进入 room member、message、mention、agent binding 和 CLI，就必须稳定。业界更常见的做法是“稳定 slug + 短随机冲突后缀”，例如 Kubernetes object name 或很多 SaaS 的 workspace slug。只有完全不面向用户操作的内部对象，才更适合直接暴露 `usr_...`、`agt_...` 这类带类型前缀的 opaque ID。
+
+推荐生成算法：
+
+1. 如果请求显式传入 `id`，先 normalize 并校验唯一性。
+2. 如果没有显式 `id`，只能从稳定来源生成 slug，例如创建请求里的独立 `slug` / `handle` 字段、内置模板 key、角色 key、外部 channel 的不可变 handle，或迁移时的旧 bot/user ID。不要使用可修改的显示名 `name`。
+3. Slug 规则：小写；去掉首尾空白；把连续非 `[a-z0-9]` 字符替换成 `-`；折叠连续 `-`；去掉首尾 `-`；建议长度限制为 3 到 48 个字符。
+4. 如果 slug 为空，按类型生成可读前缀加短随机后缀，例如 `agent-8f3k2m`、`human-8f3k2m`、`notification-8f3k2m`。
+5. 如果 slug 已存在，在 slug 后追加短随机后缀，例如 `qa-8f3k2m`。短随机后缀可以来自 UUID/ULID/nanoid 的 base32/base36 截断值。
+6. 服务端返回最终 participant ID；同一个 `request_id` 或 `client_transaction_id` 重试时必须返回同一个 ID。
+
+Agent-backed participant 的默认 Agent ID 生成规则保持：
+
+```text
+agent_id = "u-" + participant_id
+```
+
+因此新建 CSGClaw IM Agent 时，participant `qa` 默认生成 agent `u-qa`，同时 CSGClaw channel user ref 也可以继续使用 `u-qa`，保持旧 runtime、workspace 和 mention 习惯。
 
 ### Channel User / Channel Identity
 
@@ -301,7 +340,7 @@ POST /api/v1/channels/{channel}/participants
 
 ```json
 {
-  "id": "u-qa",
+  "id": "qa",
   "type": "agent",
   "name": "qa",
   "channel_user": {
@@ -347,7 +386,7 @@ POST /api/v1/channels/{channel}/participants
 
 ```json
 {
-  "id": "u-test",
+  "id": "test",
   "type": "agent",
   "name": "QA",
   "channel_user": {
@@ -366,7 +405,7 @@ POST /api/v1/channels/{channel}/participants
 
 ```json
 {
-  "id": "human-alice",
+  "id": "alice",
   "type": "human",
   "name": "Alice",
   "channel_user": {
@@ -422,13 +461,13 @@ GET /api/v1/agents/{id}?include_participants=true
   "status": "running",
   "participants": [
     {
-      "id": "u-qa",
+      "id": "qa",
       "channel": "csgclaw",
       "type": "agent",
       "channel_user_ref": "u-qa"
     },
     {
-      "id": "u-test",
+      "id": "test",
       "channel": "feishu",
       "type": "agent",
       "channel_user_ref": "ou_xxx"
@@ -544,7 +583,7 @@ Channel 或 Room 页面
   "room_id": "oc_xxx",
   "mentions": [
     {
-      "id": "human-alice"
+      "id": "alice"
     }
   ],
   "content": "please take a look"
@@ -554,10 +593,10 @@ Channel 或 Room 页面
 Channel adapter 解析链路：
 
 ```text
-path id -> Participant(channel=feishu, id=u-test)
+path id -> Participant(channel=feishu, id=test)
         -> sender 所需的 channel_user_ref/channel_app_ref
 
-mentions[].id -> Participant(channel=feishu, id=human-alice)
+mentions[].id -> Participant(channel=feishu, id=alice)
               -> channel_user_ref=open_id
 ```
 
@@ -599,10 +638,40 @@ UI 不应该把 participant、agent、channel user 这些内部模型词作为�
 
 UI 可以继续使用 Bot、Person 这类产品友好的名称。后端保持 participant 和 agent 的分层清晰。
 
+## CLI 变化
+
+CLI 的规范资源名应跟随后端模型，使用 `participant` 作为协作身份入口，并提供更短的 `pt` 子命令别名。`participant` 用于文档、脚本和长期稳定引用；`pt` 用于交互式日常操作。`bot` 可以作为面向使用者的轻量别名保留给 `type=agent` 场景，但输出 JSON、API payload 和错误信息应使用 participant 语义，避免继续暴露 Bot 存储模型。
+
+推荐命令形状：
+
+```text
+csgclaw participant list --channel csgclaw --type agent
+csgclaw participant create --channel csgclaw --type agent --id qa --name QA --bind create
+csgclaw participant create --channel feishu --type agent --id test --bind reuse --agent-id u-qa --channel-user-ref ou_xxx --channel-user-kind open_id --channel-app-ref cli_xxx
+csgclaw participant create --channel feishu --type human --id alice --name Alice --channel-user-ref ou_alice --channel-user-kind open_id --channel-app-ref cli_xxx
+csgclaw participant delete --channel feishu test
+csgclaw participant delete --channel feishu test --delete-agent if-unreferenced
+csgclaw pt list --channel csgclaw --type agent
+csgclaw pt create --channel csgclaw --type agent --id qa --name QA --bind create
+```
+
+CLI 字段改名应和 API 一致：
+
+- `pt` 是 `participant` 的等价短别名，所有 `participant` 子命令、flag、输出和错误语义都必须一致。
+- `bot list/create/delete` 不再是规范命令；如果保留，应只是 `participant --type agent` / `pt --type agent` 的产品别名。
+- `agent create` 只负责创建 runtime-only Agent，不应作为“创建可聊天 CSGClaw IM Agent”的主入口。
+- `user list/create/delete` 迁移为 `participant list/create/delete --type human`。
+- room member 命令中的 `--user-id`、`--user-ids`、`--member-ids` 应改为 `--participant-id`、`--participant-ids` 或结构化 participant ref。
+- message 命令中的 `--sender-id` 应改为 path 或显式 `--participant-id`；`--mention-id` 应支持重复传入或改为 `--mention-participant-id`，并发送为 `mentions` / `mention_ids` 数组。
+- Feishu 配置命令中的 `--bot-id` 应改为 `--participant-id` 或 `--channel-app-ref`，取决于命令是在配置 participant 绑定，还是在管理 Feishu app/config。
+- team/task 命令里的 `--lead-bot-id`、`--member-bot-ids`、`--bot-id`、`--actor-id` 应改为 `--lead-participant-id`、`--member-participant-ids`、`--participant-id`、`--actor-participant-id`；只有明确操作 runtime 时才使用 `--agent-id`。
+- `csgclaw-cli` 这类 runtime 内置命令也要同步更新；内置技能和模板不能继续依赖旧 `bot_id`、`sender_id`、`mention_id` 和 `user_ids` 语义。
+
 ## 一步到位实施范围
 
 - 新增 participant request/response types。
 - 新增 participant storage，规范 key 为 `(channel, id)`。
+- 新增 Participant ID 生成器：从显式 `id` 或稳定 key 生成可读 slug，冲突时追加短随机后缀；不要从可修改的 `name` 派生 ID；新建 agent-backed participant 的默认 Agent ID 保持 `u-{participant_id}`。
 - 用 participant API 替换公开 `User` API。只有 CSGClaw 和外部 channel adapter 需要时，才保留内部 channel identity/profile store。
 - 新增 participant service，支持 list、get、create、patch、delete 和 agent binding。
 - 注册 `/api/v1/channels/{channel}/participants`。
@@ -614,7 +683,7 @@ UI 可以继续使用 Bot、Person 这类产品友好的名称。后端保持 pa
 - 在 `/api/v1/agents/{agent_id}/llm/*` 下注册 agent LLM 路由。
 - 实现 `create`、`reuse`、`none` 三种创建模式。
 - 支持 `include_agent` 和 `include_channel_user` 响应展开。
-- 增加测试：创建 Feishu participant `u-test` 并绑定到 agent `u-qa`。
+- 增加测试：创建 Feishu participant `test` 并绑定到 agent `u-qa`。
 - sender 和 mention ID 统一通过 participant service 解析。
 - 更新 CSGClaw IM mention 渲染，支持 human 和 agent participant。
 - 更新 Feishu 发送链路，让 mention 解析到 participant 的 `channel_user_ref`，不再要求每个 mention 对象都有配置好的 bot app。
@@ -624,8 +693,8 @@ UI 可以继续使用 Bot、Person 这类产品友好的名称。后端保持 pa
 - 将 room membership 请求字段从 `user_ids` 改为 `participant_ids` 或结构化 participant ref。
 - 为 `GET /api/v1/agents` 增加 `participants` 展开。
 - 包含飞书和未来 channel store 中的 participant。
-- 增加测试：agent `u-qa` 同时展示 `csgclaw:u-qa` 和 `feishu:u-test` 两个绑定。
-- 增加测试：删除 `feishu:u-test` participant 不删除仍被 `csgclaw:u-qa` 使用的 agent `u-qa`。
+- 增加测试：agent `u-qa` 同时展示 `csgclaw:qa` 和 `feishu:test` 两个绑定。
+- 增加测试：删除 `feishu:test` participant 不删除仍被 `csgclaw:qa` 使用的 agent `u-qa`。
 - 用基于意图的 channel action 替代当前 create-agent/create-bot 混淆。
 - CSGClaw UI 创建可聊天 Agent 时，使用
   `POST /api/v1/channels/csgclaw/participants`，不要直接创建 agent 后再单独创建 user。
@@ -633,6 +702,8 @@ UI 可以继续使用 Bot、Person 这类产品友好的名称。后端保持 pa
 - 增加“添加真人”流程。
 - 用 participant-scoped notification endpoint 替换当前 notification bot webhook/pull 路由。
 - Agent 页面聚焦 runtime 配置和生命周期。
+- 更新 CLI 和 `csgclaw-cli`：规范命令使用 participant，并注册 `pt` 短别名；旧 bot/user/member/message 参数同步改为 participant 语义。
+- 迁移旧 `bots.json`、IM state、Feishu config 和 Team state 里的身份引用；旧 runtime image/template contract 过期时在 UI 提醒 recreate，当前 recreate 只保留用户 skills。
 - 本次不实现聊天记录同步、sync storage 或 sync API；只保证身份模型兼容未来同步。
 - 在同一个变更中删除 channel bot CRUD、Feishu bot event、`/api/bots/*` 和公开 `/users` 路由。
 - 删除旧 handler 前，先把 runtime bridge 调用方替换成 participant/agent scoped 路由。
@@ -641,6 +712,6 @@ UI 可以继续使用 Bot、Person 这类产品友好的名称。后端保持 pa
 
 这个模型符合真实领域边界。真人和 bot 是 channel 身份，Agent 是可复用的 runtime 能力。Mention 属于 channel 身份层，不属于 runtime 层。
 
-它也去掉了 ID 相等假设。Feishu participant 可以叫 `u-test`，同时显式绑定到底层 agent `u-qa`。这个关系是持久化外键，不再是命名约定。
+它也去掉了 ID 相等假设。Feishu participant 可以叫 `test`，同时显式绑定到底层 agent `u-qa`。这个关系是持久化外键，不再是命名约定。
 
 最终结果是一个目标 API，而不是两个并存的 API 面。UI 创建 Agent 时不再调用 bot API；channel 流程显式创建 participant。UI 仍然可以用用户意图组织流程，而不是暴露内部模型术语。

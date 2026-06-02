@@ -11,9 +11,12 @@
   should call `POST /api/v1/channels/csgclaw/participants` with `type=agent` and
   `agent_binding.mode=create`. The server provisions the Agent, ChannelUser, and
   Participant in one operation.
+- For a newly created agent-backed participant, the generated Agent ID keeps the
+  old relationship: `agent_id = u-{participant_id}`. The participant ID should
+  come from an explicit `id` or stable key, not from a later-editable `name`.
 - Cross-channel reuse no longer depends on equal IDs. One Agent can have many
-  participants, such as `csgclaw:u-qa -> agent:u-qa` and
-  `feishu:u-test -> agent:u-qa`.
+  participants, such as `csgclaw:qa -> agent:u-qa` and
+  `feishu:test -> agent:u-qa`.
 - Mentions belong to the participant identity layer. Feishu human mentions
   resolve through `channel_user_ref` plus `channel_app_ref` /
   `channel_user_kind`; humans do not need their own bot app/config.
@@ -26,11 +29,41 @@
   not the underlying Agent. Agent cleanup requires explicit semantics such as
   `delete_agent=if_unreferenced`.
 - This is a coordinated breaking API change across frontend, backend, runtime
-  bridge, and embedded templates: old bot routes and public `/users` routes do
-  not keep compatibility aliases.
+  bridge, CLI, and embedded templates. API compatibility is not the migration
+  focus; old bot routes and public `/users` routes do not keep compatibility
+  aliases.
+- Legacy on-disk data such as `bots.json` should still be migratable. If an old
+  runtime image or template contract is outdated, show a recreate warning in the
+  UI; the current recreate flow only promises to preserve user-installed skills.
 - Matrix alignment is limited to identity, membership, message, mention, and
   thread shapes touched by this work. It does not implement a full Matrix
   homeserver or Client-Server API.
+
+## Migration Priorities
+
+Frontend and backend ship together, so API breaking changes are not the
+migration risk. Migration focuses on local on-disk state and old runtime images.
+
+- **`bots.json`**: legacy bot records must still load and migrate into
+  participant records. Normal bots become `type=agent` participants while
+  preserving the original `agent_id` / `channel_user_ref`; notification bots
+  become `type=notification` participants.
+- **IM state**: identity references in `im/state.json` and `im/sessions/*.jsonl`
+  must migrate from old user/bot IDs to participant IDs, including `users`, room
+  `members`, message `sender_id`, `mentions`, and thread context.
+- **Feishu config**: app/config entries in `channels/feishu.toml` currently keyed
+  by old `bot_id` must migrate to participant/channel-app semantics so Feishu
+  sending and mention resolution do not lose configuration.
+- **Team state**: `teams/*` fields such as `lead_bot_id`, `member_bot_ids`,
+  `bot_id`, `actor_id`, `created_by`, `assigned_to`, `requested_by`, and
+  `approver_id` must migrate to participant IDs.
+- **Agents state**: `agents/state.json` does not need Agent ID rewrites; new
+  participant records keep pointing at existing Agents through `agent_id`.
+- **Outdated image warning**: whenever the runtime image/template contract is
+  detected as outdated, show a recreate warning in the UI.
+- **Recreate preserves skills**: the current recreate flow only promises to
+  preserve user-installed skills; preserving workspace/project state is not
+  added in this plan.
 
 ## Background
 
@@ -50,8 +83,8 @@ time, the underlying runtime agent is already reusable across channels. For
 example, a Feishu bot can be modeled as a Feishu channel identity plus an
 underlying agent that was originally created from the CSGClaw channel. Today
 that reuse depends heavily on matching IDs such as `u-manager`. If the CSGClaw
-agent is `u-qa` and the Feishu-facing bot is `u-test`, the relationship cannot
-be represented cleanly.
+agent is `u-qa` and the Feishu-facing participant is `test`, the relationship
+cannot be represented cleanly.
 
 The target design separates these concerns:
 
@@ -113,6 +146,13 @@ Agent
 Rules:
 
 - Agent IDs are global.
+- When an agent-backed participant is created and the request does not specify
+  an Agent ID, the server generates it as `u-{participant_id}`. This preserves
+  the old worker/bot ID habit; for example participant `qa` maps to agent
+  `u-qa`.
+- If the caller specifies an Agent ID explicitly, it must still be globally
+  unique and does not need to match the participant ID. Cross-channel reuse
+  usually passes an existing `agent_id`.
 - Agent lifecycle operations remain under `/api/v1/agents`.
 - Agent profile, model, runtime, logs, start, stop, restart, and recreation stay
   owned by the agent service.
@@ -161,10 +201,53 @@ Rules:
 - A single agent can have many participants across channels:
 
 ```text
-csgclaw:u-qa   -> agent:u-qa
-feishu:u-test  -> agent:u-qa
+csgclaw:qa     -> agent:u-qa
+feishu:test    -> agent:u-qa
 matrix:qa-bot  -> agent:u-qa
 ```
+
+### Participant ID Generation
+
+Participant IDs are channel identities that users and the CLI see often, so they
+should prefer readable and stable values instead of defaulting to bare UUIDs.
+UUIDs can remain the internal random source or fallback, but exposing them
+directly makes room membership, mentions, and CLI operations harder to read.
+
+Participant IDs must not be generated from `name`. `name` is a display name and
+may become editable later; once an ID is referenced by room membership, messages,
+mentions, agent binding, and CLI commands, it must remain stable. The common
+industry pattern is "stable slug plus short random collision suffix", such as
+Kubernetes object names or many SaaS workspace slugs. Opaque type-prefixed IDs
+such as `usr_...` or `agt_...` fit internal-only objects better than
+user-operated participant IDs.
+
+Recommended algorithm:
+
+1. If the request explicitly passes `id`, normalize it and verify uniqueness.
+2. If no `id` is provided, derive a slug only from stable sources such as a
+   separate `slug` / `handle` field in the create request, an embedded template
+   key, a role key, an immutable external channel handle, or a legacy bot/user ID
+   during migration. Do not use editable display `name`.
+3. Slug rules: lowercase; trim surrounding whitespace; replace consecutive
+   non-`[a-z0-9]` characters with `-`; collapse repeated `-`; trim leading and
+   trailing `-`; keep length between 3 and 48 characters.
+4. If the slug is empty, use a readable type prefix plus a short random suffix,
+   such as `agent-8f3k2m`, `human-8f3k2m`, or `notification-8f3k2m`.
+5. If the slug already exists, append a short random suffix, such as
+   `qa-8f3k2m`. The suffix can be a truncated base32/base36 value derived from
+   UUID, ULID, or nanoid.
+6. The server returns the final participant ID. Repeated requests with the same
+   `request_id` or `client_transaction_id` must return the same ID.
+
+For agent-backed participants, the default Agent ID rule remains:
+
+```text
+agent_id = "u-" + participant_id
+```
+
+For example, creating a CSGClaw IM Agent as participant `qa` generates agent
+`u-qa` by default, while the built-in CSGClaw channel user ref can also remain
+`u-qa`. This preserves old runtime, workspace, and mention habits.
 
 ### Channel User / Channel Identity
 
@@ -413,7 +496,7 @@ Create an agent-backed participant by creating a new agent:
 
 ```json
 {
-  "id": "u-qa",
+  "id": "qa",
   "type": "agent",
   "name": "qa",
   "channel_user": {
@@ -468,7 +551,7 @@ Create a channel participant that reuses an existing agent:
 
 ```json
 {
-  "id": "u-test",
+  "id": "test",
   "type": "agent",
   "name": "QA",
   "channel_user": {
@@ -487,7 +570,7 @@ Create a human participant:
 
 ```json
 {
-  "id": "human-alice",
+  "id": "alice",
   "type": "human",
   "name": "Alice",
   "channel_user": {
@@ -560,13 +643,13 @@ Example response excerpt:
   "status": "running",
   "participants": [
     {
-      "id": "u-qa",
+      "id": "qa",
       "channel": "csgclaw",
       "type": "agent",
       "channel_user_ref": "u-qa"
     },
     {
-      "id": "u-test",
+      "id": "test",
       "channel": "feishu",
       "type": "agent",
       "channel_user_ref": "ou_xxx"
@@ -699,7 +782,7 @@ mention multiple participants.
   "room_id": "oc_xxx",
   "mentions": [
     {
-      "id": "human-alice"
+      "id": "alice"
     }
   ],
   "content": "please take a look"
@@ -709,10 +792,10 @@ mention multiple participants.
 The channel adapter resolves:
 
 ```text
-path id -> Participant(channel=feishu, id=u-test)
+path id -> Participant(channel=feishu, id=test)
         -> channel_user_ref/channel_app_ref for sender credentials
 
-mentions[].id -> Participant(channel=feishu, id=human-alice)
+mentions[].id -> Participant(channel=feishu, id=alice)
               -> channel_user_ref=open_id
 ```
 
@@ -766,10 +849,64 @@ Add Person
 The UI can still use product-friendly labels such as Bot and Person. The backend
 should keep the participant and agent split explicit.
 
+## CLI Changes
+
+The canonical CLI resource name should follow the backend model and use
+`participant` for collaboration identities, with `pt` as a shorter subcommand
+alias. Use `participant` in docs, scripts, and long-lived references; use `pt`
+for interactive daily commands. `bot` can remain as a lightweight user-facing
+alias for `type=agent` flows, but JSON output, API payloads, and errors should
+use participant semantics instead of exposing a Bot storage model.
+
+Recommended command shape:
+
+```text
+csgclaw participant list --channel csgclaw --type agent
+csgclaw participant create --channel csgclaw --type agent --id qa --name QA --bind create
+csgclaw participant create --channel feishu --type agent --id test --bind reuse --agent-id u-qa --channel-user-ref ou_xxx --channel-user-kind open_id --channel-app-ref cli_xxx
+csgclaw participant create --channel feishu --type human --id alice --name Alice --channel-user-ref ou_alice --channel-user-kind open_id --channel-app-ref cli_xxx
+csgclaw participant delete --channel feishu test
+csgclaw participant delete --channel feishu test --delete-agent if-unreferenced
+csgclaw pt list --channel csgclaw --type agent
+csgclaw pt create --channel csgclaw --type agent --id qa --name QA --bind create
+```
+
+CLI field renames should match the API:
+
+- `pt` is an exact short alias for `participant`; every subcommand, flag, output,
+  and error must behave the same.
+- `bot list/create/delete` is no longer canonical. If kept, it should only be a
+  product alias for `participant --type agent` / `pt --type agent`.
+- `agent create` only creates runtime-only Agents. It should not be the primary
+  entry point for creating a chat-capable CSGClaw IM Agent.
+- `user list/create/delete` moves to `participant list/create/delete --type human`.
+- Room member commands should rename `--user-id`, `--user-ids`, and
+  `--member-ids` to `--participant-id`, `--participant-ids`, or structured
+  participant refs.
+- Message commands should replace `--sender-id` with a path participant or an
+  explicit `--participant-id`; `--mention-id` should become repeatable or be
+  renamed to `--mention-participant-id` and sent as `mentions` / `mention_ids`
+  arrays.
+- Feishu config commands should replace `--bot-id` with either
+  `--participant-id` or `--channel-app-ref`, depending on whether the command
+  configures a participant binding or manages the Feishu app/config.
+- Team/task commands should replace `--lead-bot-id`, `--member-bot-ids`,
+  `--bot-id`, and `--actor-id` with `--lead-participant-id`,
+  `--member-participant-ids`, `--participant-id`, and
+  `--actor-participant-id`. Use `--agent-id` only for runtime-specific
+  operations.
+- Runtime-embedded commands such as `csgclaw-cli` must be updated too. Embedded
+  skills and templates must not keep depending on old `bot_id`, `sender_id`,
+  `mention_id`, or `user_ids` semantics.
+
 ## One-Step Implementation Scope
 
 - Add participant request/response types.
 - Add participant storage with canonical key `(channel, id)`.
+- Add a Participant ID generator: derive readable slugs from explicit `id` or
+  stable keys, add short random suffixes on collision, never derive IDs from
+  editable `name`, and keep the default Agent ID for newly created agent-backed
+  participants as `u-{participant_id}`.
 - Replace the public `User` API with participant APIs. Keep only an internal
   channel identity/profile store where the CSGClaw and external channel
   adapters need one.
@@ -784,7 +921,7 @@ should keep the participant and agent split explicit.
 - Register agent LLM routes under `/api/v1/agents/{agent_id}/llm/*`.
 - Implement create modes: `create`, `reuse`, and `none`.
 - Add response expansion for `include_agent` and `include_channel_user`.
-- Add tests for creating a Feishu participant `u-test` bound to agent `u-qa`.
+- Add tests for creating a Feishu participant `test` bound to agent `u-qa`.
 - Resolve sender and mention IDs through participant service.
 - Update CSGClaw IM mention rendering to accept human and agent participants.
 - Update Feishu send path so mentions resolve to participant `channel_user_ref`
@@ -798,10 +935,10 @@ should keep the participant and agent split explicit.
   structured participant refs.
 - Add `participants` expansion to `GET /api/v1/agents`.
 - Include participants from Feishu and future channel stores.
-- Add tests proving that agent `u-qa` appears with both `csgclaw:u-qa` and
-  `feishu:u-test` participant bindings.
-- Add tests proving that deleting the `feishu:u-test` participant does not delete
-  agent `u-qa` while `csgclaw:u-qa` still references it.
+- Add tests proving that agent `u-qa` appears with both `csgclaw:qa` and
+  `feishu:test` participant bindings.
+- Add tests proving that deleting the `feishu:test` participant does not delete
+  agent `u-qa` while `csgclaw:qa` still references it.
 - Replace the current create-agent/create-bot ambiguity with intent-based
   channel actions.
 - Make CSGClaw UI create chat-capable agents through
@@ -812,6 +949,12 @@ should keep the participant and agent split explicit.
 - Replace the current notification bot webhook/pull routes with a
   participant-scoped notification endpoint.
 - Keep existing Agent pages focused on runtime configuration and lifecycle.
+- Update CLI and `csgclaw-cli`: canonical commands use participant, register the
+  `pt` short alias, and move old bot/user/member/message parameters to
+  participant semantics.
+- Migrate identity references in legacy `bots.json`, IM state, Feishu config,
+  and Team state. Warn in the UI when the runtime image/template contract is
+  outdated; the current recreate flow only preserves user skills.
 - Do not implement chat history sync, sync storage, or sync APIs in this change;
   only keep the identity model compatible with future sync.
 - Delete channel bot CRUD, Feishu bot event, `/api/bots/*`, and public `/users`
@@ -826,7 +969,7 @@ identities. Agents are reusable runtime capabilities. Mentions belong to the
 channel identity layer, not the runtime layer.
 
 It also removes the ID-equality assumption. A Feishu participant can be named
-`u-test` and bind to underlying agent `u-qa` explicitly. The relationship is a
+`test` and bind to underlying agent `u-qa` explicitly. The relationship is a
 stored foreign key rather than a naming convention.
 
 The result is a single target API rather than two competing surfaces. UI code no
