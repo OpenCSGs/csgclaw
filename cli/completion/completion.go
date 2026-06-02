@@ -102,6 +102,7 @@ func LiteSpec() CommandSpec {
 		Flags: liteGlobalFlags(),
 		Children: []CommandSpec{
 			botSpec(),
+			hubSpec(),
 			roomSpec(),
 			memberSpec(),
 			messageSpec(),
@@ -212,7 +213,7 @@ func liteGlobalFlags() []FlagSpec {
 	return []FlagSpec{
 		{Name: "endpoint", TakesValue: true},
 		{Name: "token", TakesValue: true},
-		{Name: "output", TakesValue: true, Values: []string{"table", "json"}},
+		{Name: "output", Short: "o", TakesValue: true, Values: []string{"table", "json"}},
 		{Name: "version", Short: "V"},
 	}
 }

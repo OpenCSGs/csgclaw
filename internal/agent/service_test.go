@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
@@ -3706,6 +3707,84 @@ func TestCreateWorkerFromTemplateAppliesDefaultsAndOverlaysWorkspace(t *testing.
 	}
 	if _, err := os.Stat(filepath.Join(workspaceRoot, "skills", "custom", "SKILL.md")); err != nil {
 		t.Fatalf("template skill missing after overlay: %v", err)
+	}
+}
+
+func TestApplyTemplateEnvDefaults(t *testing.T) {
+	t.Parallel()
+
+	got := applyTemplateEnvDefaults(CreateAgentSpec{
+		AgentProfile: AgentProfile{
+			Env: map[string]string{"GITLAB_TOKEN": "user-token"},
+		},
+	}, hub.Template{
+		ImageEnv: []apitypes.ImageEnvContract{
+			{Name: "GITLAB_TOKEN", Required: true, Secret: true},
+			{Name: "GITLAB_URL", Default: "https://gitlab.example.com"},
+		},
+	})
+	if got.AgentProfile.Env["GITLAB_TOKEN"] != "user-token" {
+		t.Fatalf("GITLAB_TOKEN = %q, want user-token", got.AgentProfile.Env["GITLAB_TOKEN"])
+	}
+	if got.AgentProfile.Env["GITLAB_URL"] != "https://gitlab.example.com" {
+		t.Fatalf("GITLAB_URL = %q, want default url", got.AgentProfile.Env["GITLAB_URL"])
+	}
+}
+
+func TestCreateWorkerFromTemplateAppliesImageEnvToSandbox(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	var capturedEnv map[string]string
+	restoreHook := testCreateGatewayBoxHook
+	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _, _, _ string, profile AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+		capturedEnv = profile.Env
+		return nil, sandbox.Info{ID: "box-gitlab", State: sandbox.StateRunning}, nil
+	}
+	t.Cleanup(func() { testCreateGatewayBoxHook = restoreHook })
+
+	hubSvc := mustNewLocalTemplateHubService(t, "gitlab-assistant", hub.Template{
+		ID:          "gitlab-assistant",
+		Name:        "gitlab-assistant",
+		Description: "GitLab assistant",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "worker-image:1",
+		ImageEnv: []apitypes.ImageEnvContract{
+			{Name: "GITLAB_TOKEN", Required: true, Secret: true},
+			{Name: "GITLAB_URL", Default: "https://gitlab.example.com"},
+		},
+	})
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+		WithHubService(hubSvc),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.Create(context.Background(), CreateRequest{
+		Spec: CreateAgentSpec{
+			Name:         "gitlab",
+			FromTemplate: "local/gitlab-assistant",
+			AgentProfile: AgentProfile{
+				Env: map[string]string{"GITLAB_TOKEN": "secret-token"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if capturedEnv["GITLAB_TOKEN"] != "secret-token" {
+		t.Fatalf("sandbox GITLAB_TOKEN = %q, want secret-token", capturedEnv["GITLAB_TOKEN"])
+	}
+	if capturedEnv["GITLAB_URL"] != "https://gitlab.example.com" {
+		t.Fatalf("sandbox GITLAB_URL = %q, want default url", capturedEnv["GITLAB_URL"])
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"csgclaw/cli/bot"
 	"csgclaw/cli/command"
 	completioncmd "csgclaw/cli/completion"
+	hubcmd "csgclaw/cli/hub"
 	"csgclaw/cli/member"
 	"csgclaw/cli/message"
 	"csgclaw/cli/room"
@@ -68,6 +69,7 @@ func (a *App) AddCommand(commands ...command.Command) {
 func (a *App) registerDefaultCommands() {
 	a.AddCommand(
 		bot.NewCmd(),
+		hubcmd.NewCmd(),
 		room.NewCmd(),
 		member.NewCmd(),
 		message.NewCmd(),
@@ -118,6 +120,7 @@ func (a *App) parseGlobalOptions(args []string) (GlobalOptions, []string, error)
 	fs.StringVar(&opts.Endpoint, "endpoint", opts.Endpoint, "HTTP server endpoint")
 	fs.StringVar(&opts.Token, "token", opts.Token, "API authentication token")
 	fs.StringVar(&opts.Output, "output", "", "output format: table or json")
+	fs.StringVar(&opts.Output, "o", "", "shorthand for --output")
 	fs.BoolVar(&opts.Version, "version", false, "print version and exit")
 	fs.BoolVar(&opts.Version, "V", false, "print version and exit")
 
@@ -160,7 +163,7 @@ func (a *App) defaultOutput(opts GlobalOptions, rest []string) string {
 
 func consumesValue(arg string) bool {
 	switch arg {
-	case "--endpoint", "--token", "--output":
+	case "--endpoint", "--token", "--output", "-o":
 		return true
 	default:
 		return false
@@ -190,7 +193,7 @@ func (a *App) usage() {
 	fmt.Fprintln(a.stderr, "Global flags:")
 	fmt.Fprintf(a.stderr, "  --endpoint string   HTTP server endpoint (default %s)\n", envBaseURL)
 	fmt.Fprintf(a.stderr, "  --token string      API authentication token (default %s)\n", envAccessToken)
-	fmt.Fprintln(a.stderr, "  --output string     Output format: table or json")
+	fmt.Fprintln(a.stderr, "  --output, -o string Output format: table or json")
 	fmt.Fprintln(a.stderr, "  --version, -V       Print version and exit")
 }
 

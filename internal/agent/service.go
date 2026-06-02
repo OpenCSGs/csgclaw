@@ -789,6 +789,7 @@ func (s *Service) resolveTemplateCreateSpec(ctx context.Context, spec CreateAgen
 
 	cleanup := templateWorkspaceCleanup(item.Source.Kind, workspace)
 	spec = applyTemplateDefaults(spec, item)
+	spec = applyTemplateEnvDefaults(spec, item)
 	if strings.TrimSpace(workspace.Kind) == hub.WorkspaceKindDir {
 		spec.FromTemplate = strings.TrimSpace(workspace.Path)
 	}
@@ -855,6 +856,30 @@ func applyTemplateDefaults(spec CreateAgentSpec, item hub.Template) CreateAgentS
 	if strings.TrimSpace(spec.RuntimeKind) == "" {
 		spec.RuntimeKind = item.RuntimeKind
 	}
+	return spec
+}
+
+func applyTemplateEnvDefaults(spec CreateAgentSpec, item hub.Template) CreateAgentSpec {
+	if len(item.ImageEnv) == 0 {
+		return spec
+	}
+	env := spec.AgentProfile.Env
+	if env == nil {
+		env = make(map[string]string)
+	}
+	for _, contract := range item.ImageEnv {
+		name := strings.TrimSpace(contract.Name)
+		if name == "" {
+			continue
+		}
+		if _, exists := env[name]; exists {
+			continue
+		}
+		if defaultValue := strings.TrimSpace(contract.Default); defaultValue != "" {
+			env[name] = defaultValue
+		}
+	}
+	spec.AgentProfile.Env = env
 	return spec
 }
 

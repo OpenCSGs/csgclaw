@@ -100,6 +100,9 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	modelID := fs.String("model-id", "", "agent model identifier")
 	runtimeKind := fs.String("runtime", "", "agent runtime kind for worker bots (for example: picoclaw_sandbox, openclaw_sandbox, codex)")
+	fromTemplate := fs.String("from-template", "", "hub template to use as creation defaults and workspace overlay")
+	var envValues envFlag
+	fs.Var(&envValues, "env", "agent image environment variable as KEY=VALUE (repeatable)")
 	botType := fs.String("type", botdomain.BotTypeNormal, "bot type: normal or notification")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -114,21 +117,26 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		return fmt.Errorf("bot create requires --role")
 	}
 
-	req := apitypes.CreateBotRequest{
-		ID:          *id,
-		Name:        *name,
-		Description: *description,
-		Type:        botdomain.NormalizeBotType(*botType),
-		Role:        *role,
-		Channel:     *channelName,
-		RuntimeKind: *runtimeKind,
+	envMap, err := parseEnvAssignments(envValues)
+	if err != nil {
+		return err
 	}
-	if strings.TrimSpace(*modelID) != "" {
-		req.AgentProfile = &apitypes.CreateAgentProfile{ModelID: *modelID}
+
+	req := apitypes.CreateBotRequest{
+		ID:           *id,
+		Name:         *name,
+		Description:  *description,
+		Type:         botdomain.NormalizeBotType(*botType),
+		Role:         *role,
+		Channel:      *channelName,
+		RuntimeKind:  *runtimeKind,
+		FromTemplate: *fromTemplate,
+	}
+	if strings.TrimSpace(*modelID) != "" || len(envMap) > 0 {
+		req.AgentProfile = &apitypes.CreateAgentProfile{ModelID: *modelID, Env: envMap}
 	}
 	client := run.APIClient(globals)
 	var created apitypes.Bot
-	var err error
 	if req.Type == botdomain.BotTypeNotification {
 		created, err = client.CreateNotificationBot(ctx, req)
 	} else {
@@ -163,4 +171,38 @@ func (c cmd) runDelete(ctx context.Context, run *command.Context, args []string,
 		Channel: *channelName,
 		Message: fmt.Sprintf("deleted %s bot %s", *channelName, rest[0]),
 	})
+}
+
+type envFlag []string
+
+func (e *envFlag) String() string {
+	return strings.Join(*e, ",")
+}
+
+func (e *envFlag) Set(value string) error {
+	*e = append(*e, value)
+	return nil
+}
+
+func parseEnvAssignments(values []string) (map[string]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(values))
+	for _, raw := range values {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		key, value, ok := strings.Cut(raw, "=")
+		key = strings.TrimSpace(key)
+		if !ok || key == "" {
+			return nil, fmt.Errorf("invalid --env %q: expected KEY=VALUE", raw)
+		}
+		if _, exists := out[key]; exists {
+			return nil, fmt.Errorf("duplicate --env key %q", key)
+		}
+		out[key] = value
+	}
+	return out, nil
 }

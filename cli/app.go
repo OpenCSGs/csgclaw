@@ -132,6 +132,7 @@ func (a *App) parseGlobalOptions(args []string) (GlobalOptions, []string, error)
 	fs.StringVar(&opts.Endpoint, "endpoint", opts.Endpoint, "HTTP server endpoint")
 	fs.StringVar(&opts.Token, "token", opts.Token, "API authentication token")
 	fs.StringVar(&opts.Output, "output", "", "output format: table or json")
+	fs.StringVar(&opts.Output, "o", "", "shorthand for --output")
 	fs.StringVar(&opts.Config, "config", "", "path to config file")
 	fs.BoolVar(&opts.Version, "version", false, "print version and exit")
 	fs.BoolVar(&opts.Version, "V", false, "print version and exit")
@@ -189,7 +190,7 @@ func isSpecialOutputCommand(rest []string) bool {
 
 func consumesValue(arg string) bool {
 	switch arg {
-	case "--endpoint", "--token", "--output", "--config":
+	case "--endpoint", "--token", "--output", "-o", "--config":
 		return true
 	default:
 		return false
@@ -224,7 +225,7 @@ func (a *App) usage() {
 	fmt.Fprintln(a.stderr, "Global flags:")
 	fmt.Fprintf(a.stderr, "  --endpoint string   HTTP server endpoint (default %s)\n", envBaseURL)
 	fmt.Fprintf(a.stderr, "  --token string      API authentication token (default %s)\n", envAccessToken)
-	fmt.Fprintln(a.stderr, "  --output string     Output format: table or json")
+	fmt.Fprintln(a.stderr, "  --output, -o string Output format: table or json")
 	fmt.Fprintln(a.stderr, "  --config string     Path to config file")
 	fmt.Fprintln(a.stderr, "  --version, -V       Print version and exit")
 }

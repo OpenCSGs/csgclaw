@@ -31,6 +31,7 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 	for _, want := range []string{
 		"Available Commands:",
 		"bot      Manage bots",
+		"hub      Discover agent templates.",
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
 		"message  Manage IM messages.",
@@ -67,6 +68,30 @@ func TestExecuteCompletionFish(t *testing.T) {
 	}
 }
 
+func TestExecuteHubListAcceptsOutputShorthand(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodGet {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
+			}
+			if req.URL.String() != "http://example.test/api/v1/hub/templates" {
+				t.Fatalf("url = %q, want hub templates route", req.URL.String())
+			}
+			return jsonResponse(http.StatusOK, `[{"id":"builtin/gitlab-worker","name":"gitlab-worker","source":{"name":"builtin","kind":"builtin"}}]`), nil
+		}),
+	}
+
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "-o", "json", "hub", "list"}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"id": "builtin/gitlab-worker"`) {
+		t.Fatalf("stdout = %q, want JSON hub template payload", stdout.String())
+	}
+}
+
 func TestExecuteHiddenCompleteUsesLiteCommandSet(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{
@@ -79,7 +104,7 @@ func TestExecuteHiddenCompleteUsesLiteCommandSet(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"bot\n", "room\n", "member\n", "message\n", "team\n", "completion\n"} {
+	for _, want := range []string{"bot\n", "hub\n", "room\n", "member\n", "message\n", "team\n", "completion\n"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stdout = %q, want substring %q", got, want)
 		}

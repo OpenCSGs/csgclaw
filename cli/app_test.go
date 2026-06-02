@@ -349,6 +349,44 @@ func TestExecuteBotCreateUsesDefaultChannel(t *testing.T) {
 	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "test-lead", "worker", "csgclaw")
 }
 
+func TestExecuteBotCreateSendsFromTemplateAndEnv(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodPost {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
+			}
+			var payload bot.CreateRequest
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if payload.FromTemplate != "builtin/gitlab-worker" {
+				t.Fatalf("payload.FromTemplate = %q, want builtin/gitlab-worker", payload.FromTemplate)
+			}
+			if payload.AgentProfile == nil || payload.AgentProfile.Env["GITLAB_TOKEN"] != "secret" {
+				t.Fatalf("payload.AgentProfile.Env = %#v, want GITLAB_TOKEN", payload.AgentProfile)
+			}
+			return jsonResponse(http.StatusCreated, `{"id":"u-gitlab","name":"gitlab","description":"gitlab worker","role":"worker","channel":"csgclaw","runtime_kind":"picoclaw_sandbox","agent_id":"u-gitlab","user_id":"u-gitlab","available":true,"created_at":"2026-04-12T09:00:00Z"}`), nil
+		}),
+	}
+
+	err := app.Execute(context.Background(), []string{
+		"--endpoint", "http://example.test",
+		"bot", "create",
+		"--name", "gitlab",
+		"--description", "gitlab worker",
+		"--role", "worker",
+		"--from-template", "builtin/gitlab-worker",
+		"--env", "GITLAB_TOKEN=secret",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	assertTableHasRow(t, stdout.String(), "u-gitlab", "gitlab", "gitlab worker", "worker", "csgclaw")
+}
+
 func TestExecuteBotCreateFeishuSendsChannelPayload(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{

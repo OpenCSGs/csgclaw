@@ -13,6 +13,18 @@ Check the current CLI surface through the `basics` skill instead of writing ad h
 
 If the user only needs a direct CLI action and there is no real dispatch workflow, use the `basics` skill instead of this skill.
 
+If the user wants to create or provision a new agent from hub templates (not execute a task), use the `agent-creator` skill instead of this skill.
+
+## Out of Scope
+
+Do not use this skill for:
+
+- hub template listing, matching, or selection
+- collecting template `image_env` values
+- creating agents with `--from-template`
+
+For those flows, use `agent-creator`. Never create a new worker with bare `bot create` from dispatch.
+
 ## Mandatory Dispatch Order
 
 When a user asks for manager-led coordination (especially GitLab planning, issue queries, breakdown, assignment, or execution handoff), follow this order and do not skip steps:
@@ -20,7 +32,9 @@ When a user asks for manager-led coordination (especially GitLab planning, issue
 1. Read this skill first before any domain execution.
 2. Check existing workers first (`bot list`) and prefer reusing a capable available worker.
 3. Ensure the selected worker is a member of the target room (add if missing).
-4. If no suitable worker exists or the matching one is `unavailable`, create or recreate the worker first, then add to the room.
+4. If no suitable worker exists or the matching one is `unavailable`:
+   - **New worker needed:** stop dispatch, follow `agent-creator` (hub list → hub get → `bot create --from-template` + `--env`), then use `basics` to add the worker to the room.
+   - **Existing worker unavailable:** use `basics` / recreate paths for that bot id only; do not bare-create a replacement.
 5. Dispatch the task to the worker in-room after membership is confirmed.
 
 Do not start with repo/code exploration, web fetch/search, or manager self-execution when the task is delegable to an existing or creatable worker.
@@ -33,7 +47,7 @@ If the admin explicitly asks the manager to arrange or reuse workers such as `ux
 1. Do not do the implementation work yourself.
 2. Do not use `message` for progress chatter or to restate the request.
 3. Do not use `spawn` or `subagent`.
-4. Use the `basics` skill to inspect existing workers, reuse matching available workers, and create a worker only if a required capability is missing or the matching worker is `unavailable`.
+4. Use the `basics` skill to inspect existing workers, reuse matching available workers, and use `agent-creator` only if a required capability is missing or the matching worker is `unavailable` and must be replaced with a new hub-template worker.
 5. Use the `basics` skill to ensure every chosen worker has joined the target room and verify room membership.
 6. Only after all required workers are present in the room, write `todo.json` under `~/.picoclaw/workspace/projects/<slug>/todo.json`.
 7. Only after that room-membership check passes, start tracking with `scripts/manager_worker_api.py start-tracking`.
@@ -47,7 +61,7 @@ Do not inspect or modify project implementation files before dispatch unless you
 
 1. Break the admin request into concrete deliverables.
 2. Match each task to the needed capability; use the `basics` skill to inspect existing workers first (`bot list`) and reuse by matching `description`.
-3. If a suitable worker does not exist or is `unavailable`, create or recreate it before dispatch.
+3. If a suitable worker does not exist or is `unavailable`, provision via `agent-creator` (new) or recreate the existing bot (unavailable) before dispatch.
 4. Use the `basics` skill to ensure every required worker has joined the target room, then verify the full required worker set.
 5. Dispatch the user task to selected workers in-room after membership checks pass.
 6. Choose a suitable project directory under `~/.picoclaw/workspace/projects`; create a short slug directory if none fits.
@@ -150,11 +164,10 @@ Use the `basics` skill whenever this workflow needs any of these supporting oper
 
 - create the target room
 - list workers or bots
-- create or recreate a worker bot
 - add a worker into the room
 - verify room membership before tracking
 
-If a listed worker is `unavailable`, use the `basics` skill to recreate that bot with the same original parameters so the backing agent becomes available again before dispatch.
+When a **new** worker is required, use `agent-creator` instead of bare `bot create`. Use `basics` here only for recreate when an existing listed worker is `unavailable`.
 
 ## Tracking Script Usage
 
@@ -173,7 +186,7 @@ python scripts/manager_worker_api.py start-tracking --channel <current_channel> 
 Dispatch delivery verification (mandatory, immediately after start):
 
 ```bash
-csgclaw-cli message list --room-id <target_room_id> --channel <current_channel> --output json
+csgclaw-cli --output json message list --room-id <target_room_id> --channel <current_channel>
 ```
 
 Success criteria:
@@ -209,7 +222,7 @@ Use this when exactly one worker should act (for example install a registry skil
 ## Operating Rules
 
 - Reuse available workers before creating new ones.
-- If a matching worker is listed as `unavailable`, use the `basics` skill to recreate it with the original parameters so the backing agent is created before joining or dispatching work to it.
+- If a matching worker is listed as `unavailable`, recreate that existing bot; do not bare-create a different replacement worker.
 - Before writing the final `todo.json` or running `start-tracking`, use the `basics` skill to verify all required workers are already members of the target room.
 - Treat missing room membership as a blocker: add the worker, verify again, and only then continue with `todo.json` and tracking.
 - Keep `todo.json` aligned with the actual assignment being dispatched.
