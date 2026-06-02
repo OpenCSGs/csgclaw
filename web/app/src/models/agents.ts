@@ -15,6 +15,7 @@ import {
   RUNTIME_KIND_OPTIONS,
   WORKER_AGENT_ROLE,
 } from "@/shared/constants/agents";
+import { avatarFallbackText } from "@/shared/avatar";
 
 export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | string;
 export type BotType = typeof BOT_TYPE_NORMAL | typeof BOT_TYPE_NOTIFICATION | string;
@@ -74,6 +75,13 @@ export type AgentLike = AgentProfileLike & {
   runtime_options?: JSONRecord | null;
   status?: string | null;
   template_name?: string | null;
+};
+
+export type AvatarLikeUser = {
+  avatar?: string | null;
+  handle?: string | null;
+  id: string;
+  name?: string | null;
 };
 
 export type AgentDraft = {
@@ -217,6 +225,41 @@ export function normalizeBotType(value: unknown): BotType {
 
 export function isNotificationBotAgent(item: AgentLike | null | undefined): boolean {
   return normalizeBotType(item?.bot_type ?? item?.type) === BOT_TYPE_NOTIFICATION;
+}
+
+export function resolveAgentAvatarSource(
+  agent: AgentLike | null | undefined,
+  usersById?: Map<string, AvatarLikeUser> | null,
+): string {
+  const agentAvatar = String(agent?.avatar ?? "").trim();
+  const candidateUserIDs = [agent?.user_id, agent?.id]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+
+  for (const userID of candidateUserIDs) {
+    const userAvatar = String(usersById?.get(userID)?.avatar ?? "").trim();
+    if (userAvatar) {
+      return userAvatar;
+    }
+  }
+
+  return agentAvatar;
+}
+
+export function resolveAgentAvatarFallback(
+  agent: AgentLike | null | undefined,
+  usersById?: Map<string, AvatarLikeUser> | null,
+): string {
+  const candidateUserIDs = [agent?.user_id, agent?.id]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  for (const userID of candidateUserIDs) {
+    const user = usersById?.get(userID);
+    if (user) {
+      return avatarFallbackText(user.avatar, user.name, user.handle, user.id);
+    }
+  }
+  return avatarFallbackText(agent?.avatar, agent?.name, agent?.handle, agent?.id);
 }
 
 export function partitionWorkspaceAgentItems(

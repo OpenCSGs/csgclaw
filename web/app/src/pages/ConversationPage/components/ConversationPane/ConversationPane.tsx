@@ -4,7 +4,8 @@ import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import { MessageContent } from "@/components/business/MessageContent";
-import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 import {
   Button,
   DialogBody,

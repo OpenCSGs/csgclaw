@@ -1,0 +1,28 @@
+const AVATAR_BASE = "avatar";
+
+const AVATAR_GROUPS = ["3D", "cartoon", "pic"] as const;
+
+const AVATAR_VALUE_SET = new Set(
+  AVATAR_GROUPS.flatMap((group) => Array.from({ length: 8 }, (_, index) => `${AVATAR_BASE}/${group}-${index + 1}.png`)),
+);
+
+export function normalizeAvatarPath(value: unknown): string {
+  const avatar = String(value ?? "").trim();
+  if (AVATAR_VALUE_SET.has(avatar)) {
+    return avatar;
+  }
+  if (/^(https?:\/\/|\/|data:)/i.test(avatar)) {
+    return avatar;
+  }
+  return "";
+}
+
+export function avatarFallbackText(...labels: Array<string | null | undefined>): string {
+  for (const label of labels) {
+    const text = String(label ?? "").trim();
+    if (text) {
+      return text.slice(0, 2).toUpperCase();
+    }
+  }
+  return "#";
+}

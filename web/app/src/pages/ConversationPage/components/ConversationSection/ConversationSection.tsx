@@ -4,7 +4,8 @@ import {
   isDirectConversation,
   resolveConversationUser,
 } from "@/models/conversations";
-import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import { TrashIcon } from "@/components/ui/Icons";
 

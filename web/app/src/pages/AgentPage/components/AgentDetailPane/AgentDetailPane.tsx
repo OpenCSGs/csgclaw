@@ -22,7 +22,8 @@ import {
   normalizeRuntimeKind,
   notifierFormIsComplete,
 } from "@/models/agents";
-import { AgentAvatarContent, AgentAvatarPicker, avatarFallbackText } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 import { Button, Select } from "@/components/ui";
 
 export function AgentDetailPane({

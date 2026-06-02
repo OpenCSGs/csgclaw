@@ -47,6 +47,7 @@ import {
   isNotifierRuntimeDraftOnAgentPage,
   normalizeAuthProviderName,
   partitionWorkspaceAgentItems,
+  resolveAgentAvatarSource,
   normalizeRuntimeKind,
   normalizeTemplateSelection,
   pickDefaultAgentTemplate,
@@ -135,9 +136,21 @@ export function useAgentController({
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPageError, setAgentPageError] = useState("");
   const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
-  const managerAgent = agents.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
-  const { workerAgentItems, notificationAgentItems } = partitionWorkspaceAgentItems(agents, MANAGER_AGENT_ID);
-  const agentItems = [...workerAgentItems, ...notificationAgentItems];
+  const usersById = useMemo(() => {
+    const result = new Map<string, { avatar?: string | null; handle?: string | null; id: string; name?: string | null }>();
+    data?.users.forEach((user) => result.set(user.id, user));
+    return result;
+  }, [data?.users]);
+  const agentItems = useMemo(
+    () =>
+      agents.map((item) => ({
+        ...item,
+        avatar: resolveAgentAvatarSource(item, usersById),
+      })),
+    [agents, usersById],
+  );
+  const managerAgent = agentItems.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
+  const { workerAgentItems, notificationAgentItems } = partitionWorkspaceAgentItems(agentItems, MANAGER_AGENT_ID);
   const runningAgentCount = agentItems.filter(isAgentRunning).length;
   const notifierWebhookPublicOrigin = useMemo(
     () => resolvedNotifierWebhookOrigin(bootstrapConfig),
@@ -147,8 +160,8 @@ export function useAgentController({
     if (activePane.type !== WorkspacePaneTypes.agent) {
       return null;
     }
-    return agents.find((item) => item.id === activePane.id) ?? null;
-  }, [agents, activePane]);
+    return agentItems.find((item) => item.id === activePane.id) ?? null;
+  }, [agentItems, activePane]);
   const activeConversation = useMemo(
     () => data?.rooms.find((item) => item.id === activeConversationId) ?? null,
     [data, activeConversationId],

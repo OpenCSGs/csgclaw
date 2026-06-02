@@ -1,7 +1,6 @@
 import { AgentIcon } from "@/components/ui/Icons";
+import { normalizeAvatarPath } from "@/shared/avatar";
 import type { ReactNode } from "react";
-
-const AVATAR_BASE = "avatar";
 
 const AVATAR_GROUPS = [
   { key: "3D", labelKey: "agentAvatarStyle3D" },
@@ -14,11 +13,9 @@ export const AGENT_AVATAR_OPTIONS = AVATAR_GROUPS.flatMap((group) =>
     group: group.key,
     labelKey: group.labelKey,
     index: index + 1,
-    value: `${AVATAR_BASE}/${group.key}-${index + 1}.png`,
+    value: `avatar/${group.key}-${index + 1}.png`,
   })),
 );
-
-const AGENT_AVATAR_VALUE_SET = new Set(AGENT_AVATAR_OPTIONS.map((option) => option.value));
 
 type TranslateFn = (key: string) => string;
 
@@ -26,25 +23,8 @@ export function defaultAgentAvatar(): string {
   return AGENT_AVATAR_OPTIONS[0]?.value || "";
 }
 
-export function avatarFallbackText(...labels: Array<string | null | undefined>): string {
-  for (const label of labels) {
-    const text = String(label ?? "").trim();
-    if (text) {
-      return text.slice(0, 2).toUpperCase();
-    }
-  }
-  return "#";
-}
-
 export function normalizeAgentAvatarPath(value: unknown): string {
-  const avatar = String(value ?? "").trim();
-  if (AGENT_AVATAR_VALUE_SET.has(avatar)) {
-    return avatar;
-  }
-  if (/^(https?:\/\/|\/|data:)/i.test(avatar)) {
-    return avatar;
-  }
-  return "";
+  return normalizeAvatarPath(value);
 }
 
 export function AgentAvatarImage({ avatar, alt = "" }: { avatar?: string | null; alt?: string }) {

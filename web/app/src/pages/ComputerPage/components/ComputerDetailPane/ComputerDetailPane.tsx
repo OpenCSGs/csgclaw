@@ -2,7 +2,8 @@ import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { agentModelID, formatProviderLabel, isAgentIncomplete, isAgentRunning } from "@/models/agents";
 import { ComputerIcon, PlayIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
-import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 
 export function ComputerDetailPane({
   t,

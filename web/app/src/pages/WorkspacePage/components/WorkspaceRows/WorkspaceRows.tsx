@@ -17,7 +17,8 @@ import {
 } from "@/models/conversations";
 import { ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
-import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import type { DragEvent, ReactNode } from "react";
 

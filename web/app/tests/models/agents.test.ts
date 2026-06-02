@@ -27,6 +27,7 @@ import {
   pickDefaultAgentTemplate,
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
+  resolveAgentAvatarSource,
   runtimeImageForKind,
 } from "@/models/agents";
 
@@ -215,6 +216,24 @@ describe("agent model helpers", () => {
       "picoclaw_sandbox",
       "openclaw_sandbox",
     ]);
+  });
+
+  it("prefers a user-set avatar over the agent avatar when available", () => {
+    const usersById = new Map([
+      ["u-gitlab", { id: "u-gitlab", avatar: "avatar/cartoon-3.png", name: "GitLab Assistant" }],
+    ]);
+
+    expect(
+      resolveAgentAvatarSource(
+        {
+          id: "u-gitlab",
+          avatar: "GI",
+          name: "GitLab Assistant",
+          role: "worker",
+        },
+        usersById,
+      ),
+    ).toBe("avatar/cartoon-3.png");
   });
 
   it("uses manager template variants for manager rebuild runtime and image choices", () => {

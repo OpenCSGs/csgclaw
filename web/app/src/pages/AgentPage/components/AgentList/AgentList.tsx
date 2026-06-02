@@ -10,7 +10,8 @@ import {
 } from "@/models/agents";
 import { AgentIcon, PlayIcon, StopIcon, TrashIcon, WrenchIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
-import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 
 export function AgentSection({
   title,

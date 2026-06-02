@@ -10,7 +10,8 @@ import {
   isAgentRunning,
 } from "@/models/agents";
 import { localizeRole } from "@/shared/i18n";
-import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 import { Button, IconButton } from "@/components/ui";
 
 function clamp(value, min, max) {

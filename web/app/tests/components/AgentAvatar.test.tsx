@@ -1,5 +1,6 @@
 import { render } from "@testing-library/react";
-import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 
 describe("AgentAvatar", () => {
   it("renders a fallback label when the avatar path is missing", () => {
