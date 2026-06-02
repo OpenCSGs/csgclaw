@@ -1,0 +1,124 @@
+.room-avatar {
+  position: relative;
+  display: block;
+  overflow: clip;
+  border: 1px solid var(--portal-white);
+  background: var(--portal-white);
+  flex: 0 0 auto;
+  isolation: isolate;
+}
+
+.room-avatar--compact {
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.56);
+}
+
+.room-avatar--large {
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.42);
+}
+
+.room-avatar-tile {
+  position: absolute;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: var(--portal-white);
+  color: var(--avatar-text);
+}
+
+.room-avatar-tile--full {
+  inset: 0;
+}
+
+.room-avatar-tile--half {
+  top: 0;
+  bottom: 0;
+  width: 50%;
+}
+
+.room-avatar-tile--left {
+  left: 0;
+  border-right: 1px solid var(--portal-white);
+}
+
+.room-avatar-tile--right {
+  right: 0;
+  border-left: 1px solid var(--portal-white);
+}
+
+.room-avatar-tile--quarter {
+  width: 50%;
+  height: 50%;
+}
+
+.room-avatar-tile--top-left {
+  top: 0;
+  left: 0;
+  border-right: 1px solid var(--portal-white);
+  border-bottom: 1px solid var(--portal-white);
+}
+
+.room-avatar-tile--top-right {
+  top: 0;
+  right: 0;
+  border-left: 1px solid var(--portal-white);
+  border-bottom: 1px solid var(--portal-white);
+}
+
+.room-avatar-tile--bottom-left {
+  left: 0;
+  bottom: 0;
+  border-top: 1px solid var(--portal-white);
+  border-right: 1px solid var(--portal-white);
+}
+
+.room-avatar-tile--bottom-right {
+  right: 0;
+  bottom: 0;
+  border-top: 1px solid var(--portal-white);
+  border-left: 1px solid var(--portal-white);
+}
+
+.room-avatar-tile--tall {
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  border-left: 1px solid var(--portal-white);
+}
+
+.room-avatar-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.room-avatar-content .agent-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.room-avatar-count-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--portal-white);
+  color: var(--portal-gray-700);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  text-align: center;
+  z-index: 1;
+  pointer-events: none;
+}

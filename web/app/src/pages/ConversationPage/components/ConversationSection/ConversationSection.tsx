@@ -5,6 +5,7 @@ import {
   resolveConversationUser,
 } from "@/models/conversations";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import { TrashIcon } from "@/components/ui/Icons";
 
 export function ConversationSection({
@@ -26,19 +27,26 @@ export function ConversationSection({
     <section className="conversation-section">
       {items.map((conversation) => {
         const lastMessage = conversation.messages[conversation.messages.length - 1];
-        const displayUser = resolveConversationUser(conversation, currentUserID, usersById);
-        const isDirect = isDirectConversation(conversation);
-        const avatar = isDirect && displayUser ? displayUser.avatar : conversation.title.slice(0, 2).toUpperCase();
-        const color = isDirect && displayUser ? displayUser.accent_hex : "#2563eb";
+        const displayUser = isDirectConversation(conversation)
+          ? resolveConversationUser(conversation, currentUserID, usersById)
+          : null;
+        const roomAvatarMembers = resolveRoomAvatarMembers(conversation, usersById, currentUserID);
         return (
           <div
             key={conversation.id}
             className={`conversation-item ${conversation.id === activeConversationId ? "active" : ""}`}
           >
             <button className="conversation-item-main" onClick={() => onSelect(conversation.id)}>
-              <div className="avatar" style={{ background: `linear-gradient(135deg, ${color}, #10233f)` }}>
-                <AgentAvatarContent avatar={avatar} fallback={avatar} />
-              </div>
+              {displayUser ? (
+                <div className="avatar" aria-hidden="true">
+                  <AgentAvatarContent
+                    avatar={displayUser.avatar}
+                    fallback={displayUser.name || displayUser.handle || displayUser.id}
+                  />
+                </div>
+              ) : (
+                <RoomAvatar members={roomAvatarMembers} count={conversation.members.length} size={48} />
+              )}
               <div className="conversation-main">
                 <div className="conversation-head">
                   <div className="conversation-name truncate">{conversation.title}</div>

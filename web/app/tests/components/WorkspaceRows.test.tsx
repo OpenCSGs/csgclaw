@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { WorkspaceThreadRow } from "@/pages/WorkspacePage/components/WorkspaceRows";
+import { WorkspaceConversationRow, WorkspaceThreadRow } from "@/pages/WorkspacePage/components/WorkspaceRows";
 import type { IMConversation, ThreadView, TranslateFn } from "@/models/conversations";
 
 const t: TranslateFn = (key, params = {}) => {
@@ -13,6 +13,37 @@ const t: TranslateFn = (key, params = {}) => {
 };
 
 describe("WorkspaceRows", () => {
+  it("renders direct message rows without room avatar placeholders", () => {
+    const usersById = new Map([
+      ["u-local", { id: "u-local", name: "本地用户", avatar: "LU" }],
+      ["u-agent", { id: "u-agent", name: "Alice", avatar: "https://example.com/avatar.png" }],
+    ]);
+    const conversation: IMConversation = {
+      id: "dm-1",
+      is_direct: true,
+      members: ["u-local", "u-agent"],
+      messages: [{ content: "hello", created_at: "2026-05-21T08:00:00Z" }],
+      title: "Alice",
+    };
+
+    render(
+      <WorkspaceConversationRow
+        active={false}
+        conversation={conversation}
+        currentUserID="u-local"
+        locale="en"
+        onSelect={() => {}}
+        onPreviewUser={() => {}}
+        t={t}
+        usersById={usersById}
+      />,
+    );
+
+    const row = screen.getAllByRole("button")[0];
+    expect(row).toHaveTextContent("Alice");
+    expect(row).not.toHaveTextContent("#");
+  });
+
   it("renders thread rows without markdown code-fence language prefixes", () => {
     const conversation: IMConversation = {
       id: "room-1",

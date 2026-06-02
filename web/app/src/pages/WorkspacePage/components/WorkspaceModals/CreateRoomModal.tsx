@@ -1,4 +1,5 @@
 import { isBlank } from "@/components/business/ProfileControls";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button as CSGButton } from "@/components/ui/Button";
 import { useEffect } from "react";
 import { toggleSelection } from "@/shared/lib/collections";
@@ -10,9 +11,10 @@ function getAvatarInitial(user) {
 }
 
 function MemberAvatar({ user, index = 0, compact = false }) {
+  const fallback = getAvatarInitial(user);
   return (
     <span className={compact ? "create-room-avatar compact" : "create-room-avatar"} data-avatar-index={index % 6}>
-      {getAvatarInitial(user)}
+      <AgentAvatarContent avatar={user.avatar} fallback={fallback} />
     </span>
   );
 }
