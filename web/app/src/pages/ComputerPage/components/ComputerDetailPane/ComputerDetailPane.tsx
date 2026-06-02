@@ -2,7 +2,7 @@ import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { agentModelID, formatProviderLabel, isAgentIncomplete, isAgentRunning } from "@/models/agents";
 import { ComputerIcon, PlayIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
-import { AgentAvatarImage } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
 
 export function ComputerDetailPane({
   t,
@@ -62,7 +62,7 @@ export function ComputerDetailPane({
               <div key={item.id} className="entity-list-row">
                 <button className="entity-list-main-button" onClick={() => onSelectAgent(item)}>
                   <span className="entity-list-icon">
-                    <AgentAvatarImage avatar={item.avatar} alt="" />
+                    <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)} />
                   </span>
                   <span className="entity-list-main">
                     <strong>{item.name}</strong>

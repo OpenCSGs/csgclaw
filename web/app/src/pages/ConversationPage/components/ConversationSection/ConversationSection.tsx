@@ -4,7 +4,7 @@ import {
   isDirectConversation,
   resolveConversationUser,
 } from "@/models/conversations";
-import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import { TrashIcon } from "@/components/ui/Icons";
 
@@ -41,7 +41,7 @@ export function ConversationSection({
                 <div className="avatar" aria-hidden="true">
                   <AgentAvatarContent
                     avatar={displayUser.avatar}
-                    fallback={displayUser.name || displayUser.handle || displayUser.id}
+                    fallback={avatarFallbackText(displayUser.avatar, displayUser.name, displayUser.handle, displayUser.id)}
                   />
                 </div>
               ) : (

@@ -17,7 +17,7 @@ import {
 } from "@/models/conversations";
 import { ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
-import { AgentAvatarContent, AgentAvatarImage } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import type { DragEvent, ReactNode } from "react";
 
@@ -158,7 +158,7 @@ export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notifi
           }
         }}
       >
-        <AgentAvatarImage avatar={item.avatar} alt="" />
+        <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)} />
       </span>
       <span className="workspace-row-main">
         <span className="workspace-row-title-line">

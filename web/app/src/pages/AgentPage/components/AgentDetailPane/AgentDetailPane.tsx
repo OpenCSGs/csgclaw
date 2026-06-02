@@ -22,7 +22,7 @@ import {
   normalizeRuntimeKind,
   notifierFormIsComplete,
 } from "@/models/agents";
-import { AgentAvatarImage, AgentAvatarPicker } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent, AgentAvatarPicker, avatarFallbackText } from "@/components/business/AgentAvatar";
 import { Button, Select } from "@/components/ui";
 
 export function AgentDetailPane({
@@ -65,7 +65,7 @@ export function AgentDetailPane({
     <section className="entity-pane agent-detail-pane">
       <header className="entity-header">
         <div className="entity-avatar">
-          <AgentAvatarImage avatar={item.avatar} alt="" />
+          <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)} />
         </div>
         <div className="entity-heading">
           <div className="entity-title-row">

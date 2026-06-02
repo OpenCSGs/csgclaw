@@ -26,6 +26,16 @@ export function defaultAgentAvatar(): string {
   return AGENT_AVATAR_OPTIONS[0]?.value || "";
 }
 
+export function avatarFallbackText(...labels: Array<string | null | undefined>): string {
+  for (const label of labels) {
+    const text = String(label ?? "").trim();
+    if (text) {
+      return text.slice(0, 2).toUpperCase();
+    }
+  }
+  return "#";
+}
+
 export function normalizeAgentAvatarPath(value: unknown): string {
   const avatar = String(value ?? "").trim();
   if (AGENT_AVATAR_VALUE_SET.has(avatar)) {
@@ -56,7 +66,7 @@ export function AgentAvatarContent({
 }) {
   const src = normalizeAgentAvatarPath(avatar);
   if (!src) {
-    return <>{fallback ?? avatar}</>;
+    return <span className="agent-avatar-fallback">{fallback ?? avatar}</span>;
   }
   return <img className="agent-avatar-image" src={src} alt={alt} draggable={false} />;
 }

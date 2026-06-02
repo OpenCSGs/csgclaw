@@ -10,7 +10,7 @@ import {
   isAgentRunning,
 } from "@/models/agents";
 import { localizeRole } from "@/shared/i18n";
-import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent, avatarFallbackText } from "@/components/business/AgentAvatar";
 import { Button, IconButton } from "@/components/ui";
 
 function clamp(value, min, max) {
@@ -118,14 +118,14 @@ export function ProfilePreviewPopover({
       <div className="preview-hero">
         {agent ? (
           <div className="entity-avatar preview-avatar">
-            <AgentAvatarContent avatar={agent.avatar} fallback={displayName.slice(0, 2).toUpperCase()} alt="" />
+            <AgentAvatarContent avatar={agent.avatar} fallback={avatarFallbackText(agent.avatar, displayName, agent.id)} alt="" />
           </div>
         ) : (
           <div
             className="avatar preview-avatar"
             style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}
           >
-            <AgentAvatarContent avatar={user.avatar} fallback={user.avatar} />
+            <AgentAvatarContent avatar={user.avatar} fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)} />
           </div>
         )}
         <div className="preview-identity">
