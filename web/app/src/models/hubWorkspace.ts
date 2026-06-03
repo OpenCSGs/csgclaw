@@ -5,9 +5,18 @@ import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
 export type HubWorkspaceEntry = WorkspaceEntry;
 export type HubWorkspaceFile = WorkspaceFile;
 
+export const HUB_REGISTRY_KIND_LOCAL = "local";
+
 export type HubTemplateSource = {
   name?: string | null;
+  kind?: string | null;
 };
+
+export function isDeletableHubTemplate(template: HubTemplate | null | undefined): boolean {
+  return String(template?.source?.kind ?? "")
+    .trim()
+    .toLowerCase() === HUB_REGISTRY_KIND_LOCAL;
+}
 
 export type HubTemplate = AgentTemplateLike & {
   source?: HubTemplateSource | null;

@@ -1844,6 +1844,62 @@ func TestHandleHubTemplatesListsAggregatedTemplates(t *testing.T) {
 	}
 }
 
+func TestHandleHubTemplateDeleteRemovesLocalTemplate(t *testing.T) {
+	hubSvc := mustNewLocalTemplateHubService(t, "review-bot", hub.Template{
+		ID:          "review-bot",
+		Name:        "review-bot",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: agent.RuntimeKindCodex,
+	})
+	srv := &Handler{}
+	srv.SetHubService(hubSvc)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/hub/templates/local.review-bot", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates", nil)
+	listRec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d; body=%s", listRec.Code, http.StatusOK, listRec.Body.String())
+	}
+	var listed []apitypes.HubTemplate
+	if err := json.NewDecoder(listRec.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	for _, item := range listed {
+		if item.ID == "local.review-bot" {
+			t.Fatalf("listed templates = %#v, want deleted local.review-bot", listed)
+		}
+	}
+}
+
+func TestHandleHubTemplateDeleteRejectsBuiltinTemplate(t *testing.T) {
+	builtinSvc, err := hub.NewService(config.HubConfig{
+		DefaultRegistry: "builtin",
+		Registries: []config.HubRegistryConfig{
+			{Name: "builtin", Kind: hub.RegistryKindBuiltin, Enabled: true},
+		},
+	}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+	srv := &Handler{}
+	srv.SetHubService(builtinSvc)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/hub/templates/builtin.picoclaw-worker", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
 func TestHandleHubTemplateByIDReturnsTemplate(t *testing.T) {
 	hubSvc := mustNewLocalTemplateHubService(t, "review-bot", hub.Template{
 		ID:          "review-bot",

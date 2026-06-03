@@ -971,10 +971,6 @@ func (h *Handler) handleHubTemplateByID(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) handleHubTemplateByResolvedID(w http.ResponseWriter, r *http.Request, id string) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 	if h.hub == nil {
 		http.Error(w, "hub service is not configured", http.StatusServiceUnavailable)
 		return
@@ -983,25 +979,43 @@ func (h *Handler) handleHubTemplateByResolvedID(w http.ResponseWriter, r *http.R
 		http.NotFound(w, r)
 		return
 	}
-	item, err := h.hub.Get(r.Context(), id)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			http.Error(w, err.Error(), http.StatusNotFound)
+	switch r.Method {
+	case http.MethodGet:
+		item, err := h.hub.Get(r.Context(), id)
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "not found") {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	presented, err := h.presentHubTemplateDetail(r.Context(), item)
-	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, os.ErrNotExist) {
-			status = http.StatusNotFound
+		presented, err := h.presentHubTemplateDetail(r.Context(), item)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, os.ErrNotExist) {
+				status = http.StatusNotFound
+			}
+			http.Error(w, err.Error(), status)
+			return
 		}
-		http.Error(w, err.Error(), status)
-		return
+		writeJSON(w, http.StatusOK, presented)
+	case http.MethodDelete:
+		if err := h.hub.Delete(r.Context(), id); err != nil {
+			status := http.StatusBadRequest
+			switch {
+			case errors.Is(err, hub.ErrTemplateNotFound), strings.Contains(strings.ToLower(err.Error()), "not found"):
+				status = http.StatusNotFound
+			case errors.Is(err, hub.ErrRegistryNotDeletable), errors.Is(err, hub.ErrRegistryNotWritable):
+				status = http.StatusForbidden
+			}
+			http.Error(w, err.Error(), status)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
-	writeJSON(w, http.StatusOK, presented)
 }
 
 func (h *Handler) handleHubTemplateWorkspaceFileByID(w http.ResponseWriter, r *http.Request) {

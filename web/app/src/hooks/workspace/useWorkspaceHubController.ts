@@ -1,4 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { errorMessage } from "@/api/client";
+import { deleteHubTemplateRequest } from "@/api/hub";
+import { isDeletableHubTemplate } from "@/models/hubWorkspace";
+import type { HubTemplate } from "@/models/hubWorkspace";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
 import type { UseWorkspaceHubControllerArgs } from "./types";
 
@@ -15,6 +19,8 @@ export function useWorkspaceHubController({
   t,
 }: UseWorkspaceHubControllerArgs): WorkspaceHubController {
   const [hubManualError, setHubManualError] = useState("");
+  const [hubDeleteBusy, setHubDeleteBusy] = useState(false);
+  const [hubDeleteError, setHubDeleteError] = useState("");
 
   async function refreshHubTemplates(): Promise<void> {
     try {
@@ -35,13 +41,48 @@ export function useWorkspaceHubController({
     templates: hubTemplates,
     templatesQuery: hubTemplatesQuery,
     loaded: hubLoaded,
-    manualError: hubManualError,
+    manualError: hubManualError || hubDeleteError,
     refreshTemplates: refreshHubTemplates,
     t,
   });
 
+  const deleteHubTemplate = useCallback(
+    async (template: HubTemplate | null | undefined): Promise<boolean> => {
+      if (!template?.id || !isDeletableHubTemplate(template)) {
+        return false;
+      }
+      const label = template.name || template.id;
+      if (!window.confirm(`${t("hubDeleteConfirm")} ${label}?`)) {
+        return false;
+      }
+      setHubDeleteBusy(true);
+      setHubDeleteError("");
+      try {
+        await deleteHubTemplateRequest(template.id);
+        hub.setSelectedHubTemplateId("");
+        await refreshHubTemplates();
+        return true;
+      } catch (err) {
+        setHubDeleteError(errorMessage(err, t("hubDeleteFailed")));
+        return false;
+      } finally {
+        setHubDeleteBusy(false);
+      }
+    },
+    [hub.setSelectedHubTemplateId, refreshHubTemplates, t],
+  );
+
   return {
-    hub,
+    hub: {
+      ...hub,
+      deleteBusy: hubDeleteBusy,
+      deleteHubTemplate,
+      detailPaneProps: {
+        ...hub.detailPaneProps,
+        deleteBusy: hubDeleteBusy,
+        onDeleteTemplate: deleteHubTemplate,
+      },
+    },
     refreshHubTemplates,
   };
 }

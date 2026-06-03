@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { fetchHubTemplate, fetchHubWorkspaceFile } from "@/api/hub";
+import { deleteHubTemplateRequest, fetchHubTemplate, fetchHubWorkspaceFile } from "@/api/hub";
 
 function mockFetch(): Mock<typeof fetch> {
   const fetchMock = vi.fn<typeof fetch>(async (_input, _init) => new Response("{}", { status: 200 }));
@@ -19,6 +19,17 @@ describe("hub API", () => {
     await fetchHubTemplate("builtin.openclaw-manager");
 
     expect(fetchMock).toHaveBeenCalledWith("api/v1/hub/templates/builtin.openclaw-manager", expect.any(Object));
+  });
+
+  it("uses single-id paths for template delete requests", async () => {
+    const fetchMock = mockFetch();
+
+    await deleteHubTemplateRequest("local.gitlab-assistant");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates/local.gitlab-assistant",
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 
   it("uses single-id paths for namespaced workspace file requests", async () => {

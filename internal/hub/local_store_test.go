@@ -100,6 +100,26 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLocalStoreDeleteRemovesTemplate(t *testing.T) {
+	store := NewLocalStore(t.TempDir())
+	if _, err := store.Publish(context.Background(), PublishSpec{
+		ID:          "frontend-alice",
+		Name:        "frontend-alice",
+		Role:        TemplateRoleWorker,
+		RuntimeKind: "picoclaw_sandbox",
+		Image:       "worker:latest",
+	}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	if err := store.Delete(context.Background(), "frontend-alice"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if _, err := store.Get(context.Background(), "frontend-alice"); !errors.Is(err, ErrTemplateNotFound) {
+		t.Fatalf("Get() after Delete() error = %v, want %v", err, ErrTemplateNotFound)
+	}
+}
+
 func TestLocalStorePublishRejectsUnsafeTemplateID(t *testing.T) {
 	store := NewLocalStore(t.TempDir())
 	workspaceRoot := writeWorkspaceFile(t, "workspace", "AGENTS.md", "agent")

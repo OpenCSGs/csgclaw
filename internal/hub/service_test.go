@@ -219,6 +219,53 @@ func TestListContinuesWhenRegistryFails(t *testing.T) {
 	}
 }
 
+func TestDeleteRemovesLocalTemplate(t *testing.T) {
+	registryRoot := t.TempDir()
+	store := NewLocalStore(registryRoot)
+	if _, err := store.Publish(context.Background(), PublishSpec{
+		ID:          "review-bot",
+		Name:        "review-bot",
+		Role:        TemplateRoleWorker,
+		RuntimeKind: "picoclaw_sandbox",
+		Image:       "agent-image:test",
+	}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	svc, err := NewService(config.HubConfig{
+		DefaultRegistry: "local",
+		Registries: []config.HubRegistryConfig{
+			{Name: "local", Kind: RegistryKindLocal, Path: registryRoot, Enabled: true},
+		},
+	}, DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	if err := svc.Delete(context.Background(), "local.review-bot"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if _, err := svc.Get(context.Background(), "local.review-bot"); err == nil {
+		t.Fatal("Get() after Delete() succeeded, want error")
+	}
+}
+
+func TestDeleteRejectsBuiltinRegistry(t *testing.T) {
+	svc := mustService(t, config.HubConfig{
+		DefaultRegistry: "builtin",
+		Registries: []config.HubRegistryConfig{
+			{Name: "builtin", Kind: RegistryKindBuiltin, Enabled: true},
+		},
+	}, map[string]Store{
+		"builtin": stubStore{},
+	})
+
+	err := svc.Delete(context.Background(), "builtin.picoclaw-worker")
+	if !errors.Is(err, ErrRegistryNotDeletable) {
+		t.Fatalf("Delete() error = %v, want ErrRegistryNotDeletable", err)
+	}
+}
+
 func TestPublishRejectsBuiltinRegistry(t *testing.T) {
 	svc := mustService(t, config.HubConfig{
 		DefaultRegistry:        "builtin",
@@ -261,6 +308,10 @@ func (s stubStore) Publish(context.Context, PublishSpec) (Template, error) {
 	return Template{}, nil
 }
 
+func (s stubStore) Delete(context.Context, string) error {
+	return nil
+}
+
 type recordingStore struct {
 	lastGetID       string
 	lastPublishSpec PublishSpec
@@ -284,6 +335,10 @@ func (s *recordingStore) FetchWorkspace(context.Context, string) (WorkspaceRef, 
 func (s *recordingStore) Publish(_ context.Context, spec PublishSpec) (Template, error) {
 	s.lastPublishSpec = spec
 	return s.publishResult, nil
+}
+
+func (s *recordingStore) Delete(context.Context, string) error {
+	return nil
 }
 
 func mustService(t *testing.T, cfg config.HubConfig, stores map[string]Store) *Service {

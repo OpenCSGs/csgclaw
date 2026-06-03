@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	ErrStoreFactoryRequired = errors.New("hub store factory is required")
-	ErrRegistryNotFound     = errors.New("hub registry not found")
-	ErrRegistryNotReadable  = errors.New("hub registry is not readable")
-	ErrRegistryNotWritable  = errors.New("hub registry is not writable")
+	ErrStoreFactoryRequired  = errors.New("hub store factory is required")
+	ErrRegistryNotFound      = errors.New("hub registry not found")
+	ErrRegistryNotReadable   = errors.New("hub registry is not readable")
+	ErrRegistryNotWritable   = errors.New("hub registry is not writable")
+	ErrRegistryNotDeletable  = errors.New("hub registry is not deletable")
 )
 
 const templateIDNamespaceSeparator = "."
@@ -24,6 +25,7 @@ type Store interface {
 	Get(ctx context.Context, id string) (Template, error)
 	FetchWorkspace(ctx context.Context, id string) (WorkspaceRef, error)
 	Publish(ctx context.Context, spec PublishSpec) (Template, error)
+	Delete(ctx context.Context, id string) error
 }
 
 type StoreFactory func(cfg config.HubRegistryConfig) (Store, error)
@@ -146,6 +148,20 @@ func (s *Service) Publish(ctx context.Context, spec PublishSpec) (Template, erro
 		return Template{}, fmt.Errorf("publish hub template to %q: %w", cfgStore.ref.Name, err)
 	}
 	return decorateTemplate(cfgStore.ref, item), nil
+}
+
+func (s *Service) Delete(ctx context.Context, id string) error {
+	cfgStore, templateID, err := s.resolveRead(id)
+	if err != nil {
+		return err
+	}
+	if normalizeRegistryKind(cfgStore.ref.Kind) != RegistryKindLocal {
+		return fmt.Errorf("%w: %s", ErrRegistryNotDeletable, cfgStore.ref.Name)
+	}
+	if err := cfgStore.store.Delete(ctx, templateID); err != nil {
+		return fmt.Errorf("delete hub template %q from %q: %w", templateID, cfgStore.ref.Name, err)
+	}
+	return nil
 }
 
 func (s *Service) resolveRead(id string) (configuredStore, string, error) {

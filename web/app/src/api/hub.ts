@@ -1,4 +1,4 @@
-import { get, post } from "@/api/client";
+import { del, get, post } from "@/api/client";
 import type { HubTemplate, HubWorkspaceFile } from "@/models/hubWorkspace";
 
 const HUB_TEMPLATES_PATH = "/api/v1/hub/templates";
@@ -26,6 +26,10 @@ export function publishAgentTemplateRequest(agentID: string): Promise<HubTemplat
     agent_id: agentID,
   };
   return post<HubTemplate>(HUB_TEMPLATES_PATH, payload);
+}
+
+export function deleteHubTemplateRequest(templateID: string): Promise<void> {
+  return del(hubTemplatePath(templateID));
 }
 
 function hubTemplatePath(templateID: string): string {

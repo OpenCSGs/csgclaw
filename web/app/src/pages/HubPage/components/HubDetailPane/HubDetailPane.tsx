@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatHubDate, formatHubDateTime, formatHubTemplateCount } from "@/models/hubWorkspace";
+import { formatHubDate, formatHubDateTime, formatHubTemplateCount, isDeletableHubTemplate } from "@/models/hubWorkspace";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import { localizeRole, localizeTemplateSourceTag } from "@/shared/i18n";
 import { HubIcon } from "@/components/ui/Icons";
@@ -49,7 +49,10 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
     onRetry,
     onSelectTemplate,
     onSelectWorkspaceFile,
+    onDeleteTemplate,
+    deleteBusy = false,
   } = hub.detailPaneProps;
+  const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
   const workspaceEntries = selectedTemplate?.workspace?.entries ?? EMPTY_WORKSPACE_ENTRIES;
   const [isTemplateListScrolling, setIsTemplateListScrolling] = useState(false);
   const [isInspectorScrolling, setIsInspectorScrolling] = useState(false);
@@ -191,6 +194,17 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
                       <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
                         <span>{t("createAgent")}</span>
                       </Button>
+                      {canDeleteTemplate ? (
+                        <Button
+                          variant="danger"
+                          size="md"
+                          loading={deleteBusy}
+                          disabled={deleteBusy}
+                          onClick={() => onDeleteTemplate?.(selectedTemplate)}
+                        >
+                          {t("hubDeleteTemplate")}
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
