@@ -23,8 +23,8 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
-	"csgclaw/internal/sandbox/boxlitecli"
-	"csgclaw/internal/sandbox/dockercli"
+	"csgclaw/internal/sandbox"
+	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/team"
 	"csgclaw/internal/upgrade"
 	"csgclaw/internal/utils"
@@ -172,7 +172,7 @@ func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (h *Handler) listRuntimeImages(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) listAgentImageCandidates(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -198,51 +198,22 @@ func (h *Handler) listRuntimeImages(w http.ResponseWriter, r *http.Request) {
 }
 
 func listLocalRuntimeImages(ctx context.Context, cfg config.Config) ([]string, error) {
-	return listLocalRuntimeImagesWithDeps(ctx, cfg, defaultRuntimeImageListDeps)
+	provider, err := sandboxproviders.Provider(cfg.Sandbox)
+	if err != nil {
+		return nil, err
+	}
+	return listLocalRuntimeImagesWithProvider(ctx, provider)
 }
 
-type runtimeImageListDeps struct {
-	docker  func(context.Context, config.SandboxConfig) ([]string, error)
-	boxlite func(context.Context, config.SandboxConfig, string) ([]string, error)
-}
-
-var defaultRuntimeImageListDeps = runtimeImageListDeps{
-	docker:  listDockerRuntimeImages,
-	boxlite: listBoxLiteRuntimeImages,
-}
-
-func listLocalRuntimeImagesWithDeps(ctx context.Context, cfg config.Config, deps runtimeImageListDeps) ([]string, error) {
-	sandboxCfg := cfg.Sandbox.Resolved()
-	switch sandboxCfg.Provider {
-	case config.DockerProvider:
-		if deps.docker == nil {
-			return []string{}, nil
-		}
-		return deps.docker(ctx, sandboxCfg)
-	case config.BoxLiteProvider:
-		if deps.boxlite == nil {
-			return []string{}, nil
-		}
-		homeDir, err := agent.SandboxRuntimeHome(agent.ManagerName)
-		if err != nil {
-			return nil, err
-		}
-		return deps.boxlite(ctx, sandboxCfg, homeDir)
-	default:
+func listLocalRuntimeImagesWithProvider(ctx context.Context, provider sandbox.Provider) ([]string, error) {
+	if provider == nil {
 		return []string{}, nil
 	}
-}
-
-func listDockerRuntimeImages(ctx context.Context, cfg config.SandboxConfig) ([]string, error) {
-	return dockercli.ListImages(ctx, dockercli.WithPath(cfg.EffectiveDockerCLIPath()))
-}
-
-func listBoxLiteRuntimeImages(ctx context.Context, cfg config.SandboxConfig, homeDir string) ([]string, error) {
-	opts := []boxlitecli.ProviderOption{boxlitecli.WithPath(boxlitecli.ResolvePath(""))}
-	for _, registry := range cfg.EffectiveDebianRegistries() {
-		opts = append(opts, boxlitecli.WithRegistry(registry))
+	homeDir, err := agent.SandboxRuntimeHome(agent.ManagerName)
+	if err != nil {
+		return nil, err
 	}
-	return boxlitecli.ListImages(ctx, homeDir, opts...)
+	return provider.ListImages(ctx, homeDir)
 }
 
 func (h *Handler) loadBootstrapConfig() (config.Config, string, error) {

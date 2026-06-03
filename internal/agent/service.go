@@ -61,6 +61,10 @@ func (unconfiguredSandboxProvider) Open(context.Context, string) (sandbox.Runtim
 	return nil, fmt.Errorf("sandbox provider is not configured")
 }
 
+func (unconfiguredSandboxProvider) ListImages(context.Context, string) ([]string, error) {
+	return []string{}, nil
+}
+
 var (
 	testEnsureRuntimeHook       func(*Service, string) (sandbox.Runtime, error)
 	testEnsureRuntimeAtHomeHook func(*Service, string) (sandbox.Runtime, error)

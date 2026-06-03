@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"csgclaw/internal/agent"
 	"csgclaw/internal/config"
+	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/boxlitecli"
 )
 
@@ -36,7 +36,7 @@ func StatPathForTest(fn func(string) (os.FileInfo, error)) func() {
 // Non-SDK sandbox providers register unconditionally so they remain available
 // in every csgclaw build.
 func init() {
-	Register(config.BoxLiteProvider, func(cfg config.SandboxConfig) (agent.ServiceOption, error) {
+	Register(config.BoxLiteProvider, func(cfg config.SandboxConfig) (sandbox.Provider, error) {
 		resolvedPath := boxlitecli.ResolvePath("")
 		if err := ensureBoxLiteAvailable(resolvedPath); err != nil {
 			return nil, err
@@ -46,7 +46,7 @@ func init() {
 		for _, registry := range cfg.EffectiveDebianRegistries() {
 			opts = append(opts, boxlitecli.WithRegistry(registry))
 		}
-		return agent.WithSandboxProvider(boxlitecli.NewProvider(opts...)), nil
+		return boxlitecli.NewProvider(opts...), nil
 	})
 }
 

@@ -265,7 +265,7 @@ func TestBootstrapConfigViewUsesServerUpgradeVisibility(t *testing.T) {
 	}
 }
 
-func TestHandleRuntimeImagesReturnsLocalDockerImages(t *testing.T) {
+func TestHandleAgentImageCandidatesReturnsLocalSandboxImages(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	if err := (config.Config{
 		Server: config.ServerConfig{
@@ -294,7 +294,7 @@ func TestHandleRuntimeImagesReturnsLocalDockerImages(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/runtime/images", nil))
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents/image-candidates", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -304,44 +304,31 @@ func TestHandleRuntimeImagesReturnsLocalDockerImages(t *testing.T) {
 	}
 	want := []string{"registry.example/picoclaw:2026.5.27", "registry.example/picoclaw:2026.5.22"}
 	if !slices.Equal(got, want) {
-		t.Fatalf("runtime images = %#v, want %#v", got, want)
+		t.Fatalf("agent image candidates = %#v, want %#v", got, want)
 	}
 }
 
-func TestListLocalRuntimeImagesDispatchesBoxLiteProvider(t *testing.T) {
-	var dockerCalled bool
+func TestListLocalRuntimeImagesUsesSandboxProviderCapability(t *testing.T) {
 	var gotHome string
-	got, err := listLocalRuntimeImagesWithDeps(context.Background(), config.Config{
-		Sandbox: config.SandboxConfig{
-			Provider:                 config.BoxLiteProvider,
-			DebianRegistriesOverride: []string{"registry.local"},
-		},
-	}, runtimeImageListDeps{
-		docker: func(context.Context, config.SandboxConfig) ([]string, error) {
-			dockerCalled = true
-			return nil, errors.New("docker lister should not be called")
-		},
-		boxlite: func(_ context.Context, cfg config.SandboxConfig, homeDir string) ([]string, error) {
+	provider := &sandboxtest.Provider{
+		Images: []string{"registry.example/picoclaw:2026.5.27"},
+		ListImagesFunc: func(_ context.Context, homeDir string) ([]string, error) {
 			gotHome = homeDir
-			if got, want := strings.Join(cfg.EffectiveDebianRegistries(), ","), "registry.local"; got != want {
-				t.Fatalf("EffectiveDebianRegistries() = %q, want %q", got, want)
-			}
 			return []string{"registry.example/picoclaw:2026.5.27"}, nil
 		},
-	})
-	if err != nil {
-		t.Fatalf("listLocalRuntimeImagesWithDeps() error = %v", err)
 	}
-	if dockerCalled {
-		t.Fatal("docker lister was called for boxlite provider")
+
+	got, err := listLocalRuntimeImagesWithProvider(context.Background(), provider)
+	if err != nil {
+		t.Fatalf("listLocalRuntimeImagesWithProvider() error = %v", err)
 	}
 	want := []string{"registry.example/picoclaw:2026.5.27"}
 	if !slices.Equal(got, want) {
-		t.Fatalf("listLocalRuntimeImagesWithDeps() = %#v, want %#v", got, want)
+		t.Fatalf("listLocalRuntimeImagesWithProvider() = %#v, want %#v", got, want)
 	}
 	wantHomeSuffix := filepath.Join(config.AppDirName, "agents", agent.ManagerName, config.RuntimeHomeDirName)
 	if !strings.HasSuffix(gotHome, wantHomeSuffix) {
-		t.Fatalf("boxlite home = %q, want suffix %q", gotHome, wantHomeSuffix)
+		t.Fatalf("sandbox home = %q, want suffix %q", gotHome, wantHomeSuffix)
 	}
 }
 

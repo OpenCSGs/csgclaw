@@ -10,6 +10,11 @@ import (
 // ListImages returns tagged local BoxLite image references in boxlite images order.
 func ListImages(ctx context.Context, homeDir string, opts ...ProviderOption) ([]string, error) {
 	p := NewProvider(opts...)
+	return p.ListImages(ctx, homeDir)
+}
+
+// ListImages returns tagged local BoxLite image references in boxlite images order.
+func (p Provider) ListImages(ctx context.Context, homeDir string) ([]string, error) {
 	rt, err := p.Open(ctx, homeDir)
 	if err != nil {
 		return nil, err

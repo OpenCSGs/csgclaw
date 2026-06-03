@@ -20,7 +20,7 @@ export function fetchBootstrapConfig(): Promise<RuntimeBootstrapConfig> {
 }
 
 export function fetchRuntimeImages(): Promise<string[]> {
-  return get("api/v1/runtime/images");
+  return get("api/v1/agents/image-candidates");
 }
 
 export function fetchVersion(options: FetchVersionOptions = {}): Promise<VersionResponse> {

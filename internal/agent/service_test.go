@@ -52,6 +52,10 @@ func (f fakeProvider) Open(ctx context.Context, homeDir string) (sandbox.Runtime
 	return &fakeRuntime{}, nil
 }
 
+func (fakeProvider) ListImages(context.Context, string) ([]string, error) {
+	return []string{}, nil
+}
+
 func (f *fakeRuntime) Create(context.Context, sandbox.CreateSpec) (sandbox.Instance, error) {
 	return &fakeInstance{}, nil
 }

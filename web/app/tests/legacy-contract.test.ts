@@ -81,6 +81,7 @@ describe("legacy UI contract", () => {
     expect(source).toContain('const HUB_TEMPLATES_PATH = "/api/v1/hub/templates";');
     expect(source).toContain("post<HubTemplate>(HUB_TEMPLATES_PATH, payload)");
     expect(source).toContain("publishAgentTemplateRequest(selectedAgentForPage.id)");
+    expect(source).toContain('get("api/v1/agents/image-candidates")');
     expect(source).toContain("agent_id: agentID");
     expect(source).toContain("setSelectedHubTemplateId(published.id);");
     expect(source).toContain('className="entity-toolbar-publish"');

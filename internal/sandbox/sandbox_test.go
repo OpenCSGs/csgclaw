@@ -16,6 +16,10 @@ func (testProvider) Open(context.Context, string) (Runtime, error) {
 	return testRuntime{}, nil
 }
 
+func (testProvider) ListImages(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
 type testRuntime struct{}
 
 func (testRuntime) Create(context.Context, CreateSpec) (Instance, error) {

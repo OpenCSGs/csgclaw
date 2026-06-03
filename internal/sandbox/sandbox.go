@@ -22,6 +22,7 @@ func IsNotFound(err error) bool {
 type Provider interface {
 	Name() string
 	Open(ctx context.Context, homeDir string) (Runtime, error)
+	ListImages(ctx context.Context, homeDir string) ([]string, error)
 }
 
 // Runtime manages sandbox instances under one sandbox home.
