@@ -377,6 +377,10 @@ export function AgentDetailPane({
                   emptyHint={t("agentWorkspacePreviewHint")}
                   binaryText={t("agentWorkspaceBinary")}
                   emptyFileText={t("agentWorkspaceEmptyFile")}
+                  previewText={t("workspacePreviewPreviewTab")}
+                  codeText={t("workspacePreviewCodeTab")}
+                  viewToggleLabel={t("workspacePreviewViewMode")}
+                  closeText={t("close")}
                   truncatedText={t("workspacePreviewTruncated")}
                 />
               </div>

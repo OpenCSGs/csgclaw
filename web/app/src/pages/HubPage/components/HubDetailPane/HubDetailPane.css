@@ -399,8 +399,7 @@
   background: var(--hub-workspace-panel-bg);
 }
 
-.hub-workspace-tree,
-.hub-workspace-preview {
+.hub-workspace-tree {
   min-width: 0;
   min-height: 340px;
   height: 100%;
@@ -582,8 +581,7 @@
 }
 
 @media (max-width: 720px) {
-  .hub-workspace-tree,
-  .hub-workspace-preview {
+  .hub-workspace-tree {
     min-height: 280px;
   }
 }

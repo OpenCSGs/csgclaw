@@ -57,7 +57,7 @@
   padding: var(--workspace-preview-header-padding, 10px 12px);
   border-bottom: 1px solid var(--workspace-preview-border, var(--line));
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   color: var(--workspace-preview-muted, var(--muted));
@@ -72,6 +72,51 @@
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workspace-preview-file-actions {
+  min-width: 0;
+  height: 24px;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.workspace-preview-file-meta {
+  min-width: 0;
+  overflow: hidden;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-preview-open-button {
+  --btn-height: 24px;
+  --btn-min-width: 24px;
+  --btn-padding-x: 0;
+
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  border-radius: 6px;
+  color: var(--workspace-preview-muted, var(--muted));
+  box-shadow: none;
+}
+
+.workspace-preview-open-button:hover:not(:disabled),
+.workspace-preview-open-button:focus-visible {
+  color: var(--workspace-preview-text, var(--text));
+}
+
+.workspace-preview-open-button .btn-content {
+  width: 100%;
+  height: 100%;
+}
+
+.workspace-preview-open-button svg {
+  display: block;
 }
 
 .workspace-preview-body {
@@ -110,4 +155,272 @@
   overflow: visible;
   background: var(--workspace-preview-bg, var(--surface));
   color: var(--workspace-preview-text, var(--text));
+}
+
+.workspace-preview-dialog {
+  width: min(1120px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.workspace-preview-dialog-header {
+  align-items: center;
+  padding: 16px 18px;
+}
+
+.workspace-preview-dialog-heading {
+  min-width: 0;
+}
+
+.workspace-preview-dialog-heading .csg-dialog-title,
+.workspace-preview-dialog-heading .csg-dialog-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-preview-dialog-actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.workspace-preview-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.workspace-preview-mode-button {
+  --btn-height: 30px;
+  --btn-min-width: 0;
+  --btn-padding-x: 12px;
+  --btn-font-size: 13px;
+  --btn-line-height: 18px;
+
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--portal-gray-600);
+  font-weight: 650;
+}
+
+.workspace-preview-mode-button + .workspace-preview-mode-button {
+  border-left: 1px solid var(--line);
+}
+
+.workspace-preview-mode-button:hover:not(:disabled),
+.workspace-preview-mode-button:focus-visible {
+  background: color-mix(in srgb, var(--portal-gray-100) 70%, transparent);
+  color: var(--portal-gray-800);
+  box-shadow: none;
+}
+
+.workspace-preview-mode-button.active,
+.workspace-preview-mode-button[aria-selected="true"] {
+  background: color-mix(in srgb, var(--portal-gray-100) 82%, var(--surface) 18%);
+  color: var(--portal-gray-900);
+  box-shadow: none;
+}
+
+.workspace-preview-close-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--portal-gray-700);
+  font: inherit;
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.workspace-preview-close-button:hover:not(:disabled),
+.workspace-preview-close-button:focus-visible {
+  background: color-mix(in srgb, var(--portal-gray-100) 78%, transparent);
+  color: var(--portal-gray-900);
+  box-shadow: none;
+}
+
+.workspace-preview-close-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.workspace-preview-close-button svg {
+  display: block;
+}
+
+.workspace-preview-dialog-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+}
+
+.workspace-preview-dialog-code-view .workspace-preview-line-numbers,
+.workspace-preview-dialog-code-view .workspace-preview-code {
+  padding: 16px 24px;
+}
+
+.workspace-preview-markdown {
+  min-width: 0;
+  max-width: 100%;
+  padding: 24px 36px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.workspace-preview-markdown > :first-child {
+  margin-top: 0;
+}
+
+.workspace-preview-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.workspace-preview-markdown h1,
+.workspace-preview-markdown h2,
+.workspace-preview-markdown h3,
+.workspace-preview-markdown h4,
+.workspace-preview-markdown h5,
+.workspace-preview-markdown h6 {
+  margin: 1.35em 0 0.55em;
+  color: var(--text);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.workspace-preview-markdown h1,
+.workspace-preview-markdown h2 {
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace-preview-markdown h1 {
+  font-size: 1.65em;
+}
+
+.workspace-preview-markdown h2 {
+  font-size: 1.35em;
+}
+
+.workspace-preview-markdown h3 {
+  font-size: 1.15em;
+}
+
+.workspace-preview-markdown p,
+.workspace-preview-markdown ul,
+.workspace-preview-markdown ol,
+.workspace-preview-markdown blockquote,
+.workspace-preview-markdown pre,
+.workspace-preview-markdown table {
+  margin: 0 0 1em;
+}
+
+.workspace-preview-markdown ul,
+.workspace-preview-markdown ol {
+  padding-left: 1.5em;
+}
+
+.workspace-preview-markdown blockquote {
+  padding-left: 1em;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+
+.workspace-preview-markdown code {
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.workspace-preview-markdown pre {
+  max-width: 100%;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.workspace-preview-markdown pre code {
+  display: block;
+  min-width: max-content;
+  padding: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.workspace-preview-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow: auto;
+  border-collapse: collapse;
+}
+
+.workspace-preview-markdown th,
+.workspace-preview-markdown td {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+}
+
+.workspace-preview-markdown th {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  font-weight: 700;
+}
+
+.workspace-preview-markdown a {
+  color: var(--portal-brand-700);
+  text-decoration: none;
+}
+
+.workspace-preview-markdown a:hover {
+  text-decoration: underline;
+}
+
+.workspace-preview-markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 720px) {
+  .workspace-preview-file-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workspace-preview-dialog-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workspace-preview-dialog-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .workspace-preview-markdown {
+    padding: 20px;
+  }
 }

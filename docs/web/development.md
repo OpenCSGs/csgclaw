@@ -103,6 +103,7 @@ If a subdirectory later needs its own rules, add a short README in that subdirec
 - Pure icon components belong under `src/components/ui/Icons/`.
 - A component becomes business UI when it combines UI primitives with business state, labels, actions, or API-backed data.
 - When adding page functionality, first check whether existing `src/components/ui` and `src/components/business` packages can be composed for the need. Do not duplicate base button, form, select, overlay, or tooltip interactions inside pages.
+- If shared components do not fit, prefer a page- or feature-private component near the owner before introducing new shared surface area. Promote it later only after reuse or a stable interaction contract is clear.
 - Follow `docs/web/ui-components.md` when adding or changing UI primitives, Radix wrappers, form controls, overlay layers, or component-library exports. Also read it when deciding whether to use an existing component, wrap a Radix primitive, or extract a new local component.
 
 ## Component Naming
@@ -143,11 +144,14 @@ src/pages/WorkspacePage/components/
 - Component-owned CSS lives next to the component and uses the component name, such as `AgentDetailPane.css`.
 - Feature-level shared CSS can live in the feature components folder, such as `WorkspaceComponents.css`.
 - Global styles and design tokens stay in `src/shared/styles/`.
-- Prefer existing CSS variables and tokens before introducing new color, spacing, or shadow values.
-- Tailwind CSS utility classes may be used for small layout and common styling details; stable component presentation should still be captured in component CSS, shared tokens, or component-library wrappers.
+- New UI work should follow a progressive styling order: first compose existing global or feature-local components; if no component fits, implement the smallest local component needed.
+- For new styles, prefer existing CSS variables and tokens before introducing new color, spacing, radius, shadow, or layer values.
+- If a style is ordinary layout or a small common detail and does not need a new semantic selector, prefer Tailwind CSS utility classes.
+- Use component CSS or CSS Modules for stable component presentation, complex selectors, generated markup such as rendered Markdown, or states that are awkward to express with utilities. Prefer CSS Modules for newly extracted page-private components.
 - Keep CSS class names tied to component or feature semantics; avoid generic class names that can collide globally.
 - Do not put page-specific styles in `src/shared/styles/`.
 - Cross-component overlay layers must use the z-index tokens in `src/shared/styles/tokens.css`; see `docs/web/ui-components.md` for the modal, popover, portal, and tooltip layering model.
+- These styling rules are progressive for new files and new component work. Existing files that do not yet follow this order do not need churn-only rewrites; when a single file is already being functionally refactored, it is reasonable to move that file's touched styles toward this order.
 
 ## State And Data
 

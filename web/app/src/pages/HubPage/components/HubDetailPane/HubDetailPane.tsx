@@ -55,7 +55,6 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
   const [isInspectorScrolling, setIsInspectorScrolling] = useState(false);
   const templateListScrollTimerRef = useRef<number | null>(null);
   const inspectorScrollTimerRef = useRef<number | null>(null);
-
   useEffect(
     () => () => {
       if (templateListScrollTimerRef.current) {
@@ -241,6 +240,10 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
                       emptyIcon={<HubPreviewEmptyIcon />}
                       binaryText={t("hubWorkspaceBinary")}
                       emptyFileText={t("hubWorkspaceEmptyFile")}
+                      previewText={t("workspacePreviewPreviewTab")}
+                      codeText={t("workspacePreviewCodeTab")}
+                      viewToggleLabel={t("workspacePreviewViewMode")}
+                      closeText={t("close")}
                       truncatedText={t("workspacePreviewTruncated")}
                     />
                   </div>
