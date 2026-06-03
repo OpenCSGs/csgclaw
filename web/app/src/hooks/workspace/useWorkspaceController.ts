@@ -239,6 +239,7 @@ export function useWorkspaceController() {
     return {
       ready: false,
       loadingText: loadingError || t("loading"),
+      deleteConversationModalProps: null,
     };
   }
 
@@ -321,6 +322,7 @@ export function useWorkspaceController() {
     taskViewProps: task.taskViewProps,
     profilePreviewProps: profilePreview.profilePreviewProps,
     createRoomModalProps: conversation.createRoomModalProps,
+    deleteConversationModalProps: conversation.deleteConversationModalProps,
     inviteMembersModalProps: conversation.inviteMembersModalProps,
     upgradeModalProps: upgrade.upgradeModalProps,
     agentProfileModalProps: agent.agentProfileModalProps,

@@ -32,6 +32,98 @@
   font-weight: 650;
 }
 
+.delete-conversation-backdrop {
+  padding: 32px;
+  background: rgba(12, 17, 29, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+.delete-conversation-modal {
+  width: min(400px, 100%);
+  max-height: calc(100dvh - 64px);
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow:
+    0 20px 24px -4px rgba(16, 24, 40, 0.08),
+    0 8px 8px -4px rgba(16, 24, 40, 0.03);
+}
+
+.delete-conversation-modal .modal-header {
+  position: relative;
+  display: block;
+  padding: 0 68px 0 0;
+}
+
+.delete-conversation-modal .modal-title {
+  color: #101828;
+  font-family:
+    "PingFang SC",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.delete-conversation-modal .modal-subtitle {
+  margin-top: 4px;
+  color: #475467;
+  font-family:
+    "PingFang SC",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+}
+
+.delete-conversation-modal .modal-header .modal-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  color: #98a2b3;
+}
+
+.delete-conversation-error {
+  margin: 16px 24px 0;
+}
+
+.delete-conversation-modal .modal-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin: 0;
+  padding: 32px 0 0;
+  border-top: 0;
+}
+
+.delete-conversation-modal .modal-actions .btn {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-family:
+    "PingFang SC",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
 .agent-create-progress {
   display: grid;
   gap: 8px;

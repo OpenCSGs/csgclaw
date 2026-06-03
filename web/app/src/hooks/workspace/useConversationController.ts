@@ -115,6 +115,9 @@ export function useConversationController({
   const [showInvite, setShowInvite] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
   const [showChannelTools, setShowChannelTools] = useState(false);
+  const [deleteConversationID, setDeleteConversationID] = useState("");
+  const [deleteConversationBusy, setDeleteConversationBusy] = useState(false);
+  const [deleteConversationError, setDeleteConversationError] = useState("");
   const [roomTitle, setRoomTitle] = useState("");
   const [roomDescription, setRoomDescription] = useState("");
   const [roomMemberIDs, setRoomMemberIDs] = useState<string[]>([]);
@@ -244,11 +247,12 @@ export function useConversationController({
     if (!activeThreadDraftKey) {
       return [];
     }
-    return activeThreadDraftKey ? threadDraftsByKey[activeThreadDraftKey] ?? [] : [];
+    return activeThreadDraftKey ? (threadDraftsByKey[activeThreadDraftKey] ?? []) : [];
   }, [activeThreadDraftKey, threadDraftsByKey]);
-  const activeThreadDraft = useMemo(
-    () => segmentsToPlainText(activeThreadDraftSegments),
-    [activeThreadDraftSegments],
+  const activeThreadDraft = useMemo(() => segmentsToPlainText(activeThreadDraftSegments), [activeThreadDraftSegments]);
+  const deleteConversation = useMemo(
+    () => data?.rooms.find((item) => item.id === deleteConversationID) ?? null,
+    [data, deleteConversationID],
   );
   const threadSlashPickerState = useMemo(
     () =>
@@ -720,16 +724,26 @@ export function useConversationController({
     }
   }
 
-  async function deleteRoom(roomID: string): Promise<void> {
+  function requestDeleteRoom(roomID: string): void {
     if (!data || !roomID) {
       return;
+    }
+    setDeleteConversationID(roomID);
+    setDeleteConversationError("");
+    setShowChannelTools(false);
+    setShowMemberList(false);
+  }
+
+  async function deleteRoom(roomID: string): Promise<boolean> {
+    if (!data || !roomID) {
+      return false;
     }
 
     try {
       await deleteRoomRequest(roomID);
     } catch (err) {
       setComposerError(localizeError(err.message, t));
-      return;
+      return false;
     }
 
     const remainingRooms = rooms.filter((item) => item.id !== roomID);
@@ -753,6 +767,33 @@ export function useConversationController({
         selectComputer({ replace: true });
       }
     }
+    return true;
+  }
+
+  async function confirmDeleteConversation(): Promise<void> {
+    if (!deleteConversationID || deleteConversationBusy) {
+      return;
+    }
+    setDeleteConversationBusy(true);
+    setDeleteConversationError("");
+    try {
+      const deleted = await deleteRoom(deleteConversationID);
+      if (deleted) {
+        setDeleteConversationID("");
+      } else {
+        setDeleteConversationError(t("deleteConversationFailed"));
+      }
+    } finally {
+      setDeleteConversationBusy(false);
+    }
+  }
+
+  function cancelDeleteConversation(): void {
+    if (deleteConversationBusy) {
+      return;
+    }
+    setDeleteConversationID("");
+    setDeleteConversationError("");
   }
 
   function applyMention(user: IMUser | null | undefined) {
@@ -971,7 +1012,7 @@ export function useConversationController({
       channelToolsRef,
       messageListRef,
       editorRef,
-      onDeleteRoom: deleteRoom,
+      onDeleteRoom: requestDeleteRoom,
       inviteActionLabel,
       onInviteAction: handleInviteAction,
       mentionCandidates,
@@ -1043,6 +1084,22 @@ export function useConversationController({
             submitError,
             onClose: () => setShowCreateRoom(false),
             onCreate: createRoom,
+          }
+        : null,
+    deleteConversationModalProps:
+      deleteConversation && data
+        ? {
+            t,
+            busy: deleteConversationBusy,
+            conversationTitle:
+              isDirectConversation(deleteConversation) && data.current_user_id
+                ? resolveConversationUser(deleteConversation, data.current_user_id, usersById)?.name ||
+                  deleteConversation.title
+                : deleteConversation.title,
+            error: deleteConversationError,
+            isDirect: isDirectConversation(deleteConversation),
+            onCancel: cancelDeleteConversation,
+            onConfirm: confirmDeleteConversation,
           }
         : null,
     inviteMembersModalProps:

@@ -85,6 +85,8 @@ const t: TranslateFn = (key, params = {}) => {
   const labels: Record<string, string> = {
     close: "Close",
     composerTip: "Enter to send",
+    deleteDirectMessage: "Delete DM",
+    deleteRoom: "Delete Room",
     directMessagesSection: "Direct Messages",
     inputPlaceholder: "Message",
     latestThreadReply: "Latest reply",
@@ -205,6 +207,81 @@ function renderThreadPane({
 }
 
 describe("ConversationPane", () => {
+  it("offers private conversation deletion from the tools popover", async () => {
+    const onDeleteRoom = vi.fn();
+    const onToggleChannelTools = vi.fn();
+    const conversation: IMConversation = {
+      id: "room-dm",
+      is_direct: true,
+      members: ["u-admin", "u-manager"],
+      messages: [],
+      title: "manager",
+    };
+
+    render(
+      <ConversationPane
+        activeThreadRootID=""
+        activeThreadView={null}
+        authBusyProvider=""
+        authStatuses={{}}
+        channelToolsRef={createRef<HTMLDivElement>()}
+        composerError=""
+        conversation={conversation}
+        conversationMembers={users}
+        currentUserID="u-admin"
+        draftSegments={[]}
+        draftText=""
+        editorRef={createRef<HTMLDivElement>()}
+        inviteActionLabel="Invite"
+        locale="zh"
+        logAgent={null}
+        managerProfile={null}
+        managerProfileIncomplete={false}
+        memberMenuRef={createRef<HTMLDivElement>()}
+        mentionCandidates={[]}
+        mentionIndex={0}
+        mentionableUsersByHandle={new Map([["manager", users[1]]])}
+        messageActionBusy={false}
+        messageActionError=""
+        messageListRef={createRef<HTMLElement>()}
+        onApplyMention={() => {}}
+        onCloseThread={() => {}}
+        onComposerCompositionEnd={() => {}}
+        onComposerCompositionStart={() => {}}
+        onComposerKeyDown={() => {}}
+        onDeleteRoom={onDeleteRoom}
+        onInviteAction={() => {}}
+        onMessageAction={() => {}}
+        onOpenThread={() => {}}
+        onProviderLogin={() => {}}
+        onPreviewUser={() => {}}
+        onSendMessage={() => {}}
+        onSendThreadReply={() => {}}
+        onSyncComposer={() => {}}
+        onThreadDraftChange={() => {}}
+        onToggleChannelTools={onToggleChannelTools}
+        onToggleMemberList={() => {}}
+        onToggleToolCalls={() => {}}
+        selectedMessageCount={0}
+        showChannelTools
+        showMemberList={false}
+        showToolCalls
+        t={t}
+        theme="light"
+        threadDraftSegments={[]}
+        threadError=""
+        threadLoading={false}
+        usersById={usersById}
+        visibleMessages={[]}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete DM" }));
+
+    expect(onToggleChannelTools).toHaveBeenCalledWith(false);
+    expect(onDeleteRoom).toHaveBeenCalledWith("room-dm");
+  });
+
   it("shows one date divider per day without times", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-03T12:00:00+08:00"));
@@ -247,9 +324,9 @@ describe("ConversationPane", () => {
         "data-tooltip",
         "2026-05-11 10:25:00",
       );
-      expect([...container.querySelectorAll(".message-row .message-timestamp")].map((item) => item.textContent)).toEqual(
-        ["10:25", "16:45", "09:15"],
-      );
+      expect(
+        [...container.querySelectorAll(".message-row .message-timestamp")].map((item) => item.textContent),
+      ).toEqual(["10:25", "16:45", "09:15"]);
     } finally {
       vi.useRealTimers();
     }

@@ -124,6 +124,8 @@ export function ConversationPane({
 }) {
   const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
   const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
+  const isDirect = isDirectConversation(conversation);
+  const deleteConversationLabel = isDirect ? t("deleteDirectMessage") : t("deleteRoom");
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [logContent, setLogContent] = useState("");
   const [logError, setLogError] = useState("");
@@ -266,21 +268,19 @@ export function ConversationPane({
                       <span>{showToolCalls ? t("toggleToolCallsHide") : t("toggleToolCallsShow")}</span>
                       <strong>{showToolCalls ? t("enabled") : t("disabled")}</strong>
                     </Button>
-                    {!isDirectConversation(conversation) ? (
-                      <Button
-                        variant="outlineDanger"
-                        className="tool-menu-row danger"
-                        onClick={() => {
-                          onToggleChannelTools(false);
-                          onDeleteRoom(conversation.id);
-                        }}
-                      >
-                        <span>{t("deleteRoom")}</span>
-                        <span className="tool-menu-icon" aria-hidden="true">
-                          <TrashIcon />
-                        </span>
-                      </Button>
-                    ) : null}
+                    <Button
+                      variant="outlineDanger"
+                      className="tool-menu-row danger"
+                      onClick={() => {
+                        onToggleChannelTools(false);
+                        onDeleteRoom(conversation.id);
+                      }}
+                    >
+                      <span>{deleteConversationLabel}</span>
+                      <span className="tool-menu-icon" aria-hidden="true">
+                        <TrashIcon />
+                      </span>
+                    </Button>
                   </div>
                 ) : null}
               </div>
@@ -744,7 +744,9 @@ function ThreadPanel({
   const mentionableUsersByHandle = useMemo(() => {
     const result = new Map<string, (typeof mentionableUsers)[number]>();
     mentionableUsers.forEach((user) => {
-      const handle = String(user.handle || user.name || user.id || "").trim().toLowerCase();
+      const handle = String(user.handle || user.name || user.id || "")
+        .trim()
+        .toLowerCase();
       if (!handle) {
         return;
       }
@@ -754,10 +756,7 @@ function ThreadPanel({
     });
     return result;
   }, [mentionableUsers]);
-  const displayDraftSegments = useMemo(
-    () => normalizeComposerSegmentsForDisplay(draftSegments || []),
-    [draftSegments],
-  );
+  const displayDraftSegments = useMemo(() => normalizeComposerSegmentsForDisplay(draftSegments || []), [draftSegments]);
   const threadMentionCandidates = useMemo(() => {
     if (!mentionState) {
       return [];
@@ -854,7 +853,9 @@ function ThreadPanel({
           <div className="thread-panel-kicker">{t("threadPanelTitle")}</div>
           <div className="thread-panel-title truncate">
             {visibleRoot ? (
-              <MessagePreviewText content={thread?.summary?.context_summary?.root_excerpt || visibleRoot.content || ""} />
+              <MessagePreviewText
+                content={thread?.summary?.context_summary?.root_excerpt || visibleRoot.content || ""}
+              />
             ) : (
               t("noVisibleMessages")
             )}

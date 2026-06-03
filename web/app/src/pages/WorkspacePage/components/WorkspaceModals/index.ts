@@ -2,6 +2,7 @@ import "./WorkspaceModals.css";
 
 export * from "./AgentProfileModal";
 export * from "./CreateRoomModal";
+export * from "./DeleteConversationModal";
 export * from "./InviteMembersModal";
 export * from "./ManagerProfileSetupModal";
 export * from "./ManagerRebuildModal";
