@@ -57,6 +57,7 @@ export function AgentDetailPane({
   onStart,
   onStop,
   onRecreate,
+  onUpgrade,
   onDelete,
   onInvite,
   onOpenDM,
@@ -124,6 +125,14 @@ export function AgentDetailPane({
             onClick={() => onOpenDM(item)}
           >
             {t("openDM")}
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            disabled={busyKey.startsWith(busyPrefix) || incomplete}
+            onClick={() => onUpgrade?.(item)}
+          >
+            {t("agentUpgrade")}
           </Button>
           <Button
             variant="danger"

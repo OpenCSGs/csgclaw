@@ -35,6 +35,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 					r.Put("/", h.updateAgentProfile)
 				})
 				r.Post("/recreate", h.recreateAgent)
+				r.Post("/upgrade", h.upgradeAgent)
 			})
 		})
 		r.Route("/hub/templates", func(r chi.Router) {

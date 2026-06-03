@@ -80,7 +80,7 @@ type ManagerRebuildOptions = {
 };
 
 type AgentModalMode = "create" | "edit";
-type AgentAction = "delete" | "recreate" | "start" | "stop";
+type AgentAction = "delete" | "recreate" | "start" | "stop" | "upgrade";
 
 type AgentWithProfile = {
   agent: AgentLike;
@@ -762,7 +762,7 @@ export function useAgentController({
     if (!item?.id || agentActionBusy) {
       return;
     }
-    if (isNotificationBotAgent(item) && (action === "recreate" || action === "start" || action === "stop")) {
+    if (isNotificationBotAgent(item) && (action === "recreate" || action === "start" || action === "stop" || action === "upgrade")) {
       return;
     }
     if (action === "recreate" && isManagerAgent(item)) {
@@ -940,6 +940,7 @@ export function useAgentController({
       onStart: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),
       onStop: (item: AgentLike | null | undefined) => runAgentAction(item, "stop"),
       onRecreate: (item: AgentLike | null | undefined) => runAgentAction(item, "recreate"),
+      onUpgrade: (item: AgentLike | null | undefined) => runAgentAction(item, "upgrade"),
       onDelete: (item: AgentLike | null | undefined) => runAgentAction(item, "delete"),
       onInvite: inviteAgentToRoom,
       onOpenDM: openAgentDirectMessage,

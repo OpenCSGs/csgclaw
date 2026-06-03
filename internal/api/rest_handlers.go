@@ -29,6 +29,9 @@ func (h *Handler) updateAgentProfile(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) recreateAgent(w http.ResponseWriter, r *http.Request) {
 	h.handleAgentRecreateByID(w, r)
 }
+func (h *Handler) upgradeAgent(w http.ResponseWriter, r *http.Request) {
+	h.handleAgentUpgradeByID(w, r)
+}
 func (h *Handler) listHubTemplates(w http.ResponseWriter, r *http.Request) {
 	h.handleHubTemplates(w, r)
 }

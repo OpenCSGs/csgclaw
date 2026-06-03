@@ -294,6 +294,22 @@ func (s *Service) ResolvedAgentProfile(agentID string) (AgentProfile, error) {
 }
 
 func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
+	return s.recreate(ctx, id, func(ctx context.Context, got Agent) (string, error) {
+		return s.imageForRecreate(ctx, got), nil
+	})
+}
+
+func (s *Service) Upgrade(ctx context.Context, id string) (Agent, error) {
+	return s.recreate(ctx, id, func(ctx context.Context, got Agent) (string, error) {
+		latest, ok := s.currentDefaultImageForAgent(ctx, got)
+		if !ok || strings.TrimSpace(latest) == "" {
+			return "", fmt.Errorf("agent %q has no default image to upgrade", got.ID)
+		}
+		return latest, nil
+	})
+}
+
+func (s *Service) recreate(ctx context.Context, id string, imageFor func(context.Context, Agent) (string, error)) (Agent, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
@@ -314,7 +330,10 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
-	image := s.imageForRecreate(ctx, got)
+	image, err := imageFor(ctx, got)
+	if err != nil {
+		return Agent{}, err
+	}
 	runtimeKind := strings.TrimSpace(got.RuntimeKind)
 	if isGatewayRuntimeKind(runtimeKind) {
 		if image == "" {

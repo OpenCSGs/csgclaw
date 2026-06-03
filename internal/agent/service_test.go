@@ -4130,6 +4130,72 @@ func TestRecreateUsesLatestDefaultTemplateImageAndPreservesUserSkills(t *testing
 	}
 }
 
+func TestUpgradeUsesLatestDefaultTemplateImage(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
+		ID:          "frontend-worker",
+		Name:        "frontend-worker",
+		Description: "frontend worker",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "registry.example/picoclaw-worker:2026.06.03",
+	})
+
+	var newImage string
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+		WithHubService(hubSvc),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				newImage = spec.Image
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-alice-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning, CreatedAt: time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeID:   "rt-u-alice",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "custom.example/alice-worker:2026.05.27",
+		BoxID:       "box-alice-old",
+		Role:        RoleWorker,
+		Status:      string(agentruntime.StateRunning),
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	recreated, err := svc.Upgrade(context.Background(), "u-alice")
+	if err != nil {
+		t.Fatalf("Upgrade() error = %v", err)
+	}
+	if newImage != "registry.example/picoclaw-worker:2026.06.03" {
+		t.Fatalf("runtime New() image = %q, want latest default template image", newImage)
+	}
+	if recreated.Image != "registry.example/picoclaw-worker:2026.06.03" {
+		t.Fatalf("Upgrade().Image = %q, want latest default template image", recreated.Image)
+	}
+}
+
 func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
