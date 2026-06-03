@@ -642,7 +642,7 @@ export const messages = {
     managerRebuildSubtitle: "Choose the runtime and image to use for recreate. This interrupts the current Manager.",
     managerRebuildAction: "Recreate",
     managerRebuildBusy: "Recreating...",
-    profileRestartRequired: "Restart needed",
+    profileRestartRequired: "Recreate required",
     profileCompleteBadge: "Configured",
     profileIncompleteBadge: "Incomplete",
     noAgents: "No workers yet.",

@@ -193,6 +193,7 @@ export type UseAgentControllerArgs = {
   bootstrapConfig: RuntimeBootstrapConfig | null;
   data: IMData | null;
   hubTemplates: HubTemplate[];
+  localRuntimeImages: string[];
   locale: LocaleCode;
   managerProfile: AgentProfileLike | null;
   refreshHubTemplates: () => Promise<void>;

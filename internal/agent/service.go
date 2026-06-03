@@ -501,7 +501,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		_ = s.closeRuntime(runtimeHome, rt)
 	}()
 	if forceRecreate {
-		rt, err = s.cleanupBootstrapManagerForRecreate(ctx, rt, runtimeHome)
+		rt, err = s.cleanupBootstrapManagerForRecreate(ctx, rt, runtimeHome, runtimeKind)
 		if err != nil {
 			return Agent{}, err
 		}
@@ -624,7 +624,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 	return *cloneAgent(&manager), nil
 }
 
-func (s *Service) cleanupBootstrapManagerForRecreate(ctx context.Context, rt sandbox.Runtime, runtimeHome string) (sandbox.Runtime, error) {
+func (s *Service) cleanupBootstrapManagerForRecreate(ctx context.Context, rt sandbox.Runtime, runtimeHome, runtimeKind string) (sandbox.Runtime, error) {
 	log.Printf("force recreating bootstrap manager box %q", ManagerName)
 	removed := false
 	for _, managerBoxIDOrName := range s.bootstrapManagerLookupKeys() {
@@ -650,14 +650,41 @@ func (s *Service) cleanupBootstrapManagerForRecreate(ctx context.Context, rt san
 	if err != nil {
 		return nil, err
 	}
+	sourceRuntimeKind := s.managerSkillPreservationSourceRuntimeKind(runtimeKind)
+	restoreSkills, cleanupSkills, err := prepareWorkspaceSkillsPreservation(ManagerName, sourceRuntimeKind, runtimeKind, RoleManager)
+	if err != nil {
+		return nil, fmt.Errorf("prepare bootstrap manager skills preservation: %w", err)
+	}
+	if cleanupSkills != nil {
+		defer cleanupSkills()
+	}
 	if err := removeAllWithRetry(managerHome); err != nil {
 		return nil, fmt.Errorf("remove bootstrap manager home: %w", err)
+	}
+	if restoreSkills != nil {
+		if err := restoreSkills(); err != nil {
+			return nil, fmt.Errorf("restore bootstrap manager skills: %w", err)
+		}
 	}
 	rt, err = s.ensureRuntimeAtHome(runtimeHome)
 	if err != nil {
 		return nil, err
 	}
 	return rt, nil
+}
+
+func (s *Service) managerSkillPreservationSourceRuntimeKind(targetRuntimeKind string) string {
+	targetRuntimeKind = strings.TrimSpace(targetRuntimeKind)
+	if s == nil {
+		return targetRuntimeKind
+	}
+	s.mu.RLock()
+	existing := s.agents[ManagerUserID]
+	s.mu.RUnlock()
+	if source := strings.TrimSpace(existing.RuntimeKind); isGatewayRuntimeKind(source) {
+		return source
+	}
+	return targetRuntimeKind
 }
 
 func (s *Service) managerStartupProfile(ctx context.Context) (AgentProfile, []ProfileDetectionResult) {
@@ -918,7 +945,6 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent create --replace requires id")
 	}
-	managerImageOverride := replaceImageOverride(req)
 
 	s.mu.RLock()
 	existing, ok := s.agents[id]
@@ -947,6 +973,7 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 	}
 
 	if isManagerAgent(existing) || isManagerCreateSpec(spec) {
+		managerImageOverride := s.managerImageOverrideForReplace(ctx, existing, req, spec.RuntimeKind)
 		return s.ensureManager(ctx, true, managerImageOverride, spec.RuntimeKind)
 	}
 	if shouldCreateWorkerSpec(spec) || strings.EqualFold(existing.Role, RoleWorker) {
@@ -973,6 +1000,23 @@ func replaceImageOverride(req CreateRequest) string {
 		}
 	}
 	return ""
+}
+
+func (s *Service) managerImageOverrideForReplace(ctx context.Context, existing Agent, req CreateRequest, runtimeKind string) string {
+	requested := strings.TrimSpace(replaceImageOverride(req))
+	if requested == "" {
+		return ""
+	}
+	if requested != strings.TrimSpace(existing.Image) {
+		return requested
+	}
+	if runtimeKindForGatewayRuntime(runtimeKind) != runtimeKindForGatewayRuntime(existing.RuntimeKind) {
+		return requested
+	}
+	if latest, ok := s.currentDefaultImageForAgent(ctx, existing); ok && imageNeedsDefaultRecreate(existing.Image, latest) {
+		return latest
+	}
+	return requested
 }
 
 func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) (CreateAgentSpec, error) {
@@ -1053,7 +1097,8 @@ func (s *Service) Agent(id string) (Agent, bool) {
 	if !ok {
 		return Agent{}, false
 	}
-	return s.hydrateAgentStatus(context.Background(), a), true
+	ctx := context.Background()
+	return s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, a)), true
 }
 
 func (s *Service) agentSnapshot(id string) (Agent, bool) {
@@ -1348,8 +1393,9 @@ func (s *Service) List() []Agent {
 	s.mu.RLock()
 	agents := sortedAgentsFromMap(s.agents)
 	s.mu.RUnlock()
+	ctx := context.Background()
 	for idx := range agents {
-		agents[idx] = s.hydrateAgentStatus(context.Background(), agents[idx])
+		agents[idx] = s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, agents[idx]))
 	}
 	return agents
 }

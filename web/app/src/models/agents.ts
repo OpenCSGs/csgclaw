@@ -1145,7 +1145,9 @@ export function availableManagerRebuildRuntimeOptions(
 export function availableManagerRebuildImageOptions(
   variants: readonly ManagerTemplateVariant[] | null | undefined,
   runtimeKind: unknown,
+  bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
   currentImage = "",
+  localImages: readonly string[] | null | undefined = [],
 ): string[] {
   const images: string[] = [];
   const seen = new Set<string>();
@@ -1157,7 +1159,7 @@ export function availableManagerRebuildImageOptions(
     seen.add(trimmed);
     images.push(trimmed);
   };
-  push(currentImage);
+  push(defaultManagerRebuildImageForRuntime(variants, runtimeKind, bootstrapConfig, ""));
   const selectedRuntime = normalizeRuntimeKind(runtimeKind);
   if (Array.isArray(variants)) {
     for (const item of variants) {
@@ -1167,6 +1169,12 @@ export function availableManagerRebuildImageOptions(
       push(item?.image);
     }
   }
+  if (Array.isArray(localImages)) {
+    for (const image of localImages) {
+      push(image);
+    }
+  }
+  push(currentImage);
   return images;
 }
 
@@ -1176,11 +1184,23 @@ export function defaultManagerRebuildImageForRuntime(
   bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
   fallbackImage = "",
 ): string {
-  const images = availableManagerRebuildImageOptions(variants, runtimeKind);
-  if (images.length > 0) {
-    return images[0];
+  const runtimeDefault = runtimeImageForKind(runtimeKind, bootstrapConfig, "");
+  if (runtimeDefault) {
+    return runtimeDefault;
   }
-  return runtimeImageForKind(runtimeKind, bootstrapConfig, fallbackImage);
+  const selectedRuntime = normalizeRuntimeKind(runtimeKind);
+  if (Array.isArray(variants)) {
+    for (const item of variants) {
+      if (selectedRuntime && normalizeRuntimeKind(item?.runtimeKind) !== selectedRuntime) {
+        continue;
+      }
+      const image = String(item?.image ?? "").trim();
+      if (image) {
+        return image;
+      }
+    }
+  }
+  return String(fallbackImage ?? "").trim();
 }
 
 export function agentCreateProgressSteps(runtimeKind: unknown): AgentCreateProgressStep[] {

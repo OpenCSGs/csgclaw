@@ -23,6 +23,8 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/sandbox/boxlitecli"
+	"csgclaw/internal/sandbox/dockercli"
 	"csgclaw/internal/team"
 	"csgclaw/internal/upgrade"
 	"csgclaw/internal/utils"
@@ -48,6 +50,7 @@ type Handler struct {
 	upgradeManager      *upgrade.Manager
 	upgradeConfigPath   string
 	upgradeApply        func(upgrade.ApplyHelperOptions) error
+	localRuntimeImages  func(context.Context, config.Config) ([]string, error)
 	notificationDeliver notification_bot.Fanouter
 	activityDecider     ActivityDecider
 }
@@ -167,6 +170,79 @@ func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) 
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (h *Handler) listRuntimeImages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cfg, _, err := h.loadBootstrapConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	lister := h.localRuntimeImages
+	if lister == nil {
+		lister = listLocalRuntimeImages
+	}
+	images, err := lister(r.Context(), cfg)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if images == nil {
+		images = []string{}
+	}
+	writeJSON(w, http.StatusOK, images)
+}
+
+func listLocalRuntimeImages(ctx context.Context, cfg config.Config) ([]string, error) {
+	return listLocalRuntimeImagesWithDeps(ctx, cfg, defaultRuntimeImageListDeps)
+}
+
+type runtimeImageListDeps struct {
+	docker  func(context.Context, config.SandboxConfig) ([]string, error)
+	boxlite func(context.Context, config.SandboxConfig, string) ([]string, error)
+}
+
+var defaultRuntimeImageListDeps = runtimeImageListDeps{
+	docker:  listDockerRuntimeImages,
+	boxlite: listBoxLiteRuntimeImages,
+}
+
+func listLocalRuntimeImagesWithDeps(ctx context.Context, cfg config.Config, deps runtimeImageListDeps) ([]string, error) {
+	sandboxCfg := cfg.Sandbox.Resolved()
+	switch sandboxCfg.Provider {
+	case config.DockerProvider:
+		if deps.docker == nil {
+			return []string{}, nil
+		}
+		return deps.docker(ctx, sandboxCfg)
+	case config.BoxLiteProvider:
+		if deps.boxlite == nil {
+			return []string{}, nil
+		}
+		homeDir, err := agent.SandboxRuntimeHome(agent.ManagerName)
+		if err != nil {
+			return nil, err
+		}
+		return deps.boxlite(ctx, sandboxCfg, homeDir)
+	default:
+		return []string{}, nil
+	}
+}
+
+func listDockerRuntimeImages(ctx context.Context, cfg config.SandboxConfig) ([]string, error) {
+	return dockercli.ListImages(ctx, dockercli.WithPath(cfg.EffectiveDockerCLIPath()))
+}
+
+func listBoxLiteRuntimeImages(ctx context.Context, cfg config.SandboxConfig, homeDir string) ([]string, error) {
+	opts := []boxlitecli.ProviderOption{boxlitecli.WithPath(boxlitecli.ResolvePath(""))}
+	for _, registry := range cfg.EffectiveDebianRegistries() {
+		opts = append(opts, boxlitecli.WithRegistry(registry))
+	}
+	return boxlitecli.ListImages(ctx, homeDir, opts...)
 }
 
 func (h *Handler) loadBootstrapConfig() (config.Config, string, error) {

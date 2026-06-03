@@ -919,7 +919,11 @@
 }
 
 .manager-rebuild-modal .manager-rebuild-grid {
+  --manager-rebuild-control-height: 64px;
+
   min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 18px;
 }
 
@@ -927,11 +931,105 @@
   gap: 8px;
 }
 
-.manager-rebuild-modal .field span {
+.manager-rebuild-modal .field > span {
   color: var(--portal-gray-700);
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
+}
+
+.manager-rebuild-image-option {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.manager-rebuild-runtime-field .csg-select-trigger,
+.manager-rebuild-image-select {
+  height: var(--manager-rebuild-control-height);
+  min-height: var(--manager-rebuild-control-height);
+}
+
+.manager-rebuild-image-select .csg-select-value {
+  display: block;
+  overflow: visible;
+  white-space: normal;
+}
+
+.manager-rebuild-image-primary {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: baseline;
+  gap: 0;
+}
+
+.manager-rebuild-image-select .csg-select-value,
+.manager-rebuild-image-select-item [data-radix-select-item-text] {
+  min-width: 0;
+}
+
+.manager-rebuild-image-select-item [data-radix-select-item-text] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.manager-rebuild-image-name,
+.manager-rebuild-image-context {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-rebuild-image-option span.manager-rebuild-image-name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.manager-rebuild-image-option span.manager-rebuild-image-tag {
+  flex: 0 0 auto;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.manager-rebuild-image-option span.manager-rebuild-image-context {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.manager-rebuild-image-placeholder {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-rebuild-image-select-content {
+  min-width: min(var(--radix-select-trigger-width), calc(100vw - 48px));
+  width: min(var(--radix-select-trigger-width), calc(100vw - 48px));
+  max-width: min(var(--radix-select-trigger-width), calc(100vw - 48px));
+}
+
+.manager-rebuild-image-select-item {
+  min-height: 58px;
+  max-width: 100%;
+}
+
+.manager-rebuild-image-select-content .manager-rebuild-image-option {
+  max-width: calc(min(var(--radix-select-trigger-width), calc(100vw - 48px)) - 44px);
 }
 
 .manager-rebuild-modal .form-error {

@@ -15,9 +15,11 @@ const labels: Record<string, string> = {
   profileModel: "Model",
   profileProvider: "Provider",
   profileReasoning: "Reasoning",
-  profileRestartRequired: "Restart required",
+  profileRestartRequired: "Recreate required",
   profileRuntimeKind: "Runtime",
   agentName: "Name",
+  agentDescription: "Description",
+  agentImage: "Image",
 };
 
 function t(key: string): string {
@@ -35,6 +37,26 @@ const worker = {
 };
 
 describe("agent action visibility", () => {
+  it("shows a recreate warning when backend marks an agent restart required", () => {
+    render(
+      <AgentRow
+        item={{ ...worker, env_restart_required: true }}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        onEdit={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Recreate required")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recreate" })).toBeInTheDocument();
+  });
+
   it("shows recreate for worker rows even when lifecycle actions are hidden", () => {
     render(
       <AgentRow
@@ -163,5 +185,43 @@ describe("agent action visibility", () => {
     const nameInput = screen.getByDisplayValue("Worker");
     expect(nameInput).toBeDisabled();
     expect(nameInput).toHaveAttribute("readonly");
+  });
+
+  it("shows long agent image values with full hover text and full-row alignment", () => {
+    const image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27";
+    render(
+      <AgentDetailPane
+        item={{ ...worker, image }}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={agentToDraft({ ...worker, image })}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    const imageInput = screen.getByLabelText("Image");
+    expect(imageInput).toHaveValue(image);
+    expect(imageInput).toHaveAttribute("title", image);
+    expect(imageInput).toHaveClass("long-image-input");
+    expect(imageInput.closest("label")).toHaveClass("span-2", "agent-image-field");
   });
 });

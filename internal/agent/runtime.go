@@ -172,6 +172,10 @@ func (s *Service) closeRuntime(homeDir string, rt sandbox.Runtime) error {
 }
 
 func (s *Service) sandboxRuntimeHome(agentName string) (string, error) {
+	return SandboxRuntimeHome(agentName)
+}
+
+func SandboxRuntimeHome(agentName string) (string, error) {
 	agentHome, err := agentHomeDir(agentName)
 	if err != nil {
 		return "", err

@@ -78,6 +78,52 @@ func TestCreateBuildsRunCLIArgs(t *testing.T) {
 	}
 }
 
+func TestListImagesBuildsCLIArgsAndParsesJSON(t *testing.T) {
+	runner := &fakeRunner{
+		results: []fakeResult{{result: CommandResult{Stdout: []byte(`[
+			{"Repository":"registry.example/picoclaw","Tag":"2026.5.27"},
+			{"repository":"registry.example/picoclaw","tag":"2026.5.22"},
+			{"Reference":"registry.example/custom:dev"},
+			{"repository":"<none>","tag":"<none>"},
+			{"Repository":"registry.example/picoclaw","Tag":"2026.5.27"}
+		]`)}}},
+	}
+
+	got, err := ListImages(
+		context.Background(),
+		"/tmp/boxlite-home",
+		WithPath("/usr/local/bin/boxlite"),
+		WithConfig("/tmp/config.toml"),
+		WithRegistry("registry.local"),
+		WithRunner(runner),
+	)
+	if err != nil {
+		t.Fatalf("ListImages() error = %v", err)
+	}
+	wantImages := []string{
+		"registry.example/picoclaw:2026.5.27",
+		"registry.example/picoclaw:2026.5.22",
+		"registry.example/custom:dev",
+	}
+	if !reflect.DeepEqual(got, wantImages) {
+		t.Fatalf("ListImages() = %#v, want %#v", got, wantImages)
+	}
+
+	wantArgs := []string{
+		"--home", "/tmp/boxlite-home",
+		"--config", "/tmp/config.toml",
+		"--registry", "registry.local",
+		"images",
+		"--format", "json",
+	}
+	if got := runner.requests[0].Args; !reflect.DeepEqual(got, wantArgs) {
+		t.Fatalf("ListImages() args = %#v, want %#v", got, wantArgs)
+	}
+	if got, want := runner.requests[0].Path, "/usr/local/bin/boxlite"; got != want {
+		t.Fatalf("ListImages() path = %q, want %q", got, want)
+	}
+}
+
 func TestCreateRejectsUnsupportedOptions(t *testing.T) {
 	tests := []struct {
 		name string

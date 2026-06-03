@@ -96,6 +96,7 @@ export function useAgentController({
   bootstrapConfig,
   data,
   hubTemplates,
+  localRuntimeImages,
   locale,
   managerProfile,
   refreshHubTemplates,
@@ -201,7 +202,9 @@ export function useAgentController({
   const managerRebuildImageOptions = availableManagerRebuildImageOptions(
     managerTemplateVariants,
     managerRebuildRuntimeKind,
+    bootstrapConfig,
     managerAgent?.image,
+    localRuntimeImages,
   );
   const agentsDisplayError =
     agentsError || (agentsQuery.isError ? errorMessage(agentsQuery.error, t("agentActionFailed")) : "");
@@ -351,9 +354,12 @@ export function useAgentController({
       ? initialRuntimeKind
       : fallbackRuntimeKind;
     const currentImage = String(item?.image ?? managerAgent?.image ?? "").trim();
-    const resolvedImage =
-      currentImage ||
-      defaultManagerRebuildImageForRuntime(managerTemplateVariants, resolvedRuntimeKind, bootstrapConfig, "");
+    const resolvedImage = defaultManagerRebuildImageForRuntime(
+      managerTemplateVariants,
+      resolvedRuntimeKind,
+      bootstrapConfig,
+      currentImage,
+    );
     setManagerRebuildRuntimeKind(resolvedRuntimeKind);
     setManagerRebuildImage(resolvedImage);
     setShowManagerRebuildModal(true);

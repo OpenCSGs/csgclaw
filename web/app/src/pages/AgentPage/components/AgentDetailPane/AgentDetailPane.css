@@ -114,6 +114,7 @@
 
 .agent-detail-pane .field {
   margin-top: 0;
+  min-width: 0;
 }
 
 .agent-detail-pane .profile-grid-compact,
@@ -133,6 +134,17 @@
 .agent-detail-pane .csg-select-trigger {
   min-height: 42px;
   border-radius: 10px;
+}
+
+.agent-detail-pane .agent-image-field {
+  min-width: 0;
+}
+
+.agent-detail-pane .long-image-input {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-detail-pane .profile-section .field textarea.compact-textarea {

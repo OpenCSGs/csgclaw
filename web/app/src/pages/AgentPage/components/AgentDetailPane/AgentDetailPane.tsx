@@ -211,10 +211,12 @@ export function AgentDetailPane({
                 <input value={draft.runtime_kind || item.runtime_kind || ""} readOnly disabled />
               </label>
               {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-                <label className="field">
+                <label className="field span-2 agent-image-field">
                   <span>{t("agentImage")}</span>
                   <input
+                    className="long-image-input"
                     value={draft.image}
+                    title={draft.image}
                     readOnly
                     disabled
                     onInput={(event) => updateDraft({ image: event.currentTarget.value })}

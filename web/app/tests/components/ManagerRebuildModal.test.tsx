@@ -26,22 +26,25 @@ describe("ManagerRebuildModal", () => {
     const onImageChange = vi.fn();
     const onClose = vi.fn();
     const onConfirm = vi.fn();
+    const managerImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27";
+    const localImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.22";
+    const alternateImage = "picoclaw:alternate";
 
     const { container } = render(
       <ManagerRebuildModal
         t={t}
         runtimeOptions={[{ value: "picoclaw_sandbox" }, { value: "openclaw_sandbox" }]}
         runtimeKind="picoclaw_sandbox"
-        image="picoclaw:manager"
-        imageOptions={["picoclaw:manager", "picoclaw:alternate"]}
+        image={managerImage}
+        imageOptions={[managerImage, localImage, alternateImage]}
         templateVariants={[
-          { runtimeKind: "picoclaw_sandbox", image: "picoclaw:manager" },
+          { runtimeKind: "picoclaw_sandbox", image: managerImage },
           { runtimeKind: "openclaw_sandbox", image: "openclaw:template" },
         ]}
         bootstrapConfig={{
           runtime_default_images: {
             openclaw_sandbox: "openclaw:manager",
-            picoclaw_sandbox: "picoclaw:manager",
+            picoclaw_sandbox: managerImage,
           },
         }}
         managerAgent={{ image: "fallback:manager" }}
@@ -58,13 +61,33 @@ describe("ManagerRebuildModal", () => {
     const runtimeSelect = screen.getByRole("combobox", { name: "Runtime" });
 
     expect(runtimeSelect).toHaveTextContent("PicoClaw");
-    expect(screen.getByLabelText("Image")).toHaveValue("picoclaw:manager");
-    expect(document.querySelector('option[value="picoclaw:alternate"]')).toBeInTheDocument();
+    const imageSelect = screen.getByRole("combobox", { name: "Image" });
+    expect(imageSelect).toHaveAttribute("title", managerImage);
+    const selectedImageLabel = imageSelect.querySelector(".manager-rebuild-image-option");
+    expect(selectedImageLabel).toBeInTheDocument();
+    expect(selectedImageLabel?.querySelector(".manager-rebuild-image-name")).toHaveTextContent("picoclaw");
+    expect(selectedImageLabel?.querySelector(".manager-rebuild-image-tag")).toHaveTextContent(":2026.5.27");
+    expect(selectedImageLabel?.querySelector(".manager-rebuild-image-context")).toHaveTextContent(
+      "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq",
+    );
+
+    await user.click(imageSelect);
+    expect(await screen.findByRole("option", { name: managerImage })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: localImage })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: alternateImage })).toBeInTheDocument();
+    const managerOption = screen.getByRole("option", { name: managerImage });
+    expect(managerOption).toHaveClass("manager-rebuild-image-select-item");
+    expect(managerOption.querySelector(".manager-rebuild-image-name")).toHaveTextContent("picoclaw");
+    expect(managerOption.querySelector(".manager-rebuild-image-context")).toHaveTextContent(
+      "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq",
+    );
+    await user.click(screen.getByRole("option", { name: alternateImage }));
+    expect(onImageChange).toHaveBeenCalledWith(alternateImage);
 
     await user.click(runtimeSelect);
     await user.click(await screen.findByRole("option", { name: "OpenClaw" }));
     expect(onRuntimeKindChange).toHaveBeenCalledWith("openclaw_sandbox");
-    expect(onImageChange).toHaveBeenCalledWith("openclaw:template");
+    expect(onImageChange).toHaveBeenCalledWith("openclaw:manager");
 
     await user.click(screen.getByRole("button", { name: "Recreate" }));
     expect(onConfirm).toHaveBeenCalledTimes(1);

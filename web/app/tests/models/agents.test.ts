@@ -256,10 +256,27 @@ describe("agent model helpers", () => {
         "custom_sandbox",
       ).map((option) => option.value),
     ).toEqual(["custom_sandbox", "picoclaw_sandbox", "openclaw_sandbox"]);
-    expect(availableManagerRebuildImageOptions(variants, "openclaw_sandbox", "current:manager")).toEqual([
-      "current:manager",
+    expect(availableManagerRebuildImageOptions(variants, "openclaw_sandbox", null, "current:manager")).toEqual([
       "openclaw:manager",
+      "current:manager",
     ]);
+    expect(
+      availableManagerRebuildImageOptions(
+        [],
+        "picoclaw_sandbox",
+        { runtime_default_images: { picoclaw_sandbox: "picoclaw:latest" } },
+        "picoclaw:old",
+        ["picoclaw:old", "local/custom:dev"],
+      ),
+    ).toEqual(["picoclaw:latest", "picoclaw:old", "local/custom:dev"]);
+    expect(
+      defaultManagerRebuildImageForRuntime(
+        variants,
+        "picoclaw_sandbox",
+        { runtime_default_images: { picoclaw_sandbox: "picoclaw:latest" } },
+        "picoclaw:old",
+      ),
+    ).toBe("picoclaw:latest");
     expect(defaultManagerRebuildImageForRuntime(variants, "openclaw_sandbox", null, "fallback:manager")).toBe(
       "openclaw:manager",
     );

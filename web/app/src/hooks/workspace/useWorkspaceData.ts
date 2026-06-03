@@ -14,6 +14,7 @@ import {
   useWorkspaceBootstrapQuery,
   useWorkspaceHubTemplatesQuery,
   useWorkspaceManagerProfileQuery,
+  useWorkspaceRuntimeImagesQuery,
   useWorkspaceUpgradeStatusQuery,
   workspaceQueryKeys,
 } from "./workspaceQueries";
@@ -30,6 +31,7 @@ export function useWorkspaceData() {
   const bootstrapConfigQuery = useWorkspaceBootstrapConfigQuery();
   const managerProfileQuery = useWorkspaceManagerProfileQuery();
   const agentsQuery = useWorkspaceAgentsQuery();
+  const runtimeImagesQuery = useWorkspaceRuntimeImagesQuery();
   const hubTemplatesQuery = useWorkspaceHubTemplatesQuery();
   const appVersionQuery = useWorkspaceAppVersionQuery();
   const upgradeStatusQuery = useWorkspaceUpgradeStatusQuery();
@@ -161,6 +163,7 @@ export function useWorkspaceData() {
     managerProfileQuery,
     agentsQuery,
     hubTemplatesQuery,
+    runtimeImagesQuery,
     appVersionQuery,
     upgradeStatusQuery,
     data: bootstrapQuery.data ?? null,
@@ -169,6 +172,7 @@ export function useWorkspaceData() {
     agents: agentsQuery.data ?? [],
     agentsLoaded: agentsQuery.isFetched,
     hubTemplates: hubTemplatesQuery.data ?? [],
+    runtimeImages: runtimeImagesQuery.data ?? [],
     hubLoaded: hubTemplatesQuery.isFetched,
     appVersion: appVersionQuery.data ?? "dev",
     upgradeStatus: upgradeStatusQuery.data ?? null,

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { fetchAgentProfileModels, fetchAgentWorkspace, fetchAgentWorkspaceFile, fetchAgents } from "@/api/agents";
 import type { AgentProfileModelRequest } from "@/api/agents";
-import { fetchBootstrap, fetchBootstrapConfig, fetchVersion } from "@/api/app";
+import { fetchBootstrap, fetchBootstrapConfig, fetchRuntimeImages, fetchVersion } from "@/api/app";
 import type { FetchVersionOptions } from "@/api/app";
 import { fetchHubTemplate, fetchHubTemplates, fetchHubWorkspaceFile } from "@/api/hub";
 import { fetchManagerProfile } from "@/api/agents";
@@ -23,6 +23,7 @@ export const workspaceQueryKeys = {
   bootstrapConfig: () => [WORKSPACE_QUERY_SCOPE, "bootstrap-config"] as const,
   managerProfile: () => [WORKSPACE_QUERY_SCOPE, "manager-profile"] as const,
   agents: () => [WORKSPACE_QUERY_SCOPE, "agents"] as const,
+  runtimeImages: () => [WORKSPACE_QUERY_SCOPE, "runtime-images"] as const,
   hubTemplates: () => [WORKSPACE_QUERY_SCOPE, "hub-templates"] as const,
   hubTemplate: (templateID: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-template", templateID || ""] as const,
@@ -56,6 +57,24 @@ export async function fetchWorkspaceBootstrapConfig(): Promise<RuntimeBootstrapC
       : [],
     runtime_default_images: normalizeRuntimeImageMap(payload.runtime_default_images),
   };
+}
+
+export async function fetchWorkspaceRuntimeImages(): Promise<string[]> {
+  const payload = await fetchRuntimeImages();
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const images: string[] = [];
+  for (const item of payload) {
+    const image = String(item ?? "").trim();
+    if (!image || seen.has(image)) {
+      continue;
+    }
+    seen.add(image);
+    images.push(image);
+  }
+  return images;
 }
 
 export async function fetchWorkspaceAppVersion(options: FetchVersionOptions = {}): Promise<string> {
@@ -106,6 +125,14 @@ export function useWorkspaceAgentsQuery(): UseQueryResult<AgentLike[]> {
   return useQuery<AgentLike[]>({
     queryKey: workspaceQueryKeys.agents(),
     queryFn: () => fetchAgents(),
+  });
+}
+
+export function useWorkspaceRuntimeImagesQuery(): UseQueryResult<string[]> {
+  return useQuery<string[]>({
+    queryKey: workspaceQueryKeys.runtimeImages(),
+    queryFn: fetchWorkspaceRuntimeImages,
+    retry: 0,
   });
 }
 
