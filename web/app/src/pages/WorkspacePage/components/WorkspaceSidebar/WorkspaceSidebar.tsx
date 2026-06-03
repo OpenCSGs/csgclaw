@@ -57,7 +57,6 @@ export function WorkspaceSidebar({
             variant="rail"
             workspaceTab={workspaceTab}
             onWorkspaceTabChange={onWorkspaceTabChange}
-            taskCount={taskCount}
             roomCount={roomCount}
             agentCount={agentCount}
             onSelectHub={onSelectHub}
