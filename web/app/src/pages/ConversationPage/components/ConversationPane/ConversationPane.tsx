@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Logs, RefreshCw, X } from "lucide-react";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
@@ -35,8 +36,8 @@ import { isAgentRunning, normalizeAuthProviderName, providerNeedsAuth } from "@/
 import {
   agentMatchesUser,
   formatEventMessage,
+  formatMessageTimestampParts,
   formatThreadReplyCount,
-  formatTime,
   getConversationDescription,
   isDirectConversation,
   isEventMessage,
@@ -319,12 +320,19 @@ export function ConversationPane({
             <strong>{t("noVisibleMessages")}</strong>
           </div>
         ) : null}
-        {visibleMessages.map((message) => {
+        {visibleMessages.map((message, index) => {
+          const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
+          const previousMessage = visibleMessages[index - 1];
+          const showDivider = shouldShowMessageDateDivider(previousMessage, message);
+
           if (isEventMessage(message)) {
             return (
-              <div key={message.id} className="message-event-row">
-                <div className="message-event-text">{formatEventMessage(message, usersById, locale)}</div>
-              </div>
+              <Fragment key={message.id || `event-${index}`}>
+                {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
+                <div className="message-event-row">
+                  <div className="message-event-text">{formatEventMessage(message, usersById, locale)}</div>
+                </div>
+              </Fragment>
             );
           }
           const user = usersById.get(message.sender_id);
@@ -338,72 +346,78 @@ export function ConversationPane({
           const threadSummary = message.thread;
           const latestThreadReply = threadSummary?.latest_reply;
           return (
-            <div key={message.id} className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""}`.trim()}>
-              <button
-                type="button"
-                className="avatar avatar-button"
-                style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}
-                aria-label={`${t("profilePreview")} ${user.name}`}
-                onClick={(event) => onPreviewUser(user, event.currentTarget)}
-              >
-                {user.avatar}
-                {messageAgent ? (
-                  <span className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`} aria-hidden="true" />
-                ) : null}
-              </button>
-              <div className="message-card">
-                <div className="message-hover-actions">
-                  <button
-                    type="button"
-                    className="thread-hover-button"
-                    aria-label={t("replyInThread")}
-                    onClick={() => onOpenThread(message)}
-                  >
-                    <span className="thread-hover-icon" aria-hidden="true">
-                      {IconImage("rooms")}
-                    </span>
-                    <span className="thread-action-tooltip" aria-hidden="true">
-                      {t("replyInThread")}
-                    </span>
-                  </button>
-                </div>
-                <div className="message-meta">
-                  <span className="message-author">{user.name}</span>
-                  <span>{formatTime(message.created_at, locale)}</span>
-                </div>
-                <div className="message-bubble">
-                  <MessageContent
-                    key={`${message.id}:${theme}`}
-                    content={message.content}
-                    message={message}
-                    actionBusy={messageActionBusy}
-                    actionError={messageActionError}
-                    onAction={onMessageAction}
-                  />
-                </div>
-                {threadSummary ? (
-                  <div className="message-thread-actions has-thread-summary">
-                    <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
-                      <span aria-hidden="true">{IconImage("rooms")}</span>
-                      <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
+            <Fragment key={message.id || `message-${index}`}>
+              {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
+              <div className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""}`.trim()}>
+                <button
+                  type="button"
+                  className="avatar avatar-button"
+                  style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}
+                  aria-label={`${t("profilePreview")} ${user.name}`}
+                  onClick={(event) => onPreviewUser(user, event.currentTarget)}
+                >
+                  {user.avatar}
+                  {messageAgent ? (
+                    <span
+                      className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`}
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </button>
+                <div className="message-card">
+                  <div className="message-hover-actions">
+                    <button
+                      type="button"
+                      className="thread-hover-button"
+                      aria-label={t("replyInThread")}
+                      onClick={() => onOpenThread(message)}
+                    >
+                      <span className="thread-hover-icon" aria-hidden="true">
+                        {IconImage("rooms")}
+                      </span>
+                      <span className="thread-action-tooltip" aria-hidden="true">
+                        {t("replyInThread")}
+                      </span>
                     </button>
-                    {latestThreadReply ? (
-                      <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
-                        <span>{t("latestThreadReply")}</span>
-                        <strong className="truncate">
-                          <MessagePreviewText content={latestThreadReply.content} />
-                        </strong>
-                      </button>
-                    ) : (
-                      <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
-                        <span>{t("threadStarted")}</span>
-                        <strong>{formatThreadReplyCount(threadSummary.reply_count, t)}</strong>
-                      </button>
-                    )}
                   </div>
-                ) : null}
+                  <div className="message-meta">
+                    <span className="message-author">{user.name}</span>
+                    <MessageTimestamp parts={timestampParts} />
+                  </div>
+                  <div className="message-bubble">
+                    <MessageContent
+                      key={`${message.id}:${theme}`}
+                      content={message.content}
+                      message={message}
+                      actionBusy={messageActionBusy}
+                      actionError={messageActionError}
+                      onAction={onMessageAction}
+                    />
+                  </div>
+                  {threadSummary ? (
+                    <div className="message-thread-actions has-thread-summary">
+                      <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
+                        <span aria-hidden="true">{IconImage("rooms")}</span>
+                        <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
+                      </button>
+                      {latestThreadReply ? (
+                        <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
+                          <span>{t("latestThreadReply")}</span>
+                          <strong className="truncate">
+                            <MessagePreviewText content={latestThreadReply.content} />
+                          </strong>
+                        </button>
+                      ) : (
+                        <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
+                          <span>{t("threadStarted")}</span>
+                          <strong>{formatThreadReplyCount(threadSummary.reply_count, t)}</strong>
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            </Fragment>
           );
         })}
       </section>
@@ -415,7 +429,7 @@ export function ConversationPane({
             activeIndex={skillIndex}
             loading={skillLoading}
             t={t}
-            onSelect={(name) => onApplySkillCandidate?.(name, editorRef.current)}
+            onSelect={(name) => onApplySkillCandidate?.(name)}
           />
         ) : null}
         {mentionCandidates.length > 0 ? (
@@ -894,7 +908,7 @@ function ThreadPanel({
             loading={threadSkillLoading}
             className="thread-skill-picker"
             t={t}
-            onSelect={(name) => onApplyThreadSkillCandidate(name, threadEditorRef.current)}
+            onSelect={(name) => onApplyThreadSkillCandidate(name)}
           />
         ) : null}
         {threadMentionCandidates.length > 0 ? (
@@ -939,7 +953,7 @@ function ThreadPanel({
                 activeIndex: threadSkillIndex,
                 pickerOpen: threadSkillPickerOpen,
                 onIndexChange: (value) => onSetThreadSkillIndex(value),
-                onApply: (value) => onApplyThreadSkillCandidate(value, threadEditorRef.current),
+                onApply: (value) => onApplyThreadSkillCandidate(value),
                 onDismiss: () => {
                   onDismissThreadSkillPicker();
                   setMentionState(null);
@@ -1025,6 +1039,7 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
   const avatar = user?.avatar || fallbackName.slice(0, 1).toUpperCase();
   const name = user?.name || user?.handle || fallbackName;
   const avatarStyle = { background: `linear-gradient(135deg, ${user?.accent_hex || "#4d6ad6"}, #10233f)` };
+  const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
 
   return (
     <div className={`thread-message ${compact ? "compact" : ""}`.trim()}>
@@ -1046,7 +1061,7 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
       <div className="thread-message-main">
         <div className="message-meta">
           <span className="message-author">{name}</span>
-          <span>{formatTime(message.created_at, locale)}</span>
+          <MessageTimestamp parts={timestampParts} />
         </div>
         <div className="thread-message-bubble">
           <MessageContent key={`${message.id}:${theme}`} content={message.content} message={message} />
@@ -1054,4 +1069,67 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
       </div>
     </div>
   );
+}
+
+function MessageTimestamp({ parts }) {
+  if (!parts.shortLabel) {
+    return null;
+  }
+  return (
+    <time
+      className="message-timestamp"
+      dateTime={parts.dateTime}
+      title={parts.tooltip}
+      aria-label={parts.tooltip}
+      data-tooltip={parts.tooltip}
+      tabIndex={0}
+    >
+      {parts.shortLabel}
+    </time>
+  );
+}
+
+function MessageTimeDivider({ parts }) {
+  if (!parts.dividerLabel) {
+    return null;
+  }
+  return (
+    <div className="message-time-divider">
+      <time
+        className="message-time-divider-label"
+        dateTime={parts.dateTime}
+        title={parts.tooltip}
+        data-tooltip={parts.tooltip}
+        tabIndex={0}
+      >
+        {parts.dividerLabel}
+      </time>
+    </div>
+  );
+}
+
+function shouldShowMessageDateDivider(previousMessage, currentMessage) {
+  if (!previousMessage) {
+    return hasValidMessageTime(currentMessage);
+  }
+  return !isSameMessageDate(previousMessage, currentMessage);
+}
+
+function isSameMessageDate(previousMessage, currentMessage) {
+  const previousAt = Date.parse(previousMessage?.created_at || "");
+  const currentAt = Date.parse(currentMessage?.created_at || "");
+  if (!Number.isFinite(previousAt) || !Number.isFinite(currentAt)) {
+    return false;
+  }
+  const previousDate = new Date(previousAt);
+  const currentDate = new Date(currentAt);
+  return (
+    previousDate.getFullYear() === currentDate.getFullYear() &&
+    previousDate.getMonth() === currentDate.getMonth() &&
+    previousDate.getDate() === currentDate.getDate()
+  );
+}
+
+function hasValidMessageTime(message) {
+  return Number.isFinite(Date.parse(message?.created_at || ""));
 }

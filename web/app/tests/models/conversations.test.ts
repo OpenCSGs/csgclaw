@@ -5,6 +5,7 @@ import {
   conversationThreadViews,
   formatConversationPreview,
   formatEventMessage,
+  formatMessageTimestampParts,
   formatMessagePreviewText,
   splitMessagePreviewText,
   formatTime,
@@ -124,6 +125,56 @@ describe("conversation model helpers", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("formats layered message timestamps and hover details", () => {
+    const enT = (key: string) =>
+      key === "timestampToday" ? "Today" : key === "timestampYesterday" ? "Yesterday" : key;
+    const zhT = (key: string) => (key === "timestampToday" ? "今天" : key === "timestampYesterday" ? "昨天" : key);
+    const now = new Date("2026-06-03T12:00:00+08:00");
+
+    expect(formatMessageTimestampParts("2026-06-03T14:32:45+08:00", "en", enT, now)).toEqual({
+      dateTime: "2026-06-03T06:32:45.000Z",
+      dividerLabel: "Today",
+      label: "14:32",
+      shortLabel: "14:32",
+      tooltip: "2026-06-03 14:32:45",
+    });
+    expect(formatMessageTimestampParts("2026-06-02T14:32:45+08:00", "en", enT, now)).toEqual({
+      dateTime: "2026-06-02T06:32:45.000Z",
+      dividerLabel: "Yesterday",
+      label: "Yesterday 14:32",
+      shortLabel: "14:32",
+      tooltip: "2026-06-02 14:32:45",
+    });
+    expect(formatMessageTimestampParts("2026-06-01T14:32:45+08:00", "zh", zhT, now)).toEqual({
+      dateTime: "2026-06-01T06:32:45.000Z",
+      dividerLabel: "周一",
+      label: "周一 14:32",
+      shortLabel: "14:32",
+      tooltip: "2026-06-01 14:32:45",
+    });
+    expect(formatMessageTimestampParts("2026-05-25T14:32:45+08:00", "zh", zhT, now)).toEqual({
+      dateTime: "2026-05-25T06:32:45.000Z",
+      dividerLabel: "5月25日",
+      label: "5月25日 14:32",
+      tooltip: "2026-05-25 14:32:45",
+      shortLabel: "14:32",
+    });
+    expect(formatMessageTimestampParts("2026-05-11T10:25:00+08:00", "en", enT, now)).toEqual({
+      dateTime: "2026-05-11T02:25:00.000Z",
+      dividerLabel: "05-11",
+      label: "05-11 10:25",
+      shortLabel: "10:25",
+      tooltip: "2026-05-11 10:25:00",
+    });
+    expect(formatMessageTimestampParts("2025-05-31T13:21:45+08:00", "zh", zhT, now)).toEqual({
+      dateTime: "2025-05-31T05:21:45.000Z",
+      dividerLabel: "2025年5月31日",
+      label: "2025年5月31日 13:21",
+      shortLabel: "13:21",
+      tooltip: "2025-05-31 13:21:45",
+    });
   });
 
   it("resolves display names and agent/user matches defensively", () => {

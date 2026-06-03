@@ -261,8 +261,88 @@
   margin-bottom: 6px;
 }
 
+.message-timestamp {
+  flex-shrink: 0;
+  position: relative;
+  white-space: nowrap;
+}
+
 .message-row.own .message-meta {
   justify-content: flex-end;
+}
+
+.message-time-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.message-time-divider::before,
+.message-time-divider::after {
+  content: "";
+  flex: 1;
+  min-width: 16px;
+  height: 1px;
+  background: var(--line);
+}
+
+.message-time-divider-label {
+  position: relative;
+  white-space: nowrap;
+}
+
+.message-timestamp::after,
+.message-time-divider-label::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: var(--z-portal-popover);
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: max-content;
+  max-width: min(260px, 70vw);
+  padding: 6px 8px;
+  border: 1px solid color-mix(in oklab, var(--portal-gray-900) 12%, transparent);
+  border-radius: 6px;
+  background: var(--portal-gray-900);
+  color: var(--portal-white);
+  box-shadow: 0 10px 24px color-mix(in oklab, var(--portal-gray-900) 18%, transparent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(3px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  white-space: nowrap;
+}
+
+.message-timestamp:hover::after,
+.message-timestamp:focus::after,
+.message-timestamp:focus-visible::after,
+.message-time-divider-label:hover::after,
+.message-time-divider-label:focus::after,
+.message-time-divider-label:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.message-row.own .message-timestamp::after {
+  right: 0;
+  left: auto;
+  transform: translateY(3px);
+}
+
+.message-row.own .message-timestamp:hover::after,
+.message-row.own .message-timestamp:focus::after,
+.message-row.own .message-timestamp:focus-visible::after {
+  transform: translateY(0);
 }
 
 .message-bubble {

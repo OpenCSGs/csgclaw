@@ -90,6 +90,8 @@ const t: TranslateFn = (key, params = {}) => {
     latestThreadReply: "Latest reply",
     replyInThread: "Reply in thread",
     send: "Send",
+    timestampToday: "Today",
+    timestampYesterday: "Yesterday",
     threadComposerPlaceholder: "Reply in thread",
     threadNoReplies: "No replies",
     threadPanelTitle: "Thread",
@@ -102,9 +104,16 @@ const t: TranslateFn = (key, params = {}) => {
 
 function renderThreadPane({
   conversationMembers = users,
+  messages,
   onPreviewUser = vi.fn(),
   replies = [],
   showToolCalls = false,
+}: {
+  conversationMembers?: IMUser[];
+  messages?: IMConversation["messages"];
+  onPreviewUser?: ReturnType<typeof vi.fn>;
+  replies?: ThreadView["replies"];
+  showToolCalls?: boolean;
 } = {}) {
   const root = {
     content: "Hi! How can I help you today?",
@@ -112,11 +121,12 @@ function renderThreadPane({
     id: "msg-root",
     sender_id: "u-manager",
   };
+  const timelineMessages = messages || [root];
   const conversation: IMConversation = {
     id: "room-1",
     is_direct: true,
     members: conversationMembers.map((user) => user.id),
-    messages: [root],
+    messages: timelineMessages,
     title: "manager",
   };
   const thread: ThreadView = {
@@ -175,7 +185,7 @@ function renderThreadPane({
         onToggleChannelTools={() => {}}
         onToggleMemberList={() => {}}
         onToggleToolCalls={() => {}}
-        selectedMessageCount={1}
+        selectedMessageCount={timelineMessages.length}
         showChannelTools={false}
         showMemberList={false}
         showToolCalls={showToolCalls}
@@ -186,7 +196,7 @@ function renderThreadPane({
         threadLoading={false}
         onThreadDraftChange={setThreadDraftSegments}
         usersById={usersById}
-        visibleMessages={[root]}
+        visibleMessages={timelineMessages}
       />
     );
   }
@@ -195,6 +205,56 @@ function renderThreadPane({
 }
 
 describe("ConversationPane", () => {
+  it("shows one date divider per day without times", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-03T12:00:00+08:00"));
+
+    try {
+      const { container } = renderThreadPane({
+        messages: [
+          {
+            content: "Morning",
+            created_at: "2026-05-11T10:25:00+08:00",
+            id: "msg-morning",
+            sender_id: "u-manager",
+          },
+          {
+            content: "Afternoon",
+            created_at: "2026-05-11T16:45:00+08:00",
+            id: "msg-afternoon",
+            sender_id: "u-manager",
+          },
+          {
+            content: "Next day",
+            created_at: "2026-05-12T09:15:00+08:00",
+            id: "msg-next-day",
+            sender_id: "u-manager",
+          },
+        ],
+      });
+
+      expect(
+        [...container.querySelectorAll(".message-time-divider-label")].map((item) => ({
+          tooltip: item.getAttribute("data-tooltip"),
+          text: item.textContent,
+          title: item.getAttribute("title"),
+        })),
+      ).toEqual([
+        { text: "5月11日", title: "2026-05-11 10:25:00", tooltip: "2026-05-11 10:25:00" },
+        { text: "5月12日", title: "2026-05-12 09:15:00", tooltip: "2026-05-12 09:15:00" },
+      ]);
+      expect(container.querySelector(".message-row .message-timestamp")).toHaveAttribute(
+        "data-tooltip",
+        "2026-05-11 10:25:00",
+      );
+      expect([...container.querySelectorAll(".message-row .message-timestamp")].map((item) => item.textContent)).toEqual(
+        ["10:25", "16:45", "09:15"],
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("offers mention choices inside the thread composer", async () => {
     const user = userEvent.setup();
     renderThreadPane();

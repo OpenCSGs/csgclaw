@@ -162,7 +162,7 @@ export type MessagePreviewTextToken = {
   type: "text" | "mention" | "slash";
 };
 
-const previewTokenPattern = /(^|[\s])\/[A-Za-z0-9._-]+(?!\/)|@[\w.-]+/g;
+const previewTokenPattern = /(^|[\s])\/[A-Za-z0-9._-]+(?=$|[\s.,!?;:)\]])|@[\w.-]+/g;
 
 export function splitMessagePreviewText(content: unknown): MessagePreviewTextToken[] {
   const text = formatMessagePreviewText(content);
@@ -394,6 +394,54 @@ export function formatTime(value: string | number | Date | null | undefined, loc
   });
 }
 
+export type MessageTimestampParts = {
+  dateTime: string;
+  dividerLabel: string;
+  label: string;
+  shortLabel: string;
+  tooltip: string;
+};
+
+export function formatMessageTimestampParts(
+  value: string | number | Date | null | undefined,
+  locale: LocaleCode,
+  t: TranslateFn,
+  now: Date = new Date(),
+): MessageTimestampParts {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) {
+    return { dateTime: "", dividerLabel: "", label: "", shortLabel: "", tooltip: "" };
+  }
+
+  const dayDiff = differenceInCalendarDays(now, date);
+  const time = formatClockTime(date);
+  const dateTime = date.toISOString();
+  const tooltip = formatTimestampTooltip(date);
+
+  if (dayDiff === 0) {
+    return { dateTime, dividerLabel: t("timestampToday"), label: time, shortLabel: time, tooltip };
+  }
+  if (dayDiff === 1) {
+    return {
+      dateTime,
+      dividerLabel: t("timestampYesterday"),
+      label: `${t("timestampYesterday")} ${time}`,
+      shortLabel: time,
+      tooltip,
+    };
+  }
+  if (dayDiff > 1 && dayDiff <= 7) {
+    const weekday = formatWeekday(date, locale);
+    return { dateTime, dividerLabel: weekday, label: `${weekday} ${time}`, shortLabel: time, tooltip };
+  }
+  if (date.getFullYear() === now.getFullYear()) {
+    const monthDay = formatTimestampMonthDay(date, locale);
+    return { dateTime, dividerLabel: monthDay, label: `${monthDay} ${time}`, shortLabel: time, tooltip };
+  }
+  const yearMonthDay = formatTimestampYearMonthDay(date, locale);
+  return { dateTime, dividerLabel: yearMonthDay, label: `${yearMonthDay} ${time}`, shortLabel: time, tooltip };
+}
+
 export function latestAt(conversation: { messages?: readonly IMMessage[] | null }): number {
   const messages = conversation.messages ?? [];
   if (!messages.length) return 0;
@@ -430,6 +478,52 @@ export function applyIMEvent<T extends IMData | null | undefined>(
     return upsertConversationInData(current, event.room as IMConversation);
   }
   return current;
+}
+
+function formatClockTime(date: Date): string {
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+function formatTimestampTooltip(date: Date): string {
+  return `${formatTimestampDate(date)} ${formatTimestampSeconds(date)}`;
+}
+
+function formatTimestampDate(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function formatTimestampMonthDay(date: Date, locale: LocaleCode): string {
+  if (locale === "zh") {
+    return `${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+  return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function formatTimestampYearMonthDay(date: Date, locale: LocaleCode): string {
+  if (locale === "zh") {
+    return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+  return formatTimestampDate(date);
+}
+
+function formatTimestampSeconds(date: Date): string {
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+}
+
+function formatWeekday(date: Date, locale: LocaleCode): string {
+  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+    weekday: "short",
+  }).format(date);
+}
+
+function differenceInCalendarDays(left: Date, right: Date): number {
+  const leftStart = new Date(left.getFullYear(), left.getMonth(), left.getDate());
+  const rightStart = new Date(right.getFullYear(), right.getMonth(), right.getDate());
+  return Math.floor((leftStart.getTime() - rightStart.getTime()) / 86400000);
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
 export function isAgentRosterEvent(event: IMServerEvent | null | undefined): boolean {
