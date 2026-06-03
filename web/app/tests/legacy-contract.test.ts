@@ -30,6 +30,8 @@ describe("legacy UI contract", () => {
     expect(source).toContain("replace: true,");
     expect(source).toContain("payload.runtime_kind = options.runtime_kind;");
     expect(source).toContain("payload.image = options.image;");
+    expect(source).toContain("const rebuiltAgent = await createManagerAgentRequest");
+    expect(source).toContain("await refreshAgentsWithUpdatedAgent(rebuiltAgent);");
     expect(source).not.toContain('request("api/v1/agents/u-manager/recreate"');
     expect(source).not.toContain("saved.profile_complete");
     expect(source).not.toContain("if (saved.profile_complete)");

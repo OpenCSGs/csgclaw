@@ -5,6 +5,7 @@ import {
   formatProviderLabel,
   isAgentIncomplete,
   isAgentRestartNeeded,
+  isAgentUpgradeNeeded,
   isAgentRunning,
   isNotificationBotAgent,
 } from "@/models/agents";
@@ -88,6 +89,7 @@ export function AgentRow({
   const running = isAgentRunning(item);
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
+  const upgradeNeeded = isAgentUpgradeNeeded(item);
   const busyPrefix = `${item.id}:`;
   return (
     <div className={`agent-row ${isManager ? "manager" : ""} ${incomplete ? "incomplete" : ""}`.trim()}>
@@ -106,6 +108,7 @@ export function AgentRow({
           <span className={`agent-badge ${incomplete ? "warn" : ""}`}>
             {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
           </span>
+          {upgradeNeeded ? <span className="agent-badge warn">{t("profileUpgradeRequired")}</span> : null}
           {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
         </div>
       </div>

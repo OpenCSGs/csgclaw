@@ -136,6 +136,6 @@ export function deleteBotRequest(botID: string): Promise<void> {
   return del(`api/v1/channels/csgclaw/bots/${encodeURIComponent(botID)}`);
 }
 
-export function runAgentActionRequest(agentID: string, action: string): Promise<void> {
+export function runAgentActionRequest(agentID: string, action: string): Promise<AgentLike> {
   return post(`api/v1/agents/${encodeURIComponent(agentID)}/${action}`);
 }

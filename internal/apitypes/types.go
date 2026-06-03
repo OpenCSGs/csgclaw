@@ -6,24 +6,25 @@ import (
 )
 
 type Bot struct {
-	ID                 string         `json:"id"`
-	Name               string         `json:"name"`
-	Description        string         `json:"description,omitempty"`
-	Type               string         `json:"type,omitempty"`
-	Role               string         `json:"role"`
-	Channel            string         `json:"channel"`
-	AgentID            string         `json:"agent_id"`
-	UserID             string         `json:"user_id"`
-	Available          bool           `json:"available"`
-	RuntimeOptions     map[string]any `json:"runtime_options,omitempty"`
-	RuntimeKind        string         `json:"runtime_kind,omitempty"`
-	Image              string         `json:"image,omitempty"`
-	Status             string         `json:"status,omitempty"`
-	Provider           string         `json:"provider,omitempty"`
-	ModelID            string         `json:"model_id,omitempty"`
-	ProfileComplete    bool           `json:"profile_complete,omitempty"`
-	EnvRestartRequired bool           `json:"env_restart_required,omitempty"`
-	CreatedAt          time.Time      `json:"created_at"`
+	ID                   string         `json:"id"`
+	Name                 string         `json:"name"`
+	Description          string         `json:"description,omitempty"`
+	Type                 string         `json:"type,omitempty"`
+	Role                 string         `json:"role"`
+	Channel              string         `json:"channel"`
+	AgentID              string         `json:"agent_id"`
+	UserID               string         `json:"user_id"`
+	Available            bool           `json:"available"`
+	RuntimeOptions       map[string]any `json:"runtime_options,omitempty"`
+	RuntimeKind          string         `json:"runtime_kind,omitempty"`
+	Image                string         `json:"image,omitempty"`
+	Status               string         `json:"status,omitempty"`
+	Provider             string         `json:"provider,omitempty"`
+	ModelID              string         `json:"model_id,omitempty"`
+	ProfileComplete      bool           `json:"profile_complete,omitempty"`
+	EnvRestartRequired   bool           `json:"env_restart_required,omitempty"`
+	ImageUpgradeRequired bool           `json:"image_upgrade_required,omitempty"`
+	CreatedAt            time.Time      `json:"created_at"`
 }
 
 type CreateBotRequest struct {

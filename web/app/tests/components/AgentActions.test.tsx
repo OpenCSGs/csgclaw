@@ -17,6 +17,7 @@ const labels: Record<string, string> = {
   profileProvider: "Provider",
   profileReasoning: "Reasoning",
   profileRestartRequired: "Recreate required",
+  profileUpgradeRequired: "Upgrade required",
   profileRuntimeKind: "Runtime",
   agentName: "Name",
   agentDescription: "Description",
@@ -59,6 +60,27 @@ describe("agent action visibility", () => {
     expect(screen.getByText("Recreate required")).toBeInTheDocument();
     screen.getByRole("button", { name: "Upgrade" }).click();
     expect(onUpgrade).toHaveBeenCalledWith(expect.objectContaining({ id: "worker-1" }));
+  });
+
+  it("shows an upgrade warning when only the agent image is outdated", () => {
+    render(
+      <AgentRow
+        item={{ ...worker, image_upgrade_required: true }}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        onEdit={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Upgrade required")).toBeInTheDocument();
+    expect(screen.queryByText("Recreate required")).not.toBeInTheDocument();
   });
 
   it("shows recreate for worker rows even when lifecycle actions are hidden", () => {
@@ -157,6 +179,41 @@ describe("agent action visibility", () => {
 
     screen.getByRole("button", { name: "Upgrade" }).click();
     expect(onUpgrade).toHaveBeenCalledWith(expect.objectContaining({ id: "worker-1" }));
+  });
+
+  it("shows upgrade required in worker detail panes when only the agent image is outdated", () => {
+    render(
+      <AgentDetailPane
+        item={{ ...worker, image_upgrade_required: true }}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={null}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Upgrade required")).toBeInTheDocument();
+    expect(screen.queryByText("Recreate required")).not.toBeInTheDocument();
   });
 
   it("trusts complete notifier profile state when gating recreate in detail panes", () => {

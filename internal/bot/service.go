@@ -130,6 +130,7 @@ func (s *Service) refreshBotAvailability(bots []Bot) []Bot {
 				b.ModelID = strings.TrimSpace(a.AgentProfile.ModelID)
 				b.ProfileComplete = a.ProfileComplete || a.AgentProfile.ProfileComplete
 				b.EnvRestartRequired = a.AgentProfile.EnvRestartRequired
+				b.ImageUpgradeRequired = a.AgentProfile.ImageUpgradeRequired
 			}
 		}
 		refreshed = append(refreshed, b)

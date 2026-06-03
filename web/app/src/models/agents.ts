@@ -47,6 +47,7 @@ export type AgentProfileLike = {
   env?: JSONRecord | null;
   env_restart_required?: boolean | null;
   headers?: JSONRecord | null;
+  image_upgrade_required?: boolean | null;
   model_id?: string | null;
   profile_complete?: boolean | null;
   provider?: ProviderName | null;
@@ -227,6 +228,57 @@ export function partitionWorkspaceAgentItems(
   const notificationAgentItems = rest.filter((item) => isNotificationBotAgent(item));
   const workerAgentItems = [manager, ...rest.filter((item) => !isNotificationBotAgent(item))].filter(Boolean);
   return { workerAgentItems, notificationAgentItems };
+}
+
+export function mergeAgentIntoList(
+  items: readonly AgentLike[] | null | undefined,
+  updated: AgentLike | null | undefined,
+): AgentLike[] {
+  const currentItems = [...(items ?? [])];
+  const id = String(updated?.id ?? "").trim();
+  if (!id || !updated) {
+    return currentItems;
+  }
+
+  let found = false;
+  const next = currentItems.map((item) => {
+    if (String(item?.id ?? "").trim() !== id) {
+      return item;
+    }
+    found = true;
+    const merged: AgentLike = { ...item, ...updated };
+    if (item?.agent_profile || updated.agent_profile) {
+      merged.agent_profile = { ...(item.agent_profile ?? {}), ...(updated.agent_profile ?? {}) };
+    }
+    return merged;
+  });
+
+  return found ? next : [...next, updated];
+}
+
+export function agentDraftWithRuntimeFieldsFromAgent(
+  draft: AgentDraft | null | undefined,
+  updated: AgentLike | null | undefined,
+): AgentDraft | null {
+  if (!draft) {
+    return null;
+  }
+  const agentID = String(updated?.id ?? "").trim();
+  const draftID = String(draft.agent_id ?? "").trim();
+  if (!agentID || (draftID && draftID !== agentID)) {
+    return draft;
+  }
+
+  const next: AgentDraft = { ...draft, agent_id: draftID || agentID };
+  if (updated?.image != null) {
+    const image = String(updated.image).trim();
+    next.image = image;
+    next.default_image = image;
+  }
+  if (updated?.runtime_kind != null) {
+    next.runtime_kind = normalizeRuntimeKind(updated.runtime_kind || next.runtime_kind);
+  }
+  return next;
 }
 
 export function notificationBotStatusLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
@@ -919,6 +971,10 @@ export function isAgentIncomplete(
 
 export function isAgentRestartNeeded(item: AgentLike | null | undefined): boolean {
   return Boolean(item?.env_restart_required || item?.agent_profile?.env_restart_required);
+}
+
+export function isAgentUpgradeNeeded(item: AgentLike | null | undefined): boolean {
+  return Boolean(item?.image_upgrade_required || item?.agent_profile?.image_upgrade_required);
 }
 
 export function agentModelID(item: AgentLike | null | undefined): string {

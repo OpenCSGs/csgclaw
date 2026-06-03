@@ -3,6 +3,7 @@ import {
   formatProviderLabel,
   isAgentIncomplete,
   isAgentRestartNeeded,
+  isAgentUpgradeNeeded,
   isAgentRunning,
   notificationBotMetaLabel,
 } from "@/models/agents";
@@ -131,6 +132,7 @@ export function WorkspaceComputerRow({ title, active, subtitle, onSelect }) {
 export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notification = false }) {
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
+  const upgradeNeeded = isAgentUpgradeNeeded(item);
   const running = isAgentRunning(item);
   const meta = notification
     ? notificationBotMetaLabel(item, t)
@@ -168,6 +170,7 @@ export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notifi
       </span>
       <span className="workspace-row-badges">
         {incomplete ? <span className="mini-badge warn">{t("profileIncompleteBadge")}</span> : null}
+        {upgradeNeeded ? <span className="mini-badge warn">{t("profileUpgradeRequired")}</span> : null}
         {restartNeeded ? <span className="mini-badge warn">{t("profileRestartRequired")}</span> : null}
       </span>
     </button>

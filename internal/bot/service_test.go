@@ -470,10 +470,11 @@ func TestServiceListIncludesAgentViewFieldsForCSGClawBots(t *testing.T) {
 			CreatedAt:       time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
 			ProfileComplete: true,
 			AgentProfile: agent.AgentProfile{
-				Provider:           agent.ProviderCSGHubLite,
-				ModelID:            "glm-4.5",
-				ProfileComplete:    true,
-				EnvRestartRequired: true,
+				Provider:             agent.ProviderCSGHubLite,
+				ModelID:              "glm-4.5",
+				ProfileComplete:      true,
+				EnvRestartRequired:   true,
+				ImageUpgradeRequired: true,
 			},
 		},
 	})
@@ -496,8 +497,8 @@ func TestServiceListIncludesAgentViewFieldsForCSGClawBots(t *testing.T) {
 	if got[0].Provider != agent.ProviderCSGHubLite || got[0].ModelID != "glm-4.5" {
 		t.Fatalf("bot profile fields = %+v, want csghub_lite/glm-4.5", got[0])
 	}
-	if !got[0].ProfileComplete || !got[0].EnvRestartRequired {
-		t.Fatalf("bot completeness fields = %+v, want profile_complete and env_restart_required", got[0])
+	if !got[0].ProfileComplete || !got[0].EnvRestartRequired || !got[0].ImageUpgradeRequired {
+		t.Fatalf("bot completeness fields = %+v, want profile_complete, env_restart_required, and image_upgrade_required", got[0])
 	}
 }
 

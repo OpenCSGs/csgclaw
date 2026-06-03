@@ -8,12 +8,14 @@ import {
   availableManagerRuntimeOptions,
   collectManagerTemplateVariants,
   defaultManagerRebuildImageForRuntime,
+  agentDraftWithRuntimeFieldsFromAgent,
   draftNotifierRuntimeOptionsForSave,
   draftToProfile,
   ensureNotifierPullSubscriptionDraft,
   envRowsToMap,
   formatProviderLabel,
   isAgentIncomplete,
+  mergeAgentIntoList,
   isNotificationBotAgent,
   mapToEnvRows,
   partitionWorkspaceAgentItems,
@@ -85,6 +87,71 @@ describe("agent model helpers", () => {
         { key: "PATH", value: "two" },
       ]),
     ).toThrow("Duplicate environment variable: PATH");
+  });
+
+  it("merges a fresh action response into the existing agent list", () => {
+    expect(
+      mergeAgentIntoList(
+        [
+          {
+            id: "u-manager",
+            image: "registry.example/opencsghq/picoclaw:2026.05.22",
+            agent_profile: {
+              image_upgrade_required: true,
+              model_id: "gpt-5.5",
+            },
+            status: "running",
+          },
+          { id: "u-alice", image: "registry.example/worker:2026.06.03" },
+        ],
+        {
+          id: "u-manager",
+          image: "registry.example/opencsghq/picoclaw:2026.06.03",
+          agent_profile: {
+            image_upgrade_required: false,
+          },
+        },
+      ),
+    ).toEqual([
+      {
+        id: "u-manager",
+        image: "registry.example/opencsghq/picoclaw:2026.06.03",
+        agent_profile: {
+          image_upgrade_required: false,
+          model_id: "gpt-5.5",
+        },
+        status: "running",
+      },
+      { id: "u-alice", image: "registry.example/worker:2026.06.03" },
+    ]);
+  });
+
+  it("syncs readonly runtime fields from a fresh action response into the agent page draft", () => {
+    const draft = agentToDraft({
+      id: "u-manager",
+      image: "registry.example/opencsghq/picoclaw:2026.05.22",
+      name: "manager",
+      runtime_kind: "picoclaw_sandbox",
+      agent_profile: {
+        model_id: "gpt-5.5",
+        provider: "codex",
+      },
+    });
+
+    expect(
+      agentDraftWithRuntimeFieldsFromAgent(draft, {
+        id: "u-manager",
+        image: "registry.example/opencsghq/picoclaw:2026.06.03",
+        runtime_kind: "picoclaw_sandbox",
+      }),
+    ).toMatchObject({
+      agent_id: "u-manager",
+      image: "registry.example/opencsghq/picoclaw:2026.06.03",
+      default_image: "registry.example/opencsghq/picoclaw:2026.06.03",
+      model_id: "gpt-5.5",
+      provider: "codex",
+      runtime_kind: "picoclaw_sandbox",
+    });
   });
 
   it("keeps JSON profile fields object-shaped", () => {

@@ -35,37 +35,39 @@ var (
 )
 
 type AgentProfile struct {
-	Name               string            `json:"name,omitempty"`
-	Description        string            `json:"description,omitempty"`
-	Provider           string            `json:"provider,omitempty"`
-	BaseURL            string            `json:"base_url,omitempty"`
-	APIKey             string            `json:"api_key,omitempty"`
-	Headers            map[string]string `json:"headers,omitempty"`
-	ModelID            string            `json:"model_id,omitempty"`
-	ReasoningEffort    string            `json:"reasoning_effort,omitempty"`
-	EnableFastMode     bool              `json:"enable_fast_mode,omitempty"`
-	RequestOptions     map[string]any    `json:"request_options,omitempty"`
-	Env                map[string]string `json:"env,omitempty"`
-	ProfileComplete    bool              `json:"profile_complete"`
-	EnvRestartRequired bool              `json:"env_restart_required,omitempty"`
+	Name                 string            `json:"name,omitempty"`
+	Description          string            `json:"description,omitempty"`
+	Provider             string            `json:"provider,omitempty"`
+	BaseURL              string            `json:"base_url,omitempty"`
+	APIKey               string            `json:"api_key,omitempty"`
+	Headers              map[string]string `json:"headers,omitempty"`
+	ModelID              string            `json:"model_id,omitempty"`
+	ReasoningEffort      string            `json:"reasoning_effort,omitempty"`
+	EnableFastMode       bool              `json:"enable_fast_mode,omitempty"`
+	RequestOptions       map[string]any    `json:"request_options,omitempty"`
+	Env                  map[string]string `json:"env,omitempty"`
+	ProfileComplete      bool              `json:"profile_complete"`
+	EnvRestartRequired   bool              `json:"env_restart_required,omitempty"`
+	ImageUpgradeRequired bool              `json:"image_upgrade_required,omitempty"`
 }
 
 type AgentProfileView struct {
-	Name               string                   `json:"name,omitempty"`
-	Description        string                   `json:"description,omitempty"`
-	Provider           string                   `json:"provider,omitempty"`
-	BaseURL            string                   `json:"base_url,omitempty"`
-	APIKeySet          bool                     `json:"api_key_set,omitempty"`
-	APIKeyPreview      string                   `json:"api_key_preview,omitempty"`
-	Headers            map[string]string        `json:"headers,omitempty"`
-	ModelID            string                   `json:"model_id,omitempty"`
-	ReasoningEffort    string                   `json:"reasoning_effort,omitempty"`
-	EnableFastMode     bool                     `json:"enable_fast_mode"`
-	RequestOptions     map[string]any           `json:"request_options,omitempty"`
-	Env                map[string]string        `json:"env,omitempty"`
-	ProfileComplete    bool                     `json:"profile_complete"`
-	EnvRestartRequired bool                     `json:"env_restart_required,omitempty"`
-	DetectionResults   []ProfileDetectionResult `json:"detection_results,omitempty"`
+	Name                 string                   `json:"name,omitempty"`
+	Description          string                   `json:"description,omitempty"`
+	Provider             string                   `json:"provider,omitempty"`
+	BaseURL              string                   `json:"base_url,omitempty"`
+	APIKeySet            bool                     `json:"api_key_set,omitempty"`
+	APIKeyPreview        string                   `json:"api_key_preview,omitempty"`
+	Headers              map[string]string        `json:"headers,omitempty"`
+	ModelID              string                   `json:"model_id,omitempty"`
+	ReasoningEffort      string                   `json:"reasoning_effort,omitempty"`
+	EnableFastMode       bool                     `json:"enable_fast_mode"`
+	RequestOptions       map[string]any           `json:"request_options,omitempty"`
+	Env                  map[string]string        `json:"env,omitempty"`
+	ProfileComplete      bool                     `json:"profile_complete"`
+	EnvRestartRequired   bool                     `json:"env_restart_required,omitempty"`
+	ImageUpgradeRequired bool                     `json:"image_upgrade_required,omitempty"`
+	DetectionResults     []ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
 type ProfileDetectionResult struct {
@@ -218,21 +220,22 @@ func cloneProfile(profile AgentProfile) AgentProfile {
 func profileViewWithAgentRuntimeOptions(profile AgentProfile, _ map[string]any, _ string, detection []ProfileDetectionResult) AgentProfileView {
 	profile = cloneProfile(profile)
 	v := AgentProfileView{
-		Name:               profile.Name,
-		Description:        profile.Description,
-		Provider:           profile.Provider,
-		BaseURL:            profile.BaseURL,
-		APIKeySet:          strings.TrimSpace(profile.APIKey) != "",
-		APIKeyPreview:      apiKeyPreview(profile.APIKey),
-		Headers:            profile.Headers,
-		ModelID:            profile.ModelID,
-		ReasoningEffort:    profile.ReasoningEffort,
-		EnableFastMode:     profile.EnableFastMode,
-		RequestOptions:     profile.RequestOptions,
-		Env:                profile.Env,
-		ProfileComplete:    profile.ProfileComplete,
-		EnvRestartRequired: profile.EnvRestartRequired,
-		DetectionResults:   append([]ProfileDetectionResult(nil), detection...),
+		Name:                 profile.Name,
+		Description:          profile.Description,
+		Provider:             profile.Provider,
+		BaseURL:              profile.BaseURL,
+		APIKeySet:            strings.TrimSpace(profile.APIKey) != "",
+		APIKeyPreview:        apiKeyPreview(profile.APIKey),
+		Headers:              profile.Headers,
+		ModelID:              profile.ModelID,
+		ReasoningEffort:      profile.ReasoningEffort,
+		EnableFastMode:       profile.EnableFastMode,
+		RequestOptions:       profile.RequestOptions,
+		Env:                  profile.Env,
+		ProfileComplete:      profile.ProfileComplete,
+		EnvRestartRequired:   profile.EnvRestartRequired,
+		ImageUpgradeRequired: profile.ImageUpgradeRequired,
+		DetectionResults:     append([]ProfileDetectionResult(nil), detection...),
 	}
 	return v
 }

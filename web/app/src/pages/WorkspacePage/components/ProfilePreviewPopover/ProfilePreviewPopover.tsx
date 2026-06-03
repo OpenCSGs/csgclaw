@@ -7,6 +7,7 @@ import {
   formatRuntimeKindLabel,
   isAgentIncomplete,
   isAgentRestartNeeded,
+  isAgentUpgradeNeeded,
   isAgentRunning,
 } from "@/models/agents";
 import { localizeRole } from "@/shared/i18n";
@@ -72,6 +73,7 @@ export function ProfilePreviewPopover({
   const running = agent ? isAgentRunning(agent) : false;
   const incomplete = agent ? isAgentIncomplete(agent) : false;
   const restartNeeded = agent ? isAgentRestartNeeded(agent) : false;
+  const upgradeNeeded = agent ? isAgentUpgradeNeeded(agent) : false;
   const provider = agent?.provider || agent?.agent_profile?.provider;
   const previewRuntime = agent
     ? formatRuntimeKindLabel(agent.runtime_kind || agent.agent_profile?.runtime_kind, t)
@@ -161,6 +163,7 @@ export function ProfilePreviewPopover({
                 <span className={`agent-badge ${incomplete ? "warn" : ""}`}>
                   {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
                 </span>
+                {upgradeNeeded ? <span className="agent-badge warn">{t("profileUpgradeRequired")}</span> : null}
                 {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
               </div>
               <div className="preview-actions">

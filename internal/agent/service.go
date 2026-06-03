@@ -1185,7 +1185,7 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
-	if got.AgentProfile.EnvRestartRequired {
+	if got.AgentProfile.EnvRestartRequired || got.AgentProfile.ImageUpgradeRequired {
 		return s.Recreate(ctx, id)
 	}
 	if err := s.ensureCodexResponsesAPI(ctx, strings.TrimSpace(got.RuntimeKind), got.AgentProfile); err != nil {

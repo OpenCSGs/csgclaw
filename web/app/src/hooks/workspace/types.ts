@@ -205,6 +205,7 @@ export type UseAgentControllerArgs = {
   selectComputer: WorkspaceNavigationController["selectComputer"];
   selectConversation: WorkspaceNavigationController["selectConversation"];
   selectHub: WorkspaceNavigationController["selectHub"];
+  setAgentsData: WorkspaceQuerySetter<AgentLike[]>;
   setManagerProfileData: WorkspaceQuerySetter<AgentProfileLike | null>;
   setSelectedHubTemplateId: WorkspaceUiState["setSelectedHubTemplateId"];
   t: TranslateFn;

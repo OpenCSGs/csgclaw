@@ -32,6 +32,7 @@ import { firstWorkspaceFilePath, hasWorkspaceFilePath } from "@/models/workspace
 import {
   applyTemplateToDraft,
   advanceAgentProgress,
+  agentDraftWithRuntimeFieldsFromAgent,
   agentToDraft,
   availableManagerRebuildImageOptions,
   availableManagerRebuildRuntimeOptions,
@@ -46,6 +47,7 @@ import {
   isNotificationBotDraftContext,
   isNotifierRuntimeDraft,
   isNotifierRuntimeDraftOnAgentPage,
+  mergeAgentIntoList,
   normalizeAuthProviderName,
   partitionWorkspaceAgentItems,
   normalizeRuntimeKind,
@@ -108,6 +110,7 @@ export function useAgentController({
   selectComputer,
   selectConversation,
   selectHub,
+  setAgentsData,
   setManagerProfileData,
   setSelectedHubTemplateId,
   t,
@@ -373,11 +376,11 @@ export function useAgentController({
         managerRuntimeOptions[0]?.value,
     );
     const image = String(options.image ?? managerAgent?.image ?? "").trim();
-    await createManagerAgentRequest({
+    const rebuiltAgent = await createManagerAgentRequest({
       runtime_kind: runtimeKind,
       image,
     });
-    await refreshAgents();
+    await refreshAgentsWithUpdatedAgent(rebuiltAgent);
     await refreshManagerProfile();
     await refreshWorkspaceBootstrapConfig();
   }
@@ -462,6 +465,16 @@ export function useAgentController({
     } catch (err) {
       if (!options.silent) {
         setAgentsError(errorMessage(err, t("agentActionFailed")));
+      }
+    }
+  }
+
+  async function refreshAgentsWithUpdatedAgent(updatedAgent: AgentLike | null | undefined): Promise<void> {
+    await refreshAgents();
+    if (updatedAgent?.id) {
+      setAgentsData((current) => mergeAgentIntoList(current, updatedAgent));
+      if (activePane.type === WorkspacePaneTypes.agent && activePane.id === updatedAgent.id) {
+        setAgentPageDraft((current) => agentDraftWithRuntimeFieldsFromAgent(current, updatedAgent));
       }
     }
   }
@@ -775,12 +788,13 @@ export function useAgentController({
     setAgentActionBusy(`${item.id}:${action}`);
     setAgentsError("");
     try {
+      let updatedAgent: AgentLike | null = null;
       if (action === "delete") {
         await deleteBotRequest(item.id);
       } else {
-        await runAgentActionRequest(item.id, action);
+        updatedAgent = await runAgentActionRequest(item.id, action);
       }
-      await refreshAgents();
+      await refreshAgentsWithUpdatedAgent(updatedAgent);
       if (item.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }

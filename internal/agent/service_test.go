@@ -3976,7 +3976,7 @@ func TestCreateWorkerUsesConfiguredDefaultTemplate(t *testing.T) {
 	}
 }
 
-func TestAgentMarksOutdatedDefaultTemplateImageRestartRequired(t *testing.T) {
+func TestAgentMarksOutdatedDefaultTemplateImageUpgradeRequired(t *testing.T) {
 	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
@@ -4028,8 +4028,65 @@ func TestAgentMarksOutdatedDefaultTemplateImageRestartRequired(t *testing.T) {
 	if !ok {
 		t.Fatal("Agent() ok = false, want true")
 	}
-	if !got.AgentProfile.EnvRestartRequired {
-		t.Fatalf("Agent().AgentProfile.EnvRestartRequired = false, want true for outdated default image")
+	if got.AgentProfile.EnvRestartRequired {
+		t.Fatalf("Agent().AgentProfile.EnvRestartRequired = true, want false for image-only upgrade")
+	}
+	if !got.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("Agent().AgentProfile.ImageUpgradeRequired = false, want true for outdated default image")
+	}
+}
+
+func TestAgentMarksOutdatedManagerImageUpgradeRequiredWhenGatewayRuntimeChanged(t *testing.T) {
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	const (
+		oldManagerImage = "registry.example/opencsghq/picoclaw:2026.05.22"
+		newManagerImage = "registry.example/opencsghq/picoclaw:2026.06.03"
+	)
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		newManagerImage,
+		"",
+		WithGatewayRuntime(RuntimeKindOpenClawSandbox),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       oldManagerImage,
+		BoxID:       "box-manager",
+		Role:        RoleManager,
+		Status:      string(agentruntime.StateRunning),
+		CreatedAt:   time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
+		AgentProfile: AgentProfile{
+			Name:            ManagerName,
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent() ok = false, want true")
+	}
+	if got.AgentProfile.EnvRestartRequired {
+		t.Fatalf("Agent().AgentProfile.EnvRestartRequired = true, want false for image-only upgrade")
+	}
+	if !got.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("Agent().AgentProfile.ImageUpgradeRequired = false, want true for outdated manager image")
 	}
 }
 

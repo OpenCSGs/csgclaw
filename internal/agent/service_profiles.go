@@ -439,6 +439,7 @@ func (s *Service) persistRecreatedAgent(ctx context.Context, id, image string, i
 		current.CreatedAt = time.Now().UTC()
 	}
 	current.AgentProfile.EnvRestartRequired = false
+	current.AgentProfile.ImageUpgradeRequired = false
 	current.ProfileComplete = true
 	s.agents[id] = current
 	s.syncRuntimeRecordLocked(current)

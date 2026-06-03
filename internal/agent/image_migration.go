@@ -11,7 +11,7 @@ func (s *Service) withRuntimeImageMigrationStatus(ctx context.Context, a Agent) 
 	if !ok || !imageNeedsDefaultRecreate(a.Image, latestImage) {
 		return a
 	}
-	a.AgentProfile.EnvRestartRequired = true
+	a.AgentProfile.ImageUpgradeRequired = true
 	return a
 }
 
@@ -63,7 +63,7 @@ func (s *Service) currentDefaultImageForAgent(ctx context.Context, a Agent) (str
 		}
 	}
 
-	if role == RoleManager && strings.TrimSpace(a.RuntimeKind) == gatewayRuntime && managerImage != "" {
+	if role == RoleManager && managerImage != "" && (strings.TrimSpace(a.RuntimeKind) == gatewayRuntime || imageNeedsDefaultRecreate(a.Image, managerImage)) {
 		return managerImage, true
 	}
 	return "", false
