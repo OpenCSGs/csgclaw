@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react";
-import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 
 describe("AgentAvatar", () => {
@@ -11,8 +11,17 @@ describe("AgentAvatar", () => {
   });
 
   it("derives a short fallback label from the available identity fields", () => {
-    expect(avatarFallbackText("", "Alice Bob", "alice", "u-alice")).toBe("AL");
-    expect(avatarFallbackText("LU", "", "", "")).toBe("LU");
+    expect(avatarFallbackText("", "Alice Bob", "alice", "u-alice")).toBe("A");
+    expect(avatarFallbackText("LU", "", "", "")).toBe("L");
+    expect(avatarFallbackText("", "测试头像", "", "")).toBe("测");
     expect(avatarFallbackText("", "", "", "")).toBe("#");
+  });
+
+  it("does not preselect an avatar when none is provided", () => {
+    const { container } = render(
+      <AgentAvatarPicker value="" t={(key) => key} onChange={() => {}} />,
+    );
+
+    expect(container.querySelectorAll(".agent-avatar-option.selected")).toHaveLength(0);
   });
 });

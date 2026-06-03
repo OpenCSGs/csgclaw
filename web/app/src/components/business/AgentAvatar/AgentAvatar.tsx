@@ -60,7 +60,7 @@ export function AgentAvatarPicker({
   t: TranslateFn;
   onChange: (value: string) => void;
 }) {
-  const selected = normalizeAgentAvatarPath(value) || defaultAgentAvatar();
+  const selected = normalizeAgentAvatarPath(value);
   return (
     <div className="agent-avatar-picker" role="radiogroup" aria-label={t("agentAvatar")}>
       {AVATAR_GROUPS.map((group) => (

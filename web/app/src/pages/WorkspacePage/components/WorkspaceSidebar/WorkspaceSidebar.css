@@ -692,8 +692,8 @@
 }
 
 .workspace-row-icon.avatar-icon {
-  background: var(--panel-soft);
-  color: var(--text);
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
   border-radius: 50%;
 }
 
@@ -2850,6 +2850,7 @@
 .workspace-row-icon.avatar-icon {
   background: var(--portal-gray-100);
   color: var(--portal-gray-700);
+  font-weight: var(--avatar-default-weight);
   border-radius: 50%;
 }
 
@@ -2961,8 +2962,8 @@
 }
 
 :root[data-theme="dark"] .workspace-row-icon.avatar-icon {
-  background: rgba(208, 213, 221, 0.1);
-  color: var(--portal-gray-300);
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
 }
 
 :root[data-theme="dark"] .workspace-row-meta,

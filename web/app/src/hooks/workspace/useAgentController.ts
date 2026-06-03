@@ -70,7 +70,6 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { useProfileModelOptions } from "./useProfileModelOptions";
 import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
-import { defaultAgentAvatar } from "@/components/business/AgentAvatar";
 import type { IMConversation } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
 
@@ -481,7 +480,7 @@ export function useAgentController({
       agentToDraft({
         name: "",
         description: "",
-        avatar: defaultAgentAvatar(),
+        avatar: "",
         bot_type: BOT_TYPE_NOTIFICATION,
       }),
     );
@@ -509,7 +508,7 @@ export function useAgentController({
           selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
         ) || DEFAULT_RUNTIME_KIND;
       let draft = agentToDraft({
-        avatar: defaultAgentAvatar(),
+        avatar: "",
         image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
         bot_type: BOT_TYPE_NORMAL,
@@ -524,7 +523,7 @@ export function useAgentController({
           selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
         ) || DEFAULT_RUNTIME_KIND;
       let draft = agentToDraft({
-        avatar: defaultAgentAvatar(),
+        avatar: "",
         image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
         bot_type: BOT_TYPE_NORMAL,

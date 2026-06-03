@@ -203,10 +203,10 @@
   justify-content: center;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--portal-brand-50);
-  color: var(--portal-brand-700);
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
+  font-weight: var(--avatar-default-weight);
   font-size: 14px;
-  font-weight: 500;
   line-height: 1;
 }
 
@@ -226,28 +226,28 @@
 }
 
 .create-room-avatar[data-avatar-index="1"] {
-  background: var(--portal-success-50);
-  color: var(--portal-success-700);
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
 }
 
 .create-room-avatar[data-avatar-index="2"] {
-  background: var(--portal-warning-50);
-  color: var(--portal-warning-700);
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
 }
 
 .create-room-avatar[data-avatar-index="3"] {
-  background: var(--portal-error-50);
-  color: var(--portal-error-700);
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
 }
 
 .create-room-avatar[data-avatar-index="4"] {
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-700);
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
 }
 
 .create-room-avatar[data-avatar-index="5"] {
-  background: var(--portal-brand-25);
-  color: var(--portal-brand-800);
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
 }
 
 .create-room-avatar-stack {
@@ -275,10 +275,10 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-600);
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
+  font-weight: var(--avatar-default-weight);
   font-size: 12px;
-  font-weight: 500;
   line-height: 18px;
 }
 

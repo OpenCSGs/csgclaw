@@ -53,6 +53,9 @@
   --on-primary: var(--portal-white);
   --mention: var(--portal-brand-600);
   --mention-on-primary: var(--portal-brand-25);
+  --avatar-default-bg: var(--portal-gray-200);
+  --avatar-default-fg: var(--portal-gray-700);
+  --avatar-default-weight: 500;
   --avatar-text: var(--portal-white);
   --message-border: var(--portal-gray-200);
   --admin-bubble: var(--portal-gray-100);
@@ -101,6 +104,9 @@
   --on-primary: #ffffff;
   --mention: #acbdff;
   --mention-on-primary: #ffffff;
+  --avatar-default-bg: #eaecf0;
+  --avatar-default-fg: #344054;
+  --avatar-default-weight: 500;
   --message-border: #344054;
   --admin-bubble: #181d27;
   --admin-text: #d0d5dd;

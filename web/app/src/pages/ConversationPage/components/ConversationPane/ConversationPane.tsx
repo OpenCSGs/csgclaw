@@ -175,7 +175,6 @@ export function ConversationPane({
                             <button
                               type="button"
                               className="avatar avatar-button"
-                              style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}
                               aria-label={`${t("profilePreview")} ${user.name}`}
                               onClick={(event) => onPreviewUser(user, event.currentTarget)}
                             >
@@ -312,7 +311,6 @@ export function ConversationPane({
               <button
                 type="button"
                 className="avatar avatar-button"
-                style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}
                 aria-label={`${t("profilePreview")} ${user.name}`}
                 onClick={(event) => onPreviewUser(user, event.currentTarget)}
               >
@@ -496,7 +494,7 @@ function MentionPicker({ users = [], activeIndex = 0, className = "", showRole =
             onSelect(user);
           }}
         >
-          <span className="avatar" style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}>
+          <span className="avatar">
             <AgentAvatarContent
               avatar={user.avatar}
               fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)}
@@ -793,7 +791,6 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
   const fallbackName = message.sender_id || "";
   const avatar = user?.avatar || fallbackName.slice(0, 1).toUpperCase();
   const name = user?.name || user?.handle || fallbackName;
-  const avatarStyle = { background: `linear-gradient(135deg, ${user?.accent_hex || "#4d6ad6"}, #10233f)` };
 
   return (
     <div className={`thread-message ${compact ? "compact" : ""}`.trim()}>
@@ -801,14 +798,13 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
         <button
           type="button"
           className="thread-message-avatar"
-          style={avatarStyle}
           aria-label={`${t("profilePreview")} ${name}`}
           onClick={(event) => onPreviewUser(user, event.currentTarget)}
         >
           <AgentAvatarContent avatar={avatar} fallback={avatar} />
         </button>
       ) : (
-        <div className="thread-message-avatar" style={avatarStyle} aria-hidden="true">
+        <div className="thread-message-avatar" aria-hidden="true">
           <AgentAvatarContent avatar={avatar} fallback={avatar} />
         </div>
       )}

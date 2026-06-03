@@ -63,7 +63,12 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: transparent;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
+  font-weight: var(--avatar-default-weight);
   box-shadow: none;
 }
 
@@ -78,6 +83,11 @@
   height: 48px;
   border-radius: 50%;
   object-fit: cover;
+}
+
+:root[data-theme="dark"] .agent-detail-pane .entity-avatar {
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
 }
 
 .agent-detail-pane .entity-title-row h1 {

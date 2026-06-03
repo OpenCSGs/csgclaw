@@ -21,7 +21,8 @@ export function avatarFallbackText(...labels: Array<string | null | undefined>):
   for (const label of labels) {
     const text = String(label ?? "").trim();
     if (text) {
-      return text.slice(0, 2).toUpperCase();
+      const firstCharacter = Array.from(text)[0] || "";
+      return firstCharacter.toUpperCase();
     }
   }
   return "#";

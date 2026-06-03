@@ -1,4 +1,5 @@
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 import type { IMConversation, IMUser, UsersById } from "@/models/conversations";
 import "./RoomAvatar.css";
 
@@ -19,11 +20,7 @@ function normalizeMemberFallback(member: RoomAvatarSlot): string {
   if (member.placeholder) {
     return "#";
   }
-  const text = (member.name || member.handle || member.id || "").trim();
-  if (!text) {
-    return "#";
-  }
-  return text.slice(0, 2).toUpperCase();
+  return avatarFallbackText(member.name, member.handle, member.id);
 }
 
 function pickTileColor(member: RoomAvatarMember, index: number): string {

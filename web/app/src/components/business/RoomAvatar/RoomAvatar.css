@@ -95,7 +95,7 @@
   justify-content: center;
   font: inherit;
   line-height: 1;
-  font-weight: 700;
+  font-weight: var(--avatar-default-weight);
 }
 
 .room-avatar-content .agent-avatar-image {

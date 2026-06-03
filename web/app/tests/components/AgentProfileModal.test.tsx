@@ -32,6 +32,39 @@ const worker = {
 };
 
 describe("AgentProfileModal", () => {
+  it("does not preselect an avatar in create mode", () => {
+    const draft = { ...agentToDraft(worker), avatar: "" };
+
+    const { container } = render(
+      <AgentProfileModal
+        t={t}
+        agentModalMode="create"
+        editingAgent={null}
+        agentDraft={draft}
+        onAgentDraftChange={vi.fn()}
+        onAgentModelsReset={vi.fn()}
+        hubTemplates={[]}
+        bootstrapConfig={{}}
+        managerAgent={null}
+        agentModels={[]}
+        agentModelBusy={false}
+        authStatuses={{}}
+        authBusyProvider=""
+        agentCreateBotKind="worker"
+        onAgentCreateBotKindChange={vi.fn()}
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onProviderLogin={vi.fn()}
+        agentError=""
+        agentProgress={null}
+        agentBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelectorAll(".agent-avatar-option.selected")).toHaveLength(0);
+  });
+
   it("keeps the agent name read-only in edit mode", () => {
     render(
       <AgentProfileModal

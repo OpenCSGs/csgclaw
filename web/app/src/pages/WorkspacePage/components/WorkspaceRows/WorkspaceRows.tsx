@@ -227,7 +227,7 @@ export function WorkspaceConversationRow({
         {isDirect && displayUser ? (
           <AgentAvatarContent
             avatar={displayUser.avatar}
-            fallback={displayUser.name || displayUser.handle || displayUser.id}
+            fallback={avatarFallbackText(displayUser.avatar, displayUser.name, displayUser.handle, displayUser.id)}
           />
         ) : (
           <RoomAvatar members={roomAvatarMembers} count={conversation.members.length} />

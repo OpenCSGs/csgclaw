@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { WorkspaceConversationRow, WorkspaceThreadRow } from "@/pages/WorkspacePage/components/WorkspaceRows";
+import { avatarFallbackText } from "@/shared/avatar";
 import type { IMConversation, ThreadView, TranslateFn } from "@/models/conversations";
 
 const t: TranslateFn = (key, params = {}) => {
@@ -16,7 +17,7 @@ describe("WorkspaceRows", () => {
   it("renders direct message rows without room avatar placeholders", () => {
     const usersById = new Map([
       ["u-local", { id: "u-local", name: "本地用户", avatar: "LU" }],
-      ["u-agent", { id: "u-agent", name: "Alice", avatar: "https://example.com/avatar.png" }],
+      ["u-agent", { id: "u-agent", name: "Alice Bob", avatar: "" }],
     ]);
     const conversation: IMConversation = {
       id: "dm-1",
@@ -42,6 +43,7 @@ describe("WorkspaceRows", () => {
     const row = screen.getAllByRole("button")[0];
     expect(row).toHaveTextContent("Alice");
     expect(row).not.toHaveTextContent("#");
+    expect(row).toHaveTextContent(avatarFallbackText("", "Alice Bob", "", "u-agent"));
   });
 
   it("renders thread rows without markdown code-fence language prefixes", () => {

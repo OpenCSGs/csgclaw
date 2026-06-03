@@ -18,7 +18,7 @@ import {
   requiredFieldLabel,
 } from "@/components/business/ProfileControls";
 import { Button, Select } from "@/components/ui";
-import { AgentAvatarPicker, defaultAgentAvatar } from "@/components/business/AgentAvatar";
+import { AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import {
   agentCreateTemplateLocked,
   applyTemplateToDraft,
@@ -74,7 +74,7 @@ export function AgentProfileModal({
       onAgentDraftChange((current) =>
         ensureNotifierPullSubscriptionDraft({
           ...current,
-          avatar: current?.avatar || defaultAgentAvatar(),
+          avatar: current?.avatar || "",
           bot_type: BOT_TYPE_NOTIFICATION,
           from_template: "",
           template_name: "",
@@ -90,7 +90,7 @@ export function AgentProfileModal({
       return applyTemplateToDraft(
         {
           ...current,
-          avatar: current?.avatar || defaultAgentAvatar(),
+          avatar: current?.avatar || "",
           bot_type: BOT_TYPE_NORMAL,
           runtime_kind: runtimeKind,
           image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || current?.default_image || ""),

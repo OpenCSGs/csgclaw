@@ -122,10 +122,7 @@ export function ProfilePreviewPopover({
             <AgentAvatarContent avatar={agent.avatar} fallback={avatarFallbackText(agent.avatar, displayName, agent.id)} alt="" />
           </div>
         ) : (
-          <div
-            className="avatar preview-avatar"
-            style={{ background: `linear-gradient(135deg, ${user.accent_hex}, #10233f)` }}
-          >
+          <div className="avatar preview-avatar">
             <AgentAvatarContent avatar={user.avatar} fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)} />
           </div>
         )}
