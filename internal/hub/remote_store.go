@@ -96,6 +96,10 @@ func (s *RemoteStore) Publish(context.Context, PublishSpec) (Template, error) {
 	return Template{}, ErrRegistryNotWritable
 }
 
+func (s *RemoteStore) Delete(context.Context, string) error {
+	return ErrRegistryNotDeletable
+}
+
 func (s *RemoteStore) templatesURL() string {
 	return s.baseURL + "/api/v1/hub/templates"
 }

@@ -5,6 +5,7 @@ import (
 
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
+	"csgclaw/internal/slashcommand"
 )
 
 // Service adapts the local CSGClaw IM service to the channel-facing
@@ -55,12 +56,28 @@ func (s *Service) ListMessagesWithOptions(roomID string, opts im.ListMessagesOpt
 }
 
 func (s *Service) SendMessage(req apitypes.CreateMessageRequest) (im.Message, error) {
+	content, err := normalizeSlashContent(req.Content)
+	if err != nil {
+		return im.Message{}, err
+	}
+	req.Content = content
 	req.SenderID = botIDToUserID(req.SenderID)
 	req.MentionID = botIDToUserID(req.MentionID)
 	if req.RelatesTo != nil {
 		req.RelatesTo.EventID = botIDToUserID(req.RelatesTo.EventID)
 	}
 	return s.im.CreateMessage(req)
+}
+
+func normalizeSlashContent(content string) (string, error) {
+	normalized, ok, err := slashcommand.Normalize(content)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return normalized, nil
+	}
+	return content, nil
 }
 
 func botIDToUserID(id string) string {

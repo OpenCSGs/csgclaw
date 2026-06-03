@@ -89,6 +89,36 @@ func TestPublishMessageEventUsesGroupChatTypeForTwoMemberGroup(t *testing.T) {
 	}
 }
 
+func TestPublishMessageEventUsesSlashContentVerbatim(t *testing.T) {
+	bridge := NewBotBridge("")
+	events, cancel := bridge.Subscribe("u-bot")
+	defer cancel()
+
+	room := Room{
+		ID:       "room-direct",
+		IsDirect: true,
+		Members:  []string{"u-admin", "u-bot"},
+	}
+	sender := User{ID: "u-admin", Name: "Admin", Handle: "admin"}
+	message := Message{
+		ID:        "msg-skill",
+		SenderID:  "u-admin",
+		Content:   "/skill-creator make a skill",
+		CreatedAt: time.Now().UTC(),
+	}
+
+	bridge.PublishMessageEvent(room, sender, message)
+
+	select {
+	case evt := <-events:
+		if evt.Text != "/skill-creator make a skill" {
+			t.Fatalf("Text = %q, want original slash content", evt.Text)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("PublishMessageEvent() timed out waiting for event")
+	}
+}
+
 func TestPublishMessageEventIncludesThreadRootAndContext(t *testing.T) {
 	bridge := NewBotBridge("")
 	events, cancel := bridge.Subscribe("u-bot")

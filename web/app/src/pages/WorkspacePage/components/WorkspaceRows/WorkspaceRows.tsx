@@ -3,6 +3,7 @@ import {
   formatProviderLabel,
   isAgentIncomplete,
   isAgentRestartNeeded,
+  isAgentUpgradeNeeded,
   isAgentRunning,
   notificationBotMetaLabel,
 } from "@/models/agents";
@@ -15,7 +16,8 @@ import {
   isDirectConversation,
   resolveConversationUser,
 } from "@/models/conversations";
-import { ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
+import { MessagePreviewText } from "@/components/business/MessageContent";
+import { AgentIcon, ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
@@ -133,6 +135,7 @@ export function WorkspaceComputerRow({ title, active, subtitle, onSelect }) {
 export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notification = false }) {
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
+  const upgradeNeeded = isAgentUpgradeNeeded(item);
   const running = isAgentRunning(item);
   const meta = notification
     ? notificationBotMetaLabel(item, t)
@@ -170,6 +173,7 @@ export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notifi
       </span>
       <span className="workspace-row-badges">
         {incomplete ? <span className="mini-badge warn">{t("profileIncompleteBadge")}</span> : null}
+        {upgradeNeeded ? <span className="mini-badge warn">{t("profileUpgradeRequired")}</span> : null}
         {restartNeeded ? <span className="mini-badge warn">{t("profileRestartRequired")}</span> : null}
       </span>
     </button>
@@ -194,6 +198,7 @@ export function WorkspaceConversationRow({
   const directAgentRunning = isAgentRunning(directAgent);
   const title = isDirect && displayUser ? displayUser.name : conversation.title;
   const roomAvatarMembers = resolveRoomAvatarMembers(conversation, usersById, currentUserID);
+  const preview = formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t);
   return (
     <button
       className={`workspace-row conversation-nav-row ${active ? "active" : ""}`}
@@ -241,7 +246,7 @@ export function WorkspaceConversationRow({
           ) : null}
         </span>
         <span className="workspace-row-meta truncate">
-          {formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t)}
+          <MessagePreviewText content={preview} />
         </span>
       </span>
       <span className="workspace-row-time">{formatTime(lastMessage?.created_at, locale)}</span>
@@ -257,9 +262,8 @@ export function WorkspaceThreadRow({ conversation, thread, active, locale, t, on
   }
   const latestReply = thread?.summary?.latest_reply;
   const title = formatMessagePreviewText(thread?.summary?.context_summary?.root_excerpt || root.content);
-  const meta = latestReply
-    ? `${t("latestThreadReply")}: ${formatMessagePreviewText(latestReply.content)}`
-    : formatThreadReplyCount(thread?.summary?.reply_count, t);
+  const latestReplyText = latestReply ? formatMessagePreviewText(latestReply.content) : "";
+  const meta = latestReply ? null : formatThreadReplyCount(thread?.summary?.reply_count, t);
   const updatedAt = latestReply?.created_at || root.created_at;
 
   return (
@@ -272,8 +276,19 @@ export function WorkspaceThreadRow({ conversation, thread, active, locale, t, on
         <RoomsIcon />
       </span>
       <span className="workspace-row-main">
-        <span className="workspace-row-title truncate">{title}</span>
-        <span className="workspace-row-meta truncate">{meta}</span>
+        <span className="workspace-row-title truncate" title={title}>
+          <MessagePreviewText content={title} />
+        </span>
+        <span className="workspace-row-meta truncate">
+          {latestReply ? (
+            <>
+              <span>{`${t("latestThreadReply")}: `}</span>
+              <MessagePreviewText content={latestReplyText} />
+            </>
+          ) : (
+            meta
+          )}
+        </span>
       </span>
       <span className="workspace-row-time">{formatTime(updatedAt, locale)}</span>
     </button>

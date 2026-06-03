@@ -115,6 +115,29 @@ func TestStartWaitsForDockerReadiness(t *testing.T) {
 	}
 }
 
+func TestDeleteStopsBoxBeforeForceRemove(t *testing.T) {
+	var calls []string
+	deps := testGatewayDeps(func() string { return "docker" }, func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error) {
+		return 0, nil
+	})
+	deps.StopBox = func(context.Context, sandbox.Instance, sandbox.StopOptions) error {
+		calls = append(calls, "stop")
+		return nil
+	}
+	deps.ForceRemoveBox = func(context.Context, sandbox.Runtime, string) error {
+		calls = append(calls, "remove")
+		return nil
+	}
+
+	rt := New(deps)
+	if err := rt.Delete(context.Background(), agentruntime.Handle{RuntimeID: "rt-u-manager", HandleID: "box-1"}); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if strings.Join(calls, ",") != "stop,remove" {
+		t.Fatalf("Delete() sandbox calls = %q, want stop then remove", strings.Join(calls, ","))
+	}
+}
+
 func testGatewayDeps(providerName func() string, run func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error)) Dependencies {
 	return Dependencies{
 		RuntimeKind:         agentruntime.KindOpenClawSandbox,

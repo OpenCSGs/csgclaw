@@ -98,6 +98,10 @@ func (s *BuiltinStore) Publish(context.Context, PublishSpec) (Template, error) {
 	return Template{}, ErrRegistryNotWritable
 }
 
+func (s *BuiltinStore) Delete(context.Context, string) error {
+	return ErrRegistryNotDeletable
+}
+
 func (s *BuiltinStore) loadManifest(id string) (templateManifest, error) {
 	if err := validateLocalTemplateID(id); err != nil {
 		return templateManifest{}, err

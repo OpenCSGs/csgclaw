@@ -15,6 +15,7 @@ export function WorkspaceSidebar({
   notificationAgentItems,
   workspaceTab,
   onWorkspaceTabChange,
+  taskCount,
   roomCount,
   channels,
   directMessages,
@@ -24,6 +25,7 @@ export function WorkspaceSidebar({
   currentUserID,
   usersById,
   collapsedWorkspaceGroups,
+  showUpgradeControls,
   onToggleWorkspaceGroup,
   onCreateRoom,
   onCreateAgent,
@@ -55,6 +57,7 @@ export function WorkspaceSidebar({
             variant="rail"
             workspaceTab={workspaceTab}
             onWorkspaceTabChange={onWorkspaceTabChange}
+            taskCount={taskCount}
             roomCount={roomCount}
             agentCount={agentCount}
             onSelectHub={onSelectHub}
@@ -72,6 +75,7 @@ export function WorkspaceSidebar({
             upgradeBusy={upgradeBusy}
             upgradePhase={upgradePhase}
             upgradeError={upgradeError}
+            showUpgradeControls={showUpgradeControls}
             onOpenUpgrade={onOpenUpgrade}
             t={t}
           />
@@ -85,6 +89,7 @@ export function WorkspaceSidebar({
         <nav className="workspace-nav" aria-label="Workspace">
           <WorkspaceTabPanels
             workspaceTab={workspaceTab}
+            taskCount={taskCount}
             channels={channels}
             directMessages={directMessages}
             threadGroups={threadGroups}

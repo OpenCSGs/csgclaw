@@ -72,6 +72,9 @@ func ensureConfigState(path string) (config.Config, error) {
 	if hasExistingConfig && configNeedsCompletion(existingContent) {
 		needsSave = true
 	}
+	if hasExistingConfig && cfg.NeedsMigrationRewrite() {
+		needsSave = true
+	}
 	if needsSave {
 		if err := cfg.Save(path); err != nil {
 			return config.Config{}, err
@@ -121,7 +124,7 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 	}
 	opts = append(opts,
 		runtimewiring.WithPicoClawSandboxRuntime(nil),
-		runtimewiring.WithOpenClawSandboxRuntime(),
+		runtimewiring.WithOpenClawSandboxRuntime(nil),
 		agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 		agent.WithHubService(hubSvc),
@@ -159,6 +162,7 @@ func defaultConfig() config.Config {
 			ListenAddr:  config.DefaultListenAddr(),
 			AccessToken: config.DefaultAccessToken,
 			NoAuth:      false,
+			ShowUpgrade: true,
 		},
 		Bootstrap: config.BootstrapConfig{},
 		Sandbox:   config.SandboxConfig{},

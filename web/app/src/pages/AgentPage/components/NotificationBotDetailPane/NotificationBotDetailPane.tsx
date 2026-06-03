@@ -40,7 +40,6 @@ export function NotificationBotDetailPane({
             <h1>{item.name}</h1>
             <span className={`status-pill ${ready ? "online" : ""}`}>{notificationBotStatusLabel(item, t)}</span>
           </div>
-          <p>{item.description || ""}</p>
         </div>
       </header>
       <div className="entity-toolbar">

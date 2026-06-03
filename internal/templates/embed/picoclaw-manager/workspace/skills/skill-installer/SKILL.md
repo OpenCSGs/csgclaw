@@ -55,5 +55,5 @@ Use `--skills-dir` only when the workspace layout is non-standard.
 
 - Never guess or change slug casing.
 - Prefer `skill get` / `skill versions` before install when version or moderation matters.
-- Add `-o json` when structured output is needed.
+- Add `--output json` when structured output is needed (place global flags before the subcommand, e.g. `csgclaw-cli --output json skill search gitlab`).
 - Run `csgclaw-cli skill -h` or `csgclaw-cli skill <subcommand> -h` for flags.

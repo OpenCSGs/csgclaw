@@ -1,6 +1,7 @@
 import { del, get, patch, post, put, requestText } from "@/api/client";
 import { BOT_TYPE_NOTIFICATION, MANAGER_AGENT_ID } from "@/shared/constants/agents";
 import type { AgentLike, AgentProfileLike, AgentProfileModelsResponse, JSONRecord, RuntimeKind } from "@/models/agents";
+import type { WorkspaceFile, WorkspaceListing } from "@/models/workspace";
 
 export type AgentProfileModelRequest = {
   agent_id?: string;
@@ -72,6 +73,20 @@ export function fetchAgentLogsRequest(agentID: string, options: FetchAgentLogsOp
   return requestText(`api/v1/agents/${encodeURIComponent(agentID)}/logs?${params.toString()}`);
 }
 
+export function fetchAgentWorkspace(agentID: string, workspacePath = ""): Promise<WorkspaceListing> {
+  const params = new URLSearchParams();
+  if (workspacePath.trim()) {
+    params.set("path", workspacePath.trim());
+  }
+  const query = params.toString();
+  return get(`api/v1/agents/${encodeURIComponent(agentID)}/workspace${query ? `?${query}` : ""}`);
+}
+
+export function fetchAgentWorkspaceFile(agentID: string, workspacePath: string): Promise<WorkspaceFile> {
+  const params = new URLSearchParams({ path: workspacePath });
+  return get(`api/v1/agents/${encodeURIComponent(agentID)}/workspace/file?${params.toString()}`);
+}
+
 export function createManagerAgentRequest(options: CreateManagerAgentOptions = {}): Promise<AgentLike> {
   const payload: { id: string; image?: string; replace: boolean; runtime_kind?: RuntimeKind } = {
     id: MANAGER_AGENT_ID, // Legacy contract: id: "u-manager",
@@ -122,6 +137,6 @@ export function deleteBotRequest(botID: string): Promise<void> {
   return del(`api/v1/channels/csgclaw/bots/${encodeURIComponent(botID)}`);
 }
 
-export function runAgentActionRequest(agentID: string, action: string): Promise<void> {
+export function runAgentActionRequest(agentID: string, action: string): Promise<AgentLike> {
   return post(`api/v1/agents/${encodeURIComponent(agentID)}/${action}`);
 }

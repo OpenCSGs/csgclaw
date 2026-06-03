@@ -179,6 +179,36 @@ func TestCreateMessagePrefixesMentionTag(t *testing.T) {
 	}
 }
 
+func TestCreateMessageKeepsMentionAfterSlashCommandPrefix(t *testing.T) {
+	svc := NewServiceFromBootstrap(Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-dev", Name: "dev", Handle: "dev"},
+		},
+		Rooms: []Room{
+			{ID: "room-1", Title: "Ops", Members: []string{"u-admin", "u-dev"}},
+		},
+	})
+
+	message, err := svc.CreateMessage(CreateMessageRequest{
+		RoomID:    "room-1",
+		SenderID:  "u-admin",
+		Content:   `<slash-command name="use-skill" arg="skill-creator"></slash-command> build it`,
+		MentionID: "u-dev",
+	})
+	if err != nil {
+		t.Fatalf("CreateMessage() error = %v", err)
+	}
+	want := `<slash-command name="use-skill" arg="skill-creator"></slash-command> <at user_id="u-dev">dev</at> build it`
+	if message.Content != want {
+		t.Fatalf("CreateMessage() content = %q, want %q", message.Content, want)
+	}
+	if len(message.Mentions) != 1 || message.Mentions[0].ID != "u-dev" || message.Mentions[0].Name != "dev" {
+		t.Fatalf("CreateMessage() mentions = %+v, want [u-dev]", message.Mentions)
+	}
+}
+
 func TestCreateMessageWithMissingMentionIDFails(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",

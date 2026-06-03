@@ -28,7 +28,7 @@ func TestBoxLiteProviderFactoryUsesDefaultResolvedPath(t *testing.T) {
 		t.Fatalf("boxlite provider factory not registered")
 	}
 
-	opt, err := factory(config.SandboxConfig{
+	provider, err := factory(config.SandboxConfig{
 		Provider:                 config.BoxLiteProvider,
 		DebianRegistriesOverride: []string{"registry.a"},
 	})
@@ -36,7 +36,6 @@ func TestBoxLiteProviderFactoryUsesDefaultResolvedPath(t *testing.T) {
 		t.Fatalf("factory() error = %v", err)
 	}
 
-	provider := sandboxProviderFromOption(t, opt)
 	boxliteProvider, ok := provider.(boxlitecli.Provider)
 	if !ok {
 		t.Fatalf("provider = %T, want boxlitecli.Provider", provider)

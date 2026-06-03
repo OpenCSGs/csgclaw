@@ -8,6 +8,9 @@ import (
 func TestGatewayRunCommandWritesGatewayOutputToSingleLog(t *testing.T) {
 	cmd := GatewayRunCommand()
 
+	if !strings.Contains(cmd, "exec node /app/openclaw.mjs gateway ") {
+		t.Fatalf("GatewayRunCommand() = %q, want Node to launch OpenClaw", cmd)
+	}
 	if !strings.Contains(cmd, "1>"+BoxGatewayLogPath) {
 		t.Fatalf("GatewayRunCommand() = %q, want stdout written to gateway log", cmd)
 	}

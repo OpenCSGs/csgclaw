@@ -60,8 +60,8 @@ base_url = "https://claw.example.com"
 official_base_url = ""
 
 [bootstrap]
-default_manager_template = "builtin/picoclaw-manager"
-default_worker_template = "builtin/picoclaw-worker"
+default_manager_template = "builtin.picoclaw-manager"
+default_worker_template = "builtin.picoclaw-worker"
 
 [models]
 default = "default.minimax-m2.7"

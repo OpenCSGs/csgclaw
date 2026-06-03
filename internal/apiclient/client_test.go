@@ -126,6 +126,105 @@ func TestClientUsesCsgclawChannelRoutes(t *testing.T) {
 				return c.DeleteUser(ctx, "csgclaw", "u-alice")
 			},
 		},
+		{
+			name: "list teams",
+			body: `[]`,
+			want: "GET /api/v1/teams",
+			call: func(c *Client) error {
+				_, err := c.ListTeams(ctx)
+				return err
+			},
+		},
+		{
+			name: "create team",
+			body: `{}`,
+			want: "POST /api/v1/teams",
+			call: func(c *Client) error {
+				_, err := c.CreateTeam(ctx, apitypes.CreateTeamRequest{Channel: "csgclaw", LeadBotID: "bot-manager"})
+				return err
+			},
+		},
+		{
+			name: "list global tasks",
+			body: `[]`,
+			want: "GET /api/v1/tasks",
+			call: func(c *Client) error {
+				_, err := c.ListGlobalTasks(ctx)
+				return err
+			},
+		},
+		{
+			name: "list team tasks",
+			body: `[]`,
+			want: "GET /api/v1/teams/team-1/tasks",
+			call: func(c *Client) error {
+				_, err := c.ListTeamTasks(ctx, "team-1")
+				return err
+			},
+		},
+		{
+			name: "create team tasks batch",
+			body: `{"tasks":[]}`,
+			want: "POST /api/v1/teams/team-1/tasks/batch",
+			call: func(c *Client) error {
+				_, err := c.CreateTeamTasksBatch(ctx, "team-1", apitypes.CreateTeamTasksBatchRequest{CreatedBy: "bot-manager"})
+				return err
+			},
+		},
+		{
+			name: "claim next team task",
+			body: `{}`,
+			want: "POST /api/v1/teams/team-1/tasks/claim-next",
+			call: func(c *Client) error {
+				_, err := c.ClaimNextTeamTask(ctx, apitypes.ClaimNextTeamTaskRequest{TeamID: "team-1", BotID: "bot-worker"})
+				return err
+			},
+		},
+		{
+			name: "update team task",
+			body: `{}`,
+			want: "PATCH /api/v1/teams/team-1/tasks/task-1",
+			call: func(c *Client) error {
+				_, err := c.UpdateTeamTask(ctx, "team-1", "task-1", "bot-worker", apitypes.PatchTeamTaskRequest{Status: "completed", Result: "done"})
+				return err
+			},
+		},
+		{
+			name: "assign team task",
+			body: `{}`,
+			want: "POST /api/v1/teams/team-1/tasks/task-1/assign",
+			call: func(c *Client) error {
+				_, err := c.AssignTeamTask(ctx, "team-1", "task-1", "bot-manager", "bot-worker")
+				return err
+			},
+		},
+		{
+			name: "list team approvals",
+			body: `[]`,
+			want: "GET /api/v1/teams/team-1/approvals",
+			call: func(c *Client) error {
+				_, err := c.ListTeamApprovals(ctx, "team-1")
+				return err
+			},
+		},
+		{
+			name: "create team approval",
+			body: `{}`,
+			want: "POST /api/v1/teams/team-1/approvals",
+			call: func(c *Client) error {
+				_, err := c.CreateTeamApproval(ctx, "team-1", apitypes.CreateTeamApprovalRequest{RequestedBy: "bot-worker", Kind: "command", Summary: "approve"})
+				return err
+			},
+		},
+		{
+			name: "resolve team approval",
+			body: `{}`,
+			want: "POST /api/v1/teams/team-1/approvals/ap-1/resolve",
+			call: func(c *Client) error {
+				_, err := c.ResolveTeamApproval(ctx, "team-1", "ap-1", apitypes.ResolveTeamApprovalRequest{Status: "approved"})
+				return err
+			},
+		},
 	}
 
 	for _, tt := range tests {

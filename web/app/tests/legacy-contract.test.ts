@@ -30,6 +30,8 @@ describe("legacy UI contract", () => {
     expect(source).toContain("replace: true,");
     expect(source).toContain("payload.runtime_kind = options.runtime_kind;");
     expect(source).toContain("payload.image = options.image;");
+    expect(source).toContain("const rebuiltAgent = await createManagerAgentRequest");
+    expect(source).toContain("await refreshAgentsWithUpdatedAgent(rebuiltAgent);");
     expect(source).not.toContain('request("api/v1/agents/u-manager/recreate"');
     expect(source).not.toContain("saved.profile_complete");
     expect(source).not.toContain("if (saved.profile_complete)");
@@ -79,6 +81,7 @@ describe("legacy UI contract", () => {
     expect(source).toContain('const HUB_TEMPLATES_PATH = "/api/v1/hub/templates";');
     expect(source).toContain("post<HubTemplate>(HUB_TEMPLATES_PATH, payload)");
     expect(source).toContain("publishAgentTemplateRequest(selectedAgentForPage.id)");
+    expect(source).toContain('get("api/v1/agents/image-candidates")');
     expect(source).toContain("agent_id: agentID");
     expect(source).toContain("setSelectedHubTemplateId(published.id);");
     expect(source).toContain('className="entity-toolbar-publish"');

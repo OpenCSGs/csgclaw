@@ -68,13 +68,13 @@ func TestListAggregatesAndNamespacesTemplates(t *testing.T) {
 	if got, want := len(items), 2; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
-	if got, want := items[0].ID, "builtin/frontend-alice"; got != want {
+	if got, want := items[0].ID, "builtin.frontend-alice"; got != want {
 		t.Fatalf("List()[0].ID = %q, want %q", got, want)
 	}
 	if got, want := items[0].Source.Name, "builtin"; got != want {
 		t.Fatalf("List()[0].Source.Name = %q, want %q", got, want)
 	}
-	if got, want := items[1].ID, "team/review-bot"; got != want {
+	if got, want := items[1].ID, "team.review-bot"; got != want {
 		t.Fatalf("List()[1].ID = %q, want %q", got, want)
 	}
 	if got, want := items[1].Source.Kind, RegistryKindRemote; got != want {
@@ -103,7 +103,7 @@ func TestGetUsesDefaultRegistryForUnqualifiedID(t *testing.T) {
 	if got, want := teamStore.lastGetID, "frontend-alice"; got != want {
 		t.Fatalf("store Get id = %q, want %q", got, want)
 	}
-	if got, want := item.ID, "team/frontend-alice"; got != want {
+	if got, want := item.ID, "team.frontend-alice"; got != want {
 		t.Fatalf("Get().ID = %q, want %q", got, want)
 	}
 }
@@ -124,7 +124,7 @@ func TestGetUsesQualifiedRegistryWhenPresent(t *testing.T) {
 		"team":  stubStore{},
 	})
 
-	item, err := svc.Get(context.Background(), "local/frontend-alice")
+	item, err := svc.Get(context.Background(), "local.frontend-alice")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -133,6 +133,34 @@ func TestGetUsesQualifiedRegistryWhenPresent(t *testing.T) {
 	}
 	if got, want := item.Source.Name, "local"; got != want {
 		t.Fatalf("Get().Source.Name = %q, want %q", got, want)
+	}
+}
+
+func TestGetUsesLongestQualifiedRegistryPrefix(t *testing.T) {
+	regionalStore := &recordingStore{
+		getResult: Template{ID: "review.bot", Name: "review.bot"},
+	}
+	svc := mustService(t, config.HubConfig{
+		DefaultRegistry:        "team",
+		DefaultPublishRegistry: "team",
+		Registries: []config.HubRegistryConfig{
+			{Name: "team", Kind: RegistryKindRemote, Enabled: true},
+			{Name: "team.us", Kind: RegistryKindRemote, Enabled: true},
+		},
+	}, map[string]Store{
+		"team":    stubStore{},
+		"team.us": regionalStore,
+	})
+
+	item, err := svc.Get(context.Background(), "team.us.review.bot")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got, want := regionalStore.lastGetID, "review.bot"; got != want {
+		t.Fatalf("store Get id = %q, want %q", got, want)
+	}
+	if got, want := item.ID, "team.us.review.bot"; got != want {
+		t.Fatalf("Get().ID = %q, want %q", got, want)
 	}
 }
 
@@ -159,7 +187,7 @@ func TestPublishUsesDefaultPublishRegistry(t *testing.T) {
 	if got, want := localStore.lastPublishSpec.Registry, "local"; got != want {
 		t.Fatalf("publish registry = %q, want %q", got, want)
 	}
-	if got, want := item.ID, "local/frontend-alice"; got != want {
+	if got, want := item.ID, "local.frontend-alice"; got != want {
 		t.Fatalf("Publish().ID = %q, want %q", got, want)
 	}
 }
@@ -186,8 +214,55 @@ func TestListContinuesWhenRegistryFails(t *testing.T) {
 	if got, want := len(items), 1; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
-	if got, want := items[0].ID, "builtin/picoclaw-manager"; got != want {
+	if got, want := items[0].ID, "builtin.picoclaw-manager"; got != want {
 		t.Fatalf("List()[0].ID = %q, want %q", got, want)
+	}
+}
+
+func TestDeleteRemovesLocalTemplate(t *testing.T) {
+	registryRoot := t.TempDir()
+	store := NewLocalStore(registryRoot)
+	if _, err := store.Publish(context.Background(), PublishSpec{
+		ID:          "review-bot",
+		Name:        "review-bot",
+		Role:        TemplateRoleWorker,
+		RuntimeKind: "picoclaw_sandbox",
+		Image:       "agent-image:test",
+	}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	svc, err := NewService(config.HubConfig{
+		DefaultRegistry: "local",
+		Registries: []config.HubRegistryConfig{
+			{Name: "local", Kind: RegistryKindLocal, Path: registryRoot, Enabled: true},
+		},
+	}, DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	if err := svc.Delete(context.Background(), "local.review-bot"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if _, err := svc.Get(context.Background(), "local.review-bot"); err == nil {
+		t.Fatal("Get() after Delete() succeeded, want error")
+	}
+}
+
+func TestDeleteRejectsBuiltinRegistry(t *testing.T) {
+	svc := mustService(t, config.HubConfig{
+		DefaultRegistry: "builtin",
+		Registries: []config.HubRegistryConfig{
+			{Name: "builtin", Kind: RegistryKindBuiltin, Enabled: true},
+		},
+	}, map[string]Store{
+		"builtin": stubStore{},
+	})
+
+	err := svc.Delete(context.Background(), "builtin.picoclaw-worker")
+	if !errors.Is(err, ErrRegistryNotDeletable) {
+		t.Fatalf("Delete() error = %v, want ErrRegistryNotDeletable", err)
 	}
 }
 
@@ -233,6 +308,10 @@ func (s stubStore) Publish(context.Context, PublishSpec) (Template, error) {
 	return Template{}, nil
 }
 
+func (s stubStore) Delete(context.Context, string) error {
+	return nil
+}
+
 type recordingStore struct {
 	lastGetID       string
 	lastPublishSpec PublishSpec
@@ -256,6 +335,10 @@ func (s *recordingStore) FetchWorkspace(context.Context, string) (WorkspaceRef, 
 func (s *recordingStore) Publish(_ context.Context, spec PublishSpec) (Template, error) {
 	s.lastPublishSpec = spec
 	return s.publishResult, nil
+}
+
+func (s *recordingStore) Delete(context.Context, string) error {
+	return nil
 }
 
 func mustService(t *testing.T, cfg config.HubConfig, stores map[string]Store) *Service {

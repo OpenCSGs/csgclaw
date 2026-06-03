@@ -2138,35 +2138,23 @@
   gap: 8px;
 }
 
-.sidebar-version-alert-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--danger);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 14%, transparent);
-  flex: 0 0 auto;
-}
-
-.sidebar-version-row {
+.sidebar-version-status {
   min-width: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.sidebar-version-row strong {
-  min-width: 0;
-  max-width: 170px;
-  color: var(--text);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.35;
-  overflow-wrap: anywhere;
   text-align: right;
+}
+
+.sidebar-version-value {
+  min-width: 0;
+  color: var(--text);
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .sidebar-version-error {
@@ -2176,13 +2164,18 @@
   overflow-wrap: anywhere;
 }
 
-.sidebar-upgrade-menu-button {
-  width: 100%;
+.sidebar-version-action {
+  max-width: 150px;
+  min-width: 0;
+  height: 28px;
+  padding-inline: 8px;
   justify-content: center;
   gap: 8px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
-.sidebar-upgrade-menu-button.is-running {
+.sidebar-version-action.is-running {
   cursor: progress;
 }
 
@@ -2195,13 +2188,13 @@
   flex: 0 0 auto;
 }
 
-.sidebar-upgrade-menu-button.is-running .sidebar-upgrade-menu-dot {
+.sidebar-version-action.is-running .sidebar-upgrade-menu-dot {
   background: var(--primary);
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent);
   animation: upgrade-pulse 1.4s ease-in-out infinite;
 }
 
-.sidebar-upgrade-menu-button.is-done .sidebar-upgrade-menu-dot {
+.sidebar-version-action.is-done .sidebar-upgrade-menu-dot {
   background: var(--portal-success-700);
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--portal-success-700) 16%, transparent);
 }

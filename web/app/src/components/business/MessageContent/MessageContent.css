@@ -2,6 +2,71 @@
   background: var(--panel-strong);
 }
 
+.slash-command-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid rgba(43, 109, 246, 0.2);
+  border-radius: var(--radius-md);
+  background: rgba(43, 109, 246, 0.08);
+}
+
+.slash-command-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.slash-command-kicker {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.slash-command-name,
+.slash-command-arg {
+  width: fit-content;
+  padding: 3px 7px;
+  border: 1px solid rgba(43, 109, 246, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  color: inherit;
+  font-family: "SFMono-Regular", "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.slash-command-arg {
+  border-color: rgba(148, 163, 184, 0.34);
+  background: rgba(255, 255, 255, 0.45);
+  color: var(--muted);
+}
+
+.slash-command-body {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-slash-token {
+  color: var(--mention);
+  font-weight: 600;
+}
+
+:root[data-theme="dark"] .slash-command-card {
+  background: rgba(43, 109, 246, 0.14);
+}
+
+:root[data-theme="dark"] .slash-command-name,
+:root[data-theme="dark"] .slash-command-arg {
+  background: rgba(15, 23, 42, 0.54);
+}
+
 .structured-message-link {
   margin-top: 6px;
   font-size: 13px;
@@ -420,7 +485,9 @@
 }
 
 .message-row.own .message-bubble .message-content .message-mention,
+.message-row.own .message-bubble .message-content .message-slash-token,
 .message-row.own .message-bubble .message-content p > .message-mention,
+.message-row.own .message-bubble .message-content p > .message-slash-token,
 .message-row.admin.own .message-bubble .message-content .message-mention {
   color: var(--portal-brand-700);
 }
@@ -431,7 +498,9 @@
 
 :root[data-theme="dark"] .message-row.own .message-bubble .message-content p,
 :root[data-theme="dark"] .message-row.own .message-bubble .message-content .message-mention,
-:root[data-theme="dark"] .message-row.own .message-bubble .message-content p > .message-mention {
+:root[data-theme="dark"] .message-row.own .message-bubble .message-content .message-slash-token,
+:root[data-theme="dark"] .message-row.own .message-bubble .message-content p > .message-mention,
+:root[data-theme="dark"] .message-row.own .message-bubble .message-content p > .message-slash-token {
   color: var(--on-primary);
 }
 

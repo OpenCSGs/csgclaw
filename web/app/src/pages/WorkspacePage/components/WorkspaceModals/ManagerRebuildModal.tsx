@@ -1,5 +1,5 @@
 import { AgentCreateProgress } from "@/components/business/ProfileControls";
-import { Button, Select } from "@/components/ui";
+import { Button, Select, SelectContent, SelectItem, SelectRoot, SelectTrigger } from "@/components/ui";
 import { defaultManagerRebuildImageForRuntime, formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
 import { ModalCloseButton } from "./ModalCloseButton";
 
@@ -21,6 +21,7 @@ export function ManagerRebuildModal({
   onConfirm,
 }) {
   const selectedRuntimeKind = normalizeRuntimeKind(runtimeKind) || runtimeOptions[0]?.value || "picoclaw_sandbox";
+  const selectedImage = String(image ?? "").trim();
   return (
     <div className="modal-backdrop">
       <div className="modal-card profile-modal manager-rebuild-modal" onClick={(event) => event.stopPropagation()}>
@@ -59,17 +60,32 @@ export function ManagerRebuildModal({
               </label>
               <label className="field manager-rebuild-image-field">
                 <span>{t("agentImage")}</span>
-                <input
-                  list="manager-rebuild-image-options"
-                  value={image}
-                  onInput={(event) => onImageChange(event.currentTarget.value)}
-                  placeholder={t("agentImagePlaceholder")}
-                />
-                <datalist id="manager-rebuild-image-options">
-                  {imageOptions.map((option) => (
-                    <option key={option} value={option} />
-                  ))}
-                </datalist>
+                <SelectRoot value={selectedImage} onValueChange={onImageChange}>
+                  <SelectTrigger
+                    className="manager-rebuild-image-select"
+                    aria-label={t("agentImage")}
+                    title={selectedImage}
+                  >
+                    {selectedImage ? (
+                      <ImageReferenceLabel image={selectedImage} />
+                    ) : (
+                      <span className="manager-rebuild-image-placeholder">{t("agentImagePlaceholder")}</span>
+                    )}
+                  </SelectTrigger>
+                  <SelectContent className="manager-rebuild-image-select-content">
+                    {imageOptions.map((option) => (
+                      <SelectItem
+                        key={option}
+                        aria-label={option}
+                        className="manager-rebuild-image-select-item"
+                        value={option}
+                        textValue={option}
+                      >
+                        <ImageReferenceLabel image={option} />
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </SelectRoot>
               </label>
             </div>
           </section>
@@ -95,4 +111,51 @@ export function ManagerRebuildModal({
       </div>
     </div>
   );
+}
+
+function ImageReferenceLabel({ image }) {
+  const { context, name, suffix } = imageReferenceParts(image);
+  return (
+    <span className="manager-rebuild-image-option" title={image}>
+      <span className="sr-only">{image}</span>
+      <span className="manager-rebuild-image-primary" aria-hidden="true">
+        <span className="manager-rebuild-image-name">{name}</span>
+        {suffix ? <span className="manager-rebuild-image-tag">{suffix}</span> : null}
+      </span>
+      {context ? (
+        <span className="manager-rebuild-image-context" aria-hidden="true">
+          {context}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function imageReferenceParts(image) {
+  const value = String(image ?? "").trim();
+  if (!value) {
+    return { context: "", name: "", suffix: "" };
+  }
+  const digestIndex = value.indexOf("@");
+  if (digestIndex > 0) {
+    return splitImagePath(value.slice(0, digestIndex), value.slice(digestIndex));
+  }
+  const lastSlash = value.lastIndexOf("/");
+  const lastColon = value.lastIndexOf(":");
+  if (lastColon > lastSlash) {
+    return splitImagePath(value.slice(0, lastColon), value.slice(lastColon));
+  }
+  return splitImagePath(value, "");
+}
+
+function splitImagePath(path, suffix) {
+  const lastSlash = path.lastIndexOf("/");
+  if (lastSlash < 0) {
+    return { context: "", name: path, suffix };
+  }
+  return {
+    context: path.slice(0, lastSlash),
+    name: path.slice(lastSlash + 1),
+    suffix,
+  };
 }

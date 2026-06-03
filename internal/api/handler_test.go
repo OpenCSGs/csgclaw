@@ -43,7 +43,7 @@ func init() {
 		if err := runtimewiring.WithPicoClawSandboxRuntime(nil)(s); err != nil {
 			return err
 		}
-		return runtimewiring.WithOpenClawSandboxRuntime()(s)
+		return runtimewiring.WithOpenClawSandboxRuntime(nil)(s)
 	})
 	_ = agent.TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
 		return nil
@@ -239,6 +239,96 @@ func TestHandleVersionMethodNotAllowed(t *testing.T) {
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusMethodNotAllowed, rec.Body.String())
+	}
+}
+
+func TestBootstrapConfigViewUsesServerUpgradeVisibility(t *testing.T) {
+	tests := []struct {
+		name        string
+		configValue bool
+		showUpgrade bool
+	}{
+		{name: "shown", configValue: true, showUpgrade: true},
+		{name: "hidden", configValue: false, showUpgrade: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := bootstrapConfigView(context.Background(), config.Config{
+				Server: config.ServerConfig{ShowUpgrade: tt.configValue},
+			}, nil)
+
+			if got.ShowUpgrade != tt.showUpgrade {
+				t.Fatalf("ShowUpgrade = %t, want %t", got.ShowUpgrade, tt.showUpgrade)
+			}
+		})
+	}
+}
+
+func TestHandleAgentImageCandidatesReturnsLocalSandboxImages(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	if err := (config.Config{
+		Server: config.ServerConfig{
+			ListenAddr:  "127.0.0.1:18080",
+			AccessToken: "token",
+		},
+		Sandbox: config.SandboxConfig{
+			Provider:      config.DockerProvider,
+			DockerCLIPath: "/custom/docker",
+		},
+	}).Save(configPath); err != nil {
+		t.Fatalf("Save(config) error = %v", err)
+	}
+
+	srv := &Handler{
+		configPath: configPath,
+		localRuntimeImages: func(_ context.Context, cfg config.Config) ([]string, error) {
+			if got, want := cfg.Sandbox.Provider, config.DockerProvider; got != want {
+				t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
+			}
+			if got, want := cfg.Sandbox.DockerCLIPath, "/custom/docker"; got != want {
+				t.Fatalf("cfg.Sandbox.DockerCLIPath = %q, want %q", got, want)
+			}
+			return []string{"registry.example/picoclaw:2026.5.27", "registry.example/picoclaw:2026.5.22"}, nil
+		},
+	}
+
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents/image-candidates", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got []string
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	want := []string{"registry.example/picoclaw:2026.5.27", "registry.example/picoclaw:2026.5.22"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("agent image candidates = %#v, want %#v", got, want)
+	}
+}
+
+func TestListLocalRuntimeImagesUsesSandboxProviderCapability(t *testing.T) {
+	var gotHome string
+	provider := &sandboxtest.Provider{
+		Images: []string{"registry.example/picoclaw:2026.5.27"},
+		ListImagesFunc: func(_ context.Context, homeDir string) ([]string, error) {
+			gotHome = homeDir
+			return []string{"registry.example/picoclaw:2026.5.27"}, nil
+		},
+	}
+
+	got, err := listLocalRuntimeImagesWithProvider(context.Background(), provider)
+	if err != nil {
+		t.Fatalf("listLocalRuntimeImagesWithProvider() error = %v", err)
+	}
+	want := []string{"registry.example/picoclaw:2026.5.27"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("listLocalRuntimeImagesWithProvider() = %#v, want %#v", got, want)
+	}
+	wantHomeSuffix := filepath.Join(config.AppDirName, "agents", agent.ManagerName, config.RuntimeHomeDirName)
+	if !strings.HasSuffix(gotHome, wantHomeSuffix) {
+		t.Fatalf("sandbox home = %q, want suffix %q", gotHome, wantHomeSuffix)
 	}
 }
 
@@ -1087,6 +1177,73 @@ func TestHandleAgentsGetByIDReturnsAgent(t *testing.T) {
 	}
 }
 
+func TestHandleAgentUpgradeUsesLatestDefaultImage(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
+		ID:          "frontend-worker",
+		Name:        "frontend-worker",
+		Description: "frontend worker",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		Image:       "registry.example/picoclaw-worker:2026.06.03",
+	})
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	if err := writeSeededAgents(statePath, []agent.Agent{
+		{
+			ID:           "u-alice",
+			Name:         "alice",
+			RuntimeID:    "rt-u-alice",
+			RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
+			Image:        "custom.example/alice-worker:2026.05.27",
+			BoxID:        "box-alice-old",
+			Role:         agent.RoleWorker,
+			Status:       string(agentruntime.StateRunning),
+			AgentProfile: agent.AgentProfile{Name: "alice", Provider: agent.ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
+			CreatedAt:    time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
+		},
+	}); err != nil {
+		t.Fatalf("writeSeededAgents() error = %v", err)
+	}
+	var newImage string
+	svc, err := agent.NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		statePath,
+		agent.WithHubService(hubSvc),
+		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
+		agent.WithRuntime(fakeCompatRuntime{
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				newImage = spec.Image
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-alice-new"}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	srv := &Handler{svc: svc}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/upgrade", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if newImage != "registry.example/picoclaw-worker:2026.06.03" {
+		t.Fatalf("runtime New() image = %q, want latest default image", newImage)
+	}
+	var got agent.Agent
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Image != "registry.example/picoclaw-worker:2026.06.03" {
+		t.Fatalf("response Image = %q, want latest default image", got.Image)
+	}
+}
+
 func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
 	svc := mustNewSeededService(t, []agent.Agent{
 		{
@@ -1815,7 +1972,7 @@ func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 	got := agentCreateRequestFromAPI(apitypes.CreateAgentRequest{
 		Name:         "alice",
 		RuntimeKind:  agent.RuntimeKindCodex,
-		FromTemplate: "builtin/frontend-alice",
+		FromTemplate: "builtin.frontend-alice",
 		Avatar:       "avatar/3D-1.png",
 		Profile:      "codex-fast",
 	})
@@ -1826,8 +1983,8 @@ func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 	if got.Spec.RuntimeKind != agent.RuntimeKindCodex {
 		t.Fatalf("Spec.RuntimeKind = %q, want %q", got.Spec.RuntimeKind, agent.RuntimeKindCodex)
 	}
-	if got.Spec.FromTemplate != "builtin/frontend-alice" {
-		t.Fatalf("Spec.FromTemplate = %q, want %q", got.Spec.FromTemplate, "builtin/frontend-alice")
+	if got.Spec.FromTemplate != "builtin.frontend-alice" {
+		t.Fatalf("Spec.FromTemplate = %q, want %q", got.Spec.FromTemplate, "builtin.frontend-alice")
 	}
 	if got.Spec.Avatar != "avatar/3D-1.png" {
 		t.Fatalf("Spec.Avatar = %q, want %q", got.Spec.Avatar, "avatar/3D-1.png")
@@ -1866,7 +2023,63 @@ func TestHandleHubTemplatesListsAggregatedTemplates(t *testing.T) {
 	}
 }
 
-func TestHandleHubTemplateByRegistryNameReturnsTemplate(t *testing.T) {
+func TestHandleHubTemplateDeleteRemovesLocalTemplate(t *testing.T) {
+	hubSvc := mustNewLocalTemplateHubService(t, "review-bot", hub.Template{
+		ID:          "review-bot",
+		Name:        "review-bot",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: agent.RuntimeKindCodex,
+	})
+	srv := &Handler{}
+	srv.SetHubService(hubSvc)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/hub/templates/local.review-bot", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates", nil)
+	listRec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d; body=%s", listRec.Code, http.StatusOK, listRec.Body.String())
+	}
+	var listed []apitypes.HubTemplate
+	if err := json.NewDecoder(listRec.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	for _, item := range listed {
+		if item.ID == "local.review-bot" {
+			t.Fatalf("listed templates = %#v, want deleted local.review-bot", listed)
+		}
+	}
+}
+
+func TestHandleHubTemplateDeleteRejectsBuiltinTemplate(t *testing.T) {
+	builtinSvc, err := hub.NewService(config.HubConfig{
+		DefaultRegistry: "builtin",
+		Registries: []config.HubRegistryConfig{
+			{Name: "builtin", Kind: hub.RegistryKindBuiltin, Enabled: true},
+		},
+	}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+	srv := &Handler{}
+	srv.SetHubService(builtinSvc)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/hub/templates/builtin.picoclaw-worker", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
+func TestHandleHubTemplateByIDReturnsTemplate(t *testing.T) {
 	hubSvc := mustNewLocalTemplateHubService(t, "review-bot", hub.Template{
 		ID:          "review-bot",
 		Name:        "review-bot",
@@ -1876,7 +2089,7 @@ func TestHandleHubTemplateByRegistryNameReturnsTemplate(t *testing.T) {
 	})
 	srv := &Handler{}
 	srv.SetHubService(hubSvc)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local/review-bot", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot", nil)
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -1888,8 +2101,8 @@ func TestHandleHubTemplateByRegistryNameReturnsTemplate(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "local/review-bot" {
-		t.Fatalf("template id = %q, want %q", got.ID, "local/review-bot")
+	if got.ID != "local.review-bot" {
+		t.Fatalf("template id = %q, want %q", got.ID, "local.review-bot")
 	}
 	if got.Source.Name != "local" || got.Source.Kind != "local" {
 		t.Fatalf("template source = %+v, want local/local", got.Source)
@@ -1915,7 +2128,7 @@ func TestHandleHubTemplateByRegistryNameReturnsTemplate(t *testing.T) {
 	}
 }
 
-func TestHandleHubTemplateWorkspaceFileByRegistryNameReturnsContent(t *testing.T) {
+func TestHandleHubTemplateWorkspaceFileByIDReturnsContent(t *testing.T) {
 	hubSvc := mustNewLocalTemplateHubService(t, "review-bot", hub.Template{
 		ID:          "review-bot",
 		Name:        "review-bot",
@@ -1925,7 +2138,7 @@ func TestHandleHubTemplateWorkspaceFileByRegistryNameReturnsContent(t *testing.T
 	})
 	srv := &Handler{}
 	srv.SetHubService(hubSvc)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local/review-bot/workspace/file?path=skills/custom/SKILL.md", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot/workspace/file?path=skills/custom/SKILL.md", nil)
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -1934,6 +2147,54 @@ func TestHandleHubTemplateWorkspaceFileByRegistryNameReturnsContent(t *testing.T
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	var got apitypes.HubTemplateWorkspaceFile
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Path != "skills/custom/SKILL.md" {
+		t.Fatalf("path = %q, want %q", got.Path, "skills/custom/SKILL.md")
+	}
+	if strings.TrimSpace(got.Content) != "# Custom" {
+		t.Fatalf("content = %q, want %q", strings.TrimSpace(got.Content), "# Custom")
+	}
+}
+
+func TestHandleAgentWorkspaceFileReturnsContent(t *testing.T) {
+	svc := mustNewService(t)
+	created, err := svc.Create(context.Background(), agent.CreateRequest{
+		Spec: agent.CreateAgentSpec{
+			Name:        "alice",
+			Role:        agent.RoleWorker,
+			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			Image:       "worker-image:test",
+			AgentProfile: agent.AgentProfile{
+				ProfileComplete: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	workspaceRoot, err := agent.WorkspaceRoot(created.Name, created.RuntimeKind)
+	if err != nil {
+		t.Fatalf("WorkspaceRoot() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(workspaceRoot, "skills", "custom"), 0o755); err != nil {
+		t.Fatalf("create skill dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "skills", "custom", "SKILL.md"), []byte("# Custom\n"), 0o644); err != nil {
+		t.Fatalf("write skill file: %v", err)
+	}
+
+	srv := &Handler{svc: svc}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+created.ID+"/workspace/file?path=skills/custom/SKILL.md", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got apitypes.WorkspaceFile
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -1956,7 +2217,7 @@ func TestHandleHubTemplateWithoutWorkspaceOmitsEntriesAndFilePreview(t *testing.
 	srv := &Handler{}
 	srv.SetHubService(hubSvc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local/review-bot", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot", nil)
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -1971,7 +2232,7 @@ func TestHandleHubTemplateWithoutWorkspaceOmitsEntriesAndFilePreview(t *testing.
 		t.Fatalf("workspace entries = %#v, want empty", detail.Workspace.Entries)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local/review-bot/workspace/file?path=USER.md", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot/workspace/file?path=USER.md", nil)
 	rec = httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -2030,8 +2291,8 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "local/alice" {
-		t.Fatalf("template id = %q, want %q", got.ID, "local/alice")
+	if got.ID != "local.alice" {
+		t.Fatalf("template id = %q, want %q", got.ID, "local.alice")
 	}
 	if got.Role != hub.TemplateRoleWorker {
 		t.Fatalf("template role = %q, want %q", got.Role, hub.TemplateRoleWorker)
@@ -2095,8 +2356,8 @@ func TestHandleHubTemplatesPublishesAgentSnapshotToDefaultRegistryWhenOmitted(t 
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "local/alice" {
-		t.Fatalf("template id = %q, want %q", got.ID, "local/alice")
+	if got.ID != "local.alice" {
+		t.Fatalf("template id = %q, want %q", got.ID, "local.alice")
 	}
 	if got.Role != hub.TemplateRoleWorker {
 		t.Fatalf("template role = %q, want %q", got.Role, hub.TemplateRoleWorker)
@@ -2707,6 +2968,81 @@ func TestHandleMessagesPostCreatesMessage(t *testing.T) {
 	}
 }
 
+func TestHandleMessagesPostNormalizesCanonicalSlashCommand(t *testing.T) {
+	srv := &Handler{
+		im: im.NewServiceFromBootstrap(im.Bootstrap{
+			CurrentUserID: "u-admin",
+			Users: []im.User{
+				{ID: "u-admin", Name: "admin", Handle: "admin"},
+				{ID: "u-manager", Name: "manager", Handle: "manager"},
+			},
+			Rooms: []im.Room{{ID: "room-1", Title: "Room One", Members: []string{"u-admin", "u-manager"}}},
+		}),
+	}
+
+	body := `{"room_id":"room-1","sender_id":"u-admin","content":"  <slash-command arg=\"skill-creator\" name=\"use-skill\"/>  create & review <safely>  "}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/messages", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var got im.Message
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	want := `<slash-command name="use-skill" arg="skill-creator"></slash-command> create & review <safely>`
+	if got.Content != want {
+		t.Fatalf("content = %q, want canonical slash command %q", got.Content, want)
+	}
+}
+
+func TestHandleMessagesPostRejectsMalformedSlashCommand(t *testing.T) {
+	srv := &Handler{
+		im: im.NewServiceFromBootstrap(im.Bootstrap{
+			CurrentUserID: "u-admin",
+			Users:         []im.User{{ID: "u-admin", Name: "admin", Handle: "admin"}},
+			Rooms:         []im.Room{{ID: "room-1", Title: "Room One", Members: []string{"u-admin"}}},
+		}),
+	}
+
+	body := `{"room_id":"room-1","sender_id":"u-admin","content":"<slash-command name=\"\"></slash-command> body"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleMessagesPostKeepsLegacySlashTextAsPlainContent(t *testing.T) {
+	srv := &Handler{
+		im: im.NewServiceFromBootstrap(im.Bootstrap{
+			CurrentUserID: "u-admin",
+			Users:         []im.User{{ID: "u-admin", Name: "admin", Handle: "admin"}},
+			Rooms:         []im.Room{{ID: "room-1", Title: "Room One", Members: []string{"u-admin"}}},
+		}),
+	}
+
+	body := `{"room_id":"room-1","sender_id":"u-admin","content":"/skill-creator create a review skill"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var got im.Message
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Content != "/skill-creator create a review skill" {
+		t.Fatalf("content = %q, want legacy slash text kept as plain content", got.Content)
+	}
+}
+
 func TestHandleThreadRoutesAndMessageFiltering(t *testing.T) {
 	srv := &Handler{
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
@@ -2963,6 +3299,66 @@ func TestHandleFeishuMessagesPostSendsMessage(t *testing.T) {
 	}
 }
 
+func TestHandleFeishuMessagesPostNormalizesCanonicalSlashCommand(t *testing.T) {
+	wantContent := `<slash-command name="use-skill" arg="skill-creator"></slash-command> create & review`
+	feishuSvc := feishu.NewServiceWithSendMessage(
+		map[string]feishu.AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, _ feishu.AppConfig, req feishu.SendMessageRequest) (feishu.SendMessageResponse, error) {
+			if req.ChatID != "oc_alpha" || req.Content != wantContent {
+				t.Fatalf("send request = %+v, want chat/content %q", req, wantContent)
+			}
+			return feishu.SendMessageResponse{MessageID: "om_1", SenderOpenID: "ou_manager"}, nil
+		},
+	)
+	srv := &Handler{feishu: feishuSvc}
+
+	body := `{"room_id":"oc_alpha","sender_id":"u-manager","content":"<slash-command arg=\"skill-creator\" name=\"use-skill\"/> create & review"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/feishu/messages", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var got im.Message
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Content != wantContent {
+		t.Fatalf("content = %q, want %q", got.Content, wantContent)
+	}
+}
+
+func TestHandleFeishuMessagesPostConvertsSlashShorthandToCanonicalCommand(t *testing.T) {
+	wantContent := `<slash-command name="use-skill" arg="skill-creator"></slash-command> create & review`
+	feishuSvc := feishu.NewServiceWithSendMessage(
+		map[string]feishu.AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, _ feishu.AppConfig, req feishu.SendMessageRequest) (feishu.SendMessageResponse, error) {
+			if req.ChatID != "oc_alpha" || req.Content != wantContent {
+				t.Fatalf("send request = %+v, want chat/content %q", req, wantContent)
+			}
+			return feishu.SendMessageResponse{MessageID: "om_1", SenderOpenID: "ou_manager"}, nil
+		},
+	)
+	srv := &Handler{feishu: feishuSvc}
+
+	body := `{"room_id":"oc_alpha","sender_id":"u-manager","content":"/skill-creator create & review"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/feishu/messages", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var got im.Message
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Content != wantContent {
+		t.Fatalf("content = %q, want %q", got.Content, wantContent)
+	}
+}
+
 func TestHandleFeishuMessagesGetListsRoomMessages(t *testing.T) {
 	feishuSvc := feishu.NewServiceWithCreateChatAndListRoomMessages(
 		map[string]feishu.AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret", AdminOpenID: "ou_admin"}},
@@ -3028,12 +3424,14 @@ func TestHandleFeishuEventsStreamsMessageBusEvents(t *testing.T) {
 		},
 	})
 	feishuSvc.MessageBus().Publish(feishu.MessageEvent{
-		Type:   feishu.MessageEventTypeMessageCreated,
-		RoomID: "oc_alpha",
+		Type:         feishu.MessageEventTypeMessageCreated,
+		RoomID:       "oc_alpha",
+		SenderBotID:  "u-worker",
+		MentionBotID: "u-manager",
 		Message: &im.Message{
 			ID:       "om_1",
 			SenderID: "ou_manager",
-			Content:  "hello @alice",
+			Content:  "/custom do this",
 			Mentions: []im.Mention{{ID: "u-manager"}},
 		},
 	})
@@ -3048,11 +3446,50 @@ func TestHandleFeishuEventsStreamsMessageBusEvents(t *testing.T) {
 	if !strings.Contains(body, `"room_id":"oc_alpha"`) {
 		t.Fatalf("body = %q, want room_id", body)
 	}
+	if !strings.Contains(body, `"sender_bot_id":"u-worker"`) || !strings.Contains(body, `"mention_bot_id":"u-manager"`) {
+		t.Fatalf("body = %q, want bot id bridge metadata", body)
+	}
 	if strings.Contains(body, "om_ignored") || strings.Contains(body, "oc_ignored") {
 		t.Fatalf("body = %q, want only u-manager events", body)
 	}
 	if !strings.Contains(body, `"id":"om_1"`) {
 		t.Fatalf("body = %q, want message id", body)
+	}
+	if !strings.Contains(body, `"content":"/custom do this"`) {
+		t.Fatalf("body = %q, want original slash invocation content", body)
+	}
+	if strings.Contains(body, "agent_content") || strings.Contains(body, "Follow custom rules") {
+		t.Fatalf("body = %q, want no hidden skill payload", body)
+	}
+}
+
+func TestHandleFeishuEventsSendsHeartbeat(t *testing.T) {
+	oldInterval := sseHeartbeatInterval
+	sseHeartbeatInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		sseHeartbeatInterval = oldInterval
+	})
+
+	feishuSvc := feishu.NewService()
+	srv := &Handler{feishu: feishuSvc, serverAccessToken: "secret"}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/bots/u-manager/events", nil).WithContext(ctx)
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		srv.Routes().ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	<-done
+
+	if body := rec.Body.String(); !strings.Contains(body, ": ping\n\n") {
+		t.Fatalf("body = %q, want heartbeat ping", body)
 	}
 }
 

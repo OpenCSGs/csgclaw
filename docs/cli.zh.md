@@ -16,6 +16,8 @@
 
 - `--output table` 输出适合人读的表格或纯文本。
 - `--output json` 输出结构化 JSON。
+- `-o` 是 `--output` 的简写。
+- 全局参数（`--output`、`-o`、`--endpoint`、`--token`）必须写在子命令**之前**（例如 `csgclaw-cli --output json hub list`，不要写成 `csgclaw-cli hub list --output json`）。
 - 如果不显式传入 `--output`：
   - 输出到终端时，默认是 `table`
   - 输出被管道或重定向时，默认是 `json`

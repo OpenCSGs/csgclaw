@@ -1,4 +1,4 @@
 interface:
   display_name: "CSGClaw CLI Basics"
   short_description: "Basic CSGClaw CLI room/bot/member operations"
-  default_prompt: "Use $basics to handle basic CSGClaw CLI operations such as creating rooms, listing bots, creating bots, listing room members, and adding bots into rooms."
+  default_prompt: "Use $basics to handle basic CSGClaw CLI operations such as creating rooms or Feishu groups, listing bots, creating bots, listing room members, and adding bots into rooms."

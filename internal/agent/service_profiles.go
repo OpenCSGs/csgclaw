@@ -297,6 +297,22 @@ func (s *Service) ResolvedAgentProfile(agentID string) (AgentProfile, error) {
 }
 
 func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
+	return s.recreate(ctx, id, func(ctx context.Context, got Agent) (string, error) {
+		return s.imageForRecreate(ctx, got), nil
+	})
+}
+
+func (s *Service) Upgrade(ctx context.Context, id string) (Agent, error) {
+	return s.recreate(ctx, id, func(ctx context.Context, got Agent) (string, error) {
+		latest, ok := s.currentDefaultImageForAgent(ctx, got)
+		if !ok || strings.TrimSpace(latest) == "" {
+			return "", fmt.Errorf("agent %q has no default image to upgrade", got.ID)
+		}
+		return latest, nil
+	})
+}
+
+func (s *Service) recreate(ctx context.Context, id string, imageFor func(context.Context, Agent) (string, error)) (Agent, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
@@ -317,7 +333,10 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
-	image := strings.TrimSpace(got.Image)
+	image, err := imageFor(ctx, got)
+	if err != nil {
+		return Agent{}, err
+	}
 	runtimeKind := strings.TrimSpace(got.RuntimeKind)
 	if isGatewayRuntimeKind(runtimeKind) {
 		if image == "" {
@@ -356,7 +375,7 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 			State:     agentruntime.State(sandboxInfo.State),
 			CreatedAt: sandboxInfo.CreatedAt.UTC(),
 		}
-		recreated, err := s.persistRecreatedAgent(ctx, id, info)
+		recreated, err := s.persistRecreatedAgent(ctx, id, image, info)
 		if err != nil {
 			return Agent{}, err
 		}
@@ -381,6 +400,9 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 		Image:     image,
 		Profile:   runtimeProfile,
 	}
+	if err := refreshGatewayTemplateSkills(got.Name, runtimeKind, recreateTemplateRole(got)); err != nil {
+		return Agent{}, fmt.Errorf("refresh gateway template skills: %w", err)
+	}
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
 		RuntimeID: createSpec.RuntimeID,
 		AgentID:   createSpec.AgentID,
@@ -399,14 +421,14 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 		return Agent{}, fmt.Errorf("read agent runtime info: %w", err)
 	}
 
-	recreated, err := s.persistRecreatedAgent(ctx, id, info)
+	recreated, err := s.persistRecreatedAgent(ctx, id, image, info)
 	if err != nil {
 		return Agent{}, err
 	}
 	return recreated, nil
 }
 
-func (s *Service) persistRecreatedAgent(ctx context.Context, id string, info agentruntime.Info) (Agent, error) {
+func (s *Service) persistRecreatedAgent(ctx context.Context, id, image string, info agentruntime.Info) (Agent, error) {
 	s.mu.Lock()
 	current, ok := s.agents[id]
 	if !ok {
@@ -414,6 +436,9 @@ func (s *Service) persistRecreatedAgent(ctx context.Context, id string, info age
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
 	current.RuntimeID = normalizeRuntimeID(current.RuntimeID, current.ID)
+	if image = strings.TrimSpace(image); image != "" {
+		current.Image = image
+	}
 	current.BoxID = info.HandleID
 	current.Status = string(info.State)
 	if !info.CreatedAt.IsZero() {
@@ -422,6 +447,7 @@ func (s *Service) persistRecreatedAgent(ctx context.Context, id string, info age
 		current.CreatedAt = time.Now().UTC()
 	}
 	current.AgentProfile.EnvRestartRequired = false
+	current.AgentProfile.ImageUpgradeRequired = false
 	current.ProfileComplete = true
 	s.agents[id] = current
 	s.syncRuntimeRecordLocked(current)

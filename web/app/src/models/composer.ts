@@ -1,3 +1,25 @@
+export type ComposerSegment =
+  | {
+      text: string;
+      type: "text";
+    }
+  | {
+      type: "slash";
+      text: string;
+    }
+  | {
+      type: "mention";
+      userId: string;
+      userName: string;
+    };
+
+export type ComposerSlashState = {
+  endOffset: number;
+  query: string;
+  startOffset: number;
+  textNode: Node;
+};
+
 export function createMentionTokenElement(user) {
   const token = document.createElement("span");
   token.className = "composer-mention-token";
@@ -6,6 +28,56 @@ export function createMentionTokenElement(user) {
   token.contentEditable = "false";
   token.textContent = `@${token.dataset.userName}`;
   return token;
+}
+
+export function createSlashTokenElement(value) {
+  const token = document.createElement("span");
+  token.className = "composer-slash-token";
+  token.dataset.composerSlashToken = "true";
+  token.contentEditable = "false";
+  token.textContent = String(value ?? "");
+  return token;
+}
+
+const slashTokenPattern = /(^|[\s])\/[A-Za-z0-9._-]+(?!\/)/g;
+
+function splitTextSegmentBySlash(value) {
+  const text = String(value ?? "");
+  const segments = [];
+  let last = 0;
+  for (const match of text.matchAll(slashTokenPattern)) {
+    const fullMatch = match[0] || "";
+    const matchText = fullMatch.trimStart();
+    const start = (match.index || 0) + (fullMatch.length - matchText.length);
+    if (start > last) {
+      segments.push({ type: "text", text: text.slice(last, start) });
+    }
+    segments.push({ type: "slash", text: matchText });
+    last = start + matchText.length;
+  }
+  if (last < text.length) {
+    segments.push({ type: "text", text: text.slice(last) });
+  }
+  return segments;
+}
+
+export function normalizeComposerSegmentsForDisplay(segments) {
+  const normalized = [];
+  for (const segment of segments ?? []) {
+    if (!segment) {
+      continue;
+    }
+    if (segment.type === "mention") {
+      normalized.push({ type: "mention", userId: segment.userId, userName: segment.userName });
+      continue;
+    }
+    const text = String(segment.text ?? "");
+    if (!text) {
+      continue;
+    }
+    normalized.push(...splitTextSegmentBySlash(text));
+  }
+  return normalized;
 }
 
 export function appendComposerSegments(parent, segments) {
@@ -24,6 +96,10 @@ export function appendComposerSegments(parent, segments) {
           handle: segment.userName,
         }),
       );
+      continue;
+    }
+    if (segment.type === "slash") {
+      parent.append(createSlashTokenElement(segment.text || ""));
       continue;
     }
     const parts = String(segment.text ?? "").split("\n");
@@ -72,6 +148,10 @@ export function collectComposerSegments(node, segments) {
       });
       return;
     }
+    if (child.dataset?.composerSlashToken) {
+      segments.push({ type: "slash", text: child.textContent ?? "" });
+      return;
+    }
     if (child.tagName === "BR") {
       segments.push({ type: "text", text: "\n" });
       return;
@@ -93,6 +173,10 @@ export function normalizeComposerSegments(segments) {
       if (!segment.userId) {
         continue;
       }
+      normalized.push(segment);
+      continue;
+    }
+    if (segment.type === "slash") {
       normalized.push(segment);
       continue;
     }
@@ -303,6 +387,45 @@ export function getActiveTextQueryContext(node, offset) {
   };
 }
 
+export function getComposerSlashState(root) {
+  if (!root) {
+    return null;
+  }
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return null;
+  }
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.startContainer)) {
+    return null;
+  }
+  let context = getActiveTextQueryContext(range.startContainer, range.startOffset);
+  if (!context && range.startContainer.nodeType === Node.ELEMENT_NODE) {
+    const textNode = getAdjacentSlashTokenTextNode(range.startContainer, range.startOffset);
+    if (textNode) {
+      context = {
+        textNode,
+        offset: textNode.textContent?.length ?? 0,
+        textBeforeCursor: textNode.textContent ?? "",
+      };
+    }
+  }
+  if (!context) {
+    return null;
+  }
+  const match = context.textBeforeCursor.match(/(^|\s)\/([^\s]*)$/);
+  if (!match) {
+    return null;
+  }
+  const query = match[2] ?? "";
+  return {
+    query,
+    startOffset: context.offset - query.length - 1,
+    endOffset: context.offset,
+    textNode: context.textNode,
+  };
+}
+
 export function replaceMentionQueryWithToken(root, mentionState, user) {
   if (!root || !mentionState?.textNode || !user) {
     return false;
@@ -387,6 +510,35 @@ export function insertComposerSegmentsAtSelection(segments) {
   selection.addRange(nextRange);
 }
 
+export function replaceComposerSlashWithSegments(root, segments) {
+  const slashState = getComposerSlashState(root);
+  if (!slashState) {
+    return false;
+  }
+
+  const range = document.createRange();
+  range.setStart(slashState.textNode, slashState.startOffset);
+  range.setEnd(slashState.textNode, slashState.endOffset);
+  range.deleteContents();
+
+  const marker = document.createTextNode("");
+  const fragment = document.createDocumentFragment();
+  appendComposerSegments(fragment, segments);
+  fragment.append(marker);
+  range.insertNode(fragment);
+
+  const selection = window.getSelection();
+  if (!selection) {
+    return true;
+  }
+  const nextRange = document.createRange();
+  nextRange.setStart(marker, marker.textContent.length);
+  nextRange.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(nextRange);
+  return true;
+}
+
 export function removeAdjacentMentionToken(root, direction) {
   if (!root) {
     return false;
@@ -425,14 +577,38 @@ export function findAdjacentMentionToken(node, offset, direction) {
       return null;
     }
     const sibling = direction === "backward" ? node.previousSibling : node.nextSibling;
-    return sibling?.dataset?.userId ? sibling : null;
+    return isComposerTokenNode(sibling) ? sibling : null;
   }
   if (node.nodeType !== Node.ELEMENT_NODE) {
     return null;
   }
   const index = direction === "backward" ? offset - 1 : offset;
   const sibling = node.childNodes[index];
-  return sibling?.dataset?.userId ? sibling : null;
+  return isComposerTokenNode(sibling) ? sibling : null;
+}
+
+function isComposerTokenNode(node: Node | null): boolean {
+  if (node?.nodeType !== Node.ELEMENT_NODE) {
+    return false;
+  }
+  const element = node as HTMLElement;
+  return Boolean(element.dataset?.userId || element.dataset?.composerSlashToken);
+}
+
+function getAdjacentSlashTokenTextNode(node: Node, offset: number): Text | null {
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return null;
+  }
+  const previous = node.childNodes[offset - 1];
+  if (!previous || previous.nodeType !== Node.ELEMENT_NODE) {
+    return null;
+  }
+  const element = previous as HTMLElement;
+  if (!element.dataset?.composerSlashToken) {
+    return null;
+  }
+  const textNode = element.firstChild;
+  return textNode?.nodeType === Node.TEXT_NODE ? (textNode as Text) : null;
 }
 
 export function placeCaretNearNode(root, node, direction) {

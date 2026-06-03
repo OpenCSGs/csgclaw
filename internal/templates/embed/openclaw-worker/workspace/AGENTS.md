@@ -37,6 +37,8 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
 - Local skills live under `skills/<skill-name>/SKILL.md`.
 - Before using a skill, check the local `skills/` directory and read the
   matching `SKILL.md`.
+- If a task begins with `<slash-command name="use-skill" arg="<slug>"></slash-command>`,
+  treat `<slug>` as the required skill slug and the remaining text as the task instruction.
 - Prefer local workspace skills over external discovery.
 - Do not use OpenClaw `find_skills` or `install_skill` when disabled. For registry
   skill search, inspect, versions, or install, read `skills/skill-installer/SKILL.md`

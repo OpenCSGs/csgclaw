@@ -103,6 +103,7 @@ pnpm --dir web/app install
 - 纯图标组件放在 `src/components/ui/Icons/`。
 - 当组件把 UI 基础件与业务状态、文案、动作或 API 数据组合起来时，它就是业务组件。
 - 新增页面功能时，先查已有 `src/components/ui` 和 `src/components/business` 是否能组合实现；不要在页面里重复实现基础按钮、表单、选择器、浮层或 tooltip 交互。
+- 如果共享组件不适合，优先在当前页面或 feature 附近实现页面私有组件，不要过早增加新的共享组件面。只有出现复用需求或交互契约稳定后，再提升为共享组件。
 - 新增或修改 UI 基础件、Radix wrapper、表单控件、浮层层级或组件库 export 时，遵循 `docs/web/ui-components.md` 或 `docs/web/ui-components.zh.md`。当你需要判断“应该用现有组件、直接用 Radix、还是抽一个新的本地组件”时，也先看该组件库规范。
 
 ## 组件命名
@@ -143,11 +144,14 @@ src/pages/WorkspacePage/components/
 - 组件自有 CSS 与组件放在一起，并使用组件名，例如 `AgentDetailPane.css`。
 - feature 级共享 CSS 可以放在该 feature 的 components 目录，例如 `WorkspaceComponents.css`。
 - 全局样式和设计 token 放在 `src/shared/styles/`。
-- 新增颜色、间距、阴影前优先使用已有 CSS 变量和 token。
-- Tailwind CSS utility class 可以用于少量布局和通用样式；稳定的组件外观仍应沉淀到组件 CSS、共享 token 或组件库封装中。
+- 新增 UI 工作遵循渐进式样式顺序：先组合已有全局组件或 feature 局部组件；如果没有合适组件，再实现最小必要的局部组件。
+- 新增样式时，颜色、间距、圆角、阴影和层级值优先使用已有 CSS 变量和 token。
+- 如果只是普通布局或少量通用样式，并且不需要新的语义选择器，优先使用 Tailwind CSS utility class。
+- 稳定的组件外观、复杂选择器、渲染后内容（例如 Markdown）或 utility 难表达的状态，使用组件 CSS 或 CSS Module。新抽取的页面私有组件优先使用 CSS Module。
 - CSS class 名应绑定组件或 feature 语义，避免容易全局冲突的泛用名称。
 - 不要把页面专属样式放进 `src/shared/styles/`。
 - 跨组件浮层必须使用 `src/shared/styles/tokens.css` 中的 z-index token；modal、popover、portal 和 tooltip 的层级模型见 `docs/web/ui-components.md` 或 `docs/web/ui-components.zh.md`。
+- 这些样式规则作为新增文件和新增组件工作的渐进式规范。已有文件没有遵循时，不需要只为样式规范做无功能改动；如果正在对单个文件做功能重构，可以把本次触及的样式顺手按该顺序优化。
 
 ## 状态与数据
 

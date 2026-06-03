@@ -4,6 +4,7 @@ import {
   isDirectConversation,
   resolveConversationUser,
 } from "@/models/conversations";
+import { MessagePreviewText } from "@/components/business/MessageContent";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
@@ -54,7 +55,7 @@ export function ConversationSection({
                   <div className="section-label">{formatTime(lastMessage?.created_at, locale)}</div>
                 </div>
                 <div className="conversation-preview truncate">
-                  {formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t)}
+                  <MessagePreviewText content={formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t)} />
                 </div>
               </div>
             </button>

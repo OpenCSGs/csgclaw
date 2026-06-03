@@ -28,9 +28,11 @@ import {
   WORKER_AGENT_ROLE,
 } from "@/shared/constants/agents";
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
+import { firstWorkspaceFilePath, hasWorkspaceFilePath } from "@/models/workspace";
 import {
   applyTemplateToDraft,
   advanceAgentProgress,
+  agentDraftWithRuntimeFieldsFromAgent,
   agentToDraft,
   availableManagerRebuildImageOptions,
   availableManagerRebuildRuntimeOptions,
@@ -45,6 +47,7 @@ import {
   isNotificationBotDraftContext,
   isNotifierRuntimeDraft,
   isNotifierRuntimeDraftOnAgentPage,
+  mergeAgentIntoList,
   normalizeAuthProviderName,
   partitionWorkspaceAgentItems,
   resolveAgentAvatarSource,
@@ -69,6 +72,7 @@ import { isDirectConversation } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { useProfileModelOptions } from "./useProfileModelOptions";
+import { useWorkspaceAgentWorkspaceFileQuery, useWorkspaceAgentWorkspaceQuery } from "./workspaceQueries";
 import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
 import type { IMConversation } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
@@ -79,7 +83,7 @@ type ManagerRebuildOptions = {
 };
 
 type AgentModalMode = "create" | "edit";
-type AgentAction = "delete" | "recreate" | "start" | "stop";
+type AgentAction = "delete" | "recreate" | "start" | "stop" | "upgrade";
 
 type AgentWithProfile = {
   agent: AgentLike;
@@ -95,6 +99,7 @@ export function useAgentController({
   bootstrapConfig,
   data,
   hubTemplates,
+  localRuntimeImages,
   locale,
   managerProfile,
   refreshHubTemplates,
@@ -106,6 +111,7 @@ export function useAgentController({
   selectComputer,
   selectConversation,
   selectHub,
+  setAgentsData,
   setManagerProfileData,
   setSelectedHubTemplateId,
   t,
@@ -134,6 +140,7 @@ export function useAgentController({
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPageError, setAgentPageError] = useState("");
+  const [selectedAgentWorkspacePath, setSelectedAgentWorkspacePath] = useState("");
   const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
   const usersById = useMemo(() => {
     const result = new Map<string, { avatar?: string | null; handle?: string | null; id: string; name?: string | null }>();
@@ -161,6 +168,43 @@ export function useAgentController({
     }
     return agentItems.find((item) => item.id === activePane.id) ?? null;
   }, [agentItems, activePane]);
+  const selectedAgentWorkspaceSupported = useMemo(() => {
+    const runtimeKind = normalizeRuntimeKind(selectedAgentForPage?.runtime_kind);
+    return runtimeKind === "openclaw_sandbox" || runtimeKind === "picoclaw_sandbox";
+  }, [selectedAgentForPage?.runtime_kind]);
+  const workspaceAgentID = selectedAgentWorkspaceSupported ? selectedAgentForPage?.id || "" : "";
+  const agentWorkspaceQuery = useWorkspaceAgentWorkspaceQuery(workspaceAgentID);
+  const agentWorkspaceEntries = agentWorkspaceQuery.data?.entries ?? null;
+  const agentWorkspaceError = agentWorkspaceQuery.error
+    ? errorMessage(agentWorkspaceQuery.error, t("agentWorkspaceLoadFailed"))
+    : "";
+  const selectedAgentWorkspaceFilePath = hasWorkspaceFilePath(agentWorkspaceEntries, selectedAgentWorkspacePath)
+    ? selectedAgentWorkspacePath
+    : "";
+  const agentWorkspaceFileQuery = useWorkspaceAgentWorkspaceFileQuery(workspaceAgentID, selectedAgentWorkspaceFilePath);
+  const agentWorkspaceFileError = agentWorkspaceFileQuery.error
+    ? errorMessage(agentWorkspaceFileQuery.error, t("agentWorkspaceFileLoadFailed"))
+    : "";
+  useEffect(() => {
+    const entries = agentWorkspaceEntries ?? [];
+    if (!selectedAgentWorkspaceSupported || !selectedAgentForPage?.id || !entries.length) {
+      if (selectedAgentWorkspacePath) {
+        setSelectedAgentWorkspacePath("");
+      }
+      return;
+    }
+    if (!hasWorkspaceFilePath(entries, selectedAgentWorkspacePath)) {
+      const nextPath = firstWorkspaceFilePath(entries);
+      if (nextPath !== selectedAgentWorkspacePath) {
+        setSelectedAgentWorkspacePath(nextPath);
+      }
+    }
+  }, [
+    agentWorkspaceEntries,
+    selectedAgentForPage?.id,
+    selectedAgentWorkspacePath,
+    selectedAgentWorkspaceSupported,
+  ]);
   const activeConversation = useMemo(
     () => data?.rooms.find((item) => item.id === activeConversationId) ?? null,
     [data, activeConversationId],
@@ -175,7 +219,9 @@ export function useAgentController({
   const managerRebuildImageOptions = availableManagerRebuildImageOptions(
     managerTemplateVariants,
     managerRebuildRuntimeKind,
+    bootstrapConfig,
     managerAgent?.image,
+    localRuntimeImages,
   );
   const agentsDisplayError =
     agentsError || (agentsQuery.isError ? errorMessage(agentsQuery.error, t("agentActionFailed")) : "");
@@ -326,9 +372,12 @@ export function useAgentController({
       ? initialRuntimeKind
       : fallbackRuntimeKind;
     const currentImage = String(item?.image ?? managerAgent?.image ?? "").trim();
-    const resolvedImage =
-      currentImage ||
-      defaultManagerRebuildImageForRuntime(managerTemplateVariants, resolvedRuntimeKind, bootstrapConfig, "");
+    const resolvedImage = defaultManagerRebuildImageForRuntime(
+      managerTemplateVariants,
+      resolvedRuntimeKind,
+      bootstrapConfig,
+      currentImage,
+    );
     setManagerRebuildRuntimeKind(resolvedRuntimeKind);
     setManagerRebuildImage(resolvedImage);
     setShowManagerRebuildModal(true);
@@ -342,11 +391,11 @@ export function useAgentController({
         managerRuntimeOptions[0]?.value,
     );
     const image = String(options.image ?? managerAgent?.image ?? "").trim();
-    await createManagerAgentRequest({
+    const rebuiltAgent = await createManagerAgentRequest({
       runtime_kind: runtimeKind,
       image,
     });
-    await refreshAgents();
+    await refreshAgentsWithUpdatedAgent(rebuiltAgent);
     await refreshManagerProfile();
     await refreshWorkspaceBootstrapConfig();
   }
@@ -431,6 +480,16 @@ export function useAgentController({
     } catch (err) {
       if (!options.silent) {
         setAgentsError(errorMessage(err, t("agentActionFailed")));
+      }
+    }
+  }
+
+  async function refreshAgentsWithUpdatedAgent(updatedAgent: AgentLike | null | undefined): Promise<void> {
+    await refreshAgents();
+    if (updatedAgent?.id) {
+      setAgentsData((current) => mergeAgentIntoList(current, updatedAgent));
+      if (activePane.type === WorkspacePaneTypes.agent && activePane.id === updatedAgent.id) {
+        setAgentPageDraft((current) => agentDraftWithRuntimeFieldsFromAgent(current, updatedAgent));
       }
     }
   }
@@ -814,7 +873,7 @@ export function useAgentController({
     if (!item?.id || agentActionBusy) {
       return;
     }
-    if (isNotificationBotAgent(item) && (action === "recreate" || action === "start" || action === "stop")) {
+    if (isNotificationBotAgent(item) && (action === "recreate" || action === "start" || action === "stop" || action === "upgrade")) {
       return;
     }
     if (action === "recreate" && isManagerAgent(item)) {
@@ -827,12 +886,13 @@ export function useAgentController({
     setAgentActionBusy(`${item.id}:${action}`);
     setAgentsError("");
     try {
+      let updatedAgent: AgentLike | null = null;
       if (action === "delete") {
         await deleteBotRequest(item.id);
       } else {
-        await runAgentActionRequest(item.id, action);
+        updatedAgent = await runAgentActionRequest(item.id, action);
       }
-      await refreshAgents();
+      await refreshAgentsWithUpdatedAgent(updatedAgent);
       if (item.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }
@@ -976,6 +1036,15 @@ export function useAgentController({
       authStatuses: cliproxyAuthStatuses,
       authBusyProvider: cliproxyAuthBusy,
       notifierWebhookPublicOrigin,
+      workspaceEntries: agentWorkspaceQuery.data?.entries ?? [],
+      workspaceLoading: agentWorkspaceQuery.isFetching,
+      workspaceError: agentWorkspaceError,
+      workspaceSupported: selectedAgentWorkspaceSupported,
+      selectedWorkspacePath: selectedAgentWorkspacePath,
+      workspaceFile: agentWorkspaceFileQuery.data ?? null,
+      workspaceFileLoading: agentWorkspaceFileQuery.isFetching,
+      workspaceFileError: agentWorkspaceFileError,
+      onSelectWorkspaceFile: setSelectedAgentWorkspacePath,
       onDraftChange: setAgentPageDraft,
       onSave: saveAgentPage,
       onPublish: publishAgentPage,
@@ -983,6 +1052,7 @@ export function useAgentController({
       onStart: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),
       onStop: (item: AgentLike | null | undefined) => runAgentAction(item, "stop"),
       onRecreate: (item: AgentLike | null | undefined) => runAgentAction(item, "recreate"),
+      onUpgrade: (item: AgentLike | null | undefined) => runAgentAction(item, "upgrade"),
       onDelete: (item: AgentLike | null | undefined) => runAgentAction(item, "delete"),
       onInvite: inviteAgentToRoom,
       onOpenDM: openAgentDirectMessage,

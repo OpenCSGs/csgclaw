@@ -39,6 +39,7 @@ be practical, accurate, and efficient.
 
 - Before using any skill for a task, list local directories under `workspace/skills` and prefer skills that are already present there.
 - If a matching local skill exists, read its `SKILL.md` (or the sub-skill `skill.md` when the task names a path) and follow it as the primary execution contract.
+- If a task begins with `<slash-command name="use-skill" arg="<slug>"></slash-command>`, treat `<slug>` as the required skill slug and the remaining text as the task instruction.
 - Do not use PicoClaw `find_skills` or `install_skill` (disabled). For registry skill **search**, **inspect**, **versions**, or **install**, read `workspace/skills/skill-installer/SKILL.md` and run `csgclaw-cli skill` via `exec` in this sandbox.
 - When local and external skills overlap, prefer the local copy unless the human explicitly overrides.
 

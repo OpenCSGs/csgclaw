@@ -41,8 +41,8 @@ token = "${SKILL_TOKEN}"
 non_suspicious_only = false
 
 [bootstrap]
-default_manager_template = "builtin/picoclaw-manager"
-default_worker_template = "builtin/picoclaw-worker"
+default_manager_template = "builtin.picoclaw-manager"
+default_worker_template = "builtin.picoclaw-worker"
 
 [models]
 default = "default.minimax-m2.7"
@@ -84,8 +84,8 @@ base_url = "https://claw.legacy.example"
 token = "${CLAWHUB_TOKEN}"
 
 [bootstrap]
-default_manager_template = "builtin/picoclaw-manager"
-default_worker_template = "builtin/picoclaw-worker"
+default_manager_template = "builtin.picoclaw-manager"
+default_worker_template = "builtin.picoclaw-worker"
 
 [models]
 default = "default.minimax-m2.7"

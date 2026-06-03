@@ -7,18 +7,19 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/config"
+	"csgclaw/internal/sandbox"
 )
 
-// serviceOptionFactory converts config into the agent service option that wires
-// a concrete sandbox provider. Providers register themselves from init funcs.
-type serviceOptionFactory func(config.SandboxConfig) (agent.ServiceOption, error)
+// providerFactory converts config into a concrete sandbox provider. Providers
+// register themselves from init funcs.
+type providerFactory func(config.SandboxConfig) (sandbox.Provider, error)
 
-var factories = map[string]serviceOptionFactory{}
+var factories = map[string]providerFactory{}
 
 // Register adds a sandbox provider that is compiled into the current binary.
 // Sandbox implementations should register unconditionally so they ship in all
 // builds unless a future provider introduces an explicit compile-time gate.
-func Register(name string, factory serviceOptionFactory) {
+func Register(name string, factory providerFactory) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		panic("sandbox provider name is required")
@@ -32,20 +33,26 @@ func Register(name string, factory serviceOptionFactory) {
 	factories[name] = factory
 }
 
-// ServiceOptions resolves the configured sandbox provider against the set of
+// Provider resolves the configured sandbox provider against the set of
 // providers compiled into the current binary.
-func ServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {
+func Provider(cfg config.SandboxConfig) (sandbox.Provider, error) {
 	cfg = cfg.Resolved()
 	factory, ok := factories[cfg.Provider]
 	if !ok {
 		return nil, fmt.Errorf("unsupported sandbox provider %q; supported values are %s", cfg.Provider, SupportedProvidersText())
 	}
-	provider, err := factory(cfg)
+	return factory(cfg)
+}
+
+// ServiceOptions resolves the configured sandbox provider against the set of
+// providers compiled into the current binary.
+func ServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {
+	provider, err := Provider(cfg)
 	if err != nil {
 		return nil, err
 	}
 	return []agent.ServiceOption{
-		provider,
+		agent.WithSandboxProvider(provider),
 	}, nil
 }
 

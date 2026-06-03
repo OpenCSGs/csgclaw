@@ -9,6 +9,7 @@ import {
   sendMessageRequest,
   startThreadRequest,
 } from "@/api/im";
+import { fetchAgentWorkspace } from "@/api/agents";
 import {
   agentMatchesUser,
   appendMessageToData,
@@ -29,37 +30,29 @@ import {
 } from "@/models/conversations";
 import {
   areComposerSegmentsEqual,
+  type ComposerSegment,
   getMentionCandidates,
   getComposerMentionState,
   insertComposerLineBreak,
   isComposerKeyboardEventComposing,
   parseComposerSegments,
   placeCaretAtEnd,
+  normalizeComposerSegmentsForDisplay,
   removeAdjacentMentionToken,
   renderComposerSegments,
+  replaceComposerSlashWithSegments,
   replaceMentionQueryWithToken,
   segmentsToPlainText,
   serializeComposerSegments,
   updateDrafts,
 } from "@/models/composer";
 import { WorkspacePaneTypes } from "@/models/routing";
-import { normalizeAuthProviderName, normalizeRuntimeKind, providerNeedsAuth } from "@/models/agents";
+import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
 import { localizeError } from "@/shared/i18n";
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
 import type { IMMessage, IMServerEvent, IMUser, ThreadView } from "@/models/conversations";
 import type { UseConversationControllerArgs } from "./types";
-
-type ComposerSegment =
-  | {
-      text: string;
-      type: "text";
-    }
-  | {
-      type: "mention";
-      userId: string;
-      userName: string;
-    };
 
 type ComposerMentionState = {
   endOffset: number;
@@ -69,7 +62,7 @@ type ComposerMentionState = {
 };
 
 type DraftsByConversationId = Record<string, ComposerSegment[]>;
-type DraftsByThreadKey = Record<string, string>;
+type DraftsByThreadKey = Record<string, ComposerSegment[]>;
 
 type OpenCreateRoomOptions = {
   description?: string;
@@ -112,6 +105,12 @@ export function useConversationController({
   const [threadError, setThreadError] = useState("");
   const [composerMentionState, setComposerMentionState] = useState<ComposerMentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [skillNames, setSkillNames] = useState<string[]>([]);
+  const [skillIndex, setSkillIndex] = useState(0);
+  const [skillLoading, setSkillLoading] = useState(false);
+  const [skillPickerDismissed, setSkillPickerDismissed] = useState(false);
+  const [threadSkillPickerDismissed, setThreadSkillPickerDismissed] = useState(false);
+  const [threadSkillIndex, setThreadSkillIndex] = useState(0);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
@@ -172,15 +171,18 @@ export function useConversationController({
     selectedConversation && !isDirectConversation(selectedConversation) ? selectedConversation : null;
   const selectedMessageCount = selectedConversation?.messages?.length ?? 0;
   const logAgent = useMemo(() => {
-    if (!selectedConversation || !isDirectConversation(selectedConversation) || !data?.current_user_id) {
+    if (!selectedConversation || !data?.current_user_id) {
       return null;
     }
+
     const directUser = resolveConversationUser(selectedConversation, data.current_user_id, usersById);
-    const agentID =
-      directUser?.id || selectedConversation.members.find((id) => id && id !== data.current_user_id) || "";
+    const otherMembers = selectedConversation.members.filter((id) => id && id !== data.current_user_id);
+    if (otherMembers.length !== 1) {
+      return null;
+    }
+    const agentID = directUser?.id || otherMembers[0];
     const agent = agents.find((item) => item.id === agentID || agentMatchesUser(item, directUser));
-    const runtimeKind = normalizeRuntimeKind(agent?.runtime_kind);
-    return runtimeKind === "openclaw_sandbox" || runtimeKind === "picoclaw_sandbox" ? agent : null;
+    return agent ?? null;
   }, [agents, data?.current_user_id, selectedConversation, usersById]);
   const activeConversationMembers = activeConversation
     ? activeConversation.members.map((id) => usersById.get(id)).filter(Boolean)
@@ -221,12 +223,47 @@ export function useConversationController({
   }, [data, activeConversation]);
 
   const draftSegments = useMemo(
-    () => draftsByConversationId[activeConversationId] ?? [],
+    () => normalizeComposerSegmentsForDisplay(draftsByConversationId[activeConversationId] ?? []),
     [draftsByConversationId, activeConversationId],
   );
   const draftText = useMemo(() => segmentsToPlainText(draftSegments), [draftSegments]);
+  const slashPickerState = useMemo(
+    () =>
+      buildSlashPickerState({
+        draftText,
+        enabled: Boolean(logAgent?.id && !skillPickerDismissed),
+        skillNames,
+      }),
+    [draftText, logAgent, skillPickerDismissed, skillNames],
+  );
+  const slashSkillQuery = slashPickerState.query;
+  const slashSkillActive = slashPickerState.active;
+  const skillCandidates = slashPickerState.candidates;
   const activeThreadDraftKey = activeThreadRootID ? threadKey(activeConversationId, activeThreadRootID) : "";
-  const activeThreadDraft = activeThreadDraftKey ? (threadDraftsByKey[activeThreadDraftKey] ?? "") : "";
+  const activeThreadDraftSegments = useMemo(() => {
+    if (!activeThreadDraftKey) {
+      return [];
+    }
+    return activeThreadDraftKey ? threadDraftsByKey[activeThreadDraftKey] ?? [] : [];
+  }, [activeThreadDraftKey, threadDraftsByKey]);
+  const activeThreadDraft = useMemo(
+    () => segmentsToPlainText(activeThreadDraftSegments),
+    [activeThreadDraftSegments],
+  );
+  const threadSlashPickerState = useMemo(
+    () =>
+      buildSlashPickerState({
+        draftText: activeThreadDraft,
+        enabled: Boolean(logAgent?.id && activeThreadDraftKey),
+        skillNames,
+        disabled: threadSkillPickerDismissed,
+      }),
+    [activeThreadDraft, logAgent, activeThreadDraftKey, threadSkillPickerDismissed, skillNames],
+  );
+  const threadSlashSkillQuery = threadSlashPickerState.query;
+  const threadSlashSkillActive = threadSlashPickerState.active;
+  const threadSkillCandidates = threadSlashPickerState.candidates;
+  const isAnySlashSkillPickerNeeded = slashSkillActive || threadSlashSkillActive;
 
   useEffect(() => {
     activeThreadKeyRef.current = activeThreadRootID ? threadKey(activeConversationId, activeThreadRootID) : "";
@@ -258,6 +295,59 @@ export function useConversationController({
   useEffect(() => {
     setMentionIndex(0);
   }, [activeConversationId, composerMentionState?.query, draftText]);
+
+  useEffect(() => {
+    setSkillPickerDismissed(false);
+  }, [draftText]);
+
+  useEffect(() => {
+    setSkillNames([]);
+    setSkillIndex(0);
+    setSkillPickerDismissed(false);
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    setThreadSkillIndex(0);
+    setThreadSkillPickerDismissed(false);
+  }, [activeThreadDraftKey]);
+
+  useEffect(() => {
+    setSkillIndex(0);
+  }, [slashSkillQuery, skillNames]);
+
+  useEffect(() => {
+    setThreadSkillIndex(0);
+  }, [threadSlashSkillQuery, skillNames]);
+
+  useEffect(() => {
+    if (!isAnySlashSkillPickerNeeded || !logAgent?.id) {
+      setSkillNames([]);
+      setSkillLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSkillLoading(true);
+    fetchAgentWorkspace(logAgent.id, "skills")
+      .then((workspace) => {
+        if (cancelled) {
+          return;
+        }
+        setSkillNames(skillNamesFromWorkspace(workspace.entries || []));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSkillNames([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSkillLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAnySlashSkillPickerNeeded, logAgent?.id]);
 
   useEffect(() => {
     if (!managerProfileIncomplete) {
@@ -448,11 +538,13 @@ export function useConversationController({
     }
 
     setComposerError("");
+    const serializedDraft = serializeComposerSegments(draftSegments);
+    const content = normalizeSlashShorthandForPayload(serializedDraft);
     try {
       const created = await sendMessageRequest({
         room_id: activeConversation.id,
         sender_id: data.current_user_id,
-        content: serializeComposerSegments(draftSegments),
+        content,
       });
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
       clearComposer();
@@ -511,8 +603,12 @@ export function useConversationController({
       setThreadError(t("authRequired"));
       return;
     }
-    const text = activeThreadDraft.trim();
-    if (!data || !activeConversation || !activeThreadRootID || !text) {
+    if (!activeThreadDraft.trim()) {
+      return;
+    }
+    const serializedDraft = serializeComposerSegments(activeThreadDraftSegments);
+    const text = normalizeSlashShorthandForPayload(serializedDraft);
+    if (!data || !activeConversation || !activeThreadRootID || !text.trim()) {
       return;
     }
 
@@ -527,7 +623,7 @@ export function useConversationController({
           event_id: activeThreadRootID,
         },
       });
-      setThreadDraftsByKey((current) => ({ ...current, [activeThreadDraftKey]: "" }));
+      setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, []));
       setActiveThreadView((current) => appendReplyToThreadView(current, created));
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
       await refreshThreadView(activeConversation.id, activeThreadRootID);
@@ -671,6 +767,49 @@ export function useConversationController({
     syncComposerFromEditor();
   }
 
+  function applySkillCandidate(name: string | null | undefined, editor?: HTMLElement | null) {
+    const skillName = String(name || "").trim();
+    if (!skillName || !activeConversationId) {
+      return;
+    }
+    const nextText = slashSkillInputText(skillName);
+    const nextSegments = normalizeComposerSegmentsForDisplay([{ type: "text", text: nextText }]);
+    applySlashSuggestionToComposer(editor ?? editorRef.current, nextSegments, () =>
+      setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, nextSegments)),
+    );
+    setSkillIndex(0);
+  }
+
+  function applyThreadSkillCandidate(name: string | null | undefined, editor?: HTMLElement | null) {
+    const skillName = String(name || "").trim();
+    if (!skillName || !activeThreadDraftKey) {
+      return;
+    }
+    const nextText = slashSkillInputText(skillName);
+    const nextSegments = normalizeComposerSegmentsForDisplay([{ type: "text", text: nextText }]);
+    applySlashSuggestionToComposer(editor, nextSegments, () => {
+      setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, nextSegments));
+    });
+    setThreadSkillIndex(0);
+  }
+
+  function applySlashSuggestionToComposer(
+    editor: HTMLElement | null | undefined,
+    segments: ComposerSegment[],
+    onCommit: () => void,
+  ) {
+    if (!editor) {
+      onCommit();
+      return;
+    }
+    if (!replaceComposerSlashWithSegments(editor, segments)) {
+      renderComposerSegments(editor, segments);
+      placeCaretAtEnd(editor);
+    }
+    editor.focus();
+    onCommit();
+  }
+
   function onComposerKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (
       isComposerKeyboardEventComposing(event) ||
@@ -678,6 +817,30 @@ export function useConversationController({
       (event.key === "Enter" && composerJustEndedCompositionRef.current)
     ) {
       return;
+    }
+
+    if (slashSkillActive) {
+      if (event.key === "ArrowDown" && skillCandidates.length > 0) {
+        event.preventDefault();
+        setSkillIndex((value) => (value + 1) % skillCandidates.length);
+        return;
+      }
+      if (event.key === "ArrowUp" && skillCandidates.length > 0) {
+        event.preventDefault();
+        setSkillIndex((value) => (value - 1 + skillCandidates.length) % skillCandidates.length);
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey && skillCandidates.length > 0) {
+        event.preventDefault();
+        applySkillCandidate(skillCandidates[skillIndex] ?? skillCandidates[0], editorRef.current);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSkillPickerDismissed(true);
+        setSkillIndex(0);
+        return;
+      }
     }
 
     if (mentionCandidates.length > 0) {
@@ -814,6 +977,11 @@ export function useConversationController({
       mentionCandidates,
       mentionIndex,
       onApplyMention: applyMention,
+      skillCandidates,
+      skillIndex,
+      skillLoading,
+      skillPickerOpen: slashSkillActive,
+      onApplySkillCandidate: applySkillCandidate,
       managerProfile,
       managerProfileIncomplete,
       authStatuses,
@@ -835,16 +1003,30 @@ export function useConversationController({
       activeThreadView,
       threadLoading,
       threadError,
-      threadDraft: activeThreadDraft,
+      threadDraftSegments: activeThreadDraftSegments,
       onOpenThread: openThread,
       onCloseThread: closeThread,
-      onThreadDraftChange: (value: string) => {
+      onThreadDraftChange: (segments: ComposerSegment[]) => {
         if (!activeThreadDraftKey) {
           return;
         }
-        setThreadDraftsByKey((current) => ({ ...current, [activeThreadDraftKey]: value }));
+        setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, segments));
+        setThreadSkillPickerDismissed(false);
+        if (segmentsToPlainText(segments) !== activeThreadDraft) {
+          setThreadSkillIndex(0);
+        }
       },
       onSendThreadReply: sendThreadReply,
+      threadSkillCandidates,
+      threadSkillIndex,
+      threadSkillLoading: skillLoading,
+      threadSkillPickerOpen: threadSlashSkillActive,
+      onApplyThreadSkillCandidate: applyThreadSkillCandidate,
+      onDismissThreadSkillPicker: () => {
+        setThreadSkillPickerDismissed(true);
+        setThreadSkillIndex(0);
+      },
+      onSetThreadSkillIndex: setThreadSkillIndex,
     },
     createRoomModalProps:
       showCreateRoom && data
@@ -876,4 +1058,151 @@ export function useConversationController({
           }
         : null,
   };
+}
+
+function skillNamesFromWorkspace(entries: readonly { name?: string; path?: string; type?: string }[]): string[] {
+  const skillDirs = new Set<string>();
+  const dirs = new Set<string>();
+  entries.forEach((entry) => {
+    const path = String(entry.path || "").trim();
+    if (!path.startsWith("skills/")) {
+      return;
+    }
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length === 2 && entry.type === "dir") {
+      dirs.add(path);
+    }
+    if (parts.length === 3 && parts[2] === "SKILL.md") {
+      skillDirs.add(parts.slice(0, 2).join("/"));
+    }
+  });
+  return [...dirs]
+    .filter((path) => skillDirs.has(path))
+    .map((path) => path.split("/").pop() || "")
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+type SlashPickerStateInput = {
+  draftText: string;
+  disabled?: boolean;
+  enabled: boolean;
+  skillNames: string[];
+};
+
+type SlashPickerState = {
+  query: string | null;
+  active: boolean;
+  candidates: string[];
+};
+
+function buildSlashPickerState(input: SlashPickerStateInput): SlashPickerState {
+  const query = slashSkillQueryForDraft(input.draftText);
+  const active = Boolean(input.enabled && query !== null && !input.disabled);
+  if (!active) {
+    return {
+      query,
+      active: false,
+      candidates: [],
+    };
+  }
+
+  return {
+    query,
+    active: true,
+    candidates: input.skillNames.filter((name) => fuzzySkillMatch(name, query ?? "")),
+  };
+}
+
+export function slashSkillQueryForDraft(draftText: string): string | null {
+  const trimmed = draftText.trimStart();
+  if (!trimmed.startsWith("/")) {
+    return null;
+  }
+  const query = trimmed.slice(1);
+  return /\s/.test(query) ? null : query.toLowerCase();
+}
+
+export function slashSkillCommandText(skillName: string): string {
+  return slashSkillCommandTextWithBody(skillName, "");
+}
+
+function slashSkillCommandTextWithBody(skillName: string, body = ""): string {
+  const skillArg = escapeXMLAttribute(String(skillName || "").trim());
+  const base = `<slash-command name="use-skill" arg="${skillArg}"></slash-command>`;
+  const normalizedBody = String(body ?? "").trim();
+  if (!normalizedBody) {
+    return base;
+  }
+  return `${base} ${normalizedBody}`;
+}
+
+export function slashSkillInputText(skillName: string): string {
+  return `/${String(skillName || "").trim()} `;
+}
+
+export function normalizeSlashShorthandForPayload(text: string): string {
+  const shorthand = parseSlashShorthandToPayload(text);
+  if (!shorthand) {
+    return text;
+  }
+  return slashSkillCommandTextWithBody(shorthand.arg, shorthand.body);
+}
+
+function parseSlashShorthandToPayload(text: string): { arg: string; body: string } | null {
+  const trimmed = text.trimStart();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
+    return null;
+  }
+
+  const afterSlash = trimmed.slice(1).replace(/^\s+/, "");
+  if (!afterSlash) {
+    return null;
+  }
+  let arg = afterSlash;
+  let body = "";
+  for (let index = 0; index < afterSlash.length; index++) {
+    if (/\s/u.test(afterSlash[index])) {
+      arg = afterSlash.slice(0, index);
+      body = afterSlash.slice(index);
+      break;
+    }
+  }
+  if (!arg) {
+    return null;
+  }
+  if (!isValidSkillSlug(arg)) {
+    return null;
+  }
+  return {
+    arg,
+    body: body.trim(),
+  };
+}
+
+function isValidSkillSlug(value: string): boolean {
+  if (!value || value === "." || value === ".." || /[/\\]/u.test(value)) {
+    return false;
+  }
+  return /^[A-Za-z0-9._-]+$/u.test(value);
+}
+
+function escapeXMLAttribute(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function fuzzySkillMatch(name: string, query: string): boolean {
+  if (!query) {
+    return true;
+  }
+  const text = name.toLowerCase();
+  let offset = 0;
+  for (const char of query.toLowerCase()) {
+    offset = text.indexOf(char, offset);
+    if (offset < 0) {
+      return false;
+    }
+    offset += 1;
+  }
+  return true;
 }

@@ -16,6 +16,8 @@ Both CLIs are thin HTTP clients over the local API. They do not talk to BoxLite,
 
 - `--output table` prints human-readable tables or plain text.
 - `--output json` prints structured JSON.
+- `-o` is a shorthand for `--output`.
+- Global flags such as `--output`, `-o`, `--endpoint`, and `--token` must appear **before** the subcommand (for example `csgclaw-cli --output json hub list`, not `csgclaw-cli hub list --output json`).
 - If `--output` is omitted:
   - terminal output defaults to `table`
   - piped or redirected output defaults to `json`

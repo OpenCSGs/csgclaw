@@ -35,6 +35,7 @@ export type WorkspaceNavigationController = {
   selectComputer: (options?: NavigatePaneOptions) => void;
   selectConversation: (id: string, options?: NavigatePaneOptions) => void;
   selectHub: (options?: NavigatePaneOptions) => void;
+  selectTasks: (taskID?: string, options?: NavigatePaneOptions) => void;
 };
 
 export type UseWorkspaceShellControllerArgs = {
@@ -48,6 +49,7 @@ export type UseWorkspaceShellControllerArgs = {
   selectComputer: WorkspaceNavigationController["selectComputer"];
   selectConversation: WorkspaceNavigationController["selectConversation"];
   selectHub: WorkspaceNavigationController["selectHub"];
+  selectTasks: WorkspaceNavigationController["selectTasks"];
   setCollapsedWorkspaceGroups: WorkspaceUiState["setCollapsedWorkspaceGroups"];
   setWorkspaceTab: WorkspaceUiState["setWorkspaceTab"];
   t: TranslateFn;
@@ -191,6 +193,7 @@ export type UseAgentControllerArgs = {
   bootstrapConfig: RuntimeBootstrapConfig | null;
   data: IMData | null;
   hubTemplates: HubTemplate[];
+  localRuntimeImages: string[];
   locale: LocaleCode;
   managerProfile: AgentProfileLike | null;
   refreshHubTemplates: () => Promise<void>;
@@ -202,6 +205,7 @@ export type UseAgentControllerArgs = {
   selectComputer: WorkspaceNavigationController["selectComputer"];
   selectConversation: WorkspaceNavigationController["selectConversation"];
   selectHub: WorkspaceNavigationController["selectHub"];
+  setAgentsData: WorkspaceQuerySetter<AgentLike[]>;
   setManagerProfileData: WorkspaceQuerySetter<AgentProfileLike | null>;
   setSelectedHubTemplateId: WorkspaceUiState["setSelectedHubTemplateId"];
   t: TranslateFn;

@@ -9,9 +9,11 @@ import (
 const MessageEventTypeMessageCreated = "message.created"
 
 type MessageEvent struct {
-	Type    string      `json:"type"`
-	RoomID  string      `json:"room_id,omitempty"`
-	Message *im.Message `json:"message,omitempty"`
+	Type         string      `json:"type"`
+	RoomID       string      `json:"room_id,omitempty"`
+	SenderBotID  string      `json:"sender_bot_id,omitempty"`
+	MentionBotID string      `json:"mention_bot_id,omitempty"`
+	Message      *im.Message `json:"message,omitempty"`
 }
 
 type MessageBus struct {

@@ -84,6 +84,55 @@ func TestSaveLargeMessageSpillsToBlob(t *testing.T) {
 	}
 }
 
+func TestSaveMessageKeepsSlashInvocationAsContentOnly(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	roomID := "room-skill"
+
+	state := Bootstrap{
+		CurrentUserID: "u-admin",
+		Users:         []User{{ID: "u-admin", Name: "admin", Handle: "admin"}},
+		Rooms: []Room{{
+			ID:      roomID,
+			Title:   "skill",
+			Members: []string{"u-admin"},
+			Messages: []Message{{
+				ID:        "msg-skill-1",
+				SenderID:  "u-admin",
+				Kind:      MessageKindMessage,
+				Content:   "/custom do it",
+				CreatedAt: time.Date(2026, 5, 25, 3, 30, 0, 0, time.UTC),
+			}},
+		}},
+	}
+	if err := SaveBootstrap(statePath, state); err != nil {
+		t.Fatalf("SaveBootstrap() error = %v", err)
+	}
+
+	sessionPath := filepath.Join(dir, "sessions", roomID+".jsonl")
+	sessionData, err := os.ReadFile(sessionPath)
+	if err != nil {
+		t.Fatalf("ReadFile(session) error = %v", err)
+	}
+	if !strings.Contains(string(sessionData), `"content":"/custom do it"`) {
+		t.Fatalf("session = %q, want original slash invocation content", string(sessionData))
+	}
+	if strings.Contains(string(sessionData), "agent_content") || strings.Contains(string(sessionData), "Follow custom rules") {
+		t.Fatalf("session = %q, want no hidden skill payload", string(sessionData))
+	}
+
+	loaded, err := LoadBootstrap(statePath)
+	if err != nil {
+		t.Fatalf("LoadBootstrap() error = %v", err)
+	}
+	if len(loaded.Rooms) != 1 || len(loaded.Rooms[0].Messages) != 1 {
+		t.Fatalf("loaded rooms = %+v, want one slash invocation message", loaded.Rooms)
+	}
+	if loaded.Rooms[0].Messages[0].Content != "/custom do it" {
+		t.Fatalf("loaded content = %q, want original slash invocation", loaded.Rooms[0].Messages[0].Content)
+	}
+}
+
 func TestLoadLegacyOversizedInlineLine(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")

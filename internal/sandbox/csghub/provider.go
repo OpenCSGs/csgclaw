@@ -93,6 +93,10 @@ func (p Provider) Open(_ context.Context, _ string) (sandbox.Runtime, error) {
 	}, nil
 }
 
+func (Provider) ListImages(context.Context, string) ([]string, error) {
+	return []string{}, nil
+}
+
 func (p Provider) applyRuntimeOptions(cfg *runtimeConfig) {
 	if cfg == nil {
 		return

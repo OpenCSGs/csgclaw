@@ -25,6 +25,7 @@ export type WorkspaceSidebarProps = {
   currentUserID: string;
   currentWorkspaceLabel: string;
   directMessages: IMConversation[];
+  showUpgradeControls: boolean;
   hub: WorkspaceHubController["hub"];
   isSidebarCollapsed: boolean;
   locale: LocaleCode;
@@ -47,6 +48,7 @@ export type WorkspaceSidebarProps = {
   onToggleWorkspaceGroup: (id: string) => void;
   onWorkspaceTabChange: (tab: WorkspaceTab) => void;
   onLocaleChange: (locale: LocaleCode) => void;
+  taskCount: number;
   roomCount: number;
   runningAgentCount: number;
   t: TranslateFn;

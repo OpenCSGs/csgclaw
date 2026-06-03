@@ -1,11 +1,14 @@
 import {
   getComposerMentionState,
+  getComposerSlashState,
   getMentionCandidates,
+  createSlashTokenElement,
   isComposerKeyboardEventComposing,
   normalizeComposerSegments,
   normalizeTextMentions,
   parseComposerSegments,
   renderComposerSegments,
+  replaceComposerSlashWithSegments,
   replaceMentionQueryWithToken,
   segmentsToPlainText,
   serializeComposerSegments,
@@ -134,5 +137,47 @@ describe("composer model helpers", () => {
       { type: "mention", userId: "u-1", userName: "Alice" },
       { type: "text", text: " " },
     ]);
+  });
+
+  it("replaces the current slash query at caret without resetting the leading content", () => {
+    const root = createComposerRoot();
+    const text = document.createTextNode("Hi /bas ");
+    root.append(text);
+    const caret = window.getSelection();
+    const range = document.createRange();
+    range.setStart(text, 7);
+    range.collapse(true);
+    caret?.removeAllRanges();
+    caret?.addRange(range);
+
+    const state = getComposerSlashState(root);
+    expect(state).toMatchObject({ query: "bas", startOffset: 3, endOffset: 7 });
+    const replaced = replaceComposerSlashWithSegments(root, [{ type: "text", text: "/basics " }]);
+
+    expect(replaced).toBe(true);
+    expect(parseComposerSegments(root)).toEqual([
+      { type: "text", text: "Hi /basics " },
+    ]);
+    const selection = window.getSelection();
+    expect(selection?.rangeCount).toBe(1);
+    expect(selection?.getRangeAt(0).startContainer.nodeType).toBe(Node.TEXT_NODE);
+  });
+
+  it("replaces the current slash query when the caret is placed next to a slash token", () => {
+    const root = createComposerRoot();
+    root.append(createSlashTokenElement("bas"));
+    const range = document.createRange();
+    range.setStart(root, 1);
+    range.collapse(true);
+    const caret = window.getSelection();
+    caret?.removeAllRanges();
+    caret?.addRange(range);
+
+    const state = getComposerSlashState(root);
+    expect(state).toMatchObject({ query: "bas", startOffset: 0, endOffset: 3 });
+    const replaced = replaceComposerSlashWithSegments(root, [{ type: "text", text: "/basis " }]);
+
+    expect(replaced).toBe(true);
+    expect(parseComposerSegments(root)).toEqual([{ type: "text", text: "/basis " }]);
   });
 });

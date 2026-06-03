@@ -1,31 +1,36 @@
 ---
 name: basics
-description: Handle the most common basic CSGClaw CLI administration tasks. Use when the Manager needs to create a room, list bots, create a bot, inspect room members, add a bot into a room, or notify a worker in IM.
+description: Handle routine CSGClaw CLI administration for rooms, Feishu group/chat creation, bot listing, room members, and IM mentions. Use for list bots, member create, message create, and room operations. Do NOT use for creating a new worker—use agent-creator instead (hub list + bot create --from-template).
 ---
 
 # CSGClaw CLI Basics
 
 Execute common `csgclaw-cli` operations directly and keep the flow simple.
-Prefer this skill whenever the user is asking for basic room, bot, or member management.
+Prefer this skill for room, member, and message operations after workers already exist.
 
 ## Scope
 
 This skill covers direct CLI actions such as:
 
 - create a room
+- create a Feishu group/chat through CSGClaw
 - list rooms
 - list all bots
-- create a bot
 - list room members
 - add a bot as a room member
 - send a message, including a message with a mention
 - check command help for the current CLI surface before assuming flags
+
+Do **not** use this skill to **create a new worker**. For any new agent/bot/worker provisioning, use `agent-creator` (`hub list`, `hub get`, `bot create --from-template`).
 
 Do not use this skill when the task requires any of the following:
 
 - break a request into multiple worker-owned tasks
 - orchestrate a multi-worker workflow
 - manage cross-worker sequencing or tracking state
+- create an agent from a hub template with required image env vars
+
+For hub template selection and `--from-template` creation, use `agent-creator` instead.
 
 ## Workflow
 
@@ -43,7 +48,7 @@ Create a room:
 csgclaw-cli room create --title test-room --creator-id u-manager --member-ids u-manager,u-dev --channel <current_channel>
 ```
 
-Use CSGClaw bot IDs in room, member, and message commands.
+Use CSGClaw bot IDs in room, member, and message commands. For Feishu room creation, keep the same bot ID parameters; CSGClaw converts configured bot IDs to Feishu app IDs and sends them as `bot_id_list`.
 
 List rooms and check whether a room is direct:
 
@@ -60,7 +65,7 @@ csgclaw-cli bot list --channel <current_channel>
 Create a bot. Always include `--description`:
 
 ```bash
-csgclaw-cli bot create --id u-alex --name alex --description "frontend worker for settings tasks" --role worker --channel <current_channel>
+# Do not use this for new workers. Use agent-creator with --from-template instead.
 ```
 
 List members in a room:
@@ -137,9 +142,10 @@ Do **not** post `@alex` plain text in the room instead of `--mention-id`.
 
 - Prefer direct `csgclaw-cli` commands over ad hoc HTTP calls.
 - Use `bot list` before creating a new bot if the user may be referring to an existing one.
-- When creating a bot, always pass a meaningful `--description` so later matching and reuse remain clear.
+- When a **new** worker is needed, use `agent-creator`; do not run bare `bot create` from this skill.
 - Verify room membership with `member list` after adding a member when room presence matters.
 - A direct room cannot accept an added bot as a new member. Create a new room with `--member-ids` containing the existing DM bots and the new bot.
+- For Feishu, prefer `room create --member-ids` for new groups after bot configs exist. Use `member create` only for an existing Feishu group; that path requires manager app scopes such as `im:chat.members:write_only` or `im:chat`.
 - Keep `csgclaw-cli` parameters bot-facing across channels: use bot IDs such as `u-manager`, `u-dev`, and `u-alex`.
 - Never notify a worker with plain-text `@name`; always use `message create --mention-id` and verify `<at user_id="...">` in `message list`.
 - Keep the response focused on the concrete CLI result instead of introducing external planning artifacts.

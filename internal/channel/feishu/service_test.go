@@ -422,6 +422,38 @@ func TestFeishuSendMessageUsesSenderAppAndStoresLocalMessage(t *testing.T) {
 	}
 }
 
+func TestFeishuSendMessageConvertsSlashShorthandToCanonicalMessage(t *testing.T) {
+	var gotReq SendMessageRequest
+	svc := NewServiceWithSendMessage(
+		map[string]AppConfig{"u-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, _ AppConfig, req SendMessageRequest) (SendMessageResponse, error) {
+			gotReq = req
+			return SendMessageResponse{MessageID: "om_skill", SenderOpenID: "ou_manager"}, nil
+		},
+	)
+	svc.rooms["oc_alpha"] = &im.Room{ID: "oc_alpha", Title: "alpha", Members: []string{"u-manager"}}
+
+	message, err := svc.SendMessage(im.CreateMessageRequest{
+		RoomID:   "oc_alpha",
+		SenderID: "u-manager",
+		Content:  "/skill-creator create a review skill",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+
+	want := `<slash-command name="use-skill" arg="skill-creator"></slash-command> create a review skill`
+	if gotReq.Content != want {
+		t.Fatalf("send content = %q, want canonical XML %q", gotReq.Content, want)
+	}
+	if message.Content != want {
+		t.Fatalf("message content = %q, want canonical XML %q", message.Content, want)
+	}
+	if svc.rooms["oc_alpha"].Messages[0].Content != want {
+		t.Fatalf("stored content = %q, want canonical XML %q", svc.rooms["oc_alpha"].Messages[0].Content, want)
+	}
+}
+
 func TestFeishuSendMessageResolvesMentionApp(t *testing.T) {
 	var gotReq SendMessageRequest
 	svc := NewServiceWithSendMessage(
@@ -488,6 +520,12 @@ func TestFeishuSendMessageWithMentionPublishesMessageEvent(t *testing.T) {
 		}
 		if evt.RoomID != "oc_alpha" {
 			t.Fatalf("event room_id = %q, want oc_alpha", evt.RoomID)
+		}
+		if evt.SenderBotID != "u-manager" {
+			t.Fatalf("event sender_bot_id = %q, want u-manager", evt.SenderBotID)
+		}
+		if evt.MentionBotID != "u-dev" {
+			t.Fatalf("event mention_bot_id = %q, want u-dev", evt.MentionBotID)
 		}
 		if evt.Message == nil || evt.Message.ID != message.ID {
 			t.Fatalf("event message = %+v, want message %q", evt.Message, message.ID)

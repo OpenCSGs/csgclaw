@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 )
 
@@ -42,12 +43,12 @@ func HostGatewayLogPath(agentHome string) string {
 	return filepath.Join(Root(agentHome), "gateway.log")
 }
 
-func EnsureConfig(agentHome, botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) (string, error) {
+func EnsureConfig(agentHome, botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.BotCredentialProvider) (string, error) {
 	hostRoot := Root(agentHome)
 	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create openclaw config dir: %w", err)
 	}
-	data, err := renderConfig(botID, server, model, resolveBaseURL)
+	data, err := renderConfig(botID, server, model, resolveBaseURL, feishuProvider)
 	if err != nil {
 		return "", err
 	}
@@ -74,7 +75,9 @@ func EnsureConfig(agentHome, botID string, server config.ServerConfig, model con
 // writeExecApprovalsAllowAll seeds ~/.openclaw/exec-approvals.json so the
 // gateway-side approval daemon never prompts the agent for /approve. OpenClaw
 // takes the stricter of tools.exec.* and the file's defaults; without this file
-// the file-side defaults (deny + on-miss) still gate every command.
+// the file-side defaults (deny + on-miss) still gate every command. The
+// wildcard allowlist keeps commands working even when a model-generated exec
+// call explicitly narrows itself to allowlist mode.
 func writeExecApprovalsAllowAll(hostRoot string) error {
 	payload := map[string]any{
 		"version": 1,
@@ -86,9 +89,13 @@ func writeExecApprovalsAllowAll(hostRoot string) error {
 		},
 		"agents": map[string]any{
 			"*": map[string]any{
-				"security":    "full",
-				"ask":         "off",
-				"askFallback": "full",
+				"security":        "full",
+				"ask":             "off",
+				"askFallback":     "full",
+				"autoAllowSkills": true,
+				"allowlist": []map[string]any{
+					{"pattern": "*"},
+				},
 			},
 		},
 	}
@@ -107,7 +114,7 @@ func writeExecApprovalsAllowAll(hostRoot string) error {
 	return nil
 }
 
-func renderConfig(botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) ([]byte, error) {
+func renderConfig(botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.BotCredentialProvider) ([]byte, error) {
 	var cfg map[string]any
 	if err := json.Unmarshal(defaultOpenClawGatewayConfig, &cfg); err != nil {
 		return nil, fmt.Errorf("decode embedded openclaw config: %w", err)
@@ -116,6 +123,9 @@ func renderConfig(botID string, server config.ServerConfig, model config.ModelCo
 		return nil, err
 	}
 	if err := updateOpenClawCsgclawChannel(cfg, botID, server, resolveBaseURL); err != nil {
+		return nil, err
+	}
+	if err := updateOpenClawFeishuChannel(cfg, botID, feishuProvider); err != nil {
 		return nil, err
 	}
 	if err := updateOpenClawGatewayAuth(cfg, server); err != nil {
@@ -209,6 +219,67 @@ func updateOpenClawCsgclawChannel(cfg map[string]any, botID string, server confi
 	}
 	ch["botId"] = botID
 	ch["enabled"] = true
+	return nil
+}
+
+func updateOpenClawFeishuChannel(cfg map[string]any, botID string, provider feishu.BotCredentialProvider) error {
+	botID = strings.TrimSpace(botID)
+	if botID == "" || provider == nil {
+		return nil
+	}
+	app, ok := provider.BotConfig(botID)
+	if !ok {
+		return nil
+	}
+	appID := strings.TrimSpace(app.AppID)
+	appSecret := strings.TrimSpace(app.AppSecret)
+	if appID == "" || appSecret == "" {
+		return nil
+	}
+
+	channels, ok := cfg["channels"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("embedded openclaw config is missing channels")
+	}
+	channels["feishu"] = map[string]any{
+		"enabled":        true,
+		"connectionMode": "websocket",
+		"defaultAccount": botID,
+		"dmPolicy":       "open",
+		"allowFrom":      []any{"*"},
+		"groupPolicy":    "open",
+		"requireMention": true,
+		"accounts": map[string]any{
+			botID: map[string]any{
+				"enabled":   true,
+				"appId":     appID,
+				"appSecret": appSecret,
+				"name":      botID,
+			},
+		},
+	}
+	if err := enableOpenClawPlugin(cfg, "feishu"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func enableOpenClawPlugin(cfg map[string]any, pluginID string) error {
+	plugins, ok := cfg["plugins"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("embedded openclaw config is missing plugins")
+	}
+	entries, ok := plugins["entries"].(map[string]any)
+	if !ok {
+		entries = map[string]any{}
+		plugins["entries"] = entries
+	}
+	entry, _ := entries[pluginID].(map[string]any)
+	if entry == nil {
+		entry = map[string]any{}
+	}
+	entry["enabled"] = true
+	entries[pluginID] = entry
 	return nil
 }
 

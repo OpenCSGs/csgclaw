@@ -78,6 +78,7 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 	}
 	for _, want := range []string{
 		`[server]`,
+		`show_upgrade = true`,
 		`[bootstrap]`,
 		`[sandbox]`,
 		`provider = ""`,
@@ -104,8 +105,8 @@ advertise_base_url = ""
 access_token = "your_access_token"
 
 [bootstrap]
-default_manager_template = "builtin/picoclaw-manager"
-default_worker_template = "builtin/picoclaw-worker"
+default_manager_template = "builtin.picoclaw-manager"
+default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
 provider = "boxlite"
@@ -306,6 +307,68 @@ models = ["gpt-test"]
 	}
 }
 
+func TestEnsureStateRewritesLegacyBootstrapTemplateRefs(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	original := `[server]
+listen_addr = "127.0.0.1:19090"
+advertise_base_url = "http://example.test"
+access_token = "custom-token"
+no_auth = false
+
+[bootstrap]
+default_manager_template = "builtin/picoclaw-manager"
+default_worker_template = "local/review-worker"
+
+[sandbox]
+provider = "boxlite"
+debian_registries_override = []
+
+[models]
+default = "default.gpt-test"
+
+[models.providers.default]
+base_url = "http://llm.test/v1"
+api_key = "secret"
+models = ["gpt-test"]
+`
+	if err := os.WriteFile(configPath, []byte(original), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	restore := stubEnsureStateDeps(t)
+	defer restore()
+	EnsureIMBootstrapState = func(string) error { return nil }
+	CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
+		if got, want := cfg.Bootstrap.DefaultManagerTemplate, "builtin.picoclaw-manager"; got != want {
+			t.Fatalf("cfg.Bootstrap.DefaultManagerTemplate = %q, want %q", got, want)
+		}
+		if got, want := cfg.Bootstrap.DefaultWorkerTemplate, "local.review-worker"; got != want {
+			t.Fatalf("cfg.Bootstrap.DefaultWorkerTemplate = %q, want %q", got, want)
+		}
+		return bot.Bot{}, nil
+	}
+
+	if _, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath}); err != nil {
+		t.Fatalf("EnsureState() error = %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	content := string(data)
+	for _, want := range []string{
+		`default_manager_template = "builtin.picoclaw-manager"`,
+		`default_worker_template = "local.review-worker"`,
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("EnsureState() rewrite missing %q:\n%s", want, content)
+		}
+	}
+}
+
 func TestEnsureStateCompletesExistingConfigMissingBootstrapDefaults(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -340,9 +403,10 @@ access_token = "your_access_token"
 	content := string(data)
 	for _, want := range []string{
 		`no_auth = false`,
+		`show_upgrade = true`,
 		`[bootstrap]`,
-		`default_manager_template = "builtin/picoclaw-manager"`,
-		`default_worker_template = "builtin/picoclaw-worker"`,
+		`default_manager_template = "builtin.picoclaw-manager"`,
+		`default_worker_template = "builtin.picoclaw-worker"`,
 		`[sandbox]`,
 		`provider = ""`,
 		`debian_registries_override = []`,
@@ -369,8 +433,8 @@ access_token = "custom-token"
 no_auth = false
 
 [bootstrap]
-default_manager_template = "builtin/picoclaw-manager"
-default_worker_template = "builtin/picoclaw-worker"
+default_manager_template = "builtin.picoclaw-manager"
+default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
 provider = "boxlite"
@@ -440,8 +504,8 @@ access_token = "custom-token"
 no_auth = false
 
 [bootstrap]
-default_manager_template = "builtin/picoclaw-manager"
-default_worker_template = "builtin/picoclaw-worker"
+default_manager_template = "builtin.picoclaw-manager"
+default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
 provider = "boxlite"

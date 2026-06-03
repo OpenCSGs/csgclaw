@@ -5,6 +5,7 @@ import {
   formatProviderLabel,
   isAgentIncomplete,
   isAgentRestartNeeded,
+  isAgentUpgradeNeeded,
   isAgentRunning,
   isNotificationBotAgent,
 } from "@/models/agents";
@@ -26,6 +27,7 @@ export function AgentSection({
   onStart,
   onStop,
   onRecreate,
+  onUpgrade,
   onDelete,
   onInvite,
 }) {
@@ -57,6 +59,7 @@ export function AgentSection({
               onStart={onStart}
               onStop={onStop}
               onRecreate={onRecreate}
+              onUpgrade={onUpgrade}
               onDelete={onDelete}
               onInvite={onInvite}
             />
@@ -70,12 +73,25 @@ export function AgentSection({
   );
 }
 
-export function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop, onRecreate, onDelete, onInvite }) {
+export function AgentRow({
+  item,
+  t,
+  activeRoom,
+  busyKey,
+  onEdit,
+  onStart,
+  onStop,
+  onRecreate,
+  onUpgrade,
+  onDelete,
+  onInvite,
+}) {
   const isManager = item.role === "manager" || item.id === "u-manager";
   const isNotification = isNotificationBotAgent(item);
   const running = isAgentRunning(item);
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
+  const upgradeNeeded = isAgentUpgradeNeeded(item);
   const busyPrefix = `${item.id}:`;
   return (
     <div className={`agent-row ${isManager ? "manager" : ""} ${incomplete ? "incomplete" : ""}`.trim()}>
@@ -94,6 +110,7 @@ export function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop
           <span className={`agent-badge ${incomplete ? "warn" : ""}`}>
             {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
           </span>
+          {upgradeNeeded ? <span className="agent-badge warn">{t("profileUpgradeRequired")}</span> : null}
           {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
         </div>
       </div>
@@ -122,14 +139,24 @@ export function AgentRow({ item, t, activeRoom, busyKey, onEdit, onStart, onStop
           </>
         ) : null}
         {!isNotification ? (
-          <Button
-            variant="outlineDanger"
-            className="agent-action-text danger"
-            disabled={busyKey.startsWith(busyPrefix) || incomplete}
-            onClick={() => onRecreate(item)}
-          >
-            {t("agentRecreate")}
-          </Button>
+          <>
+            <Button
+              variant="primary"
+              className="agent-action-text"
+              disabled={busyKey.startsWith(busyPrefix) || incomplete}
+              onClick={() => onUpgrade?.(item)}
+            >
+              {t("agentUpgrade")}
+            </Button>
+            <Button
+              variant="outlineDanger"
+              className="agent-action-text danger"
+              disabled={busyKey.startsWith(busyPrefix) || incomplete}
+              onClick={() => onRecreate(item)}
+            >
+              {t("agentRecreate")}
+            </Button>
+          </>
         ) : null}
         {SHOW_AGENT_LIFECYCLE_ACTIONS && activeRoom && !isManager ? (
           <Button

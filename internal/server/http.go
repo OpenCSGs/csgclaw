@@ -16,6 +16,7 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/team"
 	"csgclaw/internal/upgrade"
 )
 
@@ -29,6 +30,8 @@ type Options struct {
 	BotBridge       *im.BotBridge
 	Feishu          *feishu.Service
 	LLM             *llm.Service
+	Team            *team.Service
+	TeamAdapter     team.TeamChannelAdapter
 	Upgrade         *upgrade.Manager
 	ActivityDecider api.ActivityDecider
 	ConfigPath      string
@@ -41,6 +44,8 @@ type Options struct {
 func newHandler(opts Options) *api.Handler {
 	handler := api.NewHandlerWithBotAndAuth(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.BotBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
 	handler.SetHubService(opts.Hub)
+	handler.SetTeamService(opts.Team)
+	handler.SetTeamAdapter(opts.TeamAdapter)
 	handler.SetUpgradeManager(opts.Upgrade)
 	handler.SetActivityDecider(opts.ActivityDecider)
 	handler.SetUpgradeConfigPath(opts.ConfigPath)

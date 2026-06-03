@@ -136,7 +136,7 @@ ok
   "name": "alice",
   "role": "worker",
   "runtime_kind": "codex",
-  "from_template": "local/review-bot"
+  "from_template": "local.review-bot"
 }
 ```
 
@@ -554,8 +554,8 @@ ok
 
 ```json
 {
-  "default_manager_template": "builtin/manager",
-  "default_worker_template": "local/review-bot"
+  "default_manager_template": "builtin.manager",
+  "default_worker_template": "local.review-bot"
 }
 ```
 

@@ -209,6 +209,140 @@ func (c *Client) DeleteUser(ctx context.Context, channel, id string) error {
 	return c.DoNoContent(ctx, http.MethodDelete, path)
 }
 
+func (c *Client) ListTeams(ctx context.Context) ([]apitypes.Team, error) {
+	var teams []apitypes.Team
+	if err := c.GetJSON(ctx, "/api/v1/teams", &teams); err != nil {
+		return nil, err
+	}
+	return teams, nil
+}
+
+func (c *Client) CreateTeam(ctx context.Context, req apitypes.CreateTeamRequest) (apitypes.Team, error) {
+	var created apitypes.Team
+	if err := c.DoJSON(ctx, http.MethodPost, "/api/v1/teams", req, &created); err != nil {
+		return apitypes.Team{}, err
+	}
+	return created, nil
+}
+
+func (c *Client) ListGlobalTasks(ctx context.Context) ([]apitypes.GlobalTask, error) {
+	var tasks []apitypes.GlobalTask
+	if err := c.GetJSON(ctx, "/api/v1/tasks", &tasks); err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+func (c *Client) ListTeamTasks(ctx context.Context, teamID string) ([]apitypes.TeamTask, error) {
+	var tasks []apitypes.TeamTask
+	path, err := teamTasksPath(teamID)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.GetJSON(ctx, path, &tasks); err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+func (c *Client) CreateTeamTasksBatch(ctx context.Context, teamID string, req apitypes.CreateTeamTasksBatchRequest) (apitypes.CreateTeamTasksBatchResponse, error) {
+	var created apitypes.CreateTeamTasksBatchResponse
+	path, err := teamTasksBatchPath(teamID)
+	if err != nil {
+		return apitypes.CreateTeamTasksBatchResponse{}, err
+	}
+	if err := c.DoJSON(ctx, http.MethodPost, path, req, &created); err != nil {
+		return apitypes.CreateTeamTasksBatchResponse{}, err
+	}
+	return created, nil
+}
+
+func (c *Client) ClaimNextTeamTask(ctx context.Context, req apitypes.ClaimNextTeamTaskRequest) (apitypes.TeamTask, error) {
+	var task apitypes.TeamTask
+	path, err := teamClaimNextPath(req.TeamID)
+	if err != nil {
+		return apitypes.TeamTask{}, err
+	}
+	if err := c.DoJSON(ctx, http.MethodPost, path, req, &task); err != nil {
+		return apitypes.TeamTask{}, err
+	}
+	return task, nil
+}
+
+func (c *Client) UpdateTeamTask(ctx context.Context, teamID, taskID, actorID string, req apitypes.PatchTeamTaskRequest) (apitypes.TeamTask, error) {
+	var updated apitypes.TeamTask
+	path, err := teamTaskPath(teamID, taskID)
+	if err != nil {
+		return apitypes.TeamTask{}, err
+	}
+	body := struct {
+		apitypes.PatchTeamTaskRequest
+		ActorID string `json:"actor_id"`
+	}{
+		PatchTeamTaskRequest: req,
+		ActorID:              strings.TrimSpace(actorID),
+	}
+	if err := c.DoJSON(ctx, http.MethodPatch, path, body, &updated); err != nil {
+		return apitypes.TeamTask{}, err
+	}
+	return updated, nil
+}
+
+func (c *Client) AssignTeamTask(ctx context.Context, teamID, taskID, actorID, botID string) (apitypes.TeamTask, error) {
+	var updated apitypes.TeamTask
+	path, err := teamTaskAssignPath(teamID, taskID)
+	if err != nil {
+		return apitypes.TeamTask{}, err
+	}
+	body := struct {
+		apitypes.AssignTeamTaskRequest
+		ActorID string `json:"actor_id"`
+	}{
+		AssignTeamTaskRequest: apitypes.AssignTeamTaskRequest{BotID: strings.TrimSpace(botID)},
+		ActorID:               strings.TrimSpace(actorID),
+	}
+	if err := c.DoJSON(ctx, http.MethodPost, path, body, &updated); err != nil {
+		return apitypes.TeamTask{}, err
+	}
+	return updated, nil
+}
+
+func (c *Client) ListTeamApprovals(ctx context.Context, teamID string) ([]apitypes.TeamApproval, error) {
+	var approvals []apitypes.TeamApproval
+	path, err := teamApprovalsPath(teamID)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.GetJSON(ctx, path, &approvals); err != nil {
+		return nil, err
+	}
+	return approvals, nil
+}
+
+func (c *Client) CreateTeamApproval(ctx context.Context, teamID string, req apitypes.CreateTeamApprovalRequest) (apitypes.TeamApproval, error) {
+	var created apitypes.TeamApproval
+	path, err := teamApprovalsPath(teamID)
+	if err != nil {
+		return apitypes.TeamApproval{}, err
+	}
+	if err := c.DoJSON(ctx, http.MethodPost, path, req, &created); err != nil {
+		return apitypes.TeamApproval{}, err
+	}
+	return created, nil
+}
+
+func (c *Client) ResolveTeamApproval(ctx context.Context, teamID, approvalID string, req apitypes.ResolveTeamApprovalRequest) (apitypes.TeamApproval, error) {
+	var resolved apitypes.TeamApproval
+	path, err := teamApprovalResolvePath(teamID, approvalID)
+	if err != nil {
+		return apitypes.TeamApproval{}, err
+	}
+	if err := c.DoJSON(ctx, http.MethodPost, path, req, &resolved); err != nil {
+		return apitypes.TeamApproval{}, err
+	}
+	return resolved, nil
+}
+
 func (c *Client) Stream(ctx context.Context, path string, values url.Values, w io.Writer) error {
 	if encoded := values.Encode(); encoded != "" {
 		path += "?" + encoded
@@ -424,4 +558,80 @@ func messageListPath(channelName, roomID string) (string, error) {
 		return "", fmt.Errorf("room_id is required")
 	}
 	return path + "?room_id=" + url.QueryEscape(roomID), nil
+}
+
+func teamBasePath(teamID string) (string, error) {
+	teamID = strings.TrimSpace(teamID)
+	if teamID == "" {
+		return "", fmt.Errorf("team_id is required")
+	}
+	return "/api/v1/teams/" + url.PathEscape(teamID), nil
+}
+
+func teamTasksBatchPath(teamID string) (string, error) {
+	path, err := teamTasksPath(teamID)
+	if err != nil {
+		return "", err
+	}
+	return path + "/batch", nil
+}
+
+func teamTasksPath(teamID string) (string, error) {
+	path, err := teamBasePath(teamID)
+	if err != nil {
+		return "", err
+	}
+	return path + "/tasks", nil
+}
+
+func teamClaimNextPath(teamID string) (string, error) {
+	teamID = strings.TrimSpace(teamID)
+	if teamID == "" {
+		return "/api/v1/teams/tasks/claim-next", nil
+	}
+	path, err := teamBasePath(teamID)
+	if err != nil {
+		return "", err
+	}
+	return path + "/tasks/claim-next", nil
+}
+
+func teamTaskPath(teamID, taskID string) (string, error) {
+	path, err := teamBasePath(teamID)
+	if err != nil {
+		return "", err
+	}
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return "", fmt.Errorf("task_id is required")
+	}
+	return path + "/tasks/" + url.PathEscape(taskID), nil
+}
+
+func teamTaskAssignPath(teamID, taskID string) (string, error) {
+	path, err := teamTaskPath(teamID, taskID)
+	if err != nil {
+		return "", err
+	}
+	return path + "/assign", nil
+}
+
+func teamApprovalsPath(teamID string) (string, error) {
+	path, err := teamBasePath(teamID)
+	if err != nil {
+		return "", err
+	}
+	return path + "/approvals", nil
+}
+
+func teamApprovalResolvePath(teamID, approvalID string) (string, error) {
+	path, err := teamApprovalsPath(teamID)
+	if err != nil {
+		return "", err
+	}
+	approvalID = strings.TrimSpace(approvalID)
+	if approvalID == "" {
+		return "", fmt.Errorf("approval_id is required")
+	}
+	return path + "/" + url.PathEscape(approvalID) + "/resolve", nil
 }

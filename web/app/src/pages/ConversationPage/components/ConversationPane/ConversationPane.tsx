@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Logs, RefreshCw, X } from "lucide-react";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
-import { MessageContent } from "@/components/business/MessageContent";
+import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import {
@@ -18,18 +19,27 @@ import {
 } from "@/components/ui";
 import { AddUserIcon, IconImage, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
 import {
+  type ComposerSegment,
   insertComposerSegmentsAtSelection,
+  areComposerSegmentsEqual,
+  removeAdjacentMentionToken,
+  getComposerMentionState,
+  insertComposerLineBreak,
+  parseComposerSegments,
+  renderComposerSegments,
   insertPlainTextAtSelection,
+  replaceMentionQueryWithToken,
   getMentionCandidates,
+  normalizeComposerSegmentsForDisplay,
+  segmentsToPlainText,
   normalizeTextMentions,
 } from "@/models/composer";
 import { isAgentRunning, normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
 import {
   agentMatchesUser,
   formatEventMessage,
-  formatMessagePreviewText,
+  formatMessageTimestampParts,
   formatThreadReplyCount,
-  formatTime,
   getConversationDescription,
   isDirectConversation,
   isEventMessage,
@@ -38,9 +48,12 @@ import {
 import { localizeRole } from "@/shared/i18n";
 
 type ThreadMentionState = {
+  endOffset: number;
   end: number;
   query: string;
+  startOffset: number;
   start: number;
+  textNode?: Node;
 };
 
 export function ConversationPane({
@@ -72,6 +85,18 @@ export function ConversationPane({
   mentionCandidates,
   mentionIndex,
   onApplyMention,
+  skillCandidates = [],
+  skillIndex = 0,
+  skillLoading = false,
+  skillPickerOpen = false,
+  onApplySkillCandidate = (_name) => {},
+  threadSkillCandidates = [],
+  threadSkillIndex = 0,
+  threadSkillLoading = false,
+  threadSkillPickerOpen = false,
+  onApplyThreadSkillCandidate = (_name) => {},
+  onDismissThreadSkillPicker = () => {},
+  onSetThreadSkillIndex = (_index) => {},
   managerProfile,
   managerProfileIncomplete,
   authStatuses,
@@ -93,7 +118,7 @@ export function ConversationPane({
   activeThreadView,
   threadLoading,
   threadError,
-  threadDraft,
+  threadDraftSegments,
   onOpenThread,
   onCloseThread,
   onThreadDraftChange,
@@ -114,6 +139,17 @@ export function ConversationPane({
     setLogError("");
     setLogLoading(false);
   }, [conversation.id, logAgentID]);
+
+  useLayoutEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const currentSegments = parseComposerSegments(editor);
+    if (!areComposerSegmentsEqual(currentSegments, draftSegments)) {
+      renderComposerSegments(editor, draftSegments);
+    }
+  }, [draftSegments]);
 
   async function refreshAgentLogs() {
     if (!logAgentID) {
@@ -288,12 +324,19 @@ export function ConversationPane({
             <strong>{t("noVisibleMessages")}</strong>
           </div>
         ) : null}
-        {visibleMessages.map((message) => {
+        {visibleMessages.map((message, index) => {
+          const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
+          const previousMessage = visibleMessages[index - 1];
+          const showDivider = shouldShowMessageDateDivider(previousMessage, message);
+
           if (isEventMessage(message)) {
             return (
-              <div key={message.id} className="message-event-row">
-                <div className="message-event-text">{formatEventMessage(message, usersById, locale)}</div>
-              </div>
+              <Fragment key={message.id || `event-${index}`}>
+                {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
+                <div className="message-event-row">
+                  <div className="message-event-text">{formatEventMessage(message, usersById, locale)}</div>
+                </div>
+              </Fragment>
             );
           }
           const user = usersById.get(message.sender_id);
@@ -307,77 +350,94 @@ export function ConversationPane({
           const threadSummary = message.thread;
           const latestThreadReply = threadSummary?.latest_reply;
           return (
-            <div key={message.id} className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""}`.trim()}>
-              <button
-                type="button"
-                className="avatar avatar-button"
-                aria-label={`${t("profilePreview")} ${user.name}`}
-                onClick={(event) => onPreviewUser(user, event.currentTarget)}
-              >
-                <AgentAvatarContent
-                  avatar={user.avatar}
-                  fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)}
-                />
-                {messageAgent ? (
-                  <span className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`} aria-hidden="true" />
-                ) : null}
-              </button>
-              <div className="message-card">
-                <div className="message-hover-actions">
-                  <button
-                    type="button"
-                    className="thread-hover-button"
-                    aria-label={t("replyInThread")}
-                    onClick={() => onOpenThread(message)}
-                  >
-                    <span className="thread-hover-icon" aria-hidden="true">
-                      {IconImage("rooms")}
-                    </span>
-                    <span className="thread-action-tooltip" aria-hidden="true">
-                      {t("replyInThread")}
-                    </span>
-                  </button>
-                </div>
-                <div className="message-meta">
-                  <span className="message-author">{user.name}</span>
-                  <span>{formatTime(message.created_at, locale)}</span>
-                </div>
-                <div className="message-bubble">
-                  <MessageContent
-                    key={`${message.id}:${theme}`}
-                    content={message.content}
-                    message={message}
-                    actionBusy={messageActionBusy}
-                    actionError={messageActionError}
-                    onAction={onMessageAction}
+            <Fragment key={message.id || `message-${index}`}>
+              {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
+              <div className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""}`.trim()}>
+                <button
+                  type="button"
+                  className="avatar avatar-button"
+                  aria-label={`${t("profilePreview")} ${user.name}`}
+                  onClick={(event) => onPreviewUser(user, event.currentTarget)}
+                >
+                  <AgentAvatarContent
+                    avatar={user.avatar}
+                    fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)}
                   />
-                </div>
-                {threadSummary ? (
-                  <div className="message-thread-actions has-thread-summary">
-                    <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
-                      <span aria-hidden="true">{IconImage("rooms")}</span>
-                      <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
+                  {messageAgent ? (
+                    <span
+                      className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`}
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </button>
+                <div className="message-card">
+                  <div className="message-hover-actions">
+                    <button
+                      type="button"
+                      className="thread-hover-button"
+                      aria-label={t("replyInThread")}
+                      onClick={() => onOpenThread(message)}
+                    >
+                      <span className="thread-hover-icon" aria-hidden="true">
+                        {IconImage("rooms")}
+                      </span>
+                      <span className="thread-action-tooltip" aria-hidden="true">
+                        {t("replyInThread")}
+                      </span>
                     </button>
-                    {latestThreadReply ? (
-                      <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
-                        <span>{t("latestThreadReply")}</span>
-                        <strong className="truncate">{formatMessagePreviewText(latestThreadReply.content)}</strong>
-                      </button>
-                    ) : (
-                      <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
-                        <span>{t("threadStarted")}</span>
-                        <strong>{formatThreadReplyCount(threadSummary.reply_count, t)}</strong>
-                      </button>
-                    )}
                   </div>
-                ) : null}
+                  <div className="message-meta">
+                    <span className="message-author">{user.name}</span>
+                    <MessageTimestamp parts={timestampParts} />
+                  </div>
+                  <div className="message-bubble">
+                    <MessageContent
+                      key={`${message.id}:${theme}`}
+                      content={message.content}
+                      message={message}
+                      actionBusy={messageActionBusy}
+                      actionError={messageActionError}
+                      onAction={onMessageAction}
+                    />
+                  </div>
+                  {threadSummary ? (
+                    <div className="message-thread-actions has-thread-summary">
+                      <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
+                        <span aria-hidden="true">{IconImage("rooms")}</span>
+                        <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
+                      </button>
+                      {latestThreadReply ? (
+                        <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
+                          <span>{t("latestThreadReply")}</span>
+                          <strong className="truncate">
+                            <MessagePreviewText content={latestThreadReply.content} />
+                          </strong>
+                        </button>
+                      ) : (
+                        <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
+                          <span>{t("threadStarted")}</span>
+                          <strong>{formatThreadReplyCount(threadSummary.reply_count, t)}</strong>
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            </Fragment>
           );
         })}
       </section>
 
       <footer className="composer">
+        {skillPickerOpen ? (
+          <SkillPicker
+            candidates={skillCandidates}
+            activeIndex={skillIndex}
+            loading={skillLoading}
+            t={t}
+            onSelect={(name) => onApplySkillCandidate?.(name)}
+          />
+        ) : null}
         {mentionCandidates.length > 0 ? (
           <MentionPicker users={mentionCandidates} activeIndex={mentionIndex} t={t} onSelect={onApplyMention} />
         ) : null}
@@ -445,7 +505,7 @@ export function ConversationPane({
           thread={activeThreadView}
           loading={threadLoading}
           error={threadError}
-          draft={threadDraft}
+          draftSegments={threadDraftSegments}
           disabled={managerProfileIncomplete}
           usersById={usersById}
           locale={locale}
@@ -454,6 +514,13 @@ export function ConversationPane({
           t={t}
           onClose={onCloseThread}
           onDraftChange={onThreadDraftChange}
+          threadSkillCandidates={threadSkillCandidates}
+          threadSkillIndex={threadSkillIndex}
+          threadSkillLoading={threadSkillLoading}
+          threadSkillPickerOpen={threadSkillPickerOpen}
+          onApplyThreadSkillCandidate={onApplyThreadSkillCandidate}
+          onDismissThreadSkillPicker={onDismissThreadSkillPicker}
+          onSetThreadSkillIndex={onSetThreadSkillIndex}
           mentionableUsers={conversationMembers}
           onPreviewUser={onPreviewUser}
           onSend={onSendThreadReply}
@@ -472,6 +539,55 @@ export function ConversationPane({
       ) : null}
     </>
   );
+}
+
+type SlashPickerNavigationInput = {
+  event: ReactKeyboardEvent<HTMLElement>;
+  candidates: string[];
+  activeIndex: number;
+  pickerOpen: boolean;
+  onIndexChange: (index: number) => void;
+  onApply: (value: string) => void;
+  onDismiss: () => void;
+  onPrepareNavigation?: () => void;
+};
+
+function handleSlashPickerNavigation({
+  event,
+  candidates,
+  activeIndex,
+  pickerOpen,
+  onIndexChange,
+  onApply,
+  onDismiss,
+  onPrepareNavigation,
+}: SlashPickerNavigationInput): boolean {
+  if (!pickerOpen) {
+    return false;
+  }
+  if (event.key === "ArrowDown" && candidates.length > 0) {
+    event.preventDefault();
+    onPrepareNavigation?.();
+    onIndexChange((activeIndex + 1) % candidates.length);
+    return true;
+  }
+  if (event.key === "ArrowUp" && candidates.length > 0) {
+    event.preventDefault();
+    onPrepareNavigation?.();
+    onIndexChange((activeIndex - 1 + candidates.length) % candidates.length);
+    return true;
+  }
+  if (event.key === "Enter" && !event.shiftKey && candidates.length > 0) {
+    event.preventDefault();
+    onApply(candidates[activeIndex] ?? candidates[0]);
+    return true;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    onDismiss();
+    return true;
+  }
+  return false;
 }
 
 function MentionPicker({ users = [], activeIndex = 0, className = "", showRole = true, t, onSelect }) {
@@ -506,6 +622,40 @@ function MentionPicker({ users = [], activeIndex = 0, className = "", showRole =
               @{user.handle}
               {showRole ? ` · ${localizeRole(user.role, t)}` : ""}
             </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SkillPicker({ candidates = [], activeIndex = 0, loading = false, className = "", t, onSelect }) {
+  const activeOptionRef = useRef<HTMLButtonElement | null>(null);
+  const activeSkill = candidates[activeIndex] || "";
+
+  useLayoutEffect(() => {
+    activeOptionRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, activeSkill, candidates.length]);
+
+  return (
+    <div className={`mention-picker skill-picker ${className}`.trim()}>
+      {loading ? <div className="skill-picker-empty">{t("agentWorkspaceLoading")}</div> : null}
+      {!loading && candidates.length === 0 ? <div className="skill-picker-empty">{t("skillPickerEmpty")}</div> : null}
+      {candidates.map((name, index) => (
+        <button
+          key={name}
+          ref={index === activeIndex ? activeOptionRef : null}
+          className={`mention-option skill-option ${index === activeIndex ? "active" : ""}`}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            onSelect(name);
+          }}
+        >
+          <span className="skill-option-mark" aria-hidden="true">
+            /
+          </span>
+          <div>
+            <div className="message-author">{name}</div>
           </div>
         </button>
       ))}
@@ -571,7 +721,7 @@ function ThreadPanel({
   thread,
   loading,
   error,
-  draft,
+  draftSegments,
   disabled,
   usersById,
   locale,
@@ -580,12 +730,19 @@ function ThreadPanel({
   t,
   onClose,
   onDraftChange,
+  threadSkillCandidates = [],
+  threadSkillIndex = 0,
+  threadSkillLoading = false,
+  threadSkillPickerOpen = false,
+  onApplyThreadSkillCandidate = (_name) => {},
+  onDismissThreadSkillPicker = () => {},
+  onSetThreadSkillIndex = (_index) => {},
   onPreviewUser,
   mentionableUsers = [],
   onSend,
 }) {
   const threadBodyRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const threadEditorRef = useRef<HTMLDivElement | null>(null);
   const [mentionState, setMentionState] = useState<ThreadMentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const root = thread?.root ?? null;
@@ -593,6 +750,23 @@ function ThreadPanel({
   const visibleRoot = showToolCalls || !isToolCallMessage(root) ? root : null;
   const visibleReplies = showToolCalls ? replies : replies.filter((message) => !isToolCallMessage(message));
   const latestReplyID = visibleReplies[visibleReplies.length - 1]?.id || "";
+  const mentionableUsersByHandle = useMemo(() => {
+    const result = new Map<string, (typeof mentionableUsers)[number]>();
+    mentionableUsers.forEach((user) => {
+      const handle = String(user.handle || user.name || user.id || "").trim().toLowerCase();
+      if (!handle) {
+        return;
+      }
+      if (!result.has(handle)) {
+        result.set(handle, user);
+      }
+    });
+    return result;
+  }, [mentionableUsers]);
+  const displayDraftSegments = useMemo(
+    () => normalizeComposerSegmentsForDisplay(draftSegments || []),
+    [draftSegments],
+  );
   const threadMentionCandidates = useMemo(() => {
     if (!mentionState) {
       return [];
@@ -613,57 +787,72 @@ function ThreadPanel({
     return () => window.cancelAnimationFrame(frame);
   }, [root, visibleReplies.length, latestReplyID, loading]);
 
-  function syncThreadMentionState(target = textareaRef.current) {
+  useLayoutEffect(() => {
+    const editor = threadEditorRef.current;
+    if (!editor) {
+      return;
+    }
+    const currentSegments = parseComposerSegments(editor);
+    if (!areComposerSegmentsEqual(currentSegments, displayDraftSegments)) {
+      renderComposerSegments(editor, displayDraftSegments);
+    }
+  }, [displayDraftSegments]);
+
+  function syncThreadDraft(target = threadEditorRef.current) {
+    if (!target) {
+      return;
+    }
+    const segments = normalizeComposerSegmentsForDisplay(parseComposerSegments(target) as ComposerSegment[]);
+    onDraftChange(segments);
+    syncThreadMentionState(target);
+  }
+
+  function syncThreadMentionState(target = threadEditorRef.current) {
     if (!target) {
       setMentionState(null);
       return;
     }
-    const cursor = target.selectionStart ?? 0;
-    const beforeCursor = target.value.slice(0, cursor);
-    const match = beforeCursor.match(/(^|\s)@([a-zA-Z0-9._-]*)$/);
-    if (!match) {
+    const nextMentionState = getComposerMentionState(target);
+    if (!nextMentionState) {
       setMentionState(null);
       setMentionIndex(0);
       return;
     }
-    const nextMentionState = {
-      end: cursor,
-      query: match[2] || "",
-      start: cursor - (match[2] || "").length - 1,
+    const normalized: ThreadMentionState = {
+      end: nextMentionState.endOffset,
+      endOffset: nextMentionState.endOffset,
+      query: nextMentionState.query,
+      start: nextMentionState.startOffset,
+      startOffset: nextMentionState.startOffset,
+      textNode: nextMentionState.textNode,
     };
     const mentionChanged =
       !mentionState ||
-      mentionState.start !== nextMentionState.start ||
-      mentionState.end !== nextMentionState.end ||
-      mentionState.query !== nextMentionState.query;
-    setMentionState(nextMentionState);
+      mentionState.start !== normalized.start ||
+      mentionState.end !== normalized.end ||
+      mentionState.query !== normalized.query;
+    setMentionState(normalized);
     if (mentionChanged) {
       setMentionIndex(0);
     }
   }
 
   function insertThreadMention(user) {
-    const target = textareaRef.current;
+    const target = threadEditorRef.current;
     if (!target || !mentionState || !user) {
       return;
     }
-    const handle = String(user.handle || user.name || user.id || "").trim();
-    if (!handle) {
+    if (!replaceMentionQueryWithToken(target, mentionState, user)) {
       return;
     }
-    const text = String(draft || "");
-    const mentionText = `@${handle} `;
-    const next = text.slice(0, mentionState.start) + mentionText + text.slice(mentionState.end);
-    const caret = mentionState.start + mentionText.length;
-    onDraftChange(next);
+    syncThreadDraft(target);
     setMentionState(null);
     setMentionIndex(0);
     requestAnimationFrame(() => {
-      if (textareaRef.current !== target) {
+      if (threadEditorRef.current !== target) {
         return;
       }
       target.focus();
-      target.setSelectionRange(caret, caret);
     });
   }
 
@@ -673,9 +862,11 @@ function ThreadPanel({
         <div>
           <div className="thread-panel-kicker">{t("threadPanelTitle")}</div>
           <div className="thread-panel-title truncate">
-            {visibleRoot
-              ? formatMessagePreviewText(thread?.summary?.context_summary?.root_excerpt || visibleRoot.content || "")
-              : t("noVisibleMessages")}
+            {visibleRoot ? (
+              <MessagePreviewText content={thread?.summary?.context_summary?.root_excerpt || visibleRoot.content || ""} />
+            ) : (
+              t("noVisibleMessages")
+            )}
           </div>
         </div>
         <Button className="icon-button" aria-label={t("close")} title={t("close")} onClick={onClose}>
@@ -719,6 +910,16 @@ function ThreadPanel({
         </div>
       </div>
       <div className="thread-composer">
+        {threadSkillPickerOpen ? (
+          <SkillPicker
+            candidates={threadSkillCandidates}
+            activeIndex={threadSkillIndex}
+            loading={threadSkillLoading}
+            className="thread-skill-picker"
+            t={t}
+            onSelect={(name) => onApplyThreadSkillCandidate(name)}
+          />
+        ) : null}
         {threadMentionCandidates.length > 0 ? (
           <MentionPicker
             users={threadMentionCandidates}
@@ -729,17 +930,52 @@ function ThreadPanel({
             onSelect={insertThreadMention}
           />
         ) : null}
-        <textarea
-          ref={textareaRef}
-          value={draft}
-          placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
-          disabled={disabled}
-          onChange={(event) => {
-            onDraftChange(event.target.value);
-            syncThreadMentionState(event.target);
-          }}
+        <div
+          ref={threadEditorRef}
+          contentEditable={!disabled}
+          suppressContentEditableWarning={true}
+          role="textbox"
+          aria-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
+          aria-label={t("threadComposerPlaceholder")}
+          className={`thread-composer-editor ${disabled ? "disabled" : ""}`}
+          data-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
+          onInput={(event) => syncThreadDraft(event.currentTarget)}
           onClick={(event) => syncThreadMentionState(event.currentTarget)}
           onKeyDown={(event) => {
+            if (disabled) {
+              return;
+            }
+            if (event.key === "Backspace" && removeAdjacentMentionToken(threadEditorRef.current, "backward")) {
+              event.preventDefault();
+              syncThreadDraft(event.currentTarget);
+              return;
+            }
+            if (event.key === "Delete" && removeAdjacentMentionToken(threadEditorRef.current, "forward")) {
+              event.preventDefault();
+              syncThreadDraft(event.currentTarget);
+              return;
+            }
+            if (
+              handleSlashPickerNavigation({
+                event,
+                candidates: threadSkillCandidates,
+                activeIndex: threadSkillIndex,
+                pickerOpen: threadSkillPickerOpen,
+                onIndexChange: (value) => onSetThreadSkillIndex(value),
+                onApply: (value) => onApplyThreadSkillCandidate(value),
+                onDismiss: () => {
+                  onDismissThreadSkillPicker();
+                  setMentionState(null);
+                  setMentionIndex(0);
+                },
+                onPrepareNavigation: () => {
+                  setMentionState(null);
+                  setMentionIndex(0);
+                },
+              })
+            ) {
+              return;
+            }
             if (threadMentionCandidates.length > 0) {
               if (event.key === "ArrowDown") {
                 event.preventDefault();
@@ -765,17 +1001,37 @@ function ThreadPanel({
                 return;
               }
             }
+            if (event.key === "Enter" && event.shiftKey) {
+              event.preventDefault();
+              insertComposerLineBreak(threadEditorRef.current);
+              syncThreadDraft(threadEditorRef.current);
+              return;
+            }
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               onSend();
             }
           }}
           onKeyUp={(event) => syncThreadMentionState(event.currentTarget)}
+          onPaste={(event) => {
+            event.preventDefault();
+            const pasted = event.clipboardData?.getData("text/plain") ?? "";
+            const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByHandle);
+            if (segments.some((segment) => segment.type === "mention")) {
+              insertComposerSegmentsAtSelection(segments);
+            } else {
+              insertPlainTextAtSelection(pasted);
+            }
+            syncThreadDraft(threadEditorRef.current);
+          }}
+          onCompositionEnd={() => {
+            syncThreadDraft(threadEditorRef.current);
+          }}
         />
         <Button
           variant="primary"
           className="thread-send-button"
-          disabled={disabled || !String(draft || "").trim()}
+          disabled={disabled || !segmentsToPlainText(draftSegments || []).trim()}
           onClick={onSend}
         >
           <span aria-hidden="true">{IconImage("send")}</span>
@@ -791,6 +1047,7 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
   const fallbackName = message.sender_id || "";
   const avatar = user?.avatar || fallbackName.slice(0, 1).toUpperCase();
   const name = user?.name || user?.handle || fallbackName;
+  const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
 
   return (
     <div className={`thread-message ${compact ? "compact" : ""}`.trim()}>
@@ -811,7 +1068,7 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
       <div className="thread-message-main">
         <div className="message-meta">
           <span className="message-author">{name}</span>
-          <span>{formatTime(message.created_at, locale)}</span>
+          <MessageTimestamp parts={timestampParts} />
         </div>
         <div className="thread-message-bubble">
           <MessageContent key={`${message.id}:${theme}`} content={message.content} message={message} />
@@ -819,4 +1076,67 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
       </div>
     </div>
   );
+}
+
+function MessageTimestamp({ parts }) {
+  if (!parts.shortLabel) {
+    return null;
+  }
+  return (
+    <time
+      className="message-timestamp"
+      dateTime={parts.dateTime}
+      title={parts.tooltip}
+      aria-label={parts.tooltip}
+      data-tooltip={parts.tooltip}
+      tabIndex={0}
+    >
+      {parts.shortLabel}
+    </time>
+  );
+}
+
+function MessageTimeDivider({ parts }) {
+  if (!parts.dividerLabel) {
+    return null;
+  }
+  return (
+    <div className="message-time-divider">
+      <time
+        className="message-time-divider-label"
+        dateTime={parts.dateTime}
+        title={parts.tooltip}
+        data-tooltip={parts.tooltip}
+        tabIndex={0}
+      >
+        {parts.dividerLabel}
+      </time>
+    </div>
+  );
+}
+
+function shouldShowMessageDateDivider(previousMessage, currentMessage) {
+  if (!previousMessage) {
+    return hasValidMessageTime(currentMessage);
+  }
+  return !isSameMessageDate(previousMessage, currentMessage);
+}
+
+function isSameMessageDate(previousMessage, currentMessage) {
+  const previousAt = Date.parse(previousMessage?.created_at || "");
+  const currentAt = Date.parse(currentMessage?.created_at || "");
+  if (!Number.isFinite(previousAt) || !Number.isFinite(currentAt)) {
+    return false;
+  }
+  const previousDate = new Date(previousAt);
+  const currentDate = new Date(currentAt);
+  return (
+    previousDate.getFullYear() === currentDate.getFullYear() &&
+    previousDate.getMonth() === currentDate.getMonth() &&
+    previousDate.getDate() === currentDate.getDate()
+  );
+}
+
+function hasValidMessageTime(message) {
+  return Number.isFinite(Date.parse(message?.created_at || ""));
 }

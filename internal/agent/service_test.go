@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
@@ -49,6 +50,10 @@ func (f fakeProvider) Open(ctx context.Context, homeDir string) (sandbox.Runtime
 		return f.open(ctx, homeDir)
 	}
 	return &fakeRuntime{}, nil
+}
+
+func (fakeProvider) ListImages(context.Context, string) ([]string, error) {
+	return []string{}, nil
 }
 
 func (f *fakeRuntime) Create(context.Context, sandbox.CreateSpec) (sandbox.Instance, error) {
@@ -296,6 +301,16 @@ func (r *agentBoxliteCLIRunner) Run(_ context.Context, req boxlitecli.CommandReq
 			return boxlitecli.CommandResult{ExitCode: 1, Stderr: []byte("Error: no such box: " + idOrName)}, fmt.Errorf("exit status 1")
 		}
 		box.Status = "running"
+		r.boxes[box.ID] = box
+		r.boxes[box.Name] = box
+		return boxlitecli.CommandResult{}, nil
+	case "stop":
+		idOrName := req.Args[len(req.Args)-1]
+		box, ok := r.boxes[idOrName]
+		if !ok {
+			return boxlitecli.CommandResult{ExitCode: 1, Stderr: []byte("Error: no such box: " + idOrName)}, fmt.Errorf("exit status 1")
+		}
+		box.Status = "stopped"
 		r.boxes[box.ID] = box
 		r.boxes[box.Name] = box
 		return boxlitecli.CommandResult{}, nil
@@ -2065,6 +2080,94 @@ func TestCreateReplaceManagerSwitchesRuntimeKindUsesRequestedImage(t *testing.T)
 	}
 }
 
+func TestCreateReplaceManagerWithStaleSubmittedImageUsesLatestDefaultTemplate(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-manager", hub.Template{
+		ID:          "picoclaw-manager",
+		Name:        "picoclaw-manager",
+		Description: "picoclaw manager",
+		Role:        hub.TemplateRoleManager,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "registry.example/picoclaw:2026.06.02",
+	})
+
+	var gotImages []string
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			gotImages = append(gotImages, image)
+			return &fakeInstance{}, sandbox.Info{
+				ID:        "box-" + name,
+				Name:      name,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	)
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) error {
+		return nil
+	}
+	defer ResetTestHooks()
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"registry.example/picoclaw:2026.06.02",
+		"",
+		WithHubService(hubSvc),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/picoclaw-manager"}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "registry.example/picoclaw:2026.05.27",
+		BoxID:       "box-manager-old",
+		Role:        RoleManager,
+		Status:      string(agentruntime.StateRunning),
+		CreatedAt:   time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
+		AgentProfile: AgentProfile{
+			Name:               ManagerName,
+			Provider:           ProviderCodex,
+			ModelID:            "gpt-5.5",
+			ProfileComplete:    true,
+			EnvRestartRequired: true,
+		},
+		ProfileComplete: true,
+	}
+
+	replaced, err := svc.Create(context.Background(), CreateRequest{
+		Spec: CreateAgentSpec{
+			ID:          ManagerUserID,
+			Name:        ManagerName,
+			Image:       "registry.example/picoclaw:2026.05.27",
+			RuntimeKind: RuntimeKindPicoClawSandbox,
+		},
+		Replace: true,
+	})
+	if err != nil {
+		t.Fatalf("Create() replace error = %v", err)
+	}
+	if got, want := replaced.Image, "registry.example/picoclaw:2026.06.02"; got != want {
+		t.Fatalf("Create() replace image = %q, want %q", got, want)
+	}
+	if len(gotImages) != 1 {
+		t.Fatalf("createGatewayBox() calls = %d, want 1", len(gotImages))
+	}
+	if got, want := gotImages[0], "registry.example/picoclaw:2026.06.02"; got != want {
+		t.Fatalf("recreate manager image = %q, want %q", got, want)
+	}
+}
+
 func TestLoadMigratesLegacyWorkersIntoAgents(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "agents.json")
@@ -2579,16 +2682,29 @@ func TestDeletePrefersBoxIDOverName(t *testing.T) {
 	defer ResetTestHooks()
 
 	var removed string
+	var calls []string
+	testStopBoxHook = func(_ *Service, _ context.Context, _ sandbox.Instance, opts sandbox.StopOptions) error {
+		calls = append(calls, "stop")
+		return nil
+	}
 	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		calls = append(calls, "remove")
 		removed = idOrName
 		return nil
 	}
-	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		if idOrName == "box-123" {
+			return &fakeInstance{}, nil
+		}
 		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
 	}
 	defer func() {
+		testStopBoxHook = nil
 		testForceRemoveBoxHook = nil
 	}()
+
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
 
 	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
 	if err != nil {
@@ -2609,6 +2725,68 @@ func TestDeletePrefersBoxIDOverName(t *testing.T) {
 	}
 	if removed != "box-123" {
 		t.Fatalf("ForceRemove() target = %q, want %q", removed, "box-123")
+	}
+	if strings.Join(calls, ",") != "stop,remove" {
+		t.Fatalf("Delete() sandbox calls = %q, want stop then remove", strings.Join(calls, ","))
+	}
+}
+
+func TestDeleteStopsBoxBeforeRemoveOnLegacyPath(t *testing.T) {
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
+		nil,
+	)
+	defer ResetTestHooks()
+
+	var calls []string
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		if idOrName == "alice" {
+			return &fakeInstance{}, nil
+		}
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	testStopBoxHook = func(_ *Service, _ context.Context, _ sandbox.Instance, _ sandbox.StopOptions) error {
+		calls = append(calls, "stop")
+		return nil
+	}
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		calls = append(calls, "remove:"+idOrName)
+		return nil
+	}
+	defer func() {
+		testGetBoxHook = nil
+		testStopBoxHook = nil
+		testForceRemoveBoxHook = nil
+	}()
+
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:        "u-alice",
+		Name:      "alice",
+		Role:      RoleWorker,
+		Status:    "running",
+		CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+	}
+
+	agentHome, err := agentHomeDir("alice")
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(agentHome, config.RuntimeHomeDirName), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(agent runtime) error = %v", err)
+	}
+
+	if err := svc.Delete(context.Background(), "u-alice"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if strings.Join(calls, ",") != "stop,remove:alice" {
+		t.Fatalf("Delete() sandbox calls = %q, want stop then remove:alice", strings.Join(calls, ","))
 	}
 }
 
@@ -3640,7 +3818,7 @@ func TestCreateWorkerFromTemplateAppliesDefaultsAndOverlaysWorkspace(t *testing.
 	got, err := svc.Create(context.Background(), CreateRequest{
 		Spec: CreateAgentSpec{
 			Name:         "alice",
-			FromTemplate: "local/frontend-worker",
+			FromTemplate: "local.frontend-worker",
 		},
 	})
 	if err != nil {
@@ -3675,6 +3853,84 @@ func TestCreateWorkerFromTemplateAppliesDefaultsAndOverlaysWorkspace(t *testing.
 	}
 }
 
+func TestApplyTemplateEnvDefaults(t *testing.T) {
+	t.Parallel()
+
+	got := applyTemplateEnvDefaults(CreateAgentSpec{
+		AgentProfile: AgentProfile{
+			Env: map[string]string{"GITLAB_TOKEN": "user-token"},
+		},
+	}, hub.Template{
+		ImageEnv: []apitypes.ImageEnvContract{
+			{Name: "GITLAB_TOKEN", Required: true, Secret: true},
+			{Name: "GITLAB_URL", Default: "https://gitlab.example.com"},
+		},
+	})
+	if got.AgentProfile.Env["GITLAB_TOKEN"] != "user-token" {
+		t.Fatalf("GITLAB_TOKEN = %q, want user-token", got.AgentProfile.Env["GITLAB_TOKEN"])
+	}
+	if got.AgentProfile.Env["GITLAB_URL"] != "https://gitlab.example.com" {
+		t.Fatalf("GITLAB_URL = %q, want default url", got.AgentProfile.Env["GITLAB_URL"])
+	}
+}
+
+func TestCreateWorkerFromTemplateAppliesImageEnvToSandbox(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	var capturedEnv map[string]string
+	restoreHook := testCreateGatewayBoxHook
+	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _, _, _ string, profile AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+		capturedEnv = profile.Env
+		return nil, sandbox.Info{ID: "box-gitlab", State: sandbox.StateRunning}, nil
+	}
+	t.Cleanup(func() { testCreateGatewayBoxHook = restoreHook })
+
+	hubSvc := mustNewLocalTemplateHubService(t, "gitlab-assistant", hub.Template{
+		ID:          "gitlab-assistant",
+		Name:        "gitlab-assistant",
+		Description: "GitLab assistant",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "worker-image:1",
+		ImageEnv: []apitypes.ImageEnvContract{
+			{Name: "GITLAB_TOKEN", Required: true, Secret: true},
+			{Name: "GITLAB_URL", Default: "https://gitlab.example.com"},
+		},
+	})
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+		WithHubService(hubSvc),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.Create(context.Background(), CreateRequest{
+		Spec: CreateAgentSpec{
+			Name:         "gitlab",
+			FromTemplate: "local.gitlab-assistant",
+			AgentProfile: AgentProfile{
+				Env: map[string]string{"GITLAB_TOKEN": "secret-token"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if capturedEnv["GITLAB_TOKEN"] != "secret-token" {
+		t.Fatalf("sandbox GITLAB_TOKEN = %q, want secret-token", capturedEnv["GITLAB_TOKEN"])
+	}
+	if capturedEnv["GITLAB_URL"] != "https://gitlab.example.com" {
+		t.Fatalf("sandbox GITLAB_URL = %q, want default url", capturedEnv["GITLAB_URL"])
+	}
+}
+
 func TestCreateOpenClawWorkerFromTemplateOverlaysOpenClawWorkspace(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -3703,7 +3959,7 @@ func TestCreateOpenClawWorkerFromTemplateOverlaysOpenClawWorkspace(t *testing.T)
 	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
 		Name:         "alice",
 		RuntimeKind:  RuntimeKindOpenClawSandbox,
-		FromTemplate: "local/openclaw-manager",
+		FromTemplate: "local.openclaw-manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateWorker() error = %v", err)
@@ -3742,7 +3998,7 @@ func TestCreateWorkerUsesConfiguredDefaultTemplate(t *testing.T) {
 		"manager-image:1",
 		"",
 		WithHubService(hubSvc),
-		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local.frontend-worker"}),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -3775,6 +4031,367 @@ func TestCreateWorkerUsesConfiguredDefaultTemplate(t *testing.T) {
 	}
 }
 
+func TestAgentMarksOutdatedDefaultTemplateImageUpgradeRequired(t *testing.T) {
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
+		ID:          "frontend-worker",
+		Name:        "frontend-worker",
+		Description: "frontend worker",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "registry.example/picoclaw-worker:2026.06.02",
+	})
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+		WithHubService(hubSvc),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeID:   "rt-u-alice",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "registry.example/picoclaw-worker:2026.05.27",
+		BoxID:       "box-alice",
+		Role:        RoleWorker,
+		Status:      string(agentruntime.StateRunning),
+		CreatedAt:   time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	got, ok := svc.Agent("u-alice")
+	if !ok {
+		t.Fatal("Agent() ok = false, want true")
+	}
+	if got.AgentProfile.EnvRestartRequired {
+		t.Fatalf("Agent().AgentProfile.EnvRestartRequired = true, want false for image-only upgrade")
+	}
+	if !got.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("Agent().AgentProfile.ImageUpgradeRequired = false, want true for outdated default image")
+	}
+}
+
+func TestAgentMarksOutdatedManagerImageUpgradeRequiredWhenGatewayRuntimeChanged(t *testing.T) {
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	const (
+		oldManagerImage = "registry.example/opencsghq/picoclaw:2026.05.22"
+		newManagerImage = "registry.example/opencsghq/picoclaw:2026.06.03"
+	)
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		newManagerImage,
+		"",
+		WithGatewayRuntime(RuntimeKindOpenClawSandbox),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       oldManagerImage,
+		BoxID:       "box-manager",
+		Role:        RoleManager,
+		Status:      string(agentruntime.StateRunning),
+		CreatedAt:   time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
+		AgentProfile: AgentProfile{
+			Name:            ManagerName,
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent() ok = false, want true")
+	}
+	if got.AgentProfile.EnvRestartRequired {
+		t.Fatalf("Agent().AgentProfile.EnvRestartRequired = true, want false for image-only upgrade")
+	}
+	if !got.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("Agent().AgentProfile.ImageUpgradeRequired = false, want true for outdated manager image")
+	}
+}
+
+func TestRecreateUsesLatestDefaultTemplateImageAndPreservesUserSkills(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
+		ID:          "frontend-worker",
+		Name:        "frontend-worker",
+		Description: "frontend worker",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "registry.example/picoclaw-worker:2026.06.02",
+	})
+
+	var newImage string
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+		WithHubService(hubSvc),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
+				skillPath, err := agentSkillPath(req.AgentName, RuntimeKindPicoClawSandbox, "custom-tool")
+				if err != nil {
+					t.Fatalf("agentSkillPath() error = %v", err)
+				}
+				data, readErr := os.ReadFile(skillPath)
+				if readErr != nil || string(data) != "# Custom Tool\n" {
+					t.Fatalf("custom skill during provision = %q, %v; want preserved skill", string(data), readErr)
+				}
+				return nil
+			},
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				newImage = spec.Image
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-alice-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning, CreatedAt: time.Date(2026, 6, 2, 10, 0, 0, 0, time.UTC)}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeID:   "rt-u-alice",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "registry.example/picoclaw-worker:2026.05.27",
+		BoxID:       "box-alice-old",
+		Role:        RoleWorker,
+		Status:      string(agentruntime.StateRunning),
+		CreatedAt:   time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
+		AgentProfile: AgentProfile{
+			Name:               "alice",
+			Provider:           ProviderCodex,
+			ModelID:            "gpt-5.5",
+			ProfileComplete:    true,
+			EnvRestartRequired: true,
+		},
+		ProfileComplete: true,
+	}
+
+	skillPath, err := agentSkillPath("alice", RuntimeKindPicoClawSandbox, "custom-tool")
+	if err != nil {
+		t.Fatalf("agentSkillPath() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(skillPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(skill dir) error = %v", err)
+	}
+	if err := os.WriteFile(skillPath, []byte("# Custom Tool\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(skill) error = %v", err)
+	}
+
+	recreated, err := svc.Recreate(context.Background(), "u-alice")
+	if err != nil {
+		t.Fatalf("Recreate() error = %v", err)
+	}
+	if newImage != "registry.example/picoclaw-worker:2026.06.02" {
+		t.Fatalf("runtime New() image = %q, want latest default template image", newImage)
+	}
+	if recreated.Image != "registry.example/picoclaw-worker:2026.06.02" {
+		t.Fatalf("Recreate().Image = %q, want latest default template image", recreated.Image)
+	}
+	if recreated.AgentProfile.EnvRestartRequired {
+		t.Fatalf("Recreate().AgentProfile.EnvRestartRequired = true, want false after recreate")
+	}
+	data, err := os.ReadFile(skillPath)
+	if err != nil || string(data) != "# Custom Tool\n" {
+		t.Fatalf("custom skill after recreate = %q, %v; want preserved skill", string(data), err)
+	}
+}
+
+func TestUpgradeUsesLatestDefaultTemplateImage(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
+		ID:          "frontend-worker",
+		Name:        "frontend-worker",
+		Description: "frontend worker",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "registry.example/picoclaw-worker:2026.06.03",
+	})
+
+	var newImage string
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+		WithHubService(hubSvc),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				newImage = spec.Image
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-alice-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning, CreatedAt: time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeID:   "rt-u-alice",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "custom.example/alice-worker:2026.05.27",
+		BoxID:       "box-alice-old",
+		Role:        RoleWorker,
+		Status:      string(agentruntime.StateRunning),
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	recreated, err := svc.Upgrade(context.Background(), "u-alice")
+	if err != nil {
+		t.Fatalf("Upgrade() error = %v", err)
+	}
+	if newImage != "registry.example/picoclaw-worker:2026.06.03" {
+		t.Fatalf("runtime New() image = %q, want latest default template image", newImage)
+	}
+	if recreated.Image != "registry.example/picoclaw-worker:2026.06.03" {
+		t.Fatalf("Upgrade().Image = %q, want latest default template image", recreated.Image)
+	}
+}
+
+func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "manager-image:1",
+		BoxID:       "box-manager-old",
+		Role:        RoleManager,
+		Status:      string(agentruntime.StateRunning),
+		CreatedAt:   time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
+		AgentProfile: AgentProfile{
+			Name:            ManagerName,
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	workspaceRoot, err := agentWorkspaceRoot(ManagerName, RuntimeKindPicoClawSandbox)
+	if err != nil {
+		t.Fatalf("agentWorkspaceRoot() error = %v", err)
+	}
+	builtInSkillPath := filepath.Join(workspaceRoot, "skills", "agent-teams", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(builtInSkillPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(agent-teams) error = %v", err)
+	}
+	if err := os.WriteFile(builtInSkillPath, []byte("# Locally Edited Agent Teams\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(agent-teams) error = %v", err)
+	}
+	userSkillPath := filepath.Join(workspaceRoot, "skills", "impeccable", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(userSkillPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(impeccable) error = %v", err)
+	}
+	if err := os.WriteFile(userSkillPath, []byte("# Impeccable\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(impeccable) error = %v", err)
+	}
+
+	recreated, err := svc.Recreate(context.Background(), ManagerUserID)
+	if err != nil {
+		t.Fatalf("Recreate() error = %v", err)
+	}
+	if recreated.AgentProfile.EnvRestartRequired {
+		t.Fatal("Recreate().AgentProfile.EnvRestartRequired = true, want false")
+	}
+
+	wantBuiltIn, err := templates.FS().Open(templates.WorkspacePath(templates.PicoClawManagerRoot) + "/skills/agent-teams/SKILL.md")
+	if err != nil {
+		t.Fatalf("open embedded agent-teams skill: %v", err)
+	}
+	defer func() {
+		_ = wantBuiltIn.Close()
+	}()
+	wantBuiltInData, err := io.ReadAll(wantBuiltIn)
+	if err != nil {
+		t.Fatalf("read embedded agent-teams skill: %v", err)
+	}
+	gotBuiltInData, err := os.ReadFile(builtInSkillPath)
+	if err != nil {
+		t.Fatalf("ReadFile(agent-teams) error = %v", err)
+	}
+	if string(gotBuiltInData) != string(wantBuiltInData) {
+		t.Fatalf("agent-teams after recreate = %q, want embedded template content", string(gotBuiltInData))
+	}
+	userData, err := os.ReadFile(userSkillPath)
+	if err != nil || string(userData) != "# Impeccable\n" {
+		t.Fatalf("impeccable after recreate = %q, %v; want preserved user skill", string(userData), err)
+	}
+}
+
 func TestCreateWorkerRejectsMissingDefaultTemplate(t *testing.T) {
 	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
@@ -3793,7 +4410,7 @@ func TestCreateWorkerRejectsMissingDefaultTemplate(t *testing.T) {
 		"manager-image:1",
 		"",
 		WithHubService(hubSvc),
-		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/missing"}),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local.missing"}),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -3803,7 +4420,7 @@ func TestCreateWorkerRejectsMissingDefaultTemplate(t *testing.T) {
 	if err == nil {
 		t.Fatal("CreateWorker() error = nil, want missing default template")
 	}
-	if !strings.Contains(err.Error(), `resolve default worker template "local/missing"`) {
+	if !strings.Contains(err.Error(), `resolve default worker template "local.missing"`) {
 		t.Fatalf("CreateWorker() error = %v, want default worker template context", err)
 	}
 }
@@ -3826,7 +4443,7 @@ func TestCreateWorkerRejectsDefaultTemplateRoleMismatch(t *testing.T) {
 		"manager-image:1",
 		"",
 		WithHubService(hubSvc),
-		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/review-manager"}),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local.review-manager"}),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -3836,7 +4453,7 @@ func TestCreateWorkerRejectsDefaultTemplateRoleMismatch(t *testing.T) {
 	if err == nil {
 		t.Fatal("CreateWorker() error = nil, want role mismatch")
 	}
-	if !strings.Contains(err.Error(), `default worker template "local/review-manager" points to a manager template`) {
+	if !strings.Contains(err.Error(), `default worker template "local.review-manager" points to a manager template`) {
 		t.Fatalf("CreateWorker() error = %v, want worker/manager mismatch", err)
 	}
 }
@@ -3857,7 +4474,7 @@ func TestCreateWorkerSkipsDefaultTemplateRuntimeMismatch(t *testing.T) {
 		"manager-image:1",
 		"",
 		WithHubService(hubSvc),
-		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local.frontend-worker"}),
 		WithRuntime(fakeAgentRuntime{
 			kind: RuntimeKindCodex,
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
@@ -3905,7 +4522,7 @@ func TestCreateWorkerAppliesTemplateDefaultsWithoutWorkspace(t *testing.T) {
 		"manager-image:1",
 		"",
 		WithHubService(hubSvc),
-		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local.frontend-worker"}),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -3949,7 +4566,7 @@ func TestCreateRejectsDefaultManagerTemplateRoleMismatch(t *testing.T) {
 		"manager-image:1",
 		"",
 		WithHubService(hubSvc),
-		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/review-worker"}),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local.review-worker"}),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -3961,7 +4578,7 @@ func TestCreateRejectsDefaultManagerTemplateRoleMismatch(t *testing.T) {
 	if err == nil {
 		t.Fatal("Create() error = nil, want role mismatch")
 	}
-	if !strings.Contains(err.Error(), `default manager template "local/review-worker" points to a worker template`) {
+	if !strings.Contains(err.Error(), `default manager template "local.review-worker" points to a worker template`) {
 		t.Fatalf("Create() error = %v, want manager/worker mismatch", err)
 	}
 }
@@ -4533,8 +5150,8 @@ func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testi
 		if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
 			t.Fatalf("stale manager file still exists before recreate: err=%v", err)
 		}
-		if _, err := os.Stat(currentSkillPath); !os.IsNotExist(err) {
-			t.Fatalf("current skill still exists before recreate: err=%v", err)
+		if data, err := os.ReadFile(currentSkillPath); err != nil || string(data) != "# Say Hello\n" {
+			t.Fatalf("current skill before recreate = %q, %v; want preserved skill", string(data), err)
 		}
 		return &fakeInstance{}, sandbox.Info{
 			ID:        "box-new",
@@ -4586,6 +5203,9 @@ func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testi
 	}
 	if closeRuntimeCalls != 2 {
 		t.Fatalf("closeRuntime() calls = %d, want %d", closeRuntimeCalls, 2)
+	}
+	if data, err := os.ReadFile(currentSkillPath); err != nil || string(data) != "# Say Hello\n" {
+		t.Fatalf("current skill after recreate = %q, %v; want preserved skill", string(data), err)
 	}
 }
 
@@ -5156,6 +5776,7 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
+	appendTemplateImageEnvContracts(t, filepath.Join(registryRoot, "templates", id, "agent.toml"), item.ImageEnv)
 
 	svc, err := hub.NewService(config.HubConfig{
 		DefaultRegistry: "local",
@@ -5167,6 +5788,39 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
 	return svc
+}
+
+func appendTemplateImageEnvContracts(t *testing.T, manifestPath string, items []apitypes.ImageEnvContract) {
+	t.Helper()
+	if len(items) == 0 {
+		return
+	}
+	content, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", manifestPath, err)
+	}
+	var b strings.Builder
+	b.WriteString(strings.Replace(string(content), "env = []\n", "", 1))
+	for _, item := range items {
+		fmt.Fprintf(&b, "\n[[image.env]]\nname = %q\nrequired = %t\nsecret = %t\n", item.Name, item.Required, item.Secret)
+		if item.Default != "" {
+			fmt.Fprintf(&b, "default = %q\n", item.Default)
+		}
+		if item.Description != "" {
+			fmt.Fprintf(&b, "description = %q\n", item.Description)
+		}
+	}
+	if err := os.WriteFile(manifestPath, []byte(b.String()), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", manifestPath, err)
+	}
+}
+
+func agentSkillPath(agentName, runtimeKind, skillName string) (string, error) {
+	workspaceRoot, err := agentWorkspaceRoot(agentName, runtimeKind)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(workspaceRoot, "skills", skillName, "SKILL.md"), nil
 }
 
 func mustNewLocalTemplateHubServiceWithoutWorkspace(t *testing.T, id string, item hub.Template) *hub.Service {

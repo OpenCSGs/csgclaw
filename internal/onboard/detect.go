@@ -25,7 +25,7 @@ var (
 			managerImage,
 			path,
 			runtimewiring.WithPicoClawSandboxRuntime(nil),
-			runtimewiring.WithOpenClawSandboxRuntime(),
+			runtimewiring.WithOpenClawSandboxRuntime(nil),
 			agent.WithGatewayRuntime(config.RuntimeKindPicoClawSandbox),
 			agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 		)

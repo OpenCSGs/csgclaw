@@ -43,6 +43,7 @@ import (
 	runtimecodex "csgclaw/internal/runtime/codex"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/server"
+	"csgclaw/internal/team"
 	"csgclaw/internal/upgrade"
 	appversion "csgclaw/internal/version"
 )
@@ -54,6 +55,7 @@ var (
 	NewIMService       = newIMService
 	NewFeishuService   = newFeishuService
 	NewLLMService      = newLLMService
+	NewTeamService     = newTeamService
 	CheckModelProvider = checkModelProvider
 	EnsureCLIProxy     = func(ctx context.Context) error {
 		return cliproxy.Default().EnsureStarted(ctx)
@@ -468,6 +470,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
+	teamSvc, teamAdapter, err := NewTeamService(imSvc)
+	if err != nil {
+		return err
+	}
 	return RunServer(server.Options{
 		ListenAddr:      cfg.Server.ListenAddr,
 		Service:         svc,
@@ -478,6 +484,8 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		BotBridge:       im.NewBotBridge(cfg.Server.AccessToken),
 		Feishu:          feishuSvc,
 		LLM:             llmSvc,
+		Team:            teamSvc,
+		TeamAdapter:     teamAdapter,
 		Upgrade:         upgradeManager,
 		ActivityDecider: channelActivityDecider(codexBridgeMgr),
 		ConfigPath:      configPath,
@@ -518,7 +526,14 @@ func configureFeishuService(feishuSvc *feishu.Service, svc *agent.Service) {
 	if feishuSvc == nil {
 		return
 	}
-	runtimewiring.UpdatePicoClawFeishuProvider(svc, feishuSvc.ConfigProvider())
+	update := func(feishuProvider feishu.BotCredentialProvider) {
+		runtimewiring.UpdatePicoClawFeishuProvider(svc, feishuProvider)
+		runtimewiring.UpdateOpenClawFeishuProvider(svc, feishuProvider)
+	}
+	update(feishuSvc.ConfigProvider())
+	feishuSvc.SetConfigReloadHook(func(feishu.Snapshot) {
+		update(feishuSvc.ConfigProvider())
+	})
 }
 
 func preflightDefaultModelProvider(ctx context.Context, cfg config.Config) error {
@@ -677,6 +692,7 @@ listen_addr = %q
 advertise_base_url = %q
 access_token = %q
 no_auth = %t
+show_upgrade = %t
 
 [bootstrap]
 default_manager_template = %q
@@ -684,7 +700,7 @@ default_worker_template = %q
 
 [sandbox]
 provider = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Bootstrap.ResolvedDefaultManagerTemplate(), cfg.Bootstrap.ResolvedDefaultWorkerTemplate(), cfg.Sandbox.Resolved().Provider)
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.ShowUpgrade, cfg.Bootstrap.ResolvedDefaultManagerTemplate(), cfg.Bootstrap.ResolvedDefaultWorkerTemplate(), cfg.Sandbox.Resolved().Provider)
 	if len(cfg.Sandbox.Resolved().DebianRegistriesOverride) > 0 {
 		content += fmt.Sprintf("debian_registries_override = %s\n", formatModelList(cfg.Sandbox.Resolved().DebianRegistriesOverride))
 	} else {
@@ -733,9 +749,22 @@ func partiallyMaskSecret(value string) string {
 
 func loadConfig(path string) (config.Config, error) {
 	if path == "" {
-		return config.LoadDefault()
+		defaultPath, err := config.DefaultPath()
+		if err != nil {
+			return config.Config{}, err
+		}
+		path = defaultPath
 	}
-	return config.Load(path)
+	cfg, err := config.Load(path)
+	if err != nil {
+		return config.Config{}, err
+	}
+	if cfg.NeedsMigrationRewrite() {
+		if err := cfg.Save(path); err != nil {
+			return config.Config{}, err
+		}
+	}
+	return cfg, nil
 }
 
 func validateModelConfig(cfg config.Config) error {
@@ -794,7 +823,7 @@ func newAgentService(cfg config.Config, feishuProvider feishu.BotCredentialProvi
 	}
 	opts = append(opts,
 		runtimewiring.WithPicoClawSandboxRuntime(feishuProvider),
-		runtimewiring.WithOpenClawSandboxRuntime(),
+		runtimewiring.WithOpenClawSandboxRuntime(feishuProvider),
 		runtimewiring.WithCodexRuntime(),
 		agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
@@ -1023,6 +1052,20 @@ func newBotService() (*bot.Service, error) {
 		return nil, err
 	}
 	return bot.NewService(store)
+}
+
+func newTeamService(imSvc *im.Service) (*team.Service, team.TeamChannelAdapter, error) {
+	teamsDir, err := config.DefaultTeamsDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	store, err := team.NewStore(teamsDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	adapter := team.NewCSGClawAdapter(imSvc)
+	projector := team.NewProjector(adapter, nil)
+	return team.NewService(team.WithStore(store), team.WithProjector(projector)), adapter, nil
 }
 
 func buildFeishuComponents(configPath string) (feishu.Provider, *feishu.Service, error) {

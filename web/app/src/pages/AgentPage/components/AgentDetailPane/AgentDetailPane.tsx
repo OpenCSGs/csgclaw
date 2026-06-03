@@ -8,6 +8,7 @@ import {
   profileBaseURLMissing,
   requiredFieldLabel,
 } from "@/components/business/ProfileControls";
+import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import {
   agentStatusLabel,
   agentModelID,
@@ -16,6 +17,7 @@ import {
   formatRuntimeKindLabel,
   isAgentIncomplete,
   isAgentRestartNeeded,
+  isAgentUpgradeNeeded,
   isAgentRunning,
   isNotifierRuntimeDraftOnAgentPage,
   normalizeAuthProviderName,
@@ -41,6 +43,15 @@ export function AgentDetailPane({
   authStatuses,
   authBusyProvider,
   notifierWebhookPublicOrigin,
+  workspaceEntries = [],
+  workspaceLoading = false,
+  workspaceError = "",
+  workspaceSupported = false,
+  selectedWorkspacePath = "",
+  workspaceFile = null,
+  workspaceFileLoading = false,
+  workspaceFileError = "",
+  onSelectWorkspaceFile = () => {},
   onDraftChange,
   onSave,
   onPublish,
@@ -48,6 +59,7 @@ export function AgentDetailPane({
   onStart,
   onStop,
   onRecreate,
+  onUpgrade,
   onDelete,
   onInvite,
   onOpenDM,
@@ -57,6 +69,7 @@ export function AgentDetailPane({
   const draftBelongsToItem = Boolean(draft) && String(draft?.agent_id ?? "").trim() === String(item?.id ?? "").trim();
   const incomplete = isAgentIncomplete(item, draftBelongsToItem ? draft : undefined);
   const restartNeeded = isAgentRestartNeeded(item);
+  const upgradeNeeded = isAgentUpgradeNeeded(item);
   const busyPrefix = `${item.id}:`;
   const provider = item.provider || item.agent_profile?.provider;
   const runtimeKind = normalizeRuntimeKind(item.runtime_kind);
@@ -75,11 +88,13 @@ export function AgentDetailPane({
             <span className={`status-pill profile-state-pill ${incomplete ? "warn" : "ready"}`}>
               {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
             </span>
+            {upgradeNeeded ? (
+              <span className="status-pill profile-state-pill warn">{t("profileUpgradeRequired")}</span>
+            ) : null}
             {restartNeeded ? (
               <span className="status-pill profile-state-pill warn">{t("profileRestartRequired")}</span>
             ) : null}
           </div>
-          <p>{item.description || item.agent_profile?.description || ""}</p>
         </div>
         <div className="entity-toolbar">
           <Button
@@ -115,6 +130,14 @@ export function AgentDetailPane({
             onClick={() => onOpenDM(item)}
           >
             {t("openDM")}
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            disabled={busyKey.startsWith(busyPrefix) || incomplete}
+            onClick={() => onUpgrade?.(item)}
+          >
+            {t("agentUpgrade")}
           </Button>
           <Button
             variant="danger"
@@ -202,10 +225,12 @@ export function AgentDetailPane({
                 <input value={draft.runtime_kind || item.runtime_kind || ""} readOnly disabled />
               </label>
               {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-                <label className="field">
+                <label className="field span-2 agent-image-field">
                   <span>{t("agentImage")}</span>
                   <input
+                    className="long-image-input"
                     value={draft.image}
+                    title={draft.image}
                     readOnly
                     disabled
                     onInput={(event) => updateDraft({ image: event.currentTarget.value })}
@@ -348,6 +373,39 @@ export function AgentDetailPane({
               </div>
             </div>
           </section>
+
+          {workspaceSupported ? (
+            <section className="profile-section agent-workspace-section">
+              <div className="profile-section-title">{t("agentWorkspaceTitle")}</div>
+              {workspaceError ? <div className="form-error">{workspaceError}</div> : null}
+              <div className="agent-workspace-panels">
+                <WorkspaceFileTree
+                  entries={workspaceEntries}
+                  loading={workspaceLoading}
+                  loadingText={t("agentWorkspaceLoading")}
+                  emptyText={t("agentWorkspaceEmpty")}
+                  selectedPath={selectedWorkspacePath}
+                  onSelectFile={onSelectWorkspaceFile}
+                />
+                <WorkspaceFilePreview
+                  className="agent-workspace-preview"
+                  file={workspaceFile}
+                  loading={workspaceFileLoading}
+                  error={workspaceFileError}
+                  loadingText={t("agentWorkspaceFileLoading")}
+                  emptyTitle={t("agentWorkspacePreviewTitle")}
+                  emptyHint={t("agentWorkspacePreviewHint")}
+                  binaryText={t("agentWorkspaceBinary")}
+                  emptyFileText={t("agentWorkspaceEmptyFile")}
+                  previewText={t("workspacePreviewPreviewTab")}
+                  codeText={t("workspacePreviewCodeTab")}
+                  viewToggleLabel={t("workspacePreviewViewMode")}
+                  closeText={t("close")}
+                  truncatedText={t("workspacePreviewTruncated")}
+                />
+              </div>
+            </section>
+          ) : null}
         </div>
       ) : null}
     </section>

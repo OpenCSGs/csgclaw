@@ -22,6 +22,7 @@ export function useWorkspaceShellController({
   selectComputer,
   selectConversation,
   selectHub,
+  selectTasks,
   setCollapsedWorkspaceGroups,
   setWorkspaceTab,
   t,
@@ -35,7 +36,9 @@ export function useWorkspaceShellController({
         ? t("computerOverview")
         : activePane.type === WorkspacePaneTypes.hub
           ? t("hubOverview")
-          : t("conversationOverview");
+          : activePane.type === WorkspacePaneTypes.task
+            ? t("tasksOverview")
+            : t("conversationOverview");
   const resolvedWorkspaceTab = useMemo(
     () => workspaceTab ?? workspaceTabForPane(activePane),
     [activePane, workspaceTab],
@@ -87,6 +90,10 @@ export function useWorkspaceShellController({
     }
     if (tab === WorkspaceTabs.agents) {
       selectComputer();
+      return;
+    }
+    if (tab === WorkspaceTabs.tasks) {
+      selectTasks();
       return;
     }
     const nextID = activeConversationId || rooms[0]?.id || "";

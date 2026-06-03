@@ -5,6 +5,7 @@ import { AgentPage } from "@/pages/AgentPage";
 import { ComputerPage } from "@/pages/ComputerPage";
 import { ConversationPage } from "@/pages/ConversationPage";
 import { HubPage } from "@/pages/HubPage";
+import { TasksPage } from "@/pages/TasksPage";
 import { WorkspacePage } from "@/pages/WorkspacePage/WorkspacePage";
 
 const routes: RouteObject[] = [
@@ -17,6 +18,8 @@ const routes: RouteObject[] = [
       { path: "agents/:agentId", element: <AgentPage /> },
       { path: "agent/:agentId", element: <AgentPage /> },
       { path: "hub", element: <HubPage /> },
+      { path: "tasks", element: <TasksPage /> },
+      { path: "tasks/:taskId", element: <TasksPage /> },
       { path: "rooms/:conversationId", element: <ConversationPage /> },
       { path: "room/:conversationId", element: <ConversationPage /> },
       { path: "channels/:conversationId", element: <ConversationPage /> },

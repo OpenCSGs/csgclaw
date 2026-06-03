@@ -16,6 +16,8 @@ Use `advertise_base_url` when the automatically inferred address is not reachabl
 
 `no_auth` controls whether CSGClaw skips the bearer-token check. The default is `false`. Set it to `true` only for trusted local or development environments.
 
+`show_upgrade` controls whether the Web UI shows upgrade actions. The default is `true`; set it to `false` only when the deployment cannot self-upgrade, such as managed Kubernetes environments.
+
 String values in `config.toml` can reference environment variables with `${NAME}` or `$NAME`. CSGClaw expands them when loading the config and keeps the placeholder form when it later rewrites the same value. If an environment variable is not set, it expands to an empty string.
 
 ```toml
@@ -24,6 +26,7 @@ listen_addr = "0.0.0.0:${PORT}"
 advertise_base_url = "http://${IP}:${PORT}"
 access_token = "${ACCESS_TOKEN}"
 no_auth = false
+show_upgrade = true
 ```
 
 ## Model Provider Examples
@@ -36,6 +39,7 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
 no_auth = false
+show_upgrade = true
 
 [models]
 default = "csghub-lite.Qwen/Qwen3-0.6B-GGUF"
@@ -61,6 +65,7 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
 no_auth = false
+show_upgrade = true
 
 [models]
 default = "remote.gpt-5.4"
@@ -86,6 +91,7 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://127.0.0.1:18080"
 access_token = "your_access_token"
 no_auth = false
+show_upgrade = true
 
 [bootstrap]
 manager_image_override = ""
@@ -131,7 +137,7 @@ CSGClaw defaults to PicoClaw for the bootstrap manager. To create a sandboxed Op
 csgclaw agent create --name alice --runtime openclaw_sandbox
 ```
 
-The recommended image shape is a slim OpenClaw base image with the CSGClaw channel plugin baked under `/home/node/openclaw-plugins/csgclaw-extension`. Runtime state still comes from `~/.csgclaw/agents/<agent>/.openclaw/openclaw.json`; do not mount an empty host directory over `/home/node/openclaw-plugins`, because that hides baked plugins.
+The recommended image shape is a slim OpenClaw base image with CSGClaw-managed plugins baked under `/home/node/openclaw-plugins` (for example, `csgclaw-extension` and external channel plugins). Runtime state still comes from `~/.csgclaw/agents/<agent>/.openclaw/openclaw.json`; do not mount an empty host directory over `/home/node/openclaw-plugins`, because that hides baked plugins.
 
 ## Sandbox Providers
 
@@ -218,8 +224,8 @@ When `[hub]` is omitted, CSGClaw enables three registries by default: `builtin` 
 [hub]
 default_registry = "builtin"
 default_publish_registry = "local"
-default_manager_template = "builtin/picoclaw-manager"
-default_worker_template = "builtin/picoclaw-worker"
+default_manager_template = "builtin.picoclaw-manager"
+default_worker_template = "builtin.picoclaw-worker"
 
 [[hub.registries]]
 name = "builtin"

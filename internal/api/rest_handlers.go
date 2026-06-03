@@ -29,17 +29,23 @@ func (h *Handler) updateAgentProfile(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) recreateAgent(w http.ResponseWriter, r *http.Request) {
 	h.handleAgentRecreateByID(w, r)
 }
+func (h *Handler) upgradeAgent(w http.ResponseWriter, r *http.Request) {
+	h.handleAgentUpgradeByID(w, r)
+}
 func (h *Handler) listHubTemplates(w http.ResponseWriter, r *http.Request) {
 	h.handleHubTemplates(w, r)
 }
 func (h *Handler) createHubTemplate(w http.ResponseWriter, r *http.Request) {
 	h.handleHubTemplates(w, r)
 }
-func (h *Handler) getHubTemplateByRegistryName(w http.ResponseWriter, r *http.Request) {
-	h.handleHubTemplateByRegistryName(w, r)
+func (h *Handler) getHubTemplateByID(w http.ResponseWriter, r *http.Request) {
+	h.handleHubTemplateByID(w, r)
 }
-func (h *Handler) getHubTemplateWorkspaceFileByRegistryName(w http.ResponseWriter, r *http.Request) {
-	h.handleHubTemplateWorkspaceFileByRegistryName(w, r)
+func (h *Handler) deleteHubTemplateByID(w http.ResponseWriter, r *http.Request) {
+	h.handleHubTemplateByID(w, r)
+}
+func (h *Handler) getHubTemplateWorkspaceFileByID(w http.ResponseWriter, r *http.Request) {
+	h.handleHubTemplateWorkspaceFileByID(w, r)
 }
 func (h *Handler) getBootstrapConfig(w http.ResponseWriter, r *http.Request) {
 	h.handleBootstrapConfig(w, r)

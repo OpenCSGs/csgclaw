@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/slashcommand"
 )
 
 type User = apitypes.User
@@ -1974,6 +1975,17 @@ func (s *Service) contentWithMentionPrefixLocked(content, mentionID string) (str
 	prefix := fmt.Sprintf("<at user_id=\"%s\">%s</at>", mentionID, displayName)
 	if content == prefix || strings.HasPrefix(content, prefix+" ") {
 		return content, nil
+	}
+	cmd, isSlash, err := slashcommand.Parse(content)
+	if err != nil {
+		return "", err
+	}
+	if isSlash {
+		if cmd.Body == prefix || strings.HasPrefix(cmd.Body, prefix+" ") {
+			return slashcommand.Render(cmd)
+		}
+		cmd.Body = strings.TrimSpace(prefix + " " + cmd.Body)
+		return slashcommand.Render(cmd)
 	}
 	return prefix + " " + strings.TrimSpace(content), nil
 }

@@ -9,6 +9,7 @@ export const WorkspacePaneTypes = {
   agent: "agent",
   computer: "computer",
   hub: "hub",
+  task: "task",
 } as const;
 
 export type WorkspacePaneType = ValueOf<typeof WorkspacePaneTypes>;
@@ -18,6 +19,7 @@ export const WorkspaceTabs = {
   threads: "threads",
   agents: "agents",
   hub: "hub",
+  tasks: "tasks",
 } as const;
 
 export type WorkspaceTab = ValueOf<typeof WorkspaceTabs>;
@@ -27,6 +29,7 @@ export const WORKSPACE_TABS = [
   WorkspaceTabs.threads,
   WorkspaceTabs.agents,
   WorkspaceTabs.hub,
+  WorkspaceTabs.tasks,
 ] as const;
 
 export const DefaultWorkspacePaneIds = {
@@ -39,6 +42,7 @@ export const WorkspaceRouteSegments = {
   agents: "agents",
   agent: "agent",
   hub: "hub",
+  tasks: "tasks",
   channels: "channels",
   channel: "channel",
   dms: "dms",
@@ -93,6 +97,9 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
   if (section === WorkspaceRouteSegments.hub) {
     return { type: WorkspacePaneTypes.hub, id: DefaultWorkspacePaneIds.hub };
   }
+  if (section === WorkspaceRouteSegments.tasks) {
+    return { type: WorkspacePaneTypes.task, id };
+  }
   if (conversationRouteSegments.has(section)) {
     return id ? { type: WorkspacePaneTypes.conversation, id } : { type: WorkspacePaneTypes.conversation, id: "" };
   }
@@ -111,6 +118,12 @@ export function pathForPane(
   }
   if (pane.type === WorkspacePaneTypes.hub) {
     return `/${WorkspaceRouteSegments.hub}`;
+  }
+  if (pane.type === WorkspacePaneTypes.task) {
+    if (pane.id) {
+      return `/${WorkspaceRouteSegments.tasks}/${encodeURIComponent(pane.id)}`;
+    }
+    return `/${WorkspaceRouteSegments.tasks}`;
   }
   if (pane.type === WorkspacePaneTypes.conversation && pane.id) {
     const room = rooms.find((item) => item.id === pane.id);
@@ -132,6 +145,9 @@ export function decodePathSegment(value: string): string {
 export function workspaceTabForPane(pane: WorkspacePane | null | undefined): WorkspaceTab {
   if (pane?.type === WorkspacePaneTypes.hub) {
     return WorkspaceTabs.hub;
+  }
+  if (pane?.type === WorkspacePaneTypes.task) {
+    return WorkspaceTabs.tasks;
   }
   if (pane?.type === WorkspacePaneTypes.agent || pane?.type === WorkspacePaneTypes.computer) {
     return WorkspaceTabs.agents;

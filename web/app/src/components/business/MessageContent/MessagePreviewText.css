@@ -1,0 +1,9 @@
+.message-preview-token {
+  line-height: inherit;
+}
+
+.message-preview-token-mention,
+.message-preview-token-slash {
+  color: var(--mention);
+  font-weight: 600;
+}

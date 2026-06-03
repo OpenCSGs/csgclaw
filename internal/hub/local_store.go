@@ -157,6 +157,28 @@ func (s *LocalStore) Publish(_ context.Context, spec PublishSpec) (Template, err
 	return s.Get(context.Background(), normalized.ID)
 }
 
+func (s *LocalStore) Delete(_ context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if err := validateLocalTemplateID(id); err != nil {
+		return err
+	}
+	targetDir := s.templateRoot(id)
+	info, err := os.Stat(targetDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrTemplateNotFound
+		}
+		return fmt.Errorf("stat local hub template %q: %w", id, err)
+	}
+	if !info.IsDir() {
+		return ErrTemplateNotFound
+	}
+	if err := os.RemoveAll(targetDir); err != nil {
+		return fmt.Errorf("delete local hub template %q: %w", id, err)
+	}
+	return nil
+}
+
 func (s *LocalStore) templatesRoot() string {
 	return filepath.Join(s.root, localTemplatesDirName)
 }

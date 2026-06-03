@@ -23,6 +23,9 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/sandbox"
+	"csgclaw/internal/sandboxproviders"
+	"csgclaw/internal/team"
 	"csgclaw/internal/upgrade"
 	"csgclaw/internal/utils"
 	"csgclaw/internal/version"
@@ -39,20 +42,22 @@ type Handler struct {
 	feishu              *feishu.Service
 	llm                 *llm.Service
 	hub                 *hub.Service
+	teamSvc             *team.Service
+	teamAdapter         team.TeamChannelAdapter
 	configPath          string
 	serverAccessToken   string
 	serverNoAuth        bool
 	upgradeManager      *upgrade.Manager
 	upgradeConfigPath   string
 	upgradeApply        func(upgrade.ApplyHelperOptions) error
+	localRuntimeImages  func(context.Context, config.Config) ([]string, error)
 	notificationDeliver notification_bot.Fanouter
 	activityDecider     ActivityDecider
 }
 
-const (
-	createOperationTimeout = 10 * time.Minute
-	sseHeartbeatInterval   = 15 * time.Second
-)
+const createOperationTimeout = 10 * time.Minute
+
+var sseHeartbeatInterval = 15 * time.Second
 
 func detachedCreateContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if ctx == nil {
@@ -83,6 +88,7 @@ type bootstrapConfigResponse struct {
 	DefaultManagerTemplate string            `json:"default_manager_template"`
 	DefaultWorkerTemplate  string            `json:"default_worker_template"`
 	RuntimeKind            string            `json:"runtime_kind"`
+	ShowUpgrade            bool              `json:"show_upgrade"`
 	EffectiveManagerImage  string            `json:"effective_manager_image"`
 	AdvertiseBaseURL       string            `json:"advertise_base_url,omitempty"`
 	SupportedRuntimeKinds  []string          `json:"supported_runtime_kinds"`
@@ -167,6 +173,50 @@ func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+func (h *Handler) listAgentImageCandidates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cfg, _, err := h.loadBootstrapConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	lister := h.localRuntimeImages
+	if lister == nil {
+		lister = listLocalRuntimeImages
+	}
+	images, err := lister(r.Context(), cfg)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if images == nil {
+		images = []string{}
+	}
+	writeJSON(w, http.StatusOK, images)
+}
+
+func listLocalRuntimeImages(ctx context.Context, cfg config.Config) ([]string, error) {
+	provider, err := sandboxproviders.Provider(cfg.Sandbox)
+	if err != nil {
+		return nil, err
+	}
+	return listLocalRuntimeImagesWithProvider(ctx, provider)
+}
+
+func listLocalRuntimeImagesWithProvider(ctx context.Context, provider sandbox.Provider) ([]string, error) {
+	if provider == nil {
+		return []string{}, nil
+	}
+	homeDir, err := agent.SandboxRuntimeHome(agent.ManagerName)
+	if err != nil {
+		return nil, err
+	}
+	return provider.ListImages(ctx, homeDir)
+}
+
 func (h *Handler) loadBootstrapConfig() (config.Config, string, error) {
 	path := strings.TrimSpace(h.configPath)
 	if path == "" {
@@ -185,6 +235,7 @@ func (h *Handler) loadBootstrapConfig() (config.Config, string, error) {
 				ListenAddr:  config.DefaultListenAddr(),
 				AccessToken: config.DefaultAccessToken,
 				NoAuth:      false,
+				ShowUpgrade: true,
 			},
 			Bootstrap: config.BootstrapConfig{},
 			Sandbox: config.SandboxConfig{
@@ -204,6 +255,7 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 	resp := bootstrapConfigResponse{
 		DefaultManagerTemplate: cfg.Bootstrap.ResolvedDefaultManagerTemplate(),
 		DefaultWorkerTemplate:  cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
+		ShowUpgrade:            cfg.Server.ShowUpgrade,
 		AdvertiseBaseURL:       config.ResolveAdvertiseBaseURL(cfg.Server),
 		SupportedRuntimeKinds: []string{
 			agent.RuntimeKindPicoClawSandbox,
@@ -323,6 +375,18 @@ func (h *Handler) SetUpgradeManager(manager *upgrade.Manager) {
 
 func (h *Handler) SetHubService(svc *hub.Service) {
 	h.hub = svc
+}
+
+func (h *Handler) SetTeamService(svc *team.Service) {
+	if h != nil {
+		h.teamSvc = svc
+	}
+}
+
+func (h *Handler) SetTeamAdapter(adapter team.TeamChannelAdapter) {
+	if h != nil {
+		h.teamAdapter = adapter
+	}
 }
 
 func (h *Handler) SetUpgradeConfigPath(configPath string) {
@@ -687,6 +751,15 @@ func (h *Handler) handleAgentRecreateByID(w http.ResponseWriter, r *http.Request
 	h.handleAgentRecreate(w, r, id)
 }
 
+func (h *Handler) handleAgentUpgradeByID(w http.ResponseWriter, r *http.Request) {
+	id := pathValue(r, "id")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	h.handleAgentUpgrade(w, r, id)
+}
+
 func (h *Handler) handleAgentProfile(w http.ResponseWriter, r *http.Request, id string) {
 	if h.svc == nil {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
@@ -735,6 +808,27 @@ func (h *Handler) handleAgentRecreate(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 	recreated, err := h.svc.Recreate(r.Context(), id)
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	writeJSON(w, http.StatusOK, presentAgent(recreated))
+}
+
+func (h *Handler) handleAgentUpgrade(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.svc == nil {
+		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	recreated, err := h.svc.Upgrade(r.Context(), id)
 	if err != nil {
 		status := http.StatusBadRequest
 		if strings.Contains(err.Error(), "not found") {
@@ -1002,15 +1096,11 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleHubTemplateByRegistryName(w http.ResponseWriter, r *http.Request) {
-	h.handleHubTemplateByResolvedID(w, r, hubTemplateIDFromRegistryNamePathValues(r))
+func (h *Handler) handleHubTemplateByID(w http.ResponseWriter, r *http.Request) {
+	h.handleHubTemplateByResolvedID(w, r, pathValue(r, "id"))
 }
 
 func (h *Handler) handleHubTemplateByResolvedID(w http.ResponseWriter, r *http.Request, id string) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 	if h.hub == nil {
 		http.Error(w, "hub service is not configured", http.StatusServiceUnavailable)
 		return
@@ -1019,30 +1109,47 @@ func (h *Handler) handleHubTemplateByResolvedID(w http.ResponseWriter, r *http.R
 		http.NotFound(w, r)
 		return
 	}
-	item, err := h.hub.Get(r.Context(), id)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			http.Error(w, err.Error(), http.StatusNotFound)
+	switch r.Method {
+	case http.MethodGet:
+		item, err := h.hub.Get(r.Context(), id)
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "not found") {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	presented, err := h.presentHubTemplateDetail(r.Context(), item)
-	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, os.ErrNotExist) {
-			status = http.StatusNotFound
+		presented, err := h.presentHubTemplateDetail(r.Context(), item)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, os.ErrNotExist) {
+				status = http.StatusNotFound
+			}
+			http.Error(w, err.Error(), status)
+			return
 		}
-		http.Error(w, err.Error(), status)
-		return
+		writeJSON(w, http.StatusOK, presented)
+	case http.MethodDelete:
+		if err := h.hub.Delete(r.Context(), id); err != nil {
+			status := http.StatusBadRequest
+			switch {
+			case errors.Is(err, hub.ErrTemplateNotFound), strings.Contains(strings.ToLower(err.Error()), "not found"):
+				status = http.StatusNotFound
+			case errors.Is(err, hub.ErrRegistryNotDeletable), errors.Is(err, hub.ErrRegistryNotWritable):
+				status = http.StatusForbidden
+			}
+			http.Error(w, err.Error(), status)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
-	writeJSON(w, http.StatusOK, presented)
 }
 
-func (h *Handler) handleHubTemplateWorkspaceFileByRegistryName(w http.ResponseWriter, r *http.Request) {
-	id := hubTemplateIDFromRegistryNamePathValues(r)
-	h.handleHubTemplateWorkspaceFile(w, r, id)
+func (h *Handler) handleHubTemplateWorkspaceFileByID(w http.ResponseWriter, r *http.Request) {
+	h.handleHubTemplateWorkspaceFile(w, r, pathValue(r, "id"))
 }
 
 func presentHubTemplates(items []hub.Template) []apitypes.HubTemplate {
@@ -1535,6 +1642,7 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publishMessageCreated(serviceReq.RoomID, message.SenderID, message)
 	h.publishThreadUpdated(serviceReq.RoomID, message)
+	h.handleTeamRoomCommand(r.Context(), serviceReq.RoomID, message.SenderID, message.Content)
 	writeJSON(w, http.StatusCreated, message)
 }
 
@@ -1824,15 +1932,6 @@ func (r addRoomMembersRequest) toServiceRequest() (im.AddRoomMembersRequest, err
 	}, nil
 }
 
-func hubTemplateIDFromRegistryNamePathValues(r *http.Request) string {
-	registry := pathValue(r, "registry")
-	name := pathValue(r, "name")
-	if registry == "" || name == "" {
-		return ""
-	}
-	return registry + "/" + name
-}
-
 func (h *Handler) reloadIM() error {
 	if h == nil || h.im == nil {
 		return nil
@@ -1856,6 +1955,23 @@ func (h *Handler) publishMessageCreated(conversationID, senderID string, message
 		Message: &messageCopy,
 		Sender:  &senderCopy,
 	})
+}
+
+func (h *Handler) handleTeamRoomCommand(ctx context.Context, roomID string, senderID string, content string) {
+	if h == nil || h.teamSvc == nil || h.teamAdapter == nil {
+		return
+	}
+	parser := team.NewCommandParser(h.teamSvc, h.teamAdapter, func(id string) bool {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return false
+		}
+		if strings.HasPrefix(strings.ToLower(id), "bot-") {
+			return false
+		}
+		return !h.isAgentSender(id)
+	})
+	parser.HandleMessage(ctx, roomID, senderID, content)
 }
 
 func (h *Handler) publishThreadUpdated(roomID string, message im.Message) {

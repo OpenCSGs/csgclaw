@@ -306,6 +306,13 @@ button.thread-message-avatar:focus-visible {
   color: var(--text);
   line-height: 1.5;
   word-break: break-word;
+  font-size: 16px;
+}
+
+.thread-message-bubble .message-content .message-mention,
+.thread-message-bubble .message-content .message-slash-token {
+  color: var(--mention);
+  font-weight: 600;
 }
 
 .thread-empty {
@@ -322,7 +329,8 @@ button.thread-message-avatar:focus-visible {
   gap: 8px;
 }
 
-.thread-mention-picker {
+.thread-mention-picker,
+.thread-skill-picker {
   left: 14px;
   right: 14px;
   bottom: calc(100% - 4px);
@@ -330,11 +338,10 @@ button.thread-message-avatar:focus-visible {
   z-index: 5;
 }
 
-.thread-composer textarea {
-  width: 100%;
+.thread-composer-editor {
   min-height: 84px;
   max-height: 160px;
-  resize: vertical;
+  overflow: auto;
   padding: 11px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -343,6 +350,35 @@ button.thread-message-avatar:focus-visible {
   font: inherit;
   line-height: 1.5;
   outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.thread-composer-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.thread-composer-editor.disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.thread-composer-editor:focus {
+  outline: none;
+}
+
+.thread-composer-editor:focus-visible {
+  outline: none;
+  border-color: var(--portal-brand-500);
+  box-shadow: var(--focus-ring);
+}
+
+.thread-composer textarea {
+  width: 100%;
+  width: 100%;
+  resize: vertical;
 }
 
 .thread-composer textarea:focus {

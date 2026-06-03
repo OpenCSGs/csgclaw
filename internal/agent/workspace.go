@@ -119,6 +119,142 @@ func overlayWorkspaceTree(srcRoot, dstRoot string) error {
 	return copyWorkspaceFS(os.DirFS(srcRoot), ".", dstRoot, "workspace", true)
 }
 
+func prepareWorkspaceSkillsPreservation(agentName, sourceRuntimeKind, targetRuntimeKind, role string) (func() error, func(), error) {
+	sourceRuntimeKind = strings.TrimSpace(sourceRuntimeKind)
+	targetRuntimeKind = strings.TrimSpace(targetRuntimeKind)
+	if sourceRuntimeKind == "" {
+		sourceRuntimeKind = targetRuntimeKind
+	}
+	if targetRuntimeKind == "" {
+		targetRuntimeKind = sourceRuntimeKind
+	}
+	sourceWorkspace, err := agentWorkspaceRoot(agentName, sourceRuntimeKind)
+	if err != nil {
+		return nil, nil, err
+	}
+	sourceSkills := filepath.Join(sourceWorkspace, "skills")
+	info, err := os.Stat(sourceSkills)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("stat workspace skills: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, nil, nil
+	}
+
+	tempDir, err := os.MkdirTemp("", "csgclaw-preserve-skills-*")
+	if err != nil {
+		return nil, nil, fmt.Errorf("create skills preservation dir: %w", err)
+	}
+	cleanup := func() {
+		_ = os.RemoveAll(tempDir)
+	}
+
+	preservedSkills := filepath.Join(tempDir, "skills")
+	if err := copyWorkspaceFS(os.DirFS(sourceSkills), ".", preservedSkills, "workspace skills", true); err != nil {
+		cleanup()
+		if errors.Is(err, ErrWorkspaceEmpty) {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+
+	templateNames, err := templateWorkspaceSkillNames(targetRuntimeKind, role)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	for name := range templateNames {
+		if err := os.RemoveAll(filepath.Join(preservedSkills, name)); err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("drop template skill %q from preservation set: %w", name, err)
+		}
+	}
+
+	restore := func() error {
+		if empty, err := directoryEmpty(preservedSkills); err != nil || empty {
+			return err
+		}
+		targetWorkspace, err := agentWorkspaceRoot(agentName, targetRuntimeKind)
+		if err != nil {
+			return err
+		}
+		targetSkills := filepath.Join(targetWorkspace, "skills")
+		if err := os.MkdirAll(targetSkills, 0o755); err != nil {
+			return fmt.Errorf("create target workspace skills dir: %w", err)
+		}
+		return overlayWorkspaceTree(preservedSkills, targetSkills)
+	}
+	return restore, cleanup, nil
+}
+
+func refreshGatewayTemplateSkills(agentName, runtimeKind, role string) error {
+	runtimeKind = strings.TrimSpace(runtimeKind)
+	if !isGatewayRuntimeKind(runtimeKind) {
+		return nil
+	}
+	workspaceRoot, err := agentWorkspaceRoot(agentName, runtimeKind)
+	if err != nil {
+		return err
+	}
+	templateNames, err := templateWorkspaceSkillNames(runtimeKind, role)
+	if err != nil {
+		return err
+	}
+	for name := range templateNames {
+		if err := os.RemoveAll(filepath.Join(workspaceRoot, "skills", name)); err != nil {
+			return fmt.Errorf("remove template skill %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func recreateTemplateRole(a Agent) string {
+	if isManagerAgent(a) {
+		return RoleManager
+	}
+	if role := normalizeRole(a.Role); role == RoleManager || role == RoleWorker {
+		return role
+	}
+	return RoleWorker
+}
+
+func templateWorkspaceSkillNames(runtimeKind, role string) (map[string]struct{}, error) {
+	names := map[string]struct{}{}
+	templateRoot, err := resolveRuntimeTemplateRoot(runtimeKind, role)
+	if err != nil {
+		return names, err
+	}
+	skillsRoot := pathpkg.Join(runtimeTemplateWorkspacePath(templateRoot), "skills")
+	entries, err := fs.ReadDir(templates.FS(), skillsRoot)
+	if errors.Is(err, fs.ErrNotExist) {
+		return names, nil
+	}
+	if err != nil {
+		return names, fmt.Errorf("read template skills: %w", err)
+	}
+	for _, entry := range entries {
+		name := strings.TrimSpace(entry.Name())
+		if name != "" {
+			names[name] = struct{}{}
+		}
+	}
+	return names, nil
+}
+
+func directoryEmpty(path string) (bool, error) {
+	entries, err := os.ReadDir(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return len(entries) == 0, nil
+}
+
 func copyWorkspaceFS(srcFS fs.FS, root, dstRoot, label string, overwrite bool) error {
 	dstRoot = strings.TrimSpace(dstRoot)
 	if dstRoot == "" {

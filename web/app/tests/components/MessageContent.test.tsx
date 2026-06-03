@@ -20,6 +20,31 @@ describe("MessageContent", () => {
     expect(document.querySelector("script")).toBeNull();
   });
 
+  it("renders canonical slash command prefixes with the prompt outside the XML element", () => {
+    render(
+      <MessageContent
+        content={
+          '<slash-command name="use-skill" arg="skill-creator"></slash-command> create <review> skill <img src=x onerror=alert(1)>'
+        }
+      />,
+    );
+
+    expect(screen.getByText("/skill-creator create <review> skill <img src=x onerror=alert(1)>")).toBeInTheDocument();
+    expect(document.querySelector("slash-command")).toBeNull();
+    expect(document.querySelector("img")).toBeNull();
+  });
+
+  it("renders canonical slash command mentions in history with mention and slash highlight classes", () => {
+    render(
+      <MessageContent
+        content={'<slash-command name="use-skill" arg="basics"></slash-command> <at user_id="u-manager">manager</at>'}
+      />,
+    );
+
+    expect(screen.getByText("/basics")).toHaveClass("message-slash-token");
+    expect(screen.getByText("@manager")).toHaveClass("message-mention");
+  });
+
   it("renders action cards and invokes the selected action with message context", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();

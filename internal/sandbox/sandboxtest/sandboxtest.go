@@ -13,12 +13,15 @@ import (
 
 // Provider is an in-memory sandbox provider for tests.
 type Provider struct {
-	NameValue string
-	OpenFunc  func(context.Context, string) (sandbox.Runtime, error)
+	NameValue      string
+	OpenFunc       func(context.Context, string) (sandbox.Runtime, error)
+	ListImagesFunc func(context.Context, string) ([]string, error)
 
-	mu        sync.Mutex
-	Runtimes  map[string]*Runtime
-	OpenCalls []string
+	mu             sync.Mutex
+	Runtimes       map[string]*Runtime
+	OpenCalls      []string
+	ListImageCalls []string
+	Images         []string
 }
 
 var _ sandbox.Provider = (*Provider)(nil)
@@ -60,6 +63,19 @@ func (p *Provider) Open(ctx context.Context, homeDir string) (sandbox.Runtime, e
 		p.Runtimes[homeDir] = rt
 	}
 	return rt, nil
+}
+
+func (p *Provider) ListImages(ctx context.Context, homeDir string) ([]string, error) {
+	if p == nil {
+		return nil, fmt.Errorf("fake sandbox provider is nil")
+	}
+	if p.ListImagesFunc != nil {
+		return p.ListImagesFunc(ctx, homeDir)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.ListImageCalls = append(p.ListImageCalls, homeDir)
+	return append([]string(nil), p.Images...), nil
 }
 
 // Runtime is an in-memory sandbox runtime for tests.

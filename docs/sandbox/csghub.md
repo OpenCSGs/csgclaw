@@ -197,6 +197,8 @@ populate, at minimum:
 - `CSGHUB_API_BASE_URL`, `CSGHUB_USER_TOKEN`
 - `CSGCLAW_RESOURCE_ID`, `CSGCLAW_CLUSTER_ID` *(optional but recommended)*
 - a `config.toml` whose `[sandbox].provider` is `csghub`, whose
+  `[server].show_upgrade` is `false` for managed deployments that cannot
+  self-upgrade, whose
   `[bootstrap].manager_image_override` points at the
   `csgclaw-agent-sandbox` image when you need to override the built-in
   default, and whose `[server]` / `[models]` sections are valid for the

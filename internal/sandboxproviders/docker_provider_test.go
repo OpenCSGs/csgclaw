@@ -17,7 +17,7 @@ func TestDockerProviderFactoryUsesConfiguredPath(t *testing.T) {
 		t.Fatalf("docker provider factory not registered")
 	}
 
-	opt, err := factory(config.SandboxConfig{
+	provider, err := factory(config.SandboxConfig{
 		Provider:      config.DockerProvider,
 		DockerCLIPath: "/opt/homebrew/bin/docker",
 	})
@@ -25,7 +25,6 @@ func TestDockerProviderFactoryUsesConfiguredPath(t *testing.T) {
 		t.Fatalf("factory() error = %v", err)
 	}
 
-	provider := sandboxProviderFromOption(t, opt)
 	dockerProvider, ok := provider.(dockercli.Provider)
 	if !ok {
 		t.Fatalf("provider = %T, want dockercli.Provider", provider)
@@ -40,11 +39,10 @@ func TestDockerProviderFactoryUsesConfiguredPath(t *testing.T) {
 
 func TestDockerProviderFactoryDefaultsPath(t *testing.T) {
 	factory := factories[config.DockerProvider]
-	opt, err := factory(config.SandboxConfig{Provider: config.DockerProvider})
+	provider, err := factory(config.SandboxConfig{Provider: config.DockerProvider})
 	if err != nil {
 		t.Fatalf("factory() error = %v", err)
 	}
-	provider := sandboxProviderFromOption(t, opt)
 	dockerProvider := provider.(dockercli.Provider)
 	if got, want := dockerProviderPath(t, dockerProvider), "docker"; got != want {
 		t.Fatalf("provider path = %q, want %q", got, want)

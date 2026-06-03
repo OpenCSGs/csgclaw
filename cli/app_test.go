@@ -349,6 +349,44 @@ func TestExecuteBotCreateUsesDefaultChannel(t *testing.T) {
 	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "test-lead", "worker", "csgclaw")
 }
 
+func TestExecuteBotCreateSendsFromTemplateAndEnv(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodPost {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
+			}
+			var payload bot.CreateRequest
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if payload.FromTemplate != "builtin.gitlab-worker" {
+				t.Fatalf("payload.FromTemplate = %q, want builtin.gitlab-worker", payload.FromTemplate)
+			}
+			if payload.AgentProfile == nil || payload.AgentProfile.Env["GITLAB_TOKEN"] != "secret" {
+				t.Fatalf("payload.AgentProfile.Env = %#v, want GITLAB_TOKEN", payload.AgentProfile)
+			}
+			return jsonResponse(http.StatusCreated, `{"id":"u-gitlab","name":"gitlab","description":"gitlab-worker","role":"worker","channel":"csgclaw","runtime_kind":"picoclaw_sandbox","agent_id":"u-gitlab","user_id":"u-gitlab","available":true,"created_at":"2026-04-12T09:00:00Z"}`), nil
+		}),
+	}
+
+	err := app.Execute(context.Background(), []string{
+		"--endpoint", "http://example.test",
+		"bot", "create",
+		"--name", "gitlab",
+		"--description", "gitlab worker",
+		"--role", "worker",
+		"--from-template", "builtin.gitlab-worker",
+		"--env", "GITLAB_TOKEN=secret",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	assertTableHasRow(t, stdout.String(), "u-gitlab", "gitlab", "gitlab-worker", "worker", "csgclaw")
+}
+
 func TestExecuteBotCreateFeishuSendsChannelPayload(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{
@@ -1069,14 +1107,14 @@ func TestExecuteAgentCreateSendsFromTemplate(t *testing.T) {
 			if payload["name"] != "alice" {
 				t.Fatalf("payload[name] = %#v, want %q", payload["name"], "alice")
 			}
-			if payload["from_template"] != "builtin/frontend-alice" {
-				t.Fatalf("payload[from_template] = %#v, want %q", payload["from_template"], "builtin/frontend-alice")
+			if payload["from_template"] != "builtin.frontend-alice" {
+				t.Fatalf("payload[from_template] = %#v, want %q", payload["from_template"], "builtin.frontend-alice")
 			}
 			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z"}`), nil
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "agent", "create", "--name", "alice", "--from-template", "builtin/frontend-alice"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "agent", "create", "--name", "alice", "--from-template", "builtin.frontend-alice"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 }
@@ -1093,14 +1131,14 @@ func TestExecuteHubListUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/hub/templates" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/hub/templates")
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"builtin/frontend-alice","name":"frontend-alice","runtime_kind":"codex","source":{"name":"builtin","kind":"builtin"}}]`), nil
+			return jsonResponse(http.StatusOK, `[{"id":"builtin.frontend-alice","name":"frontend-alice","runtime_kind":"codex","source":{"name":"builtin","kind":"builtin"}}]`), nil
 		}),
 	}
 
 	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "hub", "list"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !strings.Contains(stdout.String(), `"id": "builtin/frontend-alice"`) {
+	if !strings.Contains(stdout.String(), `"id": "builtin.frontend-alice"`) {
 		t.Fatalf("stdout = %q, want template id", stdout.String())
 	}
 }
@@ -1142,17 +1180,17 @@ func TestExecuteHubGetUsesHTTPClient(t *testing.T) {
 			if req.Method != http.MethodGet {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
 			}
-			if req.URL.String() != "http://example.test/api/v1/hub/templates/local%2Freview-bot" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/hub/templates/local%2Freview-bot")
+			if req.URL.String() != "http://example.test/api/v1/hub/templates/local.review-bot" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/hub/templates/local.review-bot")
 			}
-			return jsonResponse(http.StatusOK, `{"id":"local/review-bot","name":"review-bot","runtime_kind":"codex","source":{"name":"local","kind":"local"}}`), nil
+			return jsonResponse(http.StatusOK, `{"id":"local.review-bot","name":"review-bot","runtime_kind":"codex","source":{"name":"local","kind":"local"}}`), nil
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "hub", "get", "local/review-bot"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "hub", "get", "local.review-bot"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !strings.Contains(stdout.String(), `"id": "local/review-bot"`) {
+	if !strings.Contains(stdout.String(), `"id": "local.review-bot"`) {
 		t.Fatalf("stdout = %q, want template id", stdout.String())
 	}
 }
@@ -1179,14 +1217,14 @@ func TestExecuteHubPublishUsesHTTPClient(t *testing.T) {
 			if payload["registry"] != "local" {
 				t.Fatalf("payload[registry] = %#v, want %q", payload["registry"], "local")
 			}
-			return jsonResponse(http.StatusCreated, `{"id":"local/alice","name":"alice","runtime_kind":"codex","source":{"name":"local","kind":"local"}}`), nil
+			return jsonResponse(http.StatusCreated, `{"id":"local.alice","name":"alice","runtime_kind":"codex","source":{"name":"local","kind":"local"}}`), nil
 		}),
 	}
 
 	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "hub", "publish", "--agent", "u-alice", "--registry", "local"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !strings.Contains(stdout.String(), `"id": "local/alice"`) {
+	if !strings.Contains(stdout.String(), `"id": "local.alice"`) {
 		t.Fatalf("stdout = %q, want template id", stdout.String())
 	}
 }
@@ -1936,6 +1974,7 @@ func TestUsageIncludesTopLevelCommandIndex(t *testing.T) {
 		"bot      Manage bots",
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
+		"team     Manage agent teams.",
 		"user     Manage IM users",
 		"completion Generate shell completion scripts.",
 	} {
@@ -1966,6 +2005,7 @@ func TestRootHelpIncludesAvailableCommands(t *testing.T) {
 		"bot      Manage bots",
 		"room     Manage IM rooms",
 		"member   Manage IM room members",
+		"team     Manage agent teams.",
 		"user     Manage IM users",
 		"completion Generate shell completion scripts.",
 	} {
@@ -2020,7 +2060,7 @@ func TestExecuteHiddenCompleteUsesFullCommandSet(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"agent\n", "model\n", "upgrade\n", "completion\n"} {
+	for _, want := range []string{"agent\n", "model\n", "team\n", "upgrade\n", "completion\n"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stdout = %q, want substring %q", got, want)
 		}

@@ -89,6 +89,52 @@ func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
 	}
 }
 
+func TestServiceNormalizesCanonicalSlashCommand(t *testing.T) {
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-manager",
+		Users: []im.User{
+			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: "u-alice", Name: "alice", Handle: "alice", Role: "worker"},
+		},
+		Rooms: []im.Room{{ID: "room-1", Title: "Direct", Members: []string{"u-manager", "u-alice"}}},
+	})
+	svc := NewService(imSvc)
+
+	message, err := svc.SendMessage(apitypes.CreateMessageRequest{
+		RoomID:   "room-1",
+		SenderID: "u-manager",
+		Content:  ` <slash-command arg="skill-creator" name="use-skill"/> create one `,
+	})
+	if err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+	want := `<slash-command name="use-skill" arg="skill-creator"></slash-command> create one`
+	if message.Content != want {
+		t.Fatalf("Content = %q, want canonical XML %q", message.Content, want)
+	}
+}
+
+func TestServiceKeepsLegacySlashTextAsPlainContent(t *testing.T) {
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-manager",
+		Users:         []im.User{{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"}},
+		Rooms:         []im.Room{{ID: "room-1", Title: "Direct", Members: []string{"u-manager"}}},
+	})
+	svc := NewService(imSvc)
+
+	message, err := svc.SendMessage(apitypes.CreateMessageRequest{
+		RoomID:   "room-1",
+		SenderID: "u-manager",
+		Content:  `/skill-creator create one`,
+	})
+	if err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+	if message.Content != `/skill-creator create one` {
+		t.Fatalf("Content = %q, want legacy slash text kept as plain content", message.Content)
+	}
+}
+
 func assertMembers(t *testing.T, got []string, want ...string) {
 	t.Helper()
 	if len(got) != len(want) {
