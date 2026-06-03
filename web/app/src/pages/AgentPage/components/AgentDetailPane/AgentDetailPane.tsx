@@ -88,7 +88,6 @@ export function AgentDetailPane({
               <span className="status-pill profile-state-pill warn">{t("profileRestartRequired")}</span>
             ) : null}
           </div>
-          <p>{item.description || item.agent_profile?.description || ""}</p>
         </div>
         <div className="entity-toolbar">
           <Button

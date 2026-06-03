@@ -164,4 +164,42 @@ describe("agent action visibility", () => {
     expect(nameInput).toBeDisabled();
     expect(nameInput).toHaveAttribute("readonly");
   });
+
+  it("does not show the agent description in the detail header", () => {
+    const describedWorker = {
+      ...worker,
+      description: "Manager Worker Dispatch",
+    };
+
+    render(
+      <AgentDetailPane
+        item={describedWorker}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={null}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Manager Worker Dispatch")).not.toBeInTheDocument();
+  });
 });
