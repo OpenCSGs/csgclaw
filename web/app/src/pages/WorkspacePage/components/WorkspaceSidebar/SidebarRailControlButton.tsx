@@ -18,6 +18,7 @@ export function SidebarRailControlButton({ label, mode, onClick }: SidebarRailCo
       markClassName="sidebar-rail-control-mark"
       onClick={onClick}
       size="md"
+      title=""
       variant="tertiaryGray"
     />
   );

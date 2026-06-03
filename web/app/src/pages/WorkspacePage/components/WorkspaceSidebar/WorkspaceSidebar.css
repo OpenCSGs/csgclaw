@@ -1875,6 +1875,13 @@
   display: grid;
   grid-template-rows: 61px minmax(0, 1fr);
   overflow: visible;
+  position: relative;
+  z-index: var(--z-page-popover);
+}
+
+.workspace-sidebar-shell:has(.workspace-topbar .sidebar-rail-control-button:hover),
+.workspace-sidebar-shell:has(.workspace-topbar .sidebar-rail-control-button:focus-visible) {
+  z-index: var(--z-tooltip);
 }
 
 .app-shell.sidebar-resizing {
@@ -1893,6 +1900,11 @@
   justify-items: start;
   position: relative;
   z-index: var(--z-page-overlay);
+}
+
+.workspace-topbar:has(.sidebar-rail-control-button:hover),
+.workspace-topbar:has(.sidebar-rail-control-button:focus-visible) {
+  z-index: var(--z-tooltip);
 }
 
 .workspace-topbar-brand {
