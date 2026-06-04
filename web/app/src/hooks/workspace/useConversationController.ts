@@ -548,8 +548,8 @@ export function useConversationController({
       });
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
       clearComposer();
-    } catch (_) {
-      setComposerError(t("sendFailed"));
+    } catch (err) {
+      setComposerError(errorMessage(err, t("sendFailed")));
     }
   }
 

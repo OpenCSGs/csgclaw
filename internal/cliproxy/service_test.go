@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy"
-	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
+	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 )
 
 func TestProviderPath(t *testing.T) {
@@ -115,8 +115,8 @@ func TestEmbeddedCLIProxyRegistersImportedCodexAuthModels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListModels() error = %v", err)
 	}
-	if !containsString(models, "gpt-5.2") {
-		t.Fatalf("models = %v, want gpt-5.2 registered for imported codex auth", models)
+	if !containsString(models, "gpt-5.5") {
+		t.Fatalf("models = %v, want gpt-5.5 registered for imported codex auth", models)
 	}
 }
 
@@ -152,6 +152,7 @@ func containsString(values []string, want string) bool {
 }
 
 func TestBuildConfigUsesPrivateNonReservedPortAndWritesConfig(t *testing.T) {
+	clearStandardProxyEnv(t)
 	t.Setenv(configDirEnv, t.TempDir())
 	t.Setenv(authDirEnv, filepath.Join(t.TempDir(), "auth"))
 
@@ -189,6 +190,34 @@ func TestBuildConfigUsesPrivateNonReservedPortAndWritesConfig(t *testing.T) {
 	}
 	if strings.Contains(text, strconv.Itoa(reservedLegacyCLIProxyPort)) {
 		t.Fatalf("generated config contains reserved fixed port:\n%s", text)
+	}
+	if strings.Contains(text, "proxy-url:") {
+		t.Fatalf("generated config unexpectedly contains proxy-url:\n%s", text)
+	}
+}
+
+func TestBuildConfigUsesStandardProxyEnvironmentForCLIProxyAPI(t *testing.T) {
+	clearStandardProxyEnv(t)
+	t.Setenv(configDirEnv, t.TempDir())
+	t.Setenv(authDirEnv, filepath.Join(t.TempDir(), "auth"))
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:7890")
+
+	cfg, cfgPath, _, err := buildConfig()
+	if err != nil {
+		t.Fatalf("buildConfig returned error: %v", err)
+	}
+	if cfg.ProxyURL != "http://127.0.0.1:7890" {
+		t.Fatalf("ProxyURL = %q, want inherited HTTPS proxy", cfg.ProxyURL)
+	}
+	if err := writeConfigFile(cfgPath, cfg); err != nil {
+		t.Fatalf("writeConfigFile returned error: %v", err)
+	}
+	content, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if text := string(content); !strings.Contains(text, `proxy-url: "http://127.0.0.1:7890"`) {
+		t.Fatalf("generated config missing proxy-url:\n%s", text)
 	}
 }
 
@@ -255,5 +284,17 @@ func TestConfigDirDefaultsToAuthDomain(t *testing.T) {
 	want := filepath.Join(home, ".csgclaw", "auth")
 	if got != want {
 		t.Fatalf("configDir = %q, want %q", got, want)
+	}
+}
+
+func clearStandardProxyEnv(t *testing.T) {
+	t.Helper()
+	for _, name := range []string{
+		"HTTPS_PROXY",
+		"https_proxy",
+		"HTTP_PROXY",
+		"http_proxy",
+	} {
+		t.Setenv(name, "")
 	}
 }

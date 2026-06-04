@@ -63,6 +63,25 @@ func TestRunLoginRejectsUnsupportedProvider(t *testing.T) {
 	}
 }
 
+func TestRunLogoutCodex(t *testing.T) {
+	restore := stubLogoutProvider(func(ctx context.Context, provider string) (cliproxy.AuthStatus, error) {
+		if provider != "codex" {
+			t.Fatalf("provider = %q, want codex", provider)
+		}
+		return cliproxy.AuthStatus{Provider: "codex", LoginRequired: true, Message: "codex auth removed"}, nil
+	})
+	defer restore()
+
+	var out bytes.Buffer
+	run := &command.Context{Program: "csgclaw", Stdin: strings.NewReader(""), Stdout: &out, Stderr: &bytes.Buffer{}}
+	if err := NewCmd().Run(context.Background(), run, []string{"auth", "logout", "codex"}, command.GlobalOptions{Output: "table"}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "codex auth removed") {
+		t.Fatalf("output = %q, want logout message", got)
+	}
+}
+
 func TestRunLoginCancelsWhileProviderIsWaiting(t *testing.T) {
 	for _, provider := range []string{"codex", "claude-code"} {
 		t.Run(provider, func(t *testing.T) {
@@ -94,4 +113,10 @@ func stubLoginProvider(fn func(context.Context, string, cliproxy.LoginOptions) (
 	previous := loginProvider
 	loginProvider = fn
 	return func() { loginProvider = previous }
+}
+
+func stubLogoutProvider(fn func(context.Context, string) (cliproxy.AuthStatus, error)) func() {
+	previous := logoutProvider
+	logoutProvider = fn
+	return func() { logoutProvider = previous }
 }

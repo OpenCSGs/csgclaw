@@ -31,6 +31,8 @@ func (h *Handler) registerBotCompatibilityRoutes(router chi.Router) {
 		r.Get("/llm/v1/models", h.handleBotCompatibilityLLMModels)
 		r.Post("/llm/chat/completions", h.handleBotCompatibilityLLMChatCompletions)
 		r.Post("/llm/v1/chat/completions", h.handleBotCompatibilityLLMChatCompletions)
+		r.Get("/llm/responses", h.handleBotCompatibilityLLMResponsesWebsocket)
+		r.Get("/llm/v1/responses", h.handleBotCompatibilityLLMResponsesWebsocket)
 		r.Post("/llm/responses", h.handleBotCompatibilityLLMResponses)
 		r.Post("/llm/v1/responses", h.handleBotCompatibilityLLMResponses)
 	})
@@ -90,6 +92,14 @@ func (h *Handler) handleBotCompatibilityLLMResponses(w http.ResponseWriter, r *h
 		return
 	}
 	h.handleBotLLMResponses(w, r, botID)
+}
+
+func (h *Handler) handleBotCompatibilityLLMResponsesWebsocket(w http.ResponseWriter, r *http.Request) {
+	botID, ok := h.requireBotCompatibilityBotID(w, r)
+	if !ok {
+		return
+	}
+	h.handleBotLLMResponsesWebsocket(w, r, botID)
 }
 
 func (h *Handler) requireBotCompatibilityBotID(w http.ResponseWriter, r *http.Request) (string, bool) {

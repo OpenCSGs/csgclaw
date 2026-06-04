@@ -34,6 +34,7 @@ const (
 	homeDirName            = "home"
 	logPollInterval        = 200 * time.Millisecond
 	codexProxyProviderName = "proxy"
+	codexModelProviderName = "codex"
 )
 
 type AgentRef struct {

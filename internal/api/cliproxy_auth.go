@@ -14,12 +14,20 @@ type cliproxyAuthLoginRequest struct {
 	NoBrowser bool   `json:"no_browser,omitempty"`
 }
 
+type cliproxyAuthLogoutRequest struct {
+	Provider string `json:"provider"`
+}
+
 var cliproxyAuthStatus = func(r *http.Request, provider string) (cliproxy.AuthStatus, error) {
 	return cliproxy.Default().AuthStatus(r.Context(), provider)
 }
 
 var cliproxyAuthLogin = func(r *http.Request, req cliproxyAuthLoginRequest) (cliproxy.AuthStatus, error) {
 	return cliproxy.Default().Login(r.Context(), req.Provider, cliproxy.LoginOptions{NoBrowser: req.NoBrowser})
+}
+
+var cliproxyAuthLogout = func(r *http.Request, req cliproxyAuthLogoutRequest) (cliproxy.AuthStatus, error) {
+	return cliproxy.Default().Logout(r.Context(), req.Provider)
 }
 
 func (h *Handler) handleCLIProxyAuthStatus(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +43,28 @@ func (h *Handler) handleCLIProxyAuthStatus(w http.ResponseWriter, r *http.Reques
 	status, err := cliproxyAuthStatus(r, provider)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) handleCLIProxyAuthLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req cliproxyAuthLogoutRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.Provider) == "" {
+		http.Error(w, "provider is required", http.StatusBadRequest)
+		return
+	}
+	status, err := cliproxyAuthLogout(r, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	writeJSON(w, http.StatusOK, status)

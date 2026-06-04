@@ -201,6 +201,7 @@ Usage:
 
 ```bash
 csgclaw model auth login <provider> [flags]
+csgclaw model auth logout <provider>
 ```
 
 Providers:
@@ -217,6 +218,7 @@ Behavior:
 - `codex` first reuses `~/.codex/auth.json` when available, then starts OAuth if needed.
 - `claude-code` first probes macOS Keychain when available, then starts OAuth if needed.
 - Auth is stored in the CSGClaw-managed CLIProxy auth directory, defaulting to `~/.csgclaw/auth`.
+- `logout` disables the local CLIProxy auth record and blocks immediate re-import from the same Codex home auth or Claude Keychain entry.
 - Model provider auth is scoped under `csgclaw model auth`, not the server's own API authentication.
 
 Examples:
@@ -224,6 +226,7 @@ Examples:
 ```bash
 csgclaw model auth login codex
 csgclaw model auth login claude-code --no-browser
+csgclaw model auth logout codex
 ```
 
 ### `csgclaw agent`

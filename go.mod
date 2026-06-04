@@ -8,8 +8,14 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/pelletier/go-toml/v2 v2.2.2
-	github.com/router-for-me/CLIProxyAPI/v6 v6.10.9
 	golang.org/x/term v0.37.0
+)
+
+require (
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/redis/go-redis/v9 v9.19.0 // indirect
+	github.com/router-for-me/CLIProxyAPI/v7 v7.1.44
+	go.uber.org/atomic v1.11.0 // indirect
 )
 
 require (
@@ -29,7 +35,7 @@ require (
 	github.com/go-playground/validator/v10 v10.20.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/gorilla/websocket v1.5.3
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect

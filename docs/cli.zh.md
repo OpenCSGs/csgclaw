@@ -201,6 +201,7 @@ csgclaw upgrade --no-restart
 
 ```bash
 csgclaw model auth login <provider> [flags]
+csgclaw model auth logout <provider>
 ```
 
 Provider：
@@ -217,6 +218,7 @@ Provider：
 - `codex` 会优先复用 `~/.codex/auth.json`，没有可用 token 时再启动 OAuth。
 - `claude-code` 会在 macOS 上优先探测 Keychain，没有可用 token 时再启动 OAuth。
 - 鉴权文件会写入 CSGClaw 管理的 CLIProxy auth 目录，默认是 `~/.csgclaw/auth`。
+- `logout` 会禁用本地 CLIProxy 鉴权记录，并阻止同一个 Codex home auth 或 Claude Keychain 记录被立刻重新导入。
 - 模型 Provider 鉴权放在 `csgclaw model auth` 下，不和服务端自身 API 鉴权混在一起。
 
 示例：
@@ -224,6 +226,7 @@ Provider：
 ```bash
 csgclaw model auth login codex
 csgclaw model auth login claude-code --no-browser
+csgclaw model auth logout codex
 ```
 
 ### `csgclaw agent`

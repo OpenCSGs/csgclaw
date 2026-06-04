@@ -48,6 +48,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Route("/cliproxy/auth", func(r chi.Router) {
 			r.Get("/status", h.handleCLIProxyAuthStatus)
 			r.Post("/login", h.handleCLIProxyAuthLogin)
+			r.Post("/logout", h.handleCLIProxyAuthLogout)
 		})
 		r.Post("/agent-profiles/models", h.handleAgentProfileModels)
 		r.Get("/agent-profile-defaults", h.handleAgentProfileDefaults)

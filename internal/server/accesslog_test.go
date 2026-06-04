@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -138,6 +140,31 @@ func TestAccessLogFlushBeforeWriteDoesNotWriteHeaderTwice(t *testing.T) {
 	}
 }
 
+func TestAccessLogPreservesHijacker(t *testing.T) {
+	var buf bytes.Buffer
+	handler := accessLog(slog.New(slog.NewTextHandler(&buf, nil)), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("expected hijacker")
+		}
+		conn, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Fatalf("Hijack() error = %v", err)
+		}
+		_ = conn.Close()
+	}))
+
+	rec := &hijackResponseWriter{header: make(http.Header)}
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/bots/u-ux/llm/responses", nil))
+
+	if !rec.hijacked {
+		t.Fatal("response writer was not hijacked")
+	}
+	if logLine := buf.String(); !strings.Contains(logLine, "status=101") {
+		t.Fatalf("log line = %q, want switching-protocols status", logLine)
+	}
+}
+
 type headerCountFlusher struct {
 	header           http.Header
 	body             bytes.Buffer
@@ -159,6 +186,28 @@ func (w *headerCountFlusher) Write(p []byte) (int, error) {
 }
 
 func (w *headerCountFlusher) Flush() {}
+
+type hijackResponseWriter struct {
+	header   http.Header
+	hijacked bool
+}
+
+func (w *hijackResponseWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *hijackResponseWriter) Write([]byte) (int, error) {
+	return 0, http.ErrHijacked
+}
+
+func (w *hijackResponseWriter) WriteHeader(int) {}
+
+func (w *hijackResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	client, server := net.Pipe()
+	_ = client.Close()
+	w.hijacked = true
+	return server, bufio.NewReadWriter(bufio.NewReader(server), bufio.NewWriter(server)), nil
+}
 
 func TestAccessLogColorsTerminalOutput(t *testing.T) {
 	origStderr := accessLogStderr

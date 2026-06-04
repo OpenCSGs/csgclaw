@@ -17,10 +17,10 @@ import (
 	"csgclaw/internal/config"
 
 	"github.com/gin-gonic/gin"
-	cliproxyapi "github.com/router-for-me/CLIProxyAPI/v6/sdk/api"
-	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy"
-	sdkconfig "github.com/router-for-me/CLIProxyAPI/v6/sdk/config"
-	_ "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator/builtin"
+	cliproxyapi "github.com/router-for-me/CLIProxyAPI/v7/sdk/api"
+	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
+	sdkconfig "github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
+	_ "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator/builtin"
 )
 
 const (
@@ -240,9 +240,8 @@ func fallbackModels(provider string) []string {
 			"gpt-5.5",
 			"gpt-5.4",
 			"gpt-5.4-mini",
-			"gpt-5.3-codex",
 			"gpt-5.3-codex-spark",
-			"gpt-5.2",
+			"gpt-image-2",
 			"codex-auto-review",
 		}
 	case "claude":
@@ -367,6 +366,7 @@ func buildConfig() (*sdkconfig.Config, string, string, error) {
 			APIKeys: []string{LocalAPIKey},
 		},
 	}
+	cfg.ProxyURL = configuredProxyURL()
 	cfg.RemoteManagement.AllowRemote = false
 	cfg.RemoteManagement.SecretKey = ""
 	cfg.RemoteManagement.DisableControlPanel = true
@@ -418,6 +418,15 @@ func configDir() (string, error) {
 	return config.DefaultDomainDir(configDirName)
 }
 
+func configuredProxyURL() string {
+	for _, name := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"} {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func writeConfigFile(path string, cfg *sdkconfig.Config) error {
 	if cfg == nil {
 		return fmt.Errorf("embedded cliproxy config is nil")
@@ -425,23 +434,29 @@ func writeConfigFile(path string, cfg *sdkconfig.Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create embedded cliproxy config dir: %w", err)
 	}
-	content := strings.Join([]string{
+	lines := []string{
 		"host: " + yamlString(cfg.Host),
 		"port: " + strconv.Itoa(cfg.Port),
 		"auth-dir: " + yamlString(cfg.AuthDir),
 		"api-keys:",
 		"  - " + yamlString(LocalAPIKey),
+	}
+	if proxyURL := strings.TrimSpace(cfg.ProxyURL); proxyURL != "" {
+		lines = append(lines, "proxy-url: "+yamlString(proxyURL))
+	}
+	lines = append(lines,
 		"remote-management:",
 		"  allow-remote: false",
-		"  secret-key: " + yamlString(""),
+		"  secret-key: "+yamlString(""),
 		"  disable-control-panel: true",
 		"pprof:",
 		"  enable: false",
-		"  addr: " + yamlString("127.0.0.1:0"),
+		"  addr: "+yamlString("127.0.0.1:0"),
 		"commercial-mode: true",
 		"logging-to-file: false",
 		"",
-	}, "\n")
+	)
+	content := strings.Join(lines, "\n")
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		return fmt.Errorf("write embedded cliproxy config: %w", err)
 	}

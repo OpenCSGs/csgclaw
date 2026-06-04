@@ -74,6 +74,30 @@ func TestHandleCLIProxyAuthLoginRequiresProvider(t *testing.T) {
 	}
 }
 
+func TestHandleCLIProxyAuthLogout(t *testing.T) {
+	restoreLogout := stubCLIProxyAuthLogout(func(r *http.Request, req cliproxyAuthLogoutRequest) (cliproxy.AuthStatus, error) {
+		if req.Provider != "codex" {
+			t.Fatalf("provider = %q, want codex", req.Provider)
+		}
+		return cliproxy.AuthStatus{Provider: "codex", LoginRequired: true, Message: "codex auth removed", SupportsLogin: true}, nil
+	})
+	defer restoreLogout()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/cliproxy/auth/logout", strings.NewReader(`{"provider":"codex"}`))
+	(&Handler{}).Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got cliproxy.AuthStatus
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Authenticated || !got.LoginRequired || got.Message != "codex auth removed" {
+		t.Fatalf("response = %+v, want logged-out status", got)
+	}
+}
+
 func stubCLIProxyAuthStatus(fn func(*http.Request, string) (cliproxy.AuthStatus, error)) func() {
 	previous := cliproxyAuthStatus
 	cliproxyAuthStatus = fn
@@ -84,4 +108,10 @@ func stubCLIProxyAuthLogin(fn func(*http.Request, cliproxyAuthLoginRequest) (cli
 	previous := cliproxyAuthLogin
 	cliproxyAuthLogin = fn
 	return func() { cliproxyAuthLogin = previous }
+}
+
+func stubCLIProxyAuthLogout(fn func(*http.Request, cliproxyAuthLogoutRequest) (cliproxy.AuthStatus, error)) func() {
+	previous := cliproxyAuthLogout
+	cliproxyAuthLogout = fn
+	return func() { cliproxyAuthLogout = previous }
 }

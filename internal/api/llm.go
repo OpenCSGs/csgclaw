@@ -64,6 +64,16 @@ func (h *Handler) handleBotLLMResponses(w http.ResponseWriter, r *http.Request, 
 	_, _ = io.Copy(w, resp.Body)
 }
 
+func (h *Handler) handleBotLLMResponsesWebsocket(w http.ResponseWriter, r *http.Request, botID string) {
+	if h.llm == nil {
+		http.Error(w, "llm bridge is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.llm.ResponsesWebsocket(w, r, botID); err != nil {
+		writeLLMError(w, err)
+	}
+}
+
 func copyLLMHeaders(dst, src http.Header) {
 	for key, values := range src {
 		if strings.EqualFold(key, "connection") || strings.EqualFold(key, "content-length") {

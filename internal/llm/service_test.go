@@ -83,6 +83,19 @@ func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 	}
 }
 
+func TestNewServiceDoesNotImposeFixedUpstreamTimeout(t *testing.T) {
+	svc := NewService(config.ModelConfig{}, nil)
+	if svc.client == nil {
+		t.Fatal("client is nil")
+	}
+	if svc.client.Timeout != 0 {
+		t.Fatalf("client timeout = %s, want no fixed upstream timeout", svc.client.Timeout)
+	}
+	if svc.client.Transport != nil {
+		t.Fatal("client transport is set; want default transport so proxy environment and no_proxy are honored")
+	}
+}
+
 func TestChatCompletionsLLMAPIDoesNotOverrideRequestReasoningEffort(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -483,6 +496,88 @@ func TestResponsesLLMAPIFallsBackToChatCompletionsWhenUnsupported(t *testing.T) 
 	}
 	if out["output_text"] != "fallback result" {
 		t.Fatalf("output_text = %#v, want fallback result", out["output_text"])
+	}
+}
+
+func TestResponsesLLMAPICodexReturnsCompactResponsesErrorOnTransientFailure(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	previousProviderBaseURL := embeddedCLIProxyProviderBaseURL
+	previousAuthStatus := embeddedCLIProxyAuthStatus
+	defer func() {
+		embeddedCLIProxyProviderBaseURL = previousProviderBaseURL
+		embeddedCLIProxyAuthStatus = previousAuthStatus
+	}()
+
+	var responsesCalls int
+	var chatCalls int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/provider/codex/v1/responses":
+			responsesCalls++
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":{"message":"Post \"https://chatgpt.com/backend-api/codex/responses\": EOF","type":"server_error","code":"internal_server_error"}}`))
+		case "/api/provider/codex/v1/chat/completions":
+			chatCalls++
+			http.Error(w, "codex chat fallback should not be called", http.StatusTeapot)
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+
+	embeddedCLIProxyProviderBaseURL = func(_ context.Context, provider string) (string, error) {
+		if provider != agent.ProviderCodex {
+			t.Fatalf("provider = %q, want codex", provider)
+		}
+		return upstream.URL + "/api/provider/codex/v1", nil
+	}
+	embeddedCLIProxyAuthStatus = func(_ context.Context, provider string) (cliproxy.AuthStatus, error) {
+		if provider != agent.ProviderCodex {
+			t.Fatalf("auth provider = %q, want codex", provider)
+		}
+		return cliproxy.AuthStatus{Provider: "codex", Authenticated: true}, nil
+	}
+
+	agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
+		{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+			Role: agent.RoleManager,
+			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
+				Provider:        agent.ProviderCodex,
+				ModelID:         "gpt-5.5",
+				ProfileComplete: true,
+			},
+			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	})
+
+	svc := NewService(config.ModelConfig{}, agentSvc)
+	resp, err := svc.Responses(context.Background(), agent.ManagerUserID, []byte(`{"model":"client-model","input":"hello","stream":false}`))
+	if err != nil {
+		t.Fatalf("Responses() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if responsesCalls != 1 {
+		t.Fatalf("/responses calls = %d, want 1", responsesCalls)
+	}
+	if chatCalls != 0 {
+		t.Fatalf("/chat/completions calls = %d, want 0", chatCalls)
+	}
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	want := `Post "https://chatgpt.com/backend-api/codex/responses": EOF (type=server_error, code=internal_server_error)`
+	if string(body) != want {
+		t.Fatalf("body = %q, want %q", string(body), want)
 	}
 }
 
