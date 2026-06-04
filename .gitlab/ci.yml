@@ -5,8 +5,8 @@
 # Trigger: tags matching v* (e.g. pull mirror with "Trigger pipelines for mirror updates").
 #
 # Implementation: scripts/release-build-all.sh (per matrix cell); .gitlab/ci-gitlab-release-upload.sh (upload only);
-# scripts/prepare-picoclaw-embed-dist.sh (stage PicoClaw templates into embed/*/dist/, excluding Dockerfiles);
-# scripts/patch-picoclaw-embed-image-refs.sh (patch dist/agent.toml image refs after picoclaw manifest merge);
+# scripts/prepare-docker-embed-dist.sh (stage embed templates with Dockerfile into */dist/);
+# scripts/patch-docker-embed-image-refs.sh (patch dist/agent.toml image refs after image manifest merge);
 # .gitlab/ci-picoclaw-image.sh (stage csgclaw-cli from dist/ into picoclaw manager/worker images); .gitlab/bookworm-mirror.sh (apt sources).
 #
 # Required CI/CD variables:
@@ -145,8 +145,8 @@ embed-templates-prepare:
     - .release_rules
   stage: build
   script:
-    - chmod +x scripts/prepare-picoclaw-embed-dist.sh
-    - scripts/prepare-picoclaw-embed-dist.sh
+    - chmod +x scripts/prepare-docker-embed-dist.sh
+    - scripts/prepare-docker-embed-dist.sh
   artifacts:
     paths:
       - internal/templates/embed/picoclaw-manager/dist/
@@ -307,8 +307,8 @@ embed-templates-patch:
     - job: picoclaw-worker-manifest
       artifacts: false
   script:
-    - chmod +x scripts/patch-picoclaw-embed-image-refs.sh
-    - scripts/patch-picoclaw-embed-image-refs.sh
+    - chmod +x scripts/patch-docker-embed-image-refs.sh
+    - scripts/patch-docker-embed-image-refs.sh
   artifacts:
     paths:
       - internal/templates/embed/picoclaw-manager/dist/

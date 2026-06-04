@@ -1,14 +1,12 @@
 # Release on tag v* / workflow_dispatch.
 #
-# PicoClaw container images are built and pushed on GitLab CI (ACR). This workflow only:
-#   1. Stages embed/*/dist/ from templates (scripts/prepare-picoclaw-embed-dist.sh)
-#   2. Patches dist/agent.toml [image].ref to ACR refs tagged with the release version
+# Container images for embed templates (those with a Dockerfile) are built on GitLab CI (ACR).
+# This workflow only:
+#   1. Stages embed/<template>/dist/ for every template dir that contains a Dockerfile
+#   2. Patches dist/agent.toml [image].ref to ${ACR_REGISTRY}/opencsghq/<template>:<version>
 #   3. Builds csgclaw / csgclaw-cli release archives with the patched embed
 #
-# Image refs written into dist/agent.toml (ACR registry is hardcoded below):
-#   opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:<version>
-#   opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-worker:<version>
-# where <version> is the git tag (v*) or workflow_dispatch input.
+# <version> is the git tag (v*) or workflow_dispatch input.
 
 name: Release
 
@@ -107,7 +105,7 @@ jobs:
           path: web/static-dist/
           if-no-files-found: error
 
-  picoclaw-embed-dist:
+  docker-embed-dist:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -124,31 +122,31 @@ jobs:
           fi
           echo "value=${version}" >> "$GITHUB_OUTPUT"
 
-      - name: Stage PicoClaw embed dist and patch ACR image refs
+      - name: Stage docker embed dist and patch ACR image refs
         shell: bash
         env:
           ACR_REGISTRY: ${{ env.ACR_REGISTRY }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
-          chmod +x scripts/prepare-picoclaw-embed-dist.sh scripts/patch-picoclaw-embed-image-refs.sh
-          ./scripts/prepare-picoclaw-embed-dist.sh
-          ./scripts/patch-picoclaw-embed-image-refs.sh
-          echo "manager ref:"
-          grep '^ref = ' internal/templates/embed/picoclaw-manager/dist/agent.toml
-          echo "worker ref:"
-          grep '^ref = ' internal/templates/embed/picoclaw-worker/dist/agent.toml
+          chmod +x scripts/list-docker-embed-templates.sh \
+            scripts/prepare-docker-embed-dist.sh \
+            scripts/patch-docker-embed-image-refs.sh
+          ./scripts/prepare-docker-embed-dist.sh
+          ./scripts/patch-docker-embed-image-refs.sh
+          while IFS= read -r name; do
+            echo "${name} ref:"
+            grep '^ref = ' "internal/templates/embed/${name}/dist/agent.toml"
+          done < <(./scripts/list-docker-embed-templates.sh)
 
-      - name: Upload patched PicoClaw embed directories
+      - name: Upload patched docker embed directories
         uses: actions/upload-artifact@v4
         with:
-          name: picoclaw-embed-dist-patched
-          path: |
-            internal/templates/embed/picoclaw-manager/dist/
-            internal/templates/embed/picoclaw-worker/dist/
+          name: docker-embed-dist-patched
+          path: internal/templates/embed/*/dist/
           if-no-files-found: error
 
   build:
-    needs: [prepare, web, picoclaw-embed-dist]
+    needs: [prepare, web, docker-embed-dist]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -169,20 +167,21 @@ jobs:
           name: web-static-dist
           path: web/static-dist
 
-      - name: Download patched PicoClaw embed directories
+      - name: Download patched docker embed directories
         uses: actions/download-artifact@v4
         with:
-          name: picoclaw-embed-dist-patched
-          # Artifact root is internal/templates/embed/ (LCA of the uploaded dist paths).
+          name: docker-embed-dist-patched
+          # Artifact root is internal/templates/embed/ (LCA of embed/*/dist paths).
           path: internal/templates/embed
 
-      - name: Verify PicoClaw embed dist is present
+      - name: Verify docker embed dist is present
         shell: bash
         run: |
-          test -f internal/templates/embed/picoclaw-manager/dist/agent.toml
-          test -f internal/templates/embed/picoclaw-worker/dist/agent.toml
-          grep '^ref = ' internal/templates/embed/picoclaw-manager/dist/agent.toml
-          grep '^ref = ' internal/templates/embed/picoclaw-worker/dist/agent.toml
+          chmod +x scripts/list-docker-embed-templates.sh
+          while IFS= read -r name; do
+            test -f "internal/templates/embed/${name}/dist/agent.toml"
+            grep '^ref = ' "internal/templates/embed/${name}/dist/agent.toml"
+          done < <(./scripts/list-docker-embed-templates.sh)
 
       - name: Set up Go
         uses: actions/setup-go@v5

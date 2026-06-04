@@ -26,7 +26,7 @@ docker/
 
 # Generated embedded runtime workspaces
 /internal/agent/embed/
-# PicoClaw embed dist/ is populated by make/CI; do not commit (see make prepare-picoclaw-embed-dist).
+# Docker embed dist/ is populated by make/CI (see make prepare-docker-embed-dist).
 # Note: go:embed ignores .gitignore, so these paths must not be listed here.
 
 # Editor / tool directories

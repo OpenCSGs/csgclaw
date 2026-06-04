@@ -25,43 +25,41 @@ CLI_BIN ?= $(BIN_DIR)/csgclaw-cli
 ACR_REGISTRY ?= opencsg-registry.cn-beijing.cr.aliyuncs.com
 IMAGE ?= $(ACR_REGISTRY)/opencsghq/picoclaw
 TAG ?= 2026.5.27
-PICOCLAW_IMAGE_TAG ?= dev
+DOCKER_EMBED_IMAGE_TAG ?= dev
+PICOCLAW_IMAGE_TAG ?= $(DOCKER_EMBED_IMAGE_TAG)
 LOCAL_IMAGE ?= picoclaw:local
 PICOCLAW_BASE_IMAGE ?= $(IMAGE):$(TAG)
-PICOCLAW_MANAGER_IMAGE ?= $(ACR_REGISTRY)/opencsghq/picoclaw-manager
-PICOCLAW_WORKER_IMAGE ?= $(ACR_REGISTRY)/opencsghq/picoclaw-worker
-PICOCLAW_MANAGER_IMAGE_REF ?=
-PICOCLAW_WORKER_IMAGE_REF ?=
-PICOCLAW_DOCKER_GOOS ?= linux
-PICOCLAW_DOCKER_GOARCH ?= $(TARGET_ARCH)
-PICOCLAW_DOCKER_CLI ?= $(BIN_DIR)/csgclaw-cli
+DOCKER_EMBED_DOCKER_GOOS ?= linux
+DOCKER_EMBED_DOCKER_GOARCH ?= $(TARGET_ARCH)
+DOCKER_EMBED_CLI ?= $(BIN_DIR)/csgclaw-cli
+PICOCLAW_DOCKER_GOOS ?= $(DOCKER_EMBED_DOCKER_GOOS)
+PICOCLAW_DOCKER_GOARCH ?= $(DOCKER_EMBED_DOCKER_GOARCH)
+PICOCLAW_DOCKER_CLI ?= $(DOCKER_EMBED_CLI)
 
 .DEFAULT_GOAL := build-all
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-server-bin build-csgclaw build-csgclaw-cli build-csgclaw-cli-for-picoclaw stage-picoclaw-docker-cli prepare-picoclaw-embed-dist prepare-picoclaw-manager-embed-dist prepare-picoclaw-worker-embed-dist patch-picoclaw-embed-image-refs stage-picoclaw-embed-dist build-picoclaw-runtime-embed build-picoclaw-manager-image-docker build-picoclaw-worker-image-docker build-all run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-server-bin build-csgclaw build-csgclaw-cli build-csgclaw-cli-for-picoclaw stage-docker-embed-cli stage-picoclaw-docker-cli prepare-docker-embed-dist prepare-picoclaw-embed-dist patch-docker-embed-image-refs patch-picoclaw-embed-image-refs stage-docker-embed-dist stage-picoclaw-embed-dist build-docker-embed-images build-docker-embed-runtime-embed build-picoclaw-runtime-embed build-all run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image
 
 help:
 	@printf '%s\n' \
 		'make            - build Web UI, PicoClaw images + embed dist, bin/csgclaw, bin/csgclaw-cli' \
 		'make fmt        - format Go files' \
-		'make test       - stage-picoclaw-embed-dist (patched :dev refs), then go test ./...' \
+		'make test       - stage-docker-embed-dist (patched :dev refs), then go test ./...' \
 		'make web-install - install Web UI dependencies' \
 		'make web-dev    - run Vite Web UI dev server' \
 		'make build-web  - build Web UI app into web/static-dist' \
 		'make build      - alias for build-all' \
-		'make build-server-bin - build $(BIN) only (expects embed/*/dist patched; use build-picoclaw-runtime-embed or stage-picoclaw-embed-dist first)' \
-		'make stage-picoclaw-embed-dist - prepare dist/ and patch dev image refs (no docker)' \
+		'make build-server-bin - build $(BIN) only (expects embed/*/dist patched; use build-docker-embed-runtime-embed or stage-docker-embed-dist first)' \
+		'make stage-docker-embed-dist - prepare dist/ and patch dev image refs (no docker)' \
 		'make build-csgclaw-cli - build $(CLI_BIN) for current platform' \
-		'make build-picoclaw-runtime-embed - stage cli once, docker manager+worker, patch dist refs' \
-		'make build-picoclaw-manager-image - stage cli + docker manager:$(PICOCLAW_IMAGE_TAG)' \
-		'make build-picoclaw-worker-image - stage cli + docker worker:$(PICOCLAW_IMAGE_TAG)' \
+		'make build-docker-embed-runtime-embed - stage cli, docker all embed templates with Dockerfile, patch refs' \
 		'make run        - build everything, then run the server' \
 		'make clean      - remove local build outputs'
 
 fmt:
 	$(GOFMT) -w $(shell find cli cmd internal web -name '*.go')
 
-test: stage-picoclaw-embed-dist
+test: stage-docker-embed-dist
 	env GOCACHE=$(GOCACHE) $(GO) test ./...
 
 check-web-toolchain:
@@ -121,7 +119,7 @@ build-server-bin:
 	mkdir -p $(BIN_DIR)
 	env GOCACHE=$(GOCACHE) $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN) $(CMD_PATH)
 
-build-server: build-picoclaw-runtime-embed build-server-bin
+build-server: build-docker-embed-runtime-embed build-server-bin
 
 build-csgclaw:
 	$(MAKE) build-server APP=csgclaw
@@ -134,57 +132,54 @@ build-csgclaw-cli-for-picoclaw:
 	$(MAKE) build-csgclaw-cli TARGET_OS=linux TARGET_ARCH=amd64 CLI_BIN=$(BIN_DIR)/csgclaw-cli_linux_amd64
 	$(MAKE) build-csgclaw-cli TARGET_OS=linux TARGET_ARCH=arm64 CLI_BIN=$(BIN_DIR)/csgclaw-cli_linux_arm64
 
-$(PICOCLAW_DOCKER_CLI): prepare-picoclaw-embed-dist
+$(DOCKER_EMBED_CLI): prepare-docker-embed-dist
 	mkdir -p $(BIN_DIR)
-	env GOCACHE=$(GOCACHE) GOOS=$(PICOCLAW_DOCKER_GOOS) GOARCH=$(PICOCLAW_DOCKER_GOARCH) $(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(PICOCLAW_DOCKER_CLI) ./cmd/csgclaw-cli
+	env GOCACHE=$(GOCACHE) GOOS=$(DOCKER_EMBED_DOCKER_GOOS) GOARCH=$(DOCKER_EMBED_DOCKER_GOARCH) $(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(DOCKER_EMBED_CLI) ./cmd/csgclaw-cli
 
-stage-picoclaw-docker-cli: $(PICOCLAW_DOCKER_CLI)
+stage-docker-embed-cli: $(DOCKER_EMBED_CLI)
+stage-picoclaw-docker-cli: stage-docker-embed-cli
 
-prepare-picoclaw-embed-dist:
-	chmod +x scripts/prepare-picoclaw-embed-dist.sh
-	scripts/prepare-picoclaw-embed-dist.sh
+prepare-docker-embed-dist:
+	chmod +x scripts/list-docker-embed-templates.sh scripts/prepare-docker-embed-dist.sh
+	scripts/prepare-docker-embed-dist.sh
 
-prepare-picoclaw-manager-embed-dist:
-	chmod +x scripts/prepare-picoclaw-embed-dist.sh
-	scripts/prepare-picoclaw-embed-dist.sh picoclaw-manager
+prepare-picoclaw-embed-dist: prepare-docker-embed-dist
 
-prepare-picoclaw-worker-embed-dist:
-	chmod +x scripts/prepare-picoclaw-embed-dist.sh
-	scripts/prepare-picoclaw-embed-dist.sh picoclaw-worker
+patch-docker-embed-image-refs:
+	chmod +x scripts/list-docker-embed-templates.sh scripts/patch-docker-embed-image-refs.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" VERSION="$(DOCKER_EMBED_IMAGE_TAG)" \
+		scripts/patch-docker-embed-image-refs.sh
 
-patch-picoclaw-embed-image-refs:
-	chmod +x scripts/patch-picoclaw-embed-image-refs.sh
-	@if [ -n "$(PICOCLAW_MANAGER_IMAGE_REF)" ] || [ -n "$(PICOCLAW_WORKER_IMAGE_REF)" ]; then \
-		PICOCLAW_MANAGER_IMAGE_REF="$(PICOCLAW_MANAGER_IMAGE_REF)" \
-		PICOCLAW_WORKER_IMAGE_REF="$(PICOCLAW_WORKER_IMAGE_REF)" \
-		scripts/patch-picoclaw-embed-image-refs.sh; \
-	else \
-		ACR_REGISTRY="$(ACR_REGISTRY)" VERSION="$(PICOCLAW_IMAGE_TAG)" \
-		scripts/patch-picoclaw-embed-image-refs.sh; \
-	fi
+patch-picoclaw-embed-image-refs: patch-docker-embed-image-refs
 
-stage-picoclaw-embed-dist: prepare-picoclaw-embed-dist patch-picoclaw-embed-image-refs
+stage-docker-embed-dist: prepare-docker-embed-dist patch-docker-embed-image-refs
+stage-picoclaw-embed-dist: stage-docker-embed-dist
 
-build-picoclaw-manager-image-docker:
-	docker build -f internal/templates/embed/picoclaw-manager/Dockerfile \
-	  --build-arg PICOCLAW_IMAGE=$(PICOCLAW_BASE_IMAGE) \
-	  -t $(PICOCLAW_MANAGER_IMAGE):$(PICOCLAW_IMAGE_TAG) .
+build-docker-embed-images: stage-docker-embed-cli
+	chmod +x scripts/build-docker-embed-images.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
+		DOCKER_EMBED_IMAGE_TAG="$(DOCKER_EMBED_IMAGE_TAG)" \
+		scripts/build-docker-embed-images.sh
 
-build-picoclaw-worker-image-docker:
-	docker build -f internal/templates/embed/picoclaw-worker/Dockerfile \
-	  --build-arg PICOCLAW_IMAGE=$(PICOCLAW_BASE_IMAGE) \
-	  -t $(PICOCLAW_WORKER_IMAGE):$(PICOCLAW_IMAGE_TAG) .
+build-docker-embed-runtime-embed: build-docker-embed-images patch-docker-embed-image-refs
+build-picoclaw-runtime-embed: build-docker-embed-runtime-embed
 
-build-picoclaw-manager-image: stage-picoclaw-docker-cli build-picoclaw-manager-image-docker
+build-picoclaw-manager-image: stage-docker-embed-cli
+	chmod +x scripts/prepare-docker-embed-dist.sh scripts/build-docker-embed-images.sh
+	scripts/prepare-docker-embed-dist.sh picoclaw-manager
+	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
+		DOCKER_EMBED_IMAGE_TAG="$(DOCKER_EMBED_IMAGE_TAG)" \
+		scripts/build-docker-embed-images.sh picoclaw-manager
 
-build-picoclaw-worker-image: stage-picoclaw-docker-cli build-picoclaw-worker-image-docker
-
-build-picoclaw-runtime-embed: stage-picoclaw-docker-cli
-	$(MAKE) build-picoclaw-manager-image-docker build-picoclaw-worker-image-docker
-	$(MAKE) patch-picoclaw-embed-image-refs
+build-picoclaw-worker-image: stage-docker-embed-cli
+	chmod +x scripts/prepare-docker-embed-dist.sh scripts/build-docker-embed-images.sh
+	scripts/prepare-docker-embed-dist.sh picoclaw-worker
+	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
+		DOCKER_EMBED_IMAGE_TAG="$(DOCKER_EMBED_IMAGE_TAG)" \
+		scripts/build-docker-embed-images.sh picoclaw-worker
 
 build-all: build-web
-	$(MAKE) build-picoclaw-runtime-embed
+	$(MAKE) build-docker-embed-runtime-embed
 	$(MAKE) build-server-bin APP=csgclaw
 	$(MAKE) build-csgclaw-cli TARGET_OS=$(TARGET_OS) TARGET_ARCH=$(TARGET_ARCH)
 
@@ -211,8 +206,10 @@ release: build-web
 
 clean:
 	rm -rf $(BIN_DIR) $(DIST_DIR) $(GOCACHE)
-	find internal/templates/embed/picoclaw-manager/dist internal/templates/embed/picoclaw-worker/dist \
-	  -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
+	@for dir in internal/templates/embed/*/dist; do \
+	  [ -f "$${dir%/dist}/Dockerfile" ] || continue; \
+	  find "$$dir" -mindepth 1 ! -name .gitkeep -exec rm -rf {} + ; \
+	done
 
 tag:
 	docker tag $(LOCAL_IMAGE) $(IMAGE):$(TAG)
