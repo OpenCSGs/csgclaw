@@ -940,86 +940,60 @@ local preset: 面向本机便利，允许依赖用户本机工具或认证状态
 
 # 附录 B：本地 image 构建
 
-## B.1 为什么 Agentfile v1 不包含 `[build]`
+Agentfile v1 不包含 `[build]`，也不自动执行本地构建。主协议只描述已经可运行的 artifact：`Agentfile.toml` 必须指向 runnable `[image].ref`。
 
-`Agentfile.toml` v1 不包含 `[build]`。
+本地构建属于 source template 的发布或准备流程，不属于普通 create flow。原因是 build 会依赖本机工具、平台架构、缓存、网络、私有依赖和 registry 认证；如果远程 template 自动触发 build，也会引入安全确认、日志审计和失败恢复问题。
 
-原因：
+## B.1 Source template 到标准 template
 
-- build 依赖本机是否安装 Docker、Podman、Buildah、Nix、Bazel 或其他工具。
-- build 依赖平台架构、buildx、缓存、网络、私有依赖和 registry 认证。
-- 远程 template 如果自动触发 build，会引入安全确认、日志审计和失败恢复问题。
-- template 运行协议应描述可运行 artifact，而不是 artifact 生产过程。
-
-## B.2 推荐构建流程
-
-如果需要保留本地构建能力，建议独立为发布流程：
-
-```text
-开发者使用任意工具构建 OCI image
-开发者把 image 推送到 registry 或打成本地 tag
-Agentfile.toml 的 [image].ref 指向该 image
-agent platform 创建 agent 时只运行该 image
-```
-
-## B.3 Source template 参与流程
-
-有些用户希望共享 agent template，但无法提供公开可信的 image registry，或者使用方不愿直接信任第三方发布的 image。v1 可以允许 source template 作为 registry 的参与路径，但应保持协议边界清晰。
-
-大多数情况下，source template 和本地 image 构建是强相关的：source template 仓库保存 workspace overlay、Agentfile 生成材料、Dockerfile/Containerfile 以及其他 build context；构建流程基于这些源码产出可运行 image，并生成或更新最终的标准 `Agentfile.toml`。因此，source template 更适合作为作者侧源码和构建入口，而不是作为 client 直接创建 agent 的运行入口。
-
-source template 可以包含：
+source template 可以作为作者侧源码入口。它通常保存 workspace overlay、Dockerfile/Containerfile、README、可选 build hint 和其他 build context：
 
 ```text
 <template-root>/
-  Dockerfile or Containerfile
-  image-build.toml        # optional, future helper file
-  workspace/              # optional
-  README.md               # optional
+  Dockerfile
+  image-build.toml        # optional build hint
+  Agentfile.toml          # optional; if present as standard Agentfile, still requires image.ref
+  workspace/
+  README.md
 ```
 
-如果包含 `Agentfile.toml`，则该文件仍必须满足标准 v1 规则。也就是说，标准 `Agentfile.toml` 仍然需要 `[image].ref`。
+如果 source template 还没有可用 `[image].ref`，它不能被当作标准 Agentfile v1 template 直接创建 agent。Registry 可以把它展示为 `build-required` 类型，或者同时发布 source artifact 和构建后的 standard bundle。
 
-如果还没有可用 image.ref，应使用其他文件描述 source template 元数据，或者在 registry 中以 build-required 类型展示，而不是把不完整的 Agentfile 当作标准 v1 接受。
+## B.2 推荐本地构建流程
 
-推荐流程：
+推荐把本地构建结果输出到 source template 根目录下的 `dist/`：
 
 ```text
-作者在 Git 仓库维护 source template 源码和 image build context
-使用方下载并审查 Dockerfile、workspace 和 README
-使用方通过 Docker、Podman、Buildah、Nix 或某个实现提供的 build command 构建本地 image
-构建结果得到本地 tag 或可信 registry ref
-生成或更新 Agentfile.toml，让 [image].ref 指向该 image
-agent platform 按标准 Agentfile v1 创建 agent
+作者维护 source template 源码和 image build context
+使用方审查 Dockerfile、workspace 和 README
+使用方显式触发本地 build
+build 得到本地 image tag 或可信 registry ref
+生成 <template-root>/dist/ 标准 template snapshot
+agent platform 按 dist/ 中的 Agentfile v1 创建 agent
 ```
 
-## B.4 未来扩展
-
-未来可以增加独立辅助文件，例如：
+推荐输出布局：
 
 ```text
-image-build.toml
+<template-root>/
+  Dockerfile
+  image-build.toml
+  Agentfile.toml
+  workspace/
+  README.md
+  dist/                   # generated, ignored by source control
+    Agentfile.toml        # final standard Agentfile v1, with image.ref
+    workspace/
+    README.md
 ```
 
-但该文件不属于 Agentfile v1 的运行协议。它更像 source template 的 build hint，用于帮助显式 build 命令找到构建入口，而不是描述“如何运行 agent”。
+`dist/` 只包含普通 create flow 需要消费的最终标准 template。它应包含最终 `Agentfile.toml`、可选 workspace overlay 和必要说明文件；其中 `[image].ref` 应指向已经构建完成的本地 tag 或可信 registry ref。`dist/` 应视为 generated output，通常加入 `.gitignore`；正式发布时再打包成 immutable template bundle 并记录 digest。
 
-`image-build.toml` 的合理职责边界：
+## B.3 可选 `image-build.toml`
 
-- 声明显式 build 命令需要的最小构建入口，例如 builder 类型、Dockerfile/Containerfile 路径和 build context。
-- 给 CLI、CI 或 registry 提供可读的 build hint。
-- 构建完成后，最终仍应生成或更新标准 `Agentfile.toml` 中的 `[image].ref` 和可选 `[image].digest`。
+`image-build.toml` 是协议外 build hint，用于帮助显式 build 命令找到构建入口。它不替代 `Agentfile.toml`，不保存 secret，不要求所有 client 支持本地 build，也不让 source template 在缺少 `[image].ref` 时变成标准 template。
 
-`image-build.toml` 不应承担的职责：
-
-- 不保存 registry password、token、SSH key 或其他真实 secret。
-- 不替代 `Agentfile.toml` 的 `[image]`、`[runtime]`、`[[image.env]]` 或 `[workspace]`。
-- 不要求所有 client 必须支持本地 build。
-- 不让 source template 在缺少可用 `image.ref` 时变成标准 Agentfile v1 template。
-- 不在 Agentfile v1 中提前标准化完整 build system。
-
-一个可能的草案形态：
-
-最小可用版本应只声明 builder 和构建入口：
+最小形态可以只声明 builder 和构建入口：
 
 ```toml
 schema_version = "image-build/v1"
@@ -1035,13 +1009,11 @@ context = "."
 ```text
 csgclaw hub build ./picoclaw-worker-template
 读取 image-build.toml
-执行显式确认后的本地 build
-得到本地 image ref 或可信 registry ref
-由命令参数、实现默认值或后续发布流程更新 Agentfile.toml 的 [image].ref
-按标准 Agentfile v1 校验最终 template
+显式构建 image
+输出 dist/ 标准 template
 ```
 
-正式采用前，应单独定义 `image-build/v1`。在 Agentfile v1 中，只需要说明它是可选的协议外辅助文件，避免把 build system 复杂度带入主规范。
+正式采用前，应单独定义 `image-build/v1`。Agentfile v1 只需要说明它是可选辅助文件，避免把 build system 复杂度带入主规范。
 
 ---
 
