@@ -55,7 +55,9 @@ export function ConversationSection({
                   <div className="section-label">{formatTime(lastMessage?.created_at, locale)}</div>
                 </div>
                 <div className="conversation-preview truncate">
-                  <MessagePreviewText content={formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t)} />
+                  <MessagePreviewText
+                    content={formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t)}
+                  />
                 </div>
               </div>
             </button>

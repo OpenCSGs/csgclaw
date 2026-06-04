@@ -123,7 +123,7 @@ Minimal handoff flow:
 3. `csgclaw-cli message create` with `--mention-id` and the task body.
 4. `csgclaw-cli message list` — confirm the stored message contains `<at user_id="...">`.
 
-For multi-worker sequencing, use `manager-worker-dispatch` (`start-tracking`) instead of manual room messages.
+For multi-worker team tasks, use `agent-teams` (`csgclaw-cli team` plan/start) instead of manual room messages. Use `manager-worker-dispatch` only when team tasks are not in use.
 
 Example worker handoff (replace room ID, worker ID, and channel):
 
@@ -149,4 +149,4 @@ Do **not** post `@alex` plain text in the room instead of `--mention-id`.
 - Keep `csgclaw-cli` parameters bot-facing across channels: use bot IDs such as `u-manager`, `u-dev`, and `u-alex`.
 - Never notify a worker with plain-text `@name`; always use `message create --mention-id` and verify `<at user_id="...">` in `message list`.
 - Keep the response focused on the concrete CLI result instead of introducing external planning artifacts.
-- Hand off to `manager-worker-dispatch` only if the user explicitly needs manager orchestration or multi-worker sequencing.
+- Hand off to `agent-teams` for multi-worker team orchestration; use `manager-worker-dispatch` only if the user explicitly needs tracker handoff outside team tasks.

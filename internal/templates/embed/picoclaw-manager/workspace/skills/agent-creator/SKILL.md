@@ -1,6 +1,6 @@
 ---
 name: agent-creator
-description: Mandatory skill for provisioning any new CSGClaw agent, bot, robot, or worker. Use immediately when the user asks to create, add, set up, or provision an agent/bot/worker (including GitLab, frontend, QA, or other specialized workers), when dispatch needs a missing worker, or when asking which hub template fits. Always hub list + match + hub get + bot create --from-template with --env for secrets. Never run bot create without --from-template for a new worker. Do NOT use for task dispatch to existing workers or todo.json tracking only.
+description: Mandatory skill for provisioning any new CSGClaw agent, bot, robot, or worker. Use immediately when the user asks to create, add, set up, or provision an agent/bot/worker (including GitLab, frontend, backend, QA, or other specialized workers), when dispatch needs a missing worker, or when asking which hub template fits. Always hub list + match + hub get + bot create --from-template with --env for secrets. Never run bot create without --from-template for a new worker. Do NOT use for task dispatch to existing workers or todo.json tracking only.
 ---
 
 # Agent Creator
@@ -25,7 +25,7 @@ If dispatch or any other skill says "create a worker", that means **this skill**
 Use this skill when:
 
 - the user asks to create, add, set up, or provision an agent, bot, robot, or worker
-- the user names a capability (GitLab, frontend, QA, review, etc.) and needs a matching worker
+- the user names a capability (GitLab, frontend, backend, QA, review, etc.) and needs a matching worker
 - `bot list` shows no suitable available worker for the required capability
 - dispatch needs a new worker (pause dispatch, complete provisioning here, then resume with `basics` + dispatch)
 

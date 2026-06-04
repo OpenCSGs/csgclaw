@@ -1,10 +1,12 @@
 import { Button } from "@/components/ui";
 import { HubIcon, RoomsIcon, UsersIcon } from "@/components/ui/Icons";
 import { WorkspaceTabs } from "@/models/routing";
+import { ListTodo } from "lucide-react";
 
 export function WorkspaceTabBar({
   workspaceTab,
   onWorkspaceTabChange,
+  taskCount = 0,
   roomCount,
   agentCount,
   onSelectHub,
@@ -54,6 +56,25 @@ export function WorkspaceTabBar({
           <span className="workspace-tab-copy">
             <strong>{t("agentsTab")}</strong>
             <small>{agentCount}</small>
+          </span>
+        ) : null}
+      </Button>
+      <Button
+        className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
+        active={workspaceTab === WorkspaceTabs.tasks}
+        role="tab"
+        aria-selected={workspaceTab === WorkspaceTabs.tasks}
+        aria-label={t("tasksTab")}
+        title={t("tasksTab")}
+        onClick={() => onWorkspaceTabChange(WorkspaceTabs.tasks)}
+      >
+        <span className="workspace-tab-icon" aria-hidden="true">
+          <ListTodo strokeWidth={2.1} />
+        </span>
+        {!rail ? (
+          <span className="workspace-tab-copy">
+            <strong>{t("tasksTab")}</strong>
+            <small>{taskCount}</small>
           </span>
         ) : null}
       </Button>

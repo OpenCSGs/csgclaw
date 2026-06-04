@@ -519,6 +519,15 @@ func teamSpec() CommandSpec {
 						},
 					},
 					{
+						Name:    "claim",
+						Summary: "Claim a specific task",
+						Flags: []FlagSpec{
+							{Name: "team", TakesValue: true},
+							{Name: "task", TakesValue: true},
+							{Name: "bot-id", TakesValue: true},
+						},
+					},
+					{
 						Name:    "update",
 						Summary: "Update a task status",
 						Flags: []FlagSpec{

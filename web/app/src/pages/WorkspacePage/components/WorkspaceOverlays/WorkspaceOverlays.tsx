@@ -3,6 +3,7 @@ import { ProfilePreviewPopover } from "../ProfilePreviewPopover";
 import {
   AgentProfileModal,
   CreateRoomModal,
+  CreateTeamModal,
   InviteMembersModal,
   ManagerProfileSetupModal,
   ManagerRebuildModal,
@@ -16,6 +17,7 @@ export function WorkspaceOverlays() {
     <>
       {controller.profilePreviewProps ? <ProfilePreviewPopover {...controller.profilePreviewProps} /> : null}
       {controller.createRoomModalProps ? <CreateRoomModal {...controller.createRoomModalProps} /> : null}
+      {controller.createTeamModalProps ? <CreateTeamModal {...controller.createTeamModalProps} /> : null}
       {controller.inviteMembersModalProps ? <InviteMembersModal {...controller.inviteMembersModalProps} /> : null}
       {controller.upgradeModalProps ? <UpgradeModal {...controller.upgradeModalProps} /> : null}
       {controller.agentProfileModalProps ? <AgentProfileModal {...controller.agentProfileModalProps} /> : null}

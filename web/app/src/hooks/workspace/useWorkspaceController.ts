@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createTranslator } from "@/shared/i18n";
-import { paneFromLocation } from "@/models/routing";
+import { WorkspacePaneTypes, paneFromLocation } from "@/models/routing";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
 import { useWorkspaceData } from "./useWorkspaceData";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
@@ -113,7 +113,7 @@ export function useWorkspaceController() {
   const activePane = useMemo(() => paneFromLocation(location.pathname), [location.pathname]);
   const rooms = useMemo(() => displayData?.rooms ?? [], [displayData]);
   const loadingError = bootstrapQuery.isError ? t("loadingFailed") : "";
-  const { navigatePane, selectConversation, selectAgent, selectComputer, selectHub, selectTasks } =
+  const { navigatePane, selectConversation, selectAgent, selectTeam, selectComputer, selectHub, selectTasks } =
     useWorkspaceNavigation({
       location,
       navigate,
@@ -221,10 +221,15 @@ export function useWorkspaceController() {
   });
   const task = useTaskController({
     activePane,
+    agents: agent.agentItems,
     t,
     onSelectConversation: selectConversation,
     onSelectTask: selectTasks,
   });
+  const selectedTeamID = activePane.type === WorkspacePaneTypes.team ? String(activePane.id || "") : "";
+  const selectedTeam = agent.teams.find((item) => item.id === selectedTeamID) ?? null;
+  const selectedTeamRoom = selectedTeam ? (rooms.find((room) => room.id === selectedTeam.room_id) ?? null) : null;
+  const selectedTeamTasks = selectedTeam ? task.tasks.filter((item) => item.team_id === selectedTeam.id) : [];
 
   function selectHubTemplate(item: HubTemplate | null | undefined) {
     if (!item?.id) {
@@ -262,9 +267,13 @@ export function useWorkspaceController() {
       agentItems: agent.agentItems,
       workerAgentItems: agent.workerAgentItems,
       notificationAgentItems: agent.notificationAgentItems,
+      teams: agent.teams,
       workspaceTab: shell.workspaceTab,
       onWorkspaceTabChange: shell.selectWorkspaceTab,
-      taskCount: task.tasks.length,
+      taskCount: task.rootTaskCount,
+      taskItems: task.tasks,
+      planningTaskID: task.planningTaskID,
+      startingTaskID: task.startingTaskID,
       roomCount: conversation.roomCount,
       threadCount: conversation.threadCount,
       channels: conversation.channels,
@@ -280,9 +289,24 @@ export function useWorkspaceController() {
       onCreateRoom: () => conversation.openCreateRoomModal(),
       onCreateAgent: agent.openCreateAgentModal,
       onCreateNotificationBot: agent.openCreateNotificationBotModal,
+      onCreateTeam: async ({ title, lead_bot_id, member_bot_ids }) => {
+        await agent.agentViewProps.onCreateTeam?.({
+          channel: "csgclaw",
+          title,
+          lead_bot_id,
+          member_bot_ids,
+        });
+      },
+      teamActionBusy: agent.agentViewProps.teamActionBusy,
+      teamActionError: agent.agentViewProps.teamActionError,
+      onOpenCreateTeam: agent.openCreateTeamModal,
       hub,
       onSelectHubTemplate: selectHubTemplate,
       onSelectHub: selectHub,
+      onSelectTask: selectTasks,
+      onOpenCreateTask: task.openCreateTaskModal,
+      onViewTaskDetails: task.openParentTaskDetail,
+      onSelectTeam: selectTeam,
       agentsError: agent.agentsDisplayError,
       onSelectConversation: conversation.selectConversationAndCloseThread,
       onSelectThread: conversation.openThreadInConversation,
@@ -319,8 +343,24 @@ export function useWorkspaceController() {
       onPreviewUser: profilePreview.openParticipantPreview,
     },
     taskViewProps: task.taskViewProps,
+    teamViewProps: {
+      t,
+      team: selectedTeam,
+      teamsLoading: agent.teamsLoading,
+      room: selectedTeamRoom,
+      agents,
+      usersById: conversation.usersById,
+      tasks: selectedTeamTasks,
+      teamActionBusy: agent.agentViewProps.teamActionBusy,
+      teamActionError: agent.agentViewProps.teamActionError,
+      onAddAgentsToTeam: agent.agentViewProps.onAddAgentsToTeam,
+      onOpenRoom: selectConversation,
+      onSelectAgent: selectAgent,
+      onSelectTask: selectTasks,
+    },
     profilePreviewProps: profilePreview.profilePreviewProps,
     createRoomModalProps: conversation.createRoomModalProps,
+    createTeamModalProps: agent.createTeamModalProps,
     inviteMembersModalProps: conversation.inviteMembersModalProps,
     upgradeModalProps: upgrade.upgradeModalProps,
     agentProfileModalProps: agent.agentProfileModalProps,

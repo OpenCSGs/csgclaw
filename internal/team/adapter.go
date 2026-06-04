@@ -43,6 +43,7 @@ type AddMembersRequest struct {
 type SendMessageRequest struct {
 	Room           RoomRef `json:"room"`
 	SenderBotID    string  `json:"sender_bot_id"`
+	MentionID      string  `json:"mention_id,omitempty"`
 	Kind           string  `json:"kind,omitempty"`
 	Content        string  `json:"content"`
 	IdempotencyKey string  `json:"idempotency_key,omitempty"`

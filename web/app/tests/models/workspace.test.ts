@@ -1,8 +1,4 @@
-import {
-  firstWorkspaceFilePath,
-  hasWorkspaceFilePath,
-  workspaceAncestorDirs,
-} from "@/models/workspace";
+import { firstWorkspaceFilePath, hasWorkspaceFilePath, workspaceAncestorDirs } from "@/models/workspace";
 
 describe("workspace helpers", () => {
   it("derives ancestor directories from workspace paths", () => {

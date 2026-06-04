@@ -1,6 +1,24 @@
-import { groupTasksByParent, normalizeTaskList } from "@/models/tasks";
+import {
+  boardColumnsForTask,
+  formatTaskUpdatedAt,
+  groupTasksByParent,
+  normalizeTaskList,
+  normalizeTeamEventList,
+  resolveTaskSidebarPhase,
+  rootTasks,
+  taskChildren,
+} from "@/models/tasks";
 
 describe("tasks model", () => {
+  it("formats task timestamps in locale-neutral numeric form", () => {
+    const value = "2026-06-04T13:13:00Z";
+    const formatted = formatTaskUpdatedAt(value, "en");
+    expect(formatted).toMatch(/^\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}$/);
+    expect(formatTaskUpdatedAt(value, "zh")).toBe(formatted);
+    expect(formatTaskUpdatedAt("", "en")).toBe("-");
+    expect(formatTaskUpdatedAt("invalid", "en")).toBe("-");
+  });
+
   it("normalizes parent ids and groups child tasks under their parent", () => {
     const tasks = normalizeTaskList([
       {
@@ -52,5 +70,117 @@ describe("tasks model", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]?.task.id).toBe("task-2");
     expect(groups[0]?.children).toEqual([]);
+  });
+
+  it("counts only parent tasks and groups child tasks into board columns", () => {
+    const tasks = normalizeTaskList([
+      {
+        id: "task-1",
+        team_id: "team-1",
+        room_id: "room-1",
+        title: "Beta 1",
+        updated_at: "2026-05-30T10:00:00Z",
+      },
+      {
+        id: "task-2",
+        team_id: "team-1",
+        room_id: "room-1",
+        parent_id: "task-1",
+        status: "in_progress",
+        title: "Build board",
+        updated_at: "2026-05-30T09:00:00Z",
+      },
+      {
+        id: "task-3",
+        team_id: "team-1",
+        room_id: "room-1",
+        parent_id: "task-1",
+        status: "blocked",
+        title: "Review copy",
+        updated_at: "2026-05-30T08:00:00Z",
+      },
+    ]);
+
+    expect(rootTasks(tasks).map((item) => item.id)).toEqual(["task-1"]);
+
+    const columns = boardColumnsForTask(tasks, "task-1");
+    expect(columns.find((column) => column.status === "in_progress")?.tasks.map((item) => item.id)).toEqual(["task-2"]);
+    expect(columns.find((column) => column.status === "blocked")?.tasks.map((item) => item.id)).toEqual(["task-3"]);
+    expect(columns.find((column) => column.status === "completed")?.tasks).toEqual([]);
+  });
+
+  it("resolves sidebar phases for planning and dispatching parent tasks", () => {
+    const planningTask = normalizeTaskList([
+      {
+        id: "task-1",
+        team_id: "team-1",
+        room_id: "room-1",
+        status: "pending",
+        title: "Planning",
+      },
+    ])[0];
+    expect(resolveTaskSidebarPhase(planningTask, [])).toBe("planning");
+    expect(resolveTaskSidebarPhase(planningTask, [], { planningTaskID: "task-1" })).toBe("planning");
+
+    const dispatchTasks = normalizeTaskList([
+      {
+        id: "task-1",
+        team_id: "team-1",
+        room_id: "room-1",
+        status: "pending",
+        plan_summary: "Split work",
+        title: "Parent",
+      },
+      {
+        id: "task-2",
+        team_id: "team-1",
+        room_id: "room-1",
+        parent_id: "task-1",
+        status: "pending",
+        assigned_to: "bot-alice",
+        title: "Child",
+      },
+    ]);
+    const parent = dispatchTasks[0];
+    const children = taskChildren(dispatchTasks, "task-1");
+    expect(resolveTaskSidebarPhase(parent, children)).toBe("idle");
+    expect(resolveTaskSidebarPhase(parent, children, { startingTaskID: "task-1" })).toBe("dispatching");
+
+    const dispatchedChild = {
+      ...children[0],
+      status: "assigned",
+      dispatched_at: "2026-05-30T10:00:00Z",
+    };
+    expect(resolveTaskSidebarPhase(parent, [dispatchedChild])).toBe("idle");
+  });
+
+  it("normalizes team events in sequence order", () => {
+    const events = normalizeTeamEventList([
+      {
+        seq: 2,
+        team_id: "team-1",
+        type: "task.completed",
+        task_id: "task-2",
+        summary: "done",
+      },
+      {
+        seq: 1,
+        team_id: "team-1",
+        type: "task.created",
+        task_id: "task-2",
+        summary: "Draft release note",
+      },
+      {
+        type: "task.created",
+      },
+    ]);
+
+    expect(events.map((item) => item.type)).toEqual(["task.created", "task.completed"]);
+    expect(events[0]).toMatchObject({
+      seq: 1,
+      team_id: "team-1",
+      task_id: "task-2",
+      summary: "Draft release note",
+    });
   });
 });

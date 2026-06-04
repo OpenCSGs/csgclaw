@@ -471,6 +471,9 @@ func (s *Service) createWorker(ctx context.Context, normalized CreateRequest) (B
 	if existing, ok := s.findByChannelName(normalized.Channel, normalized.Name); ok {
 		return Bot{}, fmt.Errorf("bot name %q already exists in channel %q with id %q", normalized.Name, normalized.Channel, existing.ID)
 	}
+	if id := strings.TrimSpace(normalized.ID); id != "" && !strings.HasPrefix(id, "u-") {
+		return Bot{}, fmt.Errorf("worker bot id must be a canonical user id starting with u-: %s", id)
+	}
 
 	created, ok := s.agents.Agent(workerAgentID(normalized))
 	if ok {

@@ -373,9 +373,7 @@ describe("agent model helpers", () => {
 
   it("normalizes runtime and auth provider labels", () => {
     expect(normalizeRuntimeKind("codex")).toBe("codex");
-    expect(notificationPushWebhookPathForBot("u-test")).toBe(
-      "/api/v1/channels/csgclaw/bots/u-test/notifications",
-    );
+    expect(notificationPushWebhookPathForBot("u-test")).toBe("/api/v1/channels/csgclaw/bots/u-test/notifications");
     expect(normalizeRuntimeKind("unknown")).toBe("unknown");
     expect(normalizeAuthProviderName("claude-code")).toBe("claude_code");
     expect(providerNeedsAuth("claude")).toBe(true);
@@ -466,9 +464,7 @@ describe("agent model helpers", () => {
     expect(notifierThirdPartyRelayWebhookURL("https://relay.example.com/api/v1/inbox/messages", "sub-1")).toBe(
       "https://relay.example.com/api/v1/webhooks/ingress?subscription_id=sub-1",
     );
-    expect(
-      notifierThirdPartyRelayWebhookURL("http://opencsg-stg.com/api/v1/csgbot/notification-relay", "sub-1"),
-    ).toBe(
+    expect(notifierThirdPartyRelayWebhookURL("http://opencsg-stg.com/api/v1/csgbot/notification-relay", "sub-1")).toBe(
       "http://opencsg-stg.com/api/v1/csgbot/notification-relay/webhooks/ingress?subscription_id=sub-1",
     );
     expect(notifierThirdPartyRelayWebhookURL("https://relay.example.com", "sub-1")).toBe(

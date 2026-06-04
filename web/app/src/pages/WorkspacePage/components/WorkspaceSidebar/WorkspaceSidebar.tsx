@@ -30,9 +30,14 @@ export function WorkspaceSidebar({
   onCreateRoom,
   onCreateAgent,
   onCreateNotificationBot,
+  onOpenCreateTeam,
+  onOpenCreateTask,
   hub,
   onSelectHubTemplate,
   onSelectHub,
+  onSelectTask,
+  onViewTaskDetails,
+  onSelectTeam,
   agentsError,
   onSelectConversation,
   onSelectThread,
@@ -46,6 +51,10 @@ export function WorkspaceSidebar({
   upgradePhase,
   upgradeError,
   onOpenUpgrade,
+  taskItems,
+  teams,
+  planningTaskID = "",
+  startingTaskID = "",
 }: WorkspaceSidebarProps) {
   const agentCount = agentItems.length || 0;
 
@@ -57,6 +66,7 @@ export function WorkspaceSidebar({
             variant="rail"
             workspaceTab={workspaceTab}
             onWorkspaceTabChange={onWorkspaceTabChange}
+            taskCount={taskCount}
             roomCount={roomCount}
             agentCount={agentCount}
             onSelectHub={onSelectHub}
@@ -89,6 +99,10 @@ export function WorkspaceSidebar({
           <WorkspaceTabPanels
             workspaceTab={workspaceTab}
             taskCount={taskCount}
+            taskItems={taskItems}
+            teams={teams}
+            planningTaskID={planningTaskID}
+            startingTaskID={startingTaskID}
             channels={channels}
             directMessages={directMessages}
             threadGroups={threadGroups}
@@ -103,8 +117,13 @@ export function WorkspaceSidebar({
             onCreateRoom={onCreateRoom}
             onCreateAgent={onCreateAgent}
             onCreateNotificationBot={onCreateNotificationBot}
+            onOpenCreateTeam={onOpenCreateTeam}
+            onOpenCreateTask={onOpenCreateTask}
             hub={hub}
             onSelectHubTemplate={onSelectHubTemplate}
+            onSelectTask={onSelectTask}
+            onViewTaskDetails={onViewTaskDetails}
+            onSelectTeam={onSelectTeam}
             agentsError={agentsError}
             onSelectConversation={onSelectConversation}
             onSelectThread={onSelectThread}

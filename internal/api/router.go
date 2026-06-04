@@ -96,6 +96,9 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 					r.Post("/batch", h.createTeamTasksBatch)
 					r.Post("/claim-next", h.claimNextTask)
 					r.Route("/{task_id}", func(r chi.Router) {
+						r.Post("/plan", h.planTeamTask)
+						r.Post("/start", h.startTeamTask)
+						r.Post("/claim", h.claimTeamTask)
 						r.Patch("/", h.updateTeamTask)
 						r.Post("/assign", h.assignTeamTask)
 					})

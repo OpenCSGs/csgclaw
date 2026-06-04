@@ -206,6 +206,7 @@
 }
 
 .messages {
+  min-height: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;

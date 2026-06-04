@@ -1,0 +1,77 @@
+.task-status-pill {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--portal-gray-100);
+  color: var(--portal-gray-700);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.task-status-pill-compact {
+  min-height: 20px;
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.task-status-pill.task-status-pending,
+.task-status-pill.task-status-assigned {
+  background: var(--portal-gray-100);
+  color: var(--portal-gray-700);
+}
+
+.task-status-pill.task-status-in_progress {
+  background: color-mix(in srgb, var(--portal-brand-600) 12%, transparent);
+  color: var(--portal-brand-700);
+}
+
+.task-status-pill.task-status-completed {
+  background: color-mix(in srgb, #2e90fa 14%, transparent);
+  color: #1570ef;
+}
+
+.task-status-pill.task-status-blocked {
+  background: var(--portal-warning-50);
+  color: var(--portal-warning-700);
+}
+
+.task-status-pill.task-status-failed,
+.task-status-pill.task-status-cancelled {
+  background: color-mix(in srgb, var(--portal-error-600) 12%, transparent);
+  color: var(--portal-error-600);
+}
+
+:root[data-theme="dark"] .task-status-pill.task-status-pending,
+:root[data-theme="dark"] .task-status-pill.task-status-assigned {
+  background: color-mix(in srgb, var(--portal-gray-700) 40%, transparent);
+  color: var(--portal-gray-200);
+}
+
+:root[data-theme="dark"] .task-status-pill.task-status-in_progress {
+  background: color-mix(in srgb, var(--portal-brand-600) 22%, transparent);
+  color: var(--portal-brand-100);
+}
+
+:root[data-theme="dark"] .task-status-pill.task-status-completed {
+  background: color-mix(in srgb, #2e90fa 24%, transparent);
+  color: #84caff;
+}
+
+:root[data-theme="dark"] .task-status-pill.task-status-blocked {
+  background: color-mix(in srgb, var(--portal-warning-700) 22%, transparent);
+  color: var(--portal-warning-50);
+}
+
+:root[data-theme="dark"] .task-status-pill.task-status-failed,
+:root[data-theme="dark"] .task-status-pill.task-status-cancelled {
+  background: color-mix(in srgb, var(--portal-error-600) 22%, transparent);
+  color: var(--portal-error-300);
+}

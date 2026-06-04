@@ -3,9 +3,7 @@ import { parseSlashCommand, renderSlashCommandPreviewText } from "@/models/slash
 describe("slash command parser", () => {
   it("rejects duplicate slash command attributes", () => {
     expect(
-      parseSlashCommand(
-        '<slash-command name="use-skill" name="use-skill" arg="skill-creator"></slash-command> create',
-      ),
+      parseSlashCommand('<slash-command name="use-skill" name="use-skill" arg="skill-creator"></slash-command> create'),
     ).toBeNull();
   });
 

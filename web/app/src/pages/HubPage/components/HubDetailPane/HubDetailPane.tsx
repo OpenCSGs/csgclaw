@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { formatHubDate, formatHubDateTime, formatHubTemplateCount, isDeletableHubTemplate } from "@/models/hubWorkspace";
+import {
+  formatHubDate,
+  formatHubDateTime,
+  formatHubTemplateCount,
+  isDeletableHubTemplate,
+} from "@/models/hubWorkspace";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import { localizeRole, localizeTemplateSourceTag } from "@/shared/i18n";
 import { HubIcon } from "@/components/ui/Icons";

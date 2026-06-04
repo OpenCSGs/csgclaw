@@ -113,13 +113,23 @@ func (a *CSGClawAdapter) SendMessage(_ context.Context, req SendMessageRequest) 
 	if senderID == "" {
 		return MessageRef{}, fmt.Errorf("sender_bot_id is required")
 	}
-	if _, err := a.ensureBotUser(senderID, "worker"); err != nil {
+	senderID = a.im.ResolveUserID(senderID)
+	senderRole := "worker"
+	if user, ok := a.im.User(senderID); ok && strings.EqualFold(strings.TrimSpace(user.Role), "manager") {
+		senderRole = "manager"
+	}
+	sender, err := a.ensureBotUser(senderID, senderRole)
+	if err != nil {
 		return MessageRef{}, err
 	}
+	senderID = sender.ID
+
+	mentionID := a.im.ResolveUserID(strings.TrimSpace(req.MentionID))
 
 	msg, err := a.im.DeliverMessage(im.DeliverMessageRequest{
 		RoomID:    roomID,
 		SenderID:  senderID,
+		MentionID: mentionID,
 		Content:   strings.TrimSpace(req.Content),
 		MessageID: strings.TrimSpace(req.IdempotencyKey),
 	})
@@ -134,7 +144,11 @@ func (a *CSGClawAdapter) SendMessage(_ context.Context, req SendMessageRequest) 
 }
 
 func (a *CSGClawAdapter) ensureBotUser(botID string, role string) (im.User, error) {
-	botID = strings.TrimSpace(botID)
+	var err error
+	botID, err = requireCanonicalBotID("bot_id", botID)
+	if err != nil {
+		return im.User{}, err
+	}
 	if botID == "" {
 		return im.User{}, fmt.Errorf("bot id is required")
 	}

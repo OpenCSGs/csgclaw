@@ -41,6 +41,17 @@ export function useWorkspaceNavigation({
     [navigatePane, rooms],
   );
 
+  const selectTeam = useCallback(
+    (item: { id?: string | null } | null | undefined, options: NavigatePaneOptions = {}) => {
+      if (!item?.id) {
+        return;
+      }
+      const next: WorkspacePane = { type: WorkspacePaneTypes.team, id: item.id };
+      navigatePane(next, rooms, options);
+    },
+    [navigatePane, rooms],
+  );
+
   const selectComputer = useCallback(
     (options: NavigatePaneOptions = {}) => {
       const next: WorkspacePane = { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
@@ -90,6 +101,7 @@ export function useWorkspaceNavigation({
     navigatePane,
     selectConversation,
     selectAgent,
+    selectTeam,
     selectComputer,
     selectHub,
     selectTasks,

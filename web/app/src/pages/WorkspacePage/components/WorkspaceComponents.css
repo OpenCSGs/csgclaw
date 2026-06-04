@@ -2895,6 +2895,11 @@ select,
   grid-row: 1 / -1;
 }
 
+.chat-panel > .tasks-pane {
+  align-self: stretch;
+  min-height: 0;
+}
+
 .computer-detail-pane {
   --computer-page-content-width: min(100%, 1520px);
 

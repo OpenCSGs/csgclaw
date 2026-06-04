@@ -35,6 +35,7 @@ export type WorkspaceNavigationController = {
   selectComputer: (options?: NavigatePaneOptions) => void;
   selectConversation: (id: string, options?: NavigatePaneOptions) => void;
   selectHub: (options?: NavigatePaneOptions) => void;
+  selectTeam: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
   selectTasks: (taskID?: string, options?: NavigatePaneOptions) => void;
 };
 

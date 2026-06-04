@@ -5,11 +5,7 @@ import { errorMessage } from "@/api/client";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { actionOptionLabel, statusLabel } from "@/models/agentActivity";
 import { renderMarkdown } from "./markdown";
-import type {
-  AgentActivityAction,
-  AgentActivityActionOption,
-  AgentActivityPayload,
-} from "@/models/agentActivity";
+import type { AgentActivityAction, AgentActivityActionOption, AgentActivityPayload } from "@/models/agentActivity";
 import { Button } from "@/components/ui";
 
 type AgentActivityCardProps = {
@@ -34,13 +30,7 @@ function ToolActivityCard({ activity }: AgentActivityCardProps) {
   return <div className="message-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(markdown) }} />;
 }
 
-function PermissionActivityCard({
-  action,
-  activity,
-}: {
-  action: AgentActivityAction;
-  activity: AgentActivityPayload;
-}) {
+function PermissionActivityCard({ action, activity }: { action: AgentActivityAction; activity: AgentActivityPayload }) {
   const [busyOption, setBusyOption] = useState("");
   const [localStatus, setLocalStatus] = useState(action.status);
   const [error, setError] = useState("");
@@ -134,7 +124,9 @@ function optionStatus(option: AgentActivityActionOption): string {
 }
 
 function displayToolKind(kind: string | undefined) {
-  const normalized = String(kind || "").trim().toLowerCase();
+  const normalized = String(kind || "")
+    .trim()
+    .toLowerCase();
   if (normalized === "execute") {
     return "exec";
   }

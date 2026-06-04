@@ -155,9 +155,7 @@ describe("composer model helpers", () => {
     const replaced = replaceComposerSlashWithSegments(root, [{ type: "text", text: "/basics " }]);
 
     expect(replaced).toBe(true);
-    expect(parseComposerSegments(root)).toEqual([
-      { type: "text", text: "Hi /basics " },
-    ]);
+    expect(parseComposerSegments(root)).toEqual([{ type: "text", text: "Hi /basics " }]);
     const selection = window.getSelection();
     expect(selection?.rangeCount).toBe(1);
     expect(selection?.getRangeAt(0).startContainer.nodeType).toBe(Node.TEXT_NODE);

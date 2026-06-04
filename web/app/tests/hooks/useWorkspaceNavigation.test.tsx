@@ -39,6 +39,9 @@ function NavigationHarness() {
       <button type="button" onClick={() => navigation.selectAgent({ id: "agent-1" })}>
         Open agent
       </button>
+      <button type="button" onClick={() => navigation.selectTeam({ id: "team-1" })}>
+        Open team
+      </button>
     </>
   );
 }
@@ -93,5 +96,22 @@ describe("useWorkspaceNavigation", () => {
       expect(screen.getByTestId("path")).toHaveTextContent("/agents/agent-1");
     });
     expect(screen.getByTestId("pane")).toHaveTextContent("agent:agent-1");
+  });
+
+  it("selects teams without opening the backing room", async () => {
+    window.history.replaceState({}, "", "/rooms/room-1");
+
+    render(
+      <BrowserRouter>
+        <NavigationHarness />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open team" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("path")).toHaveTextContent("/teams/team-1");
+    });
+    expect(screen.getByTestId("pane")).toHaveTextContent("team:team-1");
   });
 });

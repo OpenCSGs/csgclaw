@@ -21,6 +21,50 @@
   background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
 }
 
+.task-sidebar-status {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  align-self: center;
+  border-radius: 999px;
+  background: var(--portal-gray-400);
+}
+
+.task-sidebar-status-pending {
+  background: var(--portal-gray-400);
+}
+
+.task-sidebar-status-assigned {
+  background: var(--portal-gray-500);
+}
+
+.task-sidebar-status-in_progress {
+  background: var(--portal-brand-600);
+}
+
+.task-sidebar-status-blocked {
+  background: var(--portal-success-500);
+}
+
+.task-sidebar-status-completed {
+  background: #2e90fa;
+}
+
+.task-sidebar-status-failed,
+.task-sidebar-status-cancelled {
+  background: #ef4444;
+}
+
+.team-nav-row .workspace-row-icon {
+  background: color-mix(in srgb, var(--portal-brand-600) 10%, transparent);
+  color: var(--portal-brand-600);
+}
+
+.team-nav-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .sidebar-slot {
   position: relative;
   z-index: var(--z-page-popover);
@@ -2759,7 +2803,7 @@
 }
 
 .workspace-group-actions {
-  opacity: 0;
+  opacity: 1;
   transition: opacity 120ms ease;
 }
 
@@ -2779,6 +2823,7 @@
 }
 
 .workspace-add-button {
+  position: relative;
   width: 26px;
   min-width: 26px;
   height: 26px;
@@ -2800,6 +2845,32 @@
 .workspace-add-button .icon-button-mark {
   width: 15px;
   height: 15px;
+}
+
+.workspace-add-button[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: var(--z-page-popover);
+  top: calc(100% + 6px);
+  right: 0;
+  display: none;
+  min-width: max-content;
+  max-width: 120px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--portal-gray-700);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+
+.workspace-add-button[data-tooltip]:hover::after,
+.workspace-add-button[data-tooltip]:focus-visible::after {
+  display: block;
 }
 
 .workspace-row {
@@ -2984,6 +3055,11 @@
   color: var(--portal-gray-200);
 }
 
+:root[data-theme="dark"] .workspace-add-button[data-tooltip]::after {
+  background: var(--panel-strong);
+  color: var(--portal-gray-200);
+}
+
 @media (max-width: 960px) {
   .workspace-sidebar-resizer {
     display: none;
@@ -3016,4 +3092,16 @@
 .conversation-nav-row .workspace-row-icon {
   width: 32px;
   height: 32px;
+}
+
+.task-sidebar-row.workspace-row {
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 5px 8px;
+}
+
+.task-sidebar-row .workspace-row-badges {
+  align-self: center;
 }

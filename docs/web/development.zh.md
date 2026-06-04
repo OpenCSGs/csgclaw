@@ -224,7 +224,6 @@ src/pages/WorkspacePage/components/
 - 纯单元测试放在 `tests/models`、`tests/shared` 或匹配语义的专门目录下，保持小而聚焦：覆盖表格化边界、非法输入、默认值和回归案例；函数调用足够时，不要为了测试而渲染 React。
 - 组件行为用 React Testing Library + jsdom：渲染公开组件，用 role/label/text 查询，用 `userEvent.setup()` 驱动交互，并断言用户可见输出、disabled/loading/error 状态或回调。
 - 如果逻辑已经抽出来，不要用组件测试替代单元测试。先直接测纯 helper，再给用户可观察的组件 wiring 补一两个行为测试。
-- 只有 jsdom 难以表达的场景才使用 browser 或 e2e 验证，例如布局、响应式、canvas/media、真实浏览器 API 或完整应用流程。
 
 ## 构建产物
 

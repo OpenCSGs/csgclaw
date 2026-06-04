@@ -59,25 +59,27 @@ type MemberPresence struct {
 
 // TeamTask is the authoritative task state, independent of room message projection.
 type TeamTask struct {
-	ID          string     `json:"id"`
-	TeamID      string     `json:"team_id"`
-	RoomID      string     `json:"room_id"`
-	ParentID    string     `json:"parent_id,omitempty"`
-	Title       string     `json:"title"`
-	Body        string     `json:"body"`
-	Status      string     `json:"status"`
-	CreatedBy   string     `json:"created_by"`
-	AssignedTo  string     `json:"assigned_to,omitempty"`
-	ClaimedBy   string     `json:"claimed_by,omitempty"`
-	DependsOn   []string   `json:"depends_on,omitempty"`
-	Priority    int        `json:"priority,omitempty"`
-	DeadlineAt  *time.Time `json:"deadline_at,omitempty"`
-	TimeoutAt   *time.Time `json:"timeout_at,omitempty"`
-	Result      string     `json:"result,omitempty"`
-	Error       string     `json:"error,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	ID           string     `json:"id"`
+	TeamID       string     `json:"team_id"`
+	RoomID       string     `json:"room_id"`
+	ParentID     string     `json:"parent_id,omitempty"`
+	Title        string     `json:"title"`
+	Body         string     `json:"body"`
+	Status       string     `json:"status"`
+	CreatedBy    string     `json:"created_by"`
+	AssignedTo   string     `json:"assigned_to,omitempty"`
+	ClaimedBy    string     `json:"claimed_by,omitempty"`
+	DependsOn    []string   `json:"depends_on,omitempty"`
+	Priority     int        `json:"priority,omitempty"`
+	PlanSummary  string     `json:"plan_summary,omitempty"`
+	DispatchedAt *time.Time `json:"dispatched_at,omitempty"`
+	DeadlineAt   *time.Time `json:"deadline_at,omitempty"`
+	TimeoutAt    *time.Time `json:"timeout_at,omitempty"`
+	Result       string     `json:"result,omitempty"`
+	Error        string     `json:"error,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	CompletedAt  *time.Time `json:"completed_at,omitempty"`
 }
 
 type TeamApproval struct {

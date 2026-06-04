@@ -112,6 +112,9 @@ func (h *Handler) requireBotCompatibilityBotID(w http.ResponseWriter, r *http.Re
 		http.Error(w, "picoclaw integration is not configured", http.StatusServiceUnavailable)
 		return "", false
 	}
+	if h.im != nil {
+		botID = h.im.ResolveUserID(botID)
+	}
 	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return "", false

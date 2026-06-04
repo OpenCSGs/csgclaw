@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useBlocker } from "react-router-dom";
 import { errorMessage } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
@@ -17,7 +18,9 @@ import {
 } from "@/api/agents";
 import type { AgentUpdatePayload, FetchAgentsOptions } from "@/api/agents";
 import { publishAgentTemplateRequest } from "@/api/hub";
-import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
+import { createUserRequest, inviteRoomUsersRequest, joinAgentToRoomRequest } from "@/api/im";
+import { createTeamRequest, fetchTeams } from "@/api/tasks";
+import type { CreateTeamPayload } from "@/api/tasks";
 import {
   BOT_CREATE_KIND_NOTIFICATION,
   BOT_CREATE_KIND_WORKER,
@@ -69,7 +72,7 @@ import type {
   AgentTemplateLike,
   RuntimeKind,
 } from "@/models/agents";
-import { isDirectConversation } from "@/models/conversations";
+import { isDirectConversation, resolveRoomInviterID } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { useProfileModelOptions } from "./useProfileModelOptions";
@@ -141,6 +144,11 @@ export function useAgentController({
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPageError, setAgentPageError] = useState("");
+  const [teamActionBusy, setTeamActionBusy] = useState(false);
+  const [teamActionError, setTeamActionError] = useState("");
+  const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
+  const [createTeamTitle, setCreateTeamTitle] = useState("");
+  const [createTeamMemberIDs, setCreateTeamMemberIDs] = useState<string[]>([]);
   const [selectedAgentWorkspacePath, setSelectedAgentWorkspacePath] = useState("");
   const agentPageHasUnsavedChanges = Boolean(
     agentPageDraft && agentPageSavedDraft && JSON.stringify(agentPageDraft) !== JSON.stringify(agentPageSavedDraft),
@@ -168,6 +176,14 @@ export function useAgentController({
   );
   const managerAgent = agentItems.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
   const { workerAgentItems, notificationAgentItems } = partitionWorkspaceAgentItems(agentItems, MANAGER_AGENT_ID);
+  const createTeamCandidates = useMemo(
+    () => [...workerAgentItems, ...notificationAgentItems].filter((item) => Boolean(item?.id)),
+    [notificationAgentItems, workerAgentItems],
+  );
+  const createTeamCandidateIDs = useMemo(
+    () => createTeamCandidates.map((item) => String(item.id)),
+    [createTeamCandidates],
+  );
   const runningAgentCount = agentItems.filter(isAgentRunning).length;
   const notifierWebhookPublicOrigin = useMemo(
     () => resolvedNotifierWebhookOrigin(bootstrapConfig),
@@ -231,6 +247,10 @@ export function useAgentController({
   );
   const agentsDisplayError =
     agentsError || (agentsQuery.isError ? errorMessage(agentsQuery.error, t("agentActionFailed")) : "");
+  const teamsQuery = useQuery({
+    queryKey: ["workspace", "teams"],
+    queryFn: fetchTeams,
+  });
 
   const {
     models: profileModels,
@@ -624,6 +644,13 @@ export function useAgentController({
     }
   }
 
+  function openCreateTeamModal(): void {
+    const firstAgentID = createTeamCandidateIDs[0] || "";
+    setCreateTeamTitle("");
+    setCreateTeamMemberIDs(firstAgentID ? [firstAgentID] : []);
+    setShowCreateTeamModal(true);
+  }
+
   async function openEditAgentModal(item: AgentLike): Promise<void> {
     setAgentModalMode("edit");
     setAgentCreateBotKind(isNotificationBotAgent(item) ? BOT_CREATE_KIND_NOTIFICATION : BOT_CREATE_KIND_WORKER);
@@ -983,6 +1010,75 @@ export function useAgentController({
     }
   }
 
+  async function createAgentTeam(payload: CreateTeamPayload): Promise<void> {
+    if (teamActionBusy) {
+      return;
+    }
+    setTeamActionBusy(true);
+    setTeamActionError("");
+    try {
+      await createTeamRequest(payload);
+      await teamsQuery.refetch();
+      await refreshWorkspaceBootstrap();
+    } catch (err) {
+      setTeamActionError(errorMessage(err, t("teamActionFailed")));
+      throw err;
+    } finally {
+      setTeamActionBusy(false);
+    }
+  }
+
+  async function createTeam(): Promise<void> {
+    await createAgentTeam({
+      channel: "csgclaw",
+      title: createTeamTitle.trim() || t("teamNewFallbackTitle"),
+      lead_bot_id: MANAGER_AGENT_ID,
+      member_bot_ids: createTeamMemberIDs,
+    });
+    setShowCreateTeamModal(false);
+  }
+
+  async function addAgentsToTeamRoom(teamID: string, agentIDs: string[]): Promise<void> {
+    if (teamActionBusy || !data?.current_user_id) {
+      return;
+    }
+    const team = teamsQuery.data?.find((item) => item.id === teamID);
+    if (!team?.room_id) {
+      setTeamActionError(t("teamActionFailed"));
+      return;
+    }
+    const room = rooms.find((item) => item.id === team.room_id);
+    const roomMembers = new Set(room?.members ?? []);
+    const nextAgentIDs = agentIDs.filter((id) => id && !roomMembers.has(id));
+    if (!nextAgentIDs.length) {
+      return;
+    }
+    const inviterID = resolveRoomInviterID(room, {
+      preferredInviterIDs: [team.lead_bot_id, data.current_user_id, MANAGER_AGENT_ID],
+    });
+    if (!inviterID) {
+      setTeamActionError(t("teamActionFailed"));
+      return;
+    }
+
+    setTeamActionBusy(true);
+    setTeamActionError("");
+    try {
+      await inviteRoomUsersRequest({
+        room_id: team.room_id,
+        inviter_id: inviterID,
+        user_ids: nextAgentIDs,
+        locale,
+      });
+      await refreshWorkspaceBootstrap();
+    } catch (err) {
+      setTeamActionError(errorMessage(err, t("teamActionFailed")));
+      throw err;
+    } finally {
+      setTeamActionBusy(false);
+    }
+  }
+
   function directConversationForUser(
     userID: string | null | undefined,
     roomList: IMConversation[] = rooms,
@@ -1048,11 +1144,14 @@ export function useAgentController({
     openAgentDirectMessage,
     notificationAgentItems,
     openCreateAgentModal,
+    openCreateTeamModal,
     openCreateNotificationBotModal,
     openEditAgentModal,
     runningAgentCount,
     runAgentAction,
     selectedAgentForPage,
+    teams: teamsQuery.data ?? [],
+    teamsLoading: teamsQuery.isLoading,
     workerAgentItems,
     notifierWebhookPublicOrigin,
     agentViewProps: {
@@ -1168,5 +1267,19 @@ export function useAgentController({
             onSave: saveManagerProfile,
           }
         : null,
+    createTeamModalProps: showCreateTeamModal
+      ? {
+          t,
+          candidates: createTeamCandidates,
+          teamTitle: createTeamTitle,
+          onTeamTitleChange: setCreateTeamTitle,
+          teamMemberIDs: createTeamMemberIDs,
+          onTeamMemberIDsChange: setCreateTeamMemberIDs,
+          submitError: teamActionError,
+          teamActionBusy,
+          onClose: () => setShowCreateTeamModal(false),
+          onCreate: createTeam,
+        }
+      : null,
   };
 }

@@ -281,6 +281,18 @@ func (c *Client) ClaimNextTeamTask(ctx context.Context, req apitypes.ClaimNextTe
 	return task, nil
 }
 
+func (c *Client) ClaimTeamTask(ctx context.Context, teamID, taskID, botID string) (apitypes.TeamTask, error) {
+	var task apitypes.TeamTask
+	path, err := teamTaskClaimPath(teamID, taskID)
+	if err != nil {
+		return apitypes.TeamTask{}, err
+	}
+	if err := c.DoJSON(ctx, http.MethodPost, path, apitypes.ClaimTeamTaskRequest{BotID: strings.TrimSpace(botID)}, &task); err != nil {
+		return apitypes.TeamTask{}, err
+	}
+	return task, nil
+}
+
 func (c *Client) UpdateTeamTask(ctx context.Context, teamID, taskID, actorID string, req apitypes.PatchTeamTaskRequest) (apitypes.TeamTask, error) {
 	var updated apitypes.TeamTask
 	path, err := teamTaskPath(teamID, taskID)
@@ -614,6 +626,14 @@ func teamClaimNextPath(teamID string) (string, error) {
 		return "", err
 	}
 	return path + "/tasks/claim-next", nil
+}
+
+func teamTaskClaimPath(teamID, taskID string) (string, error) {
+	path, err := teamTaskPath(teamID, taskID)
+	if err != nil {
+		return "", err
+	}
+	return path + "/claim", nil
 }
 
 func teamTaskPath(teamID, taskID string) (string, error) {

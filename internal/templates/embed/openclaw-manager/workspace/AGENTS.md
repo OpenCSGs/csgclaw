@@ -79,8 +79,11 @@ or identity onboarding.
   agent, bot, robot, or worker—or needs a new capability-specific worker—read
   `skills/agent-creator/SKILL.md` immediately. Never run `bot create` without
   `--from-template` for a new worker.
-- **Dispatch second:** for task handoff when workers exist (or after
-  `agent-creator` finishes), read `skills/manager-worker-dispatch/SKILL.md`.
+- **Team orchestration second:** for multi-worker handoff when workers exist (or
+  after `agent-creator` finishes), read `skills/agent-teams/SKILL.md` and use
+  `csgclaw-cli team` (create tasks, plan, start). Each main task gets its own
+  execution room when started. Use `skills/manager-worker-dispatch/SKILL.md` only
+  as a legacy fallback outside team tasks.
 - For CSGClaw room, bot, member, Feishu group/chat creation, or adding bots to
   Feishu groups, read and use `skills/basics/SKILL.md` first and run
   `csgclaw-cli`. Do not conclude group creation is unsupported just because the

@@ -77,6 +77,7 @@ type ThreadListOptions struct {
 type DeliverMessageRequest struct {
 	RoomID       string `json:"room_id"`
 	SenderID     string `json:"sender_id,omitempty"`
+	MentionID    string `json:"mention_id,omitempty"`
 	Content      string `json:"text"`
 	MessageID    string `json:"message_id,omitempty"`
 	ThreadRootID string `json:"thread_root_id,omitempty"`
@@ -1176,6 +1177,7 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	roomID := strings.TrimSpace(req.RoomID)
 	senderID := strings.TrimSpace(req.SenderID)
+	mentionID := strings.TrimSpace(req.MentionID)
 	content := strings.TrimSpace(req.Content)
 	if roomID == "" {
 		return Message{}, fmt.Errorf("room_id is required")
@@ -1192,6 +1194,10 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 
 	if _, ok := s.users[senderID]; !ok {
 		return Message{}, fmt.Errorf("sender not found")
+	}
+	content, err := s.contentWithMentionPrefixLocked(content, mentionID)
+	if err != nil {
+		return Message{}, err
 	}
 	room, ok := s.rooms[roomID]
 	if !ok {
@@ -1224,14 +1230,36 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 			if err := s.saveLocked(); err != nil {
 				return Message{}, err
 			}
-			return s.presentMessageLocked(*room, message), nil
+			presented := s.presentMessageLocked(*room, message)
+			s.publishMessageCreatedLocked(roomID, senderID, presented)
+			return presented, nil
 		}
 	}
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
 		return Message{}, err
 	}
-	return s.presentMessageLocked(*room, message), nil
+	presented := s.presentMessageLocked(*room, message)
+	s.publishMessageCreatedLocked(roomID, senderID, presented)
+	return presented, nil
+}
+
+func (s *Service) publishMessageCreatedLocked(roomID, senderID string, message Message) {
+	if s.bus == nil {
+		return
+	}
+	sender, ok := s.users[senderID]
+	if !ok {
+		return
+	}
+	messageCopy := message
+	senderCopy := sender
+	s.bus.Publish(Event{
+		Type:    EventTypeMessageCreated,
+		RoomID:  roomID,
+		Message: &messageCopy,
+		Sender:  &senderCopy,
+	})
 }
 
 func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {

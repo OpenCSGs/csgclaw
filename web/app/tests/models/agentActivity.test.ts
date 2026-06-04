@@ -1,7 +1,4 @@
-import {
-  isToolActivityMessage,
-  parseAgentActivity,
-} from "@/models/agentActivity";
+import { isToolActivityMessage, parseAgentActivity } from "@/models/agentActivity";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
 
 describe("agent activity model", () => {

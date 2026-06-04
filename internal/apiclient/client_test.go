@@ -190,6 +190,15 @@ func TestClientUsesExpectedRoutes(t *testing.T) {
 			},
 		},
 		{
+			name: "claim specific team task",
+			body: `{}`,
+			want: "POST /api/v1/teams/team-1/tasks/task-1/claim",
+			call: func(c *Client) error {
+				_, err := c.ClaimTeamTask(ctx, "team-1", "task-1", "bot-worker")
+				return err
+			},
+		},
+		{
 			name: "update team task",
 			body: `{}`,
 			want: "PATCH /api/v1/teams/team-1/tasks/task-1",

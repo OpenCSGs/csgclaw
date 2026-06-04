@@ -114,6 +114,7 @@ func (c cmd) runTask(ctx context.Context, run *command.Context, args []string, g
 			"list                        List tasks for a team",
 			"create-batch                Create tasks from a JSON file",
 			"assign                      Reassign a task to a worker",
+			"claim                       Claim a specific task",
 			"claim-next                  Claim the next available task",
 			"update                      Update a task status",
 		})
@@ -126,6 +127,8 @@ func (c cmd) runTask(ctx context.Context, run *command.Context, args []string, g
 		return c.runTaskCreateBatch(ctx, run, args[1:], globals)
 	case "assign":
 		return c.runTaskAssign(ctx, run, args[1:], globals)
+	case "claim":
+		return c.runTaskClaim(ctx, run, args[1:], globals)
 	case "claim-next":
 		return c.runTaskClaimNext(ctx, run, args[1:], globals)
 	case "update":
@@ -188,6 +191,27 @@ func (c cmd) runTaskCreateBatch(ctx context.Context, run *command.Context, args 
 		return err
 	}
 	return command.RenderTeamTasks(globals.Output, run.Stdout, resp.Tasks)
+}
+
+func (c cmd) runTaskClaim(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
+	fs := run.NewFlagSet("team task claim", run.Program+" team task claim --team <id> --task <id> --bot-id <bot>", "Claim a specific task.")
+	teamID := fs.String("team", "", "team id")
+	taskID := fs.String("task", "", "task id")
+	botID := fs.String("bot-id", "", "worker bot id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(fs.Args()) != 0 {
+		return fmt.Errorf("team task claim does not accept positional arguments")
+	}
+	if *teamID == "" || *taskID == "" || *botID == "" {
+		return fmt.Errorf("team, task, and bot_id are required")
+	}
+	item, err := run.APIClient(globals).ClaimTeamTask(ctx, *teamID, *taskID, *botID)
+	if err != nil {
+		return err
+	}
+	return command.RenderTeamTasks(globals.Output, run.Stdout, []apitypes.TeamTask{item})
 }
 
 func (c cmd) runTaskClaimNext(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {

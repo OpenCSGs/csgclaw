@@ -7,6 +7,7 @@ type ValueOf<T> = T[keyof T];
 export const WorkspacePaneTypes = {
   conversation: "conversation",
   agent: "agent",
+  team: "team",
   computer: "computer",
   hub: "hub",
   task: "task",
@@ -41,6 +42,8 @@ export const WorkspaceRouteSegments = {
   computer: "computer",
   agents: "agents",
   agent: "agent",
+  teams: "teams",
+  team: "team",
   hub: "hub",
   tasks: "tasks",
   channels: "channels",
@@ -54,6 +57,7 @@ export const WorkspaceRouteSegments = {
 } as const;
 
 const agentRouteSegments = new Set<string>([WorkspaceRouteSegments.agents, WorkspaceRouteSegments.agent]);
+const teamRouteSegments = new Set<string>([WorkspaceRouteSegments.teams, WorkspaceRouteSegments.team]);
 const conversationRouteSegments = new Set<string>([
   WorkspaceRouteSegments.channels,
   WorkspaceRouteSegments.channel,
@@ -94,6 +98,11 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
       ? { type: WorkspacePaneTypes.agent, id }
       : { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
   }
+  if (teamRouteSegments.has(section)) {
+    return id
+      ? { type: WorkspacePaneTypes.team, id }
+      : { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
+  }
   if (section === WorkspaceRouteSegments.hub) {
     return { type: WorkspacePaneTypes.hub, id: DefaultWorkspacePaneIds.hub };
   }
@@ -115,6 +124,9 @@ export function pathForPane(
   }
   if (pane.type === WorkspacePaneTypes.agent && pane.id) {
     return `/${WorkspaceRouteSegments.agents}/${encodeURIComponent(pane.id)}`;
+  }
+  if (pane.type === WorkspacePaneTypes.team && pane.id) {
+    return `/${WorkspaceRouteSegments.teams}/${encodeURIComponent(pane.id)}`;
   }
   if (pane.type === WorkspacePaneTypes.hub) {
     return `/${WorkspaceRouteSegments.hub}`;
@@ -149,7 +161,11 @@ export function workspaceTabForPane(pane: WorkspacePane | null | undefined): Wor
   if (pane?.type === WorkspacePaneTypes.task) {
     return WorkspaceTabs.tasks;
   }
-  if (pane?.type === WorkspacePaneTypes.agent || pane?.type === WorkspacePaneTypes.computer) {
+  if (
+    pane?.type === WorkspacePaneTypes.agent ||
+    pane?.type === WorkspacePaneTypes.team ||
+    pane?.type === WorkspacePaneTypes.computer
+  ) {
     return WorkspaceTabs.agents;
   }
   return WorkspaceTabs.messages;

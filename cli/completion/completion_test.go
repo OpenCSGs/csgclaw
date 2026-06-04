@@ -37,7 +37,7 @@ func TestCompleteSubcommandsAndFlags(t *testing.T) {
 	assertContainsAll(t, got, "--agent", "--registry")
 
 	got = Complete(FullSpec(), "csgclaw", []string{"csgclaw", "team", "task", ""})
-	assertContainsAll(t, got, "list", "create-batch", "assign", "claim-next", "update", "--help")
+	assertContainsAll(t, got, "list", "create-batch", "assign", "claim", "claim-next", "update", "--help")
 
 	got = Complete(LiteSpec(), "csgclaw-cli", []string{"csgclaw-cli", "bot", ""})
 	assertContainsAll(t, got, "list", "create", "delete", "config")

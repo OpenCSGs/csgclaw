@@ -13,9 +13,11 @@ export type HubTemplateSource = {
 };
 
 export function isDeletableHubTemplate(template: HubTemplate | null | undefined): boolean {
-  return String(template?.source?.kind ?? "")
-    .trim()
-    .toLowerCase() === HUB_REGISTRY_KIND_LOCAL;
+  return (
+    String(template?.source?.kind ?? "")
+      .trim()
+      .toLowerCase() === HUB_REGISTRY_KIND_LOCAL
+  );
 }
 
 export type HubTemplate = AgentTemplateLike & {

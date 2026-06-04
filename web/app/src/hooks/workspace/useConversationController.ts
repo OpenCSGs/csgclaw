@@ -259,12 +259,9 @@ export function useConversationController({
     if (!activeThreadDraftKey) {
       return [];
     }
-    return activeThreadDraftKey ? threadDraftsByKey[activeThreadDraftKey] ?? [] : [];
+    return activeThreadDraftKey ? (threadDraftsByKey[activeThreadDraftKey] ?? []) : [];
   }, [activeThreadDraftKey, threadDraftsByKey]);
-  const activeThreadDraft = useMemo(
-    () => segmentsToPlainText(activeThreadDraftSegments),
-    [activeThreadDraftSegments],
-  );
+  const activeThreadDraft = useMemo(() => segmentsToPlainText(activeThreadDraftSegments), [activeThreadDraftSegments]);
   const threadSlashPickerState = useMemo(
     () =>
       buildSlashPickerState({

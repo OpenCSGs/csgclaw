@@ -354,6 +354,23 @@ export function isDirectConversation(conversation: { is_direct?: boolean | null 
   return Boolean(conversation?.is_direct);
 }
 
+export function resolveRoomInviterID(
+  room: Pick<IMConversation, "members"> | null | undefined,
+  options: { preferredInviterIDs?: Array<string | null | undefined> } = {},
+): string {
+  const members = new Set((room?.members ?? []).map((id) => String(id).trim()).filter(Boolean));
+  if (!members.size) {
+    return "";
+  }
+  for (const candidate of options.preferredInviterIDs ?? []) {
+    const id = String(candidate ?? "").trim();
+    if (id && members.has(id)) {
+      return id;
+    }
+  }
+  return [...members][0] ?? "";
+}
+
 export function getConversationSubtitle(
   conversation: IMConversation,
   currentUserID: string,

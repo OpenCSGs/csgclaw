@@ -68,7 +68,12 @@ export function clearRoomMessagesRequest(roomID: string): Promise<IMConversation
 }
 
 export function joinAgentToRoomRequest(payload: JoinAgentToRoomPayload): Promise<IMConversation> {
-  return post("api/v1/im/agents/join", payload);
+  return inviteRoomUsersRequest({
+    room_id: payload.room_id,
+    inviter_id: payload.inviter_id,
+    user_ids: [payload.agent_id],
+    locale: payload.locale,
+  });
 }
 
 export function createUserRequest(payload: CreateUserPayload): Promise<IMUser> {

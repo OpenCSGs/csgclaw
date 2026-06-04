@@ -25,6 +25,7 @@ import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/Room
 import type { DragEvent, ReactNode } from "react";
 
 export type WorkspaceGroupProps = {
+  addIcon?: ReactNode;
   addLabel?: string;
   children: ReactNode;
   collapsed: boolean;
@@ -51,6 +52,7 @@ export function WorkspaceGroup({
   dragOver = false,
   onToggle,
   onAdd,
+  addIcon,
   addLabel,
   onDragEnd,
   onDragLeave,
@@ -94,6 +96,7 @@ export function WorkspaceGroup({
               draggable={false}
               aria-label={addLabel || title}
               title={addLabel || title}
+              data-tooltip={addLabel || title}
               onDragStart={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.preventDefault();
@@ -102,7 +105,7 @@ export function WorkspaceGroup({
               }}
             >
               <span className="icon-button-mark" aria-hidden="true">
-                <RoomPlusIcon />
+                {addIcon || <RoomPlusIcon />}
               </span>
             </Button>
           ) : null}

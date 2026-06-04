@@ -1,0 +1,30 @@
+package im
+
+import "strings"
+
+// ResolveUserID returns the canonical IM user id for agent identities.
+func (s *Service) ResolveUserID(userID string) string {
+	userID = strings.TrimSpace(userID)
+	if userID == "" || s == nil {
+		return userID
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.resolveUserIDLocked(userID)
+}
+
+func (s *Service) resolveUserIDLocked(userID string) string {
+	userID = strings.TrimSpace(userID)
+	if userID == "" || s == nil {
+		return userID
+	}
+	if _, ok := s.users[userID]; ok {
+		return userID
+	}
+	handle := strings.ToLower(strings.TrimPrefix(userID, "@"))
+	if resolved, ok := s.byHandle[handle]; ok {
+		return resolved
+	}
+	return userID
+}

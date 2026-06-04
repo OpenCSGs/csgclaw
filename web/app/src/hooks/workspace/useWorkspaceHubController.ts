@@ -6,13 +6,16 @@ import type { HubTemplate } from "@/models/hubWorkspace";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
 import type { UseWorkspaceHubControllerArgs } from "./types";
 
+type WorkspaceHubSelection = ReturnType<typeof useWorkspaceHubSelection>;
+type DeleteHubTemplate = (template: HubTemplate | null | undefined) => Promise<boolean>;
+
 export type WorkspaceHubController = {
-  hub: ReturnType<typeof useWorkspaceHubSelection> & {
+  hub: Omit<WorkspaceHubSelection, "detailPaneProps"> & {
     deleteBusy: boolean;
-    deleteHubTemplate: (template: HubTemplate | null | undefined) => Promise<boolean>;
-    detailPaneProps: ReturnType<typeof useWorkspaceHubSelection>["detailPaneProps"] & {
+    deleteHubTemplate: DeleteHubTemplate;
+    detailPaneProps: WorkspaceHubSelection["detailPaneProps"] & {
       deleteBusy: boolean;
-      onDeleteTemplate: (template: HubTemplate | null | undefined) => Promise<boolean>;
+      onDeleteTemplate: DeleteHubTemplate;
     };
   };
   refreshHubTemplates: () => Promise<void>;
@@ -29,14 +32,14 @@ export function useWorkspaceHubController({
   const [hubDeleteBusy, setHubDeleteBusy] = useState(false);
   const [hubDeleteError, setHubDeleteError] = useState("");
 
-  async function refreshHubTemplates(): Promise<void> {
+  const refreshHubTemplates = useCallback(async (): Promise<void> => {
     try {
       await refreshWorkspaceHubTemplates();
       setHubManualError("");
     } catch (_) {
       setHubManualError(t("hubLoadFailed"));
     }
-  }
+  }, [refreshWorkspaceHubTemplates, t]);
 
   useEffect(() => {
     if (hubTemplatesQuery.isSuccess) {
@@ -52,6 +55,7 @@ export function useWorkspaceHubController({
     refreshTemplates: refreshHubTemplates,
     t,
   });
+  const { setSelectedHubTemplateId } = hub;
 
   const deleteHubTemplate = useCallback(
     async (template: HubTemplate | null | undefined): Promise<boolean> => {
@@ -66,7 +70,7 @@ export function useWorkspaceHubController({
       setHubDeleteError("");
       try {
         await deleteHubTemplateRequest(template.id);
-        hub.setSelectedHubTemplateId("");
+        setSelectedHubTemplateId("");
         await refreshHubTemplates();
         return true;
       } catch (err) {
@@ -76,7 +80,7 @@ export function useWorkspaceHubController({
         setHubDeleteBusy(false);
       }
     },
-    [hub.setSelectedHubTemplateId, refreshHubTemplates, t],
+    [refreshHubTemplates, setSelectedHubTemplateId, t],
   );
 
   return {

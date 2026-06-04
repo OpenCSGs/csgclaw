@@ -1,7 +1,4 @@
-import {
-  AgentActivityMsgTypes,
-  CSGCLAW_AGENT_ACTIVITY_TYPE,
-} from "@/shared/constants/messages";
+import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
 import type { IMMessage } from "@/models/conversations";
 
 type UnknownRecord = Record<string, unknown>;
@@ -65,7 +62,11 @@ export function parseAgentActivity(content: unknown): AgentActivityPayload | nul
 
   const activityContent = parsed.content;
   const msgtype = stringValue(activityContent.msgtype);
-  if (!Object.values(AgentActivityMsgTypes).includes(msgtype as (typeof AgentActivityMsgTypes)[keyof typeof AgentActivityMsgTypes])) {
+  if (
+    !Object.values(AgentActivityMsgTypes).includes(
+      msgtype as (typeof AgentActivityMsgTypes)[keyof typeof AgentActivityMsgTypes],
+    )
+  ) {
     return null;
   }
 

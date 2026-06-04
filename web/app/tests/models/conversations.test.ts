@@ -92,8 +92,9 @@ describe("conversation model helpers", () => {
     expect(formatMessagePreviewText("```text thread title should be plain ```")).toBe("thread title should be plain");
     expect(formatMessagePreviewText("``` thread title should stay plain ```")).toBe("thread title should stay plain");
     expect(formatMessagePreviewText('Hi <at user_id="u-1">Alice</at>')).toBe("Hi @Alice");
-    expect(formatMessagePreviewText('<slash-command name="use-skill" arg="skill-creator"></slash-command> create README'))
-      .toBe("/skill-creator create README");
+    expect(
+      formatMessagePreviewText('<slash-command name="use-skill" arg="skill-creator"></slash-command> create README'),
+    ).toBe("/skill-creator create README");
     expect(formatMessagePreviewText('<slash-command name="use-skill" arg="skill-creator" />')).toBe("/skill-creator");
     expect(
       formatMessagePreviewText('<slash-command name="use-skill" arg="skill-creator"><b>bad</b></slash-command>'),

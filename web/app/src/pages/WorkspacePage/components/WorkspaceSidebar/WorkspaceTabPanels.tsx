@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { HubIcon } from "@/components/ui/Icons";
+import { Plus } from "lucide-react";
+import { TaskSubtaskIndicator } from "@/components/business";
+import { HubIcon, UsersIcon } from "@/components/ui/Icons";
 import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
+import { displayTaskTeam, displayTeam, resolveTaskSidebarPhase, rootTasks, taskChildren } from "@/models/tasks";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { WORKSPACE_SECTION_ORDER_STORAGE_KEY } from "@/shared/storage/keys";
 import {
@@ -20,6 +23,7 @@ const MessageSectionIds = {
 
 const AgentSectionIds = {
   agents: "agents",
+  teams: "teams",
   notifications: "notifications",
   computers: "computers",
 } as const;
@@ -36,7 +40,12 @@ const LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS = [
 
 const DEFAULT_SECTION_ORDERS = {
   [SectionPanels.messages]: [MessageSectionIds.directMessages, MessageSectionIds.rooms, MessageSectionIds.threads],
-  [SectionPanels.agents]: [AgentSectionIds.agents, AgentSectionIds.computers, AgentSectionIds.notifications],
+  [SectionPanels.agents]: [
+    AgentSectionIds.agents,
+    AgentSectionIds.teams,
+    AgentSectionIds.computers,
+    AgentSectionIds.notifications,
+  ],
 } as const;
 
 function orderEquals(left, right) {
@@ -83,6 +92,10 @@ function reorderSection(order, sourceId, targetId) {
 export function WorkspaceTabPanels({
   workspaceTab,
   taskCount = 0,
+  taskItems = [],
+  teams = [],
+  planningTaskID = "",
+  startingTaskID = "",
   channels,
   directMessages,
   threadGroups = [],
@@ -97,8 +110,12 @@ export function WorkspaceTabPanels({
   onCreateRoom,
   onCreateAgent,
   onCreateNotificationBot,
+  onOpenCreateTeam,
+  onOpenCreateTask,
   hub,
   onSelectHubTemplate,
+  onSelectTask,
+  onSelectTeam,
   agentsError,
   onSelectConversation,
   onSelectThread,
@@ -114,6 +131,11 @@ export function WorkspaceTabPanels({
   const hubError = hub?.listError ?? "";
   const hubLoaded = hub?.loaded ?? false;
   const selectedHubTemplateId = hub?.selectedHubTemplateId ?? "";
+  const roomsById = useMemo(
+    () => new Map([...channels, ...directMessages].map((room) => [room.id, room])),
+    [channels, directMessages],
+  );
+  const parentTaskItems = useMemo(() => rootTasks(taskItems), [taskItems]);
   const threadCount = useMemo(
     () => threadGroups.reduce((count, group) => count + group.threads.length, 0),
     [threadGroups],
@@ -340,6 +362,50 @@ export function WorkspaceTabPanels({
         </WorkspaceGroup>
       );
     }
+    if (id === AgentSectionIds.teams) {
+      return (
+        <WorkspaceGroup
+          key={id}
+          id="teams"
+          title={t("teamsSection")}
+          count={teams.length}
+          collapsed={Boolean(collapsedWorkspaceGroups.teams)}
+          onToggle={() => onToggleWorkspaceGroup("teams")}
+          onAdd={onOpenCreateTeam}
+          addLabel={t("teamCreate")}
+          {...sectionDragProps(SectionPanels.agents, id)}
+        >
+          {teams.length ? (
+            teams.map((team) => {
+              const room = roomsById.get(team.room_id);
+              const memberCount = room?.members?.length ?? 0;
+              return (
+                <button
+                  key={team.id}
+                  className={`workspace-row team-nav-row ${
+                    activePane.type === WorkspacePaneTypes.team && activePane.id === team.id ? "active" : ""
+                  }`}
+                  onClick={() => onSelectTeam?.(team)}
+                >
+                  <span className="workspace-row-icon">
+                    <UsersIcon />
+                  </span>
+                  <span className="workspace-row-main">
+                    <span className="workspace-row-title truncate">{displayTeam(team)}</span>
+                    <span className="workspace-row-meta truncate">
+                      {t("teamMembersCount", { count: memberCount })} ·{" "}
+                      {team.room_id ? `${t("teamRecordRoomShort")} ${room?.title || team.room_id}` : team.status}
+                    </span>
+                  </span>
+                </button>
+              );
+            })
+          ) : (
+            <div className="workspace-empty">{t("noTeams")}</div>
+          )}
+        </WorkspaceGroup>
+      );
+    }
     return (
       <WorkspaceGroup
         key={id}
@@ -449,14 +515,40 @@ export function WorkspaceTabPanels({
       ) : workspaceTab === WorkspaceTabs.tasks ? (
         <div className="workspace-tab-panel" role="tabpanel" aria-label={t("tasksTab")}>
           <WorkspaceGroup
-            id="global-tasks"
+            id="tasks"
             title={t("tasksTab")}
             count={taskCount}
-            collapsed={false}
-            onToggle={() => {}}
-            {...sectionDragProps(SectionPanels.tasks, "global-tasks")}
+            collapsed={Boolean(collapsedWorkspaceGroups.tasks)}
+            onToggle={() => onToggleWorkspaceGroup("tasks")}
+            onAdd={onOpenCreateTask}
+            addLabel={t("taskCreate")}
+            addIcon={<Plus size={15} strokeWidth={2.2} aria-hidden="true" />}
           >
-            <div className="workspace-empty">{t("tasksSidebarHint")}</div>
+            {parentTaskItems.length ? (
+              parentTaskItems.map((task, index) => {
+                const children = taskChildren(taskItems, task.id);
+                const phase = resolveTaskSidebarPhase(task, children, { planningTaskID, startingTaskID });
+                const active =
+                  activePane.type === WorkspacePaneTypes.task &&
+                  (activePane.id === task.id || (!activePane.id && index === 0));
+                return (
+                  <button
+                    key={task.id}
+                    type="button"
+                    className={`workspace-row task-sidebar-row ${active ? "active" : ""}`}
+                    onClick={() => onSelectTask?.(task.id)}
+                  >
+                    <span className="workspace-row-main">
+                      <span className="workspace-row-title truncate">{task.title}</span>
+                      <span className="workspace-row-meta truncate">{displayTaskTeam(task)}</span>
+                    </span>
+                    <TaskSubtaskIndicator subtasks={children} phase={phase} t={t} compact />
+                  </button>
+                );
+              })
+            ) : (
+              <div className="workspace-empty">{t("tasksSidebarHint")}</div>
+            )}
           </WorkspaceGroup>
         </div>
       ) : (

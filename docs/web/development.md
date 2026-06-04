@@ -224,7 +224,6 @@ src/pages/WorkspacePage/components/
 - Put pure unit tests under `tests/models`, `tests/shared`, or a matching focused folder, and keep them small: table-test edge cases, invalid input, defaults, and regression cases without rendering React when a function call is enough.
 - Use React Testing Library with jsdom for component behavior: render the public component, query by role/label/text, drive interactions with `userEvent.setup()`, and assert user-visible output, disabled/loading/error states, or emitted callbacks.
 - Do not replace unit tests with component tests when logic is already extracted. Test pure helpers directly, then add one or two component tests for the wiring that a user can observe.
-- Use browser or e2e verification only for behavior jsdom cannot represent well, such as layout, responsive behavior, canvas/media rendering, real browser APIs, or full app workflows.
 
 ## Generated Output
 
