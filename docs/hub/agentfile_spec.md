@@ -966,6 +966,8 @@ agent platform 创建 agent 时只运行该 image
 
 有些用户希望共享 agent template，但无法提供公开可信的 image registry，或者使用方不愿直接信任第三方发布的 image。v1 可以允许 source template 作为 registry 的参与路径，但应保持协议边界清晰。
 
+大多数情况下，source template 和本地 image 构建是强相关的：source template 仓库保存 workspace overlay、Agentfile 生成材料、Dockerfile/Containerfile 以及其他 build context；构建流程基于这些源码产出可运行 image，并生成或更新最终的标准 `Agentfile.toml`。因此，source template 更适合作为作者侧源码和构建入口，而不是作为 client 直接创建 agent 的运行入口。
+
 source template 可以包含：
 
 ```text
@@ -983,7 +985,7 @@ source template 可以包含：
 推荐流程：
 
 ```text
-作者发布 source template
+作者在 Git 仓库维护 source template 源码和 image build context
 使用方下载并审查 Dockerfile、workspace 和 README
 使用方通过 Docker、Podman、Buildah、Nix 或某个实现提供的 build command 构建本地 image
 构建结果得到本地 tag 或可信 registry ref
@@ -999,7 +1001,47 @@ agent platform 按标准 Agentfile v1 创建 agent
 image-build.toml
 ```
 
-但该文件不属于 Agentfile v1 的运行协议。
+但该文件不属于 Agentfile v1 的运行协议。它更像 source template 的 build hint，用于帮助显式 build 命令找到构建入口，而不是描述“如何运行 agent”。
+
+`image-build.toml` 的合理职责边界：
+
+- 声明显式 build 命令需要的最小构建入口，例如 builder 类型、Dockerfile/Containerfile 路径和 build context。
+- 给 CLI、CI 或 registry 提供可读的 build hint。
+- 构建完成后，最终仍应生成或更新标准 `Agentfile.toml` 中的 `[image].ref` 和可选 `[image].digest`。
+
+`image-build.toml` 不应承担的职责：
+
+- 不保存 registry password、token、SSH key 或其他真实 secret。
+- 不替代 `Agentfile.toml` 的 `[image]`、`[runtime]`、`[[image.env]]` 或 `[workspace]`。
+- 不要求所有 client 必须支持本地 build。
+- 不让 source template 在缺少可用 `image.ref` 时变成标准 Agentfile v1 template。
+- 不在 Agentfile v1 中提前标准化完整 build system。
+
+一个可能的草案形态：
+
+最小可用版本应只声明 builder 和构建入口：
+
+```toml
+schema_version = "image-build/v1"
+
+[builder]
+kind = "docker"
+dockerfile = "Dockerfile"
+context = "."
+```
+
+使用示例：
+
+```text
+csgclaw hub build ./picoclaw-worker-template
+读取 image-build.toml
+执行显式确认后的本地 build
+得到本地 image ref 或可信 registry ref
+由命令参数、实现默认值或后续发布流程更新 Agentfile.toml 的 [image].ref
+按标准 Agentfile v1 校验最终 template
+```
+
+正式采用前，应单独定义 `image-build/v1`。在 Agentfile v1 中，只需要说明它是可选的协议外辅助文件，避免把 build system 复杂度带入主规范。
 
 ---
 
@@ -1226,10 +1268,14 @@ one Git tag = one template version
 
 ```text
 picoclaw-worker-template/
+  Dockerfile
+  image-build.toml
   Agentfile.toml
   workspace/
   README.md
 ```
+
+对于需要构建 image 的模板，Git 仓库通常保存的是 source template 源码和 image build context；registry/release 流程再从该源码构建 image，并产出包含最终 `Agentfile.toml` 的标准 template bundle。这个模型与 source template 的边界一致：Git repo 可以是源码入口，bundle 才是推荐给普通 client 消费的不可变分发 artifact。
 
 示例 release tags：
 
@@ -1253,6 +1299,8 @@ Agentfile.toml
 workspace/
 README.md
 ```
+
+如果该版本来自 source template 构建流程，bundle 中的 `Agentfile.toml` 应指向已经构建完成的 image ref 或 digest。Registry 可以同时保留 source artifact 供审查和二次构建，但普通 create flow 应优先消费 standard bundle。
 
 示例 registry artifact metadata：
 
