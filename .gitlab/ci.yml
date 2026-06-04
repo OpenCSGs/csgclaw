@@ -149,12 +149,11 @@ embed-templates-prepare:
     - scripts/prepare-docker-embed-dist.sh
   artifacts:
     paths:
-      - internal/templates/embed/picoclaw-manager/dist/
-      - internal/templates/embed/picoclaw-worker/dist/
+      - internal/templates/embed/*/dist/
     expire_in: 1 day
 
-# Linux csgclaw-cli only — consumed by picoclaw manager/worker image builds before the full release.
-# Needs embed-templates-prepare: csgclaw-cli links internal/templates (go:embed picoclaw-*/dist).
+# Linux csgclaw-cli only — consumed by docker embed image builds before the full release.
+# Needs embed-templates-prepare: csgclaw-cli links internal/templates (go:embed embed/*/dist for Dockerfile templates).
 release-cli-build:
   extends:
     - .release_image
@@ -311,8 +310,7 @@ embed-templates-patch:
     - scripts/patch-docker-embed-image-refs.sh
   artifacts:
     paths:
-      - internal/templates/embed/picoclaw-manager/dist/
-      - internal/templates/embed/picoclaw-worker/dist/
+      - internal/templates/embed/*/dist/
     expire_in: 1 day
 
 release-upload:
