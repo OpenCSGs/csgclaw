@@ -13,10 +13,6 @@
   min-width: 0;
 }
 
-.entity-toolbar-publish {
-  margin-left: 0;
-}
-
 .agent-detail-pane {
   --agent-detail-section-gap: 14px;
   --agent-detail-content-width: min(100%, 1520px);
@@ -57,6 +53,45 @@
   --btn-padding-x: 16px;
 
   border-radius: 10px;
+}
+
+.agent-save-status {
+  display: inline-flex;
+  min-width: 112px;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  color: var(--portal-success-700);
+  font-size: 14px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.agent-actions-menu-trigger {
+  position: relative;
+}
+
+.agent-actions-alert-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--warning);
+}
+
+.agent-actions-menu-badge {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--portal-warning-50);
+  color: var(--portal-warning-700);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
 }
 
 .agent-detail-pane .entity-avatar {

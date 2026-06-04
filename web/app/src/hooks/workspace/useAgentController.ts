@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useBlocker } from "react-router-dom";
 import { errorMessage } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
 import {
@@ -135,10 +136,18 @@ export function useAgentController({
   const [messageActionBusy] = useState("");
   const [messageActionError, setMessageActionError] = useState<MessageActionError>({ key: "", message: "" });
   const [agentPageDraft, setAgentPageDraft] = useState<AgentDraft | null>(null);
+  const [agentPageSavedDraft, setAgentPageSavedDraft] = useState<AgentDraft | null>(null);
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPageError, setAgentPageError] = useState("");
   const [selectedAgentWorkspacePath, setSelectedAgentWorkspacePath] = useState("");
+  const agentPageHasUnsavedChanges = Boolean(
+    agentPageDraft && agentPageSavedDraft && JSON.stringify(agentPageDraft) !== JSON.stringify(agentPageSavedDraft),
+  );
+  const agentPageNavigationBlocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      agentPageHasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname,
+  );
   const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
   const managerAgent = agents.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
   const { workerAgentItems, notificationAgentItems } = partitionWorkspaceAgentItems(agents, MANAGER_AGENT_ID);
@@ -299,8 +308,32 @@ export function useAgentController({
   }, [agents, agentsLoaded, activePane, activeConversationId, selectComputer, selectConversation]);
 
   useEffect(() => {
+    if (agentPageNavigationBlocker.state !== "blocked") {
+      return;
+    }
+    if (window.confirm(t("agentUnsavedChangesWarning"))) {
+      agentPageNavigationBlocker.proceed();
+    } else {
+      agentPageNavigationBlocker.reset();
+    }
+  }, [agentPageNavigationBlocker, t]);
+
+  useEffect(() => {
+    if (!agentPageHasUnsavedChanges) {
+      return undefined;
+    }
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [agentPageHasUnsavedChanges]);
+
+  useEffect(() => {
     if (!selectedAgentForPage) {
       setAgentPageDraft(null);
+      setAgentPageSavedDraft(null);
       setAgentPageError("");
       setAgentPagePublishBusy(false);
       return;
@@ -475,6 +508,7 @@ export function useAgentController({
       setAgentsData((current) => mergeAgentIntoList(current, updatedAgent));
       if (activePane.type === WorkspacePaneTypes.agent && activePane.id === updatedAgent.id) {
         setAgentPageDraft((current) => agentDraftWithRuntimeFieldsFromAgent(current, updatedAgent));
+        setAgentPageSavedDraft((current) => agentDraftWithRuntimeFieldsFromAgent(current, updatedAgent));
       }
     }
   }
@@ -601,10 +635,12 @@ export function useAgentController({
     try {
       const draft = await agentDraftFromItem(item);
       setAgentPageDraft(draft);
+      setAgentPageSavedDraft(draft);
     } catch (err) {
       setAgentPageError(err.message || t("agentActionFailed"));
       const draft = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
       setAgentPageDraft(draft);
+      setAgentPageSavedDraft(draft);
     }
   }
 
@@ -627,7 +663,9 @@ export function useAgentController({
         }
         const saved = await patchNotificationBotRequest(selectedAgentForPage.id, payload);
         await refreshAgents();
-        setAgentPageDraft(agentToDraft(saved));
+        const savedDraft = agentToDraft(saved);
+        setAgentPageDraft(savedDraft);
+        setAgentPageSavedDraft(savedDraft);
         return;
       }
       const profile = draftToProfile(draft, {
@@ -650,7 +688,9 @@ export function useAgentController({
       if (saved.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }
-      setAgentPageDraft(await agentDraftFromItem(saved));
+      const savedDraft = await agentDraftFromItem(saved);
+      setAgentPageDraft(savedDraft);
+      setAgentPageSavedDraft(savedDraft);
     } catch (err) {
       setAgentPageError(err.message || t("agentActionFailed"));
     } finally {
@@ -930,6 +970,8 @@ export function useAgentController({
       busyKey: agentActionBusy,
       error: agentsDisplayError,
       draft: agentPageDraft,
+      savedDraft: agentPageSavedDraft,
+      hasUnsavedChanges: agentPageHasUnsavedChanges,
       models: agentPageModels,
       modelBusy: agentPageModelBusy,
       saving: agentPageBusy,

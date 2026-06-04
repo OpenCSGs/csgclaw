@@ -1,3 +1,4 @@
+import { Check, MoreHorizontal } from "lucide-react";
 import { PROVIDERS, REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
   APIKeyField,
@@ -25,7 +26,15 @@ import {
   notifierFormIsComplete,
 } from "@/models/agents";
 import { AgentIcon } from "@/components/ui/Icons";
-import { Button, Select } from "@/components/ui";
+import {
+  Button,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRoot,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Select,
+} from "@/components/ui";
 
 export function AgentDetailPane({
   item,
@@ -34,6 +43,8 @@ export function AgentDetailPane({
   busyKey,
   error,
   draft,
+  savedDraft = null,
+  hasUnsavedChanges: hasUnsavedChangesProp = undefined,
   models,
   modelBusy,
   saving,
@@ -73,6 +84,14 @@ export function AgentDetailPane({
   const provider = item.provider || item.agent_profile?.provider;
   const runtimeKind = normalizeRuntimeKind(item.runtime_kind);
   const canPublish = runtimeKind === "picoclaw_sandbox" || runtimeKind === "openclaw_sandbox";
+  const hasUnsavedChanges =
+    hasUnsavedChangesProp ?? Boolean(draft && savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft));
+  const saveDisabled =
+    saving ||
+    isBlank(draft?.name) ||
+    (isNotifierRuntimeDraftOnAgentPage(draft, item)
+      ? !notifierFormIsComplete(draft, item)
+      : !draft?.model_id || profileBaseURLMissing(draft));
   const updateDraft = (patch) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
   return (
     <section className="entity-pane agent-detail-pane">
@@ -97,32 +116,6 @@ export function AgentDetailPane({
         </div>
         <div className="entity-toolbar">
           <Button
-            variant="primary"
-            size="md"
-            loading={saving}
-            loadingLabel={t("profileLoadingModels")}
-            disabled={
-              saving ||
-              isBlank(draft?.name) ||
-              (isNotifierRuntimeDraftOnAgentPage(draft, item)
-                ? !notifierFormIsComplete(draft, item)
-                : !draft?.model_id || profileBaseURLMissing(draft))
-            }
-            onClick={onSave}
-          >
-            {t("agentUpdateSave")}
-          </Button>
-          {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
-            <Button
-              variant="secondaryGray"
-              size="md"
-              disabled={busyKey.startsWith(busyPrefix) || incomplete}
-              onClick={() => (running ? onStop(item) : onStart(item))}
-            >
-              {running ? t("agentStop") : t("agentStart")}
-            </Button>
-          ) : null}
-          <Button
             variant="secondaryGray"
             size="md"
             disabled={busyKey.startsWith(busyPrefix)}
@@ -130,49 +123,41 @@ export function AgentDetailPane({
           >
             {t("openDM")}
           </Button>
-          <Button
-            variant="primary"
-            size="md"
-            disabled={busyKey.startsWith(busyPrefix) || incomplete}
-            onClick={() => onUpgrade?.(item)}
-          >
-            {t("agentUpgrade")}
-          </Button>
-          <Button
-            variant="danger"
-            size="md"
-            disabled={busyKey.startsWith(busyPrefix) || incomplete}
-            onClick={() => onRecreate(item)}
-          >
-            {t("agentRecreate")}
-          </Button>
-          {SHOW_AGENT_LIFECYCLE_ACTIONS && activeRoom && !isManager ? (
-            <Button
-              variant="secondaryGray"
-              size="md"
-              disabled={busyKey.startsWith(busyPrefix)}
-              onClick={() => onInvite(item)}
-            >
-              {t("inviteToRoom")}
-            </Button>
-          ) : null}
-          {!isManager ? (
-            <Button variant="danger" size="md" disabled={busyKey.startsWith(busyPrefix)} onClick={() => onDelete(item)}>
-              {t("agentDelete")}
-            </Button>
-          ) : null}
-          {canPublish ? (
+          <AgentActionsMenu
+            item={item}
+            t={t}
+            activeRoom={activeRoom}
+            busy={busyKey.startsWith(busyPrefix)}
+            incomplete={incomplete}
+            isManager={isManager}
+            running={running}
+            upgradeNeeded={upgradeNeeded}
+            canPublish={canPublish}
+            publishBusy={publishBusy}
+            onStart={onStart}
+            onStop={onStop}
+            onUpgrade={onUpgrade}
+            onRecreate={onRecreate}
+            onInvite={onInvite}
+            onDelete={onDelete}
+            onPublish={onPublish}
+          />
+          {draft && (hasUnsavedChanges || saving) ? (
             <Button
               variant="primary"
               size="md"
-              className="entity-toolbar-publish"
-              loading={publishBusy}
-              loadingLabel={t("agentPublishing")}
-              disabled={publishBusy}
-              onClick={onPublish}
+              loading={saving}
+              loadingLabel={t("agentSavingChanges")}
+              disabled={saveDisabled}
+              onClick={onSave}
             >
-              {t("agentPublish")}
+              {t("agentSaveChanges")}
             </Button>
+          ) : draft ? (
+            <span className="agent-save-status" role="status">
+              <Check aria-hidden="true" size={16} strokeWidth={2.5} />
+              {t("agentSaved")}
+            </span>
           ) : null}
         </div>
       </header>
@@ -404,5 +389,69 @@ export function AgentDetailPane({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function AgentActionsMenu({
+  item,
+  t,
+  activeRoom,
+  busy,
+  incomplete,
+  isManager,
+  running,
+  upgradeNeeded,
+  canPublish,
+  publishBusy,
+  onStart,
+  onStop,
+  onUpgrade,
+  onRecreate,
+  onInvite,
+  onDelete,
+  onPublish,
+}) {
+  return (
+    <DropdownMenuRoot>
+      <DropdownMenuTrigger asChild>
+        <Button variant="secondaryGray" size="md" className="agent-actions-menu-trigger">
+          <MoreHorizontal aria-hidden="true" size={18} strokeWidth={2} />
+          <span>{t("agentMoreActions")}</span>
+          {upgradeNeeded ? <span className="agent-actions-alert-dot" aria-hidden="true"></span> : null}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="agent-actions-menu" aria-label={t("agentMoreActions")}>
+        {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
+          <DropdownMenuItem disabled={busy || incomplete} onSelect={() => (running ? onStop(item) : onStart(item))}>
+            {running ? t("agentStop") : t("agentStart")}
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem disabled={busy || incomplete} onSelect={() => onUpgrade?.(item)}>
+          <span>{t("agentUpgrade")}</span>
+          {upgradeNeeded ? <span className="agent-actions-menu-badge">{t("agentUpdateAvailable")}</span> : null}
+        </DropdownMenuItem>
+        <DropdownMenuItem danger disabled={busy || incomplete} onSelect={() => onRecreate(item)}>
+          {t("agentRecreate")}
+        </DropdownMenuItem>
+        {SHOW_AGENT_LIFECYCLE_ACTIONS && activeRoom && !isManager ? (
+          <DropdownMenuItem disabled={busy} onSelect={() => onInvite(item)}>
+            {t("inviteToRoom")}
+          </DropdownMenuItem>
+        ) : null}
+        {canPublish ? (
+          <DropdownMenuItem disabled={publishBusy} onSelect={() => onPublish?.()}>
+            {publishBusy ? t("agentPublishing") : t("agentPublish")}
+          </DropdownMenuItem>
+        ) : null}
+        {!isManager ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem danger disabled={busy} onSelect={() => onDelete(item)}>
+              {t("agentDelete")}
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenuRoot>
   );
 }
