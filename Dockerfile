@@ -23,7 +23,7 @@ WORKDIR /src
 ARG GOPROXY=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY}
 
-RUN apk add --no-cache ca-certificates git
+RUN apk add --no-cache ca-certificates
 
 COPY go.mod go.sum ./
 RUN go mod download

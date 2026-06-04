@@ -5,6 +5,8 @@
 # Trigger: tags matching v* (e.g. pull mirror with "Trigger pipelines for mirror updates").
 #
 # Implementation: scripts/release-build-all.sh (per matrix cell); .gitlab/ci-gitlab-release-upload.sh (upload only);
+# scripts/prepare-picoclaw-embed-dist.sh (stage PicoClaw templates into embed/*/dist/, excluding Dockerfiles);
+# scripts/patch-picoclaw-embed-image-refs.sh (patch dist/agent.toml image refs after picoclaw manifest merge);
 # .gitlab/ci-picoclaw-image.sh (stage csgclaw-cli from dist/ into picoclaw manager/worker images); .gitlab/bookworm-mirror.sh (apt sources).
 #
 # Required CI/CD variables:
@@ -67,6 +69,7 @@ stages:
   - web
   - build
   - image
+  - release
   - upload
 
 .release_rules:
@@ -107,7 +110,7 @@ stages:
     - .release_rules
   stage: image
   needs:
-    - job: release-build
+    - job: release-cli-build
       artifacts: true
   parallel:
     matrix:
@@ -136,14 +139,65 @@ web-build:
       - web/static-dist/
     expire_in: 1 day
 
-# Must match scripts/release-platforms.txt (order need not match; set must match).
-release-build:
+embed-templates-prepare:
+  extends:
+    - .release_image
+    - .release_rules
+  stage: build
+  script:
+    - chmod +x scripts/prepare-picoclaw-embed-dist.sh
+    - scripts/prepare-picoclaw-embed-dist.sh
+  artifacts:
+    paths:
+      - internal/templates/embed/picoclaw-manager/dist/
+      - internal/templates/embed/picoclaw-worker/dist/
+    expire_in: 1 day
+
+# Linux csgclaw-cli only — consumed by picoclaw manager/worker image builds before the full release.
+# Needs embed-templates-prepare: csgclaw-cli links internal/templates (go:embed picoclaw-*/dist).
+release-cli-build:
   extends:
     - .release_image
     - .release_rules
   stage: build
   needs:
+    - job: embed-templates-prepare
+      artifacts: true
+  parallel:
+    matrix:
+      - GOOS: linux
+        GOARCH: amd64
+      - GOOS: linux
+        GOARCH: arm64
+  before_script:
+    - chmod +x .gitlab/bookworm-mirror.sh scripts/release-build-all.sh
+    - bash .gitlab/bookworm-mirror.sh
+    - apt-get update -qq && apt-get install -y --no-install-recommends zip ca-certificates
+  script:
+    - export VERSION="$CI_COMMIT_TAG"
+    - export COMMIT="$(git rev-parse --short HEAD)"
+    - export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    - export DIST_DIR="${DIST_DIR:-dist}"
+    - export RELEASE_APPS="csgclaw-cli"
+    - mkdir -p "$DIST_DIR" "${CI_PROJECT_DIR}/.gocache"
+    - export GOCACHE="${GOCACHE:-${CI_PROJECT_DIR}/.gocache}"
+    - export BOXLITE_CLI_VERSION="${BOXLITE_CLI_VERSION:-v0.9.0}"
+    - ./scripts/release-build-all.sh "$GOOS" "$GOARCH"
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 day
+
+# Must match scripts/release-platforms.txt (order need not match; set must match).
+release-build:
+  extends:
+    - .release_image
+    - .release_rules
+  stage: release
+  needs:
     - job: web-build
+      artifacts: true
+    - job: embed-templates-patch
       artifacts: true
   parallel:
     matrix:
@@ -180,7 +234,10 @@ docker-build-amd64:
     - .kaniko_image
     - .kaniko_acr_auth
     - .release_rules
-  stage: image
+  stage: release
+  needs:
+    - job: embed-templates-patch
+      artifacts: true
   script:
     - export COMMIT="$(git rev-parse --short HEAD)"
     - export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -236,6 +293,27 @@ picoclaw-worker-manifest:
       artifacts: false
   variables:
     PICOCLAW_IMAGE_NAME: picoclaw-worker
+
+embed-templates-patch:
+  extends:
+    - .release_image
+    - .release_rules
+  stage: release
+  needs:
+    - job: embed-templates-prepare
+      artifacts: true
+    - job: picoclaw-manager-manifest
+      artifacts: false
+    - job: picoclaw-worker-manifest
+      artifacts: false
+  script:
+    - chmod +x scripts/patch-picoclaw-embed-image-refs.sh
+    - scripts/patch-picoclaw-embed-image-refs.sh
+  artifacts:
+    paths:
+      - internal/templates/embed/picoclaw-manager/dist/
+      - internal/templates/embed/picoclaw-worker/dist/
+    expire_in: 1 day
 
 release-upload:
   extends:

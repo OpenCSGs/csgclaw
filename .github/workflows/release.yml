@@ -1,3 +1,15 @@
+# Release on tag v* / workflow_dispatch.
+#
+# PicoClaw container images are built and pushed on GitLab CI (ACR). This workflow only:
+#   1. Stages embed/*/dist/ from templates (scripts/prepare-picoclaw-embed-dist.sh)
+#   2. Patches dist/agent.toml [image].ref to ACR refs tagged with the release version
+#   3. Builds csgclaw / csgclaw-cli release archives with the patched embed
+#
+# Image refs written into dist/agent.toml (ACR registry is hardcoded below):
+#   opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:<version>
+#   opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-worker:<version>
+# where <version> is the git tag (v*) or workflow_dispatch input.
+
 name: Release
 
 on:
@@ -15,6 +27,7 @@ permissions:
 
 env:
   BOXLITE_CLI_VERSION: v0.9.0
+  ACR_REGISTRY: opencsg-registry.cn-beijing.cr.aliyuncs.com
 
 jobs:
   prepare:
@@ -94,8 +107,48 @@ jobs:
           path: web/static-dist/
           if-no-files-found: error
 
+  picoclaw-embed-dist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME}"
+          fi
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Stage PicoClaw embed dist and patch ACR image refs
+        shell: bash
+        env:
+          ACR_REGISTRY: ${{ env.ACR_REGISTRY }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          chmod +x scripts/prepare-picoclaw-embed-dist.sh scripts/patch-picoclaw-embed-image-refs.sh
+          ./scripts/prepare-picoclaw-embed-dist.sh
+          ./scripts/patch-picoclaw-embed-image-refs.sh
+          echo "manager ref:"
+          grep '^ref = ' internal/templates/embed/picoclaw-manager/dist/agent.toml
+          echo "worker ref:"
+          grep '^ref = ' internal/templates/embed/picoclaw-worker/dist/agent.toml
+
+      - name: Upload patched PicoClaw embed directories
+        uses: actions/upload-artifact@v4
+        with:
+          name: picoclaw-embed-dist-patched
+          path: |
+            internal/templates/embed/picoclaw-manager/dist/
+            internal/templates/embed/picoclaw-worker/dist/
+          if-no-files-found: error
+
   build:
-    needs: [prepare, web]
+    needs: [prepare, web, picoclaw-embed-dist]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -115,6 +168,21 @@ jobs:
         with:
           name: web-static-dist
           path: web/static-dist
+
+      - name: Download patched PicoClaw embed directories
+        uses: actions/download-artifact@v4
+        with:
+          name: picoclaw-embed-dist-patched
+          # Artifact root is internal/templates/embed/ (LCA of the uploaded dist paths).
+          path: internal/templates/embed
+
+      - name: Verify PicoClaw embed dist is present
+        shell: bash
+        run: |
+          test -f internal/templates/embed/picoclaw-manager/dist/agent.toml
+          test -f internal/templates/embed/picoclaw-worker/dist/agent.toml
+          grep '^ref = ' internal/templates/embed/picoclaw-manager/dist/agent.toml
+          grep '^ref = ' internal/templates/embed/picoclaw-worker/dist/agent.toml
 
       - name: Set up Go
         uses: actions/setup-go@v5

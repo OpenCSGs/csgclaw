@@ -12,8 +12,6 @@ import (
 )
 
 const (
-	testBuiltinPicoClawManagerImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:v0.3.7.1"
-	testBuiltinPicoClawWorkerImage  = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-worker:v0.3.7.1"
 	testBuiltinOpenClawImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260529.2-csgclaw"
 )
 
@@ -50,16 +48,8 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	if got, want := item.Role, TemplateRoleWorker; got != want {
 		t.Fatalf("Get().Role = %q, want %q", got, want)
 	}
-	if got, want := item.Image, testBuiltinPicoClawWorkerImage; got != want {
-		t.Fatalf("Get().Image = %q, want %q", got, want)
-	}
-
-	managerItem, err := store.Get(context.Background(), "picoclaw-manager")
-	if err != nil {
-		t.Fatalf("Get(picoclaw-manager) error = %v", err)
-	}
-	if got, want := managerItem.Image, testBuiltinPicoClawManagerImage; got != want {
-		t.Fatalf("Get(picoclaw-manager).Image = %q, want %q", got, want)
+	if item.Image == "" {
+		t.Fatal("Get().Image is empty")
 	}
 	if got, want := item.WorkspaceRef.Kind, WorkspaceKindDir; got != want {
 		t.Fatalf("Get().WorkspaceRef.Kind = %q, want %q", got, want)
