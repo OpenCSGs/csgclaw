@@ -5,4 +5,4 @@ runtime_kind = "picoclaw_sandbox"
 updated_at = "2026-05-27T00:00:00Z"
 
 [image]
-ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:2026.5.27"
+ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:v0.3.7.1"

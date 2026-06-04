@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	testBuiltinPicoClawManagerImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:2026.5.27"
-	testBuiltinPicoClawWorkerImage  = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-worker:2026.5.27"
+	testBuiltinPicoClawManagerImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:v0.3.7.1"
+	testBuiltinPicoClawWorkerImage  = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-worker:v0.3.7.1"
 	testBuiltinOpenClawImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260529.2-csgclaw"
 )
 
