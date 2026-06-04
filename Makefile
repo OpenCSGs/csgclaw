@@ -25,10 +25,15 @@ CLI_BIN ?= $(BIN_DIR)/csgclaw-cli
 IMAGE ?= opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw
 TAG ?= 2026.5.27
 LOCAL_IMAGE ?= picoclaw:local
+PICOCLAW_BASE_IMAGE ?= opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:$(TAG)
+PICOCLAW_MANAGER_IMAGE ?= opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager
+PICOCLAW_WORKER_IMAGE ?= opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-worker
+PICOCLAW_DOCKER_GOOS ?= linux
+PICOCLAW_DOCKER_GOARCH ?= $(TARGET_ARCH)
 
 .DEFAULT_GOAL := build-all
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-csgclaw build-csgclaw-cli build-csgclaw-cli-for-picoclaw build-all run clean package package-all release tag push publish
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-csgclaw build-csgclaw-cli build-csgclaw-cli-for-picoclaw stage-picoclaw-docker-cli build-all run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image
 
 help:
 	@printf '%s\n' \
@@ -42,6 +47,8 @@ help:
 		'make build-csgclaw - alias for build-server' \
 		'make build-csgclaw-cli - build $(CLI_BIN) for TARGET_OS/TARGET_ARCH (defaults to current platform)' \
 		'make build-csgclaw-cli-for-picoclaw - build PicoClaw CLI binaries for linux/amd64 and linux/arm64' \
+		'make build-picoclaw-manager-image - build picoclaw-manager Docker image (repo root context)' \
+		'make build-picoclaw-worker-image - build picoclaw-worker Docker image (repo root context)' \
 		'make build-all - build Web UI, bin/csgclaw, and bin/csgclaw-cli' \
 		'make run       - run the server in foreground' \
 		'make package   - package APP binary into dist/' \
@@ -126,6 +133,19 @@ build-csgclaw-cli:
 build-csgclaw-cli-for-picoclaw:
 	$(MAKE) build-csgclaw-cli TARGET_OS=linux TARGET_ARCH=amd64 CLI_BIN=$(BIN_DIR)/csgclaw-cli_linux_amd64
 	$(MAKE) build-csgclaw-cli TARGET_OS=linux TARGET_ARCH=arm64 CLI_BIN=$(BIN_DIR)/csgclaw-cli_linux_arm64
+
+stage-picoclaw-docker-cli:
+	$(MAKE) build-csgclaw-cli TARGET_OS=$(PICOCLAW_DOCKER_GOOS) TARGET_ARCH=$(PICOCLAW_DOCKER_GOARCH) CLI_BIN=$(BIN_DIR)/csgclaw-cli
+
+build-picoclaw-manager-image: stage-picoclaw-docker-cli
+	docker build -f internal/templates/embed/picoclaw-manager/Dockerfile \
+	  --build-arg PICOCLAW_IMAGE=$(PICOCLAW_BASE_IMAGE) \
+	  -t $(PICOCLAW_MANAGER_IMAGE):$(TAG) .
+
+build-picoclaw-worker-image: stage-picoclaw-docker-cli
+	docker build -f internal/templates/embed/picoclaw-worker/Dockerfile \
+	  --build-arg PICOCLAW_IMAGE=$(PICOCLAW_BASE_IMAGE) \
+	  -t $(PICOCLAW_WORKER_IMAGE):$(TAG) .
 
 build-all: build-web
 	$(MAKE) build-server APP=csgclaw

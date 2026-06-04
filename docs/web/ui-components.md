@@ -68,3 +68,7 @@ When adding a Radix component with a portal, expose a container escape hatch whe
 `Select` is built on `@radix-ui/react-select`. Prefer the data-driven `options` prop for normal forms. Use the compound exports (`SelectRoot`, `SelectTrigger`, `SelectContent`, `SelectItem`) only when a custom layout is needed.
 
 `Select` maps an empty business value (`""`) to an internal Radix item value, because Radix reserves empty string for clearing selection. Callers should continue to read and write `""` normally.
+
+## Dropdown Menu
+
+`DropdownMenu` is built on `@radix-ui/react-dropdown-menu`. Compose menus with the shared `DropdownMenuRoot`, `DropdownMenuTrigger`, `DropdownMenuContent`, `DropdownMenuItem`, and `DropdownMenuSeparator` exports so pages inherit consistent hover, keyboard, danger-state, portal, and focus behavior.

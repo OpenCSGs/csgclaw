@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	sdkauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/auth"
-	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
-	sdkconfig "github.com/router-for-me/CLIProxyAPI/v6/sdk/config"
+	sdkauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/auth"
+	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	sdkconfig "github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 )
 
 const (
@@ -116,6 +116,34 @@ func (s *Service) Login(ctx context.Context, provider string, opts LoginOptions)
 		return AuthStatus{}, err
 	}
 	return authenticatedStatus(statusProvider, "oauth", authProvider), nil
+}
+
+func (s *Service) Logout(ctx context.Context, provider string) (AuthStatus, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	authProvider, statusProvider, err := normalizeAuthProvider(provider)
+	if err != nil {
+		return AuthStatus{}, err
+	}
+	cfg, err := authConfig()
+	if err != nil {
+		return AuthStatus{}, err
+	}
+	if err = disableAuthProvider(ctx, cfg.AuthDir, authProvider); err != nil {
+		return AuthStatus{}, err
+	}
+	if s != nil {
+		_ = s.Shutdown(context.Background())
+	}
+
+	status := unauthenticatedStatus(statusProvider, authProvider)
+	command := "csgclaw model auth login " + statusProvider
+	if statusProvider == "claude_code" {
+		command = "csgclaw model auth login claude-code"
+	}
+	status.Message = fmt.Sprintf("%s auth removed. Run %s to reconnect.", statusProvider, command)
+	return status, nil
 }
 
 func (s *Service) HasAuth(ctx context.Context, provider string) (bool, error) {
@@ -345,6 +373,107 @@ func saveMetadataAuth(ctx context.Context, authDir, provider, fileName string, m
 		FileName: fileName,
 		Metadata: metadata,
 	})
+}
+
+func disableAuthProvider(ctx context.Context, authDir, provider string) error {
+	store := sdkauth.NewFileTokenStore()
+	store.SetBaseDir(authDir)
+	records, err := store.List(ctx)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	disabledAny := false
+	for _, record := range records {
+		if record == nil || !strings.EqualFold(strings.TrimSpace(record.Provider), provider) {
+			continue
+		}
+		if record.Metadata == nil {
+			record.Metadata = make(map[string]any)
+		}
+		record.Metadata["disabled"] = true
+		record.Disabled = true
+		record.Status = cliproxyauth.StatusDisabled
+		if strings.TrimSpace(record.FileName) == "" {
+			record.FileName = record.ID
+		}
+		if strings.TrimSpace(record.ID) == "" {
+			record.ID = record.FileName
+		}
+		if _, err = store.Save(ctx, record); err != nil {
+			return err
+		}
+		disabledAny = true
+	}
+	if disabledAny {
+		return nil
+	}
+
+	metadata, fileName, ok := externalAuthMetadataForLogout(ctx, provider)
+	if !ok {
+		return nil
+	}
+	return saveDisabledMetadataAuth(authDir, fileName, metadata)
+}
+
+func externalAuthMetadataForLogout(ctx context.Context, provider string) (map[string]any, string, bool) {
+	switch provider {
+	case ProviderCodex:
+		path, err := codexHomeAuthPath()
+		if err != nil {
+			return nil, "", false
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, "", false
+		}
+		metadata, err := codexMetadataFromAuthJSON(raw)
+		if err != nil {
+			return nil, "", false
+		}
+		return metadata, authFileName(ProviderCodex, metadata, "codex-imported"), true
+	case authProviderClaude:
+		if currentGOOS != "darwin" || !keychainImportEnabled() {
+			return nil, "", false
+		}
+		for _, candidate := range claudeKeychainCandidates {
+			raw, err := claudeKeychainReader(ctx, candidate.service, candidate.account)
+			if err != nil || len(strings.TrimSpace(string(raw))) == 0 {
+				continue
+			}
+			metadata, err := claudeMetadataFromKeychain(raw)
+			if err != nil {
+				continue
+			}
+			fileName := authFileName(authProviderClaude, metadata, "claude-keychain-"+shortHash(candidate.service+":"+candidate.account))
+			return metadata, fileName, true
+		}
+		return nil, "", false
+	default:
+		return nil, "", false
+	}
+}
+
+func saveDisabledMetadataAuth(authDir, fileName string, metadata map[string]any) error {
+	fileName = strings.TrimSpace(fileName)
+	if fileName == "" {
+		return fmt.Errorf("cliproxy auth logout: file name is empty")
+	}
+	if metadata == nil {
+		metadata = make(map[string]any)
+	}
+	metadata["disabled"] = true
+	raw, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	path := fileName
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(authDir, fileName)
+	}
+	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0o600)
 }
 
 func findAuth(ctx context.Context, authDir, provider string) (*cliproxyauth.Auth, error) {

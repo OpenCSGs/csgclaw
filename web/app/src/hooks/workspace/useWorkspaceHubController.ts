@@ -7,7 +7,14 @@ import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
 import type { UseWorkspaceHubControllerArgs } from "./types";
 
 export type WorkspaceHubController = {
-  hub: ReturnType<typeof useWorkspaceHubSelection>;
+  hub: ReturnType<typeof useWorkspaceHubSelection> & {
+    deleteBusy: boolean;
+    deleteHubTemplate: (template: HubTemplate | null | undefined) => Promise<boolean>;
+    detailPaneProps: ReturnType<typeof useWorkspaceHubSelection>["detailPaneProps"] & {
+      deleteBusy: boolean;
+      onDeleteTemplate: (template: HubTemplate | null | undefined) => Promise<boolean>;
+    };
+  };
   refreshHubTemplates: () => Promise<void>;
 };
 

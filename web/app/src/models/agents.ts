@@ -76,6 +76,7 @@ export type AgentLike = AgentProfileLike & {
   runtime_options?: JSONRecord | null;
   status?: string | null;
   template_name?: string | null;
+  user_id?: string | null;
 };
 
 export type AvatarLikeUser = {
@@ -234,9 +235,7 @@ export function resolveAgentAvatarSource(
   usersById?: Map<string, AvatarLikeUser> | null,
 ): string {
   const agentAvatar = String(agent?.avatar ?? "").trim();
-  const candidateUserIDs = [agent?.user_id, agent?.id]
-    .map((value) => String(value ?? "").trim())
-    .filter(Boolean);
+  const candidateUserIDs = [agent?.user_id, agent?.id].map((value) => String(value ?? "").trim()).filter(Boolean);
 
   for (const userID of candidateUserIDs) {
     const userAvatar = String(usersById?.get(userID)?.avatar ?? "").trim();
@@ -252,9 +251,7 @@ export function resolveAgentAvatarFallback(
   agent: AgentLike | null | undefined,
   usersById?: Map<string, AvatarLikeUser> | null,
 ): string {
-  const candidateUserIDs = [agent?.user_id, agent?.id]
-    .map((value) => String(value ?? "").trim())
-    .filter(Boolean);
+  const candidateUserIDs = [agent?.user_id, agent?.id].map((value) => String(value ?? "").trim()).filter(Boolean);
   for (const userID of candidateUserIDs) {
     const user = usersById?.get(userID);
     if (user) {

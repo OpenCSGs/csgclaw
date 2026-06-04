@@ -345,12 +345,11 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 	}
 
 	if testCreateGatewayBoxHook != nil {
-		runtimeName := sandboxNameForAgent(got)
-		rt, err := s.ensureRuntime(runtimeName)
+		rt, err := s.ensureRuntime(got.Name)
 		if err != nil {
 			return Agent{}, err
 		}
-		runtimeHome, err := s.sandboxRuntimeHome(runtimeName)
+		runtimeHome, err := s.sandboxRuntimeHome(got.Name)
 		if err != nil {
 			return Agent{}, err
 		}
@@ -363,7 +362,7 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 				return Agent{}, fmt.Errorf("remove existing agent box: %w", deleteErr)
 			}
 		}
-		box, sandboxInfo, err := s.createGatewayBox(ctx, rt, image, runtimeName, got.ID, profile)
+		box, sandboxInfo, err := s.createGatewayBox(ctx, rt, image, got.Name, got.ID, profile)
 		if err != nil {
 			return Agent{}, fmt.Errorf("create agent box: %w", err)
 		}
@@ -389,14 +388,10 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 	}
 
 	runtimeProfile := s.runtimeProfileForKind(runtimeKind, got.ID, got.Name, got.Description, profile)
-	runtimeAgentName := got.Name
-	if isGatewayRuntimeKind(runtimeKind) {
-		runtimeAgentName = sandboxNameForAgent(got)
-	}
 	createSpec := agentruntime.Spec{
 		RuntimeID: normalizeRuntimeID(got.RuntimeID, got.ID),
 		AgentID:   got.ID,
-		AgentName: runtimeAgentName,
+		AgentName: got.Name,
 		Image:     image,
 		Profile:   runtimeProfile,
 	}
@@ -406,7 +401,7 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
 		RuntimeID: createSpec.RuntimeID,
 		AgentID:   createSpec.AgentID,
-		AgentName: got.Name,
+		AgentName: createSpec.AgentName,
 		Profile:   runtimeProfile,
 	}); err != nil {
 		return Agent{}, fmt.Errorf("provision agent runtime: %w", err)

@@ -110,6 +110,37 @@ func TestRuntimeProfileForKindUsesBridgeForCodexRuntime(t *testing.T) {
 	}
 }
 
+func TestRuntimeProfileForKindUsesHostReachableBridgeForCodexRuntime(t *testing.T) {
+	orig := localIPv4Resolver
+	localIPv4Resolver = func() string {
+		return "198.18.0.1"
+	}
+	t.Cleanup(func() {
+		localIPv4Resolver = orig
+	})
+
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{
+			ListenAddr:  "0.0.0.0:18080",
+			AccessToken: "shared-token",
+		}, "manager-image:test", "",
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	profile := svc.runtimeProfileForKind(RuntimeKindCodex, "u-developer", "developer", "", AgentProfile{
+		Name:     "developer",
+		Provider: ProviderCodex,
+		ModelID:  "gpt-5.4",
+	})
+
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/bots/u-developer/llm"; got != want {
+		t.Fatalf("runtimeProfileForKind().BaseURL = %q, want host-reachable %q", got, want)
+	}
+}
+
 func TestPicoClawRuntimeHostResolveRuntimeProfilePreservesAPIProfile(t *testing.T) {
 	svc, err := NewService(
 		config.ModelConfig{},

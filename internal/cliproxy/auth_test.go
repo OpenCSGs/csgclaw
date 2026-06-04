@@ -218,6 +218,75 @@ func TestAuthStatusDoesNotReimportDisabledCodexAuth(t *testing.T) {
 	}
 }
 
+func TestLogoutCodexDisablesAuthAndPreventsHomeReimport(t *testing.T) {
+	home := t.TempDir()
+	authDir := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(authDirEnv, authDir)
+
+	codexDir := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(codexDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{
+		"tokens": {
+			"access_token": "`+testJWT(t, `{"exp":1893456000}`)+`",
+			"refresh_token": "refresh",
+			"id_token": "`+testJWT(t, `{"exp":1893456000,"email":"dev@example.test"}`)+`",
+			"account_id": "acct_123"
+		}
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := &Service{}
+	first, err := svc.AuthStatus(context.Background(), ProviderCodex)
+	if err != nil {
+		t.Fatalf("initial AuthStatus() error = %v", err)
+	}
+	if !first.Authenticated {
+		t.Fatalf("initial status = %+v, want authenticated import", first)
+	}
+
+	status, err := svc.Logout(context.Background(), ProviderCodex)
+	if err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if status.Authenticated || !status.LoginRequired {
+		t.Fatalf("logout status = %+v, want login required", status)
+	}
+
+	second, err := svc.AuthStatus(context.Background(), ProviderCodex)
+	if err != nil {
+		t.Fatalf("second AuthStatus() error = %v", err)
+	}
+	if second.Authenticated || !second.LoginRequired {
+		t.Fatalf("second status = %+v, want home auth not reimported", second)
+	}
+
+	fileName := authFileName(ProviderCodex, map[string]any{
+		"type":          ProviderCodex,
+		"access_token":  testJWT(t, `{"exp":1893456000}`),
+		"refresh_token": "refresh",
+		"id_token":      testJWT(t, `{"exp":1893456000,"email":"dev@example.test"}`),
+		"account_id":    "acct_123",
+		"email":         "dev@example.test",
+		"expired":       "2030-01-01T00:00:00Z",
+		"disabled":      false,
+	}, "codex-imported")
+	raw, err := os.ReadFile(filepath.Join(authDir, fileName))
+	if err != nil {
+		t.Fatalf("read disabled auth marker: %v", err)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if disabled, _ := metadata["disabled"].(bool); !disabled {
+		t.Fatalf("metadata disabled = %#v, want true", metadata["disabled"])
+	}
+}
+
 func TestAuthStatusImportDoesNotRestartRunningService(t *testing.T) {
 	home := t.TempDir()
 	authDir := t.TempDir()

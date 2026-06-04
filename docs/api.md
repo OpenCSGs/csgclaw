@@ -25,6 +25,8 @@ This document is generated from the HTTP routes and behaviors currently implemen
   - `GET /api/bots/{id}/llm/v1/models`
   - `POST /api/bots/{id}/llm/chat/completions`
   - `POST /api/bots/{id}/llm/v1/chat/completions`
+  - `GET /api/bots/{id}/llm/responses`
+  - `GET /api/bots/{id}/llm/v1/responses`
   - `POST /api/bots/{id}/llm/responses`
   - `POST /api/bots/{id}/llm/v1/responses`
 - If the server runs with `no_auth`, the checks above are skipped
@@ -530,6 +532,26 @@ Notes:
 
 - Missing `provider` returns `400`
 - Login failure returns `502 Bad Gateway`
+
+### `POST /api/v1/cliproxy/auth/logout`
+
+Disables local provider auth.
+
+Request body:
+
+```json
+{
+  "provider": "codex"
+}
+```
+
+Returns the current provider auth status on success.
+
+Notes:
+
+- Missing `provider` returns `400`
+- Logout failure returns `502 Bad Gateway`
+- Logout blocks immediate auto-import from the same Codex home auth or Claude Keychain entry.
 
 ## Bootstrap Config API
 
@@ -1118,6 +1140,12 @@ Notes:
 
 Forwards OpenAI-compatible Responses API requests to the LLM bridge. Codex runtime uses this entrypoint for provider traffic. If the selected upstream provider returns an unsupported Responses endpoint status, the bridge falls back to upstream chat completions and wraps the result in a Responses-compatible response for Codex.
 
+### `GET /api/bots/{id}/llm/responses`
+
+### `GET /api/bots/{id}/llm/v1/responses`
+
+Upgrades to an OpenAI-compatible Responses WebSocket. Codex runtime enables this path only when the selected model provider is Codex, so the bridge can forward Codex ACP WebSocket traffic through the embedded CLIProxy Codex provider.
+
 Example request body:
 
 ```json
@@ -1136,6 +1164,7 @@ Notes:
 - The `model` field is overwritten with the agent's resolved `model_id`
 - Responses forwarding does not inject the chat-only top-level `reasoning_effort`
 - Upstream Responses headers, status, and body are copied through, including streaming responses such as `text/event-stream`
+- Responses WebSocket `response.create` payloads also have profile request options merged before they are forwarded upstream
 
 ## Compatibility Notes
 

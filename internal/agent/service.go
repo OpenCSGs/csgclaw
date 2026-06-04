@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -1141,25 +1140,13 @@ func (s *Service) agentSnapshot(id string) (Agent, bool) {
 }
 
 func (s *Service) resolveAgentBox(ctx context.Context, rt sandbox.Runtime, got Agent) (sandbox.Instance, string, error) {
-	keys := make([]string, 0, 3)
+	keys := make([]string, 0, 2)
 	if boxID := strings.TrimSpace(got.BoxID); boxID != "" {
 		keys = append(keys, boxID)
 	}
 	if name := strings.TrimSpace(got.Name); name != "" {
 		if len(keys) == 0 || keys[0] != name {
 			keys = append(keys, name)
-		}
-	}
-	if runtimeName := safeSandboxNameForAgent(got.ID, got.Name); runtimeName != "" {
-		duplicate := false
-		for _, key := range keys {
-			if key == runtimeName {
-				duplicate = true
-				break
-			}
-		}
-		if !duplicate {
-			keys = append(keys, runtimeName)
 		}
 	}
 	if len(keys) == 0 {
@@ -1321,12 +1308,11 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return fmt.Errorf("remove agent box: %w", err)
 		}
 	} else {
-		runtimeName := sandboxNameForAgent(existing)
-		rt, ensureErr := s.ensureRuntime(runtimeName)
+		rt, ensureErr := s.ensureRuntime(existing.Name)
 		if ensureErr != nil {
 			return ensureErr
 		}
-		runtimeHome, homeErr := s.sandboxRuntimeHome(runtimeName)
+		runtimeHome, homeErr := s.sandboxRuntimeHome(existing.Name)
 		if homeErr != nil {
 			return homeErr
 		}
@@ -1355,7 +1341,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	}
 	delete(s.agents, id)
 	s.deleteRuntimeRecordLocked(current.RuntimeID)
-	runtimeHome, err := s.sandboxRuntimeHome(sandboxNameForAgent(current))
+	runtimeHome, err := s.sandboxRuntimeHome(current.Name)
 	if err != nil {
 		s.mu.Unlock()
 		return err
@@ -1426,48 +1412,6 @@ func isRetryableRemoveAllError(err error) bool {
 	}
 	lower := strings.ToLower(err.Error())
 	return strings.Contains(lower, "directory not empty") || strings.Contains(lower, "permission denied")
-}
-
-func safeSandboxNameForAgent(id, name string) string {
-	name = strings.TrimSpace(name)
-	if isDockerSafeSandboxName(name) {
-		return name
-	}
-	id = strings.TrimSpace(id)
-	if isDockerSafeSandboxName(id) {
-		return id
-	}
-	seed := id
-	if seed == "" {
-		seed = name
-	}
-	if seed == "" {
-		seed = "agent"
-	}
-	sum := sha256.Sum256([]byte(seed))
-	return fmt.Sprintf("agent-%x", sum[:8])
-}
-
-func sandboxNameForAgent(got Agent) string {
-	return safeSandboxNameForAgent(got.ID, got.Name)
-}
-
-func isDockerSafeSandboxName(name string) bool {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return false
-	}
-	for idx := 0; idx < len(name); idx++ {
-		ch := name[idx]
-		valid := (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')
-		if idx > 0 {
-			valid = valid || ch == '_' || ch == '.' || ch == '-'
-		}
-		if !valid {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *Service) List() []Agent {
@@ -1589,10 +1533,6 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	if err := s.ensureCodexResponsesAPI(ctx, runtimeKind, resolvedProfile); err != nil {
 		return Agent{}, err
 	}
-	runtimeAgentName := name
-	if isGatewayRuntimeKind(runtimeKind) {
-		runtimeAgentName = safeSandboxNameForAgent(id, name)
-	}
 	runtimeProfile := s.runtimeProfileForKind(runtimeKind, id, name, description, resolvedProfile)
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
 		RuntimeID:        runtimeIDForAgentID(id),
@@ -1604,18 +1544,18 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		return Agent{}, fmt.Errorf("provision worker runtime: %w", err)
 	}
 	if testCreateGatewayBoxHook != nil && isGatewayRuntimeKind(runtimeKind) {
-		rt, err := s.ensureRuntime(runtimeAgentName)
+		rt, err := s.ensureRuntime(name)
 		if err != nil {
 			return Agent{}, err
 		}
-		runtimeHome, err := s.sandboxRuntimeHome(runtimeAgentName)
+		runtimeHome, err := s.sandboxRuntimeHome(name)
 		if err != nil {
 			return Agent{}, err
 		}
 		defer func() {
 			_ = s.closeRuntime(runtimeHome, rt)
 		}()
-		box, info, err := s.createGatewayBox(ctx, rt, image, runtimeAgentName, id, resolvedProfile)
+		box, info, err := s.createGatewayBox(ctx, rt, image, name, id, resolvedProfile)
 		if err != nil {
 			return Agent{}, fmt.Errorf("create worker box: %w", err)
 		}
@@ -1641,7 +1581,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	handle, err := runtimeImpl.New(ctx, agentruntime.Spec{
 		RuntimeID: runtimeIDForAgentID(id),
 		AgentID:   id,
-		AgentName: runtimeAgentName,
+		AgentName: name,
 		Image:     image,
 		Profile:   runtimeProfile,
 	})

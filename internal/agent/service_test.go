@@ -3054,47 +3054,6 @@ func TestCreateWorkerUsesRequestedImageWhenGatewayRuntimeExplicit(t *testing.T) 
 	}
 }
 
-func TestCreateWorkerUsesSafeRuntimeNameForGatewayRuntime(t *testing.T) {
-	var gotRuntimeName string
-	svc, err := NewService(
-		testModelConfig(),
-		config.ServerConfig{},
-		"manager-image:1",
-		"",
-		WithRuntime(fakeAgentRuntime{
-			kind: RuntimeKindPicoClawSandbox,
-			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-				gotRuntimeName = spec.AgentName
-				return agentruntime.Handle{
-					RuntimeID: spec.RuntimeID,
-					HandleID:  "box-" + spec.AgentName,
-				}, nil
-			},
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-
-	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
-		Name:        "测试头像",
-		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "worker-image:1",
-	})
-	if err != nil {
-		t.Fatalf("CreateWorker() error = %v", err)
-	}
-	if got.Name != "测试头像" {
-		t.Fatalf("CreateWorker().Name = %q, want display name to be preserved", got.Name)
-	}
-	if !isDockerSafeSandboxName(gotRuntimeName) || gotRuntimeName == got.Name {
-		t.Fatalf("runtime AgentName = %q, want Docker-safe name distinct from display name", gotRuntimeName)
-	}
-	if got.BoxID != "box-"+gotRuntimeName {
-		t.Fatalf("CreateWorker().BoxID = %q, want handle from safe runtime name", got.BoxID)
-	}
-}
-
 func TestCreateWorkerRejectsMissingImageWhenGatewayRuntimeExplicit(t *testing.T) {
 	var gotImage string
 	SetTestHooks(

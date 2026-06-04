@@ -132,7 +132,7 @@ func (s *Service) runtimeProfileForKind(runtimeKind, agentID, fallbackName, fall
 	apiKey := profile.APIKey
 
 	if runtimeKind == RuntimeKindCodex {
-		managerBaseURL := resolveManagerBaseURL(s.server)
+		managerBaseURL := config.ResolveAdvertiseBaseURL(s.server)
 		if managerBaseURL != "" {
 			baseURL = llmBridgeBaseURL(managerBaseURL, agentID)
 		}

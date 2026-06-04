@@ -4,7 +4,8 @@
 .cursor
 .vscode
 .agents
-bin
+bin/**
+!bin/csgclaw-cli
 dist
 manager-data
 tmp

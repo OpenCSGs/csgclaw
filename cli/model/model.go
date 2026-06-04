@@ -31,6 +31,10 @@ var loginProvider = func(ctx context.Context, provider string, opts cliproxy.Log
 	return cliproxy.Default().Login(ctx, provider, opts)
 }
 
+var logoutProvider = func(ctx context.Context, provider string) (cliproxy.AuthStatus, error) {
+	return cliproxy.Default().Logout(ctx, provider)
+}
+
 func NewCmd() command.Command {
 	return cmd{}
 }
@@ -65,6 +69,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 func (c cmd) usage(run *command.Context) {
 	run.UsageCommandGroup(c, run.Program+" model <subcommand> [flags]", []string{
 		"auth login <provider>    Login to codex or claude-code",
+		"auth logout <provider>   Logout from codex or claude-code",
 	})
 }
 
@@ -81,6 +86,8 @@ func (c cmd) runAuth(ctx context.Context, run *command.Context, args []string, g
 	switch args[0] {
 	case "login":
 		return c.runLogin(ctx, run, args[1:], globals)
+	case "logout":
+		return c.runLogout(ctx, run, args[1:], globals)
 	default:
 		c.usageAuth(run)
 		return fmt.Errorf("unknown model auth subcommand %q", args[0])
@@ -94,6 +101,7 @@ func (c cmd) usageAuth(run *command.Context) {
 	fmt.Fprintf(run.Stderr, "  %s model auth <subcommand> [flags]\n\n", run.Program)
 	fmt.Fprintln(run.Stderr, "Available Subcommands:")
 	fmt.Fprintln(run.Stderr, "  login <provider>    Login to codex or claude-code")
+	fmt.Fprintln(run.Stderr, "  logout <provider>   Logout from codex or claude-code")
 	fmt.Fprintln(run.Stderr)
 	fmt.Fprintf(run.Stderr, "Run `%s model auth <subcommand> -h` for subcommand details.\n", run.Program)
 }
@@ -122,6 +130,32 @@ func (c cmd) runLogin(ctx context.Context, run *command.Context, args []string, 
 		if errors.Is(err, context.Canceled) {
 			return fmt.Errorf("login canceled")
 		}
+		return err
+	}
+	return renderLogin(globals.Output, run.Stdout, loginResult{
+		Provider:      status.Provider,
+		Authenticated: status.Authenticated,
+		Source:        status.Source,
+		Message:       loginMessage(status),
+	})
+}
+
+func (c cmd) runLogout(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
+	fs := run.NewFlagSet("model auth logout", run.Program+" model auth logout <provider>", "Logout from a local CLIProxy provider.")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rest := fs.Args()
+	if len(rest) != 1 {
+		return fmt.Errorf("model auth logout requires exactly one provider")
+	}
+
+	provider := normalizeLoginProvider(rest[0])
+	if provider == "" {
+		return fmt.Errorf("unsupported auth provider %q", rest[0])
+	}
+	status, err := logoutProvider(ctx, provider)
+	if err != nil {
 		return err
 	}
 	return renderLogin(globals.Output, run.Stdout, loginResult{

@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +18,8 @@ import (
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/codexmodel"
 	"csgclaw/internal/config"
+
+	"github.com/gorilla/websocket"
 )
 
 type Service struct {
@@ -43,8 +47,20 @@ var embeddedCLIProxyProviderBaseURL = func(ctx context.Context, provider string)
 	return cliproxy.Default().ProviderBaseURL(ctx, provider)
 }
 
+var embeddedCLIProxyBaseURL = func(ctx context.Context) (string, error) {
+	return cliproxy.Default().BaseURL(ctx)
+}
+
 var embeddedCLIProxyAuthStatus = func(ctx context.Context, provider string) (cliproxy.AuthStatus, error) {
 	return cliproxy.Default().AuthStatus(ctx, provider)
+}
+
+var responsesWebsocketUpgrader = websocket.Upgrader{
+	CheckOrigin: func(*http.Request) bool { return true },
+}
+
+var responsesWebsocketDialer = websocket.Dialer{
+	Proxy: http.ProxyFromEnvironment,
 }
 
 func (e *HTTPError) Error() string {
@@ -58,7 +74,7 @@ func NewService(defaults config.ModelConfig, agents *agent.Service) *Service {
 	return &Service{
 		defaults:             defaults.Resolved(),
 		agents:               agents,
-		client:               &http.Client{Timeout: 60 * time.Second},
+		client:               &http.Client{},
 		responsesUnsupported: make(map[string]struct{}),
 	}
 }
@@ -105,6 +121,44 @@ func (s *Service) Responses(ctx context.Context, botID string, body []byte) (*Up
 		return nil, err
 	}
 	return s.forwardRemoteResponses(ctx, profile, body)
+}
+
+func (s *Service) ResponsesWebsocket(w http.ResponseWriter, r *http.Request, botID string) error {
+	if w == nil || r == nil {
+		return &HTTPError{Status: http.StatusBadRequest, Message: "websocket request is required"}
+	}
+	if !websocket.IsWebSocketUpgrade(r) {
+		return &HTTPError{Status: http.StatusBadRequest, Message: "responses websocket upgrade is required"}
+	}
+	profile, err := s.resolveProfile(botID)
+	if err != nil {
+		return err
+	}
+	baseURL, apiKey, err := s.agentProfileWebsocketTarget(r.Context(), profile)
+	if err != nil {
+		return err
+	}
+	if baseURL == "" {
+		return &HTTPError{Status: http.StatusBadRequest, Message: "profile base_url is required"}
+	}
+	upstreamURL, err := responsesWebsocketURL(baseURL)
+	if err != nil {
+		return &HTTPError{Status: http.StatusBadRequest, Message: err.Error()}
+	}
+	downstream, err := responsesWebsocketUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("upgrade responses websocket: %v", err)}
+	}
+	defer downstream.Close()
+
+	upstream, _, err := responsesWebsocketDialer.DialContext(r.Context(), upstreamURL, websocketUpstreamHeaders(r.Header, apiKey, profile.Headers))
+	if err != nil {
+		writeResponsesWebsocketClose(downstream, websocket.CloseTryAgainLater, fmt.Sprintf("dial upstream responses websocket: %v", err))
+		return nil
+	}
+	defer upstream.Close()
+
+	return proxyResponsesWebsocket(r.Context(), downstream, upstream, responsesWebsocketClientPayloadRewriter(profile))
 }
 
 func (s *Service) resolveProfile(botID string) (agent.AgentProfile, error) {
@@ -171,6 +225,9 @@ func (s *Service) forwardRemoteChat(ctx context.Context, profile agent.AgentProf
 	if contentType == "" {
 		contentType = "application/json"
 	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		respBody, contentType = compactUpstreamErrorResponse(resp.Header, respBody, contentType)
+	}
 	return respBody, resp.StatusCode, contentType, nil
 }
 
@@ -209,6 +266,13 @@ func (s *Service) forwardRemoteResponses(ctx context.Context, profile agent.Agen
 		s.markResponsesAPIUnsupported(profile, baseURL)
 		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey)
 	}
+	if responsesAPITransientFallbackStatus(profile, resp.StatusCode) && !responsesPayloadHasToolSemantics(payload) {
+		_ = resp.Body.Close()
+		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey)
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return compactUpstreamErrorStream(resp)
+	}
 	return &UpstreamResponse{
 		StatusCode: resp.StatusCode,
 		Header:     resp.Header.Clone(),
@@ -237,11 +301,7 @@ func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.Age
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send chat fallback request: %v", err)}
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return &UpstreamResponse{
-			StatusCode: resp.StatusCode,
-			Header:     resp.Header.Clone(),
-			Body:       resp.Body,
-		}, nil
+		return compactUpstreamErrorStream(resp)
 	}
 	if payloadBool(chatPayload["stream"]) {
 		return streamChatCompletionAsResponse(resp, strings.TrimSpace(profile.ModelID)), nil
@@ -283,8 +343,85 @@ func newProfileJSONRequest(ctx context.Context, url string, body []byte, apiKey 
 	return req, nil
 }
 
+func compactUpstreamErrorStream(resp *http.Response) (*UpstreamResponse, error) {
+	if resp == nil {
+		return nil, &HTTPError{Status: http.StatusBadGateway, Message: "upstream response is nil"}
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("read upstream error response: %v", err)}
+	}
+	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	body, contentType = compactUpstreamErrorResponse(resp.Header, body, contentType)
+	header := resp.Header.Clone()
+	header.Del("Content-Length")
+	header.Set("Content-Type", contentType)
+	return &UpstreamResponse{
+		StatusCode: resp.StatusCode,
+		Header:     header,
+		Body:       io.NopCloser(bytes.NewReader(body)),
+	}, nil
+}
+
+func compactUpstreamErrorResponse(header http.Header, body []byte, contentType string) ([]byte, string) {
+	if msg := extractUpstreamErrorMessage(body); msg != "" {
+		return []byte(msg), "text/plain; charset=utf-8"
+	}
+	if strings.TrimSpace(contentType) == "" {
+		if ct := strings.TrimSpace(header.Get("Content-Type")); ct != "" {
+			contentType = ct
+		} else {
+			contentType = "text/plain; charset=utf-8"
+		}
+	}
+	return body, contentType
+}
+
+func extractUpstreamErrorMessage(body []byte) string {
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return ""
+	}
+	value, ok := payload["error"]
+	if !ok {
+		value = payload
+	}
+	errObj, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	message := strings.TrimSpace(stringValue(errObj["message"]))
+	if message == "" {
+		return ""
+	}
+	parts := make([]string, 0, 2)
+	if typ := strings.TrimSpace(stringValue(errObj["type"])); typ != "" {
+		parts = append(parts, "type="+typ)
+	}
+	if code := strings.TrimSpace(stringValue(errObj["code"])); code != "" {
+		parts = append(parts, "code="+code)
+	}
+	if len(parts) == 0 {
+		return message
+	}
+	return message + " (" + strings.Join(parts, ", ") + ")"
+}
+
 func responsesAPIUnsupportedStatus(status int) bool {
 	return status == http.StatusNotFound || status == http.StatusMethodNotAllowed
+}
+
+func responsesAPITransientFallbackStatus(profile agent.AgentProfile, status int) bool {
+	if status < http.StatusInternalServerError || status > 599 {
+		return false
+	}
+	switch strings.TrimSpace(profile.Provider) {
+	case agent.ProviderClaudeCode:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) responsesAPIUnsupportedCached(profile agent.AgentProfile, baseURL string) bool {
@@ -909,24 +1046,32 @@ func applyProviderPayloadConstraints(payload map[string]any, profile agent.Agent
 	}
 }
 
+func (s *Service) agentProfileWebsocketTarget(ctx context.Context, profile agent.AgentProfile) (string, string, error) {
+	switch profile.Provider {
+	case agent.ProviderCodex:
+		if err := ensureCLIProxyAuthenticated(ctx, profile.Provider); err != nil {
+			return "", "", err
+		}
+		if _, err := embeddedCLIProxyProviderBaseURL(ctx, profile.Provider); err != nil {
+			return "", "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("embedded cliproxy unavailable: %v", err)}
+		}
+		baseURL, err := embeddedCLIProxyBaseURL(ctx)
+		if err != nil {
+			return "", "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("embedded cliproxy unavailable: %v", err)}
+		}
+		return strings.TrimRight(baseURL, "/") + "/v1", cliproxy.LocalAPIKey, nil
+	case agent.ProviderClaudeCode:
+		return s.agentProfileTarget(ctx, profile)
+	default:
+		return agent.ProfileBaseURL(profile), agent.ProfileAPIKey(profile), nil
+	}
+}
+
 func (s *Service) agentProfileTarget(ctx context.Context, profile agent.AgentProfile) (string, string, error) {
 	switch profile.Provider {
 	case agent.ProviderCodex, agent.ProviderClaudeCode:
-		status, err := embeddedCLIProxyAuthStatus(ctx, profile.Provider)
-		if err != nil {
-			return "", "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("embedded cliproxy auth unavailable: %v", err)}
-		}
-		if !status.Authenticated {
-			message := strings.TrimSpace(status.Message)
-			if message == "" {
-				message = fmt.Sprintf("%s auth is required. Connect this provider in the CSGClaw UI.", profile.Provider)
-			}
-			return "", "", &HTTPError{
-				Status:   http.StatusConflict,
-				Code:     "auth_required",
-				Provider: profile.Provider,
-				Message:  message,
-			}
+		if err := ensureCLIProxyAuthenticated(ctx, profile.Provider); err != nil {
+			return "", "", err
 		}
 		baseURL, err := embeddedCLIProxyProviderBaseURL(ctx, profile.Provider)
 		if err != nil {
@@ -936,4 +1081,168 @@ func (s *Service) agentProfileTarget(ctx context.Context, profile agent.AgentPro
 	default:
 		return agent.ProfileBaseURL(profile), agent.ProfileAPIKey(profile), nil
 	}
+}
+
+func ensureCLIProxyAuthenticated(ctx context.Context, provider string) error {
+	status, err := embeddedCLIProxyAuthStatus(ctx, provider)
+	if err != nil {
+		return &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("embedded cliproxy auth unavailable: %v", err)}
+	}
+	if status.Authenticated {
+		return nil
+	}
+	message := strings.TrimSpace(status.Message)
+	if message == "" {
+		message = fmt.Sprintf("%s auth is required. Connect this provider in the CSGClaw UI.", provider)
+	}
+	return &HTTPError{
+		Status:   http.StatusConflict,
+		Code:     "auth_required",
+		Provider: provider,
+		Message:  message,
+	}
+}
+
+func responsesWebsocketURL(baseURL string) (string, error) {
+	u, err := url.Parse(strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/responses")
+	if err != nil {
+		return "", fmt.Errorf("parse upstream responses websocket url: %w", err)
+	}
+	switch u.Scheme {
+	case "http":
+		u.Scheme = "ws"
+	case "https":
+		u.Scheme = "wss"
+	case "ws", "wss":
+	default:
+		return "", fmt.Errorf("upstream responses websocket url must use http, https, ws, or wss")
+	}
+	if u.Host == "" {
+		return "", fmt.Errorf("upstream responses websocket url host is required")
+	}
+	return u.String(), nil
+}
+
+func websocketUpstreamHeaders(in http.Header, apiKey string, profileHeaders map[string]string) http.Header {
+	out := make(http.Header)
+	for key, values := range in {
+		if skipWebsocketForwardHeader(key) {
+			continue
+		}
+		for _, value := range values {
+			out.Add(key, value)
+		}
+	}
+	if apiKey != "" {
+		out.Set("Authorization", "Bearer "+apiKey)
+	}
+	for key, value := range profileHeaders {
+		key = strings.TrimSpace(key)
+		if key == "" || skipWebsocketForwardHeader(key) || strings.EqualFold(key, "authorization") {
+			continue
+		}
+		out.Set(key, value)
+	}
+	return out
+}
+
+func skipWebsocketForwardHeader(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "host", "connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions", "sec-websocket-protocol", "content-length":
+		return true
+	default:
+		return false
+	}
+}
+
+type responsesWebsocketPayloadRewriter func(int, []byte) []byte
+
+func responsesWebsocketClientPayloadRewriter(profile agent.AgentProfile) responsesWebsocketPayloadRewriter {
+	return func(messageType int, payload []byte) []byte {
+		if messageType != websocket.TextMessage {
+			return payload
+		}
+		return rewriteResponsesWebsocketClientPayload(payload, profile)
+	}
+}
+
+func rewriteResponsesWebsocketClientPayload(payload []byte, profile agent.AgentProfile) []byte {
+	var message map[string]any
+	if err := json.Unmarshal(payload, &message); err != nil {
+		return payload
+	}
+	messageType := strings.TrimSpace(stringValue(message["type"]))
+	if messageType != "" && !strings.EqualFold(messageType, "response.create") {
+		return payload
+	}
+
+	target := message
+	if response, ok := message["response"].(map[string]any); ok {
+		target = response
+	}
+	mergeResponsesPayload(target, profile)
+
+	rewritten, err := json.Marshal(message)
+	if err != nil {
+		return payload
+	}
+	return rewritten
+}
+
+func proxyResponsesWebsocket(ctx context.Context, downstream, upstream *websocket.Conn, rewriteClientPayload responsesWebsocketPayloadRewriter) error {
+	errCh := make(chan error, 2)
+	pump := func(dst, src *websocket.Conn, rewrite responsesWebsocketPayloadRewriter) {
+		for {
+			messageType, payload, err := src.ReadMessage()
+			if err != nil {
+				errCh <- err
+				return
+			}
+			if rewrite != nil {
+				payload = rewrite(messageType, payload)
+			}
+			if err := dst.WriteMessage(messageType, payload); err != nil {
+				errCh <- err
+				return
+			}
+		}
+	}
+
+	go pump(upstream, downstream, rewriteClientPayload)
+	go pump(downstream, upstream, nil)
+
+	select {
+	case <-ctx.Done():
+		_ = downstream.Close()
+		_ = upstream.Close()
+		return nil
+	case err := <-errCh:
+		_ = downstream.Close()
+		_ = upstream.Close()
+		if websocketCloseIsNormal(err) {
+			return nil
+		}
+		return err
+	}
+}
+
+func writeResponsesWebsocketClose(conn *websocket.Conn, code int, message string) {
+	if conn == nil {
+		return
+	}
+	deadline := time.Now().Add(time.Second)
+	_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, message), deadline)
+}
+
+func websocketCloseIsNormal(err error) bool {
+	if err == nil || errors.Is(err, io.EOF) {
+		return true
+	}
+	return websocket.IsCloseError(err,
+		websocket.CloseNormalClosure,
+		websocket.CloseGoingAway,
+		websocket.CloseNoStatusReceived,
+		websocket.CloseAbnormalClosure,
+	) || strings.Contains(strings.ToLower(err.Error()), "unexpected eof") ||
+		strings.Contains(strings.ToLower(err.Error()), "use of closed network connection")
 }
