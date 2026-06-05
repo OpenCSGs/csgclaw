@@ -70,18 +70,10 @@ make build-all
 
 | 目标 | 输出 | 说明 |
 |------|------|------|
-| `make build-server-bin` | `bin/csgclaw` | 仅服务端；需已准备好 `embed/*/dist` |
-| `make build-csgclaw-cli` | `bin/csgclaw-cli` | 当前平台；`CGO_ENABLED=0`（静态链接） |
-| `make build-csgclaw-cli-for-picoclaw` | `bin/csgclaw-cli_linux_amd64`、`bin/csgclaw-cli_linux_arm64` | Docker embed 镜像构建前使用 |
+| `make build-server-bin` | `bin/csgclaw`、`bin/csgclaw-cli` | 当前平台两个二进制；CLI 使用 `CGO_ENABLED=0` |
 | `make stage-docker-embed-cli` | `bin/csgclaw-cli`（linux，宿主机架构） | 打入 PicoClaw Docker 镜像的 Linux CLI |
 
 `csgclaw-cli` 使用 `CGO_ENABLED=0` 构建，以便在 musl 环境的 PicoClaw / BoxLite 沙箱中运行。Release CI 同样使用该设置（`scripts/release-build-all.sh`）。
-
-如需显式指定：
-
-```bash
-make build-csgclaw-cli CGO_ENABLED=0
-```
 
 ## Embed dist
 

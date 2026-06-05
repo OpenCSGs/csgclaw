@@ -70,18 +70,10 @@ Frontend structure and verification details: [docs/web/development.md](web/devel
 
 | Target | Output | Notes |
 |--------|--------|-------|
-| `make build-server-bin` | `bin/csgclaw` | Server only; expects `embed/*/dist` already staged |
-| `make build-csgclaw-cli` | `bin/csgclaw-cli` | Current platform; `CGO_ENABLED=0` (static binary) |
-| `make build-csgclaw-cli-for-picoclaw` | `bin/csgclaw-cli_linux_amd64`, `bin/csgclaw-cli_linux_arm64` | Used before Docker embed image builds |
+| `make build-server-bin` | `bin/csgclaw`, `bin/csgclaw-cli` | Both binaries for the current platform; CLI uses `CGO_ENABLED=0` |
 | `make stage-docker-embed-cli` | `bin/csgclaw-cli` (linux, host arch) | Linux CLI copied into PicoClaw Docker images |
 
 `csgclaw-cli` is built with `CGO_ENABLED=0` so it runs inside musl-based PicoClaw and BoxLite sandbox images. Release CI uses the same setting (`scripts/release-build-all.sh`).
-
-Override statically if needed:
-
-```bash
-make build-csgclaw-cli CGO_ENABLED=0
-```
 
 ## Embed dist
 

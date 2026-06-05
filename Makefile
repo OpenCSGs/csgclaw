@@ -40,7 +40,7 @@ PICOCLAW_DOCKER_CLI ?= $(DOCKER_EMBED_CLI)
 
 .DEFAULT_GOAL := build
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-server-bin build-csgclaw build-csgclaw-cli build-csgclaw-cli-for-picoclaw stage-docker-embed-cli stage-picoclaw-docker-cli prepare-docker-embed-dist prepare-picoclaw-embed-dist patch-docker-embed-image-refs patch-picoclaw-embed-image-refs stage-docker-embed-dist stage-picoclaw-embed-dist ensure-docker-embed-dist build-docker-embed-images build-docker-embed-runtime-embed build-picoclaw-runtime-embed build-all run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-server-bin stage-docker-embed-cli stage-picoclaw-docker-cli prepare-docker-embed-dist prepare-picoclaw-embed-dist patch-docker-embed-image-refs patch-picoclaw-embed-image-refs stage-docker-embed-dist stage-picoclaw-embed-dist ensure-docker-embed-dist build-docker-embed-images build-docker-embed-runtime-embed build-picoclaw-runtime-embed build-all run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image
 
 help:
 	@printf '%s\n' \
@@ -52,10 +52,9 @@ help:
 		'make web-install - install Web UI dependencies' \
 		'make web-dev    - run Vite Web UI dev server' \
 		'make build-web  - build Web UI app into web/static-dist' \
-		'make build-server-bin - build $(BIN) only (expects embed/*/dist patched; use stage-docker-embed-dist first)' \
+		'make build-server-bin - build bin/csgclaw and bin/csgclaw-cli (expects embed/*/dist; use stage-docker-embed-dist first)' \
 		'make stage-docker-embed-dist - prepare dist/ and patch dev image refs (no docker)' \
-		'make build-csgclaw-cli - build $(CLI_BIN) for current platform (CGO_ENABLED=0)' \
-		'make build-docker-embed-runtime-embed - stage cli, docker all embed templates with Dockerfile, patch refs' \
+		'make build-docker-embed-runtime-embed - stage linux cli, docker all embed templates with Dockerfile, patch refs' \
 		'make run        - build (no docker images), then run the server' \
 		'make clean      - remove local build outputs'
 
@@ -116,27 +115,15 @@ build-web: ensure-web-deps
 		exit 1; \
 	}
 
-build: build-web ensure-docker-embed-dist
-	$(MAKE) build-server-bin APP=csgclaw
-	$(MAKE) build-csgclaw-cli TARGET_OS=$(TARGET_OS) TARGET_ARCH=$(TARGET_ARCH)
+build: build-web ensure-docker-embed-dist build-server-bin
 
 build-server-bin:
 	mkdir -p $(BIN_DIR)
-	env GOCACHE=$(GOCACHE) $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN) $(CMD_PATH)
+	env GOCACHE=$(GOCACHE) $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/csgclaw ./cmd/csgclaw
+	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
+		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(BIN_DIR)/csgclaw-cli ./cmd/csgclaw-cli
 
 build-server: ensure-docker-embed-dist build-server-bin
-
-build-csgclaw:
-	$(MAKE) build-server APP=csgclaw
-
-build-csgclaw-cli:
-	mkdir -p $(BIN_DIR)
-	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
-		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(CLI_BIN) ./cmd/csgclaw-cli
-
-build-csgclaw-cli-for-picoclaw:
-	$(MAKE) build-csgclaw-cli TARGET_OS=linux TARGET_ARCH=amd64 CLI_BIN=$(BIN_DIR)/csgclaw-cli_linux_amd64
-	$(MAKE) build-csgclaw-cli TARGET_OS=linux TARGET_ARCH=arm64 CLI_BIN=$(BIN_DIR)/csgclaw-cli_linux_arm64
 
 $(DOCKER_EMBED_CLI): prepare-docker-embed-dist
 	mkdir -p $(BIN_DIR)

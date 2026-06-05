@@ -6,7 +6,7 @@
 #   make build-picoclaw-manager-image
 #
 # Manual build:
-#   make build-csgclaw-cli TARGET_OS=linux TARGET_ARCH=amd64 CLI_BIN=bin/csgclaw-cli
+#   make stage-docker-embed-cli
 #   docker build -f internal/templates/embed/picoclaw-manager/Dockerfile \
 #     --build-arg PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27 \
 #     -t picoclaw-manager:local .
