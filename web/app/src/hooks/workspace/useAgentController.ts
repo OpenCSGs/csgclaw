@@ -1190,6 +1190,10 @@ export function useAgentController({
       onDelete: (item: AgentLike | null | undefined) => runAgentAction(item, "delete"),
       onInvite: inviteAgentToRoom,
       onOpenDM: openAgentDirectMessage,
+      teamActionBusy,
+      teamActionError,
+      onCreateTeam: createAgentTeam,
+      onAddAgentsToTeam: addAgentsToTeamRoom,
     },
     computerViewProps: {
       t,

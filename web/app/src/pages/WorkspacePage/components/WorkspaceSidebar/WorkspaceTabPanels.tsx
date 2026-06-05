@@ -115,6 +115,7 @@ export function WorkspaceTabPanels({
   hub,
   onSelectHubTemplate,
   onSelectTask,
+  onViewTaskDetails,
   onSelectTeam,
   agentsError,
   onSelectConversation,
@@ -537,6 +538,7 @@ export function WorkspaceTabPanels({
                     type="button"
                     className={`workspace-row task-sidebar-row ${active ? "active" : ""}`}
                     onClick={() => onSelectTask?.(task.id)}
+                    onDoubleClick={() => onViewTaskDetails?.(task.id)}
                   >
                     <span className="workspace-row-main">
                       <span className="workspace-row-title truncate">{task.title}</span>
