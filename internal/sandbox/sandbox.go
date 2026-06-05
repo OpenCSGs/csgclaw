@@ -68,6 +68,9 @@ type CreateSpec struct {
 	Name       string
 	Detach     bool
 	AutoRemove bool
+	// RunUser sets the process user inside the sandbox (docker/boxlite --user).
+	// Format: uid or uid:gid.
+	RunUser    string
 	Env        map[string]string
 	Mounts     []Mount
 	Entrypoint []string

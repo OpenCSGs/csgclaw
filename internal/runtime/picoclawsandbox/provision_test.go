@@ -10,6 +10,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/sandbox/hostuser"
 	"csgclaw/internal/templates"
 )
 
@@ -109,5 +110,12 @@ func TestGatewayCreateSpecMountsPicoClawRuntimeRoot(t *testing.T) {
 	cmd := strings.Join(spec.Cmd, " ")
 	if strings.Contains(cmd, "/csgclaw-projects") || strings.Contains(cmd, "ln -sfn") {
 		t.Fatalf("GatewayCreateSpec() cmd = %q, want direct projects mount without symlink setup", spec.Cmd)
+	}
+	runUser, err := hostuser.RunUser()
+	if err != nil {
+		t.Skip("host uid/gid unavailable")
+	}
+	if spec.RunUser != runUser {
+		t.Fatalf("GatewayCreateSpec() RunUser = %q, want %q", spec.RunUser, runUser)
 	}
 }

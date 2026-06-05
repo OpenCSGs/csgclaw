@@ -24,6 +24,7 @@ import (
 	"csgclaw/internal/runtime/sandboxgateway"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/boxlitecli"
+	"csgclaw/internal/sandbox/hostuser"
 	"csgclaw/internal/sandbox/sandboxtest"
 	"csgclaw/internal/templates"
 )
@@ -5626,6 +5627,13 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	}
 	if got, want := spec.Env["PICOCLAW_CHANNELS_FEISHU_APP_ID"], "cli_worker"; got != want {
 		t.Fatalf("PICOCLAW_CHANNELS_FEISHU_APP_ID = %q, want %q", got, want)
+	}
+	runUser, err := hostuser.RunUser()
+	if err != nil {
+		t.Skip("host uid/gid unavailable")
+	}
+	if spec.RunUser != runUser {
+		t.Fatalf("gatewayCreateSpec() RunUser = %q, want %q", spec.RunUser, runUser)
 	}
 
 	wantAgentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")

@@ -15,6 +15,8 @@ BOXLITE_CLI_BASE_URL ?= https://github.com/boxlite-ai/boxlite/releases/download
 
 GO ?= go
 GOFMT ?= gofmt
+# Static CLI for musl-based PicoClaw/BoxLite sandbox images (see release-build-all.sh).
+CGO_ENABLED ?= 0
 WEB_APP_DIR ?= web/app
 WEB_STATIC_DIST_DIR ?= web/static-dist
 WEB_PNPM ?= $(CURDIR)/scripts/web-pnpm.sh
@@ -36,22 +38,27 @@ PICOCLAW_DOCKER_GOOS ?= $(DOCKER_EMBED_DOCKER_GOOS)
 PICOCLAW_DOCKER_GOARCH ?= $(DOCKER_EMBED_DOCKER_GOARCH)
 PICOCLAW_DOCKER_CLI ?= $(DOCKER_EMBED_CLI)
 
+# Set to 1 to docker-build all embed templates with a Dockerfile (slow; optional).
+BUILD_DOCKER_EMBED_IMAGES ?= 0
+
 .DEFAULT_GOAL := build-all
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-server-bin build-csgclaw build-csgclaw-cli build-csgclaw-cli-for-picoclaw stage-docker-embed-cli stage-picoclaw-docker-cli prepare-docker-embed-dist prepare-picoclaw-embed-dist patch-docker-embed-image-refs patch-picoclaw-embed-image-refs stage-docker-embed-dist stage-picoclaw-embed-dist build-docker-embed-images build-docker-embed-runtime-embed build-picoclaw-runtime-embed build-all run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-server-bin build-csgclaw build-csgclaw-cli build-csgclaw-cli-for-picoclaw stage-docker-embed-cli stage-picoclaw-docker-cli prepare-docker-embed-dist prepare-picoclaw-embed-dist patch-docker-embed-image-refs patch-picoclaw-embed-image-refs stage-docker-embed-dist stage-picoclaw-embed-dist ensure-docker-embed-dist maybe-build-docker-embed-images build-docker-embed-images build-docker-embed-runtime-embed build-picoclaw-runtime-embed build-all build-all-with-docker-embed run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image
 
 help:
 	@printf '%s\n' \
-		'make            - build Web UI, PicoClaw images + embed dist, bin/csgclaw, bin/csgclaw-cli' \
+		'make            - build Web UI, ensure embed dist, bin/csgclaw, bin/csgclaw-cli (no docker images)' \
+		'make build-all-with-docker-embed - like build-all, and docker-build embed template images' \
+		'make BUILD_DOCKER_EMBED_IMAGES=1 - same as build-all-with-docker-embed' \
 		'make fmt        - format Go files' \
 		'make test       - stage-docker-embed-dist (patched :dev refs), then go test ./...' \
 		'make web-install - install Web UI dependencies' \
 		'make web-dev    - run Vite Web UI dev server' \
 		'make build-web  - build Web UI app into web/static-dist' \
 		'make build      - alias for build-all' \
-		'make build-server-bin - build $(BIN) only (expects embed/*/dist patched; use build-docker-embed-runtime-embed or stage-docker-embed-dist first)' \
+		'make build-server-bin - build $(BIN) only (expects embed/*/dist patched; use stage-docker-embed-dist first)' \
 		'make stage-docker-embed-dist - prepare dist/ and patch dev image refs (no docker)' \
-		'make build-csgclaw-cli - build $(CLI_BIN) for current platform' \
+		'make build-csgclaw-cli - build $(CLI_BIN) for current platform (CGO_ENABLED=0)' \
 		'make build-docker-embed-runtime-embed - stage cli, docker all embed templates with Dockerfile, patch refs' \
 		'make run        - build everything, then run the server' \
 		'make clean      - remove local build outputs'
@@ -119,14 +126,15 @@ build-server-bin:
 	mkdir -p $(BIN_DIR)
 	env GOCACHE=$(GOCACHE) $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN) $(CMD_PATH)
 
-build-server: build-docker-embed-runtime-embed build-server-bin
+build-server: ensure-docker-embed-dist maybe-build-docker-embed-images build-server-bin
 
 build-csgclaw:
 	$(MAKE) build-server APP=csgclaw
 
 build-csgclaw-cli:
 	mkdir -p $(BIN_DIR)
-	env GOCACHE=$(GOCACHE) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(CLI_BIN) ./cmd/csgclaw-cli
+	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
+		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(CLI_BIN) ./cmd/csgclaw-cli
 
 build-csgclaw-cli-for-picoclaw:
 	$(MAKE) build-csgclaw-cli TARGET_OS=linux TARGET_ARCH=amd64 CLI_BIN=$(BIN_DIR)/csgclaw-cli_linux_amd64
@@ -134,7 +142,8 @@ build-csgclaw-cli-for-picoclaw:
 
 $(DOCKER_EMBED_CLI): prepare-docker-embed-dist
 	mkdir -p $(BIN_DIR)
-	env GOCACHE=$(GOCACHE) GOOS=$(DOCKER_EMBED_DOCKER_GOOS) GOARCH=$(DOCKER_EMBED_DOCKER_GOARCH) $(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(DOCKER_EMBED_CLI) ./cmd/csgclaw-cli
+	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(DOCKER_EMBED_DOCKER_GOOS) GOARCH=$(DOCKER_EMBED_DOCKER_GOARCH) \
+		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(DOCKER_EMBED_CLI) ./cmd/csgclaw-cli
 
 stage-docker-embed-cli: $(DOCKER_EMBED_CLI)
 stage-picoclaw-docker-cli: stage-docker-embed-cli
@@ -154,6 +163,33 @@ patch-picoclaw-embed-image-refs: patch-docker-embed-image-refs
 
 stage-docker-embed-dist: prepare-docker-embed-dist patch-docker-embed-image-refs
 stage-picoclaw-embed-dist: stage-docker-embed-dist
+
+# Stage embed/*/dist when missing; sets .docker-embed-dist-missing for maybe-build-docker-embed-images.
+ensure-docker-embed-dist:
+	@mkdir -p "$(GOCACHE)"
+	@chmod +x scripts/list-docker-embed-templates.sh
+	@dist_missing=0; \
+	for name in $$(scripts/list-docker-embed-templates.sh); do \
+	  manifest="internal/templates/embed/$$name/dist/agent.toml"; \
+	  if [ ! -f "$$manifest" ] || ! grep -q '^ref = ' "$$manifest"; then \
+	    dist_missing=1; \
+	    break; \
+	  fi; \
+	done; \
+	if [ "$$dist_missing" -eq 1 ]; then \
+	  printf '%s\n' "docker embed dist/ missing or incomplete; running stage-docker-embed-dist"; \
+	  $(MAKE) stage-docker-embed-dist; \
+	  echo 1 > "$(GOCACHE)/.docker-embed-dist-missing"; \
+	else \
+	  rm -f "$(GOCACHE)/.docker-embed-dist-missing"; \
+	fi
+
+# Docker-build embed images when BUILD_DOCKER_EMBED_IMAGES=1 or dist/ was just staged.
+maybe-build-docker-embed-images:
+	@if [ "$(BUILD_DOCKER_EMBED_IMAGES)" = "1" ] || [ -f "$(GOCACHE)/.docker-embed-dist-missing" ]; then \
+	  $(MAKE) build-docker-embed-images patch-docker-embed-image-refs; \
+	  rm -f "$(GOCACHE)/.docker-embed-dist-missing"; \
+	fi
 
 build-docker-embed-images: stage-docker-embed-cli
 	chmod +x scripts/build-docker-embed-images.sh
@@ -178,10 +214,12 @@ build-picoclaw-worker-image: stage-docker-embed-cli
 		DOCKER_EMBED_IMAGE_TAG="$(DOCKER_EMBED_IMAGE_TAG)" \
 		scripts/build-docker-embed-images.sh picoclaw-worker
 
-build-all: build-web
-	$(MAKE) build-docker-embed-runtime-embed
+build-all: build-web ensure-docker-embed-dist maybe-build-docker-embed-images
 	$(MAKE) build-server-bin APP=csgclaw
 	$(MAKE) build-csgclaw-cli TARGET_OS=$(TARGET_OS) TARGET_ARCH=$(TARGET_ARCH)
+
+build-all-with-docker-embed:
+	$(MAKE) build-all BUILD_DOCKER_EMBED_IMAGES=1
 
 run: build-all
 	$(BIN) serve

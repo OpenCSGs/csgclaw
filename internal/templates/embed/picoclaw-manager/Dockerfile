@@ -19,3 +19,5 @@ USER root
 
 COPY bin/csgclaw-cli /usr/local/bin/csgclaw-cli
 RUN chmod 755 /usr/local/bin/csgclaw-cli
+
+USER picoclaw

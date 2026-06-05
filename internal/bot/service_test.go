@@ -44,6 +44,10 @@ func (f fakeBotAgentRuntime) Kind() string {
 	return f.kind
 }
 
+func (f fakeBotAgentRuntime) WorkspaceRoot(agentHome string) string {
+	return filepath.Join(agentHome, "workspace")
+}
+
 func (f fakeBotAgentRuntime) New(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
 	return agentruntime.Handle{
 		RuntimeID: spec.RuntimeID,

@@ -39,6 +39,8 @@ curl.exe -fsSL https://csgclaw.opencsg.com/install.ps1 | powershell -ExecutionPo
 make build
 ```
 
+Makefile 详细说明（embed dist、可选 Docker 镜像构建等）见 [docs/build.zh.md](docs/build.zh.md)。
+
 对大多数用户来说，直接使用上面的安装脚本会更简单。
 
 ## 快速开始

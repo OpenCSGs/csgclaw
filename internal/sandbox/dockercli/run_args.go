@@ -39,6 +39,10 @@ func runArgs(spec sandbox.CreateSpec) ([]string, error) {
 		args = append(args, "-e", key+"="+spec.Env[key])
 	}
 
+	if runUser := strings.TrimSpace(spec.RunUser); runUser != "" {
+		args = append(args, "-u", runUser)
+	}
+
 	for _, mount := range spec.Mounts {
 		if strings.TrimSpace(mount.HostPath) == "" {
 			return nil, fmt.Errorf("invalid sandbox mount: host path is required")

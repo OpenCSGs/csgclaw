@@ -25,8 +25,11 @@ web/static-dist/        generated Web UI assets for Go embed; run make web-build
 
 ## Commands
 
+See [docs/build.md](docs/build.md) or [docs/build.zh.md](docs/build.zh.md) for Makefile targets, embed dist staging, and optional Docker image builds.
+
 ```bash
-make                    # default build
+make                    # default build (no docker images)
+make build-all-with-docker-embed
 make fmt
 make test
 make run
@@ -65,7 +68,8 @@ make release
 ## References
 
 - `README.md`
-- `docs/README.go.md`
+- `docs/build.md`
+- `docs/build.zh.md`
 - `docs/web/development.md`
 - `Makefile`
 - `.github/workflows/release.yml`

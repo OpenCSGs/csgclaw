@@ -15,6 +15,7 @@ import (
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
+	"csgclaw/internal/sandbox/hostuser"
 )
 
 type AgentRef struct {
@@ -378,6 +379,9 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 		AutoRemove: false,
 		Env:        envVars,
 		Cmd:        []string{"/bin/sh", "-c", gatewayCommand},
+	}
+	if runUser, err := hostuser.RunUser(); err == nil {
+		spec.RunUser = runUser
 	}
 	spec.Mounts = append(spec.Mounts,
 		sandbox.Mount{HostPath: workspaceLayout.MountHostPath, GuestPath: workspaceLayout.MountGuestPath},

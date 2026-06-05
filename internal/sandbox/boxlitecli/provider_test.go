@@ -39,6 +39,7 @@ func TestCreateBuildsRunCLIArgs(t *testing.T) {
 		Name:       "agent",
 		Detach:     true,
 		AutoRemove: true,
+		RunUser:    "501:20",
 		Env:        map[string]string{"B": "two", "A": "one"},
 		Cmd:        []string{"sh", "-lc", "echo ok"},
 		Mounts: []sandbox.Mount{
@@ -63,6 +64,7 @@ func TestCreateBuildsRunCLIArgs(t *testing.T) {
 		"--rm",
 		"-e", "A=one",
 		"-e", "B=two",
+		"-u", "501:20",
 		"-v", "/host/rw:/guest/rw",
 		"-v", "/host/ro:/guest/ro:ro",
 		"alpine",
