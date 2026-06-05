@@ -370,10 +370,13 @@
 
 .composer {
   position: relative;
+  isolation: isolate;
 }
 
 .composer-box {
   display: block;
+  position: relative;
+  z-index: 1;
 }
 
 .composer-input-wrap {
@@ -479,10 +482,11 @@
 
 .mention-picker {
   position: absolute;
-  left: 24px;
-  bottom: 124px;
-  width: 280px;
-  max-height: min(360px, 48vh);
+  z-index: var(--z-portal-popover);
+  left: 20px;
+  bottom: calc(100% + 8px);
+  width: min(360px, calc(100% - 40px));
+  max-height: min(320px, calc(100dvh - 220px));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -511,10 +515,11 @@
 
 .mention-option {
   width: 100%;
+  min-height: 56px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 9px 10px;
   border: 0;
   background: transparent;
   border-radius: 14px;
@@ -525,6 +530,15 @@
 .mention-option:hover,
 .mention-option.active {
   background: var(--primary-soft);
+}
+
+.mention-option:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.mention-option > div {
+  min-width: 0;
 }
 
 .messages-empty {
@@ -1459,7 +1473,7 @@
 }
 
 .mention-picker {
-  width: min(340px, calc(100% - 48px));
+  width: min(360px, calc(100% - 40px));
   padding: 6px;
   border-radius: 14px;
   box-shadow: var(--shadow-sm);
@@ -1467,7 +1481,8 @@
 
 .mention-option {
   gap: 10px;
-  padding: 8px 10px;
+  min-height: 58px;
+  padding: 9px 10px;
   border-radius: 10px;
 }
 
@@ -1475,6 +1490,7 @@
   width: 38px;
   height: 38px;
   flex-basis: 38px;
+  overflow: hidden;
   border-radius: 50%;
   background: var(--avatar-default-bg);
   color: var(--avatar-default-fg);

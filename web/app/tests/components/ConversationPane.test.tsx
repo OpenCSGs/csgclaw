@@ -111,12 +111,18 @@ function renderThreadPane({
   onPreviewUser = vi.fn(),
   replies = [],
   showToolCalls = false,
+  mentionCandidates = [],
+  mentionIndex = 0,
+  onApplyMention = vi.fn(),
 }: {
   conversationMembers?: IMUser[];
   isDirect?: boolean;
   messages?: IMConversation["messages"];
+  mentionCandidates?: IMUser[];
+  mentionIndex?: number;
   onClearRoomMessages?: (id: string) => void;
   onDeleteRoom?: (id: string) => void;
+  onApplyMention?: (user: IMUser) => void;
   onPreviewUser?: (user: IMUser) => void;
   replies?: ThreadView["replies"];
   showToolCalls?: boolean;
@@ -170,13 +176,13 @@ function renderThreadPane({
         managerProfile={null}
         managerProfileIncomplete={false}
         memberMenuRef={createRef<HTMLDivElement>()}
-        mentionCandidates={[]}
-        mentionIndex={0}
+        mentionCandidates={mentionCandidates}
+        mentionIndex={mentionIndex}
         mentionableUsersByHandle={new Map([["manager", users[1]]])}
         messageActionBusy={false}
         messageActionError=""
         messageListRef={createRef<HTMLElement>()}
-        onApplyMention={() => {}}
+        onApplyMention={onApplyMention}
         onClearRoomMessages={onClearRoomMessages}
         onCloseThread={() => {}}
         onComposerCompositionEnd={() => {}}
@@ -274,6 +280,24 @@ describe("ConversationPane", () => {
     await user.type(threadComposer, "@");
 
     expect(screen.getByText("@manager")).toBeInTheDocument();
+  });
+
+  it("renders main composer mention choices as clickable options", async () => {
+    const user = userEvent.setup();
+    const onApplyMention = vi.fn();
+    renderThreadPane({
+      mentionCandidates: roomUsers,
+      mentionIndex: 1,
+      onApplyMention,
+    });
+
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(roomUsers.length);
+    expect(options[1]).toHaveClass("mention-option", "active");
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
+
+    await user.click(options[2]);
+    expect(onApplyMention).toHaveBeenCalledWith(roomUsers[2]);
   });
 
   it("keeps keyboard selection while navigating thread mention choices", async () => {

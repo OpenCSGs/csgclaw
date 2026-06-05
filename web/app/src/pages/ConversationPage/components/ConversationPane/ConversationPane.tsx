@@ -645,11 +645,13 @@ function MentionPicker({ users = [], activeIndex = 0, className = "", showRole =
   }, [activeIndex, activeUserID, users.length]);
 
   return (
-    <div className={`mention-picker ${className}`.trim()}>
+    <div className={`mention-picker ${className}`.trim()} role="listbox">
       {users.map((user, index) => (
         <button
           key={user.id}
           ref={index === activeIndex ? activeOptionRef : null}
+          role="option"
+          aria-selected={index === activeIndex}
           className={`mention-option ${index === activeIndex ? "active" : ""}`}
           onMouseDown={(event) => {
             event.preventDefault();
@@ -684,13 +686,15 @@ function SkillPicker({ candidates = [], activeIndex = 0, loading = false, classN
   }, [activeIndex, activeSkill, candidates.length]);
 
   return (
-    <div className={`mention-picker skill-picker ${className}`.trim()}>
+    <div className={`mention-picker skill-picker ${className}`.trim()} role="listbox">
       {loading ? <div className="skill-picker-empty">{t("agentWorkspaceLoading")}</div> : null}
       {!loading && candidates.length === 0 ? <div className="skill-picker-empty">{t("skillPickerEmpty")}</div> : null}
       {candidates.map((name, index) => (
         <button
           key={name}
           ref={index === activeIndex ? activeOptionRef : null}
+          role="option"
+          aria-selected={index === activeIndex}
           className={`mention-option skill-option ${index === activeIndex ? "active" : ""}`}
           onMouseDown={(event) => {
             event.preventDefault();

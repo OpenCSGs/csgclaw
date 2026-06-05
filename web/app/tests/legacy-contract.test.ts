@@ -125,8 +125,19 @@ describe("legacy UI contract", () => {
 
   it("keeps the mention picker scrollbar slim", () => {
     expect(styles).toMatch(/\.mention-picker\s*\{[\s\S]*scrollbar-width:\s*thin;/);
+    expect(styles).toMatch(/\.mention-picker\s*\{[\s\S]*z-index:\s*var\(--z-portal-popover\);/);
+    expect(styles).toMatch(/\.mention-picker\s*\{[\s\S]*bottom:\s*calc\(100% \+ 8px\);/);
     expect(styles).toContain(".mention-picker::-webkit-scrollbar");
     expect(styles).toContain(".mention-picker::-webkit-scrollbar-thumb");
+    expect(styles).toMatch(/\.mention-option\s*\{[\s\S]*min-height:\s*56px;/);
+  });
+
+  it("keeps profile dialogs from clipping header or actions", () => {
+    expect(styles).toMatch(/\.profile-modal\s*\{[\s\S]*display:\s*flex;[\s\S]*overflow:\s*hidden;/);
+    expect(styles).toMatch(/\.profile-modal \.modal-header\s*\{[\s\S]*position:\s*relative;/);
+    expect(styles).not.toContain("top: -24px;");
+    expect(styles).toMatch(/\.profile-editor-shell\s*\{[\s\S]*overflow-y:\s*auto;/);
+    expect(styles).toMatch(/\.agent-modal > \.modal-actions\s*\{[\s\S]*flex:\s*0 0 auto;/);
   });
 
   it("shows agent running status dots in direct message rows", () => {

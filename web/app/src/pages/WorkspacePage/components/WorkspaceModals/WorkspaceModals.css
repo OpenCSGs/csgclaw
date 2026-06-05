@@ -622,7 +622,12 @@
 }
 
 .profile-modal {
+  display: flex;
+  flex-direction: column;
   width: min(880px, 100%);
+  max-height: min(860px, calc(100dvh - 40px));
+  padding: 0;
+  overflow: hidden;
 }
 
 .agent-modal {
@@ -630,14 +635,14 @@
 }
 
 .profile-modal .modal-header {
-  position: sticky;
-  top: -24px;
+  position: relative;
+  flex: 0 0 auto;
   z-index: 2;
-  margin: -24px -24px 0;
+  margin: 0;
   padding: 18px 24px 14px;
   background: color-mix(in oklab, var(--panel) 94%, transparent);
   border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(14px);
+  backdrop-filter: none;
 }
 
 .modal-card .modal-header .modal-close {
@@ -682,7 +687,12 @@
 
 .profile-editor-shell {
   display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   margin-top: 14px;
+  padding: 14px 24px 18px;
+  overscroll-behavior: contain;
 }
 
 .profile-section {
@@ -1055,6 +1065,7 @@
 
 .profile-editor-shell {
   gap: 16px;
+  margin-top: 0;
 }
 
 .profile-section {
@@ -1068,6 +1079,23 @@
 
 .modal-actions {
   background: var(--panel);
+}
+
+.agent-modal > .form-error {
+  flex: 0 0 auto;
+  margin: 12px 24px 0;
+}
+
+.agent-modal > .agent-create-progress {
+  flex: 0 0 auto;
+  margin: 12px 24px 0;
+}
+
+.agent-modal > .modal-actions {
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 16px 24px 24px;
+  border-top: 1px solid var(--line);
 }
 
 .modal-card .field input,
@@ -1392,6 +1420,7 @@
   padding: 24px 28px 26px;
   min-width: 0;
   overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .manager-rebuild-modal .profile-section {
