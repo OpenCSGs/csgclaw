@@ -24,6 +24,7 @@ import {
   rootTaskForTask,
   rootTasks,
   taskChildren,
+  taskExecutionRoomID,
   taskStatusLabel,
   taskUsesExecutionRoom,
 } from "@/models/tasks";
@@ -95,9 +96,13 @@ export function TasksView({
     isUnstarted(task.status) || (task.status === "assigned" && managerIDs.has(task.assigned_to));
   const canPlanRootTask = Boolean(activeRootTask && isPlannableTask(activeRootTask) && childTasks.length === 0);
   const canStartRootTask = Boolean(activeRootTask && isUnstarted(activeRootTask.status) && childTasks.length > 0);
+  const activeRootExecutionRoomID = useMemo(
+    () => (activeRootTask ? taskExecutionRoomID(activeRootTask, childTasks, teams) : ""),
+    [activeRootTask, childTasks, teams],
+  );
   const activeRootUsesExecutionRoom = useMemo(
-    () => (activeRootTask ? taskUsesExecutionRoom(activeRootTask, teams) : false),
-    [activeRootTask, teams],
+    () => (activeRootTask ? taskUsesExecutionRoom(activeRootTask, teams, childTasks) : false),
+    [activeRootTask, childTasks, teams],
   );
   const [createDraft, setCreateDraft] = useState<TaskCreateDraft>(emptyCreateDraft);
   const [childDetailTaskID, setChildDetailTaskID] = useState("");
@@ -206,7 +211,9 @@ export function TasksView({
                     ? t("taskOpenExecutionRoomShort")
                     : t("taskOpenConversationShort")
                 }
-                onOpenConversation={() => (activeRootTask ? onOpenConversation(activeRootTask.room_id) : undefined)}
+                onOpenConversation={() =>
+                  activeRootExecutionRoomID ? onOpenConversation(activeRootExecutionRoomID) : undefined
+                }
                 onViewParentDetail={() => activeRootTask && onViewParentDetail?.(activeRootTask.id)}
                 onPlanTask={() => activeRootTask && onPlanTask?.(activeRootTask.id)}
                 onStartTask={() => activeRootTask && onStartTask?.(activeRootTask.id)}
@@ -252,6 +259,7 @@ export function TasksView({
       <TaskDetailDialog
         t={t}
         task={childDetailTask}
+        teams={teams}
         taskEvents={taskEvents}
         open={Boolean(childDetailTask?.parent_id)}
         onClose={() => setChildDetailTaskID("")}
@@ -263,6 +271,7 @@ export function TasksView({
         task={parentDetailTask}
         childCount={parentDetailChildTasks.length}
         childTasks={parentDetailChildTasks}
+        teams={teams}
         taskEvents={taskEvents}
         open={Boolean(parentDetailTask)}
         onClose={onCloseParentTaskDetail}
@@ -353,11 +362,7 @@ function TaskActionStrip({
     <div className="tasks-toolbar" aria-label={t("tasksActionsLabel")}>
       <TaskToolbarButton label={t("tasksRefreshShort")} title={t("tasksRefresh")} onClick={onRefresh} />
       {showParentDetail ? (
-        <TaskToolbarButton
-          label={t("taskDetailsShort")}
-          title={t("taskViewDetails")}
-          onClick={onViewParentDetail}
-        />
+        <TaskToolbarButton label={t("taskDetailsShort")} title={t("taskViewDetails")} onClick={onViewParentDetail} />
       ) : null}
       {canPlanTask ? (
         <TaskToolbarButton
@@ -421,6 +426,7 @@ function TaskDetailDialog({
   task,
   childCount = undefined,
   childTasks = [],
+  teams = [],
   taskEvents = [],
   open,
   onClose,
@@ -439,6 +445,10 @@ function TaskDetailDialog({
   const metaTags = useMemo(
     () => (task ? taskMetaTags(task, childCount, t, locale) : []),
     [childCount, locale, t, task],
+  );
+  const detailRoomID = useMemo(
+    () => (task ? taskExecutionRoomID(task, childTasks, teams) : ""),
+    [childTasks, task, teams],
   );
 
   return (
@@ -484,7 +494,7 @@ function TaskDetailDialog({
               <Button variant="secondaryGray" size="md" onClick={onClose}>
                 {t("close")}
               </Button>
-              <Button variant="primary" size="md" onClick={() => onOpenConversation(task.room_id)}>
+              <Button variant="primary" size="md" onClick={() => onOpenConversation(detailRoomID || task.room_id)}>
                 {t("taskOpenConversation")}
               </Button>
             </DialogFooter>

@@ -190,12 +190,31 @@ export function displayTaskRoom(task: WorkspaceTask): string {
   return task.room_title || task.room_id;
 }
 
-export function taskUsesExecutionRoom(task: WorkspaceTask, teams: readonly WorkspaceTeam[]): boolean {
+export function taskExecutionRoomID(
+  task: WorkspaceTask,
+  children: readonly WorkspaceTask[],
+  teams: readonly WorkspaceTeam[],
+): string {
+  const team = teams.find((item) => item.id === task.team_id);
+  const teamRoomID = team?.room_id || "";
+  if (task.room_id && task.room_id !== teamRoomID) {
+    return task.room_id;
+  }
+  const child = children.find((item) => item.room_id && item.room_id !== teamRoomID);
+  return child?.room_id || task.room_id;
+}
+
+export function taskUsesExecutionRoom(
+  task: WorkspaceTask,
+  teams: readonly WorkspaceTeam[],
+  children: readonly WorkspaceTask[] = [],
+): boolean {
   const team = teams.find((item) => item.id === task.team_id);
   if (!team) {
     return false;
   }
-  return Boolean(task.room_id) && task.room_id !== team.room_id;
+  const roomID = taskExecutionRoomID(task, children, teams);
+  return Boolean(roomID) && roomID !== team.room_id;
 }
 
 export function displayTeam(team: WorkspaceTeam): string {

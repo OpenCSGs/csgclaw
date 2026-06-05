@@ -4,9 +4,12 @@ import {
   groupTasksByParent,
   normalizeTaskList,
   normalizeTeamEventList,
+  normalizeTeamList,
   resolveTaskSidebarPhase,
   rootTasks,
   taskChildren,
+  taskExecutionRoomID,
+  taskUsesExecutionRoom,
 } from "@/models/tasks";
 
 describe("tasks model", () => {
@@ -107,6 +110,39 @@ describe("tasks model", () => {
     expect(columns.find((column) => column.status === "in_progress")?.tasks.map((item) => item.id)).toEqual(["task-2"]);
     expect(columns.find((column) => column.status === "blocked")?.tasks.map((item) => item.id)).toEqual(["task-3"]);
     expect(columns.find((column) => column.status === "completed")?.tasks).toEqual([]);
+  });
+
+  it("resolves execution room from child tasks when parent still points at the team room", () => {
+    const teams = normalizeTeamList([
+      {
+        id: "team-1",
+        room_id: "room-team",
+        title: "Team",
+      },
+    ]);
+    const tasks = normalizeTaskList([
+      {
+        id: "task-1",
+        team_id: "team-1",
+        room_id: "room-team",
+        title: "Parent",
+        updated_at: "2026-05-30T10:00:00Z",
+      },
+      {
+        id: "task-2",
+        team_id: "team-1",
+        room_id: "room-exec",
+        parent_id: "task-1",
+        title: "Child",
+        updated_at: "2026-05-30T09:00:00Z",
+      },
+    ]);
+    const parent = tasks.find((task) => task.id === "task-1");
+    expect(parent).toBeTruthy();
+    const children = taskChildren(tasks, "task-1");
+
+    expect(taskExecutionRoomID(parent!, children, teams)).toBe("room-exec");
+    expect(taskUsesExecutionRoom(parent!, teams, children)).toBe(true);
   });
 
   it("resolves sidebar phases for planning and dispatching parent tasks", () => {
