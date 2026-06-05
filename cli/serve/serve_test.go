@@ -464,6 +464,7 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	origNewIMService := NewIMService
 	origNewFeishuService := NewFeishuService
 	origNewLLMService := NewLLMService
+	origEnsureBootstrapManager := EnsureBootstrapManager
 	origStartConfiguredAgents := StartConfiguredAgents
 	origNewCodexBridgeManager := NewCodexBridgeManager
 	origEnsureCLIProxy := EnsureCLIProxy
@@ -475,6 +476,7 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		NewIMService = origNewIMService
 		NewFeishuService = origNewFeishuService
 		NewLLMService = origNewLLMService
+		EnsureBootstrapManager = origEnsureBootstrapManager
 		StartConfiguredAgents = origStartConfiguredAgents
 		NewCodexBridgeManager = origNewCodexBridgeManager
 		EnsureCLIProxy = origEnsureCLIProxy
@@ -510,7 +512,16 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	startCalled := make(chan struct{})
 	releaseStart := make(chan struct{})
 	startReturned := make(chan struct{})
-	startErrors := make(chan string, 4)
+	startErrors := make(chan string, 6)
+	EnsureBootstrapManager = func(gotCtx context.Context, gotSvc *agent.Service) error {
+		if gotCtx != ctx {
+			startErrors <- fmt.Sprintf("EnsureBootstrapManager context = %v, want %v", gotCtx, ctx)
+		}
+		if gotSvc != svc {
+			startErrors <- fmt.Sprintf("EnsureBootstrapManager service = %p, want %p", gotSvc, svc)
+		}
+		return nil
+	}
 	StartConfiguredAgents = func(gotCtx context.Context, gotSvc *agent.Service) error {
 		defer close(startReturned)
 		if gotCtx != ctx {
@@ -752,6 +763,44 @@ func TestServeForegroundStartsConfiguredAgentsOnReady(t *testing.T) {
 	}
 }
 
+func TestServeForegroundEnsuresBootstrapManagerBeforeConfiguredAgents(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+
+	calls := make(chan string, 2)
+	EnsureBootstrapManager = func(context.Context, *agent.Service) error {
+		calls <- "manager"
+		return nil
+	}
+	StartConfiguredAgents = func(context.Context, *agent.Service) error {
+		calls <- "configured-agents"
+		return nil
+	}
+	RunServer = func(opts server.Options) error {
+		if opts.OnReady == nil {
+			return fmt.Errorf("OnReady is nil")
+		}
+		opts.OnReady(nil, nil)
+		return nil
+	}
+
+	if err := serveForeground(context.Background(), testContext(), config.Config{Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"}}, "json"); err != nil {
+		t.Fatalf("serveForeground() error = %v", err)
+	}
+	got := make([]string, 0, 2)
+	for len(got) < 2 {
+		select {
+		case call := <-calls:
+			got = append(got, call)
+		case <-time.After(time.Second):
+			t.Fatalf("startup calls = %v, want manager before configured-agents", got)
+		}
+	}
+	if want := []string{"manager", "configured-agents"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("startup calls = %v, want %v", got, want)
+	}
+}
+
 func TestServeForegroundPassesConfigPathToServer(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
@@ -900,13 +949,31 @@ func TestShouldStartCodexBridge(t *testing.T) {
 	}
 }
 
+func TestCodexBridgeBindingUsesParticipantIDForWorker(t *testing.T) {
+	binding := codexBridgeBindingForAgent(agent.Agent{
+		ID:          "u-agent-3l6htd",
+		Name:        "dev",
+		RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID:   "rt-u-agent-3l6htd",
+	}, "sess-dev")
+
+	if binding.BotID != "agent-3l6htd" {
+		t.Fatalf("BotID = %q, want participant ID agent-3l6htd", binding.BotID)
+	}
+	if binding.RuntimeID != "rt-u-agent-3l6htd" || binding.SessionID != "sess-dev" {
+		t.Fatalf("binding = %+v, want runtime/session preserved", binding)
+	}
+}
+
 func TestServeForegroundPreservesBootstrapDefaultTemplates(t *testing.T) {
 	origRunServer := RunServer
 	origNewAgentService := NewAgentService
+	origEnsureBootstrapManager := EnsureBootstrapManager
 	origStartConfiguredAgents := StartConfiguredAgents
 	t.Cleanup(func() {
 		RunServer = origRunServer
 		NewAgentService = origNewAgentService
+		EnsureBootstrapManager = origEnsureBootstrapManager
 		StartConfiguredAgents = origStartConfiguredAgents
 	})
 	RunServer = func(opts server.Options) error {
@@ -915,6 +982,7 @@ func TestServeForegroundPreservesBootstrapDefaultTemplates(t *testing.T) {
 		}
 		return nil
 	}
+	EnsureBootstrapManager = func(context.Context, *agent.Service) error { return nil }
 	StartConfiguredAgents = func(context.Context, *agent.Service) error { return nil }
 
 	cfg := config.Config{
@@ -1310,6 +1378,7 @@ func stubServeDependencies(t *testing.T) func() {
 	origNewIMService := NewIMService
 	origNewFeishuService := NewFeishuService
 	origNewLLMService := NewLLMService
+	origEnsureBootstrapManager := EnsureBootstrapManager
 	origStartConfiguredAgents := StartConfiguredAgents
 	origNewCodexBridgeManager := NewCodexBridgeManager
 	origEnsureCLIProxy := EnsureCLIProxy
@@ -1332,6 +1401,7 @@ func stubServeDependencies(t *testing.T) func() {
 	NewIMService = func(*im.Bus) (*im.Service, error) { return nil, nil }
 	NewFeishuService = func(feishu.Provider) (*feishu.Service, error) { return nil, nil }
 	NewLLMService = func(config.Config, *agent.Service) (*llm.Service, error) { return nil, nil }
+	EnsureBootstrapManager = func(context.Context, *agent.Service) error { return nil }
 	StartConfiguredAgents = func(context.Context, *agent.Service) error { return nil }
 	NewCodexBridgeManager = func(config.Config, *agent.Service) (codexBridgeManager, error) { return nil, nil }
 	EnsureCLIProxy = func(context.Context) error { return nil }
@@ -1356,6 +1426,7 @@ func stubServeDependencies(t *testing.T) func() {
 		NewIMService = origNewIMService
 		NewFeishuService = origNewFeishuService
 		NewLLMService = origNewLLMService
+		EnsureBootstrapManager = origEnsureBootstrapManager
 		StartConfiguredAgents = origStartConfiguredAgents
 		NewCodexBridgeManager = origNewCodexBridgeManager
 		EnsureCLIProxy = origEnsureCLIProxy

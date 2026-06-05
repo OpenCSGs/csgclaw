@@ -54,15 +54,15 @@ Do not call `POST /api/v1/agents/u-manager/recreate` for this flow.
 - Never return or log secret values (for example `app_secret`, API keys, tokens).
 - If any sensitive value appears in logs, use masked forms such as `present`.
 
-## Notification bots
+## Notification participants
 
-Notification bots are channel bots with `type=notification`. They do not create backing worker agents; delivery configuration is stored on `bot.runtime_options` in `bots.json`. Default bot id is `n-{name}` (separate from worker agent ids `u-{name}`); you may set `id` explicitly, but it must not collide with an existing agent or channel bot.
+Notification senders are CSGClaw participants with `type=notification`. They do not create backing worker agents; delivery configuration is stored in participant `metadata`. Default participant id is `n-{name}` (separate from worker agent ids `u-{name}`); you may set `id` explicitly, but it must not collide with an existing participant in the channel.
 
-- List: `GET /api/v1/channels/csgclaw/bots` (includes `type=notification` bots; feishu bot list excludes them)
-- Create: `POST /api/v1/channels/csgclaw/bots` with `"type":"notification"` and flat `runtime_options` (`delivery_mode`, `webhook_token`, `remote_url`, …)
-- Update: `PATCH /api/v1/channels/csgclaw/bots/{id}`
-- Delete: `DELETE /api/v1/channels/csgclaw/bots/{id}`
-- Push (webhook): `POST /api/v1/channels/csgclaw/bots/{id}/notifications` with `Authorization: Bearer <webhook_token>`
+- List: `GET /api/v1/channels/csgclaw/participants?type=notification`
+- Create: `POST /api/v1/channels/csgclaw/participants` with `"type":"notification"` and `metadata` (`delivery_mode`, `webhook_token`, `remote_url`, ...)
+- Update: `PATCH /api/v1/channels/csgclaw/participants/{id}`
+- Delete: `DELETE /api/v1/channels/csgclaw/participants/{id}`
+- Push (webhook): `POST /api/v1/channels/csgclaw/participants/{id}/notifications` with `Authorization: Bearer <webhook_token>`
 
 Implementation: `internal/channel/csgclaw/notification_bot/`, `internal/bot/notification.go`.
 

@@ -47,13 +47,13 @@ func WorkspaceConfigRoot(agentHome string) string {
 	return Root(agentHome)
 }
 
-func EnsureConfig(agentHome, botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) (string, error) {
+func EnsureConfig(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) (string, error) {
 	hostRoot := Root(agentHome)
 	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create picoclaw config dir: %w", err)
 	}
 
-	data, err := RenderConfig(botID, server, model, resolveBaseURL)
+	data, err := RenderConfig(participantID, agentID, server, model, resolveBaseURL)
 	if err != nil {
 		return "", err
 	}
@@ -69,16 +69,24 @@ func EnsureConfig(agentHome, botID string, server config.ServerConfig, model con
 	return hostRoot, nil
 }
 
-func RenderConfig(botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) ([]byte, error) {
+func RenderConfig(participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) ([]byte, error) {
+	participantID = strings.TrimSpace(participantID)
+	agentID = strings.TrimSpace(agentID)
+	if participantID == "" {
+		participantID = agentID
+	}
+	if agentID == "" {
+		agentID = participantID
+	}
 	var cfg map[string]any
 	if err := json.Unmarshal(defaultGatewayConfig, &cfg); err != nil {
 		return nil, fmt.Errorf("decode embedded manager picoclaw config: %w", err)
 	}
 
-	if err := updateModelList(cfg, botID, server, model, resolveBaseURL); err != nil {
+	if err := updateModelList(cfg, agentID, server, model, resolveBaseURL); err != nil {
 		return nil, err
 	}
-	if err := updateCSGClawChannel(cfg, botID, server, resolveBaseURL); err != nil {
+	if err := updateCSGClawChannel(cfg, participantID, server, resolveBaseURL); err != nil {
 		return nil, err
 	}
 
@@ -89,7 +97,7 @@ func RenderConfig(botID string, server config.ServerConfig, model config.ModelCo
 	return data, nil
 }
 
-func updateModelList(cfg map[string]any, botID string, server config.ServerConfig, modelCfg config.ModelConfig, resolveBaseURL BaseURLResolver) error {
+func updateModelList(cfg map[string]any, agentID string, server config.ServerConfig, modelCfg config.ModelConfig, resolveBaseURL BaseURLResolver) error {
 	modelList, ok := cfg["model_list"].([]any)
 	if !ok || len(modelList) == 0 {
 		return fmt.Errorf("embedded manager picoclaw config is missing model_list[0]")
@@ -111,7 +119,7 @@ func updateModelList(cfg map[string]any, botID string, server config.ServerConfi
 	}
 
 	if managerBaseURL := managerBaseURL(server, resolveBaseURL); managerBaseURL != "" {
-		model["api_base"] = llmBridgeBaseURL(managerBaseURL, botID)
+		model["api_base"] = llmBridgeBaseURL(managerBaseURL, agentID)
 	}
 	if server.AccessToken != "" {
 		model["api_key"] = server.AccessToken
@@ -133,7 +141,7 @@ func BridgeModelID(modelID string) string {
 	return "openai/" + modelID
 }
 
-func updateCSGClawChannel(cfg map[string]any, botID string, server config.ServerConfig, resolveBaseURL BaseURLResolver) error {
+func updateCSGClawChannel(cfg map[string]any, participantID string, server config.ServerConfig, resolveBaseURL BaseURLResolver) error {
 	channels, ok := cfg["channels"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("embedded manager picoclaw config is missing channels")
@@ -148,7 +156,8 @@ func updateCSGClawChannel(cfg map[string]any, botID string, server config.Server
 	if server.AccessToken != "" {
 		channel["access_token"] = server.AccessToken
 	}
-	channel["bot_id"] = botID
+	delete(channel, "bot_id")
+	channel["participant_id"] = participantID
 	channel["enabled"] = true
 	return nil
 }
@@ -175,7 +184,7 @@ func managerBaseURL(server config.ServerConfig, resolveBaseURL BaseURLResolver) 
 	return strings.TrimRight(strings.TrimSpace(resolveBaseURL(server)), "/")
 }
 
-func llmBridgeBaseURL(managerBaseURL, botID string) string {
+func llmBridgeBaseURL(managerBaseURL, agentID string) string {
 	managerBaseURL = strings.TrimRight(strings.TrimSpace(managerBaseURL), "/")
-	return managerBaseURL + "/api/bots/" + strings.TrimSpace(botID) + "/llm"
+	return managerBaseURL + "/api/v1/agents/" + strings.TrimSpace(agentID) + "/llm"
 }

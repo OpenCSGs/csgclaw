@@ -23,6 +23,7 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/participant"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/team"
@@ -34,6 +35,7 @@ import (
 type Handler struct {
 	svc                 *agent.Service
 	botSvc              *bot.Service
+	participant         *participant.Service
 	im                  *im.Service
 	csgclaw             *csgclawchannel.Service
 	imBus               *im.Bus
@@ -117,6 +119,7 @@ type agentResponse struct {
 	AgentProfile     agent.AgentProfileView         `json:"agent_profile,omitempty"`
 	ProfileComplete  bool                           `json:"profile_complete"`
 	DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
+	Participants     []apitypes.Participant         `json:"participants,omitempty"`
 }
 
 func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) {
@@ -344,6 +347,12 @@ func (h *Handler) SetNotificationDeliver(d notification_bot.Fanouter) {
 	}
 }
 
+func (h *Handler) SetParticipantService(svc *participant.Service) {
+	if h != nil {
+		h.participant = svc
+	}
+}
+
 func (h *Handler) SetActivityDecider(decider ActivityDecider) {
 	if h != nil {
 		h.activityDecider = decider
@@ -482,134 +491,6 @@ func (h *Handler) handleUpgradeApply(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) handleBots(w http.ResponseWriter, r *http.Request) {
-	if h.botSvc == nil {
-		http.Error(w, "bot service is not configured", http.StatusServiceUnavailable)
-		return
-	}
-	h.botSvc.SetIMBus(h.imBus)
-	channelName := botChannelName(r)
-
-	switch r.Method {
-	case http.MethodGet:
-		bots, err := h.botSvc.List(channelName, r.URL.Query().Get("role"), r.URL.Query().Get("type"))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		writeJSON(w, http.StatusOK, bots)
-	case http.MethodPost:
-		var req apitypes.CreateBotRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
-			return
-		}
-		req.Channel = channelName
-		req.Type = bot.NormalizeBotType(req.Type)
-		if req.Type == bot.BotTypeNotification {
-			created, err := h.botSvc.CreateNotificationBot(r.Context(), req)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			writeJSON(w, http.StatusCreated, created)
-			return
-		}
-		created, err := h.botSvc.Create(r.Context(), req)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		writeJSON(w, http.StatusCreated, created)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (h *Handler) handleBotByID(w http.ResponseWriter, r *http.Request) {
-	if h.botSvc == nil {
-		http.Error(w, "bot service is not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	id := pathValue(r, "id")
-	if id == "" {
-		http.NotFound(w, r)
-		return
-	}
-	channelName := botChannelName(r)
-
-	stored, found, err := h.botSvc.BotByChannelID(channelName, id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if !found {
-		http.NotFound(w, r)
-		return
-	}
-
-	switch r.Method {
-	case http.MethodGet, http.MethodPatch:
-		if !bot.IsNotificationBot(stored) {
-			http.Error(w, "method not allowed for this bot type", http.StatusMethodNotAllowed)
-			return
-		}
-	}
-	switch r.Method {
-	case http.MethodGet:
-		b, err := h.botSvc.GetNotificationBot(channelName, id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		writeJSON(w, http.StatusOK, b)
-	case http.MethodPatch:
-		var patch apitypes.PatchNotificationBotRequest
-		if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
-			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
-			return
-		}
-		updated, err := h.botSvc.PatchNotificationBot(r.Context(), channelName, id, bot.CreateRequest{
-			Name:           patch.Name,
-			Description:    patch.Description,
-			Avatar:         patch.Avatar,
-			RuntimeOptions: patch.RuntimeOptions,
-		})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		h.publishUpdatedBotUser(updated)
-		writeJSON(w, http.StatusOK, updated)
-	case http.MethodDelete:
-		if err := h.botSvc.Delete(r.Context(), channelName, id); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func botChannelName(r *http.Request) string {
-	if channel := pathValue(r, "channel"); channel != "" {
-		return channel
-	}
-	if r == nil {
-		return ""
-	}
-	switch {
-	case strings.HasPrefix(r.URL.Path, "/api/v1/channels/csgclaw/"):
-		return "csgclaw"
-	case strings.HasPrefix(r.URL.Path, "/api/v1/channels/feishu/"):
-		return "feishu"
-	default:
-		return ""
-	}
-}
-
 func (h *Handler) handleAgents(w http.ResponseWriter, r *http.Request) {
 	if h.svc == nil {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
@@ -621,7 +502,7 @@ func (h *Handler) handleAgents(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, presentAgents(h.svc.List()))
+		writeJSON(w, http.StatusOK, h.presentAgentsForRequest(r, h.svc.List()))
 	case http.MethodPost:
 		h.handleCreateAgentWorker(w, r)
 	default:
@@ -652,7 +533,7 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "agent not found", http.StatusNotFound)
 			return
 		}
-		writeJSON(w, http.StatusOK, presentAgent(a))
+		writeJSON(w, http.StatusOK, h.presentAgentForRequest(r, a))
 	case http.MethodPatch:
 		var req agent.UpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -691,32 +572,6 @@ func (h *Handler) publishUpdatedAgentUser(updated agent.Agent) {
 	}
 	user, ok, err := h.im.UpdateAgentUser(im.UpdateAgentUserRequest{
 		ID:     updated.ID,
-		Name:   updated.Name,
-		Role:   updated.Role,
-		Avatar: updated.Avatar,
-	})
-	if err != nil || !ok {
-		return
-	}
-	if h.imBus != nil {
-		userCopy := user
-		h.imBus.Publish(im.Event{
-			Type: im.EventTypeUserUpdated,
-			User: &userCopy,
-		})
-	}
-}
-
-func (h *Handler) publishUpdatedBotUser(updated bot.Bot) {
-	if h == nil || h.im == nil {
-		return
-	}
-	id := strings.TrimSpace(updated.UserID)
-	if id == "" {
-		id = strings.TrimSpace(updated.ID)
-	}
-	user, ok, err := h.im.UpdateAgentUser(im.UpdateAgentUserRequest{
-		ID:     id,
 		Name:   updated.Name,
 		Role:   updated.Role,
 		Avatar: updated.Avatar,
@@ -1576,6 +1431,7 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(req.Name)
 	handle := strings.TrimSpace(req.Handle)
 	role := strings.TrimSpace(req.Role)
+	id = h.resolveCSGClawParticipantUserID(id)
 
 	if id == "" {
 		http.Error(w, "id is required", http.StatusBadRequest)
@@ -1589,20 +1445,36 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		handle = name
 	}
 
-	if h.botSvc != nil && h.svc != nil && shouldCreateWorkerForUser(id, role) {
-		h.botSvc.SetDependencies(h.svc, h.im, h.feishu)
-		h.botSvc.SetIMBus(h.imBus)
-		created, err := h.botSvc.Create(r.Context(), apitypes.CreateBotRequest{
-			ID:      id,
+	if h.participant != nil && h.svc != nil && shouldCreateWorkerForUser(id, role) {
+		participantID := workerParticipantIDFromUserID(id)
+		created, err := h.participant.Create(r.Context(), participant.CreateRequest{
+			ID:      participantID,
+			Channel: participant.ChannelCSGClaw,
+			Type:    participant.TypeAgent,
 			Name:    name,
-			Role:    string(bot.RoleWorker),
-			Channel: string(bot.ChannelCSGClaw),
+			ChannelUser: participant.ChannelUserSpec{
+				Ref:  id,
+				Kind: participant.ChannelUserKindLocalUserID,
+			},
+			AgentBinding: participant.AgentBindingSpec{
+				Mode:    participant.BindingModeCreate,
+				AgentID: id,
+				Agent: &agent.CreateAgentSpec{
+					ID:   id,
+					Name: name,
+					Role: agent.RoleWorker,
+				},
+			},
 		})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if user, ok := h.im.User(created.UserID); ok {
+		if user, ok := h.im.User(created.ChannelUserRef); ok {
+			h.publishUserEvent(im.EventTypeUserCreated, user)
+			if room, ok := h.directRoomWithMembers("u-admin", user.ID); ok {
+				h.publishRoomEvent(im.EventTypeRoomCreated, room)
+			}
 			writeJSON(w, http.StatusCreated, user)
 			return
 		}
@@ -1641,6 +1513,42 @@ func shouldCreateWorkerForUser(id, role string) bool {
 	}
 }
 
+func workerParticipantIDFromUserID(id string) string {
+	id = strings.TrimSpace(id)
+	withoutPrefix := strings.TrimPrefix(id, "u-")
+	if withoutPrefix != "" && withoutPrefix != id {
+		return withoutPrefix
+	}
+	return id
+}
+
+func (h *Handler) directRoomWithMembers(left, right string) (im.Room, bool) {
+	if h == nil || h.im == nil {
+		return im.Room{}, false
+	}
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	for _, room := range h.im.ListRooms() {
+		if !room.IsDirect {
+			continue
+		}
+		if roomHasMember(room.Members, left) && roomHasMember(room.Members, right) {
+			return room, true
+		}
+	}
+	return im.Room{}, false
+}
+
+func roomHasMember(members []string, id string) bool {
+	id = strings.TrimSpace(id)
+	for _, member := range members {
+		if strings.TrimSpace(member) == id {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	channel, ok := h.requireLocalChannel(w)
 	if !ok {
@@ -1657,6 +1565,7 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	serviceReq = h.resolveCSGClawParticipantMessageRequest(serviceReq)
 
 	message, err := channel.SendMessage(serviceReq)
 	if err != nil {
@@ -1679,6 +1588,8 @@ func (h *Handler) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
+	req.CreatorID = h.resolveCSGClawParticipantUserID(req.CreatorID)
+	req.MemberIDs = h.resolveCSGClawParticipantUserIDs(req.MemberIDs)
 
 	room, err := channel.CreateRoom(req)
 	if err != nil {
@@ -1738,6 +1649,8 @@ func (h *Handler) handleAddRoomMembers(w http.ResponseWriter, r *http.Request, p
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	serviceReq.InviterID = h.resolveCSGClawParticipantUserID(serviceReq.InviterID)
+	serviceReq.UserIDs = h.resolveCSGClawParticipantUserIDs(serviceReq.UserIDs)
 
 	room, err := channel.AddRoomMembers(serviceReq)
 	if err != nil {
@@ -1883,6 +1796,93 @@ func presentAgents(items []agent.Agent) []agentResponse {
 		out = append(out, presentAgent(item))
 	}
 	return out
+}
+
+func (h *Handler) presentAgentsForRequest(r *http.Request, items []agent.Agent) []agentResponse {
+	out := presentAgents(items)
+	if !includeParticipants(r) || h == nil || h.participant == nil {
+		return out
+	}
+	byAgent := participantsByAgentID(h.participant.List(participant.ListOptions{}))
+	for i := range out {
+		out[i].Participants = byAgent[out[i].ID]
+	}
+	return out
+}
+
+func (h *Handler) presentAgentForRequest(r *http.Request, item agent.Agent) agentResponse {
+	resp := presentAgent(item)
+	if !includeParticipants(r) || h == nil || h.participant == nil {
+		return resp
+	}
+	resp.Participants = h.participant.List(participant.ListOptions{AgentID: item.ID})
+	return resp
+}
+
+func includeParticipants(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("include_participants")), "true")
+}
+
+func participantsByAgentID(items []apitypes.Participant) map[string][]apitypes.Participant {
+	out := make(map[string][]apitypes.Participant)
+	for _, item := range items {
+		if strings.TrimSpace(item.AgentID) == "" {
+			continue
+		}
+		out[item.AgentID] = append(out[item.AgentID], item)
+	}
+	return out
+}
+
+func (h *Handler) resolveCSGClawParticipantMessageRequest(req im.CreateMessageRequest) im.CreateMessageRequest {
+	req.SenderID = h.resolveCSGClawParticipantUserID(req.SenderID)
+	req.MentionID = h.resolveCSGClawParticipantUserID(req.MentionID)
+	return req
+}
+
+func (h *Handler) resolveCSGClawParticipantUserIDs(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if resolved := h.resolveCSGClawParticipantUserID(id); resolved != "" {
+			out = append(out, resolved)
+		}
+	}
+	return out
+}
+
+func (h *Handler) resolveCSGClawParticipantUserID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" || h == nil || h.participant == nil {
+		if id == agent.ManagerUserID {
+			return agent.ManagerParticipantID
+		}
+		return id
+	}
+	item, ok := h.participant.Get(participant.ChannelCSGClaw, id)
+	if ok {
+		if ref := strings.TrimSpace(item.ChannelUserRef); ref != "" {
+			return ref
+		}
+		return id
+	}
+	for _, candidate := range h.participant.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, AgentID: id}) {
+		if ref := strings.TrimSpace(candidate.ChannelUserRef); ref != "" {
+			return ref
+		}
+		if participantID := strings.TrimSpace(candidate.ID); participantID != "" {
+			return participantID
+		}
+	}
+	if id == agent.ManagerUserID {
+		return agent.ManagerParticipantID
+	}
+	return id
 }
 
 func presentAgent(item agent.Agent) agentResponse {

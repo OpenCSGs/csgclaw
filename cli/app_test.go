@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"csgclaw/internal/apitypes"
-	"csgclaw/internal/bot"
 	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/participant"
 	appversion "csgclaw/internal/version"
 )
 
@@ -199,118 +199,7 @@ func TestExecuteAgentStopUsesHTTPClient(t *testing.T) {
 	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "worker", "stopped", "codex", "codex-main", "ghcr.io/opencsg/csgclaw-agent:2026.4.28")
 }
 
-func TestExecuteBotListUsesDefaultChannel(t *testing.T) {
-	var stdout bytes.Buffer
-	app := &App{
-		stdout: &stdout,
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodGet {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
-			}
-			if req.URL.String() != "http://example.test/api/v1/channels/csgclaw/bots" {
-				t.Fatalf("url = %q, want csgclaw bot list route", req.URL.String())
-			}
-			return jsonResponse(http.StatusOK, `[{"id":"bot-alice","name":"alice","role":"worker","channel":"csgclaw","runtime_kind":"codex","agent_id":"u-alice","user_id":"u-alice","available":true,"created_at":"2026-04-12T09:00:00Z"}]`), nil
-		}),
-	}
-
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "list"}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	assertTableHasRow(t, stdout.String(), "bot-alice", "alice", "-", "worker", "csgclaw", "u-alice", "u-alice", "true", "codex", "2026-04-12T09:00:00Z")
-}
-
-func TestExecuteBotListFeishuUsesChannelQuery(t *testing.T) {
-	var stdout bytes.Buffer
-	app := &App{
-		stdout: &stdout,
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodGet {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
-			}
-			if req.URL.String() != "http://example.test/api/v1/channels/feishu/bots" {
-				t.Fatalf("url = %q, want feishu bot list route", req.URL.String())
-			}
-			return jsonResponse(http.StatusOK, `[{"id":"bot-feishu","name":"feishu","role":"manager","channel":"feishu","agent_id":"u-manager","user_id":"fsu-manager","created_at":"2026-04-12T09:00:00Z"}]`), nil
-		}),
-	}
-
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "bot", "list", "--channel", "feishu"}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !strings.Contains(stdout.String(), `"id": "bot-feishu"`) || !strings.Contains(stdout.String(), `"channel": "feishu"`) {
-		t.Fatalf("stdout = %q, want JSON bot payload", stdout.String())
-	}
-	for _, want := range []string{`"agent_id": "u-manager"`, `"user_id": "fsu-manager"`, `"created_at": "2026-04-12T09:00:00Z"`} {
-		if !strings.Contains(stdout.String(), want) {
-			t.Fatalf("stdout = %q, want full csgclaw bot list field %s", stdout.String(), want)
-		}
-	}
-}
-
-func TestExecuteBotListUsesChannelBotsRoute(t *testing.T) {
-	app := &App{
-		stdout: &bytes.Buffer{},
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodGet {
-				t.Fatalf("method = %q, want GET", req.Method)
-			}
-			if strings.Contains(req.URL.String(), "type=notification") {
-				t.Fatalf("url = %q, bot list must not use type=notification query", req.URL.String())
-			}
-			if req.URL.String() != "http://example.test/api/v1/channels/csgclaw/bots" {
-				t.Fatalf("url = %q, want channel bot list route", req.URL.String())
-			}
-			return jsonResponse(http.StatusOK, `[]`), nil
-		}),
-	}
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "list"}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-}
-
-func TestExecuteBotListUsesTypeQuery(t *testing.T) {
-	app := &App{
-		stdout: &bytes.Buffer{},
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.String() != "http://example.test/api/v1/channels/csgclaw/bots?type=notification" {
-				t.Fatalf("url = %q, want type=notification on bot list route", req.URL.String())
-			}
-			return jsonResponse(http.StatusOK, `[]`), nil
-		}),
-	}
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "list", "--type", "notification"}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-}
-
-func TestExecuteBotListUsesRoleQuery(t *testing.T) {
-	var stdout bytes.Buffer
-	app := &App{
-		stdout: &stdout,
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodGet {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
-			}
-			if req.URL.String() != "http://example.test/api/v1/channels/csgclaw/bots?role=worker" {
-				t.Fatalf("url = %q, want role-filtered bot list route", req.URL.String())
-			}
-			return jsonResponse(http.StatusOK, `[{"id":"bot-alice","name":"alice","description":"abcdefghijklmnopqrstuvwxyz1234567890ABCDE","role":"worker","channel":"csgclaw","runtime_kind":"codex","agent_id":"u-alice","user_id":"u-alice","available":true,"created_at":"2026-04-12T09:00:00Z"}]`), nil
-		}),
-	}
-
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "list", "--role", "worker"}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	assertTableHasRow(t, stdout.String(), "bot-alice", "alice", "abcdefghijklmnopqrstuvwxyz1234567890ABCD...", "worker", "csgclaw", "u-alice", "u-alice", "true", "codex", "2026-04-12T09:00:00Z")
-}
-
-func TestExecuteBotCreateUsesDefaultChannel(t *testing.T) {
+func TestExecuteParticipantCreateSendsTemplateDescriptionAndEnv(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{
 		stdout: &stdout,
@@ -319,205 +208,54 @@ func TestExecuteBotCreateUsesDefaultChannel(t *testing.T) {
 			if req.Method != http.MethodPost {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
 			}
-			if req.URL.String() != "http://example.test/api/v1/channels/csgclaw/bots" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/channels/csgclaw/bots")
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/participants" {
+				t.Fatalf("url = %q, want feishu participant route", req.URL.String())
 			}
-			var payload bot.CreateRequest
+			var payload participant.CreateRequest
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			if payload.Name != "alice" || payload.Role != "worker" || payload.Channel != "csgclaw" {
-				t.Fatalf("payload = %+v, want alice worker csgclaw", payload)
+			if payload.ID != "u-gitlab" || payload.Name != "gitlab" || payload.Type != "agent" || payload.Channel != "feishu" {
+				t.Fatalf("payload = %+v, want u-gitlab gitlab agent feishu", payload)
 			}
-			if payload.Description != "test lead" {
-				t.Fatalf("payload = %+v, want description", payload)
+			if payload.Metadata["description"] != "GitLab worker" {
+				t.Fatalf("payload.Metadata = %#v, want description", payload.Metadata)
 			}
-			if payload.AgentProfile == nil || payload.AgentProfile.ModelID != "gpt-test" {
-				t.Fatalf("payload.AgentProfile = %+v, want model_id", payload.AgentProfile)
+			if payload.AgentBinding.Mode != "create" || payload.AgentBinding.AgentID != "u-gitlab" || payload.AgentBinding.Agent == nil {
+				t.Fatalf("payload.AgentBinding = %+v, want create u-gitlab", payload.AgentBinding)
 			}
-			if payload.RuntimeKind != "codex" {
-				t.Fatalf("payload.RuntimeKind = %q, want codex", payload.RuntimeKind)
+			spec := payload.AgentBinding.Agent
+			if spec.Description != "GitLab worker" || spec.FromTemplate != "builtin.gitlab-worker" || spec.Role != "worker" {
+				t.Fatalf("payload.AgentBinding.Agent = %+v, want description/template/role", spec)
 			}
-			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","description":"test-lead","role":"worker","channel":"csgclaw","runtime_kind":"codex","agent_id":"u-alice","user_id":"u-alice","available":true,"created_at":"2026-04-12T09:00:00Z"}`), nil
-		}),
-	}
-
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "create", "--name", "alice", "--description", "test lead", "--role", "worker", "--model-id", "gpt-test", "--runtime", "codex"})
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "test-lead", "worker", "csgclaw")
-}
-
-func TestExecuteBotCreateSendsFromTemplateAndEnv(t *testing.T) {
-	var stdout bytes.Buffer
-	app := &App{
-		stdout: &stdout,
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodPost {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
+			if spec.AgentProfile.ModelID != "gpt-test" || spec.AgentProfile.Env["GITLAB_TOKEN"] != "secret" {
+				t.Fatalf("payload.AgentBinding.Agent.AgentProfile = %+v, want model and env", spec.AgentProfile)
 			}
-			var payload bot.CreateRequest
-			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode request: %v", err)
-			}
-			if payload.FromTemplate != "builtin.gitlab-worker" {
-				t.Fatalf("payload.FromTemplate = %q, want builtin.gitlab-worker", payload.FromTemplate)
-			}
-			if payload.AgentProfile == nil || payload.AgentProfile.Env["GITLAB_TOKEN"] != "secret" {
-				t.Fatalf("payload.AgentProfile.Env = %#v, want GITLAB_TOKEN", payload.AgentProfile)
-			}
-			return jsonResponse(http.StatusCreated, `{"id":"u-gitlab","name":"gitlab","description":"gitlab-worker","role":"worker","channel":"csgclaw","runtime_kind":"picoclaw_sandbox","agent_id":"u-gitlab","user_id":"u-gitlab","available":true,"created_at":"2026-04-12T09:00:00Z"}`), nil
+			return jsonResponse(http.StatusCreated, `{"id":"u-gitlab","name":"gitlab","type":"agent","channel":"feishu","agent_id":"u-gitlab","channel_user_ref":"u-gitlab","lifecycle_status":"active","metadata":{"description":"GitLab worker"},"created_at":"2026-04-12T09:00:00Z"}`), nil
 		}),
 	}
 
 	err := app.Execute(context.Background(), []string{
 		"--endpoint", "http://example.test",
-		"bot", "create",
+		"--output", "json",
+		"participant", "create",
+		"--id", "u-gitlab",
 		"--name", "gitlab",
-		"--description", "gitlab worker",
+		"--description", "GitLab worker",
+		"--type", "agent",
+		"--channel", "feishu",
+		"--bind", "create",
+		"--agent-id", "u-gitlab",
 		"--role", "worker",
 		"--from-template", "builtin.gitlab-worker",
+		"--model-id", "gpt-test",
 		"--env", "GITLAB_TOKEN=secret",
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	assertTableHasRow(t, stdout.String(), "u-gitlab", "gitlab", "gitlab-worker", "worker", "csgclaw")
-}
-
-func TestExecuteBotCreateFeishuSendsChannelPayload(t *testing.T) {
-	var stdout bytes.Buffer
-	app := &App{
-		stdout: &stdout,
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodPost {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
-			}
-			var payload bot.CreateRequest
-			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode request: %v", err)
-			}
-			if payload.ID != "u-alice" || payload.Name != "alice" || payload.Role != "worker" || payload.Channel != "feishu" {
-				t.Fatalf("payload = %+v, want u-alice alice worker feishu", payload)
-			}
-			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","channel":"feishu","agent_id":"u-alice","user_id":"u-alice","created_at":"2026-04-12T09:00:00Z"}`), nil
-		}),
-	}
-
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "bot", "create", "--id", "u-alice", "--name", "alice", "--role", "worker", "--channel", "feishu"})
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !strings.Contains(stdout.String(), `"id": "u-alice"`) || !strings.Contains(stdout.String(), `"channel": "feishu"`) {
-		t.Fatalf("stdout = %q, want JSON feishu bot payload", stdout.String())
-	}
-}
-
-func TestExecuteBotDeleteUsesDefaultChannel(t *testing.T) {
-	app := &App{
-		stdout: &bytes.Buffer{},
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodDelete {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodDelete)
-			}
-			if req.URL.String() != "http://example.test/api/v1/channels/csgclaw/bots/u-alice" {
-				t.Fatalf("url = %q, want csgclaw bot delete route", req.URL.String())
-			}
-			return jsonResponse(http.StatusNoContent, ``), nil
-		}),
-	}
-
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "delete", "u-alice"}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-}
-
-func TestExecuteBotDeleteFeishuUsesChannelQuery(t *testing.T) {
-	app := &App{
-		stdout: &bytes.Buffer{},
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodDelete {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodDelete)
-			}
-			if req.URL.String() != "http://example.test/api/v1/channels/feishu/bots/u-alice" {
-				t.Fatalf("url = %q, want feishu bot delete route", req.URL.String())
-			}
-			return jsonResponse(http.StatusNoContent, ``), nil
-		}),
-	}
-
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "delete", "--channel", "feishu", "u-alice"}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-}
-
-func TestExecuteBotDeleteSupportsJSONOutput(t *testing.T) {
-	var stdout bytes.Buffer
-	app := &App{
-		stdout: &stdout,
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodDelete {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodDelete)
-			}
-			return jsonResponse(http.StatusNoContent, ``), nil
-		}),
-	}
-
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "bot", "delete", "--channel", "feishu", "u-alice"}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	for _, want := range []string{`"command": "bot"`, `"action": "delete"`, `"status": "deleted"`, `"id": "u-alice"`, `"channel": "feishu"`} {
-		if !strings.Contains(stdout.String(), want) {
-			t.Fatalf("stdout = %q, want %s", stdout.String(), want)
-		}
-	}
-}
-
-func TestExecuteBotConfigGetUsesFeishuConfigRoute(t *testing.T) {
-	var stdout bytes.Buffer
-	app := &App{
-		stdout: &stdout,
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodGet {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
-			}
-			if req.URL.String() != "http://example.test/api/v1/channels/feishu/config?bot_id=u-dev" {
-				t.Fatalf("url = %q, want feishu config get route", req.URL.String())
-			}
-			return jsonResponse(http.StatusOK, `{"bot_id":"u-dev","configured":true,"app_id":"cli_dev","app_secret":"present"}`), nil
-		}),
-	}
-
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "config", "--channel", "feishu", "--get", "--bot-id", "u-dev"}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !strings.Contains(stdout.String(), "u-dev") || !strings.Contains(stdout.String(), "present") {
-		t.Fatalf("stdout = %s, want bot and masked secret", stdout.String())
-	}
-}
-
-func TestExecuteBotCreateRequiresNameAndRole(t *testing.T) {
-	app := &App{
-		stdout:     &bytes.Buffer{},
-		stderr:     &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) { return nil, nil }),
-	}
-
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "create", "--role", "worker"})
-	if err == nil || !strings.Contains(err.Error(), "requires --name") {
-		t.Fatalf("Execute(missing name) error = %v, want --name error", err)
-	}
-
-	err = app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "create", "--name", "alice"})
-	if err == nil || !strings.Contains(err.Error(), "requires --role") {
-		t.Fatalf("Execute(missing role) error = %v, want --role error", err)
+	if !strings.Contains(stdout.String(), `"id": "u-gitlab"`) || !strings.Contains(stdout.String(), `"channel": "feishu"`) {
+		t.Fatalf("stdout = %q, want created participant JSON", stdout.String())
 	}
 }
 
@@ -1969,18 +1707,22 @@ func TestUsageIncludesTopLevelCommandIndex(t *testing.T) {
 	got := stderr.String()
 	for _, want := range []string{
 		"Available Commands:",
-		"agent    Manage agents",
-		"model    Manage model providers.",
-		"bot      Manage bots",
-		"room     Manage IM rooms",
-		"member   Manage IM room members",
-		"team     Manage agent teams.",
-		"user     Manage IM users",
-		"completion Generate shell completion scripts.",
+		"agent        Manage agents",
+		"model        Manage model providers.",
+		"participant  Manage channel participants.",
+		"pt           Manage channel participants.",
+		"room         Manage IM rooms",
+		"member       Manage IM room members",
+		"team         Manage agent teams.",
+		"user         Manage IM users",
+		"completion   Generate shell completion scripts.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("usage = %q, want substring %q", got, want)
 		}
+	}
+	if strings.Contains(got, "Manage bots") || strings.Contains(got, "\n  bot ") {
+		t.Fatalf("usage = %q, should not include bot command", got)
 	}
 }
 
@@ -2000,18 +1742,22 @@ func TestRootHelpIncludesAvailableCommands(t *testing.T) {
 	got := stderr.String()
 	for _, want := range []string{
 		"Available Commands:",
-		"agent    Manage agents",
-		"model    Manage model providers.",
-		"bot      Manage bots",
-		"room     Manage IM rooms",
-		"member   Manage IM room members",
-		"team     Manage agent teams.",
-		"user     Manage IM users",
-		"completion Generate shell completion scripts.",
+		"agent        Manage agents",
+		"model        Manage model providers.",
+		"participant  Manage channel participants.",
+		"pt           Manage channel participants.",
+		"room         Manage IM rooms",
+		"member       Manage IM room members",
+		"team         Manage agent teams.",
+		"user         Manage IM users",
+		"completion   Generate shell completion scripts.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("help = %q, want substring %q", got, want)
 		}
+	}
+	if strings.Contains(got, "Manage bots") || strings.Contains(got, "\n  bot ") {
+		t.Fatalf("help = %q, should not include bot command", got)
 	}
 }
 
@@ -2266,33 +2012,6 @@ func TestAgentHelpIncludesSubcommands(t *testing.T) {
 	}
 }
 
-func TestBotHelpIncludesSubcommands(t *testing.T) {
-	var stderr bytes.Buffer
-	app := &App{
-		stdout:     &bytes.Buffer{},
-		stderr:     &stderr,
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) { return nil, nil }),
-	}
-
-	err := app.Execute(context.Background(), []string{"bot", "-h"})
-	if err != flag.ErrHelp {
-		t.Fatalf("Execute() error = %v, want %v", err, flag.ErrHelp)
-	}
-
-	got := stderr.String()
-	for _, want := range []string{
-		"Manage bots.",
-		"csgclaw bot <subcommand> [flags]",
-		"list               List bots",
-		"create             Create a bot",
-		"delete <id>        Delete a bot",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("help = %q, want substring %q", got, want)
-		}
-	}
-}
-
 func TestAgentSubcommandHelpIncludesUsageAndFlags(t *testing.T) {
 	var stderr bytes.Buffer
 	app := &App{
@@ -2395,7 +2114,7 @@ func TestExecuteStartIsRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), `unknown command "start"`) {
 		t.Fatalf("Execute() error = %v, want unknown command start", err)
 	}
-	if !strings.Contains(stderr.String(), "  serve    Start the local HTTP server") {
+	if !strings.Contains(stderr.String(), "  serve        Start the local HTTP server") {
 		t.Fatalf("stderr = %q, want serve command in usage", stderr.String())
 	}
 }

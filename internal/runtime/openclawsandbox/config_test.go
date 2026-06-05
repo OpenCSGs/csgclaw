@@ -10,7 +10,7 @@ import (
 )
 
 func TestRenderAgentOpenClawConfigUsesOpenAICompatForMinimaxBaseURL(t *testing.T) {
-	data, err := renderConfig("u-manager", config.ServerConfig{
+	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
 		ListenAddr:       "127.0.0.1:18080",
 		AdvertiseBaseURL: "http://127.0.0.1:18080",
 		AccessToken:      "gateway-shared-token",
@@ -56,7 +56,7 @@ func TestRenderAgentOpenClawConfigUsesOpenAICompatForMinimaxBaseURL(t *testing.T
 }
 
 func TestRenderAgentOpenClawConfigUsesOpenAICompatForInfiniMaaS(t *testing.T) {
-	data, err := renderConfig("u-manager", config.ServerConfig{
+	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
 		ListenAddr:       "127.0.0.1:18080",
 		AdvertiseBaseURL: "http://127.0.0.1:18080",
 		AccessToken:      "gateway-shared-token",
@@ -105,7 +105,7 @@ func TestRenderAgentOpenClawConfigUsesOpenAICompatForInfiniMaaS(t *testing.T) {
 }
 
 func TestRenderAgentOpenClawConfigUsesBridgeWhenBaseURLEmpty(t *testing.T) {
-	data, err := renderConfig("u-manager", config.ServerConfig{
+	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
 		ListenAddr:       "127.0.0.1:18080",
 		AdvertiseBaseURL: "http://127.0.0.1:18080",
 		AccessToken:      "shared-token",
@@ -116,7 +116,7 @@ func TestRenderAgentOpenClawConfigUsesBridgeWhenBaseURLEmpty(t *testing.T) {
 		t.Fatalf("renderAgentOpenClawConfig() error = %v", err)
 	}
 	text := string(data)
-	if !strings.Contains(text, `http://127.0.0.1:18080/api/bots/u-manager/llm`) {
+	if !strings.Contains(text, `http://127.0.0.1:18080/api/v1/agents/u-manager/llm`) {
 		t.Fatalf("expected CSGClaw LLM bridge URL in config:\n%s", text)
 	}
 	for _, placeholder := range []string{
@@ -132,8 +132,33 @@ func TestRenderAgentOpenClawConfigUsesBridgeWhenBaseURLEmpty(t *testing.T) {
 	}
 }
 
+func TestRenderAgentOpenClawConfigSplitsParticipantAndAgentID(t *testing.T) {
+	data, err := renderConfig("manager", "u-manager", config.ServerConfig{
+		ListenAddr:       "127.0.0.1:18080",
+		AdvertiseBaseURL: "http://127.0.0.1:18080",
+		AccessToken:      "shared-token",
+	}, config.ModelConfig{
+		ModelID: "MiniMax-M2.7",
+	}, testBaseURLResolver, nil)
+	if err != nil {
+		t.Fatalf("renderAgentOpenClawConfig() error = %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		`"botId": "manager"`,
+		`"baseUrl": "http://127.0.0.1:18080/api/v1/agents/u-manager/llm"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("rendered OpenClaw config missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, `/api/v1/agents/manager/llm`) {
+		t.Fatalf("rendered OpenClaw config used participant ID for LLM bridge:\n%s", text)
+	}
+}
+
 func TestRenderAgentOpenClawConfigDisablesStartupUpdateCheck(t *testing.T) {
-	data, err := renderConfig("u-manager", config.ServerConfig{
+	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
 		ListenAddr:       "127.0.0.1:18080",
 		AdvertiseBaseURL: "http://127.0.0.1:18080",
 		AccessToken:      "shared-token",
@@ -154,7 +179,7 @@ func TestRenderAgentOpenClawConfigDisablesStartupUpdateCheck(t *testing.T) {
 }
 
 func TestRenderAgentOpenClawConfigDefaultsCsgclawGroupsToMentionOnly(t *testing.T) {
-	data, err := renderConfig("u-manager", config.ServerConfig{
+	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
 		ListenAddr:       "127.0.0.1:18080",
 		AdvertiseBaseURL: "http://127.0.0.1:18080",
 		AccessToken:      "shared-token",
@@ -185,7 +210,7 @@ func TestRenderAgentOpenClawConfigDefaultsCsgclawGroupsToMentionOnly(t *testing.
 }
 
 func TestRenderAgentOpenClawConfigAddsFeishuChannelWhenConfigured(t *testing.T) {
-	data, err := renderConfig("u-manager", config.ServerConfig{
+	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
 		ListenAddr:       "127.0.0.1:18080",
 		AdvertiseBaseURL: "http://127.0.0.1:18080",
 		AccessToken:      "shared-token",
@@ -237,7 +262,7 @@ func TestRenderAgentOpenClawConfigAddsFeishuChannelWhenConfigured(t *testing.T) 
 }
 
 func TestRenderAgentOpenClawConfigPassesThroughDockerHostAlias(t *testing.T) {
-	data, err := renderConfig("u-manager", config.ServerConfig{
+	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
 		ListenAddr:       "0.0.0.0:18080",
 		AdvertiseBaseURL: "http://host.docker.internal:18080",
 		AccessToken:      "shared-token",

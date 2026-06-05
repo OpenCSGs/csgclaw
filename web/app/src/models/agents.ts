@@ -11,6 +11,7 @@ import {
   DEFAULT_RUNTIME_KIND,
   MANAGER_AGENT_ID,
   MANAGER_AGENT_NAME,
+  MANAGER_PARTICIPANT_ID,
   MANAGER_AGENT_ROLE,
   RUNTIME_KIND_OPTIONS,
   WORKER_AGENT_ROLE,
@@ -77,6 +78,19 @@ export type AgentLike = AgentProfileLike & {
   status?: string | null;
   template_name?: string | null;
   user_id?: string | null;
+  participants?: {
+    agent_id?: string | null;
+    channel?: string | null;
+    channel_app_ref?: string | null;
+    channel_user_kind?: string | null;
+    channel_user_ref?: string | null;
+    id?: string | null;
+    lifecycle_status?: string | null;
+    mentionable?: boolean | null;
+    metadata?: JSONRecord | null;
+    name?: string | null;
+    type?: string | null;
+  }[] | null;
 };
 
 export type AvatarLikeUser = {
@@ -186,6 +200,23 @@ const NOTIFIER_STORAGE_KEYS = [
 
 export function isManagerAgent(item: AgentLike | null | undefined): boolean {
   return item?.role === MANAGER_AGENT_ROLE || item?.id === MANAGER_AGENT_ID;
+}
+
+export function resolveAgentChannelUserID(item: AgentLike | null | undefined): string {
+  if (!item) {
+    return "";
+  }
+  const participant = item.participants?.find(
+    (candidate) => String(candidate?.channel || "").trim() === "csgclaw" && String(candidate?.id || "").trim(),
+  );
+  const channelUserID = String(participant?.channel_user_ref || participant?.id || "").trim();
+  if (channelUserID) {
+    return channelUserID;
+  }
+  if (isManagerAgent(item)) {
+    return MANAGER_PARTICIPANT_ID;
+  }
+  return String(item.user_id || item.id || "").trim();
 }
 
 export function normalizeNotifierDeliveryMode(mode: unknown): string {
@@ -361,9 +392,9 @@ export function notificationBotMetaLabel(item: AgentLike | null | undefined, t: 
 export function notificationPushWebhookPathForBot(botID: unknown): string {
   const id = String(botID || "").trim();
   if (!id) {
-    return "/api/v1/channels/csgclaw/bots/<bot_id>/notifications";
+    return "/api/v1/channels/csgclaw/participants/<participant_id>/notifications";
   }
-  return `/api/v1/channels/csgclaw/bots/${encodeURIComponent(id)}/notifications`;
+  return `/api/v1/channels/csgclaw/participants/${encodeURIComponent(id)}/notifications`;
 }
 
 export function notifierPushWebhookPathForAgent(botID: unknown): string {
@@ -714,7 +745,6 @@ export function agentToDraft(agent: AgentDraftSource | null | undefined): AgentD
     role: agent?.role || WORKER_AGENT_ROLE,
     bot_type: botType,
     description: agent?.description || profile.description || "",
-    avatar: agent?.avatar || "",
     default_image: agent?.image || "",
     image: agent?.image || "",
     from_template: agent?.from_template || "",

@@ -513,7 +513,11 @@ class CSGClawAPI:
             "payload": payload,
         }
 
-        if method == "POST" and path.startswith("/api/bots/") and path.endswith("/messages/send"):
+        if (
+            method == "POST"
+            and path.startswith("/api/v1/channels/csgclaw/participants/")
+            and path.endswith("/messages")
+        ):
             result["message_id"] = "dry-run-message-id"
             return result
 

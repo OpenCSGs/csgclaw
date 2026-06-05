@@ -99,22 +99,15 @@ def csgclaw_cli_json(args, cli_args: list[str], input_text: Optional[str] = None
 
 def configure_csgclaw(args, state: dict, result: dict) -> dict:
     bot_id = state["bot_id"]
-    cli_args = [
-        "bot",
-        "config",
-        "--channel",
-        "feishu",
-        "--set",
-        "--bot-id",
-        bot_id,
-        "--app-id",
-        result["app_id"],
-        "--app-secret-stdin",
-    ]
+    payload = {
+        "bot_id": bot_id,
+        "app_id": result["app_id"],
+        "app_secret": result["app_secret"],
+    }
     candidate_admin_open_id = str(result.get("open_id") or "").strip()
     if bot_id == "u-manager" and candidate_admin_open_id:
-        cli_args.extend(["--admin-open-id", candidate_admin_open_id])
-    response = csgclaw_cli_json(args, cli_args, input_text=result["app_secret"] + "\n") or {}
+        payload["admin_open_id"] = candidate_admin_open_id
+    response = api_json(args, "PUT", "/api/v1/channels/feishu/config", payload) or {}
     if bot_id == "u-manager":
         if candidate_admin_open_id:
             response["admin_open_id"] = candidate_admin_open_id
@@ -140,12 +133,22 @@ def ensure_bot(args, state: dict, result: dict) -> Optional[dict]:
     description = args.description or state.get("description") or f"{name} Feishu {role} agent"
     payload = {
         "id": bot_id,
+        "type": "agent",
         "name": name,
-        "description": description,
-        "role": role,
-        "channel": "feishu",
+        "channel_app_ref": result.get("app_id") or state.get("app_id") or "",
+        "channel_user": {"ref": bot_id, "kind": "local_user_id"},
+        "agent_binding": {
+            "mode": "create",
+            "agent_id": bot_id,
+            "agent": {
+                "id": bot_id,
+                "name": name,
+                "description": description,
+                "role": role,
+            },
+        },
     }
-    return api_json(args, "POST", f"/api/v1/channels/feishu/bots", payload)
+    return api_json(args, "POST", "/api/v1/channels/feishu/participants", payload)
 
 
 def worker_box_conflict_message(bot_id: str, name: str) -> str:
@@ -171,10 +174,10 @@ def is_same_bot_name_conflict(exc: RuntimeError, bot_id: str) -> bool:
 
 
 def bot_exists(args, bot_id: str) -> bool:
-    bots = csgclaw_cli_json(args, ["bot", "list", "--channel", "feishu"])
-    if not isinstance(bots, list):
-        raise RuntimeError(f"csgclaw-cli bot list returned unexpected JSON: {bots!r}")
-    return any(str(bot.get("id") or "").strip() == bot_id for bot in bots if isinstance(bot, dict))
+    participants = csgclaw_cli_json(args, ["participant", "list", "--channel", "feishu", "--type", "agent"])
+    if not isinstance(participants, list):
+        raise RuntimeError(f"csgclaw-cli participant list returned unexpected JSON: {participants!r}")
+    return any(str(item.get("id") or "").strip() == bot_id for item in participants if isinstance(item, dict))
 
 
 def maybe_recreate(args, state: dict, worker_existed_before_ensure: Optional[bool] = None) -> Optional[dict]:

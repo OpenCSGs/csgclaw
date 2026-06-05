@@ -176,15 +176,19 @@ build-docker-embed-runtime-embed: build-docker-embed-images patch-docker-embed-i
 build-picoclaw-runtime-embed: build-docker-embed-runtime-embed
 
 build-picoclaw-manager-image: stage-docker-embed-cli
-	chmod +x scripts/prepare-docker-embed-dist.sh scripts/build-docker-embed-images.sh
-	scripts/prepare-docker-embed-dist.sh picoclaw-manager
+	chmod +x scripts/prepare-docker-embed-dist.sh scripts/patch-docker-embed-image-refs.sh scripts/build-docker-embed-images.sh
+	scripts/prepare-docker-embed-dist.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" VERSION="$(DOCKER_EMBED_IMAGE_TAG)" \
+		scripts/patch-docker-embed-image-refs.sh
 	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
 		DOCKER_EMBED_IMAGE_TAG="$(DOCKER_EMBED_IMAGE_TAG)" \
 		scripts/build-docker-embed-images.sh picoclaw-manager
 
 build-picoclaw-worker-image: stage-docker-embed-cli
-	chmod +x scripts/prepare-docker-embed-dist.sh scripts/build-docker-embed-images.sh
-	scripts/prepare-docker-embed-dist.sh picoclaw-worker
+	chmod +x scripts/prepare-docker-embed-dist.sh scripts/patch-docker-embed-image-refs.sh scripts/build-docker-embed-images.sh
+	scripts/prepare-docker-embed-dist.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" VERSION="$(DOCKER_EMBED_IMAGE_TAG)" \
+		scripts/patch-docker-embed-image-refs.sh
 	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
 		DOCKER_EMBED_IMAGE_TAG="$(DOCKER_EMBED_IMAGE_TAG)" \
 		scripts/build-docker-embed-images.sh picoclaw-worker

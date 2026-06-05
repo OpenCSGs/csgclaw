@@ -8,27 +8,25 @@ This document is generated from the HTTP routes and behaviors currently implemen
 - Time fields use RFC3339 / ISO8601
 - Most non-streaming errors are returned as plain-text response bodies
 - SSE endpoints use `text/event-stream`
-- The current API is mainly grouped into 4 areas:
+- The current API is mainly grouped into 3 areas:
   - Core API: `/api/v1/*`
-  - Channel API: `/api/v1/channels/*`
-  - Bot compatibility API: `/api/bots/*`
+  - Channel and participant API: `/api/v1/channels/*`
   - Health check: `/healthz`
 
 ## Authentication
 
 - Most `/api/v1/*` endpoints do not require authentication by default
 - The following endpoints require `Authorization: Bearer <token>`, where the token is the server access token:
-  - `GET /api/v1/channels/feishu/bots/{id}/events`
-  - `GET /api/bots/{id}/events`
-  - `POST /api/bots/{id}/messages/send`
-  - `GET /api/bots/{id}/llm/models`
-  - `GET /api/bots/{id}/llm/v1/models`
-  - `POST /api/bots/{id}/llm/chat/completions`
-  - `POST /api/bots/{id}/llm/v1/chat/completions`
-  - `GET /api/bots/{id}/llm/responses`
-  - `GET /api/bots/{id}/llm/v1/responses`
-  - `POST /api/bots/{id}/llm/responses`
-  - `POST /api/bots/{id}/llm/v1/responses`
+  - `GET /api/v1/channels/{channel}/participants/{id}/events`
+  - `POST /api/v1/channels/csgclaw/participants/{id}/messages`
+  - `GET /api/v1/agents/{id}/llm/models`
+  - `GET /api/v1/agents/{id}/llm/v1/models`
+  - `POST /api/v1/agents/{id}/llm/chat/completions`
+  - `POST /api/v1/agents/{id}/llm/v1/chat/completions`
+  - `POST /api/v1/agents/{id}/llm/responses`
+  - `POST /api/v1/agents/{id}/llm/v1/responses`
+  - `GET /api/v1/agents/{id}/llm/responses`
+  - `GET /api/v1/agents/{id}/llm/v1/responses`
 - If the server runs with `no_auth`, the checks above are skipped
 
 ## Health Check
@@ -88,13 +86,15 @@ On success, returns `202 Accepted`:
 
 Returns `503 Service Unavailable` if the upgrade manager is not configured.
 
-## Bot Management API
+## Participant API
 
-These endpoints are exposed under the channel API namespace and are still backed by the unified `internal/bot` service. The route shape is channel-scoped, but bot lifecycle orchestration is not split into separate per-channel bot services. `role` only supports `manager` and `worker`, and `channel` only supports `csgclaw` and `feishu`.
+Participants are channel-scoped identities used by rooms, messages, mentions,
+notifications, and runtime bridges. A participant can represent a human, an
+agent-backed channel identity, or a notification sender.
 
-### `GET /api/v1/channels/{channel}/bots`
+### `GET /api/v1/channels/{channel}/participants`
 
-Returns the bot list for the specified channel.
+Returns participants for the specified channel.
 
 Path parameters:
 
@@ -102,29 +102,36 @@ Path parameters:
 
 Optional query parameters:
 
-- `role`
+- `type`: `human`, `agent`, or `notification`
+- `agent_id`
 
 Response fields:
 
 - `id`
-- `name`
-- `description`
-- `role`
 - `channel`
+- `type`
+- `name`
+- `avatar`
+- `channel_user_ref`
+- `channel_user_kind`
+- `channel_app_ref`
 - `agent_id`
-- `user_id`
-- `available`
-- `runtime_kind`
+- `lifecycle_status`
+- `presence`
+- `mentionable`
+- `metadata`
 - `created_at`
+- `updated_at`
 
 Examples:
 
-- `GET /api/v1/channels/csgclaw/bots`
-- `GET /api/v1/channels/feishu/bots?role=worker`
+- `GET /api/v1/channels/csgclaw/participants`
+- `GET /api/v1/channels/csgclaw/participants?type=notification`
+- `GET /api/v1/channels/feishu/participants?agent_id=u-worker`
 
-### `POST /api/v1/channels/{channel}/bots`
+### `POST /api/v1/channels/{channel}/participants`
 
-Creates a bot in the specified channel.
+Creates a participant in the specified channel.
 
 Path parameters:
 
@@ -134,42 +141,59 @@ Example request body:
 
 ```json
 {
-  "id": "u-alice",
-  "name": "alice",
-  "role": "worker",
-  "runtime_kind": "codex",
-  "from_template": "local.review-bot"
+  "id": "qa",
+  "type": "agent",
+  "name": "QA",
+  "channel_user": {
+    "ref": "u-qa",
+    "kind": "local_user_id"
+  },
+  "agent_binding": {
+    "mode": "create",
+    "agent": {
+      "name": "QA",
+      "role": "worker",
+      "runtime_kind": "picoclaw_sandbox",
+      "from_template": "builtin.picoclaw-worker"
+    }
+  }
 }
 ```
 
 Notes:
 
+- `type` is required and must be `human`, `agent`, or `notification`
 - `name` is required
-- `role` is required and must be either `manager` or `worker`
 - The effective channel comes from the route path rather than the request body
-- A `worker` bot is associated with a backend agent
-- `manager` and `worker` creation behavior can differ by channel
+- `agent` participants can create or reuse an Agent through `agent_binding`
+- `human` and `notification` participants do not create runtime agents
+- For `csgclaw`, `channel_user.ref` is a local IM user ID
+- For `feishu`, `channel_user.ref` is the channel-native open ID
 
 Examples:
 
-- `POST /api/v1/channels/csgclaw/bots`
-- `POST /api/v1/channels/feishu/bots`
+- `POST /api/v1/channels/csgclaw/participants`
+- `POST /api/v1/channels/feishu/participants`
 
-### `DELETE /api/v1/channels/{channel}/bots/{id}`
+### `GET /api/v1/channels/{channel}/participants/{id}`
 
-Deletes the specified bot in the specified channel.
+Returns one participant.
 
-Path parameters:
+### `PATCH /api/v1/channels/{channel}/participants/{id}`
 
-- `channel`: `csgclaw` or `feishu`
-- `id`: bot ID
+Updates editable participant fields such as `name`, `avatar`, `mentionable`, and
+`metadata`.
+
+### `DELETE /api/v1/channels/{channel}/participants/{id}`
+
+Deletes the specified participant in the specified channel.
 
 Returns `204 No Content` on success.
 
 Examples:
 
-- `DELETE /api/v1/channels/csgclaw/bots/u-alice`
-- `DELETE /api/v1/channels/feishu/bots/u-alice`
+- `DELETE /api/v1/channels/csgclaw/participants/qa`
+- `DELETE /api/v1/channels/feishu/participants/qa`
 
 ## Agent API
 
@@ -532,26 +556,6 @@ Notes:
 
 - Missing `provider` returns `400`
 - Login failure returns `502 Bad Gateway`
-
-### `POST /api/v1/cliproxy/auth/logout`
-
-Disables local provider auth.
-
-Request body:
-
-```json
-{
-  "provider": "codex"
-}
-```
-
-Returns the current provider auth status on success.
-
-Notes:
-
-- Missing `provider` returns `400`
-- Logout failure returns `502 Bad Gateway`
-- Logout blocks immediate auto-import from the same Codex home auth or Claude Keychain entry.
 
 ## Bootstrap Config API
 
@@ -959,17 +963,17 @@ Example response:
 }
 ```
 
-### Bot Events
+### Participant Events
 
-#### `GET /api/v1/channels/feishu/bots/{id}/events`
+#### `GET /api/v1/channels/feishu/participants/{id}/events`
 
-Subscribes to mention events for the specified bot in Feishu.
+Subscribes to mention events for the specified participant in Feishu.
 
 Characteristics:
 
 - Requires Bearer Token
 - Returns `text/event-stream`
-- Only forwards events whose message mentions the bot open_id
+- Only forwards events whose message mentions the participant open_id
 - Writes `: connected` immediately after the stream is established
 
 ### Users
@@ -1032,16 +1036,18 @@ Example send-message request:
 }
 ```
 
-## Bot Compatibility API
+## Runtime Bridge API
 
-These endpoints live under `/api/bots/{id}` and exist for compatibility with the older PicoClaw bot integration.
+Runtime clients use participant-scoped routes for channel messages and
+agent-scoped routes for LLM provider traffic. The legacy `/api/bots/*` routes
+are not registered.
 
-For thread/session isolation rules used by the bot and Codex bridges, see
+For thread/session isolation rules used by runtime and Codex bridges, see
 [im-threads.md](./im-threads.md).
 
-### `GET /api/bots/{id}/events`
+### `GET /api/v1/channels/{channel}/participants/{id}/events`
 
-Subscribes to the bot event stream.
+Subscribes to the participant event stream.
 
 Characteristics:
 
@@ -1062,13 +1068,13 @@ data: {"message_id":"msg-1","room_id":"room-1","channel":"csgclaw","chat_id":"ro
 
 For thread replies, `thread_root_id` is the root message ID and
 `thread_context` carries the deterministic hidden context captured when the
-thread was started. Bot/LLM bridges use it as prompt context; it is not a list
+thread was started. Runtime/LLM bridges use it as prompt context; it is not a list
 of thread replies. PicoClaw-native clients can use `context.topic_id` as the
 same thread/session identifier.
 
-### `POST /api/bots/{id}/messages/send`
+### `POST /api/v1/channels/csgclaw/participants/{id}/messages`
 
-Sends a message through the bot compatibility channel.
+Sends a message as the specified local CSGClaw participant.
 
 Example request body:
 
@@ -1081,9 +1087,9 @@ Example request body:
 ```
 
 `thread_root_id`, `topic_id`, and `context.topic_id` are optional thread/topic
-identifiers. When one is present, the bot response is sent as a reply inside
+identifiers. When one is present, the participant response is sent as a reply inside
 that IM thread. When all are omitted, the response is sent as a top-level room/DM
-message; the server does not infer a thread from the bot's most recent room
+message; the server does not infer a thread from the participant's most recent room
 event.
 
 PicoClaw outbound message shape is also accepted:
@@ -1100,9 +1106,9 @@ PicoClaw outbound message shape is also accepted:
 }
 ```
 
-### `GET /api/bots/{id}/llm/models`
+### `GET /api/v1/agents/{id}/llm/models`
 
-### `GET /api/bots/{id}/llm/v1/models`
+### `GET /api/v1/agents/{id}/llm/v1/models`
 
 Forwards model-list requests to the LLM bridge.
 
@@ -1111,9 +1117,9 @@ Notes:
 - Requires Bearer Token
 - Response content type and body are determined by the upstream bridge
 
-### `POST /api/bots/{id}/llm/chat/completions`
+### `POST /api/v1/agents/{id}/llm/chat/completions`
 
-### `POST /api/bots/{id}/llm/v1/chat/completions`
+### `POST /api/v1/agents/{id}/llm/v1/chat/completions`
 
 Forwards chat-completions requests to the LLM bridge.
 
@@ -1134,17 +1140,17 @@ Notes:
 }
 ```
 
-### `POST /api/bots/{id}/llm/responses`
+### `POST /api/v1/agents/{id}/llm/responses`
 
-### `POST /api/bots/{id}/llm/v1/responses`
+### `POST /api/v1/agents/{id}/llm/v1/responses`
+
+### `GET /api/v1/agents/{id}/llm/responses`
+
+### `GET /api/v1/agents/{id}/llm/v1/responses`
 
 Forwards OpenAI-compatible Responses API requests to the LLM bridge. Codex runtime uses this entrypoint for provider traffic. If the selected upstream provider returns an unsupported Responses endpoint status, the bridge falls back to upstream chat completions and wraps the result in a Responses-compatible response for Codex.
 
-### `GET /api/bots/{id}/llm/responses`
-
-### `GET /api/bots/{id}/llm/v1/responses`
-
-Upgrades to an OpenAI-compatible Responses WebSocket. Codex runtime enables this path only when the selected model provider is Codex, so the bridge can forward Codex ACP WebSocket traffic through the embedded CLIProxy Codex provider.
+The `GET` variants are websocket upgrade endpoints for Responses API sessions.
 
 Example request body:
 
@@ -1164,7 +1170,6 @@ Notes:
 - The `model` field is overwritten with the agent's resolved `model_id`
 - Responses forwarding does not inject the chat-only top-level `reasoning_effort`
 - Upstream Responses headers, status, and body are copied through, including streaming responses such as `text/event-stream`
-- Responses WebSocket `response.create` payloads also have profile request options merged before they are forwarded upstream
 
 ## Compatibility Notes
 
@@ -1179,4 +1184,10 @@ Notes:
 The following paths often seen in older docs are no longer registered in the current router and should not be treated as public APIs:
 
 - `/api/v1/notify/{agent_id}`
+- `/api/v1/channels/{channel}/bots`
+- `/api/v1/channels/{channel}/bots/{id}`
+- `/api/v1/channels/feishu/bots/{id}/events`
+- `/api/bots/{id}/events`
+- `/api/bots/{id}/messages/send`
+- `/api/bots/{id}/llm/*`
 - Any other legacy path not registered in `internal/api/router.go`

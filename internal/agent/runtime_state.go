@@ -390,9 +390,9 @@ func ProjectsRoot() (string, error) {
 	return ensureAgentProjectsRoot()
 }
 
-func llmBridgeBaseURL(managerBaseURL, botID string) string {
+func llmBridgeBaseURL(managerBaseURL, agentID string) string {
 	managerBaseURL = strings.TrimRight(strings.TrimSpace(managerBaseURL), "/")
-	return managerBaseURL + "/api/bots/" + strings.TrimSpace(botID) + "/llm"
+	return managerBaseURL + "/api/v1/agents/" + strings.TrimSpace(agentID) + "/llm"
 }
 
 func bridgeLLMEnvVars(llmBaseURL, accessToken, modelID string) map[string]string {

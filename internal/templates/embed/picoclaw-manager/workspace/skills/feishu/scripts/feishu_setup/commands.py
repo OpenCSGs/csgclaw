@@ -229,7 +229,7 @@ def build_parser() -> argparse.ArgumentParser:
     finalize.add_argument("--registration-id", required=True)
     finalize.add_argument("--timeout", type=int, default=DEFAULT_EXPIRE_SECONDS)
     finalize.add_argument("--no-configure", action="store_true", help="Do not write CSGClaw config; for debugging only, still never prints secret")
-    finalize.add_argument("--no-ensure-bot", action="store_true", help="Skip POST /api/v1/channels/feishu/bots")
+    finalize.add_argument("--no-ensure-bot", action="store_true", help="Skip POST /api/v1/channels/feishu/participants")
     finalize.add_argument("--role", choices=["worker", "manager"], default="", help="Override role for ensure/recreate logic")
     finalize.add_argument("--bot-name", default="", help="Override bot name for ensure")
     finalize.add_argument("--description", default="", help="Override bot description for ensure")

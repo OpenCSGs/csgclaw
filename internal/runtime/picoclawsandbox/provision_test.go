@@ -66,7 +66,7 @@ func TestGatewayCreateSpecMountsPicoClawRuntimeRoot(t *testing.T) {
 	agentHome := t.TempDir()
 	projectsRoot := t.TempDir()
 	rt := New(Dependencies{
-		BuildRuntimeEnv: func(_, _, _, _, _ string, _ feishu.BotCredentialProvider) map[string]string {
+		BuildRuntimeEnv: func(_, _, _, _, _, _ string, _ feishu.BotCredentialProvider) map[string]string {
 			return map[string]string{}
 		},
 		AddProfileEnv: func(map[string]string, map[string]string) {},

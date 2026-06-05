@@ -572,7 +572,7 @@ func TestCreateWorkerUsesCodexRuntimeWhenRequested(t *testing.T) {
 				if spec.AgentName != "alice" {
 					t.Fatalf("Create() agent name = %q, want %q", spec.AgentName, "alice")
 				}
-				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/bots/u-alice/llm"; got != want {
+				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
 					t.Fatalf("Create() profile base url = %q, want %q", got, want)
 				}
 				if got, want := spec.Profile.APIKey, "shared-token"; got != want {
@@ -1107,7 +1107,7 @@ func TestCreateWorkerProvisionsRuntimeBeforeNew(t *testing.T) {
 				if req.AgentName != "alice" {
 					t.Fatalf("Provision() agent name = %q, want %q", req.AgentName, "alice")
 				}
-				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/bots/u-alice/llm"; got != want {
+				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
 					t.Fatalf("Provision() profile base url = %q, want %q", got, want)
 				}
 				if got, want := req.Profile.APIKey, "shared-token"; got != want {
@@ -1146,6 +1146,47 @@ func TestCreateWorkerProvisionsRuntimeBeforeNew(t *testing.T) {
 	}
 	if got, want := strings.Join(callOrder, ","), "provision,new"; got != want {
 		t.Fatalf("call order = %q, want %q", got, want)
+	}
+}
+
+func TestCreateWorkerProvisionsParticipantIDSeparateFromAgentID(t *testing.T) {
+	var gotParticipantID string
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{}, "manager-image:test", "",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
+				gotParticipantID = req.ParticipantID
+				return nil
+			},
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-qa"}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	if _, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID:          "u-agent-hhtz4b",
+		Name:        "qa",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-worker:dev",
+		AgentProfile: AgentProfile{
+			Name:            "qa",
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+	}); err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
+	}
+	if got, want := gotParticipantID, "agent-hhtz4b"; got != want {
+		t.Fatalf("Provision() participant id = %q, want %q", got, want)
 	}
 }
 
@@ -1198,7 +1239,7 @@ func TestRecreateTriggersLifecycleObserver(t *testing.T) {
 			kind: RuntimeKindCodex,
 			del:  func(context.Context, agentruntime.Handle) error { return nil },
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/bots/u-alice/llm"; got != want {
+				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
 					t.Fatalf("Create() profile base url = %q, want %q", got, want)
 				}
 				if got, want := spec.Profile.APIKey, "shared-token"; got != want {
@@ -1275,7 +1316,7 @@ func TestRecreateProvisionsRuntimeBeforeNew(t *testing.T) {
 				if req.AgentName != "alice" {
 					t.Fatalf("Provision() agent name = %q, want %q", req.AgentName, "alice")
 				}
-				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/bots/u-alice/llm"; got != want {
+				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
 					t.Fatalf("Provision() profile base url = %q, want %q", got, want)
 				}
 				if got, want := req.Profile.APIKey, "shared-token"; got != want {
@@ -3668,10 +3709,13 @@ func TestStartRefreshesCompleteWorkerGatewayConfig(t *testing.T) {
 		t.Fatalf("ReadFile(worker config) error = %v", err)
 	}
 	text := string(data)
-	for _, want := range []string{`"bot_id": "u-alice"`, `"model_name": "gpt-5.5"`, `"api_base": "http://10.0.0.8:18080/api/bots/u-alice/llm"`} {
+	for _, want := range []string{`"participant_id": "alice"`, `"model_name": "gpt-5.5"`, `"api_base": "http://10.0.0.8:18080/api/v1/agents/u-alice/llm"`} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("worker config missing %q in:\n%s", want, text)
 		}
+	}
+	if strings.Contains(text, `"bot_id"`) {
+		t.Fatalf("worker config still emitted bot_id:\n%s", text)
 	}
 }
 
@@ -5316,6 +5360,112 @@ func TestEnsureBootstrapStateReusesStoredManagerBoxIDWithoutForce(t *testing.T) 
 	}
 }
 
+func TestEnsureBootstrapStateRecreatesManagerWithLegacyPicoClawBridgeConfig(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	SetTestHooks(nil, nil)
+	defer ResetTestHooks()
+
+	primaryRT := &fakeRuntime{}
+	testEnsureRuntimeAtHomeHook = func(_ *Service, home string) (sandbox.Runtime, error) {
+		return primaryRT, nil
+	}
+	testGetBoxHook = func(_ *Service, _ context.Context, rt sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		if rt == primaryRT && idOrName == "box-old" {
+			return &fakeInfoInstance{info: sandbox.Info{
+				ID:        "box-old",
+				Name:      ManagerName,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
+			}}, nil
+		}
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	var removed []string
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		removed = append(removed, idOrName)
+		return nil
+	}
+	var created bool
+	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, botID string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+		created = true
+		if image != "manager-image:test" || name != ManagerName || botID != ManagerUserID {
+			t.Fatalf("createGatewayBox() got image=%q name=%q botID=%q", image, name, botID)
+		}
+		return &fakeInfoInstance{info: sandbox.Info{
+				ID:        "box-new",
+				Name:      ManagerName,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
+			}}, sandbox.Info{
+				ID:        "box-new",
+				Name:      ManagerName,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
+			}, nil
+	}
+
+	managerHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName)
+	configPath := filepath.Join(managerHome, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(config dir) error = %v", err)
+	}
+	legacyConfig := `{"channels":{"csgclaw":{"enabled":true,"bot_id":"u-manager"}}}`
+	if err := os.WriteFile(configPath, []byte(legacyConfig), 0o600); err != nil {
+		t.Fatalf("WriteFile(legacy config) error = %v", err)
+	}
+
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	data, err := json.Marshal(persistedState{
+		Agents: []persistedAgent{
+			{
+				ID:          ManagerUserID,
+				Name:        ManagerName,
+				RuntimeKind: RuntimeKindPicoClawSandbox,
+				Role:        RoleManager,
+				BoxID:       "box-old",
+				CreatedAt:   time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+				AgentProfile: AgentProfile{
+					Name:            ManagerName,
+					Provider:        ProviderAPI,
+					BaseURL:         "https://api.example/v1",
+					APIKey:          "api-key",
+					ModelID:         "gpt-4.1",
+					ProfileComplete: true,
+				},
+				ProfileComplete: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(statePath, data, 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	if err := EnsureBootstrapState(context.Background(), statePath, config.ServerConfig{ListenAddr: ":18080", AccessToken: "token"}, testModelConfig(), "manager-image:test", false); err != nil {
+		t.Fatalf("EnsureBootstrapState() error = %v", err)
+	}
+	if !created {
+		t.Fatal("createGatewayBox() was not called; legacy manager bridge config should force recreate")
+	}
+	if got, want := strings.Join(removed, ","), "box-old"; got != want {
+		t.Fatalf("removed boxes = %q, want %q", got, want)
+	}
+	rendered, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(rendered config) error = %v", err)
+	}
+	if !strings.Contains(string(rendered), `"participant_id": "`+ManagerParticipantID+`"`) {
+		t.Fatalf("rendered config missing participant_id:\n%s", rendered)
+	}
+	if strings.Contains(string(rendered), `"bot_id"`) {
+		t.Fatalf("rendered config still contains bot_id:\n%s", rendered)
+	}
+}
+
 func TestBoxRuntimeHomeUsesPerAgentDirectory(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -5622,7 +5772,7 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	if got, want := spec.Env["CSGCLAW_BASE_URL"], "http://10.0.0.8:18080"; got != want {
 		t.Fatalf("CSGCLAW_BASE_URL = %q, want %q", got, want)
 	}
-	if got, want := spec.Env["CSGCLAW_LLM_BASE_URL"], "http://10.0.0.8:18080/api/bots/u-worker-1/llm"; got != want {
+	if got, want := spec.Env["CSGCLAW_LLM_BASE_URL"], "http://10.0.0.8:18080/api/v1/agents/u-worker-1/llm"; got != want {
 		t.Fatalf("CSGCLAW_LLM_BASE_URL = %q, want %q", got, want)
 	}
 	if got, want := spec.Env["PICOCLAW_CHANNELS_FEISHU_APP_ID"], "cli_worker"; got != want {
@@ -6065,32 +6215,37 @@ func TestPicoclawBoxEnvVars(t *testing.T) {
 		"http://10.0.0.8:18080",
 		"shared-token",
 		"u-worker-1",
-		"http://10.0.0.8:18080/api/bots/u-worker-1/llm",
+		"u-worker-1",
+		"http://10.0.0.8:18080/api/v1/agents/u-worker-1/llm",
 		"minimax-m2.7",
 	)
 
 	wants := map[string]string{
-		"CSGCLAW_BASE_URL":                       "http://10.0.0.8:18080",
-		"CSGCLAW_ACCESS_TOKEN":                   "shared-token",
-		"PICOCLAW_CHANNELS_CSGCLAW_BASE_URL":     "http://10.0.0.8:18080",
-		"PICOCLAW_CHANNELS_CSGCLAW_ACCESS_TOKEN": "shared-token",
-		"PICOCLAW_CHANNELS_CSGCLAW_BOT_ID":       "u-worker-1",
-		"CSGCLAW_LLM_BASE_URL":                   "http://10.0.0.8:18080/api/bots/u-worker-1/llm",
-		"CSGCLAW_LLM_API_KEY":                    "shared-token",
-		"CSGCLAW_LLM_MODEL_ID":                   "minimax-m2.7",
-		"OPENAI_BASE_URL":                        "http://10.0.0.8:18080/api/bots/u-worker-1/llm",
-		"OPENAI_API_KEY":                         "shared-token",
-		"OPENAI_MODEL":                           "minimax-m2.7",
-		"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME":    "minimax-m2.7",
-		"PICOCLAW_CUSTOM_MODEL_NAME":             "minimax-m2.7",
-		"PICOCLAW_CUSTOM_MODEL_ID":               "openai/minimax-m2.7",
-		"PICOCLAW_CUSTOM_MODEL_API_KEY":          "shared-token",
-		"PICOCLAW_CUSTOM_MODEL_BASE_URL":         "http://10.0.0.8:18080/api/bots/u-worker-1/llm",
+		"CSGCLAW_BASE_URL":                         "http://10.0.0.8:18080",
+		"CSGCLAW_ACCESS_TOKEN":                     "shared-token",
+		"PICOCLAW_CHANNELS_CSGCLAW_BASE_URL":       "http://10.0.0.8:18080",
+		"PICOCLAW_CHANNELS_CSGCLAW_ACCESS_TOKEN":   "shared-token",
+		"PICOCLAW_CHANNELS_CSGCLAW_PARTICIPANT_ID": "u-worker-1",
+		"PICOCLAW_CHANNELS_CSGCLAW_ENABLED":        "true",
+		"CSGCLAW_LLM_BASE_URL":                     "http://10.0.0.8:18080/api/v1/agents/u-worker-1/llm",
+		"CSGCLAW_LLM_API_KEY":                      "shared-token",
+		"CSGCLAW_LLM_MODEL_ID":                     "minimax-m2.7",
+		"OPENAI_BASE_URL":                          "http://10.0.0.8:18080/api/v1/agents/u-worker-1/llm",
+		"OPENAI_API_KEY":                           "shared-token",
+		"OPENAI_MODEL":                             "minimax-m2.7",
+		"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME":      "minimax-m2.7",
+		"PICOCLAW_CUSTOM_MODEL_NAME":               "minimax-m2.7",
+		"PICOCLAW_CUSTOM_MODEL_ID":                 "openai/minimax-m2.7",
+		"PICOCLAW_CUSTOM_MODEL_API_KEY":            "shared-token",
+		"PICOCLAW_CUSTOM_MODEL_BASE_URL":           "http://10.0.0.8:18080/api/v1/agents/u-worker-1/llm",
 	}
 	for key, want := range wants {
 		if got[key] != want {
 			t.Fatalf("%s = %q, want %q", key, got[key], want)
 		}
+	}
+	if _, ok := got["PICOCLAW_CHANNELS_CSGCLAW_BOT_ID"]; ok {
+		t.Fatalf("PICOCLAW_CHANNELS_CSGCLAW_BOT_ID should not be emitted")
 	}
 }
 
@@ -6099,7 +6254,8 @@ func TestPicoclawBoxEnvVarsPrefixesCustomModelIDForSlashNames(t *testing.T) {
 		"http://10.0.0.8:18080",
 		"shared-token",
 		"u-worker-1",
-		"http://10.0.0.8:18080/api/bots/u-worker-1/llm",
+		"u-worker-1",
+		"http://10.0.0.8:18080/api/v1/agents/u-worker-1/llm",
 		"Qwen/Qwen3-0.6B-GGUF",
 	)
 
@@ -6143,14 +6299,15 @@ func TestAddFeishuBoxEnvVarsRequiresExactBotIDMatch(t *testing.T) {
 	}
 }
 
-func picoclawBoxEnvVars(baseURL, accessToken, botID, llmBaseURL, modelID string) map[string]string {
+func picoclawBoxEnvVars(baseURL, accessToken, participantID, agentID, llmBaseURL, modelID string) map[string]string {
 	env := bridgeLLMEnvVars(llmBaseURL, accessToken, modelID)
 	picoclawModelID := picoclawBridgeModelID(modelID)
 	env["CSGCLAW_BASE_URL"] = baseURL
 	env["CSGCLAW_ACCESS_TOKEN"] = accessToken
 	env["PICOCLAW_CHANNELS_CSGCLAW_BASE_URL"] = baseURL
 	env["PICOCLAW_CHANNELS_CSGCLAW_ACCESS_TOKEN"] = accessToken
-	env["PICOCLAW_CHANNELS_CSGCLAW_BOT_ID"] = botID
+	env["PICOCLAW_CHANNELS_CSGCLAW_PARTICIPANT_ID"] = participantID
+	env["PICOCLAW_CHANNELS_CSGCLAW_ENABLED"] = "true"
 	env["PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME"] = modelID
 	env["PICOCLAW_CUSTOM_MODEL_NAME"] = modelID
 	env["PICOCLAW_CUSTOM_MODEL_ID"] = picoclawModelID
@@ -6230,9 +6387,9 @@ func withTestSandboxRuntimeHost(host PicoClawRuntimeHost, provider feishu.BotCre
 				}, nil
 			},
 			SyncHandle: host.SyncHandle,
-			BuildRuntimeEnv: func(baseURL, accessToken, botID, llmBaseURL, modelID string, provider feishu.BotCredentialProvider) map[string]string {
-				env := picoclawBoxEnvVars(baseURL, accessToken, botID, llmBaseURL, modelID)
-				addFeishuBoxEnvVars(env, botID, provider)
+			BuildRuntimeEnv: func(baseURL, accessToken, participantID, agentID, llmBaseURL, modelID string, provider feishu.BotCredentialProvider) map[string]string {
+				env := picoclawBoxEnvVars(baseURL, accessToken, participantID, agentID, llmBaseURL, modelID)
+				addFeishuBoxEnvVars(env, agentID, provider)
 				return env
 			},
 			AddProfileEnv: addProfileEnvVars,

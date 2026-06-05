@@ -638,8 +638,12 @@ func (s *Service) ensureChannelUser(ctx context.Context, channelName string, cre
 		if s.imProv == nil {
 			return "", time.Time{}, fmt.Errorf("im provisioner is required")
 		}
+		userID := created.ID
+		if strings.TrimSpace(created.ID) == agent.ManagerUserID {
+			userID = agent.ManagerParticipantID
+		}
 		result, err := s.imProv.EnsureAgentUser(ctx, im.AgentIdentity{
-			ID:          created.ID,
+			ID:          userID,
 			Name:        created.Name,
 			Description: created.Description,
 			Handle:      deriveAgentHandle(created),

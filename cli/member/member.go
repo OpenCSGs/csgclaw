@@ -73,8 +73,8 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	fs := run.NewFlagSet("member create", run.Program+" member create [flags]", "Add a member to a room.")
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	roomID := fs.String("room-id", "", "target room id")
-	userID := fs.String("user-id", "", "bot id to add")
-	inviterID := fs.String("inviter-id", "", "inviter bot id")
+	userID := fs.String("user-id", "", "participant id to add")
+	inviterID := fs.String("inviter-id", "", "inviter participant id")
 	locale := fs.String("locale", "", "room locale")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -83,7 +83,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		return fmt.Errorf("member create does not accept positional arguments")
 	}
 	if *userID == "" {
-		return fmt.Errorf("--user-id bot id is required")
+		return fmt.Errorf("--user-id participant id is required")
 	}
 
 	room, err := run.APIClient(globals).AddRoomMemberByChannel(ctx, *channelName, apitypes.AddRoomMembersRequest{

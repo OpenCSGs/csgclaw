@@ -1112,7 +1112,10 @@ func TestHTTPClientStreamEventsMentionOnly(t *testing.T) {
 		BaseURL:     "http://example.test",
 		MentionOnly: true,
 		HTTPClient: &http.Client{
-			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if got, want := req.URL.Path, "/api/v1/channels/csgclaw/participants/u-codex/events"; got != want {
+					t.Fatalf("event stream path = %q, want %q", got, want)
+				}
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -1156,6 +1159,44 @@ func TestHTTPClientStreamEventsMentionOnly(t *testing.T) {
 	}
 	if got[2].MessageID != "m-4" {
 		t.Fatalf("received third event = %+v, want m-4", got[2])
+	}
+}
+
+func TestHTTPClientSendMessageUsesParticipantRoute(t *testing.T) {
+	t.Parallel()
+
+	client := &HTTPClient{
+		BaseURL: "http://example.test",
+		Token:   "secret",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if got, want := req.Method, http.MethodPost; got != want {
+					t.Fatalf("method = %q, want %q", got, want)
+				}
+				if got, want := req.URL.Path, "/api/v1/channels/csgclaw/participants/u-codex/messages"; got != want {
+					t.Fatalf("send message path = %q, want %q", got, want)
+				}
+				if got, want := req.Header.Get("Authorization"), "Bearer secret"; got != want {
+					t.Fatalf("authorization = %q, want %q", got, want)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`{"message_id":"m-1"}`)),
+				}, nil
+			}),
+		},
+	}
+
+	got, err := client.SendMessage(context.Background(), "u-codex", SendMessageRequest{
+		RoomID: "room-1",
+		Text:   "hello",
+	})
+	if err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+	if got.MessageID != "m-1" {
+		t.Fatalf("MessageID = %q, want %q", got.MessageID, "m-1")
 	}
 }
 

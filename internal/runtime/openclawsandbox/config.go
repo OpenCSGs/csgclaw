@@ -43,12 +43,12 @@ func HostGatewayLogPath(agentHome string) string {
 	return filepath.Join(Root(agentHome), "gateway.log")
 }
 
-func EnsureConfig(agentHome, botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.BotCredentialProvider) (string, error) {
+func EnsureConfig(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.BotCredentialProvider) (string, error) {
 	hostRoot := Root(agentHome)
 	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create openclaw config dir: %w", err)
 	}
-	data, err := renderConfig(botID, server, model, resolveBaseURL, feishuProvider)
+	data, err := renderConfig(participantID, agentID, server, model, resolveBaseURL, feishuProvider)
 	if err != nil {
 		return "", err
 	}
@@ -114,18 +114,26 @@ func writeExecApprovalsAllowAll(hostRoot string) error {
 	return nil
 }
 
-func renderConfig(botID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.BotCredentialProvider) ([]byte, error) {
+func renderConfig(participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.BotCredentialProvider) ([]byte, error) {
+	participantID = strings.TrimSpace(participantID)
+	agentID = strings.TrimSpace(agentID)
+	if participantID == "" {
+		participantID = agentID
+	}
+	if agentID == "" {
+		agentID = participantID
+	}
 	var cfg map[string]any
 	if err := json.Unmarshal(defaultOpenClawGatewayConfig, &cfg); err != nil {
 		return nil, fmt.Errorf("decode embedded openclaw config: %w", err)
 	}
-	if err := updateOpenClawModelProvider(cfg, botID, server, model, resolveBaseURL); err != nil {
+	if err := updateOpenClawModelProvider(cfg, agentID, server, model, resolveBaseURL); err != nil {
 		return nil, err
 	}
-	if err := updateOpenClawCsgclawChannel(cfg, botID, server, resolveBaseURL); err != nil {
+	if err := updateOpenClawCsgclawChannel(cfg, participantID, server, resolveBaseURL); err != nil {
 		return nil, err
 	}
-	if err := updateOpenClawFeishuChannel(cfg, botID, feishuProvider); err != nil {
+	if err := updateOpenClawFeishuChannel(cfg, agentID, feishuProvider); err != nil {
 		return nil, err
 	}
 	if err := updateOpenClawGatewayAuth(cfg, server); err != nil {
@@ -202,7 +210,7 @@ func updateOpenClawPrimaryModel(cfg map[string]any, providerID, modelID string) 
 	return nil
 }
 
-func updateOpenClawCsgclawChannel(cfg map[string]any, botID string, server config.ServerConfig, resolveBaseURL BaseURLResolver) error {
+func updateOpenClawCsgclawChannel(cfg map[string]any, participantID string, server config.ServerConfig, resolveBaseURL BaseURLResolver) error {
 	channels, ok := cfg["channels"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("embedded openclaw config is missing channels")
@@ -217,7 +225,7 @@ func updateOpenClawCsgclawChannel(cfg map[string]any, botID string, server confi
 	if server.AccessToken != "" {
 		ch["accessToken"] = server.AccessToken
 	}
-	ch["botId"] = botID
+	ch["botId"] = participantID
 	ch["enabled"] = true
 	return nil
 }
@@ -290,9 +298,9 @@ func managerBaseURL(server config.ServerConfig, resolveBaseURL BaseURLResolver) 
 	return strings.TrimRight(strings.TrimSpace(resolveBaseURL(server)), "/")
 }
 
-func llmBridgeBaseURL(managerBaseURL, botID string) string {
+func llmBridgeBaseURL(managerBaseURL, agentID string) string {
 	managerBaseURL = strings.TrimRight(strings.TrimSpace(managerBaseURL), "/")
-	return managerBaseURL + "/api/bots/" + strings.TrimSpace(botID) + "/llm"
+	return managerBaseURL + "/api/v1/agents/" + strings.TrimSpace(agentID) + "/llm"
 }
 
 func updateOpenClawGatewayAuth(cfg map[string]any, server config.ServerConfig) error {

@@ -13,6 +13,7 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
 	"csgclaw/internal/sandboxproviders"
 )
 
@@ -141,19 +142,29 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 	if err != nil {
 		return bot.Bot{}, err
 	}
-	store, err := bot.NewStore(filepath.Join(filepath.Dir(imStatePath), "bots.json"))
+	store, err := participant.NewStore(filepath.Join(filepath.Dir(imStatePath), "participants.json"))
 	if err != nil {
 		return bot.Bot{}, err
 	}
-	botSvc, err := bot.NewServiceWithDependencies(store, agentSvc, imSvc)
+	participantSvc := participant.NewService(
+		store,
+		participant.WithAgentService(agentSvc),
+		participant.WithIMService(imSvc),
+	)
+	created, err := participantSvc.EnsureBootstrapManager(ctx)
 	if err != nil {
 		return bot.Bot{}, err
 	}
-	return botSvc.CreateManager(ctx, bot.CreateRequest{
-		Name:    agent.ManagerName,
-		Role:    string(bot.RoleManager),
-		Channel: string(bot.ChannelCSGClaw),
-	}, false)
+	return bot.Bot{
+		ID:        created.ID,
+		Name:      created.Name,
+		Role:      string(bot.RoleManager),
+		Channel:   created.Channel,
+		AgentID:   created.AgentID,
+		UserID:    created.ChannelUserRef,
+		Available: true,
+		CreatedAt: created.CreatedAt,
+	}, nil
 }
 
 func defaultConfig() config.Config {

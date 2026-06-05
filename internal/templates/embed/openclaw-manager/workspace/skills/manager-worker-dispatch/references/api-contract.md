@@ -9,7 +9,7 @@ The skill and CLI use `room` as the user-facing term. Where the underlying HTTP 
 - `CSGCLAW_BASE_URL`: Preferred when the script runs inside a CSGClaw box.
 - `CSGCLAW_ACCESS_TOKEN`: Preferred bearer token when the script runs inside a CSGClaw box.
 - `MANAGER_API_BASE_URL`: Optional. Default: `http://127.0.0.1:18080`
-- `MANAGER_API_TOKEN`: Optional bearer token. Required for `/api/bots/*` when the server enables auth.
+- `MANAGER_API_TOKEN`: Optional bearer token. Required for participant APIs when the server enables auth.
 - `MANAGER_API_TIMEOUT`: Optional request timeout in seconds. Default: `30`
 
 ## Local Config
@@ -24,7 +24,7 @@ When available, load the CSGClaw API settings from `~/.openclaw/openclaw.json`:
 ### Dispatch task by bot message
 
 - Method: `POST`
-- Path: `/api/bots/{bot_id}/messages/send`
+- Path: `/api/v1/channels/csgclaw/participants/{participant_id}/messages`
 - Request body:
 
 ```json

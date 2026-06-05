@@ -18,6 +18,7 @@ export type ComposerSlashState = {
   query: string;
   startOffset: number;
   textNode: Node;
+  tokenElement?: HTMLElement;
 };
 
 export function createMentionTokenElement(user) {
@@ -401,12 +402,16 @@ export function getComposerSlashState(root) {
   }
   let context = getActiveTextQueryContext(range.startContainer, range.startOffset);
   if (!context && range.startContainer.nodeType === Node.ELEMENT_NODE) {
-    const textNode = getAdjacentSlashTokenTextNode(range.startContainer, range.startOffset);
-    if (textNode) {
-      context = {
-        textNode,
-        offset: textNode.textContent?.length ?? 0,
-        textBeforeCursor: textNode.textContent ?? "",
+    const tokenElement = getAdjacentSlashTokenElement(range.startContainer, range.startOffset);
+    if (tokenElement) {
+      const text = tokenElement.textContent ?? "";
+      const query = text.startsWith("/") ? text.slice(1) : text;
+      return {
+        query,
+        startOffset: 0,
+        endOffset: text.length,
+        textNode: tokenElement.firstChild ?? tokenElement,
+        tokenElement,
       };
     }
   }
@@ -517,8 +522,16 @@ export function replaceComposerSlashWithSegments(root, segments) {
   }
 
   const range = document.createRange();
-  range.setStart(slashState.textNode, slashState.startOffset);
-  range.setEnd(slashState.textNode, slashState.endOffset);
+  if (slashState.tokenElement) {
+    range.setStartBefore(slashState.tokenElement);
+    range.setEndAfter(slashState.tokenElement);
+  } else {
+    const endOffset = replacementEndsWithWhitespace(segments)
+      ? consumeSingleFollowingWhitespace(slashState.textNode, slashState.endOffset)
+      : slashState.endOffset;
+    range.setStart(slashState.textNode, slashState.startOffset);
+    range.setEnd(slashState.textNode, endOffset);
+  }
   range.deleteContents();
 
   const marker = document.createTextNode("");
@@ -613,7 +626,7 @@ function isComposerTokenNode(node: Node | null): boolean {
   return Boolean(element.dataset?.userId || element.dataset?.composerSlashToken);
 }
 
-function getAdjacentSlashTokenTextNode(node: Node, offset: number): Text | null {
+function getAdjacentSlashTokenElement(node: Node, offset: number): HTMLElement | null {
   if (node.nodeType !== Node.ELEMENT_NODE) {
     return null;
   }
@@ -622,11 +635,30 @@ function getAdjacentSlashTokenTextNode(node: Node, offset: number): Text | null 
     return null;
   }
   const element = previous as HTMLElement;
-  if (!element.dataset?.composerSlashToken) {
-    return null;
+  return element.dataset?.composerSlashToken ? element : null;
+}
+
+function replacementEndsWithWhitespace(segments): boolean {
+  for (let index = (segments?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const segment = segments[index];
+    if (!segment || segment.type === "mention") {
+      continue;
+    }
+    const text = String(segment.text ?? "");
+    if (!text) {
+      continue;
+    }
+    return /\s$/.test(text);
   }
-  const textNode = element.firstChild;
-  return textNode?.nodeType === Node.TEXT_NODE ? (textNode as Text) : null;
+  return false;
+}
+
+function consumeSingleFollowingWhitespace(textNode: Node, offset: number): number {
+  if (textNode.nodeType !== Node.TEXT_NODE) {
+    return offset;
+  }
+  const text = textNode.textContent ?? "";
+  return /\s/.test(text.charAt(offset)) ? offset + 1 : offset;
 }
 
 export function placeCaretNearNode(root, node, direction) {

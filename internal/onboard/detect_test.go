@@ -11,6 +11,7 @@ import (
 	"csgclaw/internal/bot"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
 )
 
 func TestDetectStateFreshHomeReportsIncompleteBootstrap(t *testing.T) {
@@ -60,14 +61,14 @@ func TestDetectStateCompleteBootstrapReportsComplete(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin", Handle: "admin", Role: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: agent.ManagerParticipantID, Name: "manager", Handle: "manager", Role: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-bootstrap",
 				Title:    "admin & manager",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", agent.ManagerParticipantID},
 			},
 		},
 	}); err != nil {
@@ -101,6 +102,7 @@ func TestDetectStateCompleteBootstrapReportsComplete(t *testing.T) {
 	if !result.Complete() {
 		t.Fatal("Complete() = false, want true")
 	}
+	assertLegacyBotsMigrated(t)
 }
 
 func TestDetectStateFlagsMissingManagerBotWhenOtherBootstrapStateExists(t *testing.T) {
@@ -191,4 +193,32 @@ func writeManagerBotState(t *testing.T, manager bot.Bot) error {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+func assertLegacyBotsMigrated(t *testing.T) {
+	t.Helper()
+
+	imStatePath, err := config.DefaultIMStatePath()
+	if err != nil {
+		t.Fatalf("DefaultIMStatePath() error = %v", err)
+	}
+	botsPath := filepath.Join(filepath.Dir(imStatePath), "bots.json")
+	if _, err := os.Stat(botsPath); !os.IsNotExist(err) {
+		t.Fatalf("bots.json still exists after participant migration; stat err=%v", err)
+	}
+
+	store, err := participant.NewStore(filepath.Join(filepath.Dir(imStatePath), "participants.json"))
+	if err != nil {
+		t.Fatalf("participant.NewStore() error = %v", err)
+	}
+	got, ok := store.Get(participant.ChannelCSGClaw, agent.ManagerParticipantID)
+	if !ok {
+		t.Fatal("manager participant was not created from legacy bots.json")
+	}
+	if got.AgentID != agent.ManagerUserID || got.ChannelUserRef != agent.ManagerParticipantID {
+		t.Fatalf("manager participant = %+v, want agent %q and channel user %q", got, agent.ManagerUserID, agent.ManagerParticipantID)
+	}
+	if _, ok := store.Get(participant.ChannelCSGClaw, agent.ManagerUserID); ok {
+		t.Fatalf("manager participant was migrated under old agent id %q", agent.ManagerUserID)
+	}
 }

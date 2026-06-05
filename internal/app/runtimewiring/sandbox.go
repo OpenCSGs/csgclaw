@@ -12,7 +12,7 @@ import (
 	"csgclaw/internal/sandbox"
 )
 
-type sandboxRuntimeEnvBuilder func(baseURL, accessToken, botID, llmBaseURL, modelID string, provider feishu.BotCredentialProvider) map[string]string
+type sandboxRuntimeEnvBuilder func(baseURL, accessToken, participantID, agentID, llmBaseURL, modelID string, provider feishu.BotCredentialProvider) map[string]string
 
 func withSandboxRuntimeHost(host agent.PicoClawRuntimeHost, feishuProvider feishu.BotCredentialProvider, buildRuntimeEnv sandboxRuntimeEnvBuilder, newRuntime func(sandboxgateway.Dependencies) agentruntime.Runtime) agent.ServiceOption {
 	return func(s *agent.Service) error {

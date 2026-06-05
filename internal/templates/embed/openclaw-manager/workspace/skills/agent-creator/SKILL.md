@@ -1,6 +1,6 @@
 ---
 name: agent-creator
-description: Mandatory skill for provisioning any new CSGClaw agent, bot, robot, or worker. Use immediately when the user asks to create, add, set up, or provision an agent/bot/worker (including GitLab, frontend, QA, or other specialized workers), when dispatch needs a missing worker, or when asking which hub template fits. Always hub list + match + hub get + bot create --from-template with --env for secrets. Never run bot create without --from-template for a new worker. Do NOT use for task dispatch to existing workers or todo.json tracking only.
+description: Mandatory skill for provisioning any new CSGClaw agent, bot, robot, or worker. Use immediately when the user asks to create, add, set up, or provision an agent/bot/worker (including GitLab, frontend, QA, or other specialized workers), when dispatch needs a missing worker, or when asking which hub template fits. Always hub list + match + hub get + participant create --type agent --bind create --from-template with --env for secrets. Never run participant create --bind create without --from-template for a new worker. Do NOT use for task dispatch to existing workers or todo.json tracking only.
 ---
 
 # Agent Creator
@@ -11,7 +11,7 @@ Use `basics` only after create for room membership or IM mentions. Use `manager-
 
 ## Routing Gate (mandatory)
 
-Before running **any** `csgclaw-cli bot create` for a **new** worker:
+Before running **any** `csgclaw-cli participant create --type agent --bind create` for a **new** worker:
 
 1. Read this skill first.
 2. Run `csgclaw-cli --output json hub list` and pick a template (do not skip even if the user named a capability like GitLab).
@@ -26,7 +26,7 @@ Use this skill when:
 
 - the user asks to create, add, set up, or provision an agent, bot, robot, or worker
 - the user names a capability (GitLab, frontend, QA, review, etc.) and needs a matching worker
-- `bot list` shows no suitable available worker for the required capability
+- `participant list` shows no suitable available worker for the required capability
 - dispatch needs a new worker (pause dispatch, complete provisioning here, then resume with `basics` + dispatch)
 
 Do **not** use this skill when:
@@ -41,7 +41,7 @@ Never run a bare worker create like:
 
 ```bash
 # FORBIDDEN for new workers
-csgclaw-cli bot create --name gitlab-worker --role worker --runtime openclaw_sandbox
+csgclaw-cli participant create --type agent --bind create --name gitlab-worker --role worker --runtime openclaw_sandbox
 ```
 
 Never tell the worker secrets in chat instead of `--env`.
@@ -51,9 +51,9 @@ Never skip `hub list` / `hub get` because you think you already know the templat
 ## Workflow
 
 1. Confirm the user wants a **new** worker (or dispatch lacks one). If an available worker already matches, stop and reuse it.
-2. `csgclaw-cli bot list --channel <current_channel>` — avoid duplicate names; ask reuse vs new if ambiguous.
+2. `csgclaw-cli participant list --channel <current_channel> --type agent` — avoid duplicate names; ask reuse vs new if ambiguous.
 3. `csgclaw-cli --output json hub list` — match by `name`, `description`, and `role`.
-4. No match → say so plainly; do not fall back to bare `bot create`.
+4. No match → say so plainly; do not fall back to bare `participant create --bind create`.
 5. Multiple matches → short comparison; let the user choose.
 6. `csgclaw-cli --output json hub get <template-id>` — read `image_env`.
 7. Collect every `required=true` env with no `default`; never echo `secret=true` values.
@@ -61,7 +61,7 @@ Never skip `hub list` / `hub get` because you think you already know the templat
 9. Create:
 
 ```bash
-csgclaw-cli bot create \
+csgclaw-cli participant create --type agent --bind create \
   --name gitlab-worker \
   --description "GitLab issue and MR worker" \
   --role worker \
@@ -70,15 +70,15 @@ csgclaw-cli bot create \
   --channel <current_channel>
 ```
 
-10. Report bot id, template id, and env status. Use `basics` for `member create` if the user wants the worker in the room. Do **not** auto-dispatch unless asked.
+10. Report participant id, template id, and env status. Use `basics` for `member create` if the user wants the worker in the room. Do **not** auto-dispatch unless asked.
 
 ## Commands
 
 ```bash
 csgclaw-cli --output json hub list
 csgclaw-cli --output json hub get builtin.gitlab-worker
-csgclaw-cli bot list --channel <current_channel>
-csgclaw-cli bot create --from-template <id> --env KEY=VALUE ... --channel <current_channel>
+csgclaw-cli participant list --channel <current_channel> --type agent
+csgclaw-cli participant create --type agent --bind create --from-template <id> --env KEY=VALUE ... --channel <current_channel>
 ```
 
 Template env vars with `default` are injected by the server; pass `--env` only for secrets and overrides.

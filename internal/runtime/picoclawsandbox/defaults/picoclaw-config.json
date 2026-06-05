@@ -36,7 +36,7 @@
     "csgclaw": {
       "enabled": true,
       "base_url": "http://127.0.0.1:18080",
-      "bot_id": "u-manager",
+      "participant_id": "u-manager",
       "access_token": "your_access_token",
       "allow_from": [],
       "group_trigger": {
@@ -45,9 +45,9 @@
       "reasoning_channel_id": ""
     },
     "feishu": {
-      "enabled": true,
-      "app_id": "bot_app_id",
-      "app_secret": "bot_app_secret",
+      "enabled": false,
+      "app_id": "",
+      "app_secret": "",
       "encrypt_key": "",
       "group_trigger": {
         "mention_only": true

@@ -16,6 +16,7 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/participant"
 	"csgclaw/internal/team"
 	"csgclaw/internal/upgrade"
 )
@@ -25,6 +26,7 @@ type Options struct {
 	Service         *agent.Service
 	Hub             *hub.Service
 	Bot             *bot.Service
+	Participant     *participant.Service
 	IM              *im.Service
 	IMBus           *im.Bus
 	BotBridge       *im.BotBridge
@@ -43,6 +45,7 @@ type Options struct {
 
 func newHandler(opts Options) *api.Handler {
 	handler := api.NewHandlerWithBotAndAuth(opts.Service, opts.Bot, opts.IM, opts.IMBus, opts.BotBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
+	handler.SetParticipantService(opts.Participant)
 	handler.SetHubService(opts.Hub)
 	handler.SetTeamService(opts.Team)
 	handler.SetTeamAdapter(opts.TeamAdapter)
@@ -59,7 +62,7 @@ func Run(opts Options) error {
 	}
 	handler := newHandler(opts)
 	router := handler.Routes()
-	router.Handle("/*", uiHandler())
+	router.Handle("/*", uiFallbackHandler())
 
 	httpServer := &http.Server{
 		Addr:              opts.ListenAddr,

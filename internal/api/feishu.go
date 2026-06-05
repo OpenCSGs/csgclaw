@@ -22,6 +22,14 @@ func (h *Handler) handleFeishuBotByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleFeishuEvents(w http.ResponseWriter, r *http.Request, botID string) {
+	h.streamFeishuEvents(w, r, botID, true)
+}
+
+func (h *Handler) handleFeishuParticipantEvents(w http.ResponseWriter, r *http.Request, targetID string) {
+	h.streamFeishuEvents(w, r, targetID, false)
+}
+
+func (h *Handler) streamFeishuEvents(w http.ResponseWriter, r *http.Request, targetID string, resolveBotOpenID bool) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -34,10 +42,14 @@ func (h *Handler) handleFeishuEvents(w http.ResponseWriter, r *http.Request, bot
 		http.Error(w, "feishu events are not configured", http.StatusServiceUnavailable)
 		return
 	}
-	botOpenID, _, err := h.feishu.ResolveBotOpenID(r.Context(), botID)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("resolve feishu bot open_id: %v", err), http.StatusBadRequest)
-		return
+	targetID = strings.TrimSpace(targetID)
+	if resolveBotOpenID {
+		botOpenID, _, err := h.feishu.ResolveBotOpenID(r.Context(), targetID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("resolve feishu bot open_id: %v", err), http.StatusBadRequest)
+			return
+		}
+		targetID = strings.TrimSpace(botOpenID)
 	}
 
 	flusher, ok := w.(http.Flusher)
@@ -72,7 +84,7 @@ func (h *Handler) handleFeishuEvents(w http.ResponseWriter, r *http.Request, bot
 			if !ok {
 				return
 			}
-			if !feishuEventMentions(evt, botOpenID) {
+			if !feishuEventMentions(evt, targetID) {
 				continue
 			}
 			data, err := json.Marshal(evt)

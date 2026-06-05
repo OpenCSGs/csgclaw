@@ -55,7 +55,7 @@ class ManagerActionCardTest(unittest.TestCase):
 
         def fake_ensure_bot(args, state, result):
             raise RuntimeError(
-                'CSGClaw API POST /api/v1/channels/feishu/bots failed: HTTP 400: '
+                'CSGClaw API POST /api/v1/channels/feishu/participants failed: HTTP 400: '
                 'bot name "web-dev" already exists in channel "feishu" with id "u-web-dev"'
             )
 

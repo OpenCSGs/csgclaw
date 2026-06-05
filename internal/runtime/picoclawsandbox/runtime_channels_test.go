@@ -17,9 +17,9 @@ func TestRuntimeSetFeishuProviderUpdatesGatewayCreateSpecEnv(t *testing.T) {
 				"u-dev": {AppID: "old-app", AppSecret: "old-secret"},
 			},
 		},
-		BuildRuntimeEnv: func(_, _, botID, _, _ string, provider feishu.BotCredentialProvider) map[string]string {
-			env := map[string]string{}
-			if app, ok := provider.BotConfig(botID); ok {
+		BuildRuntimeEnv: func(_, _, participantID, agentID, _, _ string, provider feishu.BotCredentialProvider) map[string]string {
+			env := map[string]string{"PARTICIPANT_ID": participantID}
+			if app, ok := provider.BotConfig(agentID); ok {
 				env["APP_ID"] = app.AppID
 				env["APP_SECRET"] = app.AppSecret
 			}
@@ -28,9 +28,10 @@ func TestRuntimeSetFeishuProviderUpdatesGatewayCreateSpecEnv(t *testing.T) {
 		AddProfileEnv: func(envVars map[string]string, profileEnv map[string]string) {},
 	})
 	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
-		RuntimeID: "rt-u-dev",
-		AgentID:   "u-dev",
-		AgentName: "dev",
+		RuntimeID:     "rt-u-dev",
+		AgentID:       "u-dev",
+		ParticipantID: "dev",
+		AgentName:     "dev",
 		Gateway: &agentruntime.GatewayProvision{
 			ModelFallback:     "model-1",
 			Server:            config.ServerConfig{AdvertiseBaseURL: "http://127.0.0.1:18080", AccessToken: "token"},
@@ -58,6 +59,9 @@ func TestRuntimeSetFeishuProviderUpdatesGatewayCreateSpecEnv(t *testing.T) {
 	}
 	if got, want := spec.Env["APP_SECRET"], "new-secret"; got != want {
 		t.Fatalf("APP_SECRET = %q, want %q", got, want)
+	}
+	if got, want := spec.Env["PARTICIPANT_ID"], "dev"; got != want {
+		t.Fatalf("PARTICIPANT_ID = %q, want %q", got, want)
 	}
 }
 

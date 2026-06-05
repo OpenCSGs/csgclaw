@@ -115,10 +115,6 @@ func renderAgentsTable(w io.Writer, agents []apitypes.Agent) error {
 	return tw.Flush()
 }
 
-func renderBotsTable(w io.Writer, bots []apitypes.Bot) error {
-	return command.RenderBotsTable(w, bots)
-}
-
 func displayAgentField(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {

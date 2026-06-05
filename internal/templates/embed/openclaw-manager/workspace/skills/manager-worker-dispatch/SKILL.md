@@ -23,22 +23,22 @@ Do not use this skill for:
 - collecting template `image_env` values
 - creating agents with `--from-template`
 
-For those flows, use `agent-creator`. Never create a new worker with bare `bot create` from dispatch.
+For those flows, use `agent-creator`. Never create a new worker with bare `participant create --bind create` from dispatch.
 
 ## Mandatory Dispatch Order
 
 When a user asks for manager-led coordination (especially GitLab planning, issue queries, breakdown, assignment, or execution handoff), follow this order and do not skip steps:
 
 1. Read this skill first before any domain execution.
-2. Check existing workers first (`bot list`) and prefer reusing a capable available worker.
+2. Check existing workers first (`participant list`) and prefer reusing a capable available worker.
 3. Ensure the selected worker is a member of the target room (add if missing).
 4. If no suitable worker exists or the matching one is `unavailable`:
-   - **New worker needed:** stop dispatch, follow `agent-creator` (hub list → hub get → `bot create --from-template` + `--env`), then use `basics` to add the worker to the room.
+   - **New worker needed:** stop dispatch, follow `agent-creator` (hub list → hub get → `participant create --type agent --bind create --from-template` + `--env`), then use `basics` to add the worker to the room.
    - **Existing worker unavailable:** use `basics` / recreate paths for that bot id only; do not bare-create a replacement.
 5. Dispatch the task to the worker in-room after membership is confirmed.
 
 Do not start with repo/code exploration, web fetch/search, or manager self-execution when the task is delegable to an existing or creatable worker.
-Do not skip `bot list` by assuming worker availability from memory or prior turns.
+Do not skip `participant list` by assuming worker availability from memory or prior turns.
 
 ## Fast Path
 
@@ -60,7 +60,7 @@ Do not inspect or modify project implementation files before dispatch unless you
 ## Workflow
 
 1. Break the admin request into concrete deliverables.
-2. Match each task to the needed capability; use the `basics` skill to inspect existing workers first (`bot list`) and reuse by matching `description`.
+2. Match each task to the needed capability; use the `basics` skill to inspect existing workers first (`participant list`) and reuse by matching `description`.
 3. If a suitable worker does not exist or is `unavailable`, provision via `agent-creator` (new) or recreate the existing bot (unavailable) before dispatch.
 4. Use the `basics` skill to ensure every required worker has joined the target room, then verify the full required worker set.
 5. Dispatch the user task to selected workers in-room after membership checks pass.
@@ -167,7 +167,7 @@ Use the `basics` skill whenever this workflow needs any of these supporting oper
 - add a worker into the room
 - verify room membership before tracking
 
-When a **new** worker is required, use `agent-creator` instead of bare `bot create`. Use `basics` here only for recreate when an existing listed worker is `unavailable`.
+When a **new** worker is required, use `agent-creator` instead of bare `participant create --bind create`. Use `basics` here only for recreate when an existing listed worker is `unavailable`.
 
 ## Tracking Script Usage
 
@@ -214,7 +214,7 @@ If you need to direct the human user to the project files on their Mac, point th
 
 Use this when exactly one worker should act (for example install a registry skill via `skill-installer`, run one GitLab job) and you do **not** need multi-step `todo.json` sequencing.
 
-1. Use the `basics` skill: `bot list`, confirm room membership, then `message create --mention-id <worker-bot-id>`.
+1. Use the `basics` skill: `participant list`, confirm room membership, then `message create --mention-id <worker-bot-id>`.
 2. Do **not** reply in the room with plain `@worker-name` after registry skill discovery or other tools — that does not wake workers under `mention_only`.
 3. Verify with `csgclaw-cli message list` that the dispatch message contains `<at user_id="...">`.
 4. Use `start-tracking` only when multiple workers or ordered handoff is required.

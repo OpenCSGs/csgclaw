@@ -673,7 +673,7 @@ GET    /api/v1/teams/{team_id}/events
 CLI 复用现有 bot 身份环境变量：
 
 ```bash
-PICOCLAW_CHANNELS_CSGCLAW_BOT_ID=bot-alice
+PICOCLAW_CHANNELS_CSGCLAW_PARTICIPANT_ID=bot-alice
 ```
 
 执行任务期间，`team_id` 从 `claim` / `claim-next` / `task list` 的响应或显式 `--team` 参数获取。
@@ -684,7 +684,7 @@ CLI 默认根据 stdout 自动选择输出：
 - stdout 被 pipe 或脚本消费：输出 JSON，方便 agent 和脚本解析；
 - 需要显式覆盖时使用 `--output json|table`。
 
-`--bot` 参数默认读取 `PICOCLAW_CHANNELS_CSGCLAW_BOT_ID`，只有调试或 manager 代操作时才显式传入。
+`--bot` 参数默认读取 `PICOCLAW_CHANNELS_CSGCLAW_PARTICIPANT_ID`，只有调试或 manager 代操作时才显式传入。
 
 ### 10.2 命令集分层
 

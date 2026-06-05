@@ -19,7 +19,7 @@ func TestAccessLogCapturesImplicitOK(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/users?ready=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/users?ready=1", nil)
 	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("User-Agent", "test-agent")
 	rec := httptest.NewRecorder()
@@ -33,7 +33,7 @@ func TestAccessLogCapturesImplicitOK(t *testing.T) {
 	if !strings.Contains(logLine, "method=GET") {
 		t.Fatalf("expected method in log, got %q", logLine)
 	}
-	if !strings.Contains(logLine, "uri=\"/api/v1/users?ready=1\"") {
+	if !strings.Contains(logLine, "uri=\"/api/v1/channels/csgclaw/users?ready=1\"") {
 		t.Fatalf("expected uri in log, got %q", logLine)
 	}
 	if !strings.Contains(logLine, "status=200") {
@@ -52,7 +52,7 @@ func TestAccessLogCapturesExplicitStatus(t *testing.T) {
 	}))
 
 	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/v1/users/u-1", nil))
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/v1/channels/csgclaw/users/u-1", nil))
 
 	logLine := buf.String()
 	if !strings.Contains(logLine, "status=204") {

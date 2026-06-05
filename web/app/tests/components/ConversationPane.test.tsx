@@ -7,6 +7,7 @@ import type { IMConversation, IMUser, ThreadView, TranslateFn } from "@/models/c
 import {
   getCollapsedSelectionTextOffset,
   parseComposerSegments,
+  segmentsToPlainText,
   type ComposerSegment,
 } from "@/models/composer";
 
@@ -252,7 +253,7 @@ describe("ConversationPane", () => {
           conversationMembers={users}
           currentUserID="u-admin"
           draftSegments={draftSegments}
-          draftText={draftSegments.map((segment) => segment.text ?? "").join("")}
+          draftText={segmentsToPlainText(draftSegments)}
           editorRef={editorRef}
           inviteActionLabel="Invite"
           locale="zh"

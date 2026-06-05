@@ -1,13 +1,13 @@
 # CSGClaw IM Threads
 
 本文说明 CSGClaw 本地 IM 的 thread 设计，方便维护者理解 thread 在存储、
-API、bot 兼容层、agent 上下文和 Web UI 中的协作方式。
+API、participant bridge、agent 上下文和 Web UI 中的协作方式。
 
 ## 摘要
 
 CSGClaw 在现有 IM API 内增量采用 Matrix 形状的 thread 模型，但当前不实现
 完整 Matrix Client-Server 协议。这样可以复用 Matrix `m.thread` 关系语义，
-同时保留 CSGClaw 现有的 room、user、bot、auth 和本地状态模型。
+同时保留 CSGClaw 现有的 room、user、participant、auth 和本地状态模型。
 
 一个 thread 是 room 或 DM 内的子会话。它从一条已有顶层消息开启，这条消息
 称为 root message。规范 thread ID 就是 root message ID。
@@ -127,16 +127,16 @@ Thread-aware 客户端应把 `thread.created` 和 `thread.updated` 应用到 roo
 message summary 和 thread 列表；处理 `message.created` 时，只有非 thread
 reply 才进入主时间线。
 
-## Bot 兼容与 PicoClaw
+## Participant bridge 与 PicoClaw
 
-Bot 兼容 API 是 PicoClaw 风格集成和 Codex bridge 使用的消息桥：
+Participant API 是 PicoClaw 风格集成和 Codex bridge 使用的消息桥：
 
 ```text
-GET  /api/bots/{id}/events
-POST /api/bots/{id}/messages/send
+GET  /api/v1/channels/csgclaw/participants/{id}/events
+POST /api/v1/channels/csgclaw/participants/{id}/messages
 ```
 
-Thread-aware bot event 可能包含：
+Thread-aware participant event 可能包含：
 
 - `thread_root_id`：事件位于 thread 内时的 root message ID。
 - `thread_context`：该 thread root 的隐藏上下文快照和 summary。
@@ -145,11 +145,11 @@ Thread-aware bot event 可能包含：
 
 `thread_context` 是 prompt context，不是可见 thread 历史。
 
-Bot send 可以传入 CSGClaw 字段（`room_id`、`text`、`thread_root_id`），
+Participant send 可以传入 CSGClaw 字段（`room_id`、`text`、`thread_root_id`），
 也可以传入 PicoClaw outbound 字段（`chat_id`、`content`、
 `context.topic_id`）。存在 thread root/topic 时，消息会作为该 thread 内的
-reply 发送。如果 bot send 同时省略 `thread_root_id`、`topic_id` 和
-`context.topic_id`，CSGClaw 会按 room/DM 顶层消息处理，不会根据该 bot 在
+reply 发送。如果 participant send 同时省略 `thread_root_id`、`topic_id` 和
+`context.topic_id`，CSGClaw 会按 room/DM 顶层消息处理，不会根据该 participant 在
 房间中最近收到的事件推断 thread。
 
 这对应 PicoClaw/topic 隔离需求：runtime 应把 `room_id` 视为普通会话 key，

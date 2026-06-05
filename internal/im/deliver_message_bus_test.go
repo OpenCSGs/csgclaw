@@ -10,13 +10,13 @@ func TestDeliverMessagePublishesMessageCreatedEvent(t *testing.T) {
 	svc := NewServiceFromBootstrapWithBus(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"},
 			{ID: "u-p-w-0604", Name: "worker", Handle: "p-w-0604", Role: "worker"},
 		},
 		Rooms: []Room{{
 			ID:      "room-1",
 			Title:   "task room",
-			Members: []string{"u-manager", "u-p-w-0604"},
+			Members: []string{"manager", "u-p-w-0604"},
 		}},
 	}, bus)
 
@@ -25,7 +25,7 @@ func TestDeliverMessagePublishesMessageCreatedEvent(t *testing.T) {
 
 	_, err := svc.DeliverMessage(DeliverMessageRequest{
 		RoomID:    "room-1",
-		SenderID:  "u-manager",
+		SenderID:  "manager",
 		MentionID: "u-p-w-0604",
 		Content:   "[team] Task task-17 is ready for you",
 	})

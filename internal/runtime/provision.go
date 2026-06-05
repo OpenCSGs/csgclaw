@@ -26,6 +26,7 @@ type Provisioner interface {
 type ProvisionRequest struct {
 	RuntimeID        string
 	AgentID          string
+	ParticipantID    string
 	AgentName        string
 	Profile          Profile
 	WorkspaceOverlay string

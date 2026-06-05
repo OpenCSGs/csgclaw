@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -73,7 +74,7 @@ func (c *HTTPClient) StreamEvents(ctx context.Context, botID, lastEventID string
 		defer close(events)
 		defer close(errs)
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.BaseURL, "/")+"/api/bots/"+strings.TrimSpace(botID)+"/events", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.participantBridgeURL(botID, "/events"), nil)
 		if err != nil {
 			errs <- err
 			return
@@ -117,7 +118,7 @@ func (c *HTTPClient) SendMessage(ctx context.Context, botID string, req SendMess
 	if err != nil {
 		return SendMessageResponse{}, fmt.Errorf("marshal send message request: %w", err)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/api/bots/"+strings.TrimSpace(botID)+"/messages/send", bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.participantBridgeURL(botID, "/messages"), bytes.NewReader(payload))
 	if err != nil {
 		return SendMessageResponse{}, err
 	}
@@ -140,6 +141,14 @@ func (c *HTTPClient) SendMessage(ctx context.Context, botID string, req SendMess
 		return SendMessageResponse{}, fmt.Errorf("decode send message response: %w", err)
 	}
 	return sendResp, nil
+}
+
+func (c *HTTPClient) participantBridgeURL(participantID, suffix string) string {
+	baseURL := ""
+	if c != nil {
+		baseURL = c.BaseURL
+	}
+	return strings.TrimRight(baseURL, "/") + "/api/v1/channels/csgclaw/participants/" + url.PathEscape(strings.TrimSpace(participantID)) + suffix
 }
 
 func (c *HTTPClient) httpClient() *http.Client {

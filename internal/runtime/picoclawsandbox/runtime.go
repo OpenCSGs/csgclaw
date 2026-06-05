@@ -71,7 +71,11 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 	if agentHome == "" {
 		return fmt.Errorf("gateway agent home is required")
 	}
-	if _, err := EnsureConfig(agentHome, req.AgentID, gateway.Server, configModelFromProfile(profile), fixedBaseURL(gateway.ManagerBaseURL)); err != nil {
+	participantID := strings.TrimSpace(req.ParticipantID)
+	if participantID == "" {
+		participantID = strings.TrimSpace(req.AgentID)
+	}
+	if _, err := EnsureConfig(agentHome, participantID, req.AgentID, gateway.Server, configModelFromProfile(profile), fixedBaseURL(gateway.ManagerBaseURL)); err != nil {
 		return err
 	}
 	workspaceRoot := r.WorkspaceRoot(agentHome)

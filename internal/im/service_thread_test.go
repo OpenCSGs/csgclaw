@@ -98,7 +98,7 @@ func TestCreateThreadReplyHidesFromMainTimelineAndUpdatesSummary(t *testing.T) {
 
 	reply, err := svc.CreateMessage(CreateMessageRequest{
 		RoomID:   "room-1",
-		SenderID: "u-manager",
+		SenderID: "manager",
 		Content:  "reply inside thread",
 		RelatesTo: &MessageRelation{
 			RelType: RelationTypeThread,
@@ -181,7 +181,7 @@ func TestStartThreadRejectsMissingAndNestedRoots(t *testing.T) {
 	}
 	reply, err := svc.CreateMessage(CreateMessageRequest{
 		RoomID:   "room-1",
-		SenderID: "u-manager",
+		SenderID: "manager",
 		Content:  "nested candidate",
 		RelatesTo: &MessageRelation{
 			RelType: RelationTypeThread,
@@ -211,7 +211,7 @@ func TestThreadStatePersistsAcrossReload(t *testing.T) {
 	}
 	if _, err := svc.CreateMessage(CreateMessageRequest{
 		RoomID:   "room-1",
-		SenderID: "u-manager",
+		SenderID: "manager",
 		Content:  "persisted reply",
 		RelatesTo: &MessageRelation{
 			RelType: RelationTypeThread,
@@ -320,10 +320,10 @@ func threadTestBootstrap() Bootstrap {
 		CurrentUserID: "u-admin",
 		Users: []User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []Room{
-			{ID: "room-1", Title: "Room One", Members: []string{"u-admin", "u-manager"}, Messages: messages},
+			{ID: "room-1", Title: "Room One", Members: []string{"u-admin", "manager"}, Messages: messages},
 		},
 	}
 }

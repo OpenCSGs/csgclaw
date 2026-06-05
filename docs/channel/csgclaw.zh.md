@@ -54,15 +54,15 @@ Content-Type: application/json
 - 不要返回或记录敏感凭证（如 `app_secret`、API key、token）。
 - 若敏感值出现在日志中，应使用掩码形式（例如 `present`）。
 
-## Notification bot（通知机器人）
+## Notification participant（通知参与者）
 
-通知机器人是 `type=notification` 的 channel bot，不创建 backing worker agent；投递配置保存在 `bots.json` 的 `bot.runtime_options` 中。默认 bot id 为 `n-{name}`（与 worker agent 的 `u-{name}` 区分）；创建时也可显式指定 `id`，但不得与已有 agent 或其它 channel bot 冲突。
+通知发送者是 `type=notification` 的 CSGClaw participant，不创建 backing worker agent；投递配置保存在 participant `metadata` 中。默认 participant id 为 `n-{name}`（与 worker agent 的 `u-{name}` 区分）；创建时也可显式指定 `id`，但不得与同 channel 下已有 participant 冲突。
 
-- 列表：`GET /api/v1/channels/csgclaw/bots`（含 `type=notification`；feishu channel 列表不包含通知 bot）
-- 创建：`POST /api/v1/channels/csgclaw/bots`，请求体含 `"type":"notification"` 与扁平 `runtime_options`
-- 更新：`PATCH /api/v1/channels/csgclaw/bots/{id}`
-- 删除：`DELETE /api/v1/channels/csgclaw/bots/{id}`
-- 推送（webhook）：`POST /api/v1/channels/csgclaw/bots/{id}/notifications`，请求头 `Authorization: Bearer <webhook_token>`
+- 列表：`GET /api/v1/channels/csgclaw/participants?type=notification`
+- 创建：`POST /api/v1/channels/csgclaw/participants`，请求体含 `"type":"notification"` 与 `metadata`
+- 更新：`PATCH /api/v1/channels/csgclaw/participants/{id}`
+- 删除：`DELETE /api/v1/channels/csgclaw/participants/{id}`
+- 推送（webhook）：`POST /api/v1/channels/csgclaw/participants/{id}/notifications`，请求头 `Authorization: Bearer <webhook_token>`
 
 实现：`internal/channel/csgclaw/notification_bot/`、`internal/bot/notification.go`。
 

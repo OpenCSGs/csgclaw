@@ -16,9 +16,9 @@ func TestNewServiceWithNilIMReturnsNil(t *testing.T) {
 
 func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
-		CurrentUserID: "u-manager",
+		CurrentUserID: "manager",
 		Users: []im.User{
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"},
 			{ID: "u-alice", Name: "alice", Handle: "alice", Role: "worker"},
 			{ID: "u-bob", Name: "bob", Handle: "bob", Role: "worker"},
 		},
@@ -27,7 +27,7 @@ func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
 
 	room, err := svc.CreateRoom(apitypes.CreateRoomRequest{
 		Title:     "Ops",
-		CreatorID: " u-manager ",
+		CreatorID: " manager ",
 		MemberIDs: []string{
 			" u-alice ",
 		},
@@ -35,11 +35,11 @@ func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRoom() error = %v", err)
 	}
-	assertMembers(t, room.Members, "u-manager", "u-alice")
+	assertMembers(t, room.Members, "manager", "u-alice")
 
 	room, err = svc.AddRoomMembers(apitypes.AddRoomMembersRequest{
 		RoomID:    room.ID,
-		InviterID: " u-manager ",
+		InviterID: " manager ",
 		UserIDs: []string{
 			" u-bob ",
 		},
@@ -47,19 +47,19 @@ func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddRoomMembers() error = %v", err)
 	}
-	assertMembers(t, room.Members, "u-manager", "u-alice", "u-bob")
+	assertMembers(t, room.Members, "manager", "u-alice", "u-bob")
 
 	message, err := svc.SendMessage(apitypes.CreateMessageRequest{
 		RoomID:    room.ID,
-		SenderID:  " u-manager ",
+		SenderID:  " manager ",
 		MentionID: " u-alice ",
 		Content:   "hello",
 	})
 	if err != nil {
 		t.Fatalf("SendMessage() error = %v", err)
 	}
-	if message.SenderID != "u-manager" {
-		t.Fatalf("SenderID = %q, want %q", message.SenderID, "u-manager")
+	if message.SenderID != "manager" {
+		t.Fatalf("SenderID = %q, want %q", message.SenderID, "manager")
 	}
 	if !strings.Contains(message.Content, "u-alice") {
 		t.Fatalf("Content = %q, want mention tag for u-alice", message.Content)
@@ -91,18 +91,18 @@ func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
 
 func TestServiceNormalizesCanonicalSlashCommand(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
-		CurrentUserID: "u-manager",
+		CurrentUserID: "manager",
 		Users: []im.User{
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"},
 			{ID: "u-alice", Name: "alice", Handle: "alice", Role: "worker"},
 		},
-		Rooms: []im.Room{{ID: "room-1", Title: "Direct", Members: []string{"u-manager", "u-alice"}}},
+		Rooms: []im.Room{{ID: "room-1", Title: "Direct", Members: []string{"manager", "u-alice"}}},
 	})
 	svc := NewService(imSvc)
 
 	message, err := svc.SendMessage(apitypes.CreateMessageRequest{
 		RoomID:   "room-1",
-		SenderID: "u-manager",
+		SenderID: "manager",
 		Content:  ` <slash-command arg="skill-creator" name="use-skill"/> create one `,
 	})
 	if err != nil {
@@ -116,15 +116,15 @@ func TestServiceNormalizesCanonicalSlashCommand(t *testing.T) {
 
 func TestServiceKeepsLegacySlashTextAsPlainContent(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
-		CurrentUserID: "u-manager",
-		Users:         []im.User{{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"}},
-		Rooms:         []im.Room{{ID: "room-1", Title: "Direct", Members: []string{"u-manager"}}},
+		CurrentUserID: "manager",
+		Users:         []im.User{{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"}},
+		Rooms:         []im.Room{{ID: "room-1", Title: "Direct", Members: []string{"manager"}}},
 	})
 	svc := NewService(imSvc)
 
 	message, err := svc.SendMessage(apitypes.CreateMessageRequest{
 		RoomID:   "room-1",
-		SenderID: "u-manager",
+		SenderID: "manager",
 		Content:  `/skill-creator create one`,
 	})
 	if err != nil {

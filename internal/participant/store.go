@@ -1,0 +1,419 @@
+package participant
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"time"
+
+	"csgclaw/internal/agent"
+	"csgclaw/internal/apitypes"
+)
+
+type Store struct {
+	mu    sync.RWMutex
+	path  string
+	items map[string]apitypes.Participant
+}
+
+type persistedState struct {
+	Participants []apitypes.Participant `json:"participants"`
+}
+
+type legacyBotState struct {
+	Bots []apitypes.Bot `json:"bots"`
+}
+
+func NewStore(path string) (*Store, error) {
+	s := &Store{
+		path:  path,
+		items: make(map[string]apitypes.Participant),
+	}
+	if err := s.load(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func NewMemoryStore(items []apitypes.Participant) *Store {
+	s := &Store{items: make(map[string]apitypes.Participant)}
+	for _, item := range items {
+		item = normalizeStoredParticipant(item)
+		if item.Channel == "" || item.ID == "" {
+			continue
+		}
+		s.items[storeKey(item.Channel, item.ID)] = item
+	}
+	return s
+}
+
+func (s *Store) List(opts ListOptions) []apitypes.Participant {
+	if s == nil {
+		return nil
+	}
+	channel := strings.TrimSpace(opts.Channel)
+	typ := strings.TrimSpace(opts.Type)
+	agentID := strings.TrimSpace(opts.AgentID)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	out := make([]apitypes.Participant, 0, len(s.items))
+	for _, item := range s.items {
+		if channel != "" && item.Channel != channel {
+			continue
+		}
+		if typ != "" && item.Type != typ {
+			continue
+		}
+		if agentID != "" && item.AgentID != agentID {
+			continue
+		}
+		out = append(out, cloneParticipant(item))
+	}
+	sortParticipants(out)
+	return out
+}
+
+func (s *Store) Get(channel, id string) (apitypes.Participant, bool) {
+	if s == nil {
+		return apitypes.Participant{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.items[storeKey(channel, id)]
+	if !ok {
+		return apitypes.Participant{}, false
+	}
+	return cloneParticipant(item), true
+}
+
+func (s *Store) Save(item apitypes.Participant) error {
+	if s == nil {
+		return fmt.Errorf("participant store is required")
+	}
+	item = normalizeStoredParticipant(item)
+	if item.Channel == "" {
+		return fmt.Errorf("channel is required")
+	}
+	if item.ID == "" {
+		return fmt.Errorf("id is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.items[storeKey(item.Channel, item.ID)] = item
+	return s.saveLocked()
+}
+
+func (s *Store) Delete(channel, id string) (apitypes.Participant, bool, error) {
+	if s == nil {
+		return apitypes.Participant{}, false, fmt.Errorf("participant store is required")
+	}
+	channel = strings.TrimSpace(channel)
+	id = strings.TrimSpace(id)
+	if channel == "" || id == "" {
+		return apitypes.Participant{}, false, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := storeKey(channel, id)
+	item, ok := s.items[key]
+	if !ok {
+		return apitypes.Participant{}, false, nil
+	}
+	delete(s.items, key)
+	if err := s.saveLocked(); err != nil {
+		s.items[key] = item
+		return apitypes.Participant{}, false, err
+	}
+	return cloneParticipant(item), true, nil
+}
+
+func (s *Store) load() error {
+	items, err := s.readState()
+	if err != nil {
+		return err
+	}
+	legacyPath, legacyExists, err := mergeLegacyBotState(s.path, items)
+	if err != nil {
+		return err
+	}
+	s.items = items
+	if legacyExists {
+		if err := s.saveLocked(); err != nil {
+			return fmt.Errorf("write migrated participant state: %w", err)
+		}
+		if err := os.Remove(legacyPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("delete legacy bot state after participant migration: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) readState() (map[string]apitypes.Participant, error) {
+	items := make(map[string]apitypes.Participant)
+	if s.path == "" {
+		return items, nil
+	}
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return items, nil
+		}
+		return nil, fmt.Errorf("read participant state: %w", err)
+	}
+	var state persistedState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("decode participant state: %w", err)
+	}
+	for _, item := range state.Participants {
+		item = normalizeStoredParticipant(item)
+		if item.Channel == "" || item.ID == "" {
+			return nil, fmt.Errorf("decode participant state: channel and id are required")
+		}
+		items[storeKey(item.Channel, item.ID)] = item
+	}
+	return items, nil
+}
+
+func (s *Store) saveLocked() error {
+	if s.path == "" {
+		return nil
+	}
+	items := make([]apitypes.Participant, 0, len(s.items))
+	for _, item := range s.items {
+		items = append(items, cloneParticipant(item))
+	}
+	sortParticipants(items)
+	data, err := json.MarshalIndent(persistedState{Participants: items}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode participant state: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+		return fmt.Errorf("create participant state dir: %w", err)
+	}
+	if err := os.WriteFile(s.path, append(data, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write participant state: %w", err)
+	}
+	return nil
+}
+
+func normalizeStoredParticipant(item apitypes.Participant) apitypes.Participant {
+	item.ID = strings.TrimSpace(item.ID)
+	item.Channel = strings.TrimSpace(item.Channel)
+	item.Type = strings.TrimSpace(item.Type)
+	item.Name = strings.TrimSpace(item.Name)
+	item.ChannelUserRef = strings.TrimSpace(item.ChannelUserRef)
+	item.ChannelUserKind = strings.TrimSpace(item.ChannelUserKind)
+	item.ChannelAppRef = strings.TrimSpace(item.ChannelAppRef)
+	item.AgentID = strings.TrimSpace(item.AgentID)
+	item.LifecycleStatus = strings.TrimSpace(item.LifecycleStatus)
+	item.Presence = strings.TrimSpace(item.Presence)
+	return item
+}
+
+func sortParticipants(items []apitypes.Participant) {
+	slices.SortFunc(items, func(a, b apitypes.Participant) int {
+		if a.CreatedAt.Equal(b.CreatedAt) {
+			if a.Channel != b.Channel {
+				if a.Channel < b.Channel {
+					return -1
+				}
+				return 1
+			}
+			if a.ID < b.ID {
+				return -1
+			}
+			if a.ID > b.ID {
+				return 1
+			}
+			return 0
+		}
+		if a.CreatedAt.Before(b.CreatedAt) {
+			return -1
+		}
+		return 1
+	})
+}
+
+func cloneParticipant(item apitypes.Participant) apitypes.Participant {
+	if item.Metadata != nil {
+		cloned := make(map[string]any, len(item.Metadata))
+		for key, value := range item.Metadata {
+			cloned[key] = value
+		}
+		item.Metadata = cloned
+	}
+	return item
+}
+
+func storeKey(channel, id string) string {
+	return strings.TrimSpace(channel) + "\x00" + strings.TrimSpace(id)
+}
+
+func mergeLegacyBotState(participantPath string, items map[string]apitypes.Participant) (string, bool, error) {
+	if strings.TrimSpace(participantPath) == "" {
+		return "", false, nil
+	}
+	legacyPath := filepath.Join(filepath.Dir(participantPath), "bots.json")
+	data, err := os.ReadFile(legacyPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return legacyPath, true, fmt.Errorf("read legacy bot state: %w", err)
+	}
+
+	var state legacyBotState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return legacyPath, true, fmt.Errorf("decode legacy bot state: %w", err)
+	}
+	now := time.Now().UTC()
+	for _, b := range state.Bots {
+		item, err := participantFromLegacyBot(b, now)
+		if err != nil {
+			return legacyPath, true, fmt.Errorf("decode legacy bot state: %w", err)
+		}
+		key := storeKey(item.Channel, item.ID)
+		if _, exists := items[key]; exists {
+			continue
+		}
+		items[key] = item
+	}
+	return legacyPath, true, nil
+}
+
+func participantFromLegacyBot(b apitypes.Bot, now time.Time) (apitypes.Participant, error) {
+	legacyID := strings.TrimSpace(b.ID)
+	if legacyID == "" {
+		return apitypes.Participant{}, fmt.Errorf("id is required")
+	}
+	channel := normalizeChannel(b.Channel)
+	if channel == "" {
+		return apitypes.Participant{}, fmt.Errorf("channel must be one of %q or %q", ChannelCSGClaw, ChannelFeishu)
+	}
+	typ := TypeAgent
+	if strings.EqualFold(strings.TrimSpace(b.Type), TypeNotification) {
+		typ = TypeNotification
+	}
+	name := strings.TrimSpace(b.Name)
+	if name == "" {
+		name = legacyID
+	}
+	channelUserRef := strings.TrimSpace(b.UserID)
+	if channelUserRef == "" {
+		channelUserRef = strings.TrimSpace(b.AgentID)
+	}
+	if channelUserRef == "" {
+		channelUserRef = legacyID
+	}
+	channelUserKind := ChannelUserKindLocalUserID
+	if channel == ChannelFeishu {
+		channelUserKind = ChannelUserKindOpenID
+	}
+	agentID := strings.TrimSpace(b.AgentID)
+	if typ == TypeAgent && agentID == "" && strings.HasPrefix(legacyID, "u-") {
+		agentID = legacyID
+	}
+	if typ == TypeNotification {
+		agentID = ""
+	}
+	id := legacyID
+	if isLegacyCSGClawManagerBot(b, typ, channel, agentID) {
+		id = agent.ManagerParticipantID
+		channelUserRef = agent.ManagerParticipantID
+		if agentID == "" {
+			agentID = agent.ManagerUserID
+		}
+	}
+	createdAt := b.CreatedAt.UTC()
+	if createdAt.IsZero() {
+		createdAt = now
+	}
+
+	return apitypes.Participant{
+		ID:              id,
+		Channel:         channel,
+		Type:            typ,
+		Name:            name,
+		Avatar:          strings.TrimSpace(b.Avatar),
+		ChannelUserRef:  channelUserRef,
+		ChannelUserKind: channelUserKind,
+		AgentID:         agentID,
+		LifecycleStatus: LifecycleStatusActive,
+		Mentionable:     true,
+		Metadata:        legacyBotMetadata(b),
+		CreatedAt:       createdAt,
+		UpdatedAt:       createdAt,
+	}, nil
+}
+
+func isLegacyCSGClawManagerBot(b apitypes.Bot, typ, channel, agentID string) bool {
+	if channel != ChannelCSGClaw || typ != TypeAgent {
+		return false
+	}
+	if strings.TrimSpace(agentID) == agent.ManagerUserID {
+		return true
+	}
+	if strings.TrimSpace(b.ID) == agent.ManagerUserID {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(b.Role), agent.RoleManager)
+}
+
+func legacyBotMetadata(b apitypes.Bot) map[string]any {
+	metadata := cloneAnyMap(b.RuntimeOptions)
+	putMetadataString(metadata, "description", b.Description)
+	putMetadataString(metadata, "legacy_bot_type", b.Type)
+	putMetadataString(metadata, "legacy_role", b.Role)
+	putMetadataString(metadata, "legacy_runtime_kind", b.RuntimeKind)
+	putMetadataString(metadata, "legacy_image", b.Image)
+	putMetadataString(metadata, "legacy_status", b.Status)
+	putMetadataString(metadata, "legacy_provider", b.Provider)
+	putMetadataString(metadata, "legacy_model_id", b.ModelID)
+	if strings.TrimSpace(b.AgentID) != "" && strings.EqualFold(strings.TrimSpace(b.Type), TypeNotification) {
+		putMetadataString(metadata, "legacy_agent_id", b.AgentID)
+	}
+	metadata["legacy_available"] = b.Available
+	if b.ProfileComplete {
+		metadata["legacy_profile_complete"] = true
+	}
+	if b.EnvRestartRequired {
+		metadata["legacy_env_restart_required"] = true
+	}
+	if b.ImageUpgradeRequired {
+		metadata["legacy_image_upgrade_required"] = true
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
+}
+
+func cloneAnyMap(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return map[string]any{}
+	}
+	dst := make(map[string]any, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
+}
+
+func putMetadataString(metadata map[string]any, key, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	if _, exists := metadata[key]; exists {
+		return
+	}
+	metadata[key] = value
+}

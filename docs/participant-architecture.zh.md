@@ -80,6 +80,7 @@ Agent
 
 - Agent ID 全局唯一。
 - 新建 agent-backed participant 时，如果请求未显式指定 Agent ID，服务端按 `u-{participant_id}` 生成 Agent ID。这个关系保持旧 worker/bot ID 的习惯，例如 participant `qa` 对应 agent `u-qa`。
+- Bootstrap manager 是保留例外：默认 CSGClaw participant ID 为 `manager`，Agent ID 仍为 `u-manager`。
 - 如果调用方显式指定 Agent ID，仍必须满足全局唯一，并且不要求和 participant ID 相同；跨 channel 复用时通常显式传已有 `agent_id`。
 - Agent 生命周期操作继续放在 `/api/v1/agents`。
 - Agent profile、model、runtime、日志、start、stop、restart、recreate 仍由 agent service 管理。
@@ -671,7 +672,7 @@ CLI 字段改名应和 API 一致：
 
 - 新增 participant request/response types。
 - 新增 participant storage，规范 key 为 `(channel, id)`。
-- 新增 Participant ID 生成器：从显式 `id` 或稳定 key 生成可读 slug，冲突时追加短随机后缀；不要从可修改的 `name` 派生 ID；新建 agent-backed participant 的默认 Agent ID 保持 `u-{participant_id}`。
+- 新增 Participant ID 生成器：从显式 `id` 或稳定 key 生成可读 slug，冲突时追加短随机后缀；不要从可修改的 `name` 派生 ID；新建 agent-backed participant 的默认 Agent ID 保持 `u-{participant_id}`，但 bootstrap manager 例外，participant 为 `manager`、Agent 为 `u-manager`。
 - 用 participant API 替换公开 `User` API。只有 CSGClaw 和外部 channel adapter 需要时，才保留内部 channel identity/profile store。
 - 新增 participant service，支持 list、get、create、patch、delete 和 agent binding。
 - 注册 `/api/v1/channels/{channel}/participants`。

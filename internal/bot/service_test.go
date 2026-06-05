@@ -915,7 +915,7 @@ func TestServiceDeleteKeepsBotRecordWhenChannelUserDeletionFails(t *testing.T) {
 			Role:      string(RoleManager),
 			Channel:   string(ChannelCSGClaw),
 			AgentID:   "u-manager",
-			UserID:    "u-manager",
+			UserID:    agent.ManagerParticipantID,
 			CreatedAt: time.Date(2026, 4, 12, 10, 0, 0, 0, time.UTC),
 		},
 	})
@@ -923,9 +923,9 @@ func TestServiceDeleteKeepsBotRecordWhenChannelUserDeletionFails(t *testing.T) {
 		t.Fatalf("NewMemoryStore() error = %v", err)
 	}
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
-		CurrentUserID: "u-manager",
+		CurrentUserID: agent.ManagerParticipantID,
 		Users: []im.User{
-			{ID: "u-manager", Name: "manager", Handle: "manager", IsOnline: true},
+			{ID: agent.ManagerParticipantID, Name: "manager", Handle: "manager", IsOnline: true},
 		},
 	})
 	svc, err := NewServiceWithDependencies(store, nil, imSvc)
@@ -1412,14 +1412,14 @@ func TestServiceCreateCSGClawManagerBindsBootstrappedAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create(manager) error = %v", err)
 	}
-	if got.ID != agent.ManagerUserID || got.AgentID != agent.ManagerUserID || got.UserID != agent.ManagerUserID {
-		t.Fatalf("Create(manager) = %+v, want u-manager IDs", got)
+	if got.ID != agent.ManagerUserID || got.AgentID != agent.ManagerUserID || got.UserID != agent.ManagerParticipantID {
+		t.Fatalf("Create(manager) = %+v, want agent %q and channel user %q", got, agent.ManagerUserID, agent.ManagerParticipantID)
 	}
 	if got.Role != string(RoleManager) || got.Channel != string(ChannelCSGClaw) {
 		t.Fatalf("Create(manager) = %+v, want manager csgclaw", got)
 	}
-	if !containsUser(imSvc.ListUsers(), agent.ManagerUserID) {
-		t.Fatalf("users = %+v, want u-manager", imSvc.ListUsers())
+	if !containsUser(imSvc.ListUsers(), agent.ManagerParticipantID) {
+		t.Fatalf("users = %+v, want %s", imSvc.ListUsers(), agent.ManagerParticipantID)
 	}
 }
 
@@ -1500,11 +1500,11 @@ func TestServiceCreateCSGClawManagerReusesExistingBotAndRestoresMissingUser(t *t
 	}); err != nil {
 		t.Fatalf("first Create(manager) error = %v", err)
 	}
-	if err := imSvc.DeleteUser(agent.ManagerUserID); err != nil {
+	if err := imSvc.DeleteUser(agent.ManagerParticipantID); err != nil {
 		t.Fatalf("DeleteUser(manager) error = %v", err)
 	}
-	if containsUser(imSvc.ListUsers(), agent.ManagerUserID) {
-		t.Fatalf("users = %+v, want u-manager removed before second create", imSvc.ListUsers())
+	if containsUser(imSvc.ListUsers(), agent.ManagerParticipantID) {
+		t.Fatalf("users = %+v, want %s removed before second create", imSvc.ListUsers(), agent.ManagerParticipantID)
 	}
 
 	got, err := svc.Create(context.Background(), CreateRequest{
@@ -1516,11 +1516,11 @@ func TestServiceCreateCSGClawManagerReusesExistingBotAndRestoresMissingUser(t *t
 	if err != nil {
 		t.Fatalf("second Create(manager) error = %v", err)
 	}
-	if got.ID != agent.ManagerUserID || got.UserID != agent.ManagerUserID {
-		t.Fatalf("second Create(manager) = %+v, want u-manager", got)
+	if got.ID != agent.ManagerUserID || got.UserID != agent.ManagerParticipantID {
+		t.Fatalf("second Create(manager) = %+v, want agent %q and channel user %q", got, agent.ManagerUserID, agent.ManagerParticipantID)
 	}
-	if !containsUser(imSvc.ListUsers(), agent.ManagerUserID) {
-		t.Fatalf("users = %+v, want u-manager restored", imSvc.ListUsers())
+	if !containsUser(imSvc.ListUsers(), agent.ManagerParticipantID) {
+		t.Fatalf("users = %+v, want %s restored", imSvc.ListUsers(), agent.ManagerParticipantID)
 	}
 }
 
@@ -1632,8 +1632,8 @@ func TestServiceCreateManagerBootstrapsMissingAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create(manager) error = %v", err)
 	}
-	if got.ID != agent.ManagerUserID || got.AgentID != agent.ManagerUserID || got.UserID != agent.ManagerUserID {
-		t.Fatalf("Create(manager) = %+v, want u-manager IDs", got)
+	if got.ID != agent.ManagerUserID || got.AgentID != agent.ManagerUserID || got.UserID != agent.ManagerParticipantID {
+		t.Fatalf("Create(manager) = %+v, want agent %q and channel user %q", got, agent.ManagerUserID, agent.ManagerParticipantID)
 	}
 	if _, ok := agentSvc.Agent(agent.ManagerUserID); !ok {
 		t.Fatal("manager agent was not bootstrapped")

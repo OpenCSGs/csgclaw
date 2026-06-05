@@ -13,7 +13,7 @@ const labels: Record<string, string> = {
 const t: TranslateFn = (key) => labels[key] ?? key;
 
 describe("WorkspaceTabBar", () => {
-  it("does not expose the tasks shortcut in the sidebar rail", () => {
+  it("exposes the tasks shortcut in the sidebar rail", () => {
     render(
       <WorkspaceTabBar
         variant="rail"
@@ -30,7 +30,7 @@ describe("WorkspaceTabBar", () => {
 
     expect(within(tablist).getByRole("tab", { name: "Messages" })).toBeInTheDocument();
     expect(within(tablist).getByRole("tab", { name: "Agents" })).toBeInTheDocument();
+    expect(within(tablist).getByRole("tab", { name: "Tasks" })).toBeInTheDocument();
     expect(within(tablist).getByRole("tab", { name: "Hub" })).toBeInTheDocument();
-    expect(within(tablist).queryByRole("tab", { name: "Tasks" })).not.toBeInTheDocument();
   });
 });

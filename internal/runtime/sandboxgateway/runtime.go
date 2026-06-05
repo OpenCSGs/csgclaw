@@ -52,7 +52,7 @@ type Dependencies struct {
 
 	ResolveAgent       func(h agentruntime.Handle) (AgentRef, error)
 	SyncHandle         func(h agentruntime.Handle) error
-	BuildRuntimeEnv    func(baseURL, accessToken, botID, llmBaseURL, modelID string, feishuProvider feishu.BotCredentialProvider) map[string]string
+	BuildRuntimeEnv    func(baseURL, accessToken, participantID, agentID, llmBaseURL, modelID string, feishuProvider feishu.BotCredentialProvider) map[string]string
 	AddProfileEnv      func(envVars map[string]string, profileEnv map[string]string)
 	HomeEnv            string
 	MountGuestPath     string
@@ -339,13 +339,21 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 	if err != nil {
 		return sandbox.CreateSpec{}, err
 	}
+	agentID := strings.TrimSpace(prepared.AgentID)
+	if agentID == "" {
+		agentID = strings.TrimSpace(botID)
+	}
+	participantID := strings.TrimSpace(prepared.ParticipantID)
+	if participantID == "" {
+		participantID = agentID
+	}
 	modelID := prepared.ModelID
 	managerBaseURL := strings.TrimRight(strings.TrimSpace(prepared.ManagerBaseURL), "/")
-	llmBaseURL := llmBridgeBaseURL(managerBaseURL, botID)
+	llmBaseURL := llmBridgeBaseURL(managerBaseURL, agentID)
 	profile = prepared.Profile
 	workspaceLayout := prepared.WorkspaceLayout
 	projectsRoot := prepared.ProjectsRoot
-	envVars := r.deps.BuildRuntimeEnv(managerBaseURL, prepared.Server.AccessToken, botID, llmBaseURL, modelID, r.CurrentFeishuProvider())
+	envVars := r.deps.BuildRuntimeEnv(managerBaseURL, prepared.Server.AccessToken, participantID, agentID, llmBaseURL, modelID, r.CurrentFeishuProvider())
 	r.deps.AddProfileEnv(envVars, profile.Env)
 	homeEnv := r.homeEnv()
 	projectsGuestPath := r.projectsGuestPath()
@@ -391,6 +399,8 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 }
 
 type PreparedGatewayProvision struct {
+	AgentID         string
+	ParticipantID   string
 	ModelID         string
 	Profile         agentruntime.Profile
 	WorkspaceLayout WorkspaceLayout
@@ -401,8 +411,13 @@ type PreparedGatewayProvision struct {
 
 func FinalizePreparedGatewayProvision(req agentruntime.ProvisionRequest, workspaceLayout WorkspaceLayout) (PreparedGatewayProvision, error) {
 	name := strings.TrimSpace(req.AgentName)
-	if name == "" || strings.TrimSpace(req.AgentID) == "" {
+	agentID := strings.TrimSpace(req.AgentID)
+	if name == "" || agentID == "" {
 		return PreparedGatewayProvision{}, fmt.Errorf("runtime agent name and id are required")
+	}
+	participantID := strings.TrimSpace(req.ParticipantID)
+	if participantID == "" {
+		participantID = agentID
 	}
 	gateway := req.Gateway
 	if gateway == nil {
@@ -421,6 +436,8 @@ func FinalizePreparedGatewayProvision(req agentruntime.ProvisionRequest, workspa
 		}
 	}
 	return PreparedGatewayProvision{
+		AgentID:         agentID,
+		ParticipantID:   participantID,
 		ModelID:         modelID,
 		Profile:         profile,
 		WorkspaceLayout: workspaceLayout,
@@ -677,7 +694,7 @@ func stateFromSandboxState(state sandbox.State) agentruntime.State {
 	}
 }
 
-func llmBridgeBaseURL(managerBaseURL, botID string) string {
+func llmBridgeBaseURL(managerBaseURL, agentID string) string {
 	managerBaseURL = strings.TrimRight(strings.TrimSpace(managerBaseURL), "/")
-	return managerBaseURL + "/api/bots/" + strings.TrimSpace(botID) + "/llm"
+	return managerBaseURL + "/api/v1/agents/" + strings.TrimSpace(agentID) + "/llm"
 }

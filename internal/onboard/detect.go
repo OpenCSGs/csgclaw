@@ -9,16 +9,16 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/app/runtimewiring"
-	"csgclaw/internal/bot"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
 )
 
 var (
-	loadIMBootstrap = im.LoadBootstrap
-	openBotStore    = bot.NewStore
-	openAgentState  = func(cfg config.Config, path, managerImage string) (agentStateReader, error) {
+	loadIMBootstrap      = im.LoadBootstrap
+	openParticipantStore = participant.NewStore
+	openAgentState       = func(cfg config.Config, path, managerImage string) (agentStateReader, error) {
 		return agent.NewServiceWithLLM(
 			effectiveLLMConfig(cfg),
 			cfg.Server,
@@ -111,11 +111,11 @@ func DetectState(opts DetectStateOptions) (DetectStateResult, error) {
 	}
 	result.ManagerAgentComplete = managerAgentComplete(agentState)
 
-	store, err := openBotStore(filepath.Join(filepath.Dir(imStatePath), "bots.json"))
+	store, err := openParticipantStore(filepath.Join(filepath.Dir(imStatePath), "participants.json"))
 	if err != nil {
 		return DetectStateResult{}, err
 	}
-	result.ManagerBotComplete = managerBotComplete(store.List())
+	result.ManagerBotComplete = managerParticipantComplete(store.List(participant.ListOptions{Channel: participant.ChannelCSGClaw}))
 
 	return result, nil
 }
@@ -128,14 +128,14 @@ func imBootstrapComplete(state im.Bootstrap) bool {
 	if !hasIMUser(state.Users, "u-admin", "admin", "admin") {
 		return false
 	}
-	if !hasIMUser(state.Users, "u-manager", "manager", "manager") {
+	if !hasIMUser(state.Users, agent.ManagerParticipantID, "manager", "manager") {
 		return false
 	}
 	for _, room := range state.Rooms {
 		if room.IsDirect &&
 			len(room.Members) == 2 &&
 			containsMember(room.Members, "u-admin") &&
-			containsMember(room.Members, "u-manager") {
+			containsMember(room.Members, agent.ManagerParticipantID) {
 			return true
 		}
 	}
@@ -184,21 +184,21 @@ func managerAgentComplete(state agentStateReader) bool {
 	return strings.EqualFold(strings.TrimSpace(managerAgent.Role), agent.RoleManager)
 }
 
-func managerBotComplete(bots []bot.Bot) bool {
-	for _, b := range bots {
-		if strings.TrimSpace(b.Channel) != string(bot.ChannelCSGClaw) {
+func managerParticipantComplete(items []participant.Participant) bool {
+	for _, item := range items {
+		if strings.TrimSpace(item.Channel) != participant.ChannelCSGClaw {
 			continue
 		}
-		if strings.TrimSpace(b.ID) != agent.ManagerUserID {
+		if strings.TrimSpace(item.ID) != agent.ManagerParticipantID {
 			continue
 		}
-		if !strings.EqualFold(strings.TrimSpace(b.Role), string(bot.RoleManager)) {
+		if !strings.EqualFold(strings.TrimSpace(item.Type), participant.TypeAgent) {
 			return false
 		}
-		if strings.TrimSpace(b.AgentID) != agent.ManagerUserID {
+		if strings.TrimSpace(item.AgentID) != agent.ManagerUserID {
 			return false
 		}
-		return strings.TrimSpace(b.UserID) != ""
+		return strings.TrimSpace(item.ChannelUserRef) != ""
 	}
 	return false
 }

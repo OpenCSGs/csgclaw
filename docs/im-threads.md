@@ -1,7 +1,7 @@
 # CSGClaw IM Threads
 
 This document describes the CSGClaw local IM thread model. It is meant for
-maintainers who need to understand how thread storage, APIs, bot compatibility,
+maintainers who need to understand how thread storage, APIs, participant bridges,
 agent context, and UI behavior fit together.
 
 ## Summary
@@ -9,7 +9,7 @@ agent context, and UI behavior fit together.
 CSGClaw uses an incremental Matrix-shaped thread model inside the existing IM
 APIs. It does not implement the full Matrix Client-Server protocol today. The
 goal is to adopt the useful shape of Matrix relationships while preserving the
-current CSGClaw room, user, bot, auth, and local state model.
+current CSGClaw room, user, participant, auth, and local state model.
 
 A thread is a sub-conversation in a room or DM. It starts from one existing
 top-level message, called the root message. The canonical thread ID is the root
@@ -136,17 +136,17 @@ Thread-aware clients should apply `thread.created` and `thread.updated` to the
 root message summary and thread list, while applying `message.created` to the
 main timeline only when the message is not a thread reply.
 
-## Bot Compatibility and PicoClaw
+## Participant Bridge and PicoClaw
 
-The bot compatibility API is the bridge used by PicoClaw-style integrations and
-the Codex bridge:
+The participant API is the message bridge used by PicoClaw-style integrations
+and the Codex bridge:
 
 ```text
-GET  /api/bots/{id}/events
-POST /api/bots/{id}/messages/send
+GET  /api/v1/channels/csgclaw/participants/{id}/events
+POST /api/v1/channels/csgclaw/participants/{id}/messages
 ```
 
-Thread-aware bot events may include:
+Thread-aware participant events may include:
 
 - `thread_root_id`: root message ID when the event is inside a thread.
 - `thread_context`: hidden context snapshot and summary for the thread root.
@@ -155,12 +155,12 @@ Thread-aware bot events may include:
 
 `thread_context` is prompt context, not visible thread history.
 
-Bot sends may include either CSGClaw fields (`room_id`, `text`,
+Participant sends may include either CSGClaw fields (`room_id`, `text`,
 `thread_root_id`) or PicoClaw outbound fields (`chat_id`, `content`,
 `context.topic_id`). When a thread root/topic is present, the message is sent as
-a reply in that thread. Bot sends that omit `thread_root_id`, `topic_id`, and
+a reply in that thread. Participant sends that omit `thread_root_id`, `topic_id`, and
 `context.topic_id` are treated as top-level room/DM messages; CSGClaw does not
-infer a thread from the bot's most recent room event.
+infer a thread from the participant's most recent room event.
 
 This maps to PicoClaw/topic isolation requirements: a runtime should treat
 `room_id` as the normal conversation key and `room_id:thread_root_id` as the

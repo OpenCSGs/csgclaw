@@ -29,6 +29,7 @@ import {
   pickDefaultAgentTemplate,
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
+  resolveAgentChannelUserID,
   resolveAgentAvatarSource,
   runtimeImageForKind,
 } from "@/models/agents";
@@ -153,6 +154,40 @@ describe("agent model helpers", () => {
       provider: "codex",
       runtime_kind: "picoclaw_sandbox",
     });
+  });
+
+  it("resolves CSGClaw DM identity from participant channel user before runtime agent id", () => {
+    expect(
+      resolveAgentChannelUserID({
+        id: "u-manager",
+        name: "manager",
+        role: "manager",
+        participants: [
+          {
+            agent_id: "u-manager",
+            channel: "csgclaw",
+            channel_user_ref: "manager",
+            id: "manager",
+          },
+        ],
+      }),
+    ).toBe("manager");
+
+    expect(
+      resolveAgentChannelUserID({
+        id: "u-worker",
+        participants: [
+          {
+            agent_id: "u-worker",
+            channel: "csgclaw",
+            id: "worker",
+          },
+        ],
+      }),
+    ).toBe("worker");
+
+    expect(resolveAgentChannelUserID({ id: "u-manager", role: "manager" })).toBe("manager");
+    expect(resolveAgentChannelUserID({ id: "u-worker" })).toBe("u-worker");
   });
 
   it("keeps JSON profile fields object-shaped", () => {
@@ -373,7 +408,9 @@ describe("agent model helpers", () => {
 
   it("normalizes runtime and auth provider labels", () => {
     expect(normalizeRuntimeKind("codex")).toBe("codex");
-    expect(notificationPushWebhookPathForBot("u-test")).toBe("/api/v1/channels/csgclaw/bots/u-test/notifications");
+    expect(notificationPushWebhookPathForBot("u-test")).toBe(
+      "/api/v1/channels/csgclaw/participants/u-test/notifications",
+    );
     expect(normalizeRuntimeKind("unknown")).toBe("unknown");
     expect(normalizeAuthProviderName("claude-code")).toBe("claude_code");
     expect(providerNeedsAuth("claude")).toBe(true);

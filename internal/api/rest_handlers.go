@@ -9,9 +9,24 @@ func (h *Handler) getUpgradeStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) createUpgradeApply(w http.ResponseWriter, r *http.Request) {
 	h.handleUpgradeApply(w, r)
 }
-func (h *Handler) listBots(w http.ResponseWriter, r *http.Request)     { h.handleBots(w, r) }
-func (h *Handler) createBot(w http.ResponseWriter, r *http.Request)    { h.handleBots(w, r) }
-func (h *Handler) deleteBot(w http.ResponseWriter, r *http.Request)    { h.handleBotByID(w, r) }
+func (h *Handler) listParticipants(w http.ResponseWriter, r *http.Request) {
+	h.handleParticipants(w, r)
+}
+func (h *Handler) createParticipant(w http.ResponseWriter, r *http.Request) {
+	h.handleParticipants(w, r)
+}
+func (h *Handler) handleParticipantByID(w http.ResponseWriter, r *http.Request) {
+	h.handleParticipantByIDPath(w, r)
+}
+func (h *Handler) getParticipantEvents(w http.ResponseWriter, r *http.Request) {
+	h.handleParticipantEvents(w, r)
+}
+func (h *Handler) createParticipantMessage(w http.ResponseWriter, r *http.Request) {
+	h.handleParticipantMessage(w, r)
+}
+func (h *Handler) createParticipantNotification(w http.ResponseWriter, r *http.Request) {
+	h.pushNotificationParticipant(w, r)
+}
 func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request)   { h.handleAgents(w, r) }
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request)  { h.handleAgents(w, r) }
 func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request)     { h.handleAgentByID(w, r) }
@@ -31,6 +46,18 @@ func (h *Handler) recreateAgent(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) upgradeAgent(w http.ResponseWriter, r *http.Request) {
 	h.handleAgentUpgradeByID(w, r)
+}
+func (h *Handler) getAgentLLMModels(w http.ResponseWriter, r *http.Request) {
+	h.handleAgentLLMModelsByID(w, r)
+}
+func (h *Handler) createAgentLLMChatCompletions(w http.ResponseWriter, r *http.Request) {
+	h.handleAgentLLMChatCompletionsByID(w, r)
+}
+func (h *Handler) createAgentLLMResponses(w http.ResponseWriter, r *http.Request) {
+	h.handleAgentLLMResponsesByID(w, r)
+}
+func (h *Handler) getAgentLLMResponsesWebsocket(w http.ResponseWriter, r *http.Request) {
+	h.handleAgentLLMResponsesWebsocketByID(w, r)
 }
 func (h *Handler) listHubTemplates(w http.ResponseWriter, r *http.Request) {
 	h.handleHubTemplates(w, r)
@@ -110,9 +137,6 @@ func (h *Handler) updateFeishuConfig(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) reloadFeishuConfig(w http.ResponseWriter, r *http.Request) {
 	h.handleFeishuConfigReload(w)
-}
-func (h *Handler) getFeishuBotEvents(w http.ResponseWriter, r *http.Request) {
-	h.handleFeishuBotByID(w, r)
 }
 func (h *Handler) listFeishuUsers(w http.ResponseWriter, r *http.Request)  { h.handleFeishuUsers(w, r) }
 func (h *Handler) createFeishuUser(w http.ResponseWriter, r *http.Request) { h.handleFeishuUsers(w, r) }

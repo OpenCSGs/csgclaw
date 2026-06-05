@@ -9,12 +9,12 @@ import (
 	"os"
 	"strings"
 
-	"csgclaw/cli/bot"
 	"csgclaw/cli/command"
 	completioncmd "csgclaw/cli/completion"
 	hubcmd "csgclaw/cli/hub"
 	"csgclaw/cli/member"
 	"csgclaw/cli/message"
+	participantcmd "csgclaw/cli/participant"
 	"csgclaw/cli/room"
 	skillcmd "csgclaw/cli/skill"
 	teamcmd "csgclaw/cli/team"
@@ -68,7 +68,8 @@ func (a *App) AddCommand(commands ...command.Command) {
 
 func (a *App) registerDefaultCommands() {
 	a.AddCommand(
-		bot.NewCmd(),
+		participantcmd.NewCmd(),
+		participantcmd.NewAliasCmd("pt"),
 		hubcmd.NewCmd(),
 		room.NewCmd(),
 		member.NewCmd(),
@@ -172,21 +173,23 @@ func consumesValue(arg string) bool {
 
 func (a *App) usage() {
 	a.ensureDefaultCommands()
-	fmt.Fprintln(a.stderr, "csgclaw-cli is a lite CSGClaw CLI for bots, rooms, messages, and teams.")
+	fmt.Fprintln(a.stderr, "csgclaw-cli is a lite CSGClaw CLI for participants, rooms, messages, and teams.")
 	fmt.Fprintln(a.stderr)
 	fmt.Fprintln(a.stderr, "Usage:")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli [global-flags] <command> [args]")
 	fmt.Fprintln(a.stderr)
 	fmt.Fprintln(a.stderr, "Available Commands:")
-	for _, cmd := range a.order {
-		fmt.Fprintf(a.stderr, "  %-8s %s\n", cmd.Name(), cmd.Summary())
+	commands := a.visibleCommands()
+	width := commandNameWidth(commands)
+	for _, cmd := range commands {
+		fmt.Fprintf(a.stderr, "  %-*s %s\n", width, cmd.Name(), cmd.Summary())
 	}
 	fmt.Fprintln(a.stderr)
 	fmt.Fprintln(a.stderr, "Examples:")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli -h")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli --version")
-	fmt.Fprintln(a.stderr, "  csgclaw-cli bot list --channel feishu")
-	fmt.Fprintln(a.stderr, "  csgclaw-cli bot config --channel feishu --get --bot-id u-dev")
+	fmt.Fprintln(a.stderr, "  csgclaw-cli participant list --channel feishu")
+	fmt.Fprintln(a.stderr, "  csgclaw-cli pt create --channel feishu --name dev --type agent --bind reuse --agent-id u-dev")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli message create --channel feishu --room-id oc_x --sender-id u-manager --content hello")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli team create --lead-bot-id bot-manager --title release")
 	fmt.Fprintln(a.stderr)
@@ -195,6 +198,27 @@ func (a *App) usage() {
 	fmt.Fprintf(a.stderr, "  --token string      API authentication token (default %s)\n", envAccessToken)
 	fmt.Fprintln(a.stderr, "  --output, -o string Output format: table or json")
 	fmt.Fprintln(a.stderr, "  --version, -V       Print version and exit")
+}
+
+func (a *App) visibleCommands() []command.Command {
+	commands := make([]command.Command, 0, len(a.order))
+	for _, cmd := range a.order {
+		if hidden, ok := cmd.(interface{ Hidden() bool }); ok && hidden.Hidden() {
+			continue
+		}
+		commands = append(commands, cmd)
+	}
+	return commands
+}
+
+func commandNameWidth(commands []command.Command) int {
+	width := 8
+	for _, cmd := range commands {
+		if n := len(cmd.Name()); n > width {
+			width = n
+		}
+	}
+	return width + 1
 }
 
 func (a *App) printVersion(output string) error {

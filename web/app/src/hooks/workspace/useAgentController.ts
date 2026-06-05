@@ -61,6 +61,7 @@ import {
   profileToDraft,
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
+  resolveAgentChannelUserID,
   runtimeImageForKind,
   startAgentCreateProgress,
 } from "@/models/agents";
@@ -948,7 +949,7 @@ export function useAgentController({
     try {
       let updatedAgent: AgentLike | null = null;
       if (action === "delete") {
-        await deleteBotRequest(item.id);
+        await deleteBotRequest(csgclawParticipantIDForAgent(item));
       } else {
         updatedAgent = await runAgentActionRequest(item.id, action);
       }
@@ -973,7 +974,7 @@ export function useAgentController({
     setAgentActionBusy(`${item.id}:delete-bot`);
     setAgentsError("");
     try {
-      await deleteBotRequest(item.id);
+      await deleteBotRequest(csgclawParticipantIDForAgent(item));
       await refreshAgents();
       await refreshWorkspaceBootstrap();
       if (item.id === MANAGER_AGENT_ID) {
@@ -1095,24 +1096,25 @@ export function useAgentController({
   }
 
   async function openAgentDirectMessage(item: AgentLike | null | undefined): Promise<void> {
-    if (!item?.id || !data?.current_user_id) {
+    const channelUserID = resolveAgentChannelUserID(item);
+    if (!channelUserID || !data?.current_user_id) {
       return;
     }
 
     setAgentsError("");
     try {
       let nextData = null;
-      let direct = directConversationForUser(item.id);
+      let direct = directConversationForUser(channelUserID);
       if (!direct) {
         await createUserRequest({
-          id: item.id,
-          name: item.name,
-          handle: item.handle || item.id.replace(/^u-/, "") || item.name,
-          role: item.role || WORKER_AGENT_ROLE,
+          id: channelUserID,
+          name: item?.name || channelUserID,
+          handle: item?.handle || channelUserID.replace(/^u-/, "") || item?.name,
+          role: item?.role || WORKER_AGENT_ROLE,
         });
         nextData = await refreshWorkspaceBootstrap();
         direct = directConversationForUser(
-          item.id,
+          channelUserID,
           nextData?.rooms ?? rooms,
           nextData?.current_user_id ?? data.current_user_id,
         );
@@ -1286,4 +1288,11 @@ export function useAgentController({
         }
       : null,
   };
+}
+
+function csgclawParticipantIDForAgent(item: AgentLike): string {
+  const participant = item.participants?.find(
+    (candidate) => String(candidate?.channel || "").trim() === "csgclaw" && String(candidate?.id || "").trim(),
+  );
+  return String(participant?.id || item.id || "").trim();
 }

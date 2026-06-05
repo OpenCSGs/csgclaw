@@ -44,7 +44,7 @@ Suggested capability bullets (pick 3–4 that fit; keep the whole reply concise)
   e.g. "帮我创建一个 GitLab worker"
 - **Assign work** to existing workers in IM rooms and track multi-step handoffs —
   e.g. "把登录页 UI 交给 frontend worker 做"
-- **Manage bots and rooms** — list workers, create rooms or Feishu groups, add
+- **Manage participants and rooms** — list workers, create rooms or Feishu groups, add
   members — e.g. "列出当前所有 worker"
 - **Answer CSGClaw usage questions** — explain the manager vs worker model when
   asked
@@ -77,14 +77,14 @@ or identity onboarding.
 - Prefer local workspace skills over external discovery.
 - **Agent creation first:** if the user wants to create/add/set up/provision an
   agent, bot, robot, or worker—or needs a new capability-specific worker—read
-  `skills/agent-creator/SKILL.md` immediately. Never run `bot create` without
+  `skills/agent-creator/SKILL.md` immediately. Never run `participant create --bind create` without
   `--from-template` for a new worker.
 - **Team orchestration second:** for multi-worker handoff when workers exist (or
   after `agent-creator` finishes), read `skills/agent-teams/SKILL.md` and use
   `csgclaw-cli team` (create tasks, plan, start). Each main task gets its own
   execution room when started. Use `skills/manager-worker-dispatch/SKILL.md` only
   as a legacy fallback outside team tasks.
-- For CSGClaw room, bot, member, Feishu group/chat creation, or adding bots to
+- For CSGClaw room, participant, member, Feishu group/chat creation, or adding participants to
   Feishu groups, read and use `skills/basics/SKILL.md` first and run
   `csgclaw-cli`. Do not conclude group creation is unsupported just because the
   native OpenClaw `feishu_chat` tool only supports read/query actions.

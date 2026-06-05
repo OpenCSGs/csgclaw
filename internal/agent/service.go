@@ -24,14 +24,15 @@ import (
 )
 
 const (
-	ManagerName      = "manager"
-	ManagerUserID    = "u-manager"
-	managerHostPort  = 18790
-	managerGuestPort = 18790
-	managerDebugMode = true
-	hostWorkspaceDir = "workspace"
-	hostProjectsDir  = "projects"
-	gatewayLogPoll   = 200 * time.Millisecond
+	ManagerName          = "manager"
+	ManagerParticipantID = "manager"
+	ManagerUserID        = "u-manager"
+	managerHostPort      = 18790
+	managerGuestPort     = 18790
+	managerDebugMode     = true
+	hostWorkspaceDir     = "workspace"
+	hostProjectsDir      = "projects"
+	gatewayLogPoll       = 200 * time.Millisecond
 )
 
 const (
@@ -398,10 +399,14 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	if err != nil {
 		return err
 	}
-	if _, err := ensureAgentPicoClawConfig(ManagerName, ManagerUserID, svc.server, defaultModel); err != nil {
+	recreateForParticipantBridgeConfig := !forceRecreate && agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID)
+	if _, err := ensureAgentPicoClawConfigForParticipant(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, defaultModel); err != nil {
 		return err
 	}
-	_, err = svc.EnsureManager(ctx, forceRecreate)
+	if recreateForParticipantBridgeConfig {
+		log.Printf("bootstrap manager PicoClaw config uses legacy bot bridge fields; recreating manager to load participant bridge config")
+	}
+	_, err = svc.EnsureManager(ctx, forceRecreate || recreateForParticipantBridgeConfig)
 	return err
 }
 
@@ -497,10 +502,11 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 			return err
 		}
 		if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
-			RuntimeID: runtimeIDForAgentID(ManagerUserID),
-			AgentID:   ManagerUserID,
-			AgentName: ManagerName,
-			Profile:   s.runtimeProfileForKind(runtimeKind, ManagerUserID, ManagerName, "", startProfile),
+			RuntimeID:     runtimeIDForAgentID(ManagerUserID),
+			AgentID:       ManagerUserID,
+			ParticipantID: ManagerParticipantID,
+			AgentName:     ManagerName,
+			Profile:       s.runtimeProfileForKind(runtimeKind, ManagerUserID, ManagerName, "", startProfile),
 		}); err != nil {
 			return fmt.Errorf("provision bootstrap manager runtime: %w", err)
 		}
@@ -1555,6 +1561,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
 		RuntimeID:        runtimeIDForAgentID(id),
 		AgentID:          id,
+		ParticipantID:    participantIDForAgent(name, id),
 		AgentName:        name,
 		Profile:          runtimeProfile,
 		WorkspaceOverlay: strings.TrimSpace(spec.FromTemplate),
@@ -1757,10 +1764,32 @@ func (s *Service) provisionRuntimeForAgent(ctx context.Context, rt agentruntime.
 	return s.provisionRuntime(ctx, rt, strings.TrimSpace(got.RuntimeKind), agentruntime.ProvisionRequest{
 		RuntimeID:        normalizeRuntimeID(got.RuntimeID, got.ID),
 		AgentID:          strings.TrimSpace(got.ID),
+		ParticipantID:    participantIDForAgent(got.Name, got.ID),
 		AgentName:        strings.TrimSpace(got.Name),
 		Profile:          s.runtimeProfileForAgent(got),
 		WorkspaceOverlay: strings.TrimSpace(workspaceOverlay),
 	})
+}
+
+func participantIDForAgent(agentName, agentID string) string {
+	agentID = strings.TrimSpace(agentID)
+	if managerGatewayMatch(agentName, agentID) {
+		return ManagerParticipantID
+	}
+	return participantIDFromAgentID(agentID)
+}
+
+func ParticipantIDForAgent(agentName, agentID string) string {
+	return participantIDForAgent(agentName, agentID)
+}
+
+func participantIDFromAgentID(agentID string) string {
+	agentID = strings.TrimSpace(agentID)
+	withoutPrefix := strings.TrimPrefix(agentID, "u-")
+	if withoutPrefix != "" && withoutPrefix != agentID {
+		return withoutPrefix
+	}
+	return agentID
 }
 
 func (s *Service) gatewayProvisionRequest(runtimeKind, agentName, agentID string) (*agentruntime.GatewayProvision, error) {

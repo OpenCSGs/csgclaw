@@ -8,7 +8,6 @@ import (
 	"io"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"csgclaw/internal/apiclient"
 	"csgclaw/internal/apitypes"
@@ -151,40 +150,6 @@ func RenderAction(output string, w io.Writer, result ActionResult) error {
 	return tw.Flush()
 }
 
-func RenderBots(output string, w io.Writer, bots []apitypes.Bot) error {
-	switch output {
-	case "", "table":
-		return RenderBotsTable(w, bots)
-	case "json":
-		return WriteJSON(w, bots)
-	default:
-		return fmt.Errorf("unsupported output format %q", output)
-	}
-}
-
-func RenderCompactBotList(output string, w io.Writer, bots []apitypes.Bot) error {
-	compact := compactBotList(bots)
-	switch output {
-	case "", "table":
-		return RenderCompactBotsTable(w, compact)
-	case "json":
-		return WriteJSON(w, compact)
-	default:
-		return fmt.Errorf("unsupported output format %q", output)
-	}
-}
-
-func RenderFullBotList(output string, w io.Writer, bots []apitypes.Bot) error {
-	switch output {
-	case "", "table":
-		return RenderFullBotsTable(w, bots)
-	case "json":
-		return WriteJSON(w, bots)
-	default:
-		return fmt.Errorf("unsupported output format %q", output)
-	}
-}
-
 func RenderAgents(output string, w io.Writer, agents []apitypes.Agent) error {
 	switch output {
 	case "", "table":
@@ -213,6 +178,17 @@ func RenderUsers(output string, w io.Writer, users []apitypes.User) error {
 		return RenderUsersTable(w, users)
 	case "json":
 		return WriteJSON(w, users)
+	default:
+		return fmt.Errorf("unsupported output format %q", output)
+	}
+}
+
+func RenderParticipants(output string, w io.Writer, participants []apitypes.Participant) error {
+	switch output {
+	case "", "table":
+		return RenderParticipantsTable(w, participants)
+	case "json":
+		return WriteJSON(w, participants)
 	default:
 		return fmt.Errorf("unsupported output format %q", output)
 	}
@@ -283,74 +259,22 @@ func displayAgentProfile(profile string) string {
 	return displayAgentField(profile)
 }
 
-func RenderBotsTable(w io.Writer, bots []apitypes.Bot) error {
-	return RenderCompactBotsTable(w, compactBotList(bots))
-}
-
-func RenderCompactBotsTable(w io.Writer, bots []compactBot) error {
+func RenderParticipantsTable(w io.Writer, participants []apitypes.Participant) error {
 	tw := NewTableWriter(w)
-	fmt.Fprintln(tw, "ID\tNAME\tDESCRIPTION\tROLE\tCHANNEL")
-	for _, b := range bots {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", b.ID, b.Name, displayBotDescription(b.Description), b.Role, b.Channel)
-	}
-	return tw.Flush()
-}
-
-func RenderFullBotsTable(w io.Writer, bots []apitypes.Bot) error {
-	tw := NewTableWriter(w)
-	fmt.Fprintln(tw, "ID\tNAME\tDESCRIPTION\tROLE\tCHANNEL\tAGENT_ID\tUSER_ID\tAVAILABLE\tRUNTIME_KIND\tCREATED_AT")
-	for _, b := range bots {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\n",
-			b.ID,
-			b.Name,
-			displayBotDescription(b.Description),
-			b.Role,
-			b.Channel,
-			displayBotField(b.AgentID),
-			displayBotField(b.UserID),
-			b.Available,
-			displayBotField(b.RuntimeKind),
-			displayBotTime(b.CreatedAt),
+	fmt.Fprintln(tw, "ID\tNAME\tTYPE\tCHANNEL\tAGENT_ID\tCHANNEL_USER\tAPP_REF\tSTATUS")
+	for _, p := range participants {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			displayBotField(p.ID),
+			displayBotField(p.Name),
+			displayBotField(p.Type),
+			displayBotField(p.Channel),
+			displayBotField(p.AgentID),
+			displayBotField(p.ChannelUserRef),
+			displayBotField(p.ChannelAppRef),
+			displayBotField(p.LifecycleStatus),
 		)
 	}
 	return tw.Flush()
-}
-
-type compactBot struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Role        string `json:"role"`
-	Channel     string `json:"channel"`
-}
-
-func compactBotList(bots []apitypes.Bot) []compactBot {
-	out := make([]compactBot, 0, len(bots))
-	for _, b := range bots {
-		out = append(out, compactBot{
-			ID:          b.ID,
-			Name:        b.Name,
-			Description: b.Description,
-			Role:        b.Role,
-			Channel:     b.Channel,
-		})
-	}
-	return out
-}
-
-func displayBotDescription(value string) string {
-	const maxRunes = 40
-
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "-"
-	}
-
-	runes := []rune(value)
-	if len(runes) <= maxRunes {
-		return value
-	}
-	return string(runes[:maxRunes]) + "..."
 }
 
 func displayBotField(value string) string {
@@ -359,13 +283,6 @@ func displayBotField(value string) string {
 		return "-"
 	}
 	return value
-}
-
-func displayBotTime(value time.Time) string {
-	if value.IsZero() {
-		return "-"
-	}
-	return value.UTC().Format(time.RFC3339)
 }
 
 func RenderRoomsTable(w io.Writer, rooms []apitypes.Room) error {

@@ -59,18 +59,19 @@ describe("legacy UI contract", () => {
     expect(source).toContain("pickDefaultAgentTemplate(hubTemplates, runtimeKind, bootstrapConfig)");
   });
 
-  it("keeps channel-scoped bot and notification bot frontend contracts", () => {
-    expect(source).toContain('get<AgentLike[]>("api/v1/channels/csgclaw/bots")');
-    expect(source).toContain('post("api/v1/channels/csgclaw/bots", { ...payload, type: BOT_TYPE_NOTIFICATION })');
+  it("keeps channel-scoped participant and notification frontend contracts", () => {
+    expect(source).toContain('get<AgentLike[]>("api/v1/agents?include_participants=true")');
+    expect(source).toContain('post<ParticipantLike>("api/v1/channels/csgclaw/participants"');
+    expect(source).toContain('"api/v1/channels/csgclaw/participants?type=notification"');
     expect(source).toContain("patchNotificationBotRequest");
     expect(source).toContain("createNotificationBotRequest");
-    expect(source).toContain("del(`api/v1/channels/csgclaw/bots/${encodeURIComponent(botID)}`)");
+    expect(source).toContain("del(`api/v1/channels/csgclaw/participants/${encodeURIComponent(botID)}`)");
     expect(source).toContain("const SHOW_AGENT_LIFECYCLE_ACTIONS = false;");
     expect(source).toContain('export const BOT_TYPE_NOTIFICATION = "notification"');
     expect(source).toContain("function NotifierControls");
     expect(source).toContain("function draftNotifierRuntimeOptionsForSave");
     expect(source).toContain("notifier_remote_subscription_id");
-    expect(source).toContain("/api/v1/channels/csgclaw/bots/${encodeURIComponent(id)}/notifications");
+    expect(source).toContain("/api/v1/channels/csgclaw/participants/${encodeURIComponent(id)}/notifications");
   });
 
   it("keeps the agent publish action contract", () => {

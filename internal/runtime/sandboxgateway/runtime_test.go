@@ -177,7 +177,7 @@ func testGatewayDeps(providerName func() string, run func(context.Context, sandb
 		SyncHandle: func(agentruntime.Handle) error {
 			return nil
 		},
-		BuildRuntimeEnv: func(string, string, string, string, string, feishu.BotCredentialProvider) map[string]string {
+		BuildRuntimeEnv: func(string, string, string, string, string, string, feishu.BotCredentialProvider) map[string]string {
 			return map[string]string{}
 		},
 		AddProfileEnv:      func(map[string]string, map[string]string) {},

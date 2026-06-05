@@ -10,13 +10,13 @@ import (
 	"strings"
 
 	agentcmd "csgclaw/cli/agent"
-	"csgclaw/cli/bot"
 	"csgclaw/cli/command"
 	completioncmd "csgclaw/cli/completion"
 	hubcmd "csgclaw/cli/hub"
 	"csgclaw/cli/member"
 	"csgclaw/cli/message"
 	modelcmd "csgclaw/cli/model"
+	participantcmd "csgclaw/cli/participant"
 	"csgclaw/cli/room"
 	servecmd "csgclaw/cli/serve"
 	skillcmd "csgclaw/cli/skill"
@@ -79,8 +79,9 @@ func (a *App) registerDefaultCommands() {
 		hubcmd.NewCmd(),
 		skillcmd.NewCmd(),
 		modelcmd.NewCmd(),
+		participantcmd.NewCmd(),
+		participantcmd.NewAliasCmd("pt"),
 		usercmd.NewCmd(),
-		bot.NewCmd(),
 		room.NewCmd(),
 		member.NewCmd(),
 		message.NewCmd(),
@@ -205,11 +206,10 @@ func (a *App) usage() {
 	fmt.Fprintln(a.stderr, "  csgclaw [global-flags] <command> [args]")
 	fmt.Fprintln(a.stderr)
 	fmt.Fprintln(a.stderr, "Available Commands:")
-	for _, cmd := range a.order {
-		if hidden, ok := cmd.(interface{ Hidden() bool }); ok && hidden.Hidden() {
-			continue
-		}
-		fmt.Fprintf(a.stderr, "  %-8s %s\n", cmd.Name(), cmd.Summary())
+	commands := a.visibleCommands()
+	width := commandNameWidth(commands)
+	for _, cmd := range commands {
+		fmt.Fprintf(a.stderr, "  %-*s %s\n", width, cmd.Name(), cmd.Summary())
 	}
 	fmt.Fprintln(a.stderr)
 	fmt.Fprintln(a.stderr, "Examples:")
@@ -228,6 +228,27 @@ func (a *App) usage() {
 	fmt.Fprintln(a.stderr, "  --output, -o string Output format: table or json")
 	fmt.Fprintln(a.stderr, "  --config string     Path to config file")
 	fmt.Fprintln(a.stderr, "  --version, -V       Print version and exit")
+}
+
+func (a *App) visibleCommands() []command.Command {
+	commands := make([]command.Command, 0, len(a.order))
+	for _, cmd := range a.order {
+		if hidden, ok := cmd.(interface{ Hidden() bool }); ok && hidden.Hidden() {
+			continue
+		}
+		commands = append(commands, cmd)
+	}
+	return commands
+}
+
+func commandNameWidth(commands []command.Command) int {
+	width := 8
+	for _, cmd := range commands {
+		if n := len(cmd.Name()); n > width {
+			width = n
+		}
+	}
+	return width + 1
 }
 
 func (a *App) printVersion(output string) error {

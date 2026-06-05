@@ -8,27 +8,25 @@
 - 时间字段使用 RFC3339 / ISO8601
 - 常规错误通常返回纯文本错误正文
 - SSE 接口返回 `text/event-stream`
-- 当前 API 主要分为 4 组：
+- 当前 API 主要分为 3 组：
   - 核心 API：`/api/v1/*`
-  - Channel API：`/api/v1/channels/*`
-  - Bot 兼容 API：`/api/bots/*`
+  - Channel 与 participant API：`/api/v1/channels/*`
   - 健康检查：`/healthz`
 
 ## 认证
 
 - 默认大多数 `/api/v1/*` 接口不要求认证
 - 以下接口要求 `Authorization: Bearer <token>`，其中 token 为服务端 access token
-  - `GET /api/v1/channels/feishu/bots/{id}/events`
-  - `GET /api/bots/{id}/events`
-  - `POST /api/bots/{id}/messages/send`
-  - `GET /api/bots/{id}/llm/models`
-  - `GET /api/bots/{id}/llm/v1/models`
-  - `POST /api/bots/{id}/llm/chat/completions`
-  - `POST /api/bots/{id}/llm/v1/chat/completions`
-  - `GET /api/bots/{id}/llm/responses`
-  - `GET /api/bots/{id}/llm/v1/responses`
-  - `POST /api/bots/{id}/llm/responses`
-  - `POST /api/bots/{id}/llm/v1/responses`
+  - `GET /api/v1/channels/{channel}/participants/{id}/events`
+  - `POST /api/v1/channels/csgclaw/participants/{id}/messages`
+  - `GET /api/v1/agents/{id}/llm/models`
+  - `GET /api/v1/agents/{id}/llm/v1/models`
+  - `POST /api/v1/agents/{id}/llm/chat/completions`
+  - `POST /api/v1/agents/{id}/llm/v1/chat/completions`
+  - `POST /api/v1/agents/{id}/llm/responses`
+  - `POST /api/v1/agents/{id}/llm/v1/responses`
+  - `GET /api/v1/agents/{id}/llm/responses`
+  - `GET /api/v1/agents/{id}/llm/v1/responses`
 - 若服务端开启 `no_auth`，上述鉴权会被跳过
 
 ## 健康检查
@@ -88,13 +86,13 @@ ok
 
 若升级管理器未配置，返回 `503 Service Unavailable`。
 
-## Bot 管理 API
+## Participant API
 
-这组接口挂在 channel API 命名空间下，但底层仍由统一的 `internal/bot` 服务负责编排，当前并没有按 channel 拆成独立 bot service。`role` 仅支持 `manager` 和 `worker`，`channel` 仅支持 `csgclaw` 和 `feishu`。
+Participant 是 channel-scoped identity，用于房间、消息、mention、通知和 runtime bridge。Participant 可以表示 human、agent-backed channel identity 或 notification sender。
 
-### `GET /api/v1/channels/{channel}/bots`
+### `GET /api/v1/channels/{channel}/participants`
 
-获取指定 channel 下的 bot 列表。
+获取指定 channel 下的 participant 列表。
 
 路径参数：
 
@@ -102,29 +100,36 @@ ok
 
 可选查询参数：
 
-- `role`
+- `type`：`human`、`agent` 或 `notification`
+- `agent_id`
 
 响应字段：
 
 - `id`
-- `name`
-- `description`
-- `role`
 - `channel`
+- `type`
+- `name`
+- `avatar`
+- `channel_user_ref`
+- `channel_user_kind`
+- `channel_app_ref`
 - `agent_id`
-- `user_id`
-- `available`
-- `runtime_kind`
+- `lifecycle_status`
+- `presence`
+- `mentionable`
+- `metadata`
 - `created_at`
+- `updated_at`
 
 示例：
 
-- `GET /api/v1/channels/csgclaw/bots`
-- `GET /api/v1/channels/feishu/bots?role=worker`
+- `GET /api/v1/channels/csgclaw/participants`
+- `GET /api/v1/channels/csgclaw/participants?type=notification`
+- `GET /api/v1/channels/feishu/participants?agent_id=u-worker`
 
-### `POST /api/v1/channels/{channel}/bots`
+### `POST /api/v1/channels/{channel}/participants`
 
-在指定 channel 下创建 bot。
+在指定 channel 下创建 participant。
 
 路径参数：
 
@@ -134,42 +139,58 @@ ok
 
 ```json
 {
-  "id": "u-alice",
-  "name": "alice",
-  "role": "worker",
-  "runtime_kind": "codex",
-  "from_template": "local.review-bot"
+  "id": "qa",
+  "type": "agent",
+  "name": "QA",
+  "channel_user": {
+    "ref": "u-qa",
+    "kind": "local_user_id"
+  },
+  "agent_binding": {
+    "mode": "create",
+    "agent": {
+      "name": "QA",
+      "role": "worker",
+      "runtime_kind": "picoclaw_sandbox",
+      "from_template": "builtin.picoclaw-worker"
+    }
+  }
 }
 ```
 
 说明：
 
+- `type` 必填，且只能是 `human`、`agent` 或 `notification`
 - `name` 必填
-- `role` 必填，且只能是 `manager` 或 `worker`
 - 实际 channel 由路由路径决定，而不是由请求体决定
-- `worker` bot 会关联后端 agent
-- `manager` / `worker` 在不同 channel 上的创建行为可能不同
+- `agent` participant 可通过 `agent_binding` 创建或复用 Agent
+- `human` 与 `notification` participant 不创建 runtime agent
+- 对 `csgclaw` 来说，`channel_user.ref` 是本地 IM user ID
+- 对 `feishu` 来说，`channel_user.ref` 是 channel-native open ID
 
 示例：
 
-- `POST /api/v1/channels/csgclaw/bots`
-- `POST /api/v1/channels/feishu/bots`
+- `POST /api/v1/channels/csgclaw/participants`
+- `POST /api/v1/channels/feishu/participants`
 
-### `DELETE /api/v1/channels/{channel}/bots/{id}`
+### `GET /api/v1/channels/{channel}/participants/{id}`
 
-删除指定 channel 下的 bot。
+获取单个 participant。
 
-路径参数：
+### `PATCH /api/v1/channels/{channel}/participants/{id}`
 
-- `channel`：`csgclaw` 或 `feishu`
-- `id`：bot ID
+更新 `name`、`avatar`、`mentionable`、`metadata` 等可编辑 participant 字段。
+
+### `DELETE /api/v1/channels/{channel}/participants/{id}`
+
+删除指定 channel 下的 participant。
 
 成功返回 `204 No Content`。
 
 示例：
 
-- `DELETE /api/v1/channels/csgclaw/bots/u-alice`
-- `DELETE /api/v1/channels/feishu/bots/u-alice`
+- `DELETE /api/v1/channels/csgclaw/participants/qa`
+- `DELETE /api/v1/channels/feishu/participants/qa`
 
 ## Agent API
 
@@ -532,26 +553,6 @@ ok
 
 - 缺少 `provider` 返回 `400`
 - 登录失败返回 `502 Bad Gateway`
-
-### `POST /api/v1/cliproxy/auth/logout`
-
-禁用本地 provider 鉴权。
-
-请求体：
-
-```json
-{
-  "provider": "codex"
-}
-```
-
-成功返回 provider 当前鉴权状态。
-
-说明：
-
-- 缺少 `provider` 返回 `400`
-- Logout 失败返回 `502 Bad Gateway`
-- Logout 会阻止同一个 Codex home auth 或 Claude Keychain 记录被立刻自动导入。
 
 ## Bootstrap Config API
 
@@ -953,17 +954,17 @@ context 不会被渲染成 thread 内消息；它是给 LLM-backed agent 使用�
 }
 ```
 
-### Bot 事件
+### Participant 事件
 
-#### `GET /api/v1/channels/feishu/bots/{id}/events`
+#### `GET /api/v1/channels/feishu/participants/{id}/events`
 
-订阅指定 bot 在飞书中的被提及消息事件。
+订阅指定 participant 在飞书中的被提及消息事件。
 
 特点：
 
 - 需要 Bearer Token
 - 返回 `text/event-stream`
-- 只转发“消息里 mention 到该 bot open_id”的事件
+- 只转发“消息里 mention 到该 participant open_id”的事件
 - 建立连接后先输出 `: connected`
 
 ### 用户
@@ -1026,16 +1027,16 @@ context 不会被渲染成 thread 内消息；它是给 LLM-backed agent 使用�
 }
 ```
 
-## Bot 兼容 API
+## Runtime Bridge API
 
-这组接口位于 `/api/bots/{id}`，用于兼容旧的 PicoClaw Bot 接入方式。
+Runtime client 使用 participant-scoped 路由处理 channel 消息，使用 agent-scoped 路由处理 LLM provider 流量。旧的 `/api/bots/*` 路由不再注册。
 
 Bot 和 Codex bridge 使用的 thread/session 隔离规则见
 [im-threads.zh.md](./im-threads.zh.md)。
 
-### `GET /api/bots/{id}/events`
+### `GET /api/v1/channels/{channel}/participants/{id}/events`
 
-订阅 bot 事件流。
+订阅 participant 事件流。
 
 特点：
 
@@ -1055,13 +1056,13 @@ data: {"message_id":"msg-1","room_id":"room-1","channel":"csgclaw","chat_id":"ro
 ```
 
 对于 thread replies，`thread_root_id` 是 root message ID，`thread_context`
-携带 thread 开启时记录的确定性隐藏上下文。Bot/LLM bridge 会把它作为
+携带 thread 开启时记录的确定性隐藏上下文。Runtime/LLM bridge 会把它作为
 prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client 可以把
 `context.topic_id` 当作同一个 thread/session 标识。
 
-### `POST /api/bots/{id}/messages/send`
+### `POST /api/v1/channels/csgclaw/participants/{id}/messages`
 
-向 bot 兼容通道发送消息。
+以指定本地 CSGClaw participant 身份发送消息。
 
 请求体示例：
 
@@ -1074,8 +1075,8 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
 ```
 
 `thread_root_id`、`topic_id` 和 `context.topic_id` 都是可选的 thread/topic
-标识；传入任一字段时 bot 响应会发送到该 IM thread 中。全部省略时，
-响应会作为 room/DM 顶层消息发送；服务端不会根据 bot 在房间中最近收到的
+标识；传入任一字段时 participant 响应会发送到该 IM thread 中。全部省略时，
+响应会作为 room/DM 顶层消息发送；服务端不会根据 participant 在房间中最近收到的
 事件推断 thread。
 
 也接受 PicoClaw outbound message 形态：
@@ -1092,9 +1093,9 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
 }
 ```
 
-### `GET /api/bots/{id}/llm/models`
+### `GET /api/v1/agents/{id}/llm/models`
 
-### `GET /api/bots/{id}/llm/v1/models`
+### `GET /api/v1/agents/{id}/llm/v1/models`
 
 转发模型列表请求到 LLM bridge。
 
@@ -1103,9 +1104,9 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
 - 需要 Bearer Token
 - 返回内容类型和响应体由上游 bridge 决定
 
-### `POST /api/bots/{id}/llm/chat/completions`
+### `POST /api/v1/agents/{id}/llm/chat/completions`
 
-### `POST /api/bots/{id}/llm/v1/chat/completions`
+### `POST /api/v1/agents/{id}/llm/v1/chat/completions`
 
 转发聊天补全请求到 LLM bridge。
 
@@ -1126,17 +1127,17 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
 }
 ```
 
-### `POST /api/bots/{id}/llm/responses`
+### `POST /api/v1/agents/{id}/llm/responses`
 
-### `POST /api/bots/{id}/llm/v1/responses`
+### `POST /api/v1/agents/{id}/llm/v1/responses`
+
+### `GET /api/v1/agents/{id}/llm/responses`
+
+### `GET /api/v1/agents/{id}/llm/v1/responses`
 
 转发 OpenAI-compatible Responses API 请求到 LLM bridge。Codex runtime 使用这个入口发送 provider 流量。如果所选上游 provider 返回不支持 Responses endpoint 的状态，bridge 会回退到上游 chat completions，并把结果包装成 Codex 可消费的 Responses-compatible response。
 
-### `GET /api/bots/{id}/llm/responses`
-
-### `GET /api/bots/{id}/llm/v1/responses`
-
-升级为 OpenAI-compatible Responses WebSocket。只有当选择的模型 provider 是 Codex 时，Codex runtime 才会启用这条路径，让 bridge 可以把 Codex ACP 的 WebSocket 流量转发到内置 CLIProxy 的 Codex provider。
+`GET` 形式是 Responses API session 的 websocket upgrade 入口。
 
 请求体示例：
 
@@ -1156,7 +1157,6 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
 - `model` 字段会被覆盖为 agent 已解析出的 `model_id`
 - Responses 转发不会注入 chat-only 的顶层 `reasoning_effort`
 - 上游 Responses 的 headers、status 和 body 会被透传，包括 `text/event-stream` 这类流式响应
-- Responses WebSocket 的 `response.create` payload 同样会在转发前合并 profile request options
 
 ## 兼容性说明
 
@@ -1171,4 +1171,10 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
 以下旧文档中常见路径，当前路由里已不存在，不应再作为对外 API 使用：
 
 - `/api/v1/notify/{agent_id}`
+- `/api/v1/channels/{channel}/bots`
+- `/api/v1/channels/{channel}/bots/{id}`
+- `/api/v1/channels/feishu/bots/{id}/events`
+- `/api/bots/{id}/events`
+- `/api/bots/{id}/messages/send`
+- `/api/bots/{id}/llm/*`
 - 任何未在 `internal/api/router.go` 中注册的旧路径

@@ -77,5 +77,5 @@ export function joinAgentToRoomRequest(payload: JoinAgentToRoomPayload): Promise
 }
 
 export function createUserRequest(payload: CreateUserPayload): Promise<IMUser> {
-  return post("api/v1/users", payload);
+  return post("api/v1/channels/csgclaw/users", payload);
 }

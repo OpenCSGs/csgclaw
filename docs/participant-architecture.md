@@ -150,6 +150,8 @@ Rules:
   an Agent ID, the server generates it as `u-{participant_id}`. This preserves
   the old worker/bot ID habit; for example participant `qa` maps to agent
   `u-qa`.
+- The bootstrap manager is the reserved exception: its default CSGClaw
+  participant ID is `manager`, while its Agent ID remains `u-manager`.
 - If the caller specifies an Agent ID explicitly, it must still be globally
   unique and does not need to match the participant ID. Cross-channel reuse
   usually passes an existing `agent_id`.
@@ -906,7 +908,8 @@ CLI field renames should match the API:
 - Add a Participant ID generator: derive readable slugs from explicit `id` or
   stable keys, add short random suffixes on collision, never derive IDs from
   editable `name`, and keep the default Agent ID for newly created agent-backed
-  participants as `u-{participant_id}`.
+  participants as `u-{participant_id}`, except the bootstrap manager
+  participant `manager` whose Agent ID is `u-manager`.
 - Replace the public `User` API with participant APIs. Keep only an internal
   channel identity/profile store where the CSGClaw and external channel
   adapters need one.

@@ -6,7 +6,6 @@ func (h *Handler) Routes() chi.Router {
 	router := chi.NewRouter()
 	h.registerCoreRoutes(router)
 	h.registerChannelRoutes(router)
-	h.registerBotCompatibilityRoutes(router)
 	return router
 }
 
@@ -33,6 +32,16 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Route("/profile", func(r chi.Router) {
 					r.Get("/", h.getAgentProfile)
 					r.Put("/", h.updateAgentProfile)
+				})
+				r.Route("/llm", func(r chi.Router) {
+					r.Get("/models", h.getAgentLLMModels)
+					r.Get("/v1/models", h.getAgentLLMModels)
+					r.Post("/chat/completions", h.createAgentLLMChatCompletions)
+					r.Post("/v1/chat/completions", h.createAgentLLMChatCompletions)
+					r.Post("/responses", h.createAgentLLMResponses)
+					r.Post("/v1/responses", h.createAgentLLMResponses)
+					r.Get("/responses", h.getAgentLLMResponsesWebsocket)
+					r.Get("/v1/responses", h.getAgentLLMResponsesWebsocket)
 				})
 				r.Post("/recreate", h.recreateAgent)
 				r.Post("/upgrade", h.upgradeAgent)
@@ -76,11 +85,6 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			})
 			r.Post("/invite", h.createIMRoomMembersInvite)
 		})
-		r.Route("/users", func(r chi.Router) {
-			r.Get("/", h.listUsers)
-			r.Post("/", h.createUser)
-			r.Delete("/{id}", h.deleteUser)
-		})
 		r.Route("/messages", func(r chi.Router) {
 			r.Get("/", h.listMessages)
 			r.Post("/", h.createMessage)
@@ -117,23 +121,21 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 
 func (h *Handler) registerChannelRoutes(router chi.Router) {
 	router.Route("/api/v1/channels", func(r chi.Router) {
-		// Generic bot CRUD for all channels.
-		r.Route("/{channel}/bots", func(r chi.Router) {
-			r.Get("/", h.listBots)
-			r.Post("/", h.createBot)
+		r.Route("/{channel}/participants", func(r chi.Router) {
+			r.Get("/", h.listParticipants)
+			r.Post("/", h.createParticipant)
 		})
-		r.Route("/{channel}/bots/{id}", func(r chi.Router) {
-			r.Get("/", h.handleBotByID)
-			r.Patch("/", h.handleBotByID)
-			r.Delete("/", h.deleteBot)
+		r.Route("/{channel}/participants/{id}", func(r chi.Router) {
+			r.Get("/", h.handleParticipantByID)
+			r.Patch("/", h.handleParticipantByID)
+			r.Delete("/", h.handleParticipantByID)
+			r.Get("/events", h.getParticipantEvents)
+			r.Post("/messages", h.createParticipantMessage)
+			r.Post("/notifications", h.createParticipantNotification)
 		})
 		r.Post("/{channel}/activities/{activity_id}:decide", h.handleChannelActivityDecision)
 
-		// Channel-specific bot operations (not exposed on generic /{channel}/bots/{id}).
-		r.Post("/csgclaw/bots/{id}/notifications", h.pushNotificationBot)
-		r.Get("/feishu/bots/{id}/events", h.getFeishuBotEvents)
-
-		// CSGClaw channel IM routes (flat paths so /csgclaw/bots stays on generic CRUD).
+		// CSGClaw channel IM routes.
 		r.Route("/csgclaw/users", func(r chi.Router) {
 			r.Get("/", h.listUsers)
 			r.Post("/", h.createUser)
@@ -159,7 +161,7 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Post("/", h.createMessage)
 		})
 
-		// Feishu channel routes (flat paths; bot list/CRUD uses generic /{channel}/bots).
+		// Feishu channel routes.
 		r.Route("/feishu/config", func(r chi.Router) {
 			r.Get("/", h.getFeishuConfig)
 			r.Put("/", h.updateFeishuConfig)

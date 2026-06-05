@@ -399,10 +399,11 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 		return Agent{}, fmt.Errorf("refresh gateway template skills: %w", err)
 	}
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
-		RuntimeID: createSpec.RuntimeID,
-		AgentID:   createSpec.AgentID,
-		AgentName: createSpec.AgentName,
-		Profile:   runtimeProfile,
+		RuntimeID:     createSpec.RuntimeID,
+		AgentID:       createSpec.AgentID,
+		ParticipantID: participantIDForAgent(createSpec.AgentName, createSpec.AgentID),
+		AgentName:     createSpec.AgentName,
+		Profile:       runtimeProfile,
 	}); err != nil {
 		return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
 	}

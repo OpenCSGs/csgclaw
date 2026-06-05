@@ -1,4 +1,5 @@
 export const MANAGER_AGENT_ID = "u-manager";
+export const MANAGER_PARTICIPANT_ID = "manager";
 export const MANAGER_AGENT_NAME = "manager";
 export const MANAGER_AGENT_ROLE = "manager";
 export const WORKER_AGENT_ROLE = "worker";

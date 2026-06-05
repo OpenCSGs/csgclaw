@@ -28,10 +28,12 @@ func (h *Handler) publishNewConversationBotEvent(ctx context.Context, room im.Ro
 	}
 	var missed []string
 	threadRootID := conversationThreadRootID(message)
-	for _, botID := range newConversationTargets(room, message, h.isAgentSender) {
+	for _, target := range h.newConversationBridgeTargets(room, message) {
+		botID := target.bridgeID
+		agentID := h.runtimeAgentIDForBridgeID(botID)
 		action, err := h.svc.NewConversationAction(ctx, agent.NewConversationRequest{
 			Channel:      csgclawchannel.ChannelID,
-			BotID:        botID,
+			BotID:        agentID,
 			RoomID:       room.ID,
 			ThreadRootID: threadRootID,
 			Reason:       reason,
@@ -45,16 +47,42 @@ func (h *Handler) publishNewConversationBotEvent(ctx context.Context, room im.Ro
 			if action.BotEventText == "" {
 				continue
 			}
-			if !h.botBridge.EnqueueMessageEventWithText(room, sender, message, botID, action.BotEventText) {
+			if !h.enqueueBotMessageEventForBridgeTarget(room, sender, message, target, action.BotEventText) {
 				missed = append(missed, botID)
 			}
 		case agent.NewConversationActionInternal:
-			if !h.botBridge.EnqueueMessageEvent(room, sender, message, botID) {
+			if !h.enqueueBotMessageEventForBridgeTarget(room, sender, message, target, "") {
 				missed = append(missed, botID)
 			}
 		}
 	}
 	return missed
+}
+
+func (h *Handler) newConversationBridgeTargets(room im.Room, message im.Message) []botBridgeTarget {
+	if h == nil {
+		return nil
+	}
+	targets := make([]botBridgeTarget, 0)
+	for _, target := range h.botBridgeTargetsForRoom(room) {
+		if strings.TrimSpace(target.bridgeID) == "" || target.matches(message.SenderID) || !h.isAgentSender(target.bridgeID) {
+			continue
+		}
+		if !room.IsDirect && !messageMentionsBridgeTarget(message, target) {
+			continue
+		}
+		targets = append(targets, target)
+	}
+	return targets
+}
+
+func messageMentionsBridgeTarget(message im.Message, target botBridgeTarget) bool {
+	for _, mention := range message.Mentions {
+		if target.matches(mention.ID) {
+			return true
+		}
+	}
+	return false
 }
 
 func newConversationTargets(room im.Room, message im.Message, isAgent func(string) bool) []string {

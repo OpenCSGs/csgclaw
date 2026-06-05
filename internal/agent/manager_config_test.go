@@ -59,9 +59,10 @@ func TestRenderAgentPicoClawConfigUsesBridgeModelEndpoint(t *testing.T) {
 	for _, want := range []string{
 		`"model_name": "gpt-5.4"`,
 		`"model": "openai/gpt-5.4"`,
-		`"api_base": "http://10.0.0.8:18080/api/bots/u-ux/llm"`,
+		`"api_base": "http://10.0.0.8:18080/api/v1/agents/u-ux/llm"`,
 		`"api_key": "shared-token"`,
-		`"bot_id": "u-ux"`,
+		`"participant_id": "u-ux"`,
+		`"enabled": true`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("renderAgentPicoClawConfig() missing %q in:\n%s", want, text)
@@ -70,7 +71,9 @@ func TestRenderAgentPicoClawConfigUsesBridgeModelEndpoint(t *testing.T) {
 	if strings.Contains(text, "cloud.infini-ai.com") {
 		t.Fatalf("renderAgentPicoClawConfig() leaked upstream base URL:\n%s", text)
 	}
-
+	if strings.Contains(text, `"bot_id"`) {
+		t.Fatalf("renderAgentPicoClawConfig() still emitted bot_id:\n%s", text)
+	}
 	var rendered map[string]any
 	if err := json.Unmarshal(data, &rendered); err != nil {
 		t.Fatalf("renderAgentPicoClawConfig() produced invalid JSON: %v", err)
@@ -96,6 +99,63 @@ func TestRenderAgentPicoClawConfigUsesBridgeModelEndpoint(t *testing.T) {
 	}
 	if got, want := stringifyJSONList(dimensions), []string{"chat", "topic"}; !stringSlicesEqual(got, want) {
 		t.Fatalf("session.dimensions = %v, want %v", got, want)
+	}
+}
+
+func TestRenderManagerPicoClawConfigUsesSeparateParticipantAndAgentIDs(t *testing.T) {
+	localIPv4Resolver = func() string { return "10.0.0.8" }
+	defer func() { localIPv4Resolver = localIPv4 }()
+
+	data, err := renderManagerPicoClawConfig(config.ServerConfig{
+		ListenAddr:  "0.0.0.0:18080",
+		AccessToken: "shared-token",
+	}, config.ModelConfig{
+		ModelID: "gpt-5.5",
+	})
+	if err != nil {
+		t.Fatalf("renderManagerPicoClawConfig() error = %v", err)
+	}
+
+	text := string(data)
+	for _, want := range []string{
+		`"participant_id": "` + ManagerParticipantID + `"`,
+		`"api_base": "http://10.0.0.8:18080/api/v1/agents/` + ManagerUserID + `/llm"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("renderManagerPicoClawConfig() missing %q in:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, `"api_base": "http://10.0.0.8:18080/api/v1/agents/`+ManagerParticipantID+`/llm"`) {
+		t.Fatalf("renderManagerPicoClawConfig() used participant ID for LLM bridge:\n%s", text)
+	}
+	if strings.Contains(text, `"bot_id"`) {
+		t.Fatalf("renderManagerPicoClawConfig() still emitted bot_id:\n%s", text)
+	}
+}
+
+func TestAgentPicoClawConfigNeedsParticipantRecreateRejectsLegacyBotID(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(config dir) error = %v", err)
+	}
+
+	staleConfig := `{"channels":{"csgclaw":{"enabled":true,"participant_id":"manager","bot_id":"manager"}}}`
+	if err := os.WriteFile(configPath, []byte(staleConfig), 0o600); err != nil {
+		t.Fatalf("WriteFile(stale config) error = %v", err)
+	}
+	if !agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID) {
+		t.Fatal("agentPicoClawConfigNeedsParticipantRecreate() = false, want true for legacy bot_id field")
+	}
+
+	currentConfig := `{"channels":{"csgclaw":{"enabled":true,"participant_id":"manager"}}}`
+	if err := os.WriteFile(configPath, []byte(currentConfig), 0o600); err != nil {
+		t.Fatalf("WriteFile(current config) error = %v", err)
+	}
+	if agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID) {
+		t.Fatal("agentPicoClawConfigNeedsParticipantRecreate() = true, want false for current participant bridge fields")
 	}
 }
 

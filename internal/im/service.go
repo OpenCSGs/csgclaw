@@ -158,7 +158,12 @@ func HasMentionTagForUser(content, userID string) bool {
 	return false
 }
 
-const sessionsDirName = "sessions"
+const (
+	sessionsDirName          = "sessions"
+	adminUserID              = "u-admin"
+	managerParticipantUserID = "manager"
+	legacyManagerUserID      = "u-manager"
+)
 
 type persistedBootstrap struct {
 	CurrentUserID      string          `json:"current_user_id"`
@@ -509,10 +514,14 @@ func normalizeBootstrap(state Bootstrap) Bootstrap {
 	if state.CurrentUserID == "" {
 		state.CurrentUserID = DefaultBootstrap().CurrentUserID
 	}
+	managerAliases := managerUserAliases(state.Users)
 	state.Users = ensureUsers(state.Users)
-	state.Rooms = cloneRooms(state.Rooms)
+	state.Rooms = migrateLegacyManagerRoomRefs(cloneRooms(state.Rooms), managerAliases)
 	if !containsUserID(state.Users, state.CurrentUserID) {
-		state.CurrentUserID = defaultCurrentUserID(state.Users)
+		state.CurrentUserID = migrateLegacyManagerID(state.CurrentUserID, managerAliases)
+		if !containsUserID(state.Users, state.CurrentUserID) {
+			state.CurrentUserID = defaultCurrentUserID(state.Users)
+		}
 	}
 	return state
 }
@@ -524,7 +533,7 @@ func ensureUsers(users []User) []User {
 	}
 	if !hasUserHandle(result, "admin") {
 		result = append(result, User{
-			ID:        "u-admin",
+			ID:        adminUserID,
 			Name:      "admin",
 			Handle:    "admin",
 			Role:      "admin",
@@ -542,7 +551,7 @@ func ensureUsers(users []User) []User {
 	}
 	if !hasUserHandle(result, "manager") {
 		result = append(result, User{
-			ID:        "u-manager",
+			ID:        managerParticipantUserID,
 			Name:      "manager",
 			Handle:    "manager",
 			Role:      "manager",
@@ -553,12 +562,36 @@ func ensureUsers(users []User) []User {
 	} else {
 		for i := range result {
 			if strings.EqualFold(strings.TrimSpace(result[i].Handle), "manager") {
+				result[i].ID = managerParticipantUserID
 				result[i].Name = "manager"
 				result[i].Role = "manager"
 			}
 		}
 	}
+	result = dropLegacyManagerUserDuplicates(result)
 	return result
+}
+
+func dropLegacyManagerUserDuplicates(users []User) []User {
+	out := make([]User, 0, len(users))
+	seen := make(map[string]struct{}, len(users))
+	for _, user := range users {
+		id := strings.TrimSpace(user.ID)
+		if id == "" || id == legacyManagerUserID {
+			if strings.EqualFold(strings.TrimSpace(user.Handle), "manager") ||
+				strings.EqualFold(strings.TrimSpace(user.Name), "manager") ||
+				strings.EqualFold(strings.TrimSpace(user.Role), "manager") {
+				id = managerParticipantUserID
+				user.ID = managerParticipantUserID
+			}
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, user)
+	}
+	return out
 }
 
 func normalizeUser(user User) User {
@@ -587,7 +620,7 @@ func containsUserID(users []User, userID string) bool {
 }
 
 func defaultCurrentUserID(users []User) string {
-	for _, preferred := range []string{"u-admin", "u-manager"} {
+	for _, preferred := range []string{adminUserID, managerParticipantUserID} {
 		if containsUserID(users, preferred) {
 			return preferred
 		}
@@ -598,6 +631,25 @@ func defaultCurrentUserID(users []User) string {
 	return ""
 }
 
+func managerUserAliases(users []User) map[string]struct{} {
+	aliases := map[string]struct{}{
+		legacyManagerUserID:      {},
+		managerParticipantUserID: {},
+	}
+	for _, user := range users {
+		id := strings.TrimSpace(user.ID)
+		if id == "" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(user.Handle), "manager") ||
+			strings.EqualFold(strings.TrimSpace(user.Name), "manager") ||
+			strings.EqualFold(strings.TrimSpace(user.Role), "manager") {
+			aliases[id] = struct{}{}
+		}
+	}
+	return aliases
+}
+
 func cloneRooms(rooms []Room) []Room {
 	cloned := make([]Room, 0, len(rooms))
 	for _, room := range rooms {
@@ -606,9 +658,61 @@ func cloneRooms(rooms []Room) []Room {
 	return cloned
 }
 
+func migrateLegacyManagerRoomRefs(rooms []Room, managerAliases map[string]struct{}) []Room {
+	for i := range rooms {
+		rooms[i].Members = migrateLegacyManagerIDs(rooms[i].Members, managerAliases)
+		for j := range rooms[i].Messages {
+			rooms[i].Messages[j].SenderID = migrateLegacyManagerID(rooms[i].Messages[j].SenderID, managerAliases)
+			rooms[i].Messages[j].Content = migrateLegacyManagerMentionTags(rooms[i].Messages[j].Content, managerAliases)
+			for k := range rooms[i].Messages[j].Mentions {
+				rooms[i].Messages[j].Mentions[k].ID = migrateLegacyManagerID(rooms[i].Messages[j].Mentions[k].ID, managerAliases)
+			}
+		}
+	}
+	return rooms
+}
+
+func migrateLegacyManagerIDs(ids []string, managerAliases map[string]struct{}) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		id = migrateLegacyManagerID(id, managerAliases)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func migrateLegacyManagerID(id string, managerAliases map[string]struct{}) string {
+	id = strings.TrimSpace(id)
+	if _, ok := managerAliases[id]; ok {
+		return managerParticipantUserID
+	}
+	return id
+}
+
+func migrateLegacyManagerMentionTags(content string, managerAliases map[string]struct{}) string {
+	for id := range managerAliases {
+		if id == managerParticipantUserID {
+			continue
+		}
+		content = strings.ReplaceAll(content, `user_id="`+id+`"`, `user_id="`+managerParticipantUserID+`"`)
+	}
+	return content
+}
+
 func ensureAdminManagerRoom(rooms []Room) []Room {
 	for _, room := range rooms {
-		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(room, "u-admin") && containsUserIDInRoom(room, "u-manager") {
+		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(room, adminUserID) && containsUserIDInRoom(room, managerParticipantUserID) {
 			normalized := room
 			if normalized.Title == "Admin & Manager" {
 				normalized.Title = "admin & manager"
@@ -638,11 +742,11 @@ func ensureAdminManagerRoom(rooms []Room) []Room {
 		Subtitle:    formatConversationSubtitle(2),
 		Description: "Bootstrap room for admin and manager.",
 		IsDirect:    true,
-		Members:     []string{"u-admin", "u-manager"},
+		Members:     []string{adminUserID, managerParticipantUserID},
 		Messages: []Message{
 			{
 				ID:        fmt.Sprintf("msg-%d", now.UnixNano()+1),
-				SenderID:  "u-manager",
+				SenderID:  managerParticipantUserID,
 				Content:   "Bootstrap room created for admin and manager.",
 				CreatedAt: now,
 			},

@@ -58,7 +58,7 @@ func TestRuntimeProfileForAgentUsesBridgeForCodex(t *testing.T) {
 		},
 	})
 
-	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/bots/u-alice/llm"; got != want {
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
 		t.Fatalf("runtimeProfileForAgent().BaseURL = %q, want %q", got, want)
 	}
 	if got, want := profile.APIKey, "shared-token"; got != want {
@@ -96,7 +96,7 @@ func TestRuntimeProfileForKindUsesBridgeForCodexRuntime(t *testing.T) {
 		},
 	})
 
-	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/bots/u-alice/llm"; got != want {
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
 		t.Fatalf("runtimeProfileForKind().BaseURL = %q, want %q", got, want)
 	}
 	if got, want := profile.APIKey, "shared-token"; got != want {
@@ -136,7 +136,7 @@ func TestRuntimeProfileForKindUsesHostReachableBridgeForCodexRuntime(t *testing.
 		ModelID:  "gpt-5.4",
 	})
 
-	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/bots/u-developer/llm"; got != want {
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-developer/llm"; got != want {
 		t.Fatalf("runtimeProfileForKind().BaseURL = %q, want host-reachable %q", got, want)
 	}
 }

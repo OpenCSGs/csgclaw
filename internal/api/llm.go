@@ -8,6 +8,51 @@ import (
 	"csgclaw/internal/llm"
 )
 
+func (h *Handler) handleAgentLLMModelsByID(w http.ResponseWriter, r *http.Request) {
+	agentID, ok := h.requireAgentLLMID(w, r)
+	if !ok {
+		return
+	}
+	h.handleBotLLMModels(w, r, agentID)
+}
+
+func (h *Handler) handleAgentLLMChatCompletionsByID(w http.ResponseWriter, r *http.Request) {
+	agentID, ok := h.requireAgentLLMID(w, r)
+	if !ok {
+		return
+	}
+	h.handleBotLLMChatCompletions(w, r, agentID)
+}
+
+func (h *Handler) handleAgentLLMResponsesByID(w http.ResponseWriter, r *http.Request) {
+	agentID, ok := h.requireAgentLLMID(w, r)
+	if !ok {
+		return
+	}
+	h.handleBotLLMResponses(w, r, agentID)
+}
+
+func (h *Handler) handleAgentLLMResponsesWebsocketByID(w http.ResponseWriter, r *http.Request) {
+	agentID, ok := h.requireAgentLLMID(w, r)
+	if !ok {
+		return
+	}
+	h.handleBotLLMResponsesWebsocket(w, r, agentID)
+}
+
+func (h *Handler) requireAgentLLMID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	agentID := strings.TrimSpace(pathValue(r, "id"))
+	if agentID == "" {
+		http.NotFound(w, r)
+		return "", false
+	}
+	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return "", false
+	}
+	return agentID, true
+}
+
 func (h *Handler) handleBotLLMModels(w http.ResponseWriter, r *http.Request, botID string) {
 	if h.llm == nil {
 		http.Error(w, "llm bridge is not configured", http.StatusServiceUnavailable)

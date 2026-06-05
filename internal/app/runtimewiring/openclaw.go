@@ -26,10 +26,10 @@ func UpdateOpenClawFeishuProvider(svc *agent.Service, provider feishu.BotCredent
 	updateRuntimeFeishuProvider(svc, agentruntime.KindOpenClawSandbox, provider)
 }
 
-func openClawBoxEnvVars(baseURL, accessToken, botID, llmBaseURL, modelID string, _ feishu.BotCredentialProvider) map[string]string {
+func openClawBoxEnvVars(baseURL, accessToken, participantID, _ string, llmBaseURL, modelID string, _ feishu.BotCredentialProvider) map[string]string {
 	env := bridgeLLMEnvVars(llmBaseURL, accessToken, modelID)
 	env["CSGCLAW_BASE_URL"] = baseURL
 	env["CSGCLAW_ACCESS_TOKEN"] = accessToken
-	env["CSGCLAW_BOT_ID"] = botID
+	env["CSGCLAW_BOT_ID"] = participantID
 	return env
 }

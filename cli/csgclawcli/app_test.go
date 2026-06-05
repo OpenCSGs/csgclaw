@@ -30,20 +30,21 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 	got := stderr.String()
 	for _, want := range []string{
 		"Available Commands:",
-		"bot      Manage bots",
-		"hub      Discover agent templates.",
-		"room     Manage IM rooms",
-		"member   Manage IM room members",
-		"message  Manage IM messages.",
-		"team     Manage agent teams.",
-		"skill    Discover and install ClawHub skills.",
-		"completion Generate shell completion scripts.",
+		"participant  Manage channel participants.",
+		"pt           Manage channel participants.",
+		"hub          Discover agent templates.",
+		"room         Manage IM rooms",
+		"member       Manage IM room members",
+		"message      Manage IM messages.",
+		"team         Manage agent teams.",
+		"skill        Discover and install ClawHub skills.",
+		"completion   Generate shell completion scripts.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("usage = %q, want substring %q", got, want)
 		}
 	}
-	for _, notWant := range []string{"  agent", "  serve", "  onboard", "  user"} {
+	for _, notWant := range []string{"  agent", "  serve", "  onboard", "  user", "\n  bot "} {
 		if strings.Contains(got, notWant) {
 			t.Fatalf("usage = %q, should not include %q", got, notWant)
 		}
@@ -104,20 +105,20 @@ func TestExecuteHiddenCompleteUsesLiteCommandSet(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"bot\n", "hub\n", "room\n", "member\n", "message\n", "team\n", "completion\n"} {
+	for _, want := range []string{"participant\n", "pt\n", "hub\n", "room\n", "member\n", "message\n", "team\n", "completion\n"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stdout = %q, want substring %q", got, want)
 		}
 	}
-	for _, notWant := range []string{"agent\n", "serve\n", "onboard\n", "user\n", "__complete\n"} {
+	for _, notWant := range []string{"agent\n", "serve\n", "onboard\n", "user\n", "bot\n", "__complete\n"} {
 		if strings.Contains(got, notWant) {
 			t.Fatalf("stdout = %q, should not include %q", got, notWant)
 		}
 	}
 }
 
-func TestExecuteRejectsFullCsgclawCommands(t *testing.T) {
-	for _, command := range []string{"agent", "serve", "onboard", "user"} {
+func TestExecuteRejectsUnavailableCommands(t *testing.T) {
+	for _, command := range []string{"agent", "serve", "onboard", "user", "bot"} {
 		t.Run(command, func(t *testing.T) {
 			app := &App{
 				stdout: &bytes.Buffer{},
@@ -136,7 +137,7 @@ func TestExecuteRejectsFullCsgclawCommands(t *testing.T) {
 	}
 }
 
-func TestExecuteBotIdentityHelpUsesBotIDSemantics(t *testing.T) {
+func TestExecuteCollaborationIdentityHelpUsesParticipantSemantics(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
@@ -145,17 +146,17 @@ func TestExecuteBotIdentityHelpUsesBotIDSemantics(t *testing.T) {
 		{
 			name: "room create",
 			args: []string{"room", "create", "--help"},
-			want: []string{"creator bot id", "comma-separated member bot ids"},
+			want: []string{"creator participant id", "comma-separated member participant ids"},
 		},
 		{
 			name: "member create",
 			args: []string{"member", "create", "--help"},
-			want: []string{"bot id to add", "inviter bot id"},
+			want: []string{"participant id to add", "inviter participant id"},
 		},
 		{
 			name: "message create",
 			args: []string{"message", "create", "--help"},
-			want: []string{"sender bot id", "mentioned bot id"},
+			want: []string{"sender participant id", "mentioned participant id"},
 		},
 		{
 			name: "team create",
@@ -237,7 +238,7 @@ func TestExecuteTeamTaskListUsesHTTPClient(t *testing.T) {
 	}
 }
 
-func TestExecuteBotIdentityRequiredErrorsUseBotIDSemantics(t *testing.T) {
+func TestExecuteCollaborationIdentityRequiredErrorsUseParticipantSemantics(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
@@ -246,12 +247,12 @@ func TestExecuteBotIdentityRequiredErrorsUseBotIDSemantics(t *testing.T) {
 		{
 			name: "member create missing user id",
 			args: []string{"member", "create", "--room-id", "room-1", "--inviter-id", "u-manager"},
-			want: "--user-id bot id is required",
+			want: "--user-id participant id is required",
 		},
 		{
 			name: "message create missing sender id",
 			args: []string{"message", "create", "--room-id", "room-1", "--content", "hello"},
-			want: "--sender-id bot id is required",
+			want: "--sender-id participant id is required",
 		},
 	}
 
@@ -274,7 +275,7 @@ func TestExecuteBotIdentityRequiredErrorsUseBotIDSemantics(t *testing.T) {
 	}
 }
 
-func TestExecuteBotListUsesAPIClient(t *testing.T) {
+func TestExecuteParticipantListUsesAPIClient(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{
 		stdout: &stdout,
@@ -283,24 +284,19 @@ func TestExecuteBotListUsesAPIClient(t *testing.T) {
 			if req.Method != http.MethodGet {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
 			}
-			if req.URL.String() != "http://example.test/api/v1/channels/feishu/bots" {
-				t.Fatalf("url = %q, want feishu bot list route", req.URL.String())
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/participants" {
+				t.Fatalf("url = %q, want feishu participant list route", req.URL.String())
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"bot-feishu","name":"feishu","role":"manager","channel":"feishu","agent_id":"u-manager","user_id":"fsu-manager","created_at":"2026-04-12T09:00:00Z"}]`), nil
+			return jsonResponse(http.StatusOK, `[{"id":"bot-feishu","name":"feishu","type":"agent","channel":"feishu","agent_id":"u-manager","channel_user_ref":"fsu-manager","lifecycle_status":"active","created_at":"2026-04-12T09:00:00Z"}]`), nil
 		}),
 	}
 
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "bot", "list", "--channel", "feishu"})
+	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "participant", "list", "--channel", "feishu"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), `"id": "bot-feishu"`) || !strings.Contains(stdout.String(), `"channel": "feishu"`) {
-		t.Fatalf("stdout = %q, want JSON bot payload", stdout.String())
-	}
-	for _, unexpected := range []string{`"agent_id"`, `"user_id"`, `"created_at"`} {
-		if strings.Contains(stdout.String(), unexpected) {
-			t.Fatalf("stdout = %q, want compact csgclaw-cli bot list without %s", stdout.String(), unexpected)
-		}
+		t.Fatalf("stdout = %q, want JSON participant payload", stdout.String())
 	}
 }
 
@@ -318,14 +314,14 @@ func TestExecuteDefaultsToJSONOutputForNonTerminalStdout(t *testing.T) {
 			if req.Method != http.MethodGet {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
 			}
-			if req.URL.String() != "http://example.test/api/v1/channels/feishu/bots" {
-				t.Fatalf("url = %q, want feishu bot list route", req.URL.String())
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/participants" {
+				t.Fatalf("url = %q, want feishu participant list route", req.URL.String())
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"bot-feishu","name":"feishu","role":"manager","channel":"feishu","agent_id":"u-manager","user_id":"fsu-manager","created_at":"2026-04-12T09:00:00Z"}]`), nil
+			return jsonResponse(http.StatusOK, `[{"id":"bot-feishu","name":"feishu","type":"agent","channel":"feishu","agent_id":"u-manager","channel_user_ref":"fsu-manager","lifecycle_status":"active","created_at":"2026-04-12T09:00:00Z"}]`), nil
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "list", "--channel", "feishu"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "participant", "list", "--channel", "feishu"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	got, err := os.ReadFile(stdout.Name())
@@ -333,16 +329,11 @@ func TestExecuteDefaultsToJSONOutputForNonTerminalStdout(t *testing.T) {
 		t.Fatalf("ReadFile(stdout) error = %v", err)
 	}
 	if !strings.Contains(string(got), `"id": "bot-feishu"`) || !strings.Contains(string(got), `"channel": "feishu"`) {
-		t.Fatalf("stdout = %q, want JSON bot payload", string(got))
-	}
-	for _, unexpected := range []string{`"agent_id"`, `"user_id"`, `"created_at"`} {
-		if strings.Contains(string(got), unexpected) {
-			t.Fatalf("stdout = %q, want compact csgclaw-cli bot list without %s", string(got), unexpected)
-		}
+		t.Fatalf("stdout = %q, want JSON participant payload", string(got))
 	}
 }
 
-func TestExecuteBotListUsesRoleQuery(t *testing.T) {
+func TestExecuteParticipantListUsesTypeQuery(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{
 		stdout: &stdout,
@@ -351,24 +342,19 @@ func TestExecuteBotListUsesRoleQuery(t *testing.T) {
 			if req.Method != http.MethodGet {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
 			}
-			if req.URL.String() != "http://example.test/api/v1/channels/feishu/bots?role=manager" {
-				t.Fatalf("url = %q, want role-filtered bot list route", req.URL.String())
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/participants?type=agent" {
+				t.Fatalf("url = %q, want type-filtered participant list route", req.URL.String())
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"bot-feishu","name":"feishu","role":"manager","channel":"feishu","agent_id":"u-manager","user_id":"fsu-manager","created_at":"2026-04-12T09:00:00Z"}]`), nil
+			return jsonResponse(http.StatusOK, `[{"id":"bot-feishu","name":"feishu","type":"agent","channel":"feishu","agent_id":"u-manager","channel_user_ref":"fsu-manager","lifecycle_status":"active","created_at":"2026-04-12T09:00:00Z"}]`), nil
 		}),
 	}
 
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "bot", "list", "--channel", "feishu", "--role", "manager"})
+	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "participant", "list", "--channel", "feishu", "--type", "agent"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !strings.Contains(stdout.String(), `"id": "bot-feishu"`) || !strings.Contains(stdout.String(), `"role": "manager"`) {
-		t.Fatalf("stdout = %q, want JSON bot payload", stdout.String())
-	}
-	for _, unexpected := range []string{`"agent_id"`, `"user_id"`, `"created_at"`} {
-		if strings.Contains(stdout.String(), unexpected) {
-			t.Fatalf("stdout = %q, want compact csgclaw-cli bot list without %s", stdout.String(), unexpected)
-		}
+	if !strings.Contains(stdout.String(), `"id": "bot-feishu"`) || !strings.Contains(stdout.String(), `"type": "agent"`) {
+		t.Fatalf("stdout = %q, want JSON participant payload", stdout.String())
 	}
 }
 
@@ -380,8 +366,8 @@ func TestExecuteUsesEnvironmentForEndpointAndToken(t *testing.T) {
 		stdout: &bytes.Buffer{},
 		stderr: &bytes.Buffer{},
 		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.String() != "http://env.example.test/api/v1/channels/feishu/bots" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://env.example.test/api/v1/channels/feishu/bots")
+			if req.URL.String() != "http://env.example.test/api/v1/channels/feishu/participants" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://env.example.test/api/v1/channels/feishu/participants")
 			}
 			if got := req.Header.Get("Authorization"); got != "Bearer env-secret-token" {
 				t.Fatalf("Authorization = %q, want %q", got, "Bearer env-secret-token")
@@ -390,7 +376,7 @@ func TestExecuteUsesEnvironmentForEndpointAndToken(t *testing.T) {
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"bot", "list", "--channel", "feishu"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"participant", "list", "--channel", "feishu"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 }
@@ -403,8 +389,8 @@ func TestExecuteFlagsOverrideEnvironmentForEndpointAndToken(t *testing.T) {
 		stdout: &bytes.Buffer{},
 		stderr: &bytes.Buffer{},
 		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.String() != "http://flag.example.test/api/v1/channels/feishu/bots" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://flag.example.test/api/v1/channels/feishu/bots")
+			if req.URL.String() != "http://flag.example.test/api/v1/channels/feishu/participants" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://flag.example.test/api/v1/channels/feishu/participants")
 			}
 			if got := req.Header.Get("Authorization"); got != "Bearer flag-secret-token" {
 				t.Fatalf("Authorization = %q, want %q", got, "Bearer flag-secret-token")
@@ -416,13 +402,13 @@ func TestExecuteFlagsOverrideEnvironmentForEndpointAndToken(t *testing.T) {
 	if err := app.Execute(context.Background(), []string{
 		"--endpoint", "http://flag.example.test",
 		"--token", "flag-secret-token",
-		"bot", "list", "--channel", "feishu",
+		"participant", "list", "--channel", "feishu",
 	}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 }
 
-func TestExecuteBotDeleteUsesAPIClient(t *testing.T) {
+func TestExecuteParticipantDeleteUsesAPIClient(t *testing.T) {
 	app := &App{
 		stdout: &bytes.Buffer{},
 		stderr: &bytes.Buffer{},
@@ -430,20 +416,20 @@ func TestExecuteBotDeleteUsesAPIClient(t *testing.T) {
 			if req.Method != http.MethodDelete {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodDelete)
 			}
-			if req.URL.String() != "http://example.test/api/v1/channels/feishu/bots/u-alice" {
-				t.Fatalf("url = %q, want feishu bot delete route", req.URL.String())
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/participants/u-alice" {
+				t.Fatalf("url = %q, want feishu participant delete route", req.URL.String())
 			}
 			return jsonResponse(http.StatusNoContent, ``), nil
 		}),
 	}
 
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "delete", "--channel", "feishu", "u-alice"})
+	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "participant", "delete", "--channel", "feishu", "u-alice"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 }
 
-func TestExecuteBotDeleteSupportsJSONOutput(t *testing.T) {
+func TestExecuteParticipantDeleteSupportsJSONOutput(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{
 		stdout: &stdout,
@@ -456,110 +442,14 @@ func TestExecuteBotDeleteSupportsJSONOutput(t *testing.T) {
 		}),
 	}
 
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "bot", "delete", "--channel", "feishu", "u-alice"})
+	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "participant", "delete", "--channel", "feishu", "u-alice"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	for _, want := range []string{`"command": "bot"`, `"action": "delete"`, `"status": "deleted"`, `"id": "u-alice"`, `"channel": "feishu"`} {
+	for _, want := range []string{`"command": "participant"`, `"action": "delete"`, `"status": "deleted"`, `"id": "u-alice"`, `"channel": "feishu"`} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want %s", stdout.String(), want)
 		}
-	}
-}
-
-func TestExecuteBotConfigSetUsesFeishuConfigRoute(t *testing.T) {
-	var stdout bytes.Buffer
-	app := &App{
-		stdin:  strings.NewReader("stdin-secret\n"),
-		stdout: &stdout,
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodPut {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodPut)
-			}
-			if req.URL.String() != "http://example.test/api/v1/channels/feishu/config" {
-				t.Fatalf("url = %q, want feishu config route", req.URL.String())
-			}
-			if got := req.Header.Get("Authorization"); got != "Bearer token" {
-				t.Fatalf("Authorization = %q, want bearer token", got)
-			}
-			var payload map[string]any
-			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode request: %v", err)
-			}
-			for key, want := range map[string]string{
-				"bot_id":        "u-dev",
-				"app_id":        "cli_dev",
-				"app_secret":    "stdin-secret",
-				"admin_open_id": "ou_admin",
-			} {
-				if got := payload[key]; got != want {
-					t.Fatalf("payload[%s] = %#v, want %q; payload=%#v", key, got, want, payload)
-				}
-			}
-			return jsonResponse(http.StatusOK, `{"bot_id":"u-dev","configured":true,"app_id":"cli_dev","app_secret":"present","admin_open_id":"ou_admin","reloaded":true}`), nil
-		}),
-	}
-
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--token", "token", "--output", "json", "bot", "config", "--channel", "feishu", "--set", "--bot-id", "u-dev", "--app-id", "cli_dev", "--admin-open-id", "ou_admin", "--app-secret-stdin"})
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if strings.Contains(stdout.String(), "stdin-secret") {
-		t.Fatalf("stdout leaked secret: %s", stdout.String())
-	}
-	if !strings.Contains(stdout.String(), `"app_secret": "present"`) {
-		t.Fatalf("stdout = %q, want masked secret", stdout.String())
-	}
-}
-
-func TestExecuteBotConfigGetUsesFeishuConfigRoute(t *testing.T) {
-	var stdout bytes.Buffer
-	app := &App{
-		stdout: &stdout,
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodGet {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
-			}
-			if req.URL.String() != "http://example.test/api/v1/channels/feishu/config?bot_id=u-dev" {
-				t.Fatalf("url = %q, want feishu config get route", req.URL.String())
-			}
-			return jsonResponse(http.StatusOK, `{"bot_id":"u-dev","configured":true,"app_id":"cli_dev","app_secret":"present"}`), nil
-		}),
-	}
-
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "config", "--channel", "feishu", "--get", "--bot-id", "u-dev"})
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !strings.Contains(stdout.String(), "u-dev") || !strings.Contains(stdout.String(), "present") {
-		t.Fatalf("stdout = %s, want bot and masked secret", stdout.String())
-	}
-}
-
-func TestExecuteBotConfigReloadUsesFeishuConfigRoute(t *testing.T) {
-	var stdout bytes.Buffer
-	app := &App{
-		stdout: &stdout,
-		stderr: &bytes.Buffer{},
-		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.Method != http.MethodPost {
-				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
-			}
-			if req.URL.String() != "http://example.test/api/v1/channels/feishu/config" {
-				t.Fatalf("url = %q, want feishu config reload route", req.URL.String())
-			}
-			return jsonResponse(http.StatusOK, `{"status":"reloaded","feishu_bots":["u-dev"]}`), nil
-		}),
-	}
-
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "bot", "config", "--channel", "feishu", "--reload"})
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !strings.Contains(stdout.String(), "reloaded") || !strings.Contains(stdout.String(), "u-dev") {
-		t.Fatalf("stdout = %s, want reload result", stdout.String())
 	}
 }
 

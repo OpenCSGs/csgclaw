@@ -93,7 +93,7 @@ func TestAddAgentToRoomSupportsRoomID(t *testing.T) {
 	room, err := svc.CreateRoom(CreateRoomRequest{
 		Title:     "Ops",
 		CreatorID: "u-admin",
-		MemberIDs: []string{"u-manager"},
+		MemberIDs: []string{"manager"},
 	})
 	if err != nil {
 		t.Fatalf("CreateRoom() error = %v", err)
@@ -128,7 +128,7 @@ func TestCreateRoomStoresStructuredEvent(t *testing.T) {
 	room, err := svc.CreateRoom(CreateRoomRequest{
 		Title:     "Ops",
 		CreatorID: "u-admin",
-		MemberIDs: []string{"u-manager"},
+		MemberIDs: []string{"manager"},
 		Locale:    "en",
 	})
 	if err != nil {
@@ -155,10 +155,10 @@ func TestCreateMessagePrefixesMentionTag(t *testing.T) {
 		Users: []User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
 			{ID: "u-dev", Name: "dev", Handle: "dev"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []Room{
-			{ID: "room-1", Title: "Ops", Members: []string{"u-admin", "u-dev", "u-manager"}},
+			{ID: "room-1", Title: "Ops", Members: []string{"u-admin", "u-dev", "manager"}},
 		},
 	})
 
@@ -233,17 +233,17 @@ func TestCreateMessageWithMissingMentionIDFails(t *testing.T) {
 func TestDeliverMessageReplacesExistingMessageWithSameIDAndSender(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
-		Users:         []User{{ID: "u-manager", Name: "manager", Handle: "manager"}},
+		Users:         []User{{ID: "manager", Name: "manager", Handle: "manager"}},
 		Rooms: []Room{{
 			ID:      "room-1",
 			Title:   "Ops",
-			Members: []string{"u-manager"},
+			Members: []string{"manager"},
 		}},
 	})
 
 	first, err := svc.DeliverMessage(DeliverMessageRequest{
 		RoomID:    "room-1",
-		SenderID:  "u-manager",
+		SenderID:  "manager",
 		MessageID: "act-1",
 		Content:   "pending",
 	})
@@ -252,7 +252,7 @@ func TestDeliverMessageReplacesExistingMessageWithSameIDAndSender(t *testing.T) 
 	}
 	second, err := svc.DeliverMessage(DeliverMessageRequest{
 		RoomID:    "room-1",
-		SenderID:  "u-manager",
+		SenderID:  "manager",
 		MessageID: "act-1",
 		Content:   "allowed",
 	})
@@ -333,7 +333,7 @@ func TestDeleteRoomRemovesRoom(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
 		Rooms: []Room{
-			{ID: "room-1", Title: "Room One", Members: []string{"u-admin", "u-manager"}},
+			{ID: "room-1", Title: "Room One", Members: []string{"u-admin", "manager"}},
 		},
 	})
 
@@ -642,13 +642,13 @@ func TestSaveBootstrapSplitsRoomMessagesIntoSessionFiles(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []Room{
 			{
 				ID:      "room-1775709078753586000",
 				Title:   "0409-1231",
-				Members: []string{"u-admin", "u-manager"},
+				Members: []string{"u-admin", "manager"},
 				Messages: []Message{
 					{
 						ID:        "msg-1775709078753589000",
@@ -718,14 +718,14 @@ func TestLoadBootstrapSupportsExternalSessionFiles(t *testing.T) {
   "current_user_id": "u-admin",
   "users": [
     {"id": "u-admin", "name": "admin", "handle": "admin"},
-    {"id": "u-manager", "name": "manager", "handle": "manager"}
+    {"id": "manager", "name": "manager", "handle": "manager"}
   ],
   "rooms": [
     {
       "id": "room-1",
       "title": "alpha",
       "subtitle": "",
-      "members": ["u-admin", "u-manager"],
+      "members": ["u-admin", "manager"],
       "messages": "sessions/room-1.jsonl"
     }
   ]
@@ -734,7 +734,7 @@ func TestLoadBootstrapSupportsExternalSessionFiles(t *testing.T) {
 		t.Fatalf("WriteFile(state.json) error = %v", err)
 	}
 
-	sessionLine := `{"id":"msg-1","sender_id":"u-admin","kind":"message","content":"hello","created_at":"2026-04-09T04:31:18.753589Z","mentions":["u-manager"]}` + "\n"
+	sessionLine := `{"id":"msg-1","sender_id":"u-admin","kind":"message","content":"hello","created_at":"2026-04-09T04:31:18.753589Z","mentions":["manager"]}` + "\n"
 	if err := os.MkdirAll(filepath.Join(dir, "sessions"), 0o755); err != nil {
 		t.Fatalf("MkdirAll(sessions) error = %v", err)
 	}
@@ -762,14 +762,14 @@ func TestLoadBootstrapRejectsLegacyInlineMessages(t *testing.T) {
   "current_user_id": "u-admin",
   "users": [
     {"id": "u-admin", "name": "admin", "handle": "admin"},
-    {"id": "u-manager", "name": "manager", "handle": "manager"}
+    {"id": "manager", "name": "manager", "handle": "manager"}
   ],
   "rooms": [
     {
       "id": "room-1",
       "title": "alpha",
       "subtitle": "",
-      "members": ["u-admin", "u-manager"],
+      "members": ["u-admin", "manager"],
       "messages": [
         {"id":"msg-1","sender_id":"u-admin","kind":"message","content":"hello","created_at":"2026-04-09T04:31:18.753589Z","mentions":null}
       ]
@@ -797,7 +797,7 @@ func TestEnsureBootstrapStateCreatesAdminManagerDMWhenOnlyGroupExists(t *testing
 		CurrentUserID: "u-admin",
 		Users: []User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 			{ID: "u-alice", Name: "alice", Handle: "alice"},
 		},
 		Rooms: []Room{
@@ -806,7 +806,7 @@ func TestEnsureBootstrapStateCreatesAdminManagerDMWhenOnlyGroupExists(t *testing
 				Title:       "ops",
 				IsDirect:    false,
 				Description: "group room",
-				Members:     []string{"u-admin", "u-manager", "u-alice"},
+				Members:     []string{"u-admin", "manager", "u-alice"},
 			},
 		},
 	}
@@ -830,7 +830,7 @@ func TestEnsureBootstrapStateCreatesAdminManagerDMWhenOnlyGroupExists(t *testing
 	var dm *Room
 	for i := range loaded.Rooms {
 		room := &loaded.Rooms[i]
-		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(*room, "u-admin") && containsUserIDInRoom(*room, "u-manager") {
+		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(*room, "u-admin") && containsUserIDInRoom(*room, "manager") {
 			dm = room
 			break
 		}
@@ -843,6 +843,62 @@ func TestEnsureBootstrapStateCreatesAdminManagerDMWhenOnlyGroupExists(t *testing
 	}
 }
 
+func TestEnsureBootstrapStateMigratesMisspelledManagerReferences(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	legacyID := "man" + "ger"
+
+	state := Bootstrap{
+		CurrentUserID: legacyID,
+		Users: []User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: legacyID, Name: "manager", Handle: "manager", Role: "manager"},
+		},
+		Rooms: []Room{{
+			ID:       "room-dm",
+			Title:    "admin & manager",
+			IsDirect: true,
+			Members:  []string{"u-admin", legacyID},
+			Messages: []Message{{
+				ID:        "msg-1",
+				SenderID:  legacyID,
+				Content:   `<at user_id="` + legacyID + `">manager</at> hello`,
+				CreatedAt: time.Now().UTC(),
+				Mentions:  []Mention{{ID: legacyID, Name: "manager"}},
+			}},
+		}},
+	}
+	if err := SaveBootstrap(statePath, state); err != nil {
+		t.Fatalf("SaveBootstrap() error = %v", err)
+	}
+
+	if err := EnsureBootstrapState(statePath); err != nil {
+		t.Fatalf("EnsureBootstrapState() error = %v", err)
+	}
+
+	loaded, err := LoadBootstrap(statePath)
+	if err != nil {
+		t.Fatalf("LoadBootstrap() error = %v", err)
+	}
+	if loaded.CurrentUserID != "manager" {
+		t.Fatalf("CurrentUserID = %q, want manager", loaded.CurrentUserID)
+	}
+	if _, ok := NewServiceFromBootstrap(loaded).User(legacyID); ok {
+		t.Fatalf("legacy manager user %q still exists", legacyID)
+	}
+	room := loaded.Rooms[0]
+	if !containsUserIDInRoom(room, "manager") || containsUserIDInRoom(room, legacyID) {
+		t.Fatalf("room.Members = %+v, want manager only", room.Members)
+	}
+	got := room.Messages[0]
+	if got.SenderID != "manager" || len(got.Mentions) != 1 || got.Mentions[0].ID != "manager" {
+		t.Fatalf("message = %+v, want manager sender and mention", got)
+	}
+	if !strings.Contains(got.Content, `user_id="manager"`) || strings.Contains(got.Content, legacyID) {
+		t.Fatalf("message.Content = %q, want manager mention tag", got.Content)
+	}
+}
+
 func TestReloadRefreshesRoomsFromStateFile(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")
@@ -850,7 +906,7 @@ func TestReloadRefreshesRoomsFromStateFile(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []User{
 			{ID: "u-admin", Name: "admin", Handle: "admin", Role: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"},
 		},
 	}
 	if err := SaveBootstrap(statePath, initial); err != nil {
@@ -873,7 +929,7 @@ func TestReloadRefreshesRoomsFromStateFile(t *testing.T) {
 				ID:       "room-1",
 				Title:    "admin & manager",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", "manager"},
 			},
 		},
 	}

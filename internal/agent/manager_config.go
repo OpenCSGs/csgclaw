@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -31,15 +32,19 @@ var defaultLocalIPDetector = localIPDetector{
 }
 
 func ensureManagerPicoClawConfig(server config.ServerConfig, model config.ModelConfig) (string, error) {
-	return ensureAgentPicoClawConfig(ManagerName, "u-manager", server, model)
+	return ensureAgentPicoClawConfigForParticipant(ManagerName, ManagerParticipantID, ManagerUserID, server, model)
 }
 
-func ensureAgentPicoClawConfig(agentName, botID string, server config.ServerConfig, model config.ModelConfig) (string, error) {
+func ensureAgentPicoClawConfig(agentName, agentID string, server config.ServerConfig, model config.ModelConfig) (string, error) {
+	return ensureAgentPicoClawConfigForParticipant(agentName, agentID, agentID, server, model)
+}
+
+func ensureAgentPicoClawConfigForParticipant(agentName, participantID, agentID string, server config.ServerConfig, model config.ModelConfig) (string, error) {
 	agentHome, err := agentHomeDir(agentName)
 	if err != nil {
 		return "", err
 	}
-	return picoclawsandbox.EnsureConfig(agentHome, botID, server, model, resolveManagerBaseURL)
+	return picoclawsandbox.EnsureConfig(agentHome, participantID, agentID, server, model, resolveManagerBaseURL)
 }
 
 func managerPicoClawRoot() (string, error) {
@@ -59,11 +64,52 @@ func agentPicoClawRoot(agentName string) (string, error) {
 }
 
 func renderManagerPicoClawConfig(server config.ServerConfig, model config.ModelConfig) ([]byte, error) {
-	return renderAgentPicoClawConfig("u-manager", server, model)
+	return renderAgentPicoClawConfigForParticipant(ManagerParticipantID, ManagerUserID, server, model)
 }
 
-func renderAgentPicoClawConfig(botID string, server config.ServerConfig, model config.ModelConfig) ([]byte, error) {
-	return picoclawsandbox.RenderConfig(botID, server, model, resolveManagerBaseURL)
+func renderAgentPicoClawConfig(agentID string, server config.ServerConfig, model config.ModelConfig) ([]byte, error) {
+	return renderAgentPicoClawConfigForParticipant(agentID, agentID, server, model)
+}
+
+func renderAgentPicoClawConfigForParticipant(participantID, agentID string, server config.ServerConfig, model config.ModelConfig) ([]byte, error) {
+	return picoclawsandbox.RenderConfig(participantID, agentID, server, model, resolveManagerBaseURL)
+}
+
+func agentPicoClawConfigNeedsParticipantRecreate(agentName, participantID string) bool {
+	root, err := agentPicoClawRoot(agentName)
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(root, picoclawsandbox.HostConfig))
+	if err != nil {
+		return false
+	}
+
+	var cfg struct {
+		Channels map[string]json.RawMessage `json:"channels"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return false
+	}
+	raw := cfg.Channels["csgclaw"]
+	if len(raw) == 0 {
+		return true
+	}
+	var channel map[string]any
+	if err := json.Unmarshal(raw, &channel); err != nil {
+		return false
+	}
+	if enabled, ok := channel["enabled"].(bool); !ok || !enabled {
+		return true
+	}
+	got, ok := channel["participant_id"].(string)
+	if !ok || strings.TrimSpace(got) != strings.TrimSpace(participantID) {
+		return true
+	}
+	if _, ok := channel["bot_id"]; ok {
+		return true
+	}
+	return false
 }
 
 func picoclawBridgeModelID(modelID string) string {

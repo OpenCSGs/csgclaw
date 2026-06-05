@@ -43,7 +43,7 @@ It has two audiences:
                                 │ manager pod  │  csgclaw-agent-sandbox
                                 │ picoclaw     │──────────────┐   │
                                 └──────┬───────┘              │   │
-             POST /api/bots/:id/worker │                      │   │
+ POST /api/v1/channels/csgclaw/participants │                 │   │
                                        ▼                      │   │
                                 ┌──────────────┐              │   │
                                 │ worker pod   │  csgclaw-agent-sandbox
@@ -142,7 +142,7 @@ the CSGHub API env before sending the CSGHub `CreateRequest`.
 | Picoclaw ↔ server | `CSGCLAW_ACCESS_TOKEN` | `server.AccessToken` |
 | Picoclaw ↔ server | `PICOCLAW_CHANNELS_CSGCLAW_BASE_URL` | `resolveManagerBaseURL(server)` |
 | Picoclaw ↔ server | `PICOCLAW_CHANNELS_CSGCLAW_ACCESS_TOKEN` | `server.AccessToken` |
-| Picoclaw ↔ server | `PICOCLAW_CHANNELS_CSGCLAW_BOT_ID` | per-agent |
+| Picoclaw ↔ server | `PICOCLAW_CHANNELS_CSGCLAW_PARTICIPANT_ID` | per-agent |
 | Picoclaw ↔ server | `CSGCLAW_LLM_BASE_URL` | `llmBridgeBaseURL(...)` |
 | Picoclaw ↔ server | `CSGCLAW_LLM_API_KEY` | `server.AccessToken` |
 | Picoclaw ↔ server | `CSGCLAW_LLM_MODEL_ID` | per-agent |
@@ -179,9 +179,10 @@ values and optionally prefixes them with `CSGCLAW_PVC_SUBPATH_PREFIX`.
 - Every sandbox (server + manager + worker) must share an overlay
   reachable by pod-IP or Hub service DNS; the server's advertised URL
   must resolve from inside manager/worker pods.
-- Manager/worker pods must reach the server on
-  `CSGCLAW_BASE_URL` (LLM bridge `/api/bots/<id>/llm`, worker spawn
-  `/api/bots/<id>/workers`, health `/healthz`).
+- Manager/worker pods must reach the server on `CSGCLAW_BASE_URL`:
+  participant message bridge
+  `/api/v1/channels/csgclaw/participants/<id>/{events,messages}`,
+  LLM bridge `/api/v1/agents/<id>/llm`, and health `/healthz`.
 - Server pod must reach the CSGHub Sandbox API on
   `CSGHUB_API_BASE_URL` (TLS + bearer).
 - The server-side CSGHub client uses `CSGHUB_AIGATEWAY_URL` when set;

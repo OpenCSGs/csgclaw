@@ -70,7 +70,6 @@ export function AgentDetailPane({
   onStart,
   onStop,
   onRecreate,
-  onUpgrade,
   onDelete,
   onInvite,
   onOpenDM,
@@ -140,7 +139,6 @@ export function AgentDetailPane({
             publishBusy={publishBusy}
             onStart={onStart}
             onStop={onStop}
-            onUpgrade={onUpgrade}
             onRecreate={onRecreate}
             onInvite={onInvite}
             onDelete={onDelete}
@@ -413,7 +411,6 @@ function AgentActionsMenu({
   publishBusy,
   onStart,
   onStop,
-  onUpgrade,
   onRecreate,
   onInvite,
   onDelete,
@@ -434,10 +431,6 @@ function AgentActionsMenu({
             {running ? t("agentStop") : t("agentStart")}
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem disabled={busy || incomplete} onSelect={() => onUpgrade?.(item)}>
-          <span>{t("agentUpgrade")}</span>
-          {upgradeNeeded ? <span className="agent-actions-menu-badge">{t("agentUpdateAvailable")}</span> : null}
-        </DropdownMenuItem>
         <DropdownMenuItem danger disabled={busy || incomplete} onSelect={() => onRecreate(item)}>
           {t("agentRecreate")}
         </DropdownMenuItem>

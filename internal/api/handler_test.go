@@ -23,6 +23,7 @@ import (
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
@@ -160,35 +161,6 @@ func (f *fakeCodexBridgeController) StopAgent(agentID string) {
 	f.stopCalls = append(f.stopCalls, agentID)
 }
 
-func TestParseBotCompatibilityPath(t *testing.T) {
-	tests := []struct {
-		path       string
-		wantBotID  string
-		wantAction string
-		wantOK     bool
-	}{
-		{path: "/api/bots/u-manager/events", wantBotID: "u-manager", wantAction: "events", wantOK: true},
-		{path: "/api/bots/u-manager/messages/send", wantBotID: "u-manager", wantAction: "messages/send", wantOK: true},
-		{path: "/api/bots/u-manager/llm/models", wantBotID: "u-manager", wantAction: "llm/models", wantOK: true},
-		{path: "/api/bots/u-manager/llm/v1/models", wantBotID: "u-manager", wantAction: "llm/v1/models", wantOK: true},
-		{path: "/api/bots/u-manager/llm/chat/completions", wantBotID: "u-manager", wantAction: "llm/chat/completions", wantOK: true},
-		{path: "/api/bots/u-manager/llm/v1/chat/completions", wantBotID: "u-manager", wantAction: "llm/v1/chat/completions", wantOK: true},
-		{path: "/api/bots/u-manager/llm/responses", wantBotID: "u-manager", wantAction: "llm/responses", wantOK: true},
-		{path: "/api/bots/u-manager/llm/v1/responses", wantBotID: "u-manager", wantAction: "llm/v1/responses", wantOK: true},
-		{path: "/api/bots/u-manager", wantOK: false},
-		{path: "/api/bots//events", wantOK: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			gotBotID, gotAction, gotOK := parseBotCompatibilityPath(tt.path)
-			if gotBotID != tt.wantBotID || gotAction != tt.wantAction || gotOK != tt.wantOK {
-				t.Fatalf("parseBotCompatibilityPath(%q) = (%q, %q, %v), want (%q, %q, %v)", tt.path, gotBotID, gotAction, gotOK, tt.wantBotID, tt.wantAction, tt.wantOK)
-			}
-		})
-	}
-}
-
 func TestDeriveAgentHandle(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -292,73 +264,6 @@ func TestBootstrapConfigViewUsesServerUpgradeVisibility(t *testing.T) {
 				t.Fatalf("ShowUpgrade = %t, want %t", got.ShowUpgrade, tt.showUpgrade)
 			}
 		})
-	}
-}
-
-func TestHandleAgentImageCandidatesReturnsLocalSandboxImages(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "config.toml")
-	if err := (config.Config{
-		Server: config.ServerConfig{
-			ListenAddr:  "127.0.0.1:18080",
-			AccessToken: "token",
-		},
-		Sandbox: config.SandboxConfig{
-			Provider:      config.DockerProvider,
-			DockerCLIPath: "/custom/docker",
-		},
-	}).Save(configPath); err != nil {
-		t.Fatalf("Save(config) error = %v", err)
-	}
-
-	srv := &Handler{
-		configPath: configPath,
-		localRuntimeImages: func(_ context.Context, cfg config.Config) ([]string, error) {
-			if got, want := cfg.Sandbox.Provider, config.DockerProvider; got != want {
-				t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
-			}
-			if got, want := cfg.Sandbox.DockerCLIPath, "/custom/docker"; got != want {
-				t.Fatalf("cfg.Sandbox.DockerCLIPath = %q, want %q", got, want)
-			}
-			return []string{"registry.example/picoclaw:2026.5.27", "registry.example/picoclaw:2026.5.22"}, nil
-		},
-	}
-
-	rec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents/image-candidates", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var got []string
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	want := []string{"registry.example/picoclaw:2026.5.27", "registry.example/picoclaw:2026.5.22"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("agent image candidates = %#v, want %#v", got, want)
-	}
-}
-
-func TestListLocalRuntimeImagesUsesSandboxProviderCapability(t *testing.T) {
-	var gotHome string
-	provider := &sandboxtest.Provider{
-		Images: []string{"registry.example/picoclaw:2026.5.27"},
-		ListImagesFunc: func(_ context.Context, homeDir string) ([]string, error) {
-			gotHome = homeDir
-			return []string{"registry.example/picoclaw:2026.5.27"}, nil
-		},
-	}
-
-	got, err := listLocalRuntimeImagesWithProvider(context.Background(), provider)
-	if err != nil {
-		t.Fatalf("listLocalRuntimeImagesWithProvider() error = %v", err)
-	}
-	want := []string{"registry.example/picoclaw:2026.5.27"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("listLocalRuntimeImagesWithProvider() = %#v, want %#v", got, want)
-	}
-	wantHomeSuffix := filepath.Join(config.AppDirName, "agents", agent.ManagerName, config.RuntimeHomeDirName)
-	if !strings.HasSuffix(gotHome, wantHomeSuffix) {
-		t.Fatalf("sandbox home = %q, want suffix %q", gotHome, wantHomeSuffix)
 	}
 }
 
@@ -484,626 +389,6 @@ func TestHandleRoomsMembersAddsCsgclawMember(t *testing.T) {
 	}
 	if len(room.Members) != 2 || room.Members[1] != "u-alice" {
 		t.Fatalf("members = %+v, want u-admin and u-alice", room.Members)
-	}
-}
-
-func TestHandleBotsListUsesChannelPath(t *testing.T) {
-	srv := &Handler{botSvc: mustNewBotService(t, []bot.Bot{
-		{
-			ID:        "bot-csgclaw",
-			Name:      "CSGClaw Bot",
-			Role:      string(bot.RoleWorker),
-			Channel:   string(bot.ChannelCSGClaw),
-			AgentID:   "agent-csgclaw",
-			UserID:    "user-csgclaw",
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-		},
-		{
-			ID:        "bot-feishu",
-			Name:      "Feishu Bot",
-			Role:      string(bot.RoleManager),
-			Channel:   string(bot.ChannelFeishu),
-			AgentID:   "agent-feishu",
-			UserID:    "user-feishu",
-			CreatedAt: time.Date(2026, 4, 12, 10, 0, 0, 0, time.UTC),
-		},
-	})}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/bots", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var got []bot.Bot
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(got) != 1 || got[0].ID != "bot-csgclaw" {
-		t.Fatalf("bots = %+v, want only csgclaw bot", got)
-	}
-}
-
-func TestHandleBotsListFiltersByChannel(t *testing.T) {
-	srv := &Handler{botSvc: mustNewBotService(t, []bot.Bot{
-		{
-			ID:        "bot-csgclaw",
-			Name:      "CSGClaw Bot",
-			Role:      string(bot.RoleWorker),
-			Channel:   string(bot.ChannelCSGClaw),
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-		},
-		{
-			ID:        "bot-feishu",
-			Name:      "Feishu Bot",
-			Role:      string(bot.RoleWorker),
-			Channel:   string(bot.ChannelFeishu),
-			CreatedAt: time.Date(2026, 4, 12, 10, 0, 0, 0, time.UTC),
-		},
-	})}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/bots", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var got []bot.Bot
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(got) != 1 || got[0].ID != "bot-csgclaw" {
-		t.Fatalf("bots = %+v, want only bot-csgclaw", got)
-	}
-}
-
-func TestHandleBotsListFiltersByRole(t *testing.T) {
-	srv := &Handler{botSvc: mustNewBotService(t, []bot.Bot{
-		{
-			ID:        "bot-manager",
-			Name:      "Manager Bot",
-			Role:      string(bot.RoleManager),
-			Channel:   string(bot.ChannelCSGClaw),
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-		},
-		{
-			ID:        "bot-worker",
-			Name:      "Worker Bot",
-			Role:      string(bot.RoleWorker),
-			Channel:   string(bot.ChannelCSGClaw),
-			CreatedAt: time.Date(2026, 4, 12, 10, 0, 0, 0, time.UTC),
-		},
-	})}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/bots?role=worker", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var got []bot.Bot
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(got) != 1 || got[0].ID != "bot-worker" {
-		t.Fatalf("bots = %+v, want only bot-worker", got)
-	}
-}
-
-func TestHandleBotsListRejectsInvalidChannel(t *testing.T) {
-	srv := &Handler{botSvc: mustNewBotService(t, nil)}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/unknown/bots", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
-	}
-}
-
-func TestHandleBotsListRejectsInvalidRole(t *testing.T) {
-	srv := &Handler{botSvc: mustNewBotService(t, nil)}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/bots?role=agent", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
-	}
-}
-
-func TestHandleBotsListRequiresService(t *testing.T) {
-	srv := &Handler{}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/bots", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-	}
-}
-
-func TestHandleBotsCreateCSGClawWorker(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	agentSvc, _ := mustNewSeededServiceWithPath(t, nil)
-	imSvc := im.NewService()
-	bus := im.NewBus()
-	events, cancel := bus.Subscribe()
-	defer cancel()
-	store, err := bot.NewMemoryStore(nil)
-	if err != nil {
-		t.Fatalf("bot.NewMemoryStore() error = %v", err)
-	}
-	botSvc, err := bot.NewServiceWithDependencies(store, agentSvc, imSvc)
-	if err != nil {
-		t.Fatalf("bot.NewServiceWithDependencies() error = %v", err)
-	}
-	srv := &Handler{
-		svc:    agentSvc,
-		botSvc: botSvc,
-		im:     imSvc,
-		imBus:  bus,
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/bots", strings.NewReader(`{"name":"alice","description":"test lead","image":"agent-image:1","avatar":"avatar/cartoon-3.png","role":"worker","runtime_kind":"picoclaw_sandbox","agent_profile":{"provider":"csghub_lite","model_id":"glm-4.5","reasoning_effort":"high"}}`))
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	var created bot.Bot
-	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if created.ID != "u-alice" || created.AgentID != "u-alice" || created.UserID != "u-alice" {
-		t.Fatalf("created bot = %+v, want u-alice IDs", created)
-	}
-	if created.Description != "test lead" {
-		t.Fatalf("created bot description = %q, want test lead", created.Description)
-	}
-	if created.Avatar != "avatar/cartoon-3.png" {
-		t.Fatalf("created bot avatar = %q, want avatar/cartoon-3.png", created.Avatar)
-	}
-
-	rec = httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/bots", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("list bots status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var bots []bot.Bot
-	if err := json.NewDecoder(rec.Body).Decode(&bots); err != nil {
-		t.Fatalf("decode bots response: %v", err)
-	}
-	if len(bots) != 1 || bots[0].ID != "u-alice" {
-		t.Fatalf("bots = %+v, want u-alice", bots)
-	}
-	if bots[0].Description != "test lead" {
-		t.Fatalf("bots[0].Description = %q, want test lead", bots[0].Description)
-	}
-	if bots[0].Avatar != "avatar/cartoon-3.png" {
-		t.Fatalf("bots[0].Avatar = %q, want avatar/cartoon-3.png", bots[0].Avatar)
-	}
-
-	rec = httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("list agents status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var agents []map[string]any
-	if err := json.NewDecoder(rec.Body).Decode(&agents); err != nil {
-		t.Fatalf("decode agents response: %v", err)
-	}
-	if len(agents) != 1 || agents[0]["id"] != "u-alice" {
-		t.Fatalf("agents = %+v, want u-alice", agents)
-	}
-	if agents[0]["image"] != "agent-image:1" {
-		t.Fatalf("agents[0].image = %#v, want agent-image:1", agents[0]["image"])
-	}
-	if agents[0]["avatar"] != "avatar/cartoon-3.png" {
-		t.Fatalf("agents[0].avatar = %#v, want avatar/cartoon-3.png", agents[0]["avatar"])
-	}
-	profile, ok := agents[0]["agent_profile"].(map[string]any)
-	if !ok || profile["provider"] != agent.ProviderCSGHubLite || profile["model_id"] != "glm-4.5" {
-		t.Fatalf("agent_profile = %#v, want csghub_lite/glm-4.5", agents[0]["agent_profile"])
-	}
-
-	rec = httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("list users status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var users []im.User
-	if err := json.NewDecoder(rec.Body).Decode(&users); err != nil {
-		t.Fatalf("decode users response: %v", err)
-	}
-	if !containsUser(users, "u-alice") {
-		t.Fatalf("users = %+v, want u-alice", users)
-	}
-	for _, user := range users {
-		if user.ID == "u-alice" && user.Avatar != "avatar/cartoon-3.png" {
-			t.Fatalf("user avatar = %q, want avatar/cartoon-3.png", user.Avatar)
-		}
-	}
-	rooms := imSvc.ListRooms()
-	if len(rooms) != 1 || !containsMember(rooms[0].Members, "u-admin") || !containsMember(rooms[0].Members, "u-alice") {
-		t.Fatalf("rooms = %+v, want bootstrap room with admin and u-alice", rooms)
-	}
-	first := mustReceiveIMEvent(t, events)
-	if first.Type != im.EventTypeUserCreated || first.User == nil || first.User.ID != "u-alice" {
-		t.Fatalf("first event = %+v, want user_created for u-alice", first)
-	}
-	second := mustReceiveIMEvent(t, events)
-	if second.Type != im.EventTypeRoomCreated || second.Room == nil {
-		t.Fatalf("second event = %+v, want room_created with room payload", second)
-	}
-	third := mustReceiveIMEventWithin(t, events, 2*time.Second)
-	if third.Type != im.EventTypeMessageCreated || third.Message == nil {
-		t.Fatalf("third event = %+v, want bootstrap message", third)
-	}
-}
-
-func TestHandleBotsCreateCodexWorkerEnsuresCodexBridge(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	agentSvc, err := agent.NewService(
-		config.ModelConfig{
-			Provider: config.ProviderLLMAPI,
-			BaseURL:  "http://127.0.0.1:4000",
-			APIKey:   "sk-test",
-			ModelID:  "model-1",
-		},
-		config.ServerConfig{}, "manager-image:test", "",
-		agent.WithRuntime(fakeCompatRuntime{
-			kind: agent.RuntimeKindCodex,
-			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-" + spec.AgentName}, nil
-			},
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-
-	imSvc := im.NewService()
-	bus := im.NewBus()
-	store, err := bot.NewMemoryStore(nil)
-	if err != nil {
-		t.Fatalf("bot.NewMemoryStore() error = %v", err)
-	}
-	botSvc, err := bot.NewServiceWithDependencies(store, agentSvc, imSvc)
-	if err != nil {
-		t.Fatalf("bot.NewServiceWithDependencies() error = %v", err)
-	}
-	bridge := &fakeCodexBridgeController{}
-	agentSvc.SetLifecycleObserver(bridge)
-	srv := &Handler{
-		svc:    agentSvc,
-		botSvc: botSvc,
-		im:     imSvc,
-		imBus:  bus,
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/bots", strings.NewReader(`{"name":"alice","role":"worker","runtime_kind":"codex"}`))
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(bridge.ensureCalls) != 1 {
-		t.Fatalf("EnsureAgent() calls = %d, want 1", len(bridge.ensureCalls))
-	}
-	if bridge.ensureCalls[0].ID != "u-alice" || bridge.ensureCalls[0].RuntimeKind != agent.RuntimeKindCodex {
-		t.Fatalf("EnsureAgent() got %+v, want codex worker u-alice", bridge.ensureCalls[0])
-	}
-}
-
-func TestHandleBotsCreateFeishuWorker(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	agentSvc, _ := mustNewSeededServiceWithPath(t, nil)
-	feishuSvc := feishu.NewService()
-	store, err := bot.NewMemoryStore(nil)
-	if err != nil {
-		t.Fatalf("bot.NewMemoryStore() error = %v", err)
-	}
-	botSvc, err := bot.NewServiceWithDependencies(store, agentSvc, nil, feishuSvc)
-	if err != nil {
-		t.Fatalf("bot.NewServiceWithDependencies() error = %v", err)
-	}
-	srv := &Handler{
-		svc:    agentSvc,
-		botSvc: botSvc,
-		feishu: feishuSvc,
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/feishu/bots", strings.NewReader(`{"name":"alice","image":"agent-image:1","role":"worker","runtime_kind":"picoclaw_sandbox"}`))
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	var created bot.Bot
-	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if created.ID != "u-alice" || created.AgentID != "u-alice" || created.UserID != "u-alice" || created.Channel != "feishu" {
-		t.Fatalf("created bot = %+v, want feishu u-alice IDs", created)
-	}
-
-	rec = httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/bots", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("list bots status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var bots []bot.Bot
-	if err := json.NewDecoder(rec.Body).Decode(&bots); err != nil {
-		t.Fatalf("decode bots response: %v", err)
-	}
-	if len(bots) != 1 || bots[0].ID != "u-alice" {
-		t.Fatalf("bots = %+v, want u-alice", bots)
-	}
-
-	rec = httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/users", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("list feishu users status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var users []im.User
-	if err := json.NewDecoder(rec.Body).Decode(&users); err != nil {
-		t.Fatalf("decode users response: %v", err)
-	}
-	if !containsUser(users, "u-alice") {
-		t.Fatalf("feishu users = %+v, want u-alice", users)
-	}
-}
-
-func TestHandleBotsCreateRejectsDuplicateWorkerNameInSameChannel(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	agentSvc, _ := mustNewSeededServiceWithPath(t, nil)
-	imSvc := im.NewService()
-	store, err := bot.NewMemoryStore(nil)
-	if err != nil {
-		t.Fatalf("bot.NewMemoryStore() error = %v", err)
-	}
-	botSvc, err := bot.NewServiceWithDependencies(store, agentSvc, imSvc)
-	if err != nil {
-		t.Fatalf("bot.NewServiceWithDependencies() error = %v", err)
-	}
-	srv := &Handler{
-		svc:    agentSvc,
-		botSvc: botSvc,
-		im:     imSvc,
-	}
-
-	first := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/bots", strings.NewReader(`{"name":"alice","image":"agent-image:1","role":"worker","runtime_kind":"picoclaw_sandbox"}`))
-	firstRec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(firstRec, first)
-	if firstRec.Code != http.StatusCreated {
-		t.Fatalf("first status = %d, want %d; body=%s", firstRec.Code, http.StatusCreated, firstRec.Body.String())
-	}
-
-	second := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/bots", strings.NewReader(`{"name":"alice","image":"agent-image:1","role":"worker","runtime_kind":"picoclaw_sandbox"}`))
-	secondRec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(secondRec, second)
-	if secondRec.Code != http.StatusBadRequest {
-		t.Fatalf("second status = %d, want %d; body=%s", secondRec.Code, http.StatusBadRequest, secondRec.Body.String())
-	}
-	if !strings.Contains(secondRec.Body.String(), `bot name "alice" already exists in channel "csgclaw"`) {
-		t.Fatalf("second body = %q, want duplicate name error", secondRec.Body.String())
-	}
-}
-
-func TestHandleBotsCreateCSGClawManagerBindsBootstrappedAgent(t *testing.T) {
-	agentSvc := mustNewSeededService(t, []agent.Agent{
-		{
-			ID:        agent.ManagerUserID,
-			Name:      agent.ManagerName,
-			Role:      agent.RoleManager,
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-		},
-	})
-	imSvc := im.NewService()
-	store, err := bot.NewMemoryStore(nil)
-	if err != nil {
-		t.Fatalf("bot.NewMemoryStore() error = %v", err)
-	}
-	botSvc, err := bot.NewServiceWithDependencies(store, agentSvc, imSvc)
-	if err != nil {
-		t.Fatalf("bot.NewServiceWithDependencies() error = %v", err)
-	}
-	srv := &Handler{
-		svc:    agentSvc,
-		botSvc: botSvc,
-		im:     imSvc,
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/bots", strings.NewReader(`{"name":"manager","role":"manager"}`))
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	var created bot.Bot
-	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if created.ID != agent.ManagerUserID || created.AgentID != agent.ManagerUserID || created.UserID != agent.ManagerUserID || created.Role != string(bot.RoleManager) {
-		t.Fatalf("created bot = %+v, want manager u-manager IDs", created)
-	}
-}
-
-func TestHandleBotsCreateManagerBootstrapsMissingAgent(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	agentSvc := mustNewSeededService(t, nil)
-	imSvc := im.NewService()
-	store, err := bot.NewMemoryStore(nil)
-	if err != nil {
-		t.Fatalf("bot.NewMemoryStore() error = %v", err)
-	}
-	botSvc, err := bot.NewServiceWithDependencies(store, agentSvc, imSvc)
-	if err != nil {
-		t.Fatalf("bot.NewServiceWithDependencies() error = %v", err)
-	}
-	srv := &Handler{
-		svc:    agentSvc,
-		botSvc: botSvc,
-		im:     imSvc,
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/bots", strings.NewReader(`{"name":"manager","role":"manager"}`))
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	var created bot.Bot
-	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if created.ID != agent.ManagerUserID || created.AgentID != agent.ManagerUserID || created.UserID != agent.ManagerUserID {
-		t.Fatalf("created bot = %+v, want u-manager IDs", created)
-	}
-}
-
-func TestHandleBotsListRejectsUnsupportedMethod(t *testing.T) {
-	srv := &Handler{botSvc: mustNewBotService(t, nil)}
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/channels/csgclaw/bots", strings.NewReader(`{}`))
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusMethodNotAllowed, rec.Body.String())
-	}
-}
-
-func TestHandleBotByIDDeleteUsesChannel(t *testing.T) {
-	srv := &Handler{botSvc: mustNewBotService(t, []bot.Bot{
-		{
-			ID:        "u-alice",
-			Name:      "Alice",
-			Role:      string(bot.RoleWorker),
-			Channel:   string(bot.ChannelCSGClaw),
-			AgentID:   "u-alice",
-			UserID:    "u-alice",
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-		},
-		{
-			ID:        "u-alice",
-			Name:      "Alice",
-			Role:      string(bot.RoleWorker),
-			Channel:   string(bot.ChannelFeishu),
-			AgentID:   "u-alice",
-			UserID:    "u-alice",
-			CreatedAt: time.Date(2026, 4, 12, 10, 0, 0, 0, time.UTC),
-		},
-	})}
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/feishu/bots/u-alice", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
-	}
-	bots, err := srv.botSvc.List(string(bot.ChannelCSGClaw), "", "")
-	if err != nil {
-		t.Fatalf("List(csgclaw) error = %v", err)
-	}
-	if len(bots) != 1 || bots[0].ID != "u-alice" {
-		t.Fatalf("csgclaw bots = %+v, want retained u-alice", bots)
-	}
-	bots, err = srv.botSvc.List(string(bot.ChannelFeishu), "", "")
-	if err != nil {
-		t.Fatalf("List(feishu) error = %v", err)
-	}
-	if len(bots) != 0 {
-		t.Fatalf("feishu bots = %+v, want deleted", bots)
-	}
-}
-
-func TestHandleBotByIDDeleteRemovesCSGClawUser(t *testing.T) {
-	store, err := bot.NewMemoryStore([]bot.Bot{
-		{
-			ID:        "u-alice",
-			Name:      "Alice",
-			Role:      string(bot.RoleWorker),
-			Channel:   string(bot.ChannelCSGClaw),
-			AgentID:   "u-alice",
-			UserID:    "u-alice",
-			CreatedAt: time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-		},
-	})
-	if err != nil {
-		t.Fatalf("NewMemoryStore() error = %v", err)
-	}
-	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
-		CurrentUserID: "u-admin",
-		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin", IsOnline: true},
-			{ID: "u-alice", Name: "Alice", Handle: "alice", IsOnline: true},
-		},
-		Rooms: []im.Room{
-			{
-				ID:       "room-1",
-				Title:    "Alice",
-				Members:  []string{"u-admin", "u-alice"},
-				Messages: []im.Message{{ID: "msg-1", SenderID: "u-alice", Content: "hello"}},
-			},
-		},
-	})
-	botSvc, err := bot.NewServiceWithDependencies(store, nil, imSvc)
-	if err != nil {
-		t.Fatalf("NewServiceWithDependencies() error = %v", err)
-	}
-	srv := &Handler{botSvc: botSvc}
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/csgclaw/bots/u-alice", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
-	}
-	if _, ok := imSvc.User("u-alice"); ok {
-		t.Fatal("User(u-alice) ok = true, want false after bot delete")
-	}
-	if _, ok := imSvc.Room("room-1"); ok {
-		t.Fatal("Room(room-1) ok = true, want false after removing DM user")
-	}
-	bots, err := botSvc.List(string(bot.ChannelCSGClaw), "", "")
-	if err != nil {
-		t.Fatalf("List(csgclaw) error = %v", err)
-	}
-	if len(bots) != 0 {
-		t.Fatalf("csgclaw bots = %+v, want deleted", bots)
 	}
 }
 
@@ -1339,22 +624,9 @@ func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 			CreatedAt:       time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC),
 		},
 	})
-	imSvc := im.NewService()
-	if _, _, err := imSvc.EnsureAgentUser(im.EnsureAgentUserRequest{
-		ID:     "u-alice",
-		Name:   "alice",
-		Handle: "alice",
-		Role:   agent.RoleWorker,
-		Avatar: "avatar/3D-1.png",
-	}); err != nil {
-		t.Fatalf("EnsureAgentUser() error = %v", err)
-	}
-	bus := im.NewBus()
-	events, cancel := bus.Subscribe()
-	defer cancel()
 
-	srv := &Handler{svc: svc, im: imSvc, imBus: bus}
-	body := `{"description":"new role","avatar":"avatar/cartoon-4.png","agent_profile":{"name":"alice","provider":"csghub_lite","model_id":"new-model","env":{"A":"B"}}}`
+	srv := &Handler{svc: svc}
+	body := `{"description":"new role","agent_profile":{"name":"alice","provider":"csghub_lite","model_id":"new-model","env":{"A":"B"}}}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-alice", strings.NewReader(body))
 	rec := httptest.NewRecorder()
 
@@ -1370,23 +642,9 @@ func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 	if got["description"] != "new role" {
 		t.Fatalf("agent = %#v, want updated description", got)
 	}
-	if got["avatar"] != "avatar/cartoon-4.png" {
-		t.Fatalf("agent avatar = %#v, want updated avatar", got["avatar"])
-	}
 	profile, ok := got["agent_profile"].(map[string]any)
 	if !ok || profile["env_restart_required"] != true || profile["model_id"] != "new-model" {
 		t.Fatalf("agent_profile = %#v, want env_restart_required true", got["agent_profile"])
-	}
-	user, ok := imSvc.User("u-alice")
-	if !ok {
-		t.Fatal("User(u-alice) ok = false, want true")
-	}
-	if user.Avatar != "avatar/cartoon-4.png" {
-		t.Fatalf("user avatar = %q, want avatar/cartoon-4.png", user.Avatar)
-	}
-	evt := mustReceiveIMEvent(t, events)
-	if evt.Type != im.EventTypeUserUpdated || evt.User == nil || evt.User.Avatar != "avatar/cartoon-4.png" {
-		t.Fatalf("event = %+v, want user.updated with updated avatar", evt)
 	}
 }
 
@@ -2003,7 +1261,6 @@ func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 		Name:         "alice",
 		RuntimeKind:  agent.RuntimeKindCodex,
 		FromTemplate: "builtin.frontend-alice",
-		Avatar:       "avatar/3D-1.png",
 		Profile:      "codex-fast",
 	})
 
@@ -2015,9 +1272,6 @@ func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 	}
 	if got.Spec.FromTemplate != "builtin.frontend-alice" {
 		t.Fatalf("Spec.FromTemplate = %q, want %q", got.Spec.FromTemplate, "builtin.frontend-alice")
-	}
-	if got.Spec.Avatar != "avatar/3D-1.png" {
-		t.Fatalf("Spec.Avatar = %q, want %q", got.Spec.Avatar, "avatar/3D-1.png")
 	}
 	if got.Spec.Profile != "codex-fast" {
 		t.Fatalf("Spec.Profile = %q, want %q", got.Spec.Profile, "codex-fast")
@@ -2050,62 +1304,6 @@ func TestHandleHubTemplatesListsAggregatedTemplates(t *testing.T) {
 	}
 	if got[0].Source.Name == "" || got[0].Source.Kind == "" {
 		t.Fatalf("template source = %+v, want populated source", got[0].Source)
-	}
-}
-
-func TestHandleHubTemplateDeleteRemovesLocalTemplate(t *testing.T) {
-	hubSvc := mustNewLocalTemplateHubService(t, "review-bot", hub.Template{
-		ID:          "review-bot",
-		Name:        "review-bot",
-		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: agent.RuntimeKindCodex,
-	})
-	srv := &Handler{}
-	srv.SetHubService(hubSvc)
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/hub/templates/local.review-bot", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
-	}
-	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates", nil)
-	listRec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(listRec, listReq)
-	if listRec.Code != http.StatusOK {
-		t.Fatalf("list status = %d, want %d; body=%s", listRec.Code, http.StatusOK, listRec.Body.String())
-	}
-	var listed []apitypes.HubTemplate
-	if err := json.NewDecoder(listRec.Body).Decode(&listed); err != nil {
-		t.Fatalf("decode list response: %v", err)
-	}
-	for _, item := range listed {
-		if item.ID == "local.review-bot" {
-			t.Fatalf("listed templates = %#v, want deleted local.review-bot", listed)
-		}
-	}
-}
-
-func TestHandleHubTemplateDeleteRejectsBuiltinTemplate(t *testing.T) {
-	builtinSvc, err := hub.NewService(config.HubConfig{
-		DefaultRegistry: "builtin",
-		Registries: []config.HubRegistryConfig{
-			{Name: "builtin", Kind: hub.RegistryKindBuiltin, Enabled: true},
-		},
-	}, hub.DefaultStoreFactory)
-	if err != nil {
-		t.Fatalf("hub.NewService() error = %v", err)
-	}
-	srv := &Handler{}
-	srv.SetHubService(builtinSvc)
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/hub/templates/builtin.picoclaw-worker", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
 	}
 }
 
@@ -2581,7 +1779,7 @@ func TestHandleRoomsInviteAliasAddsConversationMembers(t *testing.T) {
 			CurrentUserID: "u-admin",
 			Users: []im.User{
 				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "u-manager", Name: "manager", Handle: "manager"},
+				{ID: "manager", Name: "manager", Handle: "manager"},
 			},
 			Rooms: []im.Room{
 				{
@@ -2592,7 +1790,7 @@ func TestHandleRoomsInviteAliasAddsConversationMembers(t *testing.T) {
 			},
 		}),
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms/invite", strings.NewReader(`{"room_id":"room-1","inviter_id":"u-admin","user_ids":["u-manager"],"locale":"en"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms/invite", strings.NewReader(`{"room_id":"room-1","inviter_id":"u-admin","user_ids":["manager"],"locale":"en"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -2608,14 +1806,14 @@ func TestHandleRoomsInviteAliasAddsConversationMembers(t *testing.T) {
 	if got.ID != "room-1" {
 		t.Fatalf("conversation id = %q, want %q", got.ID, "room-1")
 	}
-	if !containsMember(got.Members, "u-manager") {
-		t.Fatalf("members = %+v, want u-manager to be invited", got.Members)
+	if !containsMember(got.Members, "manager") {
+		t.Fatalf("members = %+v, want manager to be invited", got.Members)
 	}
 }
 
 func TestHandleRoomsInviteRequiresRoomID(t *testing.T) {
 	srv := &Handler{im: im.NewService()}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms/invite", strings.NewReader(`{"inviter_id":"u-admin","user_ids":["u-manager"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms/invite", strings.NewReader(`{"inviter_id":"u-admin","user_ids":["manager"]}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -2723,7 +1921,7 @@ func TestHandleUsersReturnsUserList(t *testing.T) {
 		}),
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/users", nil)
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -2750,7 +1948,7 @@ func TestHandleUsersCreateProvisionsIMUser(t *testing.T) {
 		imBus: bus,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"id":"u-alice","name":"Alice","handle":"alice","role":"worker"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-alice","name":"Alice","handle":"alice","role":"worker"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -2784,7 +1982,7 @@ func TestHandleUsersCreateProvisionsIMUser(t *testing.T) {
 	}
 }
 
-func TestHandleUsersCreateWithBotServiceCreatesWorkerAgent(t *testing.T) {
+func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
@@ -2794,22 +1992,19 @@ func TestHandleUsersCreateWithBotServiceCreatesWorkerAgent(t *testing.T) {
 	events, cancel := bus.Subscribe()
 	defer cancel()
 
-	store, err := bot.NewMemoryStore(nil)
-	if err != nil {
-		t.Fatalf("bot.NewMemoryStore() error = %v", err)
-	}
-	botSvc, err := bot.NewServiceWithDependencies(store, agentSvc, imSvc)
-	if err != nil {
-		t.Fatalf("bot.NewServiceWithDependencies() error = %v", err)
-	}
+	participantSvc := participant.NewService(
+		participant.NewMemoryStore(nil),
+		participant.WithAgentService(agentSvc),
+		participant.WithIMService(imSvc),
+	)
 	srv := &Handler{
-		svc:    agentSvc,
-		botSvc: botSvc,
-		im:     imSvc,
-		imBus:  bus,
+		svc:         agentSvc,
+		participant: participantSvc,
+		im:          imSvc,
+		imBus:       bus,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"id":"u-qa","name":"qa","handle":"qa","role":"qa"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-qa","name":"qa","handle":"qa","role":"qa"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -2832,12 +2027,9 @@ func TestHandleUsersCreateWithBotServiceCreatesWorkerAgent(t *testing.T) {
 		t.Fatalf("agent = %+v, want qa worker", created)
 	}
 
-	bots, err := botSvc.List(string(bot.ChannelCSGClaw), string(bot.RoleWorker), "")
-	if err != nil {
-		t.Fatalf("List(worker) error = %v", err)
-	}
-	if len(bots) != 1 || bots[0].ID != "u-qa" || bots[0].AgentID != "u-qa" || bots[0].UserID != "u-qa" {
-		t.Fatalf("bots = %+v, want one qa worker bot", bots)
+	participants := participantSvc.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent})
+	if len(participants) != 1 || participants[0].ID != "qa" || participants[0].AgentID != "u-qa" || participants[0].ChannelUserRef != "u-qa" {
+		t.Fatalf("participants = %+v, want one qa worker participant", participants)
 	}
 
 	first := mustReceiveIMEvent(t, events)
@@ -2850,10 +2042,81 @@ func TestHandleUsersCreateWithBotServiceCreatesWorkerAgent(t *testing.T) {
 	}
 }
 
+func TestHandleUsersCreateManagerAgentIDReturnsParticipantUser(t *testing.T) {
+	imSvc := im.NewService()
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              agent.ManagerParticipantID,
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeAgent,
+		Name:            agent.ManagerName,
+		ChannelUserRef:  agent.ManagerParticipantID,
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		AgentID:         agent.ManagerUserID,
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}))
+	srv := &Handler{
+		im:          imSvc,
+		participant: participantSvc,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-manager","name":"manager","handle":"manager","role":"manager"}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var got im.User
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.ID != agent.ManagerParticipantID || got.Handle != agent.ManagerName {
+		t.Fatalf("user = %+v, want existing manager participant user", got)
+	}
+	if _, ok := imSvc.User(agent.ManagerUserID); ok {
+		t.Fatalf("legacy runtime user %q was created", agent.ManagerUserID)
+	}
+}
+
+func TestHandleCreateRoomResolvesManagerAgentIDToParticipantUser(t *testing.T) {
+	imSvc := im.NewService()
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              agent.ManagerParticipantID,
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeAgent,
+		Name:            agent.ManagerName,
+		ChannelUserRef:  agent.ManagerParticipantID,
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		AgentID:         agent.ManagerUserID,
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}))
+	srv := &Handler{
+		im:          imSvc,
+		participant: participantSvc,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/rooms", strings.NewReader(`{"title":"manager dm","creator_id":"u-admin","member_ids":["u-manager"]}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var got im.Room
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !containsMember(got.Members, agent.ManagerParticipantID) || containsMember(got.Members, agent.ManagerUserID) {
+		t.Fatalf("room members = %+v, want manager participant user only", got.Members)
+	}
+}
+
 func TestHandleUsersCreateDefaultsHandleFromName(t *testing.T) {
 	srv := &Handler{im: im.NewService()}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"id":"u-alice","name":"Alice"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-alice","name":"Alice"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -2873,7 +2136,7 @@ func TestHandleUsersCreateDefaultsHandleFromName(t *testing.T) {
 func TestHandleUsersCreateRejectsMissingID(t *testing.T) {
 	srv := &Handler{im: im.NewService()}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"Alice","handle":"alice"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"name":"Alice","handle":"alice"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -2966,13 +2229,13 @@ func TestHandleMessagesPostCreatesMessage(t *testing.T) {
 			CurrentUserID: "u-admin",
 			Users: []im.User{
 				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "u-manager", Name: "manager", Handle: "manager"},
+				{ID: "manager", Name: "manager", Handle: "manager"},
 			},
 			Rooms: []im.Room{
 				{
 					ID:      "room-1",
 					Title:   "Room One",
-					Members: []string{"u-admin", "u-manager"},
+					Members: []string{"u-admin", "manager"},
 				},
 			},
 		}),
@@ -2993,8 +2256,8 @@ func TestHandleMessagesPostCreatesMessage(t *testing.T) {
 	if got.SenderID != "u-admin" || got.Content != "hello @manager" {
 		t.Fatalf("message = %+v, want sender/content populated", got)
 	}
-	if len(got.Mentions) != 1 || got.Mentions[0].ID != "u-manager" || got.Mentions[0].Name != "manager" {
-		t.Fatalf("mentions = %+v, want u-manager", got.Mentions)
+	if len(got.Mentions) != 1 || got.Mentions[0].ID != "manager" || got.Mentions[0].Name != "manager" {
+		t.Fatalf("mentions = %+v, want manager", got.Mentions)
 	}
 }
 
@@ -3079,17 +2342,17 @@ func TestHandleThreadRoutesAndMessageFiltering(t *testing.T) {
 			CurrentUserID: "u-admin",
 			Users: []im.User{
 				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "u-manager", Name: "manager", Handle: "manager"},
+				{ID: "manager", Name: "manager", Handle: "manager"},
 			},
 			Rooms: []im.Room{
 				{
 					ID:      "room-1",
 					Title:   "Room One",
-					Members: []string{"u-admin", "u-manager"},
+					Members: []string{"u-admin", "manager"},
 					Messages: []im.Message{
 						{ID: "msg-1", SenderID: "u-admin", Content: "before", CreatedAt: time.Date(2026, 5, 20, 9, 0, 0, 0, time.UTC)},
 						{ID: "msg-root", SenderID: "u-admin", Content: "root", CreatedAt: time.Date(2026, 5, 20, 9, 1, 0, 0, time.UTC)},
-						{ID: "msg-2", SenderID: "u-manager", Content: "after", CreatedAt: time.Date(2026, 5, 20, 9, 2, 0, 0, time.UTC)},
+						{ID: "msg-2", SenderID: "manager", Content: "after", CreatedAt: time.Date(2026, 5, 20, 9, 2, 0, 0, time.UTC)},
 					},
 				},
 			},
@@ -3110,7 +2373,7 @@ func TestHandleThreadRoutesAndMessageFiltering(t *testing.T) {
 		t.Fatalf("started thread = %+v, want root with context", started)
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"room-1","sender_id":"u-manager","content":"thread reply","relates_to":{"rel_type":"m.thread","event_id":"msg-root"}}`))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"room-1","sender_id":"manager","content":"thread reply","relates_to":{"rel_type":"m.thread","event_id":"msg-root"}}`))
 	rec = httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -3220,13 +2483,13 @@ func TestHandleThreadEventsPublishCreatedAndUpdated(t *testing.T) {
 			CurrentUserID: "u-admin",
 			Users: []im.User{
 				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "u-manager", Name: "manager", Handle: "manager"},
+				{ID: "manager", Name: "manager", Handle: "manager"},
 			},
 			Rooms: []im.Room{
 				{
 					ID:       "room-1",
 					Title:    "Room One",
-					Members:  []string{"u-admin", "u-manager"},
+					Members:  []string{"u-admin", "manager"},
 					Messages: []im.Message{{ID: "msg-root", SenderID: "u-admin", Content: "root", CreatedAt: time.Date(2026, 5, 20, 9, 0, 0, 0, time.UTC)}},
 				},
 			},
@@ -3245,7 +2508,7 @@ func TestHandleThreadEventsPublishCreatedAndUpdated(t *testing.T) {
 		t.Fatalf("created event = %+v, want thread.created for msg-root", created)
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"room-1","sender_id":"u-manager","content":"thread reply","relates_to":{"rel_type":"m.thread","event_id":"msg-root"}}`))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"room-1","sender_id":"manager","content":"thread reply","relates_to":{"rel_type":"m.thread","event_id":"msg-root"}}`))
 	rec = httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -3432,7 +2695,7 @@ func TestHandleFeishuEventsStreamsMessageBusEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/bots/u-manager/events", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer secret")
 	rec := httptest.NewRecorder()
 
@@ -3504,7 +2767,7 @@ func TestHandleFeishuEventsSendsHeartbeat(t *testing.T) {
 	srv := &Handler{feishu: feishuSvc, serverAccessToken: "secret"}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/bots/u-manager/events", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer secret")
 	rec := httptest.NewRecorder()
 
@@ -3529,7 +2792,7 @@ func TestHandleFeishuEventsRequiresAuthorization(t *testing.T) {
 		serverAccessToken: "secret",
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/bots/u-manager/events", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil)
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3541,7 +2804,7 @@ func TestHandleFeishuEventsRequiresAuthorization(t *testing.T) {
 func TestHandleFeishuEventsRequiresAuthorizationWhenServerAccessTokenEmpty(t *testing.T) {
 	srv := &Handler{}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/bots/u-manager/events", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil)
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3553,7 +2816,7 @@ func TestHandleFeishuEventsRequiresAuthorizationWhenServerAccessTokenEmpty(t *te
 func TestHandleFeishuEventsSkipsAuthorizationWhenNoAuth(t *testing.T) {
 	srv := &Handler{serverNoAuth: true}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/bots/u-manager/events", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil)
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3621,12 +2884,12 @@ func TestHandleRoomsPostCreatesRoom(t *testing.T) {
 			Users: []im.User{
 				{ID: "u-admin", Name: "admin", Handle: "admin"},
 				{ID: "u-alice", Name: "Alice", Handle: "alice"},
-				{ID: "u-manager", Name: "manager", Handle: "manager"},
+				{ID: "manager", Name: "manager", Handle: "manager"},
 			},
 		}),
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms", strings.NewReader(`{"title":"Launch","description":"coordination","creator_id":"u-admin","member_ids":["u-alice","u-manager"],"locale":"en"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms", strings.NewReader(`{"title":"Launch","description":"coordination","creator_id":"u-admin","member_ids":["u-alice","manager"],"locale":"en"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3641,7 +2904,7 @@ func TestHandleRoomsPostCreatesRoom(t *testing.T) {
 	if got.Title != "Launch" {
 		t.Fatalf("conversation.Title = %q, want Launch", got.Title)
 	}
-	if !containsMember(got.Members, "u-admin") || !containsMember(got.Members, "u-alice") || !containsMember(got.Members, "u-manager") {
+	if !containsMember(got.Members, "u-admin") || !containsMember(got.Members, "u-alice") || !containsMember(got.Members, "manager") {
 		t.Fatalf("members = %+v, want admin, alice, and manager", got.Members)
 	}
 }
@@ -3693,7 +2956,7 @@ func TestHandleUsersDeleteRemovesUser(t *testing.T) {
 		}),
 	}
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/u-alice", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/csgclaw/users/u-alice", nil)
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3711,7 +2974,7 @@ func TestHandleUsersDeleteRemovesUser(t *testing.T) {
 func TestHandleUsersDeleteCurrentUserReturnsConflict(t *testing.T) {
 	srv := &Handler{im: im.NewService()}
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/u-admin", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/csgclaw/users/u-admin", nil)
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3786,14 +3049,14 @@ func TestHandleFeishuRoomsDeleteRemovesRoom(t *testing.T) {
 	}
 }
 
-func TestHandleBotCompatibilityRoutesRequireAuthorization(t *testing.T) {
+func TestHandleParticipantMessageRouteRequiresAuthorization(t *testing.T) {
 	srv := &Handler{
 		im:                im.NewService(),
 		botBridge:         im.NewBotBridge("secret"),
 		serverAccessToken: "secret",
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/u-manager/messages", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3802,12 +3065,12 @@ func TestHandleBotCompatibilityRoutesRequireAuthorization(t *testing.T) {
 	}
 }
 
-func TestHandleBotCompatibilityRoutesRequireAuthorizationWhenServerAccessTokenEmpty(t *testing.T) {
+func TestHandleParticipantMessageRouteRequiresAuthorizationWhenServerAccessTokenEmpty(t *testing.T) {
 	srv := &Handler{
 		botBridge: im.NewBotBridge("secret"),
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/u-manager/messages", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3816,13 +3079,13 @@ func TestHandleBotCompatibilityRoutesRequireAuthorizationWhenServerAccessTokenEm
 	}
 }
 
-func TestHandleBotCompatibilityRoutesSkipAuthorizationWhenNoAuth(t *testing.T) {
+func TestHandleParticipantMessageRouteSkipsAuthorizationWhenNoAuth(t *testing.T) {
 	srv := &Handler{
 		botBridge:    im.NewBotBridge("secret"),
 		serverNoAuth: true,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/u-manager/messages", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3837,7 +3100,7 @@ func TestHandleBotSendMessageRequiresIMService(t *testing.T) {
 		serverNoAuth: true,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/u-manager/messages", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3852,15 +3115,15 @@ func TestHandleBotSendMessageDoesNotInferRecentThreadScope(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-1",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", "manager"},
 				Messages: []im.Message{
-					{ID: "msg-root", SenderID: "u-manager", Content: "How can I help?", CreatedAt: now},
+					{ID: "msg-root", SenderID: "manager", Content: "How can I help?", CreatedAt: now},
 				},
 			},
 		},
@@ -3889,7 +3152,7 @@ func TestHandleBotSendMessageDoesNotInferRecentThreadScope(t *testing.T) {
 		t.Fatal("User(u-admin) = false, want user")
 	}
 	bridge := im.NewBotBridge("")
-	events, cancel := bridge.Subscribe("u-manager")
+	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 	bridge.PublishMessageEvent(room, sender, inbound)
 	select {
@@ -3897,13 +3160,13 @@ func TestHandleBotSendMessageDoesNotInferRecentThreadScope(t *testing.T) {
 		if evt.ThreadRootID != "msg-root" {
 			t.Fatalf("bot event ThreadRootID = %q, want msg-root", evt.ThreadRootID)
 		}
-		bridge.Ack("u-manager", evt.MessageID)
+		bridge.Ack("manager", evt.MessageID)
 	case <-time.After(time.Second):
 		t.Fatal("PublishMessageEvent() timed out waiting for threaded event")
 	}
 
 	srv := &Handler{im: imSvc, botBridge: bridge, serverNoAuth: true}
-	req := httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{"room_id":"room-1","text":"thread answer"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/manager/messages", strings.NewReader(`{"room_id":"room-1","text":"thread answer"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -3941,15 +3204,15 @@ func TestHandleBotSendMessageAcceptsPicoClawThreadContext(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-1",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", "manager"},
 				Messages: []im.Message{
-					{ID: "msg-root", SenderID: "u-manager", Content: "How can I help?", CreatedAt: now},
+					{ID: "msg-root", SenderID: "manager", Content: "How can I help?", CreatedAt: now},
 				},
 			},
 		},
@@ -3959,7 +3222,7 @@ func TestHandleBotSendMessageAcceptsPicoClawThreadContext(t *testing.T) {
 	}
 
 	srv := &Handler{im: imSvc, botBridge: im.NewBotBridge(""), serverNoAuth: true}
-	req := httptest.NewRequest(http.MethodPost, "/api/bots/u-manager/messages/send", strings.NewReader(`{
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/manager/messages", strings.NewReader(`{
 		"chat_id": "room-1",
 		"content": "direct PicoClaw thread answer",
 		"context": {
@@ -4009,13 +3272,13 @@ func TestPublishBotEventQueuesUntilBotSubscribes(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-1",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", "manager"},
 				Messages: []im.Message{
 					{
 						ID:        "msg-pending",
@@ -4046,7 +3309,7 @@ func TestPublishBotEventQueuesUntilBotSubscribes(t *testing.T) {
 		Message: &room.Messages[0],
 	})
 
-	events, cancel := bridge.Subscribe("u-manager")
+	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
 	select {
@@ -4232,13 +3495,13 @@ func TestHandleBotEventsRequeuesWhenSSEWriteFails(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-1",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", "manager"},
 				Messages: []im.Message{
 					{
 						ID:        "msg-retry",
@@ -4262,10 +3525,10 @@ func TestHandleBotEventsRequeuesWhenSSEWriteFails(t *testing.T) {
 	bridge.PublishMessageEvent(room, sender, room.Messages[0])
 
 	srv := &Handler{im: imSvc, botBridge: bridge}
-	req := httptest.NewRequest(http.MethodGet, "/api/bots/u-manager/events", nil)
-	srv.handleBotEvents(&failingBotEventWriter{header: make(http.Header)}, req, "u-manager")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/participants/manager/events", nil)
+	srv.handleBotEvents(&failingBotEventWriter{header: make(http.Header)}, req, "manager")
 
-	events, cancel := bridge.Subscribe("u-manager")
+	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 	select {
 	case evt := <-events:
@@ -4303,13 +3566,13 @@ func TestReplayRecentBotMessagesReplaysUnansweredHumanMessage(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-1",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", "manager"},
 				Messages: []im.Message{
 					{
 						ID:        "msg-missed",
@@ -4322,11 +3585,11 @@ func TestReplayRecentBotMessagesReplaysUnansweredHumanMessage(t *testing.T) {
 		},
 	})
 	bridge := im.NewBotBridge("")
-	events, cancel := bridge.Subscribe("u-manager")
+	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
 	srv := &Handler{im: imSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("u-manager", "")
+	srv.replayRecentBotMessages("manager", "")
 
 	select {
 	case evt := <-events:
@@ -4335,6 +3598,108 @@ func TestReplayRecentBotMessagesReplaysUnansweredHumanMessage(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("replayRecentBotMessages() timed out waiting for event")
+	}
+}
+
+func TestReplayRecentBotMessagesSkipsRoomWithoutBridgeTarget(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-agent-hhtz4b", Name: "qa", Handle: "qa"},
+			{ID: agent.ManagerParticipantID, Name: "manager", Handle: "manager"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-qa",
+				IsDirect: true,
+				Members:  []string{"u-admin", "u-agent-hhtz4b"},
+				Messages: []im.Message{
+					{
+						ID:        "msg-qa",
+						SenderID:  "u-admin",
+						Content:   "qa only",
+						CreatedAt: now,
+					},
+				},
+			},
+		},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              agent.ManagerParticipantID,
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeAgent,
+		Name:            agent.ManagerName,
+		ChannelUserRef:  agent.ManagerParticipantID,
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		AgentID:         agent.ManagerUserID,
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}))
+	bridge := im.NewBotBridge("")
+	events, cancel := bridge.Subscribe(agent.ManagerParticipantID)
+	defer cancel()
+
+	srv := &Handler{im: imSvc, participant: participantSvc, botBridge: bridge}
+	srv.replayRecentBotMessages(agent.ManagerParticipantID, "")
+
+	select {
+	case evt := <-events:
+		t.Fatalf("replayed event = %+v, want no replay for room without manager membership", evt)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestReplayRecentBotMessagesReplaysParticipantRoomUsingChannelUserRef(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-agent-hhtz4b", Name: "qa", Handle: "qa"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-qa",
+				IsDirect: true,
+				Members:  []string{"u-admin", "u-agent-hhtz4b"},
+				Messages: []im.Message{
+					{
+						ID:        "msg-qa",
+						SenderID:  "u-admin",
+						Content:   "qa only",
+						CreatedAt: now,
+					},
+				},
+			},
+		},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              "agent-hhtz4b",
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeAgent,
+		Name:            "qa",
+		ChannelUserRef:  "u-agent-hhtz4b",
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		AgentID:         "u-agent-hhtz4b",
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}))
+	bridge := im.NewBotBridge("")
+	events, cancel := bridge.Subscribe("agent-hhtz4b")
+	defer cancel()
+
+	srv := &Handler{im: imSvc, participant: participantSvc, botBridge: bridge}
+	srv.replayRecentBotMessages("agent-hhtz4b", "")
+
+	select {
+	case evt := <-events:
+		if evt.MessageID != "msg-qa" || evt.Context.Account != "agent-hhtz4b" {
+			t.Fatalf("replayed event = %+v, want participant-keyed QA replay", evt)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("replayRecentBotMessages() timed out waiting for participant-keyed QA event")
 	}
 }
 
@@ -4383,13 +3748,13 @@ func TestReplayRecentBotMessagesUsesNewConversationFlow(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-1",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", "manager"},
 				Messages: []im.Message{
 					{
 						ID:        "msg-new-convo",
@@ -4402,11 +3767,11 @@ func TestReplayRecentBotMessagesUsesNewConversationFlow(t *testing.T) {
 		},
 	})
 	bridge := im.NewBotBridge("")
-	events, cancel := bridge.Subscribe("u-manager")
+	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
 	srv := &Handler{svc: svc, im: imSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("u-manager", "")
+	srv.replayRecentBotMessages("manager", "")
 
 	select {
 	case evt := <-events:
@@ -4424,13 +3789,13 @@ func TestReplayRecentBotMessagesSkipsAnsweredMessage(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-1",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", "manager"},
 				Messages: []im.Message{
 					{
 						ID:        "msg-answered",
@@ -4440,7 +3805,7 @@ func TestReplayRecentBotMessagesSkipsAnsweredMessage(t *testing.T) {
 					},
 					{
 						ID:        "msg-reply",
-						SenderID:  "u-manager",
+						SenderID:  "manager",
 						Content:   "done",
 						CreatedAt: now.Add(time.Second),
 					},
@@ -4449,11 +3814,11 @@ func TestReplayRecentBotMessagesSkipsAnsweredMessage(t *testing.T) {
 		},
 	})
 	bridge := im.NewBotBridge("")
-	events, cancel := bridge.Subscribe("u-manager")
+	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
 	srv := &Handler{im: imSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("u-manager", "")
+	srv.replayRecentBotMessages("manager", "")
 
 	select {
 	case evt := <-events:
@@ -4468,13 +3833,13 @@ func TestReplayRecentBotMessagesDoesNotDuplicateDeliveredMessage(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-1",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", "manager"},
 				Messages: []im.Message{
 					{
 						ID:        "msg-delivered",
@@ -4487,7 +3852,7 @@ func TestReplayRecentBotMessagesDoesNotDuplicateDeliveredMessage(t *testing.T) {
 		},
 	})
 	bridge := im.NewBotBridge("")
-	events, cancel := bridge.Subscribe("u-manager")
+	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
 	room, ok := imSvc.Room("room-1")
@@ -4505,13 +3870,13 @@ func TestReplayRecentBotMessagesDoesNotDuplicateDeliveredMessage(t *testing.T) {
 		if evt.MessageID != "msg-delivered" {
 			t.Fatalf("live event = %+v, want msg-delivered", evt)
 		}
-		bridge.Ack("u-manager", evt.MessageID)
+		bridge.Ack("manager", evt.MessageID)
 	case <-time.After(time.Second):
 		t.Fatal("PublishMessageEvent() timed out waiting for event")
 	}
 
 	srv := &Handler{im: imSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("u-manager", "")
+	srv.replayRecentBotMessages("manager", "")
 
 	select {
 	case evt := <-events:
@@ -4526,13 +3891,13 @@ func TestReplayRecentBotMessagesHonorsLastEventID(t *testing.T) {
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-1",
 				IsDirect: true,
-				Members:  []string{"u-admin", "u-manager"},
+				Members:  []string{"u-admin", "manager"},
 				Messages: []im.Message{
 					{
 						ID:        "msg-seen",
@@ -4551,11 +3916,11 @@ func TestReplayRecentBotMessagesHonorsLastEventID(t *testing.T) {
 		},
 	})
 	bridge := im.NewBotBridge("")
-	events, cancel := bridge.Subscribe("u-manager")
+	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
 	srv := &Handler{im: imSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("u-manager", "msg-seen")
+	srv.replayRecentBotMessages("manager", "msg-seen")
 
 	select {
 	case evt := <-events:
@@ -4622,7 +3987,7 @@ func TestHandleBotLLMModelsReturnsBridgeCatalog(t *testing.T) {
 		serverAccessToken: "secret",
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/bots/u-manager/llm/v1/models", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager/llm/v1/models", nil)
 	req.Header.Set("Authorization", "Bearer secret")
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
@@ -4684,7 +4049,7 @@ func TestHandleBotLLMModelsLegacyRouteReturnsBridgeCatalog(t *testing.T) {
 		serverAccessToken: "secret",
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/bots/u-manager/llm/models", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager/llm/models", nil)
 	req.Header.Set("Authorization", "Bearer secret")
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)

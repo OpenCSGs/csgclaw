@@ -13,6 +13,7 @@ import (
 
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
+	"csgclaw/internal/participant"
 )
 
 type HTTPClient interface {
@@ -43,44 +44,49 @@ func New(endpoint, token string, client HTTPClient) *Client {
 	}
 }
 
-func (c *Client) ListBots(ctx context.Context, channel, role, botType string) ([]apitypes.Bot, error) {
-	var bots []apitypes.Bot
+func (c *Client) ListParticipants(ctx context.Context, channel, typ, agentID string) ([]apitypes.Participant, error) {
+	var participants []apitypes.Participant
 	values := url.Values{}
-	if strings.TrimSpace(role) != "" {
-		values.Set("role", strings.TrimSpace(role))
+	if strings.TrimSpace(typ) != "" {
+		values.Set("type", strings.TrimSpace(typ))
 	}
-	if strings.TrimSpace(botType) != "" {
-		values.Set("type", strings.TrimSpace(botType))
+	if strings.TrimSpace(agentID) != "" {
+		values.Set("agent_id", strings.TrimSpace(agentID))
 	}
-	path, err := botCollectionPath(channel)
+	path, err := participantCollectionPath(channel)
 	if err != nil {
 		return nil, err
 	}
 	if encoded := values.Encode(); encoded != "" {
 		path += "?" + encoded
 	}
-	if err := c.GetJSON(ctx, path, &bots); err != nil {
+	if err := c.GetJSON(ctx, path, &participants); err != nil {
 		return nil, err
 	}
-	return bots, nil
+	return participants, nil
 }
 
-func (c *Client) CreateBot(ctx context.Context, req apitypes.CreateBotRequest) (apitypes.Bot, error) {
-	var created apitypes.Bot
-	path, err := botCollectionPath(req.Channel)
+func (c *Client) CreateParticipant(ctx context.Context, req participant.CreateRequest) (apitypes.Participant, error) {
+	var created apitypes.Participant
+	path, err := participantCollectionPath(req.Channel)
 	if err != nil {
-		return apitypes.Bot{}, err
+		return apitypes.Participant{}, err
 	}
 	if err := c.DoJSON(ctx, http.MethodPost, path, req, &created); err != nil {
-		return apitypes.Bot{}, err
+		return apitypes.Participant{}, err
 	}
 	return created, nil
 }
 
-func (c *Client) DeleteBot(ctx context.Context, channel, id string) error {
-	path, err := botItemPath(channel, id)
+func (c *Client) DeleteParticipant(ctx context.Context, channel, id, deleteAgent string) error {
+	path, err := participantItemPath(channel, id)
 	if err != nil {
 		return err
+	}
+	if strings.TrimSpace(deleteAgent) != "" {
+		values := url.Values{}
+		values.Set("delete_agent", strings.TrimSpace(deleteAgent))
+		path += "?" + values.Encode()
 	}
 	return c.DoNoContent(ctx, http.MethodDelete, path)
 }
@@ -191,6 +197,9 @@ func (c *Client) ListUsers(ctx context.Context) ([]apitypes.User, error) {
 
 func (c *Client) ListUsersByChannel(ctx context.Context, channel string) ([]apitypes.User, error) {
 	var users []apitypes.User
+	if strings.TrimSpace(channel) == "" {
+		channel = "csgclaw"
+	}
 	path, err := channelPath(channel, "users")
 	if err != nil {
 		return nil, err
@@ -203,6 +212,9 @@ func (c *Client) ListUsersByChannel(ctx context.Context, channel string) ([]apit
 
 func (c *Client) CreateUser(ctx context.Context, channel string, req apitypes.CreateUserRequest) (apitypes.User, error) {
 	var created apitypes.User
+	if strings.TrimSpace(channel) == "" {
+		channel = "csgclaw"
+	}
 	path, err := channelPath(channel, "users")
 	if err != nil {
 		return apitypes.User{}, err
@@ -488,29 +500,29 @@ func channelPath(channelName, resource string) (string, error) {
 	}
 }
 
-func botCollectionPath(channelName string) (string, error) {
+func participantCollectionPath(channelName string) (string, error) {
 	channelName = strings.ToLower(strings.TrimSpace(channelName))
 	if channelName == "" {
 		channelName = "csgclaw"
 	}
 	switch channelName {
 	case "csgclaw", "feishu":
-		return "/api/v1/channels/" + channelName + "/bots", nil
+		return "/api/v1/channels/" + channelName + "/participants", nil
 	default:
 		return "", fmt.Errorf("unsupported channel %q", channelName)
 	}
 }
 
-func botItemPath(channelName, botID string) (string, error) {
-	path, err := botCollectionPath(channelName)
+func participantItemPath(channelName, participantID string) (string, error) {
+	path, err := participantCollectionPath(channelName)
 	if err != nil {
 		return "", err
 	}
-	botID = strings.TrimSpace(botID)
-	if botID == "" {
-		return "", fmt.Errorf("bot id is required")
+	participantID = strings.TrimSpace(participantID)
+	if participantID == "" {
+		return "", fmt.Errorf("participant id is required")
 	}
-	return path + "/" + url.PathEscape(botID), nil
+	return path + "/" + url.PathEscape(participantID), nil
 }
 
 func memberCreatePath(channelName, roomID string) (string, error) {
@@ -570,7 +582,7 @@ func userDeletePath(channelName, userID string) (string, error) {
 	}
 	switch channelName {
 	case "":
-		return "/api/v1/users/" + url.PathEscape(userID), nil
+		return "/api/v1/channels/csgclaw/users/" + url.PathEscape(userID), nil
 	case "csgclaw":
 		return "/api/v1/channels/csgclaw/users/" + url.PathEscape(userID), nil
 	case "feishu":
