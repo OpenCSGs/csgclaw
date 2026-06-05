@@ -29,7 +29,7 @@ See [docs/build.md](docs/build.md) or [docs/build.zh.md](docs/build.zh.md) for M
 
 ```bash
 make                    # default build (no docker images)
-make build-all-with-docker-embed
+make build-all          # full build including embed docker images
 make fmt
 make test
 make run

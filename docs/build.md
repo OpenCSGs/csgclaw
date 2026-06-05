@@ -19,13 +19,12 @@ make help
 
 ## Default build
 
-The default goal is `build-all`:
+The default goal is `build`:
 
 ```bash
 make
 # same as:
 make build
-make build-all
 ```
 
 This builds:
@@ -35,7 +34,7 @@ This builds:
 3. `bin/csgclaw` (server CLI)
 4. `bin/csgclaw-cli` for the current platform
 
-By default, **Docker images are not built**. This keeps day-to-day builds fast.
+**Docker images are not built.** Use `make build-all` for a full local build including embed template images.
 
 After a successful build:
 
@@ -44,6 +43,16 @@ After a successful build:
 # or
 make run
 ```
+
+## Full build
+
+`build-all` runs `build`, then docker-builds all embed templates with a `Dockerfile` and patches image refs:
+
+```bash
+make build-all
+```
+
+Use this when you need local `picoclaw-manager` / `picoclaw-worker` images. It can be slow.
 
 ## Web UI
 
@@ -95,23 +104,15 @@ make stage-docker-embed-dist
 
 ## Docker embed images (optional)
 
-Local Docker image builds are **optional** and can be slow. Use them when you need custom `picoclaw-manager` / `picoclaw-worker` images on your machine.
+Local Docker image builds are **optional** and can be slow. The usual entry point is `make build-all`. Use individual targets when you only need one image.
 
 ### When images are built
 
 | Command | Builds Docker images? |
 |---------|------------------------|
-| `make` / `make build-all` | No (unless dist was just created for the first time; see below) |
-| `make build-all-with-docker-embed` | Yes |
-| `BUILD_DOCKER_EMBED_IMAGES=1 make` | Yes |
-| `make build-docker-embed-runtime-embed` | Yes (full pipeline) |
-
-On a fresh clone, `ensure-docker-embed-dist` may stage missing `dist/` trees and then trigger a one-time image build so refs resolve to local `:dev` tags. To always skip Docker during default builds, stage dist first:
-
-```bash
-make stage-docker-embed-dist
-make build-all
-```
+| `make` / `make build` | No |
+| `make build-all` | Yes |
+| `make build-docker-embed-runtime-embed` | Yes (images + patch refs, without rebuilding binaries) |
 
 ### Image build targets
 

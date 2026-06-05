@@ -19,13 +19,12 @@ make help
 
 ## 默认构建
 
-默认目标是 `build-all`：
+默认目标是 `build`：
 
 ```bash
 make
 # 等价于：
 make build
-make build-all
 ```
 
 会依次构建：
@@ -35,7 +34,7 @@ make build-all
 3. `bin/csgclaw`（服务端 CLI）
 4. 当前平台的 `bin/csgclaw-cli`
 
-**默认不会构建 Docker 镜像**，日常开发更快。
+**不会构建 Docker 镜像。** 需要完整本地环境（含 embed 镜像）时使用 `make build-all`。
 
 构建完成后可运行：
 
@@ -44,6 +43,16 @@ make build-all
 # 或
 make run
 ```
+
+## 完整构建
+
+`build-all` 先执行 `build`，再 docker build 所有带 `Dockerfile` 的 embed 模板并 patch 镜像 ref：
+
+```bash
+make build-all
+```
+
+需要本地 `picoclaw-manager` / `picoclaw-worker` 镜像时使用，可能较慢。
 
 ## Web UI
 
@@ -95,23 +104,15 @@ make stage-docker-embed-dist
 
 ## Docker embed 镜像（可选）
 
-本地 Docker 镜像构建为**可选项**，可能较慢。仅在需要本机自定义 `picoclaw-manager` / `picoclaw-worker` 镜像时使用。
+本地 Docker 镜像构建为**可选项**，可能较慢。常用入口是 `make build-all`；只需单个镜像时使用下方独立 target。
 
 ### 何时会构建镜像
 
 | 命令 | 是否构建 Docker 镜像 |
 |------|----------------------|
-| `make` / `make build-all` | 否（除非首次补全 dist 时触发一次，见下） |
-| `make build-all-with-docker-embed` | 是 |
-| `BUILD_DOCKER_EMBED_IMAGES=1 make` | 是 |
-| `make build-docker-embed-runtime-embed` | 是（完整流程） |
-
-全新 clone 时，`ensure-docker-embed-dist` 可能先补全 `dist/`，再触发一次性镜像构建，使 ref 指向本地 `:dev` tag。若希望默认构建始终跳过 Docker，可先 stage dist：
-
-```bash
-make stage-docker-embed-dist
-make build-all
-```
+| `make` / `make build` | 否 |
+| `make build-all` | 是 |
+| `make build-docker-embed-runtime-embed` | 是（仅镜像 + patch refs，不重建二进制） |
 
 ### 镜像构建目标
 
