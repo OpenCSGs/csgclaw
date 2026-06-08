@@ -7,3 +7,4 @@ export * from "./InviteMembersModal";
 export * from "./ManagerProfileSetupModal";
 export * from "./ManagerRebuildModal";
 export * from "./UpgradeModal";
+export * from "./ConfigSettingsModal";

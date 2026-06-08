@@ -80,6 +80,18 @@ func (h *Handler) getBootstrapConfig(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) updateBootstrapConfig(w http.ResponseWriter, r *http.Request) {
 	h.handleBootstrapConfig(w, r)
 }
+func (h *Handler) getConfigFile(w http.ResponseWriter, r *http.Request)    { h.handleConfigFile(w, r) }
+func (h *Handler) updateConfigFile(w http.ResponseWriter, r *http.Request) { h.handleConfigFile(w, r) }
+func (h *Handler) getConfigSettings(w http.ResponseWriter, r *http.Request) { h.handleConfigSettings(w, r) }
+func (h *Handler) updateConfigSettings(w http.ResponseWriter, r *http.Request) {
+	h.handleConfigSettings(w, r)
+}
+func (h *Handler) applyConfigRestart(w http.ResponseWriter, r *http.Request) {
+	h.handleConfigApply(w, r)
+}
+func (h *Handler) getConfigRestartStatus(w http.ResponseWriter, r *http.Request) {
+	h.handleConfigRestartStatus(w, r)
+}
 func (h *Handler) getIMBootstrap(w http.ResponseWriter, r *http.Request) { h.handleIMBootstrap(w, r) }
 func (h *Handler) getIMEvents(w http.ResponseWriter, r *http.Request)    { h.handleIMEvents(w, r) }
 func (h *Handler) listRooms(w http.ResponseWriter, r *http.Request)      { h.handleRooms(w, r) }

@@ -6,6 +6,7 @@ import { requiredFieldLabel } from "./requiredFieldLabel";
 import { isBlank } from "./utils";
 
 export type APIKeyFieldProps = {
+  label?: string;
   onInput?: FormEventHandler<HTMLInputElement>;
   profile?: APIKeyProfile | null;
   required?: boolean;
@@ -13,7 +14,7 @@ export type APIKeyFieldProps = {
   value: string;
 };
 
-export function APIKeyField({ value, onInput, profile, required = false, t }: APIKeyFieldProps) {
+export function APIKeyField({ label, value, onInput, profile, required = false, t }: APIKeyFieldProps) {
   const generatedID = useId();
   const inputID = `${generatedID}-api-key`;
   const labelID = `${generatedID}-api-key-label`;
@@ -22,12 +23,13 @@ export function APIKeyField({ value, onInput, profile, required = false, t }: AP
   const showStoredMask = stored && isBlank(value);
   const previewPrefix = preview.endsWith("...") ? preview.slice(0, -3) : "";
   const placeholder = stored ? "" : t("profileAPIKeyNewPlaceholder");
+  const labelText = label || t("profileAPIKey");
   return (
     <label className="field api-key-field" htmlFor={inputID}>
       {required ? (
-        requiredFieldLabel(t("profileAPIKey"), { id: labelID })
+        requiredFieldLabel(labelText, { id: labelID })
       ) : (
-        <span id={labelID}>{t("profileAPIKey")}</span>
+        <span id={labelID}>{labelText}</span>
       )}
       <div className="api-key-input-shell">
         <TextInput

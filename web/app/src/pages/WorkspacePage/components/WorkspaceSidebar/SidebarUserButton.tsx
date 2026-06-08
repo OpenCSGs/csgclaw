@@ -20,6 +20,7 @@ type SidebarUserButtonProps = {
   upgradeError?: string;
   showUpgradeControls?: boolean;
   onOpenUpgrade?: () => void;
+  onOpenConfigSettings?: () => void;
   t: TranslateFn;
 };
 
@@ -35,6 +36,7 @@ export function SidebarUserButton({
   upgradeError = "",
   showUpgradeControls = true,
   onOpenUpgrade,
+  onOpenConfigSettings,
   t,
 }: SidebarUserButtonProps) {
   const [open, setOpen] = useState(false);
@@ -65,6 +67,11 @@ export function SidebarUserButton({
   function handleOpenUpgrade() {
     setOpen(false);
     onOpenUpgrade?.();
+  }
+
+  function handleOpenConfigSettings() {
+    setOpen(false);
+    onOpenConfigSettings?.();
   }
 
   useEffect(() => {
@@ -154,6 +161,10 @@ export function SidebarUserButton({
               </Button>
             </div>
           </div>
+          <div className="sidebar-menu-divider"></div>
+          <button type="button" className="sidebar-menu-row" role="menuitem" onClick={handleOpenConfigSettings}>
+            {t("configSettingsMenu")}
+          </button>
           <div className="sidebar-menu-divider"></div>
           <div className="sidebar-version-panel">
             <div className="sidebar-version-heading">

@@ -90,6 +90,7 @@ func (a *App) registerDefaultCommands() {
 		completioncmd.NewCmd("csgclaw", completioncmd.FullSpec()),
 		completioncmd.NewCompleteCmd("csgclaw", completioncmd.FullSpec()),
 		servecmd.NewInternalServeCmd(),
+		servecmd.NewInternalRestartCmd(),
 	)
 }
 
@@ -180,7 +181,7 @@ func isSpecialOutputCommand(rest []string) bool {
 		return true
 	}
 	switch rest[0] {
-	case "serve", "stop", "_serve":
+	case "serve", "stop", "_serve", "_restart":
 		return true
 	case "agent":
 		return len(rest) > 1 && rest[1] == "logs"

@@ -8,6 +8,7 @@ import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
 import { useWorkspaceShellController } from "./useWorkspaceShellController";
 import { useWorkspaceHubController } from "./useWorkspaceHubController";
 import { useUpgradeController } from "./useUpgradeController";
+import { useConfigController } from "./useConfigController";
 import { useAgentController } from "./useAgentController";
 import { useConversationController } from "./useConversationController";
 import { useProfilePreviewController } from "./useProfilePreviewController";
@@ -155,6 +156,11 @@ export function useWorkspaceController() {
     setUpgradeStatusData,
     t,
     upgradeStatus,
+  });
+  const configSettings = useConfigController({
+    hubTemplates,
+    refreshWorkspaceAppVersion,
+    t,
   });
   const agent = useAgentController({
     activeConversationId,
@@ -320,6 +326,7 @@ export function useWorkspaceController() {
       upgradePhase: upgrade.upgradePhase,
       upgradeError: upgrade.upgradeError,
       onOpenUpgrade: upgrade.openUpgradeModal,
+      onOpenConfigSettings: configSettings.openConfigModal,
     },
     hubViewProps: {
       t,
@@ -363,6 +370,7 @@ export function useWorkspaceController() {
     createTeamModalProps: agent.createTeamModalProps,
     inviteMembersModalProps: conversation.inviteMembersModalProps,
     upgradeModalProps: upgrade.upgradeModalProps,
+    configModalProps: configSettings.configModalProps,
     agentProfileModalProps: agent.agentProfileModalProps,
     managerRebuildModalProps: agent.managerRebuildModalProps,
     managerProfileSetupModalProps: agent.managerProfileSetupModalProps,

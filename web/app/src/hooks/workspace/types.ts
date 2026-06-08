@@ -10,7 +10,9 @@ import type { HubTemplate } from "@/models/hubWorkspace";
 import type { CollapsedWorkspaceGroups, WorkspacePane, WorkspaceTab } from "@/models/routing";
 import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import type { ThemeMode } from "@/shared/theme/theme";
+import type { ConfigSettingsDraft } from "@/models/configSettings";
 import type { CLIProxyAuthStatusMap } from "./useCLIProxyAuthStatuses";
+import type { ConfigPhase } from "./useConfigController";
 import type { WorkspaceUiState } from "./workspaceUiStore";
 
 export type WorkspaceQueryData<T> = T | ((current: T) => T);
@@ -113,6 +115,31 @@ export type UpgradeController = {
   upgradeError: string;
   upgradeModalProps: UpgradeModalControllerProps | null;
   upgradePhase: UpgradePhase;
+};
+
+export type ConfigModalControllerProps = {
+  configBusy: boolean;
+  configDraft: ConfigSettingsDraft;
+  configError: string;
+  configPhase: ConfigPhase;
+  hubTemplates: readonly HubTemplate[];
+  onClose: () => void;
+  onDraftChange: (patch: Partial<ConfigSettingsDraft>) => void;
+  onReload: () => void;
+  onSaveAndRestart: () => Promise<void>;
+  sandboxProviders: string[];
+  t: TranslateFn;
+};
+
+export type UseConfigControllerArgs = {
+  hubTemplates?: readonly HubTemplate[];
+  refreshWorkspaceAppVersion: (options?: FetchVersionOptions) => Promise<string>;
+  t: TranslateFn;
+};
+
+export type ConfigController = {
+  configModalProps: ConfigModalControllerProps | null;
+  openConfigModal: () => void;
 };
 
 export type ProfilePreviewAnchorRect = {

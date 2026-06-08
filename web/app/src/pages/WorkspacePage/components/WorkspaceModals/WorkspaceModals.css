@@ -985,6 +985,16 @@
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 16%, transparent);
 }
 
+.upgrade-status-card.manual_restart {
+  border-color: color-mix(in oklab, var(--portal-warning-700) 32%, var(--line));
+  background: var(--portal-warning-50);
+}
+
+.upgrade-status-card.manual_restart .upgrade-status-dot {
+  background: var(--portal-warning-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--portal-warning-700) 16%, transparent);
+}
+
 .profile-model-row {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -1606,4 +1616,46 @@
 
 :root[data-theme="dark"] .manager-rebuild-modal .modal-subtitle {
   color: var(--muted);
+}
+
+.config-settings-modal {
+  width: min(760px, 100%);
+}
+
+.config-settings-form {
+  display: grid;
+  gap: 20px;
+}
+
+.config-settings-section {
+  display: grid;
+  gap: 12px;
+}
+
+.config-settings-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.config-settings-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.config-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.config-settings-grid .span-2 {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .config-settings-grid {
+    grid-template-columns: 1fr;
+  }
 }

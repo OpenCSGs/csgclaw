@@ -37,12 +37,7 @@ func StartApplyHelper(opts ApplyHelperOptions) error {
 		return fmt.Errorf("open upgrade helper log %s: %w", artifacts.LogPath, err)
 	}
 
-	args := []string{"upgrade"}
-	if opts.ConfigPath != "" {
-		args = append(args, "--config", opts.ConfigPath)
-	}
-
-	cmd := startHelperCommand(exe, args...)
+	cmd := startHelperCommand(exe, commandArgsWithConfig(opts.ConfigPath, "upgrade")...)
 	cmd.Stdin = devNull
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile

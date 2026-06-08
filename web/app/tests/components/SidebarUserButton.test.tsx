@@ -14,6 +14,7 @@ const labels: Record<string, string> = {
   upgradeLocalBuild: "Local build",
   versionInfo: "Version",
   versionSettings: "Version and updates",
+  configSettingsMenu: "Settings",
 };
 
 function t(key: string): string {
@@ -42,6 +43,7 @@ describe("SidebarUserButton", () => {
         showUpgradeControls={false}
         locale="en"
         onOpenUpgrade={onOpenUpgrade}
+        onOpenConfigSettings={() => {}}
         onLocaleChange={() => {}}
         onThemeChange={() => {}}
         t={t}
@@ -69,6 +71,7 @@ describe("SidebarUserButton", () => {
         showUpgradeControls={true}
         locale="en"
         onOpenUpgrade={onOpenUpgrade}
+        onOpenConfigSettings={() => {}}
         onLocaleChange={() => {}}
         onThemeChange={() => {}}
         t={t}
@@ -93,6 +96,7 @@ describe("SidebarUserButton", () => {
         showUpgradeControls={true}
         locale="en"
         onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
         onLocaleChange={() => {}}
         onThemeChange={() => {}}
         t={t}
@@ -111,5 +115,29 @@ describe("SidebarUserButton", () => {
     expect(screen.getByText("Local build")).toBeInTheDocument();
     expect(screen.getByText("v0.3.5+local")).toBeInTheDocument();
     expect(screen.queryByText("Update & Restart")).not.toBeInTheDocument();
+  });
+
+  it("opens config settings from the settings menu", async () => {
+    const user = userEvent.setup();
+    const onOpenConfigSettings = vi.fn();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        showUpgradeControls={false}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={onOpenConfigSettings}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        t={t}
+        theme="light"
+        upgradeStatus={updateAvailableStatus}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
+    expect(onOpenConfigSettings).toHaveBeenCalledTimes(1);
   });
 });

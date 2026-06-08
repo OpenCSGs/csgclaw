@@ -50,6 +50,7 @@ type Handler struct {
 	upgradeManager      *upgrade.Manager
 	upgradeConfigPath   string
 	upgradeApply        func(upgrade.ApplyHelperOptions) error
+	configRestartApply  func(upgrade.RestartHelperOptions) error
 	localRuntimeImages  func(context.Context, config.Config) ([]string, error)
 	notificationDeliver notification.Fanouter
 	activityDecider     ActivityDecider
@@ -389,6 +390,14 @@ func (h *Handler) SetTeamAdapter(adapter team.TeamChannelAdapter) {
 
 func (h *Handler) SetUpgradeConfigPath(configPath string) {
 	h.upgradeConfigPath = strings.TrimSpace(configPath)
+}
+
+func (h *Handler) SetConfigRestartApplyFunc(apply func(upgrade.RestartHelperOptions) error) {
+	if apply == nil {
+		h.configRestartApply = upgrade.StartRestartHelper
+		return
+	}
+	h.configRestartApply = apply
 }
 
 func (h *Handler) SetUpgradeApplyFunc(apply func(upgrade.ApplyHelperOptions) error) {

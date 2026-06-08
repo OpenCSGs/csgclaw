@@ -40,6 +40,7 @@ export type WorkspaceSidebarProps = {
   onCreateRoom: () => void;
   onExpandSidebar: () => void;
   onOpenUpgrade: () => void;
+  onOpenConfigSettings: () => void;
   onPreviewAgent: (item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) => void;
   onPreviewUser: (user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) => void;
   onSelectAgent: (item: AgentLike | null | undefined) => void;

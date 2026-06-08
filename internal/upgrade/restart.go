@@ -55,21 +55,7 @@ func (c Client) RestartIfRunning(ctx context.Context, installed InstalledBundle,
 	if err != nil {
 		return RestartResult{}, err
 	}
-	exePath := layout.CSGClawPath
-	if err := runUpgradeCommand(ctx, exePath, "stop"); err != nil {
-		return RestartResult{}, fmt.Errorf("stop running daemon: %w", err)
-	}
-
-	args := []string{"serve", "--daemon"}
-	if strings.TrimSpace(opts.ConfigPath) != "" {
-		args = append(args, "--config", strings.TrimSpace(opts.ConfigPath))
-	}
-	if err := runUpgradeCommand(ctx, exePath, args...); err != nil {
-		return RestartResult{}, fmt.Errorf("restart daemon: %w", err)
-	}
-
-	result.Restarted = true
-	return result, nil
+	return RestartDaemon(ctx, layout.CSGClawPath, opts)
 }
 
 func defaultUpgradePIDPath() (string, error) {

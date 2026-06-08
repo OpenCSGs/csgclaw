@@ -117,6 +117,12 @@ func picoclawBridgeModelID(modelID string) string {
 }
 
 func resolveManagerBaseURL(server config.ServerConfig) string {
+	return ResolveManagerBaseURL(server)
+}
+
+// ResolveManagerBaseURL returns the base URL injected into agent runtime config.
+// It prefers server.advertise_base_url and otherwise resolves a reachable local IPv4 address.
+func ResolveManagerBaseURL(server config.ServerConfig) string {
 	if server.AdvertiseBaseURL != "" {
 		baseURL := strings.TrimRight(server.AdvertiseBaseURL, "/")
 		slog.Debug("local ip detector using advertise_base_url", "base_url", baseURL)

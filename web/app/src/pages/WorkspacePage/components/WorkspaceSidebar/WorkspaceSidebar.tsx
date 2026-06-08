@@ -51,6 +51,7 @@ export function WorkspaceSidebar({
   upgradePhase,
   upgradeError,
   onOpenUpgrade,
+  onOpenConfigSettings,
   taskItems,
   teams,
   planningTaskID = "",
@@ -86,6 +87,7 @@ export function WorkspaceSidebar({
             upgradeError={upgradeError}
             showUpgradeControls={showUpgradeControls}
             onOpenUpgrade={onOpenUpgrade}
+            onOpenConfigSettings={onOpenConfigSettings}
             t={t}
           />
         </div>

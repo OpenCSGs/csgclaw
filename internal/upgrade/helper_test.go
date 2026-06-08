@@ -40,7 +40,7 @@ func TestStartApplyHelperIncludesConfigPath(t *testing.T) {
 	if gotName != "/tmp/csgclaw" {
 		t.Fatalf("command name = %q, want %q", gotName, "/tmp/csgclaw")
 	}
-	wantArgs := []string{"upgrade", "--config", configPath}
+	wantArgs := []string{"--config", configPath, "upgrade"}
 	if !reflect.DeepEqual(gotArgs, wantArgs) {
 		t.Fatalf("command args = %#v, want %#v", gotArgs, wantArgs)
 	}
