@@ -37,13 +37,15 @@ Do not invent extra commands. Stay within the shipped CLI surface and Web Tasks 
 Create or enable a team room:
 
 ```bash
-csgclaw-cli team create --channel csgclaw --room-id <room_id> --lead-bot-id <manager_bot_id> --member-bot-ids <worker_bot_ids>
+csgclaw-cli team create --channel csgclaw --room-id <room_id> --lead-bot-id <manager_participant_id> --member-bot-ids <worker_participant_ids>
 ```
+
+The `--lead-bot-id` and `--member-bot-ids` flag names are legacy; pass participant IDs.
 
 Create one or more tasks:
 
 ```bash
-csgclaw-cli team task create-batch --team <team_id> --created-by <manager_bot_id> --file <tasks.json>
+csgclaw-cli team task create-batch --team <team_id> --created-by <manager_participant_id> --file <tasks.json>
 ```
 
 Recommended batch shape for a main task plus subtasks:
@@ -58,12 +60,12 @@ Recommended batch shape for a main task plus subtasks:
     {
       "title": "Draft release note",
       "parent_ref": "story",
-      "assign_to": "u-writer"
+      "assign_to": "writer"
     },
     {
       "title": "Smoke test",
       "parent_ref": "story",
-      "assign_to": "u-tester"
+      "assign_to": "tester"
     }
   ]
 }
@@ -77,7 +79,7 @@ Attach a new subtask to an existing main task with `parent_id`:
     {
       "title": "Prepare rollback note",
       "parent_id": "task-12",
-      "assign_to": "u-writer"
+      "assign_to": "writer"
     }
   ]
 }

@@ -433,7 +433,7 @@ csgclaw user list
 csgclaw user list --channel feishu
 csgclaw user create --name Alice --handle alice --role worker
 csgclaw user create --channel feishu --name Alice --handle alice --role manager --avatar AL
-csgclaw user delete u-alice
+csgclaw user delete alice
 ```
 
 ### `csgclaw` 中共享的协作命令组
@@ -513,7 +513,7 @@ csgclaw room <subcommand> [flags]
 - `--title string`：房间标题。
 - `--description string`：房间描述。
 - `--creator-id string`：创建者 participant ID，例如 `manager`。
-- `--member-ids string`：逗号分隔的 participant ID 列表，例如 `manager,u-dev`。
+- `--member-ids string`：逗号分隔的 participant ID 列表，例如 `manager,dev`。
 - `--locale string`：房间 locale。
 
 `csgclaw-cli` 设计约束：创建 room 时只暴露 CSGClaw participant ID，不暴露 channel user ID、agent ID、飞书 open_id、飞书 app_id 或应用凭证。Feishu 渠道由 adapter 在内部把 participant ID 兑换为已配置的飞书应用凭证和渠道标识。飞书建群需要真人 owner ID 时，代码仍使用配置里的 `admin_open_id`，CLI 调用方仍只传 participant ID。
@@ -548,7 +548,7 @@ csgclaw member <subcommand> [flags]
 
 - `--channel string`：`csgclaw` 或 `feishu`，默认 `csgclaw`。
 - `--room-id string`：目标房间 ID。
-- `--user-id string`：必填，要加入房间的 participant ID，例如 `u-dev`。
+- `--user-id string`：必填，要加入房间的 participant ID，例如 `dev`。
 - `--inviter-id string`：邀请人 participant ID，例如 `manager`。
 - `--locale string`：房间 locale。
 
@@ -592,8 +592,8 @@ csgclaw message <subcommand> [flags]
 ```bash
 csgclaw participant list
 csgclaw participant create --name alice --bind create --role worker --model-id gpt-5.4-mini
-csgclaw room create --title "release-room" --creator-id manager --member-ids manager,u-alice
-csgclaw member create --room-id room-1 --user-id u-alice --inviter-id manager
+csgclaw room create --title "release-room" --creator-id manager --member-ids manager,alice
+csgclaw member create --room-id room-1 --user-id alice --inviter-id manager
 csgclaw message list --room-id room-1
 csgclaw message create --channel csgclaw --room-id room-1 --sender-id manager --content hello
 ```
@@ -659,10 +659,10 @@ csgclaw-cli completion fish
 ```bash
 csgclaw-cli participant list --channel feishu --type agent
 csgclaw-cli pt create --name manager --channel feishu --type agent --bind create --role manager
-csgclaw-cli room create --channel feishu --title "ops-room" --creator-id u-manager --member-ids u-manager,u-dev
+csgclaw-cli room create --channel feishu --title "ops-room" --creator-id manager --member-ids manager,dev
 csgclaw-cli member list --channel feishu --room-id oc_x
-csgclaw-cli member create --channel feishu --room-id oc_x --user-id u-dev --inviter-id u-manager
-csgclaw-cli message create --channel feishu --room-id oc_x --sender-id u-manager --mention-id u-dev --content hello
+csgclaw-cli member create --channel feishu --room-id oc_x --user-id dev --inviter-id manager
+csgclaw-cli message create --channel feishu --room-id oc_x --sender-id manager --mention-id dev --content hello
 ```
 
 `csgclaw-cli` 是面向 participant 的 CLI。room、member、message 命令不应要求调用方理解或传入 agent ID、飞书 open_id、飞书 app_id、App ID/App Secret 或其他渠道凭证。各 channel adapter 负责把 participant ID 转换成目标渠道需要的标识。

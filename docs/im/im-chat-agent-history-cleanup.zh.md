@@ -250,11 +250,11 @@ type ConversationStarter interface {
 - `internal/channel/csgclaw`：只负责 channel 入站/出站适配、mention/room 解析，不维护 runtime 命令映射。
 - `internal/channel/feishu`：只负责 Feishu 配置、平台消息发送/查询、fallback 展示和内部 MessageBus/SSE bridge；不解析或归一化用户侧 slash 输入，不识别 agent `/new` reset，不维护 runtime 原生命令映射。
 - `internal/im`：只保存 CSGClaw 本地 channel 的消息、room、thread，不感知 runtime 原生命令。
-- `internal/agent.Service`：负责根据 bot id 找 agent/runtime/handle，并调用 runtime `ConversationStarter` capability。
-- `internal/api` 的 channel event glue：在 CSGClaw BotBridge 投递给 bot 前识别 canonical `/new`，并把 agent service 返回的 action 写回现有事件路径。
+- `internal/agent.Service`：负责根据 participant 或 bridge target ID 找 agent/runtime/handle，并调用 runtime `ConversationStarter` capability。
+- `internal/api` 的 channel event glue：在 CSGClaw participant event bridge 投递前识别 canonical `/new`，并把 agent service 返回的 action 写回现有事件路径。
 - PicoClaw/OpenClaw runtime：只执行自己的原生命令或内部清理接口。
 
-CSGClaw 调用 Agent slash 的方式不是新增 RPC，而是复用现有 bot/event 协议：
+CSGClaw 调用 Agent slash 的方式不是新增 RPC，而是复用现有 participant event bridge：
 
 ```mermaid
 flowchart LR
@@ -282,7 +282,7 @@ internal/api.handleCreateMessage
 -> internal/im.Service.CreateMessage
 -> internal/api.Handler.PublishBotEvent
 -> internal/im.BotBridge.PublishMessageEvent
--> /api/bots/{botID}/events
+-> /api/v1/channels/csgclaw/participants/{participantID}/events
 ```
 
 实现 `/new` 时：
@@ -290,15 +290,15 @@ internal/api.handleCreateMessage
 1. `internal/channel/csgclaw.Service.SendMessage` 继续只做 canonical normalize 与 `internal/im` 写入。
 2. `internal/im.BotBridge` 继续只负责事件排队与 SSE 投递，不查询 runtime，也不维护 runtime 原生命令映射。
 3. 在 `internal/api.Handler.PublishBotEvent` 附近识别 `evt.Message.Content` 是否为 canonical `new conversation`。
-4. 命中后，对每个实际要通知的 bot 调用 `agent.Service.NewConversationAction`。
-5. 对 PicoClaw/OpenClaw，把投递给 bot 的 `im.BotEvent.Text` 替换成 runtime 原生命令 `/clear` 或 `/new`，其余 room/thread/context 字段仍复用 `BotBridge` 构造逻辑。
+4. 命中后，对每个实际要通知的目标 Agent 调用 `agent.Service.NewConversationAction`。
+5. 对 PicoClaw/OpenClaw，把投递给目标 bridge 的 `im.BotEvent.Text` 替换成 runtime 原生命令 `/clear` 或 `/new`，其余 room/thread/context 字段仍复用 `BotBridge` 构造逻辑。
 6. 对 Codex，仅在 CSGClaw 本地 channel 使用 `/new`，不通过外部 channel 或外部 CLI 对接。
 
-注意：`BotBridge` 当前按 room member 通知 bot，且 `shouldNotifyBot` 不要求 mention。`/new` 的实现必须收紧路由语义：在直接对某个 agent 的 room 中可以不带 mention 生效；在群聊中必须 `@agent`，未 mention 不执行清理，且只对被 mention 的目标 agent 生效。API glue 层需要用 message mentions 过滤目标 bot，避免广播给所有 room member。
+注意：`BotBridge` 当前按 room member 通知目标 bridge，且 `shouldNotifyBot` 不要求 mention。`/new` 的实现必须收紧路由语义：在直接对某个 agent 的 room 中可以不带 mention 生效；在群聊中必须 `@agent`，未 mention 不执行清理，且只对被 mention 的目标 agent 生效。API glue 层需要用 message mentions 过滤 participant bridge target，避免广播给所有 room member。
 
 Feishu 说明：
 
-- CSGClaw 的 `/api/v1/channels/feishu/bots/{botID}/events` 是内部 SSE bridge，不是飞书开放平台入站 webhook。
+- CSGClaw 的 `/api/v1/channels/feishu/participants/{participantID}/events` 是内部 SSE bridge，不是飞书开放平台入站 webhook。
 - 当前 Feishu 真实入站由 runtime 自己的 Feishu/Lark channel 处理，CSGClaw server 不在该路径中把 `/new` 翻译成 `/clear`。
 - 如果用户直接在 PicoClaw 的 Feishu channel 对话，清理历史应使用 PicoClaw 原生命令 `/clear`，或者由 PicoClaw 自身决定是否支持额外别名。
 
@@ -325,25 +325,25 @@ PicoClaw 已有内部清理命令：
 PicoClaw 通过 CSGClaw 本地 channel 的对接方式：
 
 1. CSGClaw Web/API 将 `/new` 归一化成 canonical slash。
-2. CSGClaw runtime slash adapter 识别目标 bot 是 PicoClaw sandbox。
+2. CSGClaw runtime slash adapter 识别目标 Agent 使用 PicoClaw sandbox。
 3. adapter 将 canonical command 映射成 PicoClaw 原生命令：
 
 ```text
 /clear
 ```
 
-4. `internal/im.BotBridge` 或专门的 agent slash dispatcher 向目标 PicoClaw bot 投递 BotEvent。
-5. PicoClaw 通过 CSGClaw bot compatibility 协议订阅并收到 message event。
+4. `internal/im.BotBridge` 或专门的 agent slash dispatcher 向目标 PicoClaw participant bridge 投递 BotEvent。
+5. PicoClaw 通过 CSGClaw participant bridge 协议订阅并收到 message event。
 6. PicoClaw command executor 在进入 LLM 前识别 `/clear`。
 7. PicoClaw 根据 event context 计算自身 session key：
    - `roomID`
-8. PicoClaw 清理该 bot 当前 conversation 的内部历史。
-9. PicoClaw 通过 CSGClaw bot compatibility 协议回一条确认消息。
+8. PicoClaw 清理该 Agent 当前 conversation 的内部历史。
+9. PicoClaw 通过 CSGClaw participant bridge 协议回一条确认消息。
 
 CSGClaw 和 PicoClaw 的协议是 HTTP/SSE：
 
 ```http
-GET /api/bots/{botID}/events
+GET /api/v1/channels/csgclaw/participants/{participantID}/events
 ```
 
 - PicoClaw 使用 `CSGCLAW_BASE_URL` 或 `PICOCLAW_CHANNELS_CSGCLAW_BASE_URL` 连接 CSGClaw。
@@ -354,7 +354,7 @@ GET /api/bots/{botID}/events
 PicoClaw 回消息使用：
 
 ```http
-POST /api/bots/{botID}/messages/send
+POST /api/v1/channels/csgclaw/participants/{participantID}/messages
 ```
 
 请求体：
@@ -376,7 +376,7 @@ room_id = 当前 room
 chat_id = 当前 room
 thread_root_id = 当前 thread root，可为空（保留透传，不影响清理范围）
 context.channel = "csgclaw"
-context.account = bot_id
+context.account = participant_id
 context.chat_id = 当前 room
 context.topic_id = 当前 thread root，可为空（保留透传，不影响清理范围）
 ```
@@ -396,18 +396,18 @@ CSGCLAW_BOT_ID
 OpenClaw 对接方式：
 
 1. CSGClaw 解析用户侧 canonical slash。
-2. runtime slash adapter 识别目标 bot 是 OpenClaw sandbox。
+2. runtime slash adapter 识别目标 Agent 使用 OpenClaw sandbox。
 3. adapter 将 canonical command 映射成 OpenClaw 原生命令：
 
 ```text
 /new
 ```
 
-4. `internal/im.BotBridge` 或专门的 agent slash dispatcher 向目标 OpenClaw bot 投递 BotEvent。
-5. OpenClaw 通过 CSGClaw bot compatibility HTTP/SSE 协议接收 message event。
+4. `internal/im.BotBridge` 或专门的 agent slash dispatcher 向目标 OpenClaw participant bridge 投递 BotEvent。
+5. OpenClaw 通过 CSGClaw participant bridge HTTP/SSE 协议接收 message event。
 6. OpenClaw gateway/channel adapter 将 event 交给 OpenClaw runtime。
 7. OpenClaw command executor 在进入模型前识别 `/new`，原地 reset 当前 session。
-8. OpenClaw 通过 `POST /api/bots/{botID}/messages/send` 回确认。
+8. OpenClaw 通过 `POST /api/v1/channels/csgclaw/participants/{participantID}/messages` 回确认。
 
 CSGClaw 投递给 OpenClaw 的 BotEvent 关键字段：
 
@@ -418,7 +418,7 @@ room_id = 当前 room
 chat_id = 当前 room
 thread_root_id = 当前 thread root，可为空（保留透传，不影响清理范围）
 context.channel = "csgclaw"
-context.account = bot_id
+context.account = participant_id
 context.chat_id = 当前 room
 context.topic_id = 当前 thread root，可为空（保留透传，不影响清理范围）
 ```
@@ -438,7 +438,7 @@ OpenClaw 官方文档要求 slash command 是以 `/` 开头的 standalone messag
 
 - IM 中保留用户发出的 slash 清理命令和 Agent 的确认消息。
 - 不保存被清理的内部历史内容。
-- 日志只记录 bot id、room id、scope、结果，不记录消息正文或历史内容。
+- 日志只记录 participant 或 agent id、room id、scope、结果，不记录消息正文或历史内容。
 
 ### 2.9 端到端场景
 
@@ -472,7 +472,7 @@ Agent slash 清理：
 - 新增 `room.messages_cleared` SSE，同步多窗口状态。
 - 新增 `new` canonical slash 支持。
 - 在 `internal/runtime` 增加 `ConversationStarter` optional capability。
-- 在 `internal/agent.Service` 增加 `NewConversationAction` use-case 方法，集中完成 bot -> agent/runtime/handle 查找与 capability 调用。
+- 在 `internal/agent.Service` 增加 `NewConversationAction` use-case 方法，集中完成 participant/bridge target -> agent/runtime/handle 查找与 capability 调用。
 - CSGClaw 本地 channel 在现有 event glue 中识别 canonical `/new`，再调用 agent service use-case；不新增 `internal/channel/agentslash` 包。
 - Feishu channel 不参与 agent `/new` reset；`handleFeishuEvents` 只按 Feishu mention 过滤 MessageBus 事件并原样转发。
 - Codex 仅通过 CSGClaw 本地 channel 的 `/new` 使用，不列为独立对接项。

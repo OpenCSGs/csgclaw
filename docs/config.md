@@ -12,7 +12,7 @@ English | [中文](config.zh.md)
 
 Use `advertise_base_url` when the automatically inferred address is not reachable from BoxLite boxes, such as when you need a LAN address, a tunnel URL, or a host alias.
 
-`access_token` protects authenticated API routes, including the PicoClaw bot routes. When authentication is enabled, clients must send `Authorization: Bearer <access_token>`.
+`access_token` protects authenticated API routes, including the PicoClaw participant bridge routes. When authentication is enabled, clients must send `Authorization: Bearer <access_token>`.
 
 `no_auth` controls whether CSGClaw skips the bearer-token check. The default is `false`. Set it to `true` only for trusted local or development environments.
 

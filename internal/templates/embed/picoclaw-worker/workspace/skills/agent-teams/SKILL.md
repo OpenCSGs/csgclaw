@@ -11,10 +11,10 @@ Only begin work after an explicit dispatch message in the task execution room:
 
 ```text
 [team] Task <task_id> is ready for you
-Claim it with: csgclaw-cli team task claim --team <team_id> --task <task_id> --bot-id <worker_bot_id>
+Claim it with: csgclaw-cli team task claim --team <team_id> --task <task_id> --bot-id <worker_participant_id>
 ```
 
-CSGClaw worker IDs normally use the `u-<name>` form, for example `u-frontend-dev`. Rendered mentions may show only the handle, for example `@frontend-dev`. Treat a structured mention for your bot and the `--bot-id` value in the dispatch command as the same identity; use the exact `--bot-id` shown when claiming or updating the task.
+The `--bot-id` flag name is legacy; pass the worker participant ID shown in the dispatch message, for example `frontend-dev`. Rendered mentions may show only the handle, for example `@frontend-dev`; use the exact `--bot-id` value shown when claiming or updating the task.
 
 Ignore team setup and planning messages, including `[team] Task created`, `[team] Task planning complete`, and `[team] ... started assigning tasks`. Those messages are not permission to start work.
 
@@ -33,13 +33,13 @@ Never infer `team_id` from the room id. A room id such as `room-178...` is not a
 Claim the dispatched task:
 
 ```bash
-csgclaw-cli team task claim --team <team_id> --task <task_id> --bot-id <worker_bot_id>
+csgclaw-cli team task claim --team <team_id> --task <task_id> --bot-id <worker_participant_id>
 ```
 
 If the dispatch did not include a task id, claim the next available task:
 
 ```bash
-csgclaw-cli team task claim-next --team <team_id> --bot-id <worker_bot_id>
+csgclaw-cli team task claim-next --team <team_id> --bot-id <worker_participant_id>
 ```
 
 After claiming, confirm the response status is `in_progress` for the same task before doing the work.
@@ -47,7 +47,7 @@ After claiming, confirm the response status is `in_progress` for the same task b
 Report a completed task:
 
 ```bash
-csgclaw-cli team task update --team <team_id> --task <task_id> --actor-id <worker_bot_id> --status completed --result "<summary>"
+csgclaw-cli team task update --team <team_id> --task <task_id> --actor-id <worker_participant_id> --status completed --result "<summary>"
 ```
 
 The task is not complete until this CLI status update succeeds. Sending a normal room message with the result is useful, but it does not update task state.
@@ -55,13 +55,13 @@ The task is not complete until this CLI status update succeeds. Sending a normal
 Report a blocked task:
 
 ```bash
-csgclaw-cli team task update --team <team_id> --task <task_id> --actor-id <worker_bot_id> --status blocked --reason "<why blocked>"
+csgclaw-cli team task update --team <team_id> --task <task_id> --actor-id <worker_participant_id> --status blocked --reason "<why blocked>"
 ```
 
 Report a failed task:
 
 ```bash
-csgclaw-cli team task update --team <team_id> --task <task_id> --actor-id <worker_bot_id> --status failed --error "<failure>"
+csgclaw-cli team task update --team <team_id> --task <task_id> --actor-id <worker_participant_id> --status failed --error "<failure>"
 ```
 
 ## Working Rules

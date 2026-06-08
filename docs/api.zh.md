@@ -165,6 +165,7 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 - 实际 channel 由路由路径决定，而不是由请求体决定
 - `agent` participant 可通过 `agent_binding` 创建或复用 Agent
 - `human` 与 `notification` participant 不创建 runtime agent
+- 上面的示例中，`qa` 是 participant ID；`u-qa` 只作为本地 channel user ref 和生成的 backing agent ID。
 - 对 `csgclaw` 来说，`channel_user.ref` 是本地 IM user ID
 - 对 `feishu` 来说，`channel_user.ref` 是 channel-native open ID
 
@@ -657,7 +658,7 @@ bootstrap 响应中的 room 消息列表遵循默认时间线契约：只包含�
 
 ```json
 {
-  "id": "u-alice",
+  "id": "alice",
   "name": "Alice",
   "handle": "alice",
   "role": "worker"
@@ -669,7 +670,7 @@ bootstrap 响应中的 room 消息列表遵循默认时间线契约：只包含�
 - `id` 必填
 - `name` 必填
 - `handle` 省略时默认等于 `name`
-- 对于 `worker/agent` 角色，如果 bot service 与 agent service 已启用，服务端可能转而创建一个 worker bot 及其 backing agent
+- 对于 `worker/agent` 角色，如果 participant service 与 agent service 已启用，应优先使用 participant API 创建 agent-backed 身份
 
 ### `DELETE /api/v1/users/{id}`
 
@@ -702,8 +703,8 @@ room 消息列表默认不包含 thread reply；当 thread 存在时，root mess
 {
   "title": "Launch",
   "description": "coordination",
-  "creator_id": "u-admin",
-  "member_ids": ["u-alice", "u-bob"],
+  "creator_id": "manager",
+  "member_ids": ["alice", "bob"],
   "locale": "en"
 }
 ```
@@ -728,8 +729,8 @@ room 消息列表默认不包含 thread reply；当 thread 存在时，root mess
 
 ```json
 {
-  "inviter_id": "u-admin",
-  "user_ids": ["u-bob"],
+  "inviter_id": "manager",
+  "user_ids": ["bob"],
   "locale": "en"
 }
 ```
@@ -748,8 +749,8 @@ room 消息列表默认不包含 thread reply；当 thread 存在时，root mess
 ```json
 {
   "room_id": "room-1",
-  "inviter_id": "u-admin",
-  "user_ids": ["u-bob"],
+  "inviter_id": "manager",
+  "user_ids": ["bob"],
   "locale": "en"
 }
 ```
@@ -772,9 +773,9 @@ room 消息列表默认不包含 thread reply；当 thread 存在时，root mess
 ```json
 {
   "room_id": "room-1",
-  "sender_id": "u-admin",
+  "sender_id": "manager",
   "content": "hello @alice",
-  "mention_id": "u-alice"
+  "mention_id": "alice"
 }
 ```
 
@@ -903,6 +904,9 @@ context 不会被渲染成 thread 内消息；它是给 LLM-backed agent 使用�
 
 - `bot_id`
 
+`bot_id` 是当前 Feishu 凭证/config key 的字段名，不是 participant ID；面向
+participant 的路由仍使用 participant ID。
+
 响应示例：
 
 ```json
@@ -953,6 +957,9 @@ context 不会被渲染成 thread 内消息；它是给 LLM-backed agent 使用�
   "feishu_bots": ["u-manager"]
 }
 ```
+
+`feishu_bots` 是当前响应字段名，表示已重新加载的飞书凭证 key。
+其中的值是目标 agent ID，不是 participant ID。
 
 ### Participant 事件
 
@@ -1005,8 +1012,8 @@ context 不会被渲染成 thread 内消息；它是给 LLM-backed agent 使用�
 
 ```json
 {
-  "inviter_id": "u-manager",
-  "user_ids": ["ou_member"],
+  "inviter_id": "manager",
+  "user_ids": ["dev"],
   "locale": "zh-CN"
 }
 ```
@@ -1021,9 +1028,9 @@ context 不会被渲染成 thread 内消息；它是给 LLM-backed agent 使用�
 ```json
 {
   "room_id": "oc_xxx",
-  "sender_id": "u-manager",
+  "sender_id": "manager",
   "content": "hello",
-  "mention_id": "u-worker"
+  "mention_id": "worker"
 }
 ```
 
@@ -1031,7 +1038,7 @@ context 不会被渲染成 thread 内消息；它是给 LLM-backed agent 使用�
 
 Runtime client 使用 participant-scoped 路由处理 channel 消息，使用 agent-scoped 路由处理 LLM provider 流量。旧的 `/api/bots/*` 路由不再注册。
 
-Bot 和 Codex bridge 使用的 thread/session 隔离规则见
+Runtime 和 Codex bridge 使用的 thread/session 隔离规则见
 [im-threads.zh.md](./im-threads.zh.md)。
 
 ### `GET /api/v1/channels/{channel}/participants/{id}/events`
@@ -1052,7 +1059,7 @@ Bot 和 Codex bridge 使用的 thread/session 隔离规则见
 ```text
 id: msg-1
 event: message
-data: {"message_id":"msg-1","room_id":"room-1","channel":"csgclaw","chat_id":"room-1","sender_id":"u-admin","text":"hello","thread_root_id":"msg-root","context":{"channel":"csgclaw","chat_id":"room-1","chat_type":"direct","topic_id":"msg-root","sender_id":"u-admin","message_id":"msg-1"},"thread_context":{"root_message_id":"msg-root","context":[{"id":"msg-root","sender_id":"u-admin","content":"root text"}],"summary":{"root_excerpt":"root text","message_count":1,"before_count":0,"after_count":0}}}
+data: {"message_id":"msg-1","room_id":"room-1","channel":"csgclaw","chat_id":"room-1","sender_id":"admin","text":"hello","thread_root_id":"msg-root","context":{"channel":"csgclaw","chat_id":"room-1","chat_type":"direct","topic_id":"msg-root","sender_id":"admin","message_id":"msg-1"},"thread_context":{"root_message_id":"msg-root","context":[{"id":"msg-root","sender_id":"admin","content":"root text"}],"summary":{"root_excerpt":"root text","message_count":1,"before_count":0,"after_count":0}}}
 ```
 
 对于 thread replies，`thread_root_id` 是 root message ID，`thread_context`
@@ -1162,7 +1169,7 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
 
 - `CreateRoomRequest.participant_ids` 仍兼容旧字段，会映射到 `member_ids`
 - `Message.mentions` 兼容旧格式：
-  - 新格式：`[{ "id": "u-alice", "name": "Alice" }]`
+  - 新格式：`[{ "id": "alice", "name": "Alice" }]`
   - 旧格式：`["u-alice"]`
 - 本地 `csgclaw` channel 路由本质上是 `/api/v1/users|rooms|messages` 的镜像入口
 

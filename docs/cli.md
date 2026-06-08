@@ -433,7 +433,7 @@ csgclaw user list
 csgclaw user list --channel feishu
 csgclaw user create --name Alice --handle alice --role worker
 csgclaw user create --channel feishu --name Alice --handle alice --role manager --avatar AL
-csgclaw user delete u-alice
+csgclaw user delete alice
 ```
 
 ### Shared collaboration groups in `csgclaw`
@@ -513,7 +513,7 @@ Subcommands:
 - `--title string`: room title.
 - `--description string`: room description.
 - `--creator-id string`: creator participant ID, such as `manager`.
-- `--member-ids string`: comma-separated participant IDs, such as `manager,u-dev`.
+- `--member-ids string`: comma-separated participant IDs, such as `manager,dev`.
 - `--locale string`: room locale.
 
 Design note for `csgclaw-cli`: room creation should expose CSGClaw participant IDs, not channel user IDs, agent IDs, Feishu open IDs, Feishu app IDs, or app credentials. In the Feishu channel, the channel adapter resolves participant IDs to the configured Feishu app credentials and channel identifiers internally. When Feishu group creation needs a real human owner ID, CSGClaw continues to use the configured `admin_open_id` internally; callers should still pass participant IDs at the CLI boundary.
@@ -548,7 +548,7 @@ Subcommands:
 
 - `--channel string`: `csgclaw` or `feishu`. Default `csgclaw`.
 - `--room-id string`: target room ID.
-- `--user-id string`: required. Participant ID to add, such as `u-dev`.
+- `--user-id string`: required. Participant ID to add, such as `dev`.
 - `--inviter-id string`: inviter participant ID, such as `manager`.
 - `--locale string`: room locale.
 
@@ -592,8 +592,8 @@ Examples:
 ```bash
 csgclaw participant list
 csgclaw participant create --name alice --bind create --role worker --model-id gpt-5.4-mini
-csgclaw room create --title "release-room" --creator-id manager --member-ids manager,u-alice
-csgclaw member create --room-id room-1 --user-id u-alice --inviter-id manager
+csgclaw room create --title "release-room" --creator-id manager --member-ids manager,alice
+csgclaw member create --room-id room-1 --user-id alice --inviter-id manager
 csgclaw message list --room-id room-1
 csgclaw message create --channel csgclaw --room-id room-1 --sender-id manager --content hello
 ```
@@ -659,10 +659,10 @@ Examples:
 ```bash
 csgclaw-cli participant list --channel feishu --type agent
 csgclaw-cli pt create --name manager --channel feishu --type agent --bind create --role manager
-csgclaw-cli room create --channel feishu --title "ops-room" --creator-id u-manager --member-ids u-manager,u-dev
+csgclaw-cli room create --channel feishu --title "ops-room" --creator-id manager --member-ids manager,dev
 csgclaw-cli member list --channel feishu --room-id oc_x
-csgclaw-cli member create --channel feishu --room-id oc_x --user-id u-dev --inviter-id u-manager
-csgclaw-cli message create --channel feishu --room-id oc_x --sender-id u-manager --mention-id u-dev --content hello
+csgclaw-cli member create --channel feishu --room-id oc_x --user-id dev --inviter-id manager
+csgclaw-cli message create --channel feishu --room-id oc_x --sender-id manager --mention-id dev --content hello
 ```
 
 `csgclaw-cli` is the participant-facing CLI. Room, member, and message commands should not require callers to know or pass agent IDs, Feishu open IDs, Feishu app IDs, App ID/App Secret, or other channel credentials. Channel-specific adapters are responsible for exchanging participant IDs for the identifiers required by the target channel.

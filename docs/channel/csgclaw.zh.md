@@ -32,6 +32,7 @@
 ### 必填行为
 
 - `type` 必须是 `csgclaw.action_card`。
+- `bot_id` 是现有 setup helper 沿用的旧 payload 字段；其值表示目标 agent ID，不是 participant ID。
 - `actions[0].id` 必须是 `rebuild-manager`。
 - `actions[0].method` 必须是 `manager-bootstrap-replace`。
 - 前端必须将该 payload 直接作为完整聊天内容渲染（不允许附加普通文本、markdown 表格或 markdown 代码块）。

@@ -11,7 +11,7 @@ Issue 2219 要求在 CSGClaw IM 的房间工具中支持清空聊天记录。关
 
 非目标：
 
-- UI 清空聊天记录不删除 room，不删除 members，不删除 users，不删除 bots。
+- UI 清空聊天记录不删除 room，不删除 members，不删除 users，不删除 participants 或 agents。
 - UI 清空聊天记录不直接删除 PicoClaw、OpenClaw、Codex 的内部记忆、会话、workspace memory 或文件。
 - Agent slash 清理不反向清空 IM 房间消息，除非后续单独设计组合操作。
 
@@ -63,7 +63,7 @@ Issue 2219 要求在 CSGClaw IM 的房间工具中支持清空聊天记录。关
 | `CreateRoom` | 创建 room，并追加 `room_created` event message |
 | `AddRoomMembers` | 修改 members，并追加 `room_members_added` event message |
 | `CreateMessage` | 用户或前端发送消息，追加到 `room.Messages` |
-| `DeliverMessage` | Bot/runtime 回写消息，按 message id 幂等追加或覆盖 |
+| `DeliverMessage` | Agent/runtime 回写消息，按 message id 幂等追加或覆盖 |
 | `StartThread` | 给 root message 创建 `ThreadState`，并保存 thread context snapshot |
 | `DeleteRoom` | 删除 room 后保存 state，`cleanupSessionFiles` 清理不再被引用的 JSONL 和 blob |
 
@@ -131,7 +131,7 @@ POST /api/v1/channels/{channel}/rooms/{room}:clearMessages
 {
   "id": "room-123",
   "title": "general",
-  "members": ["u-admin", "u-manager"],
+  "members": ["admin", "manager"],
   "messages": [],
   "threads": []
 }
@@ -154,7 +154,7 @@ POST /api/v1/channels/{channel}/rooms/{room}:clearMessages
 接口分层如下：
 
 - HTTP 层从 URL 解析出 `roomID`，直接调用本地 `internal/im.Service.ClearRoomMessages(roomID)`。
-- `internal/channel/csgclaw.Service` 继续负责 CSGClaw channel 适配，例如 bot id/user id 转换、slash 内容归一化、后续权限校验，但不承载清空 IM room 消息的能力。
+- `internal/channel/csgclaw.Service` 继续负责 CSGClaw channel 适配，例如 participant/user ID 转换、slash 内容归一化、后续权限校验，但不承载清空 IM room 消息的能力。
 - `internal/im.Service` 处理本地 IM room/message 数据，负责“清空、落盘、发布领域事件”的完整操作边界。
 
 当前消息发送链路也是这个模式：
@@ -208,7 +208,7 @@ room.Threads = []RoomThread{}
 
 这会同时清理主线消息、thread root、thread reply、thread 状态摘要和 thread context snapshot。落盘时统一截断 `sessions/<roomID>.jsonl`，删除 `sessions/blobs/<roomID>/`，不再为 thread 单独设计第二套清理流程。
 
-清空语义以调用时刻已经落盘的 room 消息为边界：清空只删除调用时刻之前已落盘消息，之后到达的消息允许出现。例如清空前已经触发但尚未回写的 bot/runtime reply，如果在清空完成后才通过 `DeliverMessage` 到达，可以作为新的 room 消息继续出现；本接口不尝试取消或过滤这类 in-flight 回复。
+清空语义以调用时刻已经落盘的 room 消息为边界：清空只删除调用时刻之前已落盘消息，之后到达的消息允许出现。例如清空前已经触发但尚未回写的 agent/runtime reply，如果在清空完成后才通过 `DeliverMessage` 到达，可以作为新的 room 消息继续出现；本接口不尝试取消或过滤这类 in-flight 回复。
 
 ```mermaid
 flowchart LR
@@ -298,7 +298,7 @@ api.Handler
 
 internal/channel/csgclaw.Service
   - channel adapter for channel-owned operations
-  - bot/user id normalization if needed
+  - participant/user ID normalization if needed
   - delegate to im.Service
 
 internal/im.Service

@@ -250,11 +250,11 @@ Module boundaries:
 - `internal/channel/csgclaw`: channel ingress/egress adaptation, mention/room parsing, and no runtime command mapping.
 - `internal/channel/feishu`: Feishu configuration, platform message send/query, fallback rendering, and internal MessageBus/SSE bridge only. It does not parse or normalize user-side slash input, does not recognize Agent `/new` reset, and does not maintain runtime-native command mappings.
 - `internal/im`: store CSGClaw local-channel messages, rooms, and threads only. It does not know runtime-native commands.
-- `internal/agent.Service`: find agent/runtime/handle by bot id and call the runtime `ConversationStarter` capability.
-- `internal/api` channel event glue: before delivering through the CSGClaw BotBridge, recognize canonical `/new` and write the Agent service action back into the existing event path.
+- `internal/agent.Service`: find agent/runtime/handle by participant or bridge target ID and call the runtime `ConversationStarter` capability.
+- `internal/api` channel event glue: before delivering through the CSGClaw participant event bridge, recognize canonical `/new` and write the Agent service action back into the existing event path.
 - PicoClaw/OpenClaw runtime: execute only their own native command or internal cleanup interface.
 
-CSGClaw invokes Agent slash commands through the existing bot/event protocol, not through a new RPC:
+CSGClaw invokes Agent slash commands through the existing participant event bridge, not through a new RPC:
 
 ```mermaid
 flowchart LR
@@ -282,7 +282,7 @@ internal/api.handleCreateMessage
 -> internal/im.Service.CreateMessage
 -> internal/api.Handler.PublishBotEvent
 -> internal/im.BotBridge.PublishMessageEvent
--> /api/bots/{botID}/events
+-> /api/v1/channels/csgclaw/participants/{participantID}/events
 ```
 
 For `/new`:
@@ -290,15 +290,15 @@ For `/new`:
 1. `internal/channel/csgclaw.Service.SendMessage` continues to only canonical-normalize and write to `internal/im`.
 2. `internal/im.BotBridge` continues to only queue events and deliver SSE. It does not query runtimes or maintain runtime-native command mappings.
 3. Near `internal/api.Handler.PublishBotEvent`, detect whether `evt.Message.Content` is canonical `new conversation`.
-4. If matched, call `agent.Service.NewConversationAction` for each bot that should actually be notified.
+4. If matched, call `agent.Service.NewConversationAction` for each target Agent that should actually be notified.
 5. For PicoClaw/OpenClaw, replace `im.BotEvent.Text` with the runtime-native command `/clear` or `/new`. Keep the other room/thread/context fields produced by BotBridge.
 6. For Codex, only use `/new` through the CSGClaw local channel. Do not integrate through an external channel or external CLI here.
 
-Note: `BotBridge` currently notifies by room membership, and `shouldNotifyBot` does not require mention. The `/new` implementation must tighten routing semantics: in a direct room with an Agent, mention is not required; in a group chat, `@agent` is required. If no Agent is mentioned, no cleanup is executed, and cleanup is not broadcast to all room Agents. API glue should filter targets using message mentions.
+Note: `BotBridge` currently notifies by room membership, and `shouldNotifyBot` does not require mention. The `/new` implementation must tighten routing semantics: in a direct room with an Agent, mention is not required; in a group chat, `@agent` is required. If no Agent is mentioned, no cleanup is executed, and cleanup is not broadcast to all room Agents. API glue should filter participant bridge targets using message mentions.
 
 Feishu notes:
 
-- CSGClaw's `/api/v1/channels/feishu/bots/{botID}/events` is an internal SSE bridge, not a Feishu Open Platform inbound webhook.
+- CSGClaw's `/api/v1/channels/feishu/participants/{participantID}/events` is an internal SSE bridge, not a Feishu Open Platform inbound webhook.
 - Real Feishu inbound messages are currently handled by the runtime's own Feishu/Lark channel. CSGClaw server does not translate `/new` to `/clear` on that path.
 - If users talk directly to PicoClaw's Feishu channel, history cleanup should use PicoClaw's native `/clear` command, or PicoClaw itself should decide whether to support an additional alias.
 
@@ -325,25 +325,25 @@ PicoClaw already has an internal cleanup command:
 PicoClaw integration through the CSGClaw local channel:
 
 1. CSGClaw Web/API normalizes `/new` into canonical slash.
-2. The CSGClaw runtime slash adapter recognizes that the target bot is PicoClaw sandbox.
+2. The CSGClaw runtime slash adapter recognizes that the target Agent uses PicoClaw sandbox.
 3. The adapter maps the canonical command to the PicoClaw native command:
 
 ```text
 /clear
 ```
 
-4. `internal/im.BotBridge` or a dedicated Agent slash dispatcher delivers a BotEvent to the target PicoClaw bot.
-5. PicoClaw subscribes through the CSGClaw bot compatibility protocol and receives the message event.
+4. `internal/im.BotBridge` or a dedicated Agent slash dispatcher delivers a BotEvent to the target PicoClaw participant bridge.
+5. PicoClaw subscribes through the CSGClaw participant bridge protocol and receives the message event.
 6. PicoClaw command executor recognizes `/clear` before entering the LLM.
 7. PicoClaw computes its own session key from event context:
    - `roomID`
-8. PicoClaw clears this bot's internal conversation history for the current conversation.
-9. PicoClaw replies through the CSGClaw bot compatibility protocol.
+8. PicoClaw clears this Agent's internal conversation history for the current conversation.
+9. PicoClaw replies through the CSGClaw participant bridge protocol.
 
 CSGClaw and PicoClaw communicate through HTTP/SSE:
 
 ```http
-GET /api/bots/{botID}/events
+GET /api/v1/channels/csgclaw/participants/{participantID}/events
 ```
 
 - PicoClaw connects to CSGClaw using `CSGCLAW_BASE_URL` or `PICOCLAW_CHANNELS_CSGCLAW_BASE_URL`.
@@ -354,7 +354,7 @@ GET /api/bots/{botID}/events
 PicoClaw replies through:
 
 ```http
-POST /api/bots/{botID}/messages/send
+POST /api/v1/channels/csgclaw/participants/{participantID}/messages
 ```
 
 Request body:
@@ -376,7 +376,7 @@ room_id = current room
 chat_id = current room
 thread_root_id = current thread root, optional pass-through and not part of cleanup scope
 context.channel = "csgclaw"
-context.account = bot_id
+context.account = participant_id
 context.chat_id = current room
 context.topic_id = current thread root, optional pass-through and not part of cleanup scope
 ```
@@ -396,18 +396,18 @@ CSGCLAW_BOT_ID
 OpenClaw integration:
 
 1. CSGClaw parses the user-facing canonical slash command.
-2. The runtime slash adapter recognizes that the target bot is OpenClaw sandbox.
+2. The runtime slash adapter recognizes that the target Agent uses OpenClaw sandbox.
 3. The adapter maps the canonical command to the OpenClaw native command:
 
 ```text
 /new
 ```
 
-4. `internal/im.BotBridge` or a dedicated Agent slash dispatcher delivers a BotEvent to the target OpenClaw bot.
-5. OpenClaw receives the message event through the CSGClaw bot compatibility HTTP/SSE protocol.
+4. `internal/im.BotBridge` or a dedicated Agent slash dispatcher delivers a BotEvent to the target OpenClaw participant bridge.
+5. OpenClaw receives the message event through the CSGClaw participant bridge HTTP/SSE protocol.
 6. The OpenClaw gateway/channel adapter forwards the event to the OpenClaw runtime.
 7. The OpenClaw command executor recognizes `/new` before entering the model and resets the current session in place.
-8. OpenClaw replies through `POST /api/bots/{botID}/messages/send`.
+8. OpenClaw replies through `POST /api/v1/channels/csgclaw/participants/{participantID}/messages`.
 
 Important BotEvent fields delivered by CSGClaw to OpenClaw:
 
@@ -418,7 +418,7 @@ room_id = current room
 chat_id = current room
 thread_root_id = current thread root, optional pass-through and not part of cleanup scope
 context.channel = "csgclaw"
-context.account = bot_id
+context.account = participant_id
 context.chat_id = current room
 context.topic_id = current thread root, optional pass-through and not part of cleanup scope
 ```
@@ -438,7 +438,7 @@ Audit strategy:
 
 - IM keeps the user's slash cleanup command and the Agent confirmation message.
 - Cleared internal history content is not saved.
-- Logs should record only bot id, room id, scope, and result. They must not record message content or history content.
+- Logs should record only participant or agent id, room id, scope, and result. They must not record message content or history content.
 
 ### 2.9 End-to-End Scenarios
 
@@ -472,7 +472,7 @@ Combined use:
 - Add `room.messages_cleared` SSE to synchronize multi-window state.
 - Add canonical `new` slash support.
 - Add optional `ConversationStarter` capability in `internal/runtime`.
-- Add `NewConversationAction` use-case method in `internal/agent.Service`, centralizing bot -> agent/runtime/handle lookup and capability invocation.
+- Add `NewConversationAction` use-case method in `internal/agent.Service`, centralizing participant/bridge target -> agent/runtime/handle lookup and capability invocation.
 - CSGClaw local channel recognizes canonical `/new` in the existing event glue and calls the Agent service use case. Do not add an `internal/channel/agentslash` package.
 - Feishu channel does not participate in Agent `/new` reset. `handleFeishuEvents` only filters MessageBus events by Feishu mention and forwards them as-is.
 - Codex is only used through `/new` in the CSGClaw local channel and is not listed as an independent integration item.

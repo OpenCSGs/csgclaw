@@ -32,6 +32,7 @@ Some flows (notably Feishu manager setup) return a structured card object in the
 ### Required behavior
 
 - `type` must be exactly `csgclaw.action_card`.
+- `bot_id` is a legacy payload field used by the existing setup helper; its value is the target agent ID, not a participant ID.
 - `actions[0].id` must be `rebuild-manager`.
 - `actions[0].method` must be `manager-bootstrap-replace`.
 - Frontend must render this payload directly as the complete chat content (no prose, no markdown table, no markdown code fence).

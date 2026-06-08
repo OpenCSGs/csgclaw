@@ -21,7 +21,7 @@ When available, load the CSGClaw API settings from `~/.openclaw/openclaw.json`:
 
 ## Expected Endpoints
 
-### Dispatch task by bot message
+### Dispatch task by participant message
 
 - Method: `POST`
 - Path: `/api/v1/channels/csgclaw/participants/{participant_id}/messages`
@@ -30,7 +30,7 @@ When available, load the CSGClaw API settings from `~/.openclaw/openclaw.json`:
 ```json
 {
   "room_id": "room-123",
-  "text": "<at user_id=\"u-bob\">bob</at> 你来写前端代码，实现设置页 UI"
+  "text": "<at user_id=\"bob\">bob</at> 你来写前端代码，实现设置页 UI"
 }
 ```
 
@@ -49,7 +49,7 @@ When available, load the CSGClaw API settings from `~/.openclaw/openclaw.json`:
 ## Notes
 
 - There is no dedicated task-assignment API.
-- Dispatch still means sending a normal bot message in the target room and mentioning the worker.
+- Dispatch still means sending a normal participant message in the target room and mentioning the worker participant.
 - Each task in `todo.json` should carry an `id` task number, increasing in dispatch order such as `1`, `2`, `3`.
 - `start-tracking` watches `todo.json`, room history, and IM bootstrap data.
 - The first task dispatches immediately. Later tasks dispatch only after the previous task both:

@@ -186,6 +186,7 @@ Legacy notes:
 - Product-facing collaboration identities are participants, not bots.
 - A participant is scoped to a channel and has `type=human|agent|notification`.
 - `agent` participants may create or bind a runtime Agent.
+- In the example above, `alice` is the participant ID; `u-alice` is not a participant ID.
 - Channel user identity belongs to participant state, while runtime state belongs to Agent.
 
 ---

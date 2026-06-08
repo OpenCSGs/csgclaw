@@ -7,7 +7,7 @@ description: Use this skill only for manager-led multi-worker coordination in CS
 
 Break a multi-worker admin request into clear tasks, choose workers by capability, and dispatch them through CSGClaw's real local interfaces in sequence.
 
-Use the `basics` skill for room, bot, and member operations that support the dispatch flow. Use `skill-installer` for registry skill search; workers use `skill-installer` for install (not `find_skills`).
+Use the `basics` skill for room, participant, and member operations that support the dispatch flow. Use `skill-installer` for registry skill search; workers use `skill-installer` for install (not `find_skills`).
 Use `scripts/manager_worker_api.py` only for `start-tracking` and `stop-tracking`.
 Check the current CLI surface through the `basics` skill instead of writing ad hoc API requests.
 
@@ -34,7 +34,7 @@ When a user asks for manager-led coordination (especially GitLab planning, issue
 3. Ensure the selected worker is a member of the target room (add if missing).
 4. If no suitable worker exists or the matching one is `unavailable`:
    - **New worker needed:** stop dispatch, follow `agent-creator` (hub list → hub get → `participant create --type agent --bind create --from-template` + `--env`), then use `basics` to add the worker to the room.
-   - **Existing worker unavailable:** use `basics` / recreate paths for that bot id only; do not bare-create a replacement.
+   - **Existing worker unavailable:** use `basics` / recreate paths for that participant only; do not bare-create a replacement.
 5. Dispatch the task to the worker in-room after membership is confirmed.
 
 Do not start with repo/code exploration, web fetch/search, or manager self-execution when the task is delegable to an existing or creatable worker.
@@ -61,14 +61,14 @@ Do not inspect or modify project implementation files before dispatch unless you
 
 1. Break the admin request into concrete deliverables.
 2. Match each task to the needed capability; use the `basics` skill to inspect existing workers first (`participant list`) and reuse by matching `description`.
-3. If a suitable worker does not exist or is `unavailable`, provision via `agent-creator` (new) or recreate the existing bot (unavailable) before dispatch.
+3. If a suitable worker does not exist or is `unavailable`, provision via `agent-creator` (new) or recreate the existing worker before dispatch.
 4. Use the `basics` skill to ensure every required worker has joined the target room, then verify the full required worker set.
 5. Dispatch the user task to selected workers in-room after membership checks pass.
 6. Choose a suitable project directory under `~/.picoclaw/workspace/projects`; create a short slug directory if none fits.
 7. Write or overwrite `todo.json` in that directory as the only source of truth for the current dispatch plan, but only after the room-membership verification succeeds.
 8. Start `scripts/manager_worker_api.py start-tracking` against that `todo.json`, but only after all required workers are confirmed present in the room.
 9. Let the tracker own sequential handoff; workers must reply in-room with results or blockers, and neither the manager nor workers should manually assign the next worker while tracking is active.
-10. After `start-tracking`, run an explicit dispatch-delivery check before claiming success: query recent room messages and confirm the tracker/bot has posted a task message with a real mention (`mention_id` targeting the assignee user; rendered as `<at user_id="...">...</at>`).
+10. After `start-tracking`, run an explicit dispatch-delivery check before claiming success: query recent room messages and confirm the tracker has posted a task message with a real mention (`mention_id` targeting the assignee participant; rendered as `<at user_id="...">...</at>`).
 
 ## Room Membership Gate
 
@@ -163,7 +163,7 @@ Split cross-capability work into multiple tasks instead of giving one vague pack
 Use the `basics` skill whenever this workflow needs any of these supporting operations:
 
 - create the target room
-- list workers or bots
+- list workers or participants
 - add a worker into the room
 - verify room membership before tracking
 
@@ -191,8 +191,8 @@ csgclaw-cli --output json message list --room-id <target_room_id> --channel <cur
 
 Success criteria:
 
-- There is a new tracker dispatch message from the manager bot in the target room.
-- The dispatch message includes mention to the selected assignee (`mention_id` equals the worker user id). Do **not** rely on plain-text `@name`; CSGClaw renders mentions as `<at user_id="...">Name</at>`.
+- There is a new tracker dispatch message from the manager participant in the target room.
+- The dispatch message includes mention to the selected assignee (`mention_id` equals the worker participant ID). Do **not** rely on plain-text `@name`; CSGClaw renders mentions as `<at user_id="...">Name</at>`.
 - Message content matches the task dispatch text pattern (task id/todo path context).
 
 If verification does not pass:
@@ -200,7 +200,7 @@ If verification does not pass:
 1. Wait briefly and re-check message list up to 3 times.
 2. If still missing, report dispatch failure with evidence.
 3. Do **not** send a manual fallback assignment message while tracking is active.
-4. Stop tracking if needed, fix root cause (assignee handle mismatch, room membership mismatch, bot id mismatch), then restart tracking.
+4. Stop tracking if needed, fix root cause (assignee handle mismatch, room membership mismatch, participant ID mismatch), then restart tracking.
 
 Stop the tracking:
 
@@ -214,7 +214,7 @@ If you need to direct the human user to the project files on their Mac, point th
 
 Use this when exactly one worker should act (for example install a registry skill via `skill-installer`, run one GitLab job) and you do **not** need multi-step `todo.json` sequencing.
 
-1. Use the `basics` skill: `participant list`, confirm room membership, then `message create --mention-id <worker-bot-id>`.
+1. Use the `basics` skill: `participant list`, confirm room membership, then `message create --mention-id <worker_participant_id>`.
 2. Do **not** reply in the room with plain `@worker-name` after registry skill discovery or other tools — that does not wake workers under `mention_only`.
 3. Verify with `csgclaw-cli message list` that the dispatch message contains `<at user_id="...">`.
 4. Use `start-tracking` only when multiple workers or ordered handoff is required.
@@ -222,7 +222,7 @@ Use this when exactly one worker should act (for example install a registry skil
 ## Operating Rules
 
 - Reuse available workers before creating new ones.
-- If a matching worker is listed as `unavailable`, recreate that existing bot; do not bare-create a different replacement worker.
+- If a matching worker is listed as `unavailable`, recreate that existing worker; do not bare-create a different replacement worker.
 - Before writing the final `todo.json` or running `start-tracking`, use the `basics` skill to verify all required workers are already members of the target room.
 - Treat missing room membership as a blocker: add the worker, verify again, and only then continue with `todo.json` and tracking.
 - Keep `todo.json` aligned with the actual assignment being dispatched.
@@ -231,5 +231,5 @@ Use this when exactly one worker should act (for example install a registry skil
 - Never "补发" assignment messages manually after `start-tracking`; treat missing mention/`mention_id` dispatch as a verification failure to debug, not a prompt for manual dispatch.
 - While tracking is active, do not manually tell the next worker to start in prose. The tracker is the only sequencer.
 - When a worker finishes, they must reply in the shared room with a normal summary or blocker note; updating `todo.json` alone does not release the next task.
-- Route all non-tracking room, bot, and member operations through the `basics` skill; do not use `scripts/manager_worker_api.py` for those operations.
+- Route all non-tracking room, participant, and member operations through the `basics` skill; do not use `scripts/manager_worker_api.py` for those operations.
 - If `start-tracking` or `stop-tracking` response shape differs from expectations, patch the script instead of improvising around it.

@@ -52,13 +52,13 @@ be practical, accurate, and efficient.
 
 ## Duplicate dispatches from manager
 
-- If the room shows two (or more) near-identical task lines from `u-manager` mentioning you with the same goal, treat them as **one** task: reply once with `ACK_SKILL`, then execute once. Do not spend multiple turns only confirming "already dispatched" without doing the work.
+- If the room shows two (or more) near-identical task lines from `manager` mentioning you with the same goal, treat them as **one** task: reply once with `ACK_SKILL`, then execute once. Do not spend multiple turns only confirming "already dispatched" without doing the work.
 
 ## CSGClaw identity
 
-- Your CSGClaw bot ID uses the worker ID from the channel/runtime config, commonly `u-<name>` such as `u-frontend-dev`.
-- Rendered mentions may display only the handle, such as `@frontend-dev`; that is the same identity as `u-frontend-dev` when the structured mention or claim command uses that bot ID.
-- For team task dispatches, use the exact `--bot-id` shown in the dispatch command for claim and status updates.
+- Your CSGClaw participant ID comes from the channel/runtime config, commonly a stable worker slug such as `frontend-dev`.
+- Rendered mentions may display only the handle, such as `@frontend-dev`; use the exact participant ID shown in structured mentions or team claim commands.
+- For team task dispatches, the `--bot-id` flag name is legacy; pass the exact participant ID shown in the dispatch command for claim and status updates.
 
 ## Goals
 

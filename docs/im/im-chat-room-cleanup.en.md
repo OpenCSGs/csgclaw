@@ -11,7 +11,7 @@ This plan keeps the two requirements separate:
 
 Non-goals:
 
-- UI chat cleanup does not delete the room, members, users, or bots.
+- UI chat cleanup does not delete the room, members, users, participants, or agents.
 - UI chat cleanup does not directly delete PicoClaw, OpenClaw, or Codex internal memory, sessions, workspace memory, or files.
 - Agent slash cleanup does not clear IM room messages in reverse, unless a combined operation is designed separately later.
 
@@ -63,7 +63,7 @@ Main write scenarios:
 | `CreateRoom` | Creates a room and appends a `room_created` event message |
 | `AddRoomMembers` | Updates members and appends a `room_members_added` event message |
 | `CreateMessage` | Appends a user or frontend message to `room.Messages` |
-| `DeliverMessage` | Appends or overwrites a bot/runtime message idempotently by message ID |
+| `DeliverMessage` | Appends or overwrites an agent/runtime message idempotently by message ID |
 | `StartThread` | Creates `ThreadState` for the root message and saves the thread context snapshot |
 | `DeleteRoom` | Saves state after deleting the room, and `cleanupSessionFiles` removes JSONL and blob files that are no longer referenced |
 
@@ -131,7 +131,7 @@ Response:
 {
   "id": "room-123",
   "title": "general",
-  "members": ["u-admin", "u-manager"],
+  "members": ["admin", "manager"],
   "messages": [],
   "threads": []
 }
@@ -154,7 +154,7 @@ No dedicated response DTO is added. The HTTP response directly returns the clear
 Layering:
 
 - The HTTP layer parses `roomID` from the URL and directly calls local `internal/im.Service.ClearRoomMessages(roomID)`.
-- `internal/channel/csgclaw.Service` remains responsible for CSGClaw channel adaptation, such as bot ID/user ID conversion, slash content normalization, and future permission checks, but it does not own the ability to clear IM room messages.
+- `internal/channel/csgclaw.Service` remains responsible for CSGClaw channel adaptation, such as participant/user ID conversion, slash content normalization, and future permission checks, but it does not own the ability to clear IM room messages.
 - `internal/im.Service` handles local IM room/message data and owns the full "clear, persist, publish domain event" operation boundary.
 
 The current message sending path uses channel adaptation:
@@ -208,7 +208,7 @@ room.Threads = []RoomThread{}
 
 This clears mainline messages, thread roots, thread replies, thread state summaries, and thread context snapshots. Persistence truncates `sessions/<roomID>.jsonl` and removes `sessions/blobs/<roomID>/`; no second cleanup flow is needed for threads.
 
-Cleanup semantics are bounded by the room messages that have been persisted at call time. Messages delivered after cleanup may appear. For example, if a bot/runtime reply was already triggered before cleanup but only arrives through `DeliverMessage` after cleanup finishes, it can continue to appear as a new room message. This API does not attempt to cancel or filter such in-flight replies.
+Cleanup semantics are bounded by the room messages that have been persisted at call time. Messages delivered after cleanup may appear. For example, if an agent/runtime reply was already triggered before cleanup but only arrives through `DeliverMessage` after cleanup finishes, it can continue to appear as a new room message. This API does not attempt to cancel or filter such in-flight replies.
 
 ```mermaid
 flowchart LR
@@ -298,7 +298,7 @@ api.Handler
 
 internal/channel/csgclaw.Service
   - channel adapter for channel-owned operations
-  - bot/user id normalization if needed
+  - participant/user ID normalization if needed
   - delegate to im.Service
 
 internal/im.Service

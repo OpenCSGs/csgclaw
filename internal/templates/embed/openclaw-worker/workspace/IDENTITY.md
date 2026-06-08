@@ -2,7 +2,7 @@
 
 Name: OpenClaw
 
-Role: CSGClaw worker bot
+Role: CSGClaw worker agent
 
 Nature: OpenClaw runtime agent managed by CSGClaw
 

@@ -167,6 +167,7 @@ Notes:
 - The effective channel comes from the route path rather than the request body
 - `agent` participants can create or reuse an Agent through `agent_binding`
 - `human` and `notification` participants do not create runtime agents
+- In the example above, `qa` is the participant ID; `u-qa` is used only as the local channel user ref and generated backing agent ID.
 - For `csgclaw`, `channel_user.ref` is a local IM user ID
 - For `feishu`, `channel_user.ref` is the channel-native open ID
 
@@ -660,7 +661,7 @@ Request body:
 
 ```json
 {
-  "id": "u-alice",
+  "id": "alice",
   "name": "Alice",
   "handle": "alice",
   "role": "worker"
@@ -672,7 +673,7 @@ Notes:
 - `id` is required
 - `name` is required
 - `handle` defaults to `name` when omitted
-- For `worker` or `agent` roles, if bot service and agent service are both enabled, the server may create a worker bot and its backing agent instead
+- For `worker` or `agent` roles, if participant and agent services are both enabled, prefer the participant API for agent-backed identities
 
 ### `DELETE /api/v1/users/{id}`
 
@@ -706,8 +707,8 @@ Request body:
 {
   "title": "Launch",
   "description": "coordination",
-  "creator_id": "u-admin",
-  "member_ids": ["u-alice", "u-bob"],
+  "creator_id": "manager",
+  "member_ids": ["alice", "bob"],
   "locale": "en"
 }
 ```
@@ -732,8 +733,8 @@ Request body:
 
 ```json
 {
-  "inviter_id": "u-admin",
-  "user_ids": ["u-bob"],
+  "inviter_id": "manager",
+  "user_ids": ["bob"],
   "locale": "en"
 }
 ```
@@ -752,8 +753,8 @@ Request body:
 ```json
 {
   "room_id": "room-1",
-  "inviter_id": "u-admin",
-  "user_ids": ["u-bob"],
+  "inviter_id": "manager",
+  "user_ids": ["bob"],
   "locale": "en"
 }
 ```
@@ -777,9 +778,9 @@ Request body:
 ```json
 {
   "room_id": "room-1",
-  "sender_id": "u-admin",
+  "sender_id": "manager",
   "content": "hello @alice",
-  "mention_id": "u-alice"
+  "mention_id": "alice"
 }
 ```
 
@@ -912,6 +913,9 @@ Optional query parameters:
 
 - `bot_id`
 
+`bot_id` is the current Feishu credential/config key field name. It is not a
+participant ID; participant-facing routes continue to use participant IDs.
+
 Example response:
 
 ```json
@@ -962,6 +966,9 @@ Example response:
   "feishu_bots": ["u-manager"]
 }
 ```
+
+`feishu_bots` is the current response field name for reloaded Feishu
+credential keys. Values are target agent IDs, not participant IDs.
 
 ### Participant Events
 
@@ -1014,8 +1021,8 @@ Example add-members request:
 
 ```json
 {
-  "inviter_id": "u-manager",
-  "user_ids": ["ou_member"],
+  "inviter_id": "manager",
+  "user_ids": ["dev"],
   "locale": "zh-CN"
 }
 ```
@@ -1030,9 +1037,9 @@ Example send-message request:
 ```json
 {
   "room_id": "oc_xxx",
-  "sender_id": "u-manager",
+  "sender_id": "manager",
   "content": "hello",
-  "mention_id": "u-worker"
+  "mention_id": "worker"
 }
 ```
 
@@ -1063,7 +1070,7 @@ Example single event:
 ```text
 id: msg-1
 event: message
-data: {"message_id":"msg-1","room_id":"room-1","channel":"csgclaw","chat_id":"room-1","sender_id":"u-admin","text":"hello","thread_root_id":"msg-root","context":{"channel":"csgclaw","chat_id":"room-1","chat_type":"direct","topic_id":"msg-root","sender_id":"u-admin","message_id":"msg-1"},"thread_context":{"root_message_id":"msg-root","context":[{"id":"msg-root","sender_id":"u-admin","content":"root text"}],"summary":{"root_excerpt":"root text","message_count":1,"before_count":0,"after_count":0}}}
+data: {"message_id":"msg-1","room_id":"room-1","channel":"csgclaw","chat_id":"room-1","sender_id":"admin","text":"hello","thread_root_id":"msg-root","context":{"channel":"csgclaw","chat_id":"room-1","chat_type":"direct","topic_id":"msg-root","sender_id":"admin","message_id":"msg-1"},"thread_context":{"root_message_id":"msg-root","context":[{"id":"msg-root","sender_id":"admin","content":"root text"}],"summary":{"root_excerpt":"root text","message_count":1,"before_count":0,"after_count":0}}}
 ```
 
 For thread replies, `thread_root_id` is the root message ID and
@@ -1175,7 +1182,7 @@ Notes:
 
 - `CreateRoomRequest.participant_ids` is still accepted and mapped to `member_ids`
 - `Message.mentions` remains backward-compatible with the legacy format:
-  - New format: `[{ "id": "u-alice", "name": "Alice" }]`
+  - New format: `[{ "id": "alice", "name": "Alice" }]`
   - Legacy format: `["u-alice"]`
 - The local `csgclaw` channel routes are effectively mirrored entrypoints for `/api/v1/users|rooms|messages`
 
