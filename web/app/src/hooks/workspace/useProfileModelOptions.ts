@@ -19,7 +19,7 @@ export function useProfileModelOptions({ draft, enabled = true, onDraftChange }:
   const shouldLoad = Boolean(enabled && draft?.provider && !isNotifierRuntimeDraft(draft));
 
   useEffect(() => {
-    if (!shouldLoad) {
+    if (!shouldLoad || !draft) {
       setRequestDraft(null);
       return undefined;
     }

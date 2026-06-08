@@ -26,11 +26,7 @@ export function APIKeyField({ label, value, onInput, profile, required = false, 
   const labelText = label || t("profileAPIKey");
   return (
     <label className="field api-key-field" htmlFor={inputID}>
-      {required ? (
-        requiredFieldLabel(labelText, { id: labelID })
-      ) : (
-        <span id={labelID}>{labelText}</span>
-      )}
+      {required ? requiredFieldLabel(labelText, { id: labelID }) : <span id={labelID}>{labelText}</span>}
       <div className="api-key-input-shell">
         <TextInput
           id={inputID}

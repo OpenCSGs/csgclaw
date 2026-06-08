@@ -1,4 +1,4 @@
-import * as RadixDropdownMenu from "@radix-ui/react-dropdown-menu";
+import { DropdownMenu as RadixDropdownMenu } from "radix-ui";
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef } from "react";
 import { classNames } from "@/shared/lib/classNames";

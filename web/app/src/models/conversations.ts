@@ -138,7 +138,7 @@ export function isEventMessage(message: IMMessage | null | undefined): boolean {
 
 export function formatConversationPreview(
   message: IMMessage | null | undefined,
-  conversation: IMConversation,
+  conversation: IMConversation | null | undefined,
   currentUserID: string,
   usersById: UsersById,
   locale: LocaleCode,
@@ -150,7 +150,7 @@ export function formatConversationPreview(
     }
     return formatMessagePreviewText(message.content);
   }
-  return getConversationSubtitle(conversation, currentUserID, usersById, locale, t);
+  return conversation ? getConversationSubtitle(conversation, currentUserID, usersById, locale, t) : "";
 }
 
 export function formatMessagePreviewText(content: unknown): string {
@@ -675,7 +675,7 @@ export function upsertUserInData<T extends IMData | null | undefined>(
 
   const existing = current.users.some((item) => item.id === user.id);
   const users = existing ? current.users.map((item) => (item.id === user.id ? user : item)) : [...current.users, user];
-  users.sort((a, b) => a.name.localeCompare(b.name));
+  users.sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
   return { ...current, users };
 }
 
@@ -701,7 +701,7 @@ export function removeUserFromData<T extends IMData | null | undefined>(
         messages,
       };
     })
-    .filter(Boolean);
+    .filter((room): room is IMConversation => Boolean(room));
 
   return { ...current, users, rooms: sortConversations(rooms) };
 }

@@ -9,9 +9,10 @@ export function AgentPage() {
     return null;
   }
 
-  if (!controller.agentViewProps.item) {
+  const agentViewProps = controller.agentViewProps;
+  if (!agentViewProps?.item) {
     return <ConversationPage />;
   }
 
-  return <AgentView {...controller.agentViewProps} />;
+  return <AgentView {...agentViewProps} item={agentViewProps.item} />;
 }

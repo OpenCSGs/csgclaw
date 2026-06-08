@@ -9,8 +9,47 @@ import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/W
 import { localizeRole, localizeTemplateSourceTag } from "@/shared/i18n";
 import { HubIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
+import type { LocaleCode, TranslateFn } from "@/models/conversations";
+import type { HubTemplate } from "@/models/hubWorkspace";
+import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
 
-const EMPTY_WORKSPACE_ENTRIES = [];
+const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
+
+type HubDetailPaneHub = {
+  detailPaneProps: {
+    deleteBusy?: boolean;
+    detailLoading: boolean;
+    error: string;
+    loaded: boolean;
+    onDeleteTemplate?: (item: HubTemplate | null | undefined) => unknown;
+    onRetry: () => void | Promise<void>;
+    onSelectTemplate?: (item: HubTemplate | null | undefined) => void;
+    onSelectWorkspaceFile: (workspacePath: string) => void;
+    selectedTemplate: HubTemplate | null;
+    selectedTemplateId: string;
+    selectedWorkspacePath: string;
+    templates: readonly HubTemplate[];
+    workspaceFile: WorkspaceFile | null;
+    workspaceFileError: string;
+    workspaceFileLoading: boolean;
+  };
+};
+
+const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
+  deleteBusy: false,
+  detailLoading: false,
+  error: "",
+  loaded: false,
+  onRetry: () => {},
+  onSelectWorkspaceFile: () => {},
+  selectedTemplate: null,
+  selectedTemplateId: "",
+  selectedWorkspacePath: "",
+  templates: [],
+  workspaceFile: null,
+  workspaceFileError: "",
+  workspaceFileLoading: false,
+};
 
 function HubPreviewEmptyIcon() {
   return (
@@ -39,7 +78,19 @@ function HubPreviewEmptyIcon() {
   );
 }
 
-export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
+export type HubDetailPaneProps = {
+  hub?: HubDetailPaneHub;
+  locale?: LocaleCode;
+  onCreateFromTemplate?: (item: HubTemplate) => void | Promise<void>;
+  t?: TranslateFn;
+};
+
+export function HubDetailPane({
+  t = (key) => key,
+  locale = "en",
+  hub,
+  onCreateFromTemplate = () => {},
+}: HubDetailPaneProps) {
   const {
     templates,
     selectedTemplate,
@@ -56,7 +107,7 @@ export function HubDetailPane({ t, locale, hub, onCreateFromTemplate }) {
     onSelectWorkspaceFile,
     onDeleteTemplate,
     deleteBusy = false,
-  } = hub.detailPaneProps;
+  } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
   const workspaceEntries = selectedTemplate?.workspace?.entries ?? EMPTY_WORKSPACE_ENTRIES;
   const [isTemplateListScrolling, setIsTemplateListScrolling] = useState(false);

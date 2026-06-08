@@ -4,6 +4,12 @@ These rules apply to the Vite web app in `web/app`.
 
 Chinese companion: `development.zh.md`. This English document is the agent-facing source of truth.
 
+## When To Use This Guide
+
+- Read this guide before changing the Vite app's source, tests, package/config files, public assets, or generated web asset pipeline.
+- Common triggers include React pages, components, hooks, shared models, route helpers, API clients, CSS/Tailwind/tokens, i18n text, Vite/Vitest/TypeScript config, dependency changes, public asset URLs, and `web/static-dist` handling.
+- When changing UI primitives, Radix wrappers, form controls, overlays, or component-library exports, also follow `docs/web/ui-components.md`.
+
 ## Tooling
 
 - Use Node.js 22.13.x or newer, up to but not including Node.js 25, for frontend development.
@@ -32,6 +38,14 @@ pnpm --dir web/app install
 - Keep frontend source in `web/app/src`.
 - Treat `web/static-dist` as generated output for Go embedding.
 - Prefer local conventions already present in `web/app` before adding new patterns or dependencies.
+
+## TypeScript Type Checking
+
+- `pnpm --dir web/app typecheck` is the strict TypeScript gate and must stay passing for normal frontend changes.
+- Treat missing type declarations, unresolved modules, implicit `any`, and other TypeScript errors as part of the change. Add or refine local types, package types, runtime guards, or typed adapters until type checking passes.
+- When strict type errors appear, prioritize the touched code and shared foundations first: `src/models`, `src/shared`, controller hooks, API boundary helpers, and reusable UI primitives.
+- Prefer precise input/output types, runtime guards at external boundaries, and small null handling fixes over broad assertions or `any`.
+- Do not change user-visible behavior just to satisfy TypeScript. If a type fix needs behavior changes, cover the affected path with a focused test.
 
 ## Static Assets And Deployment Paths
 
@@ -213,7 +227,7 @@ src/pages/WorkspacePage/components/
 
 ## Tests And Verification
 
-- Run `pnpm --dir web/app typecheck` after TypeScript or import-path changes.
+- Run `pnpm --dir web/app typecheck` after frontend TypeScript, import-path, package, or config changes, and fix missing type declarations or type errors before handing off the change.
 - Run `pnpm --dir web/app lint` after frontend source changes.
 - Run `pnpm --dir web/app format:check` before sharing changes, or `pnpm --dir web/app format` to apply Prettier formatting.
 - Run `pnpm --dir web/app test` for the frontend Vitest suite.

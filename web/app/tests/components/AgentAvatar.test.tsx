@@ -18,9 +18,7 @@ describe("AgentAvatar", () => {
   });
 
   it("does not preselect an avatar when none is provided", () => {
-    const { container } = render(
-      <AgentAvatarPicker value="" t={(key) => key} onChange={() => {}} />,
-    );
+    const { container } = render(<AgentAvatarPicker value="" t={(key) => key} onChange={() => {}} />);
 
     expect(container.querySelectorAll(".agent-avatar-option.selected")).toHaveLength(0);
   });

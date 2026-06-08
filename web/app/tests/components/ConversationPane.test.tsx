@@ -184,8 +184,8 @@ function renderThreadPane({
         mentionCandidates={mentionCandidates}
         mentionIndex={mentionIndex}
         mentionableUsersByHandle={new Map([["manager", users[1]]])}
-        messageActionBusy={false}
-        messageActionError=""
+        messageActionBusy=""
+        messageActionError={{}}
         messageListRef={createRef<HTMLElement>()}
         onApplyMention={onApplyMention}
         onClearRoomMessages={onClearRoomMessages}
@@ -264,8 +264,8 @@ describe("ConversationPane", () => {
           mentionCandidates={[]}
           mentionIndex={0}
           mentionableUsersByHandle={new Map()}
-          messageActionBusy={false}
-          messageActionError=""
+          messageActionBusy=""
+          messageActionError={{}}
           messageListRef={createRef<HTMLElement>()}
           onApplyMention={() => {}}
           onApplySlashCandidate={() => {}}

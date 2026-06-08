@@ -1,4 +1,10 @@
-export function SidebarHeader({ t, currentWorkspaceLabel, runningAgentCount, agentCount }) {
+import type { WorkspaceSidebarProps } from "./types";
+
+type SidebarHeaderProps = Pick<WorkspaceSidebarProps, "currentWorkspaceLabel" | "runningAgentCount" | "t"> & {
+  agentCount: number;
+};
+
+export function SidebarHeader({ t, currentWorkspaceLabel, runningAgentCount, agentCount }: SidebarHeaderProps) {
   return (
     <div className="sidebar-header workspace-header">
       <div className="workspace-presence-panel" aria-label={currentWorkspaceLabel}>

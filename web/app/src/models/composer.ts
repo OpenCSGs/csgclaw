@@ -13,15 +13,50 @@ export type ComposerSegment =
       userName: string;
     };
 
+export type ComposerMentionUser = {
+  handle?: string | null;
+  id: string;
+  name?: string | null;
+};
+
+export type ComposerMentionState = {
+  endOffset: number;
+  query: string;
+  startOffset: number;
+  textNode?: Node;
+};
+
 export type ComposerSlashState = {
   endOffset: number;
   query: string;
   startOffset: number;
-  textNode: Node;
+  textNode: Text;
   tokenElement?: HTMLElement;
 };
 
-export function createMentionTokenElement(user) {
+type ComposerTextQueryContext = {
+  isSlashToken?: boolean;
+  offset: number;
+  slashTokenElement?: HTMLElement;
+  textBeforeCursor: string;
+  textNode: Text;
+};
+
+type ComposerCaretDirection = "backward" | "forward";
+
+type ComposerKeyboardLikeEvent = {
+  isComposing?: boolean;
+  key?: string;
+  keyCode?: number;
+  nativeEvent?: {
+    isComposing?: boolean;
+    keyCode?: number;
+    which?: number;
+  };
+  which?: number;
+};
+
+export function createMentionTokenElement(user: ComposerMentionUser): HTMLSpanElement {
   const token = document.createElement("span");
   token.className = "composer-mention-token";
   token.dataset.userId = user.id;
@@ -31,7 +66,7 @@ export function createMentionTokenElement(user) {
   return token;
 }
 
-export function createSlashTokenElement(value) {
+export function createSlashTokenElement(value: unknown): HTMLSpanElement {
   const token = document.createElement("span");
   token.className = "composer-slash-token";
   token.dataset.composerSlashToken = "true";
@@ -42,9 +77,9 @@ export function createSlashTokenElement(value) {
 
 const slashTokenPattern = /(^|[\s])\/[A-Za-z0-9._-]+(?!\/)/g;
 
-function splitTextSegmentBySlash(value) {
+function splitTextSegmentBySlash(value: unknown): ComposerSegment[] {
   const text = String(value ?? "");
-  const segments = [];
+  const segments: ComposerSegment[] = [];
   let last = 0;
   for (const match of text.matchAll(slashTokenPattern)) {
     const fullMatch = match[0] || "";
@@ -62,8 +97,10 @@ function splitTextSegmentBySlash(value) {
   return segments;
 }
 
-export function normalizeComposerSegmentsForDisplay(segments) {
-  const normalized = [];
+export function normalizeComposerSegmentsForDisplay(
+  segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
+): ComposerSegment[] {
+  const normalized: ComposerSegment[] = [];
   for (const segment of segments ?? []) {
     if (!segment) {
       continue;
@@ -81,7 +118,10 @@ export function normalizeComposerSegmentsForDisplay(segments) {
   return normalized;
 }
 
-export function appendComposerSegments(parent, segments) {
+export function appendComposerSegments(
+  parent: ParentNode | null | undefined,
+  segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
+): void {
   if (!parent) {
     return;
   }
@@ -115,7 +155,10 @@ export function appendComposerSegments(parent, segments) {
   }
 }
 
-export function renderComposerSegments(root, segments) {
+export function renderComposerSegments(
+  root: HTMLElement | null | undefined,
+  segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
+): void {
   if (!root) {
     return;
   }
@@ -123,16 +166,16 @@ export function renderComposerSegments(root, segments) {
   appendComposerSegments(root, segments);
 }
 
-export function parseComposerSegments(root) {
+export function parseComposerSegments(root: Node | null | undefined): ComposerSegment[] {
   if (!root) {
     return [];
   }
-  const segments = [];
+  const segments: ComposerSegment[] = [];
   collectComposerSegments(root, segments);
   return normalizeComposerSegments(segments);
 }
 
-export function collectComposerSegments(node, segments) {
+export function collectComposerSegments(node: Node, segments: ComposerSegment[]): void {
   node.childNodes.forEach((child) => {
     if (child.nodeType === Node.TEXT_NODE) {
       segments.push({ type: "text", text: child.textContent ?? "" });
@@ -141,31 +184,34 @@ export function collectComposerSegments(node, segments) {
     if (child.nodeType !== Node.ELEMENT_NODE) {
       return;
     }
-    if (child.dataset?.userId) {
+    const element = child as HTMLElement;
+    if (element.dataset?.userId) {
       segments.push({
         type: "mention",
-        userId: child.dataset.userId,
-        userName: child.dataset.userName || child.textContent?.replace(/^@/, "") || child.dataset.userId,
+        userId: element.dataset.userId,
+        userName: element.dataset.userName || element.textContent?.replace(/^@/, "") || element.dataset.userId,
       });
       return;
     }
-    if (child.dataset?.composerSlashToken) {
-      segments.push({ type: "slash", text: child.textContent ?? "" });
+    if (element.dataset?.composerSlashToken) {
+      segments.push({ type: "slash", text: element.textContent ?? "" });
       return;
     }
-    if (child.tagName === "BR") {
+    if (element.tagName === "BR") {
       segments.push({ type: "text", text: "\n" });
       return;
     }
-    collectComposerSegments(child, segments);
-    if (child.tagName === "DIV" || child.tagName === "P") {
+    collectComposerSegments(element, segments);
+    if (element.tagName === "DIV" || element.tagName === "P") {
       segments.push({ type: "text", text: "\n" });
     }
   });
 }
 
-export function normalizeComposerSegments(segments) {
-  const normalized = [];
+export function normalizeComposerSegments(
+  segments: readonly (ComposerSegment | null | undefined)[],
+): ComposerSegment[] {
+  const normalized: ComposerSegment[] = [];
   for (const segment of segments) {
     if (!segment) {
       continue;
@@ -192,16 +238,20 @@ export function normalizeComposerSegments(segments) {
       normalized.push({ type: "text", text });
     }
   }
-  while (normalized.at(-1)?.type === "text" && normalized.at(-1).text.endsWith("\n")) {
-    normalized.at(-1).text = normalized.at(-1).text.replace(/\n+$/, "");
-    if (!normalized.at(-1).text) {
+  for (;;) {
+    const last = normalized[normalized.length - 1];
+    if (last?.type !== "text" || !last.text.endsWith("\n")) {
+      break;
+    }
+    last.text = last.text.replace(/\n+$/, "");
+    if (!last.text) {
       normalized.pop();
     }
   }
   return normalized;
 }
 
-export function segmentsToPlainText(segments) {
+export function segmentsToPlainText(segments: readonly ComposerSegment[] | null | undefined): string {
   return (segments ?? [])
     .map((segment) => {
       if (segment.type === "mention") {
@@ -212,7 +262,10 @@ export function segmentsToPlainText(segments) {
     .join("");
 }
 
-export function areComposerSegmentsEqual(left, right) {
+export function areComposerSegmentsEqual(
+  left: readonly ComposerSegment[] | null | undefined,
+  right: readonly ComposerSegment[] | null | undefined,
+): boolean {
   if (left === right) {
     return true;
   }
@@ -221,16 +274,23 @@ export function areComposerSegmentsEqual(left, right) {
   }
   return left.every((segment, index) => {
     const other = right[index];
-    return (
-      segment.type === other?.type &&
-      segment.text === other?.text &&
-      segment.userId === other?.userId &&
-      segment.userName === other?.userName
-    );
+    if (!other || segment.type !== other.type) {
+      return false;
+    }
+    if (segment.type === "mention") {
+      if (other.type !== "mention") {
+        return false;
+      }
+      return segment.userId === other.userId && segment.userName === other.userName;
+    }
+    if (other.type === "mention") {
+      return false;
+    }
+    return segment.text === other.text;
   });
 }
 
-export function isComposerKeyboardEventComposing(event) {
+export function isComposerKeyboardEventComposing(event: ComposerKeyboardLikeEvent | null | undefined): boolean {
   const nativeEvent = event?.nativeEvent;
   return Boolean(
     event?.isComposing ||
@@ -242,7 +302,11 @@ export function isComposerKeyboardEventComposing(event) {
   );
 }
 
-export function updateDrafts(current, conversationID, segments) {
+export function updateDrafts(
+  current: Record<string, ComposerSegment[]>,
+  conversationID: string,
+  segments: readonly ComposerSegment[] | null | undefined,
+): Record<string, ComposerSegment[]> {
   const normalized = normalizeComposerSegments(segments ?? []);
   const existing = current[conversationID] ?? [];
   if (areComposerSegmentsEqual(existing, normalized)) {
@@ -259,7 +323,7 @@ export function updateDrafts(current, conversationID, segments) {
   return { ...current, [conversationID]: normalized };
 }
 
-export function serializeComposerSegments(segments) {
+export function serializeComposerSegments(segments: readonly ComposerSegment[] | null | undefined): string {
   return (segments ?? [])
     .map((segment) => {
       if (segment.type === "mention") {
@@ -272,15 +336,18 @@ export function serializeComposerSegments(segments) {
     .join("");
 }
 
-export function splitTextSegmentByMentions(text, mentionableUsersByHandle) {
+export function splitTextSegmentByMentions(
+  text: unknown,
+  mentionableUsersByHandle: Map<string, ComposerMentionUser> | null | undefined,
+): ComposerSegment[] {
   const content = String(text ?? "");
   if (!content || !mentionableUsersByHandle || mentionableUsersByHandle.size === 0) {
     return content ? [{ type: "text", text: content }] : [];
   }
   const mentionPattern = /(^|[^\w])@([a-zA-Z0-9._-]+)/g;
-  const segments = [];
+  const segments: ComposerSegment[] = [];
   let lastIndex = 0;
-  let match;
+  let match: RegExpExecArray | null;
   while ((match = mentionPattern.exec(content)) !== null) {
     const prefix = match[1] ?? "";
     const handle = match[2] ?? "";
@@ -305,8 +372,11 @@ export function splitTextSegmentByMentions(text, mentionableUsersByHandle) {
   return segments;
 }
 
-export function normalizeTextMentions(segments, mentionableUsersByHandle) {
-  const normalized = [];
+export function normalizeTextMentions(
+  segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
+  mentionableUsersByHandle: Map<string, ComposerMentionUser> | null | undefined,
+): ComposerSegment[] {
+  const normalized: ComposerSegment[] = [];
   for (const segment of segments ?? []) {
     if (!segment) {
       continue;
@@ -320,11 +390,15 @@ export function normalizeTextMentions(segments, mentionableUsersByHandle) {
   return normalizeComposerSegments(normalized);
 }
 
-export function getMentionCandidates(users, query, options: { limit?: number } = {}) {
+export function getMentionCandidates(
+  users: readonly (ComposerMentionUser | null | undefined)[] | null | undefined,
+  query: unknown,
+  options: { limit?: number } = {},
+): ComposerMentionUser[] {
   const normalizedQuery = String(query ?? "")
     .trim()
     .toLowerCase();
-  const validUsers = (users ?? []).filter((user) => user?.id);
+  const validUsers = (users ?? []).filter((user): user is ComposerMentionUser => Boolean(user?.id));
   if (!normalizedQuery) {
     return validUsers;
   }
@@ -338,7 +412,7 @@ export function getMentionCandidates(users, query, options: { limit?: number } =
     .slice(0, limit);
 }
 
-export function getComposerMentionState(root) {
+export function getComposerMentionState(root: HTMLElement | null | undefined): ComposerMentionState | null {
   if (!root) {
     return null;
   }
@@ -358,18 +432,19 @@ export function getComposerMentionState(root) {
   if (!match) {
     return null;
   }
+  const query = match[2] ?? "";
   return {
-    query: match[2],
+    query,
     textNode: context.textNode,
-    startOffset: context.offset - match[2].length - 1,
+    startOffset: context.offset - query.length - 1,
     endOffset: context.offset,
   };
 }
 
-export function getActiveTextQueryContext(node, offset) {
+export function getActiveTextQueryContext(node: Node, offset: number): ComposerTextQueryContext | null {
   if (node.nodeType === Node.TEXT_NODE) {
     return {
-      textNode: node,
+      textNode: node as Text,
       offset,
       textBeforeCursor: (node.textContent ?? "").slice(0, offset),
     };
@@ -382,13 +457,13 @@ export function getActiveTextQueryContext(node, offset) {
     return null;
   }
   return {
-    textNode: child,
+    textNode: child as Text,
     offset: child.textContent?.length ?? 0,
     textBeforeCursor: child.textContent ?? "",
   };
 }
 
-export function getComposerSlashState(root) {
+export function getComposerSlashState(root: HTMLElement | null | undefined): ComposerSlashState | null {
   if (!root) {
     return null;
   }
@@ -402,21 +477,29 @@ export function getComposerSlashState(root) {
   }
   let context = getActiveTextQueryContext(range.startContainer, range.startOffset);
   if (!context && range.startContainer.nodeType === Node.ELEMENT_NODE) {
-    const tokenElement = getAdjacentSlashTokenElement(range.startContainer, range.startOffset);
-    if (tokenElement) {
-      const text = tokenElement.textContent ?? "";
-      const query = text.startsWith("/") ? text.slice(1) : text;
-      return {
-        query,
-        startOffset: 0,
-        endOffset: text.length,
-        textNode: tokenElement.firstChild ?? tokenElement,
-        tokenElement,
+    const tokenContext = getAdjacentSlashTokenContext(range.startContainer, range.startOffset);
+    if (tokenContext) {
+      context = {
+        textNode: tokenContext.textNode,
+        offset: tokenContext.textNode.textContent?.length ?? 0,
+        textBeforeCursor: tokenContext.textNode.textContent ?? "",
+        isSlashToken: true,
+        slashTokenElement: tokenContext.element,
       };
     }
   }
   if (!context) {
     return null;
+  }
+  if (context.isSlashToken) {
+    const query = (context.textBeforeCursor ?? "").replace(/^\//, "");
+    return {
+      query,
+      startOffset: 0,
+      endOffset: context.offset,
+      textNode: context.textNode,
+      tokenElement: context.slashTokenElement,
+    };
   }
   const match = context.textBeforeCursor.match(/(^|\s)\/([^\s]*)$/);
   if (!match) {
@@ -431,7 +514,11 @@ export function getComposerSlashState(root) {
   };
 }
 
-export function replaceMentionQueryWithToken(root, mentionState, user) {
+export function replaceMentionQueryWithToken(
+  root: HTMLElement | null | undefined,
+  mentionState: ComposerMentionState | null | undefined,
+  user: ComposerMentionUser | null | undefined,
+): boolean {
   if (!root || !mentionState?.textNode || !user) {
     return false;
   }
@@ -447,8 +534,12 @@ export function replaceMentionQueryWithToken(root, mentionState, user) {
   range.insertNode(fragment);
 
   const selection = window.getSelection();
+  if (!selection) {
+    root.focus();
+    return true;
+  }
   const afterRange = document.createRange();
-  afterRange.setStart(spacer, spacer.textContent.length);
+  afterRange.setStart(spacer, spacer.textContent?.length ?? 0);
   afterRange.collapse(true);
   selection.removeAllRanges();
   selection.addRange(afterRange);
@@ -456,7 +547,7 @@ export function replaceMentionQueryWithToken(root, mentionState, user) {
   return true;
 }
 
-export function insertComposerLineBreak(root) {
+export function insertComposerLineBreak(root: HTMLElement | null | undefined): void {
   if (!root) {
     return;
   }
@@ -480,7 +571,7 @@ export function insertComposerLineBreak(root) {
   selection.addRange(nextRange);
 }
 
-export function insertPlainTextAtSelection(text) {
+export function insertPlainTextAtSelection(text: string): void {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) {
     return;
@@ -490,13 +581,13 @@ export function insertPlainTextAtSelection(text) {
   const node = document.createTextNode(text);
   range.insertNode(node);
   const nextRange = document.createRange();
-  nextRange.setStart(node, node.textContent.length);
+  nextRange.setStart(node, text.length);
   nextRange.collapse(true);
   selection.removeAllRanges();
   selection.addRange(nextRange);
 }
 
-export function insertComposerSegmentsAtSelection(segments) {
+export function insertComposerSegmentsAtSelection(segments: readonly ComposerSegment[] | null | undefined): void {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) {
     return;
@@ -515,7 +606,10 @@ export function insertComposerSegmentsAtSelection(segments) {
   selection.addRange(nextRange);
 }
 
-export function replaceComposerSlashWithSegments(root, segments) {
+export function replaceComposerSlashWithSegments(
+  root: HTMLElement | null | undefined,
+  segments: readonly ComposerSegment[] | null | undefined,
+): boolean {
   const slashState = getComposerSlashState(root);
   if (!slashState) {
     return false;
@@ -523,8 +617,7 @@ export function replaceComposerSlashWithSegments(root, segments) {
 
   const range = document.createRange();
   if (slashState.tokenElement) {
-    range.setStartBefore(slashState.tokenElement);
-    range.setEndAfter(slashState.tokenElement);
+    range.selectNode(slashState.tokenElement);
   } else {
     const endOffset = replacementEndsWithWhitespace(segments)
       ? consumeSingleFollowingWhitespace(slashState.textNode, slashState.endOffset)
@@ -552,7 +645,7 @@ export function replaceComposerSlashWithSegments(root, segments) {
   return true;
 }
 
-export function getCollapsedSelectionTextOffset(root) {
+export function getCollapsedSelectionTextOffset(root: Node | null | undefined): number | null {
   if (!root) {
     return null;
   }
@@ -570,7 +663,10 @@ export function getCollapsedSelectionTextOffset(root) {
   return prefixRange.toString().length;
 }
 
-export function removeAdjacentMentionToken(root, direction) {
+export function removeAdjacentMentionToken(
+  root: HTMLElement | null | undefined,
+  direction: ComposerCaretDirection,
+): boolean {
   if (!root) {
     return false;
   }
@@ -599,7 +695,11 @@ export function removeAdjacentMentionToken(root, direction) {
   return true;
 }
 
-export function findAdjacentMentionToken(node, offset, direction) {
+export function findAdjacentMentionToken(
+  node: Node,
+  offset: number,
+  direction: ComposerCaretDirection,
+): HTMLElement | null {
   if (node.nodeType === Node.TEXT_NODE) {
     if (direction === "backward" && offset > 0) {
       return null;
@@ -618,7 +718,7 @@ export function findAdjacentMentionToken(node, offset, direction) {
   return isComposerTokenNode(sibling) ? sibling : null;
 }
 
-function isComposerTokenNode(node: Node | null): boolean {
+function isComposerTokenNode(node: Node | null | undefined): node is HTMLElement {
   if (node?.nodeType !== Node.ELEMENT_NODE) {
     return false;
   }
@@ -626,7 +726,7 @@ function isComposerTokenNode(node: Node | null): boolean {
   return Boolean(element.dataset?.userId || element.dataset?.composerSlashToken);
 }
 
-function getAdjacentSlashTokenElement(node: Node, offset: number): HTMLElement | null {
+function getAdjacentSlashTokenContext(node: Node, offset: number): { element: HTMLElement; textNode: Text } | null {
   if (node.nodeType !== Node.ELEMENT_NODE) {
     return null;
   }
@@ -635,12 +735,16 @@ function getAdjacentSlashTokenElement(node: Node, offset: number): HTMLElement |
     return null;
   }
   const element = previous as HTMLElement;
-  return element.dataset?.composerSlashToken ? element : null;
+  if (!element.dataset?.composerSlashToken) {
+    return null;
+  }
+  const textNode = element.firstChild;
+  return textNode?.nodeType === Node.TEXT_NODE ? { element, textNode: textNode as Text } : null;
 }
 
-function replacementEndsWithWhitespace(segments): boolean {
+function replacementEndsWithWhitespace(segments: readonly ComposerSegment[] | null | undefined): boolean {
   for (let index = (segments?.length ?? 0) - 1; index >= 0; index -= 1) {
-    const segment = segments[index];
+    const segment = segments?.[index];
     if (!segment || segment.type === "mention") {
       continue;
     }
@@ -653,19 +757,24 @@ function replacementEndsWithWhitespace(segments): boolean {
   return false;
 }
 
-function consumeSingleFollowingWhitespace(textNode: Node, offset: number): number {
-  if (textNode.nodeType !== Node.TEXT_NODE) {
-    return offset;
-  }
+function consumeSingleFollowingWhitespace(textNode: Text, offset: number): number {
   const text = textNode.textContent ?? "";
   return /\s/.test(text.charAt(offset)) ? offset + 1 : offset;
 }
 
-export function placeCaretNearNode(root, node, direction) {
+export function placeCaretNearNode(
+  root: HTMLElement,
+  node: Node | null | undefined,
+  direction: ComposerCaretDirection,
+): void {
   const selection = window.getSelection();
+  if (!selection) {
+    root.focus();
+    return;
+  }
   const range = document.createRange();
   if (node?.nodeType === Node.TEXT_NODE) {
-    const offset = direction === "backward" ? node.textContent.length : 0;
+    const offset = direction === "backward" ? (node.textContent?.length ?? 0) : 0;
     range.setStart(node, offset);
   } else if (node?.parentNode) {
     const parent = node.parentNode;
@@ -680,6 +789,6 @@ export function placeCaretNearNode(root, node, direction) {
   root.focus();
 }
 
-export function placeCaretAtEnd(root) {
+export function placeCaretAtEnd(root: HTMLElement): void {
   placeCaretNearNode(root, root.lastChild, "backward");
 }

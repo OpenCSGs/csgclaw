@@ -237,13 +237,13 @@ export function useAgentController({
   const managerRuntimeOptions = availableManagerRebuildRuntimeOptions(
     managerTemplateVariants,
     bootstrapConfig,
-    managerAgent?.runtime_kind,
+    managerAgent?.runtime_kind ?? undefined,
   );
   const managerRebuildImageOptions = availableManagerRebuildImageOptions(
     managerTemplateVariants,
     managerRebuildRuntimeKind,
     bootstrapConfig,
-    managerAgent?.image,
+    managerAgent?.image ?? undefined,
     localRuntimeImages,
   );
   const agentsDisplayError =
@@ -406,7 +406,7 @@ export function useAgentController({
         provider: normalized,
         authenticated: false,
         login_required: true,
-        message: err.message || t("authMissing"),
+        message: errorMessage(err, t("authMissing")),
       });
     } finally {
       setCLIProxyAuthBusy("");
@@ -470,7 +470,7 @@ export function useAgentController({
       return true;
     } catch (err) {
       setAgentProgress((current) => (current ? { ...current, status: "failed" } : current));
-      setAgentsError(err.message || t("agentActionFailed"));
+      setAgentsError(errorMessage(err, t("agentActionFailed")));
       return false;
     } finally {
       setAgentActionBusy("");
@@ -517,7 +517,7 @@ export function useAgentController({
       setProfileDraft({ ...profileToDraft(saved), agent_id: MANAGER_AGENT_ID });
       await refreshManagerProfile();
     } catch (err) {
-      setProfileError(err.message || t("sendFailed"));
+      setProfileError(errorMessage(err, t("sendFailed")));
     } finally {
       setProfileBusy(false);
     }
@@ -664,7 +664,7 @@ export function useAgentController({
       setAgentDraft(draft);
       setShowAgentModal(true);
     } catch (err) {
-      setAgentError(err.message || t("agentActionFailed"));
+      setAgentError(errorMessage(err, t("agentActionFailed")));
     }
   }
 
@@ -679,7 +679,7 @@ export function useAgentController({
       setAgentPageDraft(draft);
       setAgentPageSavedDraft(draft);
     } catch (err) {
-      setAgentPageError(err.message || t("agentActionFailed"));
+      setAgentPageError(errorMessage(err, t("agentActionFailed")));
       const draft = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
       setAgentPageDraft(draft);
       setAgentPageSavedDraft(draft);
@@ -806,7 +806,7 @@ export function useAgentController({
       setAgentPageDraft(savedDraft);
       setAgentPageSavedDraft(savedDraft);
     } catch (err) {
-      setAgentPageError(err.message || t("agentActionFailed"));
+      setAgentPageError(errorMessage(err, t("agentActionFailed")));
     } finally {
       setAgentPageBusy(false);
     }
@@ -826,7 +826,7 @@ export function useAgentController({
       }
       selectHub();
     } catch (err) {
-      setAgentPageError(err.message || t("agentActionFailed"));
+      setAgentPageError(errorMessage(err, t("agentActionFailed")));
     } finally {
       setAgentPagePublishBusy(false);
     }
@@ -839,6 +839,12 @@ export function useAgentController({
     setAgentBusy(true);
     setAgentError("");
     const isCreate = agentModalMode === "create";
+    const editingAgentID = String(editingAgent?.id ?? "").trim();
+    if (!isCreate && !editingAgentID) {
+      setAgentError(t("agentActionFailed"));
+      setAgentBusy(false);
+      return;
+    }
     const isNotification = isNotificationBotDraftContext(
       agentDraft,
       editingAgent,
@@ -858,9 +864,7 @@ export function useAgentController({
         if (runtimeOptions) {
           payload.runtime_options = runtimeOptions;
         }
-        await (isCreate
-          ? createNotificationBotRequest(payload)
-          : patchNotificationBotRequest(editingAgent!.id, payload));
+        await (isCreate ? createNotificationBotRequest(payload) : patchNotificationBotRequest(editingAgentID, payload));
         await refreshAgents();
         await refreshWorkspaceBootstrap();
         if (isCreate) {
@@ -897,7 +901,7 @@ export function useAgentController({
       }
       const saved = isCreate
         ? await createBotRequest(payload)
-        : await updateAgentRequest(editingAgent!.id, {
+        : await updateAgentRequest(editingAgentID, {
             name: payload.name,
             avatar: payload.avatar,
             description: payload.description,
@@ -921,7 +925,7 @@ export function useAgentController({
       setAgentProgress(null);
     } catch (err) {
       setAgentProgress((current) => (current ? { ...current, status: "failed" } : current));
-      setAgentError(err.message || t("agentActionFailed"));
+      setAgentError(errorMessage(err, t("agentActionFailed")));
     } finally {
       setAgentBusy(false);
     }
@@ -958,7 +962,7 @@ export function useAgentController({
         await refreshManagerProfile();
       }
     } catch (err) {
-      setAgentsError(err.message || t("agentActionFailed"));
+      setAgentsError(errorMessage(err, t("agentActionFailed")));
     } finally {
       setAgentActionBusy("");
     }
@@ -982,7 +986,7 @@ export function useAgentController({
       }
       return true;
     } catch (err) {
-      setAgentsError(err.message || t("agentActionFailed"));
+      setAgentsError(errorMessage(err, t("agentActionFailed")));
       return false;
     } finally {
       setAgentActionBusy("");
@@ -1006,7 +1010,7 @@ export function useAgentController({
       await refreshWorkspaceBootstrap();
     } catch (err) {
       if (!options.silent) {
-        setAgentsError(err.message || t("agentActionFailed"));
+        setAgentsError(errorMessage(err, t("agentActionFailed")));
       }
     }
   }
@@ -1108,8 +1112,8 @@ export function useAgentController({
       if (!direct) {
         await createUserRequest({
           id: channelUserID,
-          name: item?.name || channelUserID,
-          handle: item?.handle || channelUserID.replace(/^u-/, "") || item?.name,
+          name: String(item?.name || item?.handle || channelUserID),
+          handle: String(item?.handle || channelUserID.replace(/^u-/, "") || item?.name || channelUserID),
           role: item?.role || WORKER_AGENT_ROLE,
         });
         nextData = await refreshWorkspaceBootstrap();
@@ -1126,7 +1130,7 @@ export function useAgentController({
       }
       selectConversation(direct.id, { rooms: nextData?.rooms ?? rooms });
     } catch (err) {
-      setAgentsError(err.message || t("agentActionFailed"));
+      setAgentsError(errorMessage(err, t("agentActionFailed")));
     }
   }
 

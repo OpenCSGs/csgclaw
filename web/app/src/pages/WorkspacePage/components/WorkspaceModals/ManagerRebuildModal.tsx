@@ -1,7 +1,37 @@
-import { AgentCreateProgress } from "@/components/business/ProfileControls";
+import { AgentCreateProgress, type AgentCreateProgressProps } from "@/components/business/ProfileControls";
 import { Button, Select, SelectContent, SelectItem, SelectRoot, SelectTrigger } from "@/components/ui";
 import { defaultManagerRebuildImageForRuntime, formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
+import type { AgentLike, ManagerTemplateVariant, RuntimeBootstrapConfig } from "@/models/agents";
+import type { TranslateFn } from "@/models/conversations";
 import { ModalCloseButton } from "./ModalCloseButton";
+
+type RuntimeOption = {
+  value: string;
+};
+
+type ImageReferenceParts = {
+  context: string;
+  name: string;
+  suffix: string;
+};
+
+export type ManagerRebuildModalProps = {
+  bootstrapConfig?: RuntimeBootstrapConfig | null;
+  busy?: boolean;
+  error?: string;
+  image?: string;
+  imageOptions?: string[];
+  managerAgent?: AgentLike | null;
+  onClose: () => void;
+  onConfirm: () => void | Promise<void>;
+  onImageChange: (image: string) => void;
+  onRuntimeKindChange: (runtimeKind: string) => void;
+  progress?: AgentCreateProgressProps["progress"];
+  runtimeKind?: string;
+  runtimeOptions: RuntimeOption[];
+  t: TranslateFn;
+  templateVariants?: ManagerTemplateVariant[];
+};
 
 export function ManagerRebuildModal({
   t,
@@ -12,14 +42,14 @@ export function ManagerRebuildModal({
   templateVariants = [],
   bootstrapConfig,
   managerAgent,
-  busy,
-  error,
+  busy = false,
+  error = "",
   progress = null,
   onRuntimeKindChange,
   onImageChange,
   onClose,
   onConfirm,
-}) {
+}: ManagerRebuildModalProps) {
   const selectedRuntimeKind = normalizeRuntimeKind(runtimeKind) || runtimeOptions[0]?.value || "picoclaw_sandbox";
   const selectedImage = String(image ?? "").trim();
   return (
@@ -113,7 +143,7 @@ export function ManagerRebuildModal({
   );
 }
 
-function ImageReferenceLabel({ image }) {
+function ImageReferenceLabel({ image }: { image: string }) {
   const { context, name, suffix } = imageReferenceParts(image);
   return (
     <span className="manager-rebuild-image-option" title={image}>
@@ -131,7 +161,7 @@ function ImageReferenceLabel({ image }) {
   );
 }
 
-function imageReferenceParts(image) {
+function imageReferenceParts(image: string): ImageReferenceParts {
   const value = String(image ?? "").trim();
   if (!value) {
     return { context: "", name: "", suffix: "" };
@@ -148,7 +178,7 @@ function imageReferenceParts(image) {
   return splitImagePath(value, "");
 }
 
-function splitImagePath(path, suffix) {
+function splitImagePath(path: string, suffix: string): ImageReferenceParts {
   const lastSlash = path.lastIndexOf("/");
   if (lastSlash < 0) {
     return { context: "", name: path, suffix };

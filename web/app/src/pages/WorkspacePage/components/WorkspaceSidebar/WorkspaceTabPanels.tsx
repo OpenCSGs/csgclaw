@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { DragEvent } from "react";
 import { Plus } from "lucide-react";
 import { TaskSubtaskIndicator } from "@/components/business";
 import { HubIcon, UsersIcon } from "@/components/ui/Icons";
@@ -14,6 +15,7 @@ import {
   WorkspaceGroup,
   WorkspaceThreadRow,
 } from "../WorkspaceRows";
+import type { WorkspaceSidebarProps } from "./types";
 
 const MessageSectionIds = {
   rooms: "rooms",
@@ -34,7 +36,58 @@ const SectionPanels = {
   tasks: "tasks",
 } as const;
 
-const LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS = [
+type MessageSectionId = (typeof MessageSectionIds)[keyof typeof MessageSectionIds];
+type AgentSectionId = (typeof AgentSectionIds)[keyof typeof AgentSectionIds];
+type OrderedSectionPanel = typeof SectionPanels.messages | typeof SectionPanels.agents;
+type SectionId = MessageSectionId | AgentSectionId;
+type SectionOrders = Record<OrderedSectionPanel, SectionId[]>;
+type SectionDragState = {
+  id: SectionId | "";
+  overId: SectionId | "";
+  panel: OrderedSectionPanel | "";
+};
+type WorkspaceTabPanelsProps = Pick<
+  WorkspaceSidebarProps,
+  | "activePane"
+  | "activeThreadRootID"
+  | "agentItems"
+  | "agentsError"
+  | "channels"
+  | "collapsedWorkspaceGroups"
+  | "currentUserID"
+  | "directMessages"
+  | "hub"
+  | "locale"
+  | "notificationAgentItems"
+  | "onCreateAgent"
+  | "onCreateNotificationParticipant"
+  | "onCreateRoom"
+  | "onOpenCreateTask"
+  | "onOpenCreateTeam"
+  | "onPreviewAgent"
+  | "onPreviewUser"
+  | "onSelectAgent"
+  | "onSelectComputer"
+  | "onSelectConversation"
+  | "onSelectHubTemplate"
+  | "onSelectTask"
+  | "onSelectTeam"
+  | "onSelectThread"
+  | "onToggleWorkspaceGroup"
+  | "onViewTaskDetails"
+  | "planningTaskID"
+  | "startingTaskID"
+  | "t"
+  | "taskCount"
+  | "taskItems"
+  | "teams"
+  | "threadGroups"
+  | "usersById"
+  | "workerAgentItems"
+  | "workspaceTab"
+>;
+
+const LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS: readonly (readonly MessageSectionId[])[] = [
   [MessageSectionIds.rooms, MessageSectionIds.directMessages, MessageSectionIds.threads],
 ];
 
@@ -48,20 +101,26 @@ const DEFAULT_SECTION_ORDERS = {
   ],
 } as const;
 
-function orderEquals(left, right) {
+function orderEquals(left: readonly SectionId[], right: readonly SectionId[]): boolean {
   return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 
-function normalizeSectionOrder(value, defaults, legacyDefaults = []) {
+function normalizeSectionOrder(
+  value: unknown,
+  defaults: readonly SectionId[],
+  legacyDefaults: readonly (readonly SectionId[])[] = [],
+): SectionId[] {
   const allowed = new Set(defaults);
-  const ordered = Array.isArray(value) ? value.filter((item) => allowed.has(item)) : [];
+  const ordered = Array.isArray(value)
+    ? value.filter((item): item is SectionId => typeof item === "string" && allowed.has(item as SectionId))
+    : [];
   if (legacyDefaults.some((legacyDefault) => orderEquals(ordered, legacyDefault))) {
     return [...defaults];
   }
   return [...ordered, ...defaults.filter((item) => !ordered.includes(item))];
 }
 
-function readSectionOrders() {
+function readSectionOrders(): SectionOrders {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(WORKSPACE_SECTION_ORDER_STORAGE_KEY) || "{}");
     return {
@@ -80,9 +139,9 @@ function readSectionOrders() {
   }
 }
 
-function reorderSection(order, sourceId, targetId) {
+function reorderSection(order: readonly SectionId[], sourceId: SectionId, targetId: SectionId): SectionId[] {
   if (!sourceId || !targetId || sourceId === targetId || !order.includes(sourceId) || !order.includes(targetId)) {
-    return order;
+    return [...order];
   }
   const next = order.filter((item) => item !== sourceId);
   next.splice(next.indexOf(targetId), 0, sourceId);
@@ -127,7 +186,7 @@ export function WorkspaceTabPanels({
   onSelectAgent,
   onPreviewAgent,
   onSelectComputer,
-}) {
+}: WorkspaceTabPanelsProps) {
   const hubTemplates = hub?.templates ?? [];
   const hubError = hub?.listError ?? "";
   const hubLoaded = hub?.loaded ?? false;
@@ -141,14 +200,14 @@ export function WorkspaceTabPanels({
     () => threadGroups.reduce((count, group) => count + group.threads.length, 0),
     [threadGroups],
   );
-  const [sectionOrders, setSectionOrders] = useState(readSectionOrders);
-  const [dragState, setDragState] = useState({ id: "", overId: "", panel: "" });
+  const [sectionOrders, setSectionOrders] = useState<SectionOrders>(readSectionOrders);
+  const [dragState, setDragState] = useState<SectionDragState>({ id: "", overId: "", panel: "" });
 
   useEffect(() => {
     window.localStorage.setItem(WORKSPACE_SECTION_ORDER_STORAGE_KEY, JSON.stringify(sectionOrders));
   }, [sectionOrders]);
 
-  const moveSection = useCallback((panel, sourceId, targetId) => {
+  const moveSection = useCallback((panel: OrderedSectionPanel, sourceId: SectionId, targetId: SectionId) => {
     setSectionOrders((current) => ({
       ...current,
       [panel]: reorderSection(current[panel] ?? [], sourceId, targetId),
@@ -156,23 +215,23 @@ export function WorkspaceTabPanels({
   }, []);
 
   const sectionDragProps = useCallback(
-    (panel, id) => ({
+    (panel: OrderedSectionPanel, id: SectionId) => ({
       dragOver: dragState.panel === panel && dragState.overId === id && dragState.id !== id,
       dragging: dragState.panel === panel && dragState.id === id,
-      onDragStart: (event) => {
+      onDragStart: (event: DragEvent<HTMLElement>) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("application/x-csgclaw-section", `${panel}:${id}`);
         event.dataTransfer.setData("text/plain", `${panel}:${id}`);
         setDragState({ id, overId: "", panel });
       },
-      onDragOver: (event) => {
+      onDragOver: (event: DragEvent<HTMLElement>) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
         setDragState((current) =>
           current.panel === panel && current.id && current.overId !== id ? { ...current, overId: id } : current,
         );
       },
-      onDragLeave: (event) => {
+      onDragLeave: (event: DragEvent<HTMLElement>) => {
         const relatedTarget = event.relatedTarget;
         if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
           return;
@@ -181,12 +240,12 @@ export function WorkspaceTabPanels({
           current.panel === panel && current.overId === id ? { ...current, overId: "" } : current,
         );
       },
-      onDrop: (event) => {
+      onDrop: (event: DragEvent<HTMLElement>) => {
         event.preventDefault();
         const payload =
           event.dataTransfer.getData("application/x-csgclaw-section") || event.dataTransfer.getData("text/plain");
         const [sourcePanel, sourceId] = payload.split(":");
-        if (sourcePanel === panel) {
+        if (sourcePanel === panel && isSectionId(sourceId)) {
           moveSection(panel, sourceId, id);
         }
         setDragState({ id: "", overId: "", panel: "" });
@@ -195,6 +254,18 @@ export function WorkspaceTabPanels({
     }),
     [dragState.id, dragState.overId, dragState.panel, moveSection],
   );
+
+  function isSectionId(value: string | undefined): value is SectionId {
+    return (
+      value === MessageSectionIds.rooms ||
+      value === MessageSectionIds.directMessages ||
+      value === MessageSectionIds.threads ||
+      value === AgentSectionIds.agents ||
+      value === AgentSectionIds.teams ||
+      value === AgentSectionIds.notifications ||
+      value === AgentSectionIds.computers
+    );
+  }
 
   function renderThreadRows() {
     if (!threadGroups.length) {
@@ -222,7 +293,7 @@ export function WorkspaceTabPanels({
     );
   }
 
-  function renderMessageSection(id) {
+  function renderMessageSection(id: SectionId) {
     if (id === MessageSectionIds.rooms) {
       return (
         <WorkspaceGroup
@@ -303,7 +374,7 @@ export function WorkspaceTabPanels({
     );
   }
 
-  function renderAgentSection(id) {
+  function renderAgentSection(id: SectionId) {
     if (id === AgentSectionIds.agents) {
       return (
         <WorkspaceGroup
@@ -440,7 +511,7 @@ export function WorkspaceTabPanels({
               const displayUser = isDirectConversation(group.conversation)
                 ? resolveConversationUser(group.conversation, currentUserID, usersById)
                 : null;
-              const groupTitle = displayUser?.name || group.conversation.title;
+              const groupTitle = displayUser?.name || group.conversation.title || "";
               return (
                 <WorkspaceGroup
                   key={group.conversation.id}

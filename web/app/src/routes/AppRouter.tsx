@@ -1,37 +1,49 @@
-import type { ReactElement } from "react";
+import { lazy, Suspense } from "react";
+import type { ComponentType, ReactElement } from "react";
 import { createHashRouter, RouterProvider } from "react-router-dom";
 import type { RouteObject } from "react-router-dom";
-import { AgentPage } from "@/pages/AgentPage";
-import { ComputerPage } from "@/pages/ComputerPage";
-import { ConversationPage } from "@/pages/ConversationPage";
-import { HubPage } from "@/pages/HubPage";
-import { TeamPage } from "@/pages/TeamPage";
-import { TasksPage } from "@/pages/TasksPage";
 import { WorkspacePage } from "@/pages/WorkspacePage/WorkspacePage";
+
+const AgentPage = lazy(() => import("@/pages/AgentPage").then((module) => ({ default: module.AgentPage })));
+const ComputerPage = lazy(() => import("@/pages/ComputerPage").then((module) => ({ default: module.ComputerPage })));
+const ConversationPage = lazy(() =>
+  import("@/pages/ConversationPage").then((module) => ({ default: module.ConversationPage })),
+);
+const HubPage = lazy(() => import("@/pages/HubPage").then((module) => ({ default: module.HubPage })));
+const TeamPage = lazy(() => import("@/pages/TeamPage").then((module) => ({ default: module.TeamPage })));
+const TasksPage = lazy(() => import("@/pages/TasksPage").then((module) => ({ default: module.TasksPage })));
+
+function routeElement(Page: ComponentType): ReactElement {
+  return (
+    <Suspense fallback={null}>
+      <Page />
+    </Suspense>
+  );
+}
 
 const routes: RouteObject[] = [
   {
     path: "/",
     element: <WorkspacePage />,
     children: [
-      { index: true, element: <ConversationPage /> },
-      { path: "computer", element: <ComputerPage /> },
-      { path: "agents/:agentId", element: <AgentPage /> },
-      { path: "agent/:agentId", element: <AgentPage /> },
-      { path: "teams/:teamId", element: <TeamPage /> },
-      { path: "team/:teamId", element: <TeamPage /> },
-      { path: "hub", element: <HubPage /> },
-      { path: "tasks", element: <TasksPage /> },
-      { path: "tasks/:taskId", element: <TasksPage /> },
-      { path: "rooms/:conversationId", element: <ConversationPage /> },
-      { path: "room/:conversationId", element: <ConversationPage /> },
-      { path: "channels/:conversationId", element: <ConversationPage /> },
-      { path: "channel/:conversationId", element: <ConversationPage /> },
-      { path: "dms/:conversationId", element: <ConversationPage /> },
-      { path: "dm/:conversationId", element: <ConversationPage /> },
-      { path: "conversations/:conversationId", element: <ConversationPage /> },
-      { path: "conversation/:conversationId", element: <ConversationPage /> },
-      { path: "*", element: <ConversationPage /> },
+      { index: true, element: routeElement(ConversationPage) },
+      { path: "computer", element: routeElement(ComputerPage) },
+      { path: "agents/:agentId", element: routeElement(AgentPage) },
+      { path: "agent/:agentId", element: routeElement(AgentPage) },
+      { path: "teams/:teamId", element: routeElement(TeamPage) },
+      { path: "team/:teamId", element: routeElement(TeamPage) },
+      { path: "hub", element: routeElement(HubPage) },
+      { path: "tasks", element: routeElement(TasksPage) },
+      { path: "tasks/:taskId", element: routeElement(TasksPage) },
+      { path: "rooms/:conversationId", element: routeElement(ConversationPage) },
+      { path: "room/:conversationId", element: routeElement(ConversationPage) },
+      { path: "channels/:conversationId", element: routeElement(ConversationPage) },
+      { path: "channel/:conversationId", element: routeElement(ConversationPage) },
+      { path: "dms/:conversationId", element: routeElement(ConversationPage) },
+      { path: "dm/:conversationId", element: routeElement(ConversationPage) },
+      { path: "conversations/:conversationId", element: routeElement(ConversationPage) },
+      { path: "conversation/:conversationId", element: routeElement(ConversationPage) },
+      { path: "*", element: routeElement(ConversationPage) },
     ],
   },
 ];

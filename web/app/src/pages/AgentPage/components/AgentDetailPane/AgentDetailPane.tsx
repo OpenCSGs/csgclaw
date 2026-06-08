@@ -25,6 +25,10 @@ import {
   normalizeRuntimeKind,
   notifierFormIsComplete,
 } from "@/models/agents";
+import type { AgentDraft, AgentLike } from "@/models/agents";
+import type { IMConversation, TranslateFn } from "@/models/conversations";
+import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
+import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import {
@@ -37,23 +41,65 @@ import {
   Select,
 } from "@/components/ui";
 
+type VoidOrPromise = void | Promise<void>;
+type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
+
+export type AgentDetailPaneProps = {
+  activeRoom?: IMConversation | null;
+  authBusyProvider?: string;
+  authStatuses?: CLIProxyAuthStatusMap;
+  busyKey?: string;
+  draft?: AgentDraft | null;
+  error?: string;
+  hasUnsavedChanges?: boolean;
+  item: AgentLike;
+  modelBusy?: boolean;
+  models?: string[];
+  notifierWebhookPublicOrigin?: string;
+  onDelete: AgentActionHandler;
+  onDraftChange?: (draft: AgentDraft) => void;
+  onInvite: AgentActionHandler;
+  onOpenDM: AgentActionHandler;
+  onProviderLogin?: (provider: string) => VoidOrPromise;
+  onPublish?: () => VoidOrPromise;
+  onRecreate: AgentActionHandler;
+  onSave?: () => VoidOrPromise;
+  onSelectWorkspaceFile?: (path: string) => void;
+  onStart: AgentActionHandler;
+  onStop: AgentActionHandler;
+  onUpgrade?: AgentActionHandler;
+  publishBusy?: boolean;
+  saveError?: string;
+  savedDraft?: AgentDraft | null;
+  saving?: boolean;
+  selectedWorkspacePath?: string;
+  t: TranslateFn;
+  workspaceEntries?: WorkspaceEntry[];
+  workspaceError?: string;
+  workspaceFile?: WorkspaceFile | null;
+  workspaceFileError?: string;
+  workspaceFileLoading?: boolean;
+  workspaceLoading?: boolean;
+  workspaceSupported?: boolean;
+};
+
 export function AgentDetailPane({
   item,
   t,
-  activeRoom,
-  busyKey,
-  error,
+  activeRoom = null,
+  busyKey = "",
+  error = "",
   draft,
   savedDraft = null,
   hasUnsavedChanges: hasUnsavedChangesProp = undefined,
-  models,
-  modelBusy,
-  saving,
-  publishBusy,
-  saveError,
-  authStatuses,
-  authBusyProvider,
-  notifierWebhookPublicOrigin,
+  models = [],
+  modelBusy = false,
+  saving = false,
+  publishBusy = false,
+  saveError = "",
+  authStatuses = {},
+  authBusyProvider = "",
+  notifierWebhookPublicOrigin = "",
   workspaceEntries = [],
   workspaceLoading = false,
   workspaceError = "",
@@ -73,7 +119,7 @@ export function AgentDetailPane({
   onDelete,
   onInvite,
   onOpenDM,
-}) {
+}: AgentDetailPaneProps) {
   const isManager = item.role === "manager" || item.id === "u-manager";
   const running = isAgentRunning(item);
   const draftBelongsToItem = Boolean(draft) && String(draft?.agent_id ?? "").trim() === String(item?.id ?? "").trim();
@@ -92,7 +138,7 @@ export function AgentDetailPane({
     (isNotifierRuntimeDraftOnAgentPage(draft, item)
       ? !notifierFormIsComplete(draft, item)
       : !draft?.model_id || profileBaseURLMissing(draft));
-  const updateDraft = (patch) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
+  const updateDraft = (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
   return (
     <section className="entity-pane agent-detail-pane">
       <header className="entity-header">
@@ -299,7 +345,7 @@ export function AgentDetailPane({
             </section>
           ) : (
             <NotifierControls
-              agentID={item.id}
+              agentID={item.id || ""}
               draft={draft}
               t={t}
               webhookPublicOrigin={notifierWebhookPublicOrigin}
@@ -398,6 +444,26 @@ export function AgentDetailPane({
   );
 }
 
+type AgentActionsMenuProps = {
+  activeRoom?: IMConversation | null;
+  busy: boolean;
+  canPublish: boolean;
+  incomplete: boolean;
+  isManager: boolean;
+  item: AgentLike;
+  onDelete: AgentActionHandler;
+  onInvite: AgentActionHandler;
+  onPublish?: () => VoidOrPromise;
+  onRecreate: AgentActionHandler;
+  onStart: AgentActionHandler;
+  onStop: AgentActionHandler;
+  onUpgrade?: AgentActionHandler;
+  publishBusy: boolean;
+  running: boolean;
+  t: TranslateFn;
+  upgradeNeeded: boolean;
+};
+
 function AgentActionsMenu({
   item,
   t,
@@ -415,7 +481,7 @@ function AgentActionsMenu({
   onInvite,
   onDelete,
   onPublish,
-}) {
+}: AgentActionsMenuProps) {
   return (
     <DropdownMenuRoot>
       <DropdownMenuTrigger asChild>

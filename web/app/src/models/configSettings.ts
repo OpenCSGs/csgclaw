@@ -119,7 +119,9 @@ export function formatListenAddress(host: string, port: string): string {
 }
 
 export function normalizeAdvertiseBaseURL(value: string): string {
-  return String(value || "").trim().replace(/\/+$/, "");
+  return String(value || "")
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 export function configSettingsToDraft(settings: ConfigSettings): ConfigSettingsDraft {

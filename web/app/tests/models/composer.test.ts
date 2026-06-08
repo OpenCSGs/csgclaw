@@ -1,4 +1,5 @@
 import {
+  type ComposerSegment,
   getComposerMentionState,
   getComposerSlashState,
   getCollapsedSelectionTextOffset,
@@ -105,7 +106,7 @@ describe("composer model helpers", () => {
   });
 
   it("updates draft maps only when normalized segments change", () => {
-    const current = { room1: [{ type: "text", text: "Hello" }] };
+    const current: Record<string, ComposerSegment[]> = { room1: [{ type: "text", text: "Hello" }] };
 
     expect(updateDrafts(current, "room1", [{ type: "text", text: "Hello" }])).toBe(current);
     expect(updateDrafts(current, "room1", [])).toEqual({});

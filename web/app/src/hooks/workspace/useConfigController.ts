@@ -2,12 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchServerConfig, fetchServerRestartStatus, restartServer, updateServerConfig } from "@/api/config";
 import { errorMessage } from "@/api/client";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
-import {
-  configDraftToUpdatePayload,
-  configSettingsToDraft,
-  normalizeConfigSettings,
-} from "@/models/configSettings";
-import type { HubTemplate } from "@/models/hubWorkspace";
+import { configDraftToUpdatePayload, configSettingsToDraft, normalizeConfigSettings } from "@/models/configSettings";
 import type { ConfigController, UseConfigControllerArgs } from "./types";
 
 export type ConfigPhase = "idle" | "loading" | "saving" | "restarting" | "manual_restart" | "done" | "error";

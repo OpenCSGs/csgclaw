@@ -112,12 +112,9 @@ describe("configSettings model", () => {
         "manager",
       ),
     ).toBe(false);
-    expect(
-      isValidConfigBootstrapTemplate(
-        { id: "bad-worker", role: "worker", runtime_kind: "" },
-        "worker",
-      ),
-    ).toBe(false);
+    expect(isValidConfigBootstrapTemplate({ id: "bad-worker", role: "worker", runtime_kind: "" }, "worker")).toBe(
+      false,
+    );
     expect(
       isValidConfigBootstrapTemplate(
         { id: "builtin.picoclaw-worker", role: "worker", runtime_kind: "picoclaw_sandbox" },

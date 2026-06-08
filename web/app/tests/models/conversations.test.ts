@@ -274,9 +274,7 @@ describe("conversation model helpers", () => {
 
     expect(next.rooms.find((item) => item.id === "general")?.messages).toEqual([]);
     expect(next.rooms.find((item) => item.id === "general")?.threads).toEqual([]);
-    expect(next.rooms.find((item) => item.id === "other")?.messages.map((item) => item.id)).toEqual([
-      "other-message",
-    ]);
+    expect(next.rooms.find((item) => item.id === "other")?.messages.map((item) => item.id)).toEqual(["other-message"]);
   });
 
   it("applies thread event summaries to root messages and exposes thread views", () => {

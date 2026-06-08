@@ -27,18 +27,19 @@ export function useProfilePreviewController({
   const profilePreviewRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!profilePreview) {
+    const activePreview = profilePreview;
+    if (!activePreview) {
       return undefined;
     }
+    const activeAnchor = activePreview.anchorEl;
 
     function handlePointerDown(event: MouseEvent) {
       const preview = profilePreviewRef.current;
-      const anchor = profilePreview?.anchorEl;
       if (
         !preview ||
         !(event.target instanceof Node) ||
         preview.contains(event.target) ||
-        anchor.contains(event.target)
+        activeAnchor.contains(event.target)
       ) {
         return;
       }
@@ -70,17 +71,17 @@ export function useProfilePreviewController({
     : null;
 
   function openParticipantPreview(user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) {
-    if (!user?.id) {
+    if (!user?.id || !anchor) {
       return;
     }
-    const rect = anchor?.getBoundingClientRect?.();
-    if (!rect) {
-      return;
-    }
+    const rect = anchor.getBoundingClientRect();
     const agent = agentItems.find((item) => agentMatchesUser(item, user));
+    const nextID = String(agent?.id || user.id).trim();
+    if (!nextID) {
+      return;
+    }
     setProfilePreview((current) => {
       const nextType = agent ? WorkspacePaneTypes.agent : "user";
-      const nextID = agent ? agent.id : user.id;
       if (current?.type === nextType && current?.id === nextID) {
         return null;
       }
@@ -100,20 +101,18 @@ export function useProfilePreviewController({
   }
 
   function openAgentPreview(item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) {
-    if (!item?.id) {
+    if (!item?.id || !anchor) {
       return;
     }
-    const rect = anchor?.getBoundingClientRect?.();
-    if (!rect) {
-      return;
-    }
+    const itemID = item.id;
+    const rect = anchor.getBoundingClientRect();
     setProfilePreview((current) => {
-      if (current?.type === WorkspacePaneTypes.agent && current?.id === item.id) {
+      if (current?.type === WorkspacePaneTypes.agent && current?.id === itemID) {
         return null;
       }
       return {
         type: WorkspacePaneTypes.agent,
-        id: item.id,
+        id: itemID,
         anchorRect: {
           top: rect.top,
           right: rect.right,

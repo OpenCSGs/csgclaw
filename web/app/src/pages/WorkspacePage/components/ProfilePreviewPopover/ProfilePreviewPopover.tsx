@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState } from "react";
+import type { RefObject } from "react";
 import { X } from "lucide-react";
 import {
   agentStatusLabel,
@@ -14,12 +15,35 @@ import { localizeRole } from "@/shared/i18n";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { Button, IconButton } from "@/components/ui";
+import type { AgentLike } from "@/models/agents";
+import type { IMUser, TranslateFn } from "@/models/conversations";
 
-function clamp(value, min, max) {
+type ProfilePreviewAnchorRect = {
+  bottom: number;
+  left: number;
+  right: number;
+  top: number;
+};
+
+export type ProfilePreviewPopoverProps = {
+  agent: AgentLike | null;
+  anchorRect: ProfilePreviewAnchorRect;
+  busyKey: string;
+  inDirectConversation: boolean;
+  onClose: () => void;
+  onDelete: (item: AgentLike) => void | Promise<void>;
+  onOpenAgent: (item: AgentLike) => void;
+  onOpenDM: (item: AgentLike) => void | Promise<void>;
+  previewRef: RefObject<HTMLElement | null>;
+  t: TranslateFn;
+  user: IMUser | null;
+};
+
+function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function profilePreviewStyle(anchorRect, cardHeight = 420) {
+function profilePreviewStyle(anchorRect: ProfilePreviewAnchorRect | null | undefined, cardHeight = 420) {
   const offset = 12;
   const viewportPadding = 16;
   const width = Math.min(360, window.innerWidth - viewportPadding * 2);
@@ -38,17 +62,17 @@ function profilePreviewStyle(anchorRect, cardHeight = 420) {
   return { top: `${top}px`, left: `${left}px`, width: `${width}px` };
 }
 
-function previewFieldLabel(label) {
+function previewFieldLabel(label: string): string {
   return String(label || "").toLocaleUpperCase();
 }
 
-function agentModelWithReasoning(agent) {
+function agentModelWithReasoning(agent: AgentLike): string {
   const model = agentModelID(agent);
   const reasoning = agent?.reasoning_effort || agent?.agent_profile?.reasoning_effort || "medium";
   return reasoning ? `${model}(${reasoning})` : model;
 }
 
-function isBootstrapAdminUser(user) {
+function isBootstrapAdminUser(user: IMUser | null | undefined): boolean {
   return (
     user?.id === "u-admin" ||
     String(user?.handle ?? "").toLowerCase() === "admin" ||
@@ -68,7 +92,7 @@ export function ProfilePreviewPopover({
   onOpenAgent,
   onOpenDM,
   onDelete,
-}) {
+}: ProfilePreviewPopoverProps) {
   const localAdminPreview = !agent && isBootstrapAdminUser(user);
   const showAgentMetadataFields = Boolean(agent || localAdminPreview);
   const running = agent ? isAgentRunning(agent) : false;
@@ -82,7 +106,7 @@ export function ProfilePreviewPopover({
   const previewProvider = agent ? formatProviderLabel(provider) : t("profileLocalProvider");
   const previewModel = agent ? agentModelWithReasoning(agent) : localizeRole(user?.role || "admin", t);
   const displayName = agent?.name || user?.name || "";
-  const displayRole = agent ? agent.role || "worker" : user?.role;
+  const displayRole = agent ? agent.role || "worker" : user?.role || "";
   const deleteBusy = agent ? busyKey === `${agent.id}:delete-bot` : false;
   const canOpenDM = !inDirectConversation;
   const [cardHeight, setCardHeight] = useState(420);
@@ -121,11 +145,18 @@ export function ProfilePreviewPopover({
       <div className="preview-hero">
         {agent ? (
           <div className="entity-avatar preview-avatar">
-            <AgentAvatarContent avatar={agent.avatar} fallback={avatarFallbackText(agent.avatar, displayName, agent.id)} alt="" />
+            <AgentAvatarContent
+              avatar={agent.avatar}
+              fallback={avatarFallbackText(agent.avatar, displayName, agent.id)}
+              alt=""
+            />
           </div>
         ) : (
           <div className="avatar preview-avatar">
-            <AgentAvatarContent avatar={user.avatar} fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)} />
+            <AgentAvatarContent
+              avatar={user?.avatar}
+              fallback={avatarFallbackText(user?.avatar, user?.name, user?.handle, user?.id)}
+            />
           </div>
         )}
         <div className="preview-identity">
@@ -192,7 +223,7 @@ export function ProfilePreviewPopover({
           </div>
           <div className="entity-field">
             <span>{previewFieldLabel(t("roleLabel"))}</span>
-            <strong>{localizeRole(user?.role, t)}</strong>
+            <strong>{localizeRole(user?.role || "", t)}</strong>
           </div>
           <div className="entity-field">
             <span>{previewFieldLabel(t("handleLabel"))}</span>

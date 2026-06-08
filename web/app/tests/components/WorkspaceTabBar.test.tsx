@@ -21,6 +21,7 @@ describe("WorkspaceTabBar", () => {
         onWorkspaceTabChange={() => {}}
         roomCount={2}
         agentCount={1}
+        taskCount={0}
         onSelectHub={() => {}}
         t={t}
       />,

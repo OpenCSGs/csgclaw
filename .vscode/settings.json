@@ -1,4 +1,6 @@
 {
+  "js/ts.tsdk.path": "web/app/node_modules/typescript/lib",
+  "js/ts.validate.enabled": true,
   "editor.formatOnSave": true,
   "prettier.requireConfig": true,
   "prettier.configPath": "web/app/.prettierrc.json",

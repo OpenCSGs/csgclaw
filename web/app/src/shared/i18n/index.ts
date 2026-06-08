@@ -2,6 +2,8 @@ import { messages } from "@/shared/i18n/messages";
 import { LOCALE_STORAGE_KEY } from "@/shared/storage/keys";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 
+type ErrorTranslationKey = keyof typeof messages.zh.errors;
+
 export function detectInitialLocale(): LocaleCode {
   const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
   if (stored === "zh" || stored === "en") {
@@ -56,7 +58,8 @@ export function localizeTemplateSourceTag(source: unknown, locale: LocaleCode): 
 
 export function localizeError(raw: unknown, t: TranslateFn): string {
   const cleaned = String(raw ?? "").trim();
-  for (const key of Object.keys(messages.zh.errors)) {
+  const errorKeys = Object.keys(messages.zh.errors) as ErrorTranslationKey[];
+  for (const key of errorKeys) {
     if (cleaned.includes(key)) {
       return t(`errors.${key}`);
     }

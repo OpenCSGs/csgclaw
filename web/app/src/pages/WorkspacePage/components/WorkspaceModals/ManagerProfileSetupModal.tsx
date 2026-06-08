@@ -13,6 +13,39 @@ import {
   normalizeAuthProviderName,
   normalizeRuntimeKind,
 } from "@/models/agents";
+import type { AgentDraft, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
+import type { TranslateFn } from "@/models/conversations";
+import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
+
+type ManagerProfileDetectionResult = {
+  error?: string | null;
+  model_id?: string | null;
+  provider?: string | null;
+  status?: string | null;
+};
+
+type ManagerProfileLike = AgentProfileLike & {
+  detection_results?: ManagerProfileDetectionResult[] | null;
+};
+
+type VoidOrPromise = void | Promise<void>;
+
+export type ManagerProfileSetupModalProps = {
+  authBusyProvider?: string;
+  authStatuses?: CLIProxyAuthStatusMap;
+  bootstrapConfig?: RuntimeBootstrapConfig | null;
+  managerProfile?: ManagerProfileLike | null;
+  onProfileDraftChange: (draft: AgentDraft) => void;
+  onProfileModelsReset: () => void;
+  onProviderLogin?: (provider: string) => VoidOrPromise;
+  onSave: () => VoidOrPromise;
+  profileBusy?: boolean;
+  profileDraft: AgentDraft;
+  profileError?: string;
+  profileModelBusy?: boolean;
+  profileModels?: string[];
+  t: TranslateFn;
+};
 
 export function ManagerProfileSetupModal({
   t,
@@ -20,16 +53,16 @@ export function ManagerProfileSetupModal({
   profileDraft,
   onProfileDraftChange,
   onProfileModelsReset,
-  bootstrapConfig,
-  profileModels,
-  profileModelBusy,
-  authStatuses,
-  authBusyProvider,
+  bootstrapConfig = null,
+  profileModels = [],
+  profileModelBusy = false,
+  authStatuses = {},
+  authBusyProvider = "",
   onProviderLogin,
-  profileError,
-  profileBusy,
+  profileError = "",
+  profileBusy = false,
   onSave,
-}) {
+}: ManagerProfileSetupModalProps) {
   return (
     <div className="modal-backdrop profile-backdrop nonblocking">
       <div className="modal-card profile-modal" onClick={(event) => event.stopPropagation()}>

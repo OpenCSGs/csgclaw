@@ -60,11 +60,20 @@
 - 保留 Radix 的交互契约，在其上组合 CSGClaw 的样式。
 - 常规表单控件优先提供 data-driven API；只有需要自定义布局时才使用 compound exports。
 - 页面或业务组件不要直接依赖 Radix primitive，除非这是一次明确的页面私有探索；一旦需要复用或形成稳定交互，应抽到 `src/components/ui`。
-- 新增 Radix 依赖时，优先遵循项目现有依赖方式，并尽量让 Radix 相关包保持一致版本，避免重复 shared dependency。
+- 从统一的 `radix-ui` 包导入 Radix namespace，例如 `import { Select as RadixSelect } from "radix-ui"`。不要为已经由 `radix-ui` 暴露的 primitive 新增 `@radix-ui/react-*` 分包依赖。
+- 只有统一包没有暴露所需 primitive 时，才单独新增 Radix 分包，并在改动里说明原因。
 - 如果 jsdom 缺少某个 Radix primitive 依赖的浏览器 API，在 `web/app/tests/setup.ts` 里补最小、稳定的 polyfill，并让组件测试聚焦用户可见行为。
 
 ## Select
 
-`Select` 基于 `@radix-ui/react-select` 实现。常规表单优先使用 data-driven 的 `options` prop。只有需要自定义布局时才使用 compound exports（`SelectRoot`、`SelectTrigger`、`SelectContent`、`SelectItem`）。
+`Select` 基于 `radix-ui` 包里的 `Select` namespace 实现。常规表单优先使用 data-driven 的 `options` prop。只有需要自定义布局时才使用 compound exports（`SelectRoot`、`SelectTrigger`、`SelectContent`、`SelectItem`）。
 
 `Select` 会把业务侧空值（`""`）映射到内部 Radix item value，因为 Radix 把空字符串保留给清空选择。调用方仍然按 `""` 正常读写即可。
+
+## Dropdown Menu
+
+`DropdownMenu` 基于 `radix-ui` 包里的 `DropdownMenu` namespace 实现。菜单应组合共享的 `DropdownMenuRoot`、`DropdownMenuTrigger`、`DropdownMenuContent`、`DropdownMenuItem` 和 `DropdownMenuSeparator`，让页面继承一致的 hover、键盘、danger 状态、portal 和焦点行为。
+
+## Dialog
+
+`Dialog` 基于 `radix-ui` 包里的 `Dialog` namespace 实现。modal 流程应使用共享 dialog exports，让页面继承一致的 backdrop、portal、focus trap、关闭按钮、标题、描述和布局行为。dialog 或嵌套 floating child 需要留在特定层级内时，暴露并使用 `portalContainer`。

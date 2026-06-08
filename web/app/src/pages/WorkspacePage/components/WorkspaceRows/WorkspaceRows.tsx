@@ -17,12 +17,22 @@ import {
   resolveConversationUser,
 } from "@/models/conversations";
 import { MessagePreviewText } from "@/components/business/MessageContent";
-import { AgentIcon, ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
+import { ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import type { DragEvent, ReactNode } from "react";
+import type { AgentLike } from "@/models/agents";
+import type {
+  IMConversation,
+  IMMessage,
+  IMUser,
+  LocaleCode,
+  ThreadView,
+  TranslateFn,
+  UsersById,
+} from "@/models/conversations";
 
 export type WorkspaceGroupProps = {
   addIcon?: ReactNode;
@@ -120,7 +130,14 @@ export function WorkspaceGroup({
   );
 }
 
-export function WorkspaceComputerRow({ title, active, subtitle, onSelect }) {
+export type WorkspaceComputerRowProps = {
+  active: boolean;
+  onSelect: () => void;
+  subtitle: string;
+  title: string;
+};
+
+export function WorkspaceComputerRow({ title, active, subtitle, onSelect }: WorkspaceComputerRowProps) {
   return (
     <button className={`workspace-row computer-row ${active ? "active" : ""}`} onClick={onSelect}>
       <span className="workspace-row-icon">
@@ -135,7 +152,23 @@ export function WorkspaceComputerRow({ title, active, subtitle, onSelect }) {
   );
 }
 
-export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notification = false }) {
+export type WorkspaceAgentRowProps = {
+  active: boolean;
+  item: AgentLike;
+  notification?: boolean;
+  onPreview?: (item: AgentLike, anchor: HTMLElement) => void;
+  onSelect: (item: AgentLike) => void;
+  t: TranslateFn;
+};
+
+export function WorkspaceAgentRow({
+  item,
+  active,
+  t,
+  onSelect,
+  onPreview,
+  notification = false,
+}: WorkspaceAgentRowProps) {
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
   const upgradeNeeded = isAgentUpgradeNeeded(item);
@@ -165,7 +198,10 @@ export function WorkspaceAgentRow({ item, active, t, onSelect, onPreview, notifi
           }
         }}
       >
-        <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)} />
+        <AgentAvatarContent
+          avatar={item.avatar}
+          fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)}
+        />
       </span>
       <span className="workspace-row-main">
         <span className="workspace-row-title-line">
@@ -193,6 +229,16 @@ export function WorkspaceConversationRow({
   t,
   onSelect,
   onPreviewUser,
+}: {
+  active: boolean;
+  agents?: AgentLike[];
+  conversation: IMConversation;
+  currentUserID: string;
+  locale: LocaleCode;
+  onPreviewUser?: (user: IMUser, anchor: HTMLElement) => void;
+  onSelect: (id: string) => void;
+  t: TranslateFn;
+  usersById: UsersById;
 }) {
   const lastMessage = conversation.messages[conversation.messages.length - 1];
   const isDirect = isDirectConversation(conversation);
@@ -257,7 +303,16 @@ export function WorkspaceConversationRow({
   );
 }
 
-export function WorkspaceThreadRow({ conversation, thread, active, locale, t, onSelect }) {
+export type WorkspaceThreadRowProps = {
+  active: boolean;
+  conversation: IMConversation;
+  locale: LocaleCode;
+  onSelect: (conversationID: string, message: IMMessage) => void | Promise<void>;
+  t: TranslateFn;
+  thread: ThreadView;
+};
+
+export function WorkspaceThreadRow({ conversation, thread, active, locale, t, onSelect }: WorkspaceThreadRowProps) {
   const root = thread?.root;
   const rootID = thread?.summary?.root_id || root?.id;
   if (!root || !rootID) {

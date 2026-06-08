@@ -9,6 +9,7 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import { TrashIcon } from "@/components/ui/Icons";
+import type { IMConversation, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
 
 export function ConversationSection({
   title,
@@ -20,13 +21,23 @@ export function ConversationSection({
   t,
   onSelect,
   onDelete,
+}: {
+  activeConversationId: string;
+  currentUserID: string;
+  items: IMConversation[];
+  locale: LocaleCode;
+  onDelete: (id: string) => void | Promise<void>;
+  onSelect: (id: string) => void;
+  t: TranslateFn;
+  title: string;
+  usersById: UsersById;
 }) {
   if (!items.length) {
     return null;
   }
 
   return (
-    <section className="conversation-section">
+    <section className="conversation-section" aria-label={title}>
       {items.map((conversation) => {
         const lastMessage = conversation.messages[conversation.messages.length - 1];
         const displayUser = isDirectConversation(conversation)
@@ -43,7 +54,12 @@ export function ConversationSection({
                 <div className="avatar" aria-hidden="true">
                   <AgentAvatarContent
                     avatar={displayUser.avatar}
-                    fallback={avatarFallbackText(displayUser.avatar, displayUser.name, displayUser.handle, displayUser.id)}
+                    fallback={avatarFallbackText(
+                      displayUser.avatar,
+                      displayUser.name,
+                      displayUser.handle,
+                      displayUser.id,
+                    )}
                   />
                 </div>
               ) : (

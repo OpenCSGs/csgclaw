@@ -1,4 +1,5 @@
 import { ApiEndpoints, IM_EVENTS_SHARED_WORKER_PATH } from "@/shared/constants/api";
+import type { IMServerEvent } from "@/models/conversations";
 
 const sharedWorkerURL = import.meta.env.DEV ? "/src/shared/realtime/sseSharedWorker.ts" : IM_EVENTS_SHARED_WORKER_PATH;
 
@@ -9,25 +10,30 @@ function createSharedWorker() {
   return new SharedWorker(sharedWorkerURL);
 }
 
-export function safeParseEventData(raw) {
+type SharedWorkerEnvelope = {
+  data?: string;
+  type?: string;
+};
+
+export function safeParseEventData(raw: string): IMServerEvent | null {
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw) as IMServerEvent;
   } catch (error) {
     console.warn("Failed to parse IM event payload", error);
     return null;
   }
 }
 
-export function subscribeIMEvents(onEvent) {
+export function subscribeIMEvents(onEvent: (payload: IMServerEvent) => void): () => void {
   if (typeof window.SharedWorker === "function") {
     try {
       const worker = createSharedWorker();
       const port = worker.port;
-      const handleMessage = ({ data }) => {
+      const handleMessage = ({ data }: MessageEvent<SharedWorkerEnvelope>) => {
         if (!data || data.type !== "message") {
           return;
         }
-        const payload = safeParseEventData(data.data);
+        const payload = safeParseEventData(String(data.data ?? ""));
         if (payload) {
           onEvent(payload);
         }

@@ -47,7 +47,7 @@ describe("ProfilePreviewPopover", () => {
           reasoning_effort: "medium",
           runtime_kind: "codex",
         }}
-        user={{ handle: "builder" }}
+        user={{ id: "u-builder", handle: "builder" }}
         anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
         t={t}
         inDirectConversation={false}

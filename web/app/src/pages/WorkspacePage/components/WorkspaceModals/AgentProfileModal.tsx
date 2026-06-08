@@ -7,8 +7,10 @@ import {
   PROVIDERS,
   WORKER_RUNTIME_KIND_OPTIONS,
 } from "@/shared/constants/agents";
+import type { SetStateAction } from "react";
 import {
   AgentCreateProgress,
+  type AgentCreateProgressProps,
   APIKeyField,
   CLIProxyAuthControl,
   EnvKeyValueEditor,
@@ -34,7 +36,40 @@ import {
   runtimeImageForKind,
   templateMatchesRuntime,
 } from "@/models/agents";
+import type { AgentDraft, AgentLike, RuntimeBootstrapConfig } from "@/models/agents";
+import type { TranslateFn } from "@/models/conversations";
+import type { HubTemplate } from "@/models/hubWorkspace";
+import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import { ModalCloseButton } from "./ModalCloseButton";
+
+type AgentModalMode = "create" | "edit";
+type AgentDraftUpdate = SetStateAction<AgentDraft | null>;
+type VoidOrPromise = void | Promise<void>;
+
+export type AgentProfileModalProps = {
+  agentBusy?: boolean;
+  agentCreateBotKind: string;
+  agentDraft: AgentDraft;
+  agentError?: string;
+  agentModelBusy?: boolean;
+  agentModalMode: AgentModalMode;
+  agentModels?: string[];
+  agentProgress?: AgentCreateProgressProps["progress"];
+  authBusyProvider?: string;
+  authStatuses?: CLIProxyAuthStatusMap;
+  bootstrapConfig?: RuntimeBootstrapConfig | null;
+  editingAgent?: AgentLike | null;
+  hubTemplates?: HubTemplate[];
+  managerAgent?: AgentLike | null;
+  notifierWebhookPublicOrigin?: string;
+  onAgentCreateBotKindChange: (kind: string) => void;
+  onAgentDraftChange: (update: AgentDraftUpdate) => void;
+  onAgentModelsReset: () => void;
+  onClose: () => void;
+  onProviderLogin?: (provider: string) => VoidOrPromise;
+  onSave: () => VoidOrPromise;
+  t: TranslateFn;
+};
 
 export function AgentProfileModal({
   t,
@@ -45,55 +80,61 @@ export function AgentProfileModal({
   agentDraft,
   onAgentDraftChange,
   onAgentModelsReset,
-  hubTemplates,
-  bootstrapConfig,
-  managerAgent,
-  agentModels,
-  agentModelBusy,
-  authStatuses,
-  authBusyProvider,
-  notifierWebhookPublicOrigin,
+  hubTemplates = [],
+  bootstrapConfig = null,
+  managerAgent = null,
+  agentModels = [],
+  agentModelBusy = false,
+  authStatuses = {},
+  authBusyProvider = "",
+  notifierWebhookPublicOrigin = "",
   onProviderLogin,
-  agentError,
-  agentProgress,
-  agentBusy,
+  agentError = "",
+  agentProgress = null,
+  agentBusy = false,
   onClose,
   onSave,
-}) {
+}: AgentProfileModalProps) {
   const createBotKind = agentModalMode === "create" ? agentCreateBotKind : undefined;
   const isNotificationContext = isNotificationBotDraftContext(agentDraft, editingAgent, createBotKind);
   const isWorkerCreate = agentModalMode === "create" && !isNotificationContext;
   const templateLocked = agentCreateTemplateLocked(agentDraft, agentModalMode);
 
-  function switchCreateBotKind(nextKind) {
+  function switchCreateBotKind(nextKind: string) {
     if (agentModalMode !== "create" || nextKind === agentCreateBotKind) {
       return;
     }
     onAgentCreateBotKindChange(nextKind);
     if (nextKind === BOT_CREATE_KIND_NOTIFICATION) {
-      onAgentDraftChange((current) =>
-        ensureNotifierPullSubscriptionDraft({
-          ...current,
-          avatar: current?.avatar || "",
+      onAgentDraftChange((current) => {
+        const baseDraft = current ?? agentDraft;
+        return ensureNotifierPullSubscriptionDraft({
+          ...baseDraft,
+          avatar: baseDraft.avatar || "",
           bot_type: BOT_TYPE_NOTIFICATION,
           from_template: "",
           template_name: "",
-          notifier_delivery_mode: current?.notifier_delivery_mode || "webhook",
-        }),
-      );
+          notifier_delivery_mode: baseDraft.notifier_delivery_mode || "webhook",
+        });
+      });
       return;
     }
     onAgentDraftChange((current) => {
-      const runtimeKindRaw = normalizeRuntimeKind(current?.runtime_kind) || DEFAULT_RUNTIME_KIND;
+      const baseDraft = current ?? agentDraft;
+      const runtimeKindRaw = normalizeRuntimeKind(baseDraft.runtime_kind) || DEFAULT_RUNTIME_KIND;
       const runtimeKind = runtimeKindRaw === "notifier" ? DEFAULT_RUNTIME_KIND : runtimeKindRaw;
       const template = pickDefaultAgentTemplate(hubTemplates, runtimeKind, bootstrapConfig);
       return applyTemplateToDraft(
         {
-          ...current,
-          avatar: current?.avatar || "",
+          ...baseDraft,
+          avatar: baseDraft.avatar || "",
           bot_type: BOT_TYPE_NORMAL,
           runtime_kind: runtimeKind,
-          image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || current?.default_image || ""),
+          image: runtimeImageForKind(
+            runtimeKind,
+            bootstrapConfig,
+            managerAgent?.image || baseDraft.default_image || "",
+          ),
         },
         template,
         bootstrapConfig,
@@ -165,13 +206,17 @@ export function AgentProfileModal({
                         hubTemplates.find((item) => item.id === value) || null,
                       );
                       onAgentDraftChange((current) =>
-                        applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || ""),
+                        current
+                          ? applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || "")
+                          : current,
                       );
                     }}
                     triggerProps={{ "aria-label": t("templateLabel") }}
                     options={[
                       { value: "", label: t("templateNone") },
-                      ...hubTemplates.map((item) => ({ value: item.id, label: item.name || item.id })),
+                      ...hubTemplates
+                        .filter((item) => item.id)
+                        .map((item) => ({ value: item.id || "", label: item.name || item.id || "" })),
                     ]}
                   />
                 </label>
@@ -226,7 +271,7 @@ export function AgentProfileModal({
                           const nextTemplate = templateMatchesRuntime(currentTemplate, runtimeKind)
                             ? currentTemplate
                             : pickDefaultAgentTemplate(hubTemplates, runtimeKind, bootstrapConfig);
-                          let nextDraft = {
+                          let nextDraft: AgentDraft = {
                             ...agentDraft,
                             bot_type: BOT_TYPE_NORMAL,
                             role: "worker",
@@ -278,7 +323,7 @@ export function AgentProfileModal({
           </section>
           {isNotificationContext ? (
             <NotifierControls
-              agentID={agentModalMode === "edit" ? editingAgent?.id : ""}
+              agentID={agentModalMode === "edit" ? editingAgent?.id || "" : ""}
               draft={agentDraft}
               t={t}
               webhookPublicOrigin={notifierWebhookPublicOrigin}

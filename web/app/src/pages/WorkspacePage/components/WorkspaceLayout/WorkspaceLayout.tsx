@@ -35,7 +35,8 @@ export function WorkspaceLayout() {
     pointerX: 0,
     width: SidebarWidth.default,
   });
-  const isSidebarCollapsed = controller.ready ? controller.sidebarProps.isSidebarCollapsed : false;
+  const sidebarProps = controller.ready ? controller.sidebarProps : null;
+  const isSidebarCollapsed = sidebarProps?.isSidebarCollapsed ?? false;
 
   useEffect(() => {
     if (!isSidebarCollapsed) {
@@ -113,16 +114,16 @@ export function WorkspaceLayout() {
     <AppLayout ready={controller.ready} loadingFallback={<AppLayoutLoading>{controller.loadingText}</AppLayoutLoading>}>
       <AppLayoutShell className={shellClassName} style={shellStyle}>
         <div className="workspace-sidebar-shell">
-          {controller.ready ? (
+          {sidebarProps ? (
             <WorkspaceTopBar
               isSidebarCollapsed={isSidebarCollapsed}
-              onCollapseSidebar={controller.sidebarProps.onCollapseSidebar}
-              onExpandSidebar={controller.sidebarProps.onExpandSidebar}
-              collapseSidebarLabel={controller.sidebarProps.t("collapseSidebar")}
-              expandSidebarLabel={controller.sidebarProps.t("expandSidebar")}
+              onCollapseSidebar={sidebarProps.onCollapseSidebar}
+              onExpandSidebar={sidebarProps.onExpandSidebar}
+              collapseSidebarLabel={sidebarProps.t("collapseSidebar")}
+              expandSidebarLabel={sidebarProps.t("expandSidebar")}
             />
           ) : null}
-          <WorkspaceSidebar {...controller.sidebarProps} />
+          {sidebarProps ? <WorkspaceSidebar {...sidebarProps} /> : null}
         </div>
         {controller.ready ? (
           <div

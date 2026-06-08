@@ -4,6 +4,12 @@
 
 英文版为 `development.md`，Agent 默认以英文版为准。
 
+## 何时使用本规范
+
+- 修改 Vite 应用源码、测试、包或配置文件、public 资源，或生成式前端资产链路前，先阅读并遵循本规范。
+- 常见触发范围包括 React 页面、组件、hooks、共享 models、路由 helper、API client、CSS/Tailwind/tokens、i18n 文案、Vite/Vitest/TypeScript 配置、依赖变更、public 资源 URL 和 `web/static-dist` 处理。
+- 修改 UI primitives、Radix wrappers、表单控件、浮层或组件库 export 时，还要遵循 `docs/web/ui-components.md` 或 `docs/web/ui-components.zh.md`。
+
 ## 工具链
 
 - 前端开发使用 Node.js 22.13.x 或更新版本，但不包括 Node.js 25 及以上。
@@ -32,6 +38,14 @@ pnpm --dir web/app install
 - 前端源码放在 `web/app/src`。
 - `web/static-dist` 是给 Go embed 使用的构建产物。
 - 新增模式或依赖前，优先沿用 `web/app` 里已有的约定。
+
+## TypeScript 类型检查
+
+- `pnpm --dir web/app typecheck` 是严格 TypeScript 门槛，普通前端改动必须保持通过。
+- 缺失类型声明、模块无法解析、隐式 `any` 和其它 TypeScript 报错，都属于本次改动要处理的内容。通过补充或收敛本地类型、包类型、运行时 guard 或 typed adapter，让类型检查通过。
+- 处理 strict 类型报错时，优先处理本次触碰的代码和共享底座：`src/models`、`src/shared`、controller hooks、API 边界 helper 和可复用 UI primitives。
+- 优先使用准确的输入/输出类型、外部边界运行时 guard、小范围 null 处理；不要用大范围断言或 `any` 掩盖问题。
+- 不要为了满足 TypeScript 改变用户可见行为。类型修复如果必须伴随行为变化，需要给受影响路径补聚焦测试。
 
 ## 静态资源与部署路径
 
@@ -213,7 +227,7 @@ src/pages/WorkspacePage/components/
 
 ## 测试与验证
 
-- TypeScript 或 import 路径变化后，运行 `pnpm --dir web/app typecheck`。
+- 前端 TypeScript、import 路径、包依赖或配置变化后，运行 `pnpm --dir web/app typecheck`，并在交付前修复缺失类型声明和类型报错。
 - 前端源码变化后，运行 `pnpm --dir web/app lint`。
 - 提交或共享改动前，运行 `pnpm --dir web/app format:check`；需要应用 Prettier 格式化时运行 `pnpm --dir web/app format`。
 - 运行 `pnpm --dir web/app test` 执行前端 Vitest 测试。

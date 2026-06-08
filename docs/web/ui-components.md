@@ -60,15 +60,20 @@ When adding a Radix component with a portal, expose a container escape hatch whe
 - Keep the Radix interaction contract intact, and compose CSGClaw styling around it.
 - Prefer data-driven APIs for common form controls, with compound exports available only for custom layouts.
 - Pages and business components should not depend on Radix primitives directly unless it is an explicit page-private exploration. Extract the wrapper to `src/components/ui` once the interaction needs reuse or becomes a stable convention.
-- When adding Radix dependencies, follow the project's existing dependency style and keep Radix-related package versions aligned when practical to avoid duplicate shared dependencies.
+- Import Radix namespaces from the unified `radix-ui` package, for example `import { Select as RadixSelect } from "radix-ui"`. Do not add `@radix-ui/react-*` package dependencies for primitives that are available through `radix-ui`.
+- Add a separate Radix package only when the unified package does not expose the needed primitive, and document why in the change.
 - If jsdom lacks browser APIs needed by a Radix primitive, add the smallest stable polyfill in `web/app/tests/setup.ts` and keep component tests focused on user-visible behavior.
 
 ## Select
 
-`Select` is built on `@radix-ui/react-select`. Prefer the data-driven `options` prop for normal forms. Use the compound exports (`SelectRoot`, `SelectTrigger`, `SelectContent`, `SelectItem`) only when a custom layout is needed.
+`Select` is built on the `Select` namespace from `radix-ui`. Prefer the data-driven `options` prop for normal forms. Use the compound exports (`SelectRoot`, `SelectTrigger`, `SelectContent`, `SelectItem`) only when a custom layout is needed.
 
 `Select` maps an empty business value (`""`) to an internal Radix item value, because Radix reserves empty string for clearing selection. Callers should continue to read and write `""` normally.
 
 ## Dropdown Menu
 
-`DropdownMenu` is built on `@radix-ui/react-dropdown-menu`. Compose menus with the shared `DropdownMenuRoot`, `DropdownMenuTrigger`, `DropdownMenuContent`, `DropdownMenuItem`, and `DropdownMenuSeparator` exports so pages inherit consistent hover, keyboard, danger-state, portal, and focus behavior.
+`DropdownMenu` is built on the `DropdownMenu` namespace from `radix-ui`. Compose menus with the shared `DropdownMenuRoot`, `DropdownMenuTrigger`, `DropdownMenuContent`, `DropdownMenuItem`, and `DropdownMenuSeparator` exports so pages inherit consistent hover, keyboard, danger-state, portal, and focus behavior.
+
+## Dialog
+
+`Dialog` is built on the `Dialog` namespace from `radix-ui`. Use the shared dialog exports for modal workflows so pages inherit consistent backdrop, portal, focus trap, close button, title, description, and layout behavior. Expose `portalContainer` when a dialog or nested floating child needs to stay inside a specific layer.

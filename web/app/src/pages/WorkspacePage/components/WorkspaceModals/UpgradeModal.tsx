@@ -1,17 +1,30 @@
 import { Button } from "@/components/ui";
 import { formatSidebarVersionLabel, isLocalBuildVersion, upgradeStatusLabel } from "@/models/upgradeStatus";
+import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
+import type { TranslateFn } from "@/models/conversations";
 import { ModalCloseButton } from "./ModalCloseButton";
+
+export type UpgradeModalProps = {
+  appVersion?: string;
+  onApply: () => void | Promise<void>;
+  onClose: () => void;
+  t: TranslateFn;
+  upgradeBusy?: boolean;
+  upgradeError?: string;
+  upgradePhase: UpgradePhase;
+  upgradeStatus?: UpgradeStatus | null;
+};
 
 export function UpgradeModal({
   t,
   upgradeStatus,
-  appVersion,
+  appVersion = "",
   upgradePhase,
-  upgradeBusy,
-  upgradeError,
+  upgradeBusy = false,
+  upgradeError = "",
   onClose,
   onApply,
-}) {
+}: UpgradeModalProps) {
   const currentVersion = upgradeStatus?.current_version || appVersion || "dev";
   const statusLabel = isLocalBuildVersion(currentVersion)
     ? t("upgradeStatusLocal")
@@ -60,7 +73,7 @@ export function UpgradeModal({
           </p>
         </div>
         {upgradeError || upgradeStatus?.last_error ? (
-          <div className="form-error">{upgradeError || upgradeStatus.last_error}</div>
+          <div className="form-error">{upgradeError || upgradeStatus?.last_error}</div>
         ) : null}
         <div className="modal-actions">
           {upgradePhase === "done" ? (

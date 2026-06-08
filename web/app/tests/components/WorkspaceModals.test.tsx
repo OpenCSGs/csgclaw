@@ -30,7 +30,10 @@ describe("WorkspaceModals", () => {
       />,
     );
 
-    expect(container.querySelector(".create-room-avatar .agent-avatar-image")).toHaveAttribute("src", avatarUser.avatar);
+    expect(container.querySelector(".create-room-avatar .agent-avatar-image")).toHaveAttribute(
+      "src",
+      avatarUser.avatar,
+    );
   });
 
   it("renders invite member avatars from user avatar paths", () => {
@@ -46,6 +49,9 @@ describe("WorkspaceModals", () => {
       />,
     );
 
-    expect(container.querySelector(".create-room-avatar .agent-avatar-image")).toHaveAttribute("src", avatarUser.avatar);
+    expect(container.querySelector(".create-room-avatar .agent-avatar-image")).toHaveAttribute(
+      "src",
+      avatarUser.avatar,
+    );
   });
 });

@@ -13,15 +13,38 @@ import { AgentIcon, PlayIcon, StopIcon, TrashIcon, WrenchIcon } from "@/componen
 import { Button } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
+import type { AgentLike } from "@/models/agents";
+import type { IMConversation, TranslateFn } from "@/models/conversations";
+
+type VoidOrPromise = void | Promise<void>;
+type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
+
+export type AgentSectionProps = {
+  activeRoom?: IMConversation | null;
+  busyKey?: string;
+  error?: string;
+  manager?: AgentLike | null;
+  onCreate: () => VoidOrPromise;
+  onDelete: AgentActionHandler;
+  onEdit: AgentActionHandler;
+  onInvite: AgentActionHandler;
+  onRecreate: AgentActionHandler;
+  onStart: AgentActionHandler;
+  onStop: AgentActionHandler;
+  onUpgrade?: AgentActionHandler;
+  t: TranslateFn;
+  title: string;
+  workers?: AgentLike[];
+};
 
 export function AgentSection({
   title,
   manager,
-  workers,
+  workers = [],
   t,
-  activeRoom,
-  busyKey,
-  error,
+  activeRoom = null,
+  busyKey = "",
+  error = "",
   onCreate,
   onEdit,
   onStart,
@@ -29,8 +52,8 @@ export function AgentSection({
   onRecreate,
   onDelete,
   onInvite,
-}) {
-  const items = [manager, ...workers].filter(Boolean);
+}: AgentSectionProps) {
+  const items = [manager, ...workers].filter((item): item is AgentLike => Boolean(item));
   return (
     <section className="agent-section">
       <div className="agent-section-head">
@@ -71,18 +94,32 @@ export function AgentSection({
   );
 }
 
+export type AgentRowProps = {
+  activeRoom?: IMConversation | null;
+  busyKey?: string;
+  item: AgentLike;
+  onDelete: AgentActionHandler;
+  onEdit: AgentActionHandler;
+  onInvite: AgentActionHandler;
+  onRecreate: AgentActionHandler;
+  onStart: AgentActionHandler;
+  onStop: AgentActionHandler;
+  onUpgrade?: AgentActionHandler;
+  t: TranslateFn;
+};
+
 export function AgentRow({
   item,
   t,
-  activeRoom,
-  busyKey,
+  activeRoom = null,
+  busyKey = "",
   onEdit,
   onStart,
   onStop,
   onRecreate,
   onDelete,
   onInvite,
-}) {
+}: AgentRowProps) {
   const isManager = item.role === "manager" || item.id === "u-manager";
   const isNotification = isNotificationBotAgent(item);
   const running = isAgentRunning(item);
@@ -93,7 +130,10 @@ export function AgentRow({
   return (
     <div className={`agent-row ${isManager ? "manager" : ""} ${incomplete ? "incomplete" : ""}`.trim()}>
       <div className="agent-avatar" aria-hidden="true">
-        <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)} />
+        <AgentAvatarContent
+          avatar={item.avatar}
+          fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)}
+        />
       </div>
       <div className="agent-row-main">
         <div className="agent-row-top">

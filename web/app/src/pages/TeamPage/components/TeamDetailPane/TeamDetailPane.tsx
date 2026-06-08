@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { ExternalLink, ListChecks, Plus, Users } from "lucide-react";
 import { TaskSubtaskIndicator } from "@/components/business";
 import { AgentIcon, UsersIcon } from "@/components/ui/Icons";
@@ -16,24 +17,55 @@ import {
 } from "@/components/ui";
 import { toggleSelection } from "@/shared/lib/collections";
 import { isAgentRunning } from "@/models/agents";
-import { displayTeam, formatTaskUpdatedAt, resolveTaskSidebarPhase, rootTasks, taskChildren, teamStatusLabel } from "@/models/tasks";
+import type { AgentLike } from "@/models/agents";
+import type { IMConversation, IMUser, TranslateFn, UsersById } from "@/models/conversations";
+import {
+  displayTeam,
+  formatTaskUpdatedAt,
+  resolveTaskSidebarPhase,
+  rootTasks,
+  taskChildren,
+  teamStatusLabel,
+} from "@/models/tasks";
+import type { WorkspaceTask, WorkspaceTeam } from "@/models/tasks";
+
+type UsersLookup = UsersById | Record<string, IMUser | undefined>;
+type VoidOrPromise = void | Promise<void>;
+
+export type TeamDetailPaneProps = {
+  agents?: AgentLike[];
+  onAddAgentsToTeam?: (teamID: string, agentIDs: string[]) => VoidOrPromise;
+  onOpenRoom?: (roomID: string) => VoidOrPromise;
+  onSelectAgent?: (agent: AgentLike) => void;
+  onSelectTask?: (taskID: string) => void;
+  room?: IMConversation | null;
+  tasks?: WorkspaceTask[];
+  team?: WorkspaceTeam | null;
+  teamActionBusy?: boolean;
+  teamActionError?: string;
+  teamsLoading?: boolean;
+  t?: TranslateFn;
+  usersById?: UsersLookup;
+};
+
+type ActiveTeamTab = "members" | "records";
 
 export function TeamDetailPane({
-  t,
-  team,
+  t = (key) => key,
+  team = null,
   teamsLoading = false,
   room = null,
   agents = [],
-  usersById = {},
+  usersById = new Map<string, IMUser>(),
   tasks = [],
-  onOpenRoom,
-  onSelectAgent,
-  onSelectTask,
+  onOpenRoom = () => {},
+  onSelectAgent = () => {},
+  onSelectTask = () => {},
   teamActionBusy = false,
   teamActionError = "",
   onAddAgentsToTeam,
-}) {
-  const [activeTab, setActiveTab] = useState("members");
+}: TeamDetailPaneProps) {
+  const [activeTab, setActiveTab] = useState<ActiveTeamTab>("members");
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
   const [selectedMemberIDs, setSelectedMemberIDs] = useState<string[]>([]);
 
@@ -52,7 +84,7 @@ export function TeamDetailPane({
   const members = memberIDs.map((memberID) => memberDisplay(memberID, agents, usersById, team.lead_bot_id));
   const parentTasks = rootTasks(tasks);
   const locale = document.documentElement.lang || "en";
-  const teamAgents = agents.filter((agent) => Boolean(agent?.id));
+  const teamAgents = agents.filter((agent): agent is AgentLike & { id: string } => Boolean(agent?.id));
   const teamAgentIDs = teamAgents.map((agent) => String(agent.id));
   const roomMemberIDs = new Set(room?.members ?? []);
   const existingTeamAgentIDs = teamAgentIDs.filter(
@@ -249,13 +281,14 @@ export function TeamDetailPane({
                 </div>
                 <div className="team-member-list">
                   {members.length ? (
-                    members.map((member) =>
-                      member.agent ? (
+                    members.map((member) => {
+                      const memberAgent = member.agent;
+                      return memberAgent ? (
                         <button
                           key={member.id}
                           type="button"
                           className="team-member-row"
-                          onClick={() => onSelectAgent?.(member.agent)}
+                          onClick={() => onSelectAgent(memberAgent)}
                         >
                           <MemberRowContent member={member} t={t} />
                         </button>
@@ -263,8 +296,8 @@ export function TeamDetailPane({
                         <div key={member.id} className="team-member-row team-member-static">
                           <MemberRowContent member={member} t={t} />
                         </div>
-                      ),
-                    )
+                      );
+                    })
                   ) : (
                     <div className="workspace-empty">{t("teamNoMembers")}</div>
                   )}
@@ -324,7 +357,12 @@ export function TeamDetailPane({
   );
 }
 
-function DetailField({ label, value }) {
+type DetailFieldProps = {
+  label: string;
+  value: ReactNode;
+};
+
+function DetailField({ label, value }: DetailFieldProps) {
   return (
     <div className="entity-field team-detail-field">
       <span className="team-detail-label">{label}</span>
@@ -333,7 +371,16 @@ function DetailField({ label, value }) {
   );
 }
 
-function MemberRowContent({ member, t }) {
+type TeamMemberDisplay = {
+  agent: AgentLike | null;
+  id: string;
+  initials: string;
+  leader: boolean;
+  name: string;
+  running: boolean;
+};
+
+function MemberRowContent({ member, t }: { member: TeamMemberDisplay; t: TranslateFn }) {
   return (
     <>
       <span className={`team-member-avatar ${member.agent ? "agent" : ""}`}>
@@ -353,7 +400,7 @@ function MemberRowContent({ member, t }) {
   );
 }
 
-function teamMemberIDs(team, room) {
+function teamMemberIDs(team: WorkspaceTeam, room: IMConversation | null | undefined): string[] {
   const ids = new Set(room?.members ?? []);
   if (team.lead_bot_id) {
     ids.add(team.lead_bot_id);
@@ -361,9 +408,14 @@ function teamMemberIDs(team, room) {
   return Array.from(ids);
 }
 
-function memberDisplay(memberID, agents, usersById, leadBotID) {
+function memberDisplay(
+  memberID: string,
+  agents: readonly AgentLike[],
+  usersById: UsersLookup,
+  leadBotID: string,
+): TeamMemberDisplay {
   const agent = agents.find((item) => item.id === memberID) ?? null;
-  const user = usersById?.[memberID] ?? null;
+  const user = lookupUser(usersById, memberID);
   const name = agent?.name || user?.name || memberID;
   return {
     id: memberID,
@@ -375,14 +427,21 @@ function memberDisplay(memberID, agents, usersById, leadBotID) {
   };
 }
 
-function memberName(memberID, agents, usersById) {
+function memberName(memberID: string, agents: readonly AgentLike[], usersById: UsersLookup): string {
   if (!memberID) {
     return "-";
   }
   return memberDisplay(memberID, agents, usersById, "").name;
 }
 
-function initialsForName(name) {
+function lookupUser(usersById: UsersLookup, memberID: string): IMUser | undefined {
+  if (usersById instanceof Map) {
+    return usersById.get(memberID);
+  }
+  return usersById[memberID];
+}
+
+function initialsForName(name: string): string {
   const parts = String(name || "")
     .trim()
     .split(/\s+/)

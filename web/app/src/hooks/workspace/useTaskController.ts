@@ -72,7 +72,8 @@ export function useTaskController({
     queryKey: teamEventsQueryKey(activeEventsTeamID),
     queryFn: () => fetchTeamEvents(activeEventsTeamID),
     enabled: Boolean(activeEventsTeamID),
-    refetchInterval: shouldPollActiveTaskBoard ? TASK_BOARD_POLL_DELAY_MS : false,  });
+    refetchInterval: shouldPollActiveTaskBoard ? TASK_BOARD_POLL_DELAY_MS : false,
+  });
   const taskEvents = useMemo(() => taskEventsQuery.data ?? [], [taskEventsQuery.data]);
 
   useEffect(() => {

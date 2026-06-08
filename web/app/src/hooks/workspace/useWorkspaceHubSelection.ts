@@ -26,7 +26,7 @@ export function useWorkspaceHubSelection({
       return;
     }
     setSelectedHubTemplateId((current) =>
-      hubTemplates.some((item) => item.id === current) ? current : hubTemplates[0].id,
+      hubTemplates.some((item) => item.id === current) ? current : (hubTemplates[0]?.id ?? ""),
     );
   }, [hubTemplates, setSelectedHubTemplateId, setSelectedHubWorkspacePath]);
 

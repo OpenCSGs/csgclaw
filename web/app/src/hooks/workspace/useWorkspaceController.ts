@@ -13,6 +13,7 @@ import { useAgentController } from "./useAgentController";
 import { useConversationController } from "./useConversationController";
 import { useProfilePreviewController } from "./useProfilePreviewController";
 import { useTaskController } from "./useTaskController";
+import type { CreateTeamPayload } from "@/api/tasks";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { IMData, IMUser } from "@/models/conversations";
 
@@ -287,7 +288,7 @@ export function useWorkspaceController() {
       threadGroups: conversation.threadGroups,
       activePane,
       activeThreadRootID: conversation.activeThreadRootID,
-      currentUserID: displayData.current_user_id,
+      currentUserID: displayData.current_user_id ?? "",
       usersById: conversation.usersById,
       collapsedWorkspaceGroups,
       showUpgradeControls: bootstrapConfig?.show_upgrade !== false,
@@ -295,7 +296,7 @@ export function useWorkspaceController() {
       onCreateRoom: () => conversation.openCreateRoomModal(),
       onCreateAgent: agent.openCreateAgentModal,
       onCreateNotificationParticipant: agent.openCreateNotificationParticipantModal,
-      onCreateTeam: async ({ title, lead_bot_id, member_bot_ids }) => {
+      onCreateTeam: async ({ title, lead_bot_id, member_bot_ids }: CreateTeamPayload) => {
         await agent.agentViewProps.onCreateTeam?.({
           channel: "csgclaw",
           title,

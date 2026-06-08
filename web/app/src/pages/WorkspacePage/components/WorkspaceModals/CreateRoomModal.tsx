@@ -2,15 +2,17 @@ import { isBlank } from "@/components/business/ProfileControls";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button as CSGButton } from "@/components/ui/Button";
 import { useEffect } from "react";
+import type { Dispatch, SetStateAction } from "react";
+import type { IMUser, TranslateFn } from "@/models/conversations";
 import { toggleSelection } from "@/shared/lib/collections";
 import { ModalCloseButton } from "./ModalCloseButton";
 
-function getAvatarInitial(user) {
+function getAvatarInitial(user: IMUser): string {
   const label = user.name || user.handle || user.id || "?";
   return label.trim().charAt(0).toUpperCase() || "?";
 }
 
-function MemberAvatar({ user, index = 0, compact = false }) {
+function MemberAvatar({ user, index = 0, compact = false }: { compact?: boolean; index?: number; user: IMUser }) {
   const fallback = getAvatarInitial(user);
   return (
     <span className={compact ? "create-room-avatar compact" : "create-room-avatar"} data-avatar-index={index % 6}>
@@ -19,7 +21,7 @@ function MemberAvatar({ user, index = 0, compact = false }) {
   );
 }
 
-function AvatarStack({ users }) {
+function AvatarStack({ users }: { users: IMUser[] }) {
   const visibleUsers = users.slice(0, 9);
   const overflowCount = Math.max(users.length - visibleUsers.length, 0);
 
@@ -32,6 +34,21 @@ function AvatarStack({ users }) {
     </span>
   );
 }
+
+export type CreateRoomModalProps = {
+  candidates: IMUser[];
+  lockedRoomMemberIDs: string[];
+  onClose: () => void;
+  onCreate: () => void | Promise<void>;
+  onRoomDescriptionChange: (value: string) => void;
+  onRoomMemberIDsChange: Dispatch<SetStateAction<string[]>>;
+  onRoomTitleChange: (value: string) => void;
+  roomDescription: string;
+  roomMemberIDs: string[];
+  roomTitle: string;
+  submitError?: string;
+  t: TranslateFn;
+};
 
 export function CreateRoomModal({
   t,
@@ -46,7 +63,7 @@ export function CreateRoomModal({
   submitError,
   onClose,
   onCreate,
-}) {
+}: CreateRoomModalProps) {
   const candidateIDs = candidates.map((user) => user.id).filter(Boolean);
   const selectableMemberIDs = candidateIDs.filter((id) => !lockedRoomMemberIDs.includes(id));
   const allMembersSelected = candidateIDs.length > 0 && candidateIDs.every((id) => roomMemberIDs.includes(id));

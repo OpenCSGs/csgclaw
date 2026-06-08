@@ -43,7 +43,7 @@ export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   showToolCalls: true,
   isSidebarCollapsed: window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true",
   collapsedWorkspaceGroups: readCollapsedWorkspaceGroups(),
-  activeConversationId: initialPane.type === WorkspacePaneTypes.conversation ? initialPane.id : "",
+  activeConversationId: initialPane.type === WorkspacePaneTypes.conversation ? String(initialPane.id ?? "") : "",
   workspaceTab: workspaceTabForPane(initialPane),
   selectedHubTemplateId: "",
   selectedHubWorkspacePath: "",

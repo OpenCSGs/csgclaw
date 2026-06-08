@@ -74,6 +74,8 @@ function renderHubDetailPane() {
           },
           workspaceFileError: "",
           workspaceFileLoading: false,
+          deleteBusy: false,
+          onDeleteTemplate: vi.fn(),
         },
       }}
     />,

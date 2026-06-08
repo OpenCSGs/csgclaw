@@ -8,26 +8,45 @@ import {
   notificationBotStatusLabel,
   notifierFormIsComplete,
 } from "@/models/agents";
+import type { AgentDraft } from "@/models/agents";
+import type { AgentDetailPaneProps } from "../AgentDetailPane";
+
+export type NotificationBotDetailPaneProps = Pick<
+  AgentDetailPaneProps,
+  | "busyKey"
+  | "error"
+  | "item"
+  | "notifierWebhookPublicOrigin"
+  | "onDelete"
+  | "onDraftChange"
+  | "onOpenDM"
+  | "onSave"
+  | "saveError"
+  | "saving"
+  | "t"
+> & {
+  draft?: AgentDraft | null;
+};
 
 export function NotificationParticipantDetailPane({
   item,
   t,
-  busyKey,
-  error,
-  saveError,
+  busyKey = "",
+  error = "",
+  saveError = "",
   draft,
-  saving,
-  notifierWebhookPublicOrigin,
+  saving = false,
+  notifierWebhookPublicOrigin = "",
   onDraftChange,
   onSave,
   onOpenDM,
   onDelete,
-}) {
+}: NotificationBotDetailPaneProps) {
   const draftBelongsToItem = Boolean(draft) && String(draft?.agent_id ?? "").trim() === String(item?.id ?? "").trim();
   const incomplete = isAgentIncomplete(item, draftBelongsToItem ? draft : undefined);
   const ready = isAgentRunning(item);
   const busyPrefix = `${item.id}:`;
-  const updateDraft = (patch) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
+  const updateDraft = (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
 
   return (
     <section className="entity-pane agent-detail-pane notification-participant-detail-pane">
@@ -90,7 +109,7 @@ export function NotificationParticipantDetailPane({
             </div>
           </section>
           <NotifierControls
-            agentID={item.id}
+            agentID={item.id || ""}
             draft={draft}
             t={t}
             webhookPublicOrigin={notifierWebhookPublicOrigin}

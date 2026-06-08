@@ -1,7 +1,11 @@
 import { Button } from "@/components/ui";
 import type { ConfigPhase } from "@/hooks/workspace/useConfigController";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
-import { configTemplateOptions, configAdvertiseBaseURLPlaceholder, sandboxProviderLabel } from "@/models/configSettings";
+import {
+  configTemplateOptions,
+  configAdvertiseBaseURLPlaceholder,
+  sandboxProviderLabel,
+} from "@/models/configSettings";
 import type { TranslateFn } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { ModalCloseButton } from "./ModalCloseButton";
@@ -44,11 +48,7 @@ export function ConfigSettingsModal({
           ? t("configSettingsRestartingBody")
           : t("configSettingsHint");
   const providerOptions = sandboxProviders.length > 0 ? sandboxProviders : ["boxlite", "docker", "csghub"];
-  const managerTemplateOptions = configTemplateOptions(
-    hubTemplates,
-    "manager",
-    configDraft.default_manager_template,
-  );
+  const managerTemplateOptions = configTemplateOptions(hubTemplates, "manager", configDraft.default_manager_template);
   const managerTemplateLabel =
     managerTemplateOptions.find((option) => option.value === configDraft.default_manager_template)?.label ||
     configDraft.default_manager_template;
@@ -74,13 +74,7 @@ export function ConfigSettingsModal({
             <div className="config-settings-stack">
               <label className="field">
                 <span>{t("configSettingsListenPort")}</span>
-                <input
-                  inputMode="numeric"
-                  value={configDraft.listen_port}
-                  disabled
-                  readOnly
-                  aria-readonly="true"
-                />
+                <input inputMode="numeric" value={configDraft.listen_port} disabled readOnly aria-readonly="true" />
               </label>
               <label className="field">
                 <span>{t("configSettingsAdvertiseBaseURL")}</span>
@@ -91,9 +85,7 @@ export function ConfigSettingsModal({
                   placeholder={configAdvertiseBaseURLPlaceholder(configDraft) || undefined}
                   autoComplete="off"
                   spellCheck={false}
-                  onInput={(event) =>
-                    onDraftChange({ advertise_base_url: event.currentTarget.value.trim() })
-                  }
+                  onInput={(event) => onDraftChange({ advertise_base_url: event.currentTarget.value.trim() })}
                 />
               </label>
             </div>
@@ -143,9 +135,7 @@ export function ConfigSettingsModal({
             <label className="field">
               <span>{t("configSettingsShowUpgrade")}</span>
               <input
-                value={
-                  configDraft.show_upgrade ? t("configSettingsShowUpgradeOn") : t("configSettingsShowUpgradeOff")
-                }
+                value={configDraft.show_upgrade ? t("configSettingsShowUpgradeOn") : t("configSettingsShowUpgradeOff")}
                 disabled
                 readOnly
                 aria-readonly="true"

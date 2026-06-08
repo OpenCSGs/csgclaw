@@ -138,12 +138,12 @@ export function useConversationController({
   const [inviteUserIDs, setInviteUserIDs] = useState<string[]>([]);
   const [submitError, setSubmitError] = useState("");
   const [composerError, setComposerError] = useState("");
-  const editorRef = useRef<HTMLElement | null>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const composerIsComposingRef = useRef(false);
   const composerJustEndedCompositionRef = useRef(false);
   const messageListRef = useRef<HTMLElement | null>(null);
-  const memberMenuRef = useRef<HTMLElement | null>(null);
-  const channelToolsRef = useRef<HTMLElement | null>(null);
+  const memberMenuRef = useRef<HTMLDivElement | null>(null);
+  const channelToolsRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const autoScrollConversationRef = useRef(activeConversationId);
   const activeThreadKeyRef = useRef("");
@@ -229,7 +229,7 @@ export function useConversationController({
     return "";
   }, [activeConversationAgentMembers, logAgent?.id]);
   const activeConversationMembers = activeConversation
-    ? activeConversation.members.map((id) => usersById.get(id)).filter(Boolean)
+    ? activeConversation.members.map((id) => usersById.get(id)).filter((user): user is IMUser => Boolean(user))
     : [];
   const inviteCandidates = activeConversation
     ? data?.users.filter((user) => !activeConversation.members.includes(user.id)) || []
@@ -322,7 +322,7 @@ export function useConversationController({
       }
       if (payload?.type === "message.created" && payload.message) {
         if (threadMessageKey(payload.room_id, payload.message) === activeThreadKeyRef.current) {
-          setActiveThreadView((current) => appendReplyToThreadView(current, payload.message));
+          setActiveThreadView((current) => appendReplyToThreadView(current, payload.message) ?? null);
         }
       }
       if (payload?.type === "upgrade.status_changed" && payload.upgrade) {
@@ -576,7 +576,7 @@ export function useConversationController({
       setComposerError(t("authRequired"));
       return;
     }
-    if (!data || !activeConversation || !draftText.trim()) {
+    if (!data?.current_user_id || !activeConversation || !draftText.trim()) {
       return;
     }
 
@@ -651,7 +651,7 @@ export function useConversationController({
     }
     const serializedDraft = serializeComposerSegments(activeThreadDraftSegments);
     const text = normalizeSlashShorthandForPayload(serializedDraft);
-    if (!data || !activeConversation || !activeThreadRootID || !text.trim()) {
+    if (!data?.current_user_id || !activeConversation || !activeThreadRootID || !text.trim()) {
       return;
     }
 
@@ -667,7 +667,7 @@ export function useConversationController({
         },
       });
       setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, []));
-      setActiveThreadView((current) => appendReplyToThreadView(current, created));
+      setActiveThreadView((current) => appendReplyToThreadView(current, created) ?? null);
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
       await refreshThreadView(activeConversation.id, activeThreadRootID);
     } catch (err) {
@@ -688,12 +688,12 @@ export function useConversationController({
   }
 
   async function createRoom(): Promise<void> {
-    if (!data || !roomTitle.trim()) {
+    if (!data?.current_user_id || !roomTitle.trim()) {
       return;
     }
 
     setSubmitError("");
-    const memberIDs = roomMemberIDs.filter((id) => id && id !== data.current_user_id);
+    const memberIDs = roomMemberIDs.filter((id): id is string => Boolean(id && id !== data.current_user_id));
     try {
       const created = await createRoomRequest({
         title: roomTitle,
@@ -707,7 +707,7 @@ export function useConversationController({
       setComposerError("");
       setShowCreateRoom(false);
     } catch (err) {
-      setSubmitError(localizeError(err.message, t));
+      setSubmitError(localizeError(errorMessage(err, ""), t));
     }
   }
 
@@ -715,8 +715,12 @@ export function useConversationController({
     if (!data) {
       return;
     }
-    const lockedIDs = Array.from(new Set((options.lockedMemberIDs ?? [data.current_user_id]).filter(Boolean)));
-    const selectedIDs = Array.from(new Set((options.preselectedMemberIDs ?? lockedIDs).filter(Boolean)));
+    const lockedIDs = Array.from(
+      new Set((options.lockedMemberIDs ?? [data.current_user_id]).filter((id): id is string => Boolean(id))),
+    );
+    const selectedIDs = Array.from(
+      new Set((options.preselectedMemberIDs ?? lockedIDs).filter((id): id is string => Boolean(id))),
+    );
     setRoomTitle(options.title ?? "");
     setRoomDescription(options.description ?? "");
     setRoomMemberIDs(selectedIDs);
@@ -743,7 +747,7 @@ export function useConversationController({
   }
 
   async function inviteUsers(): Promise<void> {
-    if (!data || !activeConversation || inviteUserIDs.length === 0) {
+    if (!data?.current_user_id || !activeConversation || inviteUserIDs.length === 0) {
       return;
     }
 
@@ -759,7 +763,7 @@ export function useConversationController({
       setComposerError("");
       setShowInvite(false);
     } catch (err) {
-      setSubmitError(localizeError(err.message, t));
+      setSubmitError(localizeError(errorMessage(err, ""), t));
     }
   }
 
@@ -771,7 +775,7 @@ export function useConversationController({
     try {
       await deleteRoomRequest(roomID);
     } catch (err) {
-      setComposerError(localizeError(err.message, t));
+      setComposerError(localizeError(errorMessage(err, ""), t));
       return;
     }
 
@@ -807,7 +811,7 @@ export function useConversationController({
     try {
       clearedRoom = await clearRoomMessagesRequest(roomID);
     } catch (err) {
-      setComposerError(localizeError(err.message, t));
+      setComposerError(localizeError(errorMessage(err, ""), t));
       return;
     }
 
@@ -1182,9 +1186,9 @@ export function buildSlashPickerState(input: SlashPickerStateInput): SlashPicker
       ...builtinSlashCommandNames
         .filter((name) => fuzzySkillMatch(name, query ?? ""))
         .map((name) => ({ name, type: "command" as const })),
-      ...input.skillNames.filter(
-        (name) => !builtinSlashCommandNames.includes(name) && fuzzySkillMatch(name, query ?? ""),
-      ).map((name) => ({ name, type: "skill" as const })),
+      ...input.skillNames
+        .filter((name) => !builtinSlashCommandNames.includes(name) && fuzzySkillMatch(name, query ?? ""))
+        .map((name) => ({ name, type: "skill" as const })),
     ],
   };
 }

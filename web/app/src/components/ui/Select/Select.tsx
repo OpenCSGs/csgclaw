@@ -1,4 +1,4 @@
-import * as RadixSelect from "@radix-ui/react-select";
+import { Select as RadixSelect } from "radix-ui";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef, ReactNode } from "react";

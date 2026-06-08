@@ -15,6 +15,9 @@ import {
   Select,
 } from "@/components/ui";
 import { TaskStatusPill } from "@/components/business";
+import type { CreateWorkspaceTaskPayload } from "@/api/tasks";
+import type { AgentLike } from "@/models/agents";
+import type { TranslateFn } from "@/models/conversations";
 import {
   boardColumnsForTask,
   displayTaskRoom,
@@ -28,7 +31,7 @@ import {
   taskStatusLabel,
   taskUsesExecutionRoom,
 } from "@/models/tasks";
-import type { WorkspaceTask, WorkspaceTeamEvent } from "@/models/tasks";
+import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
 import { MANAGER_AGENT_ID } from "@/shared/constants/agents";
 import "./TasksView.css";
 
@@ -46,15 +49,43 @@ const emptyCreateDraft: TaskCreateDraft = {
   description: "",
 };
 
+type VoidOrPromise = void | Promise<void>;
+
+export type TasksViewProps = {
+  agents?: AgentLike[];
+  createTaskBusy?: boolean;
+  createTaskError?: string;
+  error?: string;
+  loading?: boolean;
+  onCloseCreateTaskModal?: () => void;
+  onCloseParentTaskDetail?: () => void;
+  onCreateTask?: (payload: CreateWorkspaceTaskPayload) => VoidOrPromise;
+  onOpenConversation?: (roomID: string) => VoidOrPromise;
+  onPlanTask?: (taskID: string) => VoidOrPromise;
+  onRefresh?: () => VoidOrPromise;
+  onStartTask?: (taskID: string) => VoidOrPromise;
+  onViewParentDetail?: (taskID: string) => VoidOrPromise;
+  parentDetailTaskID?: string;
+  planTaskBusy?: boolean;
+  selectedTask?: WorkspaceTask | null;
+  showCreateTaskModal?: boolean;
+  startTaskBusy?: boolean;
+  taskActionError?: string;
+  taskEvents?: WorkspaceTeamEvent[];
+  tasks?: WorkspaceTask[];
+  t?: TranslateFn;
+  teams?: WorkspaceTeam[];
+};
+
 export function TasksView({
-  t,
+  t = (key) => key,
   agents = [],
-  tasks,
+  tasks = [],
   taskEvents = [],
   teams = [],
   selectedTask,
-  loading,
-  error,
+  loading = false,
+  error = "",
   taskActionError = "",
   planTaskBusy = false,
   startTaskBusy = false,
@@ -67,10 +98,10 @@ export function TasksView({
   onCreateTask,
   onPlanTask,
   onStartTask,
-  onRefresh,
-  onOpenConversation,
+  onRefresh = () => {},
+  onOpenConversation = () => {},
   onViewParentDetail,
-}) {
+}: TasksViewProps) {
   const parentTasks = useMemo(() => rootTasks(tasks), [tasks]);
   const routedRootTask = useMemo(() => rootTaskForTask(tasks, selectedTask), [selectedTask, tasks]);
   const activeRootTask = routedRootTask ?? parentTasks[0] ?? null;
@@ -85,14 +116,14 @@ export function TasksView({
   const managerIDs = useMemo(() => {
     const idSet = new Set<string>([MANAGER_AGENT_ID]);
     for (const agent of agents) {
-      if (agent.role === "manager") {
+      if (agent.role === "manager" && agent.id) {
         idSet.add(agent.id);
       }
     }
     return idSet;
   }, [agents]);
   const isUnstarted = (status: string) => status === "" || status === "pending";
-  const isPlannableTask = (task: (typeof tasks)[0]) =>
+  const isPlannableTask = (task: WorkspaceTask) =>
     isUnstarted(task.status) || (task.status === "assigned" && managerIDs.has(task.assigned_to));
   const canPlanRootTask = Boolean(activeRootTask && isPlannableTask(activeRootTask) && childTasks.length === 0);
   const canStartRootTask = Boolean(activeRootTask && isUnstarted(activeRootTask.status) && childTasks.length > 0);
@@ -342,6 +373,23 @@ export function TasksView({
   );
 }
 
+type TaskActionStripProps = {
+  canPlanTask: boolean;
+  canStartTask: boolean;
+  conversationLabel?: string;
+  conversationShortLabel?: string;
+  onOpenConversation?: () => VoidOrPromise;
+  onPlanTask?: () => VoidOrPromise;
+  onRefresh: () => VoidOrPromise;
+  onStartTask?: () => VoidOrPromise;
+  onViewParentDetail?: () => VoidOrPromise;
+  planTaskBusy: boolean;
+  showConversation: boolean;
+  showParentDetail?: boolean;
+  startTaskBusy: boolean;
+  t: TranslateFn;
+};
+
 function TaskActionStrip({
   t,
   showConversation,
@@ -357,7 +405,7 @@ function TaskActionStrip({
   onPlanTask = undefined,
   onStartTask = undefined,
   onRefresh,
-}) {
+}: TaskActionStripProps) {
   return (
     <div className="tasks-toolbar" aria-label={t("tasksActionsLabel")}>
       <TaskToolbarButton label={t("tasksRefreshShort")} title={t("tasksRefresh")} onClick={onRefresh} />
@@ -408,7 +456,13 @@ function TaskToolbarButton({ label, title = label, variant = "secondaryGray", ..
   );
 }
 
-function TaskBoardCard({ task, t, onSelect }) {
+type TaskBoardCardProps = {
+  onSelect: () => void;
+  t: TranslateFn;
+  task: WorkspaceTask;
+};
+
+function TaskBoardCard({ task, t, onSelect }: TaskBoardCardProps) {
   const description = task.body || task.plan_summary || task.result || task.error || t("tasksDetailPlaceholder");
 
   return (
@@ -419,6 +473,19 @@ function TaskBoardCard({ task, t, onSelect }) {
     </button>
   );
 }
+
+type TaskDetailDialogProps = {
+  childCount?: number;
+  childTasks?: WorkspaceTask[];
+  onClose?: () => void;
+  onOpenConversation: (roomID: string) => VoidOrPromise;
+  open: boolean;
+  t: TranslateFn;
+  task: WorkspaceTask | null;
+  taskEvents?: WorkspaceTeamEvent[];
+  teams?: WorkspaceTeam[];
+  title?: string;
+};
 
 function TaskDetailDialog({
   t,
@@ -431,7 +498,7 @@ function TaskDetailDialog({
   open,
   onClose,
   onOpenConversation,
-}) {
+}: TaskDetailDialogProps) {
   const dialogTitle = task?.title || title || t("tasksDetailLabel");
   const locale = document.documentElement.lang;
   const detailEvents = useMemo(
@@ -566,7 +633,12 @@ function TaskMetaTag({ label, value }: TaskMetaTagItem) {
   );
 }
 
-function taskMetaTags(task: WorkspaceTask, childCount: number | undefined, t, locale: string): TaskMetaTagItem[] {
+function taskMetaTags(
+  task: WorkspaceTask,
+  childCount: number | undefined,
+  t: TranslateFn,
+  locale: string,
+): TaskMetaTagItem[] {
   const tags: TaskMetaTagItem[] = [
     {
       key: "kind",
@@ -652,7 +724,7 @@ function taskTimelineEntries(
   task: WorkspaceTask,
   childTasks: readonly WorkspaceTask[],
   events: readonly WorkspaceTeamEvent[],
-  t,
+  t: TranslateFn,
   locale: string,
 ): TaskTimelineEntry[] {
   const tasksByID = new Map([task, ...childTasks].map((item) => [item.id, item]));
@@ -668,7 +740,7 @@ function taskTimelineEntries(
 function taskTimelineEntryForEvent(
   event: WorkspaceTeamEvent,
   tasksByID: ReadonlyMap<string, WorkspaceTask>,
-  t,
+  t: TranslateFn,
   locale: string,
 ): TaskTimelineEntry | null {
   const title = taskEventTitle(event.type, t);
@@ -691,7 +763,7 @@ function taskTimelineEntryForEvent(
 function syntheticTimelineEntries(
   task: WorkspaceTask,
   existingEventTypes: ReadonlySet<string>,
-  t,
+  t: TranslateFn,
   locale: string,
 ): TaskTimelineEntry[] {
   const entries: TaskTimelineEntry[] = [];
@@ -741,7 +813,7 @@ function syntheticTimelineEntries(
   return entries;
 }
 
-function taskEventTitle(type: string, t): string {
+function taskEventTitle(type: string, t: TranslateFn): string {
   switch (type) {
     case "task.created":
       return t("taskTimelineCreated");
@@ -780,8 +852,8 @@ function taskEventMeta(event: WorkspaceTeamEvent, locale: string): string {
   return [formatTaskUpdatedAt(event.created_at, locale), event.actor_id].filter(Boolean).join(" · ");
 }
 
-function taskEventBody(event: WorkspaceTeamEvent, t): string {
-  const lines = [];
+function taskEventBody(event: WorkspaceTeamEvent, t: TranslateFn): string {
+  const lines: string[] = [];
   if (event.summary) {
     lines.push(event.summary);
   }

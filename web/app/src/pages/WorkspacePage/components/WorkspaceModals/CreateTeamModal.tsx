@@ -31,7 +31,7 @@ export function CreateTeamModal({
   onClose,
   onCreate,
 }: CreateTeamModalProps) {
-  const candidateIDs = candidates.map((item) => String(item.id)).filter(Boolean);
+  const candidateIDs = candidates.map((item) => item.id).filter((id): id is string => Boolean(id));
   const allCandidatesSelected = candidateIDs.length > 0 && candidateIDs.every((id) => teamMemberIDs.includes(id));
   const selectedMemberCount = candidateIDs.filter((id) => teamMemberIDs.includes(id)).length;
 
@@ -77,17 +77,23 @@ export function CreateTeamModal({
                     {selectedMemberCount}/{candidateIDs.length}
                   </small>
                 </label>
-                {candidates.map((item) => (
-                  <label key={item.id} className="selection-item">
-                    <input
-                      type="checkbox"
-                      checked={teamMemberIDs.includes(item.id)}
-                      onChange={() => onTeamMemberIDsChange((current) => toggleSelection(current, item.id))}
-                    />
-                    <span>{item.name || item.id}</span>
-                    <small>{item.role || "-"}</small>
-                  </label>
-                ))}
+                {candidates.map((item) => {
+                  const itemID = item.id || "";
+                  return (
+                    <label key={itemID || item.name} className="selection-item">
+                      <input
+                        type="checkbox"
+                        checked={itemID ? teamMemberIDs.includes(itemID) : false}
+                        disabled={!itemID}
+                        onChange={() =>
+                          itemID ? onTeamMemberIDsChange((current) => toggleSelection(current, itemID)) : undefined
+                        }
+                      />
+                      <span>{item.name || itemID}</span>
+                      <small>{item.role || "-"}</small>
+                    </label>
+                  );
+                })}
               </>
             ) : (
               <div className="selection-empty">{t("teamNoMembersHint")}</div>

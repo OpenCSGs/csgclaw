@@ -78,19 +78,21 @@ export type AgentLike = AgentProfileLike & {
   status?: string | null;
   template_name?: string | null;
   user_id?: string | null;
-  participants?: {
-    agent_id?: string | null;
-    channel?: string | null;
-    channel_app_ref?: string | null;
-    channel_user_kind?: string | null;
-    channel_user_ref?: string | null;
-    id?: string | null;
-    lifecycle_status?: string | null;
-    mentionable?: boolean | null;
-    metadata?: JSONRecord | null;
-    name?: string | null;
-    type?: string | null;
-  }[] | null;
+  participants?:
+    | {
+        agent_id?: string | null;
+        channel?: string | null;
+        channel_app_ref?: string | null;
+        channel_user_kind?: string | null;
+        channel_user_ref?: string | null;
+        id?: string | null;
+        lifecycle_status?: string | null;
+        mentionable?: boolean | null;
+        metadata?: JSONRecord | null;
+        name?: string | null;
+        type?: string | null;
+      }[]
+    | null;
 };
 
 export type AvatarLikeUser = {
@@ -136,7 +138,11 @@ export type AgentDraft = {
   template_name?: string;
 };
 
-export type AgentDraftSource = AgentLike & Partial<AgentDraft>;
+type NullableAgentDraftFields = {
+  [Key in keyof AgentDraft]?: AgentDraft[Key] | null;
+};
+
+export type AgentDraftSource = AgentLike & NullableAgentDraftFields;
 
 export type AgentTemplateLike = {
   description?: string | null;
@@ -299,7 +305,9 @@ export function partitionWorkspaceAgentItems(
   const manager = (agents ?? []).find((item) => item.role === MANAGER_AGENT_ROLE || item.id === managerID) ?? null;
   const rest = (agents ?? []).filter((item) => item.id !== manager?.id);
   const notificationAgentItems = rest.filter((item) => isNotificationBotAgent(item));
-  const workerAgentItems = [manager, ...rest.filter((item) => !isNotificationBotAgent(item))].filter(Boolean);
+  const workerAgentItems = [manager, ...rest.filter((item) => !isNotificationBotAgent(item))].filter(
+    (item): item is AgentLike => Boolean(item),
+  );
   return { workerAgentItems, notificationAgentItems };
 }
 
@@ -814,6 +822,18 @@ export function pickDefaultAgentTemplate(
 }
 
 export function applyTemplateToDraft(
+  draft: AgentDraft,
+  template: AgentTemplateLike | null | undefined,
+  bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
+  fallbackImage?: string,
+): AgentDraft;
+export function applyTemplateToDraft(
+  draft: null | undefined,
+  template: AgentTemplateLike | null | undefined,
+  bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
+  fallbackImage?: string,
+): null | undefined;
+export function applyTemplateToDraft(
   draft: AgentDraft | null | undefined,
   template: AgentTemplateLike | null | undefined,
   bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
@@ -990,7 +1010,7 @@ export function mapImageEnvToRows(contracts: readonly ImageEnvContract[] | null 
 
 export function envRowsToMap(rows: readonly EnvKeyValueRow[] | null | undefined): Record<string, string> {
   const result: Record<string, string> = {};
-  const seen = new Set();
+  const seen = new Set<string>();
   for (const row of rows ?? []) {
     const key = String(row?.key ?? "").trim();
     const value = String(row?.value ?? "");
@@ -1191,8 +1211,9 @@ export function runtimeImageForKind(
     return "";
   }
   const images = normalizeRuntimeImageMap(bootstrapConfig?.runtime_default_images);
-  if (images[runtimeKind]) {
-    return images[runtimeKind];
+  const configuredImage = images[runtimeKind];
+  if (configuredImage) {
+    return configuredImage;
   }
   if (normalizeRuntimeKind(bootstrapConfig?.runtime_kind) === runtimeKind && bootstrapConfig?.effective_manager_image) {
     return String(bootstrapConfig.effective_manager_image).trim();

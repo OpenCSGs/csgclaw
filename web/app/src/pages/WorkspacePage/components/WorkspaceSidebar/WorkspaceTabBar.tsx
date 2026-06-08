@@ -2,6 +2,15 @@ import { Button } from "@/components/ui";
 import { HubIcon, RoomsIcon, UsersIcon } from "@/components/ui/Icons";
 import { WorkspaceTabs } from "@/models/routing";
 import { ListTodo } from "lucide-react";
+import type { WorkspaceSidebarProps } from "./types";
+
+type WorkspaceTabBarProps = Pick<
+  WorkspaceSidebarProps,
+  "onSelectHub" | "onWorkspaceTabChange" | "roomCount" | "t" | "taskCount" | "workspaceTab"
+> & {
+  agentCount: number;
+  variant?: "default" | "rail";
+};
 
 export function WorkspaceTabBar({
   workspaceTab,
@@ -12,7 +21,7 @@ export function WorkspaceTabBar({
   onSelectHub,
   t,
   variant = "default",
-}) {
+}: WorkspaceTabBarProps) {
   const rail = variant === "rail";
   return (
     <div

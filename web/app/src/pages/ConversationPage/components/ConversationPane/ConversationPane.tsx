@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction } from "react";
 import { Logs, RefreshCw, X } from "lucide-react";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
+import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import {
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui";
 import { AddUserIcon, IconImage, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
 import {
+  type ComposerMentionUser,
   type ComposerSegment,
   insertComposerSegmentsAtSelection,
   areComposerSegmentsEqual,
@@ -37,6 +39,7 @@ import {
   placeCaretAtEnd,
 } from "@/models/composer";
 import { isAgentRunning, normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
+import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import {
   agentMatchesUser,
@@ -44,11 +47,21 @@ import {
   formatMessageTimestampParts,
   formatThreadReplyCount,
   getConversationDescription,
+  type IMConversation,
+  type IMMessage,
+  type IMUser,
   isDirectConversation,
   isEventMessage,
   isToolCallMessage,
+  type LocaleCode,
+  type MessageTimestampParts,
+  type ThreadView,
+  type TranslateFn,
+  type UsersById,
 } from "@/models/conversations";
 import { localizeRole } from "@/shared/i18n";
+import type { ThemeMode } from "@/shared/theme/theme";
+import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 
 type ThreadMentionState = {
   endOffset: number;
@@ -59,10 +72,84 @@ type ThreadMentionState = {
   textNode?: Node;
 };
 
+type BooleanStateSetter = Dispatch<SetStateAction<boolean>>;
+type MentionPickerUser = ComposerMentionUser & Pick<IMUser, "avatar" | "role">;
+type VoidOrPromise = void | Promise<void>;
+
+export type ConversationPaneProps = {
+  activeThreadRootID?: string;
+  activeThreadView?: ThreadView | null;
+  agents?: AgentLike[];
+  authBusyProvider: string;
+  authStatuses: CLIProxyAuthStatusMap;
+  channelToolsRef: RefObject<HTMLDivElement | null>;
+  composerError: string;
+  conversation: IMConversation;
+  conversationMembers: IMUser[];
+  currentUserID?: string;
+  draftSegments: ComposerSegment[];
+  draftText: string;
+  editorRef: RefObject<HTMLDivElement | null>;
+  inviteActionLabel: string;
+  locale: LocaleCode;
+  logAgent?: AgentLike | null;
+  managerProfile?: AgentProfileLike | null;
+  managerProfileIncomplete?: boolean | null;
+  memberMenuRef: RefObject<HTMLDivElement | null>;
+  mentionCandidates: MentionPickerUser[];
+  mentionIndex: number;
+  mentionableUsersByHandle: Map<string, ComposerMentionUser>;
+  messageActionBusy: string;
+  messageActionError: MessageActionError;
+  messageListRef: RefObject<HTMLElement | null>;
+  onApplyMention: (user: MentionPickerUser) => void;
+  onApplySlashCandidate?: (name: string) => void;
+  onApplyThreadSlashCandidate?: (name: string) => void;
+  onClearRoomMessages?: (id: string) => VoidOrPromise;
+  onCloseThread: () => void;
+  onComposerCompositionEnd: () => void;
+  onComposerCompositionStart: () => void;
+  onComposerKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
+  onDeleteRoom: (id: string) => VoidOrPromise;
+  onDismissThreadSlashPicker?: () => void;
+  onInviteAction: () => void;
+  onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
+  onOpenThread: (message: IMMessage) => VoidOrPromise;
+  onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onProviderLogin: (provider: string) => VoidOrPromise;
+  onSendMessage: () => VoidOrPromise;
+  onSendThreadReply: () => VoidOrPromise;
+  onSetThreadSlashIndex?: (index: number) => void;
+  onSyncComposer: () => void;
+  onThreadDraftChange: (segments: ComposerSegment[]) => void;
+  onToggleChannelTools: BooleanStateSetter;
+  onToggleMemberList: BooleanStateSetter;
+  onToggleToolCalls: BooleanStateSetter;
+  selectedMessageCount: number;
+  showChannelTools: boolean;
+  showMemberList: boolean;
+  showToolCalls: boolean;
+  slashCandidates?: SlashPickerCandidate[];
+  slashIndex?: number;
+  slashPickerLoading?: boolean;
+  slashPickerOpen?: boolean;
+  t: TranslateFn;
+  theme: ThemeMode;
+  threadDraftSegments: ComposerSegment[];
+  threadError: string;
+  threadLoading: boolean;
+  threadSlashCandidates?: SlashPickerCandidate[];
+  threadSlashIndex?: number;
+  threadSlashPickerLoading?: boolean;
+  threadSlashPickerOpen?: boolean;
+  usersById: UsersById;
+  visibleMessages: IMMessage[];
+};
+
 export function ConversationPane({
   conversation,
   visibleMessages,
-  currentUserID,
+  currentUserID = "",
   usersById,
   agents = [],
   locale,
@@ -127,7 +214,7 @@ export function ConversationPane({
   onCloseThread,
   onThreadDraftChange,
   onSendThreadReply,
-}) {
+}: ConversationPaneProps) {
   const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
   const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
   const [logModalOpen, setLogModalOpen] = useState(false);
@@ -137,7 +224,8 @@ export function ConversationPane({
   const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
   const logAgentID = logAgent?.id || "";
-  const logAgentName = logAgent?.name || conversation.title;
+  const logAgentName = logAgent?.name || conversation.title || "";
+  const composerDisabled = Boolean(managerProfileIncomplete);
 
   useEffect(() => {
     setLogModalOpen(false);
@@ -236,7 +324,7 @@ export function ConversationPane({
                             <div className="member-row-main">
                               <div className="member-row-name">{user.name}</div>
                               <div className="member-row-meta">
-                                @{user.handle} · {localizeRole(user.role, t)}
+                                @{user.handle} · {localizeRole(user.role || "", t)}
                               </div>
                             </div>
                           </div>
@@ -366,7 +454,7 @@ export function ConversationPane({
               </Fragment>
             );
           }
-          const user = usersById.get(message.sender_id);
+          const user = usersById.get(message.sender_id || "");
           if (!user) {
             return null;
           }
@@ -483,13 +571,13 @@ export function ConversationPane({
           <div className="composer-input-wrap">
             {draftSegments.length === 0 ? (
               <div className="composer-placeholder" aria-hidden="true">
-                {managerProfileIncomplete ? t("profileIncomplete") : t("inputPlaceholder")}
+                {composerDisabled ? t("profileIncomplete") : t("inputPlaceholder")}
               </div>
             ) : null}
             <div
               ref={editorRef}
-              className={`composer-editor ${managerProfileIncomplete ? "disabled" : ""}`}
-              contentEditable={managerProfileIncomplete ? "false" : "true"}
+              className={`composer-editor ${composerDisabled ? "disabled" : ""}`}
+              contentEditable={composerDisabled ? "false" : "true"}
               suppressContentEditableWarning={true}
               aria-label={t("inputPlaceholder")}
               onInput={onSyncComposer}
@@ -515,7 +603,7 @@ export function ConversationPane({
               className="composer-send-button"
               aria-label={t("send")}
               title={t("send")}
-              disabled={managerProfileIncomplete || !draftText.trim()}
+              disabled={composerDisabled || !draftText.trim()}
               onClick={onSendMessage}
             >
               <span className="composer-send-main" aria-hidden="true">
@@ -533,7 +621,7 @@ export function ConversationPane({
           loading={threadLoading}
           error={threadError}
           draftSegments={threadDraftSegments}
-          disabled={managerProfileIncomplete}
+          disabled={composerDisabled}
           usersById={usersById}
           locale={locale}
           theme={theme}
@@ -645,7 +733,23 @@ function handleSlashPickerNavigation({
   return false;
 }
 
-function MentionPicker({ users = [], activeIndex = 0, className = "", showRole = true, t, onSelect }) {
+type MentionPickerProps = {
+  activeIndex?: number;
+  className?: string;
+  onSelect: (user: MentionPickerUser) => void;
+  showRole?: boolean;
+  t: TranslateFn;
+  users?: MentionPickerUser[];
+};
+
+function MentionPicker({
+  users = [],
+  activeIndex = 0,
+  className = "",
+  showRole = true,
+  t,
+  onSelect,
+}: MentionPickerProps) {
   const activeOptionRef = useRef<HTMLButtonElement | null>(null);
   const activeUserID = users[activeIndex]?.id || "";
 
@@ -677,7 +781,7 @@ function MentionPicker({ users = [], activeIndex = 0, className = "", showRole =
             <div className="message-author">{user.name}</div>
             <div className="conversation-preview">
               @{user.handle}
-              {showRole ? ` · ${localizeRole(user.role, t)}` : ""}
+              {showRole ? ` · ${localizeRole(user.role || "", t)}` : ""}
             </div>
           </div>
         </button>
@@ -686,7 +790,23 @@ function MentionPicker({ users = [], activeIndex = 0, className = "", showRole =
   );
 }
 
-function SlashPicker({ candidates = [], activeIndex = 0, loading = false, className = "", t, onSelect }) {
+type SlashPickerProps = {
+  activeIndex?: number;
+  candidates?: SlashPickerCandidate[];
+  className?: string;
+  loading?: boolean;
+  onSelect: (name: string) => void;
+  t: TranslateFn;
+};
+
+function SlashPicker({
+  candidates = [],
+  activeIndex = 0,
+  loading = false,
+  className = "",
+  t,
+  onSelect,
+}: SlashPickerProps) {
   const activeOptionRef = useRef<HTMLButtonElement | null>(null);
   const activeCandidate = candidates[activeIndex] || null;
   const activeCandidateKey = activeCandidate ? `${activeCandidate.type}:${activeCandidate.name}` : "";
@@ -767,7 +887,17 @@ function RoomDangerConfirmDialog({
   );
 }
 
-function AgentLogsDialog({ agentName, content, error, loading, t, onClose, onRefresh }) {
+type AgentLogsDialogProps = {
+  agentName: string;
+  content: string;
+  error: string;
+  loading: boolean;
+  onClose: () => void;
+  onRefresh: () => VoidOrPromise;
+  t: TranslateFn;
+};
+
+function AgentLogsDialog({ agentName, content, error, loading, t, onClose, onRefresh }: AgentLogsDialogProps) {
   const logsViewerRef = useRef<HTMLPreElement | null>(null);
   const displayContent = content || (loading ? t("agentLogsLoading") : t("agentLogsEmpty"));
 
@@ -821,6 +951,31 @@ function AgentLogsDialog({ agentName, content, error, loading, t, onClose, onRef
   );
 }
 
+type ThreadPanelProps = {
+  disabled: boolean;
+  draftSegments: ComposerSegment[];
+  error: string;
+  loading: boolean;
+  locale: LocaleCode;
+  mentionableUsers?: MentionPickerUser[];
+  onApplyThreadSlashCandidate?: (name: string) => void;
+  onClose: () => void;
+  onDismissThreadSlashPicker?: () => void;
+  onDraftChange: (segments: ComposerSegment[]) => void;
+  onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onSend: () => VoidOrPromise;
+  onSetThreadSlashIndex?: (index: number) => void;
+  showToolCalls: boolean;
+  t: TranslateFn;
+  theme: ThemeMode;
+  thread?: ThreadView | null;
+  threadSlashCandidates?: SlashPickerCandidate[];
+  threadSlashIndex?: number;
+  threadSlashPickerLoading?: boolean;
+  threadSlashPickerOpen?: boolean;
+  usersById: UsersById;
+};
+
 function ThreadPanel({
   thread,
   loading,
@@ -844,7 +999,7 @@ function ThreadPanel({
   onPreviewUser,
   mentionableUsers = [],
   onSend,
-}) {
+}: ThreadPanelProps) {
   const threadBodyRef = useRef<HTMLDivElement | null>(null);
   const threadEditorRef = useRef<HTMLDivElement | null>(null);
   const [mentionState, setMentionState] = useState<ThreadMentionState | null>(null);
@@ -874,7 +1029,7 @@ function ThreadPanel({
     if (!mentionState) {
       return [];
     }
-    return getMentionCandidates(mentionableUsers, mentionState.query);
+    return getMentionCandidates(mentionableUsers, mentionState.query) as MentionPickerUser[];
   }, [mentionState, mentionableUsers]);
 
   useLayoutEffect(() => {
@@ -946,7 +1101,7 @@ function ThreadPanel({
     }
   }
 
-  function insertThreadMention(user) {
+  function insertThreadMention(user: MentionPickerUser | null | undefined) {
     const target = threadEditorRef.current;
     if (!target || !mentionState || !user) {
       return;
@@ -1153,8 +1308,18 @@ function ThreadPanel({
   );
 }
 
-function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, compact = false }) {
-  const user = usersById.get(message.sender_id);
+type ThreadMessageProps = {
+  compact?: boolean;
+  locale: LocaleCode;
+  message: IMMessage;
+  onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  t: TranslateFn;
+  theme: ThemeMode;
+  usersById: UsersById;
+};
+
+function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, compact = false }: ThreadMessageProps) {
+  const user = usersById.get(message.sender_id || "");
   const fallbackName = message.sender_id || "";
   const avatar = user?.avatar || fallbackName.slice(0, 1).toUpperCase();
   const name = user?.name || user?.handle || fallbackName;
@@ -1189,7 +1354,7 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
   );
 }
 
-function MessageTimestamp({ parts }) {
+function MessageTimestamp({ parts }: { parts: MessageTimestampParts }) {
   if (!parts.shortLabel) {
     return null;
   }
@@ -1207,7 +1372,7 @@ function MessageTimestamp({ parts }) {
   );
 }
 
-function MessageTimeDivider({ parts }) {
+function MessageTimeDivider({ parts }: { parts: MessageTimestampParts }) {
   if (!parts.dividerLabel) {
     return null;
   }
@@ -1226,14 +1391,20 @@ function MessageTimeDivider({ parts }) {
   );
 }
 
-function shouldShowMessageDateDivider(previousMessage, currentMessage) {
+function shouldShowMessageDateDivider(
+  previousMessage: IMMessage | null | undefined,
+  currentMessage: IMMessage | null | undefined,
+): boolean {
   if (!previousMessage) {
     return hasValidMessageTime(currentMessage);
   }
   return !isSameMessageDate(previousMessage, currentMessage);
 }
 
-function isSameMessageDate(previousMessage, currentMessage) {
+function isSameMessageDate(
+  previousMessage: IMMessage | null | undefined,
+  currentMessage: IMMessage | null | undefined,
+): boolean {
   const previousAt = Date.parse(previousMessage?.created_at || "");
   const currentAt = Date.parse(currentMessage?.created_at || "");
   if (!Number.isFinite(previousAt) || !Number.isFinite(currentAt)) {
@@ -1248,6 +1419,6 @@ function isSameMessageDate(previousMessage, currentMessage) {
   );
 }
 
-function hasValidMessageTime(message) {
+function hasValidMessageTime(message: IMMessage | null | undefined): boolean {
   return Number.isFinite(Date.parse(message?.created_at || ""));
 }
