@@ -288,7 +288,7 @@ export function useWorkspaceController() {
       onToggleWorkspaceGroup: shell.toggleWorkspaceGroup,
       onCreateRoom: () => conversation.openCreateRoomModal(),
       onCreateAgent: agent.openCreateAgentModal,
-      onCreateNotificationBot: agent.openCreateNotificationBotModal,
+      onCreateNotificationParticipant: agent.openCreateNotificationParticipantModal,
       onCreateTeam: async ({ title, lead_bot_id, member_bot_ids }) => {
         await agent.agentViewProps.onCreateTeam?.({
           channel: "csgclaw",

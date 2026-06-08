@@ -579,7 +579,7 @@ export function useAgentController({
     });
   }
 
-  async function openCreateNotificationBotModal(): Promise<void> {
+  async function openCreateNotificationParticipantModal(): Promise<void> {
     setAgentModalMode("create");
     setAgentCreateBotKind(BOT_CREATE_KIND_NOTIFICATION);
     setEditingAgent(null);
@@ -1147,7 +1147,7 @@ export function useAgentController({
     notificationAgentItems,
     openCreateAgentModal,
     openCreateTeamModal,
-    openCreateNotificationBotModal,
+    openCreateNotificationParticipantModal,
     openEditAgentModal,
     runningAgentCount,
     runAgentAction,

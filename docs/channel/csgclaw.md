@@ -65,11 +65,11 @@ Notification senders are CSGClaw participants with `type=notification`. They do 
 - Delete: `DELETE /api/v1/channels/csgclaw/participants/{id}`
 - Push (webhook): `POST /api/v1/channels/csgclaw/participants/{id}/notifications` with `Authorization: Bearer <webhook_token>`
 
-Implementation: `internal/channel/csgclaw/notification_bot/`, `internal/bot/notification.go`.
+Implementation: `internal/channel/csgclaw/notification/`.
 
 ## csgclaw.notify_card payload
 
-Notification deliveries (GitLab/GitHub webhooks, and so on) to the CSGClaw Web IM use this type: the message **`content` is a single JSON object** produced by `internal/channel/csgclaw/notification_bot`, and the Web UI renders it as a structured card (title, badge, meta rows, optional link, optional collapsible raw JSON).
+Notification deliveries (GitLab/GitHub webhooks, and so on) to the CSGClaw Web IM use this type: the message **`content` is a single JSON object** produced by `internal/channel/csgclaw/notification`, and the Web UI renders it as a structured card (title, badge, meta rows, optional link, optional collapsible raw JSON).
 
 ```json
 {
@@ -106,5 +106,5 @@ Notification deliveries (GitLab/GitHub webhooks, and so on) to the CSGClaw Web I
 
 - Frontend parser/renderer: `web/app/src/components/business/MessageContent/MessageContent.tsx`, `web/app/src/components/business/MessageContent/structuredMessages.ts`
 - Action-card and notifier-card test coverage: `web/app/tests/legacy-contract.test.ts`, `web/app/tests/components/MessageContent/structuredMessages.test.ts`
-- Notification card encoding: `internal/channel/csgclaw/notification_bot/notify_card.go`, `internal/channel/csgclaw/notification_bot/notify_webhooks.go`
+- Notification card encoding: `internal/channel/csgclaw/notification/notify_card.go`, `internal/channel/csgclaw/notification/notify_webhooks.go`
 - Feishu setup command output: `internal/templates/embed/runtimes/picoclaw/manager/workspace/skills/feishu/scripts/feishu_setup/csgclaw.py`

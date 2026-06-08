@@ -15,12 +15,12 @@ import (
 
 	"csgclaw/cli/command"
 	"csgclaw/internal/agent"
-	"csgclaw/internal/bot"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	internalonboard "csgclaw/internal/onboard"
+	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/server"
@@ -141,12 +141,12 @@ func TestServeRunSkipsAutoBootstrapWhenStateComplete(t *testing.T) {
 			t.Fatalf("DetectStateOptions.ConfigPath = %q, want %q", opts.ConfigPath, configPath)
 		}
 		return internalonboard.DetectStateResult{
-			ConfigPath:           configPath,
-			ConfigExists:         true,
-			ConfigComplete:       true,
-			IMBootstrapComplete:  true,
-			ManagerAgentComplete: true,
-			ManagerBotComplete:   true,
+			ConfigPath:                 configPath,
+			ConfigExists:               true,
+			ConfigComplete:             true,
+			IMBootstrapComplete:        true,
+			ManagerAgentComplete:       true,
+			ManagerParticipantComplete: true,
 		}, nil
 	}
 	EnsureBootstrapState = func(context.Context, internalonboard.EnsureStateOptions) (internalonboard.EnsureStateResult, error) {
@@ -171,15 +171,15 @@ func TestServeRunSkipsBootstrapWhenStateComplete(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
 	t.Setenv("HOME", t.TempDir())
-	origCreateManagerBot := internalonboard.CreateManagerBot
+	origCreateManagerParticipant := internalonboard.CreateManagerParticipant
 	origEnsureIMBootstrapState := internalonboard.EnsureIMBootstrapState
 	t.Cleanup(func() {
-		internalonboard.CreateManagerBot = origCreateManagerBot
+		internalonboard.CreateManagerParticipant = origCreateManagerParticipant
 		internalonboard.EnsureIMBootstrapState = origEnsureIMBootstrapState
 	})
 	internalonboard.EnsureIMBootstrapState = func(string) error { return nil }
-	internalonboard.CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
-		return bot.Bot{ID: agent.ManagerUserID}, nil
+	internalonboard.CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
+		return participant.Participant{ID: agent.ManagerParticipantID}, nil
 	}
 
 	origDetectBootstrapState := DetectBootstrapState
@@ -214,12 +214,12 @@ debian_registries_override = []
 			t.Fatalf("DetectStateOptions.ConfigPath = %q, want %q", opts.ConfigPath, configPath)
 		}
 		return internalonboard.DetectStateResult{
-			ConfigPath:           configPath,
-			ConfigExists:         true,
-			ConfigComplete:       true,
-			IMBootstrapComplete:  true,
-			ManagerAgentComplete: true,
-			ManagerBotComplete:   true,
+			ConfigPath:                 configPath,
+			ConfigExists:               true,
+			ConfigComplete:             true,
+			IMBootstrapComplete:        true,
+			ManagerAgentComplete:       true,
+			ManagerParticipantComplete: true,
 		}, nil
 	}
 	EnsureBootstrapState = func(_ context.Context, opts internalonboard.EnsureStateOptions) (internalonboard.EnsureStateResult, error) {
@@ -420,12 +420,12 @@ func TestServeRunRepeatedAutoBootstrapRemainsIdempotent(t *testing.T) {
 			t.Fatalf("DetectStateOptions.ConfigPath = %q, want %q", opts.ConfigPath, configPath)
 		}
 		return internalonboard.DetectStateResult{
-			ConfigPath:           configPath,
-			ConfigExists:         true,
-			ConfigComplete:       complete,
-			IMBootstrapComplete:  complete,
-			ManagerAgentComplete: complete,
-			ManagerBotComplete:   complete,
+			ConfigPath:                 configPath,
+			ConfigExists:               true,
+			ConfigComplete:             complete,
+			IMBootstrapComplete:        complete,
+			ManagerAgentComplete:       complete,
+			ManagerParticipantComplete: complete,
 		}, nil
 	}
 	EnsureBootstrapState = func(_ context.Context, opts internalonboard.EnsureStateOptions) (internalonboard.EnsureStateResult, error) {
@@ -460,7 +460,6 @@ func TestServeRunRepeatedAutoBootstrapRemainsIdempotent(t *testing.T) {
 func TestServeForegroundPassesContextToServer(t *testing.T) {
 	origRunServer := RunServer
 	origNewAgentService := NewAgentService
-	origNewBotService := NewBotService
 	origNewIMService := NewIMService
 	origNewFeishuService := NewFeishuService
 	origNewLLMService := NewLLMService
@@ -472,7 +471,6 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	t.Cleanup(func() {
 		RunServer = origRunServer
 		NewAgentService = origNewAgentService
-		NewBotService = origNewBotService
 		NewIMService = origNewIMService
 		NewFeishuService = origNewFeishuService
 		NewLLMService = origNewLLMService
@@ -491,10 +489,6 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	}
 	NewIMService = func(*im.Bus) (*im.Service, error) {
 		return nil, nil
-	}
-	wantBotSvc := &bot.Service{}
-	NewBotService = func() (*bot.Service, error) {
-		return wantBotSvc, nil
 	}
 	NewFeishuService = func(provider feishu.Provider) (*feishu.Service, error) {
 		if provider == nil {
@@ -538,9 +532,6 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		called = true
 		if opts.Context != ctx {
 			return fmt.Errorf("Context = %v, want %v", opts.Context, ctx)
-		}
-		if opts.Bot != wantBotSvc {
-			return fmt.Errorf("Bot = %v, want injected bot service", opts.Bot)
 		}
 		if !opts.NoAuth {
 			return fmt.Errorf("NoAuth = false, want true")
@@ -701,7 +692,7 @@ func TestStartServerWithConfigPathLoadsPersistedUpgradeFailure(t *testing.T) {
 		},
 	}
 
-	if err := startServerWithConfigPath(context.Background(), run, cfg, nil, nil, nil, nil, nil, configPath, "table"); err != nil {
+	if err := startServerWithConfigPath(context.Background(), run, cfg, nil, nil, nil, nil, configPath, "table"); err != nil {
 		t.Fatalf("startServerWithConfigPath() error = %v", err)
 	}
 	if _, err := os.Stat(artifacts.StatusPath); !errors.Is(err, os.ErrNotExist) {
@@ -1374,7 +1365,6 @@ func stubServeDependencies(t *testing.T) func() {
 	t.Helper()
 	origRunServer := RunServer
 	origNewAgentService := NewAgentService
-	origNewBotService := NewBotService
 	origNewIMService := NewIMService
 	origNewFeishuService := NewFeishuService
 	origNewLLMService := NewLLMService
@@ -1397,7 +1387,6 @@ func stubServeDependencies(t *testing.T) func() {
 	NewAgentService = func(config.Config, feishu.BotCredentialProvider) (*agent.Service, error) {
 		return &agent.Service{}, nil
 	}
-	NewBotService = func() (*bot.Service, error) { return &bot.Service{}, nil }
 	NewIMService = func(*im.Bus) (*im.Service, error) { return nil, nil }
 	NewFeishuService = func(feishu.Provider) (*feishu.Service, error) { return nil, nil }
 	NewLLMService = func(config.Config, *agent.Service) (*llm.Service, error) { return nil, nil }
@@ -1411,18 +1400,17 @@ func stubServeDependencies(t *testing.T) func() {
 	WaitForHealthy = func(string, time.Duration) error { return nil }
 	DetectBootstrapState = func(internalonboard.DetectStateOptions) (internalonboard.DetectStateResult, error) {
 		return internalonboard.DetectStateResult{
-			ConfigExists:         true,
-			ConfigComplete:       true,
-			IMBootstrapComplete:  true,
-			ManagerAgentComplete: true,
-			ManagerBotComplete:   true,
+			ConfigExists:               true,
+			ConfigComplete:             true,
+			IMBootstrapComplete:        true,
+			ManagerAgentComplete:       true,
+			ManagerParticipantComplete: true,
 		}, nil
 	}
 	EnsureBootstrapState = internalonboard.EnsureState
 	return func() {
 		RunServer = origRunServer
 		NewAgentService = origNewAgentService
-		NewBotService = origNewBotService
 		NewIMService = origNewIMService
 		NewFeishuService = origNewFeishuService
 		NewLLMService = origNewLLMService

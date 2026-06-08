@@ -15,9 +15,8 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
-	"csgclaw/internal/bot"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
-	"csgclaw/internal/channel/csgclaw/notification_bot"
+	"csgclaw/internal/channel/csgclaw/notification"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
@@ -34,13 +33,12 @@ import (
 
 type Handler struct {
 	svc                 *agent.Service
-	botSvc              *bot.Service
 	participant         *participant.Service
 	im                  *im.Service
 	csgclaw             *csgclawchannel.Service
 	imBus               *im.Bus
 	imProvisioner       *im.Provisioner
-	botBridge           *im.BotBridge
+	participantBridge   *im.ParticipantBridge
 	feishu              *feishu.Service
 	llm                 *llm.Service
 	hub                 *hub.Service
@@ -53,7 +51,7 @@ type Handler struct {
 	upgradeConfigPath   string
 	upgradeApply        func(upgrade.ApplyHelperOptions) error
 	localRuntimeImages  func(context.Context, config.Config) ([]string, error)
-	notificationDeliver notification_bot.Fanouter
+	notificationDeliver notification.Fanouter
 	activityDecider     ActivityDecider
 }
 
@@ -307,31 +305,22 @@ type addRoomMembersRequest struct {
 	Locale    string   `json:"locale"`
 }
 
-func NewHandler(svc *agent.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *feishu.Service, llmSvc *llm.Service) *Handler {
-	return NewHandlerWithBotAndAccessToken(svc, nil, imSvc, imBus, botBridge, feishu, llmSvc, "")
+func NewHandler(svc *agent.Service, imSvc *im.Service, imBus *im.Bus, participantBridge *im.ParticipantBridge, feishu *feishu.Service, llmSvc *llm.Service) *Handler {
+	return NewHandlerWithAccessToken(svc, imSvc, imBus, participantBridge, feishu, llmSvc, "")
 }
 
-func NewHandlerWithBot(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *feishu.Service, llmSvc *llm.Service) *Handler {
-	return NewHandlerWithBotAndAccessToken(svc, botSvc, imSvc, imBus, botBridge, feishu, llmSvc, "")
+func NewHandlerWithAccessToken(svc *agent.Service, imSvc *im.Service, imBus *im.Bus, participantBridge *im.ParticipantBridge, feishu *feishu.Service, llmSvc *llm.Service, serverAccessToken string) *Handler {
+	return NewHandlerWithAuth(svc, imSvc, imBus, participantBridge, feishu, llmSvc, serverAccessToken, false)
 }
 
-func NewHandlerWithBotAndAccessToken(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *feishu.Service, llmSvc *llm.Service, serverAccessToken string) *Handler {
-	return NewHandlerWithBotAndAuth(svc, botSvc, imSvc, imBus, botBridge, feishu, llmSvc, serverAccessToken, false)
-}
-
-func NewHandlerWithBotAndAuth(svc *agent.Service, botSvc *bot.Service, imSvc *im.Service, imBus *im.Bus, botBridge *im.BotBridge, feishu *feishu.Service, llmSvc *llm.Service, serverAccessToken string, serverNoAuth bool) *Handler {
-	if botSvc != nil {
-		botSvc.SetDependencies(svc, imSvc, feishu)
-		botSvc.SetIMBus(imBus)
-	}
+func NewHandlerWithAuth(svc *agent.Service, imSvc *im.Service, imBus *im.Bus, participantBridge *im.ParticipantBridge, feishu *feishu.Service, llmSvc *llm.Service, serverAccessToken string, serverNoAuth bool) *Handler {
 	h := &Handler{
 		svc:               svc,
-		botSvc:            botSvc,
 		im:                imSvc,
 		csgclaw:           csgclawchannel.NewService(imSvc),
 		imBus:             imBus,
 		imProvisioner:     im.NewProvisioner(imSvc, imBus),
-		botBridge:         botBridge,
+		participantBridge: participantBridge,
 		feishu:            feishu,
 		llm:               llmSvc,
 		serverAccessToken: serverAccessToken,
@@ -341,7 +330,7 @@ func NewHandlerWithBotAndAuth(svc *agent.Service, botSvc *bot.Service, imSvc *im
 	return h
 }
 
-func (h *Handler) SetNotificationDeliver(d notification_bot.Fanouter) {
+func (h *Handler) SetNotificationDeliver(d notification.Fanouter) {
 	if h != nil {
 		h.notificationDeliver = d
 	}

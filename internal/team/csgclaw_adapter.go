@@ -145,12 +145,12 @@ func (a *CSGClawAdapter) SendMessage(_ context.Context, req SendMessageRequest) 
 
 func (a *CSGClawAdapter) ensureBotUser(botID string, role string) (im.User, error) {
 	var err error
-	botID, err = requireCanonicalBotID("bot_id", botID)
+	botID, err = requireCanonicalParticipantID("bot_id", botID)
 	if err != nil {
 		return im.User{}, err
 	}
 	if botID == "" {
-		return im.User{}, fmt.Errorf("bot id is required")
+		return im.User{}, fmt.Errorf("participant id is required")
 	}
 	user, _, err := a.im.EnsureAgentUser(im.EnsureAgentUserRequest{
 		ID:     botID,

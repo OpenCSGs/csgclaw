@@ -65,11 +65,11 @@ Content-Type: application/json
 - 删除：`DELETE /api/v1/channels/csgclaw/participants/{id}`
 - 推送（webhook）：`POST /api/v1/channels/csgclaw/participants/{id}/notifications`，请求头 `Authorization: Bearer <webhook_token>`
 
-实现：`internal/channel/csgclaw/notification_bot/`、`internal/bot/notification.go`。
+实现：`internal/channel/csgclaw/notification/`。
 
 ## `csgclaw.notify_card` 结构
 
-通知投递（GitLab/GitHub webhook 等）到 CSGClaw Web IM 时使用该类型：**整条消息的 `content` 即一段 JSON**，由服务端 `internal/channel/csgclaw/notification_bot` 生成，Web 前端按 `type` 渲染为结构化卡片（标题、徽章、元数据行、可选链接与折叠原始 JSON）。
+通知投递（GitLab/GitHub webhook 等）到 CSGClaw Web IM 时使用该类型：**整条消息的 `content` 即一段 JSON**，由服务端 `internal/channel/csgclaw/notification` 生成，Web 前端按 `type` 渲染为结构化卡片（标题、徽章、元数据行、可选链接与折叠原始 JSON）。
 
 ```json
 {
@@ -106,5 +106,5 @@ Content-Type: application/json
 
 - 前端解析与渲染：`web/app/src/components/business/MessageContent/MessageContent.tsx`、`web/app/src/components/business/MessageContent/structuredMessages.ts`
 - Action card 与 Notifier card 单测：`web/app/tests/legacy-contract.test.ts`、`web/app/tests/components/MessageContent/structuredMessages.test.ts`
-- 通知卡片生成：`internal/channel/csgclaw/notification_bot/notify_card.go`、`internal/channel/csgclaw/notification_bot/notify_webhooks.go`
+- 通知卡片生成：`internal/channel/csgclaw/notification/notify_card.go`、`internal/channel/csgclaw/notification/notify_webhooks.go`
 - Feishu setup 命令输出：`internal/templates/embed/runtimes/picoclaw/manager/workspace/skills/feishu/scripts/feishu_setup/csgclaw.py`

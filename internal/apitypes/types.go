@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type Bot struct {
+type LegacyBot struct {
 	ID                   string         `json:"id"`
 	Name                 string         `json:"name"`
 	Description          string         `json:"description,omitempty"`
@@ -26,28 +26,6 @@ type Bot struct {
 	EnvRestartRequired   bool           `json:"env_restart_required,omitempty"`
 	ImageUpgradeRequired bool           `json:"image_upgrade_required,omitempty"`
 	CreatedAt            time.Time      `json:"created_at"`
-}
-
-type CreateBotRequest struct {
-	ID             string              `json:"id,omitempty"`
-	Name           string              `json:"name"`
-	Description    string              `json:"description,omitempty"`
-	Type           string              `json:"type,omitempty"`
-	Image          string              `json:"image,omitempty"`
-	Avatar         string              `json:"avatar,omitempty"`
-	Role           string              `json:"role"`
-	Channel        string              `json:"channel,omitempty"`
-	RuntimeKind    string              `json:"runtime_kind,omitempty"`
-	FromTemplate   string              `json:"from_template,omitempty"`
-	RuntimeOptions map[string]any      `json:"runtime_options,omitempty"`
-	AgentProfile   *CreateAgentProfile `json:"agent_profile,omitempty"`
-}
-
-type PatchNotificationBotRequest struct {
-	Name           string         `json:"name,omitempty"`
-	Description    string         `json:"description,omitempty"`
-	Avatar         string         `json:"avatar,omitempty"`
-	RuntimeOptions map[string]any `json:"runtime_options,omitempty"`
 }
 
 type User struct {

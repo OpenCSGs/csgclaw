@@ -43,7 +43,7 @@ type TeamMeta struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// MemberPresence captures runtime state derived from room members plus bot identity.
+// MemberPresence captures runtime state derived from room members plus participant identity.
 type MemberPresence struct {
 	TeamID          string    `json:"team_id"`
 	BotID           string    `json:"bot_id"`

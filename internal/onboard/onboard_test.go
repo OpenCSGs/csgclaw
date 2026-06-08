@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"csgclaw/internal/agent"
-	"csgclaw/internal/bot"
 	"csgclaw/internal/config"
+	"csgclaw/internal/participant"
 )
 
 func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
@@ -35,11 +35,11 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 		gotIMStatePath = path
 		return nil
 	}
-	CreateManagerBot = func(_ context.Context, agentsPath, imStatePath string, cfg config.Config) (bot.Bot, error) {
+	CreateManagerParticipant = func(_ context.Context, agentsPath, imStatePath string, cfg config.Config) (participant.Participant, error) {
 		gotAgentsPath = agentsPath
 		gotManagerIMStatePath = imStatePath
 		gotCfg = cfg
-		return bot.Bot{ID: agent.ManagerUserID}, nil
+		return participant.Participant{ID: agent.ManagerParticipantID}, nil
 	}
 
 	result, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath})
@@ -51,10 +51,10 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 		t.Fatalf("EnsureIMBootstrapState path = %q, want %q", gotIMStatePath, wantIMStatePath)
 	}
 	if gotAgentsPath != wantAgentsPath {
-		t.Fatalf("CreateManagerBot agentsPath = %q, want %q", gotAgentsPath, wantAgentsPath)
+		t.Fatalf("CreateManagerParticipant agentsPath = %q, want %q", gotAgentsPath, wantAgentsPath)
 	}
 	if gotManagerIMStatePath != wantIMStatePath {
-		t.Fatalf("CreateManagerBot imStatePath = %q, want %q", gotManagerIMStatePath, wantIMStatePath)
+		t.Fatalf("CreateManagerParticipant imStatePath = %q, want %q", gotManagerIMStatePath, wantIMStatePath)
 	}
 	if result.ConfigPath != configPath {
 		t.Fatalf("result.ConfigPath = %q, want %q", result.ConfigPath, configPath)
@@ -143,9 +143,9 @@ models = ["gpt-test"]
 	restore := stubEnsureStateDeps(t)
 	defer restore()
 	EnsureIMBootstrapState = func(string) error { return nil }
-	CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
+	CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
 		gotCfg = cfg
-		return bot.Bot{}, nil
+		return participant.Participant{}, nil
 	}
 
 	if _, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath}); err != nil {
@@ -217,11 +217,11 @@ models = ["gpt-test"]
 	restore := stubEnsureStateDeps(t)
 	defer restore()
 	EnsureIMBootstrapState = func(string) error { return nil }
-	CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
+	CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
 		if got, want := cfg.Server.ListenAddr, "127.0.0.1:19090"; got != want {
 			t.Fatalf("cfg.Server.ListenAddr = %q, want %q", got, want)
 		}
-		return bot.Bot{}, nil
+		return participant.Participant{}, nil
 	}
 
 	if _, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath}); err != nil {
@@ -287,11 +287,11 @@ models = ["gpt-test"]
 	restore := stubEnsureStateDeps(t)
 	defer restore()
 	EnsureIMBootstrapState = func(string) error { return nil }
-	CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
+	CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
 		if got, want := cfg.Sandbox.Provider, config.BoxLiteProvider; got != want {
 			t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
 		}
-		return bot.Bot{}, nil
+		return participant.Participant{}, nil
 	}
 
 	if _, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath}); err != nil {
@@ -340,14 +340,14 @@ models = ["gpt-test"]
 	restore := stubEnsureStateDeps(t)
 	defer restore()
 	EnsureIMBootstrapState = func(string) error { return nil }
-	CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
+	CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
 		if got, want := cfg.Bootstrap.DefaultManagerTemplate, "builtin.picoclaw-manager"; got != want {
 			t.Fatalf("cfg.Bootstrap.DefaultManagerTemplate = %q, want %q", got, want)
 		}
 		if got, want := cfg.Bootstrap.DefaultWorkerTemplate, "local.review-worker"; got != want {
 			t.Fatalf("cfg.Bootstrap.DefaultWorkerTemplate = %q, want %q", got, want)
 		}
-		return bot.Bot{}, nil
+		return participant.Participant{}, nil
 	}
 
 	if _, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath}); err != nil {
@@ -385,11 +385,11 @@ access_token = "your_access_token"
 	restore := stubEnsureStateDeps(t)
 	defer restore()
 	EnsureIMBootstrapState = func(string) error { return nil }
-	CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
+	CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
 		if got, want := cfg.Sandbox.Resolved().Provider, config.DockerProvider; got != want {
 			t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
 		}
-		return bot.Bot{}, nil
+		return participant.Participant{}, nil
 	}
 
 	if _, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath}); err != nil {
@@ -456,14 +456,14 @@ models = ["gpt-test"]
 	restore := stubEnsureStateDeps(t)
 	defer restore()
 	EnsureIMBootstrapState = func(string) error { return nil }
-	CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
+	CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
 		if got, want := cfg.Hub.DefaultRegistry, "builtin"; got != want {
 			t.Fatalf("cfg.Hub.DefaultRegistry = %q, want %q", got, want)
 		}
 		if got, want := cfg.Hub.DefaultPublishRegistry, "local"; got != want {
 			t.Fatalf("cfg.Hub.DefaultPublishRegistry = %q, want %q", got, want)
 		}
-		return bot.Bot{}, nil
+		return participant.Participant{}, nil
 	}
 
 	if _, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath}); err != nil {
@@ -530,11 +530,11 @@ models = ["gpt-test"]
 	restore := stubEnsureStateDeps(t)
 	defer restore()
 	EnsureIMBootstrapState = func(string) error { return nil }
-	CreateManagerBot = func(_ context.Context, _, _ string, cfg config.Config) (bot.Bot, error) {
+	CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
 		if got, want := len(cfg.Hub.Registries), 3; got != want {
 			t.Fatalf("len(cfg.Hub.Registries) = %d, want %d", got, want)
 		}
-		return bot.Bot{}, nil
+		return participant.Participant{}, nil
 	}
 
 	if _, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath}); err != nil {
@@ -564,10 +564,10 @@ models = ["gpt-test"]
 
 func stubEnsureStateDeps(t *testing.T) func() {
 	t.Helper()
-	origCreateManager := CreateManagerBot
+	origCreateManager := CreateManagerParticipant
 	origEnsureIMBootstrapState := EnsureIMBootstrapState
 	return func() {
-		CreateManagerBot = origCreateManager
+		CreateManagerParticipant = origCreateManager
 		EnsureIMBootstrapState = origEnsureIMBootstrapState
 	}
 }

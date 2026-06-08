@@ -1,4 +1,4 @@
 export * from "./AgentDetailPane";
-export * from "./NotificationBotDetailPane";
+export * from "./NotificationParticipantDetailPane";
 export * from "./AgentList";
 export * from "./AgentView";

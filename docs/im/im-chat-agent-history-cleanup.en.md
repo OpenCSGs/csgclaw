@@ -155,8 +155,8 @@ flowchart LR
   ChannelRecord --> Glue["Channel event glue"]
   Glue --> AgentSvc["internal/agent.Service.NewConversationAction"]
   AgentSvc --> Runtime["runtime ConversationStarter capability"]
-  Runtime --> Pico["PicoClaw BotEvent.Text = /clear"]
-  Runtime --> Open["OpenClaw BotEvent.Text = /new"]
+  Runtime --> Pico["PicoClaw ParticipantEvent.Text = /clear"]
+  Runtime --> Open["OpenClaw ParticipantEvent.Text = /new"]
 ```
 
 CSGClaw local channel responsibilities:
@@ -166,7 +166,7 @@ CSGClaw local channel responsibilities:
 - Do not treat `new` as a normal skill in the IM layer.
 - The CSGClaw channel normalizes user input into canonical slash form and sends messages through the existing channel/event flow.
 - Channel event glue recognizes canonical `/new` and calls `internal/agent.Service.NewConversationAction` to get the target runtime action.
-- For PicoClaw/OpenClaw, output a BotEvent invocation and deliver it through the existing BotEvent protocol.
+- For PicoClaw/OpenClaw, output a ParticipantEvent invocation and deliver it through the existing ParticipantEvent protocol.
 - Codex only responds to `/new` through the CSGClaw local channel. This document does not design an external channel or external Codex CLI integration.
 
 Add the Agent service use-case data structures:
@@ -264,13 +264,13 @@ flowchart LR
   Capability --> Native{"Runtime action"}
   Native --> PicoCmd["PicoClaw: /clear"]
   Native --> OpenCmd["OpenClaw: /new"]
-  PicoCmd --> BotEvent["BotEvent.Text first token is /clear"]
-  OpenCmd --> OpenBotEvent["BotEvent.Text first token is /new"]
-  BotEvent --> Executor["Agent runtime command executor"]
-  OpenBotEvent --> Executor
+  PicoCmd --> ParticipantEvent["ParticipantEvent.Text first token is /clear"]
+  OpenCmd --> OpenParticipantEvent["ParticipantEvent.Text first token is /new"]
+  ParticipantEvent --> Executor["Agent runtime command executor"]
+  OpenParticipantEvent --> Executor
 ```
 
-To make runtime-native commands recognizable, the delivered `BotEvent.Text` must start with the native slash command as the first token. Do not put `<at ...>` before the command, and do not send canonical XML directly to PicoClaw/OpenClaw expecting them to recognize it.
+To make runtime-native commands recognizable, the delivered `ParticipantEvent.Text` must start with the native slash command as the first token. Do not put `<at ...>` before the command, and do not send canonical XML directly to PicoClaw/OpenClaw expecting them to recognize it.
 
 #### 2.5.1 CSGClaw Local Channel Entry Point
 
@@ -280,21 +280,21 @@ Current CSGClaw local channel message flow:
 internal/api.handleCreateMessage
 -> internal/channel/csgclaw.Service.SendMessage
 -> internal/im.Service.CreateMessage
--> internal/api.Handler.PublishBotEvent
--> internal/im.BotBridge.PublishMessageEvent
+-> internal/api.Handler.PublishParticipantEvent
+-> internal/im.ParticipantBridge.PublishMessageEvent
 -> /api/v1/channels/csgclaw/participants/{participantID}/events
 ```
 
 For `/new`:
 
 1. `internal/channel/csgclaw.Service.SendMessage` continues to only canonical-normalize and write to `internal/im`.
-2. `internal/im.BotBridge` continues to only queue events and deliver SSE. It does not query runtimes or maintain runtime-native command mappings.
-3. Near `internal/api.Handler.PublishBotEvent`, detect whether `evt.Message.Content` is canonical `new conversation`.
+2. `internal/im.ParticipantBridge` continues to only queue events and deliver SSE. It does not query runtimes or maintain runtime-native command mappings.
+3. Near `internal/api.Handler.PublishParticipantEvent`, detect whether `evt.Message.Content` is canonical `new conversation`.
 4. If matched, call `agent.Service.NewConversationAction` for each target Agent that should actually be notified.
-5. For PicoClaw/OpenClaw, replace `im.BotEvent.Text` with the runtime-native command `/clear` or `/new`. Keep the other room/thread/context fields produced by BotBridge.
+5. For PicoClaw/OpenClaw, replace `im.ParticipantEvent.Text` with the runtime-native command `/clear` or `/new`. Keep the other room/thread/context fields produced by ParticipantBridge.
 6. For Codex, only use `/new` through the CSGClaw local channel. Do not integrate through an external channel or external CLI here.
 
-Note: `BotBridge` currently notifies by room membership, and `shouldNotifyBot` does not require mention. The `/new` implementation must tighten routing semantics: in a direct room with an Agent, mention is not required; in a group chat, `@agent` is required. If no Agent is mentioned, no cleanup is executed, and cleanup is not broadcast to all room Agents. API glue should filter participant bridge targets using message mentions.
+Note: `ParticipantBridge` currently notifies by room membership, and `shouldNotifyParticipant` does not require mention. The `/new` implementation must tighten routing semantics: in a direct room with an Agent, mention is not required; in a group chat, `@agent` is required. If no Agent is mentioned, no cleanup is executed, and cleanup is not broadcast to all room Agents. API glue should filter participant bridge targets using message mentions.
 
 Feishu notes:
 
@@ -332,7 +332,7 @@ PicoClaw integration through the CSGClaw local channel:
 /clear
 ```
 
-4. `internal/im.BotBridge` or a dedicated Agent slash dispatcher delivers a BotEvent to the target PicoClaw participant bridge.
+4. `internal/im.ParticipantBridge` or a dedicated Agent slash dispatcher delivers a ParticipantEvent to the target PicoClaw participant bridge.
 5. PicoClaw subscribes through the CSGClaw participant bridge protocol and receives the message event.
 6. PicoClaw command executor recognizes `/clear` before entering the LLM.
 7. PicoClaw computes its own session key from event context:
@@ -349,7 +349,7 @@ GET /api/v1/channels/csgclaw/participants/{participantID}/events
 - PicoClaw connects to CSGClaw using `CSGCLAW_BASE_URL` or `PICOCLAW_CHANNELS_CSGCLAW_BASE_URL`.
 - Requests include `Authorization: Bearer <token>`.
 - CSGClaw returns `text/event-stream`; event name is `message`.
-- Event data is `im.BotEvent`, containing `channel=csgclaw`, `room_id`, `chat_id`, `thread_root_id`, `text`, `context`, and `thread_context`. Thread fields are pass-through context and do not affect cleanup scope.
+- Event data is `im.ParticipantEvent`, containing `channel=csgclaw`, `room_id`, `chat_id`, `thread_root_id`, `text`, `context`, and `thread_context`. Thread fields are pass-through context and do not affect cleanup scope.
 
 PicoClaw replies through:
 
@@ -367,7 +367,7 @@ Request body:
 }
 ```
 
-Important BotEvent fields delivered by CSGClaw to PicoClaw:
+Important ParticipantEvent fields delivered by CSGClaw to PicoClaw:
 
 ```text
 text = "/clear"
@@ -381,7 +381,7 @@ context.chat_id = current room
 context.topic_id = current thread root, optional pass-through and not part of cleanup scope
 ```
 
-Therefore PicoClaw does not need a new standalone cleanup command for the current CSGClaw local channel capability. CSGClaw maps local-channel user-facing `/new` to PicoClaw native `/clear` and keeps BotEvent context pointing at the current room. This mapping does not cover PicoClaw's direct Feishu/Lark channel.
+Therefore PicoClaw does not need a new standalone cleanup command for the current CSGClaw local channel capability. CSGClaw maps local-channel user-facing `/new` to PicoClaw native `/clear` and keeps ParticipantEvent context pointing at the current room. This mapping does not cover PicoClaw's direct Feishu/Lark channel.
 
 ### 2.7 OpenClaw Integration Plan
 
@@ -403,13 +403,13 @@ OpenClaw integration:
 /new
 ```
 
-4. `internal/im.BotBridge` or a dedicated Agent slash dispatcher delivers a BotEvent to the target OpenClaw participant bridge.
+4. `internal/im.ParticipantBridge` or a dedicated Agent slash dispatcher delivers a ParticipantEvent to the target OpenClaw participant bridge.
 5. OpenClaw receives the message event through the CSGClaw participant bridge HTTP/SSE protocol.
 6. The OpenClaw gateway/channel adapter forwards the event to the OpenClaw runtime.
 7. The OpenClaw command executor recognizes `/new` before entering the model and resets the current session in place.
 8. OpenClaw replies through `POST /api/v1/channels/csgclaw/participants/{participantID}/messages`.
 
-Important BotEvent fields delivered by CSGClaw to OpenClaw:
+Important ParticipantEvent fields delivered by CSGClaw to OpenClaw:
 
 ```text
 text = "/new"

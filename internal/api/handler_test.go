@@ -17,7 +17,6 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/app/runtimewiring"
-	"csgclaw/internal/bot"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
@@ -3052,7 +3051,7 @@ func TestHandleFeishuRoomsDeleteRemovesRoom(t *testing.T) {
 func TestHandleParticipantMessageRouteRequiresAuthorization(t *testing.T) {
 	srv := &Handler{
 		im:                im.NewService(),
-		botBridge:         im.NewBotBridge("secret"),
+		participantBridge: im.NewParticipantBridge("secret"),
 		serverAccessToken: "secret",
 	}
 
@@ -3067,7 +3066,7 @@ func TestHandleParticipantMessageRouteRequiresAuthorization(t *testing.T) {
 
 func TestHandleParticipantMessageRouteRequiresAuthorizationWhenServerAccessTokenEmpty(t *testing.T) {
 	srv := &Handler{
-		botBridge: im.NewBotBridge("secret"),
+		participantBridge: im.NewParticipantBridge("secret"),
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/u-manager/messages", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
@@ -3081,8 +3080,8 @@ func TestHandleParticipantMessageRouteRequiresAuthorizationWhenServerAccessToken
 
 func TestHandleParticipantMessageRouteSkipsAuthorizationWhenNoAuth(t *testing.T) {
 	srv := &Handler{
-		botBridge:    im.NewBotBridge("secret"),
-		serverNoAuth: true,
+		participantBridge: im.NewParticipantBridge("secret"),
+		serverNoAuth:      true,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/u-manager/messages", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
@@ -3096,8 +3095,8 @@ func TestHandleParticipantMessageRouteSkipsAuthorizationWhenNoAuth(t *testing.T)
 
 func TestHandleBotSendMessageRequiresIMService(t *testing.T) {
 	srv := &Handler{
-		botBridge:    im.NewBotBridge(""),
-		serverNoAuth: true,
+		participantBridge: im.NewParticipantBridge(""),
+		serverNoAuth:      true,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/u-manager/messages", strings.NewReader(`{"room_id":"room-1","text":"hello"}`))
@@ -3151,7 +3150,7 @@ func TestHandleBotSendMessageDoesNotInferRecentThreadScope(t *testing.T) {
 	if !ok {
 		t.Fatal("User(u-admin) = false, want user")
 	}
-	bridge := im.NewBotBridge("")
+	bridge := im.NewParticipantBridge("")
 	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 	bridge.PublishMessageEvent(room, sender, inbound)
@@ -3165,7 +3164,7 @@ func TestHandleBotSendMessageDoesNotInferRecentThreadScope(t *testing.T) {
 		t.Fatal("PublishMessageEvent() timed out waiting for threaded event")
 	}
 
-	srv := &Handler{im: imSvc, botBridge: bridge, serverNoAuth: true}
+	srv := &Handler{im: imSvc, participantBridge: bridge, serverNoAuth: true}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/manager/messages", strings.NewReader(`{"room_id":"room-1","text":"thread answer"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
@@ -3221,7 +3220,7 @@ func TestHandleBotSendMessageAcceptsPicoClawThreadContext(t *testing.T) {
 		t.Fatalf("StartThread() error = %v", err)
 	}
 
-	srv := &Handler{im: imSvc, botBridge: im.NewBotBridge(""), serverNoAuth: true}
+	srv := &Handler{im: imSvc, participantBridge: im.NewParticipantBridge(""), serverNoAuth: true}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/manager/messages", strings.NewReader(`{
 		"chat_id": "room-1",
 		"content": "direct PicoClaw thread answer",
@@ -3266,7 +3265,7 @@ func TestHandleBotSendMessageAcceptsPicoClawThreadContext(t *testing.T) {
 	}
 }
 
-func TestPublishBotEventQueuesUntilBotSubscribes(t *testing.T) {
+func TestPublishParticipantEventQueuesUntilParticipantSubscribes(t *testing.T) {
 	now := time.Now().UTC()
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
@@ -3290,8 +3289,8 @@ func TestPublishBotEventQueuesUntilBotSubscribes(t *testing.T) {
 			},
 		},
 	})
-	bridge := im.NewBotBridge("")
-	srv := &Handler{im: imSvc, botBridge: bridge}
+	bridge := im.NewParticipantBridge("")
+	srv := &Handler{im: imSvc, participantBridge: bridge}
 
 	sender, ok := imSvc.User("u-admin")
 	if !ok {
@@ -3302,7 +3301,7 @@ func TestPublishBotEventQueuesUntilBotSubscribes(t *testing.T) {
 		t.Fatalf("room = %+v, want one message", room)
 	}
 
-	srv.PublishBotEvent(im.Event{
+	srv.PublishParticipantEvent(im.Event{
 		Type:    im.EventTypeMessageCreated,
 		RoomID:  "room-1",
 		Sender:  &sender,
@@ -3322,7 +3321,7 @@ func TestPublishBotEventQueuesUntilBotSubscribes(t *testing.T) {
 	}
 }
 
-func TestPublishBotEventReensuresRunningWorkerLifecycle(t *testing.T) {
+func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	started := make(chan string, 1)
 	recreated := make(chan string, 1)
@@ -3389,8 +3388,8 @@ func TestPublishBotEventReensuresRunningWorkerLifecycle(t *testing.T) {
 		t.Fatalf("room = %+v, want one message", room)
 	}
 
-	srv := &Handler{svc: svc, im: imSvc, botBridge: im.NewBotBridge("")}
-	srv.PublishBotEvent(im.Event{
+	srv := &Handler{svc: svc, im: imSvc, participantBridge: im.NewParticipantBridge("")}
+	srv.PublishParticipantEvent(im.Event{
 		Type:    im.EventTypeMessageCreated,
 		RoomID:  "room-1",
 		Sender:  &sender,
@@ -3409,7 +3408,7 @@ func TestPublishBotEventReensuresRunningWorkerLifecycle(t *testing.T) {
 	}
 }
 
-func TestPublishBotEventStartsStoppedWorker(t *testing.T) {
+func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	started := make(chan string, 1)
 	restoreDefault := agent.TestOnlySetDefaultServiceOption(func(s *agent.Service) error {
@@ -3471,8 +3470,8 @@ func TestPublishBotEventStartsStoppedWorker(t *testing.T) {
 		t.Fatalf("room = %+v, want one message", room)
 	}
 
-	srv := &Handler{svc: svc, im: imSvc, botBridge: im.NewBotBridge("")}
-	srv.PublishBotEvent(im.Event{
+	srv := &Handler{svc: svc, im: imSvc, participantBridge: im.NewParticipantBridge("")}
+	srv.PublishParticipantEvent(im.Event{
 		Type:    im.EventTypeMessageCreated,
 		RoomID:  "room-1",
 		Sender:  &sender,
@@ -3513,7 +3512,7 @@ func TestHandleBotEventsRequeuesWhenSSEWriteFails(t *testing.T) {
 			},
 		},
 	})
-	bridge := im.NewBotBridge("")
+	bridge := im.NewParticipantBridge("")
 	room, ok := imSvc.Room("room-1")
 	if !ok {
 		t.Fatal("Room(room-1) = false, want room")
@@ -3524,9 +3523,9 @@ func TestHandleBotEventsRequeuesWhenSSEWriteFails(t *testing.T) {
 	}
 	bridge.PublishMessageEvent(room, sender, room.Messages[0])
 
-	srv := &Handler{im: imSvc, botBridge: bridge}
+	srv := &Handler{im: imSvc, participantBridge: bridge}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/participants/manager/events", nil)
-	srv.handleBotEvents(&failingBotEventWriter{header: make(http.Header)}, req, "manager")
+	srv.handleParticipantEventsStream(&failingBotEventWriter{header: make(http.Header)}, req, "manager")
 
 	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
@@ -3584,12 +3583,12 @@ func TestReplayRecentBotMessagesReplaysUnansweredHumanMessage(t *testing.T) {
 			},
 		},
 	})
-	bridge := im.NewBotBridge("")
+	bridge := im.NewParticipantBridge("")
 	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
-	srv := &Handler{im: imSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("manager", "")
+	srv := &Handler{im: imSvc, participantBridge: bridge}
+	srv.replayRecentParticipantMessages("manager", "")
 
 	select {
 	case evt := <-events:
@@ -3597,7 +3596,7 @@ func TestReplayRecentBotMessagesReplaysUnansweredHumanMessage(t *testing.T) {
 			t.Fatalf("replayed event = %+v, want msg-missed please reply", evt)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("replayRecentBotMessages() timed out waiting for event")
+		t.Fatal("replayRecentParticipantMessages() timed out waiting for event")
 	}
 }
 
@@ -3637,12 +3636,12 @@ func TestReplayRecentBotMessagesSkipsRoomWithoutBridgeTarget(t *testing.T) {
 		LifecycleStatus: participant.LifecycleStatusActive,
 		Mentionable:     true,
 	}}))
-	bridge := im.NewBotBridge("")
+	bridge := im.NewParticipantBridge("")
 	events, cancel := bridge.Subscribe(agent.ManagerParticipantID)
 	defer cancel()
 
-	srv := &Handler{im: imSvc, participant: participantSvc, botBridge: bridge}
-	srv.replayRecentBotMessages(agent.ManagerParticipantID, "")
+	srv := &Handler{im: imSvc, participant: participantSvc, participantBridge: bridge}
+	srv.replayRecentParticipantMessages(agent.ManagerParticipantID, "")
 
 	select {
 	case evt := <-events:
@@ -3686,12 +3685,12 @@ func TestReplayRecentBotMessagesReplaysParticipantRoomUsingChannelUserRef(t *tes
 		LifecycleStatus: participant.LifecycleStatusActive,
 		Mentionable:     true,
 	}}))
-	bridge := im.NewBotBridge("")
+	bridge := im.NewParticipantBridge("")
 	events, cancel := bridge.Subscribe("agent-hhtz4b")
 	defer cancel()
 
-	srv := &Handler{im: imSvc, participant: participantSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("agent-hhtz4b", "")
+	srv := &Handler{im: imSvc, participant: participantSvc, participantBridge: bridge}
+	srv.replayRecentParticipantMessages("agent-hhtz4b", "")
 
 	select {
 	case evt := <-events:
@@ -3699,7 +3698,7 @@ func TestReplayRecentBotMessagesReplaysParticipantRoomUsingChannelUserRef(t *tes
 			t.Fatalf("replayed event = %+v, want participant-keyed QA replay", evt)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("replayRecentBotMessages() timed out waiting for participant-keyed QA event")
+		t.Fatal("replayRecentParticipantMessages() timed out waiting for participant-keyed QA event")
 	}
 }
 
@@ -3766,12 +3765,12 @@ func TestReplayRecentBotMessagesUsesNewConversationFlow(t *testing.T) {
 			},
 		},
 	})
-	bridge := im.NewBotBridge("")
+	bridge := im.NewParticipantBridge("")
 	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
-	srv := &Handler{svc: svc, im: imSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("manager", "")
+	srv := &Handler{svc: svc, im: imSvc, participantBridge: bridge}
+	srv.replayRecentParticipantMessages("manager", "")
 
 	select {
 	case evt := <-events:
@@ -3779,7 +3778,7 @@ func TestReplayRecentBotMessagesUsesNewConversationFlow(t *testing.T) {
 			t.Fatalf("replayed event = %+v, want msg-new-convo ack: cleared", evt)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("replayRecentBotMessages() timed out waiting for event")
+		t.Fatal("replayRecentParticipantMessages() timed out waiting for event")
 	}
 }
 
@@ -3813,12 +3812,12 @@ func TestReplayRecentBotMessagesSkipsAnsweredMessage(t *testing.T) {
 			},
 		},
 	})
-	bridge := im.NewBotBridge("")
+	bridge := im.NewParticipantBridge("")
 	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
-	srv := &Handler{im: imSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("manager", "")
+	srv := &Handler{im: imSvc, participantBridge: bridge}
+	srv.replayRecentParticipantMessages("manager", "")
 
 	select {
 	case evt := <-events:
@@ -3851,7 +3850,7 @@ func TestReplayRecentBotMessagesDoesNotDuplicateDeliveredMessage(t *testing.T) {
 			},
 		},
 	})
-	bridge := im.NewBotBridge("")
+	bridge := im.NewParticipantBridge("")
 	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
@@ -3875,8 +3874,8 @@ func TestReplayRecentBotMessagesDoesNotDuplicateDeliveredMessage(t *testing.T) {
 		t.Fatal("PublishMessageEvent() timed out waiting for event")
 	}
 
-	srv := &Handler{im: imSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("manager", "")
+	srv := &Handler{im: imSvc, participantBridge: bridge}
+	srv.replayRecentParticipantMessages("manager", "")
 
 	select {
 	case evt := <-events:
@@ -3915,12 +3914,12 @@ func TestReplayRecentBotMessagesHonorsLastEventID(t *testing.T) {
 			},
 		},
 	})
-	bridge := im.NewBotBridge("")
+	bridge := im.NewParticipantBridge("")
 	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
-	srv := &Handler{im: imSvc, botBridge: bridge}
-	srv.replayRecentBotMessages("manager", "msg-seen")
+	srv := &Handler{im: imSvc, participantBridge: bridge}
+	srv.replayRecentParticipantMessages("manager", "msg-seen")
 
 	select {
 	case evt := <-events:
@@ -3928,7 +3927,7 @@ func TestReplayRecentBotMessagesHonorsLastEventID(t *testing.T) {
 			t.Fatalf("replayed event = %+v, want msg-new new after reconnect", evt)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("replayRecentBotMessages() timed out waiting for event")
+		t.Fatal("replayRecentParticipantMessages() timed out waiting for event")
 	}
 
 	select {
@@ -3982,7 +3981,7 @@ func TestHandleBotLLMModelsReturnsBridgeCatalog(t *testing.T) {
 
 	srv := &Handler{
 		svc:               svc,
-		botBridge:         im.NewBotBridge("secret"),
+		participantBridge: im.NewParticipantBridge("secret"),
 		llm:               bridge,
 		serverAccessToken: "secret",
 	}
@@ -4044,7 +4043,7 @@ func TestHandleBotLLMModelsLegacyRouteReturnsBridgeCatalog(t *testing.T) {
 
 	srv := &Handler{
 		svc:               svc,
-		botBridge:         im.NewBotBridge("secret"),
+		participantBridge: im.NewParticipantBridge("secret"),
 		llm:               bridge,
 		serverAccessToken: "secret",
 	}
@@ -4094,20 +4093,6 @@ func mustNewSeededService(t *testing.T, agents []agent.Agent) *agent.Service {
 	t.Helper()
 
 	svc, _ := mustNewSeededServiceWithPath(t, agents)
-	return svc
-}
-
-func mustNewBotService(t *testing.T, bots []bot.Bot) *bot.Service {
-	t.Helper()
-
-	store, err := bot.NewMemoryStore(bots)
-	if err != nil {
-		t.Fatalf("bot.NewMemoryStore() error = %v", err)
-	}
-	svc, err := bot.NewService(store)
-	if err != nil {
-		t.Fatalf("bot.NewService() error = %v", err)
-	}
 	return svc
 }
 

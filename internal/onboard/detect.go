@@ -41,13 +41,13 @@ type DetectStateOptions struct {
 }
 
 type DetectStateResult struct {
-	ConfigPath           string
-	Config               config.Config
-	ConfigExists         bool
-	ConfigComplete       bool
-	IMBootstrapComplete  bool
-	ManagerAgentComplete bool
-	ManagerBotComplete   bool
+	ConfigPath                 string
+	Config                     config.Config
+	ConfigExists               bool
+	ConfigComplete             bool
+	IMBootstrapComplete        bool
+	ManagerAgentComplete       bool
+	ManagerParticipantComplete bool
 }
 
 func (r DetectStateResult) Complete() bool {
@@ -55,7 +55,7 @@ func (r DetectStateResult) Complete() bool {
 		r.ConfigComplete &&
 		r.IMBootstrapComplete &&
 		r.ManagerAgentComplete &&
-		r.ManagerBotComplete
+		r.ManagerParticipantComplete
 }
 
 func DetectState(opts DetectStateOptions) (DetectStateResult, error) {
@@ -115,7 +115,7 @@ func DetectState(opts DetectStateOptions) (DetectStateResult, error) {
 	if err != nil {
 		return DetectStateResult{}, err
 	}
-	result.ManagerBotComplete = managerParticipantComplete(store.List(participant.ListOptions{Channel: participant.ChannelCSGClaw}))
+	result.ManagerParticipantComplete = managerParticipantComplete(store.List(participant.ListOptions{Channel: participant.ChannelCSGClaw}))
 
 	return result, nil
 }

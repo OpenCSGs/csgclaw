@@ -232,7 +232,7 @@ func TestParticipantMessageRouteSendsAsParticipantChannelUser(t *testing.T) {
 	srv := &Handler{
 		im:                imSvc,
 		participant:       participantSvc,
-		botBridge:         im.NewBotBridge("secret"),
+		participantBridge: im.NewParticipantBridge("secret"),
 		serverAccessToken: "secret",
 	}
 
@@ -285,10 +285,10 @@ func TestParticipantMessageRouteCanonicalizesAgentIDAlias(t *testing.T) {
 		Mentionable:     true,
 	}}))
 	srv := &Handler{
-		im:           imSvc,
-		participant:  participantSvc,
-		botBridge:    im.NewBotBridge(""),
-		serverNoAuth: true,
+		im:                imSvc,
+		participant:       participantSvc,
+		participantBridge: im.NewParticipantBridge(""),
+		serverNoAuth:      true,
 	}
 
 	rec := httptest.NewRecorder()
@@ -347,7 +347,7 @@ func TestParticipantNotificationRouteAcceptsNotificationParticipant(t *testing.T
 func TestParticipantEventsRouteRequiresAuthorization(t *testing.T) {
 	srv := &Handler{
 		im:                im.NewService(),
-		botBridge:         im.NewBotBridge("secret"),
+		participantBridge: im.NewParticipantBridge("secret"),
 		serverAccessToken: "secret",
 	}
 
@@ -393,10 +393,10 @@ func TestParticipantEventsRouteCanonicalizesAgentIDAlias(t *testing.T) {
 		Mentionable:     true,
 	}}))
 	srv := &Handler{
-		im:           imSvc,
-		participant:  participantSvc,
-		botBridge:    im.NewBotBridge(""),
-		serverNoAuth: true,
+		im:                imSvc,
+		participant:       participantSvc,
+		participantBridge: im.NewParticipantBridge(""),
+		serverNoAuth:      true,
 	}
 
 	writer := &recordingFailingEventWriter{header: make(http.Header)}
@@ -460,24 +460,24 @@ func TestCreateMessageResolvesCSGClawParticipantMentionToBridgeID(t *testing.T) 
 		LifecycleStatus: participant.LifecycleStatusActive,
 		Mentionable:     true,
 	}}))
-	bridge := im.NewBotBridge("secret")
+	bridge := im.NewParticipantBridge("secret")
 	bus := im.NewBus()
 	events, cancel := bridge.Subscribe(agent.ManagerParticipantID)
 	defer cancel()
 	srv := &Handler{
-		im:           imSvc,
-		csgclaw:      csgclawchannel.NewService(imSvc),
-		imBus:        bus,
-		participant:  participantSvc,
-		botBridge:    bridge,
-		serverNoAuth: true,
+		im:                imSvc,
+		csgclaw:           csgclawchannel.NewService(imSvc),
+		imBus:             bus,
+		participant:       participantSvc,
+		participantBridge: bridge,
+		serverNoAuth:      true,
 	}
 	busEvents, cancelBus := bus.Subscribe()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		for evt := range busEvents {
-			srv.PublishBotEvent(evt)
+			srv.PublishParticipantEvent(evt)
 		}
 	}()
 	defer func() {
@@ -508,7 +508,7 @@ func TestCreateMessageResolvesCSGClawParticipantMentionToBridgeID(t *testing.T) 
 	}
 }
 
-func TestPublishBotEventDeliversToParticipantIDWhenRoomUsesChannelUserRef(t *testing.T) {
+func TestPublishParticipantEventDeliversToParticipantIDWhenRoomUsesChannelUserRef(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
@@ -538,13 +538,13 @@ func TestPublishBotEventDeliversToParticipantIDWhenRoomUsesChannelUserRef(t *tes
 		LifecycleStatus: participant.LifecycleStatusActive,
 		Mentionable:     true,
 	}}))
-	bridge := im.NewBotBridge("secret")
+	bridge := im.NewParticipantBridge("secret")
 	events, cancel := bridge.Subscribe("agent-hhtz4b")
 	defer cancel()
 	srv := &Handler{
-		im:          imSvc,
-		participant: participantSvc,
-		botBridge:   bridge,
+		im:                imSvc,
+		participant:       participantSvc,
+		participantBridge: bridge,
 	}
 	room, ok := imSvc.Room("room-1")
 	if !ok || len(room.Messages) != 1 {
@@ -555,7 +555,7 @@ func TestPublishBotEventDeliversToParticipantIDWhenRoomUsesChannelUserRef(t *tes
 		t.Fatal("missing admin sender")
 	}
 
-	srv.PublishBotEvent(im.Event{
+	srv.PublishParticipantEvent(im.Event{
 		Type:    im.EventTypeMessageCreated,
 		RoomID:  "room-1",
 		Sender:  &sender,
@@ -597,11 +597,11 @@ func TestParticipantEventsRouteReceivesParticipantIDQueue(t *testing.T) {
 		LifecycleStatus: participant.LifecycleStatusActive,
 		Mentionable:     true,
 	}}))
-	bridge := im.NewBotBridge("secret")
+	bridge := im.NewParticipantBridge("secret")
 	srv := &Handler{
 		im:                imSvc,
 		participant:       participantSvc,
-		botBridge:         bridge,
+		participantBridge: bridge,
 		serverAccessToken: "secret",
 	}
 	ctx, cancelReq := context.WithCancel(context.Background())

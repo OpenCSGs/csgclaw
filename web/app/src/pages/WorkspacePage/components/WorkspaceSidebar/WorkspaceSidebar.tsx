@@ -29,7 +29,7 @@ export function WorkspaceSidebar({
   onToggleWorkspaceGroup,
   onCreateRoom,
   onCreateAgent,
-  onCreateNotificationBot,
+  onCreateNotificationParticipant,
   onOpenCreateTeam,
   onOpenCreateTask,
   hub,
@@ -116,7 +116,7 @@ export function WorkspaceSidebar({
             onToggleWorkspaceGroup={onToggleWorkspaceGroup}
             onCreateRoom={onCreateRoom}
             onCreateAgent={onCreateAgent}
-            onCreateNotificationBot={onCreateNotificationBot}
+            onCreateNotificationParticipant={onCreateNotificationParticipant}
             onOpenCreateTeam={onOpenCreateTeam}
             onOpenCreateTask={onOpenCreateTask}
             hub={hub}

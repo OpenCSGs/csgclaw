@@ -155,8 +155,8 @@ flowchart LR
   ChannelRecord --> Glue["channel event glue"]
   Glue --> AgentSvc["internal/agent.Service.NewConversationAction"]
   AgentSvc --> Runtime["runtime ConversationStarter capability"]
-  Runtime --> Pico["PicoClaw BotEvent.Text = /clear"]
-  Runtime --> Open["OpenClaw BotEvent.Text = /new"]
+  Runtime --> Pico["PicoClaw ParticipantEvent.Text = /clear"]
+  Runtime --> Open["OpenClaw ParticipantEvent.Text = /new"]
 ```
 
 CSGClaw 本地 channel 责任：
@@ -166,7 +166,7 @@ CSGClaw 本地 channel 责任：
 - 不在 IM 层把 `new` 当作普通 skill。
 - CSGClaw channel 负责把用户输入归一化为 canonical slash，并把消息送入现有 channel/event 链路。
 - 在 channel event glue 中识别 canonical `/new`，调用 `internal/agent.Service.NewConversationAction` 获取目标 runtime action。
-- 对 PicoClaw/OpenClaw runtime 输出 BotEvent invocation，再走现有 BotEvent 协议投递。
+- 对 PicoClaw/OpenClaw runtime 输出 ParticipantEvent invocation，再走现有 ParticipantEvent 协议投递。
 - Codex 仅在 CSGClaw 本地 channel 中响应 `/new`；不在本文设计外部 channel 或外部 Codex CLI 对接。
 
 新增 agent service use-case 数据结构：
@@ -264,13 +264,13 @@ flowchart LR
   Capability --> Native{"runtime action"}
   Native --> PicoCmd["PicoClaw: /clear"]
   Native --> OpenCmd["OpenClaw: /new"]
-  PicoCmd --> BotEvent["BotEvent.Text 首 token 是 /clear"]
-  OpenCmd --> OpenBotEvent["BotEvent.Text 首 token 是 /new"]
-  BotEvent --> Executor["Agent runtime command executor"]
-  OpenBotEvent --> Executor
+  PicoCmd --> ParticipantEvent["ParticipantEvent.Text 首 token 是 /clear"]
+  OpenCmd --> OpenParticipantEvent["ParticipantEvent.Text 首 token 是 /new"]
+  ParticipantEvent --> Executor["Agent runtime command executor"]
+  OpenParticipantEvent --> Executor
 ```
 
-为了让原生命令被 runtime 识别，投递给 Agent 的 `BotEvent.Text` 必须以原生 slash 命令作为第一个 token。不能把 `<at ...>` mention 放在命令前面，也不能把 canonical XML 直接投给 PicoClaw/OpenClaw 期待它识别原生命令。
+为了让原生命令被 runtime 识别，投递给 Agent 的 `ParticipantEvent.Text` 必须以原生 slash 命令作为第一个 token。不能把 `<at ...>` mention 放在命令前面，也不能把 canonical XML 直接投给 PicoClaw/OpenClaw 期待它识别原生命令。
 
 #### 2.5.1 CSGClaw 本地 channel 落点
 
@@ -280,21 +280,21 @@ flowchart LR
 internal/api.handleCreateMessage
 -> internal/channel/csgclaw.Service.SendMessage
 -> internal/im.Service.CreateMessage
--> internal/api.Handler.PublishBotEvent
--> internal/im.BotBridge.PublishMessageEvent
+-> internal/api.Handler.PublishParticipantEvent
+-> internal/im.ParticipantBridge.PublishMessageEvent
 -> /api/v1/channels/csgclaw/participants/{participantID}/events
 ```
 
 实现 `/new` 时：
 
 1. `internal/channel/csgclaw.Service.SendMessage` 继续只做 canonical normalize 与 `internal/im` 写入。
-2. `internal/im.BotBridge` 继续只负责事件排队与 SSE 投递，不查询 runtime，也不维护 runtime 原生命令映射。
-3. 在 `internal/api.Handler.PublishBotEvent` 附近识别 `evt.Message.Content` 是否为 canonical `new conversation`。
+2. `internal/im.ParticipantBridge` 继续只负责事件排队与 SSE 投递，不查询 runtime，也不维护 runtime 原生命令映射。
+3. 在 `internal/api.Handler.PublishParticipantEvent` 附近识别 `evt.Message.Content` 是否为 canonical `new conversation`。
 4. 命中后，对每个实际要通知的目标 Agent 调用 `agent.Service.NewConversationAction`。
-5. 对 PicoClaw/OpenClaw，把投递给目标 bridge 的 `im.BotEvent.Text` 替换成 runtime 原生命令 `/clear` 或 `/new`，其余 room/thread/context 字段仍复用 `BotBridge` 构造逻辑。
+5. 对 PicoClaw/OpenClaw，把投递给目标 bridge 的 `im.ParticipantEvent.Text` 替换成 runtime 原生命令 `/clear` 或 `/new`，其余 room/thread/context 字段仍复用 `ParticipantBridge` 构造逻辑。
 6. 对 Codex，仅在 CSGClaw 本地 channel 使用 `/new`，不通过外部 channel 或外部 CLI 对接。
 
-注意：`BotBridge` 当前按 room member 通知目标 bridge，且 `shouldNotifyBot` 不要求 mention。`/new` 的实现必须收紧路由语义：在直接对某个 agent 的 room 中可以不带 mention 生效；在群聊中必须 `@agent`，未 mention 不执行清理，且只对被 mention 的目标 agent 生效。API glue 层需要用 message mentions 过滤 participant bridge target，避免广播给所有 room member。
+注意：`ParticipantBridge` 当前按 room member 通知目标 bridge，且 `shouldNotifyParticipant` 不要求 mention。`/new` 的实现必须收紧路由语义：在直接对某个 agent 的 room 中可以不带 mention 生效；在群聊中必须 `@agent`，未 mention 不执行清理，且只对被 mention 的目标 agent 生效。API glue 层需要用 message mentions 过滤 participant bridge target，避免广播给所有 room member。
 
 Feishu 说明：
 
@@ -332,7 +332,7 @@ PicoClaw 通过 CSGClaw 本地 channel 的对接方式：
 /clear
 ```
 
-4. `internal/im.BotBridge` 或专门的 agent slash dispatcher 向目标 PicoClaw participant bridge 投递 BotEvent。
+4. `internal/im.ParticipantBridge` 或专门的 agent slash dispatcher 向目标 PicoClaw participant bridge 投递 ParticipantEvent。
 5. PicoClaw 通过 CSGClaw participant bridge 协议订阅并收到 message event。
 6. PicoClaw command executor 在进入 LLM 前识别 `/clear`。
 7. PicoClaw 根据 event context 计算自身 session key：
@@ -349,7 +349,7 @@ GET /api/v1/channels/csgclaw/participants/{participantID}/events
 - PicoClaw 使用 `CSGCLAW_BASE_URL` 或 `PICOCLAW_CHANNELS_CSGCLAW_BASE_URL` 连接 CSGClaw。
 - 请求带 `Authorization: Bearer <token>`。
 - CSGClaw 返回 `text/event-stream`，事件名是 `message`。
-- 事件 data 是 `im.BotEvent`，包含 `channel=csgclaw`、`room_id`、`chat_id`、`thread_root_id`、`text`、`context`、`thread_context`，其中线程相关字段仅用于透传，不参与清理范围判断。
+- 事件 data 是 `im.ParticipantEvent`，包含 `channel=csgclaw`、`room_id`、`chat_id`、`thread_root_id`、`text`、`context`、`thread_context`，其中线程相关字段仅用于透传，不参与清理范围判断。
 
 PicoClaw 回消息使用：
 
@@ -367,7 +367,7 @@ POST /api/v1/channels/csgclaw/participants/{participantID}/messages
 }
 ```
 
-CSGClaw 投递给 PicoClaw 的 BotEvent 关键字段：
+CSGClaw 投递给 PicoClaw 的 ParticipantEvent 关键字段：
 
 ```text
 text = "/clear"
@@ -381,7 +381,7 @@ context.chat_id = 当前 room
 context.topic_id = 当前 thread root，可为空（保留透传，不影响清理范围）
 ```
 
-因此 PicoClaw 不需要新增独立清理命令才能完成 CSGClaw 本地 channel 的当前能力。CSGClaw 要做的是把本地 channel 用户侧 `/new` 映射为 PicoClaw 原生 `/clear`，并确保 BotEvent 的上下文仍指向当前 room。这个映射不覆盖 PicoClaw 直连 Feishu/Lark channel。
+因此 PicoClaw 不需要新增独立清理命令才能完成 CSGClaw 本地 channel 的当前能力。CSGClaw 要做的是把本地 channel 用户侧 `/new` 映射为 PicoClaw 原生 `/clear`，并确保 ParticipantEvent 的上下文仍指向当前 room。这个映射不覆盖 PicoClaw 直连 Feishu/Lark channel。
 
 ### 2.7 OpenClaw 对接方案
 
@@ -403,13 +403,13 @@ OpenClaw 对接方式：
 /new
 ```
 
-4. `internal/im.BotBridge` 或专门的 agent slash dispatcher 向目标 OpenClaw participant bridge 投递 BotEvent。
+4. `internal/im.ParticipantBridge` 或专门的 agent slash dispatcher 向目标 OpenClaw participant bridge 投递 ParticipantEvent。
 5. OpenClaw 通过 CSGClaw participant bridge HTTP/SSE 协议接收 message event。
 6. OpenClaw gateway/channel adapter 将 event 交给 OpenClaw runtime。
 7. OpenClaw command executor 在进入模型前识别 `/new`，原地 reset 当前 session。
 8. OpenClaw 通过 `POST /api/v1/channels/csgclaw/participants/{participantID}/messages` 回确认。
 
-CSGClaw 投递给 OpenClaw 的 BotEvent 关键字段：
+CSGClaw 投递给 OpenClaw 的 ParticipantEvent 关键字段：
 
 ```text
 text = "/new"

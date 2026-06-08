@@ -109,7 +109,7 @@ export function WorkspaceTabPanels({
   onToggleWorkspaceGroup,
   onCreateRoom,
   onCreateAgent,
-  onCreateNotificationBot,
+  onCreateNotificationParticipant,
   onOpenCreateTeam,
   onOpenCreateTask,
   hub,
@@ -343,7 +343,7 @@ export function WorkspaceTabPanels({
           count={notificationAgentItems.length}
           collapsed={Boolean(collapsedWorkspaceGroups.notifications)}
           onToggle={() => onToggleWorkspaceGroup("notifications")}
-          onAdd={onCreateNotificationBot}
+          onAdd={onCreateNotificationParticipant}
           addLabel={t("createNotificationBot")}
           {...sectionDragProps(SectionPanels.agents, id)}
         >

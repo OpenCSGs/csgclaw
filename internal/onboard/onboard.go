@@ -9,7 +9,6 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/app/runtimewiring"
-	"csgclaw/internal/bot"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
@@ -18,10 +17,10 @@ import (
 )
 
 var (
-	CreateManagerBot       = createManagerBot
-	EnsureIMBootstrapState = im.EnsureBootstrapState
-	defaultAgentsPath      = config.DefaultAgentsPath
-	defaultIMStatePath     = config.DefaultIMStatePath
+	CreateManagerParticipant = createManagerParticipant
+	EnsureIMBootstrapState   = im.EnsureBootstrapState
+	defaultAgentsPath        = config.DefaultAgentsPath
+	defaultIMStatePath       = config.DefaultIMStatePath
 )
 
 type EnsureStateOptions struct {
@@ -92,7 +91,7 @@ func ensureBootstrapState(ctx context.Context, cfg config.Config) error {
 	if err := EnsureIMBootstrapState(imStatePath); err != nil {
 		return err
 	}
-	if _, err := CreateManagerBot(ctx, agentsPath, imStatePath, cfg); err != nil {
+	if _, err := CreateManagerParticipant(ctx, agentsPath, imStatePath, cfg); err != nil {
 		return err
 	}
 	return nil
@@ -110,18 +109,18 @@ func bootstrapPaths() (agentsPath, imStatePath string, err error) {
 	return agentsPath, imStatePath, nil
 }
 
-func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg config.Config) (bot.Bot, error) {
+func createManagerParticipant(ctx context.Context, agentsPath, imStatePath string, cfg config.Config) (participant.Participant, error) {
 	hubSvc, err := hub.NewService(cfg.Hub, hub.DefaultStoreFactory)
 	if err != nil {
-		return bot.Bot{}, err
+		return participant.Participant{}, err
 	}
 	bootstrapDefaults, err := hub.ResolveBootstrapDefaults(ctx, cfg.Bootstrap, hubSvc)
 	if err != nil {
-		return bot.Bot{}, err
+		return participant.Participant{}, err
 	}
 	opts, err := sandboxproviders.ServiceOptions(cfg.Sandbox)
 	if err != nil {
-		return bot.Bot{}, err
+		return participant.Participant{}, err
 	}
 	opts = append(opts,
 		runtimewiring.WithPicoClawSandboxRuntime(nil),
@@ -132,7 +131,7 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 	)
 	agentSvc, err := agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, bootstrapDefaults.ManagerImage, agentsPath, opts...)
 	if err != nil {
-		return bot.Bot{}, err
+		return participant.Participant{}, err
 	}
 	defer func() {
 		_ = agentSvc.Close()
@@ -140,11 +139,11 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 
 	imSvc, err := im.NewServiceFromPath(imStatePath)
 	if err != nil {
-		return bot.Bot{}, err
+		return participant.Participant{}, err
 	}
 	store, err := participant.NewStore(filepath.Join(filepath.Dir(imStatePath), "participants.json"))
 	if err != nil {
-		return bot.Bot{}, err
+		return participant.Participant{}, err
 	}
 	participantSvc := participant.NewService(
 		store,
@@ -153,18 +152,9 @@ func createManagerBot(ctx context.Context, agentsPath, imStatePath string, cfg c
 	)
 	created, err := participantSvc.EnsureBootstrapManager(ctx)
 	if err != nil {
-		return bot.Bot{}, err
+		return participant.Participant{}, err
 	}
-	return bot.Bot{
-		ID:        created.ID,
-		Name:      created.Name,
-		Role:      string(bot.RoleManager),
-		Channel:   created.Channel,
-		AgentID:   created.AgentID,
-		UserID:    created.ChannelUserRef,
-		Available: true,
-		CreatedAt: created.CreatedAt,
-	}, nil
+	return created, nil
 }
 
 func defaultConfig() config.Config {

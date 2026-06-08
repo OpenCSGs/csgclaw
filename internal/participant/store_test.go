@@ -32,7 +32,7 @@ func TestNewStoreMigratesLegacyBotsAndDeletesSource(t *testing.T) {
 			UpdatedAt:       createdAt.Add(time.Minute),
 		},
 	}})
-	writeJSONFile(t, botsPath, legacyBotState{Bots: []apitypes.Bot{
+	writeJSONFile(t, botsPath, legacyBotState{Bots: []apitypes.LegacyBot{
 		{
 			ID:        "u-manager",
 			Name:      "manager",

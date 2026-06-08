@@ -22,15 +22,15 @@ func newConversationCommandReason(content string) (string, bool, error) {
 	return strings.TrimSpace(cmd.Body), true, nil
 }
 
-func (h *Handler) publishNewConversationBotEvent(ctx context.Context, room im.Room, sender im.User, message im.Message, reason string) []string {
-	if h == nil || h.svc == nil || h.botBridge == nil {
+func (h *Handler) publishNewConversationParticipantEvent(ctx context.Context, room im.Room, sender im.User, message im.Message, reason string) []string {
+	if h == nil || h.svc == nil || h.participantBridge == nil {
 		return nil
 	}
 	var missed []string
 	threadRootID := conversationThreadRootID(message)
 	for _, target := range h.newConversationBridgeTargets(room, message) {
-		botID := target.bridgeID
-		agentID := h.runtimeAgentIDForBridgeID(botID)
+		participantID := target.bridgeID
+		agentID := h.runtimeAgentIDForBridgeID(participantID)
 		action, err := h.svc.NewConversationAction(ctx, agent.NewConversationRequest{
 			Channel:      csgclawchannel.ChannelID,
 			BotID:        agentID,
@@ -39,7 +39,7 @@ func (h *Handler) publishNewConversationBotEvent(ctx context.Context, room im.Ro
 			Reason:       reason,
 		})
 		if err != nil {
-			slog.Warn("new conversation action failed", "channel", csgclawchannel.ChannelID, "bot_id", botID, "room_id", room.ID, "error", err)
+			slog.Warn("new conversation action failed", "channel", csgclawchannel.ChannelID, "participant_id", participantID, "room_id", room.ID, "error", err)
 			continue
 		}
 		switch action.Mode {
@@ -47,24 +47,24 @@ func (h *Handler) publishNewConversationBotEvent(ctx context.Context, room im.Ro
 			if action.BotEventText == "" {
 				continue
 			}
-			if !h.enqueueBotMessageEventForBridgeTarget(room, sender, message, target, action.BotEventText) {
-				missed = append(missed, botID)
+			if !h.enqueueParticipantMessageEventForBridgeTarget(room, sender, message, target, action.BotEventText) {
+				missed = append(missed, participantID)
 			}
 		case agent.NewConversationActionInternal:
-			if !h.enqueueBotMessageEventForBridgeTarget(room, sender, message, target, "") {
-				missed = append(missed, botID)
+			if !h.enqueueParticipantMessageEventForBridgeTarget(room, sender, message, target, "") {
+				missed = append(missed, participantID)
 			}
 		}
 	}
 	return missed
 }
 
-func (h *Handler) newConversationBridgeTargets(room im.Room, message im.Message) []botBridgeTarget {
+func (h *Handler) newConversationBridgeTargets(room im.Room, message im.Message) []participantBridgeTarget {
 	if h == nil {
 		return nil
 	}
-	targets := make([]botBridgeTarget, 0)
-	for _, target := range h.botBridgeTargetsForRoom(room) {
+	targets := make([]participantBridgeTarget, 0)
+	for _, target := range h.participantBridgeTargetsForRoom(room) {
 		if strings.TrimSpace(target.bridgeID) == "" || target.matches(message.SenderID) || !h.isAgentSender(target.bridgeID) {
 			continue
 		}
@@ -76,7 +76,7 @@ func (h *Handler) newConversationBridgeTargets(room im.Room, message im.Message)
 	return targets
 }
 
-func messageMentionsBridgeTarget(message im.Message, target botBridgeTarget) bool {
+func messageMentionsBridgeTarget(message im.Message, target participantBridgeTarget) bool {
 	for _, mention := range message.Mentions {
 		if target.matches(mention.ID) {
 			return true

@@ -1,10 +1,10 @@
 import { isNotificationBotAgent } from "@/models/agents";
 import { AgentDetailPane } from "../AgentDetailPane";
-import { NotificationBotDetailPane } from "../NotificationBotDetailPane";
+import { NotificationParticipantDetailPane } from "../NotificationParticipantDetailPane";
 
 export function AgentView(props) {
   if (isNotificationBotAgent(props.item)) {
-    return <NotificationBotDetailPane {...props} />;
+    return <NotificationParticipantDetailPane {...props} />;
   }
   return <AgentDetailPane {...props} />;
 }

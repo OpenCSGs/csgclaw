@@ -113,11 +113,11 @@ Task/Approval/Presence = server 端权威结构化状态
 | 能力 | 当前落点 | 在 Agent Teams 中的作用 |
 | --- | --- | --- |
 | agent runtime 生命周期 | `internal/agent` | manager/worker 的执行实体 |
-| bot 到 agent/user 绑定 | `internal/bot` | team member 的稳定身份 |
+| participant 到 agent/user 绑定 | `internal/participant` | team member 的稳定身份 |
 | channel-neutral 协作能力 | 建议新增 `team.ChannelAdapter` 或等价接口 | 统一表达 create room / add member / send message / list messages |
 | 内建 csgclaw channel | `internal/im` | 内建 channel 的 room/member/message 存储与投影实现 |
 | 内建 csgclaw 实时事件 | `internal/im.Bus` | 仅用于内建 Web UI/SSE 的实时更新 |
-| 内建 csgclaw bot delivery | `internal/im.BotBridge` | 仅用于内建 channel runtime 接收 room 消息；不是 Feishu/Matrix 的通用 mailbox |
+| 内建 csgclaw participant delivery | `internal/im.ParticipantBridge` | 仅用于内建 channel runtime 接收 room 消息；不是 Feishu/Matrix 的通用 mailbox |
 | 外部 channel | `internal/channel/*` + `/api/v1/channels/{channel}` | Feishu/未来 Matrix 的 room/member/message 适配边界 |
 | Web conversation UI | `web/app/src/pages/ConversationPage` | 内建 csgclaw channel 的第一版可见性主入口 |
 
@@ -139,7 +139,7 @@ Phase 0 定义 adapter 时应按最弱 channel 的能力下限设计，而不是
 - `SendMessage` 是 MVP 的核心能力，返回可用于排查的 `MessageRef` 即可；
 - channel 特有能力通过 optional capability 逐步补充，不提前放进基础接口。
 
-内建 `csgclaw` adapter 可以包一层 `internal/im.Service`、`internal/im.Bus` 和 `internal/im.BotBridge`；Feishu adapter 则通过 `internal/channel/feishu` 发送消息；未来 Matrix adapter 走 Matrix 的 room/member/message API。`ListMessages` 不作为 MVP 必需能力；只有在做外部 channel 的消息 cursor 恢复、人工恢复或历史同步时，才作为 optional capability 加回 adapter，避免把 task 状态恢复依赖 room history。
+内建 `csgclaw` adapter 可以包一层 `internal/im.Service`、`internal/im.Bus` 和 `internal/im.ParticipantBridge`；Feishu adapter 则通过 `internal/channel/feishu` 发送消息；未来 Matrix adapter 走 Matrix 的 room/member/message API。`ListMessages` 不作为 MVP 必需能力；只有在做外部 channel 的消息 cursor 恢复、人工恢复或历史同步时，才作为 optional capability 加回 adapter，避免把 task 状态恢复依赖 room history。
 
 推荐的概念映射：
 
@@ -218,7 +218,7 @@ Agent Teams 的高级语义由 `internal/team` 解释和维护，再投影成普
 | room/member/message | 本地完整读写 | 通过 channel adapter 调用外部 API |
 | room history 审计 | 本地可完整读取 | 受外部平台权限和历史可见性限制 |
 | structured event 展示 | Web UI 可增强渲染 | 默认投影为普通文本，后续可加卡片 |
-| bot delivery | 可复用 `internal/im.BotBridge` | 需要各自 webhook/event adapter |
+| participant delivery | 可复用 `internal/im.ParticipantBridge` | 需要各自 webhook/event adapter |
 | sideband control | 后续可本地实现 | 后续按渠道能力单独适配 |
 
 ---

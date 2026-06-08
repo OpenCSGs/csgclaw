@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
-	"csgclaw/internal/bot"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
@@ -34,8 +34,8 @@ func TestDetectStateFreshHomeReportsIncompleteBootstrap(t *testing.T) {
 	if result.ManagerAgentComplete {
 		t.Fatal("ManagerAgentComplete = true, want false")
 	}
-	if result.ManagerBotComplete {
-		t.Fatal("ManagerBotComplete = true, want false")
+	if result.ManagerParticipantComplete {
+		t.Fatal("ManagerParticipantComplete = true, want false")
 	}
 	if result.Complete() {
 		t.Fatal("Complete() = true, want false")
@@ -78,11 +78,11 @@ func TestDetectStateCompleteBootstrapReportsComplete(t *testing.T) {
 	if err := writeManagerAgentState(t); err != nil {
 		t.Fatalf("writeManagerAgentState() error = %v", err)
 	}
-	if err := writeManagerBotState(t, bot.Bot{
+	if err := writeManagerBotState(t, apitypes.LegacyBot{
 		ID:        agent.ManagerUserID,
 		Name:      "manager",
-		Role:      string(bot.RoleManager),
-		Channel:   string(bot.ChannelCSGClaw),
+		Role:      agent.RoleManager,
+		Channel:   participant.ChannelCSGClaw,
 		AgentID:   agent.ManagerUserID,
 		UserID:    agent.ManagerUserID,
 		Available: true,
@@ -96,7 +96,7 @@ func TestDetectStateCompleteBootstrapReportsComplete(t *testing.T) {
 		t.Fatalf("DetectState() error = %v", err)
 	}
 
-	if !result.ConfigExists || !result.ConfigComplete || !result.IMBootstrapComplete || !result.ManagerAgentComplete || !result.ManagerBotComplete {
+	if !result.ConfigExists || !result.ConfigComplete || !result.IMBootstrapComplete || !result.ManagerAgentComplete || !result.ManagerParticipantComplete {
 		t.Fatalf("DetectState() completeness = %+v, want all true", result)
 	}
 	if !result.Complete() {
@@ -135,8 +135,8 @@ func TestDetectStateFlagsMissingManagerBotWhenOtherBootstrapStateExists(t *testi
 	if !result.ConfigExists || !result.ConfigComplete || !result.IMBootstrapComplete || !result.ManagerAgentComplete {
 		t.Fatalf("DetectState() = %+v, want config/im/agent complete", result)
 	}
-	if result.ManagerBotComplete {
-		t.Fatal("ManagerBotComplete = true, want false")
+	if result.ManagerParticipantComplete {
+		t.Fatal("ManagerParticipantComplete = true, want false")
 	}
 	if result.Complete() {
 		t.Fatal("Complete() = true, want false")
@@ -174,7 +174,7 @@ func writeManagerAgentState(t *testing.T) error {
 	return os.WriteFile(agentsPath, append(data, '\n'), 0o600)
 }
 
-func writeManagerBotState(t *testing.T, manager bot.Bot) error {
+func writeManagerBotState(t *testing.T, manager apitypes.LegacyBot) error {
 	t.Helper()
 
 	imStatePath, err := config.DefaultIMStatePath()
@@ -187,7 +187,7 @@ func writeManagerBotState(t *testing.T, manager bot.Bot) error {
 	}
 
 	data, err := json.MarshalIndent(map[string]any{
-		"bots": []bot.Bot{manager},
+		"bots": []apitypes.LegacyBot{manager},
 	}, "", "  ")
 	if err != nil {
 		return err

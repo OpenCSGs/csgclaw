@@ -25,7 +25,7 @@ type persistedState struct {
 }
 
 type legacyBotState struct {
-	Bots []apitypes.Bot `json:"bots"`
+	Bots []apitypes.LegacyBot `json:"bots"`
 }
 
 func NewStore(path string) (*Store, error) {
@@ -289,7 +289,7 @@ func mergeLegacyBotState(participantPath string, items map[string]apitypes.Parti
 	return legacyPath, true, nil
 }
 
-func participantFromLegacyBot(b apitypes.Bot, now time.Time) (apitypes.Participant, error) {
+func participantFromLegacyBot(b apitypes.LegacyBot, now time.Time) (apitypes.Participant, error) {
 	legacyID := strings.TrimSpace(b.ID)
 	if legacyID == "" {
 		return apitypes.Participant{}, fmt.Errorf("id is required")
@@ -354,7 +354,7 @@ func participantFromLegacyBot(b apitypes.Bot, now time.Time) (apitypes.Participa
 	}, nil
 }
 
-func isLegacyCSGClawManagerBot(b apitypes.Bot, typ, channel, agentID string) bool {
+func isLegacyCSGClawManagerBot(b apitypes.LegacyBot, typ, channel, agentID string) bool {
 	if channel != ChannelCSGClaw || typ != TypeAgent {
 		return false
 	}
@@ -367,7 +367,7 @@ func isLegacyCSGClawManagerBot(b apitypes.Bot, typ, channel, agentID string) boo
 	return strings.EqualFold(strings.TrimSpace(b.Role), agent.RoleManager)
 }
 
-func legacyBotMetadata(b apitypes.Bot) map[string]any {
+func legacyBotMetadata(b apitypes.LegacyBot) map[string]any {
 	metadata := cloneAnyMap(b.RuntimeOptions)
 	putMetadataString(metadata, "description", b.Description)
 	putMetadataString(metadata, "legacy_bot_type", b.Type)

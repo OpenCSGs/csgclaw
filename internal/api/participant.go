@@ -116,7 +116,7 @@ func (h *Handler) handleParticipantEvents(w http.ResponseWriter, r *http.Request
 		if !ok {
 			return
 		}
-		h.handleBotEvents(w, r, participantID)
+		h.handleParticipantEventsStream(w, r, participantID)
 	case "feishu":
 		h.handleFeishuParticipantEvents(w, r, h.resolveFeishuParticipantTargetID(id))
 	default:
@@ -140,7 +140,7 @@ func (h *Handler) handleParticipantMessage(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	h.handleBotSendMessage(w, r, participantID)
+	h.handleParticipantSendMessage(w, r, participantID)
 }
 
 func (h *Handler) resolveParticipantChannelUserID(channelName, id string) string {
@@ -214,7 +214,7 @@ func (h *Handler) requireParticipantBridgeID(w http.ResponseWriter, r *http.Requ
 		http.NotFound(w, r)
 		return "", false
 	}
-	if h.botBridge == nil {
+	if h.participantBridge == nil {
 		http.Error(w, "picoclaw integration is not configured", http.StatusServiceUnavailable)
 		return "", false
 	}

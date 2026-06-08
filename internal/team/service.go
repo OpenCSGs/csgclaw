@@ -277,7 +277,7 @@ func (s *Service) CreateTeam(input CreateTeamInput) (TeamMeta, error) {
 	if strings.TrimSpace(input.LeadBotID) == "" {
 		return TeamMeta{}, fmt.Errorf("lead_bot_id is required")
 	}
-	leadBotID, err := requireCanonicalBotID("lead_bot_id", input.LeadBotID)
+	leadBotID, err := requireCanonicalParticipantID("lead_bot_id", input.LeadBotID)
 	if err != nil {
 		return TeamMeta{}, err
 	}
@@ -388,7 +388,7 @@ func (s *Service) CreateTask(input CreateTaskInput) (TeamTask, error) {
 	if err := s.validateDependsOnLocked(input.TeamID, input.DependsOn); err != nil {
 		return TeamTask{}, err
 	}
-	if _, err := requireCanonicalBotID("assign_to", input.AssignTo); err != nil {
+	if _, err := requireCanonicalParticipantID("assign_to", input.AssignTo); err != nil {
 		return TeamTask{}, err
 	}
 
@@ -436,7 +436,7 @@ func (s *Service) CreateTasks(input CreateTaskBatchInput) (CreateTasksResult, er
 		if strings.TrimSpace(item.Title) == "" {
 			return CreateTasksResult{}, fmt.Errorf("tasks[%d].title is required", i)
 		}
-		if _, err := requireCanonicalBotID("assign_to", item.AssignTo); err != nil {
+		if _, err := requireCanonicalParticipantID("assign_to", item.AssignTo); err != nil {
 			return CreateTasksResult{}, fmt.Errorf("tasks[%d].assign_to: %w", i, err)
 		}
 		idRef := strings.TrimSpace(item.IDRef)
@@ -591,7 +591,7 @@ func (s *Service) PlanTask(input PlanTaskInput) (PlanTaskResult, error) {
 	result := PlanTaskResult{AlreadyPlanned: false}
 	for i, item := range input.Tasks {
 		assignTo := firstNonEmpty(strings.TrimSpace(item.AssignTo), fallbackPlanAssignee(task.AssignedTo, meta))
-		if _, err := requireCanonicalBotID("assign_to", assignTo); err != nil {
+		if _, err := requireCanonicalParticipantID("assign_to", assignTo); err != nil {
 			return PlanTaskResult{}, fmt.Errorf("plan tasks[%d].assign_to: %w", i, err)
 		}
 		child := s.newTaskLocked(meta, CreateTaskInput{
@@ -765,7 +765,7 @@ func taskAssignedToManager(assignedTo string, teamMeta TeamMeta) bool {
 		return false
 	}
 	if leadBotID := strings.TrimSpace(teamMeta.LeadBotID); leadBotID != "" {
-		return BotIDsMatch(assignedTo, leadBotID)
+		return ParticipantIDsMatch(assignedTo, leadBotID)
 	}
 	return assignedTo == "u-manager"
 }
@@ -808,7 +808,7 @@ func (s *Service) AssignTask(input AssignTaskInput) (TeamTask, error) {
 	if strings.TrimSpace(input.AssignedTo) == "" {
 		return TeamTask{}, fmt.Errorf("assigned_to is required")
 	}
-	assignedTo, err := requireCanonicalBotID("assigned_to", input.AssignedTo)
+	assignedTo, err := requireCanonicalParticipantID("assigned_to", input.AssignedTo)
 	if err != nil {
 		return TeamTask{}, err
 	}
@@ -852,7 +852,7 @@ func (s *Service) ClaimTask(input ClaimTaskInput) (TeamTask, error) {
 	}
 	before := s.captureTeamStateLocked(meta.ID)
 	eventStart := len(s.events[meta.ID])
-	botID, err := requireCanonicalBotID("bot_id", input.BotID)
+	botID, err := requireCanonicalParticipantID("bot_id", input.BotID)
 	if err != nil {
 		return TeamTask{}, err
 	}
@@ -870,7 +870,7 @@ func (s *Service) ClaimNext(teamID string, botID string) (TeamTask, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	botID, err := requireCanonicalBotID("bot_id", botID)
+	botID, err := requireCanonicalParticipantID("bot_id", botID)
 	if err != nil {
 		return TeamTask{}, err
 	}
@@ -966,7 +966,7 @@ func (s *Service) bestClaimCandidateLocked(teamID string, botID string) *TeamTas
 		if strings.TrimSpace(task.ParentID) != "" && task.DispatchedAt == nil {
 			continue
 		}
-		if strings.TrimSpace(task.AssignedTo) != "" && !BotIDsMatch(task.AssignedTo, botID) {
+		if strings.TrimSpace(task.AssignedTo) != "" && !ParticipantIDsMatch(task.AssignedTo, botID) {
 			continue
 		}
 		if !s.dependenciesCompletedLocked(teamID, task.DependsOn) {
@@ -1368,7 +1368,7 @@ func (s *Service) GetPresence(teamID string, botID string) (MemberPresence, bool
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	botID = cleanBotID(botID)
+	botID = cleanParticipantID(botID)
 	if botID == "" {
 		return MemberPresence{}, false
 	}
@@ -1396,7 +1396,7 @@ func (s *Service) UpsertPresence(input UpsertPresenceInput) (MemberPresence, err
 	if err != nil {
 		return MemberPresence{}, err
 	}
-	botID, err := requireCanonicalBotID("bot_id", input.BotID)
+	botID, err := requireCanonicalParticipantID("bot_id", input.BotID)
 	if err != nil {
 		return MemberPresence{}, err
 	}
@@ -1416,7 +1416,7 @@ func (s *Service) UpsertPresence(input UpsertPresenceInput) (MemberPresence, err
 	role := strings.TrimSpace(input.Role)
 	if role == "" {
 		role = "worker"
-		if BotIDsMatch(botID, meta.LeadBotID) {
+		if ParticipantIDsMatch(botID, meta.LeadBotID) {
 			role = "manager"
 		}
 	}
@@ -1522,7 +1522,7 @@ func (s *Service) blockTask(input UpdateTaskStatusInput) (TeamTask, error) {
 }
 
 func (s *Service) claimableLocked(meta TeamMeta, task *TeamTask, botID string) error {
-	botID = cleanBotID(botID)
+	botID = cleanParticipantID(botID)
 	if botID == "" {
 		return fmt.Errorf("bot_id is required")
 	}
@@ -1537,7 +1537,7 @@ func (s *Service) claimableLocked(meta TeamMeta, task *TeamTask, botID string) e
 	if strings.TrimSpace(task.ParentID) != "" && task.DispatchedAt == nil {
 		return fmt.Errorf("%w: task %s has not been dispatched", ErrTaskNotClaimable, task.ID)
 	}
-	if task.AssignedTo != "" && !BotIDsMatch(task.AssignedTo, botID) {
+	if task.AssignedTo != "" && !ParticipantIDsMatch(task.AssignedTo, botID) {
 		return fmt.Errorf("%w: task %s is assigned to %s", ErrTaskNotClaimable, task.ID, task.AssignedTo)
 	}
 	if !s.dependenciesCompletedLocked(meta.ID, task.DependsOn) {
@@ -1621,7 +1621,7 @@ func (s *Service) readyChildrenCountLocked(meta TeamMeta, parentID string) int {
 		default:
 			continue
 		}
-		if cleanBotID(child.AssignedTo) == "" {
+		if cleanParticipantID(child.AssignedTo) == "" {
 			continue
 		}
 		if !s.dependenciesCompletedLocked(meta.ID, child.DependsOn) {
@@ -1648,7 +1648,7 @@ func (s *Service) dispatchReadyChildrenLocked(meta TeamMeta, parentID string, ac
 		default:
 			continue
 		}
-		assignee := cleanBotID(child.AssignedTo)
+		assignee := cleanParticipantID(child.AssignedTo)
 		if assignee == "" {
 			continue
 		}
@@ -1703,7 +1703,7 @@ func (s *Service) aggregateChildResultsLocked(teamID string, parentID string) st
 }
 
 func (s *Service) claimLocked(meta TeamMeta, task *TeamTask, botID string) {
-	botID = cleanBotID(botID)
+	botID = cleanParticipantID(botID)
 	now := s.now()
 	task.Status = TaskStatusInProgress
 	task.ClaimedBy = botID
@@ -1759,7 +1759,7 @@ func (s *Service) requireTaskOperatorLocked(meta TeamMeta, task *TeamTask, actor
 	if actorID == "" {
 		return fmt.Errorf("actor_id is required")
 	}
-	if BotIDsMatch(actorID, meta.LeadBotID) || BotIDsMatch(actorID, task.ClaimedBy) {
+	if ParticipantIDsMatch(actorID, meta.LeadBotID) || ParticipantIDsMatch(actorID, task.ClaimedBy) {
 		return nil
 	}
 	return fmt.Errorf("actor %q cannot operate task %s", actorID, task.ID)
@@ -1822,9 +1822,9 @@ func (s *Service) dependenciesCompletedLocked(teamID string, dependsOn []string)
 }
 
 func (s *Service) ensureWorkerFreeLocked(teamID string, botID string) error {
-	botID = cleanBotID(botID)
+	botID = cleanParticipantID(botID)
 	for _, task := range s.tasksForTeamLocked(teamID) {
-		if task.Status == TaskStatusInProgress && BotIDsMatch(task.ClaimedBy, botID) {
+		if task.Status == TaskStatusInProgress && ParticipantIDsMatch(task.ClaimedBy, botID) {
 			return fmt.Errorf("%w: %s", ErrWorkerAlreadyBusy, botID)
 		}
 	}
@@ -1853,7 +1853,7 @@ func (s *Service) newTaskLocked(meta TeamMeta, input CreateTaskInput) *TeamTask 
 		Body:       strings.TrimSpace(input.Body),
 		Status:     status,
 		CreatedBy:  strings.TrimSpace(input.CreatedBy),
-		AssignedTo: cleanBotID(input.AssignTo),
+		AssignedTo: cleanParticipantID(input.AssignTo),
 		DependsOn:  cloneStrings(input.DependsOn),
 		Priority:   input.Priority,
 		DeadlineAt: cloneTimePtr(input.DeadlineAt),
@@ -2024,7 +2024,7 @@ func (s *Service) snapshotTeamLocked(teamID string) teamSnapshot {
 }
 
 func (s *Service) markPresenceDirtyLocked(teamID string, botID string) {
-	botID = cleanBotID(botID)
+	botID = cleanParticipantID(botID)
 	if s.dirtyPresence[teamID] == nil {
 		s.dirtyPresence[teamID] = make(map[string]struct{})
 	}
@@ -2042,8 +2042,8 @@ func (s *Service) loadStoreState() error {
 		taskMap := make(map[string]*TeamTask, len(snapshot.Tasks))
 		for _, task := range snapshot.Tasks {
 			taskCopy := cloneTask(task)
-			taskCopy.AssignedTo = cleanBotID(taskCopy.AssignedTo)
-			taskCopy.ClaimedBy = cleanBotID(taskCopy.ClaimedBy)
+			taskCopy.AssignedTo = cleanParticipantID(taskCopy.AssignedTo)
+			taskCopy.ClaimedBy = cleanParticipantID(taskCopy.ClaimedBy)
 			taskMap[task.ID] = &taskCopy
 			s.bumpTaskIdentifierLocked(task.ID)
 		}
@@ -2058,7 +2058,7 @@ func (s *Service) loadStoreState() error {
 		presenceMap := make(map[string]*MemberPresence, len(snapshot.Presence))
 		for _, p := range snapshot.Presence {
 			pCopy := clonePresence(p)
-			pCopy.BotID = cleanBotID(pCopy.BotID)
+			pCopy.BotID = cleanParticipantID(pCopy.BotID)
 			presenceMap[pCopy.BotID] = &pCopy
 		}
 		s.presence[teamID] = presenceMap
@@ -2124,7 +2124,7 @@ func (s *Service) updatePresenceForTaskLocked(meta TeamMeta, task *TeamTask, sta
 }
 
 func (s *Service) updatePresenceLocked(meta TeamMeta, botID string, state string, currentTaskID string, summary string) {
-	botID = cleanBotID(botID)
+	botID = cleanParticipantID(botID)
 	if botID == "" {
 		return
 	}
@@ -2143,7 +2143,7 @@ func (s *Service) updatePresenceLocked(meta TeamMeta, botID string, state string
 	p.Summary = strings.TrimSpace(summary)
 	p.LastHeartbeatAt = now
 	p.UpdatedAt = now
-	if BotIDsMatch(botID, meta.LeadBotID) {
+	if ParticipantIDsMatch(botID, meta.LeadBotID) {
 		p.Role = "manager"
 	}
 	s.markPresenceDirtyLocked(meta.ID, botID)
