@@ -5,4 +5,4 @@ runtime_kind = "openclaw_sandbox"
 updated_at = "2026-05-29T03:10:23Z"
 
 [image]
-ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260529.2-csgclaw"
+ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260607.1-csgclaw"

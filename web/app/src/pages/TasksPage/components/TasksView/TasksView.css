@@ -203,6 +203,7 @@
 
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
   min-height: 0;
   height: 100%;
   overflow: hidden;
@@ -230,9 +231,12 @@
   display: grid;
   align-content: start;
   gap: 8px;
+  overflow-x: hidden;
   overflow-y: auto;
+  min-width: 0;
   min-height: 0;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
+  overscroll-behavior-x: auto;
   padding: 4px;
   border-radius: 8px;
   scrollbar-width: thin;
