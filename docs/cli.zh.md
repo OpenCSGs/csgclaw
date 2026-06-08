@@ -454,6 +454,7 @@ csgclaw pt <subcommand> [flags]
 - `list`
 - `create`
 - `delete`
+- `config`
 
 `participant list` 参数：
 
@@ -488,6 +489,30 @@ csgclaw participant delete <id> [flags]
 
 - `--channel string`：`csgclaw` 或 `feishu`，默认 `csgclaw`。
 - `--delete-agent string`：Agent 清理模式，支持 `if_unreferenced`。
+
+`participant config` 通过本地 HTTP API 管理 participant channel 配置。当前仅支持 Feishu。
+
+`participant config` 参数：
+
+- `--channel string`：仅支持 `feishu`，默认 `feishu`。
+- `--get`：读取脱敏后的 Feishu 配置。
+- `--set`：写入 Feishu 配置。
+- `--reload`：重新加载 Feishu 配置。
+- `--bot-id string`：当前服务端 API 使用的 Feishu config key。
+- `--app-id string`：Feishu app id，`--set` 时必填。
+- `--admin-open-id string`：可选 Feishu admin open_id。
+- `--app-secret-file string`：从文件读取 Feishu app secret。
+- `--app-secret-env string`：从环境变量读取 Feishu app secret。
+- `--app-secret-stdin`：从 stdin 读取 Feishu app secret。
+- `--no-reload`：只写入配置，不重新加载运行中的服务。
+
+`participant config` 行为说明：
+
+- 必须且只能传入 `--get`、`--set`、`--reload` 之一。
+- `--get` 和 `--set` 需要 `--bot-id`。
+- `--set` 必须且只能指定一种 app secret 来源。
+- 返回中的 `app_secret` 是状态标记，不是真实 secret。
+- `pt config` 与 `participant config` 完全等价。
 
 #### `room`
 
@@ -592,6 +617,8 @@ csgclaw message <subcommand> [flags]
 ```bash
 csgclaw participant list
 csgclaw participant create --name alice --bind create --role worker --model-id gpt-5.4-mini
+csgclaw participant config --channel feishu --get --bot-id u-manager
+csgclaw pt config --channel feishu --set --bot-id u-manager --app-id cli_xxx --app-secret-env FEISHU_APP_SECRET
 csgclaw room create --title "release-room" --creator-id manager --member-ids manager,alice
 csgclaw member create --room-id room-1 --user-id alice --inviter-id manager
 csgclaw message list --room-id room-1
@@ -644,6 +671,8 @@ csgclaw-cli completion fish
 - `pt list`
 - `pt create`
 - `pt delete`
+- `participant config`
+- `pt config`
 - `room list`
 - `room create`
 - `room delete`
@@ -659,6 +688,8 @@ csgclaw-cli completion fish
 ```bash
 csgclaw-cli participant list --channel feishu --type agent
 csgclaw-cli pt create --name manager --channel feishu --type agent --bind create --role manager
+csgclaw-cli participant config --channel feishu --get --bot-id u-manager
+csgclaw-cli pt config --channel feishu --reload
 csgclaw-cli room create --channel feishu --title "ops-room" --creator-id manager --member-ids manager,dev
 csgclaw-cli member list --channel feishu --room-id oc_x
 csgclaw-cli member create --channel feishu --room-id oc_x --user-id dev --inviter-id manager

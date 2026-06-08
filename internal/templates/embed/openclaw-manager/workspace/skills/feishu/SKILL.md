@@ -332,7 +332,7 @@ Do not use the generic manager recreate endpoint or any terminal/host-side manag
 
 1. Using `csgclaw-cli agent ...`: lite CLI does not have agent commands. Use full `csgclaw` or API.
 2. Running host-only `csgclaw` or `boxlite` commands from inside manager: manager usually only has `csgclaw-cli`; use this script/API from manager, and ask the host operator to clean stale BoxLite boxes if needed.
-3. Looking for removed `csgclaw channel ...` or `csgclaw-cli bot config ...` commands: Feishu config belongs to `/api/v1/channels/feishu/config`.
+3. Looking for removed `csgclaw-cli bot config ...` commands: use `csgclaw-cli participant config --channel feishu ...`, backed by `/api/v1/channels/feishu/config`.
 4. Creating the CSGClaw participant before writing/reloading Feishu config: this can create local placeholder identity.
 5. Expecting reload to update an already-running OpenClaw box: recreate is still required.
 6. Calling manager recreate from inside this manager-hosted skill: return the action card so the current window renders the rebuild button.

@@ -10,14 +10,14 @@ func TestCompleteFullTopLevel(t *testing.T) {
 	got := Complete(FullSpec(), "csgclaw", []string{"csgclaw", ""})
 
 	assertContainsAll(t, got, "serve", "upgrade", "agent", "hub", "skill", "model", "participant", "pt", "completion", "--endpoint", "--config", "-V")
-	assertContainsNone(t, got, "bot", "_serve", "__complete")
+	assertContainsNone(t, got, "bot", "channel", "_serve", "__complete")
 }
 
 func TestCompleteLiteTopLevel(t *testing.T) {
 	got := Complete(LiteSpec(), "csgclaw-cli", []string{"csgclaw-cli", ""})
 
 	assertContainsAll(t, got, "participant", "pt", "room", "member", "message", "completion", "--endpoint", "-V")
-	assertContainsNone(t, got, "bot", "serve", "agent", "model", "user", "_serve", "__complete")
+	assertContainsNone(t, got, "bot", "channel", "serve", "agent", "model", "user", "_serve", "__complete")
 }
 
 func TestCompleteSubcommandsAndFlags(t *testing.T) {
@@ -40,16 +40,19 @@ func TestCompleteSubcommandsAndFlags(t *testing.T) {
 	assertContainsAll(t, got, "list", "create-batch", "assign", "claim", "claim-next", "update", "--help")
 
 	got = Complete(LiteSpec(), "csgclaw-cli", []string{"csgclaw-cli", "participant", ""})
-	assertContainsAll(t, got, "list", "create", "delete")
+	assertContainsAll(t, got, "list", "create", "delete", "config")
 
 	got = Complete(FullSpec(), "csgclaw", []string{"csgclaw", "pt", ""})
-	assertContainsAll(t, got, "list", "create", "delete")
+	assertContainsAll(t, got, "list", "create", "delete", "config")
 
 	got = Complete(LiteSpec(), "csgclaw-cli", []string{"csgclaw-cli", "participant", "create", "--"})
 	assertContainsAll(t, got, "--channel", "--name", "--type", "--bind", "--agent-id")
 
 	got = Complete(FullSpec(), "csgclaw", []string{"csgclaw", "bot", ""})
 	assertContainsNone(t, got, "list", "create", "delete", "config")
+
+	got = Complete(LiteSpec(), "csgclaw-cli", []string{"csgclaw-cli", "pt", "config", "--"})
+	assertContainsAll(t, got, "--channel", "--get", "--set", "--reload", "--bot-id", "--app-secret-env")
 }
 
 func TestCompleteFlagValues(t *testing.T) {

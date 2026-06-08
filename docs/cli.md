@@ -454,6 +454,7 @@ Subcommands:
 - `list`
 - `create`
 - `delete`
+- `config`
 
 `participant list` flags:
 
@@ -488,6 +489,31 @@ csgclaw participant delete <id> [flags]
 
 - `--channel string`: `csgclaw` or `feishu`. Default `csgclaw`.
 - `--delete-agent string`: agent cleanup mode. Supported value: `if_unreferenced`.
+
+`participant config` manages participant channel configuration through the local HTTP API.
+Only Feishu is currently supported.
+
+`participant config` flags:
+
+- `--channel string`: only `feishu` is supported. Default `feishu`.
+- `--get`: get masked Feishu config.
+- `--set`: set Feishu config.
+- `--reload`: reload Feishu config.
+- `--bot-id string`: Feishu config key used by the current server API.
+- `--app-id string`: Feishu app id. Required with `--set`.
+- `--admin-open-id string`: optional Feishu admin open_id.
+- `--app-secret-file string`: read Feishu app secret from a file.
+- `--app-secret-env string`: read Feishu app secret from an environment variable.
+- `--app-secret-stdin`: read Feishu app secret from stdin.
+- `--no-reload`: write config without reloading the running server.
+
+`participant config` behavior:
+
+- Exactly one of `--get`, `--set`, or `--reload` is required.
+- `--get` and `--set` require `--bot-id`.
+- `--set` requires exactly one app secret source.
+- The returned `app_secret` value is a status marker, not the real secret.
+- `pt config` is equivalent to `participant config`.
 
 #### `room`
 
@@ -592,6 +618,8 @@ Examples:
 ```bash
 csgclaw participant list
 csgclaw participant create --name alice --bind create --role worker --model-id gpt-5.4-mini
+csgclaw participant config --channel feishu --get --bot-id u-manager
+csgclaw pt config --channel feishu --set --bot-id u-manager --app-id cli_xxx --app-secret-env FEISHU_APP_SECRET
 csgclaw room create --title "release-room" --creator-id manager --member-ids manager,alice
 csgclaw member create --room-id room-1 --user-id alice --inviter-id manager
 csgclaw message list --room-id room-1
@@ -644,6 +672,8 @@ csgclaw-cli completion fish
 - `pt list`
 - `pt create`
 - `pt delete`
+- `participant config`
+- `pt config`
 - `room list`
 - `room create`
 - `room delete`
@@ -659,6 +689,8 @@ Examples:
 ```bash
 csgclaw-cli participant list --channel feishu --type agent
 csgclaw-cli pt create --name manager --channel feishu --type agent --bind create --role manager
+csgclaw-cli participant config --channel feishu --get --bot-id u-manager
+csgclaw-cli pt config --channel feishu --reload
 csgclaw-cli room create --channel feishu --title "ops-room" --creator-id manager --member-ids manager,dev
 csgclaw-cli member list --channel feishu --room-id oc_x
 csgclaw-cli member create --channel feishu --room-id oc_x --user-id dev --inviter-id manager

@@ -52,7 +52,7 @@ def resolve_manager_app_id(args: argparse.Namespace, state: dict, result: dict) 
     try:
         config = csgclaw_cli_json(
             args,
-            ["bot", "config", "--channel", "feishu", "--get", "--bot-id", "u-manager"],
+            ["participant", "config", "--channel", "feishu", "--get", "--bot-id", "u-manager"],
         )
     except RuntimeError:
         return ""

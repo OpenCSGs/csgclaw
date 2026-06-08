@@ -44,7 +44,7 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 			t.Fatalf("usage = %q, want substring %q", got, want)
 		}
 	}
-	for _, notWant := range []string{"  agent", "  serve", "  onboard", "  user", "\n  bot "} {
+	for _, notWant := range []string{"  agent", "  serve", "  onboard", "  user", "\n  bot ", "\n  channel "} {
 		if strings.Contains(got, notWant) {
 			t.Fatalf("usage = %q, should not include %q", got, notWant)
 		}
@@ -110,15 +110,65 @@ func TestExecuteHiddenCompleteUsesLiteCommandSet(t *testing.T) {
 			t.Fatalf("stdout = %q, want substring %q", got, want)
 		}
 	}
-	for _, notWant := range []string{"agent\n", "serve\n", "onboard\n", "user\n", "bot\n", "__complete\n"} {
+	for _, notWant := range []string{"agent\n", "serve\n", "onboard\n", "user\n", "bot\n", "channel\n", "__complete\n"} {
 		if strings.Contains(got, notWant) {
 			t.Fatalf("stdout = %q, should not include %q", got, notWant)
 		}
 	}
 }
 
+func TestExecuteParticipantAliasConfigSetUsesHTTPClient(t *testing.T) {
+	t.Setenv("FEISHU_APP_SECRET", "secret-value")
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodPut {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodPut)
+			}
+			if req.URL.String() != "http://example.test/api/v1/channels/feishu/config" {
+				t.Fatalf("url = %q, want Feishu config route", req.URL.String())
+			}
+			var payload map[string]any
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if payload["bot_id"] != "u-manager" || payload["app_id"] != "cli_xxx" || payload["app_secret"] != "secret-value" || payload["admin_open_id"] != "ou_xxx" {
+				t.Fatalf("payload = %#v, want Feishu config fields", payload)
+			}
+			if payload["reload"] != false {
+				t.Fatalf("payload reload = %#v, want false", payload["reload"])
+			}
+			return jsonResponse(http.StatusOK, `{"bot_id":"u-manager","configured":true,"app_id":"cli_xxx","app_secret":"present","admin_open_id":"ou_xxx","reloaded":false}`), nil
+		}),
+	}
+
+	err := app.Execute(context.Background(), []string{
+		"--endpoint", "http://example.test",
+		"--output", "json",
+		"pt", "config",
+		"--channel", "feishu",
+		"--set",
+		"--bot-id", "u-manager",
+		"--app-id", "cli_xxx",
+		"--admin-open-id", "ou_xxx",
+		"--app-secret-env", "FEISHU_APP_SECRET",
+		"--no-reload",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if strings.Contains(stdout.String(), "secret-value") {
+		t.Fatalf("stdout leaked app secret: %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"app_secret": "present"`) {
+		t.Fatalf("stdout = %q, want masked secret status", stdout.String())
+	}
+}
+
 func TestExecuteRejectsUnavailableCommands(t *testing.T) {
-	for _, command := range []string{"agent", "serve", "onboard", "user", "bot"} {
+	for _, command := range []string{"agent", "serve", "onboard", "user", "bot", "channel"} {
 		t.Run(command, func(t *testing.T) {
 			app := &App{
 				stdout: &bytes.Buffer{},

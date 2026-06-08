@@ -396,6 +396,22 @@ func participantSpec(name string) CommandSpec {
 					FlagSpec{Name: "delete-agent", TakesValue: true, Values: []string{"if_unreferenced"}},
 				),
 			},
+			{
+				Name:    "config",
+				Summary: "Manage participant channel config",
+				Flags: append(feishuChannelFlags(),
+					FlagSpec{Name: "get"},
+					FlagSpec{Name: "set"},
+					FlagSpec{Name: "reload"},
+					FlagSpec{Name: "bot-id", TakesValue: true},
+					FlagSpec{Name: "app-id", TakesValue: true},
+					FlagSpec{Name: "admin-open-id", TakesValue: true},
+					FlagSpec{Name: "app-secret-file", TakesValue: true},
+					FlagSpec{Name: "app-secret-env", TakesValue: true},
+					FlagSpec{Name: "app-secret-stdin"},
+					FlagSpec{Name: "no-reload"},
+				),
+			},
 		},
 	}
 }
