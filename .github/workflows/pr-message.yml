@@ -74,28 +74,19 @@ jobs:
               return;
             }
 
-            if (body.length > 0) {
-              const invalidLines = body
-                .split("\n")
-                .map((line, index) => ({ line, number: index + 1 }))
-                .filter(({ line }) => !/^- .+/.test(line));
+            const conflictMarkerRe =
+              /^<{7}(?: .*)?$[\s\S]*^={7}$[\s\S]*^>{7}(?: .*)?$/m;
 
-              if (invalidLines.length > 0) {
-                core.setFailed(
-                  [
-                    "Invalid PR body.",
-                    "",
-                    'If PR body is present, every line must start with "- ".',
-                    "Blank lines are not allowed.",
-                    "",
-                    "Invalid lines:",
-                    ...invalidLines.map(
-                      ({ number, line }) => `  line ${number}: ${line || "<blank line>"}`
-                    ),
-                  ].join("\n")
-                );
-                return;
-              }
+            if (conflictMarkerRe.test(body)) {
+              core.setFailed(
+                [
+                  "Invalid PR body.",
+                  "",
+                  "The body appears to contain unresolved merge conflict markers.",
+                  "Please resolve the conflict markers before opening or updating the PR.",
+                ].join("\n")
+              );
+              return;
             }
 
             core.info("PR title and body look good.");

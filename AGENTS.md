@@ -54,7 +54,7 @@ make release
 ## Git And PRs
 
 - Use Conventional Commits for commit messages and PR titles.
-- Keep PR bodies compatible with `.github/workflows/pr-message.yml`: each line starts with `- `, no blank lines, no `Co-authored-by:` trailers.
+- Keep PR bodies compatible with `.github/workflows/pr-message.yml`: use concise GitHub Markdown, and do not include `Co-authored-by:` trailers or unresolved conflict markers.
 - Keep PR bodies short and focused on summary, validation, impact, related issues, and notes.
 - Check PR CI before requesting review or merge.
 
