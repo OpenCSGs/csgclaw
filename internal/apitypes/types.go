@@ -175,21 +175,12 @@ type UpgradeActionResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
-type ConfigFileResponse struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
-}
-
-type UpdateConfigRequest struct {
-	Content string `json:"content"`
-}
-
-type ConfigActionResponse struct {
+type ServerRestartResponse struct {
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
 }
 
-type ConfigRestartStatusResponse struct {
+type ServerRestartStatusResponse struct {
 	ManualRestartRequired bool   `json:"manual_restart_required,omitempty"`
 	Message               string `json:"message,omitempty"`
 	LastError             string `json:"last_error,omitempty"`

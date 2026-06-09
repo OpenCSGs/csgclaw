@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -22,7 +21,7 @@ func (h *Handler) resolveConfigPath() (string, error) {
 	return path, nil
 }
 
-func (h *Handler) handleConfigSettings(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 	path, err := h.resolveConfigPath()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -36,7 +35,7 @@ func (h *Handler) handleConfigSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, configSettingsView(path, cfg))
+		writeJSON(w, http.StatusOK, serverConfigView(path, cfg))
 	case http.MethodPut:
 		var req apitypes.UpdateConfigSettingsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -90,13 +89,13 @@ func (h *Handler) handleConfigSettings(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		writeJSON(w, http.StatusOK, configSettingsView(path, cfg))
+		writeJSON(w, http.StatusOK, serverConfigView(path, cfg))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func configSettingsView(path string, cfg config.Config) apitypes.ConfigSettingsResponse {
+func serverConfigView(path string, cfg config.Config) apitypes.ConfigSettingsResponse {
 	settings := config.UserSettingsFromConfig(cfg)
 	token := strings.TrimSpace(settings.AccessToken)
 	effective := agent.ResolveManagerBaseURL(cfg.Server)
@@ -118,53 +117,7 @@ func configSettingsView(path string, cfg config.Config) apitypes.ConfigSettingsR
 	}
 }
 
-func (h *Handler) handleConfigFile(w http.ResponseWriter, r *http.Request) {
-	path, err := h.resolveConfigPath()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	switch r.Method {
-	case http.MethodGet:
-		data, err := config.ReadRawFile(path)
-		if err != nil {
-			status := http.StatusInternalServerError
-			if strings.Contains(err.Error(), "config not found") {
-				status = http.StatusNotFound
-			}
-			http.Error(w, err.Error(), status)
-			return
-		}
-		writeJSON(w, http.StatusOK, apitypes.ConfigFileResponse{
-			Path:    path,
-			Content: string(data),
-		})
-	case http.MethodPut:
-		body, err := io.ReadAll(io.LimitReader(r.Body, 2<<20))
-		if err != nil {
-			http.Error(w, fmt.Sprintf("read request: %v", err), http.StatusBadRequest)
-			return
-		}
-		var req apitypes.UpdateConfigRequest
-		if err := json.Unmarshal(body, &req); err != nil {
-			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
-			return
-		}
-		if err := config.WriteRawFile(path, []byte(req.Content)); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		writeJSON(w, http.StatusOK, apitypes.ConfigFileResponse{
-			Path:    path,
-			Content: req.Content,
-		})
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (h *Handler) handleConfigApply(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleServerRestart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -176,22 +129,22 @@ func (h *Handler) handleConfigApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apply := h.configRestartApply
-	if apply == nil {
-		apply = upgrade.StartRestartHelper
+	restart := h.serverRestartApply
+	if restart == nil {
+		restart = upgrade.StartRestartHelper
 	}
-	if err := apply(upgrade.RestartHelperOptions{ConfigPath: configPath}); err != nil {
+	if err := restart(upgrade.RestartHelperOptions{ConfigPath: configPath}); err != nil {
 		http.Error(w, fmt.Sprintf("start restart helper: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	writeJSON(w, http.StatusAccepted, apitypes.ConfigActionResponse{
+	writeJSON(w, http.StatusAccepted, apitypes.ServerRestartResponse{
 		Status:  "accepted",
 		Message: "restart helper started",
 	})
 }
 
-func (h *Handler) handleConfigRestartStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleServerRestartStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -209,7 +162,7 @@ func (h *Handler) handleConfigRestartStatus(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	resp := apitypes.ConfigRestartStatusResponse{}
+	resp := apitypes.ServerRestartStatusResponse{}
 	switch record.Status {
 	case upgrade.ApplyStatusManualRestartRequired:
 		resp.ManualRestartRequired = true

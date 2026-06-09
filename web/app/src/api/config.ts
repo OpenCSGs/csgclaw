@@ -2,24 +2,24 @@ import { get, post, put } from "@/api/client";
 import { ApiEndpoints } from "@/shared/constants/api";
 import type { ConfigSettings, ConfigSettingsUpdatePayload } from "@/models/configSettings";
 
-export type ConfigRestartStatusResponse = {
+export type ServerRestartStatusResponse = {
   manual_restart_required?: boolean;
   message?: string;
   last_error?: string;
 };
 
-export function fetchConfigSettings(): Promise<ConfigSettings> {
-  return get(ApiEndpoints.configSettings);
+export function fetchServerConfig(): Promise<ConfigSettings> {
+  return get(ApiEndpoints.serverConfig);
 }
 
-export function updateConfigSettings(payload: ConfigSettingsUpdatePayload): Promise<ConfigSettings> {
-  return put(ApiEndpoints.configSettings, payload);
+export function updateServerConfig(payload: ConfigSettingsUpdatePayload): Promise<ConfigSettings> {
+  return put(ApiEndpoints.serverConfig, payload);
 }
 
-export function applyConfigRestart(): Promise<void> {
-  return post(ApiEndpoints.configApply);
+export function restartServer(): Promise<void> {
+  return post(ApiEndpoints.serverRestart);
 }
 
-export function fetchConfigRestartStatus(): Promise<ConfigRestartStatusResponse> {
-  return get(ApiEndpoints.configRestartStatus);
+export function fetchServerRestartStatus(): Promise<ServerRestartStatusResponse> {
+  return get(ApiEndpoints.serverRestartStatus);
 }

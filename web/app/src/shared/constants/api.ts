@@ -5,10 +5,9 @@ export const ApiEndpoints = {
   version: `${API_BASE_PATH}/version`,
   upgradeStatus: `${API_BASE_PATH}/upgrade/status`,
   upgradeApply: `${API_BASE_PATH}/upgrade/apply`,
-  config: `${API_BASE_PATH}/config`,
-  configSettings: `${API_BASE_PATH}/config/settings`,
-  configApply: `${API_BASE_PATH}/config/apply`,
-  configRestartStatus: `${API_BASE_PATH}/config/restart/status`,
+  serverConfig: `${API_BASE_PATH}/server/config`,
+  serverRestart: `${API_BASE_PATH}/server/restart`,
+  serverRestartStatus: `${API_BASE_PATH}/server/restart/status`,
   notifierRelayWebhookIngress: `${API_BASE_PATH}/webhooks/ingress`,
 } as const;
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyConfigRestart, fetchConfigRestartStatus, fetchConfigSettings, updateConfigSettings } from "@/api/config";
+import { fetchServerConfig, fetchServerRestartStatus, restartServer, updateServerConfig } from "@/api/config";
 import { errorMessage } from "@/api/client";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
 import {
@@ -51,7 +51,7 @@ export function useConfigController({
     setConfigError("");
     setConfigPhase("loading");
     try {
-      const payload = normalizeConfigSettings(await fetchConfigSettings());
+      const payload = normalizeConfigSettings(await fetchServerConfig());
       if (!payload) {
         throw new Error(t("configSettingsLoadFailed"));
       }
@@ -90,7 +90,7 @@ export function useConfigController({
       attempts += 1;
 
       try {
-        const status = await fetchConfigRestartStatus();
+        const status = await fetchServerRestartStatus();
         if (status?.manual_restart_required) {
           finishManualRestart();
           return;
@@ -99,7 +99,7 @@ export function useConfigController({
           stopConfigPoll();
           setConfigBusy(false);
           setConfigPhase("error");
-          setConfigError(`${t("configSettingsApplyFailed")} ${status.last_error}`.trim());
+          setConfigError(`${t("configSettingsRestartFailed")} ${status.last_error}`.trim());
           return;
         }
       } catch (_) {
@@ -124,15 +124,15 @@ export function useConfigController({
         setConfigBusy(false);
         setConfigPhase("error");
         try {
-          const status = await fetchConfigRestartStatus();
+          const status = await fetchServerRestartStatus();
           if (status?.manual_restart_required) {
             finishManualRestart();
             return;
           }
           const detail = status?.last_error ? ` ${status.last_error}` : "";
-          setConfigError(`${t("configSettingsApplyFailed")}${detail}`);
+          setConfigError(`${t("configSettingsRestartFailed")}${detail}`);
         } catch (_) {
-          setConfigError(t("configSettingsApplyFailed"));
+          setConfigError(t("configSettingsRestartFailed"));
         }
       }
     };
@@ -148,13 +148,13 @@ export function useConfigController({
     setConfigError("");
     setConfigPhase("saving");
     try {
-      const saved = normalizeConfigSettings(await updateConfigSettings(configDraftToUpdatePayload(configDraft)));
+      const saved = normalizeConfigSettings(await updateServerConfig(configDraftToUpdatePayload(configDraft)));
       if (saved) {
         setConfigDraft(configSettingsToDraft(saved));
         setSandboxProviders(saved.supported_sandbox_providers || sandboxProviders);
       }
       setConfigPhase("restarting");
-      await applyConfigRestart();
+      await restartServer();
       startConfigReconnectPoll();
     } catch (err: unknown) {
       setConfigBusy(false);

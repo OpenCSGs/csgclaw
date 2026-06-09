@@ -26,7 +26,7 @@ CLI_BIN ?= $(BIN_DIR)/csgclaw-cli
 
 ACR_REGISTRY ?= opencsg-registry.cn-beijing.cr.aliyuncs.com
 IMAGE ?= $(ACR_REGISTRY)/opencsghq/picoclaw
-TAG ?= 2026.5.27
+TAG ?= 2026.6.8
 DOCKER_EMBED_IMAGE_TAG ?= dev
 PICOCLAW_IMAGE_TAG ?= $(DOCKER_EMBED_IMAGE_TAG)
 LOCAL_IMAGE ?= picoclaw:local
