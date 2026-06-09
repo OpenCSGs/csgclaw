@@ -123,11 +123,13 @@ make sync-docker-embed-image-refs
 ### 常用变量
 
 ```bash
-# registry 与基础镜像（默认值）
+# registry（默认值）
 ACR_REGISTRY=opencsg-registry.cn-beijing.cr.aliyuncs.com
-PICOCLAW_BASE_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8
 
-# 示例：PR 前本地镜像测试（会递增 version 并更新 image.ref，如 0.1.3 -> 0.1.4）
+# 上游 picoclaw 基础镜像默认见 embed Dockerfile 的 ARG PICOCLAW_IMAGE
+# 可选覆盖：PICOCLAW_BASE_IMAGE=registry.example/opencsghq/picoclaw:tag make build-all
+
+# 示例：PR 前本地镜像测试（会递增 version 并更新 image.ref，如 0.1.0 -> 0.1.1）
 make build-all
 ```
 

@@ -11,6 +11,7 @@
 #     --build-arg PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8 \
 #     -t picoclaw-manager:local .
 
+# Default upstream picoclaw base image (single source of truth for local make / CI builds).
 ARG PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8
 
 FROM ${PICOCLAW_IMAGE}

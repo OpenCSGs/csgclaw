@@ -25,7 +25,7 @@
 # Optional:
 #   SSH_PORT – default 22
 #   REMOTE_BASE_DIR – default /data/csgclaw (releases under .../releases/<tag>/)
-#   PICOCLAW_BASE_TAG – upstream picoclaw base image tag; default 2026.5.27
+#   PICOCLAW_BASE_IMAGE – optional override for upstream picoclaw base (default: Dockerfile ARG)
 #   BOXLITE_CLI_VERSION – default v0.9.0
 #   BOXLITE_CLI_BASE_URL – boxlite-cli tarballs; default mirrors https://csgclaw.opencsg.com/boxlite-cli/{version}/{filename} (matches fetch-boxlite-cli.sh)
 #   BOXLITE_CURL_INSECURE – default 1 (TLS inspection); set 0 if csgclaw.opencsg.com is trusted as-is
@@ -63,7 +63,6 @@ variables:
   GOPROXY: "https://goproxy.cn,direct"
   DEBIAN_APT_MIRROR_DEB: "http://mirrors.aliyun.com/debian"
   DEBIAN_APT_MIRROR_SEC: "http://mirrors.aliyun.com/debian-security"
-  PICOCLAW_BASE_TAG: "2026.5.27"
   CRANE_VERSION: "v0.20.6"
 
 stages:

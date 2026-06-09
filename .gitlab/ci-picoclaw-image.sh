@@ -56,11 +56,17 @@ if [ ! -f "${cli_path}" ]; then
   exit 1
 fi
 
-export PICOCLAW_BASE_TAG="${PICOCLAW_BASE_TAG:-2026.5.27}"
-
-/kaniko/executor \
+set -- /kaniko/executor \
   --context "${CI_PROJECT_DIR}" \
   --dockerfile "${CI_PROJECT_DIR}/${dockerfile}" \
   --custom-platform "linux/${goarch}" \
-  --destination "${ACR_REGISTRY}/opencsghq/${image_name}:${PICOCLAW_IMAGE_VERSION}-${goarch}" \
-  --build-arg PICOCLAW_IMAGE="${ACR_REGISTRY}/opencsghq/picoclaw:${PICOCLAW_BASE_TAG}"
+  --destination "${ACR_REGISTRY}/opencsghq/${image_name}:${PICOCLAW_IMAGE_VERSION}-${goarch}"
+
+if [ -n "${PICOCLAW_BASE_IMAGE:-}" ]; then
+  set -- "$@" --build-arg "PICOCLAW_IMAGE=${PICOCLAW_BASE_IMAGE}"
+  echo "using PICOCLAW_IMAGE override: ${PICOCLAW_BASE_IMAGE}"
+else
+  echo "using PICOCLAW_IMAGE from Dockerfile default"
+fi
+
+exec "$@"

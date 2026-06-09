@@ -25,10 +25,9 @@ TARGET_ARCH ?= $(shell $(GO) env GOARCH)
 CLI_BIN ?= $(BIN_DIR)/csgclaw-cli
 
 ACR_REGISTRY ?= opencsg-registry.cn-beijing.cr.aliyuncs.com
-IMAGE ?= $(ACR_REGISTRY)/opencsghq/picoclaw
-TAG ?= 2026.6.8
+# Upstream picoclaw base image default: embed Dockerfile ARG PICOCLAW_IMAGE.
+# Optional build/CI override: export PICOCLAW_BASE_IMAGE=registry/.../picoclaw:tag
 LOCAL_IMAGE ?= picoclaw:local
-PICOCLAW_BASE_IMAGE ?= $(IMAGE):$(TAG)
 DOCKER_EMBED_DOCKER_GOOS ?= linux
 DOCKER_EMBED_DOCKER_GOARCH ?= $(TARGET_ARCH)
 DOCKER_EMBED_CLI ?= $(BIN_DIR)/csgclaw-cli
@@ -154,30 +153,30 @@ ensure-docker-embed-manifests:
 	fi
 
 build-docker-embed-images: stage-docker-embed-cli bump-docker-embed-version
-	chmod +x scripts/build-docker-embed-images.sh
-	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
+	chmod +x scripts/build-docker-embed-images.sh scripts/read-picoclaw-base-image.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/build-docker-embed-images.sh
 
 build-docker-embed-images-only: stage-docker-embed-cli
-	chmod +x scripts/build-docker-embed-images.sh
-	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
+	chmod +x scripts/build-docker-embed-images.sh scripts/read-picoclaw-base-image.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/build-docker-embed-images.sh
 
 build-docker-embed-runtime-embed: build-docker-embed-images
 build-picoclaw-runtime-embed: build-docker-embed-runtime-embed
 
 build-picoclaw-manager-image: stage-docker-embed-cli
-	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh
+	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh scripts/read-picoclaw-base-image.sh
 	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/bump-docker-embed-version.sh picoclaw-manager
-	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/build-docker-embed-images.sh picoclaw-manager
 
 build-picoclaw-worker-image: stage-docker-embed-cli
-	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh
+	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh scripts/read-picoclaw-base-image.sh
 	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/bump-docker-embed-version.sh picoclaw-worker
-	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/build-docker-embed-images.sh picoclaw-worker
 
 # Bump embed versions before go:embed so the server binary matches built images.
@@ -209,9 +208,11 @@ clean:
 	rm -rf $(BIN_DIR) $(DIST_DIR) $(GOCACHE)
 
 tag:
-	docker tag $(LOCAL_IMAGE) $(IMAGE):$(TAG)
+	chmod +x scripts/read-picoclaw-base-image.sh
+	docker tag $(LOCAL_IMAGE) $$(scripts/read-picoclaw-base-image.sh)
 
 push:
-	docker push $(IMAGE):$(TAG)
+	chmod +x scripts/read-picoclaw-base-image.sh
+	docker push $$(scripts/read-picoclaw-base-image.sh)
 
 publish: tag push

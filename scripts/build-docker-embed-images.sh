@@ -11,7 +11,6 @@ LIST_SCRIPT="${ROOT}/scripts/list-docker-embed-templates.sh"
 . "${COMMON}"
 
 : "${ACR_REGISTRY:?ACR_REGISTRY must be set}"
-: "${PICOCLAW_BASE_IMAGE:?PICOCLAW_BASE_IMAGE must be set}"
 
 image_tag_for_template() {
   local name="$1"
@@ -36,9 +35,17 @@ build_one() {
 
   tag="$(image_tag_for_template "${name}")"
   image="${ACR_REGISTRY}/opencsghq/${name}:${tag}"
-  echo "docker build ${name} -> ${image}"
+  if [ -n "${PICOCLAW_BASE_IMAGE:-}" ]; then
+    echo "docker build ${name} -> ${image} (PICOCLAW_IMAGE override: ${PICOCLAW_BASE_IMAGE})"
+    docker build -f "${ROOT}/internal/templates/embed/${name}/Dockerfile" \
+      --build-arg "PICOCLAW_IMAGE=${PICOCLAW_BASE_IMAGE}" \
+      -t "${image}" \
+      "${ROOT}"
+    return
+  fi
+
+  echo "docker build ${name} -> ${image} (PICOCLAW_IMAGE from Dockerfile default)"
   docker build -f "${ROOT}/internal/templates/embed/${name}/Dockerfile" \
-    --build-arg PICOCLAW_IMAGE="${PICOCLAW_BASE_IMAGE}" \
     -t "${image}" \
     "${ROOT}"
 }

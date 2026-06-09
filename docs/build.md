@@ -123,11 +123,13 @@ Alias targets `build-picoclaw-runtime-embed`, `sync-picoclaw-embed-image-refs`, 
 ### Useful variables
 
 ```bash
-# Registry and base image (defaults shown)
+# Registry (default shown)
 ACR_REGISTRY=opencsg-registry.cn-beijing.cr.aliyuncs.com
-PICOCLAW_BASE_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8
 
-# Example: local pre-PR image test (bumps version and updates image.ref, e.g. 0.1.3 -> 0.1.4)
+# Upstream picoclaw base image defaults to embed Dockerfile ARG PICOCLAW_IMAGE
+# Optional override: PICOCLAW_BASE_IMAGE=registry.example/opencsghq/picoclaw:tag make build-all
+
+# Example: local pre-PR image test (bumps version and updates image.ref, e.g. 0.1.0 -> 0.1.1)
 make build-all
 ```
 

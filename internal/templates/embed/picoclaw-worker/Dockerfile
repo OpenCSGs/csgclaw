@@ -11,6 +11,7 @@
 #     --build-arg PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8 \
 #     -t picoclaw-worker:local .
 
+# Default upstream picoclaw base image (keep in sync with picoclaw-manager/Dockerfile).
 ARG PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8
 
 FROM ${PICOCLAW_IMAGE}
