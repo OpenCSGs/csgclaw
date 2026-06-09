@@ -289,7 +289,7 @@ describe("agent action visibility", () => {
   });
 
   it("shows long agent image values with full hover text and full-row alignment", () => {
-    const image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27";
+    const image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8";
     render(
       <AgentDetailPane
         item={{ ...worker, image }}

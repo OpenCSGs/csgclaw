@@ -8,10 +8,10 @@
 # Manual build:
 #   make stage-docker-embed-cli
 #   docker build -f internal/templates/embed/picoclaw-manager/Dockerfile \
-#     --build-arg PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27 \
+#     --build-arg PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8 \
 #     -t picoclaw-manager:local .
 
-ARG PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27
+ARG PICOCLAW_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8
 
 FROM ${PICOCLAW_IMAGE}
 

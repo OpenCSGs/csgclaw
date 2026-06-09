@@ -123,7 +123,7 @@ make stage-docker-embed-dist
 #  registry 与 tag（默认值）
 ACR_REGISTRY=opencsg-registry.cn-beijing.cr.aliyuncs.com
 DOCKER_EMBED_IMAGE_TAG=dev
-PICOCLAW_BASE_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27
+PICOCLAW_BASE_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8
 
 # 示例：自定义 tag 构建 worker 镜像
 make build-picoclaw-worker-image DOCKER_EMBED_IMAGE_TAG=local

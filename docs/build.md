@@ -123,7 +123,7 @@ Alias targets `build-picoclaw-runtime-embed`, `stage-picoclaw-embed-dist`, and s
 # Registry and tags (defaults shown)
 ACR_REGISTRY=opencsg-registry.cn-beijing.cr.aliyuncs.com
 DOCKER_EMBED_IMAGE_TAG=dev
-PICOCLAW_BASE_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27
+PICOCLAW_BASE_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8
 
 # Example: build worker image with a custom tag
 make build-picoclaw-worker-image DOCKER_EMBED_IMAGE_TAG=local

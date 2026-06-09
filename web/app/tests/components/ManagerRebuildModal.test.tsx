@@ -26,7 +26,7 @@ describe("ManagerRebuildModal", () => {
     const onImageChange = vi.fn();
     const onClose = vi.fn();
     const onConfirm = vi.fn();
-    const managerImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27";
+    const managerImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8";
     const localImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.22";
     const alternateImage = "picoclaw:alternate";
 
@@ -66,7 +66,7 @@ describe("ManagerRebuildModal", () => {
     const selectedImageLabel = imageSelect.querySelector(".manager-rebuild-image-option");
     expect(selectedImageLabel).toBeInTheDocument();
     expect(selectedImageLabel?.querySelector(".manager-rebuild-image-name")).toHaveTextContent("picoclaw");
-    expect(selectedImageLabel?.querySelector(".manager-rebuild-image-tag")).toHaveTextContent(":2026.5.27");
+    expect(selectedImageLabel?.querySelector(".manager-rebuild-image-tag")).toHaveTextContent(":2026.6.8");
     expect(selectedImageLabel?.querySelector(".manager-rebuild-image-context")).toHaveTextContent(
       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq",
     );
