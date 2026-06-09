@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import {
   buildSlashPickerState,
   normalizeSlashShorthandForPayload,
+  skillDescriptionFromMarkdown,
   slashSkillCommandText,
   slashCommandInputText,
   slashPickerQueryForDraft,
@@ -93,19 +94,26 @@ describe("useConversationController slash skill helpers", () => {
       buildSlashPickerState({
         draftText: "/",
         enabled: true,
-        skillNames: ["skill-creator", "new"],
+        skillOptions: [{ name: "skill-creator", description: "Create useful skills" }, { name: "new" }],
       }).candidates,
     ).toEqual([
-      { name: "new", type: "command" },
-      { name: "skill-creator", type: "skill" },
+      { description: "Start a new conversation", name: "new", type: "command" },
+      { description: "Create useful skills", name: "skill-creator", type: "skill" },
     ]);
     expect(
       buildSlashPickerState({
         draftText: "/ne",
         enabled: true,
-        skillNames: ["skill-creator"],
+        skillOptions: [{ name: "skill-creator" }],
       }).candidates,
-    ).toEqual([{ name: "new", type: "command" }]);
+    ).toEqual([{ description: "Start a new conversation", name: "new", type: "command" }]);
+  });
+
+  it("extracts optional skill descriptions from SKILL.md frontmatter", () => {
+    expect(
+      skillDescriptionFromMarkdown('---\nname: browser\ndescription: "Control the in-app browser"\n---\n# Browser'),
+    ).toBe("Control the in-app browser");
+    expect(skillDescriptionFromMarkdown("---\nname: empty\n---\n# Empty")).toBe("");
   });
 
   it("renders selected skills as canonical slash-command XML", () => {

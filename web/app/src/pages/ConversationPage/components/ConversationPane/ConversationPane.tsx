@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction } from "react";
-import { Logs, RefreshCw, X } from "lucide-react";
+import { BoxIcon, TerminalIcon, Logs, RefreshCw, X } from "lucide-react";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
@@ -817,7 +817,7 @@ function SlashPicker({
 
   return (
     <div className={`mention-picker slash-picker ${className}`.trim()} role="listbox">
-      {loading ? <div className="slash-picker-empty">{t("agentWorkspaceLoading")}</div> : null}
+      {loading ? <div className="slash-picker-empty">{t("slashPickerLoading")}</div> : null}
       {!loading && candidates.length === 0 ? <div className="slash-picker-empty">{t("slashPickerEmpty")}</div> : null}
       {candidates.map((candidate, index) => (
         <button
@@ -832,11 +832,19 @@ function SlashPicker({
           }}
         >
           <span className="slash-option-mark" aria-hidden="true">
-            {candidate.type === "command" ? "CMD" : "/"}
+            {candidate.type === "command" ? (
+              <TerminalIcon size={18} strokeWidth={1.8} />
+            ) : (
+              <BoxIcon size={18} strokeWidth={1.8} />
+            )}
           </span>
-          <div>
-            <div className="message-author">{candidate.name}</div>
+          <div className="slash-option-copy">
+            <span className="message-author">{candidate.name}</span>
+            {candidate.description ? <span className="slash-option-description">{candidate.description}</span> : null}
           </div>
+          <span className="slash-option-kind">
+            {candidate.type === "command" ? t("slashPickerCommandKind") : t("slashPickerSkillKind")}
+          </span>
         </button>
       ))}
     </div>

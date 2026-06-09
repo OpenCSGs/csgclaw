@@ -1516,29 +1516,83 @@
   font-size: 13px;
 }
 
+.slash-picker {
+  left: 12px;
+  right: 12px;
+  width: auto;
+  max-height: min(352px, calc(100dvh - 220px));
+  padding: 8px;
+  border-color: rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  background: color-mix(in oklch, var(--portal-white) 96%, transparent);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
+}
+
+.slash-picker .slash-option {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 14px;
+}
+
+.slash-picker .slash-option:hover,
+.slash-picker .slash-option.active {
+  background: rgba(15, 23, 42, 0.055);
+}
+
 .slash-option-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  border-radius: 8px;
-  background: var(--primary-soft);
-  color: var(--primary-strong);
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.02em;
+  width: 24px;
+  height: 24px;
+  color: color-mix(in oklch, var(--text) 72%, var(--muted));
 }
 
-.command-option .slash-option-mark {
-  background: var(--warning-soft, #fff3cd);
-  color: var(--warning-strong, #8a4b00);
+.slash-option-copy {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 
-.skill-slash-option .slash-option-mark {
-  background: var(--primary-soft);
-  color: var(--primary-strong);
+.slash-picker .message-author {
+  flex: 0 0 auto;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 560;
+  line-height: 24px;
+}
+
+.slash-option-description {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in oklch, var(--muted) 86%, var(--text));
+  font-size: 14px;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slash-option-kind {
+  align-self: center;
+  color: color-mix(in oklch, var(--muted) 76%, transparent);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+:root[data-theme="dark"] .slash-picker {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: color-mix(in oklch, var(--panel-strong) 92%, transparent);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
+}
+
+:root[data-theme="dark"] .slash-picker .slash-option:hover,
+:root[data-theme="dark"] .slash-picker .slash-option.active {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Preserve the message display design after the latest main refinements. */

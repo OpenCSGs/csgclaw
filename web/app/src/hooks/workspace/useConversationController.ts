@@ -10,7 +10,7 @@ import {
   sendMessageRequest,
   startThreadRequest,
 } from "@/api/im";
-import { fetchAgentWorkspace } from "@/api/agents";
+import { fetchAgentWorkspace, fetchAgentWorkspaceFile } from "@/api/agents";
 import {
   agentMatchesUser,
   appendMessageToData,
@@ -55,6 +55,14 @@ import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
 import type { IMMessage, IMServerEvent, IMUser, ThreadView } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import type { UseConversationControllerArgs } from "./types";
+
+type SlashSkillOption = {
+  description?: string;
+  name: string;
+};
+
+const slashSkillOptionsCache = new Map<string, SlashSkillOption[]>();
+const slashSkillOptionsRequests = new Map<string, Promise<SlashSkillOption[]>>();
 
 type ComposerMentionState = {
   endOffset: number;
@@ -121,7 +129,7 @@ export function useConversationController({
   const [threadError, setThreadError] = useState("");
   const [composerMentionState, setComposerMentionState] = useState<ComposerMentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
-  const [skillNames, setSkillNames] = useState<string[]>([]);
+  const [skillOptions, setSkillOptions] = useState<SlashSkillOption[]>([]);
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashPickerLoading, setSlashPickerLoading] = useState(false);
   const [slashPickerDismissed, setSlashPickerDismissed] = useState(false);
@@ -277,9 +285,9 @@ export function useConversationController({
       buildSlashPickerState({
         draftText,
         enabled: slashPickerEnabled,
-        skillNames,
+        skillOptions,
       }),
-    [draftText, slashPickerEnabled, skillNames],
+    [draftText, slashPickerEnabled, skillOptions],
   );
   const slashPickerQuery = slashPickerState.query;
   const slashPickerActive = slashPickerState.active;
@@ -298,10 +306,10 @@ export function useConversationController({
       buildSlashPickerState({
         draftText: activeThreadDraft,
         enabled: threadSlashPickerEnabled,
-        skillNames,
+        skillOptions,
         disabled: threadSlashPickerDismissed,
       }),
-    [activeThreadDraft, threadSlashPickerEnabled, threadSlashPickerDismissed, skillNames],
+    [activeThreadDraft, threadSlashPickerEnabled, threadSlashPickerDismissed, skillOptions],
   );
   const threadSlashPickerQuery = threadSlashPickerState.query;
   const threadSlashPickerActive = threadSlashPickerState.active;
@@ -344,7 +352,7 @@ export function useConversationController({
   }, [draftText]);
 
   useEffect(() => {
-    setSkillNames([]);
+    setSkillOptions([]);
     setSlashIndex(0);
     setSlashPickerDismissed(false);
   }, [activeConversationId]);
@@ -356,30 +364,45 @@ export function useConversationController({
 
   useEffect(() => {
     setSlashIndex(0);
-  }, [slashPickerQuery, skillNames]);
+  }, [slashPickerQuery, skillOptions]);
 
   useEffect(() => {
     setThreadSlashIndex(0);
-  }, [threadSlashPickerQuery, skillNames]);
+  }, [threadSlashPickerQuery, skillOptions]);
 
   useEffect(() => {
-    if (!isAnySlashPickerNeeded || !activeConversationAgentId) {
-      setSkillNames([]);
+    if (!activeConversationAgentId) {
+      setSkillOptions([]);
       setSlashPickerLoading(false);
       return;
     }
+
+    const cached = slashSkillOptionsCache.get(activeConversationAgentId);
+    if (cached) {
+      setSkillOptions(cached);
+      setSlashPickerLoading(false);
+      return;
+    }
+
     let cancelled = false;
-    setSlashPickerLoading(true);
-    fetchAgentWorkspace(activeConversationAgentId, "skills")
-      .then((workspace) => {
+    setSkillOptions([]);
+    setSlashPickerLoading(false);
+    loadSlashSkillOptions(activeConversationAgentId, (skills) => {
+      if (cancelled) {
+        return;
+      }
+      setSkillOptions(skills);
+      setSlashPickerLoading(false);
+    })
+      .then((skills) => {
         if (cancelled) {
           return;
         }
-        setSkillNames(skillNamesFromWorkspace(workspace.entries || []));
+        setSkillOptions(skills);
       })
       .catch(() => {
         if (!cancelled) {
-          setSkillNames([]);
+          setSkillOptions([]);
         }
       })
       .finally(() => {
@@ -390,7 +413,15 @@ export function useConversationController({
     return () => {
       cancelled = true;
     };
-  }, [activeConversationAgentId, isAnySlashPickerNeeded]);
+  }, [activeConversationAgentId]);
+
+  useEffect(() => {
+    if (!isAnySlashPickerNeeded || !activeConversationAgentId || skillOptions.length > 0) {
+      setSlashPickerLoading(false);
+      return;
+    }
+    setSlashPickerLoading(slashSkillOptionsRequests.has(activeConversationAgentId));
+  }, [activeConversationAgentId, isAnySlashPickerNeeded, skillOptions.length]);
 
   useEffect(() => {
     if (!managerProfileIncomplete) {
@@ -1130,7 +1161,9 @@ export function useConversationController({
   };
 }
 
-function skillNamesFromWorkspace(entries: readonly { name?: string; path?: string; type?: string }[]): string[] {
+function skillOptionsFromWorkspace(
+  entries: readonly { name?: string; path?: string; type?: string }[],
+): SlashSkillOption[] {
   const skillDirs = new Set<string>();
   const dirs = new Set<string>();
   entries.forEach((entry) => {
@@ -1148,9 +1181,68 @@ function skillNamesFromWorkspace(entries: readonly { name?: string; path?: strin
   });
   return [...dirs]
     .filter((path) => skillDirs.has(path))
-    .map((path) => path.split("/").pop() || "")
-    .filter(Boolean)
-    .sort((left, right) => left.localeCompare(right));
+    .map((path) => ({ name: path.split("/").pop() || "" }))
+    .filter((skill) => Boolean(skill.name))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function loadSlashSkillOptions(
+  agentID: string,
+  onInitial: (skills: SlashSkillOption[]) => void,
+): Promise<SlashSkillOption[]> {
+  const cached = slashSkillOptionsCache.get(agentID);
+  if (cached) {
+    return Promise.resolve(cached);
+  }
+  const pending = slashSkillOptionsRequests.get(agentID);
+  if (pending) {
+    return pending;
+  }
+
+  const request = fetchAgentWorkspace(agentID, "skills")
+    .then(async (workspace) => {
+      const skills = skillOptionsFromWorkspace(workspace.entries || []);
+      slashSkillOptionsCache.set(agentID, skills);
+      onInitial(skills);
+
+      const enriched = await Promise.all(
+        skills.map(async (skill) => {
+          try {
+            const file = await fetchAgentWorkspaceFile(agentID, `skills/${skill.name}/SKILL.md`);
+            return {
+              ...skill,
+              description: skillDescriptionFromMarkdown(file.content || "") || skill.description,
+            };
+          } catch {
+            return skill;
+          }
+        }),
+      );
+      slashSkillOptionsCache.set(agentID, enriched);
+      return enriched;
+    })
+    .finally(() => {
+      slashSkillOptionsRequests.delete(agentID);
+    });
+
+  slashSkillOptionsRequests.set(agentID, request);
+  return request;
+}
+
+export function skillDescriptionFromMarkdown(content: string): string {
+  const frontmatterMatch = String(content || "").match(/^---\n([\s\S]*?)\n---/);
+  if (!frontmatterMatch) {
+    return "";
+  }
+  const descriptionLine = frontmatterMatch[1].split(/\r?\n/).find((line) => line.trim().startsWith("description:"));
+  if (!descriptionLine) {
+    return "";
+  }
+  const description = descriptionLine
+    .replace(/^\s*description:\s*/, "")
+    .trim()
+    .replace(/^['"]|['"]$/g, "");
+  return description.slice(0, 220);
 }
 
 const builtinSlashCommandNames = ["new"];
@@ -1159,7 +1251,7 @@ type SlashPickerStateInput = {
   draftText: string;
   disabled?: boolean;
   enabled: boolean;
-  skillNames: string[];
+  skillOptions: SlashSkillOption[];
 };
 
 type SlashPickerState = {
@@ -1185,12 +1277,19 @@ export function buildSlashPickerState(input: SlashPickerStateInput): SlashPicker
     candidates: [
       ...builtinSlashCommandNames
         .filter((name) => fuzzySkillMatch(name, query ?? ""))
-        .map((name) => ({ name, type: "command" as const })),
-      ...input.skillNames
-        .filter((name) => !builtinSlashCommandNames.includes(name) && fuzzySkillMatch(name, query ?? ""))
-        .map((name) => ({ name, type: "skill" as const })),
+        .map((name) => ({ description: slashCommandDescription(name), name, type: "command" as const })),
+      ...input.skillOptions
+        .filter((skill) => !builtinSlashCommandNames.includes(skill.name) && fuzzySkillMatch(skill.name, query ?? ""))
+        .map((skill) => ({ description: skill.description, name: skill.name, type: "skill" as const })),
     ],
   };
+}
+
+function slashCommandDescription(name: string): string {
+  if (name === "new") {
+    return "Start a new conversation";
+  }
+  return "";
 }
 
 export function slashPickerQueryForDraft(draftText: string): string | null {

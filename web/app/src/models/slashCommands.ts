@@ -7,6 +7,7 @@ export type SlashCommandPayload = {
 export type SlashPickerCandidateType = "command" | "skill";
 
 export type SlashPickerCandidate = {
+  description?: string;
   name: string;
   type: SlashPickerCandidateType;
 };
