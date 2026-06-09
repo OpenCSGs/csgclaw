@@ -66,6 +66,7 @@ const (
 
 type ListMessagesOptions struct {
 	IncludeThreadReplies bool
+	Locale               string
 }
 
 type ThreadListOptions struct {
@@ -81,6 +82,15 @@ type DeliverMessageRequest struct {
 	Content      string `json:"text"`
 	MessageID    string `json:"message_id,omitempty"`
 	ThreadRootID string `json:"thread_root_id,omitempty"`
+}
+
+type DeliverEventRequest struct {
+	RoomID    string        `json:"room_id"`
+	SenderID  string        `json:"sender_id,omitempty"`
+	MentionID string        `json:"mention_id,omitempty"`
+	Content   string        `json:"text"`
+	MessageID string        `json:"message_id,omitempty"`
+	Event     *EventPayload `json:"event,omitempty"`
 }
 
 type CreateRoomRequest = apitypes.CreateRoomRequest
@@ -897,7 +907,7 @@ func (s *Service) Bootstrap() Bootstrap {
 
 	rooms := make([]Room, 0, len(s.rooms))
 	for _, room := range s.rooms {
-		rooms = append(rooms, s.presentRoomLocked(*room))
+		rooms = append(rooms, s.presentRoomLocked(*room, ""))
 	}
 	slices.SortFunc(rooms, func(a, b Room) int {
 		return latestRoomMessageAt(b).Compare(latestRoomMessageAt(a))
@@ -919,10 +929,11 @@ func (s *Service) ListRoomsWithOptions(opts ListMessagesOptions) []Room {
 	defer s.mu.RUnlock()
 
 	rooms := make([]Room, 0, len(s.rooms))
+	locale := messagePresentationLocale(opts.Locale)
 	for _, room := range s.rooms {
-		presented := s.presentRoomLocked(*room)
+		presented := s.presentRoomLocked(*room, locale)
 		if opts.IncludeThreadReplies {
-			presented.Messages = s.presentMessagesLocked(*room, true)
+			presented.Messages = s.presentMessagesLocked(*room, true, locale)
 		}
 		rooms = append(rooms, presented)
 	}
@@ -1004,7 +1015,7 @@ func (s *Service) ListMessagesWithOptions(roomID string, opts ListMessagesOption
 	if !ok {
 		return nil, fmt.Errorf("room not found")
 	}
-	return s.presentMessagesLocked(*room, opts.IncludeThreadReplies), nil
+	return s.presentMessagesLocked(*room, opts.IncludeThreadReplies, opts.Locale), nil
 }
 
 func (s *Service) StartThread(req StartThreadRequest) (ThreadView, bool, error) {
@@ -1174,7 +1185,7 @@ func (s *Service) ClearRoomMessages(roomID string) (Room, error) {
 		s.mu.Unlock()
 		return Room{}, err
 	}
-	presented := s.presentRoomLocked(*room)
+	presented := s.presentRoomLocked(*room, "")
 	bus := s.bus
 	s.mu.Unlock()
 
@@ -1416,7 +1427,7 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	if err := s.saveLocked(); err != nil {
 		return Message{}, err
 	}
-	return s.presentMessageLocked(*room, message), nil
+	return s.presentMessageLocked(*room, message, ""), nil
 }
 
 func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
@@ -1476,7 +1487,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 			if err := s.saveLocked(); err != nil {
 				return Message{}, err
 			}
-			presented := s.presentMessageLocked(*room, message)
+			presented := s.presentMessageLocked(*room, message, "")
 			s.publishMessageCreatedLocked(roomID, senderID, presented)
 			return presented, nil
 		}
@@ -1485,7 +1496,70 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	if err := s.saveLocked(); err != nil {
 		return Message{}, err
 	}
-	presented := s.presentMessageLocked(*room, message)
+	presented := s.presentMessageLocked(*room, message, "")
+	s.publishMessageCreatedLocked(roomID, senderID, presented)
+	return presented, nil
+}
+
+func (s *Service) DeliverEvent(req DeliverEventRequest) (Message, error) {
+	roomID := strings.TrimSpace(req.RoomID)
+	senderID := strings.TrimSpace(req.SenderID)
+	mentionID := strings.TrimSpace(req.MentionID)
+	content := strings.TrimSpace(req.Content)
+	if roomID == "" {
+		return Message{}, fmt.Errorf("room_id is required")
+	}
+	if content == "" && req.Event == nil {
+		return Message{}, fmt.Errorf("event content is required")
+	}
+	if senderID == "" {
+		senderID = s.currentUserID
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.users[senderID]; !ok {
+		return Message{}, fmt.Errorf("sender not found")
+	}
+	room, ok := s.rooms[roomID]
+	if !ok {
+		return Message{}, fmt.Errorf("room not found")
+	}
+	mentions := s.extractMentions(content)
+	if mentionID != "" {
+		if _, ok := s.users[mentionID]; !ok {
+			return Message{}, fmt.Errorf("mentioned user not found")
+		}
+		mentions = appendMissingMentions(mentions, s.mentionsForUserIDs([]string{mentionID}))
+	}
+
+	message := s.newMessage(req.MessageID, senderID, MessageKindEvent, content)
+	message.Event = cloneEventPayload(req.Event)
+	message.Mentions = mentions
+	if strings.TrimSpace(req.MessageID) != "" {
+		for idx := range room.Messages {
+			if room.Messages[idx].ID != message.ID {
+				continue
+			}
+			if room.Messages[idx].SenderID != senderID {
+				return Message{}, fmt.Errorf("message id %q already exists for another sender", message.ID)
+			}
+			message.CreatedAt = room.Messages[idx].CreatedAt
+			room.Messages[idx] = message
+			if err := s.saveLocked(); err != nil {
+				return Message{}, err
+			}
+			presented := s.presentMessageLocked(*room, message, "")
+			s.publishMessageCreatedLocked(roomID, senderID, presented)
+			return presented, nil
+		}
+	}
+	room.Messages = append(room.Messages, message)
+	if err := s.saveLocked(); err != nil {
+		return Message{}, err
+	}
+	presented := s.presentMessageLocked(*room, message, "")
 	s.publishMessageCreatedLocked(roomID, senderID, presented)
 	return presented, nil
 }
@@ -1522,7 +1596,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	creatorID = s.resolveUserIDLocked(creatorID)
+	creatorID = s.resolveRoomUserIDLocked(creatorID)
 	if _, ok := s.users[creatorID]; !ok {
 		return Room{}, fmt.Errorf("creator not found")
 	}
@@ -1558,7 +1632,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 	if err := s.saveLocked(); err != nil {
 		return Room{}, err
 	}
-	return s.presentRoomLocked(room), nil
+	return s.presentRoomLocked(room, messagePresentationLocale(req.Locale)), nil
 }
 
 func (s *Service) CreateConversation(req CreateConversationRequest) (Conversation, error) {
@@ -1585,7 +1659,7 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	if !ok {
 		return Room{}, fmt.Errorf("room not found")
 	}
-	inviterID = s.resolveUserIDLocked(inviterID)
+	inviterID = s.resolveRoomUserIDLocked(inviterID)
 	if _, ok := s.users[inviterID]; !ok {
 		return Room{}, fmt.Errorf("inviter not found")
 	}
@@ -1603,7 +1677,7 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 
 	addedIDs := make([]string, 0, len(req.UserIDs))
 	for _, userID := range req.UserIDs {
-		userID = s.resolveUserIDLocked(userID)
+		userID = s.resolveRoomUserIDLocked(userID)
 		if userID == "" {
 			continue
 		}
@@ -1638,7 +1712,7 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		return Room{}, err
 	}
 
-	return s.presentRoomLocked(*room), nil
+	return s.presentRoomLocked(*room, messagePresentationLocale(req.Locale)), nil
 }
 
 func (s *Service) AddConversationMembers(req AddConversationMembersRequest) (Conversation, error) {
@@ -1671,7 +1745,7 @@ func (s *Service) Room(roomID string) (Room, bool) {
 	if !ok {
 		return Room{}, false
 	}
-	return s.presentRoomLocked(*room), true
+	return s.presentRoomLocked(*room, ""), true
 }
 
 func (s *Service) Conversation(conversationID string) (Conversation, bool) {
@@ -1731,7 +1805,7 @@ func (s *Service) normalizeMembers(creatorID string, memberIDs []string) ([]stri
 	seen := map[string]struct{}{creatorID: {}}
 	members := []string{creatorID}
 	for _, userID := range memberIDs {
-		userID = s.resolveUserIDLocked(userID)
+		userID = s.resolveRoomUserIDLocked(userID)
 		if userID == "" {
 			continue
 		}
@@ -1752,6 +1826,32 @@ const (
 	MessageKindEvent   = "event"
 )
 
+func messagePresentationLocale(locale string) string {
+	if strings.TrimSpace(locale) == "" {
+		return "en"
+	}
+	switch normalizeLocale(locale) {
+	case "zh":
+		return "zh"
+	default:
+		return "en"
+	}
+}
+
+func (s *Service) localizeEventMessageLocked(locale string, message Message) string {
+	if message.Event == nil {
+		return strings.TrimSpace(message.Content)
+	}
+	key := strings.TrimSpace(message.Event.Key)
+	if key == "" {
+		return strings.TrimSpace(message.Content)
+	}
+	if localized := strings.TrimSpace(s.localizeSystemText(messagePresentationLocale(locale), key, message.Event.ActorID, message.Event.Title, message.Event.TargetIDs)); localized != "" {
+		return localized
+	}
+	return strings.TrimSpace(message.Content)
+}
+
 func (s *Service) localizeSystemText(locale, key, actorID, title string, userIDs []string) string {
 	actor := s.userDisplayName(actorID)
 	targets := s.userDisplayNames(userIDs)
@@ -1759,14 +1859,14 @@ func (s *Service) localizeSystemText(locale, key, actorID, title string, userIDs
 	case "en":
 		switch key {
 		case "room_created":
-			return fmt.Sprintf("%s created the room \"%s\"", actor, title)
+			return fmt.Sprintf("%s created the room", actor)
 		case "room_members_added":
 			return fmt.Sprintf("%s invited %s to join the room", actor, strings.Join(targets, ", "))
 		}
 	default:
 		switch key {
 		case "room_created":
-			return fmt.Sprintf("%s 创建了房间“%s”", actor, title)
+			return fmt.Sprintf("%s 创建了房间", actor)
 		case "room_members_added":
 			return fmt.Sprintf("%s 邀请 %s 加入了房间", actor, strings.Join(targets, "、"))
 		}
@@ -1820,9 +1920,9 @@ func formatConversationSubtitle(count int) string {
 	return formatRoomSubtitle(count)
 }
 
-func (s *Service) presentRoomLocked(room Room) Room {
+func (s *Service) presentRoomLocked(room Room, locale string) Room {
 	cloned := cloneRoom(room)
-	cloned.Messages = s.presentMessagesLocked(room, false)
+	cloned.Messages = s.presentMessagesLocked(room, false, locale)
 	if !cloned.IsDirect || len(cloned.Members) != 2 {
 		return cloned
 	}
@@ -1838,7 +1938,7 @@ func (s *Service) presentRoomLocked(room Room) Room {
 }
 
 func (s *Service) presentConversationLocked(conv Conversation) Conversation {
-	return s.presentRoomLocked(conv)
+	return s.presentRoomLocked(conv, "")
 }
 
 func cloneRoom(room Room) Room {
@@ -1867,6 +1967,7 @@ func cloneMessages(messages []Message) []Message {
 func cloneMessage(message Message) Message {
 	cloned := message
 	cloned.Mentions = append([]Mention(nil), message.Mentions...)
+	cloned.Event = cloneEventPayload(message.Event)
 	if message.RelatesTo != nil {
 		rel := *message.RelatesTo
 		cloned.RelatesTo = &rel
@@ -1876,6 +1977,15 @@ func cloneMessage(message Message) Message {
 		cloned.Thread = &summary
 	}
 	return cloned
+}
+
+func cloneEventPayload(event *EventPayload) *EventPayload {
+	if event == nil {
+		return nil
+	}
+	cloned := *event
+	cloned.TargetIDs = append([]string(nil), event.TargetIDs...)
+	return &cloned
 }
 
 func cloneThreadStates(states []ThreadState) []ThreadState {
@@ -1905,19 +2015,24 @@ func cloneThreadSummary(summary ThreadSummary) ThreadSummary {
 	return cloned
 }
 
-func (s *Service) presentMessagesLocked(room Room, includeThreadReplies bool) []Message {
+func (s *Service) presentMessagesLocked(room Room, includeThreadReplies bool, locale string) []Message {
 	messages := make([]Message, 0, len(room.Messages))
 	for _, message := range room.Messages {
 		if !includeThreadReplies && isThreadReply(message) {
 			continue
 		}
-		messages = append(messages, s.presentMessageLocked(room, message))
+		messages = append(messages, s.presentMessageLocked(room, message, locale))
 	}
 	return messages
 }
 
-func (s *Service) presentMessageLocked(room Room, message Message) Message {
+func (s *Service) presentMessageLocked(room Room, message Message, locale string) Message {
 	cloned := cloneMessage(message)
+	if cloned.Kind == MessageKindEvent && cloned.Event != nil {
+		if localized := s.localizeEventMessageLocked(locale, cloned); localized != "" {
+			cloned.Content = localized
+		}
+	}
 	if isThreadReply(cloned) {
 		cloned.Thread = nil
 		return cloned
@@ -2016,7 +2131,7 @@ func (s *Service) threadViewLocked(room Room, rootMessageID string, includeConte
 		return ThreadView{}, fmt.Errorf("thread not found")
 	}
 	summary, _ := s.threadSummaryLocked(room, rootMessageID)
-	root := s.presentMessageLocked(room, room.Messages[rootIndex])
+	root := s.presentMessageLocked(room, room.Messages[rootIndex], "")
 	root.Thread = &summary
 	view := ThreadView{
 		RoomID:  room.ID,
@@ -2352,6 +2467,31 @@ func (s *Service) mentionsForUserIDs(userIDs []string) []Mention {
 	return mentions
 }
 
+func appendMissingMentions(base, extra []Mention) []Mention {
+	if len(extra) == 0 {
+		return base
+	}
+	seen := make(map[string]struct{}, len(base)+len(extra))
+	for _, mention := range base {
+		if id := strings.TrimSpace(mention.ID); id != "" {
+			seen[id] = struct{}{}
+		}
+	}
+	out := append([]Mention(nil), base...)
+	for _, mention := range extra {
+		id := strings.TrimSpace(mention.ID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, mention)
+	}
+	return out
+}
+
 func (s *Service) saveLocked() error {
 	if s.statePath == "" {
 		return nil
@@ -2426,7 +2566,7 @@ func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, 
 			continue
 		}
 		if containsUserIDInRoom(*room, adminUserID) && containsUserIDInRoom(*room, agentID) {
-			presented := s.presentRoomLocked(*room)
+			presented := s.presentRoomLocked(*room, "")
 			return &presented, false
 		}
 	}
@@ -2449,7 +2589,7 @@ func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, 
 		},
 	}
 	s.rooms[room.ID] = &room
-	presented := s.presentRoomLocked(room)
+	presented := s.presentRoomLocked(room, "")
 	return &presented, true
 }
 

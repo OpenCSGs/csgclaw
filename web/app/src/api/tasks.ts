@@ -10,8 +10,8 @@ import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/
 
 export type CreateTeamPayload = {
   channel?: string;
-  lead_bot_id: string;
-  member_bot_ids?: string[];
+  lead_participant_id: string;
+  member_participant_ids?: string[];
   room_id?: string;
   title?: string;
 };
@@ -71,8 +71,8 @@ export async function createTeamRequest(payload: CreateTeamPayload): Promise<Wor
   const team = normalizeTeam(
     await post<unknown>("/api/v1/teams", {
       channel: payload.channel || "csgclaw",
-      lead_bot_id: payload.lead_bot_id,
-      member_bot_ids: payload.member_bot_ids ?? [],
+      lead_participant_id: payload.lead_participant_id,
+      member_participant_ids: payload.member_participant_ids ?? [],
       room_id: payload.room_id,
       title: payload.title,
     }),
@@ -85,7 +85,7 @@ export async function createTeamRequest(payload: CreateTeamPayload): Promise<Wor
 
 export async function createWorkspaceTask(payload: CreateWorkspaceTaskPayload): Promise<WorkspaceTask> {
   const response = await post<unknown>(`/api/v1/teams/${encodeURIComponent(payload.team_id)}/tasks/batch`, {
-    created_by: payload.created_by || "web",
+    created_by: payload.created_by || undefined,
     tasks: [
       {
         assign_to: payload.assign_to || undefined,
@@ -106,7 +106,7 @@ export async function planWorkspaceTask(payload: PlanWorkspaceTaskPayload): Prom
   const response = await post<unknown>(
     `/api/v1/teams/${encodeURIComponent(payload.team_id)}/tasks/${encodeURIComponent(payload.task_id)}/plan`,
     {
-      actor_id: payload.actor_id || "web",
+      actor_id: payload.actor_id || undefined,
       auto_start: Boolean(payload.auto_start),
     },
   );
@@ -128,7 +128,7 @@ export async function startWorkspaceTask(payload: StartWorkspaceTaskPayload): Pr
   const response = await post<unknown>(
     `/api/v1/teams/${encodeURIComponent(payload.team_id)}/tasks/${encodeURIComponent(payload.task_id)}/start`,
     {
-      actor_id: payload.actor_id || "web",
+      actor_id: payload.actor_id || undefined,
     },
   );
   const parsed = response as Record<string, unknown>;

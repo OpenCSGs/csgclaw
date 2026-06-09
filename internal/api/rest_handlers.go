@@ -113,11 +113,49 @@ func (h *Handler) addRoomMembers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) createIMRoomMembersInvite(w http.ResponseWriter, r *http.Request) {
 	h.handleIMRoomMembers(w, r)
 }
-func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request)            { h.handleUsers(w, r) }
-func (h *Handler) createUser(w http.ResponseWriter, r *http.Request)           { h.handleCreateUser(w, r) }
-func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request)           { h.handleUserByID(w, r) }
-func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request)         { h.handleMessages(w, r) }
-func (h *Handler) createMessage(w http.ResponseWriter, r *http.Request)        { h.handleCreateMessage(w, r) }
+func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request)     { h.handleUsers(w, r) }
+func (h *Handler) createUser(w http.ResponseWriter, r *http.Request)    { h.handleCreateUser(w, r) }
+func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request)    { h.handleUserByID(w, r) }
+func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request)  { h.handleMessages(w, r) }
+func (h *Handler) createMessage(w http.ResponseWriter, r *http.Request) { h.handleCreateMessage(w, r) }
+func (h *Handler) listTeams(w http.ResponseWriter, r *http.Request)     { h.handleListTeams(w, r) }
+func (h *Handler) createTeam(w http.ResponseWriter, r *http.Request)    { h.handleCreateTeam(w, r) }
+func (h *Handler) getTeam(w http.ResponseWriter, r *http.Request)       { h.handleGetTeam(w, r) }
+func (h *Handler) listTeamTasks(w http.ResponseWriter, r *http.Request) { h.handleListTeamTasks(w, r) }
+func (h *Handler) createTeamTasksBatch(w http.ResponseWriter, r *http.Request) {
+	h.handleCreateTeamTasksBatch(w, r)
+}
+func (h *Handler) claimNextTask(w http.ResponseWriter, r *http.Request) {
+	h.handleClaimNextTask(w, r)
+}
+func (h *Handler) claimTeamTask(w http.ResponseWriter, r *http.Request) {
+	h.handleClaimTeamTask(w, r)
+}
+func (h *Handler) updateTeamTask(w http.ResponseWriter, r *http.Request) {
+	h.handleUpdateTeamTask(w, r)
+}
+func (h *Handler) planTeamTask(w http.ResponseWriter, r *http.Request) { h.handlePlanTeamTask(w, r) }
+func (h *Handler) startTeamTask(w http.ResponseWriter, r *http.Request) {
+	h.handleStartTeamTask(w, r)
+}
+func (h *Handler) assignTeamTask(w http.ResponseWriter, r *http.Request) {
+	h.handleAssignTeamTask(w, r)
+}
+func (h *Handler) listTeamApprovals(w http.ResponseWriter, r *http.Request) {
+	h.handleListTeamApprovals(w, r)
+}
+func (h *Handler) createTeamApproval(w http.ResponseWriter, r *http.Request) {
+	h.handleCreateTeamApproval(w, r)
+}
+func (h *Handler) resolveTeamApproval(w http.ResponseWriter, r *http.Request) {
+	h.handleResolveTeamApproval(w, r)
+}
+func (h *Handler) listTeamEvents(w http.ResponseWriter, r *http.Request) {
+	h.handleListTeamEvents(w, r)
+}
+func (h *Handler) listGlobalTasks(w http.ResponseWriter, r *http.Request) {
+	h.handleListGlobalTasks(w, r)
+}
 func (h *Handler) listIMMessages(w http.ResponseWriter, r *http.Request)       { h.handleIMMessages(w, r) }
 func (h *Handler) createIMMessage(w http.ResponseWriter, r *http.Request)      { h.handleIMMessages(w, r) }
 func (h *Handler) listIMConversations(w http.ResponseWriter, r *http.Request)  { h.handleIMRooms(w, r) }

@@ -22,6 +22,23 @@ describe("tasks model", () => {
     expect(formatTaskUpdatedAt("invalid", "en")).toBe("-");
   });
 
+  it("normalizes team lead participant ids", () => {
+    const teams = normalizeTeamList([
+      {
+        id: "team-1",
+        room_id: "room-1",
+        lead_participant_id: "u-manager",
+      },
+      {
+        id: "team-2",
+        room_id: "room-2",
+        lead_participant_id: "u-other-manager",
+      },
+    ]);
+
+    expect(teams.map((team) => team.lead_participant_id)).toEqual(["u-manager", "u-other-manager"]);
+  });
+
   it("normalizes parent ids and groups child tasks under their parent", () => {
     const tasks = normalizeTaskList([
       {

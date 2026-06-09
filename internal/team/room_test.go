@@ -18,10 +18,10 @@ func TestTaskExecutionRoomTitleIncludesTaskID(t *testing.T) {
 func TestFindTeamByRoomMatchesExecutionRoom(t *testing.T) {
 	svc := newTestService()
 	meta, err := svc.CreateTeam(CreateTeamInput{
-		ID:        "team-ops",
-		RoomID:    "room-team-home",
-		Channel:   "csgclaw",
-		LeadBotID: "u-manager",
+		ID:                "team-ops",
+		RoomID:            "room-team-home",
+		Channel:           "csgclaw",
+		LeadParticipantID: "manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)
@@ -29,7 +29,7 @@ func TestFindTeamByRoomMatchesExecutionRoom(t *testing.T) {
 	parent, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    meta.ID,
 		Title:     "Ship",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
@@ -37,9 +37,9 @@ func TestFindTeamByRoomMatchesExecutionRoom(t *testing.T) {
 	if _, err := svc.PlanTask(PlanTaskInput{
 		TeamID:  meta.ID,
 		TaskID:  parent.ID,
-		ActorID: "u-manager",
+		ActorID: "manager",
 		Tasks: []PlanTaskItem{
-			{Title: "Build", AssignTo: "u-alice"},
+			{Title: "Build", AssignTo: "alice"},
 		},
 	}); err != nil {
 		t.Fatalf("PlanTask() error = %v", err)
@@ -68,10 +68,10 @@ func TestFindTeamByRoomMatchesExecutionRoom(t *testing.T) {
 func TestPlanTaskProjectsPlanningCompleteToBoundExecutionRoom(t *testing.T) {
 	svc := newTestService()
 	meta, err := svc.CreateTeam(CreateTeamInput{
-		ID:        "team-ops",
-		RoomID:    "room-team-home",
-		Channel:   "csgclaw",
-		LeadBotID: "u-manager",
+		ID:                "team-ops",
+		RoomID:            "room-team-home",
+		Channel:           "csgclaw",
+		LeadParticipantID: "manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)
@@ -79,7 +79,7 @@ func TestPlanTaskProjectsPlanningCompleteToBoundExecutionRoom(t *testing.T) {
 	parent, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    meta.ID,
 		Title:     "Ship",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
@@ -95,10 +95,10 @@ func TestPlanTaskProjectsPlanningCompleteToBoundExecutionRoom(t *testing.T) {
 	if _, err := svc.PlanTask(PlanTaskInput{
 		TeamID:      meta.ID,
 		TaskID:      parent.ID,
-		ActorID:     "u-manager",
+		ActorID:     "manager",
 		PlanSummary: "Split backend and frontend work.",
 		Tasks: []PlanTaskItem{
-			{Title: "Build", AssignTo: "u-alice"},
+			{Title: "Build", AssignTo: "alice"},
 		},
 	}); err != nil {
 		t.Fatalf("PlanTask() error = %v", err)
@@ -107,7 +107,7 @@ func TestPlanTaskProjectsPlanningCompleteToBoundExecutionRoom(t *testing.T) {
 	events := svc.ListEvents(meta.ID)
 	var planningRoomID string
 	for _, event := range events {
-		if event.Type == "task.planned" {
+		if event.Type == EventTaskPlanned {
 			planningRoomID = event.RoomID
 			break
 		}

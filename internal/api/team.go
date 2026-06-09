@@ -2,38 +2,23 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"csgclaw/internal/apitypes"
-	"csgclaw/internal/llm"
 	"csgclaw/internal/team"
 )
 
-func (h *Handler) listTeams(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleListTeams(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
 	}
-	teams := svc.ListTeams()
-	resp := make([]apitypes.Team, 0, len(teams))
-	for _, item := range teams {
-		resp = append(resp, apiTeam(item))
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, apiTeams(svc.ListTeams()))
 }
 
-func (h *Handler) createTeam(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleCreateTeam(w http.ResponseWriter, r *http.Request) {
 	svc, adapter, ok := h.requireTeamComponents(w)
 	if !ok {
 		return
@@ -44,43 +29,12 @@ func (h *Handler) createTeam(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-
-	channel := strings.TrimSpace(req.Channel)
-	if channel == "" {
-		channel = "csgclaw"
-	}
-	if !strings.EqualFold(channel, adapter.Channel()) {
-		http.Error(w, fmt.Sprintf("unsupported team channel %q", channel), http.StatusBadRequest)
-		return
-	}
-
-	roomRef, err := adapter.EnsureRoom(r.Context(), team.EnsureRoomRequest{
-		RoomID:       strings.TrimSpace(req.RoomID),
-		Title:        strings.TrimSpace(req.Title),
-		LeadBotID:    strings.TrimSpace(req.LeadBotID),
-		CreatorBotID: strings.TrimSpace(req.LeadBotID),
-		MemberBotIDs: uniqueStrings(req.MemberBotIDs),
-	})
-	if err != nil {
-		writeTeamError(w, err)
-		return
-	}
-	if strings.TrimSpace(req.RoomID) != "" && len(req.MemberBotIDs) > 0 {
-		if err := adapter.AddMembers(r.Context(), team.AddMembersRequest{
-			Room:         roomRef,
-			InviterBotID: strings.TrimSpace(req.LeadBotID),
-			MemberBotIDs: uniqueStrings(req.MemberBotIDs),
-		}); err != nil {
-			writeTeamError(w, err)
-			return
-		}
-	}
-
-	created, err := svc.CreateTeam(team.CreateTeamInput{
-		RoomID:    roomRef.RoomID,
-		Channel:   channel,
-		Title:     strings.TrimSpace(req.Title),
-		LeadBotID: strings.TrimSpace(req.LeadBotID),
+	created, err := svc.CreateTeamWithRoom(r.Context(), adapter, team.CreateTeamWithRoomInput{
+		RoomID:               strings.TrimSpace(req.RoomID),
+		Channel:              strings.TrimSpace(req.Channel),
+		Title:                strings.TrimSpace(req.Title),
+		LeadParticipantID:    strings.TrimSpace(req.LeadParticipantID),
+		MemberParticipantIDs: req.MemberParticipantIDs,
 	})
 	if err != nil {
 		writeTeamError(w, err)
@@ -89,11 +43,7 @@ func (h *Handler) createTeam(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, apiTeam(created))
 }
 
-func (h *Handler) getTeam(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleGetTeam(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -106,11 +56,7 @@ func (h *Handler) getTeam(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiTeam(item))
 }
 
-func (h *Handler) listTeamTasks(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleListTeamTasks(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -118,45 +64,18 @@ func (h *Handler) listTeamTasks(w http.ResponseWriter, r *http.Request) {
 	if !h.ensureTeamExists(w, svc, pathValue(r, "team_id")) {
 		return
 	}
-	tasks := svc.ListTasks(pathValue(r, "team_id"))
-	resp := make([]apitypes.TeamTask, 0, len(tasks))
-	for _, item := range tasks {
-		resp = append(resp, apiTask(item))
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, apiTasks(svc.ListTasks(pathValue(r, "team_id"))))
 }
 
-func (h *Handler) listGlobalTasks(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleListGlobalTasks(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
 	}
-	tasks := svc.ListAllTasks()
-	resp := make([]apitypes.GlobalTask, 0, len(tasks))
-	for _, item := range tasks {
-		task := apitypes.GlobalTask{TeamTask: apiTask(item)}
-		if meta, found := svc.GetTeam(item.TeamID); found {
-			task.TeamTitle = meta.Title
-		}
-		if h.im != nil {
-			if room, found := h.im.Room(item.RoomID); found {
-				task.RoomTitle = room.Title
-			}
-		}
-		resp = append(resp, task)
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, apiGlobalTasks(svc.ListGlobalTaskViews(h.teamDirectory())))
 }
 
-func (h *Handler) createTeamTasksBatch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleCreateTeamTasksBatch(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -166,48 +85,15 @@ func (h *Handler) createTeamTasksBatch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	input := team.CreateTaskBatchInput{
-		TeamID:    pathValue(r, "team_id"),
-		CreatedBy: strings.TrimSpace(req.CreatedBy),
-		Tasks:     make([]team.CreateTaskBatchItem, 0, len(req.Tasks)),
-	}
-	for _, item := range req.Tasks {
-		input.Tasks = append(input.Tasks, team.CreateTaskBatchItem{
-			IDRef:         strings.TrimSpace(item.IDRef),
-			ParentID:      strings.TrimSpace(item.ParentID),
-			ParentRef:     strings.TrimSpace(item.ParentRef),
-			Title:         strings.TrimSpace(item.Title),
-			Body:          strings.TrimSpace(item.Body),
-			AssignTo:      strings.TrimSpace(item.AssignTo),
-			DependsOnRefs: uniqueStrings(item.DependsOnRefs),
-			Priority:      item.Priority,
-			DeadlineAt:    item.DeadlineAt,
-			TimeoutAt:     item.TimeoutAt,
-		})
-	}
-	result, err := svc.CreateTasks(input)
+	result, err := svc.CreateTasks(teamCreateTaskBatchInput(pathValue(r, "team_id"), req))
 	if err != nil {
 		writeTeamError(w, err)
 		return
 	}
-	resp := apitypes.CreateTeamTasksBatchResponse{
-		Tasks:  make([]apitypes.TeamTask, 0, len(result.Tasks)),
-		IDRefs: make([]apitypes.TeamTaskIDRef, 0, len(result.IDRefs)),
-	}
-	for _, item := range result.Tasks {
-		resp.Tasks = append(resp.Tasks, apiTask(item))
-	}
-	for _, ref := range result.IDRefs {
-		resp.IDRefs = append(resp.IDRefs, apitypes.TeamTaskIDRef{IDRef: ref.IDRef, TaskID: ref.TaskID})
-	}
-	writeJSON(w, http.StatusCreated, resp)
+	writeJSON(w, http.StatusCreated, apiCreateTasksBatchResponse(result))
 }
 
-func (h *Handler) claimNextTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleClaimNextTask(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -221,7 +107,7 @@ func (h *Handler) claimNextTask(w http.ResponseWriter, r *http.Request) {
 	if teamID == "" {
 		teamID = strings.TrimSpace(req.TeamID)
 	}
-	item, err := svc.ClaimNext(teamID, strings.TrimSpace(req.BotID))
+	item, err := svc.ClaimNext(teamID, strings.TrimSpace(req.ParticipantID))
 	if err != nil {
 		writeTeamError(w, err)
 		return
@@ -229,11 +115,7 @@ func (h *Handler) claimNextTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiTask(item))
 }
 
-func (h *Handler) claimTeamTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleClaimTeamTask(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -244,9 +126,9 @@ func (h *Handler) claimTeamTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item, err := svc.ClaimTask(team.ClaimTaskInput{
-		TeamID: pathValue(r, "team_id"),
-		TaskID: pathValue(r, "task_id"),
-		BotID:  strings.TrimSpace(req.BotID),
+		TeamID:        pathValue(r, "team_id"),
+		TaskID:        pathValue(r, "task_id"),
+		ParticipantID: strings.TrimSpace(req.ParticipantID),
 	})
 	if err != nil {
 		writeTeamError(w, err)
@@ -255,11 +137,7 @@ func (h *Handler) claimTeamTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiTask(item))
 }
 
-func (h *Handler) updateTeamTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPatch {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleUpdateTeamTask(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -288,11 +166,7 @@ func (h *Handler) updateTeamTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiTask(item))
 }
 
-func (h *Handler) planTeamTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handlePlanTeamTask(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -304,181 +178,33 @@ func (h *Handler) planTeamTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	teamID := pathValue(r, "team_id")
-	taskID := pathValue(r, "task_id")
-	actorID := strings.TrimSpace(req.ActorID)
-	if actorID == "" {
-		actorID = "web"
-	}
-	input := team.PlanTaskInput{
-		TeamID:  teamID,
-		TaskID:  taskID,
-		ActorID: actorID,
-	}
-	var autoStartAdapter team.TeamChannelAdapter
-	var taskRoomID string
+	var adapter team.TeamChannelAdapter
 	if req.AutoStart {
 		var ok bool
-		_, autoStartAdapter, ok = h.requireTeamComponents(w)
+		_, adapter, ok = h.requireTeamComponents(w)
 		if !ok {
 			return
 		}
-		meta, found := svc.GetTeam(teamID)
-		if !found {
-			http.Error(w, team.ErrTeamNotFound.Error(), http.StatusNotFound)
-			return
-		}
-		parent, found := svc.GetTask(teamID, taskID)
-		if !found {
-			http.Error(w, team.ErrTaskNotFound.Error(), http.StatusNotFound)
-			return
-		}
-		if strings.TrimSpace(parent.ParentID) != "" {
-			writeTeamError(w, fmt.Errorf("%w: only parent tasks can have execution rooms", team.ErrTaskTransitionInvalid))
-			return
-		}
-		var roomErr error
-		taskRoomID, roomErr = h.ensureTaskExecutionRoom(r.Context(), autoStartAdapter, meta, parent)
-		if roomErr != nil {
-			writeTeamError(w, roomErr)
-			return
-		}
-		if _, err := svc.BindTaskExecutionRoom(team.BindTaskExecutionRoomInput{
-			TeamID:     teamID,
-			TaskID:     taskID,
-			ActorID:    actorID,
-			TaskRoomID: taskRoomID,
-		}); err != nil {
-			writeTeamError(w, err)
-			return
-		}
 	}
-	if !taskHasChildren(svc.ListTasks(teamID), taskID) {
-		meta, found := svc.GetTeam(teamID)
-		if !found {
-			http.Error(w, team.ErrTeamNotFound.Error(), http.StatusNotFound)
-			return
-		}
-		parent, found := svc.GetTask(teamID, taskID)
-		if !found {
-			http.Error(w, team.ErrTaskNotFound.Error(), http.StatusNotFound)
-			return
-		}
-		planned, planErr := h.managerPlanTask(r.Context(), meta, parent)
-		if planErr != nil {
-			writeTeamPlannerError(w, planErr)
-			return
-		}
-		input.PlanSummary = planned.PlanSummary
-		input.Tasks = planned.Tasks
-		input.ActorID = firstNonEmpty(planned.ActorID, input.ActorID)
-	}
-	item, err := svc.PlanTask(input)
+	directory := h.teamDirectory()
+	result, err := svc.PlanTaskWithOptionalStart(r.Context(), team.PlanTaskWorkflowInput{
+		TeamID:    pathValue(r, "team_id"),
+		TaskID:    pathValue(r, "task_id"),
+		ActorID:   strings.TrimSpace(req.ActorID),
+		AutoStart: req.AutoStart,
+	}, adapter, directory, team.NewManagerPlanner(h.llm, directory))
 	if err != nil {
-		writeTeamError(w, err)
+		writeTeamPlanError(w, err)
 		return
 	}
-	created := make([]apitypes.TeamTask, 0, len(item.Tasks))
-	for _, child := range item.Tasks {
-		created = append(created, apiTask(child))
-	}
-	resp := apitypes.PlanTeamTaskResponse{
-		Task:           apiTask(item.Parent),
-		CreatedTasks:   created,
-		AlreadyPlanned: item.AlreadyPlanned,
-	}
-	if req.AutoStart && taskStatusIsUnstarted(item.Parent.Status) {
-		meta, found := svc.GetTeam(teamID)
-		if !found {
-			http.Error(w, team.ErrTeamNotFound.Error(), http.StatusNotFound)
-			return
-		}
-		parent, found := svc.GetTask(teamID, taskID)
-		if !found {
-			http.Error(w, team.ErrTaskNotFound.Error(), http.StatusNotFound)
-			return
-		}
-		syncedRoomID, roomErr := h.ensureTaskExecutionRoom(r.Context(), autoStartAdapter, meta, parent)
-		if roomErr != nil {
-			writeTeamError(w, roomErr)
-			return
-		}
-		taskRoomID = syncedRoomID
-		started, startErr := svc.StartTask(team.StartTaskInput{
-			TeamID:     teamID,
-			TaskID:     taskID,
-			ActorID:    actorID,
-			TaskRoomID: taskRoomID,
-		})
-		if startErr != nil {
-			writeTeamError(w, startErr)
-			return
-		}
-		resp.Task = apiTask(started.Parent)
-		resp.Started = true
-		resp.ScheduledTasks = started.ScheduledCount
-		refreshedChildren := make([]apitypes.TeamTask, 0, len(created))
-		for _, taskItem := range svc.ListTasks(teamID) {
-			if taskItem.ParentID == taskID {
-				refreshedChildren = append(refreshedChildren, apiTask(taskItem))
-			}
-		}
-		resp.CreatedTasks = refreshedChildren
-	}
-	writeJSON(w, http.StatusOK, apitypes.PlanTeamTaskResponse{
-		Task:           resp.Task,
-		CreatedTasks:   resp.CreatedTasks,
-		AlreadyPlanned: resp.AlreadyPlanned,
-		Started:        resp.Started,
-		ScheduledTasks: resp.ScheduledTasks,
-	})
+	writeJSON(w, http.StatusOK, apiPlanTaskWorkflowResponse(result))
 }
 
-func taskHasChildren(tasks []team.TeamTask, parentID string) bool {
-	parentID = strings.TrimSpace(parentID)
-	if parentID == "" {
-		return false
-	}
-	for _, task := range tasks {
-		if task.ParentID == parentID {
-			return true
-		}
-	}
-	return false
-}
-
-func taskStatusIsUnstarted(status string) bool {
-	status = strings.TrimSpace(status)
-	return status == "" || status == team.TaskStatusPending
-}
-
-func (h *Handler) startTeamTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleStartTeamTask(w http.ResponseWriter, r *http.Request) {
 	svc, adapter, ok := h.requireTeamComponents(w)
 	if !ok {
 		return
 	}
-	teamID := pathValue(r, "team_id")
-	taskID := pathValue(r, "task_id")
-	meta, found := svc.GetTeam(teamID)
-	if !found {
-		http.Error(w, team.ErrTeamNotFound.Error(), http.StatusNotFound)
-		return
-	}
-	parent, found := svc.GetTask(teamID, taskID)
-	if !found {
-		http.Error(w, team.ErrTaskNotFound.Error(), http.StatusNotFound)
-		return
-	}
-	taskRoomID, err := h.ensureTaskExecutionRoom(r.Context(), adapter, meta, parent)
-	if err != nil {
-		writeTeamError(w, err)
-		return
-	}
-
 	var req struct {
 		apitypes.StartTeamTaskRequest
 	}
@@ -486,12 +212,11 @@ func (h *Handler) startTeamTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	item, err := svc.StartTask(team.StartTaskInput{
-		TeamID:     teamID,
-		TaskID:     taskID,
-		ActorID:    strings.TrimSpace(req.ActorID),
-		TaskRoomID: taskRoomID,
-	})
+	item, err := svc.StartTaskWithExecutionRoom(r.Context(), team.StartTaskWithExecutionRoomInput{
+		TeamID:  pathValue(r, "team_id"),
+		TaskID:  pathValue(r, "task_id"),
+		ActorID: strings.TrimSpace(req.ActorID),
+	}, adapter, h.teamDirectory())
 	if err != nil {
 		writeTeamError(w, err)
 		return
@@ -502,18 +227,14 @@ func (h *Handler) startTeamTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) assignTeamTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleAssignTeamTask(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
 	}
 	var req struct {
-		apitypes.AssignTeamTaskRequest
-		ActorID string `json:"actor_id"`
+		ParticipantID string `json:"participant_id"`
+		ActorID       string `json:"actor_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
@@ -522,7 +243,7 @@ func (h *Handler) assignTeamTask(w http.ResponseWriter, r *http.Request) {
 	item, err := svc.AssignTask(team.AssignTaskInput{
 		TeamID:     pathValue(r, "team_id"),
 		TaskID:     pathValue(r, "task_id"),
-		AssignedTo: strings.TrimSpace(req.BotID),
+		AssignedTo: strings.TrimSpace(req.ParticipantID),
 		ActorID:    strings.TrimSpace(req.ActorID),
 	})
 	if err != nil {
@@ -532,11 +253,7 @@ func (h *Handler) assignTeamTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiTask(item))
 }
 
-func (h *Handler) listTeamApprovals(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleListTeamApprovals(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -544,19 +261,10 @@ func (h *Handler) listTeamApprovals(w http.ResponseWriter, r *http.Request) {
 	if !h.ensureTeamExists(w, svc, pathValue(r, "team_id")) {
 		return
 	}
-	approvals := svc.ListApprovals(pathValue(r, "team_id"))
-	resp := make([]apitypes.TeamApproval, 0, len(approvals))
-	for _, item := range approvals {
-		resp = append(resp, apiApproval(item))
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, apiApprovals(svc.ListApprovals(pathValue(r, "team_id"))))
 }
 
-func (h *Handler) createTeamApproval(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleCreateTeamApproval(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -582,11 +290,7 @@ func (h *Handler) createTeamApproval(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, apiApproval(item))
 }
 
-func (h *Handler) resolveTeamApproval(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleResolveTeamApproval(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -610,11 +314,7 @@ func (h *Handler) resolveTeamApproval(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiApproval(item))
 }
 
-func (h *Handler) listTeamEvents(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handleListTeamEvents(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
@@ -622,162 +322,5 @@ func (h *Handler) listTeamEvents(w http.ResponseWriter, r *http.Request) {
 	if !h.ensureTeamExists(w, svc, pathValue(r, "team_id")) {
 		return
 	}
-	events := svc.ListEvents(pathValue(r, "team_id"))
-	resp := make([]apitypes.TeamEvent, 0, len(events))
-	for _, item := range events {
-		resp = append(resp, apiEvent(item))
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-func (h *Handler) requireTeamService(w http.ResponseWriter) (*team.Service, bool) {
-	if h == nil || h.teamSvc == nil {
-		http.Error(w, "team service is not configured", http.StatusServiceUnavailable)
-		return nil, false
-	}
-	return h.teamSvc, true
-}
-
-func (h *Handler) requireTeamComponents(w http.ResponseWriter) (*team.Service, team.TeamChannelAdapter, bool) {
-	svc, ok := h.requireTeamService(w)
-	if !ok {
-		return nil, nil, false
-	}
-	if h.teamAdapter == nil {
-		http.Error(w, "team adapter is not configured", http.StatusServiceUnavailable)
-		return nil, nil, false
-	}
-	return svc, h.teamAdapter, true
-}
-
-func (h *Handler) ensureTeamExists(w http.ResponseWriter, svc *team.Service, teamID string) bool {
-	if _, found := svc.GetTeam(teamID); !found {
-		http.Error(w, team.ErrTeamNotFound.Error(), http.StatusNotFound)
-		return false
-	}
-	return true
-}
-
-func writeTeamError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, team.ErrTeamNotFound), errors.Is(err, team.ErrTaskNotFound), errors.Is(err, team.ErrApprovalNotFound):
-		http.Error(w, err.Error(), http.StatusNotFound)
-	case errors.Is(err, team.ErrTaskNotClaimable),
-		errors.Is(err, team.ErrTaskDependenciesOpen),
-		errors.Is(err, team.ErrTaskNoSubtasks),
-		errors.Is(err, team.ErrWorkerAlreadyBusy),
-		errors.Is(err, team.ErrTeamSelectionRequired):
-		http.Error(w, err.Error(), http.StatusConflict)
-	case errors.Is(err, team.ErrTaskTransitionInvalid),
-		errors.Is(err, team.ErrApprovalAlreadyHandled):
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	default:
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-}
-
-func writeTeamPlannerError(w http.ResponseWriter, err error) {
-	var plannerErr *teamPlannerHTTPError
-	if errors.As(err, &plannerErr) {
-		http.Error(w, plannerErr.Error(), plannerErr.status)
-		return
-	}
-	var llmErr *llm.HTTPError
-	if errors.As(err, &llmErr) {
-		writeLLMError(w, llmErr)
-		return
-	}
-	http.Error(w, err.Error(), http.StatusBadGateway)
-}
-
-func apiTeam(item team.TeamMeta) apitypes.Team {
-	return apitypes.Team{
-		ID:        item.ID,
-		RoomID:    item.RoomID,
-		Channel:   item.Channel,
-		Title:     item.Title,
-		LeadBotID: item.LeadBotID,
-		Status:    item.Status,
-		CreatedAt: item.CreatedAt,
-		UpdatedAt: item.UpdatedAt,
-	}
-}
-
-func apiTask(item team.TeamTask) apitypes.TeamTask {
-	return apitypes.TeamTask{
-		ID:           item.ID,
-		TeamID:       item.TeamID,
-		RoomID:       item.RoomID,
-		ParentID:     item.ParentID,
-		Title:        item.Title,
-		Body:         item.Body,
-		Status:       item.Status,
-		CreatedBy:    item.CreatedBy,
-		AssignedTo:   item.AssignedTo,
-		ClaimedBy:    item.ClaimedBy,
-		DependsOn:    append([]string(nil), item.DependsOn...),
-		Priority:     item.Priority,
-		PlanSummary:  item.PlanSummary,
-		DispatchedAt: item.DispatchedAt,
-		DeadlineAt:   item.DeadlineAt,
-		TimeoutAt:    item.TimeoutAt,
-		Result:       item.Result,
-		Error:        item.Error,
-		CreatedAt:    item.CreatedAt,
-		UpdatedAt:    item.UpdatedAt,
-		CompletedAt:  item.CompletedAt,
-	}
-}
-
-func apiApproval(item team.TeamApproval) apitypes.TeamApproval {
-	return apitypes.TeamApproval{
-		ID:          item.ID,
-		TeamID:      item.TeamID,
-		RoomID:      item.RoomID,
-		TaskID:      item.TaskID,
-		RequestedBy: item.RequestedBy,
-		ApproverID:  item.ApproverID,
-		Kind:        item.Kind,
-		Summary:     item.Summary,
-		Payload:     item.Payload,
-		Status:      item.Status,
-		Resolution:  item.Resolution,
-		CreatedAt:   item.CreatedAt,
-		ResolvedAt:  item.ResolvedAt,
-	}
-}
-
-func apiEvent(item team.TeamEvent) apitypes.TeamEvent {
-	return apitypes.TeamEvent{
-		Seq:       item.Seq,
-		TeamID:    item.TeamID,
-		RoomID:    item.RoomID,
-		Type:      item.Type,
-		ActorID:   item.ActorID,
-		TaskID:    item.TaskID,
-		TargetID:  item.TargetID,
-		Summary:   item.Summary,
-		CreatedAt: item.CreatedAt,
-	}
-}
-
-func uniqueStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
+	writeJSON(w, http.StatusOK, apiEvents(svc.ListEvents(pathValue(r, "team_id"))))
 }

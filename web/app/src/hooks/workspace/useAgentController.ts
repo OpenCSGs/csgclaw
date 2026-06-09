@@ -1151,8 +1151,8 @@ export function useAgentController({
     await createAgentTeam({
       channel: "csgclaw",
       title: createTeamTitle.trim() || t("teamNewFallbackTitle"),
-      lead_bot_id: MANAGER_AGENT_ID,
-      member_bot_ids: createTeamMemberIDs,
+      lead_participant_id: MANAGER_AGENT_ID,
+      member_participant_ids: createTeamMemberIDs,
     });
     setShowCreateTeamModal(false);
   }
@@ -1173,7 +1173,7 @@ export function useAgentController({
       return;
     }
     const inviterID = resolveRoomInviterID(room, {
-      preferredInviterIDs: [team.lead_bot_id, data.current_user_id, MANAGER_AGENT_ID],
+      preferredInviterIDs: [team.lead_participant_id, data.current_user_id, MANAGER_AGENT_ID],
     });
     if (!inviterID) {
       setTeamActionError(t("teamActionFailed"));

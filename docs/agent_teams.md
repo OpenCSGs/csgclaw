@@ -29,7 +29,7 @@ Claude Code agent teams 提供了更强的模型：
 - mailbox；
 - approval / shutdown / presence。
 
-但 Claude Code 的实现背景与 `csgclaw` 不同。Claude Code 需要协调多个独立 CLI 进程，因此用本地文件、task 目录、inbox 文件和 lockfile 做轻量共享状态。`csgclaw` 已经有一个常驻本地 server、REST/SSE、agent lifecycle、bot/channel 绑定和 IM room，因此没有必要照搬文件式 mailbox/task lock。
+但 Claude Code 的实现背景与 `csgclaw` 不同。Claude Code 需要协调多个独立 CLI 进程，因此用本地文件、task 目录、inbox 文件和 lockfile 做轻量共享状态。`csgclaw` 已经有一个常驻本地 server、REST/SSE、agent lifecycle、participant/channel 绑定和 IM room，因此没有必要照搬文件式 mailbox/task lock。
 
 `csgclaw` 应复用 Claude Code 的“协作语义”，不复制它的“进程间文件协调实现”。
 
@@ -63,7 +63,7 @@ Claude Code agent teams 提供了更强的模型：
 
 ```text
 Team = 一个带结构化协作状态的 room
-Member = room member 对应的 bot
+Member = room member 对应的 participant
 Message = 人类可见协作事件和人工干预入口
 Task/Approval/Presence = server 端权威结构化状态
 ```
@@ -86,7 +86,7 @@ Task/Approval/Presence = server 端权威结构化状态
 - room；
 - member；
 - message；
-- bot。
+- participant。
 
 因此，Agent Teams 的第一层产品体验应建立在这些稳定对象上。
 
@@ -145,8 +145,8 @@ Phase 0 定义 adapter 时应按最弱 channel 的能力下限设计，而不是
 
 | Claude Code 概念 | CSGClaw 简化映射                                                             |
 | ---------------- | ---------------------------------------------------------------------------- |
-| Team lead        | role=manager 的 bot，且是 team room member                                   |
-| Teammate         | role=worker 的 bot，且是 team room member                                    |
+| Team lead        | role=manager 的 participant，且是 team room member                           |
+| Teammate         | role=worker 的 participant，且是 team room member                            |
 | Team config      | room 上的 team metadata，server 持久化                                       |
 | Task list        | room-scoped structured tasks                                                 |
 | Mailbox          | MVP 先用 task assignment + room-visible messages；后续再做 sideband envelope |
@@ -174,7 +174,7 @@ internal/team/
 
 ```text
 team.Service
-  ├─ bot lookup: botID -> agentID/userID/channel/role
+  ├─ participant lookup: participantID -> agentID/userID/channel/role
   ├─ channel adapter registry: 按 channel 选择 csgclaw / feishu / matrix adapter
   ├─ channel adapter: 创建或复用 room、添加 members、写入 visible messages
   ├─ agent: 查询 runtime 状态，必要时 start/stop
@@ -198,7 +198,7 @@ team.Service
 
 不要把 task 状态只写进 message 文本；message 是投影，不是 source of truth。
 
-对内建 `csgclaw` channel 来说，Channel 权威状态由 `internal/im` 管理。对 Feishu/Matrix 来说，Channel 权威状态在外部平台，`csgclaw` 本地只保存 team 元数据、bot/channel 映射、投影事件和必要的 mirror/cursor。
+对内建 `csgclaw` channel 来说，Channel 权威状态由 `internal/im` 管理。对 Feishu/Matrix 来说，Channel 权威状态在外部平台，`csgclaw` 本地只保存 team 元数据、participant/channel 映射、投影事件和必要的 mirror/cursor。
 
 ### 5.2 Channel 复用原则
 
@@ -207,7 +207,7 @@ team.Service
 - 创建/绑定 room；
 - 添加 member；
 - 发送 message；
-- 接收用户 message 或 bot event。
+- 接收用户 message 或 participant event。
 
 Agent Teams 的高级语义由 `internal/team` 解释和维护，再投影成普通消息。因此 Feishu/Matrix 不需要自定义复杂 UI 也能使用。
 
@@ -235,7 +235,7 @@ type TeamMeta struct {
     RoomID      string    `json:"room_id"`
     Channel     string    `json:"channel"`  // csgclaw, feishu, matrix
     Title       string    `json:"title"`
-    LeadBotID   string    `json:"lead_bot_id"`
+    LeadParticipantID string `json:"lead_participant_id"`
     Status      string    `json:"status"`   // active, paused, archived
     CreatedAt   time.Time `json:"created_at"`
     UpdatedAt   time.Time `json:"updated_at"`
@@ -250,14 +250,14 @@ type TeamMeta struct {
 
 ### 6.2 TeamMember
 
-第一版可以不单独持久化完整 member 列表，而是从 room members + bot store 派生。
+第一版可以不单独持久化完整 member 列表，而是从 room members + participant store 派生。
 
 需要缓存的只是运行态：
 
 ```go
 type MemberPresence struct {
     TeamID          string    `json:"team_id"`
-    BotID           string    `json:"bot_id"`
+    ParticipantID   string    `json:"participant_id"`
     UserID          string    `json:"user_id"`
     AgentID         string    `json:"agent_id"`
     Role            string    `json:"role"`   // manager, worker
@@ -269,7 +269,7 @@ type MemberPresence struct {
 }
 ```
 
-`POST /api/v1/teams/{team_id}/presence` 是按 `team_id + bot_id` 的 upsert，不是 append。普通 heartbeat 可以只更新内存中的 `LastHeartbeatAt`；状态变化、checkpoint 和 server 退出时再落盘。
+`POST /api/v1/teams/{team_id}/presence` 是按 `team_id + participant_id` 的 upsert，不是 append。普通 heartbeat 可以只更新内存中的 `LastHeartbeatAt`；状态变化、checkpoint 和 server 退出时再落盘。
 
 ### 6.3 TeamTask
 
@@ -547,7 +547,7 @@ Reply in this room with: approve T-102 or reject T-102 <reason>
 approve <task_id>
 reject <task_id> <reason>
 cancel <task_id>
-reassign <task_id> <bot_id>
+reassign <task_id> <participant_id>
 ```
 
 这些命令只在 team room 内生效，并且必须经过权限检查。无法解析或权限不足时，应投影一条可读的失败说明。更复杂的自然语言命令、按钮和卡片可以作为后续增强。
@@ -599,7 +599,7 @@ GET    /api/v1/teams/{team_id}/events
 
 `POST /api/v1/teams/{team_id}/pause` 和 `resume` 是 `PATCH /teams/{team_id}` 的显式语义化快捷入口，分别把 `TeamMeta.Status` 置为 `paused` 和 `active`，便于 CLI 和固定文本命令共用。
 
-`POST /api/v1/teams/tasks/claim-next` 用于未指定 team 的领取。服务端按 `bot_id` 查找 bot 所属 active teams，筛选可领取任务并按统一优先级排序；如果无法得出唯一结果或策略不支持跨 team claim，应返回要求指定 `team_id` 的错误。
+`POST /api/v1/teams/tasks/claim-next` 用于未指定 team 的领取。服务端按 `participant_id` 查找 participant 所属 active teams，筛选可领取任务并按统一优先级排序；如果无法得出唯一结果或策略不支持跨 team claim，应返回要求指定 `team_id` 的错误。
 
 `POST /api/v1/teams` 建议支持两种模式：
 
@@ -609,7 +609,7 @@ GET    /api/v1/teams/{team_id}/events
 {
   "channel": "csgclaw",
   "room_id": "room-123",
-  "lead_bot_id": "bot-manager"
+  "lead_participant_id": "manager"
 }
 ```
 
@@ -619,8 +619,8 @@ GET    /api/v1/teams/{team_id}/events
 {
   "channel": "csgclaw",
   "title": "release team",
-  "lead_bot_id": "bot-manager",
-  "member_bot_ids": ["bot-alice", "bot-bob"]
+  "lead_participant_id": "manager",
+  "member_participant_ids": ["alice", "bob"]
 }
 ```
 
@@ -632,7 +632,7 @@ GET    /api/v1/teams/{team_id}/events
     {
       "id_ref": "collect",
       "title": "Collect feedback",
-      "assign_to": "bot-alice"
+      "assign_to": "alice"
     },
     {
       "id_ref": "analyze",
@@ -657,7 +657,7 @@ GET    /api/v1/teams/{team_id}/events
 
 `POST /api/v1/teams/{team_id}/presence` 的语义是 upsert：
 
-- key 为 `team_id + bot_id`；
+- key 为 `team_id + participant_id`；
 - worker heartbeat 可以重复提交同一状态；
 - 高频 heartbeat 不要求每次落盘；
 - 服务端可以返回当前 presence 和建议的下一次 heartbeat 间隔。
@@ -670,10 +670,10 @@ GET    /api/v1/teams/{team_id}/events
 
 ### 10.1 环境与输出约定
 
-CLI 复用现有 bot 身份环境变量：
+CLI 复用现有 participant 身份环境变量：
 
 ```bash
-PICOCLAW_CHANNELS_CSGCLAW_PARTICIPANT_ID=bot-alice
+PICOCLAW_CHANNELS_CSGCLAW_PARTICIPANT_ID=alice
 ```
 
 执行任务期间，`team_id` 从 `claim` / `claim-next` / `task list` 的响应或显式 `--team` 参数获取。
@@ -684,7 +684,7 @@ CLI 默认根据 stdout 自动选择输出：
 - stdout 被 pipe 或脚本消费：输出 JSON，方便 agent 和脚本解析；
 - 需要显式覆盖时使用 `--output json|table`。
 
-`--bot` 参数默认读取 `PICOCLAW_CHANNELS_CSGCLAW_PARTICIPANT_ID`，只有调试或 manager 代操作时才显式传入。
+`--participant-id` 参数默认可由 runtime 从 `PICOCLAW_CHANNELS_CSGCLAW_PARTICIPANT_ID` 读取，调试或 manager 代操作时也应显式传入 participant ID。这里的 participant ID 是 team 内的稳定身份，例如 `alice` / `p-w-0604`，不是 `u-alice` / `u-p-w-0604` 这类 channel user 或 agent ID。
 
 ### 10.2 命令集分层
 
@@ -692,24 +692,24 @@ CLI 默认根据 stdout 自动选择输出：
 
 ```text
 csgclaw-cli team list
-csgclaw-cli team create --channel <ch> [--room-id <room>] [--title <title>] --lead-bot <bot> [--member-bots <ids>]
+csgclaw-cli team create --channel <ch> [--room-id <room>] [--title <title>] --lead-participant-id <participant> [--member-participant-ids <ids>]
 csgclaw-cli team pause --team <id>
 csgclaw-cli team resume --team <id>
 
-csgclaw-cli team task list --team <id> [--status <status>] [--assigned-to <bot>]
-csgclaw-cli team task create --team <id> --title <title> [--body <text>] [--assign-to <bot>] [--depends-on <ids>] [--priority <n>]
-csgclaw-cli team task create-batch --team <team> --file <tasks.json>
-csgclaw-cli team task assign --team <id> --task <id> --to <bot>
-csgclaw-cli team task claim --team <id> --task <id> [--bot <bot>]
-csgclaw-cli team task claim-next [--team <id>] [--bot <bot>]
-csgclaw-cli team task update --team <id> --task <id> --status completed|failed|blocked [--result <text>] [--error <text>] [--reason <text>]
+csgclaw-cli team task list --team <id> [--status <status>] [--assigned-to <participant>]
+csgclaw-cli team task create --team <id> --title <title> [--body <text>] [--assign-to <participant>] [--depends-on <ids>] [--priority <n>]
+csgclaw-cli team task create-batch --team <team> --created-by <participant> --file <tasks.json>
+csgclaw-cli team task assign --team <id> --task <id> --participant-id <participant> --actor-id <participant>
+csgclaw-cli team task claim --team <id> --task <id> --participant-id <participant>
+csgclaw-cli team task claim-next [--team <id>] --participant-id <participant>
+csgclaw-cli team task update --team <id> --task <id> --actor-id <participant> --status completed|failed|blocked [--result <text>] [--error <text>] [--reason <text>]
 csgclaw-cli team task cancel --team <id> --task <id>
 
 csgclaw-cli team approval list --team <id> [--status pending]
-csgclaw-cli team approval create --team <id> --task <id> [--bot <bot>] --kind <kind> --summary <text>
+csgclaw-cli team approval create --team <id> --task <id> --requested-by <participant> [--approver-id <participant>] --kind <kind> --summary <text>
 csgclaw-cli team approval resolve --team <id> --approval <id> --status approved|rejected [--reason <text>]
 
-csgclaw-cli team presence update --team <id> [--bot <bot>] --state idle|busy|blocked [--summary <text>]
+csgclaw-cli team presence update --team <id> --participant-id <participant> --state idle|busy|blocked [--summary <text>]
 ```
 
 Phase 2 必需子集：
@@ -736,7 +736,7 @@ Phase 2 可选调试命令：
 
 `task cancel` 单独保留，因为它是 manager 或 human 的强制终止动作，不应和 worker 的执行状态汇报混在一起。
 
-`task claim-next` 的 `--team` 可以省略。省略时，服务端可以基于 bot membership 跨 team 搜索可领取任务；如果 bot 属于多个 active team 且无法得出唯一或最高优先级任务，应返回需要显式 `--team` 的错误，而不是猜测。
+`task claim-next` 的 `--team` 可以省略。省略时，服务端可以基于 participant membership 跨 team 搜索可领取任务；如果 participant 属于多个 active team 且无法得出唯一或最高优先级任务，应返回需要显式 `--team` 的错误，而不是猜测。
 
 ### 10.3 Manager 行为约束
 
@@ -785,7 +785,7 @@ MVP 使用文件存储，保持与当前项目风格一致，但不要把所有 
 - channel；
 - room id；
 - title；
-- lead bot id；
+- lead participant id；
 - status；
 - team directory path 或可推导路径。
 

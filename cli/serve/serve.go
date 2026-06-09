@@ -522,7 +522,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
-	teamSvc, teamAdapter, err := NewTeamService(imSvc)
+	teamSvc, teamAdapter, err := NewTeamService(imSvc, participantSvc)
 	if err != nil {
 		return err
 	}
@@ -1128,7 +1128,7 @@ func newParticipantService(agentSvc *agent.Service, imSvc *im.Service) (*partici
 	), nil
 }
 
-func newTeamService(imSvc *im.Service) (*team.Service, team.TeamChannelAdapter, error) {
+func newTeamService(imSvc *im.Service, participantSvc *participant.Service) (*team.Service, team.TeamChannelAdapter, error) {
 	teamsDir, err := config.DefaultTeamsDir()
 	if err != nil {
 		return nil, nil, err
@@ -1137,7 +1137,7 @@ func newTeamService(imSvc *im.Service) (*team.Service, team.TeamChannelAdapter, 
 	if err != nil {
 		return nil, nil, err
 	}
-	adapter := team.NewCSGClawAdapter(imSvc)
+	adapter := team.NewCSGClawAdapter(imSvc, participantSvc)
 	projector := team.NewProjector(adapter, nil)
 	return team.NewService(team.WithStore(store), team.WithProjector(projector)), adapter, nil
 }

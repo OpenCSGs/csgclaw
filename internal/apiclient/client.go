@@ -293,13 +293,13 @@ func (c *Client) ClaimNextTeamTask(ctx context.Context, req apitypes.ClaimNextTe
 	return task, nil
 }
 
-func (c *Client) ClaimTeamTask(ctx context.Context, teamID, taskID, botID string) (apitypes.TeamTask, error) {
+func (c *Client) ClaimTeamTask(ctx context.Context, teamID, taskID, participantID string) (apitypes.TeamTask, error) {
 	var task apitypes.TeamTask
 	path, err := teamTaskClaimPath(teamID, taskID)
 	if err != nil {
 		return apitypes.TeamTask{}, err
 	}
-	if err := c.DoJSON(ctx, http.MethodPost, path, apitypes.ClaimTeamTaskRequest{BotID: strings.TrimSpace(botID)}, &task); err != nil {
+	if err := c.DoJSON(ctx, http.MethodPost, path, apitypes.ClaimTeamTaskRequest{ParticipantID: strings.TrimSpace(participantID)}, &task); err != nil {
 		return apitypes.TeamTask{}, err
 	}
 	return task, nil
@@ -324,7 +324,7 @@ func (c *Client) UpdateTeamTask(ctx context.Context, teamID, taskID, actorID str
 	return updated, nil
 }
 
-func (c *Client) AssignTeamTask(ctx context.Context, teamID, taskID, actorID, botID string) (apitypes.TeamTask, error) {
+func (c *Client) AssignTeamTask(ctx context.Context, teamID, taskID, actorID, participantID string) (apitypes.TeamTask, error) {
 	var updated apitypes.TeamTask
 	path, err := teamTaskAssignPath(teamID, taskID)
 	if err != nil {
@@ -334,7 +334,7 @@ func (c *Client) AssignTeamTask(ctx context.Context, teamID, taskID, actorID, bo
 		apitypes.AssignTeamTaskRequest
 		ActorID string `json:"actor_id"`
 	}{
-		AssignTeamTaskRequest: apitypes.AssignTeamTaskRequest{BotID: strings.TrimSpace(botID)},
+		AssignTeamTaskRequest: apitypes.AssignTeamTaskRequest{ParticipantID: strings.TrimSpace(participantID)},
 		ActorID:               strings.TrimSpace(actorID),
 	}
 	if err := c.DoJSON(ctx, http.MethodPost, path, body, &updated); err != nil {

@@ -3,14 +3,14 @@ package apitypes
 import "time"
 
 type Team struct {
-	ID        string    `json:"id"`
-	RoomID    string    `json:"room_id"`
-	Channel   string    `json:"channel"`
-	Title     string    `json:"title"`
-	LeadBotID string    `json:"lead_bot_id"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                string    `json:"id"`
+	RoomID            string    `json:"room_id"`
+	Channel           string    `json:"channel"`
+	Title             string    `json:"title"`
+	LeadParticipantID string    `json:"lead_participant_id"`
+	Status            string    `json:"status"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 type TeamTask struct {
@@ -61,7 +61,7 @@ type TeamApproval struct {
 
 type TeamPresence struct {
 	TeamID          string    `json:"team_id"`
-	BotID           string    `json:"bot_id"`
+	ParticipantID   string    `json:"participant_id"`
 	UserID          string    `json:"user_id"`
 	AgentID         string    `json:"agent_id"`
 	Role            string    `json:"role"`
@@ -85,11 +85,11 @@ type TeamEvent struct {
 }
 
 type CreateTeamRequest struct {
-	Channel      string   `json:"channel"`
-	RoomID       string   `json:"room_id,omitempty"`
-	Title        string   `json:"title,omitempty"`
-	LeadBotID    string   `json:"lead_bot_id"`
-	MemberBotIDs []string `json:"member_bot_ids,omitempty"`
+	Channel              string   `json:"channel"`
+	RoomID               string   `json:"room_id,omitempty"`
+	Title                string   `json:"title,omitempty"`
+	LeadParticipantID    string   `json:"lead_participant_id"`
+	MemberParticipantIDs []string `json:"member_participant_ids,omitempty"`
 }
 
 type PatchTeamRequest struct {
@@ -166,16 +166,16 @@ type PatchTeamTaskRequest struct {
 }
 
 type AssignTeamTaskRequest struct {
-	BotID string `json:"bot_id"`
+	ParticipantID string `json:"participant_id"`
 }
 
 type ClaimTeamTaskRequest struct {
-	BotID string `json:"bot_id"`
+	ParticipantID string `json:"participant_id"`
 }
 
 type ClaimNextTeamTaskRequest struct {
-	TeamID string `json:"team_id,omitempty"`
-	BotID  string `json:"bot_id"`
+	TeamID        string `json:"team_id,omitempty"`
+	ParticipantID string `json:"participant_id"`
 }
 
 type CreateTeamApprovalRequest struct {
@@ -194,7 +194,7 @@ type ResolveTeamApprovalRequest struct {
 }
 
 type UpsertTeamPresenceRequest struct {
-	BotID         string `json:"bot_id"`
+	ParticipantID string `json:"participant_id"`
 	UserID        string `json:"user_id,omitempty"`
 	AgentID       string `json:"agent_id,omitempty"`
 	Role          string `json:"role,omitempty"`

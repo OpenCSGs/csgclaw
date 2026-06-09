@@ -10,13 +10,14 @@ Use this skill when the manager is coordinating work through CSGClaw team tasks 
 Only begin work after an explicit dispatch message in the task execution room:
 
 ```text
-[team] Task <task_id> is ready for you
-Claim it with: csgclaw-cli team task claim --team <team_id> --task <task_id> --bot-id <worker_participant_id>
+@<worker_display_name> <manager_display_name> dispatched <task_id> to <worker_display_name>. Claim: csgclaw-cli team task claim --team <team_id> --task <task_id> --participant-id <worker_participant_id>
 ```
 
-The `--bot-id` flag name is legacy; pass the worker participant ID shown in the dispatch message, for example `frontend-dev`. Rendered mentions may show only the handle, for example `@frontend-dev`; use the exact `--bot-id` value shown when claiming or updating the task.
+The claim command uses participant IDs, for example `u-frontend-dev`. Rendered mentions may show only the display name or handle, for example `@frontend-dev`; do not use the display name as the CLI participant ID unless the claim command shows it.
 
-Ignore team setup and planning messages, including `[team] Task created`, `[team] Task planning complete`, and `[team] ... started assigning tasks`. Those messages are not permission to start work.
+Do not use legacy `--bot-id` for team commands. If `csgclaw-cli team task claim --help` does not show `--participant-id`, the sandbox has a stale `csgclaw-cli`; report that blocker and stop instead of retrying with `--bot-id`.
+
+Ignore team setup and planning events, including messages such as `enabled team`, `created task`, `created tasks`, `completed planning for task`, and `created execution room`. Those messages are not permission to start work.
 
 ## Worker actions
 
@@ -33,13 +34,13 @@ Never infer `team_id` from the room id. A room id such as `room-178...` is not a
 Claim the dispatched task:
 
 ```bash
-csgclaw-cli team task claim --team <team_id> --task <task_id> --bot-id <worker_participant_id>
+csgclaw-cli team task claim --team <team_id> --task <task_id> --participant-id <worker_participant_id>
 ```
 
 If the dispatch did not include a task id, claim the next available task:
 
 ```bash
-csgclaw-cli team task claim-next --team <team_id> --bot-id <worker_participant_id>
+csgclaw-cli team task claim-next --team <team_id> --participant-id <worker_participant_id>
 ```
 
 After claiming, confirm the response status is `in_progress` for the same task before doing the work.

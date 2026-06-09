@@ -37,7 +37,7 @@ export type WorkspaceTeam = {
   room_id: string;
   channel: string;
   title: string;
-  lead_bot_id: string;
+  lead_participant_id: string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -100,7 +100,7 @@ export function normalizeTeam(input: unknown): WorkspaceTeam | null {
     room_id: roomID,
     channel: text(item.channel) || "csgclaw",
     title: text(item.title),
-    lead_bot_id: text(item.lead_bot_id),
+    lead_participant_id: text(item.lead_participant_id),
     status: text(item.status) || "active",
     created_at: text(item.created_at),
     updated_at: text(item.updated_at),

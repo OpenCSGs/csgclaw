@@ -1433,7 +1433,11 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(req.Name)
 	handle := strings.TrimSpace(req.Handle)
 	role := strings.TrimSpace(req.Role)
+	rawID := id
 	id = h.resolveCSGClawParticipantUserID(id)
+	if rawID == agent.ManagerUserID {
+		id = agent.ManagerParticipantID
+	}
 
 	if id == "" {
 		http.Error(w, "id is required", http.StatusBadRequest)
@@ -1445,6 +1449,12 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if handle == "" {
 		handle = name
+	}
+	if id == agent.ManagerParticipantID {
+		if user, ok := h.im.User(id); ok {
+			writeJSON(w, http.StatusCreated, user)
+			return
+		}
 	}
 
 	if h.participant != nil && h.svc != nil && shouldCreateWorkerForUser(id, role) {

@@ -165,7 +165,6 @@ export function useTaskController({
         const planned = await planWorkspaceTask({
           team_id: teamID,
           task_id: taskID,
-          actor_id: "web",
           auto_start: true,
         });
         await tasksQuery.refetch();
@@ -200,7 +199,6 @@ export function useTaskController({
       const planned = await planWorkspaceTask({
         team_id: target.team_id,
         task_id: target.id,
-        actor_id: "web",
         auto_start: true,
       });
       await tasksQuery.refetch();
@@ -244,7 +242,6 @@ export function useTaskController({
       const started = await startWorkspaceTask({
         team_id: target.team_id,
         task_id: target.id,
-        actor_id: "web",
       });
       await finishStartTask(target, started.task.room_id);
       return;
@@ -255,13 +252,11 @@ export function useTaskController({
           await planWorkspaceTask({
             team_id: target.team_id,
             task_id: target.id,
-            actor_id: "web",
           });
           await queryClient.invalidateQueries({ queryKey: teamEventsQueryKey(target.team_id) });
           const started = await startWorkspaceTask({
             team_id: target.team_id,
             task_id: target.id,
-            actor_id: "web",
           });
           await finishStartTask(target, started.task.room_id);
           return;

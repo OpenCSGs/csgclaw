@@ -295,12 +295,12 @@ export function useWorkspaceController() {
       onCreateRoom: () => conversation.openCreateRoomModal(),
       onCreateAgent: agent.openCreateAgentModal,
       onCreateNotificationParticipant: agent.openCreateNotificationParticipantModal,
-      onCreateTeam: async ({ title, lead_bot_id, member_bot_ids }: CreateTeamPayload) => {
+      onCreateTeam: async ({ title, lead_participant_id, member_participant_ids }: CreateTeamPayload) => {
         await agent.agentViewProps.onCreateTeam?.({
           channel: "csgclaw",
           title,
-          lead_bot_id,
-          member_bot_ids,
+          lead_participant_id,
+          member_participant_ids,
         });
       },
       teamActionBusy: agent.agentViewProps.teamActionBusy,
