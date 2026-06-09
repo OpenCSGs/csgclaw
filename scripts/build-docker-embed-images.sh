@@ -1,17 +1,41 @@
 #!/usr/bin/env bash
 # Build container images for embed templates that include a Dockerfile.
+# Image tag defaults to agent.toml version (after bump-docker-embed-version.sh).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMMON="${ROOT}/scripts/docker-embed-agent-toml-common.sh"
 LIST_SCRIPT="${ROOT}/scripts/list-docker-embed-templates.sh"
+
+# shellcheck source=scripts/docker-embed-agent-toml-common.sh
+. "${COMMON}"
 
 : "${ACR_REGISTRY:?ACR_REGISTRY must be set}"
 : "${PICOCLAW_BASE_IMAGE:?PICOCLAW_BASE_IMAGE must be set}"
-: "${DOCKER_EMBED_IMAGE_TAG:?DOCKER_EMBED_IMAGE_TAG must be set}"
+
+image_tag_for_template() {
+  local name="$1"
+  local manifest version
+
+  manifest="$(docker_embed_manifest_path "${name}")"
+  if [ ! -f "${manifest}" ]; then
+    echo "missing manifest: ${manifest}" >&2
+    exit 1
+  fi
+  version="$(read_agent_toml_version "${manifest}")"
+  if [ -z "${version}" ]; then
+    echo "missing version in ${manifest}; run scripts/bump-docker-embed-version.sh first" >&2
+    exit 1
+  fi
+  printf '%s' "${version}"
+}
 
 build_one() {
   local name="$1"
-  local image="${ACR_REGISTRY}/opencsghq/${name}:${DOCKER_EMBED_IMAGE_TAG}"
+  local tag image
+
+  tag="$(image_tag_for_template "${name}")"
+  image="${ACR_REGISTRY}/opencsghq/${name}:${tag}"
   echo "docker build ${name} -> ${image}"
   docker build -f "${ROOT}/internal/templates/embed/${name}/Dockerfile" \
     --build-arg PICOCLAW_IMAGE="${PICOCLAW_BASE_IMAGE}" \

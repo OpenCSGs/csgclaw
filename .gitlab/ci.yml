@@ -1,12 +1,13 @@
-# GitLab CI: on tag v*, build release archives and a Docker image, then upload archives to SSH storage.
+# GitLab CI: release on tag v*; picoclaw embed images on main branch commits.
 #
 # Platform list: scripts/release-platforms.txt — keep parallel.matrix below in sync (same GOOS/GOARCH rows).
 #
-# Trigger: tags matching v* (e.g. pull mirror with "Trigger pipelines for mirror updates").
+# Triggers:
+#   - tag v* — release archives, csgclaw Docker image, SSH upload (uses committed embed agent.toml)
+#   - push / merge to default branch (main) — build/push picoclaw images when agent.toml version changed (uses committed version/ref; no bump)
 #
 # Implementation: scripts/release-build-all.sh (per matrix cell); .gitlab/ci-gitlab-release-upload.sh (upload only);
-# scripts/prepare-docker-embed-dist.sh (stage embed templates with Dockerfile into */dist/);
-# scripts/patch-docker-embed-image-refs.sh (patch dist/agent.toml image refs after image manifest merge);
+# .gitlab/ci-picoclaw-version-check.sh (gate builds when agent.toml version changed; never bumps version);
 # .gitlab/ci-picoclaw-image.sh (stage csgclaw-cli from dist/ into picoclaw manager/worker images); .gitlab/bookworm-mirror.sh (apt sources).
 #
 # Required CI/CD variables:
@@ -76,6 +77,10 @@ stages:
   rules:
     - if: $CI_COMMIT_TAG =~ /^v/
 
+.main_rules:
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
+
 .release_image:
   image:
     name: ${ACR_REGISTRY}/opencsg_public/golang:bookworm
@@ -107,16 +112,31 @@ stages:
   extends:
     - .kaniko_image
     - .kaniko_acr_auth
-    - .release_rules
+    - .main_rules
   stage: image
   needs:
-    - job: release-cli-build
+    - job: picoclaw-version-check
+      artifacts: true
+    - job: picoclaw-cli-build
       artifacts: true
   parallel:
     matrix:
       - GOARCH: amd64
       - GOARCH: arm64
   script:
+    - |
+      case "${PICOCLAW_IMAGE_NAME}" in
+        picoclaw-manager) build_flag="${PICOCLAW_MANAGER_BUILD:-false}" ;;
+        picoclaw-worker) build_flag="${PICOCLAW_WORKER_BUILD:-false}" ;;
+        *)
+          echo "unknown picoclaw image ${PICOCLAW_IMAGE_NAME}" >&2
+          exit 1
+          ;;
+      esac
+      if [ "${build_flag}" != "true" ]; then
+        echo "picoclaw embed version unchanged; skipping ${PICOCLAW_IMAGE_NAME} image build"
+        exit 0
+      fi
     - chmod +x .gitlab/ci-picoclaw-image.sh
     - sh .gitlab/ci-picoclaw-image.sh "${GOARCH}" "${PICOCLAW_DOCKERFILE}" "${PICOCLAW_IMAGE_NAME}"
 
@@ -139,28 +159,27 @@ web-build:
       - web/static-dist/
     expire_in: 1 day
 
-embed-templates-prepare:
+# Detect version changes and read build flags. Does not modify agent.toml.
+picoclaw-version-check:
   extends:
     - .release_image
-    - .release_rules
+    - .main_rules
   stage: build
   script:
-    - chmod +x scripts/prepare-docker-embed-dist.sh
-    - scripts/prepare-docker-embed-dist.sh
+    - chmod +x .gitlab/ci-picoclaw-version-check.sh
+    - ./.gitlab/ci-picoclaw-version-check.sh
   artifacts:
-    paths:
-      - internal/templates/embed/*/dist/
-    expire_in: 1 day
+    reports:
+      dotenv: picoclaw-build.env
 
-# Linux csgclaw-cli only — consumed by docker embed image builds before the full release.
-# Needs embed-templates-prepare: csgclaw-cli links internal/templates (go:embed embed/*/dist for Dockerfile templates).
-release-cli-build:
+# Linux csgclaw-cli for picoclaw embed image builds (main branch only).
+picoclaw-cli-build:
   extends:
     - .release_image
-    - .release_rules
+    - .main_rules
   stage: build
   needs:
-    - job: embed-templates-prepare
+    - job: picoclaw-version-check
       artifacts: true
   parallel:
     matrix:
@@ -173,11 +192,19 @@ release-cli-build:
     - bash .gitlab/bookworm-mirror.sh
     - apt-get update -qq && apt-get install -y --no-install-recommends zip ca-certificates
   script:
-    - export VERSION="$CI_COMMIT_TAG"
+    - |
+      if [ "${PICOCLAW_ANY_BUILD}" != "true" ]; then
+        echo "No picoclaw embed version changes since previous commit; skipping csgclaw-cli build for embed images"
+        mkdir -p "${DIST_DIR:-dist}"
+        echo "skipped" > "${DIST_DIR:-dist}/picoclaw-embed-cli-build.skipped"
+        exit 0
+      fi
+    - export VERSION="${CI_COMMIT_SHORT_SHA}"
     - export COMMIT="$(git rev-parse --short HEAD)"
     - export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     - export DIST_DIR="${DIST_DIR:-dist}"
     - export RELEASE_APPS="csgclaw-cli"
+    - export PICOCLAW_CLI_VERSION="${CI_COMMIT_SHORT_SHA}"
     - mkdir -p "$DIST_DIR" "${CI_PROJECT_DIR}/.gocache"
     - export GOCACHE="${GOCACHE:-${CI_PROJECT_DIR}/.gocache}"
     - export BOXLITE_CLI_VERSION="${BOXLITE_CLI_VERSION:-v0.9.0}"
@@ -196,8 +223,6 @@ release-build:
   needs:
     - job: web-build
       artifacts: true
-    - job: embed-templates-patch
-      artifacts: true
   parallel:
     matrix:
       - GOOS: linux
@@ -211,10 +236,20 @@ release-build:
       - GOOS: windows
         GOARCH: amd64
   before_script:
-    - chmod +x .gitlab/bookworm-mirror.sh scripts/release-build-all.sh
+    - chmod +x .gitlab/bookworm-mirror.sh scripts/release-build-all.sh scripts/list-docker-embed-templates.sh
     - bash .gitlab/bookworm-mirror.sh
     - apt-get update -qq && apt-get install -y --no-install-recommends zip ca-certificates
   script:
+    - |
+      while IFS= read -r name; do
+        manifest="internal/templates/embed/${name}/agent.toml"
+        test -f "${manifest}"
+        grep '^ref = ' "${manifest}"
+        if grep -q '^ref = ""' "${manifest}"; then
+          echo "missing image ref in ${manifest}" >&2
+          exit 1
+        fi
+      done < <(./scripts/list-docker-embed-templates.sh)
     - export VERSION="$CI_COMMIT_TAG"
     - export COMMIT="$(git rev-parse --short HEAD)"
     - export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -235,7 +270,7 @@ docker-build-amd64:
     - .release_rules
   stage: release
   needs:
-    - job: embed-templates-patch
+    - job: web-build
       artifacts: true
   script:
     - export COMMIT="$(git rev-parse --short HEAD)"
@@ -269,17 +304,35 @@ picoclaw-worker-image:
 .picoclaw_manifest:
   extends:
     - .crane_image
-    - .release_rules
+    - .main_rules
   stage: image
+  needs:
+    - job: picoclaw-version-check
+      artifacts: true
   before_script:
     - chmod +x .gitlab/ci-picoclaw-manifest.sh
     - crane version
   script:
+    - |
+      case "${PICOCLAW_IMAGE_NAME}" in
+        picoclaw-manager) build_flag="${PICOCLAW_MANAGER_BUILD:-false}" ;;
+        picoclaw-worker) build_flag="${PICOCLAW_WORKER_BUILD:-false}" ;;
+        *)
+          echo "unknown picoclaw image ${PICOCLAW_IMAGE_NAME}" >&2
+          exit 1
+          ;;
+      esac
+      if [ "${build_flag}" != "true" ]; then
+        echo "picoclaw embed version unchanged; skipping ${PICOCLAW_IMAGE_NAME} manifest"
+        exit 0
+      fi
     - sh .gitlab/ci-picoclaw-manifest.sh "${PICOCLAW_IMAGE_NAME}"
 
 picoclaw-manager-manifest:
   extends: .picoclaw_manifest
   needs:
+    - job: picoclaw-version-check
+      artifacts: true
     - job: picoclaw-manager-image
       artifacts: false
   variables:
@@ -288,30 +341,12 @@ picoclaw-manager-manifest:
 picoclaw-worker-manifest:
   extends: .picoclaw_manifest
   needs:
+    - job: picoclaw-version-check
+      artifacts: true
     - job: picoclaw-worker-image
       artifacts: false
   variables:
     PICOCLAW_IMAGE_NAME: picoclaw-worker
-
-embed-templates-patch:
-  extends:
-    - .release_image
-    - .release_rules
-  stage: release
-  needs:
-    - job: embed-templates-prepare
-      artifacts: true
-    - job: picoclaw-manager-manifest
-      artifacts: false
-    - job: picoclaw-worker-manifest
-      artifacts: false
-  script:
-    - chmod +x scripts/patch-docker-embed-image-refs.sh
-    - scripts/patch-docker-embed-image-refs.sh
-  artifacts:
-    paths:
-      - internal/templates/embed/*/dist/
-    expire_in: 1 day
 
 release-upload:
   extends:

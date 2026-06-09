@@ -30,7 +30,7 @@ make build
 This builds:
 
 1. Web UI assets into `web/static-dist/`
-2. Embed template `dist/` trees when missing (see [Embed dist](#embed-dist))
+2. Embed template `agent.toml` image refs when missing or out of sync with `version` (see [Embed templates](#embed-templates))
 3. `bin/csgclaw` (server CLI)
 4. `bin/csgclaw-cli` for the current platform
 
@@ -46,7 +46,7 @@ make run
 
 ## Full build
 
-`build-all` runs `build`, then docker-builds all embed templates with a `Dockerfile` and patches image refs:
+`build-all` builds the Web UI, bumps each embed template's `version` and syncs `image.ref`, rebuilds `csgclaw` (so embed matches image tags), then docker-builds all templates with a `Dockerfile` (**no `dist/` output**):
 
 ```bash
 make build-all
@@ -75,23 +75,26 @@ Frontend structure and verification details: [docs/web/development.md](web/devel
 
 `csgclaw-cli` is built with `CGO_ENABLED=0` so it runs inside musl-based PicoClaw and BoxLite sandbox images. Release CI uses the same setting (`scripts/release-build-all.sh`).
 
-## Embed dist
+## Embed templates
 
-Builtin PicoClaw templates ship source under `internal/templates/embed/<name>/`. Runtime files for `go:embed` live in each template's `dist/` directory and are generated locally or in CI.
+Builtin PicoClaw templates live under `internal/templates/embed/<name>/` and are embedded directly via `go:embed` (`agent.toml`, `workspace/`, etc.). Each docker embed template carries a `version` field and matching `image.ref`.
+
+**Local (before PR)**: `make build-all` bumps `version`, syncs `image.ref`, rebuilds `csgclaw` (so embed matches image tags), then builds Docker images.
+
+**GitLab CI (main)**: reads committed `version` / `image.ref`, builds and pushes images **without** modifying `agent.toml`; runs only when `version` changed since the previous commit.
 
 | Target | Description |
 |--------|-------------|
-| `make prepare-docker-embed-dist` | Copy template source into `embed/*/dist/` (no Docker) |
-| `make patch-docker-embed-image-refs` | Patch `dist/agent.toml` image refs (default tag `:dev`) |
-| `make stage-docker-embed-dist` | `prepare` + `patch` |
-| `make ensure-docker-embed-dist` | Stage dist when missing (used by `build-all`) |
+| `make sync-docker-embed-image-refs` | Sync `image.ref` from current `version` (no bump) |
+| `make bump-docker-embed-version` | Bump `version` and sync `image.ref` for all docker embed templates |
+| `make ensure-docker-embed-manifests` | Run `sync-docker-embed-image-refs` when `image.ref` is missing or out of sync with `version` (used by `make build` / `make test`) |
 
 Templates with a `Dockerfile` are discovered by `scripts/list-docker-embed-templates.sh` (currently `picoclaw-manager` and `picoclaw-worker`).
 
-If `make build-server-bin` fails with `pattern embed/.../dist: no matching files found`, run:
+If `image.ref` is empty or out of sync with `version`, run:
 
 ```bash
-make stage-docker-embed-dist
+make sync-docker-embed-image-refs
 ```
 
 ## Docker embed images (optional)
@@ -104,37 +107,38 @@ Local Docker image builds are **optional** and can be slow. The usual entry poin
 |---------|------------------------|
 | `make` / `make build` | No |
 | `make build-all` | Yes |
-| `make build-docker-embed-runtime-embed` | Yes (images + patch refs, without rebuilding binaries) |
+| `make build-docker-embed-runtime-embed` | Yes (bump versions + images, without rebuilding binaries) |
 
 ### Image build targets
 
 | Target | Description |
 |--------|-------------|
-| `make build-docker-embed-images` | Build all embed templates that have a `Dockerfile` |
-| `make build-picoclaw-manager-image` | Build manager image only |
-| `make build-picoclaw-worker-image` | Build worker image only |
-| `make build-docker-embed-runtime-embed` | Build linux CLI, docker-build all templates, patch refs |
+| `make build-docker-embed-images` | Bump versions and build all embed templates that have a `Dockerfile` |
+| `make build-picoclaw-manager-image` | Bump manager version and build manager image only |
+| `make build-picoclaw-worker-image` | Bump worker version and build worker image only |
+| `make build-docker-embed-runtime-embed` | Alias for `build-docker-embed-images` |
 
-Alias targets `build-picoclaw-runtime-embed`, `stage-picoclaw-embed-dist`, and similar names remain for compatibility.
+Alias targets `build-picoclaw-runtime-embed`, `sync-picoclaw-embed-image-refs`, `bump-picoclaw-embed-version`, and similar names remain for compatibility.
 
 ### Useful variables
 
 ```bash
-# Registry and tags (defaults shown)
+# Registry and base image (defaults shown)
 ACR_REGISTRY=opencsg-registry.cn-beijing.cr.aliyuncs.com
-DOCKER_EMBED_IMAGE_TAG=dev
 PICOCLAW_BASE_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8
 
-# Example: build worker image with a custom tag
-make build-picoclaw-worker-image DOCKER_EMBED_IMAGE_TAG=local
+# Example: local pre-PR image test (bumps version and updates image.ref, e.g. 0.1.3 -> 0.1.4)
+make build-all
 ```
 
 Resulting images follow:
 
 ```text
-${ACR_REGISTRY}/opencsghq/picoclaw-manager:${DOCKER_EMBED_IMAGE_TAG}
-${ACR_REGISTRY}/opencsghq/picoclaw-worker:${DOCKER_EMBED_IMAGE_TAG}
+${ACR_REGISTRY}/opencsghq/picoclaw-manager:<agent.toml version>
+${ACR_REGISTRY}/opencsghq/picoclaw-worker:<agent.toml version>
 ```
+
+After a successful image build, the matching `agent.toml` files are updated in place (`version` and `image.ref`).
 
 Build context is the repository root; Dockerfiles expect `bin/csgclaw-cli` (linux) to be present—`stage-docker-embed-cli` creates it.
 
@@ -146,9 +150,9 @@ Images built with `make build-docker-embed-images` are stored in the **Docker** 
 
 | Target | Description |
 |--------|-------------|
-| `make test` | `stage-docker-embed-dist`, then `go test ./...` |
+| `make test` | `ensure-docker-embed-manifests`, then `go test ./...` (does not overwrite committed version/ref) |
 | `make fmt` | Format Go sources under `cli/`, `cmd/`, `internal/`, `web/` |
-| `make clean` | Remove `bin/`, `dist/`, `.gocache/`, and generated embed `dist/` contents |
+| `make clean` | Remove `bin/`, `dist/`, and `.gocache/` |
 
 For targeted Go tests:
 
@@ -167,7 +171,7 @@ Maintainer targets:
 | `make package-all` | Full build plus `csgclaw` and `csgclaw-cli` packages |
 | `make release` | Cross-platform release bundles (darwin/linux, arm64/amd64) |
 
-CI release flows use `.github/workflows/release.yml` and GitLab jobs for embed dist and image builds.
+CI release flows use `.github/workflows/release.yml` (tag) and GitLab CI (tag for release archives; **main branch** builds and pushes picoclaw images from committed `version`, without editing `agent.toml`). Tag releases embed `agent.toml` from the tag commit as-is.
 
 ## Related docs
 

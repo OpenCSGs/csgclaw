@@ -30,8 +30,6 @@ docker/
 
 # Generated embedded runtime workspaces
 /internal/agent/embed/
-# Docker embed dist/ is populated by make/CI (see make prepare-docker-embed-dist).
-# Note: go:embed ignores .gitignore, so these paths must not be listed here.
 
 # Editor / tool directories
 .cursor/

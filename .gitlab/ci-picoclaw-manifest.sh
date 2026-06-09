@@ -11,12 +11,34 @@ image_name="$1"
 : "${ACR_REGISTRY:?ACR_REGISTRY must be set}"
 : "${ACR_USERNAME:?ACR_USERNAME must be set}"
 : "${ACR_PASSWORD:?ACR_PASSWORD must be set}"
-: "${CI_COMMIT_TAG:?CI_COMMIT_TAG must be set}"
+: "${CI_PROJECT_DIR:?CI_PROJECT_DIR must be set}"
+
+manifest="${CI_PROJECT_DIR}/internal/templates/embed/${image_name}/agent.toml"
+if [ ! -f "${manifest}" ]; then
+  echo "missing manifest: ${manifest}" >&2
+  exit 1
+fi
+
+PICOCLAW_IMAGE_VERSION="$(awk -F= '
+  /^version[[:space:]]*=[[:space:]]*/ {
+    value = $2
+    gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+    gsub(/^"/, "", value)
+    gsub(/"$/, "", value)
+    print value
+    exit
+  }
+' "${manifest}")"
+
+if [ -z "${PICOCLAW_IMAGE_VERSION}" ]; then
+  echo "missing version in ${manifest}" >&2
+  exit 1
+fi
 
 repo="${ACR_REGISTRY}/opencsghq/${image_name}"
-amd64_ref="${repo}:${CI_COMMIT_TAG}-amd64"
-arm64_ref="${repo}:${CI_COMMIT_TAG}-arm64"
-target_ref="${repo}:${CI_COMMIT_TAG}"
+amd64_ref="${repo}:${PICOCLAW_IMAGE_VERSION}-amd64"
+arm64_ref="${repo}:${PICOCLAW_IMAGE_VERSION}-arm64"
+target_ref="${repo}:${PICOCLAW_IMAGE_VERSION}"
 
 crane auth login "$ACR_REGISTRY" -u "$ACR_USERNAME" -p "$ACR_PASSWORD"
 

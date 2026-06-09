@@ -5,12 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm typecheck && vite build",
+    "build": "tsc --noEmit && vite build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
+    "check": "eslint . && prettier . --check && tsc --noEmit && vitest run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

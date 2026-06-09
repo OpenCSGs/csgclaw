@@ -11,16 +11,38 @@ dockerfile="$2"
 image_name="$3"
 
 : "${CI_PROJECT_DIR:?CI_PROJECT_DIR must be set}"
-: "${CI_COMMIT_TAG:?CI_COMMIT_TAG must be set}"
 : "${ACR_REGISTRY:?ACR_REGISTRY must be set}"
 
-archive="${CI_PROJECT_DIR}/dist/csgclaw-cli_${CI_COMMIT_TAG}_linux_${goarch}.tar.gz"
+manifest="${CI_PROJECT_DIR}/internal/templates/embed/${image_name}/agent.toml"
+if [ ! -f "${manifest}" ]; then
+  echo "missing manifest: ${manifest}" >&2
+  exit 1
+fi
+
+PICOCLAW_IMAGE_VERSION="$(awk -F= '
+  /^version[[:space:]]*=[[:space:]]*/ {
+    value = $2
+    gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+    gsub(/^"/, "", value)
+    gsub(/"$/, "", value)
+    print value
+    exit
+  }
+' "${manifest}")"
+
+if [ -z "${PICOCLAW_IMAGE_VERSION}" ]; then
+  echo "missing version in ${manifest}" >&2
+  exit 1
+fi
+
+PICOCLAW_CLI_VERSION="${PICOCLAW_CLI_VERSION:-${CI_COMMIT_SHORT_SHA:-unknown}}"
+archive="${CI_PROJECT_DIR}/dist/csgclaw-cli_${PICOCLAW_CLI_VERSION}_linux_${goarch}.tar.gz"
 staging_dir="${CI_PROJECT_DIR}/bin"
 cli_path="${staging_dir}/csgclaw-cli"
 
 if [ ! -f "${archive}" ]; then
   echo "missing release artifact: ${archive}" >&2
-  echo "picoclaw image builds reuse csgclaw-cli from release-build (scripts/release-build-all.sh)" >&2
+  echo "picoclaw image builds reuse csgclaw-cli from picoclaw-cli-build (scripts/release-build-all.sh)" >&2
   exit 1
 fi
 
@@ -40,5 +62,5 @@ export PICOCLAW_BASE_TAG="${PICOCLAW_BASE_TAG:-2026.5.27}"
   --context "${CI_PROJECT_DIR}" \
   --dockerfile "${CI_PROJECT_DIR}/${dockerfile}" \
   --custom-platform "linux/${goarch}" \
-  --destination "${ACR_REGISTRY}/opencsghq/${image_name}:${CI_COMMIT_TAG}-${goarch}" \
+  --destination "${ACR_REGISTRY}/opencsghq/${image_name}:${PICOCLAW_IMAGE_VERSION}-${goarch}" \
   --build-arg PICOCLAW_IMAGE="${ACR_REGISTRY}/opencsghq/picoclaw:${PICOCLAW_BASE_TAG}"

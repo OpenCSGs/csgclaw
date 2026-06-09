@@ -15,6 +15,7 @@ type templateManifest struct {
 	Description string               `toml:"description,omitempty"`
 	Role        string               `toml:"role"`
 	RuntimeKind string               `toml:"runtime_kind"`
+	Version     string               `toml:"version,omitempty"`
 	Image       templateImageSection `toml:"image"`
 	UpdatedAt   string               `toml:"updated_at,omitempty"`
 }

@@ -39,7 +39,7 @@ Official release bundles are also published for macOS amd64 and Windows amd64. W
 make build
 ```
 
-See [docs/build.md](docs/build.md) for embed dist staging, optional PicoClaw Docker image builds, and other Makefile targets.
+See [docs/build.md](docs/build.md) for embed template versioning, optional PicoClaw Docker image builds, and other Makefile targets.
 
 For most users, the install script above is the simpler option.
 

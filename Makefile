@@ -27,8 +27,6 @@ CLI_BIN ?= $(BIN_DIR)/csgclaw-cli
 ACR_REGISTRY ?= opencsg-registry.cn-beijing.cr.aliyuncs.com
 IMAGE ?= $(ACR_REGISTRY)/opencsghq/picoclaw
 TAG ?= 2026.6.8
-DOCKER_EMBED_IMAGE_TAG ?= dev
-PICOCLAW_IMAGE_TAG ?= $(DOCKER_EMBED_IMAGE_TAG)
 LOCAL_IMAGE ?= picoclaw:local
 PICOCLAW_BASE_IMAGE ?= $(IMAGE):$(TAG)
 DOCKER_EMBED_DOCKER_GOOS ?= linux
@@ -40,28 +38,27 @@ PICOCLAW_DOCKER_CLI ?= $(DOCKER_EMBED_CLI)
 
 .DEFAULT_GOAL := build
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-server-bin stage-docker-embed-cli stage-picoclaw-docker-cli prepare-docker-embed-dist prepare-picoclaw-embed-dist patch-docker-embed-image-refs patch-picoclaw-embed-image-refs stage-docker-embed-dist stage-picoclaw-embed-dist ensure-docker-embed-dist build-docker-embed-images build-docker-embed-runtime-embed build-picoclaw-runtime-embed build-all run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-server-bin stage-docker-embed-cli stage-picoclaw-docker-cli sync-docker-embed-image-refs sync-picoclaw-embed-image-refs bump-docker-embed-version bump-picoclaw-embed-version ensure-docker-embed-manifests build-docker-embed-images build-docker-embed-images-only build-docker-embed-runtime-embed build-picoclaw-runtime-embed build-all run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image
 
 help:
 	@printf '%s\n' \
-		'make            - build Web UI, ensure embed dist, bin/csgclaw, bin/csgclaw-cli (no docker images)' \
+		'make            - build Web UI, ensure embed image refs, bin/csgclaw, bin/csgclaw-cli (no docker images)' \
 		'make build      - same as default goal' \
-		'make build-all  - build plus docker-build all embed template images and patch refs' \
+		'make build-all  - build-web, bump embed versions, rebuild binaries, docker-build all embed images' \
 		'make fmt        - format Go files' \
-		'make test       - stage-docker-embed-dist (patched :dev refs), then go test ./...' \
+		'make test       - ensure embed agent.toml refs, then go test ./...' \
 		'make web-install - install Web UI dependencies' \
 		'make web-dev    - run Vite Web UI dev server' \
 		'make build-web  - build Web UI app into web/static-dist' \
-		'make build-server-bin - build bin/csgclaw and bin/csgclaw-cli (expects embed/*/dist; use stage-docker-embed-dist first)' \
-		'make stage-docker-embed-dist - prepare dist/ and patch dev image refs (no docker)' \
-		'make build-docker-embed-runtime-embed - stage linux cli, docker all embed templates with Dockerfile, patch refs' \
+		'make build-server-bin - build bin/csgclaw and bin/csgclaw-cli' \
+		'make build-docker-embed-runtime-embed - bump versions, stage linux cli, docker-build all embed templates' \
 		'make run        - build (no docker images), then run the server' \
 		'make clean      - remove local build outputs'
 
 fmt:
 	$(GOFMT) -w $(shell find cli cmd internal web -name '*.go')
 
-test: stage-docker-embed-dist
+test: ensure-docker-embed-manifests
 	env GOCACHE=$(GOCACHE) $(GO) test ./...
 
 check-web-toolchain:
@@ -115,7 +112,7 @@ build-web: ensure-web-deps
 		exit 1; \
 	}
 
-build: build-web ensure-docker-embed-dist build-server-bin
+build: build-web ensure-docker-embed-manifests build-server-bin
 
 build-server-bin:
 	mkdir -p $(BIN_DIR)
@@ -123,9 +120,9 @@ build-server-bin:
 	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
 		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(BIN_DIR)/csgclaw-cli ./cmd/csgclaw-cli
 
-build-server: ensure-docker-embed-dist build-server-bin
+build-server: ensure-docker-embed-manifests build-server-bin
 
-$(DOCKER_EMBED_CLI): prepare-docker-embed-dist
+$(DOCKER_EMBED_CLI):
 	mkdir -p $(BIN_DIR)
 	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(DOCKER_EMBED_DOCKER_GOOS) GOARCH=$(DOCKER_EMBED_DOCKER_GOARCH) \
 		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(DOCKER_EMBED_CLI) ./cmd/csgclaw-cli
@@ -133,68 +130,59 @@ $(DOCKER_EMBED_CLI): prepare-docker-embed-dist
 stage-docker-embed-cli: $(DOCKER_EMBED_CLI)
 stage-picoclaw-docker-cli: stage-docker-embed-cli
 
-prepare-docker-embed-dist:
-	chmod +x scripts/list-docker-embed-templates.sh scripts/prepare-docker-embed-dist.sh
-	scripts/prepare-docker-embed-dist.sh
+sync-docker-embed-image-refs:
+	chmod +x scripts/list-docker-embed-templates.sh scripts/sync-docker-embed-image-refs.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
+		scripts/sync-docker-embed-image-refs.sh
 
-prepare-picoclaw-embed-dist: prepare-docker-embed-dist
+sync-picoclaw-embed-image-refs: sync-docker-embed-image-refs
 
-patch-docker-embed-image-refs: prepare-docker-embed-dist
-	chmod +x scripts/list-docker-embed-templates.sh scripts/patch-docker-embed-image-refs.sh
-	ACR_REGISTRY="$(ACR_REGISTRY)" VERSION="$(DOCKER_EMBED_IMAGE_TAG)" \
-		scripts/patch-docker-embed-image-refs.sh
+bump-docker-embed-version:
+	chmod +x scripts/list-docker-embed-templates.sh scripts/bump-docker-embed-version.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
+		scripts/bump-docker-embed-version.sh
 
-patch-picoclaw-embed-image-refs: patch-docker-embed-image-refs
+bump-picoclaw-embed-version: bump-docker-embed-version
 
-stage-docker-embed-dist: prepare-docker-embed-dist patch-docker-embed-image-refs
-stage-picoclaw-embed-dist: stage-docker-embed-dist
-
-# Stage embed/*/dist when missing (no docker).
-ensure-docker-embed-dist:
+# Sync embed agent.toml image refs from version when missing or out of sync (no docker).
+ensure-docker-embed-manifests:
 	@mkdir -p "$(GOCACHE)"
-	@chmod +x scripts/list-docker-embed-templates.sh
-	@dist_missing=0; \
-	for name in $$(scripts/list-docker-embed-templates.sh); do \
-	  manifest="internal/templates/embed/$$name/dist/agent.toml"; \
-	  if [ ! -f "$$manifest" ] || ! grep -q '^ref = ' "$$manifest"; then \
-	    dist_missing=1; \
-	    break; \
-	  fi; \
-	done; \
-	if [ "$$dist_missing" -eq 1 ]; then \
-	  printf '%s\n' "docker embed dist/ missing or incomplete; running stage-docker-embed-dist"; \
-	  $(MAKE) stage-docker-embed-dist; \
+	@chmod +x scripts/list-docker-embed-templates.sh scripts/check-docker-embed-manifests.sh
+	@if ! scripts/check-docker-embed-manifests.sh; then \
+	  printf '%s\n' "docker embed agent.toml version/ref out of sync; running sync-docker-embed-image-refs"; \
+	  $(MAKE) sync-docker-embed-image-refs; \
 	fi
 
-build-docker-embed-images: stage-docker-embed-cli
+build-docker-embed-images: stage-docker-embed-cli bump-docker-embed-version
 	chmod +x scripts/build-docker-embed-images.sh
 	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
-		DOCKER_EMBED_IMAGE_TAG="$(DOCKER_EMBED_IMAGE_TAG)" \
 		scripts/build-docker-embed-images.sh
 
-build-docker-embed-runtime-embed: build-docker-embed-images patch-docker-embed-image-refs
+build-docker-embed-images-only: stage-docker-embed-cli
+	chmod +x scripts/build-docker-embed-images.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
+		scripts/build-docker-embed-images.sh
+
+build-docker-embed-runtime-embed: build-docker-embed-images
 build-picoclaw-runtime-embed: build-docker-embed-runtime-embed
 
 build-picoclaw-manager-image: stage-docker-embed-cli
-	chmod +x scripts/prepare-docker-embed-dist.sh scripts/patch-docker-embed-image-refs.sh scripts/build-docker-embed-images.sh
-	scripts/prepare-docker-embed-dist.sh
-	ACR_REGISTRY="$(ACR_REGISTRY)" VERSION="$(DOCKER_EMBED_IMAGE_TAG)" \
-		scripts/patch-docker-embed-image-refs.sh
+	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
+		scripts/bump-docker-embed-version.sh picoclaw-manager
 	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
-		DOCKER_EMBED_IMAGE_TAG="$(DOCKER_EMBED_IMAGE_TAG)" \
 		scripts/build-docker-embed-images.sh picoclaw-manager
 
 build-picoclaw-worker-image: stage-docker-embed-cli
-	chmod +x scripts/prepare-docker-embed-dist.sh scripts/patch-docker-embed-image-refs.sh scripts/build-docker-embed-images.sh
-	scripts/prepare-docker-embed-dist.sh
-	ACR_REGISTRY="$(ACR_REGISTRY)" VERSION="$(DOCKER_EMBED_IMAGE_TAG)" \
-		scripts/patch-docker-embed-image-refs.sh
+	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
+		scripts/bump-docker-embed-version.sh picoclaw-worker
 	ACR_REGISTRY="$(ACR_REGISTRY)" PICOCLAW_BASE_IMAGE="$(PICOCLAW_BASE_IMAGE)" \
-		DOCKER_EMBED_IMAGE_TAG="$(DOCKER_EMBED_IMAGE_TAG)" \
 		scripts/build-docker-embed-images.sh picoclaw-worker
 
-build-all: build
-	$(MAKE) build-docker-embed-images patch-docker-embed-image-refs
+# Bump embed versions before go:embed so the server binary matches built images.
+build-all: build-web bump-docker-embed-version build-server-bin
+	$(MAKE) build-docker-embed-images-only
 
 run: build
 	$(BIN) serve
@@ -219,10 +207,6 @@ release: build-web
 
 clean:
 	rm -rf $(BIN_DIR) $(DIST_DIR) $(GOCACHE)
-	@for dir in internal/templates/embed/*/dist; do \
-	  [ -f "$${dir%/dist}/Dockerfile" ] || continue; \
-	  find "$$dir" -mindepth 1 ! -name .gitkeep -exec rm -rf {} + ; \
-	done
 
 tag:
 	docker tag $(LOCAL_IMAGE) $(IMAGE):$(TAG)

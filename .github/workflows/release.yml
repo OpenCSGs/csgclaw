@@ -1,10 +1,8 @@
 # Release on tag v* / workflow_dispatch.
 #
-# Container images for embed templates (those with a Dockerfile) are built on GitLab CI (ACR).
-# This workflow only:
-#   1. Stages embed/<template>/dist/ for every template dir that contains a Dockerfile
-#   2. Patches dist/agent.toml [image].ref to ${ACR_REGISTRY}/opencsghq/<template>:<version>
-#   3. Builds csgclaw / csgclaw-cli release archives with the patched embed
+# Container images for embed templates are built on GitLab CI (main branch, ACR).
+# This workflow:
+#   1. Builds csgclaw / csgclaw-cli release archives with embed agent.toml from the tag commit
 #
 # <version> is the git tag (v*) or workflow_dispatch input.
 
@@ -105,48 +103,8 @@ jobs:
           path: web/static-dist/
           if-no-files-found: error
 
-  docker-embed-dist:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Resolve version
-        id: version
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ github.event.inputs.version }}"
-          else
-            version="${GITHUB_REF_NAME}"
-          fi
-          echo "value=${version}" >> "$GITHUB_OUTPUT"
-
-      - name: Stage docker embed dist and patch ACR image refs
-        shell: bash
-        env:
-          ACR_REGISTRY: ${{ env.ACR_REGISTRY }}
-          VERSION: ${{ steps.version.outputs.value }}
-        run: |
-          chmod +x scripts/list-docker-embed-templates.sh \
-            scripts/prepare-docker-embed-dist.sh \
-            scripts/patch-docker-embed-image-refs.sh
-          ./scripts/prepare-docker-embed-dist.sh
-          ./scripts/patch-docker-embed-image-refs.sh
-          while IFS= read -r name; do
-            echo "${name} ref:"
-            grep '^ref = ' "internal/templates/embed/${name}/dist/agent.toml"
-          done < <(./scripts/list-docker-embed-templates.sh)
-
-      - name: Upload patched docker embed directories
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-embed-dist-patched
-          path: internal/templates/embed/*/dist/
-          if-no-files-found: error
-
   build:
-    needs: [prepare, web, docker-embed-dist]
+    needs: [prepare, web]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -167,20 +125,17 @@ jobs:
           name: web-static-dist
           path: web/static-dist
 
-      - name: Download patched docker embed directories
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-embed-dist-patched
-          # Artifact root is internal/templates/embed/ (LCA of embed/*/dist paths).
-          path: internal/templates/embed
-
-      - name: Verify docker embed dist is present
+      - name: Verify embed agent manifests are present
         shell: bash
         run: |
           chmod +x scripts/list-docker-embed-templates.sh
           while IFS= read -r name; do
-            test -f "internal/templates/embed/${name}/dist/agent.toml"
-            grep '^ref = ' "internal/templates/embed/${name}/dist/agent.toml"
+            test -f "internal/templates/embed/${name}/agent.toml"
+            grep '^ref = ' "internal/templates/embed/${name}/agent.toml"
+            if grep -q '^ref = ""' "internal/templates/embed/${name}/agent.toml"; then
+              echo "missing image ref in internal/templates/embed/${name}/agent.toml" >&2
+              exit 1
+            fi
           done < <(./scripts/list-docker-embed-templates.sh)
 
       - name: Set up Go

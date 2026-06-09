@@ -30,7 +30,7 @@ make build
 会依次构建：
 
 1. Web UI 产物到 `web/static-dist/`
-2. 缺失时的 embed 模板 `dist/` 目录（见 [Embed dist](#embed-dist)）
+2. 缺失或与 `version` 不一致时同步 embed 模板 `agent.toml` 的 `image.ref`（见 [Embed 模板](#embed-模板)）
 3. `bin/csgclaw`（服务端 CLI）
 4. 当前平台的 `bin/csgclaw-cli`
 
@@ -46,7 +46,7 @@ make run
 
 ## 完整构建
 
-`build-all` 先执行 `build`，再 docker build 所有带 `Dockerfile` 的 embed 模板并 patch 镜像 ref：
+`build-all` 会构建 Web UI、递增各 embed 模板的 `version` 并同步 `image.ref`、编译 `csgclaw`（使 embed 与镜像 tag 一致），再 docker build 所有带 `Dockerfile` 的模板（**不产生 `dist/`**）：
 
 ```bash
 make build-all
@@ -75,23 +75,26 @@ make build-all
 
 `csgclaw-cli` 使用 `CGO_ENABLED=0` 构建，以便在 musl 环境的 PicoClaw / BoxLite 沙箱中运行。Release CI 同样使用该设置（`scripts/release-build-all.sh`）。
 
-## Embed dist
+## Embed 模板
 
-内置 PicoClaw 模板源码位于 `internal/templates/embed/<name>/`。供 `go:embed` 使用的运行时文件在各模板的 `dist/` 目录，由本地或 CI 生成。
+内置 PicoClaw 模板位于 `internal/templates/embed/<name>/`，通过 `go:embed` 直接嵌入（`agent.toml`、`workspace/` 等）。每个 docker embed 模板在 `agent.toml` 中有 `version` 字段与对应的 `image.ref`。
+
+**本地（PR 前）**：`make build-all` 会先递增 `version`、同步 `image.ref`，再编译 `csgclaw`（使 embed 与镜像 tag 一致），最后构建 Docker 镜像。
+
+**GitLab CI（main）**：仅读取已提交的 `version` / `image.ref` 构建并 push 镜像，**不会**修改 `agent.toml`；仅当相对上一 commit 的 `version` 发生变化时才触发构建。
 
 | 目标 | 说明 |
 |------|------|
-| `make prepare-docker-embed-dist` | 将模板源码复制到 `embed/*/dist/`（不打 Docker） |
-| `make patch-docker-embed-image-refs` | 修补 `dist/agent.toml` 中的镜像 ref（默认 tag `:dev`） |
-| `make stage-docker-embed-dist` | `prepare` + `patch` |
-| `make ensure-docker-embed-dist` | 缺失时自动 stage dist（`build-all` 使用） |
+| `make sync-docker-embed-image-refs` | 按当前 `version` 同步 `image.ref`（不递增） |
+| `make bump-docker-embed-version` | 递增全部 docker embed 模板的 `version` 并同步 `image.ref` |
+| `make ensure-docker-embed-manifests` | `image.ref` 缺失或与 `version` 不一致时调用 `sync-docker-embed-image-refs`（`make build` / `make test` 使用） |
 
 带 `Dockerfile` 的模板由 `scripts/list-docker-embed-templates.sh` 发现（当前为 `picoclaw-manager` 和 `picoclaw-worker`）。
 
-若 `make build-server-bin` 报错 `pattern embed/.../dist: no matching files found`，请执行：
+若 `image.ref` 为空或与 `version` 不一致，请执行：
 
 ```bash
-make stage-docker-embed-dist
+make sync-docker-embed-image-refs
 ```
 
 ## Docker embed 镜像（可选）
@@ -104,37 +107,38 @@ make stage-docker-embed-dist
 |------|----------------------|
 | `make` / `make build` | 否 |
 | `make build-all` | 是 |
-| `make build-docker-embed-runtime-embed` | 是（仅镜像 + patch refs，不重建二进制） |
+| `make build-docker-embed-runtime-embed` | 是（递增 version + 构建镜像，不重建二进制） |
 
 ### 镜像构建目标
 
 | 目标 | 说明 |
 |------|------|
-| `make build-docker-embed-images` | 构建所有带 `Dockerfile` 的 embed 模板 |
-| `make build-picoclaw-manager-image` | 仅构建 manager 镜像 |
-| `make build-picoclaw-worker-image` | 仅构建 worker 镜像 |
-| `make build-docker-embed-runtime-embed` | 构建 linux CLI、docker build 全部模板、patch refs |
+| `make build-docker-embed-images` | 递增 version 并构建所有带 `Dockerfile` 的 embed 模板 |
+| `make build-picoclaw-manager-image` | 递增 manager version 并仅构建 manager 镜像 |
+| `make build-picoclaw-worker-image` | 递增 worker version 并仅构建 worker 镜像 |
+| `make build-docker-embed-runtime-embed` | `build-docker-embed-images` 的别名 |
 
-兼容别名包括 `build-picoclaw-runtime-embed`、`stage-picoclaw-embed-dist` 等。
+兼容别名包括 `build-picoclaw-runtime-embed`、`sync-picoclaw-embed-image-refs`、`bump-picoclaw-embed-version` 等。
 
 ### 常用变量
 
 ```bash
-#  registry 与 tag（默认值）
+# registry 与基础镜像（默认值）
 ACR_REGISTRY=opencsg-registry.cn-beijing.cr.aliyuncs.com
-DOCKER_EMBED_IMAGE_TAG=dev
 PICOCLAW_BASE_IMAGE=opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8
 
-# 示例：自定义 tag 构建 worker 镜像
-make build-picoclaw-worker-image DOCKER_EMBED_IMAGE_TAG=local
+# 示例：PR 前本地镜像测试（会递增 version 并更新 image.ref，如 0.1.3 -> 0.1.4）
+make build-all
 ```
 
 产物镜像命名：
 
 ```text
-${ACR_REGISTRY}/opencsghq/picoclaw-manager:${DOCKER_EMBED_IMAGE_TAG}
-${ACR_REGISTRY}/opencsghq/picoclaw-worker:${DOCKER_EMBED_IMAGE_TAG}
+${ACR_REGISTRY}/opencsghq/picoclaw-manager:<agent.toml version>
+${ACR_REGISTRY}/opencsghq/picoclaw-worker:<agent.toml version>
 ```
+
+镜像构建成功后，对应的 `agent.toml` 会原地更新（`version` 与 `image.ref`）。
 
 构建上下文为仓库根目录；Dockerfile 需要 `bin/csgclaw-cli`（linux），由 `stage-docker-embed-cli` 生成。
 
@@ -146,9 +150,9 @@ ${ACR_REGISTRY}/opencsghq/picoclaw-worker:${DOCKER_EMBED_IMAGE_TAG}
 
 | 目标 | 说明 |
 |------|------|
-| `make test` | 先 `stage-docker-embed-dist`，再 `go test ./...` |
+| `make test` | 先 `ensure-docker-embed-manifests`，再 `go test ./...`（不修改已提交的 version/ref） |
 | `make fmt` | 格式化 `cli/`、`cmd/`、`internal/`、`web/` 下的 Go 源码 |
-| `make clean` | 删除 `bin/`、`dist/`、`.gocache/` 及 embed 生成的 `dist/` 内容 |
+| `make clean` | 删除 `bin/`、`dist/`、`.gocache/` |
 
 针对性测试：
 
@@ -167,7 +171,7 @@ go test ./...
 | `make package-all` | 完整构建并打包 `csgclaw` 与 `csgclaw-cli` |
 | `make release` | 跨平台 release bundle（darwin/linux，arm64/amd64） |
 
-CI 发布流程见 `.github/workflows/release.yml` 及 GitLab 中的 embed dist / 镜像 job。
+CI 发布流程见 `.github/workflows/release.yml`（tag）与 GitLab CI（tag 打 release 包；**main 分支**按已提交的 `version` 构建并 push picoclaw 镜像，不修改 `agent.toml`）。Tag release 直接使用 tag commit 中已提交的 `agent.toml`。
 
 ## 相关文档
 

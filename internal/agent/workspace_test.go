@@ -23,13 +23,13 @@ func TestRuntimeTemplateFSEmbedsCompleteTemplateUnits(t *testing.T) {
 		},
 		{
 			name:         "picoclaw manager",
-			manifestPath: "embed/picoclaw-manager/dist/agent.toml",
-			workspaceDoc: "embed/picoclaw-manager/dist/workspace/AGENT.md",
+			manifestPath: "embed/picoclaw-manager/agent.toml",
+			workspaceDoc: "embed/picoclaw-manager/workspace/AGENT.md",
 		},
 		{
 			name:         "picoclaw worker",
-			manifestPath: "embed/picoclaw-worker/dist/agent.toml",
-			workspaceDoc: "embed/picoclaw-worker/dist/workspace/AGENT.md",
+			manifestPath: "embed/picoclaw-worker/agent.toml",
+			workspaceDoc: "embed/picoclaw-worker/workspace/AGENT.md",
 		},
 		{
 			name:         "openclaw worker",
