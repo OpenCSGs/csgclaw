@@ -1472,6 +1472,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 			}
 			message.CreatedAt = room.Messages[idx].CreatedAt
 			room.Messages[idx] = message
+			s.rebuildThreadStatesLocked(room)
 			if err := s.saveLocked(); err != nil {
 				return Message{}, err
 			}

@@ -10,6 +10,15 @@ import {
 } from "@/shared/constants/messages";
 
 describe("MessageContent", () => {
+  it("renders an animated three-dot indicator for blank turn placeholders", () => {
+    render(<MessageContent content={"\u200b"} />);
+
+    const indicator = screen.getByLabelText("Waiting for response");
+    expect(indicator).toHaveClass("message-loading-dots");
+    expect(indicator.querySelectorAll(".message-loading-dot")).toHaveLength(3);
+    expect(screen.queryByText("\u200b")).not.toBeInTheDocument();
+  });
+
   it("renders sanitized markdown links with safe external-link attributes", () => {
     render(<MessageContent content={'Open [docs](https://example.com/docs)<script>alert("xss")</script>'} />);
 

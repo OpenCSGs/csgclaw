@@ -14,7 +14,11 @@ import "./MessageContent.css";
 
 export function MessageContent({ content, message, actionBusy, actionError, onAction }: MessageContentProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const activity = useMemo(() => parseAgentActivity(content), [content]);
+  const blankTurnPlaceholder = isBlankTurnPlaceholder(content);
+  const activity = useMemo(
+    () => (blankTurnPlaceholder ? null : parseAgentActivity(content)),
+    [blankTurnPlaceholder, content],
+  );
   const slashCommand = useMemo(() => (activity ? null : parseSlashCommand(content)), [activity, content]);
   const slashCommandText = useMemo(() => renderSlashCommandText(slashCommand), [slashCommand]);
   const structured = useMemo(
@@ -45,6 +49,16 @@ export function MessageContent({ content, message, actionBusy, actionError, onAc
     };
   }, [markup]);
 
+  if (blankTurnPlaceholder) {
+    return (
+      <span className="message-loading-dots" role="status" aria-label="Waiting for response">
+        <span className="message-loading-dot" aria-hidden="true" />
+        <span className="message-loading-dot" aria-hidden="true" />
+        <span className="message-loading-dot" aria-hidden="true" />
+      </span>
+    );
+  }
+
   if (activity) {
     return <AgentActivityCard activity={activity} />;
   }
@@ -73,6 +87,10 @@ export function MessageContent({ content, message, actionBusy, actionError, onAc
   }
 
   return <div ref={containerRef} className="message-content" dangerouslySetInnerHTML={{ __html: markup }} />;
+}
+
+function isBlankTurnPlaceholder(content: string | null | undefined): boolean {
+  return typeof content === "string" && content.replace(/\u200b/g, "").trim() === "";
 }
 
 function renderSlashCommandText(command: ReturnType<typeof parseSlashCommand>): string {

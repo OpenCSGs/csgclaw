@@ -21,7 +21,18 @@ import (
 const (
 	participantReplayWindow      = 30 * time.Minute
 	participantHeartbeatInterval = 15 * time.Second
+
+	participantActivityTurnTTL             = 10 * time.Minute
+	participantActivityTurnPlaceholderText = "\u200b"
+	participantAgentActivityType           = "com.opencsg.csgclaw.agent.activity"
+	participantAgentToolMsgType            = "com.opencsg.csgclaw.agent.tool"
+	participantAgentActionMsgType          = "com.opencsg.csgclaw.agent.action"
 )
+
+type participantActivityTurn struct {
+	rootMessageID string
+	updatedAt     time.Time
+}
 
 func (h *Handler) PublishParticipantEvent(evt im.Event) {
 	if h.participantBridge == nil || h.im == nil {
@@ -537,19 +548,140 @@ func (h *Handler) handleParticipantSendMessage(w http.ResponseWriter, r *http.Re
 	roomID := req.ResolvedRoomID()
 	text := req.ResolvedText()
 	threadRootID := req.ResolvedThreadRootID()
+	messageID := strings.TrimSpace(req.MessageID)
+	clearActivityTurn := false
+
+	if strings.TrimSpace(threadRootID) == "" {
+		if isParticipantActivityThreadMessage(text) {
+			rootID, err := h.ensureParticipantActivityTurnRoot(roomID, participantID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			threadRootID = rootID
+		} else if rootID, ok := h.participantActivityTurnRoot(roomID, participantID); ok {
+			messageID = rootID
+			clearActivityTurn = true
+		}
+	}
 
 	message, err := h.im.DeliverMessage(im.DeliverMessageRequest{
 		RoomID:       roomID,
 		SenderID:     participantID,
 		Content:      text,
-		MessageID:    req.MessageID,
+		MessageID:    messageID,
 		ThreadRootID: threadRootID,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if clearActivityTurn {
+		h.clearParticipantActivityTurnRoot(roomID, participantID)
+	}
 	h.publishMessageCreated(roomID, participantID, message)
 	h.publishThreadUpdated(roomID, message)
 	writeJSON(w, http.StatusOK, map[string]string{"message_id": message.ID})
+}
+
+func (h *Handler) ensureParticipantActivityTurnRoot(roomID, participantID string) (string, error) {
+	if rootID, ok := h.participantActivityTurnRoot(roomID, participantID); ok {
+		h.setParticipantActivityTurnRoot(roomID, participantID, rootID)
+		return rootID, nil
+	}
+	message, err := h.im.DeliverMessage(im.DeliverMessageRequest{
+		RoomID:   roomID,
+		SenderID: participantID,
+		Content:  participantActivityTurnPlaceholderText,
+	})
+	if err != nil {
+		return "", err
+	}
+	rootID := strings.TrimSpace(message.ID)
+	if rootID == "" {
+		return "", fmt.Errorf("create participant activity turn root: empty message id")
+	}
+	h.setParticipantActivityTurnRoot(roomID, participantID, rootID)
+	h.publishMessageCreated(roomID, participantID, message)
+	return rootID, nil
+}
+
+func (h *Handler) participantActivityTurnRoot(roomID, participantID string) (string, bool) {
+	key := participantActivityTurnKey(roomID, participantID)
+	if key == "" {
+		return "", false
+	}
+
+	now := time.Now()
+	h.participantActivityTurnsMu.Lock()
+	defer h.participantActivityTurnsMu.Unlock()
+
+	turn, ok := h.participantActivityTurns[key]
+	if !ok || strings.TrimSpace(turn.rootMessageID) == "" {
+		return "", false
+	}
+	if now.Sub(turn.updatedAt) > participantActivityTurnTTL {
+		delete(h.participantActivityTurns, key)
+		return "", false
+	}
+	return turn.rootMessageID, true
+}
+
+func (h *Handler) setParticipantActivityTurnRoot(roomID, participantID, rootMessageID string) {
+	key := participantActivityTurnKey(roomID, participantID)
+	rootMessageID = strings.TrimSpace(rootMessageID)
+	if key == "" || rootMessageID == "" {
+		return
+	}
+
+	h.participantActivityTurnsMu.Lock()
+	defer h.participantActivityTurnsMu.Unlock()
+	if h.participantActivityTurns == nil {
+		h.participantActivityTurns = make(map[string]participantActivityTurn)
+	}
+	h.participantActivityTurns[key] = participantActivityTurn{
+		rootMessageID: rootMessageID,
+		updatedAt:     time.Now(),
+	}
+}
+
+func (h *Handler) clearParticipantActivityTurnRoot(roomID, participantID string) {
+	key := participantActivityTurnKey(roomID, participantID)
+	if key == "" {
+		return
+	}
+
+	h.participantActivityTurnsMu.Lock()
+	defer h.participantActivityTurnsMu.Unlock()
+	delete(h.participantActivityTurns, key)
+}
+
+func participantActivityTurnKey(roomID, participantID string) string {
+	roomID = strings.TrimSpace(roomID)
+	participantID = strings.TrimSpace(participantID)
+	if roomID == "" || participantID == "" {
+		return ""
+	}
+	return roomID + "\x00" + participantID
+}
+
+func isParticipantActivityThreadMessage(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	if strings.HasPrefix(trimmed, "🔧 ") {
+		return true
+	}
+	if !strings.HasPrefix(trimmed, "{") {
+		return false
+	}
+	var payload struct {
+		Type    string `json:"type"`
+		Content struct {
+			MsgType string `json:"msgtype"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		return false
+	}
+	return payload.Type == participantAgentActivityType &&
+		(payload.Content.MsgType == participantAgentToolMsgType || payload.Content.MsgType == participantAgentActionMsgType)
 }

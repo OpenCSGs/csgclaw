@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"csgclaw/internal/agent"
@@ -54,6 +55,9 @@ type Handler struct {
 	localRuntimeImages  func(context.Context, config.Config) ([]string, error)
 	notificationDeliver notification.Fanouter
 	activityDecider     ActivityDecider
+
+	participantActivityTurnsMu sync.Mutex
+	participantActivityTurns   map[string]participantActivityTurn
 }
 
 const createOperationTimeout = 10 * time.Minute

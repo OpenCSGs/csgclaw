@@ -145,6 +145,52 @@ func TestCreateThreadReplyHidesFromMainTimelineAndUpdatesSummary(t *testing.T) {
 	}
 }
 
+func TestDeliverMessageReplacementRefreshesThreadRootSummary(t *testing.T) {
+	svc := NewServiceFromBootstrap(threadTestBootstrap())
+	root, err := svc.DeliverMessage(DeliverMessageRequest{
+		RoomID:    "room-1",
+		SenderID:  "manager",
+		MessageID: "assistant-turn-1",
+		Content:   "\u200b",
+	})
+	if err != nil {
+		t.Fatalf("DeliverMessage(root placeholder) error = %v", err)
+	}
+	if _, err := svc.DeliverMessage(DeliverMessageRequest{
+		RoomID:       "room-1",
+		SenderID:     "manager",
+		MessageID:    "assistant-turn-1-tool-1",
+		Content:      "tool activity",
+		ThreadRootID: root.ID,
+	}); err != nil {
+		t.Fatalf("DeliverMessage(thread reply) error = %v", err)
+	}
+
+	updated, err := svc.DeliverMessage(DeliverMessageRequest{
+		RoomID:    "room-1",
+		SenderID:  "manager",
+		MessageID: root.ID,
+		Content:   "final answer",
+	})
+	if err != nil {
+		t.Fatalf("DeliverMessage(root replacement) error = %v", err)
+	}
+	if updated.Content != "final answer" {
+		t.Fatalf("updated.Content = %q, want final answer", updated.Content)
+	}
+	if updated.Thread == nil || updated.Thread.Context.RootExcerpt != "final answer" {
+		t.Fatalf("updated.Thread = %+v, want refreshed root excerpt", updated.Thread)
+	}
+
+	view, err := svc.GetThread("room-1", root.ID)
+	if err != nil {
+		t.Fatalf("GetThread() error = %v", err)
+	}
+	if view.Summary.Context.RootExcerpt != "final answer" {
+		t.Fatalf("thread root excerpt = %q, want final answer", view.Summary.Context.RootExcerpt)
+	}
+}
+
 func TestStartThreadContextSnapshotRespectsPayloadCap(t *testing.T) {
 	bootstrap := threadTestBootstrap()
 	large := strings.Repeat("large-context ", 1800)

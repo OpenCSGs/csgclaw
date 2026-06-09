@@ -20,6 +20,8 @@ const (
 	defaultSeenWindow   = 256
 	defaultPromptSettle = 150 * time.Millisecond
 	localChannel        = csgclawchannel.ChannelID
+	turnPlaceholderText = "\u200b"
+	turnCompleteText    = "Done."
 )
 
 type Binding struct {
@@ -255,6 +257,32 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 		Meta:      cloneMeta(w.binding.PromptMeta),
 	}
 	renderer := runtimebridge.NewTurnRenderer()
+	turnRootID := strings.TrimSpace(evt.ThreadRootID)
+	var generatedRootID string
+
+	ensureActivityThreadRoot := func() (string, error) {
+		if turnRootID != "" {
+			return turnRootID, nil
+		}
+		if generatedRootID != "" {
+			return generatedRootID, nil
+		}
+		messageID, err := w.sendMessage(ctx, evt.RoomID, "", turnPlaceholderText)
+		if err != nil {
+			return "", err
+		}
+		generatedRootID = strings.TrimSpace(messageID)
+		if generatedRootID == "" {
+			return "", fmt.Errorf("create turn root message: empty message id")
+		}
+		return generatedRootID, nil
+	}
+	flushTurn := func() (string, error) {
+		if generatedRootID != "" {
+			return w.flushTurnWithFirstMessageID(ctx, evt.RoomID, "", generatedRootID, renderer)
+		}
+		return w.flushTurn(ctx, evt.RoomID, turnRootID, renderer)
+	}
 
 	type promptResult struct {
 		err error
@@ -287,26 +315,30 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 				continue
 			}
 			if renderedActivity, ok := renderer.RenderActivity(event, localChannel, evt.RoomID, w.binding.BotID); ok {
-				if err := w.sendActivity(ctx, evt.RoomID, evt.ThreadRootID, renderedActivity); err != nil {
+				threadRootID, err := ensureActivityThreadRoot()
+				if err != nil {
+					return err
+				}
+				if err := w.sendActivity(ctx, evt.RoomID, threadRootID, renderedActivity); err != nil {
 					return err
 				}
 			}
 			renderer.ApplyText(event)
 			if isTerminalEvent(event.Kind) && promptReturned {
-				_, err := w.flushTurn(ctx, evt.RoomID, evt.ThreadRootID, renderer)
+				_, err := flushTurn()
 				return err
 			}
 		case result := <-promptDone:
 			promptReturned = true
 			if result.err != nil {
 				renderer.SetPromptError(result.err.Error())
-				_, err := w.flushTurn(ctx, evt.RoomID, evt.ThreadRootID, renderer)
+				_, err := flushTurn()
 				return err
 			}
 			settleTimer.Reset(w.service.promptSettle)
 		case <-settleTimer.C:
 			if promptReturned {
-				_, err := w.flushTurn(ctx, evt.RoomID, evt.ThreadRootID, renderer)
+				_, err := flushTurn()
 				return err
 			}
 		}
@@ -355,17 +387,39 @@ func (w *worker) clearContextCache(conversationKey string) {
 }
 
 func (w *worker) flushTurn(ctx context.Context, roomID, threadRootID string, renderer *runtimebridge.TurnRenderer) (string, error) {
-	var firstMessageID string
-	for _, text := range renderer.FinalMessages() {
-		messageID, err := w.sendMessage(ctx, roomID, threadRootID, text)
+	return w.flushTurnWithFirstMessageID(ctx, roomID, threadRootID, "", renderer)
+}
+
+func (w *worker) flushTurnWithFirstMessageID(ctx context.Context, roomID, threadRootID, firstMessageID string, renderer *runtimebridge.TurnRenderer) (string, error) {
+	var firstSentMessageID string
+	replaceMessageID := strings.TrimSpace(firstMessageID)
+	messages := renderer.FinalMessages()
+	if len(messages) == 0 && replaceMessageID != "" {
+		messages = []string{turnCompleteText}
+	}
+	for idx, text := range messages {
+		req := SendMessageRequest{
+			RoomID:       roomID,
+			Text:         text,
+			ThreadRootID: strings.TrimSpace(threadRootID),
+		}
+		if idx == 0 && replaceMessageID != "" {
+			req.MessageID = replaceMessageID
+			req.ThreadRootID = ""
+		}
+		messageID, err := w.sendMessageRequest(ctx, req)
 		if err != nil {
 			return "", err
 		}
-		if firstMessageID == "" {
-			firstMessageID = messageID
+		if firstSentMessageID == "" {
+			if req.MessageID != "" {
+				firstSentMessageID = req.MessageID
+			} else {
+				firstSentMessageID = messageID
+			}
 		}
 	}
-	return firstMessageID, nil
+	return firstSentMessageID, nil
 }
 
 func (w *worker) sendMessage(ctx context.Context, roomID, threadRootID, text string) (string, error) {

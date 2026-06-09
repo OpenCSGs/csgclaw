@@ -3631,6 +3631,164 @@ func TestHandleBotSendMessageAcceptsPicoClawThreadContext(t *testing.T) {
 	}
 }
 
+func TestHandleParticipantSendMessageReplacementRefreshesThreadRootSummary(t *testing.T) {
+	now := time.Now().UTC()
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "manager", Name: "manager", Handle: "manager"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:       "room-1",
+				IsDirect: true,
+				Members:  []string{"u-admin", "manager"},
+				Messages: []im.Message{{ID: "msg-user", SenderID: "u-admin", Content: "run it", CreatedAt: now}},
+			},
+		},
+	})
+	srv := &Handler{im: imSvc, participantBridge: im.NewParticipantBridge(""), serverNoAuth: true}
+	send := func(t *testing.T, body string) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/manager/messages", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+		var sent struct {
+			MessageID string `json:"message_id"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&sent); err != nil {
+			t.Fatalf("decode send response: %v", err)
+		}
+		return sent.MessageID
+	}
+
+	rootID := send(t, `{"room_id":"room-1","message_id":"assistant-turn-1","text":"\u200b"}`)
+	send(t, `{"room_id":"room-1","message_id":"assistant-turn-1-tool-1","thread_root_id":"assistant-turn-1","text":"tool activity"}`)
+	finalID := send(t, `{"room_id":"room-1","message_id":"assistant-turn-1","text":"final answer"}`)
+	if rootID != "assistant-turn-1" || finalID != rootID {
+		t.Fatalf("root/final message ids = %q / %q, want assistant-turn-1", rootID, finalID)
+	}
+
+	timeline, err := imSvc.ListMessages("room-1")
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	var root im.Message
+	for _, message := range timeline {
+		if message.ID == "assistant-turn-1-tool-1" {
+			t.Fatalf("timeline = %+v, want tool reply hidden from top-level messages", timeline)
+		}
+		if message.ID == rootID {
+			root = message
+		}
+	}
+	if root.Content != "final answer" {
+		t.Fatalf("root.Content = %q, want final answer", root.Content)
+	}
+	if root.Thread == nil || root.Thread.Context.RootExcerpt != "final answer" || root.Thread.ReplyCount != 1 {
+		t.Fatalf("root.Thread = %+v, want refreshed summary with one reply", root.Thread)
+	}
+}
+
+func TestHandleParticipantSendMessageThreadsTopLevelToolCallsUnderFinalResponse(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		isDirect bool
+	}{
+		{name: "dm", isDirect: true},
+		{name: "room"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Now().UTC()
+			imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+				CurrentUserID: "u-admin",
+				Users: []im.User{
+					{ID: "u-admin", Name: "admin", Handle: "admin"},
+					{ID: "manager", Name: "manager", Handle: "manager"},
+				},
+				Rooms: []im.Room{
+					{
+						ID:       "room-1",
+						IsDirect: tc.isDirect,
+						Members:  []string{"u-admin", "manager"},
+						Messages: []im.Message{{ID: "msg-user", SenderID: "u-admin", Content: "use some tools", CreatedAt: now}},
+					},
+				},
+			})
+			srv := &Handler{im: imSvc, participantBridge: im.NewParticipantBridge(""), serverNoAuth: true}
+			send := func(t *testing.T, body string) string {
+				t.Helper()
+				req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/manager/messages", strings.NewReader(body))
+				rec := httptest.NewRecorder()
+				srv.Routes().ServeHTTP(rec, req)
+				if rec.Code != http.StatusOK {
+					t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+				}
+				var sent struct {
+					MessageID string `json:"message_id"`
+				}
+				if err := json.NewDecoder(rec.Body).Decode(&sent); err != nil {
+					t.Fatalf("decode send response: %v", err)
+				}
+				return sent.MessageID
+			}
+
+			firstToolID := send(t, `{"room_id":"room-1","text":"🔧 `+"`list_dir`"+`\n`+"```"+`\n{\"path\":\"/workspace\"}\n`+"```"+`"}`)
+			secondToolID := send(t, `{"room_id":"room-1","text":"🔧 `+"`exec`"+`\n`+"```"+`\n{\"command\":\"pwd\"}\n`+"```"+`"}`)
+			finalID := send(t, `{"room_id":"room-1","text":"Used two tools."}`)
+			if finalID == "" || finalID == firstToolID || finalID == secondToolID {
+				t.Fatalf("message ids first=%q second=%q final=%q, want final root distinct from tool replies", firstToolID, secondToolID, finalID)
+			}
+
+			timeline, err := imSvc.ListMessages("room-1")
+			if err != nil {
+				t.Fatalf("ListMessages() error = %v", err)
+			}
+			var root im.Message
+			for _, message := range timeline {
+				if message.ID == firstToolID || message.ID == secondToolID {
+					t.Fatalf("timeline = %+v, want tool replies hidden from top-level messages", timeline)
+				}
+				if message.ID == finalID {
+					root = message
+				}
+			}
+			if root.ID == "" {
+				t.Fatalf("timeline = %+v, want final root %q", timeline, finalID)
+			}
+			if root.Content != "Used two tools." {
+				t.Fatalf("root.Content = %q, want final response", root.Content)
+			}
+			if root.Thread == nil || root.Thread.ReplyCount != 2 || root.Thread.Context.RootExcerpt != "Used two tools." {
+				t.Fatalf("root.Thread = %+v, want refreshed summary with two replies", root.Thread)
+			}
+
+			thread, err := imSvc.GetThread("room-1", root.ID)
+			if err != nil {
+				t.Fatalf("GetThread() error = %v", err)
+			}
+			if len(thread.Replies) != 2 {
+				t.Fatalf("thread replies = %+v, want two tool replies", thread.Replies)
+			}
+			if thread.Replies[0].ID != firstToolID || thread.Replies[1].ID != secondToolID {
+				t.Fatalf("reply ids = %q / %q, want %q / %q", thread.Replies[0].ID, thread.Replies[1].ID, firstToolID, secondToolID)
+			}
+			for _, reply := range thread.Replies {
+				if reply.RelatesTo == nil || reply.RelatesTo.RelType != im.RelationTypeThread || reply.RelatesTo.EventID != root.ID {
+					t.Fatalf("reply.RelatesTo = %+v, want m.thread -> %s", reply.RelatesTo, root.ID)
+				}
+				if !strings.HasPrefix(strings.TrimSpace(reply.Content), "🔧 ") {
+					t.Fatalf("reply.Content = %q, want legacy tool call", reply.Content)
+				}
+			}
+		})
+	}
+}
+
 func TestPublishParticipantEventQueuesUntilParticipantSubscribes(t *testing.T) {
 	now := time.Now().UTC()
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{

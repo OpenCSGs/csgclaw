@@ -63,6 +63,7 @@ make release
 - Use targeted tests first for local changes.
 - Run `go test ./...` for shared or cross-package changes.
 - Run `make` when touching build, CGO, linker flags, or packaging.
+- When testing or debugging `csgclaw serve` and a browser page is unnecessary, launch with `--no-browser` to avoid stealing focus or opening extra tabs.
 - If you skip verification, say so clearly.
 
 ## References

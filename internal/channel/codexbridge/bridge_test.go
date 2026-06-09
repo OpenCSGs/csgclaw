@@ -342,13 +342,22 @@ func TestServiceUsesConversationScopedSessionsAndThreadReplies(t *testing.T) {
 	})
 }
 
-func TestServiceProjectsToolCallsAsActivityCardsAlongsideResponse(t *testing.T) {
-	t.Parallel()
+func TestServiceThreadsTopLevelToolCallsUnderFinalResponse(t *testing.T) {
+	for _, chatType := range []string{"direct", "group"} {
+		chatType := chatType
+		t.Run(chatType, func(t *testing.T) {
+			t.Parallel()
+			assertServiceThreadsTopLevelToolCallsUnderFinalResponse(t, chatType)
+		})
+	}
+}
 
+func assertServiceThreadsTopLevelToolCallsUnderFinalResponse(t *testing.T, chatType string) {
+	t.Helper()
 	stream := make(chan BotEvent, 1)
 	errs := make(chan error)
 	close(errs)
-	stream <- BotEvent{MessageID: "m-1", RoomID: "room-1", Text: "run it"}
+	stream <- BotEvent{MessageID: "m-1", RoomID: "room-1", ChatType: chatType, Text: "run it"}
 
 	sink := runtimecodex.NewEventSink()
 	client := &fakeBotClient{
@@ -402,17 +411,21 @@ func TestServiceProjectsToolCallsAsActivityCardsAlongsideResponse(t *testing.T) 
 
 	waitFor(t, func() bool {
 		records := client.sentRecords()
-		return len(records) == 3 &&
+		return len(records) == 4 &&
 			records[0].RoomID == "room-1" &&
 			records[0].ThreadRootID == "" &&
-			strings.Contains(records[0].Text, runtimebridge.AgentToolMsgType) &&
+			records[0].Text == turnPlaceholderText &&
 			records[1].RoomID == "room-1" &&
-			records[1].ThreadRootID == "" &&
+			records[1].ThreadRootID == "sent-1" &&
 			strings.Contains(records[1].Text, runtimebridge.AgentToolMsgType) &&
-			strings.Contains(records[1].Text, "command output") &&
 			records[2].RoomID == "room-1" &&
-			records[2].ThreadRootID == "" &&
-			records[2].Text == "done"
+			records[2].ThreadRootID == "sent-1" &&
+			strings.Contains(records[2].Text, runtimebridge.AgentToolMsgType) &&
+			strings.Contains(records[2].Text, "command output") &&
+			records[3].RoomID == "room-1" &&
+			records[3].MessageID == "sent-1" &&
+			records[3].ThreadRootID == "" &&
+			records[3].Text == "done"
 	})
 }
 
@@ -818,9 +831,19 @@ func TestServiceProjectsToolEventsAsAgentActivity(t *testing.T) {
 	defer svc.Close()
 
 	waitFor(t, func() bool {
-		return len(client.sentTexts()) == 1
+		return len(client.sentRecords()) == 3
 	})
-	text := client.sentTexts()[0]
+	records := client.sentRecords()
+	if records[0].Text != turnPlaceholderText || records[0].ThreadRootID != "" {
+		t.Fatalf("placeholder record = %+v, want top-level blank root", records[0])
+	}
+	if records[1].ThreadRootID != "sent-1" {
+		t.Fatalf("tool activity ThreadRootID = %q, want sent-1", records[1].ThreadRootID)
+	}
+	if records[2].Text != turnCompleteText || records[2].MessageID != "sent-1" || records[2].ThreadRootID != "" {
+		t.Fatalf("completion record = %+v, want root placeholder replacement", records[2])
+	}
+	text := records[1].Text
 	if strings.Contains(text, "Running tool:") {
 		t.Fatalf("tool event rendered as plain text: %s", text)
 	}
@@ -908,8 +931,15 @@ func TestServiceProjectsPermissionEventsAsAgentActivity(t *testing.T) {
 	defer svc.Close()
 
 	waitFor(t, func() bool {
-		return len(client.sentTexts()) == 1
+		return len(client.sentRecords()) == 2
 	})
+	records := client.sentRecords()
+	if records[0].Text != turnPlaceholderText || records[0].ThreadRootID != "" {
+		t.Fatalf("placeholder record = %+v, want top-level blank root", records[0])
+	}
+	if records[1].ThreadRootID != "sent-1" {
+		t.Fatalf("permission activity ThreadRootID = %q, want sent-1", records[1].ThreadRootID)
+	}
 	var payload struct {
 		Type    string `json:"type"`
 		Channel string `json:"channel"`
@@ -925,7 +955,7 @@ func TestServiceProjectsPermissionEventsAsAgentActivity(t *testing.T) {
 			} `json:"action"`
 		} `json:"content"`
 	}
-	if err := json.Unmarshal([]byte(client.sentTexts()[0]), &payload); err != nil {
+	if err := json.Unmarshal([]byte(records[1].Text), &payload); err != nil {
 		t.Fatalf("permission activity json decode: %v", err)
 	}
 	if payload.Type != runtimebridge.AgentActivityType || payload.Content.MsgType != runtimebridge.AgentActionMsgType {
@@ -1016,14 +1046,20 @@ func TestServiceUsesStableMessageIDForPermissionDecisionActivity(t *testing.T) {
 	defer svc.Close()
 
 	waitFor(t, func() bool {
-		return len(client.sentRecords()) == 2
+		return len(client.sentRecords()) == 3
 	})
 	sent := client.sentRecords()
-	if sent[0].MessageID == "" || sent[0].MessageID != sent[1].MessageID {
-		t.Fatalf("permission message ids = %q / %q, want stable non-empty id", sent[0].MessageID, sent[1].MessageID)
+	if sent[0].Text != turnPlaceholderText || sent[0].ThreadRootID != "" {
+		t.Fatalf("placeholder record = %+v, want top-level blank root", sent[0])
 	}
-	if !strings.Contains(sent[1].Text, `"status":"allowed"`) {
-		t.Fatalf("decision activity = %s, want allowed status", sent[1].Text)
+	if sent[1].MessageID == "" || sent[1].MessageID != sent[2].MessageID {
+		t.Fatalf("permission message ids = %q / %q, want stable non-empty id", sent[1].MessageID, sent[2].MessageID)
+	}
+	if sent[1].ThreadRootID != "sent-1" || sent[2].ThreadRootID != "sent-1" {
+		t.Fatalf("permission thread roots = %q / %q, want sent-1", sent[1].ThreadRootID, sent[2].ThreadRootID)
+	}
+	if !strings.Contains(sent[2].Text, `"status":"allowed"`) {
+		t.Fatalf("decision activity = %s, want allowed status", sent[2].Text)
 	}
 }
 

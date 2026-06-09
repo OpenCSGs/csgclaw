@@ -109,6 +109,7 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	fs := run.NewFlagSet("serve", run.Program+" serve [-d|--daemon] [flags]", c.Summary())
 	daemon := fs.Bool("daemon", false, "run server in background")
 	fs.BoolVar(daemon, "d", false, "run server in background")
+	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 
 	defaultLogPath, err := defaultServerLogPath()
@@ -144,9 +145,9 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	}
 
 	if *daemon {
-		return serveBackground(run, cfg, globals, *logPath, *pidPath, *logLevel)
+		return serveBackground(run, cfg, globals, *logPath, *pidPath, *logLevel, *noBrowser)
 	}
-	return serveForegroundWithConfigPath(ctx, run, cfg, globals.Config, globals.Output)
+	return serveForegroundWithConfigPath(ctx, run, cfg, globals.Config, globals.Output, serveOptions{NoBrowser: *noBrowser})
 }
 
 func (stopCmd) Name() string {
@@ -217,6 +218,7 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	pidPath := fs.String("pid", "", "pid file path")
 	configPathFlag := fs.String("config", globals.Config, "config file path")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
+	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -259,14 +261,18 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	if err != nil {
 		return err
 	}
-	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, *configPathFlag, globals.Output)
+	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, *configPathFlag, globals.Output, serveOptions{NoBrowser: *noBrowser})
 }
 
 func serveForeground(ctx context.Context, run *command.Context, cfg config.Config, output string) error {
 	return serveForegroundWithConfigPath(ctx, run, cfg, "", output)
 }
 
-func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string) error {
+type serveOptions struct {
+	NoBrowser bool
+}
+
+func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
 	_ = preflightDefaultModelProvider(ctx, cfg)
 	imBus := im.NewBus()
 	feishuProvider, feishuSvc, err := buildFeishuComponents(configPath)
@@ -300,10 +306,10 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 		fmt.Fprintf(run.Stdout, "CSGClaw IM is available at: %s\n", imURL)
 	}
 
-	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, output)
+	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, output, opts...)
 }
 
-func serveBackground(run *command.Context, cfg config.Config, globals command.GlobalOptions, logPath, pidPath, logLevel string) error {
+func serveBackground(run *command.Context, cfg config.Config, globals command.GlobalOptions, logPath, pidPath, logLevel string, noBrowser bool) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolve executable: %w", err)
@@ -323,6 +329,9 @@ func serveBackground(run *command.Context, cfg config.Config, globals command.Gl
 	}
 	if strings.TrimSpace(logLevel) != "" {
 		childArgs = append(childArgs, "--log-level", logLevel)
+	}
+	if noBrowser {
+		childArgs = append(childArgs, "--no-browser")
 	}
 	cmd := exec.Command(exe, childArgs...)
 	cmd.Stdout = logFile
@@ -411,7 +420,11 @@ func startServer(ctx context.Context, run *command.Context, cfg config.Config, s
 	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, "", output)
 }
 
-func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Service, imSvc *im.Service, imBus *im.Bus, feishuSvc *feishu.Service, configPath, output string) error {
+func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Service, imSvc *im.Service, imBus *im.Bus, feishuSvc *feishu.Service, configPath, output string, opts ...serveOptions) error {
+	serveOpts := serveOptions{}
+	if len(opts) > 0 {
+		serveOpts = opts[0]
+	}
 	_ = EnsureCLIProxy(ctx)
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -493,7 +506,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		OnReady: func(handler *api.Handler, router chi.Router) {
 			deliver := channelwiring.WireNotificationParticipantPull(ctx, participantSvc, imSvc, apiURL, cfg.Server.AccessToken)
 			handler.SetNotificationDeliver(deliver)
-			if output != "json" && run != nil {
+			if !serveOpts.NoBrowser && output != "json" && run != nil {
 				go func() {
 					if err := WaitForHealthy(apiURL, 5*time.Second); err != nil {
 						fmt.Fprintln(run.Stdout, "Open this URL in your browser after startup.")

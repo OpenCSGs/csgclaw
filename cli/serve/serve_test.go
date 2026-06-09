@@ -305,6 +305,64 @@ func TestServeForegroundOpensIMURLWhenBrowserAllowed(t *testing.T) {
 	}
 }
 
+func TestServeRunNoBrowserFlagSuppressesBrowserOpen(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+
+	origRunServer := RunServer
+	t.Cleanup(func() {
+		RunServer = origRunServer
+	})
+	RunServer = func(opts server.Options) error {
+		if opts.OnReady != nil {
+			opts.OnReady(nil, nil)
+		}
+		return nil
+	}
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.Config{
+		Server: config.ServerConfig{
+			ListenAddr:       "127.0.0.1:18080",
+			AdvertiseBaseURL: "http://example.test/base",
+			AccessToken:      "pc-secret",
+		},
+		Sandbox: config.SandboxConfig{Provider: config.DefaultSandboxProvider},
+	}
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	openedCh := make(chan string, 1)
+	waitedCh := make(chan string, 1)
+	WaitForHealthy = func(rawURL string, _ time.Duration) error {
+		waitedCh <- rawURL
+		return nil
+	}
+	OpenBrowser = func(rawURL string) error {
+		openedCh <- rawURL
+		return nil
+	}
+
+	run := testContext()
+	if err := NewServeCmd().Run(context.Background(), run, []string{"--no-browser"}, command.GlobalOptions{Config: configPath}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	select {
+	case rawURL := <-waitedCh:
+		t.Fatalf("WaitForHealthy called for %q, want no browser startup path", rawURL)
+	default:
+	}
+	select {
+	case rawURL := <-openedCh:
+		t.Fatalf("OpenBrowser called for %q, want suppressed", rawURL)
+	default:
+	}
+	if got := run.Stdout.(*bytes.Buffer).String(); !strings.Contains(got, "CSGClaw IM is available at: http://example.test/base/") {
+		t.Fatalf("stdout missing IM URL:\n%s", got)
+	}
+}
+
 func TestServeForegroundPrintsManualIMURLWhenBrowserNotAllowed(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
