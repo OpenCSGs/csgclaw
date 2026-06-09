@@ -144,11 +144,14 @@ func (s *Store) load() error {
 	if err != nil {
 		return err
 	}
+	repairedLegacyIDs := migrateLegacyCSGClawAgentParticipantIDs(items)
 	s.items = items
-	if legacyExists {
+	if legacyExists || repairedLegacyIDs {
 		if err := s.saveLocked(); err != nil {
 			return fmt.Errorf("write migrated participant state: %w", err)
 		}
+	}
+	if legacyExists {
 		if err := os.Remove(legacyPath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("delete legacy bot state after participant migration: %w", err)
 		}
@@ -255,6 +258,129 @@ func cloneParticipant(item apitypes.Participant) apitypes.Participant {
 
 func storeKey(channel, id string) string {
 	return strings.TrimSpace(channel) + "\x00" + strings.TrimSpace(id)
+}
+
+func migrateLegacyCSGClawAgentParticipantIDs(items map[string]apitypes.Participant) bool {
+	if len(items) == 0 {
+		return false
+	}
+	keys := make([]string, 0, len(items))
+	for key := range items {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	changed := false
+	for _, key := range keys {
+		item, ok := items[key]
+		if !ok {
+			continue
+		}
+		nextID, ok := legacyCSGClawAgentParticipantID(item)
+		if !ok {
+			continue
+		}
+		next := item
+		legacyID := strings.TrimSpace(next.ID)
+		next.ID = nextID
+		if strings.TrimSpace(next.ChannelUserRef) == "" {
+			next.ChannelUserRef = legacyID
+		}
+		if strings.TrimSpace(next.AgentID) == "" {
+			next.AgentID = legacyID
+		}
+		next = normalizeStoredParticipant(next)
+
+		nextKey := storeKey(next.Channel, next.ID)
+		if nextKey == key {
+			continue
+		}
+		if existing, exists := items[nextKey]; exists {
+			if sameAgentParticipantBinding(existing, next) {
+				items[nextKey] = mergeAgentParticipant(existing, next)
+				delete(items, key)
+				changed = true
+			}
+			continue
+		}
+		items[nextKey] = next
+		delete(items, key)
+		changed = true
+	}
+	return changed
+}
+
+func legacyCSGClawAgentParticipantID(item apitypes.Participant) (string, bool) {
+	item = normalizeStoredParticipant(item)
+	if item.Channel != ChannelCSGClaw || item.Type != TypeAgent {
+		return "", false
+	}
+	if item.ID == "" || item.ID == agent.ManagerUserID || !strings.HasPrefix(item.ID, "u-") {
+		return "", false
+	}
+	if item.AgentID != "" && item.AgentID != item.ID {
+		return "", false
+	}
+	id := strings.TrimPrefix(item.ID, "u-")
+	if id == "" || id == item.ID {
+		return "", false
+	}
+	return id, true
+}
+
+func sameAgentParticipantBinding(a, b apitypes.Participant) bool {
+	a = normalizeStoredParticipant(a)
+	b = normalizeStoredParticipant(b)
+	if a.Channel != b.Channel || a.Type != b.Type || a.Type != TypeAgent {
+		return false
+	}
+	if a.AgentID != "" && b.AgentID != "" && a.AgentID == b.AgentID {
+		return true
+	}
+	return a.ChannelUserRef != "" && b.ChannelUserRef != "" && a.ChannelUserRef == b.ChannelUserRef
+}
+
+func mergeAgentParticipant(existing, legacy apitypes.Participant) apitypes.Participant {
+	merged := normalizeStoredParticipant(existing)
+	legacy = normalizeStoredParticipant(legacy)
+	if merged.Name == "" {
+		merged.Name = legacy.Name
+	}
+	if merged.Avatar == "" {
+		merged.Avatar = legacy.Avatar
+	}
+	if merged.ChannelUserRef == "" {
+		merged.ChannelUserRef = legacy.ChannelUserRef
+	}
+	if merged.ChannelUserKind == "" {
+		merged.ChannelUserKind = legacy.ChannelUserKind
+	}
+	if merged.AgentID == "" {
+		merged.AgentID = legacy.AgentID
+	}
+	if merged.LifecycleStatus == "" {
+		merged.LifecycleStatus = legacy.LifecycleStatus
+	}
+	if merged.Presence == "" {
+		merged.Presence = legacy.Presence
+	}
+	merged.Mentionable = merged.Mentionable || legacy.Mentionable
+	if merged.Metadata == nil {
+		merged.Metadata = cloneParticipant(legacy).Metadata
+	} else {
+		for key, value := range legacy.Metadata {
+			if _, ok := merged.Metadata[key]; !ok {
+				merged.Metadata[key] = value
+			}
+		}
+	}
+	if merged.CreatedAt.IsZero() || (!legacy.CreatedAt.IsZero() && legacy.CreatedAt.Before(merged.CreatedAt)) {
+		merged.CreatedAt = legacy.CreatedAt
+	}
+	if merged.UpdatedAt.IsZero() || legacy.UpdatedAt.After(merged.UpdatedAt) {
+		merged.UpdatedAt = legacy.UpdatedAt
+	}
+	return merged
 }
 
 func mergeLegacyBotState(participantPath string, items map[string]apitypes.Participant) (string, bool, error) {

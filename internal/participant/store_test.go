@@ -57,6 +57,17 @@ func TestNewStoreMigratesLegacyBotsAndDeletesSource(t *testing.T) {
 			},
 			CreatedAt: createdAt.Add(2 * time.Minute),
 		},
+		{
+			ID:        "u-alice",
+			Name:      "alice",
+			Type:      "normal",
+			Role:      "worker",
+			Channel:   ChannelCSGClaw,
+			AgentID:   "u-alice",
+			UserID:    "u-alice",
+			Available: true,
+			CreatedAt: createdAt.Add(3 * time.Minute),
+		},
 	}})
 
 	store, err := NewStore(participantsPath)
@@ -94,6 +105,64 @@ func TestNewStoreMigratesLegacyBotsAndDeletesSource(t *testing.T) {
 	}
 	if _, ok := store.Get(ChannelCSGClaw, "dev"); !ok {
 		t.Fatal("existing participant was not preserved during migration")
+	}
+	worker, ok := store.Get(ChannelCSGClaw, "alice")
+	if !ok {
+		t.Fatal("worker participant was not migrated to stripped participant ID")
+	}
+	if worker.Type != TypeAgent || worker.AgentID != "u-alice" || worker.ChannelUserRef != "u-alice" {
+		t.Fatalf("worker participant = %+v, want participant alice bound to channel/agent u-alice", worker)
+	}
+	if _, ok := store.Get(ChannelCSGClaw, "u-alice"); ok {
+		t.Fatal("worker participant was left under legacy agent ID u-alice")
+	}
+}
+
+func TestNewStoreRepairsLegacyPrefixedAgentParticipants(t *testing.T) {
+	dir := t.TempDir()
+	participantsPath := filepath.Join(dir, "participants.json")
+	createdAt := time.Date(2026, 6, 4, 14, 0, 7, 0, time.UTC)
+	writeJSONFile(t, participantsPath, persistedState{Participants: []apitypes.Participant{
+		{
+			ID:              "u-alice",
+			Channel:         ChannelCSGClaw,
+			Type:            TypeAgent,
+			Name:            "alice",
+			ChannelUserRef:  "u-alice",
+			ChannelUserKind: ChannelUserKindLocalUserID,
+			AgentID:         "u-alice",
+			LifecycleStatus: LifecycleStatusActive,
+			Mentionable:     true,
+			CreatedAt:       createdAt,
+			UpdatedAt:       createdAt,
+		},
+	}})
+
+	store, err := NewStore(participantsPath)
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+
+	worker, ok := store.Get(ChannelCSGClaw, "alice")
+	if !ok {
+		t.Fatal("worker participant was not repaired to stripped participant ID")
+	}
+	if worker.AgentID != "u-alice" || worker.ChannelUserRef != "u-alice" {
+		t.Fatalf("worker participant = %+v, want participant alice bound to channel/agent u-alice", worker)
+	}
+	if _, ok := store.Get(ChannelCSGClaw, "u-alice"); ok {
+		t.Fatal("legacy prefixed participant u-alice still exists after repair")
+	}
+
+	reloaded, err := NewStore(participantsPath)
+	if err != nil {
+		t.Fatalf("reload NewStore() error = %v", err)
+	}
+	if _, ok := reloaded.Get(ChannelCSGClaw, "alice"); !ok {
+		t.Fatal("reloaded store missing repaired participant alice")
+	}
+	if _, ok := reloaded.Get(ChannelCSGClaw, "u-alice"); ok {
+		t.Fatal("reloaded store still has legacy participant u-alice")
 	}
 }
 
