@@ -81,7 +81,7 @@ Builtin PicoClaw templates live under `internal/templates/embed/<name>/` and are
 
 **Local (before PR)**: `make build-all` bumps `version`, syncs `image.ref`, rebuilds `csgclaw` (so embed matches image tags), then builds Docker images.
 
-**GitLab CI (main)**: reads committed `version` / `image.ref`, builds and pushes images **without** modifying `agent.toml`; runs only when `version` changed since the previous commit.
+**GitLab CI (main)**: reads committed `version` / `image.ref`, builds and pushes images **without** modifying `agent.toml`; runs when embed `agent.toml` changed in the pushed range (`CI_COMMIT_BEFORE_SHA..HEAD`) or `version` differs from the compare base.
 
 | Target | Description |
 |--------|-------------|

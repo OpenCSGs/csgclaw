@@ -81,7 +81,7 @@ make build-all
 
 **本地（PR 前）**：`make build-all` 会先递增 `version`、同步 `image.ref`，再编译 `csgclaw`（使 embed 与镜像 tag 一致），最后构建 Docker 镜像。
 
-**GitLab CI（main）**：仅读取已提交的 `version` / `image.ref` 构建并 push 镜像，**不会**修改 `agent.toml`；仅当相对上一 commit 的 `version` 发生变化时才触发构建。
+**GitLab CI（main）**：仅读取已提交的 `version` / `image.ref` 构建并 push 镜像，**不会**修改 `agent.toml`；当本次 push 范围内（`CI_COMMIT_BEFORE_SHA..HEAD`）embed `agent.toml` 发生变化或 `version` 相对 compare base 改变时触发构建。
 
 | 目标 | 说明 |
 |------|------|

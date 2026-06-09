@@ -4,10 +4,10 @@
 #
 # Triggers:
 #   - tag v* — release archives, csgclaw Docker image, SSH upload (uses committed embed agent.toml)
-#   - push / merge to default branch (main) — build/push picoclaw images when agent.toml version changed (uses committed version/ref; no bump)
+#   - push / merge to default branch (main) — build/push picoclaw images when embed agent.toml changed in the pushed range (uses committed version/ref; no bump)
 #
 # Implementation: scripts/release-build-all.sh (per matrix cell); .gitlab/ci-gitlab-release-upload.sh (upload only);
-# .gitlab/ci-picoclaw-version-check.sh (gate builds when agent.toml version changed; never bumps version);
+# .gitlab/ci-picoclaw-version-check.sh (gate builds on CI_COMMIT_BEFORE_SHA..HEAD; never bumps version);
 # .gitlab/ci-picoclaw-image.sh (stage csgclaw-cli from dist/ into picoclaw manager/worker images); .gitlab/bookworm-mirror.sh (apt sources).
 #
 # Required CI/CD variables:
@@ -194,7 +194,7 @@ picoclaw-cli-build:
   script:
     - |
       if [ "${PICOCLAW_ANY_BUILD}" != "true" ]; then
-        echo "No picoclaw embed version changes since previous commit; skipping csgclaw-cli build for embed images"
+        echo "No picoclaw embed agent.toml changes in pushed range; skipping csgclaw-cli build for embed images"
         mkdir -p "${DIST_DIR:-dist}"
         echo "skipped" > "${DIST_DIR:-dist}/picoclaw-embed-cli-build.skipped"
         exit 0

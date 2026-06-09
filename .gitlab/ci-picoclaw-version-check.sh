@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Detect embed agent.toml version changes on main for CI build gating.
+# Detect embed agent.toml changes on main for CI build gating.
+# Compares the pushed range (CI_COMMIT_BEFORE_SHA..HEAD), not just HEAD~1.
 # CI never modifies agent.toml — it reads version/image.ref and builds images with that tag.
 # Writes picoclaw-build.env (GitLab dotenv report) for downstream jobs.
 set -euo pipefail
@@ -11,6 +12,7 @@ ENV_FILE="${CI_PROJECT_DIR:-${ROOT}}/picoclaw-build.env"
 MANAGER_TEMPLATE="picoclaw-manager"
 WORKER_TEMPLATE="picoclaw-worker"
 CURRENT_REF="HEAD"
+EMPTY_SHA="0000000000000000000000000000000000000000"
 
 read_agent_toml_field_at_ref() {
   local template="$1"
@@ -48,7 +50,22 @@ image_ref_tag() {
   printf '%s' "${ref##*:}"
 }
 
-find_previous_main_commit() {
+agent_toml_path() {
+  local template="$1"
+  printf 'internal/templates/embed/%s/agent.toml' "${template}"
+}
+
+find_compare_base() {
+  local before_sha="${CI_COMMIT_BEFORE_SHA:-}"
+
+  if [ -n "${before_sha}" ] && [ "${before_sha}" != "${EMPTY_SHA}" ]; then
+    if git cat-file -e "${before_sha}^{commit}" 2>/dev/null; then
+      printf '%s' "${before_sha}"
+      return 0
+    fi
+    echo "CI_COMMIT_BEFORE_SHA ${before_sha} is not reachable; falling back to HEAD~1" >&2
+  fi
+
   if git rev-parse "${CURRENT_REF}~1" >/dev/null 2>&1; then
     git rev-parse "${CURRENT_REF}~1"
     return 0
@@ -56,20 +73,40 @@ find_previous_main_commit() {
   return 1
 }
 
-version_changed() {
+manifest_changed_in_push() {
   local template="$1"
-  local previous_ref="$2"
+  local compare_base="$2"
+  local path
+
+  path="$(agent_toml_path "${template}")"
+  if [ -z "${compare_base}" ]; then
+    return 0
+  fi
+
+  if ! git cat-file -e "${compare_base}^{commit}" 2>/dev/null; then
+    return 0
+  fi
+
+  if git diff --name-only "${compare_base}" "${CURRENT_REF}" -- "${path}" | grep -q .; then
+    return 0
+  fi
+  return 1
+}
+
+version_changed_since_base() {
+  local template="$1"
+  local compare_base="$2"
   local current previous
 
   current="$(read_agent_toml_version_at_ref "${template}" "${CURRENT_REF}")"
-  if [ -z "${previous_ref}" ]; then
+  if [ -z "${compare_base}" ]; then
     if [ -n "${current}" ]; then
       return 0
     fi
     return 1
   fi
 
-  previous="$(read_agent_toml_version_at_ref "${template}" "${previous_ref}")"
+  previous="$(read_agent_toml_version_at_ref "${template}" "${compare_base}")"
   if [ -z "${previous}" ]; then
     return 0
   fi
@@ -78,6 +115,16 @@ version_changed() {
     exit 1
   fi
   [ "${current}" != "${previous}" ]
+}
+
+should_build_template() {
+  local template="$1"
+  local compare_base="$2"
+
+  if manifest_changed_in_push "${template}" "${compare_base}"; then
+    return 0
+  fi
+  version_changed_since_base "${template}" "${compare_base}"
 }
 
 validate_version_and_ref() {
@@ -105,11 +152,11 @@ validate_version_and_ref() {
   fi
 }
 
-previous_ref=""
-if previous_ref="$(find_previous_main_commit)"; then
-  echo "previous main commit: ${previous_ref}"
+compare_base=""
+if compare_base="$(find_compare_base)"; then
+  echo "compare base: ${compare_base} (range ${compare_base}..${CURRENT_REF})"
 else
-  echo "no previous commit found"
+  echo "no compare base found; treating embed manifests as new"
 fi
 
 manager_version="$(read_agent_toml_version_at_ref "${MANAGER_TEMPLATE}" "${CURRENT_REF}")"
@@ -117,11 +164,11 @@ worker_version="$(read_agent_toml_version_at_ref "${WORKER_TEMPLATE}" "${CURRENT
 
 manager_build=false
 worker_build=false
-if version_changed "${MANAGER_TEMPLATE}" "${previous_ref:-}"; then
+if should_build_template "${MANAGER_TEMPLATE}" "${compare_base:-}"; then
   manager_build=true
   validate_version_and_ref "${MANAGER_TEMPLATE}" "${manager_version}"
 fi
-if version_changed "${WORKER_TEMPLATE}" "${previous_ref:-}"; then
+if should_build_template "${WORKER_TEMPLATE}" "${compare_base:-}"; then
   worker_build=true
   validate_version_and_ref "${WORKER_TEMPLATE}" "${worker_version}"
 fi
@@ -137,8 +184,9 @@ fi
   printf 'PICOCLAW_MANAGER_BUILD=%s\n' "${manager_build}"
   printf 'PICOCLAW_WORKER_BUILD=%s\n' "${worker_build}"
   printf 'PICOCLAW_ANY_BUILD=%s\n' "${any_build}"
-  if [ -n "${previous_ref}" ]; then
-    printf 'PICOCLAW_PREVIOUS_COMMIT=%s\n' "${previous_ref}"
+  if [ -n "${compare_base}" ]; then
+    printf 'PICOCLAW_COMPARE_BASE=%s\n' "${compare_base}"
+    printf 'PICOCLAW_PREVIOUS_COMMIT=%s\n' "${compare_base}"
   fi
 } > "${ENV_FILE}"
 

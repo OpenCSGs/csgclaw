@@ -5,6 +5,7 @@
 bin/
 bin-csghub/
 dist/
+picoclaw-build.env
 *.test
 *.out
 
