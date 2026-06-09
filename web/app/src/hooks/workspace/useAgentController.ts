@@ -953,7 +953,7 @@ export function useAgentController({
     try {
       let updatedAgent: AgentLike | null = null;
       if (action === "delete") {
-        await deleteBotRequest(csgclawParticipantIDForAgent(item));
+        await deleteBotRequest(csgclawParticipantIDForAgent(item), { deleteAgent: true });
       } else {
         updatedAgent = await runAgentActionRequest(item.id, action);
       }

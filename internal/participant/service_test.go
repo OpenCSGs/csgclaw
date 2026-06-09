@@ -396,6 +396,69 @@ func TestDeleteParticipantRejectsAgentCleanupWhenStillReferenced(t *testing.T) {
 	}
 }
 
+func TestDeleteParticipantAgentCleanupKeepsSharedCSGClawUser(t *testing.T) {
+	agentSvc := mustNewAgentService(t)
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-qa", Name: "QA", Handle: "qa"},
+		},
+	})
+	svc := NewService(NewMemoryStore(nil), WithAgentService(agentSvc), WithIMService(imSvc))
+	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
+		Spec: agent.CreateAgentSpec{
+			ID:          "u-qa",
+			Name:        "QA Runtime",
+			Role:        agent.RoleWorker,
+			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			Image:       "agent-image:test",
+		},
+	}); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+	for _, req := range []CreateRequest{
+		{
+			ID:      "qa",
+			Channel: ChannelCSGClaw,
+			Type:    TypeAgent,
+			Name:    "QA",
+			ChannelUser: ChannelUserSpec{
+				Ref:  "u-qa",
+				Kind: ChannelUserKindLocalUserID,
+			},
+			AgentBinding: AgentBindingSpec{
+				Mode:    BindingModeReuse,
+				AgentID: "u-qa",
+			},
+		},
+		{
+			ID:      "qa-human-ref",
+			Channel: ChannelCSGClaw,
+			Type:    TypeHuman,
+			Name:    "QA Human Ref",
+			ChannelUser: ChannelUserSpec{
+				Ref:  "u-qa",
+				Kind: ChannelUserKindLocalUserID,
+			},
+		},
+	} {
+		if _, err := svc.Create(context.Background(), req); err != nil {
+			t.Fatalf("Create(%s) error = %v", req.ID, err)
+		}
+	}
+
+	if _, ok, err := svc.Delete(context.Background(), ChannelCSGClaw, "qa", DeleteOptions{DeleteAgent: DeleteAgentIfUnreferenced}); err != nil || !ok {
+		t.Fatalf("Delete() ok=%v error=%v, want ok", ok, err)
+	}
+	if _, exists := agentSvc.Agent("u-qa"); exists {
+		t.Fatal("agent u-qa still exists after cleanup")
+	}
+	if _, exists := imSvc.User("u-qa"); !exists {
+		t.Fatal("shared user u-qa was deleted despite another participant reference")
+	}
+}
+
 func TestCreateHumanParticipantRejectsCreateAgentBinding(t *testing.T) {
 	svc := NewService(NewMemoryStore(nil))
 

@@ -314,6 +314,61 @@ func TestParticipantMessageRouteCanonicalizesAgentIDAlias(t *testing.T) {
 	}
 }
 
+func TestParticipantDeleteWithAgentCleanupRemovesCSGClawUser(t *testing.T) {
+	agentSvc := mustNewService(t)
+	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
+		Spec: agent.CreateAgentSpec{
+			ID:          "u-qa",
+			Name:        "qa",
+			Role:        agent.RoleWorker,
+			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			Image:       "agent-image:test",
+		},
+	}); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-qa", Name: "qa", Handle: "qa"},
+		},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              "qa",
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeAgent,
+		Name:            "qa",
+		ChannelUserRef:  "u-qa",
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		AgentID:         "u-qa",
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}), participant.WithAgentService(agentSvc), participant.WithIMService(imSvc))
+	srv := &Handler{
+		svc:         agentSvc,
+		im:          imSvc,
+		participant: participantSvc,
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/csgclaw/participants/qa?delete_agent=if_unreferenced", nil)
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if _, ok := participantSvc.Get(participant.ChannelCSGClaw, "qa"); ok {
+		t.Fatal("participant csgclaw:qa still exists after delete")
+	}
+	if _, ok := agentSvc.Agent("u-qa"); ok {
+		t.Fatal("agent u-qa still exists after delete")
+	}
+	if _, ok := imSvc.User("u-qa"); ok {
+		t.Fatal("user u-qa still exists after participant agent cleanup")
+	}
+}
+
 func TestParticipantNotificationRouteAcceptsNotificationParticipant(t *testing.T) {
 	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
 		ID:              "alerts",

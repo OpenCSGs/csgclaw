@@ -24,6 +24,10 @@ export type FetchAgentLogsOptions = {
   lines?: number;
 };
 
+export type DeleteBotOptions = {
+  deleteAgent?: boolean;
+};
+
 export type AgentUpdatePayload = {
   agent_profile?: JSONRecord;
   avatar?: string;
@@ -178,8 +182,13 @@ export function patchNotificationBotRequest(botID: string, payload: CreateBotPay
   }).then(participantToAgentLike);
 }
 
-export function deleteBotRequest(botID: string): Promise<void> {
-  return del(`api/v1/channels/csgclaw/participants/${encodeURIComponent(botID)}`);
+export function deleteBotRequest(botID: string, options: DeleteBotOptions = {}): Promise<void> {
+  const params = new URLSearchParams();
+  if (options.deleteAgent) {
+    params.set("delete_agent", "if_unreferenced");
+  }
+  const query = params.toString();
+  return del(`api/v1/channels/csgclaw/participants/${encodeURIComponent(botID)}${query ? `?${query}` : ""}`);
 }
 
 export function runAgentActionRequest(agentID: string, action: string): Promise<AgentLike> {

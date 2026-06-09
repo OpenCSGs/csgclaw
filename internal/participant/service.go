@@ -381,8 +381,36 @@ func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOpt
 		if err := s.agents.Delete(ctx, deleted.AgentID); err != nil {
 			return deleted, true, err
 		}
+		if err := s.deleteUnreferencedCSGClawAgentUser(deleted); err != nil {
+			return deleted, true, err
+		}
 	}
 	return deleted, true, nil
+}
+
+func (s *Service) deleteUnreferencedCSGClawAgentUser(deleted apitypes.Participant) error {
+	if s == nil || s.store == nil || s.im == nil {
+		return nil
+	}
+	if deleted.Channel != ChannelCSGClaw || deleted.Type != TypeAgent || deleted.ChannelUserKind != ChannelUserKindLocalUserID {
+		return nil
+	}
+	userID := strings.TrimSpace(deleted.ChannelUserRef)
+	if userID == "" {
+		return nil
+	}
+	for _, item := range s.store.List(ListOptions{Channel: ChannelCSGClaw}) {
+		if strings.TrimSpace(item.ChannelUserRef) == userID {
+			return nil
+		}
+	}
+	if err := s.im.DeleteUser(userID); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil
+		}
+		return fmt.Errorf("delete CSGClaw user %q: %w", userID, err)
+	}
+	return nil
 }
 
 type normalizedCreateRequest struct {

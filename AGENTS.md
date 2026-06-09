@@ -54,6 +54,7 @@ make release
 ## Git And PRs
 
 - Use Conventional Commits for commit messages and PR titles.
+- Codex-generated commit messages must use the `.github/workflows/pr-message.yml` title format: `<type>[optional scope][optional !]: <description>` with an allowed lower-case type such as `feat`, `fix`, `docs`, `test`, `ci`, or `chore`.
 - Keep PR bodies compatible with `.github/workflows/pr-message.yml`: use concise GitHub Markdown, and do not include `Co-authored-by:` trailers or unresolved conflict markers.
 - Keep PR bodies short and focused on summary, validation, impact, related issues, and notes.
 - Check PR CI before requesting review or merge.
