@@ -146,6 +146,7 @@ func TestServeRunSkipsAutoBootstrapWhenStateComplete(t *testing.T) {
 			ConfigComplete:             true,
 			IMBootstrapComplete:        true,
 			ManagerAgentComplete:       true,
+			AdminParticipantComplete:   true,
 			ManagerParticipantComplete: true,
 		}, nil
 	}
@@ -219,6 +220,7 @@ debian_registries_override = []
 			ConfigComplete:             true,
 			IMBootstrapComplete:        true,
 			ManagerAgentComplete:       true,
+			AdminParticipantComplete:   true,
 			ManagerParticipantComplete: true,
 		}, nil
 	}
@@ -425,6 +427,7 @@ func TestServeRunRepeatedAutoBootstrapRemainsIdempotent(t *testing.T) {
 			ConfigComplete:             complete,
 			IMBootstrapComplete:        complete,
 			ManagerAgentComplete:       complete,
+			AdminParticipantComplete:   complete,
 			ManagerParticipantComplete: complete,
 		}, nil
 	}
@@ -1404,6 +1407,7 @@ func stubServeDependencies(t *testing.T) func() {
 			ConfigComplete:             true,
 			IMBootstrapComplete:        true,
 			ManagerAgentComplete:       true,
+			AdminParticipantComplete:   true,
 			ManagerParticipantComplete: true,
 		}, nil
 	}

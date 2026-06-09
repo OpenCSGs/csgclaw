@@ -166,6 +166,68 @@ func TestNewStoreRepairsLegacyPrefixedAgentParticipants(t *testing.T) {
 	}
 }
 
+func TestNewStoreRepairsLegacyAdminParticipant(t *testing.T) {
+	dir := t.TempDir()
+	participantsPath := filepath.Join(dir, "participants.json")
+	createdAt := time.Date(2026, 6, 9, 11, 30, 0, 0, time.UTC)
+	writeJSONFile(t, participantsPath, persistedState{Participants: []apitypes.Participant{
+		{
+			ID:              "u-admin",
+			Channel:         ChannelCSGClaw,
+			Type:            TypeAgent,
+			Name:            "Admin",
+			Avatar:          "avatar.png",
+			ChannelUserRef:  "u-admin",
+			ChannelUserKind: ChannelUserKindLocalUserID,
+			AgentID:         "u-admin",
+			LifecycleStatus: LifecycleStatusActive,
+			Mentionable:     true,
+			Metadata:        map[string]any{"legacy": "kept"},
+			CreatedAt:       createdAt,
+			UpdatedAt:       createdAt.Add(time.Minute),
+		},
+	}})
+
+	store, err := NewStore(participantsPath)
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+
+	admin, ok := store.Get(ChannelCSGClaw, "admin")
+	if !ok {
+		t.Fatal("admin participant was not repaired from legacy u-admin")
+	}
+	if admin.Type != TypeHuman {
+		t.Fatalf("admin type = %q, want %q", admin.Type, TypeHuman)
+	}
+	if admin.AgentID != "" {
+		t.Fatalf("admin agent_id = %q, want empty for human participant", admin.AgentID)
+	}
+	if admin.ChannelUserRef != "admin" || admin.ChannelUserKind != ChannelUserKindLocalUserID {
+		t.Fatalf("admin channel identity = %+v, want local user admin", admin)
+	}
+	if !admin.Mentionable || admin.LifecycleStatus != LifecycleStatusActive {
+		t.Fatalf("admin lifecycle fields = %+v, want active mentionable participant", admin)
+	}
+	if !admin.CreatedAt.Equal(createdAt) || !admin.UpdatedAt.Equal(createdAt.Add(time.Minute)) || admin.Avatar != "avatar.png" || admin.Metadata["legacy"] != "kept" {
+		t.Fatalf("admin preserved fields = %+v, want legacy fields preserved", admin)
+	}
+	if _, ok := store.Get(ChannelCSGClaw, "u-admin"); ok {
+		t.Fatal("legacy admin participant u-admin still exists after repair")
+	}
+
+	reloaded, err := NewStore(participantsPath)
+	if err != nil {
+		t.Fatalf("reload NewStore() error = %v", err)
+	}
+	if _, ok := reloaded.Get(ChannelCSGClaw, "admin"); !ok {
+		t.Fatal("reloaded store missing repaired admin participant")
+	}
+	if _, ok := reloaded.Get(ChannelCSGClaw, "u-admin"); ok {
+		t.Fatal("reloaded store still has legacy participant u-admin")
+	}
+}
+
 func writeJSONFile(t *testing.T, path string, value any) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -71,7 +71,7 @@ func (p *Provisioner) scheduleBootstrapMessage(roomID, name, description string)
 		time.Sleep(p.bootstrapDelay)
 		message, err := p.service.CreateMessage(CreateMessageRequest{
 			RoomID:   roomID,
-			SenderID: "u-admin",
+			SenderID: adminUserID,
 			Content:  buildWorkerBootstrapMessage(name, description),
 		})
 		if err != nil {

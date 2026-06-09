@@ -30,7 +30,7 @@ func TestEnsureWorkerUserCreatesUserAndBootstrapRoom(t *testing.T) {
 	if !room.IsDirect {
 		t.Fatalf("EnsureWorkerUser() room.IsDirect = %v, want true", room.IsDirect)
 	}
-	if len(room.Members) != 2 || !containsUserIDInRoom(*room, "u-admin") || !containsUserIDInRoom(*room, "u-alice") {
+	if len(room.Members) != 2 || !containsUserIDInRoom(*room, "admin") || !containsUserIDInRoom(*room, "u-alice") {
 		t.Fatalf("EnsureWorkerUser() room members = %+v, want admin and worker", room.Members)
 	}
 }
@@ -72,7 +72,7 @@ func TestListMembersReturnsRoomMembers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMembers() error = %v", err)
 	}
-	if len(members) != 2 || members[0].ID != "u-admin" || members[1].ID != "u-alice" {
+	if len(members) != 2 || members[0].ID != "admin" || members[1].ID != "u-alice" {
 		t.Fatalf("ListMembers() = %+v, want room members in member order", members)
 	}
 }
@@ -111,8 +111,8 @@ func TestAddAgentToRoomSupportsRoomID(t *testing.T) {
 		t.Fatalf("AddAgentToRoom() members = %+v, want agent joined", updated.Members)
 	}
 	last := updated.Messages[len(updated.Messages)-1]
-	if last.Event == nil || last.Event.Key != "room_members_added" || last.Event.ActorID != "u-admin" {
-		t.Fatalf("AddAgentToRoom() event = %+v, want structured room_members_added by u-admin", last)
+	if last.Event == nil || last.Event.Key != "room_members_added" || last.Event.ActorID != "admin" {
+		t.Fatalf("AddAgentToRoom() event = %+v, want structured room_members_added by admin", last)
 	}
 	if len(last.Event.TargetIDs) != 1 || last.Event.TargetIDs[0] != "u-alice" {
 		t.Fatalf("AddAgentToRoom() target_ids = %+v, want [u-alice]", last.Event.TargetIDs)
@@ -141,7 +141,7 @@ func TestCreateRoomStoresStructuredEvent(t *testing.T) {
 		t.Fatalf("CreateRoom() room.IsDirect = %v, want false", room.IsDirect)
 	}
 	got := room.Messages[0]
-	if got.Kind != MessageKindEvent || got.Event == nil || got.Event.Key != "room_created" || got.Event.ActorID != "u-admin" || got.Event.Title != "Ops" {
+	if got.Kind != MessageKindEvent || got.Event == nil || got.Event.Key != "room_created" || got.Event.ActorID != "admin" || got.Event.Title != "Ops" {
 		t.Fatalf("CreateRoom() event = %+v, want structured room_created event", got)
 	}
 	if got.Content != "" {
@@ -830,7 +830,7 @@ func TestEnsureBootstrapStateCreatesAdminManagerDMWhenOnlyGroupExists(t *testing
 	var dm *Room
 	for i := range loaded.Rooms {
 		room := &loaded.Rooms[i]
-		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(*room, "u-admin") && containsUserIDInRoom(*room, "manager") {
+		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(*room, "admin") && containsUserIDInRoom(*room, "manager") {
 			dm = room
 			break
 		}
@@ -896,6 +896,62 @@ func TestEnsureBootstrapStateMigratesMisspelledManagerReferences(t *testing.T) {
 	}
 	if !strings.Contains(got.Content, `user_id="manager"`) || strings.Contains(got.Content, legacyID) {
 		t.Fatalf("message.Content = %q, want manager mention tag", got.Content)
+	}
+}
+
+func TestEnsureBootstrapStateMigratesLegacyAdminReferences(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+
+	state := Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []User{
+			{ID: "u-admin", Name: "admin", Handle: "admin", Role: "admin"},
+			{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: "u-alice", Name: "Alice", Handle: "alice", Role: "worker"},
+		},
+		Rooms: []Room{{
+			ID:      "room-1",
+			Title:   "Ops",
+			Members: []string{"u-admin", "manager", "u-alice"},
+			Messages: []Message{{
+				ID:        "msg-1",
+				SenderID:  "u-admin",
+				Event:     &EventPayload{Key: "room_created", ActorID: "u-admin", TargetIDs: []string{"u-admin"}},
+				Content:   `<at user_id="u-admin">admin</at> hello`,
+				CreatedAt: time.Now().UTC(),
+				Mentions:  []Mention{{ID: "u-admin", Name: "admin"}},
+			}},
+		}},
+	}
+	if err := SaveBootstrap(statePath, state); err != nil {
+		t.Fatalf("SaveBootstrap() error = %v", err)
+	}
+
+	if err := EnsureBootstrapState(statePath); err != nil {
+		t.Fatalf("EnsureBootstrapState() error = %v", err)
+	}
+
+	loaded, err := LoadBootstrap(statePath)
+	if err != nil {
+		t.Fatalf("LoadBootstrap() error = %v", err)
+	}
+	if loaded.CurrentUserID != "admin" {
+		t.Fatalf("CurrentUserID = %q, want admin", loaded.CurrentUserID)
+	}
+	if containsUserID(loaded.Users, "u-admin") {
+		t.Fatal("legacy admin user u-admin still exists")
+	}
+	room := loaded.Rooms[0]
+	if !containsUserIDInRoom(room, "admin") || containsUserIDInRoom(room, "u-admin") {
+		t.Fatalf("room.Members = %+v, want admin only", room.Members)
+	}
+	got := room.Messages[0]
+	if got.SenderID != "admin" || got.Event == nil || got.Event.ActorID != "admin" || len(got.Event.TargetIDs) != 1 || got.Event.TargetIDs[0] != "admin" || len(got.Mentions) != 1 || got.Mentions[0].ID != "admin" {
+		t.Fatalf("message = %+v, want admin sender and mention", got)
+	}
+	if !strings.Contains(got.Content, `user_id="admin"`) || strings.Contains(got.Content, "u-admin") {
+		t.Fatalf("message.Content = %q, want admin mention tag", got.Content)
 	}
 }
 

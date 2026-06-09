@@ -8,6 +8,10 @@ dist/
 *.test
 *.out
 
+# Python cache artifacts
+__pycache__/
+*.py[cod]
+
 # Web frontend local artifacts
 node_modules/
 web/app/playwright-report/

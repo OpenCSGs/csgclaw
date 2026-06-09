@@ -108,6 +108,71 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Parti
 	return created, nil
 }
 
+func (s *Service) EnsureBootstrapAdmin(_ context.Context) (apitypes.Participant, error) {
+	if s == nil || s.store == nil {
+		return apitypes.Participant{}, fmt.Errorf("participant store is required")
+	}
+
+	now := time.Now().UTC()
+	createdAt := now
+	existing, ok := s.store.Get(ChannelCSGClaw, im.AdminUserID)
+	legacyExisting, legacyOK := s.store.Get(ChannelCSGClaw, legacyAdminParticipantID)
+	source := existing
+	hasLegacySource := false
+	if !ok && legacyOK && isLegacyAdminParticipant(legacyExisting) {
+		source = legacyExisting
+		hasLegacySource = true
+	}
+	if (ok || hasLegacySource) && !source.CreatedAt.IsZero() {
+		createdAt = source.CreatedAt.UTC()
+	}
+
+	name := strings.TrimSpace(source.Name)
+	if name == "" {
+		name = "admin"
+	}
+	avatar := strings.TrimSpace(source.Avatar)
+	metadata := map[string]any(nil)
+	if ok || hasLegacySource {
+		metadata = cloneMetadata(source.Metadata)
+	}
+	if s.im != nil {
+		if _, _, err := s.im.EnsureAgentUser(im.EnsureAgentUserRequest{
+			ID:     im.AdminUserID,
+			Name:   "admin",
+			Handle: "admin",
+			Role:   "admin",
+			Avatar: avatar,
+		}); err != nil {
+			return apitypes.Participant{}, err
+		}
+	}
+
+	item := apitypes.Participant{
+		ID:              im.AdminUserID,
+		Channel:         ChannelCSGClaw,
+		Type:            TypeHuman,
+		Name:            name,
+		Avatar:          avatar,
+		ChannelUserRef:  im.AdminUserID,
+		ChannelUserKind: ChannelUserKindLocalUserID,
+		LifecycleStatus: LifecycleStatusActive,
+		Mentionable:     true,
+		Metadata:        metadata,
+		CreatedAt:       createdAt,
+		UpdatedAt:       now,
+	}
+	if err := s.store.Save(item); err != nil {
+		return apitypes.Participant{}, err
+	}
+	if legacyOK && isLegacyAdminParticipant(legacyExisting) {
+		if _, _, err := s.store.Delete(ChannelCSGClaw, legacyAdminParticipantID); err != nil {
+			return apitypes.Participant{}, err
+		}
+	}
+	return item, nil
+}
+
 func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Participant, error) {
 	if s == nil || s.store == nil {
 		return apitypes.Participant{}, fmt.Errorf("participant store is required")
@@ -191,6 +256,21 @@ func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Particip
 		}
 	}
 	return item, nil
+}
+
+const (
+	bootstrapAdminParticipantID = "admin"
+	legacyAdminParticipantID    = "u-admin"
+)
+
+func isLegacyAdminParticipant(item apitypes.Participant) bool {
+	if strings.TrimSpace(item.ID) != legacyAdminParticipantID {
+		return false
+	}
+	if strings.TrimSpace(item.Channel) != ChannelCSGClaw {
+		return false
+	}
+	return true
 }
 
 func (s *Service) legacyManagerParticipants() []apitypes.Participant {

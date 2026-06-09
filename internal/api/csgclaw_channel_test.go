@@ -43,7 +43,7 @@ func TestHandleCsgclawChannelRoutesMirrorLocalCollections(t *testing.T) {
 		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 			t.Fatalf("decode users: %v", err)
 		}
-		if len(got) < 2 || got[0].ID != "u-admin" {
+		if len(got) < 2 || got[0].ID != "admin" {
 			t.Fatalf("users = %+v, want local users through csgclaw channel route", got)
 		}
 	})

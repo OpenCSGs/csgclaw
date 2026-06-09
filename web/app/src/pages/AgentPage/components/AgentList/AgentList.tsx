@@ -50,6 +50,7 @@ export function AgentSection({
   onStart,
   onStop,
   onRecreate,
+  onUpgrade,
   onDelete,
   onInvite,
 }: AgentSectionProps) {
@@ -81,6 +82,7 @@ export function AgentSection({
               onStart={onStart}
               onStop={onStop}
               onRecreate={onRecreate}
+              onUpgrade={onUpgrade}
               onDelete={onDelete}
               onInvite={onInvite}
             />
@@ -117,6 +119,7 @@ export function AgentRow({
   onStart,
   onStop,
   onRecreate,
+  onUpgrade,
   onDelete,
   onInvite,
 }: AgentRowProps) {
@@ -177,6 +180,15 @@ export function AgentRow({
         ) : null}
         {!isNotification ? (
           <>
+            {onUpgrade ? (
+              <Button
+                className="agent-action-text"
+                disabled={busyKey.startsWith(busyPrefix) || incomplete}
+                onClick={() => onUpgrade(item)}
+              >
+                {t("agentUpgrade")}
+              </Button>
+            ) : null}
             <Button
               variant="outlineDanger"
               className="agent-action-text danger"

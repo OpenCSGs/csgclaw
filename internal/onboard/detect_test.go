@@ -34,6 +34,9 @@ func TestDetectStateFreshHomeReportsIncompleteBootstrap(t *testing.T) {
 	if result.ManagerAgentComplete {
 		t.Fatal("ManagerAgentComplete = true, want false")
 	}
+	if result.AdminParticipantComplete {
+		t.Fatal("AdminParticipantComplete = true, want false")
+	}
 	if result.ManagerParticipantComplete {
 		t.Fatal("ManagerParticipantComplete = true, want false")
 	}
@@ -90,13 +93,27 @@ func TestDetectStateCompleteBootstrapReportsComplete(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("writeManagerBotState() error = %v", err)
 	}
+	if err := writeParticipantsState(t, []apitypes.Participant{{
+		ID:              im.AdminUserID,
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeHuman,
+		Name:            "admin",
+		ChannelUserRef:  im.AdminUserID,
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+		CreatedAt:       time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC),
+		UpdatedAt:       time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC),
+	}}); err != nil {
+		t.Fatalf("writeParticipantsState() error = %v", err)
+	}
 
 	result, err := DetectState(DetectStateOptions{})
 	if err != nil {
 		t.Fatalf("DetectState() error = %v", err)
 	}
 
-	if !result.ConfigExists || !result.ConfigComplete || !result.IMBootstrapComplete || !result.ManagerAgentComplete || !result.ManagerParticipantComplete {
+	if !result.ConfigExists || !result.ConfigComplete || !result.IMBootstrapComplete || !result.ManagerAgentComplete || !result.AdminParticipantComplete || !result.ManagerParticipantComplete {
 		t.Fatalf("DetectState() completeness = %+v, want all true", result)
 	}
 	if !result.Complete() {
@@ -135,11 +152,66 @@ func TestDetectStateFlagsMissingManagerBotWhenOtherBootstrapStateExists(t *testi
 	if !result.ConfigExists || !result.ConfigComplete || !result.IMBootstrapComplete || !result.ManagerAgentComplete {
 		t.Fatalf("DetectState() = %+v, want config/im/agent complete", result)
 	}
+	if result.AdminParticipantComplete {
+		t.Fatal("AdminParticipantComplete = true, want false")
+	}
 	if result.ManagerParticipantComplete {
 		t.Fatal("ManagerParticipantComplete = true, want false")
 	}
 	if result.Complete() {
 		t.Fatal("Complete() = true, want false")
+	}
+}
+
+func TestDetectStateFlagsMissingAdminParticipantWhenManagerParticipantExists(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	configPath, err := config.DefaultPath()
+	if err != nil {
+		t.Fatalf("DefaultPath() error = %v", err)
+	}
+	if err := defaultConfig().Save(configPath); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	imStatePath, err := config.DefaultIMStatePath()
+	if err != nil {
+		t.Fatalf("DefaultIMStatePath() error = %v", err)
+	}
+	if err := im.EnsureBootstrapState(imStatePath); err != nil {
+		t.Fatalf("EnsureBootstrapState() error = %v", err)
+	}
+	if err := writeManagerAgentState(t); err != nil {
+		t.Fatalf("writeManagerAgentState() error = %v", err)
+	}
+	if err := writeParticipantsState(t, []apitypes.Participant{{
+		ID:              agent.ManagerParticipantID,
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeAgent,
+		Name:            "manager",
+		ChannelUserRef:  agent.ManagerParticipantID,
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		AgentID:         agent.ManagerUserID,
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+		CreatedAt:       time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC),
+		UpdatedAt:       time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC),
+	}}); err != nil {
+		t.Fatalf("writeParticipantsState() error = %v", err)
+	}
+
+	result, err := DetectState(DetectStateOptions{})
+	if err != nil {
+		t.Fatalf("DetectState() error = %v", err)
+	}
+
+	if result.AdminParticipantComplete {
+		t.Fatal("AdminParticipantComplete = true for manager-only participant state, want false")
+	}
+	if !result.ManagerParticipantComplete {
+		t.Fatal("ManagerParticipantComplete = false, want true for manager participant fixture")
+	}
+	if result.Complete() {
+		t.Fatalf("Complete() = true for manager-only participant state: %+v", result)
 	}
 }
 
@@ -188,6 +260,27 @@ func writeManagerBotState(t *testing.T, manager apitypes.LegacyBot) error {
 
 	data, err := json.MarshalIndent(map[string]any{
 		"bots": []apitypes.LegacyBot{manager},
+	}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+func writeParticipantsState(t *testing.T, participants []apitypes.Participant) error {
+	t.Helper()
+
+	imStatePath, err := config.DefaultIMStatePath()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(filepath.Dir(imStatePath), "participants.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(map[string]any{
+		"participants": participants,
 	}, "", "  ")
 	if err != nil {
 		return err

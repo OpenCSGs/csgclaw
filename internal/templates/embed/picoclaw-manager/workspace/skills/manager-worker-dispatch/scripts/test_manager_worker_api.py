@@ -42,7 +42,7 @@ def make_message(sender_id, content, created_at):
 
 def make_bootstrap():
     return {
-        "current_user_id": "u-admin",
+        "current_user_id": "admin",
         "users": [
             {"id": "u-manager", "handle": "manager", "name": "manager"},
             {"id": "u-ux", "handle": "ux", "name": "ux"},
@@ -52,7 +52,7 @@ def make_bootstrap():
         "rooms": [
             {
                 "id": ROOM_ID,
-                "members": ["u-admin", "u-manager", "u-ux", "u-dev", "u-qa"],
+                "members": ["admin", "u-manager", "u-ux", "u-dev", "u-qa"],
             }
         ],
     }

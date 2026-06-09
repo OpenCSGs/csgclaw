@@ -47,6 +47,7 @@ type DetectStateResult struct {
 	ConfigComplete             bool
 	IMBootstrapComplete        bool
 	ManagerAgentComplete       bool
+	AdminParticipantComplete   bool
 	ManagerParticipantComplete bool
 }
 
@@ -55,6 +56,7 @@ func (r DetectStateResult) Complete() bool {
 		r.ConfigComplete &&
 		r.IMBootstrapComplete &&
 		r.ManagerAgentComplete &&
+		r.AdminParticipantComplete &&
 		r.ManagerParticipantComplete
 }
 
@@ -115,7 +117,9 @@ func DetectState(opts DetectStateOptions) (DetectStateResult, error) {
 	if err != nil {
 		return DetectStateResult{}, err
 	}
-	result.ManagerParticipantComplete = managerParticipantComplete(store.List(participant.ListOptions{Channel: participant.ChannelCSGClaw}))
+	participants := store.List(participant.ListOptions{Channel: participant.ChannelCSGClaw})
+	result.AdminParticipantComplete = adminParticipantComplete(participants)
+	result.ManagerParticipantComplete = managerParticipantComplete(participants)
 
 	return result, nil
 }
@@ -125,7 +129,7 @@ func imBootstrapComplete(state im.Bootstrap) bool {
 	if len(state.InviteDraftUserIDs) > 0 {
 		return false
 	}
-	if !hasIMUser(state.Users, "u-admin", "admin", "admin") {
+	if !hasIMUser(state.Users, im.AdminUserID, "admin", "admin") {
 		return false
 	}
 	if !hasIMUser(state.Users, agent.ManagerParticipantID, "manager", "manager") {
@@ -134,7 +138,7 @@ func imBootstrapComplete(state im.Bootstrap) bool {
 	for _, room := range state.Rooms {
 		if room.IsDirect &&
 			len(room.Members) == 2 &&
-			containsMember(room.Members, "u-admin") &&
+			containsMember(room.Members, im.AdminUserID) &&
 			containsMember(room.Members, agent.ManagerParticipantID) {
 			return true
 		}
@@ -182,6 +186,25 @@ func managerAgentComplete(state agentStateReader) bool {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(managerAgent.Role), agent.RoleManager)
+}
+
+func adminParticipantComplete(items []participant.Participant) bool {
+	for _, item := range items {
+		if strings.TrimSpace(item.Channel) != participant.ChannelCSGClaw {
+			continue
+		}
+		if strings.TrimSpace(item.ID) != im.AdminUserID {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(item.Type), participant.TypeHuman) {
+			return false
+		}
+		if strings.TrimSpace(item.AgentID) != "" {
+			return false
+		}
+		return strings.TrimSpace(item.ChannelUserRef) == im.AdminUserID
+	}
+	return false
 }
 
 func managerParticipantComplete(items []participant.Participant) bool {

@@ -304,7 +304,7 @@ func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
 
 func (s *Service) Upgrade(ctx context.Context, id string) (Agent, error) {
 	return s.recreate(ctx, id, func(ctx context.Context, got Agent) (string, error) {
-		latest, ok := s.currentDefaultImageForAgent(ctx, got)
+		latest, ok := s.imageForUpgrade(ctx, got)
 		if !ok || strings.TrimSpace(latest) == "" {
 			return "", fmt.Errorf("agent %q has no default image to upgrade", got.ID)
 		}

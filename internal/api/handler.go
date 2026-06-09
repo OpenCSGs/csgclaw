@@ -1470,7 +1470,7 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		if user, ok := h.im.User(created.ChannelUserRef); ok {
 			h.publishUserEvent(im.EventTypeUserCreated, user)
-			if room, ok := h.directRoomWithMembers("u-admin", user.ID); ok {
+			if room, ok := h.directRoomWithMembers(im.AdminUserID, user.ID); ok {
 				h.publishRoomEvent(im.EventTypeRoomCreated, room)
 			}
 			writeJSON(w, http.StatusCreated, user)
@@ -1497,7 +1497,7 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 func shouldCreateWorkerForUser(id, role string) bool {
 	id = strings.TrimSpace(id)
 	switch strings.ToLower(id) {
-	case "", "u-admin", agent.ManagerUserID:
+	case "", im.AdminUserID, "u-admin", agent.ManagerUserID:
 		return false
 	}
 

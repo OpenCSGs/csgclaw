@@ -357,7 +357,7 @@ func TestHandleRoomsMembersListsCsgclawMembers(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&members); err != nil {
 		t.Fatalf("decode members: %v", err)
 	}
-	if len(members) != 2 || members[0].ID != "u-admin" || members[1].ID != "u-alice" {
+	if len(members) != 2 || members[0].ID != "admin" || members[1].ID != "u-alice" {
 		t.Fatalf("members = %+v, want room members", members)
 	}
 }
@@ -555,6 +555,372 @@ func TestHandleAgentUpgradeUsesLatestDefaultImage(t *testing.T) {
 	}
 	if got.Image != "registry.example/picoclaw-worker:2026.06.03" {
 		t.Fatalf("response Image = %q, want latest default image", got.Image)
+	}
+}
+
+func TestHandleAgentsListReportsImageUpgradeRequiredByImageTag(t *testing.T) {
+	tests := []struct {
+		name         string
+		currentImage string
+		latestImage  string
+		wantRequired bool
+	}{
+		{
+			name:         "older tag requires upgrade",
+			currentImage: "registry.example/picoclaw-worker:2026.05.27",
+			latestImage:  "registry.example/picoclaw-worker:2026.06.03",
+			wantRequired: true,
+		},
+		{
+			name:         "newer tag does not require upgrade",
+			currentImage: "registry.example/picoclaw-worker:2026.06.09",
+			latestImage:  "registry.example/picoclaw-worker:2026.06.03",
+			wantRequired: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+			hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
+				ID:          "frontend-worker",
+				Name:        "frontend-worker",
+				Description: "frontend worker",
+				Role:        hub.TemplateRoleWorker,
+				RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+				Image:       tt.latestImage,
+			})
+			statePath := filepath.Join(t.TempDir(), "agents.json")
+			if err := writeSeededAgents(statePath, []agent.Agent{
+				{
+					ID:           "u-alice",
+					Name:         "alice",
+					RuntimeID:    "rt-u-alice",
+					RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
+					Image:        tt.currentImage,
+					BoxID:        "box-alice",
+					Role:         agent.RoleWorker,
+					Status:       string(agentruntime.StateRunning),
+					AgentProfile: agent.AgentProfile{Name: "alice", Provider: agent.ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
+					CreatedAt:    time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
+				},
+			}); err != nil {
+				t.Fatalf("writeSeededAgents() error = %v", err)
+			}
+			svc, err := agent.NewService(
+				config.ModelConfig{},
+				config.ServerConfig{},
+				"manager-image:test",
+				statePath,
+				agent.WithHubService(hubSvc),
+				agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
+				agent.WithRuntime(fakeCompatRuntime{
+					info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+						return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+					},
+				}),
+			)
+			if err != nil {
+				t.Fatalf("NewService() error = %v", err)
+			}
+
+			srv := &Handler{svc: svc}
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
+			rec := httptest.NewRecorder()
+
+			srv.Routes().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+			}
+			var got []agentResponse
+			if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("len(agents) = %d, want 1", len(got))
+			}
+			if got[0].AgentProfile.ImageUpgradeRequired != tt.wantRequired {
+				t.Fatalf("image_upgrade_required = %t, want %t; response=%+v", got[0].AgentProfile.ImageUpgradeRequired, tt.wantRequired, got[0])
+			}
+		})
+	}
+}
+
+func TestHandleManagerGetReportsImageUpgradeRequiredByImageTag(t *testing.T) {
+	tests := []struct {
+		name         string
+		currentImage string
+		latestImage  string
+		wantRequired bool
+	}{
+		{
+			name:         "older manager tag requires upgrade",
+			currentImage: "registry.example/opencsghq/picoclaw:2026.5.22",
+			latestImage:  "registry.example/opencsghq/picoclaw:2026.6.3",
+			wantRequired: true,
+		},
+		{
+			name:         "newer manager tag does not require upgrade",
+			currentImage: "registry.example/opencsghq/picoclaw:2026.6.9",
+			latestImage:  "registry.example/opencsghq/picoclaw:2026.6.3",
+			wantRequired: false,
+		},
+		{
+			name:         "dev manager tag does not require upgrade",
+			currentImage: "registry.example/opencsghq/picoclaw:dev",
+			latestImage:  "registry.example/opencsghq/picoclaw:2026.6.3",
+			wantRequired: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+			statePath := filepath.Join(t.TempDir(), "agents.json")
+			if err := writeSeededAgents(statePath, []agent.Agent{
+				{
+					ID:           agent.ManagerUserID,
+					Name:         agent.ManagerName,
+					RuntimeID:    "rt-manager",
+					RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
+					Image:        tt.currentImage,
+					BoxID:        "box-manager",
+					Role:         agent.RoleManager,
+					Status:       string(agentruntime.StateRunning),
+					AgentProfile: agent.AgentProfile{Name: agent.ManagerName, Provider: agent.ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
+					CreatedAt:    time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
+				},
+			}); err != nil {
+				t.Fatalf("writeSeededAgents() error = %v", err)
+			}
+			svc, err := agent.NewService(
+				config.ModelConfig{},
+				config.ServerConfig{},
+				tt.latestImage,
+				statePath,
+				agent.WithRuntime(fakeCompatRuntime{
+					info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+						return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+					},
+				}),
+			)
+			if err != nil {
+				t.Fatalf("NewService() error = %v", err)
+			}
+
+			srv := &Handler{svc: svc}
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager", nil)
+			rec := httptest.NewRecorder()
+
+			srv.Routes().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+			}
+			var got agentResponse
+			if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if got.AgentProfile.ImageUpgradeRequired != tt.wantRequired {
+				t.Fatalf("manager image_upgrade_required = %t, want %t; response=%+v", got.AgentProfile.ImageUpgradeRequired, tt.wantRequired, got)
+			}
+		})
+	}
+}
+
+func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
+		ID:          "frontend-worker",
+		Name:        "frontend-worker",
+		Description: "frontend worker",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		Image:       "registry.example/picoclaw-worker:2026.06.03",
+	})
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	if err := writeSeededAgents(statePath, []agent.Agent{
+		{
+			ID:           "u-alice",
+			Name:         "alice",
+			RuntimeID:    "rt-u-alice",
+			RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
+			Image:        "registry.example/picoclaw-worker:2026.05.27",
+			BoxID:        "box-alice-old",
+			Role:         agent.RoleWorker,
+			Status:       string(agentruntime.StateRunning),
+			AgentProfile: agent.AgentProfile{Name: "alice", Provider: agent.ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
+			CreatedAt:    time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
+		},
+	}); err != nil {
+		t.Fatalf("writeSeededAgents() error = %v", err)
+	}
+	var newImage string
+	svc, err := agent.NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		statePath,
+		agent.WithHubService(hubSvc),
+		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
+		agent.WithRuntime(fakeCompatRuntime{
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				newImage = spec.Image
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-alice-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning, CreatedAt: time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	srv := &Handler{svc: svc}
+	beforeReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice", nil)
+	beforeRec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(beforeRec, beforeReq)
+	if beforeRec.Code != http.StatusOK {
+		t.Fatalf("pre-upgrade status = %d, want %d; body=%s", beforeRec.Code, http.StatusOK, beforeRec.Body.String())
+	}
+	var before agentResponse
+	if err := json.NewDecoder(beforeRec.Body).Decode(&before); err != nil {
+		t.Fatalf("decode pre-upgrade response: %v", err)
+	}
+	if !before.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("pre-upgrade image_upgrade_required = false, want true; response=%+v", before)
+	}
+
+	upgradeReq := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/upgrade", nil)
+	upgradeRec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(upgradeRec, upgradeReq)
+	if upgradeRec.Code != http.StatusOK {
+		t.Fatalf("upgrade status = %d, want %d; body=%s", upgradeRec.Code, http.StatusOK, upgradeRec.Body.String())
+	}
+	if newImage != "registry.example/picoclaw-worker:2026.06.03" {
+		t.Fatalf("runtime New() image = %q, want latest default image", newImage)
+	}
+	var upgraded agentResponse
+	if err := json.NewDecoder(upgradeRec.Body).Decode(&upgraded); err != nil {
+		t.Fatalf("decode upgrade response: %v", err)
+	}
+	if upgraded.Image != "registry.example/picoclaw-worker:2026.06.03" {
+		t.Fatalf("upgrade response Image = %q, want latest default image", upgraded.Image)
+	}
+	if upgraded.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("upgrade response image_upgrade_required = true, want false; response=%+v", upgraded)
+	}
+
+	afterReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice", nil)
+	afterRec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(afterRec, afterReq)
+	if afterRec.Code != http.StatusOK {
+		t.Fatalf("post-upgrade status = %d, want %d; body=%s", afterRec.Code, http.StatusOK, afterRec.Body.String())
+	}
+	var after agentResponse
+	if err := json.NewDecoder(afterRec.Body).Decode(&after); err != nil {
+		t.Fatalf("decode post-upgrade response: %v", err)
+	}
+	if after.Image != "registry.example/picoclaw-worker:2026.06.03" || after.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("post-upgrade response = %+v, want latest image and no image upgrade flag", after)
+	}
+}
+
+func TestHandleManagerUpgradeUsesNewerLocalSameRepositoryImage(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	provider := sandboxtest.NewProvider()
+	provider.Images = []string{
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:dev",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:participant-local",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27",
+	}
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	if err := writeSeededAgents(statePath, []agent.Agent{
+		{
+			ID:           agent.ManagerUserID,
+			Name:         agent.ManagerName,
+			RuntimeID:    "rt-manager",
+			RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
+			Image:        "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27",
+			BoxID:        "box-manager-old",
+			Role:         agent.RoleManager,
+			Status:       string(agentruntime.StateRunning),
+			AgentProfile: agent.AgentProfile{Name: agent.ManagerName, Provider: agent.ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
+			CreatedAt:    time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
+		},
+	}); err != nil {
+		t.Fatalf("writeSeededAgents() error = %v", err)
+	}
+	var newImage string
+	svc, err := agent.NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:dev",
+		statePath,
+		agent.WithSandboxProvider(provider),
+		agent.WithRuntime(fakeCompatRuntime{
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				newImage = spec.Image
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-manager-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning, CreatedAt: time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	srv := &Handler{svc: svc}
+	beforeReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager", nil)
+	beforeRec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(beforeRec, beforeReq)
+	if beforeRec.Code != http.StatusOK {
+		t.Fatalf("pre-upgrade status = %d, want %d; body=%s", beforeRec.Code, http.StatusOK, beforeRec.Body.String())
+	}
+	var before agentResponse
+	if err := json.NewDecoder(beforeRec.Body).Decode(&before); err != nil {
+		t.Fatalf("decode pre-upgrade response: %v", err)
+	}
+	if !before.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("pre-upgrade image_upgrade_required = false, want true; response=%+v", before)
+	}
+
+	upgradeReq := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-manager/upgrade", nil)
+	upgradeRec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(upgradeRec, upgradeReq)
+	if upgradeRec.Code != http.StatusOK {
+		t.Fatalf("upgrade status = %d, want %d; body=%s", upgradeRec.Code, http.StatusOK, upgradeRec.Body.String())
+	}
+	wantImage := "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8"
+	if newImage != wantImage {
+		t.Fatalf("runtime New() image = %q, want %q", newImage, wantImage)
+	}
+	var upgraded agentResponse
+	if err := json.NewDecoder(upgradeRec.Body).Decode(&upgraded); err != nil {
+		t.Fatalf("decode upgrade response: %v", err)
+	}
+	if upgraded.Image != wantImage || upgraded.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("upgrade response = %+v, want latest same-repository image and no image upgrade flag", upgraded)
+	}
+
+	afterReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager", nil)
+	afterRec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(afterRec, afterReq)
+	if afterRec.Code != http.StatusOK {
+		t.Fatalf("post-upgrade status = %d, want %d; body=%s", afterRec.Code, http.StatusOK, afterRec.Body.String())
+	}
+	var after agentResponse
+	if err := json.NewDecoder(afterRec.Body).Decode(&after); err != nil {
+		t.Fatalf("decode post-upgrade response: %v", err)
+	}
+	if after.Image != wantImage || after.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("post-upgrade response = %+v, want latest same-repository image and no image upgrade flag", after)
 	}
 }
 
@@ -1967,7 +2333,7 @@ func TestHandleUsersCreateProvisionsIMUser(t *testing.T) {
 		t.Fatal("User(u-alice) ok = false, want true after create")
 	}
 	rooms := srv.im.ListRooms()
-	if len(rooms) != 1 || !containsMember(rooms[0].Members, "u-admin") || !containsMember(rooms[0].Members, "u-alice") {
+	if len(rooms) != 1 || !containsMember(rooms[0].Members, "admin") || !containsMember(rooms[0].Members, "u-alice") {
 		t.Fatalf("rooms = %+v, want one bootstrap room with admin and u-alice", rooms)
 	}
 
@@ -2252,7 +2618,7 @@ func TestHandleMessagesPostCreatesMessage(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.SenderID != "u-admin" || got.Content != "hello @manager" {
+	if got.SenderID != "admin" || got.Content != "hello @manager" {
 		t.Fatalf("message = %+v, want sender/content populated", got)
 	}
 	if len(got.Mentions) != 1 || got.Mentions[0].ID != "manager" || got.Mentions[0].Name != "manager" {
@@ -2903,7 +3269,7 @@ func TestHandleRoomsPostCreatesRoom(t *testing.T) {
 	if got.Title != "Launch" {
 		t.Fatalf("conversation.Title = %q, want Launch", got.Title)
 	}
-	if !containsMember(got.Members, "u-admin") || !containsMember(got.Members, "u-alice") || !containsMember(got.Members, "manager") {
+	if !containsMember(got.Members, "admin") || !containsMember(got.Members, "u-alice") || !containsMember(got.Members, "manager") {
 		t.Fatalf("members = %+v, want admin, alice, and manager", got.Members)
 	}
 }
@@ -2931,7 +3297,7 @@ func TestHandleRoomsPostUsesCsgclawChannelAdapter(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsMember(got.Members, "u-admin") || !containsMember(got.Members, "u-alice") {
+	if !containsMember(got.Members, "admin") || !containsMember(got.Members, "u-alice") {
 		t.Fatalf("members = %+v, want trimmed bot IDs", got.Members)
 	}
 }

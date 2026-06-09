@@ -160,7 +160,9 @@ func HasMentionTagForUser(content, userID string) bool {
 
 const (
 	sessionsDirName          = "sessions"
-	adminUserID              = "u-admin"
+	AdminUserID              = "admin"
+	adminUserID              = AdminUserID
+	legacyAdminUserID        = "u-admin"
 	managerParticipantUserID = "manager"
 	legacyManagerUserID      = "u-manager"
 )
@@ -237,7 +239,7 @@ func NewServiceFromBootstrapWithBus(state Bootstrap, bus *Bus) *Service {
 
 func DefaultBootstrap() Bootstrap {
 	return Bootstrap{
-		CurrentUserID: "u-admin",
+		CurrentUserID: adminUserID,
 		Users:         nil,
 		Rooms:         nil,
 	}
@@ -514,10 +516,13 @@ func normalizeBootstrap(state Bootstrap) Bootstrap {
 	if state.CurrentUserID == "" {
 		state.CurrentUserID = DefaultBootstrap().CurrentUserID
 	}
+	adminAliases := adminUserAliases(state.Users)
 	managerAliases := managerUserAliases(state.Users)
 	state.Users = ensureUsers(state.Users)
-	state.Rooms = migrateLegacyManagerRoomRefs(cloneRooms(state.Rooms), managerAliases)
+	state.Rooms = migrateLegacyAdminRoomRefs(cloneRooms(state.Rooms), adminAliases)
+	state.Rooms = migrateLegacyManagerRoomRefs(state.Rooms, managerAliases)
 	if !containsUserID(state.Users, state.CurrentUserID) {
+		state.CurrentUserID = migrateLegacyAdminID(state.CurrentUserID, adminAliases)
 		state.CurrentUserID = migrateLegacyManagerID(state.CurrentUserID, managerAliases)
 		if !containsUserID(state.Users, state.CurrentUserID) {
 			state.CurrentUserID = defaultCurrentUserID(state.Users)
@@ -544,6 +549,7 @@ func ensureUsers(users []User) []User {
 	} else {
 		for i := range result {
 			if strings.EqualFold(strings.TrimSpace(result[i].Handle), "admin") {
+				result[i].ID = adminUserID
 				result[i].Name = "admin"
 				result[i].Role = "admin"
 			}
@@ -568,8 +574,31 @@ func ensureUsers(users []User) []User {
 			}
 		}
 	}
+	result = dropLegacyAdminUserDuplicates(result)
 	result = dropLegacyManagerUserDuplicates(result)
 	return result
+}
+
+func dropLegacyAdminUserDuplicates(users []User) []User {
+	out := make([]User, 0, len(users))
+	seen := make(map[string]struct{}, len(users))
+	for _, user := range users {
+		id := strings.TrimSpace(user.ID)
+		if id == "" || id == legacyAdminUserID {
+			if strings.EqualFold(strings.TrimSpace(user.Handle), "admin") ||
+				strings.EqualFold(strings.TrimSpace(user.Name), "admin") ||
+				strings.EqualFold(strings.TrimSpace(user.Role), "admin") {
+				id = adminUserID
+				user.ID = adminUserID
+			}
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, user)
+	}
+	return out
 }
 
 func dropLegacyManagerUserDuplicates(users []User) []User {
@@ -631,6 +660,25 @@ func defaultCurrentUserID(users []User) string {
 	return ""
 }
 
+func adminUserAliases(users []User) map[string]struct{} {
+	aliases := map[string]struct{}{
+		legacyAdminUserID: {},
+		adminUserID:       {},
+	}
+	for _, user := range users {
+		id := strings.TrimSpace(user.ID)
+		if id == "" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(user.Handle), "admin") ||
+			strings.EqualFold(strings.TrimSpace(user.Name), "admin") ||
+			strings.EqualFold(strings.TrimSpace(user.Role), "admin") {
+			aliases[id] = struct{}{}
+		}
+	}
+	return aliases
+}
+
 func managerUserAliases(users []User) map[string]struct{} {
 	aliases := map[string]struct{}{
 		legacyManagerUserID:      {},
@@ -658,18 +706,60 @@ func cloneRooms(rooms []Room) []Room {
 	return cloned
 }
 
+func migrateLegacyAdminRoomRefs(rooms []Room, adminAliases map[string]struct{}) []Room {
+	for i := range rooms {
+		rooms[i].Members = migrateLegacyAdminIDs(rooms[i].Members, adminAliases)
+		for j := range rooms[i].Messages {
+			rooms[i].Messages[j].SenderID = migrateLegacyAdminID(rooms[i].Messages[j].SenderID, adminAliases)
+			rooms[i].Messages[j].Content = migrateLegacyAdminMentionTags(rooms[i].Messages[j].Content, adminAliases)
+			if rooms[i].Messages[j].Event != nil {
+				rooms[i].Messages[j].Event.ActorID = migrateLegacyAdminID(rooms[i].Messages[j].Event.ActorID, adminAliases)
+				rooms[i].Messages[j].Event.TargetIDs = migrateLegacyAdminIDs(rooms[i].Messages[j].Event.TargetIDs, adminAliases)
+			}
+			for k := range rooms[i].Messages[j].Mentions {
+				rooms[i].Messages[j].Mentions[k].ID = migrateLegacyAdminID(rooms[i].Messages[j].Mentions[k].ID, adminAliases)
+			}
+		}
+	}
+	return rooms
+}
+
 func migrateLegacyManagerRoomRefs(rooms []Room, managerAliases map[string]struct{}) []Room {
 	for i := range rooms {
 		rooms[i].Members = migrateLegacyManagerIDs(rooms[i].Members, managerAliases)
 		for j := range rooms[i].Messages {
 			rooms[i].Messages[j].SenderID = migrateLegacyManagerID(rooms[i].Messages[j].SenderID, managerAliases)
 			rooms[i].Messages[j].Content = migrateLegacyManagerMentionTags(rooms[i].Messages[j].Content, managerAliases)
+			if rooms[i].Messages[j].Event != nil {
+				rooms[i].Messages[j].Event.ActorID = migrateLegacyManagerID(rooms[i].Messages[j].Event.ActorID, managerAliases)
+				rooms[i].Messages[j].Event.TargetIDs = migrateLegacyManagerIDs(rooms[i].Messages[j].Event.TargetIDs, managerAliases)
+			}
 			for k := range rooms[i].Messages[j].Mentions {
 				rooms[i].Messages[j].Mentions[k].ID = migrateLegacyManagerID(rooms[i].Messages[j].Mentions[k].ID, managerAliases)
 			}
 		}
 	}
 	return rooms
+}
+
+func migrateLegacyAdminIDs(ids []string, adminAliases map[string]struct{}) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		id = migrateLegacyAdminID(id, adminAliases)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 func migrateLegacyManagerIDs(ids []string, managerAliases map[string]struct{}) []string {
@@ -692,12 +782,30 @@ func migrateLegacyManagerIDs(ids []string, managerAliases map[string]struct{}) [
 	return out
 }
 
+func migrateLegacyAdminID(id string, adminAliases map[string]struct{}) string {
+	id = strings.TrimSpace(id)
+	if _, ok := adminAliases[id]; ok {
+		return adminUserID
+	}
+	return id
+}
+
 func migrateLegacyManagerID(id string, managerAliases map[string]struct{}) string {
 	id = strings.TrimSpace(id)
 	if _, ok := managerAliases[id]; ok {
 		return managerParticipantUserID
 	}
 	return id
+}
+
+func migrateLegacyAdminMentionTags(content string, adminAliases map[string]struct{}) string {
+	for id := range adminAliases {
+		if id == adminUserID {
+			continue
+		}
+		content = strings.ReplaceAll(content, `user_id="`+id+`"`, `user_id="`+adminUserID+`"`)
+	}
+	return content
 }
 
 func migrateLegacyManagerMentionTags(content string, managerAliases map[string]struct{}) string {
@@ -1088,6 +1196,7 @@ func (s *Service) DeleteUser(userID string) error {
 	}
 
 	s.mu.Lock()
+	userID = s.resolveUserIDLocked(userID)
 	user, ok := s.users[userID]
 	if !ok {
 		s.mu.Unlock()
@@ -1266,10 +1375,11 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	content := strings.TrimSpace(req.Content)
 	roomID := strings.TrimSpace(req.RoomID)
+	senderID := strings.TrimSpace(req.SenderID)
 	if roomID == "" {
 		return Message{}, fmt.Errorf("room_id is required")
 	}
-	if req.SenderID == "" {
+	if senderID == "" {
 		return Message{}, fmt.Errorf("sender_id is required")
 	}
 	if content == "" {
@@ -1279,7 +1389,8 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.users[req.SenderID]; !ok {
+	senderID = s.resolveUserIDLocked(senderID)
+	if _, ok := s.users[senderID]; !ok {
 		return Message{}, fmt.Errorf("sender not found")
 	}
 	content, err := s.contentWithMentionPrefixLocked(content, req.MentionID)
@@ -1299,7 +1410,7 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 		s.ensureThreadStateLocked(room, relatesTo.EventID)
 	}
 
-	message := s.newMessage("", req.SenderID, MessageKindMessage, content)
+	message := s.newMessage("", senderID, MessageKindMessage, content)
 	message.RelatesTo = relatesTo
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
@@ -1399,21 +1510,23 @@ func (s *Service) publishMessageCreatedLocked(roomID, senderID string, message M
 func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 	title := strings.TrimSpace(req.Title)
 	description := strings.TrimSpace(req.Description)
+	creatorID := strings.TrimSpace(req.CreatorID)
 	if title == "" {
 		return Room{}, fmt.Errorf("title is required")
 	}
-	if req.CreatorID == "" {
+	if creatorID == "" {
 		return Room{}, fmt.Errorf("creator_id is required")
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.users[req.CreatorID]; !ok {
+	creatorID = s.resolveUserIDLocked(creatorID)
+	if _, ok := s.users[creatorID]; !ok {
 		return Room{}, fmt.Errorf("creator not found")
 	}
 
-	members, err := s.normalizeMembers(req.CreatorID, req.MemberIDs)
+	members, err := s.normalizeMembers(creatorID, req.MemberIDs)
 	if err != nil {
 		return Room{}, err
 	}
@@ -1428,11 +1541,11 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		Messages: []Message{
 			{
 				ID:       fmt.Sprintf("msg-%d", time.Now().UnixNano()),
-				SenderID: req.CreatorID,
+				SenderID: creatorID,
 				Kind:     MessageKindEvent,
 				Event: &EventPayload{
 					Key:     "room_created",
-					ActorID: req.CreatorID,
+					ActorID: creatorID,
 					Title:   title,
 				},
 				CreatedAt: time.Now().UTC(),
@@ -1453,10 +1566,11 @@ func (s *Service) CreateConversation(req CreateConversationRequest) (Conversatio
 
 func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	roomID := strings.TrimSpace(req.RoomID)
+	inviterID := strings.TrimSpace(req.InviterID)
 	if roomID == "" {
 		return Room{}, fmt.Errorf("room_id is required")
 	}
-	if req.InviterID == "" {
+	if inviterID == "" {
 		return Room{}, fmt.Errorf("inviter_id is required")
 	}
 	if len(req.UserIDs) == 0 {
@@ -1470,10 +1584,11 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	if !ok {
 		return Room{}, fmt.Errorf("room not found")
 	}
-	if _, ok := s.users[req.InviterID]; !ok {
+	inviterID = s.resolveUserIDLocked(inviterID)
+	if _, ok := s.users[inviterID]; !ok {
 		return Room{}, fmt.Errorf("inviter not found")
 	}
-	if !slices.Contains(room.Members, req.InviterID) {
+	if !slices.Contains(room.Members, inviterID) {
 		return Room{}, fmt.Errorf("inviter is not a room member")
 	}
 	if room.IsDirect {
@@ -1487,7 +1602,7 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 
 	addedIDs := make([]string, 0, len(req.UserIDs))
 	for _, userID := range req.UserIDs {
-		userID = strings.TrimSpace(userID)
+		userID = s.resolveUserIDLocked(userID)
 		if userID == "" {
 			continue
 		}
@@ -1508,11 +1623,11 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	room.Subtitle = formatRoomSubtitle(len(room.Members))
 	room.Messages = append(room.Messages, Message{
 		ID:       fmt.Sprintf("msg-%d", time.Now().UnixNano()),
-		SenderID: req.InviterID,
+		SenderID: inviterID,
 		Kind:     MessageKindEvent,
 		Event: &EventPayload{
 			Key:       "room_members_added",
-			ActorID:   req.InviterID,
+			ActorID:   inviterID,
 			TargetIDs: append([]string(nil), addedIDs...),
 		},
 		CreatedAt: time.Now().UTC(),
@@ -1566,6 +1681,7 @@ func (s *Service) User(userID string) (User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	userID = s.resolveUserIDLocked(userID)
 	user, ok := s.users[userID]
 	return user, ok
 }
@@ -1614,7 +1730,7 @@ func (s *Service) normalizeMembers(creatorID string, memberIDs []string) ([]stri
 	seen := map[string]struct{}{creatorID: {}}
 	members := []string{creatorID}
 	for _, userID := range memberIDs {
-		userID = strings.TrimSpace(userID)
+		userID = s.resolveUserIDLocked(userID)
 		if userID == "" {
 			continue
 		}
@@ -2179,7 +2295,7 @@ func (s *Service) newMessage(messageID, senderID, kind, content string) Message 
 }
 
 func (s *Service) contentWithMentionPrefixLocked(content, mentionID string) (string, error) {
-	mentionID = strings.TrimSpace(mentionID)
+	mentionID = s.resolveUserIDLocked(mentionID)
 	if mentionID == "" {
 		return content, nil
 	}
@@ -2308,7 +2424,7 @@ func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, 
 		if len(room.Members) != 2 {
 			continue
 		}
-		if containsUserIDInRoom(*room, "u-admin") && containsUserIDInRoom(*room, agentID) {
+		if containsUserIDInRoom(*room, adminUserID) && containsUserIDInRoom(*room, agentID) {
 			presented := s.presentRoomLocked(*room)
 			return &presented, false
 		}
@@ -2321,7 +2437,7 @@ func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, 
 		Subtitle:    formatRoomSubtitle(2),
 		Description: fmt.Sprintf("Bootstrap room for admin and %s.", agentName),
 		IsDirect:    true,
-		Members:     []string{"u-admin", agentID},
+		Members:     []string{adminUserID, agentID},
 		Messages: []Message{
 			{
 				ID:        fmt.Sprintf("msg-%d", now.UnixNano()+1),

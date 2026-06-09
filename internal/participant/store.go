@@ -144,9 +144,10 @@ func (s *Store) load() error {
 	if err != nil {
 		return err
 	}
+	repairedLegacyAdmin := migrateLegacyCSGClawAdminParticipant(items)
 	repairedLegacyIDs := migrateLegacyCSGClawAgentParticipantIDs(items)
 	s.items = items
-	if legacyExists || repairedLegacyIDs {
+	if legacyExists || repairedLegacyAdmin || repairedLegacyIDs {
 		if err := s.saveLocked(); err != nil {
 			return fmt.Errorf("write migrated participant state: %w", err)
 		}
@@ -258,6 +259,105 @@ func cloneParticipant(item apitypes.Participant) apitypes.Participant {
 
 func storeKey(channel, id string) string {
 	return strings.TrimSpace(channel) + "\x00" + strings.TrimSpace(id)
+}
+
+func migrateLegacyCSGClawAdminParticipant(items map[string]apitypes.Participant) bool {
+	if len(items) == 0 {
+		return false
+	}
+
+	changed := false
+	adminKey := storeKey(ChannelCSGClaw, bootstrapAdminParticipantID)
+	legacyKey := storeKey(ChannelCSGClaw, legacyAdminParticipantID)
+	if legacy, ok := items[legacyKey]; ok && isLegacyStoredAdminParticipant(legacy) {
+		next := repairStoredAdminParticipant(legacy)
+		if existing, exists := items[adminKey]; exists {
+			next = mergeAdminParticipant(existing, next)
+		}
+		items[adminKey] = next
+		delete(items, legacyKey)
+		changed = true
+	}
+
+	if existing, ok := items[adminKey]; ok && adminParticipantNeedsRepair(existing) {
+		items[adminKey] = repairStoredAdminParticipant(existing)
+		changed = true
+	}
+	return changed
+}
+
+func isLegacyStoredAdminParticipant(item apitypes.Participant) bool {
+	item = normalizeStoredParticipant(item)
+	return item.Channel == ChannelCSGClaw && item.ID == legacyAdminParticipantID
+}
+
+func adminParticipantNeedsRepair(item apitypes.Participant) bool {
+	item = normalizeStoredParticipant(item)
+	if item.Channel != ChannelCSGClaw || item.ID != bootstrapAdminParticipantID {
+		return false
+	}
+	return item.Type != TypeHuman ||
+		item.Name == "" ||
+		item.ChannelUserRef != bootstrapAdminParticipantID ||
+		item.ChannelUserKind != ChannelUserKindLocalUserID ||
+		item.AgentID != "" ||
+		item.LifecycleStatus == "" ||
+		!item.Mentionable
+}
+
+func repairStoredAdminParticipant(item apitypes.Participant) apitypes.Participant {
+	item = normalizeStoredParticipant(item)
+	item.ID = bootstrapAdminParticipantID
+	item.Channel = ChannelCSGClaw
+	item.Type = TypeHuman
+	if item.Name == "" {
+		item.Name = bootstrapAdminParticipantID
+	}
+	item.ChannelUserRef = bootstrapAdminParticipantID
+	item.ChannelUserKind = ChannelUserKindLocalUserID
+	item.AgentID = ""
+	if item.LifecycleStatus == "" {
+		item.LifecycleStatus = LifecycleStatusActive
+	}
+	item.Mentionable = true
+	return item
+}
+
+func mergeAdminParticipant(existing, legacy apitypes.Participant) apitypes.Participant {
+	merged := repairStoredAdminParticipant(existing)
+	legacy = repairStoredAdminParticipant(legacy)
+	if merged.Name == "" {
+		merged.Name = legacy.Name
+	}
+	if merged.Avatar == "" {
+		merged.Avatar = legacy.Avatar
+	}
+	if merged.ChannelUserKind == "" {
+		merged.ChannelUserKind = legacy.ChannelUserKind
+	}
+	if merged.LifecycleStatus == "" {
+		merged.LifecycleStatus = legacy.LifecycleStatus
+	}
+	if merged.Presence == "" {
+		merged.Presence = legacy.Presence
+	}
+	merged.Mentionable = true
+	if merged.Metadata == nil {
+		merged.Metadata = cloneParticipant(legacy).Metadata
+	} else {
+		for key, value := range legacy.Metadata {
+			if _, ok := merged.Metadata[key]; !ok {
+				merged.Metadata[key] = value
+			}
+		}
+	}
+	if merged.CreatedAt.IsZero() || (!legacy.CreatedAt.IsZero() && legacy.CreatedAt.Before(merged.CreatedAt)) {
+		merged.CreatedAt = legacy.CreatedAt
+	}
+	if merged.UpdatedAt.IsZero() || legacy.UpdatedAt.After(merged.UpdatedAt) {
+		merged.UpdatedAt = legacy.UpdatedAt
+	}
+	return merged
 }
 
 func migrateLegacyCSGClawAgentParticipantIDs(items map[string]apitypes.Participant) bool {

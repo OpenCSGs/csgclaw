@@ -9,6 +9,7 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/config"
+	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 )
 
@@ -90,6 +91,39 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("saved config missing %q:\n%s", want, string(data))
 		}
+	}
+}
+
+func TestCreateManagerParticipantBootstrapsAdminParticipant(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	dir := t.TempDir()
+	agentsPath := filepath.Join(dir, "agents.json")
+	imStatePath := filepath.Join(dir, "im", "state.json")
+	if err := im.EnsureBootstrapState(imStatePath); err != nil {
+		t.Fatalf("EnsureBootstrapState() error = %v", err)
+	}
+
+	if _, err := createManagerParticipant(context.Background(), agentsPath, imStatePath, defaultConfig()); err != nil {
+		t.Fatalf("createManagerParticipant() error = %v", err)
+	}
+
+	store, err := participant.NewStore(filepath.Join(filepath.Dir(imStatePath), "participants.json"))
+	if err != nil {
+		t.Fatalf("participant.NewStore() error = %v", err)
+	}
+	admin, ok := store.Get(participant.ChannelCSGClaw, im.AdminUserID)
+	if !ok {
+		t.Fatal("admin participant was not created")
+	}
+	if admin.Type != participant.TypeHuman {
+		t.Fatalf("admin participant type = %q, want %q", admin.Type, participant.TypeHuman)
+	}
+	if admin.AgentID != "" {
+		t.Fatalf("admin participant agent_id = %q, want empty", admin.AgentID)
+	}
+	if admin.ChannelUserRef != im.AdminUserID {
+		t.Fatalf("admin participant channel_user_ref = %q, want %q", admin.ChannelUserRef, im.AdminUserID)
 	}
 }
 

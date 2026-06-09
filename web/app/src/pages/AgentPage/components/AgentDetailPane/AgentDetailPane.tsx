@@ -116,6 +116,7 @@ export function AgentDetailPane({
   onStart,
   onStop,
   onRecreate,
+  onUpgrade,
   onDelete,
   onInvite,
   onOpenDM,
@@ -172,6 +173,16 @@ export function AgentDetailPane({
           >
             {t("openDM")}
           </Button>
+          {onUpgrade ? (
+            <Button
+              variant="primary"
+              size="md"
+              disabled={busyKey.startsWith(busyPrefix) || incomplete}
+              onClick={() => onUpgrade(item)}
+            >
+              {t("agentUpgrade")}
+            </Button>
+          ) : null}
           <AgentActionsMenu
             item={item}
             t={t}

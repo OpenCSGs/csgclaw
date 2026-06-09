@@ -499,7 +499,7 @@ class CSGClawAPI:
         payload: dict[str, Any] | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         if method == "GET" and path == "/api/v1/bootstrap":
-            return {"current_user_id": "u-admin", "users": [], "rooms": []}
+            return {"current_user_id": "admin", "users": [], "rooms": []}
 
         if method == "GET" and (
             path.startswith("/api/v1/messages?") or path.startswith("/api/v1/channels/feishu/messages?")

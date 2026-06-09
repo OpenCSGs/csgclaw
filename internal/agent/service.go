@@ -1443,8 +1443,9 @@ func (s *Service) List() []Agent {
 	agents := sortedAgentsFromMap(s.agents)
 	s.mu.RUnlock()
 	ctx := context.Background()
+	localImages := s.localImageCandidates(ctx)
 	for idx := range agents {
-		agents[idx] = s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, agents[idx]))
+		agents[idx] = s.withRuntimeImageMigrationStatusFromCandidates(ctx, s.hydrateAgentStatus(ctx, agents[idx]), localImages)
 	}
 	return agents
 }

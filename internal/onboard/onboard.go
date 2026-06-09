@@ -150,6 +150,9 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 		participant.WithAgentService(agentSvc),
 		participant.WithIMService(imSvc),
 	)
+	if _, err := participantSvc.EnsureBootstrapAdmin(ctx); err != nil {
+		return participant.Participant{}, err
+	}
 	created, err := participantSvc.EnsureBootstrapManager(ctx)
 	if err != nil {
 		return participant.Participant{}, err

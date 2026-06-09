@@ -4179,6 +4179,114 @@ func TestAgentMarksOutdatedManagerImageUpgradeRequiredWhenGatewayRuntimeChanged(
 	}
 }
 
+func TestAgentMarksOutdatedManagerImageUpgradeRequiredFromLocalSameRepositoryCandidate(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	provider := sandboxtest.NewProvider()
+	provider.Images = []string{
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:dev",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:participant-local",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27",
+	}
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:dev",
+		"",
+		WithSandboxProvider(provider),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27",
+		BoxID:       "box-manager",
+		Role:        RoleManager,
+		Status:      string(agentruntime.StateRunning),
+		CreatedAt:   time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
+		AgentProfile: AgentProfile{
+			Name:            ManagerName,
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent() ok = false, want true")
+	}
+	if !got.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("Agent().AgentProfile.ImageUpgradeRequired = false, want true for newer same-repository local image")
+	}
+}
+
+func TestAgentDevImageDoesNotRequireUpgrade(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	provider := sandboxtest.NewProvider()
+	provider.Images = []string{
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:dev",
+	}
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
+		"",
+		WithSandboxProvider(provider),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:dev",
+		BoxID:       "box-manager",
+		Role:        RoleManager,
+		Status:      string(agentruntime.StateRunning),
+		CreatedAt:   time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC),
+		AgentProfile: AgentProfile{
+			Name:            ManagerName,
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent() ok = false, want true")
+	}
+	if got.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("Agent().AgentProfile.ImageUpgradeRequired = true, want false for dev image")
+	}
+}
+
 func TestRecreateUsesLatestDefaultTemplateImageAndPreservesUserSkills(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)

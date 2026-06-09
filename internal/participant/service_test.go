@@ -105,6 +105,84 @@ func TestCreateAgentParticipantCanReuseExistingAgentWithDifferentParticipantID(t
 	}
 }
 
+func TestEnsureBootstrapAdminCreatesHumanParticipantWithoutAgent(t *testing.T) {
+	imSvc := im.NewService()
+	store := NewMemoryStore(nil)
+	svc := NewService(store, WithIMService(imSvc))
+
+	created, err := svc.EnsureBootstrapAdmin(context.Background())
+	if err != nil {
+		t.Fatalf("EnsureBootstrapAdmin() error = %v", err)
+	}
+
+	if created.ID != im.AdminUserID {
+		t.Fatalf("participant ID = %q, want %q", created.ID, im.AdminUserID)
+	}
+	if created.Type != TypeHuman {
+		t.Fatalf("participant type = %q, want %q", created.Type, TypeHuman)
+	}
+	if created.AgentID != "" {
+		t.Fatalf("agent ID = %q, want empty for human admin", created.AgentID)
+	}
+	if created.ChannelUserRef != im.AdminUserID {
+		t.Fatalf("channel user ref = %q, want %q", created.ChannelUserRef, im.AdminUserID)
+	}
+	if created.ChannelUserKind != ChannelUserKindLocalUserID {
+		t.Fatalf("channel user kind = %q, want %q", created.ChannelUserKind, ChannelUserKindLocalUserID)
+	}
+	if !created.Mentionable {
+		t.Fatal("admin participant Mentionable = false, want true")
+	}
+	if _, ok := store.Get(ChannelCSGClaw, im.AdminUserID); !ok {
+		t.Fatal("store missing admin participant")
+	}
+	if user, ok := imSvc.User(im.AdminUserID); !ok || user.ID != im.AdminUserID || user.Handle != "admin" || user.Role != "admin" {
+		t.Fatalf("admin channel user = %+v, ok=%v; want local admin user", user, ok)
+	}
+}
+
+func TestEnsureBootstrapAdminRenamesLegacyAdminParticipant(t *testing.T) {
+	imSvc := im.NewService()
+	createdAt := time.Date(2026, 6, 9, 10, 5, 0, 0, time.UTC)
+	store := NewMemoryStore([]Participant{{
+		ID:              "u-admin",
+		Channel:         ChannelCSGClaw,
+		Type:            TypeHuman,
+		Name:            "Local Admin",
+		Avatar:          "avatar.png",
+		ChannelUserRef:  "u-admin",
+		ChannelUserKind: ChannelUserKindLocalUserID,
+		AgentID:         "u-admin",
+		LifecycleStatus: LifecycleStatusActive,
+		Mentionable:     true,
+		Metadata:        map[string]any{"legacy": "kept"},
+		CreatedAt:       createdAt,
+		UpdatedAt:       createdAt,
+	}})
+	svc := NewService(store, WithIMService(imSvc))
+
+	created, err := svc.EnsureBootstrapAdmin(context.Background())
+	if err != nil {
+		t.Fatalf("EnsureBootstrapAdmin() error = %v", err)
+	}
+
+	if created.ID != im.AdminUserID || created.Type != TypeHuman {
+		t.Fatalf("admin participant = %+v, want human participant %q", created, im.AdminUserID)
+	}
+	if created.AgentID != "" {
+		t.Fatalf("agent ID = %q, want empty after admin migration", created.AgentID)
+	}
+	if created.ChannelUserRef != im.AdminUserID {
+		t.Fatalf("channel user ref = %q, want %q", created.ChannelUserRef, im.AdminUserID)
+	}
+	if !created.CreatedAt.Equal(createdAt) || created.Avatar != "avatar.png" || created.Metadata["legacy"] != "kept" {
+		t.Fatalf("admin participant did not preserve legacy fields: %+v", created)
+	}
+	if _, ok := store.Get(ChannelCSGClaw, "u-admin"); ok {
+		t.Fatal("legacy admin participant u-admin was not deleted")
+	}
+}
+
 func TestEnsureBootstrapManagerUsesDefaultParticipantIDSeparateFromAgentID(t *testing.T) {
 	agentSvc := mustNewManagerAgentService(t)
 	imSvc := im.NewService()

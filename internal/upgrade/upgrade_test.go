@@ -682,7 +682,7 @@ func TestClientRestartIfRunningStopsAndStartsDaemon(t *testing.T) {
 	}
 	want := [][]string{
 		{filepath.Join(installRoot, "bin", "csgclaw"), "stop"},
-		{filepath.Join(installRoot, "bin", "csgclaw"), "--config", "/tmp/custom.toml", "serve", "-d"},
+		{filepath.Join(installRoot, "bin", "csgclaw"), "--config", "/tmp/custom.toml", "serve", "--daemon"},
 	}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("exec calls = %#v, want %#v", calls, want)

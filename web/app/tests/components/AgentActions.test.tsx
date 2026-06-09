@@ -44,6 +44,7 @@ const worker = {
 
 describe("agent action visibility", () => {
   it("shows a recreate warning when backend marks an agent restart required", () => {
+    const onUpgrade = vi.fn();
     render(
       <AgentRow
         item={{ ...worker, env_restart_required: true }}
@@ -54,13 +55,14 @@ describe("agent action visibility", () => {
         onStart={vi.fn()}
         onStop={vi.fn()}
         onRecreate={vi.fn()}
+        onUpgrade={onUpgrade}
         onDelete={vi.fn()}
         onInvite={vi.fn()}
       />,
     );
 
     expect(screen.getByText("Recreate required")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Upgrade" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upgrade", hidden: true })).toBeInTheDocument();
   });
 
   it("shows an upgrade warning when only the agent image is outdated", () => {
@@ -74,6 +76,7 @@ describe("agent action visibility", () => {
         onStart={vi.fn()}
         onStop={vi.fn()}
         onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
         onDelete={vi.fn()}
         onInvite={vi.fn()}
       />,
@@ -83,7 +86,9 @@ describe("agent action visibility", () => {
     expect(screen.queryByText("Recreate required")).not.toBeInTheDocument();
   });
 
-  it("shows recreate for worker rows even when lifecycle actions are hidden", () => {
+  it("shows upgrade and recreate for worker rows even when lifecycle actions are hidden", async () => {
+    const user = userEvent.setup();
+    const onUpgrade = vi.fn();
     render(
       <AgentRow
         item={worker}
@@ -94,18 +99,21 @@ describe("agent action visibility", () => {
         onStart={vi.fn()}
         onStop={vi.fn()}
         onRecreate={vi.fn()}
+        onUpgrade={onUpgrade}
         onDelete={vi.fn()}
         onInvite={vi.fn()}
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Upgrade", hidden: true }));
+    expect(onUpgrade).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
     expect(screen.getByRole("button", { name: "Recreate", hidden: true })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Upgrade", hidden: true })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
   });
 
-  it("shows recreate for worker detail panes even when lifecycle actions are hidden", async () => {
+  it("shows upgrade and recreate for worker detail panes even when lifecycle actions are hidden", async () => {
     const user = userEvent.setup();
+    const onUpgrade = vi.fn();
     render(
       <AgentDetailPane
         item={worker}
@@ -129,20 +137,22 @@ describe("agent action visibility", () => {
         onStart={vi.fn()}
         onStop={vi.fn()}
         onRecreate={vi.fn()}
+        onUpgrade={onUpgrade}
         onDelete={vi.fn()}
         onInvite={vi.fn()}
         onOpenDM={vi.fn()}
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Upgrade" }));
+    expect(onUpgrade).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
     await user.click(screen.getByRole("button", { name: "More" }));
     expect(screen.getByRole("menuitem", { name: "Recreate" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Upgrade" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
   });
 
-  it("does not show upgrade action in worker detail panes when backend marks an agent restart required", async () => {
-    const user = userEvent.setup();
+  it("keeps upgrade action visible in worker detail panes when backend marks an agent restart required", () => {
     render(
       <AgentDetailPane
         item={{ ...worker, env_restart_required: true }}
@@ -166,14 +176,15 @@ describe("agent action visibility", () => {
         onStart={vi.fn()}
         onStop={vi.fn()}
         onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
         onDelete={vi.fn()}
         onInvite={vi.fn()}
         onOpenDM={vi.fn()}
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.queryByRole("menuitem", { name: "Upgrade" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upgrade" })).toBeInTheDocument();
+    expect(screen.getByText("Recreate required")).toBeInTheDocument();
   });
 
   it("shows upgrade required in worker detail panes when only the agent image is outdated", () => {
@@ -200,6 +211,7 @@ describe("agent action visibility", () => {
         onStart={vi.fn()}
         onStop={vi.fn()}
         onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
         onDelete={vi.fn()}
         onInvite={vi.fn()}
         onOpenDM={vi.fn()}

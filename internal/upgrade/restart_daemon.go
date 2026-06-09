@@ -39,7 +39,7 @@ func RestartDaemon(ctx context.Context, exePath string, opts RestartOptions) (Re
 		return RestartResult{}, fmt.Errorf("stop running daemon: %w", err)
 	}
 
-	if err := runUpgradeCommand(ctx, exePath, commandArgsWithConfig(opts.ConfigPath, "serve", "-d")...); err != nil {
+	if err := runUpgradeCommand(ctx, exePath, commandArgsWithConfig(opts.ConfigPath, "serve", "--daemon")...); err != nil {
 		return RestartResult{}, fmt.Errorf("restart daemon: %w", err)
 	}
 

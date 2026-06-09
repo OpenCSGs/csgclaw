@@ -19,6 +19,11 @@ func (s *Service) resolveUserIDLocked(userID string) string {
 	if userID == "" || s == nil {
 		return userID
 	}
+	if userID == legacyAdminUserID {
+		if _, ok := s.users[adminUserID]; ok {
+			return adminUserID
+		}
+	}
 	if _, ok := s.users[userID]; ok {
 		return userID
 	}
