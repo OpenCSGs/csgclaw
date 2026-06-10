@@ -499,7 +499,8 @@ func TestHandleAgentUpgradeUsesLatestDefaultImage(t *testing.T) {
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
 		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
-		Image:       "registry.example/picoclaw-worker:2026.06.03",
+		Version:     "0.2.0",
+		Image:       "registry.example/picoclaw-worker:0.2.0",
 	})
 	statePath := filepath.Join(t.TempDir(), "agents.json")
 	if err := writeSeededAgents(statePath, []agent.Agent{
@@ -546,48 +547,67 @@ func TestHandleAgentUpgradeUsesLatestDefaultImage(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if newImage != "registry.example/picoclaw-worker:2026.06.03" {
+	if newImage != "registry.example/picoclaw-worker:0.2.0" {
 		t.Fatalf("runtime New() image = %q, want latest default image", newImage)
 	}
 	var got agent.Agent
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.Image != "registry.example/picoclaw-worker:2026.06.03" {
+	if got.Image != "registry.example/picoclaw-worker:0.2.0" {
 		t.Fatalf("response Image = %q, want latest default image", got.Image)
 	}
 }
 
-func TestHandleAgentsListReportsImageUpgradeRequiredByImageTag(t *testing.T) {
+func TestHandleAgentsListReportsImageUpgradeRequiredByTemplateVersion(t *testing.T) {
 	tests := []struct {
 		name         string
 		currentImage string
 		latestImage  string
+		version      string
 		wantRequired bool
 	}{
 		{
-			name:         "older tag requires upgrade",
-			currentImage: "registry.example/picoclaw-worker:2026.05.27",
-			latestImage:  "registry.example/picoclaw-worker:2026.06.03",
+			name:         "older template version requires upgrade",
+			currentImage: "registry.example/picoclaw-worker:0.1.0",
+			latestImage:  "registry.example/picoclaw-worker:0.2.0",
+			version:      "0.2.0",
 			wantRequired: true,
 		},
 		{
-			name:         "newer tag does not require upgrade",
-			currentImage: "registry.example/picoclaw-worker:2026.06.09",
-			latestImage:  "registry.example/picoclaw-worker:2026.06.03",
+			name:         "legacy worker base image requires upgrade to template wrapper",
+			currentImage: "registry.example/picoclaw:2026.5.27",
+			latestImage:  "registry.example/picoclaw-worker:0.2.0",
+			version:      "0.2.0",
+			wantRequired: true,
+		},
+		{
+			name:         "newer template version does not require upgrade",
+			currentImage: "registry.example/picoclaw-worker:0.3.0",
+			latestImage:  "registry.example/picoclaw-worker:0.2.0",
+			version:      "0.2.0",
+			wantRequired: false,
+		},
+		{
+			name:         "dev image does not require upgrade",
+			currentImage: "registry.example/picoclaw-worker:dev",
+			latestImage:  "registry.example/picoclaw-worker:0.2.0",
+			version:      "0.2.0",
 			wantRequired: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
-			t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+			provider := sandboxtest.NewProvider()
+			provider.Images = []string{"registry.example/picoclaw-worker:9.9.9"}
 			hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
 				ID:          "frontend-worker",
 				Name:        "frontend-worker",
 				Description: "frontend worker",
 				Role:        hub.TemplateRoleWorker,
 				RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+				Version:     tt.version,
 				Image:       tt.latestImage,
 			})
 			statePath := filepath.Join(t.TempDir(), "agents.json")
@@ -612,6 +632,7 @@ func TestHandleAgentsListReportsImageUpgradeRequiredByImageTag(t *testing.T) {
 				config.ServerConfig{},
 				"manager-image:test",
 				statePath,
+				agent.WithSandboxProvider(provider),
 				agent.WithHubService(hubSvc),
 				agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
 				agent.WithRuntime(fakeCompatRuntime{
@@ -647,29 +668,40 @@ func TestHandleAgentsListReportsImageUpgradeRequiredByImageTag(t *testing.T) {
 	}
 }
 
-func TestHandleManagerGetReportsImageUpgradeRequiredByImageTag(t *testing.T) {
+func TestHandleManagerGetReportsImageUpgradeRequiredByTemplateVersion(t *testing.T) {
 	tests := []struct {
 		name         string
 		currentImage string
 		latestImage  string
+		version      string
 		wantRequired bool
 	}{
 		{
-			name:         "older manager tag requires upgrade",
-			currentImage: "registry.example/opencsghq/picoclaw:2026.5.22",
-			latestImage:  "registry.example/opencsghq/picoclaw:2026.6.3",
+			name:         "older manager version requires upgrade",
+			currentImage: "registry.example/opencsghq/picoclaw-manager:0.1.0",
+			latestImage:  "registry.example/opencsghq/picoclaw-manager:0.2.0",
+			version:      "0.2.0",
 			wantRequired: true,
 		},
 		{
-			name:         "newer manager tag does not require upgrade",
-			currentImage: "registry.example/opencsghq/picoclaw:2026.6.9",
-			latestImage:  "registry.example/opencsghq/picoclaw:2026.6.3",
+			name:         "legacy manager base image requires upgrade to template wrapper",
+			currentImage: "registry.example/opencsghq/picoclaw:2026.5.27",
+			latestImage:  "registry.example/opencsghq/picoclaw-manager:0.2.0",
+			version:      "0.2.0",
+			wantRequired: true,
+		},
+		{
+			name:         "newer manager version does not require upgrade",
+			currentImage: "registry.example/opencsghq/picoclaw-manager:0.3.0",
+			latestImage:  "registry.example/opencsghq/picoclaw-manager:0.2.0",
+			version:      "0.2.0",
 			wantRequired: false,
 		},
 		{
 			name:         "dev manager tag does not require upgrade",
-			currentImage: "registry.example/opencsghq/picoclaw:dev",
-			latestImage:  "registry.example/opencsghq/picoclaw:2026.6.3",
+			currentImage: "registry.example/opencsghq/picoclaw-manager:dev",
+			latestImage:  "registry.example/opencsghq/picoclaw-manager:0.2.0",
+			version:      "0.2.0",
 			wantRequired: false,
 		},
 	}
@@ -694,11 +726,22 @@ func TestHandleManagerGetReportsImageUpgradeRequiredByImageTag(t *testing.T) {
 			}); err != nil {
 				t.Fatalf("writeSeededAgents() error = %v", err)
 			}
+			hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-manager", hub.Template{
+				ID:          "picoclaw-manager",
+				Name:        "picoclaw-manager",
+				Description: "manager",
+				Role:        hub.TemplateRoleManager,
+				RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+				Version:     tt.version,
+				Image:       tt.latestImage,
+			})
 			svc, err := agent.NewService(
 				config.ModelConfig{},
 				config.ServerConfig{},
-				tt.latestImage,
+				"manager-image:unused",
 				statePath,
+				agent.WithHubService(hubSvc),
+				agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/picoclaw-manager"}),
 				agent.WithRuntime(fakeCompatRuntime{
 					info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
 						return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
@@ -731,14 +774,16 @@ func TestHandleManagerGetReportsImageUpgradeRequiredByImageTag(t *testing.T) {
 
 func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+	provider := sandboxtest.NewProvider()
+	provider.Images = []string{"registry.example/picoclaw-worker:0.1.0"}
 	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
 		ID:          "frontend-worker",
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
 		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
-		Image:       "registry.example/picoclaw-worker:2026.06.03",
+		Version:     "0.2.0",
+		Image:       "registry.example/picoclaw-worker:0.2.0",
 	})
 	statePath := filepath.Join(t.TempDir(), "agents.json")
 	if err := writeSeededAgents(statePath, []agent.Agent{
@@ -747,7 +792,7 @@ func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
 			Name:         "alice",
 			RuntimeID:    "rt-u-alice",
 			RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
-			Image:        "registry.example/picoclaw-worker:2026.05.27",
+			Image:        "registry.example/picoclaw-worker:0.1.0",
 			BoxID:        "box-alice-old",
 			Role:         agent.RoleWorker,
 			Status:       string(agentruntime.StateRunning),
@@ -763,6 +808,7 @@ func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
 		config.ServerConfig{},
 		"manager-image:test",
 		statePath,
+		agent.WithSandboxProvider(provider),
 		agent.WithHubService(hubSvc),
 		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
 		agent.WithRuntime(fakeCompatRuntime{
@@ -800,14 +846,14 @@ func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
 	if upgradeRec.Code != http.StatusOK {
 		t.Fatalf("upgrade status = %d, want %d; body=%s", upgradeRec.Code, http.StatusOK, upgradeRec.Body.String())
 	}
-	if newImage != "registry.example/picoclaw-worker:2026.06.03" {
+	if newImage != "registry.example/picoclaw-worker:0.2.0" {
 		t.Fatalf("runtime New() image = %q, want latest default image", newImage)
 	}
 	var upgraded agentResponse
 	if err := json.NewDecoder(upgradeRec.Body).Decode(&upgraded); err != nil {
 		t.Fatalf("decode upgrade response: %v", err)
 	}
-	if upgraded.Image != "registry.example/picoclaw-worker:2026.06.03" {
+	if upgraded.Image != "registry.example/picoclaw-worker:0.2.0" {
 		t.Fatalf("upgrade response Image = %q, want latest default image", upgraded.Image)
 	}
 	if upgraded.AgentProfile.ImageUpgradeRequired {
@@ -824,20 +870,26 @@ func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
 	if err := json.NewDecoder(afterRec.Body).Decode(&after); err != nil {
 		t.Fatalf("decode post-upgrade response: %v", err)
 	}
-	if after.Image != "registry.example/picoclaw-worker:2026.06.03" || after.AgentProfile.ImageUpgradeRequired {
+	if after.Image != "registry.example/picoclaw-worker:0.2.0" || after.AgentProfile.ImageUpgradeRequired {
 		t.Fatalf("post-upgrade response = %+v, want latest image and no image upgrade flag", after)
 	}
 }
 
-func TestHandleManagerUpgradeUsesNewerLocalSameRepositoryImage(t *testing.T) {
+func TestHandleManagerUpgradeUsesDefaultTemplateVersionWhenLocalImageListIsStale(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	provider := sandboxtest.NewProvider()
 	provider.Images = []string{
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:dev",
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:participant-local",
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.1.0",
 	}
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-manager", hub.Template{
+		ID:          "picoclaw-manager",
+		Name:        "picoclaw-manager",
+		Description: "manager",
+		Role:        hub.TemplateRoleManager,
+		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		Version:     "0.2.0",
+		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.2.0",
+	})
 	statePath := filepath.Join(t.TempDir(), "agents.json")
 	if err := writeSeededAgents(statePath, []agent.Agent{
 		{
@@ -859,9 +911,11 @@ func TestHandleManagerUpgradeUsesNewerLocalSameRepositoryImage(t *testing.T) {
 	svc, err := agent.NewService(
 		config.ModelConfig{},
 		config.ServerConfig{},
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:dev",
+		"manager-image:unused",
 		statePath,
 		agent.WithSandboxProvider(provider),
+		agent.WithHubService(hubSvc),
+		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/picoclaw-manager"}),
 		agent.WithRuntime(fakeCompatRuntime{
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
 				newImage = spec.Image
@@ -876,51 +930,61 @@ func TestHandleManagerUpgradeUsesNewerLocalSameRepositoryImage(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
-	beforeReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager", nil)
-	beforeRec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(beforeRec, beforeReq)
-	if beforeRec.Code != http.StatusOK {
-		t.Fatalf("pre-upgrade status = %d, want %d; body=%s", beforeRec.Code, http.StatusOK, beforeRec.Body.String())
+	srv := httptest.NewServer((&Handler{svc: svc}).Routes())
+	defer srv.Close()
+	getAgent := func(path string) agentResponse {
+		t.Helper()
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s error = %v", path, err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read GET %s response: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want %d; body=%s", path, resp.StatusCode, http.StatusOK, string(body))
+		}
+		var got agentResponse
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatalf("decode GET %s response: %v", path, err)
+		}
+		return got
 	}
-	var before agentResponse
-	if err := json.NewDecoder(beforeRec.Body).Decode(&before); err != nil {
-		t.Fatalf("decode pre-upgrade response: %v", err)
-	}
+
+	before := getAgent("/api/v1/agents/u-manager")
 	if !before.AgentProfile.ImageUpgradeRequired {
 		t.Fatalf("pre-upgrade image_upgrade_required = false, want true; response=%+v", before)
 	}
 
-	upgradeReq := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-manager/upgrade", nil)
-	upgradeRec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(upgradeRec, upgradeReq)
-	if upgradeRec.Code != http.StatusOK {
-		t.Fatalf("upgrade status = %d, want %d; body=%s", upgradeRec.Code, http.StatusOK, upgradeRec.Body.String())
+	resp, err := http.Post(srv.URL+"/api/v1/agents/u-manager/upgrade", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST upgrade error = %v", err)
 	}
-	wantImage := "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8"
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read POST upgrade response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST upgrade status = %d, want %d; body=%s", resp.StatusCode, http.StatusOK, string(body))
+	}
+	wantImage := "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.2.0"
 	if newImage != wantImage {
 		t.Fatalf("runtime New() image = %q, want %q", newImage, wantImage)
 	}
 	var upgraded agentResponse
-	if err := json.NewDecoder(upgradeRec.Body).Decode(&upgraded); err != nil {
+	if err := json.Unmarshal(body, &upgraded); err != nil {
 		t.Fatalf("decode upgrade response: %v", err)
 	}
 	if upgraded.Image != wantImage || upgraded.AgentProfile.ImageUpgradeRequired {
-		t.Fatalf("upgrade response = %+v, want latest same-repository image and no image upgrade flag", upgraded)
+		t.Fatalf("upgrade response = %+v, want latest template image and no image upgrade flag", upgraded)
 	}
 
-	afterReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager", nil)
-	afterRec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(afterRec, afterReq)
-	if afterRec.Code != http.StatusOK {
-		t.Fatalf("post-upgrade status = %d, want %d; body=%s", afterRec.Code, http.StatusOK, afterRec.Body.String())
-	}
-	var after agentResponse
-	if err := json.NewDecoder(afterRec.Body).Decode(&after); err != nil {
-		t.Fatalf("decode post-upgrade response: %v", err)
-	}
+	after := getAgent("/api/v1/agents/u-manager")
 	if after.Image != wantImage || after.AgentProfile.ImageUpgradeRequired {
-		t.Fatalf("post-upgrade response = %+v, want latest same-repository image and no image upgrade flag", after)
+		t.Fatalf("post-upgrade response = %+v, want latest template image and no image upgrade flag", after)
 	}
 }
 
@@ -1983,6 +2047,7 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 		Description:  item.Description,
 		Role:         item.Role,
 		RuntimeKind:  item.RuntimeKind,
+		Version:      item.Version,
 		Image:        item.Image,
 		WorkspaceRef: hub.WorkspaceRef{Kind: hub.WorkspaceKindDir, Path: workspaceRoot},
 		UpdatedAt:    time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
@@ -2013,6 +2078,7 @@ func mustNewLocalTemplateHubServiceWithoutWorkspace(t *testing.T, id string, ite
 		Description: item.Description,
 		Role:        item.Role,
 		RuntimeKind: item.RuntimeKind,
+		Version:     item.Version,
 		Image:       item.Image,
 		UpdatedAt:   time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
 	}); err != nil {
@@ -2060,6 +2126,59 @@ func TestHandleAgentsCreateReplaceManagerUsesUnifiedServiceEntry(t *testing.T) {
 	}
 	if got.ID != agent.ManagerUserID || got.Name != agent.ManagerName || got.Role != agent.RoleManager {
 		t.Fatalf("agent = %+v, want replaced manager", got)
+	}
+}
+
+func TestHandleAgentsCreateReplaceManagerIgnoresImageAndUsesRuntimeTemplate(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	svc := mustNewService(t)
+	if _, err := svc.Create(context.Background(), agent.CreateRequest{
+		Spec: agent.CreateAgentSpec{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+		},
+	}); err != nil {
+		t.Fatalf("seed Create() error = %v", err)
+	}
+	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+	openClawTemplate, err := hubSvc.Get(context.Background(), "builtin.openclaw-manager")
+	if err != nil {
+		t.Fatalf("Get(openclaw-manager) error = %v", err)
+	}
+
+	srv := httptest.NewServer((&Handler{svc: svc}).Routes())
+	defer srv.Close()
+
+	resp, err := http.Post(
+		srv.URL+"/api/v1/agents",
+		"application/json",
+		strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"runtime_kind":"openclaw_sandbox","image":"client:must-not-win"}`),
+	)
+	if err != nil {
+		t.Fatalf("POST /api/v1/agents error = %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response body: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", resp.StatusCode, http.StatusCreated, string(body))
+	}
+	var got agent.Agent
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.RuntimeKind != agent.RuntimeKindOpenClawSandbox {
+		t.Fatalf("runtime_kind = %q, want %q", got.RuntimeKind, agent.RuntimeKindOpenClawSandbox)
+	}
+	if got.Image != openClawTemplate.Image {
+		t.Fatalf("image = %q, want runtime template image %q", got.Image, openClawTemplate.Image)
 	}
 }
 

@@ -3,7 +3,6 @@ import {
   agentCreateTemplateLocked,
   agentToDraft,
   applyTemplateToDraft,
-  availableManagerRebuildImageOptions,
   availableManagerRebuildRuntimeOptions,
   availableManagerRuntimeOptions,
   collectManagerTemplateVariants,
@@ -341,7 +340,7 @@ describe("agent model helpers", () => {
     ).toBe("avatar/cartoon-3.png");
   });
 
-  it("uses manager template variants for manager rebuild runtime and image choices", () => {
+  it("uses manager template variants for manager rebuild runtime and default image", () => {
     const variants = collectManagerTemplateVariants([
       {
         id: "builtin.picoclaw-manager",
@@ -380,19 +379,6 @@ describe("agent model helpers", () => {
         "custom_sandbox",
       ).map((option) => option.value),
     ).toEqual(["custom_sandbox", "picoclaw_sandbox", "openclaw_sandbox"]);
-    expect(availableManagerRebuildImageOptions(variants, "openclaw_sandbox", null, "current:manager")).toEqual([
-      "openclaw:manager",
-      "current:manager",
-    ]);
-    expect(
-      availableManagerRebuildImageOptions(
-        [],
-        "picoclaw_sandbox",
-        { runtime_default_images: { picoclaw_sandbox: "picoclaw:latest" } },
-        "picoclaw:old",
-        ["picoclaw:old", "local/custom:dev"],
-      ),
-    ).toEqual(["picoclaw:latest", "picoclaw:old", "local/custom:dev"]);
     expect(
       defaultManagerRebuildImageForRuntime(
         variants,
@@ -400,10 +386,22 @@ describe("agent model helpers", () => {
         { runtime_default_images: { picoclaw_sandbox: "picoclaw:latest" } },
         "picoclaw:old",
       ),
-    ).toBe("picoclaw:latest");
+    ).toBe("picoclaw:manager");
     expect(defaultManagerRebuildImageForRuntime(variants, "openclaw_sandbox", null, "fallback:manager")).toBe(
       "openclaw:manager",
     );
+    expect(
+      defaultManagerRebuildImageForRuntime(
+        [],
+        "picoclaw_sandbox",
+        {
+          effective_manager_image: "picoclaw:effective-manager",
+          runtime_default_images: { picoclaw_sandbox: "picoclaw:worker" },
+          runtime_kind: "picoclaw_sandbox",
+        },
+        "fallback:manager",
+      ),
+    ).toBe("picoclaw:effective-manager");
     expect(defaultManagerRebuildImageForRuntime([], "openclaw_sandbox", null, "fallback:manager")).toBe(
       "fallback:manager",
     );

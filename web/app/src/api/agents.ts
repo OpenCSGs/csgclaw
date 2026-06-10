@@ -20,7 +20,6 @@ export type FetchAgentOptions = {
 };
 
 export type CreateManagerAgentOptions = {
-  image?: string;
   runtime_kind?: RuntimeKind;
 };
 
@@ -120,15 +119,12 @@ export function fetchAgentWorkspaceFile(agentID: string, workspacePath: string):
 }
 
 export function createManagerAgentRequest(options: CreateManagerAgentOptions = {}): Promise<AgentLike> {
-  const payload: { id: string; image?: string; replace: boolean; runtime_kind?: RuntimeKind } = {
+  const payload: { id: string; replace: boolean; runtime_kind?: RuntimeKind } = {
     id: MANAGER_AGENT_ID, // Legacy contract: id: "u-manager",
     replace: true,
   };
   if (options.runtime_kind) {
     payload.runtime_kind = options.runtime_kind;
-  }
-  if (Object.prototype.hasOwnProperty.call(options, "image")) {
-    payload.image = options.image;
   }
   return post("api/v1/agents", payload);
 }

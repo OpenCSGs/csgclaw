@@ -457,7 +457,7 @@ export const messages = {
     agentActionFailed: "Agent 操作失败",
     managerRebuildConfirm: "重建 Manager 会中断当前 Manager，会话可能需要刷新。确认继续？",
     managerRebuildTitle: "重建 Manager",
-    managerRebuildSubtitle: "选择重建时使用的 runtime 和 image。这个操作会中断当前 Manager。",
+    managerRebuildSubtitle: "选择重建时使用的 runtime。镜像会使用对应的内置模板版本。这个操作会中断当前 Manager。",
     managerRebuildAction: "重建",
     managerRebuildBusy: "正在重建...",
     profileRestartRequired: "需要重建",
@@ -1025,7 +1025,8 @@ export const messages = {
     managerRebuildConfirm:
       "Rebuilding Manager interrupts the current Manager and this session may need a refresh. Continue?",
     managerRebuildTitle: "Recreate Manager",
-    managerRebuildSubtitle: "Choose the runtime and image to use for recreate. This interrupts the current Manager.",
+    managerRebuildSubtitle:
+      "Choose the runtime to use for recreate. The image comes from the corresponding built-in template version.",
     managerRebuildAction: "Recreate",
     managerRebuildBusy: "Recreating...",
     profileRestartRequired: "Recreate required",

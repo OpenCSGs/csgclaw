@@ -1024,6 +1024,7 @@ func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 		Description: item.Description,
 		Role:        item.Role,
 		RuntimeKind: item.RuntimeKind,
+		Version:     item.Version,
 		Image:       item.Image,
 		ImageEnv:    append([]apitypes.ImageEnvContract(nil), item.ImageEnv...),
 		UpdatedAt:   item.UpdatedAt,

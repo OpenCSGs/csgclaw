@@ -1510,6 +1510,18 @@
   white-space: normal;
 }
 
+.manager-rebuild-image-readonly {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
 .manager-rebuild-image-primary {
   display: flex;
   min-width: 0;

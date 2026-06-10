@@ -1339,52 +1339,12 @@ export function availableManagerRebuildRuntimeOptions(
   return values.map((value) => ({ value, label: value }));
 }
 
-export function availableManagerRebuildImageOptions(
-  variants: readonly ManagerTemplateVariant[] | null | undefined,
-  runtimeKind: unknown,
-  bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
-  currentImage = "",
-  localImages: readonly string[] | null | undefined = [],
-): string[] {
-  const images: string[] = [];
-  const seen = new Set<string>();
-  const push = (image: unknown) => {
-    const trimmed = String(image ?? "").trim();
-    if (!trimmed || seen.has(trimmed)) {
-      return;
-    }
-    seen.add(trimmed);
-    images.push(trimmed);
-  };
-  push(defaultManagerRebuildImageForRuntime(variants, runtimeKind, bootstrapConfig, ""));
-  const selectedRuntime = normalizeRuntimeKind(runtimeKind);
-  if (Array.isArray(variants)) {
-    for (const item of variants) {
-      if (selectedRuntime && normalizeRuntimeKind(item?.runtimeKind) !== selectedRuntime) {
-        continue;
-      }
-      push(item?.image);
-    }
-  }
-  if (Array.isArray(localImages)) {
-    for (const image of localImages) {
-      push(image);
-    }
-  }
-  push(currentImage);
-  return images;
-}
-
 export function defaultManagerRebuildImageForRuntime(
   variants: readonly ManagerTemplateVariant[] | null | undefined,
   runtimeKind: unknown,
   bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
   fallbackImage = "",
 ): string {
-  const runtimeDefault = runtimeImageForKind(runtimeKind, bootstrapConfig, "");
-  if (runtimeDefault) {
-    return runtimeDefault;
-  }
   const selectedRuntime = normalizeRuntimeKind(runtimeKind);
   if (Array.isArray(variants)) {
     for (const item of variants) {
@@ -1395,6 +1355,12 @@ export function defaultManagerRebuildImageForRuntime(
       if (image) {
         return image;
       }
+    }
+  }
+  if (selectedRuntime && normalizeRuntimeKind(bootstrapConfig?.runtime_kind) === selectedRuntime) {
+    const effectiveManagerImage = String(bootstrapConfig?.effective_manager_image ?? "").trim();
+    if (effectiveManagerImage) {
+      return effectiveManagerImage;
     }
   }
   return String(fallbackImage ?? "").trim();

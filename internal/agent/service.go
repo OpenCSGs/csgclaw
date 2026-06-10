@@ -188,6 +188,7 @@ type Service struct {
 type ServiceOption func(*Service) error
 
 type templateService interface {
+	List(context.Context) ([]hub.Template, error)
 	Get(context.Context, string) (hub.Template, error)
 	FetchWorkspace(context.Context, string) (hub.WorkspaceRef, error)
 }
@@ -1040,7 +1041,7 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 	}
 
 	if isManagerAgent(existing) || isManagerCreateSpec(spec) {
-		managerImageOverride := s.managerImageOverrideForReplace(ctx, existing, req, spec.RuntimeKind)
+		managerImageOverride := s.managerImageOverrideForReplace(ctx, existing, spec.RuntimeKind)
 		return s.ensureManager(ctx, true, managerImageOverride, spec.RuntimeKind)
 	}
 	if shouldCreateWorkerSpec(spec) || strings.EqualFold(existing.Role, RoleWorker) {
@@ -1057,33 +1058,15 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 	return s.createNew(ctx, spec)
 }
 
-func replaceImageOverride(req CreateRequest) string {
-	if len(req.FieldMask) == 0 {
-		return req.Spec.Image
+func (s *Service) managerImageOverrideForReplace(ctx context.Context, existing Agent, runtimeKind string) string {
+	runtimeKind = strings.TrimSpace(runtimeKind)
+	if runtimeKind == "" {
+		runtimeKind = existing.RuntimeKind
 	}
-	for _, field := range req.FieldMask {
-		if strings.EqualFold(strings.TrimSpace(field), "image") {
-			return req.Spec.Image
-		}
+	if latest, ok := s.defaultManagerImageForRuntime(ctx, runtimeKind); ok {
+		return strings.TrimSpace(latest.image)
 	}
 	return ""
-}
-
-func (s *Service) managerImageOverrideForReplace(ctx context.Context, existing Agent, req CreateRequest, runtimeKind string) string {
-	requested := strings.TrimSpace(replaceImageOverride(req))
-	if requested == "" {
-		return ""
-	}
-	if requested != strings.TrimSpace(existing.Image) {
-		return requested
-	}
-	if runtimeKindForGatewayRuntime(runtimeKind) != runtimeKindForGatewayRuntime(existing.RuntimeKind) {
-		return requested
-	}
-	if latest, ok := s.currentDefaultImageForAgent(ctx, existing); ok && imageNeedsDefaultRecreate(existing.Image, latest) {
-		return latest
-	}
-	return requested
 }
 
 func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) (CreateAgentSpec, error) {
@@ -1482,9 +1465,8 @@ func (s *Service) List() []Agent {
 	agents := sortedAgentsFromMap(s.agents)
 	s.mu.RUnlock()
 	ctx := context.Background()
-	localImages := s.localImageCandidates(ctx)
 	for idx := range agents {
-		agents[idx] = s.withRuntimeImageMigrationStatusFromCandidates(ctx, s.hydrateAgentStatus(ctx, agents[idx]), localImages)
+		agents[idx] = s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, agents[idx]))
 	}
 	return agents
 }

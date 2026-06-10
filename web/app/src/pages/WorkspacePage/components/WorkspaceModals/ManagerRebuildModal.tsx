@@ -1,7 +1,6 @@
 import { AgentCreateProgress, type AgentCreateProgressProps } from "@/components/business/ProfileControls";
-import { Button, Select, SelectContent, SelectItem, SelectRoot, SelectTrigger } from "@/components/ui";
-import { defaultManagerRebuildImageForRuntime, formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
-import type { AgentLike, ManagerTemplateVariant, RuntimeBootstrapConfig } from "@/models/agents";
+import { Button, Select } from "@/components/ui";
+import { formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 import { ModalCloseButton } from "./ModalCloseButton";
 
@@ -16,21 +15,16 @@ type ImageReferenceParts = {
 };
 
 export type ManagerRebuildModalProps = {
-  bootstrapConfig?: RuntimeBootstrapConfig | null;
   busy?: boolean;
   error?: string;
   image?: string;
-  imageOptions?: string[];
-  managerAgent?: AgentLike | null;
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
-  onImageChange: (image: string) => void;
   onRuntimeKindChange: (runtimeKind: string) => void;
   progress?: AgentCreateProgressProps["progress"];
   runtimeKind?: string;
   runtimeOptions: RuntimeOption[];
   t: TranslateFn;
-  templateVariants?: ManagerTemplateVariant[];
 };
 
 export function ManagerRebuildModal({
@@ -38,15 +32,10 @@ export function ManagerRebuildModal({
   runtimeOptions,
   runtimeKind,
   image,
-  imageOptions = [],
-  templateVariants = [],
-  bootstrapConfig,
-  managerAgent,
   busy = false,
   error = "",
   progress = null,
   onRuntimeKindChange,
-  onImageChange,
   onClose,
   onConfirm,
 }: ManagerRebuildModalProps) {
@@ -72,14 +61,6 @@ export function ManagerRebuildModal({
                   onValueChange={(value) => {
                     const nextRuntimeKind = normalizeRuntimeKind(value);
                     onRuntimeKindChange(nextRuntimeKind);
-                    onImageChange(
-                      defaultManagerRebuildImageForRuntime(
-                        templateVariants,
-                        nextRuntimeKind,
-                        bootstrapConfig,
-                        managerAgent?.image || "",
-                      ),
-                    );
                   }}
                   triggerProps={{ "aria-label": t("profileRuntimeKind") }}
                   options={runtimeOptions.map((option) => ({
@@ -90,32 +71,13 @@ export function ManagerRebuildModal({
               </label>
               <label className="field manager-rebuild-image-field">
                 <span>{t("agentImage")}</span>
-                <SelectRoot value={selectedImage} onValueChange={onImageChange}>
-                  <SelectTrigger
-                    className="manager-rebuild-image-select"
-                    aria-label={t("agentImage")}
-                    title={selectedImage}
-                  >
-                    {selectedImage ? (
-                      <ImageReferenceLabel image={selectedImage} />
-                    ) : (
-                      <span className="manager-rebuild-image-placeholder">{t("agentImagePlaceholder")}</span>
-                    )}
-                  </SelectTrigger>
-                  <SelectContent className="manager-rebuild-image-select-content">
-                    {imageOptions.map((option) => (
-                      <SelectItem
-                        key={option}
-                        aria-label={option}
-                        className="manager-rebuild-image-select-item"
-                        value={option}
-                        textValue={option}
-                      >
-                        <ImageReferenceLabel image={option} />
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </SelectRoot>
+                <div className="manager-rebuild-image-select manager-rebuild-image-readonly" title={selectedImage}>
+                  {selectedImage ? (
+                    <ImageReferenceLabel image={selectedImage} />
+                  ) : (
+                    <span className="manager-rebuild-image-placeholder">{t("agentImagePlaceholder")}</span>
+                  )}
+                </div>
               </label>
             </div>
           </section>

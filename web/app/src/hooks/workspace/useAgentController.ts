@@ -38,7 +38,6 @@ import {
   agentDraftWithRuntimeFieldsFromAgent,
   agentRuntimePollSettled,
   agentToDraft,
-  availableManagerRebuildImageOptions,
   availableManagerRebuildRuntimeOptions,
   collectManagerTemplateVariants,
   defaultManagerRebuildImageForRuntime,
@@ -87,7 +86,6 @@ import type { IMConversation } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
 
 type ManagerRebuildOptions = {
-  image?: string;
   runtimeKind?: RuntimeKind;
 };
 
@@ -111,7 +109,6 @@ export function useAgentController({
   bootstrapConfig,
   data,
   hubTemplates,
-  localRuntimeImages,
   locale,
   managerProfile,
   refreshHubTemplates,
@@ -242,13 +239,6 @@ export function useAgentController({
     managerTemplateVariants,
     bootstrapConfig,
     managerAgent?.runtime_kind ?? undefined,
-  );
-  const managerRebuildImageOptions = availableManagerRebuildImageOptions(
-    managerTemplateVariants,
-    managerRebuildRuntimeKind,
-    bootstrapConfig,
-    managerAgent?.image ?? undefined,
-    localRuntimeImages,
   );
   const agentsDisplayError =
     agentsError || (agentsQuery.isError ? errorMessage(agentsQuery.error, t("agentActionFailed")) : "");
@@ -444,6 +434,19 @@ export function useAgentController({
     setShowManagerRebuildModal(true);
   }
 
+  function updateManagerRebuildRuntimeKind(runtimeKind: string): void {
+    const nextRuntimeKind = normalizeRuntimeKind(runtimeKind);
+    setManagerRebuildRuntimeKind(nextRuntimeKind);
+    setManagerRebuildImage(
+      defaultManagerRebuildImageForRuntime(
+        managerTemplateVariants,
+        nextRuntimeKind,
+        bootstrapConfig,
+        managerAgent?.image || "",
+      ),
+    );
+  }
+
   async function requestManagerRebuild(options: ManagerRebuildOptions = {}): Promise<void> {
     const runtimeKind = normalizeRuntimeKind(
       options.runtimeKind ||
@@ -451,10 +454,8 @@ export function useAgentController({
         bootstrapConfig?.runtime_kind ||
         managerRuntimeOptions[0]?.value,
     );
-    const image = String(options.image ?? managerAgent?.image ?? "").trim();
     const rebuiltAgent = await createManagerAgentRequest({
       runtime_kind: runtimeKind,
-      image,
     });
     await refreshAgentsWithUpdatedAgent(rebuiltAgent);
     await syncAgentStateUntilRunning(MANAGER_AGENT_ID);
@@ -496,9 +497,8 @@ export function useAgentController({
     const selectedRuntimeKind = normalizeRuntimeKind(
       managerRebuildRuntimeKind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind,
     );
-    const selectedImage = String(managerRebuildImage ?? "").trim();
     setMessageActionError({ key: "", message: "" });
-    const rebuilt = await rebuildManagerFromBrowser({ runtimeKind: selectedRuntimeKind, image: selectedImage });
+    const rebuilt = await rebuildManagerFromBrowser({ runtimeKind: selectedRuntimeKind });
     if (rebuilt) {
       setShowManagerRebuildModal(false);
       setAgentProgress(null);
@@ -1357,15 +1357,10 @@ export function useAgentController({
           runtimeOptions: managerRuntimeOptions,
           runtimeKind: managerRebuildRuntimeKind,
           image: managerRebuildImage,
-          imageOptions: managerRebuildImageOptions,
-          templateVariants: managerTemplateVariants,
-          bootstrapConfig,
-          managerAgent,
           busy: agentActionBusy === `${MANAGER_AGENT_ID}:recreate`,
           error: agentsError,
           progress: agentProgress,
-          onRuntimeKindChange: setManagerRebuildRuntimeKind,
-          onImageChange: setManagerRebuildImage,
+          onRuntimeKindChange: updateManagerRebuildRuntimeKind,
           onClose: () => {
             setShowManagerRebuildModal(false);
             setAgentProgress(null);

@@ -184,6 +184,7 @@ func templateFromAPI(item apitypes.HubTemplate) Template {
 		Description:  strings.TrimSpace(item.Description),
 		Role:         normalizeTemplateRole(item.Role),
 		RuntimeKind:  strings.TrimSpace(item.RuntimeKind),
+		Version:      strings.TrimSpace(item.Version),
 		Image:        strings.TrimSpace(item.Image),
 		ImageEnv:     append([]apitypes.ImageEnvContract(nil), item.ImageEnv...),
 		WorkspaceRef: WorkspaceRef{Kind: kind},

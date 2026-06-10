@@ -133,7 +133,6 @@ function useAgentControllerHarness(
     bootstrapConfig: null,
     data: null,
     hubTemplates: [],
-    localRuntimeImages: [],
     locale: "en",
     managerProfile: options.managerProfile ?? null,
     refreshHubTemplates: vi.fn(async () => undefined),
