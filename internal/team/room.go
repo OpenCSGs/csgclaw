@@ -42,7 +42,7 @@ func ExecutionRoomBound(task TeamTask, meta TeamMeta) bool {
 func normalizeTeamActorID(meta TeamMeta, actorID string) string {
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" || strings.EqualFold(actorID, "web") {
-		return strings.TrimSpace(meta.LeadParticipantID)
+		return defaultParticipantIDForAgentID(meta.LeadAgentID)
 	}
 	return actorID
 }

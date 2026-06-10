@@ -9,9 +9,9 @@ import (
 
 func TestTaskExecutionRoomMemberParticipantIDsIncludesWorkerAgents(t *testing.T) {
 	imSvc := im.NewService()
-	leadID := agent.ManagerParticipantID
+	leadParticipantID := agent.ManagerParticipantID
 	if _, _, err := imSvc.EnsureAgentUser(im.EnsureAgentUserRequest{
-		ID: leadID, Name: "manager", Handle: "manager", Role: agent.RoleManager,
+		ID: leadParticipantID, Name: "manager", Handle: "manager", Role: agent.RoleManager,
 	}); err != nil {
 		t.Fatalf("EnsureAgentUser(manager) error = %v", err)
 	}
@@ -22,8 +22,8 @@ func TestTaskExecutionRoomMemberParticipantIDsIncludesWorkerAgents(t *testing.T)
 	}
 	room, err := imSvc.CreateRoom(im.CreateRoomRequest{
 		Title:     "team room",
-		CreatorID: leadID,
-		MemberIDs: []string{leadID, "u-p-w-1315"},
+		CreatorID: leadParticipantID,
+		MemberIDs: []string{leadParticipantID, "u-p-w-1315"},
 	})
 	if err != nil {
 		t.Fatalf("CreateRoom() error = %v", err)
@@ -31,10 +31,10 @@ func TestTaskExecutionRoomMemberParticipantIDsIncludesWorkerAgents(t *testing.T)
 
 	teamSvc := NewService()
 	meta, err := teamSvc.CreateTeam(CreateTeamInput{
-		RoomID:            room.ID,
-		Channel:           "csgclaw",
-		Title:             "team",
-		LeadParticipantID: leadID,
+		RoomID:      room.ID,
+		Channel:     "csgclaw",
+		Title:       "team",
+		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)
@@ -90,10 +90,10 @@ func TestTaskExecutionRoomMemberParticipantIDsMapsLocalManagerParticipantToLead(
 
 	teamSvc := NewService()
 	meta, err := teamSvc.CreateTeam(CreateTeamInput{
-		RoomID:            room.ID,
-		Channel:           "csgclaw",
-		Title:             "team",
-		LeadParticipantID: agent.ManagerParticipantID,
+		RoomID:      room.ID,
+		Channel:     "csgclaw",
+		Title:       "team",
+		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)

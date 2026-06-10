@@ -53,6 +53,21 @@ func (a *CSGClawAdapter) ParticipantDisplayName(participantID string) string {
 	return strings.TrimSpace(user.ID)
 }
 
+func (a *CSGClawAdapter) ParticipantIDForAgentID(agentID string) string {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return ""
+	}
+	if a != nil && a.participants != nil {
+		for _, item := range a.participants.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, AgentID: agentID}) {
+			if participantID := strings.TrimSpace(item.ID); participantID != "" {
+				return participantID
+			}
+		}
+	}
+	return defaultParticipantIDForAgentID(agentID)
+}
+
 func (a *CSGClawAdapter) EnsureRoom(_ context.Context, req EnsureRoomRequest) (RoomRef, error) {
 	if a == nil || a.im == nil {
 		return RoomRef{}, fmt.Errorf("im service is required")

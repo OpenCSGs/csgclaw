@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/agent"
 	"csgclaw/internal/im"
 )
 
@@ -178,10 +179,10 @@ func TestProjectorRenderTaskLifecycleMessages(t *testing.T) {
 	})
 	projector := NewProjector(NewCSGClawAdapter(imSvc), nil)
 	meta := TeamMeta{
-		ID:                "team-5",
-		RoomID:            "room-team",
-		Channel:           "csgclaw",
-		LeadParticipantID: "manager",
+		ID:          "team-5",
+		RoomID:      "room-team",
+		Channel:     "csgclaw",
+		LeadAgentID: agent.ManagerUserID,
 	}
 	events := []TeamEvent{
 		{Seq: 1, TeamID: meta.ID, RoomID: "room-team", Type: EventTaskCreated, ActorID: "manager", TaskID: "task-15", TargetID: "backend-dev", Summary: "Implement API", CreatedAt: time.Now()},
@@ -240,7 +241,7 @@ func TestProjectorSuccessorDispatchSkipsPreamble(t *testing.T) {
 		},
 	})
 	projector := NewProjector(NewCSGClawAdapter(imSvc), nil)
-	meta := TeamMeta{ID: "team-5", RoomID: "room-team", Channel: "csgclaw", LeadParticipantID: "manager"}
+	meta := TeamMeta{ID: "team-5", RoomID: "room-team", Channel: "csgclaw", LeadAgentID: agent.ManagerUserID}
 	events := []TeamEvent{
 		{Seq: 1, TeamID: meta.ID, RoomID: "room-exec", Type: EventTaskCompleted, ActorID: "backend-dev", TaskID: "task-15", Summary: "done", CreatedAt: time.Now()},
 		{Seq: 2, TeamID: meta.ID, RoomID: "room-exec", Type: EventTaskDispatched, ActorID: "manager", TaskID: "task-16", TargetID: "backend-dev", Summary: "Verify API", CreatedAt: time.Now()},
@@ -274,10 +275,10 @@ func TestProjectorResolvesWorkerAliasSender(t *testing.T) {
 	})
 	projector := NewProjector(NewCSGClawAdapter(imSvc), nil)
 	meta := TeamMeta{
-		ID:                "team-5",
-		RoomID:            "room-team",
-		Channel:           "csgclaw",
-		LeadParticipantID: "manager",
+		ID:          "team-5",
+		RoomID:      "room-team",
+		Channel:     "csgclaw",
+		LeadAgentID: agent.ManagerUserID,
 	}
 	events := []TeamEvent{
 		{

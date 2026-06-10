@@ -10,7 +10,9 @@ import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/
 
 export type CreateTeamPayload = {
   channel?: string;
-  lead_participant_id: string;
+  lead_agent_id?: string;
+  lead_participant_id?: string;
+  member_agent_ids?: string[];
   member_participant_ids?: string[];
   room_id?: string;
   title?: string;
@@ -68,14 +70,26 @@ export type StartWorkspaceTaskResponse = {
 };
 
 export async function createTeamRequest(payload: CreateTeamPayload): Promise<WorkspaceTeam> {
+  const request: Record<string, unknown> = {
+    channel: payload.channel || "csgclaw",
+    room_id: payload.room_id,
+    title: payload.title,
+  };
+  if (payload.lead_agent_id !== undefined) {
+    request.lead_agent_id = payload.lead_agent_id;
+  }
+  if (payload.lead_participant_id !== undefined) {
+    request.lead_participant_id = payload.lead_participant_id;
+  }
+  if (payload.member_agent_ids !== undefined) {
+    request.member_agent_ids = payload.member_agent_ids;
+  }
+  if (payload.member_participant_ids !== undefined) {
+    request.member_participant_ids = payload.member_participant_ids;
+  }
+
   const team = normalizeTeam(
-    await post<unknown>("/api/v1/teams", {
-      channel: payload.channel || "csgclaw",
-      lead_participant_id: payload.lead_participant_id,
-      member_participant_ids: payload.member_participant_ids ?? [],
-      room_id: payload.room_id,
-      title: payload.title,
-    }),
+    await post<unknown>("/api/v1/teams", request),
   );
   if (!team) {
     throw new Error("Invalid team response");

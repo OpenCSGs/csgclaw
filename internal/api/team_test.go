@@ -13,6 +13,7 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/participant"
 	"csgclaw/internal/team"
 )
 
@@ -83,6 +84,53 @@ func TestTeamRoutesCreateAndTaskFlow(t *testing.T) {
 	}
 	if updated.Status != team.TaskStatusCompleted {
 		t.Fatalf("updated task status = %q, want %q", updated.Status, team.TaskStatusCompleted)
+	}
+}
+
+func TestTeamRoutesCreateResolvesAgentIDs(t *testing.T) {
+	imSvc := im.NewService()
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{
+		{
+			ID:              agent.ManagerParticipantID,
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			ChannelUserKind: participant.ChannelUserKindLocalUserID,
+			ChannelUserRef:  agent.ManagerParticipantID,
+			AgentID:         agent.ManagerUserID,
+		},
+		{
+			ID:              "worker",
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			ChannelUserKind: participant.ChannelUserKindLocalUserID,
+			ChannelUserRef:  "u-worker",
+			AgentID:         "u-worker",
+		},
+	}))
+	adapter := team.NewCSGClawAdapter(imSvc, participantSvc)
+	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
+	h := &Handler{participant: participantSvc, teamSvc: teamSvc, teamAdapter: adapter}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_agent_id":"u-manager","member_agent_ids":["u-worker"]}`))
+	createRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create team status = %d, want %d: %s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+
+	var created apitypes.Team
+	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create team response: %v", err)
+	}
+	if created.LeadAgentID != agent.ManagerUserID {
+		t.Fatalf("lead agent = %q, want %q", created.LeadAgentID, agent.ManagerUserID)
+	}
+	room, ok := imSvc.Room(created.RoomID)
+	if !ok {
+		t.Fatalf("room %q not found", created.RoomID)
+	}
+	if !containsMember(room.Members, agent.ManagerParticipantID) || !containsMember(room.Members, "u-worker") {
+		t.Fatalf("room members = %v, want manager participant and worker channel user", room.Members)
 	}
 }
 

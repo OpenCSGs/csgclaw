@@ -1,4 +1,5 @@
 import type { AgentLike } from "@/models/agents";
+import type { CreateTeamPayload } from "@/api/tasks";
 import type {
   IMConversation,
   IMMessage,
@@ -33,11 +34,7 @@ export type WorkspaceSidebarProps = {
   notificationAgentItems: AgentLike[];
   onCollapseSidebar: () => void;
   onCreateAgent: () => void | Promise<void>;
-  onCreateTeam: (payload: {
-    title: string;
-    lead_participant_id: string;
-    member_participant_ids: string[];
-  }) => Promise<void>;
+  onCreateTeam: (payload: CreateTeamPayload) => Promise<void>;
   onOpenCreateTeam: () => void | Promise<void>;
   onOpenCreateTask: () => void | Promise<void>;
   onCreateNotificationParticipant: () => void | Promise<void>;

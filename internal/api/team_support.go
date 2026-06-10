@@ -93,14 +93,14 @@ func writeTeamPlannerError(w http.ResponseWriter, err error) {
 
 func apiTeam(item team.TeamMeta) apitypes.Team {
 	return apitypes.Team{
-		ID:                item.ID,
-		RoomID:            item.RoomID,
-		Channel:           item.Channel,
-		Title:             item.Title,
-		LeadParticipantID: item.LeadParticipantID,
-		Status:            item.Status,
-		CreatedAt:         item.CreatedAt,
-		UpdatedAt:         item.UpdatedAt,
+		ID:          item.ID,
+		RoomID:      item.RoomID,
+		Channel:     item.Channel,
+		Title:       item.Title,
+		LeadAgentID: item.LeadAgentID,
+		Status:      item.Status,
+		CreatedAt:   item.CreatedAt,
+		UpdatedAt:   item.UpdatedAt,
 	}
 }
 

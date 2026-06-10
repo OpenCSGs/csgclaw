@@ -44,12 +44,12 @@ type Service struct {
 }
 
 type CreateTeamInput struct {
-	ID                string
-	RoomID            string
-	Channel           string
-	Title             string
-	LeadParticipantID string
-	Status            string
+	ID          string
+	RoomID      string
+	Channel     string
+	Title       string
+	LeadAgentID string
+	Status      string
 }
 
 type CreateTaskInput struct {
@@ -274,10 +274,10 @@ func (s *Service) CreateTeam(input CreateTeamInput) (TeamMeta, error) {
 	if strings.TrimSpace(input.Channel) == "" {
 		return TeamMeta{}, fmt.Errorf("channel is required")
 	}
-	if strings.TrimSpace(input.LeadParticipantID) == "" {
-		return TeamMeta{}, fmt.Errorf("lead_participant_id is required")
+	if strings.TrimSpace(input.LeadAgentID) == "" {
+		return TeamMeta{}, fmt.Errorf("lead_agent_id is required")
 	}
-	leadParticipantID, err := requireCanonicalParticipantID("lead_participant_id", input.LeadParticipantID)
+	leadAgentID, err := requireAgentID("lead_agent_id", input.LeadAgentID)
 	if err != nil {
 		return TeamMeta{}, err
 	}
@@ -296,20 +296,20 @@ func (s *Service) CreateTeam(input CreateTeamInput) (TeamMeta, error) {
 	}
 	eventStart := len(s.events[id])
 	meta := TeamMeta{
-		ID:                id,
-		RoomID:            strings.TrimSpace(input.RoomID),
-		Channel:           strings.TrimSpace(input.Channel),
-		Title:             strings.TrimSpace(input.Title),
-		LeadParticipantID: leadParticipantID,
-		Status:            status,
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		ID:          id,
+		RoomID:      strings.TrimSpace(input.RoomID),
+		Channel:     strings.TrimSpace(input.Channel),
+		Title:       strings.TrimSpace(input.Title),
+		LeadAgentID: leadAgentID,
+		Status:      status,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	s.teams[id] = meta
 	s.appendEventLocked(id, TeamEvent{
 		RoomID:    meta.RoomID,
 		Type:      EventTeamCreated,
-		ActorID:   meta.LeadParticipantID,
+		ActorID:   defaultParticipantIDForAgentID(meta.LeadAgentID),
 		Summary:   meta.Title,
 		CreatedAt: now,
 	})
@@ -743,7 +743,7 @@ func (s *Service) StartTask(input StartTaskInput) (StartTaskResult, error) {
 		})
 	}
 
-	scheduledCount = s.dispatchReadyChildrenLocked(meta, task.ID, meta.LeadParticipantID, now)
+	scheduledCount = s.dispatchReadyChildrenLocked(meta, task.ID, defaultParticipantIDForAgentID(meta.LeadAgentID), now)
 
 	task.Status = TaskStatusAssigned
 	task.Result = ""
@@ -776,7 +776,7 @@ func taskAssignedToManager(assignedTo string, teamMeta TeamMeta) bool {
 	if assignedTo == "" {
 		return false
 	}
-	if leadParticipantID := strings.TrimSpace(teamMeta.LeadParticipantID); leadParticipantID != "" {
+	if leadParticipantID := defaultParticipantIDForAgentID(teamMeta.LeadAgentID); leadParticipantID != "" {
 		return ParticipantIDsMatch(assignedTo, leadParticipantID)
 	}
 	return false
@@ -1073,7 +1073,7 @@ func (s *Service) CompleteTask(input CompleteTaskInput) (TeamTask, error) {
 		CreatedAt: now,
 	})
 	if strings.TrimSpace(task.ParentID) != "" {
-		s.dispatchReadyChildrenLocked(meta, task.ParentID, meta.LeadParticipantID, now)
+		s.dispatchReadyChildrenLocked(meta, task.ParentID, defaultParticipantIDForAgentID(meta.LeadAgentID), now)
 		s.maybeCompleteParentIfAllChildrenDoneLocked(meta, task.ParentID, actorID, now)
 	}
 	if err := s.persistMutationLocked(meta.ID, before, eventStart); err != nil {
@@ -1450,7 +1450,7 @@ func (s *Service) UpsertPresence(input UpsertPresenceInput) (MemberPresence, err
 	role := strings.TrimSpace(input.Role)
 	if role == "" {
 		role = "worker"
-		if ParticipantIDsMatch(participantID, meta.LeadParticipantID) {
+		if ParticipantIDsMatch(participantID, defaultParticipantIDForAgentID(meta.LeadAgentID)) {
 			role = "manager"
 		}
 	}
@@ -1701,7 +1701,7 @@ func (s *Service) dispatchReadyChildrenLocked(meta TeamMeta, parentID string, ac
 		s.appendEventLocked(meta.ID, TeamEvent{
 			RoomID:    EventRoomID(meta, child),
 			Type:      EventTaskDispatched,
-			ActorID:   firstNonEmpty(strings.TrimSpace(actorID), meta.LeadParticipantID),
+			ActorID:   firstNonEmpty(strings.TrimSpace(actorID), defaultParticipantIDForAgentID(meta.LeadAgentID)),
 			TaskID:    child.ID,
 			TargetID:  assignee,
 			Summary:   child.Title,
@@ -1798,7 +1798,7 @@ func (s *Service) requireTaskOperatorLocked(meta TeamMeta, task *TeamTask, actor
 	if actorID == "" {
 		return fmt.Errorf("actor_id is required")
 	}
-	if ParticipantIDsMatch(actorID, meta.LeadParticipantID) || ParticipantIDsMatch(actorID, task.ClaimedBy) {
+	if ParticipantIDsMatch(actorID, defaultParticipantIDForAgentID(meta.LeadAgentID)) || ParticipantIDsMatch(actorID, task.ClaimedBy) {
 		return nil
 	}
 	return fmt.Errorf("actor %q cannot operate task %s", actorID, task.ID)
@@ -1999,7 +1999,7 @@ func (s *Service) recordProjectionFailureLocked(meta TeamMeta, events []TeamEven
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    meta.RoomID,
 		Type:      EventProjectionFailed,
-		ActorID:   meta.LeadParticipantID,
+		ActorID:   defaultParticipantIDForAgentID(meta.LeadAgentID),
 		TaskID:    firstProjectedTaskID(events),
 		TargetID:  fmt.Sprintf("%d", events[0].Seq),
 		Summary:   truncateSummary(cause.Error(), 240),
@@ -2182,7 +2182,7 @@ func (s *Service) updatePresenceLocked(meta TeamMeta, participantID string, stat
 	p.Summary = strings.TrimSpace(summary)
 	p.LastHeartbeatAt = now
 	p.UpdatedAt = now
-	if ParticipantIDsMatch(participantID, meta.LeadParticipantID) {
+	if ParticipantIDsMatch(participantID, defaultParticipantIDForAgentID(meta.LeadAgentID)) {
 		p.Role = "manager"
 	}
 	s.markPresenceDirtyLocked(meta.ID, participantID)

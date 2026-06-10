@@ -140,6 +140,21 @@ func (d *CSGClawTeamDirectory) ResolveAgentID(participantID string) string {
 	return "u-" + participantID
 }
 
+func (d *CSGClawTeamDirectory) ParticipantIDForAgentID(agentID string) string {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return ""
+	}
+	if d != nil && d.participants != nil {
+		for _, item := range d.participants.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, AgentID: agentID}) {
+			if participantID := strings.TrimSpace(item.ID); participantID != "" {
+				return participantID
+			}
+		}
+	}
+	return defaultParticipantIDForAgentID(agentID)
+}
+
 func (d *CSGClawTeamDirectory) channelUserIDForParticipant(participantID string) string {
 	participantID = strings.TrimSpace(participantID)
 	if participantID == "" {

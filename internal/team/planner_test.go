@@ -3,12 +3,14 @@ package team
 import (
 	"strings"
 	"testing"
+
+	"csgclaw/internal/agent"
 )
 
 func TestNormalizeManagerPlanRejectsNonParticipantWorkerID(t *testing.T) {
 	_, err := normalizeManagerPlan(managerPlanContext{
 		TeamID:              "team-1",
-		LeadParticipantID:   "manager",
+		LeadAgentID:         agent.ManagerUserID,
 		AssignableMemberIDs: []string{"p-w-0604"},
 		Task: managerPlanTaskContext{
 			ID:    "task-1",
@@ -30,9 +32,9 @@ func TestNormalizeManagerPlanRejectsNonParticipantWorkerID(t *testing.T) {
 func TestManagerPlanContextResolvesLocalManagerParticipantToLead(t *testing.T) {
 	planner := &ManagerPlanner{directory: plannerAliasDirectory{}}
 	planCtx := planner.managerPlanContext(TeamMeta{
-		ID:                "team-1",
-		RoomID:            "room-1",
-		LeadParticipantID: "manager",
+		ID:          "team-1",
+		RoomID:      "room-1",
+		LeadAgentID: agent.ManagerUserID,
 	}, TeamTask{
 		ID:    "task-1",
 		Title: "Research",

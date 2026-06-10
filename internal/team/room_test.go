@@ -3,6 +3,8 @@ package team
 import (
 	"strings"
 	"testing"
+
+	"csgclaw/internal/agent"
 )
 
 func TestTaskExecutionRoomTitleIncludesTaskID(t *testing.T) {
@@ -18,10 +20,10 @@ func TestTaskExecutionRoomTitleIncludesTaskID(t *testing.T) {
 func TestFindTeamByRoomMatchesExecutionRoom(t *testing.T) {
 	svc := newTestService()
 	meta, err := svc.CreateTeam(CreateTeamInput{
-		ID:                "team-ops",
-		RoomID:            "room-team-home",
-		Channel:           "csgclaw",
-		LeadParticipantID: "manager",
+		ID:          "team-ops",
+		RoomID:      "room-team-home",
+		Channel:     "csgclaw",
+		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)
@@ -68,10 +70,10 @@ func TestFindTeamByRoomMatchesExecutionRoom(t *testing.T) {
 func TestPlanTaskProjectsPlanningCompleteToBoundExecutionRoom(t *testing.T) {
 	svc := newTestService()
 	meta, err := svc.CreateTeam(CreateTeamInput{
-		ID:                "team-ops",
-		RoomID:            "room-team-home",
-		Channel:           "csgclaw",
-		LeadParticipantID: "manager",
+		ID:          "team-ops",
+		RoomID:      "room-team-home",
+		Channel:     "csgclaw",
+		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)

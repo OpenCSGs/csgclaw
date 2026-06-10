@@ -21,10 +21,11 @@ func (s *Service) EnsureTaskExecutionRoom(ctx context.Context, adapter TeamChann
 	}
 
 	memberParticipantIDs := s.taskExecutionRoomMemberParticipantIDs(directory, meta, parent)
+	leadParticipantID := participantIDForAgentID(adapter, meta.LeadAgentID)
 	roomRef, err := adapter.EnsureRoom(ctx, EnsureRoomRequest{
 		Title:                TaskExecutionRoomTitle(parent),
-		LeadParticipantID:    meta.LeadParticipantID,
-		CreatorParticipantID: meta.LeadParticipantID,
+		LeadParticipantID:    leadParticipantID,
+		CreatorParticipantID: leadParticipantID,
 		MemberParticipantIDs: memberParticipantIDs,
 	})
 	if err != nil {
@@ -58,12 +59,13 @@ func (s *Service) syncTaskExecutionRoomMembers(ctx context.Context, adapter Team
 	if len(memberParticipantIDs) == 0 {
 		return nil
 	}
+	leadParticipantID := participantIDForAgentID(adapter, meta.LeadAgentID)
 	return adapter.AddMembers(ctx, AddMembersRequest{
 		Room: RoomRef{
 			Channel: firstNonEmpty(meta.Channel, adapter.Channel()),
 			RoomID:  roomID,
 		},
-		InviterParticipantID: meta.LeadParticipantID,
+		InviterParticipantID: leadParticipantID,
 		MemberParticipantIDs: memberParticipantIDs,
 	})
 }
@@ -71,9 +73,10 @@ func (s *Service) syncTaskExecutionRoomMembers(ctx context.Context, adapter Team
 func (s *Service) taskExecutionRoomMemberParticipantIDs(directory ExecutionRoomDirectory, meta TeamMeta, parent TeamTask) []string {
 	seen := make(map[string]struct{})
 	out := make([]string, 0)
+	leadParticipantID := participantIDForAgentID(directory, meta.LeadAgentID)
 	add := func(id string) {
 		id, err := requireCanonicalParticipantID("participant_id", id)
-		if err != nil || id == "" || ParticipantIDsMatch(id, meta.LeadParticipantID) {
+		if err != nil || id == "" || ParticipantIDsMatch(id, leadParticipantID) {
 			return
 		}
 		if _, dup := seen[id]; dup {
@@ -82,7 +85,7 @@ func (s *Service) taskExecutionRoomMemberParticipantIDs(directory ExecutionRoomD
 		seen[id] = struct{}{}
 		out = append(out, id)
 	}
-	for _, id := range teamRoomMemberParticipantIDs(directory, meta.RoomID, meta.LeadParticipantID) {
+	for _, id := range teamRoomMemberParticipantIDs(directory, meta.RoomID, leadParticipantID) {
 		add(id)
 	}
 	for _, id := range s.parentTaskAssigneeParticipantIDs(directory, meta.ID, parent.ID) {

@@ -3,14 +3,14 @@ package apitypes
 import "time"
 
 type Team struct {
-	ID                string    `json:"id"`
-	RoomID            string    `json:"room_id"`
-	Channel           string    `json:"channel"`
-	Title             string    `json:"title"`
-	LeadParticipantID string    `json:"lead_participant_id"`
-	Status            string    `json:"status"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	RoomID      string    `json:"room_id"`
+	Channel     string    `json:"channel"`
+	Title       string    `json:"title"`
+	LeadAgentID string    `json:"lead_agent_id"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type TeamTask struct {
@@ -88,7 +88,9 @@ type CreateTeamRequest struct {
 	Channel              string   `json:"channel"`
 	RoomID               string   `json:"room_id,omitempty"`
 	Title                string   `json:"title,omitempty"`
-	LeadParticipantID    string   `json:"lead_participant_id"`
+	LeadAgentID          string   `json:"lead_agent_id,omitempty"`
+	LeadParticipantID    string   `json:"lead_participant_id,omitempty"`
+	MemberAgentIDs       []string `json:"member_agent_ids,omitempty"`
 	MemberParticipantIDs []string `json:"member_participant_ids,omitempty"`
 }
 

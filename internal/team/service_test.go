@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"csgclaw/internal/agent"
 )
 
 func TestCreateTasksBatchIsAtomic(t *testing.T) {
@@ -424,11 +426,11 @@ func TestClaimNextAcrossTeamsUsesUniqueHighestPriority(t *testing.T) {
 	svc := newTestService()
 	firstTeamID := createTestTeam(t, svc)
 	secondTeam, err := svc.CreateTeam(CreateTeamInput{
-		ID:                "team-qa",
-		RoomID:            "room-qa",
-		Channel:           "csgclaw",
-		Title:             "QA",
-		LeadParticipantID: "manager",
+		ID:          "team-qa",
+		RoomID:      "room-qa",
+		Channel:     "csgclaw",
+		Title:       "QA",
+		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam(second) error = %v", err)
@@ -464,11 +466,11 @@ func TestClaimNextAcrossTeamsRequiresExplicitTeamOnPriorityTie(t *testing.T) {
 	svc := newTestService()
 	firstTeamID := createTestTeam(t, svc)
 	secondTeam, err := svc.CreateTeam(CreateTeamInput{
-		ID:                "team-qa",
-		RoomID:            "room-qa",
-		Channel:           "csgclaw",
-		Title:             "QA",
-		LeadParticipantID: "manager",
+		ID:          "team-qa",
+		RoomID:      "room-qa",
+		Channel:     "csgclaw",
+		Title:       "QA",
+		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam(second) error = %v", err)
@@ -898,8 +900,8 @@ func TestStoreWritesParticipantFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read team.json error = %v", err)
 	}
-	if !bytes.Contains(teamJSON, []byte(`"lead_participant_id"`)) || bytes.Contains(teamJSON, []byte(`"lead_bot_id"`)) {
-		t.Fatalf("team.json = %s, want lead_participant_id without lead_bot_id", string(teamJSON))
+	if !bytes.Contains(teamJSON, []byte(`"lead_agent_id"`)) || bytes.Contains(teamJSON, []byte(`"lead_bot_id"`)) {
+		t.Fatalf("team.json = %s, want lead_agent_id without lead_bot_id", string(teamJSON))
 	}
 	presenceJSON, err := os.ReadFile(filepath.Join(root, teamID, presenceFileName))
 	if err != nil {
@@ -929,11 +931,11 @@ func createTestTeam(t *testing.T, svc *Service) string {
 	t.Helper()
 
 	team, err := svc.CreateTeam(CreateTeamInput{
-		ID:                "team-ops",
-		RoomID:            "room-ops",
-		Channel:           "csgclaw",
-		Title:             "Ops",
-		LeadParticipantID: "manager",
+		ID:          "team-ops",
+		RoomID:      "room-ops",
+		Channel:     "csgclaw",
+		Title:       "Ops",
+		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)

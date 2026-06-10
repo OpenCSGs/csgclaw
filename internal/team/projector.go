@@ -31,7 +31,8 @@ func (p *Projector) Project(ctx context.Context, meta TeamMeta, events []TeamEve
 		return fmt.Errorf("channel adapter mismatch: team=%s adapter=%s", meta.Channel, p.adapter.Channel())
 	}
 
-	renderer := newProjectionRenderer(p.adapter, meta.LeadParticipantID)
+	leadParticipantID := participantIDForAgentID(p.adapter, meta.LeadAgentID)
+	renderer := newProjectionRenderer(p.adapter, leadParticipantID)
 	plans := buildProjectionPlans(events, renderer, meta)
 	for _, plan := range plans {
 		if strings.TrimSpace(plan.content) == "" {
@@ -49,7 +50,7 @@ func (p *Projector) Project(ctx context.Context, meta TeamMeta, events []TeamEve
 				Channel: firstNonEmpty(meta.Channel, p.adapter.Channel()),
 				RoomID:  roomID,
 			},
-			SenderParticipantID: projectionSenderParticipantID(firstNonEmpty(plan.senderID, meta.LeadParticipantID), meta.LeadParticipantID),
+			SenderParticipantID: projectionSenderParticipantID(firstNonEmpty(plan.senderID, leadParticipantID), leadParticipantID),
 			MentionID:           strings.TrimSpace(plan.mentionID),
 			Kind:                firstNonEmpty(plan.kind, "team_event"),
 			Content:             plan.content,
@@ -240,11 +241,11 @@ func renderSingleEvent(event TeamEvent, renderer projectionRenderer, meta TeamMe
 	}
 }
 
-func projectionSenderParticipantID(actorID, leadParticipantID string) string {
+func projectionSenderParticipantID(actorID, leadAgentID string) string {
 	actorID = cleanParticipantID(actorID)
-	leadParticipantID = cleanParticipantID(leadParticipantID)
+	leadAgentID = cleanParticipantID(leadAgentID)
 	if actorID == "" || actorID == "web" {
-		return leadParticipantID
+		return leadAgentID
 	}
 	return actorID
 }
@@ -258,11 +259,11 @@ type projectionRenderer struct {
 	displayName     func(string) string
 }
 
-func newProjectionRenderer(adapter TeamChannelAdapter, leadParticipantID string) projectionRenderer {
+func newProjectionRenderer(adapter TeamChannelAdapter, leadAgentID string) projectionRenderer {
 	resolver, _ := adapter.(participantDisplayNameResolver)
 	leadName := ""
 	if resolver != nil {
-		leadName = strings.TrimSpace(resolver.ParticipantDisplayName(leadParticipantID))
+		leadName = strings.TrimSpace(resolver.ParticipantDisplayName(leadAgentID))
 	}
 	return projectionRenderer{
 		systemActorName: firstNonEmpty(leadName, "manager"),

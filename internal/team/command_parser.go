@@ -148,7 +148,7 @@ func (p *CommandParser) sendFeedback(ctx context.Context, meta TeamMeta, roomID 
 			Channel: firstNonEmpty(meta.Channel, p.adapter.Channel()),
 			RoomID:  targetRoomID,
 		},
-		SenderParticipantID: meta.LeadParticipantID,
+		SenderParticipantID: participantIDForAgentID(p.adapter, meta.LeadAgentID),
 		Kind:                "team_event",
 		Content:             content,
 	})

@@ -10,6 +10,7 @@ import {
   runAgentActionRequest,
   updateAgentRequest,
 } from "@/api/agents";
+import { createTeamRequest, fetchTeams } from "@/api/tasks";
 import { useAgentController } from "@/hooks/workspace/useAgentController";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
@@ -32,6 +33,7 @@ vi.mock("@/api/tasks", async () => {
   const actual = await vi.importActual<typeof import("@/api/tasks")>("@/api/tasks");
   return {
     ...actual,
+    createTeamRequest: vi.fn(),
     fetchTeams: vi.fn(async () => []),
   };
 });
@@ -160,12 +162,25 @@ describe("useAgentController", () => {
     vi.mocked(fetchAgentProfile).mockReset();
     vi.mocked(fetchAgentProfileModels).mockReset();
     vi.mocked(fetchAgentWorkspace).mockReset();
+    vi.mocked(createTeamRequest).mockReset();
+    vi.mocked(fetchTeams).mockReset();
     vi.mocked(runAgentActionRequest).mockReset();
     vi.mocked(updateAgentRequest).mockReset();
     vi.mocked(fetchAgent).mockResolvedValueOnce(oldAgent).mockResolvedValueOnce(latestAgent);
     vi.mocked(fetchAgentProfile).mockResolvedValue(profile);
     vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: [] });
     vi.mocked(fetchAgentWorkspace).mockResolvedValue({ entries: [] });
+    vi.mocked(createTeamRequest).mockResolvedValue({
+      channel: "csgclaw",
+      created_at: "2026-06-10T00:00:00Z",
+      id: "team-1",
+      lead_agent_id: "u-manager",
+      room_id: "room-1",
+      status: "active",
+      title: "Untitled Team",
+      updated_at: "2026-06-10T00:00:00Z",
+    });
+    vi.mocked(fetchTeams).mockResolvedValue([]);
     vi.mocked(runAgentActionRequest).mockResolvedValue({
       ...oldAgent,
       image: actionImage,
@@ -254,5 +269,26 @@ describe("useAgentController", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("creates teams with agent id fields from the agent list", async () => {
+    const { result } = renderHook(() => useAgentControllerHarness(), { wrapper: createWrapper() });
+
+    act(() => {
+      result.current.controller.openCreateTeamModal();
+    });
+
+    await waitFor(() => expect(result.current.controller.createTeamModalProps?.teamMemberIDs).toEqual(["u-manager"]));
+
+    await act(async () => {
+      await result.current.controller.createTeamModalProps?.onCreate();
+    });
+
+    expect(createTeamRequest).toHaveBeenCalledWith({
+      channel: "csgclaw",
+      lead_agent_id: "u-manager",
+      member_agent_ids: ["u-manager"],
+      title: "teamNewFallbackTitle",
+    });
   });
 });

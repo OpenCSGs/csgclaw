@@ -7,11 +7,11 @@ import (
 )
 
 type CreateTeamWithRoomInput struct {
-	RoomID               string
-	Channel              string
-	Title                string
-	LeadParticipantID    string
-	MemberParticipantIDs []string
+	RoomID         string
+	Channel        string
+	Title          string
+	LeadAgentID    string
+	MemberAgentIDs []string
 }
 
 func (s *Service) CreateTeamWithRoom(ctx context.Context, adapter TeamChannelAdapter, input CreateTeamWithRoomInput) (TeamMeta, error) {
@@ -26,13 +26,20 @@ func (s *Service) CreateTeamWithRoom(ctx context.Context, adapter TeamChannelAda
 		return TeamMeta{}, fmt.Errorf("unsupported team channel %q", channel)
 	}
 
-	memberParticipantIDs, err := uniqueParticipantIDs(input.MemberParticipantIDs)
+	memberAgentIDs, err := uniqueAgentIDs(input.MemberAgentIDs)
 	if err != nil {
 		return TeamMeta{}, err
 	}
-	leadParticipantID, err := requireCanonicalParticipantID("lead_participant_id", input.LeadParticipantID)
+	leadAgentID, err := requireAgentID("lead_agent_id", input.LeadAgentID)
 	if err != nil {
 		return TeamMeta{}, err
+	}
+	leadParticipantID := participantIDForAgentID(adapter, leadAgentID)
+	memberParticipantIDs := make([]string, 0, len(memberAgentIDs))
+	for _, memberAgentID := range memberAgentIDs {
+		if participantID := participantIDForAgentID(adapter, memberAgentID); participantID != "" {
+			memberParticipantIDs = append(memberParticipantIDs, participantID)
+		}
 	}
 	roomID := strings.TrimSpace(input.RoomID)
 	title := strings.TrimSpace(input.Title)
@@ -57,10 +64,10 @@ func (s *Service) CreateTeamWithRoom(ctx context.Context, adapter TeamChannelAda
 	}
 
 	return s.CreateTeam(CreateTeamInput{
-		RoomID:            roomRef.RoomID,
-		Channel:           channel,
-		Title:             title,
-		LeadParticipantID: leadParticipantID,
+		RoomID:      roomRef.RoomID,
+		Channel:     channel,
+		Title:       title,
+		LeadAgentID: leadAgentID,
 	})
 }
 
@@ -86,6 +93,26 @@ func uniqueParticipantIDs(values []string) ([]string, error) {
 	out := make([]string, 0, len(values))
 	for _, value := range values {
 		value, err := requireCanonicalParticipantID("participant_id", value)
+		if err != nil {
+			return nil, err
+		}
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out, nil
+}
+
+func uniqueAgentIDs(values []string) ([]string, error) {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value, err := requireAgentID("agent_id", value)
 		if err != nil {
 			return nil, err
 		}

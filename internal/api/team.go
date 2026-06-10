@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/participant"
 	"csgclaw/internal/team"
 )
 
@@ -29,18 +31,74 @@ func (h *Handler) handleCreateTeam(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
+	leadAgentID, memberAgentIDs, err := h.resolveCreateTeamAgents(req)
+	if err != nil {
+		writeTeamError(w, err)
+		return
+	}
 	created, err := svc.CreateTeamWithRoom(r.Context(), adapter, team.CreateTeamWithRoomInput{
-		RoomID:               strings.TrimSpace(req.RoomID),
-		Channel:              strings.TrimSpace(req.Channel),
-		Title:                strings.TrimSpace(req.Title),
-		LeadParticipantID:    strings.TrimSpace(req.LeadParticipantID),
-		MemberParticipantIDs: req.MemberParticipantIDs,
+		RoomID:         strings.TrimSpace(req.RoomID),
+		Channel:        strings.TrimSpace(req.Channel),
+		Title:          strings.TrimSpace(req.Title),
+		LeadAgentID:    leadAgentID,
+		MemberAgentIDs: memberAgentIDs,
 	})
 	if err != nil {
 		writeTeamError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, apiTeam(created))
+}
+
+func (h *Handler) resolveCreateTeamAgents(req apitypes.CreateTeamRequest) (string, []string, error) {
+	leadAgentID := strings.TrimSpace(req.LeadAgentID)
+	if leadAgentID == "" && strings.TrimSpace(req.LeadParticipantID) != "" {
+		resolved, err := h.resolveCreateTeamParticipantID("lead_participant_id", req.LeadParticipantID)
+		if err != nil {
+			return "", nil, err
+		}
+		leadAgentID = resolved
+	}
+
+	memberAgentIDs := req.MemberAgentIDs
+	if len(req.MemberAgentIDs) > 0 {
+		memberAgentIDs = req.MemberAgentIDs
+	} else if len(req.MemberParticipantIDs) > 0 {
+		memberAgentIDs = make([]string, 0, len(req.MemberParticipantIDs))
+		for _, participantID := range req.MemberParticipantIDs {
+			resolved, err := h.resolveCreateTeamParticipantID("member_participant_ids", participantID)
+			if err != nil {
+				return "", nil, err
+			}
+			if strings.TrimSpace(resolved) == "" {
+				continue
+			}
+			memberAgentIDs = append(memberAgentIDs, resolved)
+		}
+	}
+
+	return leadAgentID, memberAgentIDs, nil
+}
+
+func (h *Handler) resolveCreateTeamParticipantID(field, id string) (string, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", nil
+	}
+	if id == agent.ManagerParticipantID {
+		return agent.ManagerUserID, nil
+	}
+	if h != nil && h.participant != nil {
+		if item, ok := h.participant.Get(participant.ChannelCSGClaw, id); ok {
+			if agentID := strings.TrimSpace(item.AgentID); agentID != "" {
+				return agentID, nil
+			}
+		}
+	}
+	if strings.HasPrefix(id, "u-") {
+		return id, nil
+	}
+	return "u-" + id, nil
 }
 
 func (h *Handler) handleGetTeam(w http.ResponseWriter, r *http.Request) {

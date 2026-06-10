@@ -50,14 +50,14 @@ const (
 
 // TeamMeta marks that a room has team orchestration enabled.
 type TeamMeta struct {
-	ID                string    `json:"id"`
-	RoomID            string    `json:"room_id"`
-	Channel           string    `json:"channel"`
-	Title             string    `json:"title"`
-	LeadParticipantID string    `json:"lead_participant_id"`
-	Status            string    `json:"status"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	RoomID      string    `json:"room_id"`
+	Channel     string    `json:"channel"`
+	Title       string    `json:"title"`
+	LeadAgentID string    `json:"lead_agent_id"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // MemberPresence captures runtime state derived from room members plus participant identity.
