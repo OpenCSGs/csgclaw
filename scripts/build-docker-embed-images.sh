@@ -29,23 +29,59 @@ image_tag_for_template() {
   printf '%s' "${version}"
 }
 
+base_image_arg_for_template() {
+  local name="$1"
+  case "${name}" in
+    picoclaw-*) printf 'PICOCLAW_IMAGE' ;;
+    openclaw-*) printf 'OPENCLAW_IMAGE' ;;
+    *) return 1 ;;
+  esac
+}
+
+base_image_override_key_for_template() {
+  local name="$1"
+  case "${name}" in
+    picoclaw-*) printf 'PICOCLAW_BASE_IMAGE' ;;
+    openclaw-*) printf 'OPENCLAW_BASE_IMAGE' ;;
+    *) return 1 ;;
+  esac
+}
+
 build_one() {
   local name="$1"
-  local tag image
+  local tag image dockerfile base_arg override_key override_value
 
   tag="$(image_tag_for_template "${name}")"
   image="${ACR_REGISTRY}/opencsghq/${name}:${tag}"
-  if [ -n "${PICOCLAW_BASE_IMAGE:-}" ]; then
-    echo "docker build ${name} -> ${image} (PICOCLAW_IMAGE override: ${PICOCLAW_BASE_IMAGE})"
-    docker build -f "${ROOT}/internal/templates/embed/${name}/Dockerfile" \
-      --build-arg "PICOCLAW_IMAGE=${PICOCLAW_BASE_IMAGE}" \
+  dockerfile="${ROOT}/internal/templates/embed/${name}/Dockerfile"
+  if [ ! -f "${dockerfile}" ]; then
+    echo "missing Dockerfile: ${dockerfile}" >&2
+    exit 1
+  fi
+
+  base_arg=""
+  override_key=""
+  override_value=""
+  if base_arg="$(base_image_arg_for_template "${name}")"; then
+    override_key="$(base_image_override_key_for_template "${name}")"
+    override_value="${!override_key:-}"
+  fi
+
+  if [ -n "${override_value}" ]; then
+    echo "docker build ${name} -> ${image} (${base_arg} override from ${override_key}: ${override_value})"
+    docker build -f "${dockerfile}" \
+      --build-arg "${base_arg}=${override_value}" \
       -t "${image}" \
       "${ROOT}"
     return
   fi
 
-  echo "docker build ${name} -> ${image} (PICOCLAW_IMAGE from Dockerfile default)"
-  docker build -f "${ROOT}/internal/templates/embed/${name}/Dockerfile" \
+  if [ -n "${base_arg}" ]; then
+    echo "docker build ${name} -> ${image} (${base_arg} from Dockerfile default)"
+  else
+    echo "docker build ${name} -> ${image} (Dockerfile defaults)"
+  fi
+  docker build -f "${dockerfile}" \
     -t "${image}" \
     "${ROOT}"
 }

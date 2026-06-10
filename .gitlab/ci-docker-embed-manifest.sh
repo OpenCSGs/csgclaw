@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$#" -ne 1 ]; then
-  echo "usage: ci-picoclaw-manifest.sh <image-name>" >&2
+  echo "usage: ci-docker-embed-manifest.sh <image-name>" >&2
   exit 1
 fi
 
@@ -19,7 +19,7 @@ if [ ! -f "${manifest}" ]; then
   exit 1
 fi
 
-PICOCLAW_IMAGE_VERSION="$(awk -F= '
+EMBED_IMAGE_VERSION="$(awk -F= '
   /^version[[:space:]]*=[[:space:]]*/ {
     value = $2
     gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
@@ -30,15 +30,15 @@ PICOCLAW_IMAGE_VERSION="$(awk -F= '
   }
 ' "${manifest}")"
 
-if [ -z "${PICOCLAW_IMAGE_VERSION}" ]; then
+if [ -z "${EMBED_IMAGE_VERSION}" ]; then
   echo "missing version in ${manifest}" >&2
   exit 1
 fi
 
 repo="${ACR_REGISTRY}/opencsghq/${image_name}"
-amd64_ref="${repo}:${PICOCLAW_IMAGE_VERSION}-amd64"
-arm64_ref="${repo}:${PICOCLAW_IMAGE_VERSION}-arm64"
-target_ref="${repo}:${PICOCLAW_IMAGE_VERSION}"
+amd64_ref="${repo}:${EMBED_IMAGE_VERSION}-amd64"
+arm64_ref="${repo}:${EMBED_IMAGE_VERSION}-arm64"
+target_ref="${repo}:${EMBED_IMAGE_VERSION}"
 
 crane auth login "$ACR_REGISTRY" -u "$ACR_USERNAME" -p "$ACR_PASSWORD"
 

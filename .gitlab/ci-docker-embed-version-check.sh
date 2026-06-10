@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# Detect embed agent.toml changes on main for CI build gating.
+# Detect docker embed agent.toml changes on main for CI build gating.
 # Compares the pushed range (CI_COMMIT_BEFORE_SHA..HEAD), not just HEAD~1.
-# CI never modifies agent.toml — it reads version/image.ref and builds images with that tag.
-# Writes picoclaw-build.env (GitLab dotenv report) for downstream jobs.
+# CI never modifies agent.toml - it reads version/image.ref and builds images with that tag.
+# Writes docker-embed-build.env (GitLab dotenv report) for downstream jobs.
 set -euo pipefail
 
 : "${CI_COMMIT_SHA:?CI_COMMIT_SHA must be set}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${CI_PROJECT_DIR:-${ROOT}}/picoclaw-build.env"
-MANAGER_TEMPLATE="picoclaw-manager"
-WORKER_TEMPLATE="picoclaw-worker"
+ENV_FILE="${CI_PROJECT_DIR:-${ROOT}}/docker-embed-build.env"
+LIST_SCRIPT="${ROOT}/scripts/list-docker-embed-templates.sh"
 CURRENT_REF="HEAD"
 EMPTY_SHA="0000000000000000000000000000000000000000"
 
@@ -152,6 +151,23 @@ validate_version_and_ref() {
   fi
 }
 
+env_prefix_for_template() {
+  local template="$1"
+  template="${template//-/_}"
+  printf '%s' "${template^^}"
+}
+
+chmod +x "${LIST_SCRIPT}"
+templates=()
+while IFS= read -r name; do
+  [ -n "${name}" ] && templates+=("${name}")
+done < <("${LIST_SCRIPT}")
+
+if [ "${#templates[@]}" -eq 0 ]; then
+  echo "no docker embed templates found" >&2
+  exit 1
+fi
+
 compare_base=""
 if compare_base="$(find_compare_base)"; then
   echo "compare base: ${compare_base} (range ${compare_base}..${CURRENT_REF})"
@@ -159,38 +175,42 @@ else
   echo "no compare base found; treating embed manifests as new"
 fi
 
-manager_version="$(read_agent_toml_version_at_ref "${MANAGER_TEMPLATE}" "${CURRENT_REF}")"
-worker_version="$(read_agent_toml_version_at_ref "${WORKER_TEMPLATE}" "${CURRENT_REF}")"
-
-manager_build=false
-worker_build=false
-if should_build_template "${MANAGER_TEMPLATE}" "${compare_base:-}"; then
-  manager_build=true
-  validate_version_and_ref "${MANAGER_TEMPLATE}" "${manager_version}"
-fi
-if should_build_template "${WORKER_TEMPLATE}" "${compare_base:-}"; then
-  worker_build=true
-  validate_version_and_ref "${WORKER_TEMPLATE}" "${worker_version}"
-fi
-
+declare -A versions
+declare -A builds
 any_build=false
-if [ "${manager_build}" = true ] || [ "${worker_build}" = true ]; then
-  any_build=true
-fi
+for template in "${templates[@]}"; do
+  version="$(read_agent_toml_version_at_ref "${template}" "${CURRENT_REF}")"
+  build=false
+  if should_build_template "${template}" "${compare_base:-}"; then
+    build=true
+    validate_version_and_ref "${template}" "${version}"
+  fi
+  versions["${template}"]="${version}"
+  builds["${template}"]="${build}"
+  if [ "${build}" = true ]; then
+    any_build=true
+  fi
+done
 
 {
-  printf 'PICOCLAW_MANAGER_VERSION=%s\n' "${manager_version}"
-  printf 'PICOCLAW_WORKER_VERSION=%s\n' "${worker_version}"
-  printf 'PICOCLAW_MANAGER_BUILD=%s\n' "${manager_build}"
-  printf 'PICOCLAW_WORKER_BUILD=%s\n' "${worker_build}"
+  for template in "${templates[@]}"; do
+    prefix="$(env_prefix_for_template "${template}")"
+    printf '%s_VERSION=%s\n' "${prefix}" "${versions[${template}]}"
+    printf '%s_BUILD=%s\n' "${prefix}" "${builds[${template}]}"
+  done
+  printf 'DOCKER_EMBED_ANY_BUILD=%s\n' "${any_build}"
+  # Compatibility for existing CI job names and older downstream references.
   printf 'PICOCLAW_ANY_BUILD=%s\n' "${any_build}"
   if [ -n "${compare_base}" ]; then
+    printf 'DOCKER_EMBED_COMPARE_BASE=%s\n' "${compare_base}"
+    printf 'DOCKER_EMBED_PREVIOUS_COMMIT=%s\n' "${compare_base}"
     printf 'PICOCLAW_COMPARE_BASE=%s\n' "${compare_base}"
     printf 'PICOCLAW_PREVIOUS_COMMIT=%s\n' "${compare_base}"
   fi
 } > "${ENV_FILE}"
 
-echo "picoclaw-manager version=${manager_version} build=${manager_build}"
-echo "picoclaw-worker version=${worker_version} build=${worker_build}"
-echo "picoclaw any_build=${any_build}"
+for template in "${templates[@]}"; do
+  echo "${template} version=${versions[${template}]} build=${builds[${template}]}"
+done
+echo "docker embed any_build=${any_build}"
 cat "${ENV_FILE}"

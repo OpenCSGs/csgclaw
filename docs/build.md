@@ -2,7 +2,7 @@
 
 English | [中文](build.zh.md)
 
-This document describes the repository `Makefile` targets for local development, testing, packaging, and optional PicoClaw embed image builds.
+This document describes the repository `Makefile` targets for local development, testing, packaging, and optional docker embed image builds.
 
 Run all commands from the repository root. For a quick summary at any time:
 
@@ -52,7 +52,7 @@ make run
 make build-all
 ```
 
-Use this when you need local `picoclaw-manager` / `picoclaw-worker` images. It can be slow.
+Use this when you need local PicoClaw or OpenClaw embed images. It can be slow.
 
 ## Web UI
 
@@ -71,13 +71,13 @@ Frontend structure and verification details: [docs/web/development.md](web/devel
 | Target | Output | Notes |
 |--------|--------|-------|
 | `make build-server-bin` | `bin/csgclaw`, `bin/csgclaw-cli` | Both binaries for the current platform; CLI uses `CGO_ENABLED=0` |
-| `make stage-docker-embed-cli` | `bin/csgclaw-cli` (linux, host arch) | Linux CLI copied into PicoClaw Docker images |
+| `make stage-docker-embed-cli` | `bin/csgclaw-cli` (linux, host arch) | Linux CLI copied into docker embed images |
 
-`csgclaw-cli` is built with `CGO_ENABLED=0` so it runs inside musl-based PicoClaw and BoxLite sandbox images. Release CI uses the same setting (`scripts/release-build-all.sh`).
+`csgclaw-cli` is built with `CGO_ENABLED=0` so it runs inside sandbox images. Release CI uses the same setting (`scripts/release-build-all.sh`).
 
 ## Embed templates
 
-Builtin PicoClaw templates live under `internal/templates/embed/<name>/` and are embedded directly via `go:embed` (`agent.toml`, `workspace/`, etc.). Each docker embed template carries a `version` field and matching `image.ref`.
+Builtin runtime templates live under `internal/templates/embed/<name>/` and are embedded directly via `go:embed` (`agent.toml`, `workspace/`, etc.). Each docker embed template carries a `version` field and matching `image.ref`.
 
 **Local (before PR)**: `make build-all` bumps `version`, syncs `image.ref`, rebuilds `csgclaw` (so embed matches image tags), then builds Docker images.
 
@@ -89,7 +89,7 @@ Builtin PicoClaw templates live under `internal/templates/embed/<name>/` and are
 | `make bump-docker-embed-version` | Bump `version` and sync `image.ref` for all docker embed templates |
 | `make ensure-docker-embed-manifests` | Run `sync-docker-embed-image-refs` when `image.ref` is missing or out of sync with `version` (used by `make build` / `make test`) |
 
-Templates with a `Dockerfile` are discovered by `scripts/list-docker-embed-templates.sh` (currently `picoclaw-manager` and `picoclaw-worker`).
+Templates with a `Dockerfile` are discovered by `scripts/list-docker-embed-templates.sh` (currently `openclaw-manager`, `openclaw-worker`, `picoclaw-manager`, and `picoclaw-worker`).
 
 If `image.ref` is empty or out of sync with `version`, run:
 
@@ -116,9 +116,11 @@ Local Docker image builds are **optional** and can be slow. The usual entry poin
 | `make build-docker-embed-images` | Bump versions and build all embed templates that have a `Dockerfile` |
 | `make build-picoclaw-manager-image` | Bump manager version and build manager image only |
 | `make build-picoclaw-worker-image` | Bump worker version and build worker image only |
+| `make build-openclaw-manager-image` | Bump manager version and build manager image only |
+| `make build-openclaw-worker-image` | Bump worker version and build worker image only |
 | `make build-docker-embed-runtime-embed` | Alias for `build-docker-embed-images` |
 
-Alias targets `build-picoclaw-runtime-embed`, `sync-picoclaw-embed-image-refs`, `bump-picoclaw-embed-version`, and similar names remain for compatibility.
+Alias targets `build-picoclaw-runtime-embed`, `build-openclaw-runtime-embed`, `sync-picoclaw-embed-image-refs`, `sync-openclaw-embed-image-refs`, and similar names remain for compatibility.
 
 ### Useful variables
 
@@ -126,8 +128,12 @@ Alias targets `build-picoclaw-runtime-embed`, `sync-picoclaw-embed-image-refs`, 
 # Registry (default shown)
 ACR_REGISTRY=opencsg-registry.cn-beijing.cr.aliyuncs.com
 
-# Upstream picoclaw base image defaults to embed Dockerfile ARG PICOCLAW_IMAGE
+# Upstream base images default to embed Dockerfile ARG values.
 # Optional override: PICOCLAW_BASE_IMAGE=registry.example/opencsghq/picoclaw:tag make build-all
+# Optional override: OPENCLAW_BASE_IMAGE=registry.example/opencsghq/openclaw:tag make build-all
+
+# Default OpenClaw base image:
+# opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw
 
 # Example: local pre-PR image test (bumps version and updates image.ref, e.g. 0.1.0 -> 0.1.1)
 make build-all
@@ -138,7 +144,11 @@ Resulting images follow:
 ```text
 ${ACR_REGISTRY}/opencsghq/picoclaw-manager:<agent.toml version>
 ${ACR_REGISTRY}/opencsghq/picoclaw-worker:<agent.toml version>
+${ACR_REGISTRY}/opencsghq/openclaw-manager:<agent.toml version>
+${ACR_REGISTRY}/opencsghq/openclaw-worker:<agent.toml version>
 ```
+
+OpenClaw embed images use `OPENCLAW_IMAGE` from the OpenClaw embed Dockerfiles. Make sure `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw` exists locally or in the registry before running `make build-all`, or override it with `OPENCLAW_BASE_IMAGE=...`.
 
 After a successful image build, the matching `agent.toml` files are updated in place (`version` and `image.ref`).
 
@@ -173,7 +183,7 @@ Maintainer targets:
 | `make package-all` | Full build plus `csgclaw` and `csgclaw-cli` packages |
 | `make release` | Cross-platform release bundles (darwin/linux, arm64/amd64) |
 
-CI release flows use `.github/workflows/release.yml` (tag) and GitLab CI (tag for release archives; **main branch** builds and pushes picoclaw images from committed `version`, without editing `agent.toml`). Tag releases embed `agent.toml` from the tag commit as-is.
+CI release flows use `.github/workflows/release.yml` (tag) and GitLab CI (tag for release archives; **main branch** builds and pushes docker embed images from committed `version`, without editing `agent.toml`). Tag releases embed `agent.toml` from the tag commit as-is.
 
 ## Related docs
 

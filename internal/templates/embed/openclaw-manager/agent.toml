@@ -2,7 +2,8 @@ name = "openclaw-manager"
 description = "Builtin OpenClaw manager template"
 role = "manager"
 runtime_kind = "openclaw_sandbox"
-updated_at = "2026-05-29T03:10:23Z"
+updated_at = "2026-06-10T06:59:28Z"
+version = "0.1.3"
 
 [image]
-ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260608.2-csgclaw"
+ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw-manager:0.1.3"

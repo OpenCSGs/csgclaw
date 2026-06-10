@@ -2,7 +2,7 @@
 
 [English](build.md) | 中文
 
-本文说明仓库 `Makefile` 中的本地开发、测试、打包，以及可选的 PicoClaw embed 镜像构建命令。
+本文说明仓库 `Makefile` 中的本地开发、测试、打包，以及可选的 docker embed 镜像构建命令。
 
 请在仓库根目录执行以下命令。随时可运行：
 
@@ -52,7 +52,7 @@ make run
 make build-all
 ```
 
-需要本地 `picoclaw-manager` / `picoclaw-worker` 镜像时使用，可能较慢。
+需要本地 PicoClaw 或 OpenClaw embed 镜像时使用，可能较慢。
 
 ## Web UI
 
@@ -71,13 +71,13 @@ make build-all
 | 目标 | 输出 | 说明 |
 |------|------|------|
 | `make build-server-bin` | `bin/csgclaw`、`bin/csgclaw-cli` | 当前平台两个二进制；CLI 使用 `CGO_ENABLED=0` |
-| `make stage-docker-embed-cli` | `bin/csgclaw-cli`（linux，宿主机架构） | 打入 PicoClaw Docker 镜像的 Linux CLI |
+| `make stage-docker-embed-cli` | `bin/csgclaw-cli`（linux，宿主机架构） | 打入 docker embed 镜像的 Linux CLI |
 
-`csgclaw-cli` 使用 `CGO_ENABLED=0` 构建，以便在 musl 环境的 PicoClaw / BoxLite 沙箱中运行。Release CI 同样使用该设置（`scripts/release-build-all.sh`）。
+`csgclaw-cli` 使用 `CGO_ENABLED=0` 构建，以便在沙箱镜像中运行。Release CI 同样使用该设置（`scripts/release-build-all.sh`）。
 
 ## Embed 模板
 
-内置 PicoClaw 模板位于 `internal/templates/embed/<name>/`，通过 `go:embed` 直接嵌入（`agent.toml`、`workspace/` 等）。每个 docker embed 模板在 `agent.toml` 中有 `version` 字段与对应的 `image.ref`。
+内置运行时模板位于 `internal/templates/embed/<name>/`，通过 `go:embed` 直接嵌入（`agent.toml`、`workspace/` 等）。每个 docker embed 模板在 `agent.toml` 中有 `version` 字段与对应的 `image.ref`。
 
 **本地（PR 前）**：`make build-all` 会先递增 `version`、同步 `image.ref`，再编译 `csgclaw`（使 embed 与镜像 tag 一致），最后构建 Docker 镜像。
 
@@ -89,7 +89,7 @@ make build-all
 | `make bump-docker-embed-version` | 递增全部 docker embed 模板的 `version` 并同步 `image.ref` |
 | `make ensure-docker-embed-manifests` | `image.ref` 缺失或与 `version` 不一致时调用 `sync-docker-embed-image-refs`（`make build` / `make test` 使用） |
 
-带 `Dockerfile` 的模板由 `scripts/list-docker-embed-templates.sh` 发现（当前为 `picoclaw-manager` 和 `picoclaw-worker`）。
+带 `Dockerfile` 的模板由 `scripts/list-docker-embed-templates.sh` 发现（当前为 `openclaw-manager`、`openclaw-worker`、`picoclaw-manager` 和 `picoclaw-worker`）。
 
 若 `image.ref` 为空或与 `version` 不一致，请执行：
 
@@ -116,9 +116,11 @@ make sync-docker-embed-image-refs
 | `make build-docker-embed-images` | 递增 version 并构建所有带 `Dockerfile` 的 embed 模板 |
 | `make build-picoclaw-manager-image` | 递增 manager version 并仅构建 manager 镜像 |
 | `make build-picoclaw-worker-image` | 递增 worker version 并仅构建 worker 镜像 |
+| `make build-openclaw-manager-image` | 递增 manager version 并仅构建 manager 镜像 |
+| `make build-openclaw-worker-image` | 递增 worker version 并仅构建 worker 镜像 |
 | `make build-docker-embed-runtime-embed` | `build-docker-embed-images` 的别名 |
 
-兼容别名包括 `build-picoclaw-runtime-embed`、`sync-picoclaw-embed-image-refs`、`bump-picoclaw-embed-version` 等。
+兼容别名包括 `build-picoclaw-runtime-embed`、`build-openclaw-runtime-embed`、`sync-picoclaw-embed-image-refs`、`sync-openclaw-embed-image-refs` 等。
 
 ### 常用变量
 
@@ -126,8 +128,12 @@ make sync-docker-embed-image-refs
 # registry（默认值）
 ACR_REGISTRY=opencsg-registry.cn-beijing.cr.aliyuncs.com
 
-# 上游 picoclaw 基础镜像默认见 embed Dockerfile 的 ARG PICOCLAW_IMAGE
+# 上游基础镜像默认见各 embed Dockerfile 的 ARG。
 # 可选覆盖：PICOCLAW_BASE_IMAGE=registry.example/opencsghq/picoclaw:tag make build-all
+# 可选覆盖：OPENCLAW_BASE_IMAGE=registry.example/opencsghq/openclaw:tag make build-all
+
+# 默认 OpenClaw 基础镜像：
+# opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw
 
 # 示例：PR 前本地镜像测试（会递增 version 并更新 image.ref，如 0.1.0 -> 0.1.1）
 make build-all
@@ -138,7 +144,11 @@ make build-all
 ```text
 ${ACR_REGISTRY}/opencsghq/picoclaw-manager:<agent.toml version>
 ${ACR_REGISTRY}/opencsghq/picoclaw-worker:<agent.toml version>
+${ACR_REGISTRY}/opencsghq/openclaw-manager:<agent.toml version>
+${ACR_REGISTRY}/opencsghq/openclaw-worker:<agent.toml version>
 ```
+
+OpenClaw embed 镜像使用 OpenClaw embed Dockerfile 中的 `OPENCLAW_IMAGE`。运行 `make build-all` 前需要确保 `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw` 已存在于本地或 registry；也可以用 `OPENCLAW_BASE_IMAGE=...` 覆盖。
 
 镜像构建成功后，对应的 `agent.toml` 会原地更新（`version` 与 `image.ref`）。
 
@@ -173,7 +183,7 @@ go test ./...
 | `make package-all` | 完整构建并打包 `csgclaw` 与 `csgclaw-cli` |
 | `make release` | 跨平台 release bundle（darwin/linux，arm64/amd64） |
 
-CI 发布流程见 `.github/workflows/release.yml`（tag）与 GitLab CI（tag 打 release 包；**main 分支**按已提交的 `version` 构建并 push picoclaw 镜像，不修改 `agent.toml`）。Tag release 直接使用 tag commit 中已提交的 `agent.toml`。
+CI 发布流程见 `.github/workflows/release.yml`（tag）与 GitLab CI（tag 打 release 包；**main 分支**按已提交的 `version` 构建并 push docker embed 镜像，不修改 `agent.toml`）。Tag release 直接使用 tag commit 中已提交的 `agent.toml`。
 
 ## 相关文档
 

@@ -132,6 +132,18 @@ legacy_image_ref_for_template() {
         return 0
       fi
       ;;
+    openclaw-manager)
+      if [ -n "${OPENCLAW_MANAGER_IMAGE_REF+x}" ]; then
+        printf '%s' "${OPENCLAW_MANAGER_IMAGE_REF}"
+        return 0
+      fi
+      ;;
+    openclaw-worker)
+      if [ -n "${OPENCLAW_WORKER_IMAGE_REF+x}" ]; then
+        printf '%s' "${OPENCLAW_WORKER_IMAGE_REF}"
+        return 0
+      fi
+      ;;
   esac
   return 1
 }
@@ -177,11 +189,11 @@ patch_agent_toml_ref() {
   fi
 
   escaped_ref="$(toml_escape_basic_string "${image_ref}")"
-  export PICOCLAW_IMAGE_REF="${escaped_ref}"
+  export DOCKER_EMBED_IMAGE_REF="${escaped_ref}"
 
   awk '
     BEGIN {
-      ref = ENVIRON["PICOCLAW_IMAGE_REF"]
+      ref = ENVIRON["DOCKER_EMBED_IMAGE_REF"]
       in_image = 0
       ref_done = 0
       has_image_section = 0
@@ -219,7 +231,7 @@ patch_agent_toml_ref() {
     }
   ' "${manifest}" > "${manifest}.tmp"
 
-  unset PICOCLAW_IMAGE_REF
+  unset DOCKER_EMBED_IMAGE_REF
   mv "${manifest}.tmp" "${manifest}"
 }
 
@@ -236,11 +248,11 @@ patch_agent_toml_version() {
   fi
 
   escaped_version="$(toml_escape_basic_string "${version}")"
-  export PICOCLAW_TEMPLATE_VERSION="${escaped_version}"
+  export DOCKER_EMBED_TEMPLATE_VERSION="${escaped_version}"
 
   awk '
     BEGIN {
-      version = ENVIRON["PICOCLAW_TEMPLATE_VERSION"]
+      version = ENVIRON["DOCKER_EMBED_TEMPLATE_VERSION"]
       version_done = 0
     }
     /^version[[:space:]]*=[[:space:]]*/ {
@@ -256,7 +268,7 @@ patch_agent_toml_version() {
     }
   ' "${manifest}" > "${manifest}.tmp"
 
-  unset PICOCLAW_TEMPLATE_VERSION
+  unset DOCKER_EMBED_TEMPLATE_VERSION
   mv "${manifest}.tmp" "${manifest}"
 }
 

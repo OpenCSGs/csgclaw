@@ -15,7 +15,7 @@ BOXLITE_CLI_BASE_URL ?= https://github.com/boxlite-ai/boxlite/releases/download
 
 GO ?= go
 GOFMT ?= gofmt
-# Static CLI for musl-based PicoClaw/BoxLite sandbox images (see release-build-all.sh).
+# Static CLI for sandbox images (see release-build-all.sh).
 CGO_ENABLED ?= 0
 WEB_APP_DIR ?= web/app
 WEB_STATIC_DIST_DIR ?= web/static-dist
@@ -25,8 +25,10 @@ TARGET_ARCH ?= $(shell $(GO) env GOARCH)
 CLI_BIN ?= $(BIN_DIR)/csgclaw-cli
 
 ACR_REGISTRY ?= opencsg-registry.cn-beijing.cr.aliyuncs.com
-# Upstream picoclaw base image default: embed Dockerfile ARG PICOCLAW_IMAGE.
-# Optional build/CI override: export PICOCLAW_BASE_IMAGE=registry/.../picoclaw:tag
+# Upstream sandbox base image defaults live in each embed Dockerfile ARG.
+# Optional build/CI overrides:
+#   export PICOCLAW_BASE_IMAGE=registry/.../picoclaw:tag
+#   export OPENCLAW_BASE_IMAGE=registry/.../openclaw:tag
 LOCAL_IMAGE ?= picoclaw:local
 DOCKER_EMBED_DOCKER_GOOS ?= linux
 DOCKER_EMBED_DOCKER_GOARCH ?= $(TARGET_ARCH)
@@ -34,10 +36,13 @@ DOCKER_EMBED_CLI ?= $(BIN_DIR)/csgclaw-cli
 PICOCLAW_DOCKER_GOOS ?= $(DOCKER_EMBED_DOCKER_GOOS)
 PICOCLAW_DOCKER_GOARCH ?= $(DOCKER_EMBED_DOCKER_GOARCH)
 PICOCLAW_DOCKER_CLI ?= $(DOCKER_EMBED_CLI)
+OPENCLAW_DOCKER_GOOS ?= $(DOCKER_EMBED_DOCKER_GOOS)
+OPENCLAW_DOCKER_GOARCH ?= $(DOCKER_EMBED_DOCKER_GOARCH)
+OPENCLAW_DOCKER_CLI ?= $(DOCKER_EMBED_CLI)
 
 .DEFAULT_GOAL := build
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-server-bin stage-docker-embed-cli stage-picoclaw-docker-cli sync-docker-embed-image-refs sync-picoclaw-embed-image-refs bump-docker-embed-version bump-picoclaw-embed-version ensure-docker-embed-manifests build-docker-embed-images build-docker-embed-images-only build-docker-embed-runtime-embed build-picoclaw-runtime-embed build-all run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-server build-server-bin stage-docker-embed-cli stage-picoclaw-docker-cli stage-openclaw-docker-cli sync-docker-embed-image-refs sync-picoclaw-embed-image-refs sync-openclaw-embed-image-refs bump-docker-embed-version bump-picoclaw-embed-version bump-openclaw-embed-version ensure-docker-embed-manifests build-docker-embed-images build-docker-embed-images-only build-docker-embed-runtime-embed build-picoclaw-runtime-embed build-openclaw-runtime-embed build-all run clean package package-all release tag push publish build-picoclaw-manager-image build-picoclaw-worker-image build-openclaw-manager-image build-openclaw-worker-image
 
 help:
 	@printf '%s\n' \
@@ -51,6 +56,8 @@ help:
 		'make build-web  - build Web UI app into web/static-dist' \
 		'make build-server-bin - build bin/csgclaw and bin/csgclaw-cli' \
 		'make build-docker-embed-runtime-embed - bump versions, stage linux cli, docker-build all embed templates' \
+		'make build-picoclaw-manager-image / build-picoclaw-worker-image - build one PicoClaw embed image' \
+		'make build-openclaw-manager-image / build-openclaw-worker-image - build one OpenClaw embed image' \
 		'make run        - build (no docker images), then run the server' \
 		'make clean      - remove local build outputs'
 
@@ -126,8 +133,12 @@ $(DOCKER_EMBED_CLI):
 	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(DOCKER_EMBED_DOCKER_GOOS) GOARCH=$(DOCKER_EMBED_DOCKER_GOARCH) \
 		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(DOCKER_EMBED_CLI) ./cmd/csgclaw-cli
 
-stage-docker-embed-cli: $(DOCKER_EMBED_CLI)
+stage-docker-embed-cli:
+	mkdir -p $(BIN_DIR)
+	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(DOCKER_EMBED_DOCKER_GOOS) GOARCH=$(DOCKER_EMBED_DOCKER_GOARCH) \
+		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(DOCKER_EMBED_CLI) ./cmd/csgclaw-cli
 stage-picoclaw-docker-cli: stage-docker-embed-cli
+stage-openclaw-docker-cli: stage-docker-embed-cli
 
 sync-docker-embed-image-refs:
 	chmod +x scripts/list-docker-embed-templates.sh scripts/sync-docker-embed-image-refs.sh
@@ -135,6 +146,7 @@ sync-docker-embed-image-refs:
 		scripts/sync-docker-embed-image-refs.sh
 
 sync-picoclaw-embed-image-refs: sync-docker-embed-image-refs
+sync-openclaw-embed-image-refs: sync-docker-embed-image-refs
 
 bump-docker-embed-version:
 	chmod +x scripts/list-docker-embed-templates.sh scripts/bump-docker-embed-version.sh
@@ -142,6 +154,7 @@ bump-docker-embed-version:
 		scripts/bump-docker-embed-version.sh
 
 bump-picoclaw-embed-version: bump-docker-embed-version
+bump-openclaw-embed-version: bump-docker-embed-version
 
 # Sync embed agent.toml image refs from version when missing or out of sync (no docker).
 ensure-docker-embed-manifests:
@@ -153,31 +166,46 @@ ensure-docker-embed-manifests:
 	fi
 
 build-docker-embed-images: stage-docker-embed-cli bump-docker-embed-version
-	chmod +x scripts/build-docker-embed-images.sh scripts/read-picoclaw-base-image.sh
+	chmod +x scripts/build-docker-embed-images.sh
 	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/build-docker-embed-images.sh
 
 build-docker-embed-images-only: stage-docker-embed-cli
-	chmod +x scripts/build-docker-embed-images.sh scripts/read-picoclaw-base-image.sh
+	chmod +x scripts/build-docker-embed-images.sh
 	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/build-docker-embed-images.sh
 
 build-docker-embed-runtime-embed: build-docker-embed-images
 build-picoclaw-runtime-embed: build-docker-embed-runtime-embed
+build-openclaw-runtime-embed: build-docker-embed-runtime-embed
 
 build-picoclaw-manager-image: stage-docker-embed-cli
-	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh scripts/read-picoclaw-base-image.sh
+	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh
 	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/bump-docker-embed-version.sh picoclaw-manager
 	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/build-docker-embed-images.sh picoclaw-manager
 
 build-picoclaw-worker-image: stage-docker-embed-cli
-	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh scripts/read-picoclaw-base-image.sh
+	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh
 	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/bump-docker-embed-version.sh picoclaw-worker
 	ACR_REGISTRY="$(ACR_REGISTRY)" \
 		scripts/build-docker-embed-images.sh picoclaw-worker
+
+build-openclaw-manager-image: stage-docker-embed-cli
+	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
+		scripts/bump-docker-embed-version.sh openclaw-manager
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
+		scripts/build-docker-embed-images.sh openclaw-manager
+
+build-openclaw-worker-image: stage-docker-embed-cli
+	chmod +x scripts/bump-docker-embed-version.sh scripts/build-docker-embed-images.sh
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
+		scripts/bump-docker-embed-version.sh openclaw-worker
+	ACR_REGISTRY="$(ACR_REGISTRY)" \
+		scripts/build-docker-embed-images.sh openclaw-worker
 
 # Bump embed versions before go:embed so the server binary matches built images.
 build-all: build-web bump-docker-embed-version build-server-bin
