@@ -6543,3 +6543,54 @@ func TestResolveManagerBaseURLPrefersAdvertiseBaseURL(t *testing.T) {
 		t.Fatalf("resolveManagerBaseURL() = %q, want %q", got, want)
 	}
 }
+
+func TestGatewayProfileRuntimeRestartRequiredOnModelChange(t *testing.T) {
+	current := Agent{
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Name:        ManagerName,
+		AgentProfile: AgentProfile{
+			Name:            ManagerName,
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "qwen3.7-max",
+			ProfileComplete: true,
+		},
+	}
+	next := normalizeProfile(AgentProfile{
+		Name:            ManagerName,
+		Provider:        ProviderAPI,
+		BaseURL:         "https://api.example/v1",
+		APIKey:          "api-key",
+		ModelID:         "glm-5.1",
+		ProfileComplete: true,
+	}, ManagerName, "")
+	if !gatewayProfileRuntimeRestartRequired(current, next) {
+		t.Fatal("gatewayProfileRuntimeRestartRequired() = false, want true when gateway model changes")
+	}
+	if !profileRestartRequired(current, next) {
+		t.Fatal("profileRestartRequired() = false, want true when gateway model changes")
+	}
+}
+
+func TestGatewayProfileRuntimeRestartNotRequiredForCodex(t *testing.T) {
+	current := Agent{
+		RuntimeKind: RuntimeKindCodex,
+		Name:        "alice",
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.4",
+			ProfileComplete: true,
+		},
+	}
+	next := normalizeProfile(AgentProfile{
+		Name:            "alice",
+		Provider:        ProviderCodex,
+		ModelID:         "gpt-5.5",
+		ProfileComplete: true,
+	}, "alice", "")
+	if gatewayProfileRuntimeRestartRequired(current, next) {
+		t.Fatal("gatewayProfileRuntimeRestartRequired() = true, want false for codex runtime")
+	}
+}

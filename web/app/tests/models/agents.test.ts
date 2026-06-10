@@ -9,6 +9,7 @@ import {
   collectManagerTemplateVariants,
   defaultManagerRebuildImageForRuntime,
   agentDraftWithRuntimeFieldsFromAgent,
+  agentStatusLabel,
   draftNotifierRuntimeOptionsForSave,
   draftToProfile,
   ensureNotifierPullSubscriptionDraft,
@@ -468,6 +469,29 @@ describe("agent model helpers", () => {
     expect(notifierFormIsComplete(draft)).toBe(true);
     expect(isAgentIncomplete({ type: "notification", runtime_options: {} })).toBe(true);
     expect(isAgentIncomplete({ type: "notification", available: true, runtime_options: {} })).toBe(false);
+  });
+
+  it("treats a saved profile draft as configured even when profile_complete is false", () => {
+    const draft = agentToDraft({
+      id: "u-manager",
+      profile_complete: false,
+      agent_profile: {
+        profile_complete: false,
+        provider: "api",
+        base_url: "https://api.example/v1",
+        model_id: "glm-5.1",
+      },
+    });
+
+    expect(isAgentIncomplete({ id: "u-manager", profile_complete: false, agent_profile: { profile_complete: false } }, draft)).toBe(
+      false,
+    );
+  });
+
+  it("maps profile_incomplete status to offline label", () => {
+    const t = (key: string) => key;
+    expect(agentStatusLabel("profile_incomplete", t)).toBe("offline");
+    expect(agentStatusLabel("running", t)).toBe("online");
   });
 
   it("locks runtime and image on create when a template is selected", () => {

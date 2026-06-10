@@ -399,8 +399,17 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	if err != nil {
 		return err
 	}
+	modelCfg := defaultModel
+	svc.mu.RLock()
+	if manager, ok := svc.agents[ManagerUserID]; ok {
+		profile := normalizeProfileForAgentRuntime(manager.AgentProfile, manager.RuntimeOptions, manager.Name, manager.Description, manager.RuntimeKind, nil)
+		if profile.ProfileComplete {
+			modelCfg = modelConfigFromProfile(profile)
+		}
+	}
+	svc.mu.RUnlock()
 	recreateForParticipantBridgeConfig := !forceRecreate && agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID)
-	if _, err := ensureAgentPicoClawConfigForParticipant(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, defaultModel); err != nil {
+	if _, err := ensureAgentPicoClawConfigForParticipant(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, modelCfg); err != nil {
 		return err
 	}
 	if recreateForParticipantBridgeConfig {
@@ -2062,9 +2071,14 @@ func (s *Service) hydrateAgentStatus(ctx context.Context, a Agent) Agent {
 }
 
 func statusAfterHydrateFailure(a Agent, stage string, err error) Agent {
-	if strings.TrimSpace(a.Status) != "" && !sandbox.IsNotFound(err) {
-		logHydrateStaleStatus(a, stage, err)
-		return a
+	if status := strings.TrimSpace(a.Status); status != "" {
+		if !sandbox.IsNotFound(err) {
+			logHydrateStaleStatus(a, stage, err)
+			return a
+		}
+		if strings.EqualFold(status, "profile_incomplete") {
+			return a
+		}
 	}
 	logHydrateUnknownStatus(a, stage, err)
 	a.Status = string(sandbox.StateUnknown)

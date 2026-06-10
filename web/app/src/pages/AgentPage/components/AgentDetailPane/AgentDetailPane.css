@@ -133,6 +133,20 @@
 .agent-detail-pane .entity-title-row {
   flex-wrap: wrap;
   row-gap: 6px;
+  align-items: center;
+}
+
+.agent-detail-pane .agent-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: oklch(0.48 0.02 248);
+}
+
+.agent-detail-pane .agent-status-dot.online {
+  background: var(--portal-success-700);
+  box-shadow: 0 0 0 3px rgba(6, 118, 71, 0.12);
 }
 
 .agent-detail-pane .status-pill {

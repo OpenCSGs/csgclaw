@@ -379,6 +379,9 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
   if (normalized === "offline" || normalized === "stopped") {
     return t("offline");
   }
+  if (normalized === "profile_incomplete") {
+    return t("offline");
+  }
   if (normalized === "failed" || normalized === "error") {
     return t("agentStatusFailed");
   }
@@ -1045,6 +1048,16 @@ export function isAgentProfileMarkedComplete(item: AgentLike | null | undefined)
   return item?.profile_complete === true || item?.agent_profile?.profile_complete === true;
 }
 
+export function isAgentProfileDraftComplete(draft: Partial<AgentDraft> | null | undefined): boolean {
+  if (!String(draft?.model_id ?? "").trim()) {
+    return false;
+  }
+  if (draft?.provider === "api" && !String(draft.base_url ?? "").trim()) {
+    return false;
+  }
+  return true;
+}
+
 export function isAgentIncomplete(
   item: AgentLike | null | undefined,
   draftOverride?: AgentDraft | null | undefined,
@@ -1058,6 +1071,9 @@ export function isAgentIncomplete(
   const draft = draftOverride ?? agentToDraft(item);
   if (isNotifierRuntimeDraftOnAgentPage(draft, item)) {
     return !notifierFormIsComplete(draft, item);
+  }
+  if (isAgentProfileDraftComplete(draft)) {
+    return false;
   }
   return item?.profile_complete === false || item?.agent_profile?.profile_complete === false;
 }

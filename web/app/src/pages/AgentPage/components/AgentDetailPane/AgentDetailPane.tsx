@@ -152,6 +152,7 @@ export function AgentDetailPane({
         <div className="entity-heading">
           <div className="entity-title-row">
             <h1>{item.name}</h1>
+            <span className={`agent-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
             <span className={`status-pill ${running ? "online" : ""}`}>{agentStatusLabel(item.status, t)}</span>
             <span className={`status-pill profile-state-pill ${incomplete ? "warn" : "ready"}`}>
               {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}

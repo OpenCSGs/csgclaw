@@ -182,6 +182,7 @@ func (s *Service) forwardRemoteChat(ctx context.Context, profile agent.AgentProf
 		return nil, 0, "", &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
 	}
 	mergeProfilePayload(payload, profile)
+	normalizeCompletionTokenLimits(payload)
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return nil, 0, "", &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
@@ -286,6 +287,7 @@ func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.Age
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: err.Error()}
 	}
 	mergeProfilePayload(chatPayload, profile)
+	normalizeCompletionTokenLimits(chatPayload)
 	encoded, err := json.Marshal(chatPayload)
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode chat fallback request: %v", err)}
@@ -1044,6 +1046,95 @@ func applyProviderPayloadConstraints(payload map[string]any, profile agent.Agent
 	case agent.ProviderCodex:
 		payload["store"] = false
 	}
+}
+
+const (
+	gatewayReasoningThinkingBudget = 32768
+	reasoningCompletionHeadroom    = 1024
+)
+
+func normalizeCompletionTokenLimits(payload map[string]any) {
+	if payload == nil {
+		return
+	}
+	thinkingBudget := payloadInt(payload, "thinking_budget")
+	maxCompletion := payloadInt(payload, "max_completion_tokens")
+	maxTokens := payloadInt(payload, "max_tokens")
+	effectiveMax := maxCompletion
+	if effectiveMax <= 0 {
+		effectiveMax = maxTokens
+	}
+	if effectiveMax <= 0 {
+		return
+	}
+
+	thinkingFloor := thinkingBudget
+	if thinkingFloor <= 0 {
+		thinkingFloor = reasoningModelThinkingBudgetFloor(stringValue(payload["model"]))
+	}
+	if thinkingFloor <= 0 && (effectiveMax == gatewayReasoningThinkingBudget || effectiveMax == 16384) {
+		// Picoclaw defaults can collide with gateway-side thinking budgets even when the
+		// client omits thinking_budget from the forwarded payload.
+		thinkingFloor = gatewayReasoningThinkingBudget
+	}
+	if thinkingFloor <= 0 || effectiveMax > thinkingFloor {
+		return
+	}
+	newMax := thinkingFloor + reasoningCompletionHeadroom
+	setPayloadInt(payload, "max_completion_tokens", newMax)
+	setPayloadInt(payload, "max_tokens", newMax)
+}
+
+func reasoningModelThinkingBudgetFloor(model string) int {
+	model = strings.ToLower(strings.TrimSpace(model))
+	if model == "" {
+		return 0
+	}
+	switch {
+	case strings.Contains(model, "glm-5"),
+		strings.Contains(model, "glm-4.5"),
+		strings.Contains(model, "glm-4.6"),
+		strings.Contains(model, "glm-4.7"):
+		return gatewayReasoningThinkingBudget
+	case strings.Contains(model, "qwen3"),
+		strings.Contains(model, "qwen-max"),
+		strings.Contains(model, "qwen-plus"):
+		return gatewayReasoningThinkingBudget
+	default:
+		return 0
+	}
+}
+
+func payloadInt(payload map[string]any, key string) int {
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return 0
+	}
+	switch v := value.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		n, err := v.Int64()
+		if err != nil {
+			return 0
+		}
+		return int(n)
+	default:
+		return 0
+	}
+}
+
+func setPayloadInt(payload map[string]any, key string, value int) {
+	if value <= 0 {
+		return
+	}
+	payload[key] = value
 }
 
 func (s *Service) agentProfileWebsocketTarget(ctx context.Context, profile agent.AgentProfile) (string, string, error) {
