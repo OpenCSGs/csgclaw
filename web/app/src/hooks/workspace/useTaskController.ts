@@ -145,6 +145,7 @@ export function useTaskController({
       const created = await createWorkspaceTask(draft);
       await tasksQuery.refetch();
       await queryClient.invalidateQueries({ queryKey: teamEventsQueryKey(created.team_id) });
+      await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.bootstrap() });
       setShowCreateTaskModal(false);
       onSelectTask(created.id);
       await autoPlanAndStartTask(created.id, created.team_id);
@@ -214,16 +215,10 @@ export function useTaskController({
     }
   }
 
-  async function finishStartTask(target: WorkspaceTask, startedRoomID?: string): Promise<void> {
-    const result = await tasksQuery.refetch();
+  async function finishStartTask(target: WorkspaceTask): Promise<void> {
+    await tasksQuery.refetch();
     await queryClient.invalidateQueries({ queryKey: teamEventsQueryKey(target.team_id) });
     await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.bootstrap() });
-    const refreshed = result.data ?? [];
-    const root = rootTaskForTask(refreshed, target) ?? target;
-    const roomID = String(startedRoomID || root.room_id || "").trim();
-    if (roomID) {
-      onSelectConversation(roomID);
-    }
   }
 
   async function startTask(taskId: string): Promise<void> {
@@ -239,11 +234,11 @@ export function useTaskController({
     setStartingTaskID(target.id);
     setTaskActionError("");
     try {
-      const started = await startWorkspaceTask({
+      await startWorkspaceTask({
         team_id: target.team_id,
         task_id: target.id,
       });
-      await finishStartTask(target, started.task.room_id);
+      await finishStartTask(target);
       return;
     } catch (err) {
       const needPlan = shouldAutoPlanForStartError(err);
@@ -254,11 +249,11 @@ export function useTaskController({
             task_id: target.id,
           });
           await queryClient.invalidateQueries({ queryKey: teamEventsQueryKey(target.team_id) });
-          const started = await startWorkspaceTask({
+          await startWorkspaceTask({
             team_id: target.team_id,
             task_id: target.id,
           });
-          await finishStartTask(target, started.task.room_id);
+          await finishStartTask(target);
           return;
         } catch (fallbackErr) {
           setTaskActionError(errorMessage(fallbackErr, t("taskStartFailed")));

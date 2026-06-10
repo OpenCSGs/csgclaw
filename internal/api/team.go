@@ -134,7 +134,7 @@ func (h *Handler) handleListGlobalTasks(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) handleCreateTeamTasksBatch(w http.ResponseWriter, r *http.Request) {
-	svc, ok := h.requireTeamService(w)
+	svc, adapter, ok := h.requireTeamComponents(w)
 	if !ok {
 		return
 	}
@@ -143,7 +143,8 @@ func (h *Handler) handleCreateTeamTasksBatch(w http.ResponseWriter, r *http.Requ
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	result, err := svc.CreateTasks(teamCreateTaskBatchInput(pathValue(r, "team_id"), req))
+	teamID := pathValue(r, "team_id")
+	result, err := svc.CreateTasksWithExecutionRoom(r.Context(), teamCreateTaskBatchInput(teamID, req), adapter, h.teamDirectory())
 	if err != nil {
 		writeTeamError(w, err)
 		return

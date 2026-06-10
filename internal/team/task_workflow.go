@@ -34,6 +34,61 @@ type StartTaskWithExecutionRoomInput struct {
 	ActorID string
 }
 
+func (s *Service) CreateTaskWithExecutionRoom(ctx context.Context, input CreateTaskInput, adapter TeamChannelAdapter, directory ExecutionRoomDirectory) (TeamTask, error) {
+	task, err := s.CreateTask(input)
+	if err != nil {
+		return TeamTask{}, err
+	}
+	if strings.TrimSpace(task.ParentID) != "" {
+		return task, nil
+	}
+	return s.ensureAndBindParentExecutionRoom(ctx, input.TeamID, task.ID, input.CreatedBy, adapter, directory)
+}
+
+func (s *Service) CreateTasksWithExecutionRoom(ctx context.Context, input CreateTaskBatchInput, adapter TeamChannelAdapter, directory ExecutionRoomDirectory) (CreateTasksResult, error) {
+	result, err := s.CreateTasks(input)
+	if err != nil {
+		return CreateTasksResult{}, err
+	}
+	for _, task := range result.Tasks {
+		if strings.TrimSpace(task.ParentID) != "" {
+			continue
+		}
+		if _, err := s.ensureAndBindParentExecutionRoom(ctx, input.TeamID, task.ID, input.CreatedBy, adapter, directory); err != nil {
+			return CreateTasksResult{}, err
+		}
+	}
+	for i, task := range result.Tasks {
+		if updated, ok := s.GetTask(input.TeamID, task.ID); ok {
+			result.Tasks[i] = updated
+		}
+	}
+	return result, nil
+}
+
+func (s *Service) ensureAndBindParentExecutionRoom(ctx context.Context, teamID, taskID, actorID string, adapter TeamChannelAdapter, directory ExecutionRoomDirectory) (TeamTask, error) {
+	meta, parent, err := s.requireTaskSnapshot(teamID, taskID)
+	if err != nil {
+		return TeamTask{}, err
+	}
+	if strings.TrimSpace(parent.ParentID) != "" {
+		return parent, nil
+	}
+	if ExecutionRoomBound(parent, meta) {
+		return parent, nil
+	}
+	roomID, err := s.EnsureTaskExecutionRoom(ctx, adapter, directory, meta, parent)
+	if err != nil {
+		return TeamTask{}, err
+	}
+	return s.BindTaskExecutionRoom(BindTaskExecutionRoomInput{
+		TeamID:     teamID,
+		TaskID:     taskID,
+		ActorID:    actorID,
+		TaskRoomID: roomID,
+	})
+}
+
 func (s *Service) PlanTaskWithOptionalStart(ctx context.Context, input PlanTaskWorkflowInput, adapter TeamChannelAdapter, directory ExecutionRoomDirectory, planner TaskPlanner) (PlanTaskWorkflowResult, error) {
 	teamID := strings.TrimSpace(input.TeamID)
 	taskID := strings.TrimSpace(input.TaskID)

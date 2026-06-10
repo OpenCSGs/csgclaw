@@ -134,6 +134,47 @@ func TestTeamRoutesCreateResolvesAgentIDs(t *testing.T) {
 	}
 }
 
+func TestTeamBatchCreateBindsExecutionRoomImmediately(t *testing.T) {
+	imSvc := im.NewService()
+	adapter := team.NewCSGClawAdapter(imSvc)
+	teamSvc := team.NewService()
+	h := &Handler{im: imSvc, teamSvc: teamSvc, teamAdapter: adapter}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_participant_id":"manager","member_participant_ids":["worker"]}`))
+	createRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create team status = %d, want %d: %s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+	var created apitypes.Team
+	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create team response: %v", err)
+	}
+
+	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"tasks":[{"id_ref":"parent","title":"Ship release"},{"title":"Draft release note","parent_ref":"parent","assign_to":"worker"}]}`))
+	batchRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(batchRec, batchReq)
+	if batchRec.Code != http.StatusCreated {
+		t.Fatalf("create batch status = %d, want %d: %s", batchRec.Code, http.StatusCreated, batchRec.Body.String())
+	}
+	var batchResp apitypes.CreateTeamTasksBatchResponse
+	if err := json.NewDecoder(batchRec.Body).Decode(&batchResp); err != nil {
+		t.Fatalf("decode batch response: %v", err)
+	}
+	if len(batchResp.Tasks) != 2 {
+		t.Fatalf("batch tasks len = %d, want 2", len(batchResp.Tasks))
+	}
+	if batchResp.Tasks[0].RoomID == "" || batchResp.Tasks[0].RoomID == created.RoomID {
+		t.Fatalf("parent room = %q, want dedicated execution room distinct from team room %q", batchResp.Tasks[0].RoomID, created.RoomID)
+	}
+	if batchResp.Tasks[1].RoomID != batchResp.Tasks[0].RoomID {
+		t.Fatalf("child room = %q, want parent execution room %q", batchResp.Tasks[1].RoomID, batchResp.Tasks[0].RoomID)
+	}
+	if _, ok := imSvc.Room(batchResp.Tasks[0].RoomID); !ok {
+		t.Fatalf("Room(%q) ok = false, want true", batchResp.Tasks[0].RoomID)
+	}
+}
+
 func TestTeamPlanAutoStartCreatesExecutionRoomAndDispatches(t *testing.T) {
 	imSvc := im.NewService()
 	adapter := team.NewCSGClawAdapter(imSvc)
