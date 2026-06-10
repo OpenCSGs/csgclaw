@@ -6568,8 +6568,8 @@ func TestGatewayProfileRuntimeRestartRequiredOnModelChange(t *testing.T) {
 	if !gatewayProfileRuntimeRestartRequired(current, next) {
 		t.Fatal("gatewayProfileRuntimeRestartRequired() = false, want true when gateway model changes")
 	}
-	if !profileRestartRequired(current, next) {
-		t.Fatal("profileRestartRequired() = false, want true when gateway model changes")
+	if profileRestartRequired(current, next) {
+		t.Fatal("profileRestartRequired() = true, want false when only gateway model settings change")
 	}
 }
 
@@ -6592,5 +6592,85 @@ func TestGatewayProfileRuntimeRestartNotRequiredForCodex(t *testing.T) {
 	}, "alice", "")
 	if gatewayProfileRuntimeRestartRequired(current, next) {
 		t.Fatal("gatewayProfileRuntimeRestartRequired() = true, want false for codex runtime")
+	}
+}
+
+func TestUpdateAgentProfileSyncsGatewayHostConfigWithoutRecreate(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	recreateCalled := false
+	SetTestHooks(
+		nil,
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _, _, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			recreateCalled = true
+			return nil, sandbox.Info{}, fmt.Errorf("unexpected recreate")
+		},
+	)
+	defer ResetTestHooks()
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{
+		ListenAddr:  ":18080",
+		AccessToken: "token",
+	}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		Role:        RoleManager,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		BoxID:       "box-manager",
+		Status:      string(sandbox.StateRunning),
+		AgentProfile: AgentProfile{
+			Name:            ManagerName,
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "qwen3.7-max",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	if _, err := ensureAgentPicoClawConfigForParticipant(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  "https://api.example/v1",
+		APIKey:   "api-key",
+		ModelID:  "qwen3.7-max",
+	}); err != nil {
+		t.Fatalf("ensureAgentPicoClawConfigForParticipant() error = %v", err)
+	}
+
+	_, err = svc.UpdateAgentProfile(ManagerUserID, AgentProfile{
+		Name:            ManagerName,
+		Provider:        ProviderAPI,
+		BaseURL:         "https://api.example/v1",
+		APIKey:          "api-key",
+		ModelID:         "glm-5.1",
+		ProfileComplete: true,
+	})
+	if err != nil {
+		t.Fatalf("UpdateAgentProfile() error = %v", err)
+	}
+	if recreateCalled {
+		t.Fatal("UpdateAgentProfile() recreated gateway box, want host config sync only")
+	}
+
+	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(manager config) error = %v", err)
+	}
+	if !strings.Contains(string(data), `"model_name": "glm-5.1"`) {
+		t.Fatalf("manager config missing updated model:\n%s", data)
+	}
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent() ok = false, want true")
+	}
+	if got.AgentProfile.EnvRestartRequired {
+		t.Fatal("Agent().AgentProfile.EnvRestartRequired = true, want false after config sync")
 	}
 }

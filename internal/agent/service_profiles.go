@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"csgclaw/internal/channel/feishu"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/utils"
 )
@@ -103,8 +105,7 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 
 func profileRestartRequired(current Agent, next AgentProfile) bool {
 	return !profilesEqualEnv(current.AgentProfile, next) ||
-		codexProfileRuntimeRestartRequired(current, next) ||
-		gatewayProfileRuntimeRestartRequired(current, next)
+		codexProfileRuntimeRestartRequired(current, next)
 }
 
 func codexProfileRuntimeRestartRequired(current Agent, next AgentProfile) bool {
@@ -150,11 +151,56 @@ func (s *Service) syncGatewayAfterProfileChange(ctx context.Context, id string, 
 		_, err := s.EnsureManager(ctx, false)
 		return err
 	}
+	if gatewayProfileRuntimeRestartRequired(previous, normalized) {
+		return s.syncGatewayHostConfig(got, normalized)
+	}
 	if restartRequired {
 		_, err := s.Recreate(ctx, id)
 		return err
 	}
 	return nil
+}
+
+func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
+	if s == nil {
+		return nil
+	}
+	modelCfg := modelConfigFromProfile(profile)
+	participantID := participantIDForAgent(got.Name, got.ID)
+	switch strings.TrimSpace(got.RuntimeKind) {
+	case RuntimeKindPicoClawSandbox:
+		if _, err := ensureAgentPicoClawConfigForParticipant(got.Name, participantID, got.ID, s.server, modelCfg); err != nil {
+			return fmt.Errorf("sync gateway picoclaw config: %w", err)
+		}
+	case RuntimeKindOpenClawSandbox:
+		agentHome, err := agentHomeDir(got.Name)
+		if err != nil {
+			return err
+		}
+		var feishuProvider feishu.BotCredentialProvider
+		if rt, err := s.runtimeForKind(RuntimeKindOpenClawSandbox); err == nil {
+			if fp, ok := rt.(interface {
+				CurrentFeishuProvider() feishu.BotCredentialProvider
+			}); ok {
+				feishuProvider = fp.CurrentFeishuProvider()
+			}
+		}
+		if _, err := openclawsandbox.EnsureConfig(agentHome, participantID, got.ID, s.server, modelCfg, resolveManagerBaseURL, feishuProvider); err != nil {
+			return fmt.Errorf("sync gateway openclaw config: %w", err)
+		}
+	default:
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current, ok := s.agents[got.ID]
+	if !ok {
+		return nil
+	}
+	current.AgentProfile.EnvRestartRequired = false
+	s.agents[got.ID] = current
+	return s.saveLocked()
 }
 
 func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Agent, error) {
