@@ -84,24 +84,33 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	channel := fs.String("channel", "csgclaw", "channel name")
 	roomID := fs.String("room-id", "", "existing room id")
 	title := fs.String("title", "", "team title")
-	leadParticipantID := fs.String("lead-participant-id", "", "lead participant id")
-	memberParticipantIDs := fs.String("member-participant-ids", "", "comma-separated worker participant ids")
+	leadAgentID := fs.String("lead-agent-id", "", "lead agent id")
+	memberAgentIDs := fs.String("member-agent-ids", "", "comma-separated worker agent ids")
+	leadParticipantID := fs.String("lead-participant-id", "", "legacy lead participant id")
+	memberParticipantIDs := fs.String("member-participant-ids", "", "legacy comma-separated worker participant ids")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("team create does not accept positional arguments")
 	}
-	if *leadParticipantID == "" {
-		return fmt.Errorf("lead_participant_id is required")
+	if *leadAgentID == "" && *leadParticipantID == "" {
+		return fmt.Errorf("lead_agent_id is required")
 	}
-	item, err := run.APIClient(globals).CreateTeam(ctx, apitypes.CreateTeamRequest{
-		Channel:              *channel,
-		RoomID:               *roomID,
-		Title:                *title,
-		LeadParticipantID:    *leadParticipantID,
-		MemberParticipantIDs: command.ParseCSV(*memberParticipantIDs),
-	})
+	req := apitypes.CreateTeamRequest{
+		Channel:        *channel,
+		RoomID:         *roomID,
+		Title:          *title,
+		LeadAgentID:    *leadAgentID,
+		MemberAgentIDs: command.ParseCSV(*memberAgentIDs),
+	}
+	if req.LeadAgentID == "" {
+		req.LeadParticipantID = *leadParticipantID
+	}
+	if len(req.MemberAgentIDs) == 0 {
+		req.MemberParticipantIDs = command.ParseCSV(*memberParticipantIDs)
+	}
+	item, err := run.APIClient(globals).CreateTeam(ctx, req)
 	if err != nil {
 		return err
 	}

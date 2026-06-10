@@ -3,7 +3,7 @@ description = "Builtin PicoClaw manager template"
 role = "manager"
 runtime_kind = "picoclaw_sandbox"
 updated_at = "2026-05-27T00:00:00Z"
-version = "0.1.0"
+version = "0.1.2"
 
 [image]
-ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.1.0"
+ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.1.2"

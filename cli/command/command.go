@@ -314,9 +314,9 @@ func RenderMessagesTable(w io.Writer, messages []apitypes.Message) error {
 
 func RenderTeamsTable(w io.Writer, teams []apitypes.Team) error {
 	tw := NewTableWriter(w)
-	fmt.Fprintln(tw, "ID\tROOM\tCHANNEL\tLEAD\tSTATUS\tTITLE")
+	fmt.Fprintln(tw, "ID\tROOM\tCHANNEL\tLEAD_AGENT\tSTATUS\tTITLE")
 	for _, item := range teams {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", displayValueField(item.ID), displayValueField(item.RoomID), displayValueField(item.Channel), displayValueField(item.LeadParticipantID), displayValueField(item.Status), displayValueField(item.Title))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", displayValueField(item.ID), displayValueField(item.RoomID), displayValueField(item.Channel), displayValueField(item.LeadAgentID), displayValueField(item.Status), displayValueField(item.Title))
 	}
 	return tw.Flush()
 }

@@ -149,7 +149,7 @@ func TestClientUsesExpectedRoutes(t *testing.T) {
 			body: `{}`,
 			want: "POST /api/v1/teams",
 			call: func(c *Client) error {
-				_, err := c.CreateTeam(ctx, apitypes.CreateTeamRequest{Channel: "csgclaw", LeadParticipantID: "bot-manager"})
+				_, err := c.CreateTeam(ctx, apitypes.CreateTeamRequest{Channel: "csgclaw", LeadAgentID: "u-manager"})
 				return err
 			},
 		},
