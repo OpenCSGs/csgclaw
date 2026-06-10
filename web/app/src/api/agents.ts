@@ -15,6 +15,10 @@ export type FetchAgentsOptions = {
   silent?: boolean;
 };
 
+export type FetchAgentOptions = {
+  cacheBust?: boolean;
+};
+
 export type CreateManagerAgentOptions = {
   image?: string;
   runtime_kind?: RuntimeKind;
@@ -84,8 +88,12 @@ export async function fetchAgents(options: FetchAgentsOptions = {}): Promise<Age
   ];
 }
 
-export function fetchAgent(agentID: string): Promise<AgentLike> {
-  return get(`api/v1/agents/${encodeURIComponent(agentID)}?include_participants=true`);
+export function fetchAgent(agentID: string, options: FetchAgentOptions = {}): Promise<AgentLike> {
+  const params = new URLSearchParams({ include_participants: "true" });
+  if (options.cacheBust) {
+    params.set("_", String(Date.now()));
+  }
+  return get(`api/v1/agents/${encodeURIComponent(agentID)}?${params.toString()}`);
 }
 
 export function fetchAgentLogsRequest(agentID: string, options: FetchAgentLogsOptions = {}): Promise<string> {

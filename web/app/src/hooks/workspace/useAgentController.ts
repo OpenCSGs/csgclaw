@@ -534,13 +534,31 @@ export function useAgentController({
     }
   }
 
+  async function fetchLatestActionAgent(updatedAgent: AgentLike | null | undefined): Promise<AgentLike | null> {
+    const id = String(updatedAgent?.id ?? "").trim();
+    if (!id) {
+      return updatedAgent ?? null;
+    }
+    try {
+      const fetched = await fetchAgent(id, { cacheBust: true });
+      return mergeAgentIntoList(updatedAgent ? [updatedAgent] : [], fetched)[0] ?? fetched;
+    } catch (_) {
+      return updatedAgent ?? null;
+    }
+  }
+
   async function refreshAgentsWithUpdatedAgent(updatedAgent: AgentLike | null | undefined): Promise<void> {
+    const latestAgent = await fetchLatestActionAgent(updatedAgent);
     await refreshAgents();
-    if (updatedAgent?.id) {
-      setAgentsData((current) => mergeAgentIntoList(current, updatedAgent));
-      if (activePane.type === WorkspacePaneTypes.agent && activePane.id === updatedAgent.id) {
-        setAgentPageDraft((current) => agentDraftWithRuntimeFieldsFromAgent(current, updatedAgent));
-        setAgentPageSavedDraft((current) => agentDraftWithRuntimeFieldsFromAgent(current, updatedAgent));
+    if (latestAgent?.id) {
+      setAgentsData((current) => mergeAgentIntoList(current, latestAgent));
+      if (activePane.type === WorkspacePaneTypes.agent && activePane.id === latestAgent.id) {
+        setAgentPageDraft((current) =>
+          agentDraftWithRuntimeFieldsFromAgent(current ?? agentToDraft(latestAgent), latestAgent),
+        );
+        setAgentPageSavedDraft((current) =>
+          agentDraftWithRuntimeFieldsFromAgent(current ?? agentToDraft(latestAgent), latestAgent),
+        );
       }
     }
   }
