@@ -37,6 +37,7 @@ import {
   applyTemplateToDraft,
   advanceAgentProgress,
   agentDraftWithRuntimeFieldsFromAgent,
+  agentRuntimePollSettled,
   agentToDraft,
   availableManagerRebuildImageOptions,
   availableManagerRebuildRuntimeOptions,
@@ -63,6 +64,7 @@ import {
   resolvedNotifierWebhookOrigin,
   resolveAgentChannelUserID,
   runtimeImageForKind,
+  shouldWaitForManagerRuntimeAfterProfileSave,
   startAgentCreateProgress,
 } from "@/models/agents";
 import type {
@@ -520,7 +522,7 @@ export function useAgentController({
       setManagerProfileData(saved);
       setProfileDraft({ ...profileToDraft(saved), agent_id: MANAGER_AGENT_ID });
       await refreshManagerProfile();
-      await syncAgentStateUntilRunning(MANAGER_AGENT_ID);
+      await syncManagerRuntimeAfterProfileSave(managerAgent, Boolean(managerProfileIncomplete));
       await refreshWorkspaceBootstrap();
     } catch (err) {
       setProfileError(errorMessage(err, t("sendFailed")));
@@ -569,12 +571,30 @@ export function useAgentController({
     }
   }
 
+  async function refreshAgentState(agentID: string): Promise<AgentLike | null> {
+    try {
+      const latest = await fetchAgent(agentID, { cacheBust: true });
+      applyAgentListUpdate(latest);
+      return latest;
+    } catch {
+      try {
+        await refreshWorkspaceAgents({ silent: true });
+        const latest = await fetchAgent(agentID);
+        applyAgentListUpdate(latest);
+        return latest;
+      } catch {
+        return null;
+      }
+    }
+  }
+
   async function syncAgentStateUntilRunning(
     agentID: string,
-    options: { timeoutMs?: number; intervalMs?: number } = {},
+    options: { timeoutMs?: number; intervalMs?: number; acceptStopped?: boolean } = {},
   ): Promise<AgentLike | null> {
     const timeoutMs = options.timeoutMs ?? AGENT_RUNTIME_SYNC_TIMEOUT_MS;
     const intervalMs = options.intervalMs ?? AGENT_RUNTIME_SYNC_INTERVAL_MS;
+    const acceptStopped = options.acceptStopped ?? false;
     const deadline = Date.now() + timeoutMs;
     let latest: AgentLike | null = null;
     while (Date.now() < deadline) {
@@ -582,6 +602,9 @@ export function useAgentController({
         latest = await fetchAgent(agentID);
         applyAgentListUpdate(latest);
         if (isAgentRunning(latest)) {
+          return latest;
+        }
+        if (acceptStopped && agentRuntimePollSettled(latest)) {
           return latest;
         }
       } catch {
@@ -597,6 +620,21 @@ export function useAgentController({
       // Best-effort final refresh.
     }
     return latest;
+  }
+
+  async function syncManagerRuntimeAfterProfileSave(
+    agentBeforeSave: AgentLike | null | undefined,
+    profileIncompleteBeforeSave = false,
+  ): Promise<void> {
+    if (
+      shouldWaitForManagerRuntimeAfterProfileSave(agentBeforeSave, {
+        profileIncompleteBeforeSave,
+      })
+    ) {
+      await syncAgentStateUntilRunning(MANAGER_AGENT_ID, { acceptStopped: true });
+      return;
+    }
+    await refreshAgentState(MANAGER_AGENT_ID);
   }
 
   async function refreshAgentsWithUpdatedAgent(updatedAgent: AgentLike | null | undefined): Promise<void> {
@@ -858,10 +896,11 @@ export function useAgentController({
         return;
       }
       debugAgentPageSavePayload("full", payload);
+      const managerBeforeSave = selectedAgentForPage;
       const saved = await updateAgentRequest(selectedAgentForPage.id, payload);
       await refreshAgentsWithUpdatedAgent(saved);
       if (saved.id === MANAGER_AGENT_ID && profileChanged) {
-        await syncAgentStateUntilRunning(MANAGER_AGENT_ID);
+        await syncManagerRuntimeAfterProfileSave(managerBeforeSave);
       }
       await refreshWorkspaceBootstrap();
       if (saved.id === MANAGER_AGENT_ID) {

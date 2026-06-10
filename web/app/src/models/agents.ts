@@ -64,6 +64,7 @@ export type AgentProfileLike = {
 export type AgentLike = AgentProfileLike & {
   agent_profile?: AgentProfileLike | null;
   bot_type?: BotType | null;
+  box_id?: string | null;
   default_image?: string | null;
   from_template?: string | null;
   handle?: string | null;
@@ -1080,6 +1081,36 @@ export function isAgentIncomplete(
 
 export function isAgentRestartNeeded(item: AgentLike | null | undefined): boolean {
   return Boolean(item?.env_restart_required || item?.agent_profile?.env_restart_required);
+}
+
+export function shouldWaitForManagerRuntimeAfterProfileSave(
+  agent: AgentLike | null | undefined,
+  options: { profileIncompleteBeforeSave?: boolean } = {},
+): boolean {
+  if (options.profileIncompleteBeforeSave) {
+    return true;
+  }
+  if (!isAgentProfileMarkedComplete(agent)) {
+    return true;
+  }
+  if (!String(agent?.box_id ?? "").trim()) {
+    return true;
+  }
+  if (String(agent?.status ?? "").toLowerCase() === "profile_incomplete") {
+    return true;
+  }
+  return false;
+}
+
+export function agentRuntimePollSettled(item: AgentLike | null | undefined): boolean {
+  if (isAgentRunning(item)) {
+    return true;
+  }
+  if (!String(item?.box_id ?? "").trim()) {
+    return false;
+  }
+  const status = String(item?.status ?? "").toLowerCase();
+  return status === "stopped" || status === "offline" || status === "failed" || status === "error";
 }
 
 export function isAgentUpgradeNeeded(item: AgentLike | null | undefined): boolean {
