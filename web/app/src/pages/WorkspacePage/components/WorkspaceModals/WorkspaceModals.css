@@ -727,9 +727,29 @@
 
 .profile-runtime-grid {
   display: grid;
-  grid-template-columns: minmax(150px, 0.9fr) minmax(220px, 1.3fr) minmax(116px, 0.7fr) minmax(120px, 0.6fr);
+  grid-template-columns: minmax(150px, 0.9fr) minmax(220px, 1.25fr) minmax(220px, 1.25fr) minmax(120px, 0.65fr);
   gap: 10px;
-  align-items: end;
+  align-items: start;
+}
+
+.profile-runtime-grid > .field,
+.profile-runtime-grid > .selection-item {
+  min-width: 0;
+}
+
+.profile-runtime-grid .profile-model-error {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  color: var(--portal-error-700);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .auth-status-row {
@@ -896,9 +916,8 @@
 .detection-row small {
   min-width: 0;
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .upgrade-modal {
@@ -1026,8 +1045,20 @@
 }
 
 @media (max-width: 960px) {
+  .profile-runtime-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .profile-refresh {
     width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-runtime-grid,
+  .profile-api-grid,
+  .profile-advanced-grid {
+    grid-template-columns: 1fr;
   }
 }
 

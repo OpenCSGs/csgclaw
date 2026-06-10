@@ -63,6 +63,8 @@ func FullSpec() CommandSpec {
 				Summary: "Start the local HTTP server.",
 				Flags: []FlagSpec{
 					{Name: "daemon", Short: "d"},
+					{Name: "no-auth-detect"},
+					{Name: "no-browser"},
 					{Name: "log-level", TakesValue: true, Values: logLevelValues()},
 					{Name: "log", TakesValue: true},
 					{Name: "pid", TakesValue: true},

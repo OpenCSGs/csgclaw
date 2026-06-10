@@ -32,8 +32,20 @@
 
 .agent-detail-pane > .entity-header,
 .agent-detail-pane > .entity-grid,
-.agent-detail-pane > .form-error {
+.agent-detail-pane > .form-error,
+.agent-detail-pane > .form-warning {
   width: var(--agent-detail-content-width);
+}
+
+.agent-detail-pane > .form-warning {
+  border: 1px solid color-mix(in oklab, var(--portal-warning-700) 30%, var(--line));
+  border-radius: 12px;
+  background: var(--portal-warning-50);
+  color: var(--portal-warning-700);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
 }
 
 .agent-detail-pane .entity-header {

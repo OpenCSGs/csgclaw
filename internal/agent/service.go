@@ -161,24 +161,25 @@ func TestOnlySetDefaultServiceOption(opt ServiceOption) func() {
 }
 
 type Service struct {
-	model                  config.ModelConfig
-	llm                    config.LLMConfig
-	server                 config.ServerConfig
-	hub                    templateService
-	defaultManagerTemplate string
-	defaultWorkerTemplate  string
-	managerImage           string
-	gatewayRuntime         string
-	state                  string
-	sandbox                sandbox.Provider
-	mu                     sync.RWMutex
-	runtimes               map[string]sandbox.Runtime
-	agents                 map[string]Agent
-	runtimeRecords         map[string]RuntimeRecord
-	runtimeRegistry        map[string]agentruntime.Runtime
-	lifecycle              LifecycleObserver
-	profileDefaults        AgentProfile
-	detectionResults       []ProfileDetectionResult
+	model                   config.ModelConfig
+	llm                     config.LLMConfig
+	server                  config.ServerConfig
+	hub                     templateService
+	defaultManagerTemplate  string
+	defaultWorkerTemplate   string
+	managerImage            string
+	gatewayRuntime          string
+	state                   string
+	sandbox                 sandbox.Provider
+	mu                      sync.RWMutex
+	runtimes                map[string]sandbox.Runtime
+	agents                  map[string]Agent
+	runtimeRecords          map[string]RuntimeRecord
+	runtimeRegistry         map[string]agentruntime.Runtime
+	lifecycle               LifecycleObserver
+	profileDefaults         AgentProfile
+	detectionResults        []ProfileDetectionResult
+	startupProfileDetectOff bool
 
 	// gatewayWorkPhase is set by createGatewayBox for bootstrap progress logs (best-effort if concurrent).
 	gatewayWorkPhase atomic.Uint32
@@ -263,6 +264,25 @@ func WithBootstrapDefaultTemplates(cfg config.BootstrapConfig) ServiceOption {
 		s.defaultWorkerTemplate = strings.TrimSpace(cfg.ResolvedDefaultWorkerTemplate())
 		return nil
 	}
+}
+
+func WithStartupProfileDetectionDisabled() ServiceOption {
+	return func(s *Service) error {
+		if s == nil {
+			return fmt.Errorf("agent service is required")
+		}
+		s.SetStartupProfileDetectionDisabled(true)
+		return nil
+	}
+}
+
+func (s *Service) SetStartupProfileDetectionDisabled(disabled bool) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.startupProfileDetectOff = disabled
+	s.mu.Unlock()
 }
 
 func WithLifecycleObserver(observer LifecycleObserver) ServiceOption {
@@ -409,7 +429,7 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	}
 	svc.mu.RUnlock()
 	recreateForParticipantBridgeConfig := !forceRecreate && agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID)
-	if _, err := ensureAgentPicoClawConfigForParticipant(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, modelCfg); err != nil {
+	if _, err := ensureAgentPicoClawConfigForParticipantWithResolver(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, modelCfg, svc.resolveManagerBaseURL); err != nil {
 		return err
 	}
 	if recreateForParticipantBridgeConfig {
@@ -728,6 +748,16 @@ func (s *Service) managerStartupProfile(ctx context.Context) (AgentProfile, []Pr
 		results := append([]ProfileDetectionResult(nil), existing.DetectionResults...)
 		s.mu.RUnlock()
 		return normalizeProfile(profile, ManagerName, existing.Description), results
+	}
+	if s != nil && s.startupProfileDetectOff {
+		if existing, ok := s.agents[ManagerUserID]; ok {
+			profile := cloneProfile(existing.AgentProfile)
+			results := append([]ProfileDetectionResult(nil), existing.DetectionResults...)
+			s.mu.RUnlock()
+			return normalizeProfile(profile, ManagerName, existing.Description), results
+		}
+		s.mu.RUnlock()
+		return normalizeProfile(AgentProfile{Name: ManagerName, Provider: ProviderCSGHubLite}, ManagerName, ""), nil
 	}
 	s.mu.RUnlock()
 	if s != nil {
@@ -1829,11 +1859,15 @@ func (s *Service) gatewayProvisionRequest(runtimeKind, agentName, agentID string
 	return &agentruntime.GatewayProvision{
 		ModelFallback:     modelFallback,
 		Server:            server,
-		ManagerBaseURL:    resolveManagerBaseURL(server),
+		ManagerBaseURL:    s.resolveManagerBaseURL(server),
 		AgentHome:         agentHome,
 		ProjectsRoot:      projectsRoot,
 		WorkspaceTemplate: templateRoot,
 	}, nil
+}
+
+func (s *Service) resolveManagerBaseURL(server config.ServerConfig) string {
+	return resolveManagerBaseURLForSandboxProvider(server, s.sandboxProviderName())
 }
 
 func (s *Service) StreamLogs(ctx context.Context, id string, follow bool, lines int, w io.Writer) error {

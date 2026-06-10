@@ -99,7 +99,6 @@ export function useWorkspaceController() {
     upgradeStatus,
     setBootstrapData,
     setAgentsData,
-    setManagerProfileData,
     setUpgradeStatusData,
     setAppVersionData,
     refreshWorkspaceBootstrap,
@@ -181,11 +180,11 @@ export function useWorkspaceController() {
     refreshWorkspaceBootstrapConfig,
     refreshWorkspaceManagerProfile,
     rooms,
+    selectAgent,
     selectComputer,
     selectConversation,
     selectHub,
     setAgentsData,
-    setManagerProfileData,
     setSelectedHubTemplateId,
     t,
   });
@@ -374,6 +373,5 @@ export function useWorkspaceController() {
     configModalProps: configSettings.configModalProps,
     agentProfileModalProps: agent.agentProfileModalProps,
     managerRebuildModalProps: agent.managerRebuildModalProps,
-    managerProfileSetupModalProps: agent.managerProfileSetupModalProps,
   };
 }

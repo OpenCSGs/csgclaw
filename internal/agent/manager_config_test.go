@@ -133,6 +133,43 @@ func TestRenderManagerPicoClawConfigUsesSeparateParticipantAndAgentIDs(t *testin
 	}
 }
 
+func TestResolveManagerBaseURLForDockerUsesHostAliasWhenAdvertiseURLIsImplicit(t *testing.T) {
+	origDockerHostAliasEnabled := dockerHostAliasEnabled
+	origLocalIPv4Resolver := localIPv4Resolver
+	dockerHostAliasEnabled = func() bool { return true }
+	localIPv4Resolver = func() string {
+		t.Fatal("local IPv4 resolver should not be used for Docker Desktop callback URLs")
+		return ""
+	}
+	defer func() {
+		dockerHostAliasEnabled = origDockerHostAliasEnabled
+		localIPv4Resolver = origLocalIPv4Resolver
+	}()
+
+	got := ResolveManagerBaseURLForSandboxProvider(config.ServerConfig{
+		ListenAddr: "0.0.0.0:18080",
+	}, config.DockerProvider)
+	if want := "http://host.docker.internal:18080"; got != want {
+		t.Fatalf("ResolveManagerBaseURLForSandboxProvider() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveManagerBaseURLForDockerKeepsExplicitAdvertiseURL(t *testing.T) {
+	origDockerHostAliasEnabled := dockerHostAliasEnabled
+	dockerHostAliasEnabled = func() bool { return true }
+	defer func() {
+		dockerHostAliasEnabled = origDockerHostAliasEnabled
+	}()
+
+	got := ResolveManagerBaseURLForSandboxProvider(config.ServerConfig{
+		ListenAddr:       "0.0.0.0:18080",
+		AdvertiseBaseURL: "http://tunnel.example.test/csgclaw/",
+	}, config.DockerProvider)
+	if want := "http://tunnel.example.test/csgclaw"; got != want {
+		t.Fatalf("ResolveManagerBaseURLForSandboxProvider() = %q, want %q", got, want)
+	}
+}
+
 func TestAgentPicoClawConfigNeedsParticipantRecreateRejectsLegacyBotID(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)

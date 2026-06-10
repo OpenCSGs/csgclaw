@@ -12,6 +12,8 @@
 
 当自动推断出的地址无法从 BoxLite box 内访问时，可以设置 `advertise_base_url`，例如使用局域网地址、隧道地址或 host alias。
 
+当 sandbox provider 是 Docker Desktop 上的 `docker` 时，空的 `advertise_base_url` 会在生成 manager 和 worker 运行时配置时解析为 `http://host.docker.internal:<port>`。如果 Docker 需要使用其它回连地址，请显式设置 `advertise_base_url`。
+
 `access_token` 用来保护需要认证的 API 路由，包括 PicoClaw participant bridge 路由。启用鉴权时，客户端必须发送 `Authorization: Bearer <access_token>`。
 
 `no_auth` 控制 CSGClaw 是否跳过 bearer token 检查，默认值是 `false`。仅建议在可信的本地或开发环境中设置为 `true`。

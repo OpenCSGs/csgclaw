@@ -24,7 +24,8 @@ var (
 )
 
 type EnsureStateOptions struct {
-	ConfigPath string
+	ConfigPath   string
+	NoAuthDetect bool
 }
 
 type EnsureStateResult struct {
@@ -41,6 +42,9 @@ func EnsureState(ctx context.Context, opts EnsureStateOptions) (EnsureStateResul
 	cfg, err := ensureConfigState(path)
 	if err != nil {
 		return EnsureStateResult{}, err
+	}
+	if opts.NoAuthDetect {
+		ctx = context.WithValue(ctx, noAuthDetectContextKey{}, true)
 	}
 	if err := ensureBootstrapState(ctx, cfg); err != nil {
 		return EnsureStateResult{}, err
@@ -129,6 +133,9 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 		agent.WithHubService(hubSvc),
 	)
+	if noAuthDetectFromContext(ctx) {
+		opts = append(opts, agent.WithStartupProfileDetectionDisabled())
+	}
 	agentSvc, err := agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, bootstrapDefaults.ManagerImage, agentsPath, opts...)
 	if err != nil {
 		return participant.Participant{}, err
@@ -158,6 +165,13 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 		return participant.Participant{}, err
 	}
 	return created, nil
+}
+
+type noAuthDetectContextKey struct{}
+
+func noAuthDetectFromContext(ctx context.Context) bool {
+	value, _ := ctx.Value(noAuthDetectContextKey{}).(bool)
+	return value
 }
 
 func defaultConfig() config.Config {

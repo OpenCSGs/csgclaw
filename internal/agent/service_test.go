@@ -6003,6 +6003,43 @@ func TestGatewayProvisionRequestBuildsOpenClawWorkerAssets(t *testing.T) {
 	}
 }
 
+func TestGatewayProvisionRequestUsesDockerHostAliasForImplicitAdvertiseURL(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	origDockerHostAliasEnabled := dockerHostAliasEnabled
+	origLocalIPv4Resolver := localIPv4Resolver
+	dockerHostAliasEnabled = func() bool { return true }
+	localIPv4Resolver = func() string {
+		t.Fatal("local IPv4 resolver should not be used for Docker Desktop gateway URLs")
+		return ""
+	}
+	defer func() {
+		dockerHostAliasEnabled = origDockerHostAliasEnabled
+		localIPv4Resolver = origLocalIPv4Resolver
+	}()
+
+	provider := sandboxtest.NewProvider()
+	provider.NameValue = config.DockerProvider
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: "0.0.0.0:18080", AccessToken: "shared-token"},
+		"manager-image:test",
+		"",
+		WithSandboxProvider(provider),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	gateway, err := svc.gatewayProvisionRequest(RuntimeKindPicoClawSandbox, ManagerName, ManagerUserID)
+	if err != nil {
+		t.Fatalf("gatewayProvisionRequest() error = %v", err)
+	}
+	if got, want := gateway.ManagerBaseURL, "http://host.docker.internal:18080"; got != want {
+		t.Fatalf("Gateway.ManagerBaseURL = %q, want %q", got, want)
+	}
+}
+
 func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) *hub.Service {
 	t.Helper()
 

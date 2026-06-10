@@ -113,6 +113,7 @@ csgclaw serve [-d|--daemon] [flags]
 Flags:
 
 - `--daemon`, `-d`: run in background.
+- `--no-auth-detect`: disable startup auth/model auto-detection so the Manager Profile setup flow remains incomplete for manual testing.
 - `--log-level string`: log level. Supported values: `debug`, `info`, `warn`, `error`. Default `info`.
 - `--log string`: daemon log path. Daemon mode only. Default `~/.csgclaw/server.log`.
 - `--pid string`: daemon PID path. Daemon mode only. Default `~/.csgclaw/server.pid`.
@@ -123,6 +124,7 @@ Behavior:
 - If local config or bootstrap state is incomplete, it auto-initializes local state before startup.
 - Validates effective model configuration before startup.
 - For `csghub-lite`, it performs a provider reachability preflight.
+- With `--no-auth-detect`, startup skips automatic CLI auth import and Manager Profile provider/model detection unless an existing complete Manager Profile is already saved.
 - In foreground mode it prints the effective config and IM URL.
 - In daemon mode it launches the hidden internal `_serve` entrypoint and waits for `/healthz`.
 
@@ -130,6 +132,7 @@ Examples:
 
 ```bash
 csgclaw serve
+csgclaw serve --no-auth-detect --no-browser
 csgclaw serve --daemon
 csgclaw serve --config /path/to/config.toml
 csgclaw --endpoint http://127.0.0.1:18080 serve

@@ -2,6 +2,7 @@ package onboard
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,6 +125,62 @@ func TestCreateManagerParticipantBootstrapsAdminParticipant(t *testing.T) {
 	}
 	if admin.ChannelUserRef != im.AdminUserID {
 		t.Fatalf("admin participant channel_user_ref = %q, want %q", admin.ChannelUserRef, im.AdminUserID)
+	}
+}
+
+func TestEnsureStateNoAuthDetectCreatesManagerWithoutDetectionResults(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	if _, err := EnsureState(context.Background(), EnsureStateOptions{
+		ConfigPath:   configPath,
+		NoAuthDetect: true,
+	}); err != nil {
+		t.Fatalf("EnsureState() error = %v", err)
+	}
+
+	agentsPath, err := config.DefaultAgentsPath()
+	if err != nil {
+		t.Fatalf("DefaultAgentsPath() error = %v", err)
+	}
+	data, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	var state struct {
+		Agents []struct {
+			ID               string                         `json:"id"`
+			ProfileComplete  bool                           `json:"profile_complete"`
+			AgentProfile     agent.AgentProfile             `json:"agent_profile"`
+			DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	var manager *struct {
+		ID               string                         `json:"id"`
+		ProfileComplete  bool                           `json:"profile_complete"`
+		AgentProfile     agent.AgentProfile             `json:"agent_profile"`
+		DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
+	}
+	for i := range state.Agents {
+		if state.Agents[i].ID == agent.ManagerUserID {
+			manager = &state.Agents[i]
+			break
+		}
+	}
+	if manager == nil {
+		t.Fatalf("manager agent %q not found in state: %s", agent.ManagerUserID, string(data))
+	}
+	if manager.ProfileComplete || manager.AgentProfile.ProfileComplete {
+		t.Fatalf("manager profile = %+v, top-level complete=%t; want incomplete", manager.AgentProfile, manager.ProfileComplete)
+	}
+	if manager.AgentProfile.Provider != agent.ProviderCSGHubLite {
+		t.Fatalf("manager provider = %q, want %q", manager.AgentProfile.Provider, agent.ProviderCSGHubLite)
+	}
+	if len(manager.DetectionResults) != 0 {
+		t.Fatalf("manager detection_results = %+v, want empty", manager.DetectionResults)
 	}
 }
 

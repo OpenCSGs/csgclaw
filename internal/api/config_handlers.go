@@ -98,7 +98,7 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 func serverConfigView(path string, cfg config.Config) apitypes.ConfigSettingsResponse {
 	settings := config.UserSettingsFromConfig(cfg)
 	token := strings.TrimSpace(settings.AccessToken)
-	effective := agent.ResolveManagerBaseURL(cfg.Server)
+	effective := agent.ResolveManagerBaseURLForSandboxProvider(cfg.Server, cfg.Sandbox.Resolved().Provider)
 	if effective == "" {
 		effective = config.ResolveAdvertiseBaseURL(cfg.Server)
 	}

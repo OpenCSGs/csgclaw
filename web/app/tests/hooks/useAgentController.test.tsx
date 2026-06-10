@@ -1,10 +1,18 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { fetchAgent, fetchAgentProfile, fetchAgentProfileModels, runAgentActionRequest } from "@/api/agents";
+import {
+  fetchAgent,
+  fetchAgentProfile,
+  fetchAgentProfileModels,
+  fetchAgentWorkspace,
+  runAgentActionRequest,
+  updateAgentRequest,
+} from "@/api/agents";
 import { useAgentController } from "@/hooks/workspace/useAgentController";
 import { WorkspacePaneTypes } from "@/models/routing";
+import type { WorkspacePane } from "@/models/routing";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 
@@ -35,7 +43,9 @@ vi.mock("@/api/agents", async () => {
     fetchAgent: vi.fn(),
     fetchAgentProfile: vi.fn(),
     fetchAgentProfileModels: vi.fn(),
+    fetchAgentWorkspace: vi.fn(),
     runAgentActionRequest: vi.fn(),
+    updateAgentRequest: vi.fn(),
   };
 });
 
@@ -57,7 +67,7 @@ const oldAgent: AgentLike = {
   profile_complete: true,
   provider: "codex",
   role: "manager",
-  runtime_kind: "codex",
+  runtime_kind: "picoclaw_sandbox",
   status: "running",
 };
 
@@ -77,6 +87,13 @@ const profile: AgentProfileLike = {
   provider: "codex",
 };
 
+const incompleteProfile: AgentProfileLike = {
+  image_upgrade_required: false,
+  model_id: "",
+  profile_complete: false,
+  provider: "csghub_lite",
+};
+
 const t: TranslateFn = (key) => key;
 
 function createWrapper() {
@@ -92,13 +109,17 @@ function createWrapper() {
   };
 }
 
-function useAgentControllerHarness() {
+function useAgentControllerHarness(
+  options: { activePane?: WorkspacePane; managerProfile?: AgentProfileLike | null } = {},
+) {
   const [agents, setAgents] = useState<AgentLike[]>([oldAgent]);
   const refreshWorkspaceAgents = vi.fn(async () => [oldAgent]);
+  const selectAgentRef = useRef(vi.fn());
+  const selectAgent = selectAgentRef.current;
 
-  return useAgentController({
+  const controller = useAgentController({
     activeConversationId: "",
-    activePane: { type: WorkspacePaneTypes.agent, id: "u-manager" },
+    activePane: options.activePane ?? { type: WorkspacePaneTypes.agent, id: "u-manager" },
     agents,
     agentsLoaded: true,
     agentsQuery: {
@@ -112,23 +133,25 @@ function useAgentControllerHarness() {
     hubTemplates: [],
     localRuntimeImages: [],
     locale: "en",
-    managerProfile: null,
+    managerProfile: options.managerProfile ?? null,
     refreshHubTemplates: vi.fn(async () => undefined),
     refreshWorkspaceAgents,
     refreshWorkspaceBootstrap: vi.fn(async () => null),
     refreshWorkspaceBootstrapConfig: vi.fn(async () => null),
     refreshWorkspaceManagerProfile: vi.fn(async () => null),
     rooms: [],
+    selectAgent,
     selectComputer: vi.fn(),
     selectConversation: vi.fn(),
     selectHub: vi.fn(),
-    setAgentsData: (value) => {
+    setAgentsData: (value: AgentLike[] | ((current: AgentLike[]) => AgentLike[])) => {
       setAgents((current) => (typeof value === "function" ? value(current) : value));
     },
-    setManagerProfileData: vi.fn(),
     setSelectedHubTemplateId: vi.fn(),
     t,
   });
+
+  return { controller, selectAgent };
 }
 
 describe("useAgentController", () => {
@@ -136,29 +159,100 @@ describe("useAgentController", () => {
     vi.mocked(fetchAgent).mockReset();
     vi.mocked(fetchAgentProfile).mockReset();
     vi.mocked(fetchAgentProfileModels).mockReset();
+    vi.mocked(fetchAgentWorkspace).mockReset();
     vi.mocked(runAgentActionRequest).mockReset();
+    vi.mocked(updateAgentRequest).mockReset();
     vi.mocked(fetchAgent).mockResolvedValueOnce(oldAgent).mockResolvedValueOnce(latestAgent);
     vi.mocked(fetchAgentProfile).mockResolvedValue(profile);
     vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: [] });
+    vi.mocked(fetchAgentWorkspace).mockResolvedValue({ entries: [] });
     vi.mocked(runAgentActionRequest).mockResolvedValue({
       ...oldAgent,
       image: actionImage,
     });
+    vi.mocked(updateAgentRequest).mockResolvedValue(latestAgent);
   });
 
   it("refreshes the selected agent detail from a cache-busted agent fetch after upgrade", async () => {
-    const { result } = renderHook(() => useAgentControllerHarness(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.agentViewProps.draft?.image).toBe(oldImage));
+    await waitFor(() => expect(fetchAgentWorkspace).toHaveBeenCalledTimes(1));
 
     await act(async () => {
       await result.current.agentViewProps.onUpgrade?.(oldAgent);
     });
 
     await waitFor(() => expect(result.current.agentViewProps.item?.image).toBe(latestImage));
+    await waitFor(() => expect(fetchAgentWorkspace).toHaveBeenCalledTimes(2));
     expect(result.current.agentViewProps.draft?.image).toBe(latestImage);
     expect(result.current.agentViewProps.savedDraft?.image).toBe(latestImage);
     expect(runAgentActionRequest).toHaveBeenCalledWith("u-manager", "upgrade");
     expect(fetchAgent).toHaveBeenLastCalledWith("u-manager", { cacheBust: true });
+  });
+
+  it("refreshes the selected agent workspace after saving manager profile changes", async () => {
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.agentViewProps.draft?.image).toBe(oldImage));
+    await waitFor(() => expect(fetchAgentWorkspace).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.agentViewProps.onSave?.();
+    });
+
+    await waitFor(() => expect(fetchAgentWorkspace).toHaveBeenCalledTimes(2));
+    expect(updateAgentRequest).toHaveBeenCalledWith(
+      "u-manager",
+      expect.objectContaining({
+        name: "manager",
+      }),
+    );
+  });
+
+  it("routes incomplete manager profile setup to the manager agent page", async () => {
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.conversation, id: "room-1" },
+          managerProfile: incompleteProfile,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(result.current.selectAgent).toHaveBeenCalledWith({ id: "u-manager" }, { replace: true }),
+    );
+    expect(result.current.controller.agentViewProps.notice).toBe("profileIncompleteRedirectNotice");
+    expect("managerProfileSetupModalProps" in result.current.controller).toBe(false);
+  });
+
+  it("clears the manager setup redirect notice after a short timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            activePane: { type: WorkspacePaneTypes.conversation, id: "room-1" },
+            managerProfile: incompleteProfile,
+          }),
+        { wrapper: createWrapper() },
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(result.current.controller.agentViewProps.notice).toBe("profileIncompleteRedirectNotice");
+
+      await act(async () => {
+        vi.advanceTimersByTime(5000);
+        await Promise.resolve();
+      });
+
+      expect(result.current.controller.agentViewProps.notice).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

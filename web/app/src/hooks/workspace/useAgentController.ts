@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "react-router-dom";
 import { errorMessage } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
@@ -13,7 +13,6 @@ import {
   fetchAgentProfileDefaults,
   patchNotificationBotRequest,
   runAgentActionRequest,
-  saveManagerProfileRequest,
   updateAgentRequest,
 } from "@/api/agents";
 import type { AgentUpdatePayload, FetchAgentsOptions } from "@/api/agents";
@@ -59,7 +58,6 @@ import {
   normalizeRuntimeKind,
   normalizeTemplateSelection,
   pickDefaultAgentTemplate,
-  profileToDraft,
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
   resolveAgentChannelUserID,
@@ -79,7 +77,11 @@ import { isDirectConversation, resolveRoomInviterID } from "@/models/conversatio
 import { WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { useProfileModelOptions } from "./useProfileModelOptions";
-import { useWorkspaceAgentWorkspaceFileQuery, useWorkspaceAgentWorkspaceQuery } from "./workspaceQueries";
+import {
+  useWorkspaceAgentWorkspaceFileQuery,
+  useWorkspaceAgentWorkspaceQuery,
+  workspaceQueryKeys,
+} from "./workspaceQueries";
 import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
 import type { IMConversation } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
@@ -118,17 +120,15 @@ export function useAgentController({
   refreshWorkspaceBootstrapConfig,
   refreshWorkspaceManagerProfile,
   rooms,
+  selectAgent,
   selectComputer,
   selectConversation,
   selectHub,
   setAgentsData,
-  setManagerProfileData,
   setSelectedHubTemplateId,
   t,
 }: UseAgentControllerArgs) {
-  const [profileDraft, setProfileDraft] = useState<AgentDraft | null>(null);
-  const [profileError, setProfileError] = useState("");
-  const [profileBusy, setProfileBusy] = useState(false);
+  const queryClient = useQueryClient();
   const [cliproxyAuthBusy, setCLIProxyAuthBusy] = useState("");
   const [agentsError, setAgentsError] = useState("");
   const [showAgentModal, setShowAgentModal] = useState(false);
@@ -150,6 +150,8 @@ export function useAgentController({
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPageError, setAgentPageError] = useState("");
+  const [agentPageNotice, setAgentPageNotice] = useState("");
+  const agentPageNoticeTimerRef = useRef<number | null>(null);
   const [teamActionBusy, setTeamActionBusy] = useState(false);
   const [teamActionError, setTeamActionError] = useState("");
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
@@ -191,10 +193,7 @@ export function useAgentController({
     [createTeamCandidates],
   );
   const runningAgentCount = agentItems.filter(isAgentRunning).length;
-  const notifierWebhookPublicOrigin = useMemo(
-    () => resolvedNotifierWebhookOrigin(bootstrapConfig),
-    [bootstrapConfig?.advertise_base_url],
-  );
+  const notifierWebhookPublicOrigin = useMemo(() => resolvedNotifierWebhookOrigin(bootstrapConfig), [bootstrapConfig]);
   const selectedAgentForPage = useMemo(() => {
     if (activePane.type !== WorkspacePaneTypes.agent) {
       return null;
@@ -259,15 +258,6 @@ export function useAgentController({
   });
 
   const {
-    models: profileModels,
-    modelBusy: profileModelBusy,
-    resetModels: resetProfileModels,
-  } = useProfileModelOptions({
-    draft: profileDraft,
-    enabled: Boolean(managerProfileIncomplete),
-    onDraftChange: setProfileDraft,
-  });
-  const {
     models: agentModels,
     modelBusy: agentModelBusy,
     resetModels: resetAgentModels,
@@ -288,25 +278,41 @@ export function useAgentController({
   const { cliproxyAuthStatuses, setCLIProxyAuthStatus } = useCLIProxyAuthStatuses(
     [
       managerProfile?.provider,
-      profileDraft?.provider,
       isNotifierRuntimeDraft(agentDraft) ? "" : agentDraft?.provider,
       isNotifierRuntimeDraft(agentPageDraft) ? "" : agentPageDraft?.provider,
     ],
     t,
   );
 
-  useEffect(() => {
-    if (!bootstrapConfig?.runtime_kind) {
-      return;
-    }
-    setProfileDraft((current) =>
-      current && !current.runtime_kind
-        ? { ...current, runtime_kind: normalizeRuntimeKind(bootstrapConfig.runtime_kind) }
-        : current,
-    );
-  }, [bootstrapConfig?.runtime_kind]);
-
   const progressBusy = agentBusy || agentActionBusy === `${MANAGER_AGENT_ID}:recreate`;
+
+  const clearAgentPageNotice = useCallback(() => {
+    if (agentPageNoticeTimerRef.current !== null) {
+      window.clearTimeout(agentPageNoticeTimerRef.current);
+      agentPageNoticeTimerRef.current = null;
+    }
+    setAgentPageNotice("");
+  }, []);
+
+  const showAgentPageNotice = useCallback((message: string) => {
+    if (agentPageNoticeTimerRef.current !== null) {
+      window.clearTimeout(agentPageNoticeTimerRef.current);
+    }
+    setAgentPageNotice(message);
+    agentPageNoticeTimerRef.current = window.setTimeout(() => {
+      setAgentPageNotice("");
+      agentPageNoticeTimerRef.current = null;
+    }, 5000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (agentPageNoticeTimerRef.current !== null) {
+        window.clearTimeout(agentPageNoticeTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!progressBusy || !agentProgress?.steps?.length) {
@@ -319,14 +325,22 @@ export function useAgentController({
   }, [progressBusy, agentProgress?.startedAt, agentProgress?.steps?.length]);
 
   useEffect(() => {
-    if (!managerProfile) {
+    if (!managerProfileIncomplete) {
+      clearAgentPageNotice();
       return;
     }
-    setProfileDraft({
-      ...profileToDraft(managerProfile),
-      runtime_kind: normalizeRuntimeKind(bootstrapConfig?.runtime_kind || managerProfile.runtime_kind),
-    });
-  }, [managerProfile, bootstrapConfig?.runtime_kind]);
+  }, [clearAgentPageNotice, managerProfileIncomplete]);
+
+  useEffect(() => {
+    if (!managerProfileIncomplete) {
+      return;
+    }
+    if (activePane.type === WorkspacePaneTypes.agent && activePane.id === MANAGER_AGENT_ID) {
+      return;
+    }
+    showAgentPageNotice(t("profileIncompleteRedirectNotice"));
+    selectAgent({ id: MANAGER_AGENT_ID }, { replace: true });
+  }, [activePane.id, activePane.type, managerProfileIncomplete, selectAgent, showAgentPageNotice, t]);
 
   useEffect(() => {
     if (!activePane || activePane.type !== WorkspacePaneTypes.agent) {
@@ -381,15 +395,7 @@ export function useAgentController({
   }, [selectedAgentForPage?.id]);
 
   async function refreshManagerProfile(): Promise<void> {
-    const profile = await refreshWorkspaceManagerProfile();
-    if (!profile) {
-      // The manager may not exist during the first bootstrap milliseconds.
-      return;
-    }
-    setProfileDraft({
-      ...profileToDraft(profile),
-      runtime_kind: normalizeRuntimeKind(bootstrapConfig?.runtime_kind || profile.runtime_kind),
-    });
+    await refreshWorkspaceManagerProfile();
   }
 
   async function loginCLIProxyProvider(provider: string | null | undefined): Promise<void> {
@@ -510,27 +516,6 @@ export function useAgentController({
     openManagerRebuildModal(managerAgent);
   }
 
-  async function saveManagerProfile(): Promise<void> {
-    if (!profileDraft) {
-      return;
-    }
-    setProfileBusy(true);
-    setProfileError("");
-    try {
-      const payload = draftToProfile(profileDraft);
-      const saved = await saveManagerProfileRequest(payload);
-      setManagerProfileData(saved);
-      setProfileDraft({ ...profileToDraft(saved), agent_id: MANAGER_AGENT_ID });
-      await refreshManagerProfile();
-      await syncManagerRuntimeAfterProfileSave(managerAgent, Boolean(managerProfileIncomplete));
-      await refreshWorkspaceBootstrap();
-    } catch (err) {
-      setProfileError(errorMessage(err, t("sendFailed")));
-    } finally {
-      setProfileBusy(false);
-    }
-  }
-
   async function refreshAgents(options: FetchAgentsOptions = {}) {
     try {
       await refreshWorkspaceAgents(options);
@@ -642,7 +627,19 @@ export function useAgentController({
     await refreshAgents();
     if (latestAgent?.id) {
       applyAgentListUpdate(latestAgent);
+      await refreshAgentWorkspace(latestAgent.id);
     }
+  }
+
+  async function refreshAgentWorkspace(agentID: string | null | undefined): Promise<void> {
+    const id = String(agentID ?? "").trim();
+    if (!id) {
+      return;
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentWorkspaceScope(id) }),
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentWorkspaceFileScope(id) }),
+    ]);
   }
 
   async function fetchAgentWithProfile(item: AgentLike | null | undefined): Promise<AgentWithProfile> {
@@ -854,6 +851,7 @@ export function useAgentController({
         const saved = await patchNotificationBotRequest(selectedAgentForPage.id, payload);
         await refreshAgents();
         await refreshWorkspaceBootstrap();
+        await refreshAgentWorkspace(saved.id || selectedAgentForPage.id);
         const savedDraft = agentToDraft(saved);
         setAgentPageDraft(savedDraft);
         setAgentPageSavedDraft(savedDraft);
@@ -890,6 +888,7 @@ export function useAgentController({
         if (savedMetaOnly.id === MANAGER_AGENT_ID) {
           await refreshManagerProfile();
         }
+        await refreshAgentWorkspace(savedMetaOnly.id || selectedAgentForPage.id);
         const nextDraft = await agentDraftFromItem(savedMetaOnly);
         setAgentPageDraft(nextDraft);
         setAgentPageSavedDraft(nextDraft);
@@ -906,6 +905,7 @@ export function useAgentController({
       if (saved.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }
+      await refreshAgentWorkspace(saved.id || selectedAgentForPage.id);
       const savedDraft = await agentDraftFromItem(saved);
       setAgentPageDraft(savedDraft);
       setAgentPageSavedDraft(savedDraft);
@@ -971,6 +971,9 @@ export function useAgentController({
         await (isCreate ? createNotificationBotRequest(payload) : patchNotificationBotRequest(editingAgentID, payload));
         await refreshAgents();
         await refreshWorkspaceBootstrap();
+        if (!isCreate) {
+          await refreshAgentWorkspace(editingAgentID);
+        }
         if (isCreate) {
           setAgentProgress((current) =>
             current
@@ -1017,6 +1020,7 @@ export function useAgentController({
       if (saved.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
       }
+      await refreshAgentWorkspace(saved.id || editingAgentID);
       if (isCreate) {
         setAgentProgress((current) =>
           current
@@ -1062,6 +1066,9 @@ export function useAgentController({
         updatedAgent = await runAgentActionRequest(item.id, action);
       }
       await refreshAgentsWithUpdatedAgent(updatedAgent);
+      if (action === "delete") {
+        await refreshAgentWorkspace(item.id);
+      }
       if (item.id === MANAGER_AGENT_ID) {
         await refreshManagerProfile();
         if (action === "recreate" || action === "start") {
@@ -1280,6 +1287,7 @@ export function useAgentController({
       saving: agentPageBusy,
       publishBusy: agentPagePublishBusy,
       saveError: agentPageError,
+      notice: agentPageNotice,
       authStatuses: cliproxyAuthStatuses,
       authBusyProvider: cliproxyAuthBusy,
       notifierWebhookPublicOrigin,
@@ -1365,25 +1373,6 @@ export function useAgentController({
           onConfirm: confirmManagerRebuild,
         }
       : null,
-    managerProfileSetupModalProps:
-      managerProfileIncomplete && profileDraft
-        ? {
-            t,
-            managerProfile,
-            profileDraft,
-            onProfileDraftChange: setProfileDraft,
-            onProfileModelsReset: resetProfileModels,
-            bootstrapConfig,
-            profileModels,
-            profileModelBusy,
-            authStatuses: cliproxyAuthStatuses,
-            authBusyProvider: cliproxyAuthBusy,
-            onProviderLogin: loginCLIProxyProvider,
-            profileError,
-            profileBusy,
-            onSave: saveManagerProfile,
-          }
-        : null,
     createTeamModalProps: showCreateTeamModal
       ? {
           t,

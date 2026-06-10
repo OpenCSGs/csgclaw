@@ -11,12 +11,24 @@ export type UseProfileModelOptionsArgs = {
   onDraftChange?: Dispatch<SetStateAction<AgentDraft | null>>;
 };
 
+function modelProbeReady(draft: AgentDraft | null): boolean {
+  if (!draft) {
+    return false;
+  }
+  if (draft.provider !== "api") {
+    return true;
+  }
+  const hasBaseURL = String(draft.base_url || "").trim() !== "";
+  const hasAPIKey = String(draft.api_key || "").trim() !== "" || Boolean(draft.api_key_set);
+  return hasBaseURL && hasAPIKey;
+}
+
 export function useProfileModelOptions({ draft, enabled = true, onDraftChange }: UseProfileModelOptionsArgs) {
   const queryClient = useQueryClient();
   const [requestDraft, setRequestDraft] = useState<AgentDraft | null>(null);
   const draftRequestKey = modelRequestKey(draft);
   const requestKey = modelRequestKey(requestDraft);
-  const shouldLoad = Boolean(enabled && draft?.provider && !isNotifierRuntimeDraft(draft));
+  const shouldLoad = Boolean(enabled && draft?.provider && !isNotifierRuntimeDraft(draft) && modelProbeReady(draft));
 
   useEffect(() => {
     if (!shouldLoad || !draft) {
@@ -30,7 +42,7 @@ export function useProfileModelOptions({ draft, enabled = true, onDraftChange }:
       draft.provider === "api" ? 420 : 0,
     );
     return () => window.clearTimeout(timer);
-  }, [shouldLoad, draftRequestKey]);
+  }, [draft, draftRequestKey, shouldLoad]);
 
   const query = useWorkspaceAgentProfileModelsQuery(requestDraft, {
     enabled: Boolean(requestDraft),

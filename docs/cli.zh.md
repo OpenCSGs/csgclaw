@@ -113,6 +113,7 @@ csgclaw serve [-d|--daemon] [flags]
 参数：
 
 - `--daemon`、`-d`：后台运行。
+- `--no-auth-detect`：禁用启动时的 auth/model 自动检测，让 Manager Profile 配置流程保持未完成，便于手动测试。
 - `--log-level string`：日志级别，支持 `debug`、`info`、`warn`、`error`，默认 `info`。
 - `--log string`：后台模式日志路径，仅 daemon 模式有效。默认 `~/.csgclaw/server.log`。
 - `--pid string`：后台模式 PID 文件路径，仅 daemon 模式有效。默认 `~/.csgclaw/server.pid`。
@@ -123,6 +124,7 @@ csgclaw serve [-d|--daemon] [flags]
 - 如果本地配置或 bootstrap 状态不完整，启动前会自动初始化本地状态。
 - 启动前会校验最终模型配置是否完整。
 - 对 `csghub-lite` 会做连通性预检查。
+- 使用 `--no-auth-detect` 时，启动会跳过 CLI auth 自动导入和 Manager Profile provider/model 自动检测；已保存的完整 Manager Profile 不会被覆盖。
 - 前台模式下会打印生效配置和 IM 访问地址。
 - 后台模式会拉起隐藏的 `_serve` 内部入口，并等待 `/healthz` 健康检查成功。
 
@@ -130,6 +132,7 @@ csgclaw serve [-d|--daemon] [flags]
 
 ```bash
 csgclaw serve
+csgclaw serve --no-auth-detect --no-browser
 csgclaw serve --daemon
 csgclaw serve --config /path/to/config.toml
 csgclaw --endpoint http://127.0.0.1:18080 serve

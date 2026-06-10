@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -148,6 +149,51 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 	}
 	if !strings.Contains(content, `advertise_base_url = "http://192.168.1.10:19080"`) {
 		t.Fatalf("config content = %q, want updated advertise_base_url", content)
+	}
+}
+
+func TestHandleServerConfigReturnsDockerDesktopCallbackURL(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("host.docker.internal callback URL is only the Docker Desktop default")
+	}
+
+	dir := t.TempDir()
+	configPath := dir + "/config.toml"
+	content := `[server]
+listen_addr = "0.0.0.0:19080"
+access_token = "secret"
+
+[sandbox]
+provider = "docker"
+
+[models]
+default = "default.model"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["model"]
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+
+	srv := &Handler{}
+	srv.SetConfigPath(configPath)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/config", nil)
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET config status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var got apitypes.ConfigSettingsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode GET config response: %v", err)
+	}
+	if got.AdvertiseBaseURLEffective != "http://host.docker.internal:19080" {
+		t.Fatalf("AdvertiseBaseURLEffective = %q, want Docker Desktop host alias", got.AdvertiseBaseURLEffective)
 	}
 }
 

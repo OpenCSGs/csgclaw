@@ -975,9 +975,10 @@ func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
 func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 	svc := mustNewSeededService(t, []agent.Agent{
 		{
-			ID:   "u-alice",
-			Name: "alice",
-			Role: agent.RoleWorker,
+			ID:          "u-alice",
+			Name:        "alice",
+			Role:        agent.RoleWorker,
+			RuntimeKind: agent.RuntimeKindCodex,
 			AgentProfile: agent.AgentProfile{
 				Name:            "alice",
 				Provider:        agent.ProviderCSGHubLite,
