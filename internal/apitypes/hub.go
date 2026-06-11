@@ -25,6 +25,7 @@ type HubTemplate struct {
 	Description string               `json:"description,omitempty"`
 	Role        string               `json:"role,omitempty"`
 	RuntimeKind string               `json:"runtime_kind,omitempty"`
+	Version     string               `json:"version,omitempty"`
 	Image       string               `json:"image,omitempty"`
 	ImageEnv    []ImageEnvContract   `json:"image_env,omitempty"`
 	Source      HubTemplateSource    `json:"source"`

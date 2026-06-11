@@ -86,6 +86,7 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 		Description:  manifest.Description,
 		Role:         normalizeTemplateRole(manifest.Role),
 		RuntimeKind:  manifest.RuntimeKind,
+		Version:      strings.TrimSpace(manifest.Version),
 		Image:        manifestImageRef(manifest.Image),
 		ImageEnv:     manifestImageEnv(manifest.Image),
 		WorkspaceRef: s.workspaceRef(id),
@@ -218,6 +219,7 @@ func (s *LocalStore) writeManifest(path string, spec PublishSpec) error {
 		Description: spec.Description,
 		Role:        spec.Role,
 		RuntimeKind: spec.RuntimeKind,
+		Version:     spec.Version,
 		Image: templateImageSection{
 			Ref: spec.Image,
 		},
@@ -251,6 +253,7 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 		return PublishSpec{}, fmt.Errorf("role must be one of %q or %q", TemplateRoleManager, TemplateRoleWorker)
 	}
 	spec.RuntimeKind = strings.TrimSpace(spec.RuntimeKind)
+	spec.Version = strings.TrimSpace(spec.Version)
 	spec.Image = strings.TrimSpace(spec.Image)
 	spec.Description = strings.TrimSpace(spec.Description)
 	if spec.RuntimeKind == "" {

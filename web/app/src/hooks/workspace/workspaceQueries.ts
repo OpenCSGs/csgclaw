@@ -29,8 +29,12 @@ export const workspaceQueryKeys = {
     [WORKSPACE_QUERY_SCOPE, "hub-template", templateID || ""] as const,
   hubWorkspaceFile: (templateID: string | null | undefined, workspacePath: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-workspace-file", templateID || "", workspacePath || ""] as const,
+  agentWorkspaceScope: (agentID: string | null | undefined) =>
+    [WORKSPACE_QUERY_SCOPE, "agent-workspace", agentID || ""] as const,
   agentWorkspace: (agentID: string | null | undefined, workspacePath: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "agent-workspace", agentID || "", workspacePath || ""] as const,
+  agentWorkspaceFileScope: (agentID: string | null | undefined) =>
+    [WORKSPACE_QUERY_SCOPE, "agent-workspace-file", agentID || ""] as const,
   agentWorkspaceFile: (agentID: string | null | undefined, workspacePath: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "agent-workspace-file", agentID || "", workspacePath || ""] as const,
   agentProfileModels: (requestKey: string | null | undefined) =>

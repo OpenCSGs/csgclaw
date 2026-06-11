@@ -5,20 +5,28 @@ import (
 	"fmt"
 	"strings"
 
+	"csgclaw/internal/agent"
 	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
 )
 
 const builtinChannelName = "csgclaw"
 
 type CSGClawAdapter struct {
-	im     *im.Service
-	locale string
+	im           *im.Service
+	participants participantLookup
+	locale       string
 }
 
-func NewCSGClawAdapter(imSvc *im.Service) *CSGClawAdapter {
+func NewCSGClawAdapter(imSvc *im.Service, participantSvc ...participantLookup) *CSGClawAdapter {
+	var lookup participantLookup
+	if len(participantSvc) > 0 {
+		lookup = participantSvc[0]
+	}
 	return &CSGClawAdapter{
-		im:     imSvc,
-		locale: "zh",
+		im:           imSvc,
+		participants: lookup,
+		locale:       "zh",
 	}
 }
 
@@ -26,22 +34,60 @@ func (a *CSGClawAdapter) Channel() string {
 	return builtinChannelName
 }
 
+func (a *CSGClawAdapter) ParticipantDisplayName(participantID string) string {
+	participantID = strings.TrimSpace(participantID)
+	if participantID == "" || a == nil || a.im == nil {
+		return ""
+	}
+	userID := a.channelUserIDForParticipant(participantID)
+	user, ok := a.im.User(userID)
+	if !ok {
+		return ""
+	}
+	if name := strings.TrimSpace(user.Name); name != "" {
+		return name
+	}
+	if handle := strings.TrimSpace(user.Handle); handle != "" {
+		return handle
+	}
+	return strings.TrimSpace(user.ID)
+}
+
+func (a *CSGClawAdapter) ParticipantIDForAgentID(agentID string) string {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return ""
+	}
+	if a != nil && a.participants != nil {
+		for _, item := range a.participants.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, AgentID: agentID}) {
+			if participantID := strings.TrimSpace(item.ID); participantID != "" {
+				return participantID
+			}
+		}
+	}
+	return defaultParticipantIDForAgentID(agentID)
+}
+
 func (a *CSGClawAdapter) EnsureRoom(_ context.Context, req EnsureRoomRequest) (RoomRef, error) {
 	if a == nil || a.im == nil {
 		return RoomRef{}, fmt.Errorf("im service is required")
 	}
 
-	leadBotID := strings.TrimSpace(req.LeadBotID)
-	if leadBotID == "" {
-		return RoomRef{}, fmt.Errorf("lead_bot_id is required")
+	leadParticipantID := strings.TrimSpace(req.LeadParticipantID)
+	if leadParticipantID == "" {
+		return RoomRef{}, fmt.Errorf("lead_participant_id is required")
 	}
-	if _, err := a.ensureBotUser(leadBotID, "manager"); err != nil {
+	leadUser, err := a.ensureParticipantUser(leadParticipantID, "manager")
+	if err != nil {
 		return RoomRef{}, err
 	}
-	for _, memberID := range req.MemberBotIDs {
-		if _, err := a.ensureBotUser(memberID, "worker"); err != nil {
+	memberUserIDs := make([]string, 0, len(req.MemberParticipantIDs))
+	for _, memberID := range req.MemberParticipantIDs {
+		user, err := a.ensureParticipantUser(memberID, "worker")
+		if err != nil {
 			return RoomRef{}, err
 		}
+		memberUserIDs = append(memberUserIDs, user.ID)
 	}
 
 	roomID := strings.TrimSpace(req.RoomID)
@@ -54,8 +100,8 @@ func (a *CSGClawAdapter) EnsureRoom(_ context.Context, req EnsureRoomRequest) (R
 
 	room, err := a.im.CreateRoom(im.CreateRoomRequest{
 		Title:       firstNonEmpty(strings.TrimSpace(req.Title), "team"),
-		CreatorID:   leadBotID,
-		MemberIDs:   cloneStrings(req.MemberBotIDs),
+		CreatorID:   leadUser.ID,
+		MemberIDs:   memberUserIDs,
 		Description: "",
 		Locale:      a.locale,
 	})
@@ -73,17 +119,18 @@ func (a *CSGClawAdapter) AddMembers(_ context.Context, req AddMembersRequest) er
 	if roomID == "" {
 		return fmt.Errorf("room_id is required")
 	}
-	inviterID := strings.TrimSpace(req.InviterBotID)
+	inviterID := strings.TrimSpace(req.InviterParticipantID)
 	if inviterID == "" {
-		return fmt.Errorf("inviter_bot_id is required")
+		return fmt.Errorf("inviter_participant_id is required")
 	}
-	if _, err := a.ensureBotUser(inviterID, "manager"); err != nil {
+	inviter, err := a.ensureParticipantUser(inviterID, "manager")
+	if err != nil {
 		return err
 	}
 
-	userIDs := make([]string, 0, len(req.MemberBotIDs))
-	for _, memberID := range req.MemberBotIDs {
-		user, err := a.ensureBotUser(memberID, "worker")
+	userIDs := make([]string, 0, len(req.MemberParticipantIDs))
+	for _, memberID := range req.MemberParticipantIDs {
+		user, err := a.ensureParticipantUser(memberID, "worker")
 		if err != nil {
 			return err
 		}
@@ -92,9 +139,9 @@ func (a *CSGClawAdapter) AddMembers(_ context.Context, req AddMembersRequest) er
 	if len(userIDs) == 0 {
 		return nil
 	}
-	_, err := a.im.AddRoomMembers(im.AddRoomMembersRequest{
+	_, err = a.im.AddRoomMembers(im.AddRoomMembersRequest{
 		RoomID:    roomID,
-		InviterID: inviterID,
+		InviterID: inviter.ID,
 		UserIDs:   userIDs,
 		Locale:    a.locale,
 	})
@@ -109,22 +156,56 @@ func (a *CSGClawAdapter) SendMessage(_ context.Context, req SendMessageRequest) 
 	if roomID == "" {
 		return MessageRef{}, fmt.Errorf("room_id is required")
 	}
-	senderID := strings.TrimSpace(req.SenderBotID)
-	if senderID == "" {
-		return MessageRef{}, fmt.Errorf("sender_bot_id is required")
+	senderParticipantID := strings.TrimSpace(req.SenderParticipantID)
+	if senderParticipantID == "" {
+		return MessageRef{}, fmt.Errorf("sender_participant_id is required")
 	}
-	senderID = a.im.ResolveUserID(senderID)
-	senderRole := "worker"
-	if user, ok := a.im.User(senderID); ok && strings.EqualFold(strings.TrimSpace(user.Role), "manager") {
-		senderRole = "manager"
-	}
-	sender, err := a.ensureBotUser(senderID, senderRole)
-	if err != nil {
+	if _, err := requireCanonicalParticipantID("sender_participant_id", senderParticipantID); err != nil {
 		return MessageRef{}, err
 	}
-	senderID = sender.ID
+	resolvedSenderID := a.channelUserIDForParticipant(senderParticipantID)
+	senderRole := "worker"
+	if user, ok := a.im.User(resolvedSenderID); ok && strings.EqualFold(strings.TrimSpace(user.Role), "manager") {
+		senderRole = "manager"
+	}
+	sender, ok := a.im.User(resolvedSenderID)
+	if !ok {
+		var err error
+		sender, err = a.ensureParticipantUser(senderParticipantID, senderRole)
+		if err != nil {
+			return MessageRef{}, err
+		}
+	}
+	senderID := sender.ID
 
-	mentionID := a.im.ResolveUserID(strings.TrimSpace(req.MentionID))
+	mentionID := a.channelUserIDForParticipant(strings.TrimSpace(req.MentionID))
+	if strings.TrimSpace(req.Kind) == "team_event" {
+		targetIDs := []string(nil)
+		if mentionID != "" {
+			targetIDs = []string{mentionID}
+		}
+		msg, err := a.im.DeliverEvent(im.DeliverEventRequest{
+			RoomID:    roomID,
+			SenderID:  senderID,
+			MentionID: mentionID,
+			Content:   strings.TrimSpace(req.Content),
+			MessageID: strings.TrimSpace(req.IdempotencyKey),
+			Event: &im.EventPayload{
+				Key:       "team_event",
+				ActorID:   senderID,
+				Title:     strings.TrimSpace(req.Content),
+				TargetIDs: targetIDs,
+			},
+		})
+		if err != nil {
+			return MessageRef{}, err
+		}
+		return MessageRef{
+			Channel:   a.Channel(),
+			RoomID:    roomID,
+			MessageID: msg.ID,
+		}, nil
+	}
 
 	msg, err := a.im.DeliverMessage(im.DeliverMessageRequest{
 		RoomID:    roomID,
@@ -143,19 +224,23 @@ func (a *CSGClawAdapter) SendMessage(_ context.Context, req SendMessageRequest) 
 	}, nil
 }
 
-func (a *CSGClawAdapter) ensureBotUser(botID string, role string) (im.User, error) {
+func (a *CSGClawAdapter) ensureParticipantUser(participantID string, role string) (im.User, error) {
 	var err error
-	botID, err = requireCanonicalParticipantID("bot_id", botID)
+	participantID, err = requireCanonicalParticipantID("participant_id", participantID)
 	if err != nil {
 		return im.User{}, err
 	}
-	if botID == "" {
+	if participantID == "" {
 		return im.User{}, fmt.Errorf("participant id is required")
 	}
+	userID := a.channelUserIDForParticipant(participantID)
+	if user, ok := a.lookupExistingParticipantUser(participantID); ok {
+		return user, nil
+	}
 	user, _, err := a.im.EnsureAgentUser(im.EnsureAgentUserRequest{
-		ID:     botID,
-		Name:   botDisplayName(botID),
-		Handle: botHandle(botID),
+		ID:     userID,
+		Name:   participantDisplayName(participantID),
+		Handle: participantHandle(participantID),
 		Role:   role,
 	})
 	if err != nil {
@@ -164,20 +249,74 @@ func (a *CSGClawAdapter) ensureBotUser(botID string, role string) (im.User, erro
 	return user, nil
 }
 
-func botDisplayName(botID string) string {
-	name := strings.TrimSpace(strings.TrimPrefix(botID, "bot-"))
+func (a *CSGClawAdapter) lookupExistingParticipantUser(participantID string) (im.User, bool) {
+	if a == nil || a.im == nil {
+		return im.User{}, false
+	}
+	channelUserID := a.channelUserIDForParticipant(participantID)
+	candidates := []string{
+		channelUserID,
+		strings.TrimSpace(a.im.ResolveUserID(channelUserID)),
+		strings.TrimSpace(a.im.ResolveUserID(participantID)),
+	}
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		if user, ok := a.im.User(candidate); ok {
+			return user, true
+		}
+	}
+	return im.User{}, false
+}
+
+func (a *CSGClawAdapter) channelUserIDForParticipant(participantID string) string {
+	participantID = strings.TrimSpace(participantID)
+	if participantID == "" {
+		return ""
+	}
+	if a != nil && a.participants != nil {
+		if item, ok := a.participants.Get(participant.ChannelCSGClaw, participantID); ok {
+			if ref := strings.TrimSpace(item.ChannelUserRef); ref != "" {
+				return ref
+			}
+		}
+	}
+	if participantID == agent.ManagerParticipantID || participantID == im.AdminUserID {
+		return participantID
+	}
+	if a != nil && a.im != nil {
+		if user, ok := a.im.User(participantID); ok {
+			return strings.TrimSpace(user.ID)
+		}
+		if resolved := strings.TrimSpace(a.im.ResolveUserID(participantID)); resolved != "" && resolved != participantID {
+			return resolved
+		}
+	}
+	return "u-" + participantID
+}
+
+func participantDisplayName(participantID string) string {
+	name := strings.TrimSpace(strings.TrimPrefix(participantID, "bot-"))
+	name = strings.TrimSpace(strings.TrimPrefix(name, "u-"))
 	name = strings.ReplaceAll(name, "_", "-")
 	if name == "" {
-		return "bot"
+		return "participant"
 	}
 	return name
 }
 
-func botHandle(botID string) string {
-	handle := strings.ToLower(strings.TrimSpace(botID))
+func participantHandle(participantID string) string {
+	handle := strings.ToLower(strings.TrimSpace(participantID))
 	handle = strings.ReplaceAll(handle, "_", "-")
 	if handle == "" {
-		return strings.ToLower(strings.TrimSpace(botID))
+		return strings.ToLower(strings.TrimSpace(participantID))
 	}
 	return handle
 }

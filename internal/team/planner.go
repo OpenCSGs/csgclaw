@@ -1,18 +1,77 @@
-package api
+package team
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"csgclaw/internal/agent"
-	"csgclaw/internal/team"
 )
 
 const managerPlannerModel = "csgclaw-manager-planner"
+
+var ErrManagerPlannerUnavailable = errors.New("manager planner is unavailable")
+
+type ManagerPlannerLLM interface {
+	ChatCompletions(ctx context.Context, participantID string, body []byte) ([]byte, int, string, error)
+}
+
+type PlannerDirectory interface {
+	TeamRoomMemberIDs(roomID string) []string
+	UserProfile(id string) (MemberProfile, bool)
+	AgentProfile(id string) (MemberProfile, bool)
+}
+
+type agentIDResolver interface {
+	ResolveAgentID(participantID string) string
+}
+
+type MemberProfile struct {
+	ID          string
+	Name        string
+	Role        string
+	Description string
+}
+
+type ManagerPlanner struct {
+	llm       ManagerPlannerLLM
+	directory PlannerDirectory
+}
+
+func NewManagerPlanner(llm ManagerPlannerLLM, directory PlannerDirectory) *ManagerPlanner {
+	return &ManagerPlanner{
+		llm:       llm,
+		directory: directory,
+	}
+}
+
+func (p *ManagerPlanner) PlanTask(ctx context.Context, meta TeamMeta, parent TeamTask) (PlanTaskInput, error) {
+	if p == nil || p.llm == nil {
+		return PlanTaskInput{}, fmt.Errorf("%w: llm bridge is not configured", ErrManagerPlannerUnavailable)
+	}
+	planCtx := p.managerPlanContext(meta, parent)
+	body, err := marshalManagerPlanPrompt(planCtx)
+	if err != nil {
+		return PlanTaskInput{}, err
+	}
+	leadAgentID := strings.TrimSpace(meta.LeadAgentID)
+	respBody, status, _, err := p.llm.ChatCompletions(ctx, leadAgentID, body)
+	if err != nil {
+		return PlanTaskInput{}, err
+	}
+	if status < http.StatusOK || status >= http.StatusMultipleChoices {
+		return PlanTaskInput{}, fmt.Errorf("manager planner returned status %d: %s", status, truncatePlannerText(string(respBody), 240))
+	}
+	plan, err := parseManagerPlanCompletion(respBody)
+	if err != nil {
+		return PlanTaskInput{}, err
+	}
+	return normalizeManagerPlan(planCtx, plan)
+}
 
 type teamPlanMember struct {
 	ID          string `json:"id"`
@@ -24,7 +83,8 @@ type teamPlanMember struct {
 type managerPlanContext struct {
 	TeamID              string                 `json:"team_id"`
 	RoomID              string                 `json:"room_id"`
-	LeadBotID           string                 `json:"lead_bot_id"`
+	LeadAgentID         string                 `json:"lead_agent_id"`
+	LeadParticipantID   string                 `json:"lead_participant_id"`
 	AssignableMemberIDs []string               `json:"assignable_member_ids"`
 	Members             []teamPlanMember       `json:"members"`
 	Task                managerPlanTaskContext `json:"task"`
@@ -118,36 +178,15 @@ func parsePriorityValue(value string) int {
 	}
 }
 
-func (h *Handler) managerPlanTask(ctx context.Context, meta team.TeamMeta, parent team.TeamTask) (team.PlanTaskInput, error) {
-	if h == nil || h.llm == nil {
-		return team.PlanTaskInput{}, &teamPlannerHTTPError{status: http.StatusServiceUnavailable, message: "llm bridge is not configured"}
-	}
-	planCtx := h.managerPlanContext(meta, parent)
-	body, err := marshalManagerPlanPrompt(planCtx)
-	if err != nil {
-		return team.PlanTaskInput{}, err
-	}
-	respBody, status, _, err := h.llm.ChatCompletions(ctx, meta.LeadBotID, body)
-	if err != nil {
-		return team.PlanTaskInput{}, err
-	}
-	if status < http.StatusOK || status >= http.StatusMultipleChoices {
-		return team.PlanTaskInput{}, fmt.Errorf("manager planner returned status %d: %s", status, truncatePlannerText(string(respBody), 240))
-	}
-	plan, err := parseManagerPlanCompletion(respBody)
-	if err != nil {
-		return team.PlanTaskInput{}, err
-	}
-	return h.normalizeManagerPlan(planCtx, plan)
-}
-
-func (h *Handler) managerPlanContext(meta team.TeamMeta, parent team.TeamTask) managerPlanContext {
-	members := h.teamPlanMembers(meta)
+func (p *ManagerPlanner) managerPlanContext(meta TeamMeta, parent TeamTask) managerPlanContext {
+	members := p.teamPlanMembers(meta)
 	assignable := assignablePlanMemberIDs(meta, members)
+	leadParticipantID := participantIDForAgentID(p.directory, meta.LeadAgentID)
 	return managerPlanContext{
 		TeamID:              meta.ID,
-		RoomID:              team.EventRoomID(meta, &parent),
-		LeadBotID:           meta.LeadBotID,
+		RoomID:              EventRoomID(meta, &parent),
+		LeadAgentID:         meta.LeadAgentID,
+		LeadParticipantID:   leadParticipantID,
 		AssignableMemberIDs: assignable,
 		Members:             members,
 		Task: managerPlanTaskContext{
@@ -160,11 +199,12 @@ func (h *Handler) managerPlanContext(meta team.TeamMeta, parent team.TeamTask) m
 	}
 }
 
-func (h *Handler) teamPlanMembers(meta team.TeamMeta) []teamPlanMember {
+func (p *ManagerPlanner) teamPlanMembers(meta TeamMeta) []teamPlanMember {
 	seen := make(map[string]struct{})
 	out := make([]teamPlanMember, 0)
+	leadParticipantID := participantIDForAgentID(p.directory, meta.LeadAgentID)
 	add := func(id string) {
-		id = strings.TrimSpace(id)
+		id = cleanParticipantID(id)
 		if id == "" {
 			return
 		}
@@ -173,20 +213,19 @@ func (h *Handler) teamPlanMembers(meta team.TeamMeta) []teamPlanMember {
 		}
 		seen[id] = struct{}{}
 		member := teamPlanMember{ID: id}
-		if h != nil && h.im != nil {
-			if user, ok := h.im.User(id); ok {
-				member.Name = strings.TrimSpace(user.Name)
-				member.Role = strings.TrimSpace(user.Role)
+		if p != nil && p.directory != nil {
+			if user, ok := p.directory.UserProfile(id); ok {
+				member.Name = firstTrimmedNonEmpty(member.Name, user.Name)
+				member.Role = firstTrimmedNonEmpty(member.Role, user.Role)
 			}
-		}
-		if h != nil && h.svc != nil {
-			if got, ok := h.svc.Agent(id); ok {
-				member.Name = firstNonEmpty(strings.TrimSpace(got.Name), member.Name)
-				member.Role = firstNonEmpty(strings.TrimSpace(got.Role), member.Role)
+			agentID := resolvePlannerAgentID(p.directory, id)
+			if got, ok := p.directory.AgentProfile(agentID); ok {
+				member.Name = firstTrimmedNonEmpty(got.Name, member.Name)
+				member.Role = firstTrimmedNonEmpty(got.Role, member.Role)
 				member.Description = strings.TrimSpace(got.Description)
 			}
 		}
-		if id == meta.LeadBotID {
+		if id == leadParticipantID {
 			member.Role = agent.RoleManager
 		}
 		if member.Role == "" {
@@ -195,21 +234,20 @@ func (h *Handler) teamPlanMembers(meta team.TeamMeta) []teamPlanMember {
 		out = append(out, member)
 	}
 
-	add(meta.LeadBotID)
-	if h != nil && h.im != nil {
-		if room, ok := h.im.Room(meta.RoomID); ok {
-			for _, memberID := range room.Members {
-				add(memberID)
-			}
+	add(leadParticipantID)
+	if p != nil && p.directory != nil {
+		for _, memberID := range p.directory.TeamRoomMemberIDs(meta.RoomID) {
+			add(memberID)
 		}
 	}
 	return out
 }
 
-func assignablePlanMemberIDs(meta team.TeamMeta, members []teamPlanMember) []string {
+func assignablePlanMemberIDs(meta TeamMeta, members []teamPlanMember) []string {
 	out := make([]string, 0, len(members))
+	leadParticipantID := defaultParticipantIDForAgentID(meta.LeadAgentID)
 	for _, member := range members {
-		if member.ID == "" || member.ID == meta.LeadBotID {
+		if member.ID == "" || member.ID == leadParticipantID {
 			continue
 		}
 		role := strings.ToLower(strings.TrimSpace(member.Role))
@@ -218,10 +256,23 @@ func assignablePlanMemberIDs(meta team.TeamMeta, members []teamPlanMember) []str
 			out = append(out, member.ID)
 		}
 	}
-	if len(out) == 0 && strings.TrimSpace(meta.LeadBotID) != "" {
-		out = append(out, meta.LeadBotID)
+	if len(out) == 0 && strings.TrimSpace(leadParticipantID) != "" {
+		out = append(out, leadParticipantID)
 	}
 	return out
+}
+
+func resolvePlannerAgentID(directory PlannerDirectory, id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" || directory == nil {
+		return id
+	}
+	if resolver, ok := directory.(agentIDResolver); ok {
+		if resolved := strings.TrimSpace(resolver.ResolveAgentID(id)); resolved != "" {
+			return resolved
+		}
+	}
+	return id
 }
 
 func marshalManagerPlanPrompt(planCtx managerPlanContext) ([]byte, error) {
@@ -284,7 +335,7 @@ func parseManagerPlanCompletion(body []byte) (managerPlanLLMResponse, error) {
 	return plan, nil
 }
 
-func (h *Handler) normalizeManagerPlan(planCtx managerPlanContext, plan managerPlanLLMResponse) (team.PlanTaskInput, error) {
+func normalizeManagerPlan(planCtx managerPlanContext, plan managerPlanLLMResponse) (PlanTaskInput, error) {
 	assignable := make(map[string]struct{}, len(planCtx.AssignableMemberIDs))
 	assignableMemberIDs := make([]string, 0, len(planCtx.AssignableMemberIDs))
 	for _, id := range planCtx.AssignableMemberIDs {
@@ -305,11 +356,11 @@ func (h *Handler) normalizeManagerPlan(planCtx managerPlanContext, plan managerP
 		tasks = []managerPlanLLMTask{collapseSingleExecutorPlan(planCtx, plan)}
 	}
 	if len(tasks) == 0 {
-		return team.PlanTaskInput{}, fmt.Errorf("manager plan did not include any tasks")
+		return PlanTaskInput{}, fmt.Errorf("manager plan did not include any tasks")
 	}
 
 	refs := make(map[string]struct{}, len(tasks))
-	items := make([]team.PlanTaskItem, 0, len(tasks))
+	items := make([]PlanTaskItem, 0, len(tasks))
 	for i, taskItem := range tasks {
 		idRef := strings.TrimSpace(taskItem.IDRef)
 		if idRef == "" {
@@ -324,14 +375,14 @@ func (h *Handler) normalizeManagerPlan(planCtx managerPlanContext, plan managerP
 			assignTo = defaultAssignee
 		}
 		if _, ok := assignable[assignTo]; !ok {
-			return team.PlanTaskInput{}, fmt.Errorf("manager plan task %q assign_to %q is not in assignable_member_ids", idRef, assignTo)
+			return PlanTaskInput{}, fmt.Errorf("manager plan task %q assign_to %q is not in assignable_member_ids", idRef, assignTo)
 		}
-		title := firstNonEmpty(strings.TrimSpace(taskItem.Title), planCtx.Task.Title, planCtx.Task.ID)
+		title := firstTrimmedNonEmpty(taskItem.Title, planCtx.Task.Title, planCtx.Task.ID)
 		priority := int(taskItem.Priority)
 		if priority == 0 {
 			priority = max(1, len(tasks)-i)
 		}
-		items = append(items, team.PlanTaskItem{
+		items = append(items, PlanTaskItem{
 			IDRef:         idRef,
 			Title:         title,
 			Body:          renderPlanTaskBody(taskItem),
@@ -344,11 +395,11 @@ func (h *Handler) normalizeManagerPlan(planCtx managerPlanContext, plan managerP
 		items[0].DependsOnRefs = nil
 	}
 
-	return team.PlanTaskInput{
+	return PlanTaskInput{
 		TeamID:      planCtx.TeamID,
 		TaskID:      planCtx.Task.ID,
-		ActorID:     planCtx.LeadBotID,
-		PlanSummary: firstNonEmpty(strings.TrimSpace(plan.PlanSummary), defaultManagerPlanSummary(len(items))),
+		ActorID:     planCtx.LeadParticipantID,
+		PlanSummary: firstTrimmedNonEmpty(plan.PlanSummary, defaultManagerPlanSummary(len(items))),
 		Tasks:       items,
 	}, nil
 }
@@ -370,9 +421,9 @@ func collapseSingleExecutorPlan(planCtx managerPlanContext, plan managerPlanLLMR
 	}
 	return managerPlanLLMTask{
 		IDRef:          "execution",
-		Title:          firstNonEmpty(planCtx.Task.Title, planCtx.Task.ID),
+		Title:          firstTrimmedNonEmpty(planCtx.Task.Title, planCtx.Task.ID),
 		Body:           body,
-		Goal:           firstNonEmpty(planCtx.Task.Body, planCtx.Task.Title),
+		Goal:           firstTrimmedNonEmpty(planCtx.Task.Body, planCtx.Task.Title),
 		AssigneeReason: "Only one assignable team member is available, so the task remains a single execution item.",
 		Deliverable:    "Complete the requested parent task and report the result.",
 		AssignTo:       assignee,
@@ -382,9 +433,9 @@ func collapseSingleExecutorPlan(planCtx managerPlanContext, plan managerPlanLLMR
 
 func renderPlanTaskBody(item managerPlanLLMTask) string {
 	lines := []string{
-		"Goal: " + firstNonEmpty(strings.TrimSpace(item.Goal), strings.TrimSpace(item.Body), strings.TrimSpace(item.Title)),
-		"Assignee reason: " + firstNonEmpty(strings.TrimSpace(item.AssigneeReason), "Best matched available team member."),
-		"Deliverable: " + firstNonEmpty(strings.TrimSpace(item.Deliverable), "A concise completion report with the produced result."),
+		"Goal: " + firstTrimmedNonEmpty(item.Goal, item.Body, item.Title),
+		"Assignee reason: " + firstTrimmedNonEmpty(item.AssigneeReason, "Best matched available team member."),
+		"Deliverable: " + firstTrimmedNonEmpty(item.Deliverable, "A concise completion report with the produced result."),
 	}
 	if body := strings.TrimSpace(item.Body); body != "" && body != strings.TrimSpace(item.Goal) {
 		lines = append(lines, "Notes: "+body)
@@ -442,23 +493,11 @@ func truncatePlannerText(text string, limit int) string {
 	return text[:limit-3] + "..."
 }
 
-func firstNonEmpty(values ...string) string {
+func firstTrimmedNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
 			return strings.TrimSpace(value)
 		}
 	}
 	return ""
-}
-
-type teamPlannerHTTPError struct {
-	status  int
-	message string
-}
-
-func (e *teamPlannerHTTPError) Error() string {
-	if e == nil {
-		return ""
-	}
-	return e.message
 }

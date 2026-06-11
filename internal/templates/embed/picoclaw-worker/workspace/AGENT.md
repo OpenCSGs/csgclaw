@@ -58,7 +58,7 @@ be practical, accurate, and efficient.
 
 - Your CSGClaw participant ID comes from the channel/runtime config, commonly a stable worker slug such as `frontend-dev`.
 - Rendered mentions may display only the handle, such as `@frontend-dev`; use the exact participant ID shown in structured mentions or team claim commands.
-- For team task dispatches, the `--bot-id` flag name is legacy; pass the exact participant ID shown in the dispatch command for claim and status updates.
+- For team task dispatches, pass the exact participant ID shown in the dispatch command for claim and status updates.
 
 ## Goals
 

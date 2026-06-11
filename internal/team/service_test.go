@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"csgclaw/internal/agent"
 )
 
 func TestCreateTasksBatchIsAtomic(t *testing.T) {
@@ -18,7 +20,7 @@ func TestCreateTasksBatchIsAtomic(t *testing.T) {
 
 	_, err := svc.CreateTasks(CreateTaskBatchInput{
 		TeamID:    teamID,
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 		Tasks: []CreateTaskBatchItem{
 			{IDRef: "a", Title: "Collect feedback"},
 			{Title: "Analyze", DependsOnRefs: []string{"missing"}},
@@ -39,9 +41,9 @@ func TestCreateTasksBatchResolvesIDRefs(t *testing.T) {
 
 	result, err := svc.CreateTasks(CreateTaskBatchInput{
 		TeamID:    teamID,
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 		Tasks: []CreateTaskBatchItem{
-			{IDRef: "collect", Title: "Collect feedback", AssignTo: "u-alice"},
+			{IDRef: "collect", Title: "Collect feedback", AssignTo: "alice"},
 			{IDRef: "analyze", Title: "Analyze", DependsOnRefs: []string{"collect"}},
 			{Title: "Report", DependsOnRefs: []string{"analyze"}},
 		},
@@ -69,11 +71,11 @@ func TestCreateTasksBatchResolvesParentRefs(t *testing.T) {
 
 	result, err := svc.CreateTasks(CreateTaskBatchInput{
 		TeamID:    teamID,
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 		Tasks: []CreateTaskBatchItem{
 			{IDRef: "story", Title: "Release rollout"},
-			{Title: "Draft note", ParentRef: "story", AssignTo: "u-alice"},
-			{Title: "Smoke test", ParentRef: "story", AssignTo: "u-bob"},
+			{Title: "Draft note", ParentRef: "story", AssignTo: "alice"},
+			{Title: "Smoke test", ParentRef: "story", AssignTo: "bob"},
 		},
 	})
 	if err != nil {
@@ -98,8 +100,8 @@ func TestClaimNextSkipsAssignedToOtherWorker(t *testing.T) {
 	if _, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Task A",
-		CreatedBy: "u-manager",
-		AssignTo:  "u-bob",
+		CreatedBy: "manager",
+		AssignTo:  "bob",
 		Priority:  10,
 	}); err != nil {
 		t.Fatalf("CreateTask() task A error = %v", err)
@@ -107,15 +109,15 @@ func TestClaimNextSkipsAssignedToOtherWorker(t *testing.T) {
 	want, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Task B",
-		CreatedBy: "u-manager",
-		AssignTo:  "u-alice",
+		CreatedBy: "manager",
+		AssignTo:  "alice",
 		Priority:  1,
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() task B error = %v", err)
 	}
 
-	got, err := svc.ClaimNext(teamID, "u-alice")
+	got, err := svc.ClaimNext(teamID, "alice")
 	if err != nil {
 		t.Fatalf("ClaimNext() error = %v", err)
 	}
@@ -131,36 +133,36 @@ func TestProvisionedWorkerClaimStoresTeamCanonicalID(t *testing.T) {
 	task, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Task",
-		CreatedBy: "u-manager",
-		AssignTo:  "u-p-w-0604",
+		CreatedBy: "manager",
+		AssignTo:  "p-w-0604",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
 	}
-	if task.AssignedTo != "u-p-w-0604" {
-		t.Fatalf("CreateTask().AssignedTo = %q, want u-p-w-0604", task.AssignedTo)
+	if task.AssignedTo != "p-w-0604" {
+		t.Fatalf("CreateTask().AssignedTo = %q, want p-w-0604", task.AssignedTo)
 	}
 
-	claimed, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, BotID: "u-p-w-0604"})
+	claimed, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, ParticipantID: "p-w-0604"})
 	if err != nil {
 		t.Fatalf("ClaimTask() error = %v", err)
 	}
-	if claimed.ClaimedBy != "u-p-w-0604" {
-		t.Fatalf("ClaimTask().ClaimedBy = %q, want u-p-w-0604", claimed.ClaimedBy)
+	if claimed.ClaimedBy != "p-w-0604" {
+		t.Fatalf("ClaimTask().ClaimedBy = %q, want p-w-0604", claimed.ClaimedBy)
 	}
-	presence, ok := svc.GetPresence(teamID, "u-p-w-0604")
-	if !ok || presence.BotID != "u-p-w-0604" || presence.State != PresenceStateBusy {
-		t.Fatalf("GetPresence(u-p-w-0604) = %+v, %v; want busy u-p-w-0604", presence, ok)
+	presence, ok := svc.GetPresence(teamID, "p-w-0604")
+	if !ok || presence.ParticipantID != "p-w-0604" || presence.State != PresenceStateBusy {
+		t.Fatalf("GetPresence(p-w-0604) = %+v, %v; want busy p-w-0604", presence, ok)
 	}
 
 	if _, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Next",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 	}); err != nil {
 		t.Fatalf("CreateTask(next) error = %v", err)
 	}
-	if _, err := svc.ClaimNext(teamID, "u-p-w-0604"); !errors.Is(err, ErrWorkerAlreadyBusy) {
+	if _, err := svc.ClaimNext(teamID, "p-w-0604"); !errors.Is(err, ErrWorkerAlreadyBusy) {
 		t.Fatalf("ClaimNext() error = %v, want ErrWorkerAlreadyBusy", err)
 	}
 }
@@ -172,7 +174,7 @@ func TestClaimTaskRejectsIncompleteDependencies(t *testing.T) {
 	dep, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Dependency",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() dependency error = %v", err)
@@ -180,14 +182,14 @@ func TestClaimTaskRejectsIncompleteDependencies(t *testing.T) {
 	task, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Blocked task",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 		DependsOn: []string{dep.ID},
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() blocked error = %v", err)
 	}
 
-	_, err = svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, BotID: "u-alice"})
+	_, err = svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, ParticipantID: "alice"})
 	if !errors.Is(err, ErrTaskDependenciesOpen) {
 		t.Fatalf("ClaimTask() error = %v, want ErrTaskDependenciesOpen", err)
 	}
@@ -200,7 +202,7 @@ func TestConcurrentClaimAllowsOnlyOneWinner(t *testing.T) {
 	task, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Single task",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
@@ -216,9 +218,9 @@ func TestConcurrentClaimAllowsOnlyOneWinner(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			got, claimErr := svc.ClaimTask(ClaimTaskInput{
-				TeamID: teamID,
-				TaskID: task.ID,
-				BotID:  fmt.Sprintf("u-worker-%d", i),
+				TeamID:        teamID,
+				TaskID:        task.ID,
+				ParticipantID: fmt.Sprintf("worker-%d", i),
 			})
 			if claimErr != nil {
 				errCh <- claimErr
@@ -256,7 +258,7 @@ func TestIllegalTransitionsAreRejected(t *testing.T) {
 	task, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Task",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
@@ -264,7 +266,7 @@ func TestIllegalTransitionsAreRejected(t *testing.T) {
 	if _, err := svc.CompleteTask(CompleteTaskInput{
 		TeamID:  teamID,
 		TaskID:  task.ID,
-		ActorID: "u-manager",
+		ActorID: "manager",
 		Result:  "done",
 	}); !errors.Is(err, ErrTaskTransitionInvalid) {
 		t.Fatalf("CompleteTask() error = %v, want ErrTaskTransitionInvalid", err)
@@ -278,19 +280,19 @@ func TestApprovalResolveMovesBlockedTaskBackToInProgress(t *testing.T) {
 	task, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Task",
-		CreatedBy: "u-manager",
-		AssignTo:  "u-alice",
+		CreatedBy: "manager",
+		AssignTo:  "alice",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
 	}
-	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, BotID: "u-alice"}); err != nil {
+	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, ParticipantID: "alice"}); err != nil {
 		t.Fatalf("ClaimTask() error = %v", err)
 	}
 	if _, err := svc.UpdateTaskStatus(UpdateTaskStatusInput{
 		TeamID:  teamID,
 		TaskID:  task.ID,
-		ActorID: "u-alice",
+		ActorID: "alice",
 		Status:  TaskStatusBlocked,
 		Reason:  "need approval",
 	}); err != nil {
@@ -300,8 +302,8 @@ func TestApprovalResolveMovesBlockedTaskBackToInProgress(t *testing.T) {
 	approval, err := svc.RequestApproval(RequestApprovalInput{
 		TeamID:      teamID,
 		TaskID:      task.ID,
-		RequestedBy: "u-alice",
-		ApproverID:  "u-manager",
+		RequestedBy: "alice",
+		ApproverID:  "manager",
 		Kind:        "command",
 		Summary:     "Run integration tests",
 	})
@@ -312,7 +314,7 @@ func TestApprovalResolveMovesBlockedTaskBackToInProgress(t *testing.T) {
 	resolved, err := svc.ResolveApproval(ResolveApprovalInput{
 		TeamID:     teamID,
 		ApprovalID: approval.ID,
-		ApproverID: "u-manager",
+		ApproverID: "manager",
 		Status:     ApprovalStatusApproved,
 		Resolution: "approved",
 	})
@@ -327,7 +329,7 @@ func TestApprovalResolveMovesBlockedTaskBackToInProgress(t *testing.T) {
 	if stored.Status != TaskStatusInProgress {
 		t.Fatalf("GetTask().Status = %s, want %s", stored.Status, TaskStatusInProgress)
 	}
-	presence, ok := svc.GetPresence(teamID, "u-alice")
+	presence, ok := svc.GetPresence(teamID, "alice")
 	if !ok {
 		t.Fatal("GetPresence() found = false, want true")
 	}
@@ -343,19 +345,19 @@ func TestResolveRejectedApprovalKeepsTaskBlocked(t *testing.T) {
 	task, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Task",
-		CreatedBy: "u-manager",
-		AssignTo:  "u-alice",
+		CreatedBy: "manager",
+		AssignTo:  "alice",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
 	}
-	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, BotID: "u-alice"}); err != nil {
+	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, ParticipantID: "alice"}); err != nil {
 		t.Fatalf("ClaimTask() error = %v", err)
 	}
 	if _, err := svc.UpdateTaskStatus(UpdateTaskStatusInput{
 		TeamID:  teamID,
 		TaskID:  task.ID,
-		ActorID: "u-alice",
+		ActorID: "alice",
 		Status:  TaskStatusBlocked,
 		Reason:  "need approval",
 	}); err != nil {
@@ -364,8 +366,8 @@ func TestResolveRejectedApprovalKeepsTaskBlocked(t *testing.T) {
 	approval, err := svc.RequestApproval(RequestApprovalInput{
 		TeamID:      teamID,
 		TaskID:      task.ID,
-		RequestedBy: "u-alice",
-		ApproverID:  "u-manager",
+		RequestedBy: "alice",
+		ApproverID:  "manager",
 		Kind:        "command",
 		Summary:     "Run risky command",
 	})
@@ -376,7 +378,7 @@ func TestResolveRejectedApprovalKeepsTaskBlocked(t *testing.T) {
 	if _, err := svc.ResolveApproval(ResolveApprovalInput{
 		TeamID:     teamID,
 		ApprovalID: approval.ID,
-		ApproverID: "u-manager",
+		ApproverID: "manager",
 		Status:     ApprovalStatusRejected,
 		Resolution: "do something else",
 	}); err != nil {
@@ -398,20 +400,20 @@ func TestClaimNextUsesStablePriorityOrdering(t *testing.T) {
 	)))
 	teamID := createTestTeam(t, svc)
 
-	first, err := svc.CreateTask(CreateTaskInput{TeamID: teamID, Title: "low", CreatedBy: "u-manager", Priority: 1})
+	first, err := svc.CreateTask(CreateTaskInput{TeamID: teamID, Title: "low", CreatedBy: "manager", Priority: 1})
 	if err != nil {
 		t.Fatalf("CreateTask() low error = %v", err)
 	}
-	second, err := svc.CreateTask(CreateTaskInput{TeamID: teamID, Title: "high", CreatedBy: "u-manager", Priority: 9})
+	second, err := svc.CreateTask(CreateTaskInput{TeamID: teamID, Title: "high", CreatedBy: "manager", Priority: 9})
 	if err != nil {
 		t.Fatalf("CreateTask() high error = %v", err)
 	}
-	third, err := svc.CreateTask(CreateTaskInput{TeamID: teamID, Title: "high later", CreatedBy: "u-manager", Priority: 9})
+	third, err := svc.CreateTask(CreateTaskInput{TeamID: teamID, Title: "high later", CreatedBy: "manager", Priority: 9})
 	if err != nil {
 		t.Fatalf("CreateTask() high later error = %v", err)
 	}
 
-	got, err := svc.ClaimNext(teamID, "u-alice")
+	got, err := svc.ClaimNext(teamID, "alice")
 	if err != nil {
 		t.Fatalf("ClaimNext() error = %v", err)
 	}
@@ -424,11 +426,11 @@ func TestClaimNextAcrossTeamsUsesUniqueHighestPriority(t *testing.T) {
 	svc := newTestService()
 	firstTeamID := createTestTeam(t, svc)
 	secondTeam, err := svc.CreateTeam(CreateTeamInput{
-		ID:        "team-qa",
-		RoomID:    "room-qa",
-		Channel:   "csgclaw",
-		Title:     "QA",
-		LeadBotID: "u-manager",
+		ID:          "team-qa",
+		RoomID:      "room-qa",
+		Channel:     "csgclaw",
+		Title:       "QA",
+		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam(second) error = %v", err)
@@ -436,7 +438,7 @@ func TestClaimNextAcrossTeamsUsesUniqueHighestPriority(t *testing.T) {
 	if _, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    firstTeamID,
 		Title:     "lower priority",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 		Priority:  3,
 	}); err != nil {
 		t.Fatalf("CreateTask(first) error = %v", err)
@@ -444,14 +446,14 @@ func TestClaimNextAcrossTeamsUsesUniqueHighestPriority(t *testing.T) {
 	want, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    secondTeam.ID,
 		Title:     "higher priority",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 		Priority:  8,
 	})
 	if err != nil {
 		t.Fatalf("CreateTask(second) error = %v", err)
 	}
 
-	got, err := svc.ClaimNext("", "u-alice")
+	got, err := svc.ClaimNext("", "alice")
 	if err != nil {
 		t.Fatalf("ClaimNext(global) error = %v", err)
 	}
@@ -464,11 +466,11 @@ func TestClaimNextAcrossTeamsRequiresExplicitTeamOnPriorityTie(t *testing.T) {
 	svc := newTestService()
 	firstTeamID := createTestTeam(t, svc)
 	secondTeam, err := svc.CreateTeam(CreateTeamInput{
-		ID:        "team-qa",
-		RoomID:    "room-qa",
-		Channel:   "csgclaw",
-		Title:     "QA",
-		LeadBotID: "u-manager",
+		ID:          "team-qa",
+		RoomID:      "room-qa",
+		Channel:     "csgclaw",
+		Title:       "QA",
+		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam(second) error = %v", err)
@@ -476,7 +478,7 @@ func TestClaimNextAcrossTeamsRequiresExplicitTeamOnPriorityTie(t *testing.T) {
 	if _, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    firstTeamID,
 		Title:     "first",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 		Priority:  9,
 	}); err != nil {
 		t.Fatalf("CreateTask(first) error = %v", err)
@@ -484,13 +486,13 @@ func TestClaimNextAcrossTeamsRequiresExplicitTeamOnPriorityTie(t *testing.T) {
 	if _, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    secondTeam.ID,
 		Title:     "second",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 		Priority:  9,
 	}); err != nil {
 		t.Fatalf("CreateTask(second) error = %v", err)
 	}
 
-	if _, err := svc.ClaimNext("", "u-alice"); !errors.Is(err, ErrTeamSelectionRequired) {
+	if _, err := svc.ClaimNext("", "alice"); !errors.Is(err, ErrTeamSelectionRequired) {
 		t.Fatalf("ClaimNext(global) error = %v, want ErrTeamSelectionRequired", err)
 	}
 }
@@ -502,8 +504,8 @@ func TestPlanTaskAppliesManagerPlan(t *testing.T) {
 		TeamID:    teamID,
 		Title:     "Ship release",
 		Body:      "Prepare the release package.",
-		CreatedBy: "u-manager",
-		AssignTo:  "u-manager",
+		CreatedBy: "manager",
+		AssignTo:  "manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
@@ -512,21 +514,21 @@ func TestPlanTaskAppliesManagerPlan(t *testing.T) {
 	planned, err := svc.PlanTask(PlanTaskInput{
 		TeamID:      teamID,
 		TaskID:      parent.ID,
-		ActorID:     "u-manager",
+		ActorID:     "manager",
 		PlanSummary: "Split by writing and verification responsibilities.",
 		Tasks: []PlanTaskItem{
 			{
 				IDRef:    "draft",
 				Title:    "Draft release note",
 				Body:     "Goal: write the note\nAssignee reason: writer role\nDeliverable: final note",
-				AssignTo: "u-alice",
+				AssignTo: "alice",
 				Priority: 9,
 			},
 			{
 				IDRef:         "verify",
 				Title:         "Verify checklist",
 				Body:          "Goal: verify release\nAssignee reason: QA role\nDeliverable: checklist",
-				AssignTo:      "u-bob",
+				AssignTo:      "bob",
 				DependsOnRefs: []string{"draft"},
 				Priority:      8,
 			},
@@ -544,7 +546,7 @@ func TestPlanTaskAppliesManagerPlan(t *testing.T) {
 	if len(planned.Tasks) != 2 {
 		t.Fatalf("planned tasks len = %d, want 2", len(planned.Tasks))
 	}
-	if planned.Tasks[0].Status != TaskStatusPending || planned.Tasks[0].AssignedTo != "u-alice" || planned.Tasks[0].DispatchedAt != nil {
+	if planned.Tasks[0].Status != TaskStatusPending || planned.Tasks[0].AssignedTo != "alice" || planned.Tasks[0].DispatchedAt != nil {
 		t.Fatalf("first planned task = %+v, want pending assigned-but-not-dispatched", planned.Tasks[0])
 	}
 	if planned.Tasks[1].DependsOn[0] != planned.Tasks[0].ID {
@@ -558,7 +560,7 @@ func TestStartTaskDispatchesReadyChildrenAndCompletionDispatchesSuccessor(t *tes
 	parent, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Ship release",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
@@ -566,18 +568,18 @@ func TestStartTaskDispatchesReadyChildrenAndCompletionDispatchesSuccessor(t *tes
 	planned, err := svc.PlanTask(PlanTaskInput{
 		TeamID:      teamID,
 		TaskID:      parent.ID,
-		ActorID:     "u-manager",
+		ActorID:     "manager",
 		PlanSummary: "Draft first, then verify.",
 		Tasks: []PlanTaskItem{
-			{IDRef: "draft", Title: "Draft release note", Body: "draft body", AssignTo: "u-alice", Priority: 9},
-			{IDRef: "verify", Title: "Verify checklist", Body: "verify body", AssignTo: "u-bob", DependsOnRefs: []string{"draft"}, Priority: 8},
+			{IDRef: "draft", Title: "Draft release note", Body: "draft body", AssignTo: "alice", Priority: 9},
+			{IDRef: "verify", Title: "Verify checklist", Body: "verify body", AssignTo: "bob", DependsOnRefs: []string{"draft"}, Priority: 8},
 		},
 	})
 	if err != nil {
 		t.Fatalf("PlanTask() error = %v", err)
 	}
 
-	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: planned.Tasks[0].ID, BotID: "u-alice"}); !errors.Is(err, ErrTaskNotClaimable) {
+	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: planned.Tasks[0].ID, ParticipantID: "alice"}); !errors.Is(err, ErrTaskNotClaimable) {
 		t.Fatalf("ClaimTask(before start) error = %v, want ErrTaskNotClaimable", err)
 	}
 
@@ -608,20 +610,20 @@ func TestStartTaskDispatchesReadyChildrenAndCompletionDispatchesSuccessor(t *tes
 		t.Fatalf("verify after start = %+v, want pending and not dispatched", verify)
 	}
 
-	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: draft.ID, BotID: "u-alice"}); err != nil {
+	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: draft.ID, ParticipantID: "alice"}); err != nil {
 		t.Fatalf("ClaimTask(draft) error = %v", err)
 	}
-	if _, err := svc.CompleteTask(CompleteTaskInput{TeamID: teamID, TaskID: draft.ID, ActorID: "u-alice", Result: "draft ready"}); err != nil {
+	if _, err := svc.CompleteTask(CompleteTaskInput{TeamID: teamID, TaskID: draft.ID, ActorID: "alice", Result: "draft ready"}); err != nil {
 		t.Fatalf("CompleteTask(draft) error = %v", err)
 	}
 	verify, _ = svc.GetTask(teamID, verify.ID)
 	if verify.Status != TaskStatusAssigned || verify.DispatchedAt == nil {
 		t.Fatalf("verify after draft complete = %+v, want assigned and dispatched", verify)
 	}
-	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: verify.ID, BotID: "u-bob"}); err != nil {
+	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: verify.ID, ParticipantID: "bob"}); err != nil {
 		t.Fatalf("ClaimTask(verify) error = %v", err)
 	}
-	if _, err := svc.CompleteTask(CompleteTaskInput{TeamID: teamID, TaskID: verify.ID, ActorID: "u-bob", Result: "checklist passed"}); err != nil {
+	if _, err := svc.CompleteTask(CompleteTaskInput{TeamID: teamID, TaskID: verify.ID, ActorID: "bob", Result: "checklist passed"}); err != nil {
 		t.Fatalf("CompleteTask(verify) error = %v", err)
 	}
 	updatedParent, _ := svc.GetTask(teamID, parent.ID)
@@ -639,7 +641,7 @@ func TestStartTaskDoesNotBindExecutionRoomWhenNoRunnableChildren(t *testing.T) {
 	parent, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Ship release",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
@@ -647,7 +649,7 @@ func TestStartTaskDoesNotBindExecutionRoomWhenNoRunnableChildren(t *testing.T) {
 	planned, err := svc.PlanTask(PlanTaskInput{
 		TeamID:      teamID,
 		TaskID:      parent.ID,
-		ActorID:     "u-manager",
+		ActorID:     "manager",
 		PlanSummary: "Needs an assignee before dispatch.",
 		Tasks: []PlanTaskItem{
 			{IDRef: "draft", Title: "Draft release note"},
@@ -672,7 +674,7 @@ func TestStartTaskDoesNotBindExecutionRoomWhenNoRunnableChildren(t *testing.T) {
 		t.Fatalf("execution room was bound on failed start: parent=%q child=%q", storedParent.RoomID, storedChild.RoomID)
 	}
 	for _, event := range svc.ListEvents(teamID) {
-		if event.Type == "task.execution_room" || event.Type == "task.started" || event.Type == "task.dispatched" {
+		if event.Type == EventTaskExecutionRoom || event.Type == EventTaskStarted || event.Type == EventTaskDispatched {
 			t.Fatalf("event %s was appended on failed start", event.Type)
 		}
 	}
@@ -700,20 +702,20 @@ func TestServicePersistsAndRecoversState(t *testing.T) {
 	task, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Persisted task",
-		CreatedBy: "u-manager",
-		AssignTo:  "u-alice",
+		CreatedBy: "manager",
+		AssignTo:  "alice",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
 	}
-	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, BotID: "u-alice"}); err != nil {
+	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, ParticipantID: "alice"}); err != nil {
 		t.Fatalf("ClaimTask() error = %v", err)
 	}
 	if _, err := svc.RequestApproval(RequestApprovalInput{
 		TeamID:      teamID,
 		TaskID:      task.ID,
-		RequestedBy: "u-alice",
-		ApproverID:  "u-manager",
+		RequestedBy: "alice",
+		ApproverID:  "manager",
 		Kind:        "command",
 		Summary:     "Need approval",
 	}); err != nil {
@@ -747,7 +749,7 @@ func TestStoreTruncatesPartialFinalEvent(t *testing.T) {
 	if _, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Task",
-		CreatedBy: "u-manager",
+		CreatedBy: "manager",
 	}); err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
 	}
@@ -795,13 +797,13 @@ func TestRecoverBlocksStaleInProgressTask(t *testing.T) {
 	task, err := svc.CreateTask(CreateTaskInput{
 		TeamID:    teamID,
 		Title:     "Stale task",
-		CreatedBy: "u-manager",
-		AssignTo:  "u-alice",
+		CreatedBy: "manager",
+		AssignTo:  "alice",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
 	}
-	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, BotID: "u-alice"}); err != nil {
+	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, ParticipantID: "alice"}); err != nil {
 		t.Fatalf("ClaimTask() error = %v", err)
 	}
 
@@ -838,17 +840,17 @@ func TestPresenceHeartbeatCheckpointPersistsWithoutImmediateEvent(t *testing.T) 
 	)
 	teamID := createTestTeam(t, svc)
 	if _, err := svc.UpsertPresence(UpsertPresenceInput{
-		TeamID: teamID,
-		BotID:  "u-alice",
-		State:  PresenceStateIdle,
+		TeamID:        teamID,
+		ParticipantID: "alice",
+		State:         PresenceStateIdle,
 	}); err != nil {
 		t.Fatalf("UpsertPresence(first) error = %v", err)
 	}
 	initialEvents := len(svc.ListEvents(teamID))
 	if _, err := svc.UpsertPresence(UpsertPresenceInput{
-		TeamID: teamID,
-		BotID:  "u-alice",
-		State:  PresenceStateIdle,
+		TeamID:        teamID,
+		ParticipantID: "alice",
+		State:         PresenceStateIdle,
 	}); err != nil {
 		t.Fatalf("UpsertPresence(heartbeat) error = %v", err)
 	}
@@ -860,12 +862,53 @@ func TestPresenceHeartbeatCheckpointPersistsWithoutImmediateEvent(t *testing.T) 
 	}
 
 	reloaded := NewService(WithStore(store), WithNowFunc(sequenceNow(time.Date(2026, 5, 29, 15, 1, 0, 0, time.UTC))))
-	presence, ok := reloaded.GetPresence(teamID, "u-alice")
+	presence, ok := reloaded.GetPresence(teamID, "alice")
 	if !ok {
 		t.Fatal("GetPresence() found = false")
 	}
 	if !presence.LastHeartbeatAt.Equal(time.Date(2026, 5, 29, 15, 0, 20, 0, time.UTC)) {
 		t.Fatalf("GetPresence().LastHeartbeatAt = %s, want latest checkpointed heartbeat", presence.LastHeartbeatAt)
+	}
+}
+
+func TestStoreWritesParticipantFields(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStore(root)
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	svc := NewService(
+		WithStore(store),
+		WithNowFunc(sequenceNow(
+			time.Date(2026, 5, 29, 16, 0, 0, 0, time.UTC),
+			time.Date(2026, 5, 29, 16, 0, 1, 0, time.UTC),
+		)),
+	)
+	teamID := createTestTeam(t, svc)
+	if _, err := svc.UpsertPresence(UpsertPresenceInput{
+		TeamID:        teamID,
+		ParticipantID: "alice",
+		State:         PresenceStateIdle,
+	}); err != nil {
+		t.Fatalf("UpsertPresence() error = %v", err)
+	}
+	if err := svc.CheckpointPresence(); err != nil {
+		t.Fatalf("CheckpointPresence() error = %v", err)
+	}
+
+	teamJSON, err := os.ReadFile(filepath.Join(root, teamID, teamFileName))
+	if err != nil {
+		t.Fatalf("read team.json error = %v", err)
+	}
+	if !bytes.Contains(teamJSON, []byte(`"lead_agent_id"`)) || bytes.Contains(teamJSON, []byte(`"lead_bot_id"`)) {
+		t.Fatalf("team.json = %s, want lead_agent_id without lead_bot_id", string(teamJSON))
+	}
+	presenceJSON, err := os.ReadFile(filepath.Join(root, teamID, presenceFileName))
+	if err != nil {
+		t.Fatalf("read presence.json error = %v", err)
+	}
+	if !bytes.Contains(presenceJSON, []byte(`"participant_id"`)) || bytes.Contains(presenceJSON, []byte(`"bot_id"`)) {
+		t.Fatalf("presence.json = %s, want participant_id without bot_id", string(presenceJSON))
 	}
 }
 
@@ -888,11 +931,11 @@ func createTestTeam(t *testing.T, svc *Service) string {
 	t.Helper()
 
 	team, err := svc.CreateTeam(CreateTeamInput{
-		ID:        "team-ops",
-		RoomID:    "room-ops",
-		Channel:   "csgclaw",
-		Title:     "Ops",
-		LeadBotID: "u-manager",
+		ID:          "team-ops",
+		RoomID:      "room-ops",
+		Channel:     "csgclaw",
+		Title:       "Ops",
+		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)

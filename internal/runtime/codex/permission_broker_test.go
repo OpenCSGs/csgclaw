@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"csgclaw/internal/activity"
-
-	acp "github.com/coder/acp-go-sdk"
 )
 
 func TestPermissionBrokerRequestIDUsesProcessPrefix(t *testing.T) {
@@ -70,19 +68,19 @@ func TestPermissionBrokerDecideSelectsOption(t *testing.T) {
 	}
 }
 
-func TestPermissionOptionsFromACPMarksRememberedDecisionsAsAgentScoped(t *testing.T) {
+func TestNormalizePermissionOptionsMarksRememberedDecisionsAsAgentScoped(t *testing.T) {
 	t.Parallel()
 
-	options := PermissionOptionsFromACP([]acp.PermissionOption{
+	options := NormalizePermissionOptions([]ExternalPermissionOption{
 		{
-			OptionId: "always",
-			Kind:     acp.PermissionOptionKindAllowAlways,
-			Name:     "Allow always",
+			ID:    "always",
+			Kind:  PermissionOptionKindAllowAlways,
+			Label: "Allow always",
 		},
 		{
-			OptionId: "once",
-			Kind:     acp.PermissionOptionKindAllowOnce,
-			Name:     "Allow once",
+			ID:    "once",
+			Kind:  PermissionOptionKindAllowOnce,
+			Label: "Allow once",
 		},
 	})
 

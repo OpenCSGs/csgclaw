@@ -85,6 +85,8 @@ type serveCmd struct{}
 type stopCmd struct{}
 type internalServeCmd struct{}
 
+const cliproxyAutoLoginEnv = "CSGCLAW_CLIPROXY_AUTO_LOGIN"
+
 func NewServeCmd() command.Command {
 	return serveCmd{}
 }
@@ -110,6 +112,7 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	daemon := fs.Bool("daemon", false, "run server in background")
 	fs.BoolVar(daemon, "d", false, "run server in background")
 	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup")
+	noAuthDetect := fs.Bool("no-auth-detect", false, "disable automatic auth detection during startup")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 
 	defaultLogPath, err := defaultServerLogPath()
@@ -125,6 +128,8 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
+	defer restoreAuthDetect()
 
 	restore, err := configureServeLogger(run.Stderr, *logLevel)
 	if err != nil {
@@ -132,7 +137,7 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	}
 	defer restore()
 
-	if err := ensureServeBootstrapState(ctx, globals.Config); err != nil {
+	if err := ensureServeBootstrapState(ctx, globals.Config, *noAuthDetect); err != nil {
 		return err
 	}
 
@@ -145,9 +150,12 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	}
 
 	if *daemon {
-		return serveBackground(run, cfg, globals, *logPath, *pidPath, *logLevel, *noBrowser)
+		return serveBackground(run, cfg, globals, *logPath, *pidPath, *logLevel, *noBrowser, *noAuthDetect)
 	}
-	return serveForegroundWithConfigPath(ctx, run, cfg, globals.Config, globals.Output, serveOptions{NoBrowser: *noBrowser})
+	return serveForegroundWithConfigPath(ctx, run, cfg, globals.Config, globals.Output, serveOptions{
+		NoBrowser:    *noBrowser,
+		NoAuthDetect: *noAuthDetect,
+	})
 }
 
 func (stopCmd) Name() string {
@@ -219,9 +227,12 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	configPathFlag := fs.String("config", globals.Config, "config file path")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup")
+	noAuthDetect := fs.Bool("no-auth-detect", false, "disable automatic auth detection during startup")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
+	defer restoreAuthDetect()
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -261,7 +272,10 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	if err != nil {
 		return err
 	}
-	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, *configPathFlag, globals.Output, serveOptions{NoBrowser: *noBrowser})
+	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, *configPathFlag, globals.Output, serveOptions{
+		NoBrowser:    *noBrowser,
+		NoAuthDetect: *noAuthDetect,
+	})
 }
 
 func serveForeground(ctx context.Context, run *command.Context, cfg config.Config, output string) error {
@@ -269,7 +283,8 @@ func serveForeground(ctx context.Context, run *command.Context, cfg config.Confi
 }
 
 type serveOptions struct {
-	NoBrowser bool
+	NoBrowser    bool
+	NoAuthDetect bool
 }
 
 func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
@@ -309,7 +324,7 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, output, opts...)
 }
 
-func serveBackground(run *command.Context, cfg config.Config, globals command.GlobalOptions, logPath, pidPath, logLevel string, noBrowser bool) error {
+func serveBackground(run *command.Context, cfg config.Config, globals command.GlobalOptions, logPath, pidPath, logLevel string, noBrowser, noAuthDetect bool) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolve executable: %w", err)
@@ -332,6 +347,9 @@ func serveBackground(run *command.Context, cfg config.Config, globals command.Gl
 	}
 	if noBrowser {
 		childArgs = append(childArgs, "--no-browser")
+	}
+	if noAuthDetect {
+		childArgs = append(childArgs, "--no-auth-detect")
 	}
 	cmd := exec.Command(exe, childArgs...)
 	cmd.Stdout = logFile
@@ -370,7 +388,22 @@ func serveBackground(run *command.Context, cfg config.Config, globals command.Gl
 	return nil
 }
 
-func ensureServeBootstrapState(ctx context.Context, configPath string) error {
+func applyNoAuthDetectEnv(disabled bool) func() {
+	if !disabled {
+		return func() {}
+	}
+	previous, hadPrevious := os.LookupEnv(cliproxyAutoLoginEnv)
+	_ = os.Setenv(cliproxyAutoLoginEnv, "0")
+	return func() {
+		if hadPrevious {
+			_ = os.Setenv(cliproxyAutoLoginEnv, previous)
+			return
+		}
+		_ = os.Unsetenv(cliproxyAutoLoginEnv)
+	}
+}
+
+func ensureServeBootstrapState(ctx context.Context, configPath string, noAuthDetect bool) error {
 	state, err := DetectBootstrapState(internalonboard.DetectStateOptions{ConfigPath: configPath})
 	if err != nil {
 		return err
@@ -380,7 +413,10 @@ func ensureServeBootstrapState(ctx context.Context, configPath string) error {
 	}
 
 	slog.Info("bootstrap state incomplete; auto-initializing local state", "config_path", state.ConfigPath)
-	_, err = EnsureBootstrapState(ctx, internalonboard.EnsureStateOptions{ConfigPath: configPath})
+	_, err = EnsureBootstrapState(ctx, internalonboard.EnsureStateOptions{
+		ConfigPath:   configPath,
+		NoAuthDetect: noAuthDetect,
+	})
 	return err
 }
 
@@ -425,12 +461,17 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if len(opts) > 0 {
 		serveOpts = opts[0]
 	}
+	restoreAuthDetect := applyNoAuthDetectEnv(serveOpts.NoAuthDetect)
+	defer restoreAuthDetect()
 	_ = EnsureCLIProxy(ctx)
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = ShutdownCLIProxy(shutdownCtx)
 	}()
+	if serveOpts.NoAuthDetect && svc != nil {
+		svc.SetStartupProfileDetectionDisabled(true)
+	}
 	codexBridgeMgr, err := NewCodexBridgeManager(cfg, svc)
 	if err != nil {
 		return err
@@ -481,7 +522,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
-	teamSvc, teamAdapter, err := NewTeamService(imSvc)
+	teamSvc, teamAdapter, err := NewTeamService(imSvc, participantSvc)
 	if err != nil {
 		return err
 	}
@@ -916,7 +957,7 @@ func (m *serveCodexBridgeManager) Start(ctx context.Context) error {
 	agents := m.svc.List()
 	var startErr error
 	for _, a := range agents {
-		if !shouldStartCodexBridge(a) {
+		if !shouldRestoreCodexBridgeOnStartup(a) {
 			continue
 		}
 		session, err := m.ensureSession(ctx, a)
@@ -1059,6 +1100,19 @@ func shouldStartCodexBridge(a agent.Agent) bool {
 	return strings.EqualFold(strings.TrimSpace(a.Status), string(agentruntime.StateRunning))
 }
 
+func shouldRestoreCodexBridgeOnStartup(a agent.Agent) bool {
+	if !strings.EqualFold(strings.TrimSpace(a.Role), agent.RoleWorker) {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(a.RuntimeKind), agent.RuntimeKindCodex) {
+		return false
+	}
+	if !(a.ProfileComplete || a.AgentProfile.ProfileComplete) {
+		return false
+	}
+	return !strings.EqualFold(strings.TrimSpace(a.Status), string(agentruntime.StateStopped))
+}
+
 func sandboxServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {
 	return sandboxproviders.ServiceOptions(cfg)
 }
@@ -1087,7 +1141,7 @@ func newParticipantService(agentSvc *agent.Service, imSvc *im.Service) (*partici
 	), nil
 }
 
-func newTeamService(imSvc *im.Service) (*team.Service, team.TeamChannelAdapter, error) {
+func newTeamService(imSvc *im.Service, participantSvc *participant.Service) (*team.Service, team.TeamChannelAdapter, error) {
 	teamsDir, err := config.DefaultTeamsDir()
 	if err != nil {
 		return nil, nil, err
@@ -1096,7 +1150,7 @@ func newTeamService(imSvc *im.Service) (*team.Service, team.TeamChannelAdapter, 
 	if err != nil {
 		return nil, nil, err
 	}
-	adapter := team.NewCSGClawAdapter(imSvc)
+	adapter := team.NewCSGClawAdapter(imSvc, participantSvc)
 	projector := team.NewProjector(adapter, nil)
 	return team.NewService(team.WithStore(store), team.WithProjector(projector)), adapter, nil
 }

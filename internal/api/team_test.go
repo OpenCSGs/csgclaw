@@ -13,6 +13,7 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/participant"
 	"csgclaw/internal/team"
 )
 
@@ -22,7 +23,7 @@ func TestTeamRoutesCreateAndTaskFlow(t *testing.T) {
 	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
 	h := &Handler{teamSvc: teamSvc, teamAdapter: adapter}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_bot_id":"u-manager","member_bot_ids":["u-worker"]}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_participant_id":"manager","member_participant_ids":["worker"]}`))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -40,7 +41,7 @@ func TestTeamRoutesCreateAndTaskFlow(t *testing.T) {
 		t.Fatalf("created.ID = created.RoomID = %q, want separate team and room ids", created.ID)
 	}
 
-	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"u-manager","tasks":[{"id_ref":"draft","title":"Draft release note","assign_to":"u-worker","priority":9}]}`))
+	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"manager","tasks":[{"id_ref":"draft","title":"Draft release note","assign_to":"worker","priority":9}]}`))
 	batchRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(batchRec, batchReq)
 	if batchRec.Code != http.StatusCreated {
@@ -55,7 +56,7 @@ func TestTeamRoutesCreateAndTaskFlow(t *testing.T) {
 		t.Fatalf("batch tasks len = %d, want 1", len(batchResp.Tasks))
 	}
 
-	claimReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/claim-next", strings.NewReader(`{"bot_id":"u-worker"}`))
+	claimReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/claim-next", strings.NewReader(`{"participant_id":"worker"}`))
 	claimRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(claimRec, claimReq)
 	if claimRec.Code != http.StatusOK {
@@ -70,7 +71,7 @@ func TestTeamRoutesCreateAndTaskFlow(t *testing.T) {
 		t.Fatalf("claimed task status = %q, want %q", claimed.Status, team.TaskStatusInProgress)
 	}
 
-	updateReq := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+claimed.ID, strings.NewReader(`{"actor_id":"u-worker","status":"completed","result":"done"}`))
+	updateReq := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+claimed.ID, strings.NewReader(`{"actor_id":"worker","status":"completed","result":"done"}`))
 	updateRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
@@ -86,13 +87,55 @@ func TestTeamRoutesCreateAndTaskFlow(t *testing.T) {
 	}
 }
 
-func TestTeamPlanAutoStartCreatesExecutionRoomAndDispatches(t *testing.T) {
+func TestTeamTaskResponsesIncludeParticipantDisplayNames(t *testing.T) {
+	agentSvc := mustNewSeededService(t, []agent.Agent{
+		{
+			ID:        agent.ManagerUserID,
+			Name:      "manager",
+			Role:      agent.RoleManager,
+			CreatedAt: time.Date(2026, 6, 10, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			ID:        "u-agent-ymkx7q",
+			Name:      "data-2-worker",
+			Role:      agent.RoleWorker,
+			CreatedAt: time.Date(2026, 6, 10, 8, 1, 0, 0, time.UTC),
+		},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{
+		{
+			ID:              agent.ManagerParticipantID,
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			Name:            "manager",
+			ChannelUserRef:  agent.ManagerParticipantID,
+			AgentID:         agent.ManagerUserID,
+			LifecycleStatus: participant.LifecycleStatusActive,
+			Mentionable:     true,
+		},
+		{
+			ID:              "agent-ymkx7q",
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			Name:            "stale participant name",
+			ChannelUserRef:  "u-agent-ymkx7q",
+			AgentID:         "u-agent-ymkx7q",
+			LifecycleStatus: participant.LifecycleStatusActive,
+			Mentionable:     true,
+		},
+	}))
 	imSvc := im.NewService()
-	adapter := team.NewCSGClawAdapter(imSvc)
-	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
-	h := &Handler{im: imSvc, teamSvc: teamSvc, teamAdapter: adapter}
+	adapter := team.NewCSGClawAdapter(imSvc, participantSvc)
+	teamSvc := team.NewService()
+	h := &Handler{
+		svc:         agentSvc,
+		participant: participantSvc,
+		im:          imSvc,
+		teamSvc:     teamSvc,
+		teamAdapter: adapter,
+	}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_bot_id":"u-manager","member_bot_ids":["u-worker"]}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"data","lead_participant_id":"manager","member_participant_ids":["agent-ymkx7q"]}`))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -103,7 +146,127 @@ func TestTeamPlanAutoStartCreatesExecutionRoomAndDispatches(t *testing.T) {
 		t.Fatalf("decode create team response: %v", err)
 	}
 
-	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"web","tasks":[{"id_ref":"parent","title":"Ship release"},{"title":"Draft release note","parent_ref":"parent","assign_to":"u-worker"}]}`))
+	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"manager","tasks":[{"title":"Fetch weather","assign_to":"agent-ymkx7q"}]}`))
+	batchRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(batchRec, batchReq)
+	if batchRec.Code != http.StatusCreated {
+		t.Fatalf("create batch status = %d, want %d: %s", batchRec.Code, http.StatusCreated, batchRec.Body.String())
+	}
+	var batchResp apitypes.CreateTeamTasksBatchResponse
+	if err := json.NewDecoder(batchRec.Body).Decode(&batchResp); err != nil {
+		t.Fatalf("decode batch response: %v", err)
+	}
+	if len(batchResp.Tasks) != 1 {
+		t.Fatalf("batch tasks len = %d, want 1", len(batchResp.Tasks))
+	}
+	if batchResp.Tasks[0].AssignedTo != "agent-ymkx7q" || batchResp.Tasks[0].AssignedToAgentName != "data-2-worker" {
+		t.Fatalf("batch assigned = %q/%q, want agent-ymkx7q/data-2-worker", batchResp.Tasks[0].AssignedTo, batchResp.Tasks[0].AssignedToAgentName)
+	}
+	if batchResp.Tasks[0].CreatedBy != "manager" || batchResp.Tasks[0].CreatedByAgentName != "manager" {
+		t.Fatalf("batch creator = %q/%q, want manager/manager", batchResp.Tasks[0].CreatedBy, batchResp.Tasks[0].CreatedByAgentName)
+	}
+
+	globalReq := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
+	globalRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(globalRec, globalReq)
+	if globalRec.Code != http.StatusOK {
+		t.Fatalf("global tasks status = %d, want %d: %s", globalRec.Code, http.StatusOK, globalRec.Body.String())
+	}
+	var globalTasks []apitypes.GlobalTask
+	if err := json.NewDecoder(globalRec.Body).Decode(&globalTasks); err != nil {
+		t.Fatalf("decode global tasks response: %v", err)
+	}
+	if len(globalTasks) != 1 || globalTasks[0].AssignedToAgentName != "data-2-worker" {
+		t.Fatalf("global tasks = %+v, want assigned_to_agent_name data-2-worker", globalTasks)
+	}
+
+	eventsReq := httptest.NewRequest(http.MethodGet, "/api/v1/teams/"+created.ID+"/events", nil)
+	eventsRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(eventsRec, eventsReq)
+	if eventsRec.Code != http.StatusOK {
+		t.Fatalf("events status = %d, want %d: %s", eventsRec.Code, http.StatusOK, eventsRec.Body.String())
+	}
+	var events []apitypes.TeamEvent
+	if err := json.NewDecoder(eventsRec.Body).Decode(&events); err != nil {
+		t.Fatalf("decode events response: %v", err)
+	}
+	var taskEvent apitypes.TeamEvent
+	for _, event := range events {
+		if event.TargetID == "agent-ymkx7q" {
+			taskEvent = event
+			break
+		}
+	}
+	if taskEvent.ActorAgentName != "manager" || taskEvent.TargetAgentName != "data-2-worker" {
+		t.Fatalf("events = %+v, want actor_agent_name manager and target_agent_name data-2-worker", events)
+	}
+}
+
+func TestTeamRoutesCreateResolvesAgentIDs(t *testing.T) {
+	imSvc := im.NewService()
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{
+		{
+			ID:              agent.ManagerParticipantID,
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			ChannelUserKind: participant.ChannelUserKindLocalUserID,
+			ChannelUserRef:  agent.ManagerParticipantID,
+			AgentID:         agent.ManagerUserID,
+		},
+		{
+			ID:              "worker",
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			ChannelUserKind: participant.ChannelUserKindLocalUserID,
+			ChannelUserRef:  "u-worker",
+			AgentID:         "u-worker",
+		},
+	}))
+	adapter := team.NewCSGClawAdapter(imSvc, participantSvc)
+	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
+	h := &Handler{participant: participantSvc, teamSvc: teamSvc, teamAdapter: adapter}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_agent_id":"u-manager","member_agent_ids":["u-worker"]}`))
+	createRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create team status = %d, want %d: %s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+
+	var created apitypes.Team
+	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create team response: %v", err)
+	}
+	if created.LeadAgentID != agent.ManagerUserID {
+		t.Fatalf("lead agent = %q, want %q", created.LeadAgentID, agent.ManagerUserID)
+	}
+	room, ok := imSvc.Room(created.RoomID)
+	if !ok {
+		t.Fatalf("room %q not found", created.RoomID)
+	}
+	if !containsMember(room.Members, agent.ManagerParticipantID) || !containsMember(room.Members, "u-worker") {
+		t.Fatalf("room members = %v, want manager participant and worker channel user", room.Members)
+	}
+}
+
+func TestTeamBatchCreateBindsExecutionRoomImmediately(t *testing.T) {
+	imSvc := im.NewService()
+	adapter := team.NewCSGClawAdapter(imSvc)
+	teamSvc := team.NewService()
+	h := &Handler{im: imSvc, teamSvc: teamSvc, teamAdapter: adapter}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_participant_id":"manager","member_participant_ids":["worker"]}`))
+	createRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create team status = %d, want %d: %s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+	var created apitypes.Team
+	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create team response: %v", err)
+	}
+
+	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"tasks":[{"id_ref":"parent","title":"Ship release"},{"title":"Draft release note","parent_ref":"parent","assign_to":"worker"}]}`))
 	batchRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(batchRec, batchReq)
 	if batchRec.Code != http.StatusCreated {
@@ -116,10 +279,54 @@ func TestTeamPlanAutoStartCreatesExecutionRoomAndDispatches(t *testing.T) {
 	if len(batchResp.Tasks) != 2 {
 		t.Fatalf("batch tasks len = %d, want 2", len(batchResp.Tasks))
 	}
+	if batchResp.Tasks[0].RoomID == "" || batchResp.Tasks[0].RoomID == created.RoomID {
+		t.Fatalf("parent room = %q, want dedicated execution room distinct from team room %q", batchResp.Tasks[0].RoomID, created.RoomID)
+	}
+	if batchResp.Tasks[1].RoomID != batchResp.Tasks[0].RoomID {
+		t.Fatalf("child room = %q, want parent execution room %q", batchResp.Tasks[1].RoomID, batchResp.Tasks[0].RoomID)
+	}
+	if _, ok := imSvc.Room(batchResp.Tasks[0].RoomID); !ok {
+		t.Fatalf("Room(%q) ok = false, want true", batchResp.Tasks[0].RoomID)
+	}
+}
+
+func TestTeamPlanAutoStartCreatesExecutionRoomAndDispatches(t *testing.T) {
+	imSvc := im.NewService()
+	adapter := team.NewCSGClawAdapter(imSvc)
+	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
+	h := &Handler{im: imSvc, teamSvc: teamSvc, teamAdapter: adapter}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_participant_id":"manager","member_participant_ids":["worker"]}`))
+	createRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create team status = %d, want %d: %s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+	var created apitypes.Team
+	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create team response: %v", err)
+	}
+
+	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"tasks":[{"id_ref":"parent","title":"Ship release"},{"title":"Draft release note","parent_ref":"parent","assign_to":"worker"}]}`))
+	batchRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(batchRec, batchReq)
+	if batchRec.Code != http.StatusCreated {
+		t.Fatalf("create batch status = %d, want %d: %s", batchRec.Code, http.StatusCreated, batchRec.Body.String())
+	}
+	var batchResp apitypes.CreateTeamTasksBatchResponse
+	if err := json.NewDecoder(batchRec.Body).Decode(&batchResp); err != nil {
+		t.Fatalf("decode batch response: %v", err)
+	}
+	if len(batchResp.Tasks) != 2 {
+		t.Fatalf("batch tasks len = %d, want 2", len(batchResp.Tasks))
+	}
+	if batchResp.Tasks[0].CreatedBy != "manager" || batchResp.Tasks[1].CreatedBy != "manager" {
+		t.Fatalf("batch task creators = %q/%q, want team lead manager", batchResp.Tasks[0].CreatedBy, batchResp.Tasks[1].CreatedBy)
+	}
 	parentID := batchResp.Tasks[0].ID
 	childID := batchResp.Tasks[1].ID
 
-	planReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/"+parentID+"/plan", strings.NewReader(`{"actor_id":"web","auto_start":true}`))
+	planReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/"+parentID+"/plan", strings.NewReader(`{"auto_start":true}`))
 	planRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(planRec, planReq)
 	if planRec.Code != http.StatusOK {
@@ -139,7 +346,7 @@ func TestTeamPlanAutoStartCreatesExecutionRoomAndDispatches(t *testing.T) {
 	if !ok {
 		t.Fatalf("Room(%s) ok = false, want true", planResp.Task.RoomID)
 	}
-	if !roomContainsMention(taskRoom, "Task "+childID+" is ready for you", "u-worker") {
+	if !roomContainsMention(taskRoom, "dispatched "+childID, "u-worker") {
 		t.Fatalf("task room messages missing dispatch mention: %+v", taskRoom.Messages)
 	}
 	if roomContains(taskRoom, "started assigning tasks") {
@@ -166,7 +373,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		if payload.Model != "gpt-planner" {
 			t.Fatalf("planner model = %q, want gpt-planner", payload.Model)
 		}
-		if len(payload.Messages) < 2 || !strings.Contains(payload.Messages[1].Content, "u-writer") || !strings.Contains(payload.Messages[1].Content, "release writer") {
+		if len(payload.Messages) < 2 || !strings.Contains(payload.Messages[1].Content, "writer") || !strings.Contains(payload.Messages[1].Content, "release writer") {
 			t.Fatalf("planner context messages = %+v, want team member capabilities", payload.Messages)
 		}
 		sawPlannerRequest = true
@@ -182,8 +389,8 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 						"content": `{
 							"plan_summary": "Split because writing and verification are separate roles.",
 							"tasks": [
-								{"id_ref":"draft","title":"Draft release note","assign_to":"u-writer","priority":"high","goal":"Draft the release note","assignee_reason":"u-writer is the release writer","deliverable":"release note draft"},
-								{"id_ref":"verify","title":"Verify release checklist","assign_to":"u-tester","depends_on_refs":["draft"],"priority":8,"goal":"Verify the release checklist","assignee_reason":"u-tester owns verification","deliverable":"passed checklist"}
+								{"id_ref":"draft","title":"Draft release note","assign_to":"writer","priority":"high","goal":"Draft the release note","assignee_reason":"writer is the release writer","deliverable":"release note draft"},
+								{"id_ref":"verify","title":"Verify release checklist","assign_to":"tester","depends_on_refs":["draft"],"priority":8,"goal":"Verify the release checklist","assignee_reason":"tester owns verification","deliverable":"passed checklist"}
 							]
 						}`,
 					},
@@ -237,7 +444,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		teamAdapter: adapter,
 	}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_bot_id":"u-manager","member_bot_ids":["u-writer","u-tester"]}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_participant_id":"manager","member_participant_ids":["writer","tester"]}`))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -248,7 +455,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		t.Fatalf("decode create team response: %v", err)
 	}
 
-	taskReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"web","tasks":[{"title":"Ship beta","body":"Prepare beta release notes and checklist."}]}`))
+	taskReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"tasks":[{"title":"Ship beta","body":"Prepare beta release notes and checklist."}]}`))
 	taskRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(taskRec, taskReq)
 	if taskRec.Code != http.StatusCreated {
@@ -259,8 +466,11 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		t.Fatalf("decode batch response: %v", err)
 	}
 	parent := batchResp.Tasks[0]
+	if parent.CreatedBy != "manager" {
+		t.Fatalf("parent.CreatedBy = %q, want team lead manager", parent.CreatedBy)
+	}
 
-	planReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/"+parent.ID+"/plan", strings.NewReader(`{"actor_id":"web"}`))
+	planReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/"+parent.ID+"/plan", strings.NewReader(`{}`))
 	planRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(planRec, planReq)
 	if planRec.Code != http.StatusOK {
@@ -276,6 +486,9 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 	if len(planResp.CreatedTasks) != 2 {
 		t.Fatalf("created plan tasks len = %d, want 2", len(planResp.CreatedTasks))
 	}
+	if planResp.CreatedTasks[0].CreatedBy != "manager" || planResp.CreatedTasks[1].CreatedBy != "manager" {
+		t.Fatalf("planned task creators = %q/%q, want team lead manager", planResp.CreatedTasks[0].CreatedBy, planResp.CreatedTasks[1].CreatedBy)
+	}
 	if planResp.Task.PlanSummary == "" || !strings.Contains(planResp.CreatedTasks[0].Body, "Assignee reason") {
 		t.Fatalf("plan response = %+v, want summary and detailed child body", planResp)
 	}
@@ -286,7 +499,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		t.Fatalf("first child priority = %d, want high mapped to 9", planResp.CreatedTasks[0].Priority)
 	}
 
-	startReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/"+parent.ID+"/start", strings.NewReader(`{"actor_id":"web"}`))
+	startReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/"+parent.ID+"/start", strings.NewReader(`{}`))
 	startRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(startRec, startReq)
 	if startRec.Code != http.StatusOK {
@@ -311,40 +524,40 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		t.Fatalf("task room title = %q, want to contain parent task id %q", taskRoom.Title, parent.ID)
 	}
 	teamRoom, _ := imSvc.Room(created.RoomID)
-	if !roomContains(teamRoom, "Execution room created") || !roomContains(teamRoom, startResp.Task.RoomID) {
-		t.Fatalf("team room missing execution room notice: %+v", teamRoom.Messages)
+	if roomContains(teamRoom, "created execution room") || roomContains(teamRoom, startResp.Task.RoomID) {
+		t.Fatalf("team room should not receive execution room notice: %+v", teamRoom.Messages)
 	}
-	if !roomContainsMention(taskRoom, "Task "+planResp.CreatedTasks[0].ID+" is ready for you", "u-writer") || !roomContains(taskRoom, "claim --team "+created.ID+" --task "+planResp.CreatedTasks[0].ID+" --bot-id u-writer") {
+	if !roomContainsMention(taskRoom, "dispatched "+planResp.CreatedTasks[0].ID, "u-writer") || !roomContains(taskRoom, "claim --team "+created.ID+" --task "+planResp.CreatedTasks[0].ID+" --participant-id writer") {
 		t.Fatalf("task room messages missing first dispatch: %+v", taskRoom.Messages)
 	}
 	if roomContains(taskRoom, "started assigning tasks") {
 		t.Fatalf("task room should not include dispatch preamble: %+v", taskRoom.Messages)
 	}
 
-	claimReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/"+planResp.CreatedTasks[0].ID+"/claim", strings.NewReader(`{"bot_id":"u-writer"}`))
+	claimReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/"+planResp.CreatedTasks[0].ID+"/claim", strings.NewReader(`{"participant_id":"writer"}`))
 	claimRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(claimRec, claimReq)
 	if claimRec.Code != http.StatusOK {
 		t.Fatalf("claim writer status = %d, want %d: %s", claimRec.Code, http.StatusOK, claimRec.Body.String())
 	}
-	completeReq := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+planResp.CreatedTasks[0].ID, strings.NewReader(`{"actor_id":"u-writer","status":"completed","result":"draft ready"}`))
+	completeReq := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+planResp.CreatedTasks[0].ID, strings.NewReader(`{"actor_id":"writer","status":"completed","result":"draft ready"}`))
 	completeRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(completeRec, completeReq)
 	if completeRec.Code != http.StatusOK {
 		t.Fatalf("complete writer status = %d, want %d: %s", completeRec.Code, http.StatusOK, completeRec.Body.String())
 	}
 	taskRoom, _ = imSvc.Room(startResp.Task.RoomID)
-	if !roomContainsMention(taskRoom, "Task "+planResp.CreatedTasks[1].ID+" is ready for you", "u-tester") {
+	if !roomContainsMention(taskRoom, "dispatched "+planResp.CreatedTasks[1].ID, "u-tester") {
 		t.Fatalf("task room messages missing successor dispatch: %+v", taskRoom.Messages)
 	}
 
-	claimTesterReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/"+planResp.CreatedTasks[1].ID+"/claim", strings.NewReader(`{"bot_id":"u-tester"}`))
+	claimTesterReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/"+planResp.CreatedTasks[1].ID+"/claim", strings.NewReader(`{"participant_id":"tester"}`))
 	claimTesterRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(claimTesterRec, claimTesterReq)
 	if claimTesterRec.Code != http.StatusOK {
 		t.Fatalf("claim tester status = %d, want %d: %s", claimTesterRec.Code, http.StatusOK, claimTesterRec.Body.String())
 	}
-	completeTesterReq := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+planResp.CreatedTasks[1].ID, strings.NewReader(`{"actor_id":"u-tester","status":"completed","result":"checklist passed"}`))
+	completeTesterReq := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+planResp.CreatedTasks[1].ID, strings.NewReader(`{"actor_id":"tester","status":"completed","result":"checklist passed"}`))
 	completeTesterRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(completeTesterRec, completeTesterReq)
 	if completeTesterRec.Code != http.StatusOK {
@@ -356,29 +569,6 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 	}
 	if updatedParent.Status != team.TaskStatusCompleted || !strings.Contains(updatedParent.Result, "draft ready") || !strings.Contains(updatedParent.Result, "checklist passed") {
 		t.Fatalf("updated parent = %+v, want completed with aggregated results", updatedParent)
-	}
-}
-
-func TestNormalizeManagerPlanRejectsNonCanonicalWorkerID(t *testing.T) {
-	h := &Handler{}
-	_, err := h.normalizeManagerPlan(managerPlanContext{
-		TeamID:              "team-1",
-		LeadBotID:           "u-manager",
-		AssignableMemberIDs: []string{"u-p-w-0604"},
-		Task: managerPlanTaskContext{
-			ID:    "task-1",
-			Title: "Ship release",
-		},
-	}, managerPlanLLMResponse{
-		PlanSummary: "plan",
-		Tasks: []managerPlanLLMTask{{
-			IDRef:    "draft",
-			Title:    "Draft release note",
-			AssignTo: "p-w-0604",
-		}},
-	})
-	if err == nil || !strings.Contains(err.Error(), "assignable_member_ids") {
-		t.Fatalf("normalizeManagerPlan() error = %v, want non-canonical assign_to rejection", err)
 	}
 }
 
@@ -411,7 +601,7 @@ func TestListGlobalTasks(t *testing.T) {
 	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
 	h := &Handler{im: imSvc, teamSvc: teamSvc, teamAdapter: adapter}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_bot_id":"u-manager"}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_participant_id":"manager"}`))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -423,7 +613,7 @@ func TestListGlobalTasks(t *testing.T) {
 		t.Fatalf("decode create team response: %v", err)
 	}
 
-	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"u-manager","tasks":[{"title":"Draft release note","assign_to":"u-worker","priority":9}]}`))
+	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"manager","tasks":[{"title":"Draft release note","assign_to":"worker","priority":9}]}`))
 	batchRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(batchRec, batchReq)
 	if batchRec.Code != http.StatusCreated {
@@ -460,7 +650,7 @@ func TestCreateBatchTasksWithParentRef(t *testing.T) {
 	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
 	h := &Handler{im: imSvc, teamSvc: teamSvc, teamAdapter: adapter}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_bot_id":"u-manager"}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"release","lead_participant_id":"manager"}`))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -472,7 +662,7 @@ func TestCreateBatchTasksWithParentRef(t *testing.T) {
 		t.Fatalf("decode create team response: %v", err)
 	}
 
-	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"u-manager","tasks":[{"id_ref":"story","title":"Release v1"},{"title":"Draft release note","parent_ref":"story","assign_to":"u-worker"}]}`))
+	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"manager","tasks":[{"id_ref":"story","title":"Release v1"},{"title":"Draft release note","parent_ref":"story","assign_to":"worker"}]}`))
 	batchRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(batchRec, batchReq)
 	if batchRec.Code != http.StatusCreated {
@@ -497,7 +687,7 @@ func TestTeamRoutesApprovalFlow(t *testing.T) {
 	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
 	h := &Handler{teamSvc: teamSvc, teamAdapter: adapter}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"ops","lead_bot_id":"u-manager"}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"ops","lead_participant_id":"manager"}`))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -509,7 +699,7 @@ func TestTeamRoutesApprovalFlow(t *testing.T) {
 		t.Fatalf("decode create response: %v", err)
 	}
 
-	approvalReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/approvals", strings.NewReader(`{"requested_by":"u-worker","approver_id":"u-manager","kind":"command","summary":"run release"}`))
+	approvalReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/approvals", strings.NewReader(`{"requested_by":"worker","approver_id":"manager","kind":"command","summary":"run release"}`))
 	approvalRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(approvalRec, approvalReq)
 	if approvalRec.Code != http.StatusCreated {
@@ -521,7 +711,7 @@ func TestTeamRoutesApprovalFlow(t *testing.T) {
 		t.Fatalf("decode approval response: %v", err)
 	}
 
-	resolveReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/approvals/"+createdApproval.ID+"/resolve", strings.NewReader(`{"approver_id":"u-manager","status":"approved","reason":"ok"}`))
+	resolveReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/approvals/"+createdApproval.ID+"/resolve", strings.NewReader(`{"approver_id":"manager","status":"approved","reason":"ok"}`))
 	resolveRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(resolveRec, resolveReq)
 	if resolveRec.Code != http.StatusOK {
@@ -544,7 +734,7 @@ func TestTeamRoomCommandApproveViaMessage(t *testing.T) {
 	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
 	h := &Handler{im: imSvc, teamSvc: teamSvc, teamAdapter: adapter}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"ops","lead_bot_id":"u-manager","member_bot_ids":["u-worker"]}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"ops","lead_participant_id":"manager","member_participant_ids":["worker"]}`))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -567,19 +757,19 @@ func TestTeamRoomCommandApproveViaMessage(t *testing.T) {
 	task, err := teamSvc.CreateTask(team.CreateTaskInput{
 		TeamID:    created.ID,
 		Title:     "Run tests",
-		CreatedBy: "u-manager",
-		AssignTo:  "u-worker",
+		CreatedBy: "manager",
+		AssignTo:  "worker",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
 	}
-	if _, err := teamSvc.ClaimTask(team.ClaimTaskInput{TeamID: created.ID, TaskID: task.ID, BotID: "u-worker"}); err != nil {
+	if _, err := teamSvc.ClaimTask(team.ClaimTaskInput{TeamID: created.ID, TaskID: task.ID, ParticipantID: "worker"}); err != nil {
 		t.Fatalf("ClaimTask() error = %v", err)
 	}
 	if _, err := teamSvc.UpdateTaskStatus(team.UpdateTaskStatusInput{
 		TeamID:  created.ID,
 		TaskID:  task.ID,
-		ActorID: "u-worker",
+		ActorID: "worker",
 		Status:  team.TaskStatusBlocked,
 		Reason:  "need approval",
 	}); err != nil {
@@ -588,8 +778,8 @@ func TestTeamRoomCommandApproveViaMessage(t *testing.T) {
 	if _, err := teamSvc.RequestApproval(team.RequestApprovalInput{
 		TeamID:      created.ID,
 		TaskID:      task.ID,
-		RequestedBy: "u-worker",
-		ApproverID:  "u-manager",
+		RequestedBy: "worker",
+		ApproverID:  "manager",
 		Kind:        "command",
 		Summary:     "Run go test ./...",
 	}); err != nil {
@@ -619,21 +809,10 @@ func TestTeamRoomCommandApproveViaMessage(t *testing.T) {
 	if !ok {
 		t.Fatalf("Room(%s) ok = false, want true", created.RoomID)
 	}
-	var sawInstruction bool
-	var sawResolution bool
 	for _, message := range room.Messages {
-		if strings.Contains(message.Content, "Reply in this room with: approve "+task.ID+" or reject "+task.ID+" <reason>") {
-			sawInstruction = true
+		if strings.Contains(message.Content, "requested approval") || strings.Contains(message.Content, "resolved approval") {
+			t.Fatalf("team room should not receive approval projections: %+v", message)
 		}
-		if strings.Contains(message.Content, "resolved approval") && strings.Contains(message.Content, "approved") {
-			sawResolution = true
-		}
-	}
-	if !sawInstruction {
-		t.Fatalf("room messages missing approval instruction for task %s", task.ID)
-	}
-	if !sawResolution {
-		t.Fatalf("room messages missing approval resolution projection")
 	}
 }
 
@@ -643,7 +822,7 @@ func TestTeamRoomCommandReportsUsageErrors(t *testing.T) {
 	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
 	h := &Handler{im: imSvc, teamSvc: teamSvc, teamAdapter: adapter}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"ops","lead_bot_id":"u-manager"}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"ops","lead_participant_id":"manager"}`))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -686,7 +865,7 @@ func TestTeamRoomCommandReassignsTask(t *testing.T) {
 	teamSvc := team.NewService(team.WithProjector(team.NewProjector(adapter, nil)))
 	h := &Handler{im: imSvc, teamSvc: teamSvc, teamAdapter: adapter}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"ops","lead_bot_id":"u-manager","member_bot_ids":["u-worker-a","u-worker-b"]}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"ops","lead_participant_id":"manager","member_participant_ids":["worker-a","worker-b"]}`))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -709,14 +888,14 @@ func TestTeamRoomCommandReassignsTask(t *testing.T) {
 	task, err := teamSvc.CreateTask(team.CreateTaskInput{
 		TeamID:    created.ID,
 		Title:     "Investigate",
-		CreatedBy: "u-manager",
-		AssignTo:  "u-worker-a",
+		CreatedBy: "manager",
+		AssignTo:  "worker-a",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
 	}
 
-	messageReq := httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"`+created.RoomID+`","sender_id":"u-admin","content":"reassign `+task.ID+` u-worker-b"}`))
+	messageReq := httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"`+created.RoomID+`","sender_id":"u-admin","content":"reassign `+task.ID+` worker-b"}`))
 	messageRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(messageRec, messageReq)
 	if messageRec.Code != http.StatusCreated {
@@ -727,8 +906,8 @@ func TestTeamRoomCommandReassignsTask(t *testing.T) {
 	if !ok {
 		t.Fatalf("GetTask(%s) ok = false, want true", task.ID)
 	}
-	if updated.AssignedTo != "u-worker-b" || updated.Status != team.TaskStatusAssigned {
-		t.Fatalf("updated task = %+v, want assigned to u-worker-b", updated)
+	if updated.AssignedTo != "worker-b" || updated.Status != team.TaskStatusAssigned {
+		t.Fatalf("updated task = %+v, want assigned to worker-b", updated)
 	}
 }
 
@@ -772,7 +951,7 @@ func TestTeamRoutesPhase3bPOCScenario(t *testing.T) {
 		t.Fatalf("CreateRoom() error = %v", err)
 	}
 
-	enableReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","room_id":"`+room.ID+`","title":"Launch","lead_bot_id":"u-manager","member_bot_ids":["u-worker-a","u-worker-b"]}`))
+	enableReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","room_id":"`+room.ID+`","title":"Launch","lead_participant_id":"manager","member_participant_ids":["worker-a","worker-b"]}`))
 	enableRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(enableRec, enableReq)
 	if enableRec.Code != http.StatusCreated {
@@ -784,7 +963,7 @@ func TestTeamRoutesPhase3bPOCScenario(t *testing.T) {
 		t.Fatalf("decode enable response: %v", err)
 	}
 
-	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"u-manager","tasks":[{"id_ref":"A","title":"Draft rollout note","assign_to":"u-worker-a","priority":8},{"id_ref":"B","title":"Prepare smoke checklist","assign_to":"u-worker-b","priority":8},{"id_ref":"C","title":"Publish summary","depends_on_refs":["A","B"],"priority":5}]}`))
+	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"manager","tasks":[{"id_ref":"A","title":"Draft rollout note","assign_to":"worker-a","priority":8},{"id_ref":"B","title":"Prepare smoke checklist","assign_to":"worker-b","priority":8},{"id_ref":"C","title":"Publish summary","depends_on_refs":["A","B"],"priority":5}]}`))
 	batchRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(batchRec, batchReq)
 	if batchRec.Code != http.StatusCreated {
@@ -808,24 +987,24 @@ func TestTeamRoutesPhase3bPOCScenario(t *testing.T) {
 	}
 
 	claimARec := httptest.NewRecorder()
-	h.Routes().ServeHTTP(claimARec, httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/claim-next", strings.NewReader(`{"bot_id":"u-worker-a"}`)))
+	h.Routes().ServeHTTP(claimARec, httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/claim-next", strings.NewReader(`{"participant_id":"worker-a"}`)))
 	if claimARec.Code != http.StatusOK {
 		t.Fatalf("claim A status = %d, want %d: %s", claimARec.Code, http.StatusOK, claimARec.Body.String())
 	}
 	claimBRec := httptest.NewRecorder()
-	h.Routes().ServeHTTP(claimBRec, httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/claim-next", strings.NewReader(`{"bot_id":"u-worker-b"}`)))
+	h.Routes().ServeHTTP(claimBRec, httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/claim-next", strings.NewReader(`{"participant_id":"worker-b"}`)))
 	if claimBRec.Code != http.StatusOK {
 		t.Fatalf("claim B status = %d, want %d: %s", claimBRec.Code, http.StatusOK, claimBRec.Body.String())
 	}
 
-	blockReq := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+taskIDByRef["A"], strings.NewReader(`{"actor_id":"u-worker-a","status":"blocked","reason":"need approval"}`))
+	blockReq := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+taskIDByRef["A"], strings.NewReader(`{"actor_id":"worker-a","status":"blocked","reason":"need approval"}`))
 	blockRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(blockRec, blockReq)
 	if blockRec.Code != http.StatusOK {
 		t.Fatalf("block task A status = %d, want %d: %s", blockRec.Code, http.StatusOK, blockRec.Body.String())
 	}
 
-	approvalReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/approvals", strings.NewReader(`{"task_id":"`+taskIDByRef["A"]+`","requested_by":"u-worker-a","approver_id":"u-manager","kind":"command","summary":"Run publish step"}`))
+	approvalReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/approvals", strings.NewReader(`{"task_id":"`+taskIDByRef["A"]+`","requested_by":"worker-a","approver_id":"manager","kind":"command","summary":"Run publish step"}`))
 	approvalRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(approvalRec, approvalReq)
 	if approvalRec.Code != http.StatusCreated {
@@ -840,25 +1019,25 @@ func TestTeamRoutesPhase3bPOCScenario(t *testing.T) {
 	}
 
 	completeBRec := httptest.NewRecorder()
-	h.Routes().ServeHTTP(completeBRec, httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+taskIDByRef["B"], strings.NewReader(`{"actor_id":"u-worker-b","status":"completed","result":"checklist ready"}`)))
+	h.Routes().ServeHTTP(completeBRec, httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+taskIDByRef["B"], strings.NewReader(`{"actor_id":"worker-b","status":"completed","result":"checklist ready"}`)))
 	if completeBRec.Code != http.StatusOK {
 		t.Fatalf("complete task B status = %d, want %d: %s", completeBRec.Code, http.StatusOK, completeBRec.Body.String())
 	}
 
 	prematureClaimRec := httptest.NewRecorder()
-	h.Routes().ServeHTTP(prematureClaimRec, httptest.NewRequest(http.MethodPost, "/api/v1/teams/tasks/claim-next", strings.NewReader(`{"bot_id":"u-worker-b"}`)))
+	h.Routes().ServeHTTP(prematureClaimRec, httptest.NewRequest(http.MethodPost, "/api/v1/teams/tasks/claim-next", strings.NewReader(`{"participant_id":"worker-b"}`)))
 	if prematureClaimRec.Code != http.StatusConflict {
 		t.Fatalf("premature cross-team claim status = %d, want %d: %s", prematureClaimRec.Code, http.StatusConflict, prematureClaimRec.Body.String())
 	}
 
 	completeARec := httptest.NewRecorder()
-	h.Routes().ServeHTTP(completeARec, httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+taskIDByRef["A"], strings.NewReader(`{"actor_id":"u-worker-a","status":"completed","result":"draft ready"}`)))
+	h.Routes().ServeHTTP(completeARec, httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+taskIDByRef["A"], strings.NewReader(`{"actor_id":"worker-a","status":"completed","result":"draft ready"}`)))
 	if completeARec.Code != http.StatusOK {
 		t.Fatalf("complete task A status = %d, want %d: %s", completeARec.Code, http.StatusOK, completeARec.Body.String())
 	}
 
 	claimCRec := httptest.NewRecorder()
-	h.Routes().ServeHTTP(claimCRec, httptest.NewRequest(http.MethodPost, "/api/v1/teams/tasks/claim-next", strings.NewReader(`{"bot_id":"u-worker-b"}`)))
+	h.Routes().ServeHTTP(claimCRec, httptest.NewRequest(http.MethodPost, "/api/v1/teams/tasks/claim-next", strings.NewReader(`{"participant_id":"worker-b"}`)))
 	if claimCRec.Code != http.StatusOK {
 		t.Fatalf("claim C status = %d, want %d: %s", claimCRec.Code, http.StatusOK, claimCRec.Body.String())
 	}
@@ -872,7 +1051,7 @@ func TestTeamRoutesPhase3bPOCScenario(t *testing.T) {
 	}
 
 	completeCRec := httptest.NewRecorder()
-	h.Routes().ServeHTTP(completeCRec, httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+taskIDByRef["C"], strings.NewReader(`{"actor_id":"u-worker-b","status":"completed","result":"summary posted"}`)))
+	h.Routes().ServeHTTP(completeCRec, httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID+"/tasks/"+taskIDByRef["C"], strings.NewReader(`{"actor_id":"worker-b","status":"completed","result":"summary posted"}`)))
 	if completeCRec.Code != http.StatusOK {
 		t.Fatalf("complete task C status = %d, want %d: %s", completeCRec.Code, http.StatusOK, completeCRec.Body.String())
 	}
@@ -910,20 +1089,20 @@ func TestTeamRoutesPhase3bPOCScenario(t *testing.T) {
 	if !ok {
 		t.Fatalf("Room(%s) ok = false, want true", created.RoomID)
 	}
-	var sawBatchSummary, sawApproval, sawClaimC, sawSummary bool
+	var sawSummary bool
 	for _, message := range projectedRoom.Messages {
 		switch {
 		case strings.Contains(message.Content, "created 3 tasks"):
-			sawBatchSummary = true
+			t.Fatalf("team room should not receive task batch projection: %+v", message)
 		case strings.Contains(message.Content, "requested approval for "+taskIDByRef["A"]):
-			sawApproval = true
+			t.Fatalf("team room should not receive approval projection: %+v", message)
 		case strings.Contains(message.Content, "claimed "+taskIDByRef["C"]):
-			sawClaimC = true
+			t.Fatalf("team room should not receive claim projection: %+v", message)
 		case strings.Contains(message.Content, "Summary: A/B/C completed"):
 			sawSummary = true
 		}
 	}
-	if !sawBatchSummary || !sawApproval || !sawClaimC || !sawSummary {
-		t.Fatalf("room history missing key messages: batch=%v approval=%v claimC=%v summary=%v", sawBatchSummary, sawApproval, sawClaimC, sawSummary)
+	if !sawSummary {
+		t.Fatalf("room history missing human summary message")
 	}
 }

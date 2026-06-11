@@ -26,25 +26,25 @@ type MessageRef struct {
 }
 
 type EnsureRoomRequest struct {
-	TeamID       string   `json:"team_id,omitempty"`
-	RoomID       string   `json:"room_id,omitempty"`
-	Title        string   `json:"title,omitempty"`
-	LeadBotID    string   `json:"lead_bot_id"`
-	CreatorBotID string   `json:"creator_bot_id,omitempty"`
-	MemberBotIDs []string `json:"member_bot_ids,omitempty"`
+	TeamID               string   `json:"team_id,omitempty"`
+	RoomID               string   `json:"room_id,omitempty"`
+	Title                string   `json:"title,omitempty"`
+	LeadParticipantID    string   `json:"lead_participant_id"`
+	CreatorParticipantID string   `json:"creator_participant_id,omitempty"`
+	MemberParticipantIDs []string `json:"member_participant_ids,omitempty"`
 }
 
 type AddMembersRequest struct {
-	Room         RoomRef  `json:"room"`
-	InviterBotID string   `json:"inviter_bot_id,omitempty"`
-	MemberBotIDs []string `json:"member_bot_ids"`
+	Room                 RoomRef  `json:"room"`
+	InviterParticipantID string   `json:"inviter_participant_id,omitempty"`
+	MemberParticipantIDs []string `json:"member_participant_ids"`
 }
 
 type SendMessageRequest struct {
-	Room           RoomRef `json:"room"`
-	SenderBotID    string  `json:"sender_bot_id"`
-	MentionID      string  `json:"mention_id,omitempty"`
-	Kind           string  `json:"kind,omitempty"`
-	Content        string  `json:"content"`
-	IdempotencyKey string  `json:"idempotency_key,omitempty"`
+	Room                RoomRef `json:"room"`
+	SenderParticipantID string  `json:"sender_participant_id"`
+	MentionID           string  `json:"mention_id,omitempty"`
+	Kind                string  `json:"kind,omitempty"`
+	Content             string  `json:"content"`
+	IdempotencyKey      string  `json:"idempotency_key,omitempty"`
 }

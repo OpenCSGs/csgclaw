@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"csgclaw/internal/activity"
-
-	acp "github.com/coder/acp-go-sdk"
 )
 
 const (
@@ -303,14 +301,25 @@ func (b *MemoryPermissionBroker) publish(event SessionEvent) {
 	}
 }
 
-func PermissionOptionsFromACP(options []acp.PermissionOption) []PermissionOptionSnapshot {
+const (
+	PermissionOptionKindAllowOnce   = "allow_once"
+	PermissionOptionKindAllowAlways = "allow_always"
+)
+
+type ExternalPermissionOption struct {
+	ID    string
+	Kind  string
+	Label string
+}
+
+func NormalizePermissionOptions(options []ExternalPermissionOption) []PermissionOptionSnapshot {
 	out := make([]PermissionOptionSnapshot, 0, len(options))
 	for _, option := range options {
-		kind := strings.TrimSpace(string(option.Kind))
+		kind := strings.TrimSpace(option.Kind)
 		out = append(out, PermissionOptionSnapshot{
-			ID:    strings.TrimSpace(string(option.OptionId)),
+			ID:    strings.TrimSpace(option.ID),
 			Kind:  kind,
-			Label: firstPermissionText(option.Name, kind, string(option.OptionId)),
+			Label: firstPermissionText(option.Label, kind, option.ID),
 			Scope: permissionOptionScope(kind),
 		})
 	}
@@ -360,7 +369,7 @@ func findPermissionOption(options []PermissionOptionSnapshot, optionID string) (
 
 func permissionOptionAllows(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case string(acp.PermissionOptionKindAllowOnce), string(acp.PermissionOptionKindAllowAlways):
+	case PermissionOptionKindAllowOnce, PermissionOptionKindAllowAlways:
 		return true
 	default:
 		return false
@@ -368,7 +377,7 @@ func permissionOptionAllows(kind string) bool {
 }
 
 func permissionOptionScope(kind string) string {
-	if strings.TrimSpace(kind) == string(acp.PermissionOptionKindAllowAlways) {
+	if strings.TrimSpace(kind) == PermissionOptionKindAllowAlways {
 		return activity.ActionOptionScopeAgent
 	}
 	return ""

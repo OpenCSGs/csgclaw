@@ -35,12 +35,12 @@ type teamSnapshot struct {
 }
 
 type storeIndexEntry struct {
-	ID        string `json:"id"`
-	Channel   string `json:"channel"`
-	RoomID    string `json:"room_id"`
-	Title     string `json:"title"`
-	LeadBotID string `json:"lead_bot_id"`
-	Status    string `json:"status"`
+	ID          string `json:"id"`
+	Channel     string `json:"channel"`
+	RoomID      string `json:"room_id"`
+	Title       string `json:"title"`
+	LeadAgentID string `json:"lead_agent_id"`
+	Status      string `json:"status"`
 }
 
 func NewStore(root string) (*Store, error) {
@@ -250,12 +250,12 @@ func (s *Store) buildIndex() ([]storeIndexEntry, error) {
 			return nil, err
 		}
 		index = append(index, storeIndexEntry{
-			ID:        meta.ID,
-			Channel:   meta.Channel,
-			RoomID:    meta.RoomID,
-			Title:     meta.Title,
-			LeadBotID: meta.LeadBotID,
-			Status:    meta.Status,
+			ID:          meta.ID,
+			Channel:     meta.Channel,
+			RoomID:      meta.RoomID,
+			Title:       meta.Title,
+			LeadAgentID: meta.LeadAgentID,
+			Status:      meta.Status,
 		})
 	}
 	sort.Slice(index, func(i, j int) bool { return index[i].ID < index[j].ID })

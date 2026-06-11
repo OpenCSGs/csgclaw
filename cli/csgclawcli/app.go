@@ -191,7 +191,7 @@ func (a *App) usage() {
 	fmt.Fprintln(a.stderr, "  csgclaw-cli participant list --channel feishu")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli pt create --channel feishu --name dev --type agent --bind reuse --agent-id u-dev")
 	fmt.Fprintln(a.stderr, "  csgclaw-cli message create --channel feishu --room-id oc_x --sender-id u-manager --content hello")
-	fmt.Fprintln(a.stderr, "  csgclaw-cli team create --lead-bot-id bot-manager --title release")
+	fmt.Fprintln(a.stderr, "  csgclaw-cli team create --lead-agent-id u-manager --title release")
 	fmt.Fprintln(a.stderr)
 	fmt.Fprintln(a.stderr, "Global flags:")
 	fmt.Fprintf(a.stderr, "  --endpoint string   HTTP server endpoint (default %s)\n", envBaseURL)

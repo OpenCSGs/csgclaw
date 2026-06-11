@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/agent"
-	"csgclaw/internal/codexacp"
+	"csgclaw/internal/codexcli"
 	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
 )
@@ -20,9 +20,7 @@ func WithCodexRuntime() agent.ServiceOption {
 		events := runtimecodex.NewEventSink()
 		permissions := runtimecodex.NewPermissionBroker(events)
 		rt := runtimecodex.New(runtimecodex.Dependencies{
-			BinaryProvider: codexacp.Installer{
-				Locator: codexacp.Locator{},
-			},
+			BinaryProvider: codexcli.Provider{},
 			ResolveAgent: func(h agentruntime.Handle) (runtimecodex.AgentRef, error) {
 				got, err := host.ResolveAgent(h)
 				if err != nil {

@@ -3,6 +3,7 @@ package picoclawsandbox
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"csgclaw/internal/config"
@@ -45,7 +46,16 @@ func New(deps Dependencies) *Runtime {
 }
 
 func (r *Runtime) WorkspaceRoot(agentHome string) string {
-	return workspaceRoot(agentHome)
+	return r.Layout(agentHome).WorkspaceRoot
+}
+
+func (r *Runtime) Layout(agentHome string) agentruntime.Layout {
+	workspace := workspaceRoot(agentHome)
+	return agentruntime.Layout{
+		WorkspaceRoot: workspace,
+		SkillsRoot:    filepath.Join(workspace, "skills"),
+		HostLogPaths:  []string{HostGatewayLogPath(agentHome)},
+	}
 }
 
 func (r *Runtime) NewConversation(_ context.Context, _ agentruntime.Handle, _ agentruntime.ConversationStartRequest) (agentruntime.ConversationStartAction, error) {
@@ -78,7 +88,7 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 	if _, err := EnsureConfig(agentHome, participantID, req.AgentID, gateway.Server, configModelFromProfile(profile), fixedBaseURL(gateway.ManagerBaseURL)); err != nil {
 		return err
 	}
-	workspaceRoot := r.WorkspaceRoot(agentHome)
+	workspaceRoot := r.Layout(agentHome).WorkspaceRoot
 	if err := sandboxgateway.EnsureEmbeddedWorkspace(gateway.WorkspaceTemplate, workspaceRoot); err != nil {
 		return err
 	}

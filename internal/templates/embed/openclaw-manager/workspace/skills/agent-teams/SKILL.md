@@ -37,10 +37,8 @@ Do not invent extra commands. Stay within the shipped CLI surface and Web Tasks 
 Create or enable a team room:
 
 ```bash
-csgclaw-cli team create --channel csgclaw --room-id <room_id> --lead-bot-id <manager_participant_id> --member-bot-ids <worker_participant_ids>
+csgclaw-cli team create --channel csgclaw --room-id <room_id> --lead-participant-id <manager_participant_id> --member-participant-ids <worker_participant_ids>
 ```
-
-The `--lead-bot-id` and `--member-bot-ids` flag names are legacy; pass participant IDs.
 
 Create one or more tasks:
 

@@ -3,38 +3,41 @@ package apitypes
 import "time"
 
 type Team struct {
-	ID        string    `json:"id"`
-	RoomID    string    `json:"room_id"`
-	Channel   string    `json:"channel"`
-	Title     string    `json:"title"`
-	LeadBotID string    `json:"lead_bot_id"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	RoomID      string    `json:"room_id"`
+	Channel     string    `json:"channel"`
+	Title       string    `json:"title"`
+	LeadAgentID string    `json:"lead_agent_id"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type TeamTask struct {
-	ID           string     `json:"id"`
-	TeamID       string     `json:"team_id"`
-	RoomID       string     `json:"room_id"`
-	ParentID     string     `json:"parent_id,omitempty"`
-	Title        string     `json:"title"`
-	Body         string     `json:"body"`
-	Status       string     `json:"status"`
-	CreatedBy    string     `json:"created_by"`
-	AssignedTo   string     `json:"assigned_to,omitempty"`
-	ClaimedBy    string     `json:"claimed_by,omitempty"`
-	DependsOn    []string   `json:"depends_on,omitempty"`
-	Priority     int        `json:"priority,omitempty"`
-	PlanSummary  string     `json:"plan_summary,omitempty"`
-	DispatchedAt *time.Time `json:"dispatched_at,omitempty"`
-	DeadlineAt   *time.Time `json:"deadline_at,omitempty"`
-	TimeoutAt    *time.Time `json:"timeout_at,omitempty"`
-	Result       string     `json:"result,omitempty"`
-	Error        string     `json:"error,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	CompletedAt  *time.Time `json:"completed_at,omitempty"`
+	ID                  string     `json:"id"`
+	TeamID              string     `json:"team_id"`
+	RoomID              string     `json:"room_id"`
+	ParentID            string     `json:"parent_id,omitempty"`
+	Title               string     `json:"title"`
+	Body                string     `json:"body"`
+	Status              string     `json:"status"`
+	CreatedBy           string     `json:"created_by"`
+	CreatedByAgentName  string     `json:"created_by_agent_name,omitempty"`
+	AssignedTo          string     `json:"assigned_to,omitempty"`
+	AssignedToAgentName string     `json:"assigned_to_agent_name,omitempty"`
+	ClaimedBy           string     `json:"claimed_by,omitempty"`
+	ClaimedByAgentName  string     `json:"claimed_by_agent_name,omitempty"`
+	DependsOn           []string   `json:"depends_on,omitempty"`
+	Priority            int        `json:"priority,omitempty"`
+	PlanSummary         string     `json:"plan_summary,omitempty"`
+	DispatchedAt        *time.Time `json:"dispatched_at,omitempty"`
+	DeadlineAt          *time.Time `json:"deadline_at,omitempty"`
+	TimeoutAt           *time.Time `json:"timeout_at,omitempty"`
+	Result              string     `json:"result,omitempty"`
+	Error               string     `json:"error,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+	CompletedAt         *time.Time `json:"completed_at,omitempty"`
 }
 
 type GlobalTask struct {
@@ -61,7 +64,7 @@ type TeamApproval struct {
 
 type TeamPresence struct {
 	TeamID          string    `json:"team_id"`
-	BotID           string    `json:"bot_id"`
+	ParticipantID   string    `json:"participant_id"`
 	UserID          string    `json:"user_id"`
 	AgentID         string    `json:"agent_id"`
 	Role            string    `json:"role"`
@@ -73,23 +76,27 @@ type TeamPresence struct {
 }
 
 type TeamEvent struct {
-	Seq       int64     `json:"seq"`
-	TeamID    string    `json:"team_id"`
-	RoomID    string    `json:"room_id"`
-	Type      string    `json:"type"`
-	ActorID   string    `json:"actor_id,omitempty"`
-	TaskID    string    `json:"task_id,omitempty"`
-	TargetID  string    `json:"target_id,omitempty"`
-	Summary   string    `json:"summary,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	Seq             int64     `json:"seq"`
+	TeamID          string    `json:"team_id"`
+	RoomID          string    `json:"room_id"`
+	Type            string    `json:"type"`
+	ActorID         string    `json:"actor_id,omitempty"`
+	ActorAgentName  string    `json:"actor_agent_name,omitempty"`
+	TaskID          string    `json:"task_id,omitempty"`
+	TargetID        string    `json:"target_id,omitempty"`
+	TargetAgentName string    `json:"target_agent_name,omitempty"`
+	Summary         string    `json:"summary,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type CreateTeamRequest struct {
-	Channel      string   `json:"channel"`
-	RoomID       string   `json:"room_id,omitempty"`
-	Title        string   `json:"title,omitempty"`
-	LeadBotID    string   `json:"lead_bot_id"`
-	MemberBotIDs []string `json:"member_bot_ids,omitempty"`
+	Channel              string   `json:"channel"`
+	RoomID               string   `json:"room_id,omitempty"`
+	Title                string   `json:"title,omitempty"`
+	LeadAgentID          string   `json:"lead_agent_id,omitempty"`
+	LeadParticipantID    string   `json:"lead_participant_id,omitempty"`
+	MemberAgentIDs       []string `json:"member_agent_ids,omitempty"`
+	MemberParticipantIDs []string `json:"member_participant_ids,omitempty"`
 }
 
 type PatchTeamRequest struct {
@@ -166,16 +173,16 @@ type PatchTeamTaskRequest struct {
 }
 
 type AssignTeamTaskRequest struct {
-	BotID string `json:"bot_id"`
+	ParticipantID string `json:"participant_id"`
 }
 
 type ClaimTeamTaskRequest struct {
-	BotID string `json:"bot_id"`
+	ParticipantID string `json:"participant_id"`
 }
 
 type ClaimNextTeamTaskRequest struct {
-	TeamID string `json:"team_id,omitempty"`
-	BotID  string `json:"bot_id"`
+	TeamID        string `json:"team_id,omitempty"`
+	ParticipantID string `json:"participant_id"`
 }
 
 type CreateTeamApprovalRequest struct {
@@ -194,7 +201,7 @@ type ResolveTeamApprovalRequest struct {
 }
 
 type UpsertTeamPresenceRequest struct {
-	BotID         string `json:"bot_id"`
+	ParticipantID string `json:"participant_id"`
 	UserID        string `json:"user_id,omitempty"`
 	AgentID       string `json:"agent_id,omitempty"`
 	Role          string `json:"role,omitempty"`

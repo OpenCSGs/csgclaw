@@ -55,6 +55,7 @@ export type AgentDetailPaneProps = {
   item: AgentLike;
   modelBusy?: boolean;
   models?: string[];
+  notice?: string;
   notifierWebhookPublicOrigin?: string;
   onDelete: AgentActionHandler;
   onDraftChange?: (draft: AgentDraft) => void;
@@ -94,6 +95,7 @@ export function AgentDetailPane({
   savedDraft = null,
   hasUnsavedChanges: hasUnsavedChangesProp = undefined,
   models = [],
+  notice = "",
   modelBusy = false,
   saving = false,
   publishBusy = false,
@@ -171,6 +173,7 @@ export function AgentDetailPane({
         <div className="entity-heading">
           <div className="entity-title-row">
             <h1>{item.name}</h1>
+            <span className={`agent-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
             <span className={`status-pill ${running ? "online" : ""}`}>{agentStatusLabel(item.status, t)}</span>
             <span className={`status-pill profile-state-pill ${incomplete ? "warn" : "ready"}`}>
               {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
@@ -241,6 +244,11 @@ export function AgentDetailPane({
       </header>
       {error ? <div className="form-error">{error}</div> : null}
       {saveError ? <div className="form-error">{saveError}</div> : null}
+      {notice ? (
+        <div className="form-warning" role="status">
+          {notice}
+        </div>
+      ) : null}
       {!draft ? (
         <div className="entity-grid">
           <div className="entity-field">

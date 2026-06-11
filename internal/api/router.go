@@ -29,6 +29,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Get("/logs", h.getAgentLogs)
 				r.Get("/workspace", h.handleAgentWorkspace)
 				r.Get("/workspace/file", h.handleAgentWorkspaceFile)
+				r.Get("/skills", h.handleAgentSkills)
+				r.Get("/skills/file", h.handleAgentSkillsFile)
 				r.Route("/profile", func(r chi.Router) {
 					r.Get("/", h.getAgentProfile)
 					r.Put("/", h.updateAgentProfile)

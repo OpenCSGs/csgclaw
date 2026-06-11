@@ -92,14 +92,12 @@ export function useWorkspaceController() {
     managerProfile,
     agents,
     agentsLoaded,
-    runtimeImages,
     hubTemplates,
     hubLoaded,
     appVersion,
     upgradeStatus,
     setBootstrapData,
     setAgentsData,
-    setManagerProfileData,
     setUpgradeStatusData,
     setAppVersionData,
     refreshWorkspaceBootstrap,
@@ -172,7 +170,6 @@ export function useWorkspaceController() {
     bootstrapConfig,
     data: displayData,
     hubTemplates,
-    localRuntimeImages: runtimeImages,
     locale,
     managerProfile,
     refreshHubTemplates,
@@ -186,7 +183,6 @@ export function useWorkspaceController() {
     selectConversation,
     selectHub,
     setAgentsData,
-    setManagerProfileData,
     setSelectedHubTemplateId,
     t,
   });
@@ -297,12 +293,10 @@ export function useWorkspaceController() {
       onCreateRoom: () => conversation.openCreateRoomModal(),
       onCreateAgent: agent.openCreateAgentModal,
       onCreateNotificationParticipant: agent.openCreateNotificationParticipantModal,
-      onCreateTeam: async ({ title, lead_bot_id, member_bot_ids }: CreateTeamPayload) => {
+      onCreateTeam: async (payload: CreateTeamPayload) => {
         await agent.agentViewProps.onCreateTeam?.({
           channel: "csgclaw",
-          title,
-          lead_bot_id,
-          member_bot_ids,
+          ...payload,
         });
       },
       teamActionBusy: agent.agentViewProps.teamActionBusy,
@@ -375,6 +369,5 @@ export function useWorkspaceController() {
     configModalProps: configSettings.configModalProps,
     agentProfileModalProps: agent.agentProfileModalProps,
     managerRebuildModalProps: agent.managerRebuildModalProps,
-    managerProfileSetupModalProps: agent.managerProfileSetupModalProps,
   };
 }

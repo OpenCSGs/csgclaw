@@ -11,8 +11,6 @@ import (
 	"csgclaw/internal/channel/runtimebridge"
 	runtimecodex "csgclaw/internal/runtime/codex"
 	"csgclaw/internal/slashcommand"
-
-	acp "github.com/coder/acp-go-sdk"
 )
 
 const (
@@ -32,7 +30,7 @@ type Binding struct {
 }
 
 type SessionPrompter interface {
-	Prompt(ctx context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) (acp.PromptResponse, error)
+	Prompt(ctx context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) (runtimecodex.PromptResponse, error)
 }
 
 type ConversationSessionEnsurer interface {
@@ -251,9 +249,9 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 		_, err := w.flushTurn(ctx, evt.RoomID, evt.ThreadRootID, renderer)
 		return err
 	}
-	req := acp.PromptRequest{
-		SessionId: acp.SessionId(sessionID),
-		Prompt:    []acp.ContentBlock{acp.TextBlock(w.promptText(evt))},
+	req := runtimecodex.PromptRequest{
+		SessionID: sessionID,
+		Prompt:    []runtimecodex.PromptContentBlock{runtimecodex.TextBlock(w.promptText(evt))},
 		Meta:      cloneMeta(w.binding.PromptMeta),
 	}
 	renderer := runtimebridge.NewTurnRenderer()

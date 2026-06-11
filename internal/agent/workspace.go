@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/templates"
 )
 
@@ -58,19 +59,38 @@ func ensureWorkspaceAtRoot(hostRoot, template string) (string, error) {
 }
 
 func (s *Service) agentWorkspaceRoot(agentName, runtimeKind string) (string, error) {
-	agentHome, err := agentHomeDir(agentName)
+	layout, err := s.agentLayout(agentName, runtimeKind)
 	if err != nil {
 		return "", err
+	}
+	return layout.WorkspaceRoot, nil
+}
+
+func (s *Service) agentSkillsRoot(agentName, runtimeKind string) (string, error) {
+	layout, err := s.agentLayout(agentName, runtimeKind)
+	if err != nil {
+		return "", err
+	}
+	return layout.SkillsRoot, nil
+}
+
+func (s *Service) agentLayout(agentName, runtimeKind string) (agentruntime.Layout, error) {
+	agentHome, err := agentHomeDir(agentName)
+	if err != nil {
+		return agentruntime.Layout{}, err
 	}
 	rt, err := s.runtimeForKind(strings.TrimSpace(runtimeKind))
 	if err != nil {
-		return "", err
+		return agentruntime.Layout{}, err
 	}
-	root := rt.WorkspaceRoot(agentHome)
-	if strings.TrimSpace(root) == "" {
-		return "", fmt.Errorf("runtime %q returned empty workspace root", rt.Kind())
+	layout := rt.Layout(agentHome)
+	if strings.TrimSpace(layout.WorkspaceRoot) == "" {
+		return agentruntime.Layout{}, fmt.Errorf("runtime %q returned empty workspace root", rt.Kind())
 	}
-	return root, nil
+	if strings.TrimSpace(layout.SkillsRoot) == "" {
+		return agentruntime.Layout{}, fmt.Errorf("runtime %q returned empty skills root", rt.Kind())
+	}
+	return layout, nil
 }
 
 func copyEmbeddedTree(templateRoot, dstRoot string) error {
@@ -111,11 +131,10 @@ func (s *Service) prepareWorkspaceSkillsPreservation(agentName, sourceRuntimeKin
 	if targetRuntimeKind == "" {
 		targetRuntimeKind = sourceRuntimeKind
 	}
-	sourceWorkspace, err := s.agentWorkspaceRoot(agentName, sourceRuntimeKind)
+	sourceSkills, err := s.agentSkillsRoot(agentName, sourceRuntimeKind)
 	if err != nil {
 		return nil, nil, err
 	}
-	sourceSkills := filepath.Join(sourceWorkspace, "skills")
 	info, err := os.Stat(sourceSkills)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil, nil
@@ -160,11 +179,10 @@ func (s *Service) prepareWorkspaceSkillsPreservation(agentName, sourceRuntimeKin
 		if empty, err := directoryEmpty(preservedSkills); err != nil || empty {
 			return err
 		}
-		targetWorkspace, err := s.agentWorkspaceRoot(agentName, targetRuntimeKind)
+		targetSkills, err := s.agentSkillsRoot(agentName, targetRuntimeKind)
 		if err != nil {
 			return err
 		}
-		targetSkills := filepath.Join(targetWorkspace, "skills")
 		if err := os.MkdirAll(targetSkills, 0o755); err != nil {
 			return fmt.Errorf("create target workspace skills dir: %w", err)
 		}
@@ -178,7 +196,7 @@ func (s *Service) refreshGatewayTemplateSkills(agentName, runtimeKind, role stri
 	if !isGatewayRuntimeKind(runtimeKind) {
 		return nil
 	}
-	workspaceRoot, err := s.agentWorkspaceRoot(agentName, runtimeKind)
+	skillsRoot, err := s.agentSkillsRoot(agentName, runtimeKind)
 	if err != nil {
 		return err
 	}
@@ -187,7 +205,7 @@ func (s *Service) refreshGatewayTemplateSkills(agentName, runtimeKind, role stri
 		return err
 	}
 	for name := range templateNames {
-		if err := os.RemoveAll(filepath.Join(workspaceRoot, "skills", name)); err != nil {
+		if err := os.RemoveAll(filepath.Join(skillsRoot, name)); err != nil {
 			return fmt.Errorf("remove template skill %q: %w", name, err)
 		}
 	}

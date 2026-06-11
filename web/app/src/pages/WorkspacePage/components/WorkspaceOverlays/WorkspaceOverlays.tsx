@@ -5,7 +5,6 @@ import {
   CreateRoomModal,
   CreateTeamModal,
   InviteMembersModal,
-  ManagerProfileSetupModal,
   ManagerRebuildModal,
   UpgradeModal,
   ConfigSettingsModal,
@@ -24,9 +23,6 @@ export function WorkspaceOverlays() {
       {controller.configModalProps ? <ConfigSettingsModal {...controller.configModalProps} /> : null}
       {controller.agentProfileModalProps ? <AgentProfileModal {...controller.agentProfileModalProps} /> : null}
       {controller.managerRebuildModalProps ? <ManagerRebuildModal {...controller.managerRebuildModalProps} /> : null}
-      {controller.managerProfileSetupModalProps ? (
-        <ManagerProfileSetupModal {...controller.managerProfileSetupModalProps} />
-      ) : null}
     </>
   );
 }

@@ -44,12 +44,12 @@ type Service struct {
 }
 
 type CreateTeamInput struct {
-	ID        string
-	RoomID    string
-	Channel   string
-	Title     string
-	LeadBotID string
-	Status    string
+	ID          string
+	RoomID      string
+	Channel     string
+	Title       string
+	LeadAgentID string
+	Status      string
 }
 
 type CreateTaskInput struct {
@@ -102,9 +102,9 @@ type AssignTaskInput struct {
 }
 
 type ClaimTaskInput struct {
-	TeamID string
-	TaskID string
-	BotID  string
+	TeamID        string
+	TaskID        string
+	ParticipantID string
 }
 
 type UpdateTaskStatusInput struct {
@@ -158,7 +158,7 @@ type ResolveApprovalInput struct {
 
 type UpsertPresenceInput struct {
 	TeamID        string
-	BotID         string
+	ParticipantID string
 	UserID        string
 	AgentID       string
 	Role          string
@@ -274,10 +274,10 @@ func (s *Service) CreateTeam(input CreateTeamInput) (TeamMeta, error) {
 	if strings.TrimSpace(input.Channel) == "" {
 		return TeamMeta{}, fmt.Errorf("channel is required")
 	}
-	if strings.TrimSpace(input.LeadBotID) == "" {
-		return TeamMeta{}, fmt.Errorf("lead_bot_id is required")
+	if strings.TrimSpace(input.LeadAgentID) == "" {
+		return TeamMeta{}, fmt.Errorf("lead_agent_id is required")
 	}
-	leadBotID, err := requireCanonicalParticipantID("lead_bot_id", input.LeadBotID)
+	leadAgentID, err := requireAgentID("lead_agent_id", input.LeadAgentID)
 	if err != nil {
 		return TeamMeta{}, err
 	}
@@ -296,20 +296,20 @@ func (s *Service) CreateTeam(input CreateTeamInput) (TeamMeta, error) {
 	}
 	eventStart := len(s.events[id])
 	meta := TeamMeta{
-		ID:        id,
-		RoomID:    strings.TrimSpace(input.RoomID),
-		Channel:   strings.TrimSpace(input.Channel),
-		Title:     strings.TrimSpace(input.Title),
-		LeadBotID: leadBotID,
-		Status:    status,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          id,
+		RoomID:      strings.TrimSpace(input.RoomID),
+		Channel:     strings.TrimSpace(input.Channel),
+		Title:       strings.TrimSpace(input.Title),
+		LeadAgentID: leadAgentID,
+		Status:      status,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	s.teams[id] = meta
 	s.appendEventLocked(id, TeamEvent{
 		RoomID:    meta.RoomID,
-		Type:      "team.created",
-		ActorID:   meta.LeadBotID,
+		Type:      EventTeamCreated,
+		ActorID:   defaultParticipantIDForAgentID(meta.LeadAgentID),
 		Summary:   meta.Title,
 		CreatedAt: now,
 	})
@@ -379,9 +379,15 @@ func (s *Service) CreateTask(input CreateTaskInput) (TeamTask, error) {
 	if strings.TrimSpace(input.Title) == "" {
 		return TeamTask{}, fmt.Errorf("title is required")
 	}
+	input.CreatedBy = normalizeTeamActorID(meta, input.CreatedBy)
 	if strings.TrimSpace(input.CreatedBy) == "" {
 		return TeamTask{}, fmt.Errorf("created_by is required")
 	}
+	createdBy, err := requireCanonicalParticipantID("created_by", input.CreatedBy)
+	if err != nil {
+		return TeamTask{}, err
+	}
+	input.CreatedBy = createdBy
 	if err := s.validateParentLocked(input.TeamID, input.ParentID, nil); err != nil {
 		return TeamTask{}, err
 	}
@@ -396,7 +402,7 @@ func (s *Service) CreateTask(input CreateTaskInput) (TeamTask, error) {
 	s.tasksForTeamLocked(meta.ID)[task.ID] = task
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, task),
-		Type:      "task.created",
+		Type:      EventTaskCreated,
 		ActorID:   task.CreatedBy,
 		TaskID:    task.ID,
 		TargetID:  task.AssignedTo,
@@ -419,9 +425,15 @@ func (s *Service) CreateTasks(input CreateTaskBatchInput) (CreateTasksResult, er
 	}
 	before := s.captureTeamStateLocked(meta.ID)
 	eventStart := len(s.events[meta.ID])
+	input.CreatedBy = normalizeTeamActorID(meta, input.CreatedBy)
 	if strings.TrimSpace(input.CreatedBy) == "" {
 		return CreateTasksResult{}, fmt.Errorf("created_by is required")
 	}
+	createdBy, err := requireCanonicalParticipantID("created_by", input.CreatedBy)
+	if err != nil {
+		return CreateTasksResult{}, err
+	}
+	input.CreatedBy = createdBy
 	if len(input.Tasks) == 0 {
 		return CreateTasksResult{}, fmt.Errorf("tasks are required")
 	}
@@ -498,7 +510,7 @@ func (s *Service) CreateTasks(input CreateTaskBatchInput) (CreateTasksResult, er
 		s.tasksForTeamLocked(meta.ID)[task.ID] = task
 		s.appendEventLocked(meta.ID, TeamEvent{
 			RoomID:    EventRoomID(meta, task),
-			Type:      "task.created",
+			Type:      EventTaskCreated,
 			ActorID:   task.CreatedBy,
 			TaskID:    task.ID,
 			TargetID:  task.AssignedTo,
@@ -539,9 +551,9 @@ func (s *Service) PlanTask(input PlanTaskInput) (PlanTaskResult, error) {
 		return out, nil
 	}
 
-	actorID := strings.TrimSpace(input.ActorID)
-	if actorID == "" {
-		actorID = "web"
+	actorID, err := requireCanonicalParticipantID("actor_id", normalizeTeamActorID(meta, input.ActorID))
+	if err != nil {
+		return PlanTaskResult{}, err
 	}
 	if len(input.Tasks) == 0 {
 		return PlanTaskResult{}, fmt.Errorf("plan tasks are required")
@@ -612,7 +624,7 @@ func (s *Service) PlanTask(input PlanTaskInput) (PlanTaskResult, error) {
 		result.Tasks = append(result.Tasks, cloneTask(*child))
 		s.appendEventLocked(meta.ID, TeamEvent{
 			RoomID:    EventRoomID(meta, child),
-			Type:      "task.created",
+			Type:      EventTaskCreated,
 			ActorID:   child.CreatedBy,
 			TaskID:    child.ID,
 			TargetID:  child.AssignedTo,
@@ -626,7 +638,7 @@ func (s *Service) PlanTask(input PlanTaskInput) (PlanTaskResult, error) {
 	result.Parent = cloneTask(*task)
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, task),
-		Type:      "task.planned",
+		Type:      EventTaskPlanned,
 		ActorID:   actorID,
 		TaskID:    task.ID,
 		Summary:   task.PlanSummary,
@@ -660,9 +672,9 @@ func (s *Service) BindTaskExecutionRoom(input BindTaskExecutionRoomInput) (TeamT
 		return cloneTask(*task), nil
 	}
 
-	actorID := strings.TrimSpace(input.ActorID)
-	if actorID == "" {
-		actorID = "web"
+	actorID, err := requireCanonicalParticipantID("actor_id", normalizeTeamActorID(meta, input.ActorID))
+	if err != nil {
+		return TeamTask{}, err
 	}
 	before := s.captureTeamStateLocked(meta.ID)
 	eventStart := len(s.events[meta.ID])
@@ -670,7 +682,7 @@ func (s *Service) BindTaskExecutionRoom(input BindTaskExecutionRoomInput) (TeamT
 	s.bindTaskExecutionRoomLocked(meta, task, roomID, now)
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    meta.RoomID,
-		Type:      "task.execution_room",
+		Type:      EventTaskExecutionRoom,
 		ActorID:   actorID,
 		TaskID:    task.ID,
 		TargetID:  roomID,
@@ -703,9 +715,9 @@ func (s *Service) StartTask(input StartTaskInput) (StartTaskResult, error) {
 		return StartTaskResult{}, ErrTaskNoSubtasks
 	}
 
-	actorID := strings.TrimSpace(input.ActorID)
-	if actorID == "" {
-		actorID = "web"
+	actorID, err := requireCanonicalParticipantID("actor_id", normalizeTeamActorID(meta, input.ActorID))
+	if err != nil {
+		return StartTaskResult{}, err
 	}
 
 	before := s.captureTeamStateLocked(meta.ID)
@@ -722,7 +734,7 @@ func (s *Service) StartTask(input StartTaskInput) (StartTaskResult, error) {
 		s.bindTaskExecutionRoomLocked(meta, task, taskRoomID, now)
 		s.appendEventLocked(meta.ID, TeamEvent{
 			RoomID:    meta.RoomID,
-			Type:      "task.execution_room",
+			Type:      EventTaskExecutionRoom,
 			ActorID:   actorID,
 			TaskID:    task.ID,
 			TargetID:  taskRoomID,
@@ -731,7 +743,7 @@ func (s *Service) StartTask(input StartTaskInput) (StartTaskResult, error) {
 		})
 	}
 
-	scheduledCount = s.dispatchReadyChildrenLocked(meta, task.ID, meta.LeadBotID, now)
+	scheduledCount = s.dispatchReadyChildrenLocked(meta, task.ID, defaultParticipantIDForAgentID(meta.LeadAgentID), now)
 
 	task.Status = TaskStatusAssigned
 	task.Result = ""
@@ -740,7 +752,7 @@ func (s *Service) StartTask(input StartTaskInput) (StartTaskResult, error) {
 
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, task),
-		Type:      "task.started",
+		Type:      EventTaskStarted,
 		ActorID:   actorID,
 		TaskID:    task.ID,
 		Summary:   task.Title,
@@ -764,10 +776,10 @@ func taskAssignedToManager(assignedTo string, teamMeta TeamMeta) bool {
 	if assignedTo == "" {
 		return false
 	}
-	if leadBotID := strings.TrimSpace(teamMeta.LeadBotID); leadBotID != "" {
-		return ParticipantIDsMatch(assignedTo, leadBotID)
+	if leadParticipantID := defaultParticipantIDForAgentID(teamMeta.LeadAgentID); leadParticipantID != "" {
+		return ParticipantIDsMatch(assignedTo, leadParticipantID)
 	}
-	return assignedTo == "u-manager"
+	return false
 }
 
 func fallbackPlanAssignee(assignedTo string, teamMeta TeamMeta) string {
@@ -812,6 +824,10 @@ func (s *Service) AssignTask(input AssignTaskInput) (TeamTask, error) {
 	if err != nil {
 		return TeamTask{}, err
 	}
+	actorID, err := requireCanonicalParticipantID("actor_id", normalizeTeamActorID(meta, input.ActorID))
+	if err != nil {
+		return TeamTask{}, err
+	}
 	switch task.Status {
 	case TaskStatusPending, TaskStatusAssigned, TaskStatusBlocked, TaskStatusFailed:
 	default:
@@ -829,8 +845,8 @@ func (s *Service) AssignTask(input AssignTaskInput) (TeamTask, error) {
 	s.updatePresenceForTaskLocked(meta, task, PresenceStateIdle, "")
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, task),
-		Type:      "task.assigned",
-		ActorID:   strings.TrimSpace(input.ActorID),
+		Type:      EventTaskAssigned,
+		ActorID:   actorID,
 		TaskID:    task.ID,
 		TargetID:  task.AssignedTo,
 		Summary:   task.Title,
@@ -852,39 +868,39 @@ func (s *Service) ClaimTask(input ClaimTaskInput) (TeamTask, error) {
 	}
 	before := s.captureTeamStateLocked(meta.ID)
 	eventStart := len(s.events[meta.ID])
-	botID, err := requireCanonicalParticipantID("bot_id", input.BotID)
+	participantID, err := requireCanonicalParticipantID("participant_id", input.ParticipantID)
 	if err != nil {
 		return TeamTask{}, err
 	}
-	if err := s.claimableLocked(meta, task, botID); err != nil {
+	if err := s.claimableLocked(meta, task, participantID); err != nil {
 		return TeamTask{}, err
 	}
-	s.claimLocked(meta, task, botID)
+	s.claimLocked(meta, task, participantID)
 	if err := s.persistMutationLocked(meta.ID, before, eventStart); err != nil {
 		return TeamTask{}, err
 	}
 	return cloneTask(*task), nil
 }
 
-func (s *Service) ClaimNext(teamID string, botID string) (TeamTask, error) {
+func (s *Service) ClaimNext(teamID string, participantID string) (TeamTask, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	botID, err := requireCanonicalParticipantID("bot_id", botID)
+	participantID, err := requireCanonicalParticipantID("participant_id", participantID)
 	if err != nil {
 		return TeamTask{}, err
 	}
-	if botID == "" {
-		return TeamTask{}, fmt.Errorf("bot_id is required")
+	if participantID == "" {
+		return TeamTask{}, fmt.Errorf("participant_id is required")
 	}
 	if strings.TrimSpace(teamID) == "" {
-		return s.claimNextAcrossTeamsLocked(botID)
+		return s.claimNextAcrossTeamsLocked(participantID)
 	}
-	return s.claimNextForTeamLocked(strings.TrimSpace(teamID), botID)
+	return s.claimNextForTeamLocked(strings.TrimSpace(teamID), participantID)
 }
 
-func (s *Service) claimNextAcrossTeamsLocked(botID string) (TeamTask, error) {
-	if err := s.ensureWorkerFreeGloballyLocked(botID); err != nil {
+func (s *Service) claimNextAcrossTeamsLocked(participantID string) (TeamTask, error) {
+	if err := s.ensureWorkerFreeGloballyLocked(participantID); err != nil {
 		return TeamTask{}, err
 	}
 
@@ -897,14 +913,14 @@ func (s *Service) claimNextAcrossTeamsLocked(botID string) (TeamTask, error) {
 		if meta.Status != TeamStatusActive {
 			continue
 		}
-		task := s.bestClaimCandidateLocked(meta.ID, botID)
+		task := s.bestClaimCandidateLocked(meta.ID, participantID)
 		if task == nil {
 			continue
 		}
 		candidates = append(candidates, teamCandidate{meta: meta, task: task})
 	}
 	if len(candidates) == 0 {
-		return TeamTask{}, fmt.Errorf("%w: no task available for %s", ErrTaskNotClaimable, botID)
+		return TeamTask{}, fmt.Errorf("%w: no task available for %s", ErrTaskNotClaimable, participantID)
 	}
 
 	sort.SliceStable(candidates, func(i, j int) bool {
@@ -927,37 +943,37 @@ func (s *Service) claimNextAcrossTeamsLocked(botID string) (TeamTask, error) {
 	meta := candidates[0].meta
 	before := s.captureTeamStateLocked(meta.ID)
 	eventStart := len(s.events[meta.ID])
-	s.claimLocked(meta, candidates[0].task, botID)
+	s.claimLocked(meta, candidates[0].task, participantID)
 	if err := s.persistMutationLocked(meta.ID, before, eventStart); err != nil {
 		return TeamTask{}, err
 	}
 	return cloneTask(*candidates[0].task), nil
 }
 
-func (s *Service) claimNextForTeamLocked(teamID string, botID string) (TeamTask, error) {
+func (s *Service) claimNextForTeamLocked(teamID string, participantID string) (TeamTask, error) {
 	meta, err := s.requireTeamLocked(teamID)
 	if err != nil {
 		return TeamTask{}, err
 	}
 	before := s.captureTeamStateLocked(meta.ID)
 	eventStart := len(s.events[meta.ID])
-	if err := s.ensureWorkerFreeLocked(teamID, botID); err != nil {
+	if err := s.ensureWorkerFreeLocked(teamID, participantID); err != nil {
 		return TeamTask{}, err
 	}
 
-	task := s.bestClaimCandidateLocked(teamID, botID)
+	task := s.bestClaimCandidateLocked(teamID, participantID)
 	if task == nil {
-		return TeamTask{}, fmt.Errorf("%w: no task available for %s", ErrTaskNotClaimable, botID)
+		return TeamTask{}, fmt.Errorf("%w: no task available for %s", ErrTaskNotClaimable, participantID)
 	}
 
-	s.claimLocked(meta, task, botID)
+	s.claimLocked(meta, task, participantID)
 	if err := s.persistMutationLocked(meta.ID, before, eventStart); err != nil {
 		return TeamTask{}, err
 	}
 	return cloneTask(*task), nil
 }
 
-func (s *Service) bestClaimCandidateLocked(teamID string, botID string) *TeamTask {
+func (s *Service) bestClaimCandidateLocked(teamID string, participantID string) *TeamTask {
 	candidates := make([]*TeamTask, 0)
 	for _, task := range s.tasksForTeamLocked(teamID) {
 		if task.Status != TaskStatusPending && task.Status != TaskStatusAssigned {
@@ -966,7 +982,7 @@ func (s *Service) bestClaimCandidateLocked(teamID string, botID string) *TeamTas
 		if strings.TrimSpace(task.ParentID) != "" && task.DispatchedAt == nil {
 			continue
 		}
-		if strings.TrimSpace(task.AssignedTo) != "" && !ParticipantIDsMatch(task.AssignedTo, botID) {
+		if strings.TrimSpace(task.AssignedTo) != "" && !ParticipantIDsMatch(task.AssignedTo, participantID) {
 			continue
 		}
 		if !s.dependenciesCompletedLocked(teamID, task.DependsOn) {
@@ -989,9 +1005,9 @@ func (s *Service) bestClaimCandidateLocked(teamID string, botID string) *TeamTas
 	return candidates[0]
 }
 
-func (s *Service) ensureWorkerFreeGloballyLocked(botID string) error {
+func (s *Service) ensureWorkerFreeGloballyLocked(participantID string) error {
 	for teamID := range s.teams {
-		if err := s.ensureWorkerFreeLocked(teamID, botID); err != nil {
+		if err := s.ensureWorkerFreeLocked(teamID, participantID); err != nil {
 			return err
 		}
 	}
@@ -1040,6 +1056,7 @@ func (s *Service) CompleteTask(input CompleteTaskInput) (TeamTask, error) {
 	if err := s.requireTaskOperatorLocked(meta, task, input.ActorID); err != nil {
 		return TeamTask{}, err
 	}
+	actorID := cleanParticipantID(input.ActorID)
 	now := s.now()
 	task.Status = TaskStatusCompleted
 	task.Result = strings.TrimSpace(input.Result)
@@ -1049,15 +1066,15 @@ func (s *Service) CompleteTask(input CompleteTaskInput) (TeamTask, error) {
 	s.updatePresenceForTaskLocked(meta, task, PresenceStateIdle, "")
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, task),
-		Type:      "task.completed",
-		ActorID:   strings.TrimSpace(input.ActorID),
+		Type:      EventTaskCompleted,
+		ActorID:   actorID,
 		TaskID:    task.ID,
 		Summary:   task.Result,
 		CreatedAt: now,
 	})
 	if strings.TrimSpace(task.ParentID) != "" {
-		s.dispatchReadyChildrenLocked(meta, task.ParentID, meta.LeadBotID, now)
-		s.maybeCompleteParentIfAllChildrenDoneLocked(meta, task.ParentID, strings.TrimSpace(input.ActorID), now)
+		s.dispatchReadyChildrenLocked(meta, task.ParentID, defaultParticipantIDForAgentID(meta.LeadAgentID), now)
+		s.maybeCompleteParentIfAllChildrenDoneLocked(meta, task.ParentID, actorID, now)
 	}
 	if err := s.persistMutationLocked(meta.ID, before, eventStart); err != nil {
 		return TeamTask{}, err
@@ -1084,6 +1101,7 @@ func (s *Service) FailTask(input FailTaskInput) (TeamTask, error) {
 	if err := s.requireTaskOperatorLocked(meta, task, input.ActorID); err != nil {
 		return TeamTask{}, err
 	}
+	actorID := cleanParticipantID(input.ActorID)
 	now := s.now()
 	task.Status = TaskStatusFailed
 	task.Error = strings.TrimSpace(input.Error)
@@ -1093,8 +1111,8 @@ func (s *Service) FailTask(input FailTaskInput) (TeamTask, error) {
 	s.updatePresenceForTaskLocked(meta, task, PresenceStateIdle, "")
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, task),
-		Type:      "task.failed",
-		ActorID:   strings.TrimSpace(input.ActorID),
+		Type:      EventTaskFailed,
+		ActorID:   actorID,
 		TaskID:    task.ID,
 		Summary:   task.Error,
 		CreatedAt: now,
@@ -1120,6 +1138,10 @@ func (s *Service) CancelTask(input CancelTaskInput) (TeamTask, error) {
 	default:
 		return TeamTask{}, fmt.Errorf("%w: cannot cancel task in status %s", ErrTaskTransitionInvalid, task.Status)
 	}
+	actorID, err := requireCanonicalParticipantID("actor_id", normalizeTeamActorID(meta, input.ActorID))
+	if err != nil {
+		return TeamTask{}, err
+	}
 	now := s.now()
 	task.Status = TaskStatusCancelled
 	if strings.TrimSpace(input.Reason) != "" {
@@ -1131,8 +1153,8 @@ func (s *Service) CancelTask(input CancelTaskInput) (TeamTask, error) {
 	s.updatePresenceForTaskLocked(meta, task, PresenceStateIdle, "")
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, task),
-		Type:      "task.cancelled",
-		ActorID:   strings.TrimSpace(input.ActorID),
+		Type:      EventTaskCancelled,
+		ActorID:   actorID,
 		TaskID:    task.ID,
 		Summary:   task.Error,
 		CreatedAt: now,
@@ -1155,6 +1177,14 @@ func (s *Service) RequestApproval(input RequestApprovalInput) (TeamApproval, err
 	eventStart := len(s.events[meta.ID])
 	if strings.TrimSpace(input.RequestedBy) == "" {
 		return TeamApproval{}, fmt.Errorf("requested_by is required")
+	}
+	requestedBy, err := requireCanonicalParticipantID("requested_by", input.RequestedBy)
+	if err != nil {
+		return TeamApproval{}, err
+	}
+	approverID, err := requireCanonicalParticipantID("approver_id", input.ApproverID)
+	if err != nil {
+		return TeamApproval{}, err
 	}
 	if strings.TrimSpace(input.Kind) == "" {
 		return TeamApproval{}, fmt.Errorf("kind is required")
@@ -1182,8 +1212,8 @@ func (s *Service) RequestApproval(input RequestApprovalInput) (TeamApproval, err
 		TeamID:      meta.ID,
 		RoomID:      approvalRoomID,
 		TaskID:      strings.TrimSpace(input.TaskID),
-		RequestedBy: strings.TrimSpace(input.RequestedBy),
-		ApproverID:  strings.TrimSpace(input.ApproverID),
+		RequestedBy: requestedBy,
+		ApproverID:  approverID,
 		Kind:        strings.TrimSpace(input.Kind),
 		Summary:     strings.TrimSpace(input.Summary),
 		Payload:     strings.TrimSpace(input.Payload),
@@ -1196,7 +1226,7 @@ func (s *Service) RequestApproval(input RequestApprovalInput) (TeamApproval, err
 	}
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    approvalRoomID,
-		Type:      "approval.requested",
+		Type:      EventApprovalRequested,
 		ActorID:   approval.RequestedBy,
 		TaskID:    approval.TaskID,
 		TargetID:  approval.ID,
@@ -1231,7 +1261,11 @@ func (s *Service) ResolveApproval(input ResolveApprovalInput) (TeamApproval, err
 
 	now := s.now()
 	approval.Status = status
-	approval.ApproverID = firstNonEmpty(strings.TrimSpace(input.ApproverID), approval.ApproverID)
+	approverID, err := requireCanonicalParticipantID("approver_id", input.ApproverID)
+	if err != nil {
+		return TeamApproval{}, err
+	}
+	approval.ApproverID = firstNonEmpty(approverID, approval.ApproverID)
 	approval.Resolution = strings.TrimSpace(input.Resolution)
 	approval.ResolvedAt = timePtr(now)
 
@@ -1266,7 +1300,7 @@ func (s *Service) ResolveApproval(input ResolveApprovalInput) (TeamApproval, err
 	}
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    approvalRoomID,
-		Type:      "approval.resolved",
+		Type:      EventApprovalResolved,
 		ActorID:   approval.ApproverID,
 		TaskID:    approval.TaskID,
 		TargetID:  approval.ID,
@@ -1364,15 +1398,15 @@ func (s *Service) FindPendingApprovalByTask(teamID string, taskID string) (TeamA
 	return cloneApproval(*latest), true
 }
 
-func (s *Service) GetPresence(teamID string, botID string) (MemberPresence, bool) {
+func (s *Service) GetPresence(teamID string, participantID string) (MemberPresence, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	botID = cleanParticipantID(botID)
-	if botID == "" {
+	participantID = cleanParticipantID(participantID)
+	if participantID == "" {
 		return MemberPresence{}, false
 	}
-	p, ok := s.presenceForTeamLocked(teamID)[botID]
+	p, ok := s.presenceForTeamLocked(teamID)[participantID]
 	if !ok {
 		return MemberPresence{}, false
 	}
@@ -1396,17 +1430,17 @@ func (s *Service) UpsertPresence(input UpsertPresenceInput) (MemberPresence, err
 	if err != nil {
 		return MemberPresence{}, err
 	}
-	botID, err := requireCanonicalParticipantID("bot_id", input.BotID)
+	participantID, err := requireCanonicalParticipantID("participant_id", input.ParticipantID)
 	if err != nil {
 		return MemberPresence{}, err
 	}
-	if botID == "" {
-		return MemberPresence{}, fmt.Errorf("bot_id is required")
+	if participantID == "" {
+		return MemberPresence{}, fmt.Errorf("participant_id is required")
 	}
 
 	before := s.captureTeamStateLocked(meta.ID)
 	eventStart := len(s.events[meta.ID])
-	previous, existed := s.presenceForTeamLocked(meta.ID)[botID]
+	previous, existed := s.presenceForTeamLocked(meta.ID)[participantID]
 	previousSnapshot := MemberPresence{}
 	if existed && previous != nil {
 		previousSnapshot = clonePresence(*previous)
@@ -1416,7 +1450,7 @@ func (s *Service) UpsertPresence(input UpsertPresenceInput) (MemberPresence, err
 	role := strings.TrimSpace(input.Role)
 	if role == "" {
 		role = "worker"
-		if ParticipantIDsMatch(botID, meta.LeadBotID) {
+		if ParticipantIDsMatch(participantID, defaultParticipantIDForAgentID(meta.LeadAgentID)) {
 			role = "manager"
 		}
 	}
@@ -1428,10 +1462,10 @@ func (s *Service) UpsertPresence(input UpsertPresenceInput) (MemberPresence, err
 	p := previous
 	if p == nil {
 		p = &MemberPresence{
-			TeamID: meta.ID,
-			BotID:  botID,
+			TeamID:        meta.ID,
+			ParticipantID: participantID,
 		}
-		s.presenceForTeamLocked(meta.ID)[botID] = p
+		s.presenceForTeamLocked(meta.ID)[participantID] = p
 	}
 	p.UserID = strings.TrimSpace(input.UserID)
 	p.AgentID = strings.TrimSpace(input.AgentID)
@@ -1441,7 +1475,7 @@ func (s *Service) UpsertPresence(input UpsertPresenceInput) (MemberPresence, err
 	p.Summary = strings.TrimSpace(input.Summary)
 	p.LastHeartbeatAt = now
 	p.UpdatedAt = now
-	s.markPresenceDirtyLocked(meta.ID, botID)
+	s.markPresenceDirtyLocked(meta.ID, participantID)
 
 	if !presenceMeaningfullyChanged(previousSnapshot, *p) {
 		return clonePresence(*p), nil
@@ -1449,8 +1483,8 @@ func (s *Service) UpsertPresence(input UpsertPresenceInput) (MemberPresence, err
 
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    meta.RoomID,
-		Type:      "presence.updated",
-		ActorID:   botID,
+		Type:      EventPresenceUpdated,
+		ActorID:   participantID,
 		TaskID:    p.CurrentTaskID,
 		Summary:   p.State,
 		CreatedAt: now,
@@ -1497,6 +1531,7 @@ func (s *Service) blockTask(input UpdateTaskStatusInput) (TeamTask, error) {
 	if err := s.requireTaskOperatorLocked(meta, task, input.ActorID); err != nil {
 		return TeamTask{}, err
 	}
+	actorID := cleanParticipantID(input.ActorID)
 	if strings.TrimSpace(input.Reason) == "" {
 		return TeamTask{}, fmt.Errorf("reason is required")
 	}
@@ -1509,8 +1544,8 @@ func (s *Service) blockTask(input UpdateTaskStatusInput) (TeamTask, error) {
 	s.updatePresenceForTaskLocked(meta, task, PresenceStateBlocked, task.Error)
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, task),
-		Type:      "task.blocked",
-		ActorID:   strings.TrimSpace(input.ActorID),
+		Type:      EventTaskBlocked,
+		ActorID:   actorID,
 		TaskID:    task.ID,
 		Summary:   task.Error,
 		CreatedAt: now,
@@ -1521,10 +1556,10 @@ func (s *Service) blockTask(input UpdateTaskStatusInput) (TeamTask, error) {
 	return cloneTask(*task), nil
 }
 
-func (s *Service) claimableLocked(meta TeamMeta, task *TeamTask, botID string) error {
-	botID = cleanParticipantID(botID)
-	if botID == "" {
-		return fmt.Errorf("bot_id is required")
+func (s *Service) claimableLocked(meta TeamMeta, task *TeamTask, participantID string) error {
+	participantID = cleanParticipantID(participantID)
+	if participantID == "" {
+		return fmt.Errorf("participant_id is required")
 	}
 	if meta.Status != TeamStatusActive {
 		return fmt.Errorf("team %q is not active", meta.ID)
@@ -1537,13 +1572,13 @@ func (s *Service) claimableLocked(meta TeamMeta, task *TeamTask, botID string) e
 	if strings.TrimSpace(task.ParentID) != "" && task.DispatchedAt == nil {
 		return fmt.Errorf("%w: task %s has not been dispatched", ErrTaskNotClaimable, task.ID)
 	}
-	if task.AssignedTo != "" && !ParticipantIDsMatch(task.AssignedTo, botID) {
+	if task.AssignedTo != "" && !ParticipantIDsMatch(task.AssignedTo, participantID) {
 		return fmt.Errorf("%w: task %s is assigned to %s", ErrTaskNotClaimable, task.ID, task.AssignedTo)
 	}
 	if !s.dependenciesCompletedLocked(meta.ID, task.DependsOn) {
 		return fmt.Errorf("%w: task %s", ErrTaskDependenciesOpen, task.ID)
 	}
-	if err := s.ensureWorkerFreeLocked(meta.ID, botID); err != nil {
+	if err := s.ensureWorkerFreeLocked(meta.ID, participantID); err != nil {
 		return err
 	}
 	return nil
@@ -1579,7 +1614,7 @@ func (s *Service) maybeCompleteParentIfAllChildrenDoneLocked(meta TeamMeta, pare
 	s.updatePresenceForTaskLocked(meta, parent, PresenceStateIdle, "")
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, parent),
-		Type:      "task.completed",
+		Type:      EventTaskCompleted,
 		ActorID:   actorID,
 		TaskID:    parent.ID,
 		Summary:   parent.Result,
@@ -1665,8 +1700,8 @@ func (s *Service) dispatchReadyChildrenLocked(meta TeamMeta, parentID string, ac
 		child.UpdatedAt = now
 		s.appendEventLocked(meta.ID, TeamEvent{
 			RoomID:    EventRoomID(meta, child),
-			Type:      "task.dispatched",
-			ActorID:   firstNonEmpty(strings.TrimSpace(actorID), meta.LeadBotID),
+			Type:      EventTaskDispatched,
+			ActorID:   firstNonEmpty(strings.TrimSpace(actorID), defaultParticipantIDForAgentID(meta.LeadAgentID)),
 			TaskID:    child.ID,
 			TargetID:  assignee,
 			Summary:   child.Title,
@@ -1702,17 +1737,17 @@ func (s *Service) aggregateChildResultsLocked(teamID string, parentID string) st
 	return strings.Join(lines, "\n")
 }
 
-func (s *Service) claimLocked(meta TeamMeta, task *TeamTask, botID string) {
-	botID = cleanParticipantID(botID)
+func (s *Service) claimLocked(meta TeamMeta, task *TeamTask, participantID string) {
+	participantID = cleanParticipantID(participantID)
 	now := s.now()
 	task.Status = TaskStatusInProgress
-	task.ClaimedBy = botID
+	task.ClaimedBy = participantID
 	task.UpdatedAt = now
-	s.updatePresenceLocked(meta, botID, PresenceStateBusy, task.ID, "")
+	s.updatePresenceLocked(meta, participantID, PresenceStateBusy, task.ID, "")
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, task),
-		Type:      "task.claimed",
-		ActorID:   botID,
+		Type:      EventTaskClaimed,
+		ActorID:   participantID,
 		TaskID:    task.ID,
 		Summary:   task.Title,
 		CreatedAt: now,
@@ -1755,11 +1790,15 @@ func (s *Service) requireApprovalLocked(teamID string, approvalID string) (*Team
 }
 
 func (s *Service) requireTaskOperatorLocked(meta TeamMeta, task *TeamTask, actorID string) error {
-	actorID = strings.TrimSpace(actorID)
+	var err error
+	actorID, err = requireCanonicalParticipantID("actor_id", actorID)
+	if err != nil {
+		return err
+	}
 	if actorID == "" {
 		return fmt.Errorf("actor_id is required")
 	}
-	if ParticipantIDsMatch(actorID, meta.LeadBotID) || ParticipantIDsMatch(actorID, task.ClaimedBy) {
+	if ParticipantIDsMatch(actorID, defaultParticipantIDForAgentID(meta.LeadAgentID)) || ParticipantIDsMatch(actorID, task.ClaimedBy) {
 		return nil
 	}
 	return fmt.Errorf("actor %q cannot operate task %s", actorID, task.ID)
@@ -1821,11 +1860,11 @@ func (s *Service) dependenciesCompletedLocked(teamID string, dependsOn []string)
 	return true
 }
 
-func (s *Service) ensureWorkerFreeLocked(teamID string, botID string) error {
-	botID = cleanParticipantID(botID)
+func (s *Service) ensureWorkerFreeLocked(teamID string, participantID string) error {
+	participantID = cleanParticipantID(participantID)
 	for _, task := range s.tasksForTeamLocked(teamID) {
-		if task.Status == TaskStatusInProgress && ParticipantIDsMatch(task.ClaimedBy, botID) {
-			return fmt.Errorf("%w: %s", ErrWorkerAlreadyBusy, botID)
+		if task.Status == TaskStatusInProgress && ParticipantIDsMatch(task.ClaimedBy, participantID) {
+			return fmt.Errorf("%w: %s", ErrWorkerAlreadyBusy, participantID)
 		}
 	}
 	return nil
@@ -1959,8 +1998,8 @@ func (s *Service) recordProjectionFailureLocked(meta TeamMeta, events []TeamEven
 	eventStart := len(s.events[meta.ID])
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    meta.RoomID,
-		Type:      "projection.failed",
-		ActorID:   meta.LeadBotID,
+		Type:      EventProjectionFailed,
+		ActorID:   defaultParticipantIDForAgentID(meta.LeadAgentID),
 		TaskID:    firstProjectedTaskID(events),
 		TargetID:  fmt.Sprintf("%d", events[0].Seq),
 		Summary:   truncateSummary(cause.Error(), 240),
@@ -2012,7 +2051,7 @@ func (s *Service) snapshotTeamLocked(teamID string) teamSnapshot {
 	for _, p := range s.presenceForTeamLocked(teamID) {
 		presence = append(presence, clonePresence(*p))
 	}
-	sort.Slice(presence, func(i, j int) bool { return presence[i].BotID < presence[j].BotID })
+	sort.Slice(presence, func(i, j int) bool { return presence[i].ParticipantID < presence[j].ParticipantID })
 
 	return teamSnapshot{
 		Meta:      meta,
@@ -2023,12 +2062,12 @@ func (s *Service) snapshotTeamLocked(teamID string) teamSnapshot {
 	}
 }
 
-func (s *Service) markPresenceDirtyLocked(teamID string, botID string) {
-	botID = cleanParticipantID(botID)
+func (s *Service) markPresenceDirtyLocked(teamID string, participantID string) {
+	participantID = cleanParticipantID(participantID)
 	if s.dirtyPresence[teamID] == nil {
 		s.dirtyPresence[teamID] = make(map[string]struct{})
 	}
-	s.dirtyPresence[teamID][botID] = struct{}{}
+	s.dirtyPresence[teamID][participantID] = struct{}{}
 }
 
 func (s *Service) loadStoreState() error {
@@ -2058,8 +2097,8 @@ func (s *Service) loadStoreState() error {
 		presenceMap := make(map[string]*MemberPresence, len(snapshot.Presence))
 		for _, p := range snapshot.Presence {
 			pCopy := clonePresence(p)
-			pCopy.BotID = cleanParticipantID(pCopy.BotID)
-			presenceMap[pCopy.BotID] = &pCopy
+			pCopy.ParticipantID = cleanParticipantID(pCopy.ParticipantID)
+			presenceMap[pCopy.ParticipantID] = &pCopy
 		}
 		s.presence[teamID] = presenceMap
 		s.events[teamID] = cloneEvents(snapshot.Events)
@@ -2098,7 +2137,7 @@ func (s *Service) recoverStaleTasksLocked() error {
 			s.updatePresenceForTaskLocked(s.teams[teamID], task, PresenceStateBlocked, task.Error)
 			s.appendEventLocked(teamID, TeamEvent{
 				RoomID:    s.teams[teamID].RoomID,
-				Type:      "task.blocked",
+				Type:      EventTaskBlocked,
 				ActorID:   task.ClaimedBy,
 				TaskID:    task.ID,
 				Summary:   task.Error,
@@ -2123,30 +2162,30 @@ func (s *Service) updatePresenceForTaskLocked(meta TeamMeta, task *TeamTask, sta
 	s.updatePresenceLocked(meta, task.ClaimedBy, state, task.ID, summary)
 }
 
-func (s *Service) updatePresenceLocked(meta TeamMeta, botID string, state string, currentTaskID string, summary string) {
-	botID = cleanParticipantID(botID)
-	if botID == "" {
+func (s *Service) updatePresenceLocked(meta TeamMeta, participantID string, state string, currentTaskID string, summary string) {
+	participantID = cleanParticipantID(participantID)
+	if participantID == "" {
 		return
 	}
 	now := s.now()
-	p := s.presenceForTeamLocked(meta.ID)[botID]
+	p := s.presenceForTeamLocked(meta.ID)[participantID]
 	if p == nil {
 		p = &MemberPresence{
-			TeamID: meta.ID,
-			BotID:  botID,
-			Role:   "worker",
+			TeamID:        meta.ID,
+			ParticipantID: participantID,
+			Role:          "worker",
 		}
-		s.presenceForTeamLocked(meta.ID)[botID] = p
+		s.presenceForTeamLocked(meta.ID)[participantID] = p
 	}
 	p.State = state
 	p.CurrentTaskID = currentTaskID
 	p.Summary = strings.TrimSpace(summary)
 	p.LastHeartbeatAt = now
 	p.UpdatedAt = now
-	if ParticipantIDsMatch(botID, meta.LeadBotID) {
+	if ParticipantIDsMatch(participantID, defaultParticipantIDForAgentID(meta.LeadAgentID)) {
 		p.Role = "manager"
 	}
-	s.markPresenceDirtyLocked(meta.ID, botID)
+	s.markPresenceDirtyLocked(meta.ID, participantID)
 }
 
 func (s *Service) tasksForTeamLocked(teamID string) map[string]*TeamTask {
@@ -2274,7 +2313,7 @@ func cloneEvents(in []TeamEvent) []TeamEvent {
 
 func presenceMeaningfullyChanged(before, after MemberPresence) bool {
 	return before.TeamID != after.TeamID ||
-		before.BotID != after.BotID ||
+		before.ParticipantID != after.ParticipantID ||
 		before.UserID != after.UserID ||
 		before.AgentID != after.AgentID ||
 		before.Role != after.Role ||

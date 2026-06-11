@@ -252,27 +252,11 @@ export function latestThreadTimestamp(thread: ThreadView | null | undefined): nu
 
 export function formatEventMessage(
   message: IMMessage | null | undefined,
-  usersById: UsersById,
-  locale: LocaleCode,
+  _usersById: UsersById,
+  _locale: LocaleCode,
 ): string {
   if (!message) {
     return "";
-  }
-  if (message.event?.key === "room_created") {
-    const actor = userDisplayName(message.event.actor_id || message.sender_id, usersById);
-    const title = message.event.title || message.content || "";
-    return locale === "zh" ? `${actor} 创建了房间“${title}”` : `${actor} created the room "${title}"`;
-  }
-  if (message.event?.key === "room_members_added") {
-    const actor = userDisplayName(message.event.actor_id || message.sender_id, usersById);
-    const targets = (message.event.target_ids || mentionIDs(message.mentions) || [])
-      .map((id) => userDisplayName(id, usersById))
-      .filter(Boolean);
-    if (targets.length > 0) {
-      return locale === "zh"
-        ? `${actor} 邀请 ${targets.join("、")} 加入了房间`
-        : `${actor} invited ${targets.join(", ")} to join the room`;
-    }
   }
   return message.content || "";
 }
@@ -296,12 +280,12 @@ export function isLegacySystemEventContent(content: unknown): boolean {
   return [
     /^.+ invited .+ to join the room\.?$/,
     /^.+ invited .+ to join the channel\.?$/,
-    /^.+ created the room ".+"\.?$/,
-    /^.+ created the channel ".+"\.?$/,
+    /^.+ created the room(?: ".+")?\.?$/,
+    /^.+ created the channel(?: ".+")?\.?$/,
     /^.+ 邀请 .+ 加入了房间。?$/,
     /^.+ 邀请 .+ 加入了频道。?$/,
-    /^.+ 创建了房间“.+”。?$/,
-    /^.+ 创建了频道“.+”。?$/,
+    /^.+ 创建了房间(?:“.+”)?。?$/,
+    /^.+ 创建了频道(?:“.+”)?。?$/,
   ].some((pattern) => pattern.test(text));
 }
 

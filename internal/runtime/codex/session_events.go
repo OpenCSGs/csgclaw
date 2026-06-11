@@ -2,68 +2,12 @@ package codex
 
 import (
 	"encoding/json"
-	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	agentruntime "csgclaw/internal/runtime"
-
-	acp "github.com/coder/acp-go-sdk"
 )
-
-func eventFromSessionUpdate(runtimeID string, note acp.SessionNotification) SessionEvent {
-	base := SessionEvent{
-		RuntimeKind: agentruntime.KindCodex,
-		RuntimeID:   strings.TrimSpace(runtimeID),
-		SessionID:   strings.TrimSpace(string(note.SessionId)),
-		ReceivedAt:  time.Now().UTC(),
-		Payload:     note.Update,
-	}
-
-	switch update := note.Update; {
-	case update.AgentMessageChunk != nil:
-		base.Kind = SessionEventTextDelta
-		base.MessageID = stringValue(update.AgentMessageChunk.MessageId)
-		base.Text = textFromContentBlock(update.AgentMessageChunk.Content)
-	case update.AgentThoughtChunk != nil:
-		base.Kind = SessionEventThoughtDelta
-		base.MessageID = stringValue(update.AgentThoughtChunk.MessageId)
-		base.Text = textFromContentBlock(update.AgentThoughtChunk.Content)
-	case update.UserMessageChunk != nil:
-		base.Kind = SessionEventUserMessageDelta
-		base.MessageID = stringValue(update.UserMessageChunk.MessageId)
-		base.Text = textFromContentBlock(update.UserMessageChunk.Content)
-	case update.ToolCall != nil:
-		base.Kind = SessionEventToolCallStart
-		base.ToolCallID = strings.TrimSpace(string(update.ToolCall.ToolCallId))
-		base.ToolKind = strings.TrimSpace(string(update.ToolCall.Kind))
-		base.ToolTitle = strings.TrimSpace(update.ToolCall.Title)
-		base.ToolStatus = strings.TrimSpace(string(update.ToolCall.Status))
-		base.ToolInputSummary = summarizeToolValue(update.ToolCall.RawInput)
-		base.ToolOutputSummary = summarizeToolValue(update.ToolCall.RawOutput)
-		base.Payload = update.ToolCall
-	case update.ToolCallUpdate != nil:
-		base.Kind = SessionEventToolCallUpdate
-		base.ToolCallID = strings.TrimSpace(string(update.ToolCallUpdate.ToolCallId))
-		base.ToolTitle = stringValue(update.ToolCallUpdate.Title)
-		if update.ToolCallUpdate.Kind != nil {
-			base.ToolKind = strings.TrimSpace(string(*update.ToolCallUpdate.Kind))
-		}
-		if update.ToolCallUpdate.Status != nil {
-			base.ToolStatus = strings.TrimSpace(string(*update.ToolCallUpdate.Status))
-		}
-		base.ToolInputSummary = summarizeToolValue(update.ToolCallUpdate.RawInput)
-		base.ToolOutputSummary = summarizeToolValue(update.ToolCallUpdate.RawOutput)
-		base.Payload = update.ToolCallUpdate
-	case update.Plan != nil:
-		base.Kind = SessionEventPlanUpdate
-		base.Payload = update.Plan
-	default:
-		base.Kind = SessionEventKind("session_update")
-	}
-
-	return base
-}
 
 func permissionRequestEvent(state permissionState) SessionEvent {
 	snapshot := state.snapshot
@@ -106,15 +50,15 @@ func permissionDecisionEvent(state permissionState) SessionEvent {
 	return event
 }
 
-func promptCompletedEvent(runtimeID string, sessionID string, resp acp.PromptResponse) SessionEvent {
+func promptCompletedEvent(runtimeID string, sessionID string, resp PromptResponse) SessionEvent {
 	return SessionEvent{
 		RuntimeKind: agentruntime.KindCodex,
 		RuntimeID:   strings.TrimSpace(runtimeID),
 		SessionID:   strings.TrimSpace(sessionID),
 		Kind:        SessionEventPromptCompleted,
 		ReceivedAt:  time.Now().UTC(),
-		MessageID:   stringValue(resp.UserMessageId),
-		StopReason:  strings.TrimSpace(string(resp.StopReason)),
+		MessageID:   strings.TrimSpace(resp.MessageID),
+		StopReason:  strings.TrimSpace(resp.StopReason),
 		Payload:     resp,
 	}
 }
@@ -129,28 +73,6 @@ func promptFailedEvent(runtimeID string, sessionID string, err error) SessionEve
 		Error:       errorString(err),
 		Payload:     err,
 	}
-}
-
-func textFromContentBlock(block acp.ContentBlock) string {
-	if block.Text != nil {
-		return block.Text.Text
-	}
-	if block.ResourceLink != nil {
-		return strings.TrimSpace(block.ResourceLink.Name) + " " + strings.TrimSpace(block.ResourceLink.Uri)
-	}
-	if block.Resource != nil {
-		if block.Resource.Resource.TextResourceContents != nil {
-			return block.Resource.Resource.TextResourceContents.Text
-		}
-	}
-	return ""
-}
-
-func permissionToolKind(tool acp.ToolCallUpdate) string {
-	if tool.Kind == nil {
-		return ""
-	}
-	return strings.TrimSpace(string(*tool.Kind))
 }
 
 func summarizeToolValue(value any) string {
@@ -183,6 +105,8 @@ func redactToolValue(value any) any {
 			out = append(out, redactToolValue(item))
 		}
 		return out
+	case string:
+		return redactSecretishText(typed)
 	default:
 		return value
 	}
@@ -205,16 +129,35 @@ func truncateSummary(value string, limit int) string {
 	return strings.TrimSpace(value[:limit]) + "..."
 }
 
-func stringValue(v *string) string {
-	if v == nil {
-		return ""
+func redactSecretishText(value string) string {
+	value = redactBearerTokenText(value)
+	lines := strings.Split(value, "\n")
+	for i, line := range lines {
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "token=") ||
+			strings.Contains(lower, "token:") ||
+			strings.Contains(lower, "api_key=") ||
+			strings.Contains(lower, "api_key:") ||
+			strings.Contains(lower, "apikey=") ||
+			strings.Contains(lower, "apikey:") ||
+			strings.Contains(lower, "authorization: bearer ") {
+			lines[i] = redactSecretishLine(line)
+		}
 	}
-	return strings.TrimSpace(*v)
+	return strings.Join(lines, "\n")
 }
 
 func errorString(err error) string {
 	if err == nil {
 		return ""
 	}
-	return strings.TrimSpace(fmt.Sprintf("%v", err))
+	return strings.TrimSpace(err.Error())
+}
+
+var bearerTokenPattern = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._\-]+`)
+var apiKeyLikePattern = regexp.MustCompile(`\bsk-[A-Za-z0-9._\-]+\b`)
+
+func redactBearerTokenText(value string) string {
+	value = bearerTokenPattern.ReplaceAllString(value, "Bearer [redacted]")
+	return apiKeyLikePattern.ReplaceAllString(value, "[redacted]")
 }

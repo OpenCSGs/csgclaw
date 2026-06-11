@@ -10,8 +10,10 @@ import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/
 
 export type CreateTeamPayload = {
   channel?: string;
-  lead_bot_id: string;
-  member_bot_ids?: string[];
+  lead_agent_id?: string;
+  lead_participant_id?: string;
+  member_agent_ids?: string[];
+  member_participant_ids?: string[];
   room_id?: string;
   title?: string;
 };
@@ -68,14 +70,26 @@ export type StartWorkspaceTaskResponse = {
 };
 
 export async function createTeamRequest(payload: CreateTeamPayload): Promise<WorkspaceTeam> {
+  const request: Record<string, unknown> = {
+    channel: payload.channel || "csgclaw",
+    room_id: payload.room_id,
+    title: payload.title,
+  };
+  if (payload.lead_agent_id !== undefined) {
+    request.lead_agent_id = payload.lead_agent_id;
+  }
+  if (payload.lead_participant_id !== undefined) {
+    request.lead_participant_id = payload.lead_participant_id;
+  }
+  if (payload.member_agent_ids !== undefined) {
+    request.member_agent_ids = payload.member_agent_ids;
+  }
+  if (payload.member_participant_ids !== undefined) {
+    request.member_participant_ids = payload.member_participant_ids;
+  }
+
   const team = normalizeTeam(
-    await post<unknown>("/api/v1/teams", {
-      channel: payload.channel || "csgclaw",
-      lead_bot_id: payload.lead_bot_id,
-      member_bot_ids: payload.member_bot_ids ?? [],
-      room_id: payload.room_id,
-      title: payload.title,
-    }),
+    await post<unknown>("/api/v1/teams", request),
   );
   if (!team) {
     throw new Error("Invalid team response");
@@ -85,7 +99,7 @@ export async function createTeamRequest(payload: CreateTeamPayload): Promise<Wor
 
 export async function createWorkspaceTask(payload: CreateWorkspaceTaskPayload): Promise<WorkspaceTask> {
   const response = await post<unknown>(`/api/v1/teams/${encodeURIComponent(payload.team_id)}/tasks/batch`, {
-    created_by: payload.created_by || "web",
+    created_by: payload.created_by || undefined,
     tasks: [
       {
         assign_to: payload.assign_to || undefined,
@@ -106,7 +120,7 @@ export async function planWorkspaceTask(payload: PlanWorkspaceTaskPayload): Prom
   const response = await post<unknown>(
     `/api/v1/teams/${encodeURIComponent(payload.team_id)}/tasks/${encodeURIComponent(payload.task_id)}/plan`,
     {
-      actor_id: payload.actor_id || "web",
+      actor_id: payload.actor_id || undefined,
       auto_start: Boolean(payload.auto_start),
     },
   );
@@ -128,7 +142,7 @@ export async function startWorkspaceTask(payload: StartWorkspaceTaskPayload): Pr
   const response = await post<unknown>(
     `/api/v1/teams/${encodeURIComponent(payload.team_id)}/tasks/${encodeURIComponent(payload.task_id)}/start`,
     {
-      actor_id: payload.actor_id || "web",
+      actor_id: payload.actor_id || undefined,
     },
   );
   const parsed = response as Record<string, unknown>;

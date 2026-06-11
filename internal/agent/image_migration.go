@@ -4,24 +4,27 @@ import (
 	"context"
 	"strconv"
 	"strings"
+
+	"csgclaw/internal/hub"
 )
 
 func (s *Service) withRuntimeImageMigrationStatus(ctx context.Context, a Agent) Agent {
-	return s.withRuntimeImageMigrationStatusFromCandidates(ctx, a, s.localImageCandidates(ctx))
-}
-
-func (s *Service) withRuntimeImageMigrationStatusFromCandidates(ctx context.Context, a Agent, localImages []string) Agent {
 	a = *cloneAgent(&a)
-	if _, ok := s.imageUpgradeCandidateFromCandidates(ctx, a, localImages); !ok {
+	if _, ok := s.imageUpgradeCandidate(ctx, a); !ok {
 		return a
 	}
 	a.AgentProfile.ImageUpgradeRequired = true
 	return a
 }
 
+type defaultAgentImage struct {
+	image   string
+	version string
+}
+
 func (s *Service) imageForRecreate(ctx context.Context, a Agent) string {
 	current := strings.TrimSpace(a.Image)
-	if latestImage, ok := s.imageUpgradeCandidateFromCandidates(ctx, a, s.localImageCandidates(ctx)); ok {
+	if latestImage, ok := s.imageUpgradeCandidate(ctx, a); ok {
 		return latestImage
 	}
 	if isGatewayRuntimeKind(strings.TrimSpace(a.RuntimeKind)) && current == "" {
@@ -34,23 +37,21 @@ func (s *Service) imageForRecreate(ctx context.Context, a Agent) string {
 }
 
 func (s *Service) imageForUpgrade(ctx context.Context, a Agent) (string, bool) {
-	if image, ok := s.imageUpgradeCandidateFromCandidates(ctx, a, s.localImageCandidates(ctx)); ok {
-		return image, true
-	}
-	image, ok := s.currentDefaultImageForAgent(ctx, a)
-	if isDevImageTag(dockerImageTag(image)) {
+	candidate, ok := s.currentDefaultImageForAgent(ctx, a)
+	image := strings.TrimSpace(candidate.image)
+	if !ok || image == "" || isDevImageTag(dockerImageTag(image)) {
 		return "", false
 	}
-	return strings.TrimSpace(image), ok && strings.TrimSpace(image) != ""
+	return image, true
 }
 
-func (s *Service) imageUpgradeCandidateFromCandidates(ctx context.Context, a Agent, localImages []string) (string, bool) {
-	if image, ok := latestNewerLocalImageForReference(a.Image, localImages); ok {
-		return image, true
+func (s *Service) imageUpgradeCandidate(ctx context.Context, a Agent) (string, bool) {
+	candidate, ok := s.currentDefaultImageForAgent(ctx, a)
+	if !ok {
+		return "", false
 	}
-	latestImage, ok := s.currentDefaultImageForAgent(ctx, a)
-	if ok && imageNeedsDefaultRecreate(a.Image, latestImage) {
-		return latestImage, true
+	if imageNeedsTemplateVersionUpgrade(a.Image, candidate) {
+		return strings.TrimSpace(candidate.image), true
 	}
 	return "", false
 }
@@ -76,43 +77,115 @@ func (s *Service) localImageCandidates(ctx context.Context) []string {
 	return images
 }
 
-func (s *Service) currentDefaultImageForAgent(ctx context.Context, a Agent) (string, bool) {
+func (s *Service) currentDefaultImageForAgent(ctx context.Context, a Agent) (defaultAgentImage, bool) {
 	if s == nil || !isGatewayRuntimeKind(strings.TrimSpace(a.RuntimeKind)) {
-		return "", false
+		return defaultAgentImage{}, false
 	}
 	role := normalizeRole(a.Role)
 	if isManagerAgent(a) {
 		role = RoleManager
 	}
 	if role != RoleManager && role != RoleWorker {
-		return "", false
+		return defaultAgentImage{}, false
+	}
+
+	if role == RoleManager {
+		return s.defaultManagerImageForRuntime(ctx, a.RuntimeKind)
 	}
 
 	s.mu.RLock()
 	hubSvc := s.hub
-	managerTemplate := strings.TrimSpace(s.defaultManagerTemplate)
 	workerTemplate := strings.TrimSpace(s.defaultWorkerTemplate)
-	managerImage := strings.TrimSpace(s.managerImage)
-	gatewayRuntime := s.gatewayRuntimeKind()
 	s.mu.RUnlock()
 
-	templateRef := workerTemplate
-	if role == RoleManager {
-		templateRef = managerTemplate
-	}
-	if templateRef != "" && hubSvc != nil {
-		item, err := hubSvc.Get(ctx, templateRef)
+	if workerTemplate != "" && hubSvc != nil {
+		item, err := hubSvc.Get(ctx, workerTemplate)
 		if err == nil && defaultTemplateMatchesAgent(item.Role, item.RuntimeKind, role, a.RuntimeKind) {
 			if image := strings.TrimSpace(item.Image); image != "" {
-				return image, true
+				return defaultAgentImage{
+					image:   image,
+					version: strings.TrimSpace(item.Version),
+				}, true
 			}
 		}
 	}
 
-	if role == RoleManager && managerImage != "" && (strings.TrimSpace(a.RuntimeKind) == gatewayRuntime || imageNeedsDefaultRecreate(a.Image, managerImage)) {
-		return managerImage, true
+	return defaultAgentImage{}, false
+}
+
+func (s *Service) defaultManagerImageForRuntime(ctx context.Context, runtimeKind string) (defaultAgentImage, bool) {
+	if s == nil {
+		return defaultAgentImage{}, false
 	}
-	return "", false
+	runtimeKind = strings.TrimSpace(runtimeKind)
+
+	s.mu.RLock()
+	hubSvc := s.hub
+	managerTemplate := strings.TrimSpace(s.defaultManagerTemplate)
+	managerImage := strings.TrimSpace(s.managerImage)
+	gatewayRuntime := s.gatewayRuntimeKind()
+	s.mu.RUnlock()
+
+	if runtimeKind == "" {
+		runtimeKind = gatewayRuntime
+	}
+	if managerTemplate != "" && hubSvc != nil {
+		item, err := hubSvc.Get(ctx, managerTemplate)
+		if err == nil {
+			if candidate, ok := managerTemplateImageForRuntime(item, runtimeKind); ok {
+				return candidate, true
+			}
+		}
+	}
+	if hubSvc != nil {
+		if candidate, ok := managerTemplateImageFromList(ctx, hubSvc, runtimeKind, true); ok {
+			return candidate, true
+		}
+		if candidate, ok := managerTemplateImageFromList(ctx, hubSvc, runtimeKind, false); ok {
+			return candidate, true
+		}
+	}
+	if managerImage != "" && (runtimeKind == "" || runtimeKind == gatewayRuntime) {
+		return defaultAgentImage{image: managerImage}, true
+	}
+	return defaultAgentImage{}, false
+}
+
+func managerTemplateImageFromList(ctx context.Context, hubSvc templateService, runtimeKind string, builtinOnly bool) (defaultAgentImage, bool) {
+	if hubSvc == nil {
+		return defaultAgentImage{}, false
+	}
+	items, err := hubSvc.List(ctx)
+	if err != nil {
+		return defaultAgentImage{}, false
+	}
+	for _, item := range items {
+		if builtinOnly && strings.TrimSpace(item.Source.Kind) != hub.RegistryKindBuiltin {
+			continue
+		}
+		if candidate, ok := managerTemplateImageForRuntime(item, runtimeKind); ok {
+			return candidate, true
+		}
+	}
+	return defaultAgentImage{}, false
+}
+
+func managerTemplateImageForRuntime(item hub.Template, runtimeKind string) (defaultAgentImage, bool) {
+	if normalizeRole(item.Role) != RoleManager {
+		return defaultAgentImage{}, false
+	}
+	templateRuntimeKind := strings.TrimSpace(item.RuntimeKind)
+	if runtimeKind != "" && templateRuntimeKind != runtimeKind {
+		return defaultAgentImage{}, false
+	}
+	image := strings.TrimSpace(item.Image)
+	if image == "" {
+		return defaultAgentImage{}, false
+	}
+	return defaultAgentImage{
+		image:   image,
+		version: strings.TrimSpace(item.Version),
+	}, true
 }
 
 func defaultTemplateMatchesAgent(templateRole, templateRuntimeKind, agentRole, agentRuntimeKind string) bool {
@@ -126,62 +199,72 @@ func defaultTemplateMatchesAgent(templateRole, templateRuntimeKind, agentRole, a
 	return templateRuntimeKind == strings.TrimSpace(agentRuntimeKind)
 }
 
-func latestNewerLocalImageForReference(current string, candidates []string) (string, bool) {
+func imageNeedsTemplateVersionUpgrade(current string, latest defaultAgentImage) bool {
 	current = strings.TrimSpace(current)
-	currentRepo := dockerImageRepository(current)
-	currentTag := dockerImageTag(current)
-	if current == "" || currentRepo == "" || currentTag == "" || isDevImageTag(currentTag) {
-		return "", false
-	}
-	best := ""
-	for _, candidate := range candidates {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" || candidate == current {
-			continue
-		}
-		if !strings.EqualFold(currentRepo, dockerImageRepository(candidate)) {
-			continue
-		}
-		if cmp, ok := compareImageTags(currentTag, dockerImageTag(candidate)); !ok || cmp >= 0 {
-			continue
-		}
-		if best == "" {
-			best = candidate
-			continue
-		}
-		if cmp, ok := compareImageTags(dockerImageTag(best), dockerImageTag(candidate)); ok && cmp < 0 {
-			best = candidate
-		}
-	}
-	return best, best != ""
-}
-
-func imageNeedsDefaultRecreate(current, latest string) bool {
-	current = strings.TrimSpace(current)
-	latest = strings.TrimSpace(latest)
-	if latest == "" || current == latest {
+	latestImage := strings.TrimSpace(latest.image)
+	latestVersion := strings.TrimSpace(latest.version)
+	if latestImage == "" || current == latestImage {
 		return false
 	}
 	if current == "" {
 		return true
 	}
 	currentRepo := dockerImageRepository(current)
-	latestRepo := dockerImageRepository(latest)
-	if currentRepo == "" || latestRepo == "" || !strings.EqualFold(currentRepo, latestRepo) {
+	latestRepo := dockerImageRepository(latestImage)
+	if currentRepo == "" || latestRepo == "" {
 		return false
 	}
 	currentTag := dockerImageTag(current)
-	latestTag := dockerImageTag(latest)
-	if currentTag == latestTag {
+	if isDevImageTag(currentTag) {
 		return false
 	}
-	if isDevImageTag(currentTag) || isDevImageTag(latestTag) {
+	if !strings.EqualFold(currentRepo, latestRepo) {
+		if !isLegacyPicoClawRepositoryUpgrade(currentRepo, latestRepo) {
+			return false
+		}
+		_, ok := parseSemanticVersion(latestVersion)
+		return ok
+	}
+	if latestVersion == "" {
 		return false
 	}
-	if cmp, ok := compareImageTags(currentTag, latestTag); ok {
+	if cmp, ok := compareSemanticVersions(currentTag, latestVersion); ok {
 		return cmp < 0
 	}
 	return true
+}
+
+func isLegacyPicoClawRepositoryUpgrade(currentRepo, latestRepo string) bool {
+	if !strings.EqualFold(dockerImageRepositoryName(currentRepo), "picoclaw") {
+		return false
+	}
+	latestName := dockerImageRepositoryName(latestRepo)
+	if !strings.EqualFold(latestName, "picoclaw-manager") && !strings.EqualFold(latestName, "picoclaw-worker") {
+		return false
+	}
+	return strings.EqualFold(dockerImageRepositoryParent(currentRepo), dockerImageRepositoryParent(latestRepo))
+}
+
+func dockerImageRepositoryName(repo string) string {
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(repo, "/"); idx >= 0 {
+		return strings.TrimSpace(repo[idx+1:])
+	}
+	return repo
+}
+
+func dockerImageRepositoryParent(repo string) string {
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(repo, "/"); idx >= 0 {
+		return strings.TrimSpace(repo[:idx])
+	}
+	return ""
 }
 
 func isDevImageTag(tag string) bool {
@@ -220,60 +303,153 @@ func dockerImageTag(ref string) string {
 	return ""
 }
 
-func compareImageTags(current, latest string) (int, bool) {
-	currentParts, ok := parseNumericImageTag(current)
-	if !ok {
-		return 0, false
-	}
-	latestParts, ok := parseNumericImageTag(latest)
-	if !ok {
-		return 0, false
-	}
-	maxLen := len(currentParts)
-	if len(latestParts) > maxLen {
-		maxLen = len(latestParts)
-	}
-	for i := 0; i < maxLen; i++ {
-		currentPart := 0
-		if i < len(currentParts) {
-			currentPart = currentParts[i]
-		}
-		latestPart := 0
-		if i < len(latestParts) {
-			latestPart = latestParts[i]
-		}
-		if currentPart < latestPart {
-			return -1, true
-		}
-		if currentPart > latestPart {
-			return 1, true
-		}
-	}
-	return 0, true
+type semanticVersion struct {
+	major int
+	minor int
+	patch int
+	pre   []string
 }
 
-func parseNumericImageTag(tag string) ([]int, bool) {
-	tag = strings.TrimSpace(tag)
-	tag = strings.TrimPrefix(strings.ToLower(tag), "v")
-	if tag == "" {
-		return nil, false
+func compareSemanticVersions(current, latest string) (int, bool) {
+	currentVersion, ok := parseSemanticVersion(current)
+	if !ok {
+		return 0, false
 	}
-	fields := strings.FieldsFunc(tag, func(r rune) bool {
-		return r == '.' || r == '-' || r == '_'
-	})
-	if len(fields) == 0 {
-		return nil, false
+	latestVersion, ok := parseSemanticVersion(latest)
+	if !ok {
+		return 0, false
 	}
-	parts := make([]int, 0, len(fields))
-	for _, field := range fields {
-		if field == "" {
-			return nil, false
+	if currentVersion.major != latestVersion.major {
+		return compareInts(currentVersion.major, latestVersion.major), true
+	}
+	if currentVersion.minor != latestVersion.minor {
+		return compareInts(currentVersion.minor, latestVersion.minor), true
+	}
+	if currentVersion.patch != latestVersion.patch {
+		return compareInts(currentVersion.patch, latestVersion.patch), true
+	}
+	return comparePrerelease(currentVersion.pre, latestVersion.pre), true
+}
+
+func parseSemanticVersion(value string) (semanticVersion, bool) {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "v")
+	if value == "" {
+		return semanticVersion{}, false
+	}
+	if beforeBuild, _, ok := strings.Cut(value, "+"); ok {
+		value = beforeBuild
+	}
+	core := value
+	var pre []string
+	if beforePre, afterPre, ok := strings.Cut(value, "-"); ok {
+		core = beforePre
+		if afterPre == "" {
+			return semanticVersion{}, false
 		}
-		part, err := strconv.Atoi(field)
-		if err != nil {
-			return nil, false
+		pre = strings.Split(afterPre, ".")
+		for _, item := range pre {
+			if item == "" {
+				return semanticVersion{}, false
+			}
 		}
-		parts = append(parts, part)
 	}
-	return parts, true
+	parts := strings.Split(core, ".")
+	if len(parts) != 3 {
+		return semanticVersion{}, false
+	}
+	major, ok := parseSemanticVersionNumber(parts[0])
+	if !ok {
+		return semanticVersion{}, false
+	}
+	minor, ok := parseSemanticVersionNumber(parts[1])
+	if !ok {
+		return semanticVersion{}, false
+	}
+	patch, ok := parseSemanticVersionNumber(parts[2])
+	if !ok {
+		return semanticVersion{}, false
+	}
+	return semanticVersion{major: major, minor: minor, patch: patch, pre: pre}, true
+}
+
+func parseSemanticVersionNumber(value string) (int, bool) {
+	if value == "" || (len(value) > 1 && strings.HasPrefix(value, "0")) {
+		return 0, false
+	}
+	for _, ch := range value {
+		if ch < '0' || ch > '9' {
+			return 0, false
+		}
+	}
+	part, err := strconv.Atoi(value)
+	return part, err == nil
+}
+
+func compareInts(left, right int) int {
+	if left < right {
+		return -1
+	}
+	if left > right {
+		return 1
+	}
+	return 0
+}
+
+func comparePrerelease(current, latest []string) int {
+	if len(current) == 0 && len(latest) == 0 {
+		return 0
+	}
+	if len(current) == 0 {
+		return 1
+	}
+	if len(latest) == 0 {
+		return -1
+	}
+	maxLen := len(current)
+	if len(latest) > maxLen {
+		maxLen = len(latest)
+	}
+	for i := 0; i < maxLen; i++ {
+		if i >= len(current) {
+			return -1
+		}
+		if i >= len(latest) {
+			return 1
+		}
+		if cmp := comparePrereleaseIdentifier(current[i], latest[i]); cmp != 0 {
+			return cmp
+		}
+	}
+	return 0
+}
+
+func comparePrereleaseIdentifier(current, latest string) int {
+	currentNumeric, currentNumber, currentOK := parsePrereleaseNumber(current)
+	latestNumeric, latestNumber, latestOK := parsePrereleaseNumber(latest)
+	if currentOK && latestOK {
+		return compareInts(currentNumber, latestNumber)
+	}
+	if currentNumeric != latestNumeric {
+		if currentNumeric {
+			return -1
+		}
+		return 1
+	}
+	return strings.Compare(current, latest)
+}
+
+func parsePrereleaseNumber(value string) (bool, int, bool) {
+	if value == "" {
+		return false, 0, false
+	}
+	for _, ch := range value {
+		if ch < '0' || ch > '9' {
+			return false, 0, false
+		}
+	}
+	if len(value) > 1 && strings.HasPrefix(value, "0") {
+		return true, 0, false
+	}
+	part, err := strconv.Atoi(value)
+	return true, part, err == nil
 }

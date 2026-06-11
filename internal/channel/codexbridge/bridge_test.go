@@ -16,8 +16,6 @@ import (
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/runtimebridge"
 	runtimecodex "csgclaw/internal/runtime/codex"
-
-	acp "github.com/coder/acp-go-sdk"
 )
 
 type streamResult struct {
@@ -103,13 +101,13 @@ type fakePrompter struct {
 	calls   []promptCall
 	ensures []ensureCall
 	resets  []resetCall
-	prompt  func(context.Context, runtimecodex.SessionHandle, acp.PromptRequest) error
+	prompt  func(context.Context, runtimecodex.SessionHandle, runtimecodex.PromptRequest) error
 	ensure  func(context.Context, runtimecodex.SessionHandle, string) (string, error)
 	reset   func(context.Context, runtimecodex.SessionHandle, string) error
 }
 
-func (p *fakePrompter) Prompt(ctx context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) (acp.PromptResponse, error) {
-	call := promptCall{runtimeID: handle.RuntimeID, sessionID: string(req.SessionId)}
+func (p *fakePrompter) Prompt(ctx context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) (runtimecodex.PromptResponse, error) {
+	call := promptCall{runtimeID: handle.RuntimeID, sessionID: req.SessionID}
 	if len(req.Prompt) > 0 && req.Prompt[0].Text != nil {
 		call.text = req.Prompt[0].Text.Text
 	}
@@ -119,10 +117,10 @@ func (p *fakePrompter) Prompt(ctx context.Context, handle runtimecodex.SessionHa
 
 	if p.prompt != nil {
 		if err := p.prompt(ctx, handle, req); err != nil {
-			return acp.PromptResponse{}, err
+			return runtimecodex.PromptResponse{}, err
 		}
 	}
-	return acp.PromptResponse{}, nil
+	return runtimecodex.PromptResponse{}, nil
 }
 
 func (p *fakePrompter) EnsureSession(ctx context.Context, handle runtimecodex.SessionHandle, conversationKey string) (string, error) {
@@ -196,16 +194,16 @@ func TestServiceRoundTrip(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "Hello back",
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventPromptCompleted,
 			})
 			return nil
@@ -258,16 +256,16 @@ func TestServiceEnsuresConversationSessionAndInjectsHiddenThreadContext(t *testi
 			}
 			return "acp-thread-session", nil
 		},
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "hello from thread",
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventPromptCompleted,
 			})
 			return nil
@@ -311,16 +309,16 @@ func TestServiceUsesConversationScopedSessionsAndThreadReplies(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "thread reply",
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventPromptCompleted,
 			})
 			return nil
@@ -366,35 +364,34 @@ func assertServiceThreadsTopLevelToolCallsUnderFinalResponse(t *testing.T, chatT
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID:  handle.RuntimeID,
-				SessionID:  string(req.SessionId),
+				SessionID:  req.SessionID,
 				Kind:       runtimecodex.SessionEventToolCallStart,
 				ToolCallID: "tool-1",
 				ToolTitle:  "Run shell command",
-				ToolStatus: string(acp.ToolCallStatusPending),
-				Payload:    acp.SessionUpdateToolCall{ToolCallId: "tool-1", Title: "Run shell command", Status: acp.ToolCallStatusPending},
+				ToolStatus: "pending",
+				Payload:    map[string]any{"tool_call_id": "tool-1", "title": "Run shell command", "status": "pending"},
 			})
-			completed := acp.ToolCallStatusCompleted
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID:         handle.RuntimeID,
-				SessionID:         string(req.SessionId),
+				SessionID:         req.SessionID,
 				Kind:              runtimecodex.SessionEventToolCallUpdate,
 				ToolCallID:        "tool-1",
-				ToolStatus:        string(acp.ToolCallStatusCompleted),
+				ToolStatus:        "completed",
 				ToolOutputSummary: "command output",
-				Payload:           acp.SessionToolCallUpdate{ToolCallId: "tool-1", Status: &completed, RawOutput: "command output"},
+				Payload:           map[string]any{"tool_call_id": "tool-1", "status": "completed", "raw_output": "command output"},
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "done",
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventPromptCompleted,
 			})
 			return nil
@@ -444,25 +441,25 @@ func TestServiceKeepsToolActivityInsideExistingThread(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID:  handle.RuntimeID,
-				SessionID:  string(req.SessionId),
+				SessionID:  req.SessionID,
 				Kind:       runtimecodex.SessionEventToolCallStart,
 				ToolCallID: "tool-1",
 				ToolTitle:  "Run shell command",
-				ToolStatus: string(acp.ToolCallStatusPending),
-				Payload:    acp.SessionUpdateToolCall{ToolCallId: "tool-1", Title: "Run shell command", Status: acp.ToolCallStatusPending},
+				ToolStatus: "pending",
+				Payload:    map[string]any{"tool_call_id": "tool-1", "title": "Run shell command", "status": "pending"},
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "thread done",
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventPromptCompleted,
 			})
 			return nil
@@ -541,16 +538,16 @@ func TestServiceDedupesMessagesWithinConversationScope(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "reply",
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventPromptCompleted,
 			})
 			return nil
@@ -594,16 +591,16 @@ func TestServiceDedupesReplayAcrossReconnect(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "once",
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventPromptCompleted,
 			})
 			return nil
@@ -637,16 +634,16 @@ func TestServiceWorkerOutlivesStartContext(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "still alive",
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventPromptCompleted,
 			})
 			return nil
@@ -694,7 +691,7 @@ func TestServiceQueuesWhileBusy(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(ctx context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(ctx context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			text := req.Prompt[0].Text.Text
 			if text == "first" {
 				close(firstStarted)
@@ -706,13 +703,13 @@ func TestServiceQueuesWhileBusy(t *testing.T) {
 			}
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "reply:" + text,
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventPromptCompleted,
 			})
 			return nil
@@ -760,10 +757,10 @@ func TestServiceFlushesAfterPromptSettlesWithoutTerminalEvent(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "settled reply",
 			})
@@ -800,10 +797,10 @@ func TestServiceProjectsToolEventsAsAgentActivity(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID:        handle.RuntimeID,
-				SessionID:        string(req.SessionId),
+				SessionID:        req.SessionID,
 				Kind:             runtimecodex.SessionEventToolCallStart,
 				ReceivedAt:       time.Now().UTC(),
 				ToolCallID:       "tool-1",
@@ -814,7 +811,7 @@ func TestServiceProjectsToolEventsAsAgentActivity(t *testing.T) {
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID:  handle.RuntimeID,
-				SessionID:  string(req.SessionId),
+				SessionID:  req.SessionID,
 				Kind:       runtimecodex.SessionEventPromptCompleted,
 				ReceivedAt: time.Now().UTC(),
 			})
@@ -890,10 +887,10 @@ func TestServiceProjectsPermissionEventsAsAgentActivity(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID:    handle.RuntimeID,
-				SessionID:    string(req.SessionId),
+				SessionID:    req.SessionID,
 				Kind:         runtimecodex.SessionEventPermissionRequest,
 				ReceivedAt:   now,
 				ToolCallID:   "tool-1",
@@ -914,7 +911,7 @@ func TestServiceProjectsPermissionEventsAsAgentActivity(t *testing.T) {
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID:  handle.RuntimeID,
-				SessionID:  string(req.SessionId),
+				SessionID:  req.SessionID,
 				Kind:       runtimecodex.SessionEventPromptCompleted,
 				ReceivedAt: time.Now().UTC(),
 			})
@@ -985,7 +982,7 @@ func TestServiceUsesStableMessageIDForPermissionDecisionActivity(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			pending := runtimecodex.PermissionSnapshot{
 				ID:          "perm-1",
 				Title:       "Run shell command",
@@ -998,7 +995,7 @@ func TestServiceUsesStableMessageIDForPermissionDecisionActivity(t *testing.T) {
 			}
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID:    handle.RuntimeID,
-				SessionID:    string(req.SessionId),
+				SessionID:    req.SessionID,
 				Kind:         runtimecodex.SessionEventPermissionRequest,
 				ReceivedAt:   now,
 				ToolCallID:   "tool-1",
@@ -1016,7 +1013,7 @@ func TestServiceUsesStableMessageIDForPermissionDecisionActivity(t *testing.T) {
 			}
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID:        handle.RuntimeID,
-				SessionID:        string(req.SessionId),
+				SessionID:        req.SessionID,
 				Kind:             runtimecodex.SessionEventPermissionDecision,
 				ReceivedAt:       now.Add(time.Second),
 				ToolCallID:       "tool-1",
@@ -1029,7 +1026,7 @@ func TestServiceUsesStableMessageIDForPermissionDecisionActivity(t *testing.T) {
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID:  handle.RuntimeID,
-				SessionID:  string(req.SessionId),
+				SessionID:  req.SessionID,
 				Kind:       runtimecodex.SessionEventPromptCompleted,
 				ReceivedAt: time.Now().UTC(),
 			})
@@ -1078,10 +1075,10 @@ func TestServiceIgnoresEventsFromOtherBindings(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req acp.PromptRequest) error {
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: "rt-other",
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "wrong runtime",
 			})
@@ -1093,13 +1090,13 @@ func TestServiceIgnoresEventsFromOtherBindings(t *testing.T) {
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventTextDelta,
 				Text:      "matched",
 			})
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
-				SessionID: string(req.SessionId),
+				SessionID: req.SessionID,
 				Kind:      runtimecodex.SessionEventPromptCompleted,
 			})
 			return nil
@@ -1301,7 +1298,7 @@ func TestWorkerReturnsPromptError(t *testing.T) {
 		},
 	}
 	prompter := &fakePrompter{
-		prompt: func(context.Context, runtimecodex.SessionHandle, acp.PromptRequest) error {
+		prompt: func(context.Context, runtimecodex.SessionHandle, runtimecodex.PromptRequest) error {
 			return errors.New("boom")
 		},
 	}

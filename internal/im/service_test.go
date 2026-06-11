@@ -117,8 +117,8 @@ func TestAddAgentToRoomSupportsRoomID(t *testing.T) {
 	if len(last.Event.TargetIDs) != 1 || last.Event.TargetIDs[0] != "u-alice" {
 		t.Fatalf("AddAgentToRoom() target_ids = %+v, want [u-alice]", last.Event.TargetIDs)
 	}
-	if last.Content != "" {
-		t.Fatalf("AddAgentToRoom() content = %q, want empty structured event content", last.Content)
+	if last.Content != "admin invited alice to join the room" {
+		t.Fatalf("AddAgentToRoom() content = %q, want localized room_members_added content", last.Content)
 	}
 }
 
@@ -144,8 +144,8 @@ func TestCreateRoomStoresStructuredEvent(t *testing.T) {
 	if got.Kind != MessageKindEvent || got.Event == nil || got.Event.Key != "room_created" || got.Event.ActorID != "admin" || got.Event.Title != "Ops" {
 		t.Fatalf("CreateRoom() event = %+v, want structured room_created event", got)
 	}
-	if got.Content != "" {
-		t.Fatalf("CreateRoom() content = %q, want empty structured event content", got.Content)
+	if got.Content != "admin created the room" {
+		t.Fatalf("CreateRoom() content = %q, want localized room_created content", got.Content)
 	}
 }
 

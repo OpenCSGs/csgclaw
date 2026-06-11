@@ -34,11 +34,11 @@ func (p *CommandParser) HandleMessage(ctx context.Context, roomID string, sender
 		return false
 	}
 	if err != nil {
-		p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("[team] Command failed for %s: %v", renderActor(senderID), err))
+		p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("%s command failed: %v", renderActor(senderID), err))
 		return true
 	}
 	if p.allowSender != nil && !p.allowSender(strings.TrimSpace(senderID)) {
-		p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("[team] Command failed for %s: only human room members can use team override commands", renderActor(senderID)))
+		p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("%s command failed: only human room members can use team override commands", renderActor(senderID)))
 		return true
 	}
 
@@ -46,7 +46,7 @@ func (p *CommandParser) HandleMessage(ctx context.Context, roomID string, sender
 	case "approve", "reject":
 		approval, found := p.svc.FindPendingApprovalByTask(meta.ID, cmd.taskID)
 		if !found {
-			p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("[team] Command failed for %s: no pending approval found for %s", renderActor(senderID), cmd.taskID))
+			p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("%s command failed: no pending approval found for task %s", renderActor(senderID), cmd.taskID))
 			return true
 		}
 		status := ApprovalStatusApproved
@@ -60,7 +60,7 @@ func (p *CommandParser) HandleMessage(ctx context.Context, roomID string, sender
 			Status:     status,
 			Resolution: cmd.reason,
 		}); err != nil {
-			p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("[team] Command failed for %s: %v", renderActor(senderID), err))
+			p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("%s command failed: %v", renderActor(senderID), err))
 		}
 		return true
 	case "cancel":
@@ -70,7 +70,7 @@ func (p *CommandParser) HandleMessage(ctx context.Context, roomID string, sender
 			ActorID: strings.TrimSpace(senderID),
 			Reason:  cmd.reason,
 		}); err != nil {
-			p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("[team] Command failed for %s: %v", renderActor(senderID), err))
+			p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("%s command failed: %v", renderActor(senderID), err))
 		}
 		return true
 	case "reassign":
@@ -80,7 +80,7 @@ func (p *CommandParser) HandleMessage(ctx context.Context, roomID string, sender
 			AssignedTo: strings.TrimSpace(cmd.target),
 			ActorID:    strings.TrimSpace(senderID),
 		}); err != nil {
-			p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("[team] Command failed for %s: %v", renderActor(senderID), err))
+			p.sendFeedback(ctx, meta, roomID, fmt.Sprintf("%s command failed: %v", renderActor(senderID), err))
 		}
 		return true
 	default:
@@ -127,7 +127,7 @@ func parseFixedTextCommand(content string) (fixedTextCommand, bool, error) {
 		return fixedTextCommand{name: cmd, taskID: fields[1], reason: reason}, true, nil
 	case "reassign":
 		if len(fields) != 3 {
-			return fixedTextCommand{}, true, fmt.Errorf("usage: reassign <task_id> <bot_id>")
+			return fixedTextCommand{}, true, fmt.Errorf("usage: reassign <task_id> <participant_id>")
 		}
 		return fixedTextCommand{name: cmd, taskID: fields[1], target: strings.TrimPrefix(fields[2], "@")}, true, nil
 	default:
@@ -148,8 +148,8 @@ func (p *CommandParser) sendFeedback(ctx context.Context, meta TeamMeta, roomID 
 			Channel: firstNonEmpty(meta.Channel, p.adapter.Channel()),
 			RoomID:  targetRoomID,
 		},
-		SenderBotID: meta.LeadBotID,
-		Kind:        "team_event",
-		Content:     content,
+		SenderParticipantID: participantIDForAgentID(p.adapter, meta.LeadAgentID),
+		Kind:                "team_event",
+		Content:             content,
 	})
 }

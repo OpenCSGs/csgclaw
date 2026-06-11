@@ -96,6 +96,31 @@ func TestDetectDefaultProfileAllFailedReturnsIncompleteProfile(t *testing.T) {
 	}
 }
 
+func TestManagerStartupProfileSkipsDetectionWhenDisabled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"qwen-test"}]}`))
+	}))
+	defer server.Close()
+
+	restore := setProfileDetectionURLs(t, server.URL+"/v1", server.URL+"/v1")
+	defer restore()
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "", WithStartupProfileDetectionDisabled())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	profile, results := svc.managerStartupProfile(context.Background())
+	if profile.ProfileComplete {
+		t.Fatalf("managerStartupProfile() profile = %+v, want incomplete when detection is disabled", profile)
+	}
+	if profile.Provider != ProviderCSGHubLite {
+		t.Fatalf("managerStartupProfile() provider = %q, want %q", profile.Provider, ProviderCSGHubLite)
+	}
+	if len(results) != 0 {
+		t.Fatalf("managerStartupProfile() results = %+v, want none", results)
+	}
+}
+
 func TestProfileDefaultsPersistAfterProfileUpdate(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")

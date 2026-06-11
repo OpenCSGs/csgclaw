@@ -33,3 +33,13 @@ func (s *Service) resolveUserIDLocked(userID string) string {
 	}
 	return userID
 }
+
+func (s *Service) resolveRoomUserIDLocked(userID string) string {
+	userID = s.resolveUserIDLocked(userID)
+	if userID == legacyManagerUserID {
+		if _, ok := s.users[managerParticipantUserID]; ok {
+			return managerParticipantUserID
+		}
+	}
+	return userID
+}

@@ -149,7 +149,7 @@ func TestClientUsesExpectedRoutes(t *testing.T) {
 			body: `{}`,
 			want: "POST /api/v1/teams",
 			call: func(c *Client) error {
-				_, err := c.CreateTeam(ctx, apitypes.CreateTeamRequest{Channel: "csgclaw", LeadBotID: "bot-manager"})
+				_, err := c.CreateTeam(ctx, apitypes.CreateTeamRequest{Channel: "csgclaw", LeadAgentID: "u-manager"})
 				return err
 			},
 		},
@@ -185,7 +185,7 @@ func TestClientUsesExpectedRoutes(t *testing.T) {
 			body: `{}`,
 			want: "POST /api/v1/teams/team-1/tasks/claim-next",
 			call: func(c *Client) error {
-				_, err := c.ClaimNextTeamTask(ctx, apitypes.ClaimNextTeamTaskRequest{TeamID: "team-1", BotID: "bot-worker"})
+				_, err := c.ClaimNextTeamTask(ctx, apitypes.ClaimNextTeamTaskRequest{TeamID: "team-1", ParticipantID: "bot-worker"})
 				return err
 			},
 		},

@@ -64,6 +64,7 @@ export type AgentProfileLike = {
 export type AgentLike = AgentProfileLike & {
   agent_profile?: AgentProfileLike | null;
   bot_type?: BotType | null;
+  box_id?: string | null;
   default_image?: string | null;
   from_template?: string | null;
   handle?: string | null;
@@ -381,6 +382,9 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
     return t("online");
   }
   if (normalized === "offline" || normalized === "stopped") {
+    return t("offline");
+  }
+  if (normalized === "profile_incomplete") {
     return t("offline");
   }
   if (normalized === "failed" || normalized === "error") {
@@ -1049,6 +1053,16 @@ export function isAgentProfileMarkedComplete(item: AgentLike | null | undefined)
   return item?.profile_complete === true || item?.agent_profile?.profile_complete === true;
 }
 
+export function isAgentProfileDraftComplete(draft: Partial<AgentDraft> | null | undefined): boolean {
+  if (!String(draft?.model_id ?? "").trim()) {
+    return false;
+  }
+  if (draft?.provider === "api" && !String(draft.base_url ?? "").trim()) {
+    return false;
+  }
+  return true;
+}
+
 export function isAgentIncomplete(
   item: AgentLike | null | undefined,
   draftOverride?: AgentDraft | null | undefined,
@@ -1063,11 +1077,44 @@ export function isAgentIncomplete(
   if (isNotifierRuntimeDraftOnAgentPage(draft, item)) {
     return !notifierFormIsComplete(draft, item);
   }
+  if (isAgentProfileDraftComplete(draft)) {
+    return false;
+  }
   return item?.profile_complete === false || item?.agent_profile?.profile_complete === false;
 }
 
 export function isAgentRestartNeeded(item: AgentLike | null | undefined): boolean {
   return Boolean(item?.env_restart_required || item?.agent_profile?.env_restart_required);
+}
+
+export function shouldWaitForManagerRuntimeAfterProfileSave(
+  agent: AgentLike | null | undefined,
+  options: { profileIncompleteBeforeSave?: boolean } = {},
+): boolean {
+  if (options.profileIncompleteBeforeSave) {
+    return true;
+  }
+  if (!isAgentProfileMarkedComplete(agent)) {
+    return true;
+  }
+  if (!String(agent?.box_id ?? "").trim()) {
+    return true;
+  }
+  if (String(agent?.status ?? "").toLowerCase() === "profile_incomplete") {
+    return true;
+  }
+  return false;
+}
+
+export function agentRuntimePollSettled(item: AgentLike | null | undefined): boolean {
+  if (isAgentRunning(item)) {
+    return true;
+  }
+  if (!String(item?.box_id ?? "").trim()) {
+    return false;
+  }
+  const status = String(item?.status ?? "").toLowerCase();
+  return status === "stopped" || status === "offline" || status === "failed" || status === "error";
 }
 
 export function isAgentUpgradeNeeded(item: AgentLike | null | undefined): boolean {
@@ -1296,52 +1343,12 @@ export function availableManagerRebuildRuntimeOptions(
   return values.map((value) => ({ value, label: value }));
 }
 
-export function availableManagerRebuildImageOptions(
-  variants: readonly ManagerTemplateVariant[] | null | undefined,
-  runtimeKind: unknown,
-  bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
-  currentImage = "",
-  localImages: readonly string[] | null | undefined = [],
-): string[] {
-  const images: string[] = [];
-  const seen = new Set<string>();
-  const push = (image: unknown) => {
-    const trimmed = String(image ?? "").trim();
-    if (!trimmed || seen.has(trimmed)) {
-      return;
-    }
-    seen.add(trimmed);
-    images.push(trimmed);
-  };
-  push(defaultManagerRebuildImageForRuntime(variants, runtimeKind, bootstrapConfig, ""));
-  const selectedRuntime = normalizeRuntimeKind(runtimeKind);
-  if (Array.isArray(variants)) {
-    for (const item of variants) {
-      if (selectedRuntime && normalizeRuntimeKind(item?.runtimeKind) !== selectedRuntime) {
-        continue;
-      }
-      push(item?.image);
-    }
-  }
-  if (Array.isArray(localImages)) {
-    for (const image of localImages) {
-      push(image);
-    }
-  }
-  push(currentImage);
-  return images;
-}
-
 export function defaultManagerRebuildImageForRuntime(
   variants: readonly ManagerTemplateVariant[] | null | undefined,
   runtimeKind: unknown,
   bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
   fallbackImage = "",
 ): string {
-  const runtimeDefault = runtimeImageForKind(runtimeKind, bootstrapConfig, "");
-  if (runtimeDefault) {
-    return runtimeDefault;
-  }
   const selectedRuntime = normalizeRuntimeKind(runtimeKind);
   if (Array.isArray(variants)) {
     for (const item of variants) {
@@ -1352,6 +1359,12 @@ export function defaultManagerRebuildImageForRuntime(
       if (image) {
         return image;
       }
+    }
+  }
+  if (selectedRuntime && normalizeRuntimeKind(bootstrapConfig?.runtime_kind) === selectedRuntime) {
+    const effectiveManagerImage = String(bootstrapConfig?.effective_manager_image ?? "").trim();
+    if (effectiveManagerImage) {
+      return effectiveManagerImage;
     }
   }
   return String(fallbackImage ?? "").trim();

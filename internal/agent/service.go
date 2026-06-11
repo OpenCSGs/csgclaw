@@ -18,7 +18,6 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/utils"
 )
@@ -161,24 +160,25 @@ func TestOnlySetDefaultServiceOption(opt ServiceOption) func() {
 }
 
 type Service struct {
-	model                  config.ModelConfig
-	llm                    config.LLMConfig
-	server                 config.ServerConfig
-	hub                    templateService
-	defaultManagerTemplate string
-	defaultWorkerTemplate  string
-	managerImage           string
-	gatewayRuntime         string
-	state                  string
-	sandbox                sandbox.Provider
-	mu                     sync.RWMutex
-	runtimes               map[string]sandbox.Runtime
-	agents                 map[string]Agent
-	runtimeRecords         map[string]RuntimeRecord
-	runtimeRegistry        map[string]agentruntime.Runtime
-	lifecycle              LifecycleObserver
-	profileDefaults        AgentProfile
-	detectionResults       []ProfileDetectionResult
+	model                   config.ModelConfig
+	llm                     config.LLMConfig
+	server                  config.ServerConfig
+	hub                     templateService
+	defaultManagerTemplate  string
+	defaultWorkerTemplate   string
+	managerImage            string
+	gatewayRuntime          string
+	state                   string
+	sandbox                 sandbox.Provider
+	mu                      sync.RWMutex
+	runtimes                map[string]sandbox.Runtime
+	agents                  map[string]Agent
+	runtimeRecords          map[string]RuntimeRecord
+	runtimeRegistry         map[string]agentruntime.Runtime
+	lifecycle               LifecycleObserver
+	profileDefaults         AgentProfile
+	detectionResults        []ProfileDetectionResult
+	startupProfileDetectOff bool
 
 	// gatewayWorkPhase is set by createGatewayBox for bootstrap progress logs (best-effort if concurrent).
 	gatewayWorkPhase atomic.Uint32
@@ -187,6 +187,7 @@ type Service struct {
 type ServiceOption func(*Service) error
 
 type templateService interface {
+	List(context.Context) ([]hub.Template, error)
 	Get(context.Context, string) (hub.Template, error)
 	FetchWorkspace(context.Context, string) (hub.WorkspaceRef, error)
 }
@@ -265,6 +266,25 @@ func WithBootstrapDefaultTemplates(cfg config.BootstrapConfig) ServiceOption {
 	}
 }
 
+func WithStartupProfileDetectionDisabled() ServiceOption {
+	return func(s *Service) error {
+		if s == nil {
+			return fmt.Errorf("agent service is required")
+		}
+		s.SetStartupProfileDetectionDisabled(true)
+		return nil
+	}
+}
+
+func (s *Service) SetStartupProfileDetectionDisabled(disabled bool) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.startupProfileDetectOff = disabled
+	s.mu.Unlock()
+}
+
 func WithLifecycleObserver(observer LifecycleObserver) ServiceOption {
 	return func(s *Service) error {
 		if s == nil {
@@ -318,10 +338,6 @@ func (s *Service) SetGatewayRuntime(runtime, managerImage string) error {
 		s.managerImage = managerImage
 	}
 	return nil
-}
-
-func (s *Service) useOpenClawGateway() bool {
-	return s != nil && s.gatewayRuntimeKind() == RuntimeKindOpenClawSandbox
 }
 
 func NewService(model config.ModelConfig, server config.ServerConfig, managerImage, statePath string, opts ...ServiceOption) (*Service, error) {
@@ -399,8 +415,17 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	if err != nil {
 		return err
 	}
+	modelCfg := defaultModel
+	svc.mu.RLock()
+	if manager, ok := svc.agents[ManagerUserID]; ok {
+		profile := normalizeProfileForAgentRuntime(manager.AgentProfile, manager.RuntimeOptions, manager.Name, manager.Description, manager.RuntimeKind, nil)
+		if profile.ProfileComplete {
+			modelCfg = modelConfigFromProfile(profile)
+		}
+	}
+	svc.mu.RUnlock()
 	recreateForParticipantBridgeConfig := !forceRecreate && agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID)
-	if _, err := ensureAgentPicoClawConfigForParticipant(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, defaultModel); err != nil {
+	if _, err := ensureAgentPicoClawConfigForParticipantWithResolver(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, modelCfg, svc.resolveManagerBaseURL); err != nil {
 		return err
 	}
 	if recreateForParticipantBridgeConfig {
@@ -720,6 +745,16 @@ func (s *Service) managerStartupProfile(ctx context.Context) (AgentProfile, []Pr
 		s.mu.RUnlock()
 		return normalizeProfile(profile, ManagerName, existing.Description), results
 	}
+	if s != nil && s.startupProfileDetectOff {
+		if existing, ok := s.agents[ManagerUserID]; ok {
+			profile := cloneProfile(existing.AgentProfile)
+			results := append([]ProfileDetectionResult(nil), existing.DetectionResults...)
+			s.mu.RUnlock()
+			return normalizeProfile(profile, ManagerName, existing.Description), results
+		}
+		s.mu.RUnlock()
+		return normalizeProfile(AgentProfile{Name: ManagerName, Provider: ProviderCSGHubLite}, ManagerName, ""), nil
+	}
 	s.mu.RUnlock()
 	if s != nil {
 		if profileName, model, err := s.llm.Resolve(""); err == nil {
@@ -1001,7 +1036,7 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 	}
 
 	if isManagerAgent(existing) || isManagerCreateSpec(spec) {
-		managerImageOverride := s.managerImageOverrideForReplace(ctx, existing, req, spec.RuntimeKind)
+		managerImageOverride := s.managerImageOverrideForReplace(ctx, existing, spec.RuntimeKind)
 		return s.ensureManager(ctx, true, managerImageOverride, spec.RuntimeKind)
 	}
 	if shouldCreateWorkerSpec(spec) || strings.EqualFold(existing.Role, RoleWorker) {
@@ -1018,33 +1053,15 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 	return s.createNew(ctx, spec)
 }
 
-func replaceImageOverride(req CreateRequest) string {
-	if len(req.FieldMask) == 0 {
-		return req.Spec.Image
+func (s *Service) managerImageOverrideForReplace(ctx context.Context, existing Agent, runtimeKind string) string {
+	runtimeKind = strings.TrimSpace(runtimeKind)
+	if runtimeKind == "" {
+		runtimeKind = existing.RuntimeKind
 	}
-	for _, field := range req.FieldMask {
-		if strings.EqualFold(strings.TrimSpace(field), "image") {
-			return req.Spec.Image
-		}
+	if latest, ok := s.defaultManagerImageForRuntime(ctx, runtimeKind); ok {
+		return strings.TrimSpace(latest.image)
 	}
 	return ""
-}
-
-func (s *Service) managerImageOverrideForReplace(ctx context.Context, existing Agent, req CreateRequest, runtimeKind string) string {
-	requested := strings.TrimSpace(replaceImageOverride(req))
-	if requested == "" {
-		return ""
-	}
-	if requested != strings.TrimSpace(existing.Image) {
-		return requested
-	}
-	if runtimeKindForGatewayRuntime(runtimeKind) != runtimeKindForGatewayRuntime(existing.RuntimeKind) {
-		return requested
-	}
-	if latest, ok := s.currentDefaultImageForAgent(ctx, existing); ok && imageNeedsDefaultRecreate(existing.Image, latest) {
-		return latest
-	}
-	return requested
 }
 
 func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) (CreateAgentSpec, error) {
@@ -1130,6 +1147,18 @@ func (s *Service) Agent(id string) (Agent, bool) {
 	}
 	ctx := context.Background()
 	return s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, a)), true
+}
+
+func (s *Service) AgentDisplayName(id string) (string, bool) {
+	a, ok := s.agentSnapshot(id)
+	if !ok {
+		return "", false
+	}
+	name := strings.TrimSpace(a.Name)
+	if name == "" {
+		name = strings.TrimSpace(a.ID)
+	}
+	return name, name != ""
 }
 
 func (s *Service) agentSnapshot(id string) (Agent, bool) {
@@ -1443,9 +1472,8 @@ func (s *Service) List() []Agent {
 	agents := sortedAgentsFromMap(s.agents)
 	s.mu.RUnlock()
 	ctx := context.Background()
-	localImages := s.localImageCandidates(ctx)
 	for idx := range agents {
-		agents[idx] = s.withRuntimeImageMigrationStatusFromCandidates(ctx, s.hydrateAgentStatus(ctx, agents[idx]), localImages)
+		agents[idx] = s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, agents[idx]))
 	}
 	return agents
 }
@@ -1820,11 +1848,15 @@ func (s *Service) gatewayProvisionRequest(runtimeKind, agentName, agentID string
 	return &agentruntime.GatewayProvision{
 		ModelFallback:     modelFallback,
 		Server:            server,
-		ManagerBaseURL:    resolveManagerBaseURL(server),
+		ManagerBaseURL:    s.resolveManagerBaseURL(server),
 		AgentHome:         agentHome,
 		ProjectsRoot:      projectsRoot,
 		WorkspaceTemplate: templateRoot,
 	}, nil
+}
+
+func (s *Service) resolveManagerBaseURL(server config.ServerConfig) string {
+	return resolveManagerBaseURLForSandboxProvider(server, s.sandboxProviderName())
 }
 
 func (s *Service) StreamLogs(ctx context.Context, id string, follow bool, lines int, w io.Writer) error {
@@ -1858,14 +1890,6 @@ func (s *Service) StreamLogs(ctx context.Context, id string, follow bool, lines 
 	})
 }
 
-func streamHostGatewayLog(ctx context.Context, agentName string, follow bool, lines int, w io.Writer) error {
-	logPath, err := agentGatewayLogPath(agentName)
-	if err != nil {
-		return err
-	}
-	return streamHostGatewayLogPaths(ctx, []string{logPath}, follow, lines, w)
-}
-
 func streamHostGatewayLogPaths(ctx context.Context, logPaths []string, follow bool, lines int, w io.Writer) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -1877,14 +1901,6 @@ func streamHostGatewayLogPaths(ctx context.Context, logPaths []string, follow bo
 		return err
 	}
 	return nil
-}
-
-func agentGatewayLogPath(agentName string) (string, error) {
-	agentHome, err := agentHomeDir(agentName)
-	if err != nil {
-		return "", err
-	}
-	return picoclawsandbox.HostGatewayLogPath(agentHome), nil
 }
 
 func streamGatewayLogFile(ctx context.Context, logPaths []string, follow bool, lines int, w io.Writer) error {
@@ -2062,9 +2078,14 @@ func (s *Service) hydrateAgentStatus(ctx context.Context, a Agent) Agent {
 }
 
 func statusAfterHydrateFailure(a Agent, stage string, err error) Agent {
-	if strings.TrimSpace(a.Status) != "" && !sandbox.IsNotFound(err) {
-		logHydrateStaleStatus(a, stage, err)
-		return a
+	if status := strings.TrimSpace(a.Status); status != "" {
+		if !sandbox.IsNotFound(err) {
+			logHydrateStaleStatus(a, stage, err)
+			return a
+		}
+		if strings.EqualFold(status, "profile_incomplete") {
+			return a
+		}
 	}
 	logHydrateUnknownStatus(a, stage, err)
 	a.Status = string(sandbox.StateUnknown)

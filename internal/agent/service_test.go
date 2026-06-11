@@ -98,6 +98,8 @@ func (f *fakeInstance) Close() error {
 type fakeAgentRuntime struct {
 	kind       string
 	workspace  func(string) string
+	skills     func(string) string
+	hostLogs   func(string) []string
 	provision  func(context.Context, agentruntime.ProvisionRequest) error
 	new        func(context.Context, agentruntime.Spec) (agentruntime.Handle, error)
 	start      func(context.Context, agentruntime.Handle) (agentruntime.State, error)
@@ -112,19 +114,44 @@ func (f fakeAgentRuntime) Kind() string {
 	return f.kind
 }
 
-func (f fakeAgentRuntime) WorkspaceRoot(agentHome string) string {
+func (f fakeAgentRuntime) Layout(agentHome string) agentruntime.Layout {
 	if f.workspace != nil {
-		return f.workspace(agentHome)
+		workspace := f.workspace(agentHome)
+		layout := agentruntime.Layout{
+			WorkspaceRoot: workspace,
+			SkillsRoot:    filepath.Join(workspace, "skills"),
+		}
+		if f.skills != nil {
+			layout.SkillsRoot = f.skills(agentHome)
+		}
+		if f.hostLogs != nil {
+			layout.HostLogPaths = f.hostLogs(agentHome)
+		}
+		return layout
 	}
 	switch strings.TrimSpace(f.kind) {
 	case RuntimeKindPicoClawSandbox:
-		return filepath.Join(picoclawsandbox.Root(agentHome), picoclawsandbox.HostWorkspaceDir)
+		workspace := filepath.Join(picoclawsandbox.Root(agentHome), picoclawsandbox.HostWorkspaceDir)
+		return agentruntime.Layout{
+			WorkspaceRoot: workspace,
+			SkillsRoot:    filepath.Join(workspace, "skills"),
+			HostLogPaths:  []string{picoclawsandbox.HostGatewayLogPath(agentHome)},
+		}
 	case RuntimeKindOpenClawSandbox:
-		return filepath.Join(openclawsandbox.Root(agentHome), openclawsandbox.HostWorkspaceDir)
+		workspace := filepath.Join(openclawsandbox.Root(agentHome), openclawsandbox.HostWorkspaceDir)
+		return agentruntime.Layout{
+			WorkspaceRoot: workspace,
+			SkillsRoot:    filepath.Join(workspace, "skills"),
+			HostLogPaths:  []string{openclawsandbox.HostGatewayLogPath(agentHome)},
+		}
 	case RuntimeKindCodex:
-		return filepath.Join(agentHome, ".codex", "workspace")
+		return agentruntime.Layout{
+			WorkspaceRoot: filepath.Join(agentHome, ".codex", "workspace"),
+			SkillsRoot:    filepath.Join(agentHome, ".codex", "home", "skills"),
+			HostLogPaths:  []string{filepath.Join(agentHome, ".codex", "home", "stderr.log")},
+		}
 	default:
-		return ""
+		return agentruntime.Layout{}
 	}
 }
 
@@ -193,16 +220,30 @@ func (f fakeAgentRuntimeNoLogs) Kind() string {
 	return f.kind
 }
 
-func (f fakeAgentRuntimeNoLogs) WorkspaceRoot(agentHome string) string {
+func (f fakeAgentRuntimeNoLogs) Layout(agentHome string) agentruntime.Layout {
 	switch strings.TrimSpace(f.kind) {
 	case RuntimeKindPicoClawSandbox:
-		return filepath.Join(picoclawsandbox.Root(agentHome), picoclawsandbox.HostWorkspaceDir)
+		workspace := filepath.Join(picoclawsandbox.Root(agentHome), picoclawsandbox.HostWorkspaceDir)
+		return agentruntime.Layout{
+			WorkspaceRoot: workspace,
+			SkillsRoot:    filepath.Join(workspace, "skills"),
+			HostLogPaths:  []string{picoclawsandbox.HostGatewayLogPath(agentHome)},
+		}
 	case RuntimeKindOpenClawSandbox:
-		return filepath.Join(openclawsandbox.Root(agentHome), openclawsandbox.HostWorkspaceDir)
+		workspace := filepath.Join(openclawsandbox.Root(agentHome), openclawsandbox.HostWorkspaceDir)
+		return agentruntime.Layout{
+			WorkspaceRoot: workspace,
+			SkillsRoot:    filepath.Join(workspace, "skills"),
+			HostLogPaths:  []string{openclawsandbox.HostGatewayLogPath(agentHome)},
+		}
 	case RuntimeKindCodex:
-		return filepath.Join(agentHome, ".codex", "workspace")
+		return agentruntime.Layout{
+			WorkspaceRoot: filepath.Join(agentHome, ".codex", "workspace"),
+			SkillsRoot:    filepath.Join(agentHome, ".codex", "home", "skills"),
+			HostLogPaths:  []string{filepath.Join(agentHome, ".codex", "home", "stderr.log")},
+		}
 	default:
-		return ""
+		return agentruntime.Layout{}
 	}
 }
 
@@ -1486,9 +1527,13 @@ func TestBoxLiteProviderGatewayLifecycle(t *testing.T) {
 		t.Fatalf("CreateWorker().RuntimeKind = %q, want %q", worker.RuntimeKind, RuntimeKindPicoClawSandbox)
 	}
 
-	logPath, err := agentGatewayLogPath("alice")
+	layout, err := testBuiltinLayout("alice", RuntimeKindPicoClawSandbox)
 	if err != nil {
-		t.Fatalf("agentGatewayLogPath() error = %v", err)
+		t.Fatalf("testBuiltinLayout() error = %v", err)
+	}
+	logPath := layout.HostLogPaths[0]
+	if logPath == "" {
+		t.Fatal("testBuiltinLayout() returned empty host log path")
 	}
 	if err := os.WriteFile(logPath, []byte("old line\nnew line\ngateway line\n"), 0o600); err != nil {
 		t.Fatalf("write gateway log: %v", err)
@@ -1737,7 +1782,7 @@ func TestCreateReplaceFieldMaskMergesExistingAgent(t *testing.T) {
 	}
 }
 
-func TestCreateReplaceManagerUsesRequestedImage(t *testing.T) {
+func TestCreateReplaceManagerIgnoresRequestedImageAndUsesDefault(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -1789,11 +1834,11 @@ func TestCreateReplaceManagerUsesRequestedImage(t *testing.T) {
 	if len(gotImages) != 2 {
 		t.Fatalf("createGatewayBox() calls = %d, want 2", len(gotImages))
 	}
-	if gotImages[0] != "manager-image:1" || gotImages[1] != "manager-image:2" {
-		t.Fatalf("createGatewayBox() images = %#v, want manager-image:1 then manager-image:2", gotImages)
+	if gotImages[0] != "manager-image:1" || gotImages[1] != "manager-image:1" {
+		t.Fatalf("createGatewayBox() images = %#v, want manager-image:1 for seed and replace", gotImages)
 	}
-	if replaced.Image != "manager-image:2" {
-		t.Fatalf("Create() image = %q, want requested image", replaced.Image)
+	if replaced.Image != "manager-image:1" {
+		t.Fatalf("Create() image = %q, want default manager image", replaced.Image)
 	}
 }
 
@@ -1938,8 +1983,8 @@ func TestCreateReplaceManagerReprovisionsWorkspaceAfterHomeRemoval(t *testing.T)
 	if createCalls != 2 {
 		t.Fatalf("sandbox Create() calls = %d, want 2", createCalls)
 	}
-	if replaced.Image != "manager-image:2" {
-		t.Fatalf("Create() image = %q, want requested image", replaced.Image)
+	if replaced.Image != "manager-image:1" {
+		t.Fatalf("Create() image = %q, want default manager image", replaced.Image)
 	}
 	workspaceRoot, err := testBuiltinWorkspaceRoot(ManagerName, RuntimeKindPicoClawSandbox)
 	if err != nil {
@@ -2072,7 +2117,7 @@ func TestCreateReplaceManagerSwitchesRuntimeKindRequiresImage(t *testing.T) {
 	}
 }
 
-func TestCreateReplaceManagerSwitchesRuntimeKindUsesRequestedImage(t *testing.T) {
+func TestCreateReplaceManagerSwitchesRuntimeKindUsesEmbeddedRuntimeImage(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -2097,11 +2142,20 @@ func TestCreateReplaceManagerSwitchesRuntimeKindUsesRequestedImage(t *testing.T)
 	}
 	defer ResetTestHooks()
 
+	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
 	svc, err := NewService(
 		testModelConfig(),
 		config.ServerConfig{},
 		"picoclaw-manager:old",
 		"",
+		WithHubService(hubSvc),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{
+			DefaultManagerTemplate: config.DefaultBootstrapManagerTemplate,
+			DefaultWorkerTemplate:  config.DefaultBootstrapWorkerTemplate,
+		}),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -2120,6 +2174,11 @@ func TestCreateReplaceManagerSwitchesRuntimeKindUsesRequestedImage(t *testing.T)
 	}
 
 	const requestedImage = "openclaw-manager:requested"
+	openClawTemplate, err := hubSvc.Get(context.Background(), "builtin.openclaw-manager")
+	if err != nil {
+		t.Fatalf("Get(openclaw-manager) error = %v", err)
+	}
+	wantImage := openClawTemplate.Image
 	replaced, err := svc.Create(context.Background(), CreateRequest{
 		Spec: CreateAgentSpec{
 			ID:          ManagerUserID,
@@ -2135,19 +2194,19 @@ func TestCreateReplaceManagerSwitchesRuntimeKindUsesRequestedImage(t *testing.T)
 	if got, want := replaced.RuntimeKind, RuntimeKindOpenClawSandbox; got != want {
 		t.Fatalf("Create() runtime_kind = %q, want %q", got, want)
 	}
-	if got, want := replaced.Image, requestedImage; got != want {
+	if got, want := replaced.Image, wantImage; got != want {
 		t.Fatalf("Create() image = %q, want %q", got, want)
 	}
 	if got, want := replaced.Avatar, avatar; got != want {
 		t.Fatalf("Create() avatar = %q, want %q", got, want)
 	}
-	if got, want := svc.managerImage, requestedImage; got != want {
+	if got, want := svc.managerImage, wantImage; got != want {
 		t.Fatalf("managerImage = %q, want %q", got, want)
 	}
 	if len(gotImages) != 2 {
 		t.Fatalf("createGatewayBox() calls = %d, want 2", len(gotImages))
 	}
-	if got, want := gotImages[1], requestedImage; got != want {
+	if got, want := gotImages[1], wantImage; got != want {
 		t.Fatalf("recreate manager image = %q, want %q", got, want)
 	}
 }
@@ -2162,7 +2221,8 @@ func TestCreateReplaceManagerWithStaleSubmittedImageUsesLatestDefaultTemplate(t 
 		Description: "picoclaw manager",
 		Role:        hub.TemplateRoleManager,
 		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "registry.example/picoclaw:2026.06.02",
+		Version:     "0.2.0",
+		Image:       "registry.example/picoclaw-manager:0.2.0",
 	})
 
 	var gotImages []string
@@ -2189,7 +2249,7 @@ func TestCreateReplaceManagerWithStaleSubmittedImageUsesLatestDefaultTemplate(t 
 	svc, err := NewService(
 		testModelConfig(),
 		config.ServerConfig{},
-		"registry.example/picoclaw:2026.06.02",
+		"registry.example/picoclaw-manager:0.2.0",
 		"",
 		WithHubService(hubSvc),
 		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/picoclaw-manager"}),
@@ -2202,7 +2262,7 @@ func TestCreateReplaceManagerWithStaleSubmittedImageUsesLatestDefaultTemplate(t 
 		Name:        ManagerName,
 		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
 		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "registry.example/picoclaw:2026.05.27",
+		Image:       "registry.example/picoclaw-manager:0.1.0",
 		BoxID:       "box-manager-old",
 		Role:        RoleManager,
 		Status:      string(agentruntime.StateRunning),
@@ -2221,7 +2281,7 @@ func TestCreateReplaceManagerWithStaleSubmittedImageUsesLatestDefaultTemplate(t 
 		Spec: CreateAgentSpec{
 			ID:          ManagerUserID,
 			Name:        ManagerName,
-			Image:       "registry.example/picoclaw:2026.05.27",
+			Image:       "registry.example/picoclaw-manager:0.1.0",
 			RuntimeKind: RuntimeKindPicoClawSandbox,
 		},
 		Replace: true,
@@ -2229,13 +2289,13 @@ func TestCreateReplaceManagerWithStaleSubmittedImageUsesLatestDefaultTemplate(t 
 	if err != nil {
 		t.Fatalf("Create() replace error = %v", err)
 	}
-	if got, want := replaced.Image, "registry.example/picoclaw:2026.06.02"; got != want {
+	if got, want := replaced.Image, "registry.example/picoclaw-manager:0.2.0"; got != want {
 		t.Fatalf("Create() replace image = %q, want %q", got, want)
 	}
 	if len(gotImages) != 1 {
 		t.Fatalf("createGatewayBox() calls = %d, want 1", len(gotImages))
 	}
-	if got, want := gotImages[0], "registry.example/picoclaw:2026.06.02"; got != want {
+	if got, want := gotImages[0], "registry.example/picoclaw-manager:0.2.0"; got != want {
 		t.Fatalf("recreate manager image = %q, want %q", got, want)
 	}
 }
@@ -3343,9 +3403,13 @@ func TestStreamLogsFollowUsesHostGatewayLogWithoutSandboxRuntime(t *testing.T) {
 		Status:      "running",
 		CreatedAt:   time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
 	}
-	logPath, err := agentGatewayLogPath("alice")
+	layout, err := testBuiltinLayout("alice", RuntimeKindPicoClawSandbox)
 	if err != nil {
-		t.Fatalf("agentGatewayLogPath() error = %v", err)
+		t.Fatalf("testBuiltinLayout() error = %v", err)
+	}
+	logPath := layout.HostLogPaths[0]
+	if logPath == "" {
+		t.Fatal("testBuiltinLayout() returned empty host log path")
 	}
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
 		t.Fatalf("create log dir: %v", err)
@@ -4074,7 +4138,8 @@ func TestAgentMarksOutdatedDefaultTemplateImageUpgradeRequired(t *testing.T) {
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
 		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "registry.example/picoclaw-worker:2026.06.02",
+		Version:     "0.2.0",
+		Image:       "registry.example/picoclaw-worker:0.2.0",
 	})
 
 	svc, err := NewService(
@@ -4099,7 +4164,7 @@ func TestAgentMarksOutdatedDefaultTemplateImageUpgradeRequired(t *testing.T) {
 		Name:        "alice",
 		RuntimeID:   "rt-u-alice",
 		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "registry.example/picoclaw-worker:2026.05.27",
+		Image:       "registry.example/picoclaw-worker:0.1.0",
 		BoxID:       "box-alice",
 		Role:        RoleWorker,
 		Status:      string(agentruntime.StateRunning),
@@ -4125,19 +4190,56 @@ func TestAgentMarksOutdatedDefaultTemplateImageUpgradeRequired(t *testing.T) {
 	}
 }
 
-func TestAgentMarksOutdatedManagerImageUpgradeRequiredWhenGatewayRuntimeChanged(t *testing.T) {
+func TestCompareSemanticVersions(t *testing.T) {
+	tests := []struct {
+		current string
+		latest  string
+		want    int
+		wantOK  bool
+	}{
+		{current: "0.1.0", latest: "0.2.0", want: -1, wantOK: true},
+		{current: "v1.2.3", latest: "1.2.3", want: 0, wantOK: true},
+		{current: "1.10.0", latest: "1.2.0", want: 1, wantOK: true},
+		{current: "1.0.0-alpha.2", latest: "1.0.0-alpha.10", want: -1, wantOK: true},
+		{current: "1.0.0", latest: "1.0.0-rc.1", want: 1, wantOK: true},
+		{current: "2026.5", latest: "0.2.0", want: 0, wantOK: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.current+"_vs_"+tt.latest, func(t *testing.T) {
+			got, ok := compareSemanticVersions(tt.current, tt.latest)
+			if ok != tt.wantOK {
+				t.Fatalf("compareSemanticVersions() ok = %t, want %t", ok, tt.wantOK)
+			}
+			if got != tt.want {
+				t.Fatalf("compareSemanticVersions() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAgentMarksOutdatedManagerImageUpgradeRequiredFromDefaultTemplateVersion(t *testing.T) {
 	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	const (
-		oldManagerImage = "registry.example/opencsghq/picoclaw:2026.05.22"
-		newManagerImage = "registry.example/opencsghq/picoclaw:2026.06.03"
+		oldManagerImage = "registry.example/opencsghq/picoclaw-manager:0.1.0"
+		newManagerImage = "registry.example/opencsghq/picoclaw-manager:0.2.0"
 	)
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-manager", hub.Template{
+		ID:          "picoclaw-manager",
+		Name:        "picoclaw-manager",
+		Description: "manager",
+		Role:        hub.TemplateRoleManager,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Version:     "0.2.0",
+		Image:       newManagerImage,
+	})
 	svc, err := NewService(
 		testModelConfig(),
 		config.ServerConfig{},
-		newManagerImage,
+		"manager-image:unused",
 		"",
-		WithGatewayRuntime(RuntimeKindOpenClawSandbox),
+		WithHubService(hubSvc),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/picoclaw-manager"}),
 		WithRuntime(fakeAgentRuntime{
 			kind: RuntimeKindPicoClawSandbox,
 			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
@@ -4179,23 +4281,31 @@ func TestAgentMarksOutdatedManagerImageUpgradeRequiredWhenGatewayRuntimeChanged(
 	}
 }
 
-func TestAgentMarksOutdatedManagerImageUpgradeRequiredFromLocalSameRepositoryCandidate(t *testing.T) {
+func TestAgentIgnoresNewerLocalImageCandidateForUpgradeRequired(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	provider := sandboxtest.NewProvider()
 	provider.Images = []string{
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:dev",
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:participant-local",
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.2.0",
 	}
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-manager", hub.Template{
+		ID:          "picoclaw-manager",
+		Name:        "picoclaw-manager",
+		Description: "manager",
+		Role:        hub.TemplateRoleManager,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Version:     "0.1.0",
+		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.1.0",
+	})
 
 	svc, err := NewService(
 		testModelConfig(),
 		config.ServerConfig{},
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:dev",
+		"manager-image:unused",
 		"",
 		WithSandboxProvider(provider),
+		WithHubService(hubSvc),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/picoclaw-manager"}),
 		WithRuntime(fakeAgentRuntime{
 			kind: RuntimeKindPicoClawSandbox,
 			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
@@ -4211,7 +4321,7 @@ func TestAgentMarksOutdatedManagerImageUpgradeRequiredFromLocalSameRepositoryCan
 		Name:        ManagerName,
 		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
 		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27",
+		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.1.0",
 		BoxID:       "box-manager",
 		Role:        RoleManager,
 		Status:      string(agentruntime.StateRunning),
@@ -4229,8 +4339,8 @@ func TestAgentMarksOutdatedManagerImageUpgradeRequiredFromLocalSameRepositoryCan
 	if !ok {
 		t.Fatal("Agent() ok = false, want true")
 	}
-	if !got.AgentProfile.ImageUpgradeRequired {
-		t.Fatalf("Agent().AgentProfile.ImageUpgradeRequired = false, want true for newer same-repository local image")
+	if got.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("Agent().AgentProfile.ImageUpgradeRequired = true, want false when only local image list is newer")
 	}
 }
 
@@ -4239,16 +4349,27 @@ func TestAgentDevImageDoesNotRequireUpgrade(t *testing.T) {
 	t.Setenv("HOME", homeDir)
 	provider := sandboxtest.NewProvider()
 	provider.Images = []string{
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:dev",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.2.0",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:dev",
 	}
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-manager", hub.Template{
+		ID:          "picoclaw-manager",
+		Name:        "picoclaw-manager",
+		Description: "manager",
+		Role:        hub.TemplateRoleManager,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Version:     "0.2.0",
+		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.2.0",
+	})
 
 	svc, err := NewService(
 		testModelConfig(),
 		config.ServerConfig{},
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
+		"manager-image:unused",
 		"",
 		WithSandboxProvider(provider),
+		WithHubService(hubSvc),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/picoclaw-manager"}),
 		WithRuntime(fakeAgentRuntime{
 			kind: RuntimeKindPicoClawSandbox,
 			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
@@ -4264,7 +4385,7 @@ func TestAgentDevImageDoesNotRequireUpgrade(t *testing.T) {
 		Name:        ManagerName,
 		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
 		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:dev",
+		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:dev",
 		BoxID:       "box-manager",
 		Role:        RoleManager,
 		Status:      string(agentruntime.StateRunning),
@@ -4298,7 +4419,8 @@ func TestRecreateUsesLatestDefaultTemplateImageAndPreservesUserSkills(t *testing
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
 		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "registry.example/picoclaw-worker:2026.06.02",
+		Version:     "0.2.0",
+		Image:       "registry.example/picoclaw-worker:0.2.0",
 	})
 
 	var newImage string
@@ -4339,7 +4461,7 @@ func TestRecreateUsesLatestDefaultTemplateImageAndPreservesUserSkills(t *testing
 		Name:        "alice",
 		RuntimeID:   "rt-u-alice",
 		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "registry.example/picoclaw-worker:2026.05.27",
+		Image:       "registry.example/picoclaw-worker:0.1.0",
 		BoxID:       "box-alice-old",
 		Role:        RoleWorker,
 		Status:      string(agentruntime.StateRunning),
@@ -4369,10 +4491,10 @@ func TestRecreateUsesLatestDefaultTemplateImageAndPreservesUserSkills(t *testing
 	if err != nil {
 		t.Fatalf("Recreate() error = %v", err)
 	}
-	if newImage != "registry.example/picoclaw-worker:2026.06.02" {
+	if newImage != "registry.example/picoclaw-worker:0.2.0" {
 		t.Fatalf("runtime New() image = %q, want latest default template image", newImage)
 	}
-	if recreated.Image != "registry.example/picoclaw-worker:2026.06.02" {
+	if recreated.Image != "registry.example/picoclaw-worker:0.2.0" {
 		t.Fatalf("Recreate().Image = %q, want latest default template image", recreated.Image)
 	}
 	if recreated.AgentProfile.EnvRestartRequired {
@@ -4395,7 +4517,8 @@ func TestUpgradeUsesLatestDefaultTemplateImage(t *testing.T) {
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
 		RuntimeKind: RuntimeKindPicoClawSandbox,
-		Image:       "registry.example/picoclaw-worker:2026.06.03",
+		Version:     "0.2.0",
+		Image:       "registry.example/picoclaw-worker:0.2.0",
 	})
 
 	var newImage string
@@ -4442,10 +4565,10 @@ func TestUpgradeUsesLatestDefaultTemplateImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Upgrade() error = %v", err)
 	}
-	if newImage != "registry.example/picoclaw-worker:2026.06.03" {
+	if newImage != "registry.example/picoclaw-worker:0.2.0" {
 		t.Fatalf("runtime New() image = %q, want latest default template image", newImage)
 	}
-	if recreated.Image != "registry.example/picoclaw-worker:2026.06.03" {
+	if recreated.Image != "registry.example/picoclaw-worker:0.2.0" {
 		t.Fatalf("Upgrade().Image = %q, want latest default template image", recreated.Image)
 	}
 }
@@ -6003,6 +6126,43 @@ func TestGatewayProvisionRequestBuildsOpenClawWorkerAssets(t *testing.T) {
 	}
 }
 
+func TestGatewayProvisionRequestUsesDockerHostAliasForImplicitAdvertiseURL(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	origDockerHostAliasEnabled := dockerHostAliasEnabled
+	origLocalIPv4Resolver := localIPv4Resolver
+	dockerHostAliasEnabled = func() bool { return true }
+	localIPv4Resolver = func() string {
+		t.Fatal("local IPv4 resolver should not be used for Docker Desktop gateway URLs")
+		return ""
+	}
+	defer func() {
+		dockerHostAliasEnabled = origDockerHostAliasEnabled
+		localIPv4Resolver = origLocalIPv4Resolver
+	}()
+
+	provider := sandboxtest.NewProvider()
+	provider.NameValue = config.DockerProvider
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: "0.0.0.0:18080", AccessToken: "shared-token"},
+		"manager-image:test",
+		"",
+		WithSandboxProvider(provider),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	gateway, err := svc.gatewayProvisionRequest(RuntimeKindPicoClawSandbox, ManagerName, ManagerUserID)
+	if err != nil {
+		t.Fatalf("gatewayProvisionRequest() error = %v", err)
+	}
+	if got, want := gateway.ManagerBaseURL, "http://host.docker.internal:18080"; got != want {
+		t.Fatalf("Gateway.ManagerBaseURL = %q, want %q", got, want)
+	}
+}
+
 func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) *hub.Service {
 	t.Helper()
 
@@ -6025,6 +6185,7 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 		Description:  item.Description,
 		Role:         item.Role,
 		RuntimeKind:  item.RuntimeKind,
+		Version:      item.Version,
 		Image:        item.Image,
 		WorkspaceRef: hub.WorkspaceRef{Kind: hub.WorkspaceKindDir, Path: workspaceRoot},
 		UpdatedAt:    time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
@@ -6070,34 +6231,54 @@ func appendTemplateImageEnvContracts(t *testing.T, manifestPath string, items []
 	}
 }
 
-func testBuiltinWorkspaceRoot(agentName, runtimeKind string) (string, error) {
+func testBuiltinLayout(agentName, runtimeKind string) (agentruntime.Layout, error) {
 	agentHome, err := agentHomeDir(agentName)
+	if err != nil {
+		return agentruntime.Layout{}, err
+	}
+	switch strings.TrimSpace(runtimeKind) {
+	case RuntimeKindPicoClawSandbox:
+		workspace := filepath.Join(picoclawsandbox.Root(agentHome), picoclawsandbox.HostWorkspaceDir)
+		return agentruntime.Layout{
+			WorkspaceRoot: workspace,
+			SkillsRoot:    filepath.Join(workspace, "skills"),
+			HostLogPaths:  []string{picoclawsandbox.HostGatewayLogPath(agentHome)},
+		}, nil
+	case RuntimeKindOpenClawSandbox:
+		workspace := filepath.Join(openclawsandbox.Root(agentHome), openclawsandbox.HostWorkspaceDir)
+		return agentruntime.Layout{
+			WorkspaceRoot: workspace,
+			SkillsRoot:    filepath.Join(workspace, "skills"),
+			HostLogPaths:  []string{openclawsandbox.HostGatewayLogPath(agentHome)},
+		}, nil
+	case RuntimeKindCodex:
+		return agentruntime.Layout{
+			WorkspaceRoot: filepath.Join(agentHome, ".codex", "workspace"),
+			SkillsRoot:    filepath.Join(agentHome, ".codex", "home", "skills"),
+			HostLogPaths:  []string{filepath.Join(agentHome, ".codex", "home", "stderr.log")},
+		}, nil
+	default:
+		return agentruntime.Layout{}, fmt.Errorf("unsupported runtime_kind %q for agent workspace", runtimeKind)
+	}
+}
+
+func testBuiltinWorkspaceRoot(agentName, runtimeKind string) (string, error) {
+	layout, err := testBuiltinLayout(agentName, runtimeKind)
 	if err != nil {
 		return "", err
 	}
-	var root string
-	switch strings.TrimSpace(runtimeKind) {
-	case RuntimeKindPicoClawSandbox:
-		root = filepath.Join(picoclawsandbox.Root(agentHome), picoclawsandbox.HostWorkspaceDir)
-	case RuntimeKindOpenClawSandbox:
-		root = filepath.Join(openclawsandbox.Root(agentHome), openclawsandbox.HostWorkspaceDir)
-	case RuntimeKindCodex:
-		root = filepath.Join(agentHome, ".codex", "workspace")
-	default:
-		return "", fmt.Errorf("unsupported runtime_kind %q for agent workspace", runtimeKind)
-	}
-	if strings.TrimSpace(root) == "" {
+	if strings.TrimSpace(layout.WorkspaceRoot) == "" {
 		return "", fmt.Errorf("runtime %q returned empty workspace root", runtimeKind)
 	}
-	return root, nil
+	return layout.WorkspaceRoot, nil
 }
 
 func agentSkillPath(agentName, runtimeKind, skillName string) (string, error) {
-	workspaceRoot, err := testBuiltinWorkspaceRoot(agentName, runtimeKind)
+	layout, err := testBuiltinLayout(agentName, runtimeKind)
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(workspaceRoot, "skills", skillName, "SKILL.md"), nil
+	return filepath.Join(layout.SkillsRoot, skillName, "SKILL.md"), nil
 }
 
 func mustNewLocalTemplateHubServiceWithoutWorkspace(t *testing.T, id string, item hub.Template) *hub.Service {
@@ -6111,6 +6292,7 @@ func mustNewLocalTemplateHubServiceWithoutWorkspace(t *testing.T, id string, ite
 		Description: item.Description,
 		Role:        item.Role,
 		RuntimeKind: item.RuntimeKind,
+		Version:     item.Version,
 		Image:       item.Image,
 		UpdatedAt:   time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
 	}); err != nil {
@@ -6217,6 +6399,15 @@ func TestServiceWorkspaceRootUsesRegisteredRuntimeCapability(t *testing.T) {
 	want := filepath.Join(agentHome, ".custom", "workspace")
 	if got != want {
 		t.Fatalf("WorkspaceRoot() = %q, want %q", got, want)
+	}
+
+	skillsRoot, err := svc.SkillsRoot("alice")
+	if err != nil {
+		t.Fatalf("SkillsRoot() error = %v", err)
+	}
+	wantSkills := filepath.Join(want, "skills")
+	if skillsRoot != wantSkills {
+		t.Fatalf("SkillsRoot() = %q, want %q", skillsRoot, wantSkills)
 	}
 }
 
@@ -6541,5 +6732,136 @@ func TestResolveManagerBaseURLPrefersAdvertiseBaseURL(t *testing.T) {
 	want := "http://127.0.0.1:18080"
 	if got != want {
 		t.Fatalf("resolveManagerBaseURL() = %q, want %q", got, want)
+	}
+}
+
+func TestGatewayProfileRuntimeRestartRequiredOnModelChange(t *testing.T) {
+	current := Agent{
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Name:        ManagerName,
+		AgentProfile: AgentProfile{
+			Name:            ManagerName,
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "qwen3.7-max",
+			ProfileComplete: true,
+		},
+	}
+	next := normalizeProfile(AgentProfile{
+		Name:            ManagerName,
+		Provider:        ProviderAPI,
+		BaseURL:         "https://api.example/v1",
+		APIKey:          "api-key",
+		ModelID:         "glm-5.1",
+		ProfileComplete: true,
+	}, ManagerName, "")
+	if !gatewayProfileRuntimeRestartRequired(current, next) {
+		t.Fatal("gatewayProfileRuntimeRestartRequired() = false, want true when gateway model changes")
+	}
+	if profileRestartRequired(current, next) {
+		t.Fatal("profileRestartRequired() = true, want false when only gateway model settings change")
+	}
+}
+
+func TestGatewayProfileRuntimeRestartNotRequiredForCodex(t *testing.T) {
+	current := Agent{
+		RuntimeKind: RuntimeKindCodex,
+		Name:        "alice",
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.4",
+			ProfileComplete: true,
+		},
+	}
+	next := normalizeProfile(AgentProfile{
+		Name:            "alice",
+		Provider:        ProviderCodex,
+		ModelID:         "gpt-5.5",
+		ProfileComplete: true,
+	}, "alice", "")
+	if gatewayProfileRuntimeRestartRequired(current, next) {
+		t.Fatal("gatewayProfileRuntimeRestartRequired() = true, want false for codex runtime")
+	}
+}
+
+func TestUpdateAgentProfileSyncsGatewayHostConfigWithoutRecreate(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	recreateCalled := false
+	SetTestHooks(
+		nil,
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _, _, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			recreateCalled = true
+			return nil, sandbox.Info{}, fmt.Errorf("unexpected recreate")
+		},
+	)
+	defer ResetTestHooks()
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{
+		ListenAddr:  ":18080",
+		AccessToken: "token",
+	}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		Role:        RoleManager,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		BoxID:       "box-manager",
+		Status:      string(sandbox.StateRunning),
+		AgentProfile: AgentProfile{
+			Name:            ManagerName,
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "qwen3.7-max",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	if _, err := ensureAgentPicoClawConfigForParticipant(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  "https://api.example/v1",
+		APIKey:   "api-key",
+		ModelID:  "qwen3.7-max",
+	}); err != nil {
+		t.Fatalf("ensureAgentPicoClawConfigForParticipant() error = %v", err)
+	}
+
+	_, err = svc.UpdateAgentProfile(ManagerUserID, AgentProfile{
+		Name:            ManagerName,
+		Provider:        ProviderAPI,
+		BaseURL:         "https://api.example/v1",
+		APIKey:          "api-key",
+		ModelID:         "glm-5.1",
+		ProfileComplete: true,
+	})
+	if err != nil {
+		t.Fatalf("UpdateAgentProfile() error = %v", err)
+	}
+	if recreateCalled {
+		t.Fatal("UpdateAgentProfile() recreated gateway box, want host config sync only")
+	}
+
+	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(manager config) error = %v", err)
+	}
+	if !strings.Contains(string(data), `"model_name": "glm-5.1"`) {
+		t.Fatalf("manager config missing updated model:\n%s", data)
+	}
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent() ok = false, want true")
+	}
+	if got.AgentProfile.EnvRestartRequired {
+		t.Fatal("Agent().AgentProfile.EnvRestartRequired = true, want false after config sync")
 	}
 }

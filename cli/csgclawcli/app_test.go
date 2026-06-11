@@ -211,7 +211,7 @@ func TestExecuteCollaborationIdentityHelpUsesParticipantSemantics(t *testing.T) 
 		{
 			name: "team create",
 			args: []string{"team", "create", "--help"},
-			want: []string{"lead bot id", "worker bot ids"},
+			want: []string{"lead participant id", "worker participant ids"},
 		},
 	}
 
@@ -252,14 +252,28 @@ func TestExecuteTeamCreateUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/teams" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/teams")
 			}
-			return jsonResponse(http.StatusCreated, `{"id":"room-1","room_id":"room-1","channel":"csgclaw","title":"release","lead_bot_id":"bot-manager","status":"active","created_at":"2026-05-30T00:00:00Z","updated_at":"2026-05-30T00:00:00Z"}`), nil
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode request body: %v", err)
+			}
+			if payload["lead_agent_id"] != "u-manager" {
+				t.Fatalf("lead_agent_id = %v, want u-manager; payload=%v", payload["lead_agent_id"], payload)
+			}
+			if _, ok := payload["lead_participant_id"]; ok {
+				t.Fatalf("payload includes legacy lead_participant_id: %v", payload)
+			}
+			return jsonResponse(http.StatusCreated, `{"id":"room-1","room_id":"room-1","channel":"csgclaw","title":"release","lead_agent_id":"u-manager","status":"active","created_at":"2026-05-30T00:00:00Z","updated_at":"2026-05-30T00:00:00Z"}`), nil
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "team", "create", "--lead-bot-id", "bot-manager", "--title", "release"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "team", "create", "--lead-agent-id", "u-manager", "--title", "release"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !strings.Contains(stdout.String(), "room-1") || !strings.Contains(stdout.String(), "bot-manager") {
+	if !strings.Contains(stdout.String(), "room-1") || !strings.Contains(stdout.String(), "u-manager") {
 		t.Fatalf("stdout = %q, want rendered team row", stdout.String())
 	}
 }

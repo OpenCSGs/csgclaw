@@ -146,7 +146,7 @@ func RenderAction(output string, w io.Writer, result ActionResult) error {
 
 	tw := NewTableWriter(w)
 	fmt.Fprintln(tw, "COMMAND\tACTION\tSTATUS\tID")
-	fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", result.Command, result.Action, result.Status, displayBotField(result.ID))
+	fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", result.Command, result.Action, result.Status, displayValueField(result.ID))
 	return tw.Flush()
 }
 
@@ -264,20 +264,20 @@ func RenderParticipantsTable(w io.Writer, participants []apitypes.Participant) e
 	fmt.Fprintln(tw, "ID\tNAME\tTYPE\tCHANNEL\tAGENT_ID\tCHANNEL_USER\tAPP_REF\tSTATUS")
 	for _, p := range participants {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			displayBotField(p.ID),
-			displayBotField(p.Name),
-			displayBotField(p.Type),
-			displayBotField(p.Channel),
-			displayBotField(p.AgentID),
-			displayBotField(p.ChannelUserRef),
-			displayBotField(p.ChannelAppRef),
-			displayBotField(p.LifecycleStatus),
+			displayValueField(p.ID),
+			displayValueField(p.Name),
+			displayValueField(p.Type),
+			displayValueField(p.Channel),
+			displayValueField(p.AgentID),
+			displayValueField(p.ChannelUserRef),
+			displayValueField(p.ChannelAppRef),
+			displayValueField(p.LifecycleStatus),
 		)
 	}
 	return tw.Flush()
 }
 
-func displayBotField(value string) string {
+func displayValueField(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return "-"
@@ -314,9 +314,9 @@ func RenderMessagesTable(w io.Writer, messages []apitypes.Message) error {
 
 func RenderTeamsTable(w io.Writer, teams []apitypes.Team) error {
 	tw := NewTableWriter(w)
-	fmt.Fprintln(tw, "ID\tROOM\tCHANNEL\tLEAD\tSTATUS\tTITLE")
+	fmt.Fprintln(tw, "ID\tROOM\tCHANNEL\tLEAD_AGENT\tSTATUS\tTITLE")
 	for _, item := range teams {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", displayBotField(item.ID), displayBotField(item.RoomID), displayBotField(item.Channel), displayBotField(item.LeadBotID), displayBotField(item.Status), displayBotField(item.Title))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", displayValueField(item.ID), displayValueField(item.RoomID), displayValueField(item.Channel), displayValueField(item.LeadAgentID), displayValueField(item.Status), displayValueField(item.Title))
 	}
 	return tw.Flush()
 }
@@ -325,7 +325,7 @@ func RenderTeamTasksTable(w io.Writer, tasks []apitypes.TeamTask) error {
 	tw := NewTableWriter(w)
 	fmt.Fprintln(tw, "ID\tTEAM\tSTATUS\tASSIGNED\tCLAIMED\tPRIORITY\tTITLE")
 	for _, item := range tasks {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", displayBotField(item.ID), displayBotField(item.TeamID), displayBotField(item.Status), displayBotField(item.AssignedTo), displayBotField(item.ClaimedBy), item.Priority, displayBotField(item.Title))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", displayValueField(item.ID), displayValueField(item.TeamID), displayValueField(item.Status), displayValueField(item.AssignedTo), displayValueField(item.ClaimedBy), item.Priority, displayValueField(item.Title))
 	}
 	return tw.Flush()
 }
@@ -334,7 +334,7 @@ func RenderTeamApprovalsTable(w io.Writer, approvals []apitypes.TeamApproval) er
 	tw := NewTableWriter(w)
 	fmt.Fprintln(tw, "ID\tTEAM\tTASK\tSTATUS\tREQUESTED_BY\tAPPROVER\tSUMMARY")
 	for _, item := range approvals {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", displayBotField(item.ID), displayBotField(item.TeamID), displayBotField(item.TaskID), displayBotField(item.Status), displayBotField(item.RequestedBy), displayBotField(item.ApproverID), displayBotField(item.Summary))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", displayValueField(item.ID), displayValueField(item.TeamID), displayValueField(item.TaskID), displayValueField(item.Status), displayValueField(item.RequestedBy), displayValueField(item.ApproverID), displayValueField(item.Summary))
 	}
 	return tw.Flush()
 }

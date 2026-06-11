@@ -8,8 +8,13 @@ import (
 
 type runtimeOnlyStub struct{}
 
-func (runtimeOnlyStub) Kind() string                              { return "stub" }
-func (runtimeOnlyStub) WorkspaceRoot(agentHome string) string     { return agentHome }
+func (runtimeOnlyStub) Kind() string { return "stub" }
+func (runtimeOnlyStub) Layout(agentHome string) Layout {
+	return Layout{
+		WorkspaceRoot: agentHome,
+		SkillsRoot:    agentHome + "/skills",
+	}
+}
 func (runtimeOnlyStub) New(context.Context, Spec) (Handle, error) { return Handle{}, nil }
 func (runtimeOnlyStub) Start(context.Context, Handle) (State, error) {
 	return StateRunning, nil
@@ -79,12 +84,23 @@ func TestProvisionerCanBeDiscoveredSeparatelyFromRuntime(t *testing.T) {
 	}
 }
 
-func TestRuntimeExposesWorkspaceRoot(t *testing.T) {
+func (w workspaceRootStub) Layout(string) Layout {
+	return Layout{
+		WorkspaceRoot: w.root,
+		SkillsRoot:    w.root + "/skills",
+	}
+}
+
+func TestRuntimeExposesLayout(t *testing.T) {
 	t.Parallel()
 
 	var rt Runtime = workspaceRootStub{root: "/tmp/custom-workspace"}
-	got := rt.WorkspaceRoot("/tmp/agent")
-	if got != "/tmp/custom-workspace" {
-		t.Fatalf("WorkspaceRoot() = %q, want %q", got, "/tmp/custom-workspace")
+	got := rt.Layout("/tmp/agent")
+	want := Layout{
+		WorkspaceRoot: "/tmp/custom-workspace",
+		SkillsRoot:    "/tmp/custom-workspace/skills",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Layout() = %#v, want %#v", got, want)
 	}
 }

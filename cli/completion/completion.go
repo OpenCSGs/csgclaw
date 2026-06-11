@@ -63,6 +63,8 @@ func FullSpec() CommandSpec {
 				Summary: "Start the local HTTP server.",
 				Flags: []FlagSpec{
 					{Name: "daemon", Short: "d"},
+					{Name: "no-auth-detect"},
+					{Name: "no-browser"},
 					{Name: "log-level", TakesValue: true, Values: logLevelValues()},
 					{Name: "log", TakesValue: true},
 					{Name: "pid", TakesValue: true},
@@ -499,8 +501,10 @@ func teamSpec() CommandSpec {
 					{Name: "channel", TakesValue: true, Values: []string{"csgclaw"}},
 					{Name: "room-id", TakesValue: true},
 					{Name: "title", TakesValue: true},
-					{Name: "lead-bot-id", TakesValue: true},
-					{Name: "member-bot-ids", TakesValue: true},
+					{Name: "lead-agent-id", TakesValue: true},
+					{Name: "lead-participant-id", TakesValue: true},
+					{Name: "member-agent-ids", TakesValue: true},
+					{Name: "member-participant-ids", TakesValue: true},
 				},
 			},
 			{
@@ -527,7 +531,7 @@ func teamSpec() CommandSpec {
 						Flags: []FlagSpec{
 							{Name: "team", TakesValue: true},
 							{Name: "task", TakesValue: true},
-							{Name: "bot-id", TakesValue: true},
+							{Name: "participant-id", TakesValue: true},
 							{Name: "actor-id", TakesValue: true},
 						},
 					},
@@ -536,7 +540,7 @@ func teamSpec() CommandSpec {
 						Summary: "Claim the next available task",
 						Flags: []FlagSpec{
 							{Name: "team", TakesValue: true},
-							{Name: "bot-id", TakesValue: true},
+							{Name: "participant-id", TakesValue: true},
 						},
 					},
 					{
@@ -545,7 +549,7 @@ func teamSpec() CommandSpec {
 						Flags: []FlagSpec{
 							{Name: "team", TakesValue: true},
 							{Name: "task", TakesValue: true},
-							{Name: "bot-id", TakesValue: true},
+							{Name: "participant-id", TakesValue: true},
 						},
 					},
 					{

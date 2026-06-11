@@ -10,11 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"csgclaw/internal/codexacp"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
-
-	acp "github.com/coder/acp-go-sdk"
 )
 
 type fakeBinaryProvider struct {
@@ -33,7 +30,7 @@ type fakeManager struct {
 	start  func(context.Context, SessionSpec) (*Session, error)
 	stop   func(context.Context, SessionHandle) error
 	get    func(SessionHandle) (*Session, error)
-	prompt func(context.Context, SessionHandle, acp.PromptRequest) (acp.PromptResponse, error)
+	prompt func(context.Context, SessionHandle, PromptRequest) (PromptResponse, error)
 }
 
 func (f fakeManager) Start(ctx context.Context, spec SessionSpec) (*Session, error) {
@@ -54,11 +51,11 @@ func (f fakeManager) Session(handle SessionHandle) (*Session, error) {
 	return nil, os.ErrNotExist
 }
 
-func (f fakeManager) Prompt(ctx context.Context, handle SessionHandle, req acp.PromptRequest) (acp.PromptResponse, error) {
+func (f fakeManager) Prompt(ctx context.Context, handle SessionHandle, req PromptRequest) (PromptResponse, error) {
 	if f.prompt != nil {
 		return f.prompt(ctx, handle, req)
 	}
-	return acp.PromptResponse{}, os.ErrNotExist
+	return PromptResponse{}, os.ErrNotExist
 }
 
 func TestRuntimeCreateStartAndInfo(t *testing.T) {
@@ -72,7 +69,7 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt := New(Dependencies{
-		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},
@@ -93,7 +90,10 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 				if spec.WorkspaceDir == "" || spec.HomeDir == "" || spec.CodexHomeDir == "" {
 					t.Fatalf("expected runtime directories to be populated")
 				}
-				if want := filepath.Join(root, "alice", ".codex"); spec.CodexHomeDir != want {
+				if want := hostHome; spec.HomeDir != want {
+					t.Fatalf("HomeDir = %q, want host HOME %q", spec.HomeDir, want)
+				}
+				if want := filepath.Join(root, "alice", ".codex", "home"); spec.CodexHomeDir != want {
 					t.Fatalf("CodexHomeDir = %q, want %q", spec.CodexHomeDir, want)
 				}
 				return &Session{
@@ -151,11 +151,11 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 	if err := json.Unmarshal(data, &meta); err != nil {
 		t.Fatalf("unmarshal runtime metadata: %v", err)
 	}
-	if meta.BinaryPath != "/tmp/codex-acp" {
+	if meta.BinaryPath != "/tmp/codex" {
 		t.Fatalf("runtime metadata binary path = %q", meta.BinaryPath)
 	}
 
-	authRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "auth.json"))
+	authRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", "auth.json"))
 	if err != nil {
 		t.Fatalf("read seeded runtime auth: %v", err)
 	}
@@ -163,14 +163,14 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 		t.Fatalf("runtime auth = %q, want copied host auth", string(authRaw))
 	}
 
-	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", configFileName),
+	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", "home", configFileName),
 		`model = "gpt-5.5"`,
 		`model_provider = "proxy"`,
 		`model_catalog_json = "model_catalog.json"`,
 		`wire_api = "responses"`,
 		`supports_websockets = false`,
 	)
-	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", modelCatalogFileName), "gpt-5.5")
+	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", "home", modelCatalogFileName), "gpt-5.5")
 }
 
 func TestRuntimeStopAndDelete(t *testing.T) {
@@ -179,7 +179,7 @@ func TestRuntimeStopAndDelete(t *testing.T) {
 	root := t.TempDir()
 	calledStop := false
 	rt := New(Dependencies{
-		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},
@@ -238,6 +238,7 @@ func TestRuntimeStopAndDelete(t *testing.T) {
 }
 
 func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
+	t.Setenv("HOME", "/host-home")
 	t.Setenv("OPENAI_BASE_URL", "https://host.example/v1")
 	t.Setenv("OPENAI_API_KEY", "host-key")
 	t.Setenv("OPENAI_MODEL", "host-model")
@@ -246,7 +247,7 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 	t.Setenv("ENV", "/host-env")
 
 	env := buildSessionEnv(SessionSpec{
-		HomeDir:      "/tmp/runtime-home",
+		HomeDir:      "/host-home",
 		CodexHomeDir: "/tmp/runtime-codex-home",
 		Profile: agentruntime.Profile{
 			ModelID: " gpt-5.5 ",
@@ -270,7 +271,7 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 		envMap[key] = value
 	}
 
-	if got, want := envMap["HOME"], "/tmp/runtime-home"; got != want {
+	if got, want := envMap["HOME"], "/host-home"; got != want {
 		t.Fatalf("HOME = %q, want %q", got, want)
 	}
 	if got, want := envMap["CODEX_HOME"], "/tmp/runtime-codex-home"; got != want {
@@ -299,7 +300,6 @@ func TestRuntimeInfoNotFound(t *testing.T) {
 	t.Parallel()
 
 	rt := New(Dependencies{
-		BinaryProvider: codexacp.Installer{},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(t.TempDir(), agentName), nil
 		},
@@ -325,7 +325,7 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runtimeAuthPath := filepath.Join(root, "alice", ".codex", "auth.json")
+	runtimeAuthPath := filepath.Join(root, "alice", ".codex", "home", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(runtimeAuthPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +334,7 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 	}
 
 	rt := New(Dependencies{
-		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},
@@ -380,9 +380,13 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 	if string(authRaw) != `{"tokens":{"access_token":"runtime","refresh_token":"runtime-refresh"}}` {
 		t.Fatalf("runtime auth = %q, want existing runtime auth preserved", string(authRaw))
 	}
-	if _, err := os.Stat(filepath.Join(root, "alice", ".codex", configFileName)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("config.toml should not be written when auth.json exists, stat err = %v", err)
-	}
+	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", "home", configFileName),
+		`sandbox_mode = "workspace-write"`,
+		`features.multi_agent = false`,
+		`features.memories = false`,
+		`memories.generate_memories = false`,
+		`memories.use_memories = false`,
+	)
 }
 
 func TestRuntimeCreateWritesConfigWhenHostAuthIsSeeded(t *testing.T) {
@@ -397,7 +401,7 @@ func TestRuntimeCreateWritesConfigWhenHostAuthIsSeeded(t *testing.T) {
 	}
 
 	rt := New(Dependencies{
-		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},
@@ -446,13 +450,84 @@ func TestRuntimeCreateWritesConfigWhenHostAuthIsSeeded(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", configFileName),
+	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", "home", configFileName),
 		`model = "gpt-5.5"`,
 		`model_catalog_json = "model_catalog.json"`,
 		`wire_api = "responses"`,
 		`supports_websockets = false`,
 	)
-	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", modelCatalogFileName), "gpt-5.5")
+	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", "home", modelCatalogFileName), "gpt-5.5")
+}
+
+func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
+	withAppServerHelperCommand(t, "resume-success")
+
+	root := t.TempDir()
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+	deps := Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "codex"},
+		AgentHome: func(agentName string) (string, error) {
+			return filepath.Join(root, agentName), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        "u-alice",
+				Name:      "alice",
+				RuntimeID: h.RuntimeID,
+				Profile: agentruntime.Profile{
+					ModelID:         "gpt-5",
+					BaseURL:         "https://runtime.example/v1",
+					APIKey:          "runtime-key",
+					ReasoningEffort: "medium",
+				},
+			}, nil
+		},
+	}
+
+	rt := New(deps)
+	handle, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-u-alice",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+		Profile: agentruntime.Profile{
+			ModelID:         "gpt-5",
+			BaseURL:         "https://runtime.example/v1",
+			APIKey:          "runtime-key",
+			ReasoningEffort: "medium",
+		},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if handle.HandleID != "main-thread" {
+		t.Fatalf("initial handle id = %q, want main-thread", handle.HandleID)
+	}
+
+	reloaded := New(deps)
+	manager := reloaded.SessionManager()
+	session, err := manager.Session(SessionHandle{RuntimeID: "rt-u-alice"})
+	if err != nil {
+		t.Fatalf("Session() after reload error = %v", err)
+	}
+	if session.SessionID != "resumed-thread" {
+		t.Fatalf("hydrated session id = %q, want resumed-thread", session.SessionID)
+	}
+
+	resp, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: "rt-u-alice"}, PromptRequest{
+		SessionID: session.SessionID,
+		Prompt:    []PromptContentBlock{TextBlock("hello again")},
+	})
+	if err != nil {
+		t.Fatalf("Prompt() after reload error = %v", err)
+	}
+	if resp.StopReason != StopReasonEndTurn {
+		t.Fatalf("StopReason = %q, want %q", resp.StopReason, StopReasonEndTurn)
+	}
+
+	if _, err := reloaded.Stop(context.Background(), agentruntime.Handle{RuntimeID: "rt-u-alice"}); err != nil {
+		t.Fatalf("Stop() after reload error = %v", err)
+	}
 }
 
 func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
@@ -462,7 +537,7 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 	t.Setenv("CODEX_HOME", "")
 
 	rt := New(Dependencies{
-		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},
@@ -511,7 +586,7 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	configRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", configFileName))
+	configRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", configFileName))
 	if err != nil {
 		t.Fatalf("read seeded runtime config: %v", err)
 	}
@@ -541,10 +616,320 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 	}
 }
 
+func TestRuntimeCreateCopiesHostCodexSkills(t *testing.T) {
+	root := t.TempDir()
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+	hostSkillsRoot := filepath.Join(hostHome, ".codex", "skills")
+	if err := os.MkdirAll(filepath.Join(hostSkillsRoot, "demo", "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostSkillsRoot, "demo", "SKILL.md"), []byte("# Demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostSkillsRoot, "demo", "scripts", "run.sh"), []byte("#!/bin/sh\necho ready\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome: func(agentName string) (string, error) {
+			return filepath.Join(root, agentName), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        "u-alice",
+				Name:      "alice",
+				RuntimeID: h.RuntimeID,
+			}, nil
+		},
+		Manager: fakeManager{
+			start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+				return &Session{
+					RuntimeID:    spec.RuntimeID,
+					AgentID:      spec.AgentID,
+					AgentName:    spec.AgentName,
+					SessionID:    "sess-copy-skills",
+					BinaryPath:   spec.BinaryPath,
+					WorkspaceDir: spec.WorkspaceDir,
+					HomeDir:      spec.HomeDir,
+					CodexHomeDir: spec.CodexHomeDir,
+					StderrPath:   spec.StderrPath,
+					ProcessID:    os.Getpid(),
+					CreatedAt:    time.Now().UTC(),
+					StartedAt:    time.Now().UTC(),
+				}, nil
+			},
+		},
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-u-alice",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	assertRuntimeSkillFile(t, filepath.Join(root, "alice", ".codex", "home", "skills", "demo", "SKILL.md"), "# Demo\n", 0o644)
+	assertRuntimeSkillFile(t, filepath.Join(root, "alice", ".codex", "home", "skills", "demo", "scripts", "run.sh"), "#!/bin/sh\necho ready\n", 0o755)
+}
+
+func TestRuntimeCreateRefreshesCodexSkillsFromHost(t *testing.T) {
+	root := t.TempDir()
+	hostCodexHome := filepath.Join(t.TempDir(), "shared-codex-home")
+	t.Setenv("CODEX_HOME", hostCodexHome)
+	hostSkillsRoot := filepath.Join(hostCodexHome, "skills")
+	if err := os.MkdirAll(filepath.Join(hostSkillsRoot, "fresh"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostSkillsRoot, "fresh", "SKILL.md"), []byte("# Fresh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeSkillsRoot := filepath.Join(root, "alice", ".codex", "home", "skills")
+	if err := os.MkdirAll(filepath.Join(runtimeSkillsRoot, "stale"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeSkillsRoot, "stale", "SKILL.md"), []byte("# Stale\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome: func(agentName string) (string, error) {
+			return filepath.Join(root, agentName), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        "u-alice",
+				Name:      "alice",
+				RuntimeID: h.RuntimeID,
+			}, nil
+		},
+		Manager: fakeManager{
+			start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+				return &Session{
+					RuntimeID:    spec.RuntimeID,
+					AgentID:      spec.AgentID,
+					AgentName:    spec.AgentName,
+					SessionID:    "sess-refresh-skills",
+					BinaryPath:   spec.BinaryPath,
+					WorkspaceDir: spec.WorkspaceDir,
+					HomeDir:      spec.HomeDir,
+					CodexHomeDir: spec.CodexHomeDir,
+					StderrPath:   spec.StderrPath,
+					ProcessID:    os.Getpid(),
+					CreatedAt:    time.Now().UTC(),
+					StartedAt:    time.Now().UTC(),
+				}, nil
+			},
+		},
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-u-alice",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	assertRuntimeSkillFile(t, filepath.Join(runtimeSkillsRoot, "fresh", "SKILL.md"), "# Fresh\n", 0o644)
+	if _, err := os.Stat(filepath.Join(runtimeSkillsRoot, "stale", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale runtime skill should be removed, stat err = %v", err)
+	}
+}
+
+func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
+	root := t.TempDir()
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+	if err := os.MkdirAll(filepath.Join(hostHome, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hostConfig := strings.Join([]string{
+		`approval_policy = "manual"`,
+		`[[skills.config]]`,
+		`name = "superpowers:brainstorming"`,
+		``,
+		`[features]`,
+		`multi_agent = true`,
+		`memories = true`,
+		``,
+		`[memories]`,
+		`generate_memories = true`,
+		`use_memories = true`,
+		``,
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(hostHome, ".codex", configFileName), []byte(hostConfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome: func(agentName string) (string, error) {
+			return filepath.Join(root, agentName), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        "u-alice",
+				Name:      "alice",
+				RuntimeID: h.RuntimeID,
+				Profile: agentruntime.Profile{
+					ModelID: "gpt-5.5",
+					BaseURL: "https://runtime.example/v1",
+					APIKey:  "runtime-key",
+				},
+			}, nil
+		},
+		Manager: fakeManager{
+			start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+				return &Session{
+					RuntimeID:    spec.RuntimeID,
+					AgentID:      spec.AgentID,
+					AgentName:    spec.AgentName,
+					SessionID:    "sess-copy-host-config",
+					BinaryPath:   spec.BinaryPath,
+					WorkspaceDir: spec.WorkspaceDir,
+					HomeDir:      spec.HomeDir,
+					CodexHomeDir: spec.CodexHomeDir,
+					StderrPath:   spec.StderrPath,
+					ProcessID:    os.Getpid(),
+					CreatedAt:    time.Now().UTC(),
+					StartedAt:    time.Now().UTC(),
+				}, nil
+			},
+		},
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-u-alice",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+		Profile: agentruntime.Profile{
+			ModelID: "gpt-5.5",
+			BaseURL: "https://runtime.example/v1",
+			APIKey:  "runtime-key",
+		},
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	configRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", configFileName))
+	if err != nil {
+		t.Fatalf("read runtime config: %v", err)
+	}
+	configText := string(configRaw)
+	if strings.Contains(configText, "[[skills.config]]") {
+		t.Fatalf("runtime config should strip inherited skills.config blocks:\n%s", configText)
+	}
+	for _, want := range []string{
+		`approval_policy = "manual"`,
+		csgclawProviderBeginMarker,
+		csgclawSandboxBeginMarker,
+		csgclawMultiAgentBeginMarker,
+		csgclawMemoryFeatureBeginMarker,
+		csgclawMemoryConfigBeginMarker,
+	} {
+		if !strings.Contains(configText, want) {
+			t.Fatalf("runtime config missing %q:\n%s", want, configText)
+		}
+	}
+	for _, unwanted := range []string{
+		`multi_agent = true`,
+		`memories = true`,
+		`generate_memories = true`,
+		`use_memories = true`,
+	} {
+		if strings.Contains(configText, unwanted) {
+			t.Fatalf("runtime config still contains stale host directive %q:\n%s", unwanted, configText)
+		}
+	}
+}
+
+func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T) {
+	initial := strings.Join([]string{
+		csgclawProviderBeginMarker,
+		`model = "old-model"`,
+		csgclawProviderEndMarker,
+		``,
+		csgclawSandboxBeginMarker,
+		`sandbox_mode = "danger-full-access"`,
+		csgclawSandboxEndMarker,
+		``,
+		`[features]`,
+		csgclawMultiAgentBeginMarker,
+		`multi_agent = true`,
+		csgclawMultiAgentEndMarker,
+		`memories = true`,
+		``,
+		`[memories]`,
+		csgclawMemoryConfigBeginMarker,
+		`generate_memories = true`,
+		csgclawMemoryConfigEndMarker,
+		`use_memories = true`,
+		``,
+	}, "\n")
+
+	profile := agentruntime.Profile{
+		ModelID: "gpt-5.5",
+		BaseURL: "https://runtime.example/v1",
+		APIKey:  "runtime-key",
+	}
+	first := configureCodexHomeConfig(initial, profile)
+	second := configureCodexHomeConfig(first, profile)
+	if first != second {
+		t.Fatalf("configureCodexHomeConfig should be idempotent\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+	for _, marker := range []string{
+		csgclawProviderBeginMarker,
+		csgclawSandboxBeginMarker,
+		csgclawMultiAgentBeginMarker,
+		csgclawMemoryFeatureBeginMarker,
+		csgclawMemoryConfigBeginMarker,
+	} {
+		if got := strings.Count(first, marker); got != 1 {
+			t.Fatalf("marker %q count = %d, want 1\n%s", marker, got, first)
+		}
+	}
+	for _, unwanted := range []string{
+		`model = "old-model"`,
+		`sandbox_mode = "danger-full-access"`,
+		`multi_agent = true`,
+		`generate_memories = true`,
+		`use_memories = true`,
+	} {
+		if strings.Contains(first, unwanted) {
+			t.Fatalf("managed config should replace stale directive %q:\n%s", unwanted, first)
+		}
+	}
+}
+
+func TestConfigureCodexHomeConfigIncompleteProfileSkipsProvider(t *testing.T) {
+	config := configureCodexHomeConfig("approval_policy = \"manual\"\n", agentruntime.Profile{
+		BaseURL: "https://runtime.example/v1",
+	})
+	if strings.Contains(config, csgclawProviderBeginMarker) {
+		t.Fatalf("config should skip provider block for incomplete profile:\n%s", config)
+	}
+	for _, want := range []string{
+		`approval_policy = "manual"`,
+		csgclawSandboxBeginMarker,
+		csgclawMultiAgentBeginMarker,
+		csgclawMemoryFeatureBeginMarker,
+		csgclawMemoryConfigBeginMarker,
+	} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("config missing %q:\n%s", want, config)
+		}
+	}
+}
+
 func TestRuntimeCreateAlwaysWritesResponsesConfig(t *testing.T) {
 	root := t.TempDir()
 	rt := New(Dependencies{
-		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},
@@ -581,14 +966,14 @@ func TestRuntimeCreateAlwaysWritesResponsesConfig(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", configFileName),
+	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", "home", configFileName),
 		`model = "deepseek-v4-pro"`,
 		`model_catalog_json = "model_catalog.json"`,
 		`wire_api = "responses"`,
 		`supports_websockets = false`,
 	)
-	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", modelCatalogFileName), "deepseek-v4-pro")
-	configText, err := os.ReadFile(filepath.Join(root, "alice", ".codex", configFileName))
+	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", "home", modelCatalogFileName), "deepseek-v4-pro")
+	configText, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", configFileName))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -599,7 +984,7 @@ func TestRuntimeCreateAlwaysWritesResponsesConfig(t *testing.T) {
 
 func TestRuntimeCreateRemovesStaleConfigWhenAuthExists(t *testing.T) {
 	root := t.TempDir()
-	runtimeRoot := filepath.Join(root, "alice", ".codex")
+	runtimeRoot := filepath.Join(root, "alice", ".codex", "home")
 	if err := os.MkdirAll(runtimeRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -611,7 +996,7 @@ func TestRuntimeCreateRemovesStaleConfigWhenAuthExists(t *testing.T) {
 	}
 
 	rt := New(Dependencies{
-		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},
@@ -665,10 +1050,7 @@ func TestRuntimeCreateRemovesStaleConfigWhenAuthExists(t *testing.T) {
 		t.Fatalf("read rewritten config: %v", err)
 	}
 	configText := string(configRaw)
-	if strings.Contains(configText, "stale = true") {
-		t.Fatalf("stale config was not replaced:\n%s", configText)
-	}
-	for _, want := range []string{`model = "gpt-5.5"`, `wire_api = "responses"`} {
+	for _, want := range []string{`model = "gpt-5.5"`, `wire_api = "responses"`, `stale = true`} {
 		if !strings.Contains(configText, want) {
 			t.Fatalf("runtime config missing %q:\n%s", want, configText)
 		}
@@ -718,13 +1100,32 @@ func assertRuntimeModelCatalog(t *testing.T, path, wantModel string) {
 	}
 }
 
+func assertRuntimeSkillFile(t *testing.T, path, want string, wantPerm os.FileMode) {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read runtime skill file %s: %v", path, err)
+	}
+	if string(data) != want {
+		t.Fatalf("runtime skill file %s = %q, want %q", path, string(data), want)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat runtime skill file %s: %v", path, err)
+	}
+	if got := info.Mode().Perm(); got != wantPerm {
+		t.Fatalf("runtime skill file %s perm = %o, want %o", path, got, wantPerm)
+	}
+}
+
 func TestRuntimeStartKeepsExistingRunningSession(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	startCalls := 0
 	rt := New(Dependencies{
-		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},
@@ -793,7 +1194,7 @@ func TestRuntimeCreateDetachesManagerStartContext(t *testing.T) {
 
 	var startCtx context.Context
 	rt := New(Dependencies{
-		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex-acp"},
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},

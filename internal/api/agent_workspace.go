@@ -14,6 +14,22 @@ var (
 )
 
 func (h *Handler) handleAgentWorkspace(w http.ResponseWriter, r *http.Request) {
+	h.handleAgentWorkspaceListing(w, r, h.agentWorkspaceRoot)
+}
+
+func (h *Handler) handleAgentWorkspaceFile(w http.ResponseWriter, r *http.Request) {
+	h.handleAgentWorkspaceFileRead(w, r, h.agentWorkspaceRoot)
+}
+
+func (h *Handler) handleAgentSkills(w http.ResponseWriter, r *http.Request) {
+	h.handleAgentWorkspaceListing(w, r, h.agentSkillsRoot)
+}
+
+func (h *Handler) handleAgentSkillsFile(w http.ResponseWriter, r *http.Request) {
+	h.handleAgentWorkspaceFileRead(w, r, h.agentSkillsRoot)
+}
+
+func (h *Handler) handleAgentWorkspaceListing(w http.ResponseWriter, r *http.Request, resolveRoot func(string) (string, error)) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -27,7 +43,7 @@ func (h *Handler) handleAgentWorkspace(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	root, err := h.agentWorkspaceRoot(id)
+	root, err := resolveRoot(id)
 	if err != nil {
 		writeAgentWorkspaceError(w, err)
 		return
@@ -44,7 +60,7 @@ func (h *Handler) handleAgentWorkspace(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, listing)
 }
 
-func (h *Handler) handleAgentWorkspaceFile(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleAgentWorkspaceFileRead(w http.ResponseWriter, r *http.Request, resolveRoot func(string) (string, error)) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -58,7 +74,7 @@ func (h *Handler) handleAgentWorkspaceFile(w http.ResponseWriter, r *http.Reques
 		http.NotFound(w, r)
 		return
 	}
-	root, err := h.agentWorkspaceRoot(id)
+	root, err := resolveRoot(id)
 	if err != nil {
 		writeAgentWorkspaceError(w, err)
 		return
@@ -81,6 +97,14 @@ func (h *Handler) agentWorkspaceRoot(id string) (string, error) {
 		return "", errAgentWorkspaceNotFound
 	}
 	return h.svc.WorkspaceRoot(item.Name)
+}
+
+func (h *Handler) agentSkillsRoot(id string) (string, error) {
+	item, ok := h.svc.Agent(id)
+	if !ok {
+		return "", errAgentWorkspaceNotFound
+	}
+	return h.svc.SkillsRoot(item.Name)
 }
 
 func writeAgentWorkspaceError(w http.ResponseWriter, err error) {

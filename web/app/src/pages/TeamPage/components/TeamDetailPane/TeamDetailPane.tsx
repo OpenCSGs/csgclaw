@@ -81,14 +81,14 @@ export function TeamDetailPane({
   }
 
   const memberIDs = teamMemberIDs(team, room);
-  const members = memberIDs.map((memberID) => memberDisplay(memberID, agents, usersById, team.lead_bot_id));
+  const members = memberIDs.map((memberID) => memberDisplay(memberID, agents, usersById, team.lead_agent_id));
   const parentTasks = rootTasks(tasks);
   const locale = document.documentElement.lang || "en";
   const teamAgents = agents.filter((agent): agent is AgentLike & { id: string } => Boolean(agent?.id));
   const teamAgentIDs = teamAgents.map((agent) => String(agent.id));
   const roomMemberIDs = new Set(room?.members ?? []);
   const existingTeamAgentIDs = teamAgentIDs.filter(
-    (agentID) => roomMemberIDs.has(agentID) || agentID === team.lead_bot_id,
+    (agentID) => roomMemberIDs.has(agentID) || agentID === team.lead_agent_id,
   );
   const allAgentsSelected = teamAgentIDs.length > 0 && teamAgentIDs.every((id) => selectedMemberIDs.includes(id));
   const selectedAgentCount = selectedMemberIDs.filter((id) => teamAgentIDs.includes(id)).length;
@@ -176,7 +176,7 @@ export function TeamDetailPane({
                     </label>
                     {teamAgents.map((agent) => {
                       const agentID = String(agent.id);
-                      const inTeam = roomMemberIDs.has(agentID) || agentID === team.lead_bot_id;
+                      const inTeam = roomMemberIDs.has(agentID) || agentID === team.lead_agent_id;
                       return (
                         <label key={agentID} className="selection-item">
                           <input
@@ -229,7 +229,7 @@ export function TeamDetailPane({
             </div>
           </div>
           <div className="team-detail-fields">
-            <DetailField label={t("teamLeadLabel")} value={memberName(team.lead_bot_id, agents, usersById)} />
+            <DetailField label={t("teamLeadLabel")} value={memberName(team.lead_agent_id, agents, usersById)} />
             <DetailField label={t("teamMembersLabel")} value={String(members.length)} />
             <DetailField label={t("teamChannelLabel")} value={team.channel || "csgclaw"} />
             <DetailField label={t("teamRecordRoomLabel")} value={room?.title || team.room_id || "-"} />
@@ -402,8 +402,8 @@ function MemberRowContent({ member, t }: { member: TeamMemberDisplay; t: Transla
 
 function teamMemberIDs(team: WorkspaceTeam, room: IMConversation | null | undefined): string[] {
   const ids = new Set(room?.members ?? []);
-  if (team.lead_bot_id) {
-    ids.add(team.lead_bot_id);
+  if (team.lead_agent_id) {
+    ids.add(team.lead_agent_id);
   }
   return Array.from(ids);
 }
@@ -412,7 +412,7 @@ function memberDisplay(
   memberID: string,
   agents: readonly AgentLike[],
   usersById: UsersLookup,
-  leadBotID: string,
+  leadAgentID: string,
 ): TeamMemberDisplay {
   const agent = agents.find((item) => item.id === memberID) ?? null;
   const user = lookupUser(usersById, memberID);
@@ -421,7 +421,7 @@ function memberDisplay(
     id: memberID,
     agent,
     initials: initialsForName(name),
-    leader: memberID === leadBotID,
+    leader: memberID === leadAgentID,
     name,
     running: agent ? isAgentRunning(agent) : false,
   };

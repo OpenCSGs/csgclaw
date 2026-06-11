@@ -84,24 +84,33 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	channel := fs.String("channel", "csgclaw", "channel name")
 	roomID := fs.String("room-id", "", "existing room id")
 	title := fs.String("title", "", "team title")
-	leadBotID := fs.String("lead-bot-id", "", "lead bot id")
-	memberBotIDs := fs.String("member-bot-ids", "", "comma-separated worker bot ids")
+	leadAgentID := fs.String("lead-agent-id", "", "lead agent id")
+	memberAgentIDs := fs.String("member-agent-ids", "", "comma-separated worker agent ids")
+	leadParticipantID := fs.String("lead-participant-id", "", "legacy lead participant id")
+	memberParticipantIDs := fs.String("member-participant-ids", "", "legacy comma-separated worker participant ids")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("team create does not accept positional arguments")
 	}
-	if *leadBotID == "" {
-		return fmt.Errorf("lead_bot_id is required")
+	if *leadAgentID == "" && *leadParticipantID == "" {
+		return fmt.Errorf("lead_agent_id is required")
 	}
-	item, err := run.APIClient(globals).CreateTeam(ctx, apitypes.CreateTeamRequest{
-		Channel:      *channel,
-		RoomID:       *roomID,
-		Title:        *title,
-		LeadBotID:    *leadBotID,
-		MemberBotIDs: command.ParseCSV(*memberBotIDs),
-	})
+	req := apitypes.CreateTeamRequest{
+		Channel:        *channel,
+		RoomID:         *roomID,
+		Title:          *title,
+		LeadAgentID:    *leadAgentID,
+		MemberAgentIDs: command.ParseCSV(*memberAgentIDs),
+	}
+	if req.LeadAgentID == "" {
+		req.LeadParticipantID = *leadParticipantID
+	}
+	if len(req.MemberAgentIDs) == 0 {
+		req.MemberParticipantIDs = command.ParseCSV(*memberParticipantIDs)
+	}
+	item, err := run.APIClient(globals).CreateTeam(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -158,9 +167,9 @@ func (c cmd) runTaskList(ctx context.Context, run *command.Context, args []strin
 }
 
 func (c cmd) runTaskCreateBatch(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("team task create-batch", run.Program+" team task create-batch --team <id> --created-by <bot> --file <tasks.json>", "Create a batch of tasks from a JSON file.")
+	fs := run.NewFlagSet("team task create-batch", run.Program+" team task create-batch --team <id> --created-by <participant> --file <tasks.json>", "Create a batch of tasks from a JSON file.")
 	teamID := fs.String("team", "", "team id")
-	createdBy := fs.String("created-by", "", "creator bot id")
+	createdBy := fs.String("created-by", "", "creator participant id")
 	filePath := fs.String("file", "", "path to tasks JSON file")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -194,20 +203,20 @@ func (c cmd) runTaskCreateBatch(ctx context.Context, run *command.Context, args 
 }
 
 func (c cmd) runTaskClaim(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("team task claim", run.Program+" team task claim --team <id> --task <id> --bot-id <bot>", "Claim a specific task.")
+	fs := run.NewFlagSet("team task claim", run.Program+" team task claim --team <id> --task <id> --participant-id <participant>", "Claim a specific task.")
 	teamID := fs.String("team", "", "team id")
 	taskID := fs.String("task", "", "task id")
-	botID := fs.String("bot-id", "", "worker bot id")
+	participantID := fs.String("participant-id", "", "worker participant id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("team task claim does not accept positional arguments")
 	}
-	if *teamID == "" || *taskID == "" || *botID == "" {
-		return fmt.Errorf("team, task, and bot_id are required")
+	if *teamID == "" || *taskID == "" || *participantID == "" {
+		return fmt.Errorf("team, task, and participant_id are required")
 	}
-	item, err := run.APIClient(globals).ClaimTeamTask(ctx, *teamID, *taskID, *botID)
+	item, err := run.APIClient(globals).ClaimTeamTask(ctx, *teamID, *taskID, *participantID)
 	if err != nil {
 		return err
 	}
@@ -217,19 +226,19 @@ func (c cmd) runTaskClaim(ctx context.Context, run *command.Context, args []stri
 func (c cmd) runTaskClaimNext(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
 	fs := run.NewFlagSet("team task claim-next", run.Program+" team task claim-next [flags]", "Claim the next available task.")
 	teamID := fs.String("team", "", "team id")
-	botID := fs.String("bot-id", "", "worker bot id")
+	participantID := fs.String("participant-id", "", "worker participant id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("team task claim-next does not accept positional arguments")
 	}
-	if *botID == "" {
-		return fmt.Errorf("bot_id is required")
+	if *participantID == "" {
+		return fmt.Errorf("participant_id is required")
 	}
 	item, err := run.APIClient(globals).ClaimNextTeamTask(ctx, apitypes.ClaimNextTeamTaskRequest{
-		TeamID: *teamID,
-		BotID:  *botID,
+		TeamID:        *teamID,
+		ParticipantID: *participantID,
 	})
 	if err != nil {
 		return err
@@ -238,10 +247,10 @@ func (c cmd) runTaskClaimNext(ctx context.Context, run *command.Context, args []
 }
 
 func (c cmd) runTaskAssign(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("team task assign", run.Program+" team task assign --team <id> --task <id> --bot-id <bot> --actor-id <actor>", "Assign a team task to a worker.")
+	fs := run.NewFlagSet("team task assign", run.Program+" team task assign --team <id> --task <id> --participant-id <participant> --actor-id <actor>", "Assign a team task to a worker.")
 	teamID := fs.String("team", "", "team id")
 	taskID := fs.String("task", "", "task id")
-	botID := fs.String("bot-id", "", "worker bot id")
+	participantID := fs.String("participant-id", "", "worker participant id")
 	actorID := fs.String("actor-id", "", "actor id")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -249,10 +258,10 @@ func (c cmd) runTaskAssign(ctx context.Context, run *command.Context, args []str
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("team task assign does not accept positional arguments")
 	}
-	if *teamID == "" || *taskID == "" || *botID == "" || *actorID == "" {
-		return fmt.Errorf("team, task, bot_id, and actor_id are required")
+	if *teamID == "" || *taskID == "" || *participantID == "" || *actorID == "" {
+		return fmt.Errorf("team, task, participant_id, and actor_id are required")
 	}
-	item, err := run.APIClient(globals).AssignTeamTask(ctx, *teamID, *taskID, *actorID, *botID)
+	item, err := run.APIClient(globals).AssignTeamTask(ctx, *teamID, *taskID, *actorID, *participantID)
 	if err != nil {
 		return err
 	}
@@ -260,10 +269,10 @@ func (c cmd) runTaskAssign(ctx context.Context, run *command.Context, args []str
 }
 
 func (c cmd) runTaskUpdate(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("team task update", run.Program+" team task update --team <id> --task <id> --actor-id <bot> --status <status>", "Update a team task status.")
+	fs := run.NewFlagSet("team task update", run.Program+" team task update --team <id> --task <id> --actor-id <participant> --status <status>", "Update a team task status.")
 	teamID := fs.String("team", "", "team id")
 	taskID := fs.String("task", "", "task id")
-	actorID := fs.String("actor-id", "", "actor bot id")
+	actorID := fs.String("actor-id", "", "actor participant id")
 	status := fs.String("status", "", "new status: blocked, completed, or failed")
 	result := fs.String("result", "", "task result text")
 	errorText := fs.String("error", "", "task error text")
@@ -330,11 +339,11 @@ func (c cmd) runApprovalList(ctx context.Context, run *command.Context, args []s
 }
 
 func (c cmd) runApprovalCreate(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("team approval create", run.Program+" team approval create --team <id> --requested-by <bot> --kind <kind> --summary <text>", "Create an approval request.")
+	fs := run.NewFlagSet("team approval create", run.Program+" team approval create --team <id> --requested-by <participant> --kind <kind> --summary <text>", "Create an approval request.")
 	teamID := fs.String("team", "", "team id")
 	taskID := fs.String("task-id", "", "task id")
-	requestedBy := fs.String("requested-by", "", "requesting bot id")
-	approverID := fs.String("approver-id", "", "approver bot id")
+	requestedBy := fs.String("requested-by", "", "requesting participant id")
+	approverID := fs.String("approver-id", "", "approver participant id")
 	kind := fs.String("kind", "", "approval kind")
 	summary := fs.String("summary", "", "approval summary")
 	payload := fs.String("payload", "", "approval payload")
@@ -365,7 +374,7 @@ func (c cmd) runApprovalResolve(ctx context.Context, run *command.Context, args 
 	fs := run.NewFlagSet("team approval resolve", run.Program+" team approval resolve --team <id> --approval <id> --status <status>", "Resolve an approval request.")
 	teamID := fs.String("team", "", "team id")
 	approvalID := fs.String("approval", "", "approval id")
-	approverID := fs.String("approver-id", "", "approver bot id")
+	approverID := fs.String("approver-id", "", "approver participant id")
 	status := fs.String("status", "", "approval status")
 	reason := fs.String("reason", "", "resolution reason")
 	if err := fs.Parse(args); err != nil {

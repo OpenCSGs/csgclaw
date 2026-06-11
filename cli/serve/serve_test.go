@@ -168,6 +168,94 @@ func TestServeRunSkipsAutoBootstrapWhenStateComplete(t *testing.T) {
 	}
 }
 
+func TestServeRunNoAuthDetectDisablesCLIProxyAutoLoginDuringStartup(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+	t.Setenv("CSGCLAW_CLIPROXY_AUTO_LOGIN", "true")
+
+	origRunServer := RunServer
+	t.Cleanup(func() {
+		RunServer = origRunServer
+	})
+	var gotAutoLogin string
+	RunServer = func(opts server.Options) error {
+		gotAutoLogin = os.Getenv("CSGCLAW_CLIPROXY_AUTO_LOGIN")
+		return nil
+	}
+
+	run := testContext()
+	err := NewServeCmd().Run(context.Background(), run, []string{"--no-auth-detect"}, command.GlobalOptions{
+		Output: "json",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if gotAutoLogin != "0" {
+		t.Fatalf("CSGCLAW_CLIPROXY_AUTO_LOGIN during startup = %q, want 0", gotAutoLogin)
+	}
+	if got := os.Getenv("CSGCLAW_CLIPROXY_AUTO_LOGIN"); got != "true" {
+		t.Fatalf("CSGCLAW_CLIPROXY_AUTO_LOGIN after startup = %q, want restored true", got)
+	}
+}
+
+func TestServeRunNoAuthDetectPassesOptionToAutoBootstrap(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+
+	origDetectBootstrapState := DetectBootstrapState
+	origEnsureBootstrapState := EnsureBootstrapState
+	t.Cleanup(func() {
+		DetectBootstrapState = origDetectBootstrapState
+		EnsureBootstrapState = origEnsureBootstrapState
+	})
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.Config{
+		Server: config.ServerConfig{
+			ListenAddr: "127.0.0.1:18080",
+			NoAuth:     true,
+		},
+		Sandbox: config.SandboxConfig{
+			Provider: config.DefaultSandboxProvider,
+		},
+	}
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	DetectBootstrapState = func(opts internalonboard.DetectStateOptions) (internalonboard.DetectStateResult, error) {
+		if opts.ConfigPath != configPath {
+			t.Fatalf("DetectStateOptions.ConfigPath = %q, want %q", opts.ConfigPath, configPath)
+		}
+		return internalonboard.DetectStateResult{
+			ConfigPath:     configPath,
+			Config:         cfg,
+			ConfigExists:   true,
+			ConfigComplete: true,
+		}, nil
+	}
+	var gotNoAuthDetect bool
+	EnsureBootstrapState = func(_ context.Context, opts internalonboard.EnsureStateOptions) (internalonboard.EnsureStateResult, error) {
+		gotNoAuthDetect = opts.NoAuthDetect
+		if opts.ConfigPath != configPath {
+			t.Fatalf("EnsureStateOptions.ConfigPath = %q, want %q", opts.ConfigPath, configPath)
+		}
+		return internalonboard.EnsureStateResult{ConfigPath: configPath, Config: cfg}, nil
+	}
+
+	run := testContext()
+	err := NewServeCmd().Run(context.Background(), run, []string{"--no-auth-detect"}, command.GlobalOptions{
+		Config: configPath,
+		Output: "json",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !gotNoAuthDetect {
+		t.Fatalf("EnsureStateOptions.NoAuthDetect = false, want true")
+	}
+}
+
 func TestServeRunSkipsBootstrapWhenStateComplete(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
@@ -997,6 +1085,53 @@ func TestShouldStartCodexBridge(t *testing.T) {
 	for _, tc := range cases {
 		if got := shouldStartCodexBridge(tc.agent); got != tc.want {
 			t.Fatalf("%s: shouldStartCodexBridge() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestShouldRestoreCodexBridgeOnStartup(t *testing.T) {
+	cases := []struct {
+		name  string
+		agent agent.Agent
+		want  bool
+	}{
+		{
+			name: "running codex worker is restored",
+			agent: agent.Agent{
+				ID:              "u-alice",
+				Role:            agent.RoleWorker,
+				RuntimeKind:     agent.RuntimeKindCodex,
+				Status:          string(agentruntime.StateRunning),
+				ProfileComplete: true,
+			},
+			want: true,
+		},
+		{
+			name: "exited codex worker is restored",
+			agent: agent.Agent{
+				ID:              "u-alice",
+				Role:            agent.RoleWorker,
+				RuntimeKind:     agent.RuntimeKindCodex,
+				Status:          string(agentruntime.StateExited),
+				ProfileComplete: true,
+			},
+			want: true,
+		},
+		{
+			name: "stopped codex worker stays stopped",
+			agent: agent.Agent{
+				ID:              "u-alice",
+				Role:            agent.RoleWorker,
+				RuntimeKind:     agent.RuntimeKindCodex,
+				Status:          string(agentruntime.StateStopped),
+				ProfileComplete: true,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		if got := shouldRestoreCodexBridgeOnStartup(tc.agent); got != tc.want {
+			t.Fatalf("%s: shouldRestoreCodexBridgeOnStartup() = %v, want %v", tc.name, got, tc.want)
 		}
 	}
 }

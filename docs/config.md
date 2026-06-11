@@ -12,6 +12,8 @@ English | [中文](config.zh.md)
 
 Use `advertise_base_url` when the automatically inferred address is not reachable from BoxLite boxes, such as when you need a LAN address, a tunnel URL, or a host alias.
 
+When the sandbox provider is `docker` on Docker Desktop, an empty `advertise_base_url` resolves to `http://host.docker.internal:<port>` for generated manager and worker runtime config. Set `advertise_base_url` explicitly when you need a different Docker callback URL.
+
 `access_token` protects authenticated API routes, including the PicoClaw participant bridge routes. When authentication is enabled, clients must send `Authorization: Bearer <access_token>`.
 
 `no_auth` controls whether CSGClaw skips the bearer-token check. The default is `false`. Set it to `true` only for trusted local or development environments.
@@ -119,15 +121,14 @@ Auth is also managed locally:
 - `CSGCLAW_CLIPROXY_NO_BROWSER=1` prints OAuth URLs instead of opening a browser.
 - `CSGCLAW_CLIPROXY_DISABLE_KEYCHAIN=1` disables Claude Keychain probing.
 
-When a worker uses the Codex runtime, its local state is stored under `~/.csgclaw/agents/<agent-name>/.codex/`. The workspace lives at `~/.csgclaw/agents/<agent-name>/.codex/workspace`, shell home lives at `~/.csgclaw/agents/<agent-name>/.codex/home`, and Codex-managed files such as `auth.json` are stored directly under `~/.csgclaw/agents/<agent-name>/.codex`. This path is intentionally separate from the sandbox provider home such as `~/.csgclaw/agents/<agent-name>/boxlite`.
+When a worker uses the Codex runtime, its local state is stored under `~/.csgclaw/agents/<agent-name>/.codex/`. The workspace lives at `~/.csgclaw/agents/<agent-name>/.codex/workspace`, shell home lives at `~/.csgclaw/agents/<agent-name>/.codex/home`, and Codex-managed files such as `auth.json`, `config.toml`, `stderr.log`, and runtime metadata are stored under `~/.csgclaw/agents/<agent-name>/.codex/home`. This path is intentionally separate from the sandbox provider home such as `~/.csgclaw/agents/<agent-name>/boxlite`.
 
-For complete Codex worker profiles, CSGClaw writes `~/.csgclaw/agents/<agent-name>/.codex/config.toml` with an OpenAI-compatible proxy provider and always sets `wire_api = "responses"` because current `codex-acp` no longer accepts chat wire API providers. The generated provider uses HTTP Responses rather than Responses WebSocket. If the upstream provider reports the Responses endpoint as unsupported, or the embedded CLIProxy Codex/ClaudeCode Responses backend returns a 5xx for a text-only request, CSGClaw keeps the Codex-facing Responses bridge and falls back to upstream chat completions behind that bridge. The raw upstream API key is not written to this file; it is injected into the runtime environment through `env_key = "OPENAI_API_KEY"`.
+For complete Codex worker profiles, CSGClaw writes `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml` with an OpenAI-compatible proxy provider and always sets `wire_api = "responses"` because the Codex CLI app-server path uses the Responses API. The generated provider uses HTTP Responses rather than Responses WebSocket. If the upstream provider reports the Responses endpoint as unsupported, or the embedded CLIProxy Codex/ClaudeCode Responses backend returns a 5xx for a text-only request, CSGClaw keeps the Codex-side Responses configuration and falls back to upstream chat completions behind the proxy. The raw upstream API key is not written to this file; it is injected into the runtime environment through `env_key = "OPENAI_API_KEY"`.
 
-When a worker uses the Codex runtime, CSGClaw resolves `codex-acp` automatically before startup. You can override that behavior with:
+When a worker uses the Codex runtime, CSGClaw launches the local `codex` CLI with `codex app-server --listen stdio://`. You can override the binary lookup with:
 
-- `CSGCLAW_CODEX_ACP_PATH` to point at a preinstalled `codex-acp` binary
-- `CSGCLAW_CODEX_ACP_VERSION` to pin the download version
-- `CSGCLAW_CODEX_ACP_BASE_URL` to change the download source
+- `CSGCLAW_CODEX_PATH` to point at a preinstalled `codex` binary
+- `CSGCLAW_CODEX_ACP_PATH` as a temporary compatibility fallback to the same `codex` binary path during migration
 
 ## OpenClaw Runtime
 

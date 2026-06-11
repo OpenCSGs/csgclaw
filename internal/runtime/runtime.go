@@ -21,7 +21,7 @@ const (
 // the optional Provisioner capability instead of being folded into New.
 type Runtime interface {
 	Kind() string
-	WorkspaceRoot(agentHome string) string
+	Layout(agentHome string) Layout
 
 	New(ctx context.Context, spec Spec) (Handle, error)
 	Start(ctx context.Context, h Handle) (State, error)
@@ -140,4 +140,10 @@ type LogOptions struct {
 	Follow bool
 	Tail   int
 	Writer io.Writer
+}
+
+type Layout struct {
+	WorkspaceRoot string
+	SkillsRoot    string
+	HostLogPaths  []string
 }

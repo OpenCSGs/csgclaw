@@ -14,7 +14,7 @@
       "allow_read_outside_workspace": true,
       "provider": "",
       "model_name": "minimax-m2.7",
-      "max_tokens": 32768,
+      "max_tokens": 33792,
       "max_tool_iterations": 50,
       "summarize_message_threshold": 20,
       "summarize_token_percent": 75,

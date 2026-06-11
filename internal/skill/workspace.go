@@ -40,7 +40,11 @@ func localSkillsRootCandidates() []string {
 		candidates = append(candidates,
 			filepath.Join(home, ".picoclaw", "workspace", "skills"),
 			filepath.Join(home, ".openclaw", "workspace", "skills"),
+			filepath.Join(home, ".codex", "home", "skills"),
 		)
+	}
+	if home := strings.TrimSpace(os.Getenv("CODEX_HOME")); home != "" {
+		candidates = append(candidates, filepath.Join(home, "skills"))
 	}
 	return candidates
 }

@@ -21,6 +21,7 @@ type Template struct {
 	Description  string
 	Role         string
 	RuntimeKind  string
+	Version      string
 	Image        string
 	ImageEnv     []apitypes.ImageEnvContract
 	WorkspaceRef WorkspaceRef
@@ -45,6 +46,7 @@ type PublishSpec struct {
 	Description  string
 	Role         string
 	RuntimeKind  string
+	Version      string
 	Image        string
 	WorkspaceRef WorkspaceRef
 	UpdatedAt    time.Time

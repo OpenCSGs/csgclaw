@@ -12,6 +12,8 @@
 
 当自动推断出的地址无法从 BoxLite box 内访问时，可以设置 `advertise_base_url`，例如使用局域网地址、隧道地址或 host alias。
 
+当 sandbox provider 是 Docker Desktop 上的 `docker` 时，空的 `advertise_base_url` 会在生成 manager 和 worker 运行时配置时解析为 `http://host.docker.internal:<port>`。如果 Docker 需要使用其它回连地址，请显式设置 `advertise_base_url`。
+
 `access_token` 用来保护需要认证的 API 路由，包括 PicoClaw participant bridge 路由。启用鉴权时，客户端必须发送 `Authorization: Bearer <access_token>`。
 
 `no_auth` 控制 CSGClaw 是否跳过 bearer token 检查，默认值是 `false`。仅建议在可信的本地或开发环境中设置为 `true`。
@@ -119,15 +121,14 @@ bootstrap manager 当前固定使用 `picoclaw_sandbox`；`openclaw_sandbox` 支
 - `CSGCLAW_CLIPROXY_NO_BROWSER=1` 会打印 OAuth URL，而不是自动打开浏览器。
 - `CSGCLAW_CLIPROXY_DISABLE_KEYCHAIN=1` 可关闭 Claude Keychain 探测。
 
-当 worker 使用 Codex runtime 时，它的本地状态会统一放在 `~/.csgclaw/agents/<agent-name>/.codex/` 下。workspace 路径是 `~/.csgclaw/agents/<agent-name>/.codex/workspace`，shell home 路径是 `~/.csgclaw/agents/<agent-name>/.codex/home`，而 `auth.json` 这类 Codex 自己管理的文件会直接放在 `~/.csgclaw/agents/<agent-name>/.codex` 下。这个路径会和 sandbox provider 的 home（例如 `~/.csgclaw/agents/<agent-name>/boxlite`）分开。
+当 worker 使用 Codex runtime 时，它的本地状态会统一放在 `~/.csgclaw/agents/<agent-name>/.codex/` 下。workspace 路径是 `~/.csgclaw/agents/<agent-name>/.codex/workspace`，shell home 路径是 `~/.csgclaw/agents/<agent-name>/.codex/home`，而 `auth.json`、`config.toml`、`stderr.log` 以及 runtime metadata 等由 Codex 管理的文件会放在 `~/.csgclaw/agents/<agent-name>/.codex/home` 下。这个路径会和 sandbox provider 的 home（例如 `~/.csgclaw/agents/<agent-name>/boxlite`）分开。
 
-对于完整的 Codex worker profile，CSGClaw 会写入 `~/.csgclaw/agents/<agent-name>/.codex/config.toml`，其中 OpenAI 兼容代理 provider 始终使用 `wire_api = "responses"`，因为当前 `codex-acp` 已不再接受 chat wire API provider。生成的 provider 使用 HTTP Responses，而不是 Responses WebSocket。如果上游明确表示不支持 Responses 端点，或内置 CLIProxy 的 Codex/ClaudeCode Responses 后端在纯文本请求上返回 5xx，CSGClaw 会保持 Codex 侧 Responses bridge 不变，并在 bridge 后面回退到上游 chat completions。原始上游 API key 不会写入这个文件，而是通过 `env_key = "OPENAI_API_KEY"` 注入到 runtime 环境变量。
+对于完整的 Codex worker profile，CSGClaw 会写入 `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml`，其中 OpenAI 兼容代理 provider 始终使用 `wire_api = "responses"`，因为 Codex CLI 的 app-server 路径走的是 Responses API。生成的 provider 使用 HTTP Responses，而不是 Responses WebSocket。如果上游明确表示不支持 Responses 端点，或内置 CLIProxy 的 Codex/ClaudeCode Responses 后端在纯文本请求上返回 5xx，CSGClaw 会保持 Codex 侧的 Responses 配置不变，并在代理后面回退到上游 chat completions。原始上游 API key 不会写入这个文件，而是通过 `env_key = "OPENAI_API_KEY"` 注入到 runtime 环境变量。
 
-当 worker 使用 Codex runtime 时，CSGClaw 会在启动前自动解析 `codex-acp`；如果本地不存在，则会按需下载。你可以通过下面的环境变量覆盖默认行为：
+当 worker 使用 Codex runtime 时，CSGClaw 会通过 `codex app-server --listen stdio://` 启动本地 `codex` CLI。你可以通过下面的环境变量覆盖二进制查找行为：
 
-- `CSGCLAW_CODEX_ACP_PATH`：指定本地 `codex-acp` 可执行文件路径
-- `CSGCLAW_CODEX_ACP_VERSION`：固定下载版本
-- `CSGCLAW_CODEX_ACP_BASE_URL`：指定下载源
+- `CSGCLAW_CODEX_PATH`：指定本地 `codex` 可执行文件路径
+- `CSGCLAW_CODEX_ACP_PATH`：迁移期间的兼容回退项，也指向同一个 `codex` 可执行文件路径
 
 ## OpenClaw Runtime
 

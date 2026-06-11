@@ -201,10 +201,10 @@ def is_human_room_reply(message: dict[str, Any]) -> bool:
 
 def find_task_dispatch_message(
     messages: list[dict[str, Any]],
-    bot_id: str,
+    participant_id: str,
     dispatch_text: str,
 ) -> dict[str, Any] | None:
-    expected_sender_id = str(bot_id).strip()
+    expected_sender_id = str(participant_id).strip()
     expected_content = dispatch_text.strip()
     for message in messages:
         sender_id = str(message.get("sender_id") or "").strip()
@@ -330,7 +330,7 @@ def decide_tracking_action(
     messages: list[dict[str, Any]],
     bootstrap: dict[str, Any],
     *,
-    bot_id: str,
+    participant_id: str,
     room_id: str,
     todo_path: str,
     retry_in_seconds: float,
@@ -342,7 +342,7 @@ def decide_tracking_action(
     pending_task = tasks[pending_index]
     pending_task_id = pending_task["id"]
     pending_dispatch_text = build_tracking_message(pending_task, todo_path)
-    pending_dispatch_message = find_task_dispatch_message(messages, bot_id, pending_dispatch_text)
+    pending_dispatch_message = find_task_dispatch_message(messages, participant_id, pending_dispatch_text)
     if pending_dispatch_message is not None:
         return {
             "kind": "wait",
@@ -370,7 +370,7 @@ def decide_tracking_action(
     completed_task = tasks[pending_index - 1]
     completed_task_id = completed_task["id"]
     completed_dispatch_text = build_tracking_message(completed_task, todo_path)
-    completed_dispatch_message = find_task_dispatch_message(messages, bot_id, completed_dispatch_text)
+    completed_dispatch_message = find_task_dispatch_message(messages, participant_id, completed_dispatch_text)
     if completed_dispatch_message is None:
         raise TrackingError(
             f'Task {completed_task_id} is already marked passed, but no tracker dispatch message was found in room "{room_id}"'
@@ -523,7 +523,7 @@ class CSGClawAPI:
 
         return result
 
-    def send_bot_message(self, channel: str, room_id: str, bot_id: str, mention_bot_id: str, content: str) -> Any:
+    def send_participant_message(self, channel: str, room_id: str, participant_id: str, mention_participant_id: str, content: str) -> Any:
         command = [
             "csgclaw-cli",
             "--endpoint",
@@ -542,9 +542,9 @@ class CSGClawAPI:
                 "--room-id",
                 room_id,
                 "--sender-id",
-                bot_id,
+                participant_id,
                 "--mention-id",
-                mention_bot_id,
+                mention_participant_id,
                 "--content",
                 content,
             ]
@@ -715,8 +715,8 @@ def cmd_start_tracking(args: argparse.Namespace) -> int:
             args.channel,
             "--room-id",
             args.room_id,
-            "--bot-id",
-            args.bot_id,
+            "--participant-id",
+            args.participant_id,
             "--todo-path",
             args.todo_path,
             "--interval",
@@ -741,7 +741,7 @@ def cmd_start_tracking(args: argparse.Namespace) -> int:
         "todo_path": os.path.abspath(os.path.expanduser(args.todo_path)),
         "channel": args.channel,
         "room_id": args.room_id,
-        "bot_id": args.bot_id,
+        "participant_id": args.participant_id,
         "interval": args.interval,
         "dry_run": bool(args.dry_run),
         "once": bool(args.once),
@@ -771,7 +771,7 @@ def cmd_run_tracking(args: argparse.Namespace) -> int:
         todo_path=os.path.abspath(os.path.expanduser(args.todo_path)),
         channel=args.channel,
         room_id=args.room_id,
-        bot_id=args.bot_id,
+        participant_id=args.participant_id,
         interval=args.interval,
         once=bool(args.once),
         dry_run=bool(args.dry_run),
@@ -890,7 +890,7 @@ def cmd_run_tracking(args: argparse.Namespace) -> int:
                     tasks,
                     messages,
                     bootstrap,
-                    bot_id=args.bot_id,
+                    participant_id=args.participant_id,
                     room_id=args.room_id,
                     todo_path=args.todo_path,
                     retry_in_seconds=args.interval,
@@ -1003,7 +1003,7 @@ def cmd_run_tracking(args: argparse.Namespace) -> int:
                 mention_id=mention_id,
                 text=text,
             )
-            result = api.send_bot_message(args.channel, args.room_id, args.bot_id, mention_id, text)
+            result = api.send_participant_message(args.channel, args.room_id, args.participant_id, mention_id, text)
             emit_log(
                 log_path,
                 "dispatched",
@@ -1090,7 +1090,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_args(start_tracking)
     start_tracking.add_argument("--channel", default="csgclaw", help="Channel name: csgclaw or feishu. Default: csgclaw.")
     start_tracking.add_argument("--room-id", required=True, help="Room id.")
-    start_tracking.add_argument("--bot-id", default="u-manager", help="Bot id used as message sender.")
+    start_tracking.add_argument("--participant-id", default="u-manager", help="Participant id used as message sender.")
     start_tracking.add_argument("--todo-path", required=True, help="Path to todo.json.")
     start_tracking.add_argument(
         "--interval",
@@ -1109,7 +1109,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_args(run_tracking)
     run_tracking.add_argument("--channel", default="csgclaw", help="Channel name: csgclaw or feishu. Default: csgclaw.")
     run_tracking.add_argument("--room-id", required=True, help="Room id.")
-    run_tracking.add_argument("--bot-id", default="u-manager", help="Bot id used as message sender.")
+    run_tracking.add_argument("--participant-id", default="u-manager", help="Participant id used as message sender.")
     run_tracking.add_argument("--todo-path", required=True, help="Path to todo.json.")
     run_tracking.add_argument(
         "--interval",

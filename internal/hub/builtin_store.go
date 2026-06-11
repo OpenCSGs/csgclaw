@@ -58,6 +58,7 @@ func (s *BuiltinStore) Get(_ context.Context, id string) (Template, error) {
 		Description:  manifest.Description,
 		Role:         normalizeTemplateRole(manifest.Role),
 		RuntimeKind:  manifest.RuntimeKind,
+		Version:      strings.TrimSpace(manifest.Version),
 		Image:        manifestImageRef(manifest.Image),
 		ImageEnv:     manifestImageEnv(manifest.Image),
 		WorkspaceRef: s.workspaceRef(id),

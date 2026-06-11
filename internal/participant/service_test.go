@@ -2,6 +2,7 @@ package participant
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -528,8 +529,11 @@ func (r testRuntime) Kind() string {
 	return r.kind
 }
 
-func (testRuntime) WorkspaceRoot(agentHome string) string {
-	return agentHome
+func (testRuntime) Layout(agentHome string) agentruntime.Layout {
+	return agentruntime.Layout{
+		WorkspaceRoot: agentHome,
+		SkillsRoot:    filepath.Join(agentHome, "skills"),
+	}
 }
 
 func (testRuntime) New(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {

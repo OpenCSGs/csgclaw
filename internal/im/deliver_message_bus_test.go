@@ -27,7 +27,7 @@ func TestDeliverMessagePublishesMessageCreatedEvent(t *testing.T) {
 		RoomID:    "room-1",
 		SenderID:  "manager",
 		MentionID: "u-p-w-0604",
-		Content:   "[team] Task task-17 is ready for you",
+		Content:   "manager dispatched task task-17 to u-p-w-0604",
 	})
 	if err != nil {
 		t.Fatalf("DeliverMessage() error = %v", err)

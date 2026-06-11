@@ -3,12 +3,13 @@ import {
   agentCreateTemplateLocked,
   agentToDraft,
   applyTemplateToDraft,
-  availableManagerRebuildImageOptions,
   availableManagerRebuildRuntimeOptions,
   availableManagerRuntimeOptions,
   collectManagerTemplateVariants,
   defaultManagerRebuildImageForRuntime,
   agentDraftWithRuntimeFieldsFromAgent,
+  agentRuntimePollSettled,
+  agentStatusLabel,
   draftNotifierRuntimeOptionsForSave,
   draftToProfile,
   ensureNotifierPullSubscriptionDraft,
@@ -32,6 +33,7 @@ import {
   resolveAgentChannelUserID,
   resolveAgentAvatarSource,
   runtimeImageForKind,
+  shouldWaitForManagerRuntimeAfterProfileSave,
 } from "@/models/agents";
 
 describe("agent model helpers", () => {
@@ -338,7 +340,7 @@ describe("agent model helpers", () => {
     ).toBe("avatar/cartoon-3.png");
   });
 
-  it("uses manager template variants for manager rebuild runtime and image choices", () => {
+  it("uses manager template variants for manager rebuild runtime and default image", () => {
     const variants = collectManagerTemplateVariants([
       {
         id: "builtin.picoclaw-manager",
@@ -377,19 +379,6 @@ describe("agent model helpers", () => {
         "custom_sandbox",
       ).map((option) => option.value),
     ).toEqual(["custom_sandbox", "picoclaw_sandbox", "openclaw_sandbox"]);
-    expect(availableManagerRebuildImageOptions(variants, "openclaw_sandbox", null, "current:manager")).toEqual([
-      "openclaw:manager",
-      "current:manager",
-    ]);
-    expect(
-      availableManagerRebuildImageOptions(
-        [],
-        "picoclaw_sandbox",
-        { runtime_default_images: { picoclaw_sandbox: "picoclaw:latest" } },
-        "picoclaw:old",
-        ["picoclaw:old", "local/custom:dev"],
-      ),
-    ).toEqual(["picoclaw:latest", "picoclaw:old", "local/custom:dev"]);
     expect(
       defaultManagerRebuildImageForRuntime(
         variants,
@@ -397,10 +386,22 @@ describe("agent model helpers", () => {
         { runtime_default_images: { picoclaw_sandbox: "picoclaw:latest" } },
         "picoclaw:old",
       ),
-    ).toBe("picoclaw:latest");
+    ).toBe("picoclaw:manager");
     expect(defaultManagerRebuildImageForRuntime(variants, "openclaw_sandbox", null, "fallback:manager")).toBe(
       "openclaw:manager",
     );
+    expect(
+      defaultManagerRebuildImageForRuntime(
+        [],
+        "picoclaw_sandbox",
+        {
+          effective_manager_image: "picoclaw:effective-manager",
+          runtime_default_images: { picoclaw_sandbox: "picoclaw:worker" },
+          runtime_kind: "picoclaw_sandbox",
+        },
+        "fallback:manager",
+      ),
+    ).toBe("picoclaw:effective-manager");
     expect(defaultManagerRebuildImageForRuntime([], "openclaw_sandbox", null, "fallback:manager")).toBe(
       "fallback:manager",
     );
@@ -468,6 +469,70 @@ describe("agent model helpers", () => {
     expect(notifierFormIsComplete(draft)).toBe(true);
     expect(isAgentIncomplete({ type: "notification", runtime_options: {} })).toBe(true);
     expect(isAgentIncomplete({ type: "notification", available: true, runtime_options: {} })).toBe(false);
+  });
+
+  it("treats a saved profile draft as configured even when profile_complete is false", () => {
+    const draft = agentToDraft({
+      id: "u-manager",
+      profile_complete: false,
+      agent_profile: {
+        profile_complete: false,
+        provider: "api",
+        base_url: "https://api.example/v1",
+        model_id: "glm-5.1",
+      },
+    });
+
+    expect(isAgentIncomplete({ id: "u-manager", profile_complete: false, agent_profile: { profile_complete: false } }, draft)).toBe(
+      false,
+    );
+  });
+
+  it("maps profile_incomplete status to offline label", () => {
+    const t = (key: string) => key;
+    expect(agentStatusLabel("profile_incomplete", t)).toBe("offline");
+    expect(agentStatusLabel("running", t)).toBe("online");
+  });
+
+  it("waits for manager runtime only when profile save may bootstrap sandbox", () => {
+    const runningManager = {
+      id: "u-manager",
+      box_id: "box-manager",
+      profile_complete: true,
+      status: "running",
+    };
+    const stoppedManager = { ...runningManager, status: "stopped" };
+
+    expect(shouldWaitForManagerRuntimeAfterProfileSave(runningManager)).toBe(false);
+    expect(shouldWaitForManagerRuntimeAfterProfileSave(stoppedManager)).toBe(false);
+    expect(
+      shouldWaitForManagerRuntimeAfterProfileSave(runningManager, { profileIncompleteBeforeSave: true }),
+    ).toBe(true);
+    expect(shouldWaitForManagerRuntimeAfterProfileSave({ ...runningManager, box_id: "" })).toBe(true);
+    expect(
+      shouldWaitForManagerRuntimeAfterProfileSave({
+        id: "u-manager",
+        profile_complete: false,
+        status: "profile_incomplete",
+      }),
+    ).toBe(true);
+  });
+
+  it("treats stopped manager with a box as settled for runtime polling", () => {
+    expect(
+      agentRuntimePollSettled({
+        id: "u-manager",
+        box_id: "box-manager",
+        status: "stopped",
+      }),
+    ).toBe(true);
+    expect(
+      agentRuntimePollSettled({
+        id: "u-manager",
+        box_id: "",
+        status: "stopped",
+      }),
+    ).toBe(false);
   });
 
   it("locks runtime and image on create when a template is selected", () => {

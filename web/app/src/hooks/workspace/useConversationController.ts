@@ -10,7 +10,7 @@ import {
   sendMessageRequest,
   startThreadRequest,
 } from "@/api/im";
-import { fetchAgentWorkspace, fetchAgentWorkspaceFile } from "@/api/agents";
+import { fetchAgentSkills, fetchAgentSkillsFile } from "@/api/agents";
 import {
   agentMatchesUser,
   appendMessageToData,
@@ -1168,20 +1168,17 @@ function skillOptionsFromWorkspace(
   const dirs = new Set<string>();
   entries.forEach((entry) => {
     const path = String(entry.path || "").trim();
-    if (!path.startsWith("skills/")) {
-      return;
-    }
     const parts = path.split("/").filter(Boolean);
-    if (parts.length === 2 && entry.type === "dir") {
+    if (parts.length === 1 && entry.type === "dir") {
       dirs.add(path);
     }
-    if (parts.length === 3 && parts[2] === "SKILL.md") {
-      skillDirs.add(parts.slice(0, 2).join("/"));
+    if (parts.length === 2 && parts[1] === "SKILL.md") {
+      skillDirs.add(parts[0]);
     }
   });
   return [...dirs]
     .filter((path) => skillDirs.has(path))
-    .map((path) => ({ name: path.split("/").pop() || "" }))
+    .map((path) => ({ name: path }))
     .filter((skill) => Boolean(skill.name))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -1199,16 +1196,16 @@ function loadSlashSkillOptions(
     return pending;
   }
 
-  const request = fetchAgentWorkspace(agentID, "skills")
-    .then(async (workspace) => {
-      const skills = skillOptionsFromWorkspace(workspace.entries || []);
+  const request = fetchAgentSkills(agentID)
+    .then(async (skillsListing) => {
+      const skills = skillOptionsFromWorkspace(skillsListing.entries || []);
       slashSkillOptionsCache.set(agentID, skills);
       onInitial(skills);
 
       const enriched = await Promise.all(
         skills.map(async (skill) => {
           try {
-            const file = await fetchAgentWorkspaceFile(agentID, `skills/${skill.name}/SKILL.md`);
+            const file = await fetchAgentSkillsFile(agentID, `${skill.name}/SKILL.md`);
             return {
               ...skill,
               description: skillDescriptionFromMarkdown(file.content || "") || skill.description,

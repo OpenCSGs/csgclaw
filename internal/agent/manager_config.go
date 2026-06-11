@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	stdruntime "runtime"
 	"strings"
 
 	"csgclaw/internal/config"
@@ -14,6 +15,7 @@ import (
 )
 
 const managerAgentsDirName = "agents"
+const dockerDesktopHostAlias = "host.docker.internal"
 
 type localIPDetector struct {
 	listInterfaces func() ([]net.Interface, error)
@@ -31,6 +33,10 @@ var defaultLocalIPDetector = localIPDetector{
 	},
 }
 
+var dockerHostAliasEnabled = func() bool {
+	return stdruntime.GOOS == "darwin" || stdruntime.GOOS == "windows"
+}
+
 func ensureManagerPicoClawConfig(server config.ServerConfig, model config.ModelConfig) (string, error) {
 	return ensureAgentPicoClawConfigForParticipant(ManagerName, ManagerParticipantID, ManagerUserID, server, model)
 }
@@ -40,11 +46,15 @@ func ensureAgentPicoClawConfig(agentName, agentID string, server config.ServerCo
 }
 
 func ensureAgentPicoClawConfigForParticipant(agentName, participantID, agentID string, server config.ServerConfig, model config.ModelConfig) (string, error) {
+	return ensureAgentPicoClawConfigForParticipantWithResolver(agentName, participantID, agentID, server, model, resolveManagerBaseURL)
+}
+
+func ensureAgentPicoClawConfigForParticipantWithResolver(agentName, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL picoclawsandbox.BaseURLResolver) (string, error) {
 	agentHome, err := agentHomeDir(agentName)
 	if err != nil {
 		return "", err
 	}
-	return picoclawsandbox.EnsureConfig(agentHome, participantID, agentID, server, model, resolveManagerBaseURL)
+	return picoclawsandbox.EnsureConfig(agentHome, participantID, agentID, server, model, resolveBaseURL)
 }
 
 func managerPicoClawRoot() (string, error) {
@@ -120,6 +130,10 @@ func resolveManagerBaseURL(server config.ServerConfig) string {
 	return ResolveManagerBaseURL(server)
 }
 
+func resolveManagerBaseURLForSandboxProvider(server config.ServerConfig, sandboxProvider string) string {
+	return ResolveManagerBaseURLForSandboxProvider(server, sandboxProvider)
+}
+
 // ResolveManagerBaseURL returns the base URL injected into agent runtime config.
 // It prefers server.advertise_base_url and otherwise resolves a reachable local IPv4 address.
 func ResolveManagerBaseURL(server config.ServerConfig) string {
@@ -136,6 +150,23 @@ func ResolveManagerBaseURL(server config.ServerConfig) string {
 	}
 	slog.Debug("local ip detector could not resolve manager base url", "listen_addr", server.ListenAddr, "port", port)
 	return ""
+}
+
+// ResolveManagerBaseURLForSandboxProvider returns the callback base URL injected into
+// sandbox runtime config. Explicit server.advertise_base_url always wins. For Docker
+// Desktop, containers should call the host through host.docker.internal instead of
+// a host LAN address that may not route back to the local CSGClaw server.
+func ResolveManagerBaseURLForSandboxProvider(server config.ServerConfig, sandboxProvider string) string {
+	if strings.TrimSpace(server.AdvertiseBaseURL) != "" {
+		return ResolveManagerBaseURL(server)
+	}
+	if strings.EqualFold(strings.TrimSpace(sandboxProvider), config.DockerProvider) && dockerHostAliasEnabled() {
+		port := config.ListenPort(server.ListenAddr)
+		baseURL := fmt.Sprintf("http://%s:%s", dockerDesktopHostAlias, port)
+		slog.Debug("local ip detector using docker host alias", "base_url", baseURL)
+		return baseURL
+	}
+	return ResolveManagerBaseURL(server)
 }
 
 func localIPv4() string {

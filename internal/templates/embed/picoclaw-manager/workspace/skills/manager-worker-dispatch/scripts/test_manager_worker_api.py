@@ -14,7 +14,7 @@ manager_worker_api = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(manager_worker_api)
 
 
-BOT_ID = "u-manager"
+PARTICIPANT_ID = "u-manager"
 ROOM_ID = "room-123"
 TODO_PATH = "/tmp/project/todo.json"
 
@@ -70,7 +70,7 @@ class TrackingDecisionTests(unittest.TestCase):
             tasks,
             messages,
             bootstrap,
-            bot_id=BOT_ID,
+            participant_id=PARTICIPANT_ID,
             room_id=ROOM_ID,
             todo_path=TODO_PATH,
             retry_in_seconds=2.0,
@@ -89,7 +89,7 @@ class TrackingDecisionTests(unittest.TestCase):
     def test_waits_for_task_passes_when_current_task_already_dispatched(self):
         task1 = make_task(1, "ux", passes=False)
         messages = [
-            make_message(BOT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
+            make_message(PARTICIPANT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
         ]
 
         decision = self.decide([task1, make_task(2, "dev", passes=False)], messages)
@@ -101,7 +101,7 @@ class TrackingDecisionTests(unittest.TestCase):
     def test_waits_for_task_passes_when_csgclaw_message_has_mention_prefix(self):
         task1 = make_task(1, "dev", passes=False)
         messages = [
-            make_message(BOT_ID, f"@dev {dispatch_message(task1)}", "2026-04-10T08:26:40Z"),
+            make_message(PARTICIPANT_ID, f"@dev {dispatch_message(task1)}", "2026-04-10T08:26:40Z"),
         ]
 
         decision = self.decide([task1, make_task(2, "qa", passes=False)], messages)
@@ -114,7 +114,7 @@ class TrackingDecisionTests(unittest.TestCase):
         task1 = make_task(1, "ux", passes=True)
         task2 = make_task(2, "dev", passes=False)
         messages = [
-            make_message(BOT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
+            make_message(PARTICIPANT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
         ]
 
         decision = self.decide([task1, task2], messages)
@@ -128,7 +128,7 @@ class TrackingDecisionTests(unittest.TestCase):
         task1 = make_task(1, "ux", passes=True)
         task2 = make_task(2, "dev", passes=False)
         messages = [
-            make_message(BOT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
+            make_message(PARTICIPANT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
             make_message("u-ux", "🔧 `read_file`\n```\n{\"path\":\"/tmp/todo.json\"}\n```", "2026-04-10T08:26:44Z"),
         ]
 
@@ -141,7 +141,7 @@ class TrackingDecisionTests(unittest.TestCase):
         task1 = make_task(1, "ux", passes=True)
         task2 = make_task(2, "dev", passes=False)
         messages = [
-            make_message(BOT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
+            make_message(PARTICIPANT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
             make_message("u-ux", "任务1已完成，设计文档已经交付。", "2026-04-10T08:32:49Z"),
         ]
 
@@ -156,7 +156,7 @@ class TrackingDecisionTests(unittest.TestCase):
         task1 = make_task(1, "ux", passes=True)
         task2 = make_task(2, "dev", passes=False)
         messages = [
-            make_message(BOT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
+            make_message(PARTICIPANT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
             make_message("u-ux", "设计工作完成，等待下一步。", "2026-04-10T08:27:10Z"),
         ]
 
@@ -170,7 +170,7 @@ class TrackingDecisionTests(unittest.TestCase):
         task1 = make_task(1, "ghost", passes=True)
         task2 = make_task(2, "dev", passes=False)
         messages = [
-            make_message(BOT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
+            make_message(PARTICIPANT_ID, dispatch_message(task1), "2026-04-10T08:26:40Z"),
         ]
 
         with self.assertRaises(manager_worker_api.TrackingError) as ctx:
@@ -243,7 +243,7 @@ class SimpleTrackingDecisionTests(unittest.TestCase):
 
 
 class CSGClawAPITests(unittest.TestCase):
-    def test_dry_run_send_bot_message_uses_cli_message_create_with_mention(self):
+    def test_dry_run_send_participant_message_uses_cli_message_create_with_mention(self):
         api = manager_worker_api.CSGClawAPI(
             base_url="http://example.test",
             token=None,
@@ -251,7 +251,7 @@ class CSGClawAPITests(unittest.TestCase):
             dry_run=True,
         )
 
-        result = api.send_bot_message("feishu", ROOM_ID, BOT_ID, "u-dev", "hello")
+        result = api.send_participant_message("feishu", ROOM_ID, PARTICIPANT_ID, "u-dev", "hello")
 
         self.assertEqual(
             result["command"],
@@ -268,7 +268,7 @@ class CSGClawAPITests(unittest.TestCase):
                 "--room-id",
                 ROOM_ID,
                 "--sender-id",
-                BOT_ID,
+                PARTICIPANT_ID,
                 "--mention-id",
                 "u-dev",
                 "--content",
@@ -299,7 +299,7 @@ class RunTrackingTests(unittest.TestCase):
                 dry_run=True,
                 channel="csgclaw",
                 room_id=ROOM_ID,
-                bot_id=BOT_ID,
+                participant_id=PARTICIPANT_ID,
                 todo_path=todo_path,
                 interval=0.01,
                 once=False,

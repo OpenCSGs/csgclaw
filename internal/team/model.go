@@ -29,24 +29,41 @@ const (
 	ProjectionStatusPending = "pending"
 	ProjectionStatusSent    = "sent"
 	ProjectionStatusFailed  = "failed"
+
+	EventTeamCreated       = "team.created"
+	EventTaskCreated       = "task.created"
+	EventTaskPlanned       = "task.planned"
+	EventTaskExecutionRoom = "task.execution_room"
+	EventTaskStarted       = "task.started"
+	EventTaskDispatched    = "task.dispatched"
+	EventTaskAssigned      = "task.assigned"
+	EventTaskClaimed       = "task.claimed"
+	EventTaskBlocked       = "task.blocked"
+	EventTaskCompleted     = "task.completed"
+	EventTaskFailed        = "task.failed"
+	EventTaskCancelled     = "task.cancelled"
+	EventApprovalRequested = "approval.requested"
+	EventApprovalResolved  = "approval.resolved"
+	EventPresenceUpdated   = "presence.updated"
+	EventProjectionFailed  = "projection.failed"
 )
 
 // TeamMeta marks that a room has team orchestration enabled.
 type TeamMeta struct {
-	ID        string    `json:"id"`
-	RoomID    string    `json:"room_id"`
-	Channel   string    `json:"channel"`
-	Title     string    `json:"title"`
-	LeadBotID string    `json:"lead_bot_id"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	RoomID      string    `json:"room_id"`
+	Channel     string    `json:"channel"`
+	Title       string    `json:"title"`
+	LeadAgentID string    `json:"lead_agent_id"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // MemberPresence captures runtime state derived from room members plus participant identity.
 type MemberPresence struct {
 	TeamID          string    `json:"team_id"`
-	BotID           string    `json:"bot_id"`
+	ParticipantID   string    `json:"participant_id"`
 	UserID          string    `json:"user_id"`
 	AgentID         string    `json:"agent_id"`
 	Role            string    `json:"role"`

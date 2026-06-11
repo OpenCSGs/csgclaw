@@ -117,8 +117,8 @@ func (r *Runtime) Kind() string {
 	return "sandbox_gateway"
 }
 
-func (r *Runtime) WorkspaceRoot(string) string {
-	return ""
+func (r *Runtime) Layout(string) agentruntime.Layout {
+	return agentruntime.Layout{}
 }
 
 func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {

@@ -54,19 +54,19 @@ describe("conversation model helpers", () => {
     expect(
       formatEventMessage(
         {
-          content: "",
+          content: "Alice created the room",
           event: { actor_id: "u-1", key: "room_created", title: "Ops" },
           sender_id: "u-1",
         },
         usersById,
         "en",
       ),
-    ).toBe('Alice created the room "Ops"');
+    ).toBe("Alice created the room");
 
     expect(
       formatEventMessage(
         {
-          content: "",
+          content: "Alice 邀请 @bob 加入了房间",
           event: { actor_id: "u-1", key: "room_members_added", target_ids: ["u-2"] },
           mentions: [],
           sender_id: "u-1",

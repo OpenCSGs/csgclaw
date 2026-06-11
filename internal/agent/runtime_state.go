@@ -10,7 +10,6 @@ import (
 
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/sandbox"
 )
 
@@ -163,6 +162,14 @@ func (s *Service) WorkspaceRoot(agentName string) (string, error) {
 	return s.agentWorkspaceRoot(got.Name, got.RuntimeKind)
 }
 
+func (s *Service) SkillsRoot(agentName string) (string, error) {
+	got, ok := s.agentSnapshotByName(agentName)
+	if !ok {
+		return "", fmt.Errorf("agent %q not found", strings.TrimSpace(agentName))
+	}
+	return s.agentSkillsRoot(got.Name, got.RuntimeKind)
+}
+
 func runtimeHandleForAgent(a Agent) agentruntime.Handle {
 	return agentruntime.Handle{
 		RuntimeID: normalizeRuntimeID(a.RuntimeID, a.ID),
@@ -271,14 +278,14 @@ func (s *Service) streamRuntimeHostLogs(ctx context.Context, agentID string, fol
 	if !ok {
 		return fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
 	}
-	if s.useOpenClawGateway() {
-		agentHome, err := agentHomeDir(got.Name)
-		if err != nil {
-			return err
-		}
-		return streamHostGatewayLogPaths(ctx, []string{openclawsandbox.HostGatewayLogPath(agentHome)}, follow, lines, w)
+	layout, err := s.agentLayout(got.Name, got.RuntimeKind)
+	if err != nil {
+		return err
 	}
-	return streamHostGatewayLog(ctx, got.Name, follow, lines, w)
+	if len(layout.HostLogPaths) == 0 {
+		return os.ErrNotExist
+	}
+	return streamHostGatewayLogPaths(ctx, layout.HostLogPaths, follow, lines, w)
 }
 
 func (s *Service) updateRuntimeState(id string, info agentruntime.Info) (Agent, error) {
