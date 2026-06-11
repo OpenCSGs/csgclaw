@@ -79,14 +79,19 @@ make build-all
 
 内置运行时模板位于 `internal/templates/embed/<name>/`，通过 `go:embed` 直接嵌入（`agent.toml`、`workspace/` 等）。每个 docker embed 模板在 `agent.toml` 中有 `version` 字段与对应的 `image.ref`。
 
-**本地（PR 前）**：`make build-all` 会先递增 `version`、同步 `image.ref`，再编译 `csgclaw`（使 embed 与镜像 tag 一致），最后构建 Docker 镜像。
+**本地（PR 前）**：`make build-all` 分两步，互不影响：
+
+1. **version/ref（bump）**：仅当 `cmd/csgclaw-cli/` 或某模板 `Dockerfile` 相对 git `HEAD` 有改动，且工作区 `version` 仍等于 `HEAD` 时，对该模板 `version` 末段 +1 并同步 `image.ref`；相对基线最多自增一次。`workspace/` 改动不 bump。强制递增：`DOCKER_EMBED_FORCE_BUMP=1`。
+2. **Docker 镜像（build）**：`csgclaw-cli` 改动 → 构建全部 embed 镜像；某模板 `Dockerfile` 改动 → 仅构建该模板；可多次构建，不改变 `version`。无改动时跳过 docker build。强制全建：`DOCKER_EMBED_FORCE_BUILD=1`。单独 target（如 `make build-picoclaw-manager-image`）始终构建指定镜像。
+
+随后编译 `csgclaw`（`workspace` 改动通过 `go:embed` 进入二进制，无需 bump 镜像版本）。
 
 **GitLab CI（main）**：仅读取已提交的 `version` / `image.ref` 构建并 push 镜像，**不会**修改 `agent.toml`；当本次 push 范围内（`CI_COMMIT_BEFORE_SHA..HEAD`）embed `agent.toml` 发生变化或 `version` 相对 compare base 改变时触发构建。
 
 | 目标 | 说明 |
 |------|------|
 | `make sync-docker-embed-image-refs` | 按当前 `version` 同步 `image.ref`（不递增） |
-| `make bump-docker-embed-version` | 递增全部 docker embed 模板的 `version` 并同步 `image.ref` |
+| `make bump-docker-embed-version` | 按镜像输入规则递增（或跳过）各模板 `version` 并同步 `image.ref`（与 docker build 独立） |
 | `make ensure-docker-embed-manifests` | `image.ref` 缺失或与 `version` 不一致时调用 `sync-docker-embed-image-refs`（`make build` / `make test` 使用） |
 
 带 `Dockerfile` 的模板由 `scripts/list-docker-embed-templates.sh` 发现（当前为 `openclaw-manager`、`openclaw-worker`、`picoclaw-manager` 和 `picoclaw-worker`）。

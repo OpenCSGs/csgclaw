@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Bump agent.toml version (last segment) and sync [image].ref for docker embed templates.
+# Bumps at most once vs git HEAD per image-input change (cmd/csgclaw-cli/ or template Dockerfile).
+# Workspace changes do not bump. Independent from docker build. Set DOCKER_EMBED_FORCE_BUMP=1 to always increment.
 #
 # Usage:
 #   ./scripts/bump-docker-embed-version.sh                    # all docker templates

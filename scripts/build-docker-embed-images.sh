@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Build container images for embed templates that include a Dockerfile.
-# Image tag defaults to agent.toml version (after bump-docker-embed-version.sh).
+# Image tag defaults to agent.toml version. Build selection is independent from bump:
+#   - cmd/csgclaw-cli/ changed vs HEAD -> build all templates
+#   - template Dockerfile changed vs HEAD -> build that template
+#   - PICOCLAW_BASE_IMAGE / OPENCLAW_BASE_IMAGE set -> build matching family
+# Set DOCKER_EMBED_FORCE_BUILD=1 to build all templates regardless.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -87,11 +91,20 @@ build_one() {
 }
 
 chmod +x "${LIST_SCRIPT}"
+built_any=false
 if [ "$#" -eq 0 ]; then
   while IFS= read -r name; do
     [ -z "${name}" ] && continue
-    build_one "${name}"
+    if should_build_docker_embed_image "${name}"; then
+      build_one "${name}"
+      built_any=true
+    else
+      echo "skip docker build ${name}: image inputs unchanged (set DOCKER_EMBED_FORCE_BUILD=1 to force)"
+    fi
   done < <("${LIST_SCRIPT}")
+  if [ "${built_any}" = false ]; then
+    echo "skip docker embed builds: no templates with changed image inputs"
+  fi
 else
   for name in "$@"; do
     build_one "${name}"

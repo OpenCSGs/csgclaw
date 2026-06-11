@@ -79,14 +79,19 @@ Frontend structure and verification details: [docs/web/development.md](web/devel
 
 Builtin runtime templates live under `internal/templates/embed/<name>/` and are embedded directly via `go:embed` (`agent.toml`, `workspace/`, etc.). Each docker embed template carries a `version` field and matching `image.ref`.
 
-**Local (before PR)**: `make build-all` bumps `version`, syncs `image.ref`, rebuilds `csgclaw` (so embed matches image tags), then builds Docker images.
+**Local (before PR)**: `make build-all` runs two independent steps:
+
+1. **version/ref (bump)**: increments the last segment and syncs `image.ref` per template only when `cmd/csgclaw-cli/` or that template's `Dockerfile` differs from git `HEAD` and working-tree `version` still matches `HEAD` (at most once vs baseline). `workspace/` changes do not bump. Force: `DOCKER_EMBED_FORCE_BUMP=1`.
+2. **Docker images (build)**: `csgclaw-cli` changed → build all embed images; one `Dockerfile` changed → build that template only; repeatable without changing `version`. Skips when no image inputs changed. Force all: `DOCKER_EMBED_FORCE_BUILD=1`. Explicit targets (e.g. `make build-picoclaw-manager-image`) always build the named image.
+
+Then rebuilds `csgclaw` (`workspace` ships via `go:embed`, not the sandbox image).
 
 **GitLab CI (main)**: reads committed `version` / `image.ref`, builds and pushes images **without** modifying `agent.toml`; runs when embed `agent.toml` changed in the pushed range (`CI_COMMIT_BEFORE_SHA..HEAD`) or `version` differs from the compare base.
 
 | Target | Description |
 |--------|-------------|
 | `make sync-docker-embed-image-refs` | Sync `image.ref` from current `version` (no bump) |
-| `make bump-docker-embed-version` | Bump `version` and sync `image.ref` for all docker embed templates |
+| `make bump-docker-embed-version` | Bump (or skip per image-input rules) `version` and sync `image.ref` per template (independent of docker build) |
 | `make ensure-docker-embed-manifests` | Run `sync-docker-embed-image-refs` when `image.ref` is missing or out of sync with `version` (used by `make build` / `make test`) |
 
 Templates with a `Dockerfile` are discovered by `scripts/list-docker-embed-templates.sh` (currently `openclaw-manager`, `openclaw-worker`, `picoclaw-manager`, and `picoclaw-worker`).

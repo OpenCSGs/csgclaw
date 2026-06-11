@@ -110,6 +110,179 @@ increment_version_last_segment() {
   printf '%s.%s' "${prefix}" "$((last + 1))"
 }
 
+docker_embed_git_available() {
+  local root
+  root="$(docker_embed_root)"
+  git -C "${root}" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+docker_embed_baseline_version() {
+  local template="$1"
+  local root manifest_rel tmp version
+
+  root="$(docker_embed_root)"
+  manifest_rel="internal/templates/embed/${template}/agent.toml"
+  if ! docker_embed_git_available; then
+    return 1
+  fi
+  if ! git -C "${root}" cat-file -e "HEAD:${manifest_rel}" 2>/dev/null; then
+    return 1
+  fi
+
+  tmp="$(mktemp)"
+  git -C "${root}" show "HEAD:${manifest_rel}" > "${tmp}"
+  version="$(read_agent_toml_version "${tmp}")"
+  rm -f "${tmp}"
+  if [ -z "${version}" ]; then
+    return 1
+  fi
+  printf '%s' "${version}"
+}
+
+# Prints -1 when left < right, 0 when equal, 1 when left > right.
+embed_template_version_compare() {
+  local left="$1"
+  local right="$2"
+  local -a left_parts right_parts
+  local i max len left_val right_val
+
+  if [ "${left}" = "${right}" ]; then
+    printf '%s' "0"
+    return 0
+  fi
+
+  IFS=. read -r -a left_parts <<< "${left}"
+  IFS=. read -r -a right_parts <<< "${right}"
+  len="${#left_parts[@]}"
+  if [ "${#right_parts[@]}" -gt "${len}" ]; then
+    len="${#right_parts[@]}"
+  fi
+
+  for ((i = 0; i < len; i++)); do
+    left_val=$((10#${left_parts[i]:-0}))
+    right_val=$((10#${right_parts[i]:-0}))
+    if ((left_val > right_val)); then
+      printf '%s' "1"
+      return 0
+    fi
+    if ((left_val < right_val)); then
+      printf '%s' "-1"
+      return 0
+    fi
+  done
+
+  printf '%s' "0"
+}
+
+# Exit 0 when csgclaw-cli sources differ from HEAD (shared docker embed input).
+docker_embed_cli_inputs_changed_vs_head() {
+  local root
+
+  root="$(docker_embed_root)"
+  if ! docker_embed_git_available; then
+    return 0
+  fi
+  if [ -n "$(git -C "${root}" status --porcelain -- cmd/csgclaw-cli/ 2>/dev/null || true)" ]; then
+    return 0
+  fi
+  return 1
+}
+
+# Exit 0 when the template Dockerfile differs from HEAD (includes untracked).
+docker_embed_dockerfile_changed_vs_head() {
+  local template="$1"
+  local root dockerfile_rel
+
+  root="$(docker_embed_root)"
+  dockerfile_rel="internal/templates/embed/${template}/Dockerfile"
+  if ! docker_embed_git_available; then
+    return 0
+  fi
+  if [ -n "$(git -C "${root}" status --porcelain -- "${dockerfile_rel}" 2>/dev/null || true)" ]; then
+    return 0
+  fi
+  return 1
+}
+
+# Exit 0 when inputs that affect the sandbox image changed relative to git HEAD.
+# Workspace and agent.toml metadata are excluded (they ship via go:embed, not the image).
+docker_embed_image_inputs_changed_vs_head() {
+  local template="$1"
+
+  if docker_embed_cli_inputs_changed_vs_head; then
+    return 0
+  fi
+  if docker_embed_dockerfile_changed_vs_head "${template}"; then
+    return 0
+  fi
+  return 1
+}
+
+# Exit 0 when this template's image should be docker-built locally.
+# Independent from version bump: repeated builds are allowed while version stays put.
+should_build_docker_embed_image() {
+  local template="$1"
+
+  if [ "${DOCKER_EMBED_FORCE_BUILD:-}" = "1" ]; then
+    return 0
+  fi
+  if ! docker_embed_git_available; then
+    return 0
+  fi
+  if docker_embed_cli_inputs_changed_vs_head; then
+    return 0
+  fi
+  if docker_embed_dockerfile_changed_vs_head "${template}"; then
+    return 0
+  fi
+  case "${template}" in
+    picoclaw-*)
+      if [ -n "${PICOCLAW_BASE_IMAGE:-}" ]; then
+        return 0
+      fi
+      ;;
+    openclaw-*)
+      if [ -n "${OPENCLAW_BASE_IMAGE:-}" ]; then
+        return 0
+      fi
+      ;;
+  esac
+  return 1
+}
+
+# Exit 0 when version bump should be skipped (sync-only path).
+should_skip_docker_embed_bump() {
+  local template="$1"
+  local manifest current baseline order
+
+  if [ "${DOCKER_EMBED_FORCE_BUMP:-}" = "1" ]; then
+    return 1
+  fi
+  if ! docker_embed_git_available; then
+    return 1
+  fi
+
+  manifest="$(docker_embed_manifest_path "${template}")"
+  current="$(read_agent_toml_version "${manifest}")"
+  baseline="$(docker_embed_baseline_version "${template}" || true)"
+  if [ -z "${baseline}" ]; then
+    return 1
+  fi
+
+  if ! docker_embed_image_inputs_changed_vs_head "${template}"; then
+    return 0
+  fi
+
+  order="$(embed_template_version_compare "${current}" "${baseline}")"
+  if [ "${order}" -gt 0 ]; then
+    return 0
+  fi
+  if [ "${order}" -eq 0 ]; then
+    return 1
+  fi
+  return 0
+}
+
 embed_image_ref_env_key() {
   local template="$1"
   local key="EMBED_IMAGE_REF_${template}"
@@ -283,6 +456,15 @@ bump_agent_toml_version_and_ref() {
   fi
 
   current="$(read_agent_toml_version "${manifest}")"
+  if should_skip_docker_embed_bump "${template}"; then
+    if ! docker_embed_manifest_is_current "${template}"; then
+      sync_agent_toml_version_and_ref "${template}"
+      return 0
+    fi
+    echo "skip bump ${manifest}: image inputs unchanged or already bumped (version=${current})"
+    return 0
+  fi
+
   if [ -z "${current}" ]; then
     next="0.1.0"
   else
