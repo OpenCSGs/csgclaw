@@ -1068,10 +1068,39 @@ export function isAgentProfileDraftComplete(draft: Partial<AgentDraft> | null | 
   return true;
 }
 
+export function llmProfilePayloadForCompare(draft: AgentDraft | null | undefined): string {
+  if (!draft) {
+    return "";
+  }
+  const normalized = ensureNotifierPullSubscriptionDraft(draft);
+  const profile = draftToProfile(normalized, {
+    name: normalized.name,
+    description: normalized.description,
+  });
+  return JSON.stringify({
+    provider: profile.provider,
+    base_url: profile.base_url,
+    api_key: profile.api_key,
+    model_id: profile.model_id,
+    reasoning_effort: profile.reasoning_effort,
+    enable_fast_mode: profile.enable_fast_mode,
+    headers: profile.headers,
+    request_options: profile.request_options,
+    env: profile.env,
+  });
+}
+
+export function agentPageLLMProfileChanged(
+  draft: AgentDraft | null | undefined,
+  savedDraft: AgentDraft | null | undefined,
+): boolean {
+  return llmProfilePayloadForCompare(draft) !== llmProfilePayloadForCompare(savedDraft);
+}
+
 export function agentProfilePageSaveDisabled(
   draft: AgentDraft | null | undefined,
   item: AgentLike | null | undefined,
-  options: { saving?: boolean } = {},
+  options: { saving?: boolean; savedDraft?: AgentDraft | null } = {},
 ): boolean {
   if (options.saving || !draft) {
     return true;
@@ -1081,6 +1110,9 @@ export function agentProfilePageSaveDisabled(
   }
   if (isNotifierRuntimeDraftOnAgentPage(draft, item)) {
     return !notifierFormIsComplete(draft, item);
+  }
+  if (!agentPageLLMProfileChanged(draft, options.savedDraft ?? null)) {
+    return false;
   }
   return !isAgentProfileDraftComplete(draft);
 }

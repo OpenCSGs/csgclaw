@@ -36,7 +36,7 @@ import {
   applyTemplateToDraft,
   advanceAgentProgress,
   agentDraftWithRuntimeFieldsFromAgent,
-  agentProfilePageSaveDisabled,
+  agentPageLLMProfileChanged,
   agentRuntimePollSettled,
   agentToDraft,
   isAgentProfileDraftComplete,
@@ -53,6 +53,7 @@ import {
   isNotificationBotDraftContext,
   isNotifierRuntimeDraft,
   isNotifierRuntimeDraftOnAgentPage,
+  notifierFormIsComplete,
   mergeAgentIntoList,
   normalizeAuthProviderName,
   partitionWorkspaceAgentItems,
@@ -839,15 +840,15 @@ export function useAgentController({
     if (!draftToSave || !selectedAgentForPage?.id) {
       return;
     }
-    if (agentProfilePageSaveDisabled(draftToSave, selectedAgentForPage)) {
-      setAgentPageError(t("profileSaveIncompleteError"));
-      return;
-    }
     setAgentPageBusy(true);
     setAgentPageError("");
     try {
       const draft = ensureNotifierPullSubscriptionDraft(draftToSave);
       if (isNotifierRuntimeDraftOnAgentPage(draftToSave, selectedAgentForPage)) {
+        if (!notifierFormIsComplete(draftToSave, selectedAgentForPage)) {
+          setAgentPageError(t("profileSaveIncompleteError"));
+          return;
+        }
         const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, { mergeNotifier: true });
         const payload: AgentUpdatePayload = {
           name: draftToSave.name,
@@ -903,7 +904,8 @@ export function useAgentController({
         setAgentPageSavedDraft(nextDraft);
         return;
       }
-      if (profileChanged && !isAgentProfileDraftComplete(draftToSave)) {
+      const llmProfileChanged = agentPageLLMProfileChanged(draftToSave, agentPageSavedDraft);
+      if (llmProfileChanged && !isAgentProfileDraftComplete(draftToSave)) {
         setAgentPageError(t("profileSaveIncompleteError"));
         return;
       }

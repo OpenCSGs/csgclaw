@@ -16,6 +16,8 @@ import {
   envRowsToMap,
   formatProviderLabel,
   isAgentIncomplete,
+  agentPageLLMProfileChanged,
+  agentProfilePageSaveDisabled,
   isAgentProfileDraftComplete,
   mergeAgentIntoList,
   isNotificationBotAgent,
@@ -544,6 +546,37 @@ describe("agent model helpers", () => {
         status: "profile_incomplete",
       }),
     ).toBe(false);
+  });
+
+  it("allows meta-only agent page saves while LLM profile is incomplete", () => {
+    const savedDraft = agentToDraft({
+      id: "u-manager",
+      name: "Manager",
+      avatar: "avatar-a",
+      description: "desc",
+      provider: "api",
+      profile_complete: false,
+    });
+    const avatarOnlyDraft = { ...savedDraft, avatar: "avatar-b" };
+    const descriptionOnlyDraft = { ...savedDraft, description: "updated desc" };
+
+    expect(agentPageLLMProfileChanged(avatarOnlyDraft, savedDraft)).toBe(false);
+    expect(agentPageLLMProfileChanged(descriptionOnlyDraft, savedDraft)).toBe(false);
+    expect(agentProfilePageSaveDisabled(avatarOnlyDraft, { id: "u-manager" }, { savedDraft })).toBe(false);
+    expect(agentProfilePageSaveDisabled(descriptionOnlyDraft, { id: "u-manager" }, { savedDraft })).toBe(false);
+  });
+
+  it("blocks agent page saves when LLM profile fields change while incomplete", () => {
+    const savedDraft = agentToDraft({
+      id: "u-manager",
+      name: "Manager",
+      provider: "api",
+      profile_complete: false,
+    });
+    const modelChangedDraft = { ...savedDraft, model_id: "gpt-test", base_url: "https://api.example.test/v1" };
+
+    expect(agentPageLLMProfileChanged(modelChangedDraft, savedDraft)).toBe(true);
+    expect(agentProfilePageSaveDisabled(modelChangedDraft, { id: "u-manager" }, { savedDraft })).toBe(true);
   });
 
   it("requires API key or stored key flag for API provider draft completeness", () => {

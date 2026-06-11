@@ -136,7 +136,7 @@ export function AgentDetailPane({
   const canPublish = runtimeKind === "picoclaw_sandbox" || runtimeKind === "openclaw_sandbox";
   const hasUnsavedChanges =
     hasUnsavedChangesProp ?? Boolean(draft && savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft));
-  const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving });
+  const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
   const updateDraft = (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
   return (
     <section className="entity-pane agent-detail-pane">
