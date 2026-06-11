@@ -1149,6 +1149,18 @@ func (s *Service) Agent(id string) (Agent, bool) {
 	return s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, a)), true
 }
 
+func (s *Service) AgentDisplayName(id string) (string, bool) {
+	a, ok := s.agentSnapshot(id)
+	if !ok {
+		return "", false
+	}
+	name := strings.TrimSpace(a.Name)
+	if name == "" {
+		name = strings.TrimSpace(a.ID)
+	}
+	return name, name != ""
+}
+
 func (s *Service) agentSnapshot(id string) (Agent, bool) {
 	if s == nil {
 		return Agent{}, false

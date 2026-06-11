@@ -14,27 +14,30 @@ type Team struct {
 }
 
 type TeamTask struct {
-	ID           string     `json:"id"`
-	TeamID       string     `json:"team_id"`
-	RoomID       string     `json:"room_id"`
-	ParentID     string     `json:"parent_id,omitempty"`
-	Title        string     `json:"title"`
-	Body         string     `json:"body"`
-	Status       string     `json:"status"`
-	CreatedBy    string     `json:"created_by"`
-	AssignedTo   string     `json:"assigned_to,omitempty"`
-	ClaimedBy    string     `json:"claimed_by,omitempty"`
-	DependsOn    []string   `json:"depends_on,omitempty"`
-	Priority     int        `json:"priority,omitempty"`
-	PlanSummary  string     `json:"plan_summary,omitempty"`
-	DispatchedAt *time.Time `json:"dispatched_at,omitempty"`
-	DeadlineAt   *time.Time `json:"deadline_at,omitempty"`
-	TimeoutAt    *time.Time `json:"timeout_at,omitempty"`
-	Result       string     `json:"result,omitempty"`
-	Error        string     `json:"error,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	CompletedAt  *time.Time `json:"completed_at,omitempty"`
+	ID                  string     `json:"id"`
+	TeamID              string     `json:"team_id"`
+	RoomID              string     `json:"room_id"`
+	ParentID            string     `json:"parent_id,omitempty"`
+	Title               string     `json:"title"`
+	Body                string     `json:"body"`
+	Status              string     `json:"status"`
+	CreatedBy           string     `json:"created_by"`
+	CreatedByAgentName  string     `json:"created_by_agent_name,omitempty"`
+	AssignedTo          string     `json:"assigned_to,omitempty"`
+	AssignedToAgentName string     `json:"assigned_to_agent_name,omitempty"`
+	ClaimedBy           string     `json:"claimed_by,omitempty"`
+	ClaimedByAgentName  string     `json:"claimed_by_agent_name,omitempty"`
+	DependsOn           []string   `json:"depends_on,omitempty"`
+	Priority            int        `json:"priority,omitempty"`
+	PlanSummary         string     `json:"plan_summary,omitempty"`
+	DispatchedAt        *time.Time `json:"dispatched_at,omitempty"`
+	DeadlineAt          *time.Time `json:"deadline_at,omitempty"`
+	TimeoutAt           *time.Time `json:"timeout_at,omitempty"`
+	Result              string     `json:"result,omitempty"`
+	Error               string     `json:"error,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+	CompletedAt         *time.Time `json:"completed_at,omitempty"`
 }
 
 type GlobalTask struct {
@@ -73,15 +76,17 @@ type TeamPresence struct {
 }
 
 type TeamEvent struct {
-	Seq       int64     `json:"seq"`
-	TeamID    string    `json:"team_id"`
-	RoomID    string    `json:"room_id"`
-	Type      string    `json:"type"`
-	ActorID   string    `json:"actor_id,omitempty"`
-	TaskID    string    `json:"task_id,omitempty"`
-	TargetID  string    `json:"target_id,omitempty"`
-	Summary   string    `json:"summary,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	Seq             int64     `json:"seq"`
+	TeamID          string    `json:"team_id"`
+	RoomID          string    `json:"room_id"`
+	Type            string    `json:"type"`
+	ActorID         string    `json:"actor_id,omitempty"`
+	ActorAgentName  string    `json:"actor_agent_name,omitempty"`
+	TaskID          string    `json:"task_id,omitempty"`
+	TargetID        string    `json:"target_id,omitempty"`
+	TargetAgentName string    `json:"target_agent_name,omitempty"`
+	Summary         string    `json:"summary,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type CreateTeamRequest struct {

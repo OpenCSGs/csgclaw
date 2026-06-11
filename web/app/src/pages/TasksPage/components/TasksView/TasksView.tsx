@@ -653,12 +653,12 @@ function taskMetaTags(
     {
       key: "assignee",
       label: t("taskAssigneeLabel"),
-      value: task.assigned_to || "-",
+      value: task.assigned_to_agent_name || task.assigned_to || "-",
     },
     {
       key: "claimed_by",
       label: t("taskClaimedByLabel"),
-      value: task.claimed_by || "-",
+      value: task.claimed_by_agent_name || task.claimed_by || "-",
     },
     {
       key: "parent",
@@ -779,12 +779,13 @@ function syntheticTimelineEntries(
     });
   }
   if (task.dispatched_at && !existingEventTypes.has("task.dispatched")) {
+    const assignee = task.assigned_to_agent_name || task.assigned_to;
     entries.push({
       id: `synthetic-dispatched-${task.id}`,
       title: t("taskTimelineDispatched"),
       subject: task.id,
       meta: formatTaskUpdatedAt(task.dispatched_at, locale),
-      body: task.assigned_to ? `${t("taskActivityTargetLabel")}: ${task.assigned_to}` : "",
+      body: assignee ? `${t("taskActivityTargetLabel")}: ${assignee}` : "",
       order: syntheticOrder(),
     });
   }
@@ -849,7 +850,9 @@ function taskEventTitle(type: string, t: TranslateFn): string {
 }
 
 function taskEventMeta(event: WorkspaceTeamEvent, locale: string): string {
-  return [formatTaskUpdatedAt(event.created_at, locale), event.actor_id].filter(Boolean).join(" · ");
+  return [formatTaskUpdatedAt(event.created_at, locale), event.actor_agent_name || event.actor_id]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function taskEventBody(event: WorkspaceTeamEvent, t: TranslateFn): string {
@@ -857,8 +860,9 @@ function taskEventBody(event: WorkspaceTeamEvent, t: TranslateFn): string {
   if (event.summary) {
     lines.push(event.summary);
   }
-  if (event.target_id) {
-    lines.push(`${t("taskActivityTargetLabel")}: ${event.target_id}`);
+  const target = event.target_agent_name || event.target_id;
+  if (target) {
+    lines.push(`${t("taskActivityTargetLabel")}: ${target}`);
   }
   return lines.join("\n");
 }

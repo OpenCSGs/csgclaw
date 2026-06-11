@@ -22,6 +22,49 @@ describe("tasks model", () => {
     expect(formatTaskUpdatedAt("invalid", "en")).toBe("-");
   });
 
+  it("normalizes participant display names returned by task APIs", () => {
+    const tasks = normalizeTaskList([
+      {
+        id: "task-1",
+        team_id: "team-1",
+        room_id: "room-1",
+        title: "Fetch weather",
+        created_by: "manager",
+        created_by_agent_name: "manager",
+        assigned_to: "agent-ymkx7q",
+        assigned_to_agent_name: "data-2-worker",
+        claimed_by: "agent-ymkx7q",
+        claimed_by_agent_name: "data-2-worker",
+      },
+    ]);
+    expect(tasks[0]).toMatchObject({
+      created_by: "manager",
+      created_by_agent_name: "manager",
+      assigned_to: "agent-ymkx7q",
+      assigned_to_agent_name: "data-2-worker",
+      claimed_by: "agent-ymkx7q",
+      claimed_by_agent_name: "data-2-worker",
+    });
+
+    const events = normalizeTeamEventList([
+      {
+        seq: 1,
+        team_id: "team-1",
+        type: "task.dispatched",
+        actor_id: "manager",
+        actor_agent_name: "manager",
+        target_id: "agent-ymkx7q",
+        target_agent_name: "data-2-worker",
+      },
+    ]);
+    expect(events[0]).toMatchObject({
+      actor_id: "manager",
+      actor_agent_name: "manager",
+      target_id: "agent-ymkx7q",
+      target_agent_name: "data-2-worker",
+    });
+  });
+
   it("normalizes team lead agent ids", () => {
     const teams = normalizeTeamList([
       {

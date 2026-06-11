@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"strings"
 
+	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/participant"
 	"csgclaw/internal/team"
 )
 
@@ -112,60 +114,132 @@ func apiTeams(items []team.TeamMeta) []apitypes.Team {
 	return resp
 }
 
-func apiTask(item team.TeamTask) apitypes.TeamTask {
-	return apitypes.TeamTask{
-		ID:           item.ID,
-		TeamID:       item.TeamID,
-		RoomID:       item.RoomID,
-		ParentID:     item.ParentID,
-		Title:        item.Title,
-		Body:         item.Body,
-		Status:       item.Status,
-		CreatedBy:    item.CreatedBy,
-		AssignedTo:   item.AssignedTo,
-		ClaimedBy:    item.ClaimedBy,
-		DependsOn:    append([]string(nil), item.DependsOn...),
-		Priority:     item.Priority,
-		PlanSummary:  item.PlanSummary,
-		DispatchedAt: item.DispatchedAt,
-		DeadlineAt:   item.DeadlineAt,
-		TimeoutAt:    item.TimeoutAt,
-		Result:       item.Result,
-		Error:        item.Error,
-		CreatedAt:    item.CreatedAt,
-		UpdatedAt:    item.UpdatedAt,
-		CompletedAt:  item.CompletedAt,
+type teamIdentityPresenter struct {
+	agents    *agent.Service
+	namesByID map[string]string
+}
+
+func (h *Handler) newTeamIdentityPresenter() teamIdentityPresenter {
+	p := teamIdentityPresenter{namesByID: make(map[string]string)}
+	if h != nil {
+		p.agents = h.svc
+	}
+	if h == nil || h.participant == nil {
+		return p
+	}
+	for _, item := range h.participant.List(participant.ListOptions{Channel: participant.ChannelCSGClaw}) {
+		name := p.agentDisplayName(item.AgentID)
+		if name == "" {
+			name = strings.TrimSpace(item.Name)
+		}
+		if name == "" {
+			name = strings.TrimSpace(item.ChannelUserRef)
+		}
+		if name == "" {
+			continue
+		}
+		p.addName(item.ID, name)
+		p.addName(item.ChannelUserRef, name)
+		p.addName(item.AgentID, name)
+	}
+	return p
+}
+
+func (p teamIdentityPresenter) displayAgentName(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" || p.namesByID == nil {
+		return ""
+	}
+	if name := p.namesByID[id]; name != "" {
+		return name
+	}
+	return p.agentDisplayName(id)
+}
+
+func (p teamIdentityPresenter) addName(id string, name string) {
+	id = strings.TrimSpace(id)
+	name = strings.TrimSpace(name)
+	if id == "" || name == "" {
+		return
+	}
+	p.namesByID[id] = name
+	if strings.HasPrefix(id, "u-") && len(id) > len("u-") {
+		p.namesByID[strings.TrimPrefix(id, "u-")] = name
 	}
 }
 
-func apiTasks(items []team.TeamTask) []apitypes.TeamTask {
+func (p teamIdentityPresenter) agentDisplayName(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" || p.agents == nil {
+		return ""
+	}
+	if name, ok := p.agents.AgentDisplayName(id); ok {
+		return name
+	}
+	if strings.HasPrefix(id, "u-") || id == "" {
+		return ""
+	}
+	name, _ := p.agents.AgentDisplayName("u-" + id)
+	return name
+}
+
+func apiTask(item team.TeamTask, presenter teamIdentityPresenter) apitypes.TeamTask {
+	return apitypes.TeamTask{
+		ID:                  item.ID,
+		TeamID:              item.TeamID,
+		RoomID:              item.RoomID,
+		ParentID:            item.ParentID,
+		Title:               item.Title,
+		Body:                item.Body,
+		Status:              item.Status,
+		CreatedBy:           item.CreatedBy,
+		CreatedByAgentName:  presenter.displayAgentName(item.CreatedBy),
+		AssignedTo:          item.AssignedTo,
+		AssignedToAgentName: presenter.displayAgentName(item.AssignedTo),
+		ClaimedBy:           item.ClaimedBy,
+		ClaimedByAgentName:  presenter.displayAgentName(item.ClaimedBy),
+		DependsOn:           append([]string(nil), item.DependsOn...),
+		Priority:            item.Priority,
+		PlanSummary:         item.PlanSummary,
+		DispatchedAt:        item.DispatchedAt,
+		DeadlineAt:          item.DeadlineAt,
+		TimeoutAt:           item.TimeoutAt,
+		Result:              item.Result,
+		Error:               item.Error,
+		CreatedAt:           item.CreatedAt,
+		UpdatedAt:           item.UpdatedAt,
+		CompletedAt:         item.CompletedAt,
+	}
+}
+
+func apiTasks(items []team.TeamTask, presenter teamIdentityPresenter) []apitypes.TeamTask {
 	resp := make([]apitypes.TeamTask, 0, len(items))
 	for _, item := range items {
-		resp = append(resp, apiTask(item))
+		resp = append(resp, apiTask(item, presenter))
 	}
 	return resp
 }
 
-func apiGlobalTask(item team.GlobalTaskView) apitypes.GlobalTask {
+func apiGlobalTask(item team.GlobalTaskView, presenter teamIdentityPresenter) apitypes.GlobalTask {
 	return apitypes.GlobalTask{
-		TeamTask:  apiTask(item.Task),
+		TeamTask:  apiTask(item.Task, presenter),
 		TeamTitle: item.TeamTitle,
 		RoomTitle: item.RoomTitle,
 	}
 }
 
-func apiGlobalTasks(items []team.GlobalTaskView) []apitypes.GlobalTask {
+func apiGlobalTasks(items []team.GlobalTaskView, presenter teamIdentityPresenter) []apitypes.GlobalTask {
 	resp := make([]apitypes.GlobalTask, 0, len(items))
 	for _, item := range items {
-		resp = append(resp, apiGlobalTask(item))
+		resp = append(resp, apiGlobalTask(item, presenter))
 	}
 	return resp
 }
 
-func apiPlanTaskWorkflowResponse(result team.PlanTaskWorkflowResult) apitypes.PlanTeamTaskResponse {
+func apiPlanTaskWorkflowResponse(result team.PlanTaskWorkflowResult, presenter teamIdentityPresenter) apitypes.PlanTeamTaskResponse {
 	return apitypes.PlanTeamTaskResponse{
-		Task:           apiTask(result.Parent),
-		CreatedTasks:   apiTasks(result.Tasks),
+		Task:           apiTask(result.Parent, presenter),
+		CreatedTasks:   apiTasks(result.Tasks, presenter),
 		AlreadyPlanned: result.AlreadyPlanned,
 		Started:        result.Started,
 		ScheduledTasks: result.ScheduledCount,
@@ -195,13 +269,13 @@ func teamCreateTaskBatchInput(teamID string, req apitypes.CreateTeamTasksBatchRe
 	return input
 }
 
-func apiCreateTasksBatchResponse(result team.CreateTasksResult) apitypes.CreateTeamTasksBatchResponse {
+func apiCreateTasksBatchResponse(result team.CreateTasksResult, presenter teamIdentityPresenter) apitypes.CreateTeamTasksBatchResponse {
 	resp := apitypes.CreateTeamTasksBatchResponse{
 		Tasks:  make([]apitypes.TeamTask, 0, len(result.Tasks)),
 		IDRefs: make([]apitypes.TeamTaskIDRef, 0, len(result.IDRefs)),
 	}
 	for _, item := range result.Tasks {
-		resp.Tasks = append(resp.Tasks, apiTask(item))
+		resp.Tasks = append(resp.Tasks, apiTask(item, presenter))
 	}
 	for _, ref := range result.IDRefs {
 		resp.IDRefs = append(resp.IDRefs, apitypes.TeamTaskIDRef{IDRef: ref.IDRef, TaskID: ref.TaskID})
@@ -235,24 +309,26 @@ func apiApprovals(items []team.TeamApproval) []apitypes.TeamApproval {
 	return resp
 }
 
-func apiEvent(item team.TeamEvent) apitypes.TeamEvent {
+func apiEvent(item team.TeamEvent, presenter teamIdentityPresenter) apitypes.TeamEvent {
 	return apitypes.TeamEvent{
-		Seq:       item.Seq,
-		TeamID:    item.TeamID,
-		RoomID:    item.RoomID,
-		Type:      item.Type,
-		ActorID:   item.ActorID,
-		TaskID:    item.TaskID,
-		TargetID:  item.TargetID,
-		Summary:   item.Summary,
-		CreatedAt: item.CreatedAt,
+		Seq:             item.Seq,
+		TeamID:          item.TeamID,
+		RoomID:          item.RoomID,
+		Type:            item.Type,
+		ActorID:         item.ActorID,
+		ActorAgentName:  presenter.displayAgentName(item.ActorID),
+		TaskID:          item.TaskID,
+		TargetID:        item.TargetID,
+		TargetAgentName: presenter.displayAgentName(item.TargetID),
+		Summary:         item.Summary,
+		CreatedAt:       item.CreatedAt,
 	}
 }
 
-func apiEvents(items []team.TeamEvent) []apitypes.TeamEvent {
+func apiEvents(items []team.TeamEvent, presenter teamIdentityPresenter) []apitypes.TeamEvent {
 	resp := make([]apitypes.TeamEvent, 0, len(items))
 	for _, item := range items {
-		resp = append(resp, apiEvent(item))
+		resp = append(resp, apiEvent(item, presenter))
 	}
 	return resp
 }

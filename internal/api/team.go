@@ -122,7 +122,7 @@ func (h *Handler) handleListTeamTasks(w http.ResponseWriter, r *http.Request) {
 	if !h.ensureTeamExists(w, svc, pathValue(r, "team_id")) {
 		return
 	}
-	writeJSON(w, http.StatusOK, apiTasks(svc.ListTasks(pathValue(r, "team_id"))))
+	writeJSON(w, http.StatusOK, apiTasks(svc.ListTasks(pathValue(r, "team_id")), h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleListGlobalTasks(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +130,7 @@ func (h *Handler) handleListGlobalTasks(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, apiGlobalTasks(svc.ListGlobalTaskViews(h.teamDirectory())))
+	writeJSON(w, http.StatusOK, apiGlobalTasks(svc.ListGlobalTaskViews(h.teamDirectory()), h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleCreateTeamTasksBatch(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +149,7 @@ func (h *Handler) handleCreateTeamTasksBatch(w http.ResponseWriter, r *http.Requ
 		writeTeamError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, apiCreateTasksBatchResponse(result))
+	writeJSON(w, http.StatusCreated, apiCreateTasksBatchResponse(result, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleClaimNextTask(w http.ResponseWriter, r *http.Request) {
@@ -171,7 +171,7 @@ func (h *Handler) handleClaimNextTask(w http.ResponseWriter, r *http.Request) {
 		writeTeamError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, apiTask(item))
+	writeJSON(w, http.StatusOK, apiTask(item, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleClaimTeamTask(w http.ResponseWriter, r *http.Request) {
@@ -193,7 +193,7 @@ func (h *Handler) handleClaimTeamTask(w http.ResponseWriter, r *http.Request) {
 		writeTeamError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, apiTask(item))
+	writeJSON(w, http.StatusOK, apiTask(item, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleUpdateTeamTask(w http.ResponseWriter, r *http.Request) {
@@ -222,7 +222,7 @@ func (h *Handler) handleUpdateTeamTask(w http.ResponseWriter, r *http.Request) {
 		writeTeamError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, apiTask(item))
+	writeJSON(w, http.StatusOK, apiTask(item, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handlePlanTeamTask(w http.ResponseWriter, r *http.Request) {
@@ -256,7 +256,7 @@ func (h *Handler) handlePlanTeamTask(w http.ResponseWriter, r *http.Request) {
 		writeTeamPlanError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, apiPlanTaskWorkflowResponse(result))
+	writeJSON(w, http.StatusOK, apiPlanTaskWorkflowResponse(result, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleStartTeamTask(w http.ResponseWriter, r *http.Request) {
@@ -281,7 +281,7 @@ func (h *Handler) handleStartTeamTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, apitypes.StartTeamTaskResponse{
-		Task:           apiTask(item.Parent),
+		Task:           apiTask(item.Parent, h.newTeamIdentityPresenter()),
 		ScheduledTasks: item.ScheduledCount,
 	})
 }
@@ -309,7 +309,7 @@ func (h *Handler) handleAssignTeamTask(w http.ResponseWriter, r *http.Request) {
 		writeTeamError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, apiTask(item))
+	writeJSON(w, http.StatusOK, apiTask(item, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleListTeamApprovals(w http.ResponseWriter, r *http.Request) {
@@ -381,5 +381,5 @@ func (h *Handler) handleListTeamEvents(w http.ResponseWriter, r *http.Request) {
 	if !h.ensureTeamExists(w, svc, pathValue(r, "team_id")) {
 		return
 	}
-	writeJSON(w, http.StatusOK, apiEvents(svc.ListEvents(pathValue(r, "team_id"))))
+	writeJSON(w, http.StatusOK, apiEvents(svc.ListEvents(pathValue(r, "team_id")), h.newTeamIdentityPresenter()))
 }

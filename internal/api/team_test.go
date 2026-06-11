@@ -87,6 +87,121 @@ func TestTeamRoutesCreateAndTaskFlow(t *testing.T) {
 	}
 }
 
+func TestTeamTaskResponsesIncludeParticipantDisplayNames(t *testing.T) {
+	agentSvc := mustNewSeededService(t, []agent.Agent{
+		{
+			ID:        agent.ManagerUserID,
+			Name:      "manager",
+			Role:      agent.RoleManager,
+			CreatedAt: time.Date(2026, 6, 10, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			ID:        "u-agent-ymkx7q",
+			Name:      "data-2-worker",
+			Role:      agent.RoleWorker,
+			CreatedAt: time.Date(2026, 6, 10, 8, 1, 0, 0, time.UTC),
+		},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{
+		{
+			ID:              agent.ManagerParticipantID,
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			Name:            "manager",
+			ChannelUserRef:  agent.ManagerParticipantID,
+			AgentID:         agent.ManagerUserID,
+			LifecycleStatus: participant.LifecycleStatusActive,
+			Mentionable:     true,
+		},
+		{
+			ID:              "agent-ymkx7q",
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			Name:            "stale participant name",
+			ChannelUserRef:  "u-agent-ymkx7q",
+			AgentID:         "u-agent-ymkx7q",
+			LifecycleStatus: participant.LifecycleStatusActive,
+			Mentionable:     true,
+		},
+	}))
+	imSvc := im.NewService()
+	adapter := team.NewCSGClawAdapter(imSvc, participantSvc)
+	teamSvc := team.NewService()
+	h := &Handler{
+		svc:         agentSvc,
+		participant: participantSvc,
+		im:          imSvc,
+		teamSvc:     teamSvc,
+		teamAdapter: adapter,
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"channel":"csgclaw","title":"data","lead_participant_id":"manager","member_participant_ids":["agent-ymkx7q"]}`))
+	createRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create team status = %d, want %d: %s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+	var created apitypes.Team
+	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create team response: %v", err)
+	}
+
+	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"manager","tasks":[{"title":"Fetch weather","assign_to":"agent-ymkx7q"}]}`))
+	batchRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(batchRec, batchReq)
+	if batchRec.Code != http.StatusCreated {
+		t.Fatalf("create batch status = %d, want %d: %s", batchRec.Code, http.StatusCreated, batchRec.Body.String())
+	}
+	var batchResp apitypes.CreateTeamTasksBatchResponse
+	if err := json.NewDecoder(batchRec.Body).Decode(&batchResp); err != nil {
+		t.Fatalf("decode batch response: %v", err)
+	}
+	if len(batchResp.Tasks) != 1 {
+		t.Fatalf("batch tasks len = %d, want 1", len(batchResp.Tasks))
+	}
+	if batchResp.Tasks[0].AssignedTo != "agent-ymkx7q" || batchResp.Tasks[0].AssignedToAgentName != "data-2-worker" {
+		t.Fatalf("batch assigned = %q/%q, want agent-ymkx7q/data-2-worker", batchResp.Tasks[0].AssignedTo, batchResp.Tasks[0].AssignedToAgentName)
+	}
+	if batchResp.Tasks[0].CreatedBy != "manager" || batchResp.Tasks[0].CreatedByAgentName != "manager" {
+		t.Fatalf("batch creator = %q/%q, want manager/manager", batchResp.Tasks[0].CreatedBy, batchResp.Tasks[0].CreatedByAgentName)
+	}
+
+	globalReq := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
+	globalRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(globalRec, globalReq)
+	if globalRec.Code != http.StatusOK {
+		t.Fatalf("global tasks status = %d, want %d: %s", globalRec.Code, http.StatusOK, globalRec.Body.String())
+	}
+	var globalTasks []apitypes.GlobalTask
+	if err := json.NewDecoder(globalRec.Body).Decode(&globalTasks); err != nil {
+		t.Fatalf("decode global tasks response: %v", err)
+	}
+	if len(globalTasks) != 1 || globalTasks[0].AssignedToAgentName != "data-2-worker" {
+		t.Fatalf("global tasks = %+v, want assigned_to_agent_name data-2-worker", globalTasks)
+	}
+
+	eventsReq := httptest.NewRequest(http.MethodGet, "/api/v1/teams/"+created.ID+"/events", nil)
+	eventsRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(eventsRec, eventsReq)
+	if eventsRec.Code != http.StatusOK {
+		t.Fatalf("events status = %d, want %d: %s", eventsRec.Code, http.StatusOK, eventsRec.Body.String())
+	}
+	var events []apitypes.TeamEvent
+	if err := json.NewDecoder(eventsRec.Body).Decode(&events); err != nil {
+		t.Fatalf("decode events response: %v", err)
+	}
+	var taskEvent apitypes.TeamEvent
+	for _, event := range events {
+		if event.TargetID == "agent-ymkx7q" {
+			taskEvent = event
+			break
+		}
+	}
+	if taskEvent.ActorAgentName != "manager" || taskEvent.TargetAgentName != "data-2-worker" {
+		t.Fatalf("events = %+v, want actor_agent_name manager and target_agent_name data-2-worker", events)
+	}
+}
+
 func TestTeamRoutesCreateResolvesAgentIDs(t *testing.T) {
 	imSvc := im.NewService()
 	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{

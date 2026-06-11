@@ -359,8 +359,12 @@ function workspaceTasksEqual(left: WorkspaceTask, right: WorkspaceTask): boolean
     left.title === right.title &&
     left.body === right.body &&
     left.status === right.status &&
+    left.created_by === right.created_by &&
+    left.created_by_agent_name === right.created_by_agent_name &&
     left.assigned_to === right.assigned_to &&
+    left.assigned_to_agent_name === right.assigned_to_agent_name &&
     left.claimed_by === right.claimed_by &&
+    left.claimed_by_agent_name === right.claimed_by_agent_name &&
     left.priority === right.priority &&
     stringArraysEqual(left.depends_on, right.depends_on) &&
     left.plan_summary === right.plan_summary &&

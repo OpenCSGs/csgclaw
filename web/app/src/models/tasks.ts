@@ -8,8 +8,12 @@ export type WorkspaceTask = {
   title: string;
   body: string;
   status: string;
+  created_by: string;
+  created_by_agent_name: string;
   assigned_to: string;
+  assigned_to_agent_name: string;
   claimed_by: string;
+  claimed_by_agent_name: string;
   priority: number;
   depends_on: string[];
   plan_summary: string;
@@ -26,8 +30,10 @@ export type WorkspaceTeamEvent = {
   room_id: string;
   type: string;
   actor_id: string;
+  actor_agent_name: string;
   task_id: string;
   target_id: string;
+  target_agent_name: string;
   summary: string;
   created_at: string;
 };
@@ -123,8 +129,10 @@ export function normalizeTeamEvent(input: unknown): WorkspaceTeamEvent | null {
     room_id: text(item.room_id),
     type,
     actor_id: text(item.actor_id),
+    actor_agent_name: text(item.actor_agent_name),
     task_id: text(item.task_id),
     target_id: text(item.target_id),
+    target_agent_name: text(item.target_agent_name),
     summary: text(item.summary),
     created_at: text(item.created_at),
   };
@@ -151,8 +159,12 @@ export function normalizeTask(input: unknown): WorkspaceTask | null {
     title: text(item.title) || id,
     body: text(item.body),
     status: text(item.status) || "pending",
+    created_by: text(item.created_by),
+    created_by_agent_name: text(item.created_by_agent_name),
     assigned_to: text(item.assigned_to),
+    assigned_to_agent_name: text(item.assigned_to_agent_name),
     claimed_by: text(item.claimed_by),
+    claimed_by_agent_name: text(item.claimed_by_agent_name),
     priority: numberValue(item.priority),
     depends_on: stringArray(item.depends_on),
     plan_summary: text(item.plan_summary),
