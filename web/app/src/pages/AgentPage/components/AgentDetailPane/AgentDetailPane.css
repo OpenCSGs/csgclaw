@@ -81,6 +81,16 @@
   white-space: nowrap;
 }
 
+.agent-save-status.warn {
+  color: oklch(0.72 0.16 35);
+}
+
+.field-hint.error {
+  display: block;
+  margin-top: 6px;
+  color: oklch(0.72 0.16 35);
+}
+
 .agent-actions-menu-trigger {
   position: relative;
 }

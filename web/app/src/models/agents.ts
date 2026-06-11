@@ -1057,10 +1057,32 @@ export function isAgentProfileDraftComplete(draft: Partial<AgentDraft> | null | 
   if (!String(draft?.model_id ?? "").trim()) {
     return false;
   }
-  if (draft?.provider === "api" && !String(draft.base_url ?? "").trim()) {
-    return false;
+  if (draft?.provider === "api") {
+    if (!String(draft.base_url ?? "").trim()) {
+      return false;
+    }
+    if (!String(draft.api_key ?? "").trim() && !draft.api_key_set) {
+      return false;
+    }
   }
   return true;
+}
+
+export function agentProfilePageSaveDisabled(
+  draft: AgentDraft | null | undefined,
+  item: AgentLike | null | undefined,
+  options: { saving?: boolean } = {},
+): boolean {
+  if (options.saving || !draft) {
+    return true;
+  }
+  if (!String(draft.name ?? "").trim()) {
+    return true;
+  }
+  if (isNotifierRuntimeDraftOnAgentPage(draft, item)) {
+    return !notifierFormIsComplete(draft, item);
+  }
+  return !isAgentProfileDraftComplete(draft);
 }
 
 export function isAgentIncomplete(
@@ -1110,11 +1132,19 @@ export function agentRuntimePollSettled(item: AgentLike | null | undefined): boo
   if (isAgentRunning(item)) {
     return true;
   }
-  if (!String(item?.box_id ?? "").trim()) {
-    return false;
-  }
   const status = String(item?.status ?? "").toLowerCase();
-  return status === "stopped" || status === "offline" || status === "failed" || status === "error";
+  if (status === "stopped" || status === "offline" || status === "failed" || status === "error") {
+    return true;
+  }
+  if (
+    isAgentProfileMarkedComplete(item) &&
+    status !== "profile_incomplete" &&
+    status !== "starting" &&
+    status !== "provisioning"
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function isAgentUpgradeNeeded(item: AgentLike | null | undefined): boolean {

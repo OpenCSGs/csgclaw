@@ -1,16 +1,16 @@
 import { Check, MoreHorizontal } from "lucide-react";
+import { errorMessage } from "@/api/client";
 import { PROVIDERS, REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
   APIKeyField,
   CLIProxyAuthControl,
   EnvKeyValueEditor,
-  isBlank,
   NotifierControls,
-  profileBaseURLMissing,
   requiredFieldLabel,
 } from "@/components/business/ProfileControls";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import {
+  agentProfilePageSaveDisabled,
   agentStatusLabel,
   agentModelID,
   agentToDraft,
@@ -23,7 +23,6 @@ import {
   isNotifierRuntimeDraftOnAgentPage,
   normalizeAuthProviderName,
   normalizeRuntimeKind,
-  notifierFormIsComplete,
 } from "@/models/agents";
 import type { AgentDraft, AgentLike } from "@/models/agents";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
@@ -54,12 +53,12 @@ export type AgentDetailPaneProps = {
   hasUnsavedChanges?: boolean;
   item: AgentLike;
   modelBusy?: boolean;
+  modelError?: unknown;
   models?: string[];
   notice?: string;
   notifierWebhookPublicOrigin?: string;
   onDelete: AgentActionHandler;
   onDraftChange?: (draft: AgentDraft) => void;
-  onAvatarSave?: (avatar: string) => VoidOrPromise;
   onInvite: AgentActionHandler;
   onOpenDM: AgentActionHandler;
   onProviderLogin?: (provider: string) => VoidOrPromise;
@@ -97,6 +96,7 @@ export function AgentDetailPane({
   models = [],
   notice = "",
   modelBusy = false,
+  modelError = null,
   saving = false,
   publishBusy = false,
   saveError = "",
@@ -113,7 +113,6 @@ export function AgentDetailPane({
   workspaceFileError = "",
   onSelectWorkspaceFile = () => {},
   onDraftChange,
-  onAvatarSave,
   onSave,
   onPublish,
   onProviderLogin,
@@ -137,12 +136,7 @@ export function AgentDetailPane({
   const canPublish = runtimeKind === "picoclaw_sandbox" || runtimeKind === "openclaw_sandbox";
   const hasUnsavedChanges =
     hasUnsavedChangesProp ?? Boolean(draft && savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft));
-  const saveDisabled =
-    saving ||
-    isBlank(draft?.name) ||
-    (isNotifierRuntimeDraftOnAgentPage(draft, item)
-      ? !notifierFormIsComplete(draft, item)
-      : !draft?.model_id || profileBaseURLMissing(draft));
+  const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving });
   const updateDraft = (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
   return (
     <section className="entity-pane agent-detail-pane">
@@ -153,13 +147,7 @@ export function AgentDetailPane({
               value={draft.avatar || item.avatar}
               t={t}
               mode="edit"
-              onChange={(avatar) => {
-                if (onAvatarSave) {
-                  void onAvatarSave(avatar);
-                  return;
-                }
-                updateDraft({ avatar });
-              }}
+              onChange={(avatar) => updateDraft({ avatar })}
             />
           </div>
         ) : (
@@ -234,6 +222,10 @@ export function AgentDetailPane({
             >
               {t("agentSaveChanges")}
             </Button>
+          ) : draft && incomplete ? (
+            <span className="agent-save-status warn" role="status">
+              {t("agentProfileSetupRequired")}
+            </span>
           ) : draft ? (
             <span className="agent-save-status" role="status">
               <Check aria-hidden="true" size={16} strokeWidth={2.5} />
@@ -350,6 +342,9 @@ export function AgentDetailPane({
                         : []),
                     ]}
                   />
+                  {modelError ? (
+                    <span className="field-hint error">{errorMessage(modelError, t("modelLoadFailed"))}</span>
+                  ) : null}
                 </label>
                 <label className="field">
                   <span>{t("profileReasoning")}</span>

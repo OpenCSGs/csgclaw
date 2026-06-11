@@ -16,6 +16,7 @@ import {
   envRowsToMap,
   formatProviderLabel,
   isAgentIncomplete,
+  isAgentProfileDraftComplete,
   mergeAgentIntoList,
   isNotificationBotAgent,
   mapToEnvRows,
@@ -478,6 +479,7 @@ describe("agent model helpers", () => {
       agent_profile: {
         profile_complete: false,
         provider: "api",
+        api_key_set: true,
         base_url: "https://api.example/v1",
         model_id: "glm-5.1",
       },
@@ -518,7 +520,7 @@ describe("agent model helpers", () => {
     ).toBe(true);
   });
 
-  it("treats stopped manager with a box as settled for runtime polling", () => {
+  it("treats settled manager runtime states as complete for polling", () => {
     expect(
       agentRuntimePollSettled({
         id: "u-manager",
@@ -530,9 +532,36 @@ describe("agent model helpers", () => {
       agentRuntimePollSettled({
         id: "u-manager",
         box_id: "",
+        profile_complete: true,
         status: "stopped",
       }),
+    ).toBe(true);
+    expect(
+      agentRuntimePollSettled({
+        id: "u-manager",
+        box_id: "",
+        profile_complete: false,
+        status: "profile_incomplete",
+      }),
     ).toBe(false);
+  });
+
+  it("requires API key or stored key flag for API provider draft completeness", () => {
+    expect(
+      isAgentProfileDraftComplete({
+        provider: "api",
+        base_url: "https://api.example.test/v1",
+        model_id: "gpt-test",
+      }),
+    ).toBe(false);
+    expect(
+      isAgentProfileDraftComplete({
+        provider: "api",
+        api_key_set: true,
+        base_url: "https://api.example.test/v1",
+        model_id: "gpt-test",
+      }),
+    ).toBe(true);
   });
 
   it("locks runtime and image on create when a template is selected", () => {
