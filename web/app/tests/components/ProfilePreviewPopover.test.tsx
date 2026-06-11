@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import { ProfilePreviewPopover } from "@/pages/WorkspacePage/components/ProfilePreviewPopover";
 
 const labels: Record<string, string> = {
+  agentDelete: "Delete",
   agentStatusUnknown: "Unknown",
   close: "Close",
   offline: "Offline",
@@ -50,12 +51,9 @@ describe("ProfilePreviewPopover", () => {
         user={{ id: "u-builder", handle: "builder" }}
         anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
         t={t}
-        inDirectConversation={false}
-        busyKey=""
         onClose={vi.fn()}
         onOpenAgent={vi.fn()}
         onOpenDM={vi.fn()}
-        onDelete={vi.fn()}
       />,
     );
 
@@ -69,6 +67,36 @@ describe("ProfilePreviewPopover", () => {
     expect(within(fields as HTMLElement).getByText("OpenAI API")).toBeInTheDocument();
     expect(within(fields as HTMLElement).getByText("gpt-5.5(medium)")).toBeInTheDocument();
     expect(within(fields as HTMLElement).queryByText("Reasoning")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "DM" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+  });
+
+  it("shows DM for manager agent previews", () => {
+    render(
+      <ProfilePreviewPopover
+        previewRef={createRef<HTMLElement>()}
+        agent={{
+          id: "u-manager",
+          name: "manager",
+          role: "manager",
+          status: "running",
+          provider: "api",
+          model_id: "gpt-5.5",
+          runtime_kind: "picoclaw_sandbox",
+        }}
+        user={{ id: "u-manager", handle: "manager" }}
+        anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
+        t={t}
+        onClose={vi.fn()}
+        onOpenAgent={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "DM" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
   it("uses agent-style metadata fields for local admin users", () => {
@@ -86,12 +114,9 @@ describe("ProfilePreviewPopover", () => {
         }}
         anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
         t={t}
-        inDirectConversation={false}
-        busyKey=""
         onClose={vi.fn()}
         onOpenAgent={vi.fn()}
         onOpenDM={vi.fn()}
-        onDelete={vi.fn()}
       />,
     );
 

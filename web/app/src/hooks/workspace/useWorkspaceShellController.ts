@@ -32,15 +32,17 @@ export function useWorkspaceShellController({
   const currentWorkspaceLabel =
     activePane.type === WorkspacePaneTypes.agent
       ? t("agentOverview")
-      : activePane.type === WorkspacePaneTypes.team
-        ? t("teamOverview")
-        : activePane.type === WorkspacePaneTypes.computer
-          ? t("computerOverview")
-          : activePane.type === WorkspacePaneTypes.hub
-            ? t("hubOverview")
-            : activePane.type === WorkspacePaneTypes.task
-              ? t("tasksOverview")
-              : t("conversationOverview");
+      : activePane.type === WorkspacePaneTypes.human
+        ? t("humanDetailTitle")
+        : activePane.type === WorkspacePaneTypes.team
+          ? t("teamOverview")
+          : activePane.type === WorkspacePaneTypes.computer
+            ? t("computerOverview")
+            : activePane.type === WorkspacePaneTypes.hub
+              ? t("hubOverview")
+              : activePane.type === WorkspacePaneTypes.task
+                ? t("tasksOverview")
+                : t("conversationOverview");
   const resolvedWorkspaceTab = useMemo(
     () => workspaceTab ?? workspaceTabForPane(activePane),
     [activePane, workspaceTab],

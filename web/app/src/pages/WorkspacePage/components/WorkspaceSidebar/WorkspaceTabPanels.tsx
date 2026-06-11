@@ -13,6 +13,7 @@ import {
   WorkspaceComputerRow,
   WorkspaceConversationRow,
   WorkspaceGroup,
+  WorkspaceHumanRow,
   WorkspaceThreadRow,
 } from "../WorkspaceRows";
 import type { WorkspaceSidebarProps } from "./types";
@@ -25,6 +26,7 @@ const MessageSectionIds = {
 
 const AgentSectionIds = {
   agents: "agents",
+  humans: "humans",
   teams: "teams",
   notifications: "notifications",
   computers: "computers",
@@ -69,6 +71,7 @@ type WorkspaceTabPanelsProps = Pick<
   | "onSelectAgent"
   | "onSelectComputer"
   | "onSelectConversation"
+  | "onSelectHuman"
   | "onSelectHubTemplate"
   | "onSelectTask"
   | "onSelectTeam"
@@ -91,13 +94,18 @@ const LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS: readonly (readonly MessageSectionId
   [MessageSectionIds.rooms, MessageSectionIds.directMessages, MessageSectionIds.threads],
 ];
 
+const LEGACY_DEFAULT_AGENT_SECTION_ORDERS: readonly (readonly AgentSectionId[])[] = [
+  [AgentSectionIds.agents, AgentSectionIds.teams, AgentSectionIds.computers, AgentSectionIds.notifications],
+];
+
 const DEFAULT_SECTION_ORDERS = {
   [SectionPanels.messages]: [MessageSectionIds.directMessages, MessageSectionIds.rooms, MessageSectionIds.threads],
   [SectionPanels.agents]: [
     AgentSectionIds.agents,
-    AgentSectionIds.teams,
+    AgentSectionIds.humans,
     AgentSectionIds.computers,
     AgentSectionIds.notifications,
+    AgentSectionIds.teams,
   ],
 } as const;
 
@@ -117,7 +125,22 @@ function normalizeSectionOrder(
   if (legacyDefaults.some((legacyDefault) => orderEquals(ordered, legacyDefault))) {
     return [...defaults];
   }
-  return [...ordered, ...defaults.filter((item) => !ordered.includes(item))];
+  const next = [...ordered];
+  defaults.forEach((defaultItem, defaultIndex) => {
+    if (next.includes(defaultItem)) {
+      return;
+    }
+    const precedingDefault = defaults
+      .slice(0, defaultIndex)
+      .reverse()
+      .find((item) => next.includes(item));
+    if (!precedingDefault) {
+      next.unshift(defaultItem);
+      return;
+    }
+    next.splice(next.indexOf(precedingDefault) + 1, 0, defaultItem);
+  });
+  return next;
 }
 
 function readSectionOrders(): SectionOrders {
@@ -129,7 +152,11 @@ function readSectionOrders(): SectionOrders {
         DEFAULT_SECTION_ORDERS.messages,
         LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS,
       ),
-      [SectionPanels.agents]: normalizeSectionOrder(parsed?.[SectionPanels.agents], DEFAULT_SECTION_ORDERS.agents),
+      [SectionPanels.agents]: normalizeSectionOrder(
+        parsed?.[SectionPanels.agents],
+        DEFAULT_SECTION_ORDERS.agents,
+        LEGACY_DEFAULT_AGENT_SECTION_ORDERS,
+      ),
     };
   } catch (_) {
     return {
@@ -180,6 +207,7 @@ export function WorkspaceTabPanels({
   onSelectConversation,
   onSelectThread,
   onPreviewUser,
+  onSelectHuman,
   agentItems,
   workerAgentItems = agentItems,
   notificationAgentItems = [],
@@ -261,6 +289,7 @@ export function WorkspaceTabPanels({
       value === MessageSectionIds.directMessages ||
       value === MessageSectionIds.threads ||
       value === AgentSectionIds.agents ||
+      value === AgentSectionIds.humans ||
       value === AgentSectionIds.teams ||
       value === AgentSectionIds.notifications ||
       value === AgentSectionIds.computers
@@ -402,6 +431,32 @@ export function WorkspaceTabPanels({
           ) : (
             <div className="workspace-empty">{t("noAgents")}</div>
           )}
+        </WorkspaceGroup>
+      );
+    }
+    if (id === AgentSectionIds.humans) {
+      const currentUser = usersById.get(currentUserID);
+      const humanUsers = currentUser ? [currentUser] : [];
+      return (
+        <WorkspaceGroup
+          key={id}
+          id="humans"
+          title={t("humanSection")}
+          count={humanUsers.length}
+          collapsed={Boolean(collapsedWorkspaceGroups.humans)}
+          onToggle={() => onToggleWorkspaceGroup("humans")}
+          {...sectionDragProps(SectionPanels.agents, id)}
+        >
+          {humanUsers.map((user) => (
+            <WorkspaceHumanRow
+              key={user.id}
+              user={user}
+              active={activePane.type === WorkspacePaneTypes.human && activePane.id === user.id}
+              t={t}
+              onSelect={onSelectHuman}
+              onPreview={onPreviewUser}
+            />
+          ))}
         </WorkspaceGroup>
       );
     }

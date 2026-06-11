@@ -66,11 +66,13 @@ export function AgentAvatarContent({
 }
 
 export function AgentAvatarPicker({
+  disabled = false,
   value,
   t,
   onChange,
   mode = "default",
 }: {
+  disabled?: boolean;
   value?: string | null;
   t: TranslateFn;
   onChange: (value: string) => void;
@@ -265,7 +267,12 @@ export function AgentAvatarPicker({
     event.preventDefault();
   }
 
-  function renderAvatarOption(option: (typeof AGENT_AVATAR_OPTIONS)[number], selection: string, onSelect: () => void) {
+  function renderAvatarOption(
+    option: (typeof AGENT_AVATAR_OPTIONS)[number],
+    selection: string,
+    onSelect: () => void,
+    optionDisabled = false,
+  ) {
     const checked = option.value === selection;
     const label = `${t(option.labelKey)} ${option.index}`;
     return (
@@ -277,6 +284,7 @@ export function AgentAvatarPicker({
         role="radio"
         title={label}
         type="button"
+        disabled={optionDisabled}
         onClick={onSelect}
       >
         <img src={option.value} alt="" draggable={false} />
@@ -287,6 +295,7 @@ export function AgentAvatarPicker({
   return (
     <div
       className={`agent-avatar-picker ${mode === "edit" ? "edit-mode" : ""} ${selected ? "has-avatar" : "empty-avatar"} ${open ? "open" : ""} ${suppressTriggerHover ? "suppress-trigger-hover" : ""}`}
+      aria-disabled={disabled}
       ref={pickerRef}
     >
       <button
@@ -297,6 +306,7 @@ export function AgentAvatarPicker({
         className="agent-avatar-trigger"
         title={mode === "edit" ? undefined : selected ? selectedLabel : t("agentAvatar")}
         type="button"
+        disabled={disabled}
         onClick={() => setOpen((current) => !current)}
         onPointerLeave={mode === "edit" ? handleTriggerPointerLeave : undefined}
       >
@@ -318,7 +328,7 @@ export function AgentAvatarPicker({
           </>
         ) : null}
       </button>
-      {open && mode === "edit"
+      {open && mode === "edit" && !disabled
         ? createPortal(
             <div className="agent-avatar-editor-backdrop" role="presentation" onPointerDown={closeEditor}>
               <div
@@ -457,17 +467,22 @@ export function AgentAvatarPicker({
             document.body,
           )
         : null}
-      {open && mode !== "edit" ? (
+      {open && mode !== "edit" && !disabled ? (
         <div className="agent-avatar-picker-panel" role="radiogroup" aria-label={t("agentAvatar")}>
           {AVATAR_GROUPS.map((group) => (
             <div className="agent-avatar-picker-group" key={group.key}>
               <div className="agent-avatar-picker-label">{t(group.labelKey)}</div>
               <div className="agent-avatar-picker-options">
                 {AGENT_AVATAR_OPTIONS.filter((option) => option.group === group.key).map((option) =>
-                  renderAvatarOption(option, selected, () => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }),
+                  renderAvatarOption(
+                    option,
+                    selected,
+                    () => {
+                      onChange(option.value);
+                      setOpen(false);
+                    },
+                    disabled,
+                  ),
                 )}
               </div>
             </div>

@@ -619,6 +619,13 @@ func TestListGlobalTasks(t *testing.T) {
 	if batchRec.Code != http.StatusCreated {
 		t.Fatalf("create batch status = %d, want %d: %s", batchRec.Code, http.StatusCreated, batchRec.Body.String())
 	}
+	var batchResp apitypes.CreateTeamTasksBatchResponse
+	if err := json.NewDecoder(batchRec.Body).Decode(&batchResp); err != nil {
+		t.Fatalf("decode batch response: %v", err)
+	}
+	if len(batchResp.Tasks) != 1 {
+		t.Fatalf("batch tasks len = %d, want 1", len(batchResp.Tasks))
+	}
 
 	listRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(listRec, httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil))
@@ -639,8 +646,11 @@ func TestListGlobalTasks(t *testing.T) {
 	if tasks[0].TeamTitle != "release" {
 		t.Fatalf("task.TeamTitle = %q, want %q", tasks[0].TeamTitle, "release")
 	}
-	if tasks[0].RoomID != created.RoomID {
-		t.Fatalf("task.RoomID = %q, want %q", tasks[0].RoomID, created.RoomID)
+	if tasks[0].RoomID != batchResp.Tasks[0].RoomID {
+		t.Fatalf("task.RoomID = %q, want %q", tasks[0].RoomID, batchResp.Tasks[0].RoomID)
+	}
+	if tasks[0].RoomID == created.RoomID {
+		t.Fatalf("task.RoomID = %q, want dedicated execution room distinct from team room", tasks[0].RoomID)
 	}
 }
 

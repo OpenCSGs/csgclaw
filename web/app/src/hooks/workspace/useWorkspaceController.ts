@@ -1,6 +1,9 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { errorMessage } from "@/api/client";
+import { patchParticipantAvatarRequest } from "@/api/participants";
 import { createTranslator } from "@/shared/i18n";
+import { upsertUserInData } from "@/models/conversations";
 import { WorkspacePaneTypes, paneFromLocation } from "@/models/routing";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
 import { useWorkspaceData } from "./useWorkspaceData";
@@ -58,7 +61,7 @@ function withLocalIdentity(data: IMData | null, fallbackName: string): IMData | 
       user.id === data.current_user_id
         ? {
             ...user,
-            avatar: initialsForIdentity(displayName),
+            avatar: user.avatar || initialsForIdentity(displayName),
             name: displayName,
           }
         : user,
@@ -113,14 +116,22 @@ export function useWorkspaceController() {
   const activePane = useMemo(() => paneFromLocation(location.pathname), [location.pathname]);
   const rooms = useMemo(() => displayData?.rooms ?? [], [displayData]);
   const loadingError = bootstrapQuery.isError ? t("loadingFailed") : "";
-  const { navigatePane, selectConversation, selectAgent, selectTeam, selectComputer, selectHub, selectTasks } =
-    useWorkspaceNavigation({
-      location,
-      navigate,
-      dataReady: Boolean(displayData),
-      setActiveConversationId,
-      rooms,
-    });
+  const {
+    navigatePane,
+    selectConversation,
+    selectAgent,
+    selectHuman,
+    selectTeam,
+    selectComputer,
+    selectHub,
+    selectTasks,
+  } = useWorkspaceNavigation({
+    location,
+    navigate,
+    dataReady: Boolean(displayData),
+    setActiveConversationId,
+    rooms,
+  });
   const shell = useWorkspaceShellController({
     activeConversationId,
     activePane,
@@ -213,12 +224,9 @@ export function useWorkspaceController() {
     theme,
   });
   const profilePreview = useProfilePreviewController({
-    agentActionBusy: agent.agentActionBusy,
     agentItems: agent.agentItems,
     closeConversationTools: conversation.closeConversationTools,
-    deletePreviewBot: agent.deletePreviewBot,
     openAgentDirectMessage: agent.openAgentDirectMessage,
-    selectedConversation: conversation.selectedConversation,
     selectAgent,
     t,
     usersById: conversation.usersById,
@@ -234,6 +242,49 @@ export function useWorkspaceController() {
   const selectedTeam = agent.teams.find((item) => item.id === selectedTeamID) ?? null;
   const selectedTeamRoom = selectedTeam ? (rooms.find((room) => room.id === selectedTeam.room_id) ?? null) : null;
   const selectedTeamTasks = selectedTeam ? task.tasks.filter((item) => item.team_id === selectedTeam.id) : [];
+  const selectedHumanID = activePane.type === WorkspacePaneTypes.human ? String(activePane.id || "") : "";
+  const selectedHuman = selectedHumanID ? (conversation.usersById.get(selectedHumanID) ?? null) : null;
+  const [humanAvatarBusyID, setHumanAvatarBusyID] = useState("");
+  const [humanAvatarError, setHumanAvatarError] = useState("");
+  const updateHumanAvatar = useCallback(
+    async (avatar: string) => {
+      const selected = selectedHuman;
+      const nextAvatar = String(avatar || "").trim();
+      if (!selected?.id || !nextAvatar || selected.avatar === nextAvatar) {
+        return;
+      }
+
+      setHumanAvatarBusyID(selected.id);
+      setHumanAvatarError("");
+      try {
+        const updated = await patchParticipantAvatarRequest(selected.id, nextAvatar);
+        const savedAvatar = String(updated.avatar || nextAvatar).trim() || nextAvatar;
+        const updatedUserID = String(updated.channel_user_ref || selected.id).trim() || selected.id;
+        setBootstrapData((current) => {
+          if (!current) {
+            return current;
+          }
+          const existing =
+            current.users.find((item) => item.id === updatedUserID) ??
+            current.users.find((item) => item.id === selected.id) ??
+            selected;
+          const savedName =
+            typeof updated.name === "string" && updated.name.trim() ? updated.name.trim() : existing.name;
+          return upsertUserInData(current, {
+            ...existing,
+            avatar: savedAvatar,
+            name: savedName,
+          });
+        });
+      } catch (error) {
+        setHumanAvatarError(errorMessage(error, t("humanAvatarSaveFailed")));
+      } finally {
+        setHumanAvatarBusyID((current) => (current === selected.id ? "" : current));
+      }
+    },
+    [selectedHuman, setBootstrapData, t],
+  );
+  const humanAvatarBusy = Boolean(selectedHuman?.id && humanAvatarBusyID === selectedHuman.id);
 
   function selectHubTemplate(item: HubTemplate | null | undefined) {
     if (!item?.id) {
@@ -314,6 +365,7 @@ export function useWorkspaceController() {
       onSelectThread: conversation.openThreadInConversation,
       onPreviewUser: profilePreview.openParticipantPreview,
       onSelectAgent: selectAgent,
+      onSelectHuman: selectHuman,
       onPreviewAgent: profilePreview.openAgentPreview,
       onSelectComputer: selectComputer,
       appVersion,
@@ -339,6 +391,14 @@ export function useWorkspaceController() {
       channels: conversation.channels,
       directMessages: conversation.directMessages,
       onSelectAgent: selectAgent,
+    },
+    humanViewProps: {
+      t,
+      locale,
+      avatarBusy: humanAvatarBusy,
+      avatarError: selectedHuman ? humanAvatarError : "",
+      user: selectedHuman,
+      onAvatarChange: updateHumanAvatar,
     },
     conversationViewProps: {
       ...conversation.conversationViewProps,

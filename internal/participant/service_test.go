@@ -184,6 +184,32 @@ func TestEnsureBootstrapAdminRenamesLegacyAdminParticipant(t *testing.T) {
 	}
 }
 
+func TestUpdateHumanParticipantAvatarSyncsChannelUser(t *testing.T) {
+	imSvc := im.NewService()
+	store := NewMemoryStore(nil)
+	svc := NewService(store, WithIMService(imSvc))
+	if _, err := svc.EnsureBootstrapAdmin(context.Background()); err != nil {
+		t.Fatalf("EnsureBootstrapAdmin() error = %v", err)
+	}
+
+	avatar := "avatar/cartoon-2.png"
+	updated, ok, err := svc.Update(context.Background(), ChannelCSGClaw, im.AdminUserID, UpdateRequest{
+		Avatar: &avatar,
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Update() ok = false, want true")
+	}
+	if updated.Avatar != avatar {
+		t.Fatalf("participant avatar = %q, want %q", updated.Avatar, avatar)
+	}
+	if user, ok := imSvc.User(im.AdminUserID); !ok || user.Avatar != avatar {
+		t.Fatalf("admin channel user = %+v, ok=%v; want avatar %q", user, ok, avatar)
+	}
+}
+
 func TestEnsureBootstrapManagerUsesDefaultParticipantIDSeparateFromAgentID(t *testing.T) {
 	agentSvc := mustNewManagerAgentService(t)
 	imSvc := im.NewService()

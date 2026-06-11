@@ -10,6 +10,7 @@ export type IMUser = {
   avatar?: string | null;
   handle?: string | null;
   id: string;
+  is_online?: boolean | null;
   name?: string | null;
   role?: string | null;
   user_id?: string | null;

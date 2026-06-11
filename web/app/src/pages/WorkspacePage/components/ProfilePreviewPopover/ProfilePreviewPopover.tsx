@@ -28,10 +28,7 @@ type ProfilePreviewAnchorRect = {
 export type ProfilePreviewPopoverProps = {
   agent: AgentLike | null;
   anchorRect: ProfilePreviewAnchorRect;
-  busyKey: string;
-  inDirectConversation: boolean;
   onClose: () => void;
-  onDelete: (item: AgentLike) => void | Promise<void>;
   onOpenAgent: (item: AgentLike) => void;
   onOpenDM: (item: AgentLike) => void | Promise<void>;
   previewRef: RefObject<HTMLElement | null>;
@@ -86,12 +83,9 @@ export function ProfilePreviewPopover({
   user,
   anchorRect,
   t,
-  inDirectConversation,
-  busyKey,
   onClose,
   onOpenAgent,
   onOpenDM,
-  onDelete,
 }: ProfilePreviewPopoverProps) {
   const localAdminPreview = !agent && isBootstrapAdminUser(user);
   const showAgentMetadataFields = Boolean(agent || localAdminPreview);
@@ -107,8 +101,6 @@ export function ProfilePreviewPopover({
   const previewModel = agent ? agentModelWithReasoning(agent) : localizeRole(user?.role || "admin", t);
   const displayName = agent?.name || user?.name || "";
   const displayRole = agent ? agent.role || "worker" : user?.role || "";
-  const deleteBusy = agent ? busyKey === `${agent.id}:delete-bot` : false;
-  const canOpenDM = !inDirectConversation;
   const [cardHeight, setCardHeight] = useState(420);
 
   useLayoutEffect(() => {
@@ -120,7 +112,7 @@ export function ProfilePreviewPopover({
     if (nextHeight > 0 && nextHeight !== cardHeight) {
       setCardHeight(nextHeight);
     }
-  }, [previewRef, cardHeight, agent?.id, user?.id, inDirectConversation]);
+  }, [previewRef, cardHeight, agent?.id, user?.id]);
 
   return (
     <aside
@@ -201,16 +193,9 @@ export function ProfilePreviewPopover({
                 <Button variant="primary" size="md" onClick={() => onOpenAgent(agent)}>
                   {t("openProfile")}
                 </Button>
-                {canOpenDM ? (
-                  <Button variant="secondaryGray" size="md" onClick={() => onOpenDM(agent)}>
-                    {t("openDM")}
-                  </Button>
-                ) : null}
-                {agent.role !== "manager" && agent.id !== "u-manager" ? (
-                  <Button variant="danger" size="md" disabled={deleteBusy} onClick={() => onDelete(agent)}>
-                    {t("agentDelete")}
-                  </Button>
-                ) : null}
+                <Button variant="secondaryGray" size="md" onClick={() => onOpenDM(agent)}>
+                  {t("openDM")}
+                </Button>
               </div>
             </>
           ) : null}

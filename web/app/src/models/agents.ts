@@ -272,11 +272,6 @@ export function resolveAgentAvatarSource(
   agent: AgentLike | null | undefined,
   usersById?: Map<string, AvatarLikeUser> | null,
 ): string {
-  const agentAvatar = String(agent?.avatar ?? "").trim();
-  if (agentAvatar) {
-    return agentAvatar;
-  }
-
   const candidateUserIDs = [agent?.user_id, agent?.id].map((value) => String(value ?? "").trim()).filter(Boolean);
 
   for (const userID of candidateUserIDs) {
@@ -286,6 +281,7 @@ export function resolveAgentAvatarSource(
     }
   }
 
+  const agentAvatar = String(agent?.avatar ?? "").trim();
   return agentAvatar;
 }
 

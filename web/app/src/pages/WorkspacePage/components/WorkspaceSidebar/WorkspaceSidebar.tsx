@@ -43,6 +43,7 @@ export function WorkspaceSidebar({
   onSelectThread,
   onPreviewUser,
   onSelectAgent,
+  onSelectHuman,
   onPreviewAgent,
   onSelectComputer,
   appVersion,
@@ -130,6 +131,7 @@ export function WorkspaceSidebar({
             onSelectConversation={onSelectConversation}
             onSelectThread={onSelectThread}
             onPreviewUser={onPreviewUser}
+            onSelectHuman={onSelectHuman}
             agentItems={agentItems}
             workerAgentItems={workerAgentItems}
             notificationAgentItems={notificationAgentItems}

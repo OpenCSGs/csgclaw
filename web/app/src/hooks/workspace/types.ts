@@ -36,6 +36,7 @@ export type WorkspaceNavigationController = {
   selectAgent: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
   selectComputer: (options?: NavigatePaneOptions) => void;
   selectConversation: (id: string, options?: NavigatePaneOptions) => void;
+  selectHuman: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
   selectHub: (options?: NavigatePaneOptions) => void;
   selectTeam: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
   selectTasks: (taskID?: string, options?: NavigatePaneOptions) => void;
@@ -152,10 +153,7 @@ export type ProfilePreviewAnchorRect = {
 export type ProfilePreviewControllerProps = {
   agent: AgentLike | null;
   anchorRect: ProfilePreviewAnchorRect;
-  busyKey: string;
-  inDirectConversation: boolean;
   onClose: () => void;
-  onDelete: (item: AgentLike) => Promise<void>;
   onOpenAgent: (item: AgentLike) => void;
   onOpenDM: (item: AgentLike) => Promise<void>;
   previewRef: RefObject<HTMLElement | null>;
@@ -164,12 +162,9 @@ export type ProfilePreviewControllerProps = {
 };
 
 export type UseProfilePreviewControllerArgs = {
-  agentActionBusy: string;
   agentItems: AgentLike[];
   closeConversationTools: () => void;
-  deletePreviewBot: (item: AgentLike | null | undefined) => Promise<boolean>;
   openAgentDirectMessage: (item: AgentLike | null | undefined) => Promise<void>;
-  selectedConversation: IMConversation | null;
   selectAgent: WorkspaceNavigationController["selectAgent"];
   t: TranslateFn;
   usersById: UsersById;

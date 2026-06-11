@@ -42,6 +42,9 @@ function NavigationHarness() {
       <button type="button" onClick={() => navigation.selectTeam({ id: "team-1" })}>
         Open team
       </button>
+      <button type="button" onClick={() => navigation.selectHuman({ id: "u-admin" })}>
+        Open human
+      </button>
     </>
   );
 }
@@ -113,5 +116,22 @@ describe("useWorkspaceNavigation", () => {
       expect(screen.getByTestId("path")).toHaveTextContent("/teams/team-1");
     });
     expect(screen.getByTestId("pane")).toHaveTextContent("team:team-1");
+  });
+
+  it("selects humans by opening the human detail route", async () => {
+    window.history.replaceState({}, "", "/rooms/room-1");
+
+    render(
+      <BrowserRouter>
+        <NavigationHarness />
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open human" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("path")).toHaveTextContent("/humans/u-admin");
+    });
+    expect(screen.getByTestId("pane")).toHaveTextContent("human:u-admin");
   });
 });

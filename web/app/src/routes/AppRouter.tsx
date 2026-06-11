@@ -10,6 +10,7 @@ const ConversationPage = lazy(() =>
   import("@/pages/ConversationPage").then((module) => ({ default: module.ConversationPage })),
 );
 const HubPage = lazy(() => import("@/pages/HubPage").then((module) => ({ default: module.HubPage })));
+const HumanPage = lazy(() => import("@/pages/HumanPage").then((module) => ({ default: module.HumanPage })));
 const TeamPage = lazy(() => import("@/pages/TeamPage").then((module) => ({ default: module.TeamPage })));
 const TasksPage = lazy(() => import("@/pages/TasksPage").then((module) => ({ default: module.TasksPage })));
 
@@ -30,6 +31,8 @@ const routes: RouteObject[] = [
       { path: "computer", element: routeElement(ComputerPage) },
       { path: "agents/:agentId", element: routeElement(AgentPage) },
       { path: "agent/:agentId", element: routeElement(AgentPage) },
+      { path: "humans/:humanId", element: routeElement(HumanPage) },
+      { path: "human/:humanId", element: routeElement(HumanPage) },
       { path: "teams/:teamId", element: routeElement(TeamPage) },
       { path: "team/:teamId", element: routeElement(TeamPage) },
       { path: "hub", element: routeElement(HubPage) },

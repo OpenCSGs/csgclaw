@@ -337,10 +337,49 @@ func (s *Service) Update(_ context.Context, channel, id string, req UpdateReques
 		item.Metadata = cloneMetadata(req.Metadata)
 	}
 	item.UpdatedAt = time.Now().UTC()
+	syncChannelUser := req.Name != nil || req.Avatar != nil
 	if err := s.store.Save(item); err != nil {
 		return apitypes.Participant{}, false, err
 	}
+	if syncChannelUser {
+		if err := s.syncParticipantChannelUser(item); err != nil {
+			return item, true, err
+		}
+	}
 	return item, true, nil
+}
+
+func (s *Service) syncParticipantChannelUser(item apitypes.Participant) error {
+	if s == nil || s.im == nil {
+		return nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(item.Channel), ChannelCSGClaw) {
+		return nil
+	}
+	if strings.TrimSpace(item.ChannelUserKind) != ChannelUserKindLocalUserID {
+		return nil
+	}
+	userID := strings.TrimSpace(item.ChannelUserRef)
+	if userID == "" {
+		userID = strings.TrimSpace(item.ID)
+	}
+	if userID == "" {
+		return nil
+	}
+
+	role := ""
+	if item.Type == TypeHuman {
+		role = "admin"
+	}
+	if _, _, err := s.im.UpdateAgentUser(im.UpdateAgentUserRequest{
+		ID:     userID,
+		Name:   item.Name,
+		Role:   role,
+		Avatar: item.Avatar,
+	}); err != nil {
+		return fmt.Errorf("sync channel user: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOptions) (apitypes.Participant, bool, error) {

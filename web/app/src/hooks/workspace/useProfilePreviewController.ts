@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { agentMatchesUser, isDirectConversation } from "@/models/conversations";
+import { agentMatchesUser } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { AgentLike } from "@/models/agents";
 import type { IMUser } from "@/models/conversations";
@@ -13,12 +13,9 @@ type ProfilePreviewState = {
 };
 
 export function useProfilePreviewController({
-  agentActionBusy,
   agentItems,
   closeConversationTools,
-  deletePreviewBot,
   openAgentDirectMessage,
-  selectedConversation,
   selectAgent,
   t,
   usersById,
@@ -141,8 +138,6 @@ export function useProfilePreviewController({
             user: previewUser,
             anchorRect: profilePreview.anchorRect,
             t,
-            inDirectConversation: Boolean(selectedConversation && isDirectConversation(selectedConversation)),
-            busyKey: agentActionBusy,
             onClose: closeProfilePreview,
             onOpenAgent: (item) => {
               selectAgent(item);
@@ -151,12 +146,6 @@ export function useProfilePreviewController({
             onOpenDM: async (item) => {
               await openAgentDirectMessage(item);
               closeProfilePreview();
-            },
-            onDelete: async (item) => {
-              const deleted = await deletePreviewBot(item);
-              if (deleted) {
-                closeProfilePreview();
-              }
             },
           }
         : null,

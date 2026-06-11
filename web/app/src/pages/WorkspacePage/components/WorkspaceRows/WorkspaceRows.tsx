@@ -21,6 +21,7 @@ import { ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components
 import { Button } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
+import { localizeRole } from "@/shared/i18n";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import type { DragEvent, ReactNode } from "react";
 import type { AgentLike } from "@/models/agents";
@@ -148,6 +149,50 @@ export function WorkspaceComputerRow({ title, active, subtitle, onSelect }: Work
         <span className="workspace-row-meta truncate">{subtitle}</span>
       </span>
       <span className="workspace-status-dot online" aria-hidden="true"></span>
+    </button>
+  );
+}
+
+export type WorkspaceHumanRowProps = {
+  active: boolean;
+  onPreview?: (user: IMUser, anchor: HTMLElement) => void;
+  onSelect: (user: IMUser) => void;
+  t: TranslateFn;
+  user: IMUser;
+};
+
+export function WorkspaceHumanRow({ user, active, t, onPreview, onSelect }: WorkspaceHumanRowProps) {
+  const displayName = user.name || user.handle || user.id;
+  const handle = user.handle ? `@${user.handle}` : user.id;
+  const role = localizeRole(user.role || "admin", t);
+
+  return (
+    <button className={`workspace-row human-nav-row ${active ? "active" : ""}`} onClick={() => onSelect(user)}>
+      <span
+        className="workspace-row-icon avatar-icon workspace-row-icon-clickable"
+        role="button"
+        tabIndex={0}
+        aria-label={`${t("profilePreview")} ${displayName}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onPreview?.(user, event.currentTarget);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            onPreview?.(user, event.currentTarget);
+          }
+        }}
+      >
+        <AgentAvatarContent avatar={user.avatar} fallback={avatarFallbackText(user.avatar, displayName, handle)} />
+      </span>
+      <span className="workspace-row-main">
+        <span className="workspace-row-title truncate">{displayName}</span>
+        <span className="workspace-row-meta truncate">
+          {handle} · {role}
+        </span>
+      </span>
     </button>
   );
 }

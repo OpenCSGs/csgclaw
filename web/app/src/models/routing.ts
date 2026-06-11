@@ -7,6 +7,7 @@ type ValueOf<T> = T[keyof T];
 export const WorkspacePaneTypes = {
   conversation: "conversation",
   agent: "agent",
+  human: "human",
   team: "team",
   computer: "computer",
   hub: "hub",
@@ -42,6 +43,8 @@ export const WorkspaceRouteSegments = {
   computer: "computer",
   agents: "agents",
   agent: "agent",
+  humans: "humans",
+  human: "human",
   teams: "teams",
   team: "team",
   hub: "hub",
@@ -57,6 +60,7 @@ export const WorkspaceRouteSegments = {
 } as const;
 
 const agentRouteSegments = new Set<string>([WorkspaceRouteSegments.agents, WorkspaceRouteSegments.agent]);
+const humanRouteSegments = new Set<string>([WorkspaceRouteSegments.humans, WorkspaceRouteSegments.human]);
 const teamRouteSegments = new Set<string>([WorkspaceRouteSegments.teams, WorkspaceRouteSegments.team]);
 const conversationRouteSegments = new Set<string>([
   WorkspaceRouteSegments.channels,
@@ -98,6 +102,11 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
       ? { type: WorkspacePaneTypes.agent, id }
       : { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
   }
+  if (humanRouteSegments.has(section)) {
+    return id
+      ? { type: WorkspacePaneTypes.human, id }
+      : { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
+  }
   if (teamRouteSegments.has(section)) {
     return id
       ? { type: WorkspacePaneTypes.team, id }
@@ -124,6 +133,9 @@ export function pathForPane(
   }
   if (pane.type === WorkspacePaneTypes.agent && pane.id) {
     return `/${WorkspaceRouteSegments.agents}/${encodeURIComponent(pane.id)}`;
+  }
+  if (pane.type === WorkspacePaneTypes.human && pane.id) {
+    return `/${WorkspaceRouteSegments.humans}/${encodeURIComponent(pane.id)}`;
   }
   if (pane.type === WorkspacePaneTypes.team && pane.id) {
     return `/${WorkspaceRouteSegments.teams}/${encodeURIComponent(pane.id)}`;
@@ -163,6 +175,7 @@ export function workspaceTabForPane(pane: WorkspacePane | null | undefined): Wor
   }
   if (
     pane?.type === WorkspacePaneTypes.agent ||
+    pane?.type === WorkspacePaneTypes.human ||
     pane?.type === WorkspacePaneTypes.team ||
     pane?.type === WorkspacePaneTypes.computer
   ) {

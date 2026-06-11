@@ -47,6 +47,7 @@ export type WorkspaceSidebarProps = {
   onSelectAgent: (item: AgentLike | null | undefined) => void;
   onSelectComputer: () => void;
   onSelectConversation: (id: string) => void;
+  onSelectHuman: (user: IMUser | null | undefined) => void;
   onSelectHub: () => void;
   onSelectHubTemplate: (item: HubTemplate | null | undefined) => void;
   onSelectTeam: (item: WorkspaceTeam | null | undefined) => void;
