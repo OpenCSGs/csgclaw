@@ -36,6 +36,7 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 		"id": "qa",
 		"type": "agent",
 		"name": "QA Display Name",
+		"avatar": "avatar/3D-5.png",
 		"channel_user": {
 			"ref": "u-qa",
 			"kind": "local_user_id"
@@ -46,7 +47,8 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 				"name": "QA Display Name",
 				"role": "worker",
 				"runtime_kind": "picoclaw_sandbox",
-				"image": "agent-image:test"
+				"image": "agent-image:test",
+				"avatar": "avatar/3D-5.png"
 			}
 		}
 	}`
@@ -65,14 +67,20 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	if created.ID != "qa" || created.Channel != "csgclaw" || created.Type != "agent" || created.AgentID != "u-qa" {
 		t.Fatalf("created participant = %+v, want csgclaw agent qa bound to u-qa", created)
 	}
-	if _, ok := agentSvc.Agent("u-qa"); !ok {
+	createdAgent, ok := agentSvc.Agent("u-qa")
+	if !ok {
 		t.Fatal("agent u-qa was not created")
+	}
+	if createdAgent.Avatar != "avatar/3D-5.png" {
+		t.Fatalf("agent avatar = %q, want %q", createdAgent.Avatar, "avatar/3D-5.png")
 	}
 	if _, ok := agentSvc.Agent("u-qa-display-name"); ok {
 		t.Fatal("agent ID was derived from display name")
 	}
 	if user, ok := imSvc.User("u-qa"); !ok || !strings.EqualFold(user.Name, "QA Display Name") {
 		t.Fatalf("channel user = %+v, ok=%v; want u-qa display user", user, ok)
+	} else if user.Avatar != "avatar/3D-5.png" {
+		t.Fatalf("channel user avatar = %q, want %q", user.Avatar, "avatar/3D-5.png")
 	}
 }
 

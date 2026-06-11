@@ -113,6 +113,7 @@ export function useAgentController({
   refreshWorkspaceBootstrapConfig,
   refreshWorkspaceManagerProfile,
   rooms,
+  selectAgent,
   selectComputer,
   selectConversation,
   selectHub,
@@ -751,20 +752,21 @@ export function useAgentController({
     });
   }
 
-  async function saveAgentPage(): Promise<void> {
-    if (!agentPageDraft || !selectedAgentForPage?.id) {
+  async function saveAgentPage(draftOverride?: AgentDraft): Promise<void> {
+    const draftToSave = draftOverride ?? agentPageDraft;
+    if (!draftToSave || !selectedAgentForPage?.id) {
       return;
     }
     setAgentPageBusy(true);
     setAgentPageError("");
     try {
-      const draft = ensureNotifierPullSubscriptionDraft(agentPageDraft);
-      if (isNotifierRuntimeDraftOnAgentPage(agentPageDraft, selectedAgentForPage)) {
+      const draft = ensureNotifierPullSubscriptionDraft(draftToSave);
+      if (isNotifierRuntimeDraftOnAgentPage(draftToSave, selectedAgentForPage)) {
         const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, { mergeNotifier: true });
         const payload: AgentUpdatePayload = {
-          name: agentPageDraft.name,
-          avatar: agentPageDraft.avatar,
-          description: agentPageDraft.description,
+          name: draftToSave.name,
+          avatar: draftToSave.avatar,
+          description: draftToSave.description,
         };
         if (runtimeOptions) {
           payload.runtime_options = runtimeOptions;
@@ -778,21 +780,21 @@ export function useAgentController({
         return;
       }
       const profile = draftToProfile(draft, {
-        name: agentPageDraft.name,
-        description: agentPageDraft.description,
+        name: draftToSave.name,
+        description: draftToSave.description,
       });
       const runtimeOptions = draftNotifierRuntimeOptionsForSave(draft, {
         mergeNotifier: false,
       });
-      const profileChanged = profilePayloadForCompare(agentPageDraft) !== profilePayloadForCompare(agentPageSavedDraft);
+      const profileChanged = profilePayloadForCompare(draftToSave) !== profilePayloadForCompare(agentPageSavedDraft);
       const runtimeOptionsChanged =
-        runtimeOptionsPayloadForCompare(agentPageDraft) !== runtimeOptionsPayloadForCompare(agentPageSavedDraft);
+        runtimeOptionsPayloadForCompare(draftToSave) !== runtimeOptionsPayloadForCompare(agentPageSavedDraft);
       const hasProfileOrRuntimeChange = profileChanged || (runtimeOptionsChanged && hasObjectValues(runtimeOptions));
 
       const payload: AgentUpdatePayload = {
-        name: agentPageDraft.name,
-        avatar: agentPageDraft.avatar,
-        description: agentPageDraft.description,
+        name: draftToSave.name,
+        avatar: draftToSave.avatar,
+        description: draftToSave.description,
       };
       if (profileChanged) {
         payload.agent_profile = profile;
@@ -828,6 +830,15 @@ export function useAgentController({
     } finally {
       setAgentPageBusy(false);
     }
+  }
+
+  async function saveAgentPageAvatar(avatar: string): Promise<void> {
+    if (!agentPageDraft) {
+      return;
+    }
+    const nextDraft = { ...agentPageDraft, avatar };
+    setAgentPageDraft(nextDraft);
+    await saveAgentPage(nextDraft);
   }
 
   async function publishAgentPage(): Promise<void> {
@@ -882,7 +893,9 @@ export function useAgentController({
         if (runtimeOptions) {
           payload.runtime_options = runtimeOptions;
         }
-        await (isCreate ? createNotificationBotRequest(payload) : patchNotificationBotRequest(editingAgentID, payload));
+        const saved = await (isCreate
+          ? createNotificationBotRequest(payload)
+          : patchNotificationBotRequest(editingAgentID, payload));
         await refreshAgents();
         await refreshWorkspaceBootstrap();
         if (isCreate) {
@@ -891,6 +904,7 @@ export function useAgentController({
               ? { ...current, percent: 100, status: "done", index: Math.max(0, (current.steps?.length || 1) - 1) }
               : current,
           );
+          selectAgent(saved, { replace: true });
         }
         setShowAgentModal(false);
         setAgentDraft(null);
@@ -937,6 +951,7 @@ export function useAgentController({
             ? { ...current, percent: 100, status: "done", index: Math.max(0, (current.steps?.length || 1) - 1) }
             : current,
         );
+        selectAgent(saved, { replace: true });
       }
       setShowAgentModal(false);
       setAgentDraft(null);
@@ -1205,6 +1220,7 @@ export function useAgentController({
       onSelectWorkspaceFile: setSelectedAgentWorkspacePath,
       onDraftChange: setAgentPageDraft,
       onSave: saveAgentPage,
+      onAvatarSave: saveAgentPageAvatar,
       onPublish: publishAgentPage,
       onProviderLogin: loginCLIProxyProvider,
       onStart: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),

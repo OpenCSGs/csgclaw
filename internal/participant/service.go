@@ -582,6 +582,7 @@ func (s *Service) ensureChannelIdentity(_ context.Context, req normalizedCreateR
 		Name:   req.Name,
 		Handle: req.ID,
 		Role:   role,
+		Avatar: req.Avatar,
 	})
 	return err
 }

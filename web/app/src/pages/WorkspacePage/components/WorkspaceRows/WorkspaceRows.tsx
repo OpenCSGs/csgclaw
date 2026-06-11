@@ -245,6 +245,10 @@ export function WorkspaceConversationRow({
   const displayUser = isDirect ? resolveConversationUser(conversation, currentUserID, usersById) : null;
   const directAgent = isDirect && displayUser ? agents.find((item) => agentMatchesUser(item, displayUser)) : null;
   const directAgentRunning = isAgentRunning(directAgent);
+  const directAvatar = directAgent?.avatar || displayUser?.avatar || "";
+  const directAvatarFallback = directAgent
+    ? avatarFallbackText(directAgent.avatar, directAgent.name, directAgent.handle, directAgent.id)
+    : avatarFallbackText(displayUser?.avatar, displayUser?.name, displayUser?.handle, displayUser?.id);
   const title = isDirect && displayUser ? displayUser.name : conversation.title;
   const roomAvatarMembers = resolveRoomAvatarMembers(conversation, usersById, currentUserID);
   const preview = formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t);
@@ -279,10 +283,7 @@ export function WorkspaceConversationRow({
         }
       >
         {isDirect && displayUser ? (
-          <AgentAvatarContent
-            avatar={displayUser.avatar}
-            fallback={avatarFallbackText(displayUser.avatar, displayUser.name, displayUser.handle, displayUser.id)}
-          />
+          <AgentAvatarContent avatar={directAvatar} fallback={directAvatarFallback} />
         ) : (
           <RoomAvatar members={roomAvatarMembers} count={conversation.members.length} />
         )}

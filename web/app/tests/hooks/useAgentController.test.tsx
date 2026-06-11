@@ -119,6 +119,7 @@ function useAgentControllerHarness() {
     refreshWorkspaceBootstrapConfig: vi.fn(async () => null),
     refreshWorkspaceManagerProfile: vi.fn(async () => null),
     rooms: [],
+    selectAgent: vi.fn(),
     selectComputer: vi.fn(),
     selectConversation: vi.fn(),
     selectHub: vi.fn(),

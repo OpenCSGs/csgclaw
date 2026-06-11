@@ -38,7 +38,12 @@ import {
   getCollapsedSelectionTextOffset,
   placeCaretAtEnd,
 } from "@/models/composer";
-import { isAgentRunning, normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
+import {
+  isAgentRunning,
+  normalizeAuthProviderName,
+  providerNeedsAuth,
+  resolveAgentAvatarFallback,
+} from "@/models/agents";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import {
@@ -462,6 +467,10 @@ export function ConversationPane({
           const isAdmin = user?.role === "admin";
           const messageAgent = agents.find((item) => agentMatchesUser(item, user));
           const messageAgentRunning = isAgentRunning(messageAgent);
+          const messageAvatar = messageAgent?.avatar || user.avatar;
+          const messageAvatarFallback = messageAgent
+            ? resolveAgentAvatarFallback(messageAgent, usersById)
+            : avatarFallbackText(user.avatar, user.name, user.handle, user.id);
           const threadSummary = message.thread;
           const latestThreadReply = threadSummary?.latest_reply;
           return (
@@ -474,10 +483,7 @@ export function ConversationPane({
                   aria-label={`${t("profilePreview")} ${user.name}`}
                   onClick={(event) => onPreviewUser(user, event.currentTarget)}
                 >
-                  <AgentAvatarContent
-                    avatar={user.avatar}
-                    fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)}
-                  />
+                  <AgentAvatarContent avatar={messageAvatar} fallback={messageAvatarFallback} />
                   {messageAgent ? (
                     <span
                       className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`}

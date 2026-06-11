@@ -156,6 +156,7 @@ export type CreateBotPayload = AgentUpdatePayload & {
 export async function createBotRequest(payload: CreateBotPayload): Promise<AgentLike> {
   const participant = await post<ParticipantLike>("api/v1/channels/csgclaw/participants", {
     name: payload.name,
+    avatar: payload.avatar,
     type: "agent",
     agent_binding: {
       mode: "create",
@@ -164,6 +165,7 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
         role: payload.role,
         description: payload.description,
         image: payload.image,
+        avatar: payload.avatar,
         runtime_kind: payload.runtime_kind,
         from_template: payload.from_template,
         runtime_options: payload.runtime_options,

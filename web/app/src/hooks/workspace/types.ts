@@ -230,6 +230,7 @@ export type UseAgentControllerArgs = {
   refreshWorkspaceBootstrapConfig: () => Promise<RuntimeBootstrapConfig | null>;
   refreshWorkspaceManagerProfile: () => Promise<AgentProfileLike | null>;
   rooms: IMConversation[];
+  selectAgent: WorkspaceNavigationController["selectAgent"];
   selectComputer: WorkspaceNavigationController["selectComputer"];
   selectConversation: WorkspaceNavigationController["selectConversation"];
   selectHub: WorkspaceNavigationController["selectHub"];

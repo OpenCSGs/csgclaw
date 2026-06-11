@@ -7,7 +7,7 @@ import {
   PROVIDERS,
   WORKER_RUNTIME_KIND_OPTIONS,
 } from "@/shared/constants/agents";
-import type { SetStateAction } from "react";
+import { useEffect, useRef, useState, type SetStateAction } from "react";
 import {
   AgentCreateProgress,
   type AgentCreateProgressProps,
@@ -95,10 +95,32 @@ export function AgentProfileModal({
   onClose,
   onSave,
 }: AgentProfileModalProps) {
+  const [isEditorScrolling, setIsEditorScrolling] = useState(false);
+  const editorScrollTimerRef = useRef<number | null>(null);
   const createBotKind = agentModalMode === "create" ? agentCreateBotKind : undefined;
   const isNotificationContext = isNotificationBotDraftContext(agentDraft, editingAgent, createBotKind);
   const isWorkerCreate = agentModalMode === "create" && !isNotificationContext;
   const templateLocked = agentCreateTemplateLocked(agentDraft, agentModalMode);
+
+  useEffect(
+    () => () => {
+      if (editorScrollTimerRef.current) {
+        window.clearTimeout(editorScrollTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  function onEditorShellScroll() {
+    setIsEditorScrolling(true);
+    if (editorScrollTimerRef.current) {
+      window.clearTimeout(editorScrollTimerRef.current);
+    }
+    editorScrollTimerRef.current = window.setTimeout(() => {
+      setIsEditorScrolling(false);
+      editorScrollTimerRef.current = null;
+    }, 700);
+  }
 
   function switchCreateBotKind(nextKind: string) {
     if (agentModalMode !== "create" || nextKind === agentCreateBotKind) {
@@ -145,7 +167,7 @@ export function AgentProfileModal({
   }
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card profile-modal agent-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
@@ -162,7 +184,10 @@ export function AgentProfileModal({
           </div>
           <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
-        <div className="profile-editor-shell">
+        <div
+          className={`profile-editor-shell${isEditorScrolling ? " is-scrolling" : ""}`}
+          onScroll={onEditorShellScroll}
+        >
           {agentModalMode === "create" ? (
             <div
               className="workspace-tabbar agent-create-kind-tabbar"
@@ -195,7 +220,7 @@ export function AgentProfileModal({
           ) : null}
           <section className="profile-section">
             <div className="profile-section-title">{t("profileBasics")}</div>
-            <div className="profile-grid profile-grid-compact">
+            <div className="profile-grid profile-grid-compact agent-basics-grid">
               {isWorkerCreate ? (
                 <label className="field span-2">
                   <span>{t("templateLabel")}</span>
@@ -221,6 +246,15 @@ export function AgentProfileModal({
                   />
                 </label>
               ) : null}
+              <div className="field agent-avatar-field">
+                <span>{t("agentAvatar")}</span>
+                <AgentAvatarPicker
+                  value={agentDraft.avatar}
+                  t={t}
+                  mode="edit"
+                  onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
+                />
+              </div>
               <label className="field">
                 {requiredFieldLabel(t("agentName"))}
                 <input
@@ -239,16 +273,8 @@ export function AgentProfileModal({
                   <input value={agentDraft.role || "worker"} readOnly disabled />
                 </label>
               ) : null}
-              <div className="field span-2 agent-avatar-field">
-                <span>{t("agentAvatar")}</span>
-                <AgentAvatarPicker
-                  value={agentDraft.avatar}
-                  t={t}
-                  onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
-                />
-              </div>
               {isWorkerCreate ? (
-                <>
+                <div className="agent-runtime-image-row">
                   <label className="field">
                     <span>{t("profileRuntimeKind")}</span>
                     {templateLocked ? (
@@ -309,7 +335,7 @@ export function AgentProfileModal({
                       placeholder={t("agentImagePlaceholder")}
                     />
                   </label>
-                </>
+                </div>
               ) : null}
               <label className="field span-2">
                 <span>{t("agentDescription")}</span>

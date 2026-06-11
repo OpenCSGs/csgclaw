@@ -645,6 +645,10 @@
   backdrop-filter: none;
 }
 
+.profile-modal.agent-modal .modal-header {
+  padding: 0 0 14px;
+}
+
 .modal-card .modal-header .modal-close {
   width: 34px;
   min-width: 34px;
@@ -723,6 +727,33 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.agent-basics-grid {
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  column-gap: 16px;
+}
+
+.agent-basics-grid > .span-2 {
+  grid-column: 1 / -1;
+}
+
+.agent-basics-grid .agent-avatar-field {
+  width: 44px;
+  min-width: 44px;
+}
+
+.agent-basics-grid .agent-runtime-image-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.agent-modal .agent-avatar-field .agent-avatar-picker {
+  position: relative;
 }
 
 .profile-runtime-grid {
@@ -1078,6 +1109,42 @@
   margin-top: 0;
 }
 
+.profile-modal.agent-modal .profile-editor-shell {
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.profile-modal.agent-modal .profile-editor-shell::-webkit-scrollbar {
+  width: 8px;
+  height: 0;
+}
+
+.profile-modal.agent-modal .profile-editor-shell::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.profile-modal.agent-modal .profile-editor-shell::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 6px;
+}
+
+.profile-modal.agent-modal .profile-editor-shell.is-scrolling {
+  scrollbar-color: var(--portal-gray-400) transparent;
+}
+
+.profile-modal.agent-modal .profile-editor-shell.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: var(--portal-gray-400);
+}
+
+.profile-modal.agent-modal .profile-section {
+  min-width: 0;
+}
+
 .profile-section {
   padding: 18px;
 }
@@ -1104,8 +1171,15 @@
 .agent-modal > .modal-actions {
   flex: 0 0 auto;
   margin-top: 0;
-  padding: 16px 24px 24px;
+  padding: 16px 0 0;
   border-top: 1px solid var(--line);
+  gap: 12px;
+}
+
+.agent-modal > .modal-actions .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
 }
 
 .modal-card .field input,
@@ -1588,6 +1662,16 @@
 }
 
 @media (max-width: 640px) {
+  .agent-basics-grid {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .agent-basics-grid > .field:not(.agent-avatar-field),
+  .agent-basics-grid > .span-2,
+  .agent-basics-grid > .agent-runtime-image-row {
+    grid-column: 1 / -1;
+  }
+
   .manager-rebuild-modal {
     width: min(100%, calc(100vw - 24px));
   }
