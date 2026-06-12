@@ -760,6 +760,7 @@ export function agentToDraft(agent: AgentDraftSource | null | undefined): AgentD
     bot_type: botType,
     description: agent?.description || profile.description || "",
     instructions: agent?.instructions || "",
+    avatar: agent?.avatar || "",
     default_image: agent?.image || "",
     image: agent?.image || "",
     from_template: agent?.from_template || "",

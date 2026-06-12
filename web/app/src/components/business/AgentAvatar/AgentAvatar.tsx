@@ -1,24 +1,9 @@
 import { AgentIcon } from "@/components/ui/Icons";
-import { normalizeAvatarPath } from "@/shared/avatar";
+import { AGENT_AVATAR_GROUPS, AGENT_AVATAR_OPTIONS, normalizeAgentAvatarPath } from "@/shared/avatarOptions";
 import { Edit3, ImagePlus, UploadCloud, X, ZoomIn, ZoomOut } from "lucide-react";
 import type { ChangeEvent, DragEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-
-const AVATAR_GROUPS = [
-  { key: "3D", labelKey: "agentAvatarStyle3D" },
-  { key: "cartoon", labelKey: "agentAvatarStyleCartoon" },
-  { key: "pic", labelKey: "agentAvatarStylePic" },
-] as const;
-
-export const AGENT_AVATAR_OPTIONS = AVATAR_GROUPS.flatMap((group) =>
-  Array.from({ length: 8 }, (_, index) => ({
-    group: group.key,
-    labelKey: group.labelKey,
-    index: index + 1,
-    value: `avatar/${group.key}-${index + 1}.png`,
-  })),
-);
 
 type TranslateFn = (key: string) => string;
 type AvatarEditorTab = "builtin" | "upload";
@@ -32,14 +17,6 @@ const AVATAR_ZOOM_STEP = 0.15;
 type CropOffset = { x: number; y: number };
 type CropStageSize = { width: number; height: number };
 type ImageSize = { width: number; height: number };
-
-export function defaultAgentAvatar(): string {
-  return AGENT_AVATAR_OPTIONS[0]?.value || "";
-}
-
-export function normalizeAgentAvatarPath(value: unknown): string {
-  return normalizeAvatarPath(value);
-}
 
 export function AgentAvatarImage({ avatar, alt = "" }: { avatar?: string | null; alt?: string }) {
   const src = normalizeAgentAvatarPath(avatar);
@@ -469,7 +446,7 @@ export function AgentAvatarPicker({
         : null}
       {open && mode !== "edit" && !disabled ? (
         <div className="agent-avatar-picker-panel" role="radiogroup" aria-label={t("agentAvatar")}>
-          {AVATAR_GROUPS.map((group) => (
+          {AGENT_AVATAR_GROUPS.map((group) => (
             <div className="agent-avatar-picker-group" key={group.key}>
               <div className="agent-avatar-picker-label">{t(group.labelKey)}</div>
               <div className="agent-avatar-picker-options">

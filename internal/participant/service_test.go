@@ -61,6 +61,62 @@ func TestCreateAgentParticipantUsesStableParticipantIDForDefaultAgentID(t *testi
 	}
 }
 
+func TestCreateParticipantAssignsUnusedBuiltInAvatar(t *testing.T) {
+	agentSvc := mustNewAgentService(t)
+	imSvc := im.NewService()
+	availableAvatar := builtInAvatarOptions[len(builtInAvatarOptions)-1]
+	seed := make([]Participant, 0, len(builtInAvatarOptions)-1)
+	replacer := strings.NewReplacer("/", "-", ".", "-")
+	for _, avatar := range builtInAvatarOptions[:len(builtInAvatarOptions)-1] {
+		seed = append(seed, Participant{
+			ID:              "seed-avatar-" + replacer.Replace(avatar),
+			Channel:         ChannelCSGClaw,
+			Type:            TypeHuman,
+			Name:            "seed",
+			Avatar:          avatar,
+			ChannelUserRef:  "seed",
+			ChannelUserKind: ChannelUserKindLocalUserID,
+			LifecycleStatus: LifecycleStatusActive,
+			Mentionable:     true,
+		})
+	}
+	store := NewMemoryStore(seed)
+	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+
+	created, err := svc.Create(context.Background(), CreateRequest{
+		ID:      "qa",
+		Channel: ChannelCSGClaw,
+		Type:    TypeAgent,
+		Name:    "QA",
+		ChannelUser: ChannelUserSpec{
+			Ref:  "u-qa",
+			Kind: ChannelUserKindLocalUserID,
+		},
+		AgentBinding: AgentBindingSpec{
+			Mode: BindingModeCreate,
+			Agent: &agent.CreateAgentSpec{
+				Name:        "QA",
+				Role:        agent.RoleWorker,
+				RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+				Image:       "agent-image:test",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if created.Avatar != availableAvatar {
+		t.Fatalf("participant avatar = %q, want unused %q", created.Avatar, availableAvatar)
+	}
+	if user, ok := imSvc.User("u-qa"); !ok || user.Avatar != availableAvatar {
+		t.Fatalf("channel user = %+v, ok=%v; want avatar %q", user, ok, availableAvatar)
+	}
+	if runtimeAgent, ok := agentSvc.Agent("u-qa"); !ok || runtimeAgent.Avatar != availableAvatar {
+		t.Fatalf("agent = %+v, ok=%v; want avatar %q", runtimeAgent, ok, availableAvatar)
+	}
+}
+
 func TestCreateAgentParticipantCanReuseExistingAgentWithDifferentParticipantID(t *testing.T) {
 	agentSvc := mustNewAgentService(t)
 	imSvc := im.NewService()
@@ -134,10 +190,13 @@ func TestEnsureBootstrapAdminCreatesHumanParticipantWithoutAgent(t *testing.T) {
 	if !created.Mentionable {
 		t.Fatal("admin participant Mentionable = false, want true")
 	}
+	if created.Avatar == "" {
+		t.Fatal("admin participant avatar is empty, want initialized built-in avatar")
+	}
 	if _, ok := store.Get(ChannelCSGClaw, im.AdminUserID); !ok {
 		t.Fatal("store missing admin participant")
 	}
-	if user, ok := imSvc.User(im.AdminUserID); !ok || user.ID != im.AdminUserID || user.Handle != "admin" || user.Role != "admin" {
+	if user, ok := imSvc.User(im.AdminUserID); !ok || user.ID != im.AdminUserID || user.Handle != "admin" || user.Role != "admin" || user.Avatar != created.Avatar {
 		t.Fatalf("admin channel user = %+v, ok=%v; want local admin user", user, ok)
 	}
 }
@@ -230,8 +289,14 @@ func TestEnsureBootstrapManagerUsesDefaultParticipantIDSeparateFromAgentID(t *te
 	if created.ChannelUserRef != agent.ManagerParticipantID {
 		t.Fatalf("channel user ref = %q, want %q", created.ChannelUserRef, agent.ManagerParticipantID)
 	}
-	if user, ok := imSvc.User(agent.ManagerParticipantID); !ok || user.ID != agent.ManagerParticipantID {
+	if created.Avatar == "" {
+		t.Fatal("manager participant avatar is empty, want initialized built-in avatar")
+	}
+	if user, ok := imSvc.User(agent.ManagerParticipantID); !ok || user.ID != agent.ManagerParticipantID || user.Avatar != created.Avatar {
 		t.Fatalf("manager channel user = %+v, ok=%v; want local user %q", user, ok, agent.ManagerParticipantID)
+	}
+	if manager, ok := agentSvc.Agent(agent.ManagerUserID); !ok || manager.Avatar != created.Avatar {
+		t.Fatalf("manager agent = %+v, ok=%v; want avatar %q", manager, ok, created.Avatar)
 	}
 	if _, ok := store.Get(ChannelCSGClaw, agent.ManagerParticipantID); !ok {
 		t.Fatalf("store missing manager participant %q", agent.ManagerParticipantID)

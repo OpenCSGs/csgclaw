@@ -46,6 +46,7 @@ export type AgentUpdatePayload = {
 
 export type ParticipantLike = {
   agent_id?: string | null;
+  avatar?: string | null;
   channel?: string | null;
   channel_app_ref?: string | null;
   channel_user_kind?: string | null;
@@ -191,6 +192,7 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
 export async function createNotificationBotRequest(payload: CreateBotPayload): Promise<AgentLike> {
   const participant = await post<ParticipantLike>("api/v1/channels/csgclaw/participants", {
     name: payload.name,
+    avatar: payload.avatar,
     type: "notification",
     metadata: payload.runtime_options ?? {},
   });
@@ -200,6 +202,7 @@ export async function createNotificationBotRequest(payload: CreateBotPayload): P
 export function patchNotificationBotRequest(botID: string, payload: CreateBotPayload): Promise<AgentLike> {
   return patch<ParticipantLike>(`api/v1/channels/csgclaw/participants/${encodeURIComponent(botID)}`, {
     name: payload.name,
+    avatar: payload.avatar,
     metadata: payload.runtime_options ?? {},
   }).then(participantToAgentLike);
 }
@@ -222,6 +225,7 @@ function participantToAgentLike(participant: ParticipantLike): AgentLike {
   return {
     id: participant.id,
     name: participant.name,
+    avatar: participant.avatar,
     type: participant.type === "notification" ? BOT_TYPE_NOTIFICATION : participant.type,
     bot_type: participant.type === "notification" ? BOT_TYPE_NOTIFICATION : participant.type,
     available: participant.lifecycle_status === "active",

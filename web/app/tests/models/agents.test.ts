@@ -38,6 +38,7 @@ import {
   runtimeImageForKind,
   shouldWaitForManagerRuntimeAfterProfileSave,
 } from "@/models/agents";
+import { AGENT_AVATAR_OPTIONS, selectUnusedAgentAvatar } from "@/shared/avatarOptions";
 
 describe("agent model helpers", () => {
   it("normalizes agent profiles into editable drafts", () => {
@@ -343,6 +344,13 @@ describe("agent model helpers", () => {
         usersById,
       ),
     ).toBe("avatar/cartoon-3.png");
+  });
+
+  it("selects a built-in avatar that is not already used", () => {
+    const availableAvatar = AGENT_AVATAR_OPTIONS.at(-1)?.value || "";
+    const sources = AGENT_AVATAR_OPTIONS.slice(0, -1).map((option) => ({ avatar: option.value }));
+
+    expect(selectUnusedAgentAvatar(sources)).toBe(availableAvatar);
   });
 
   it("uses manager template variants for manager rebuild runtime and default image", () => {

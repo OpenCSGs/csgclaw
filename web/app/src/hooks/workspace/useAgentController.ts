@@ -31,6 +31,7 @@ import {
   WORKER_AGENT_ROLE,
 } from "@/shared/constants/agents";
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
+import { selectUnusedAgentAvatar } from "@/shared/avatarOptions";
 import { firstWorkspaceFilePath, hasWorkspaceFilePath } from "@/models/workspace";
 import {
   applyTemplateToDraft,
@@ -195,6 +196,10 @@ export function useAgentController({
   );
   const runningAgentCount = agentItems.filter(isAgentRunning).length;
   const notifierWebhookPublicOrigin = useMemo(() => resolvedNotifierWebhookOrigin(bootstrapConfig), [bootstrapConfig]);
+  const createParticipantAvatarSources = useMemo(
+    () => [...agentItems, ...(data?.users ?? [])],
+    [agentItems, data?.users],
+  );
   const selectedAgentForPage = useMemo(() => {
     if (activePane.type !== WorkspacePaneTypes.agent) {
       return null;
@@ -688,7 +693,7 @@ export function useAgentController({
       agentToDraft({
         name: "",
         description: "",
-        avatar: "",
+        avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
         bot_type: BOT_TYPE_NOTIFICATION,
       }),
     );
@@ -716,7 +721,7 @@ export function useAgentController({
           selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
         ) || DEFAULT_RUNTIME_KIND;
       let draft = agentToDraft({
-        avatar: "",
+        avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
         image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
         bot_type: BOT_TYPE_NORMAL,
@@ -731,7 +736,7 @@ export function useAgentController({
           selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
         ) || DEFAULT_RUNTIME_KIND;
       let draft = agentToDraft({
-        avatar: "",
+        avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
         image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
         bot_type: BOT_TYPE_NORMAL,

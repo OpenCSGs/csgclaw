@@ -69,6 +69,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Parti
 	if err != nil {
 		return apitypes.Participant{}, err
 	}
+	normalized.Avatar = s.defaultParticipantAvatar(normalized.Avatar)
 	if _, ok := s.store.Get(normalized.Channel, normalized.ID); ok {
 		return apitypes.Participant{}, fmt.Errorf("participant %s:%s already exists", normalized.Channel, normalized.ID)
 	}
@@ -105,6 +106,9 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Parti
 	if err := s.store.Save(created); err != nil {
 		return apitypes.Participant{}, err
 	}
+	if err := s.syncParticipantChannelUser(created); err != nil {
+		return created, err
+	}
 	return created, nil
 }
 
@@ -132,6 +136,7 @@ func (s *Service) EnsureBootstrapAdmin(_ context.Context) (apitypes.Participant,
 		name = "admin"
 	}
 	avatar := strings.TrimSpace(source.Avatar)
+	avatar = s.defaultParticipantAvatar(avatar)
 	metadata := map[string]any(nil)
 	if ok || hasLegacySource {
 		metadata = cloneMetadata(source.Metadata)
@@ -164,6 +169,9 @@ func (s *Service) EnsureBootstrapAdmin(_ context.Context) (apitypes.Participant,
 	}
 	if err := s.store.Save(item); err != nil {
 		return apitypes.Participant{}, err
+	}
+	if err := s.syncParticipantChannelUser(item); err != nil {
+		return item, err
 	}
 	if legacyOK && isLegacyAdminParticipant(legacyExisting) {
 		if _, _, err := s.store.Delete(ChannelCSGClaw, legacyAdminParticipantID); err != nil {
@@ -207,13 +215,21 @@ func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Particip
 	if name == "" {
 		name = agent.ManagerName
 	}
-	avatar := strings.TrimSpace(manager.Avatar)
+	managerAvatar := strings.TrimSpace(manager.Avatar)
+	avatar := managerAvatar
 	metadata := map[string]any(nil)
 	if ok || hasLegacySource {
 		metadata = cloneMetadata(source.Metadata)
 		if avatar == "" {
 			avatar = strings.TrimSpace(source.Avatar)
 		}
+	}
+	avatar = s.defaultParticipantAvatar(avatar)
+	if managerAvatar != avatar {
+		if _, err := s.agents.Update(ctx, manager.ID, agent.UpdateRequest{Avatar: &avatar}); err != nil {
+			return apitypes.Participant{}, err
+		}
+		manager.Avatar = avatar
 	}
 	if s.im != nil {
 		if _, _, err := s.im.EnsureAgentUser(im.EnsureAgentUserRequest{
@@ -244,6 +260,9 @@ func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Particip
 	}
 	if err := s.store.Save(item); err != nil {
 		return apitypes.Participant{}, err
+	}
+	if err := s.syncParticipantChannelUser(item); err != nil {
+		return item, err
 	}
 	if legacyOK && isLegacyManagerParticipant(legacyExisting) {
 		if _, _, err := s.store.Delete(ChannelCSGClaw, agent.ManagerUserID); err != nil {
@@ -531,12 +550,17 @@ func (s *Service) normalizeCreateRequest(req CreateRequest) (normalizedCreateReq
 		}
 	}
 
+	avatar := strings.TrimSpace(req.Avatar)
+	if avatar == "" && binding.Agent != nil {
+		avatar = strings.TrimSpace(binding.Agent.Avatar)
+	}
+
 	return normalizedCreateRequest{
 		ID:            id,
 		Channel:       channel,
 		Type:          typ,
 		Name:          name,
-		Avatar:        strings.TrimSpace(req.Avatar),
+		Avatar:        avatar,
 		ChannelAppRef: strings.TrimSpace(req.ChannelAppRef),
 		ChannelUser:   channelUser,
 		AgentBinding:  binding,
@@ -598,6 +622,9 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if strings.TrimSpace(spec.Role) == "" {
 			spec.Role = agent.RoleWorker
 		}
+		if strings.TrimSpace(spec.Avatar) == "" {
+			spec.Avatar = req.Avatar
+		}
 		created, err := s.agents.Create(ctx, agent.CreateRequest{Spec: spec})
 		if err != nil {
 			return "", err
@@ -616,10 +643,18 @@ func (s *Service) ensureChannelIdentity(_ context.Context, req normalizedCreateR
 	if req.Type == TypeAgent {
 		role = agent.RoleWorker
 	}
-	_, _, err := s.im.EnsureAgentUser(im.EnsureAgentUserRequest{
+	if _, _, err := s.im.EnsureAgentUser(im.EnsureAgentUserRequest{
 		ID:     req.ChannelUser.Ref,
 		Name:   req.Name,
 		Handle: req.ID,
+		Role:   role,
+		Avatar: req.Avatar,
+	}); err != nil {
+		return err
+	}
+	_, _, err := s.im.UpdateAgentUser(im.UpdateAgentUserRequest{
+		ID:     req.ChannelUser.Ref,
+		Name:   req.Name,
 		Role:   role,
 		Avatar: req.Avatar,
 	})

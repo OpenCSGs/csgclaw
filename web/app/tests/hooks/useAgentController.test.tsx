@@ -5,6 +5,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import {
   fetchAgent,
   fetchAgentProfile,
+  fetchAgentProfileDefaults,
   fetchAgentProfileModels,
   fetchAgentWorkspace,
   runAgentActionRequest,
@@ -15,7 +16,8 @@ import { useAgentController } from "@/hooks/workspace/useAgentController";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
-import type { TranslateFn } from "@/models/conversations";
+import type { IMData, TranslateFn } from "@/models/conversations";
+import { AGENT_AVATAR_OPTIONS } from "@/shared/avatarOptions";
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
@@ -44,6 +46,7 @@ vi.mock("@/api/agents", async () => {
     ...actual,
     fetchAgent: vi.fn(),
     fetchAgentProfile: vi.fn(),
+    fetchAgentProfileDefaults: vi.fn(),
     fetchAgentProfileModels: vi.fn(),
     fetchAgentWorkspace: vi.fn(),
     runAgentActionRequest: vi.fn(),
@@ -113,9 +116,14 @@ function createWrapper() {
 }
 
 function useAgentControllerHarness(
-  options: { activePane?: WorkspacePane; managerProfile?: AgentProfileLike | null } = {},
+  options: {
+    activePane?: WorkspacePane;
+    agents?: AgentLike[];
+    data?: IMData | null;
+    managerProfile?: AgentProfileLike | null;
+  } = {},
 ) {
-  const [agents, setAgents] = useState<AgentLike[]>([oldAgent]);
+  const [agents, setAgents] = useState<AgentLike[]>(options.agents ?? [oldAgent]);
   const refreshWorkspaceAgents = vi.fn(async () => [oldAgent]);
   const selectAgentRef = useRef(vi.fn());
   const selectAgent = selectAgentRef.current;
@@ -132,7 +140,7 @@ function useAgentControllerHarness(
       isFetched: true,
     } as UseQueryResult<AgentLike[]>,
     bootstrapConfig: null,
-    data: null,
+    data: options.data ?? null,
     hubTemplates: [],
     locale: "en",
     managerProfile: options.managerProfile ?? null,
@@ -160,6 +168,7 @@ describe("useAgentController", () => {
   beforeEach(() => {
     vi.mocked(fetchAgent).mockReset();
     vi.mocked(fetchAgentProfile).mockReset();
+    vi.mocked(fetchAgentProfileDefaults).mockReset();
     vi.mocked(fetchAgentProfileModels).mockReset();
     vi.mocked(fetchAgentWorkspace).mockReset();
     vi.mocked(createTeamRequest).mockReset();
@@ -168,6 +177,7 @@ describe("useAgentController", () => {
     vi.mocked(updateAgentRequest).mockReset();
     vi.mocked(fetchAgent).mockResolvedValueOnce(oldAgent).mockResolvedValueOnce(latestAgent);
     vi.mocked(fetchAgentProfile).mockResolvedValue(profile);
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValue(profile);
     vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: [] });
     vi.mocked(fetchAgentWorkspace).mockResolvedValue({ entries: [] });
     vi.mocked(createTeamRequest).mockResolvedValue({
@@ -291,5 +301,42 @@ describe("useAgentController", () => {
       member_agent_ids: ["u-manager"],
       title: "teamNewFallbackTitle",
     });
+  });
+
+  it("initializes create agent drafts with an unused built-in avatar", async () => {
+    const availableAvatar = AGENT_AVATAR_OPTIONS.at(-1)?.value || "";
+    const humanAvatar = AGENT_AVATAR_OPTIONS.at(-2)?.value || "";
+    const agents = AGENT_AVATAR_OPTIONS.slice(0, -2).map((option, index): AgentLike => {
+      const manager = index === 0;
+      return {
+        id: manager ? "u-manager" : `u-worker-${index}`,
+        avatar: option.value,
+        image: oldImage,
+        name: manager ? "manager" : `worker-${index}`,
+        role: manager ? "manager" : "worker",
+        runtime_kind: "picoclaw_sandbox",
+        status: "running",
+      };
+    });
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          agents,
+          data: {
+            current_user_id: "u-admin",
+            rooms: [],
+            users: [{ id: "u-admin", avatar: humanAvatar, name: "admin" }],
+          },
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+
+    await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
+    expect(result.current.agentProfileModalProps?.agentDraft.avatar).toBe(availableAvatar);
   });
 });
