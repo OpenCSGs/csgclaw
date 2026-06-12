@@ -12,8 +12,19 @@
           {
             "id": "REPLACE_WITH_MODEL_ID",
             "name": "REPLACE_WITH_MODEL_ID",
-            "reasoning": false,
-            "input": ["text"],
+            "reasoning": true,
+            "input": ["text", "image"],
+            "compat": {
+              "supportsReasoningEffort": true,
+              "supportedReasoningEfforts": ["low", "medium", "high", "xhigh"],
+              "reasoningEffortMap": {
+                "minimal": "low",
+                "low": "low",
+                "medium": "medium",
+                "high": "high",
+                "xhigh": "xhigh"
+              }
+            },
             "cost": {
               "input": 0,
               "output": 0,
@@ -39,6 +50,7 @@
       "compaction": {
         "mode": "safeguard"
       },
+      "thinkingDefault": "medium",
       "maxConcurrent": 4,
       "subagents": {
         "maxConcurrent": 8
@@ -48,6 +60,7 @@
   },
   "tools": {
     "profile": "full",
+    "deny": ["image"],
     "exec": {
       "host": "gateway",
       "security": "full",
