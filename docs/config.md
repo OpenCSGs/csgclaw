@@ -140,6 +140,8 @@ csgclaw agent create --name alice --runtime openclaw_sandbox
 
 The recommended image shape is a slim OpenClaw base image with CSGClaw-managed plugins baked under `/home/node/openclaw-plugins` (for example, `csgclaw-extension` and external channel plugins). Runtime state still comes from `~/.csgclaw/agents/<agent>/.openclaw/openclaw.json`; do not mount an empty host directory over `/home/node/openclaw-plugins`, because that hides baked plugins.
 
+Generated OpenClaw bridge models default to `input: ["text", "image"]` and declare `low`, `medium`, `high`, and `xhigh` reasoning levels, so OpenClaw treats them as image-capable and adjustable-reasoning models by default. The generated config also writes a `reasoningEffortMap` that maps `minimal` to `low` and passes the other levels through by name. The actual default thinking value is written to `agents.defaults.thinkingDefault`; it defaults to `medium` and follows the CSGClaw profile `reasoning_effort` when one is configured. Plain OpenAI-compatible profiles still use `openai-completions`; if the upstream model does not actually support images or a reasoning level, the upstream only errors when that content or parameter is sent. With a Codex profile, CSGClaw also declares the bridge model as `openai-codex-responses` and writes streaming usage compatibility metadata.
+
 ## Sandbox Providers
 
 CSGClaw runs Workers through the configured sandbox provider. Supported built-in providers are:

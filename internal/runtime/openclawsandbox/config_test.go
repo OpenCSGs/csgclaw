@@ -2,6 +2,7 @@ package openclawsandbox
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -44,14 +45,46 @@ func TestRenderAgentOpenClawConfigUsesOpenAICompatForMinimaxBaseURL(t *testing.T
 	if got, want := llm["authHeader"], true; got != want {
 		t.Fatalf("csgclaw-llm authHeader = %v, want %v", got, want)
 	}
+	modelList := llm["models"].([]any)
+	entry := modelList[0].(map[string]any)
+	if got, want := entry["reasoning"], true; got != want {
+		t.Fatalf("model reasoning = %v, want %v", got, want)
+	}
+	if got, want := entry["input"], []any{"text", "image"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("model input = %#v, want %#v", got, want)
+	}
+	compat := entry["compat"].(map[string]any)
+	if got, want := compat["supportsReasoningEffort"], true; got != want {
+		t.Fatalf("model compat.supportsReasoningEffort = %v, want %v", got, want)
+	}
+	if got, want := compat["supportedReasoningEfforts"], []any{"low", "medium", "high", "xhigh"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("model compat.supportedReasoningEfforts = %#v, want %#v", got, want)
+	}
+	wantReasoningMap := map[string]any{
+		"minimal": "low",
+		"low":     "low",
+		"medium":  "medium",
+		"high":    "high",
+		"xhigh":   "xhigh",
+	}
+	if got := compat["reasoningEffortMap"]; !reflect.DeepEqual(got, wantReasoningMap) {
+		t.Fatalf("model compat.reasoningEffortMap = %#v, want %#v", got, wantReasoningMap)
+	}
 	agents := cfg["agents"].(map[string]any)
 	defaults := agents["defaults"].(map[string]any)
 	model := defaults["model"].(map[string]any)
 	if got, want := model["primary"], "csgclaw-llm/MiniMax-M2.7"; got != want {
 		t.Fatalf("primary model = %v, want %v", got, want)
 	}
+	if got, want := defaults["thinkingDefault"], "medium"; got != want {
+		t.Fatalf("thinkingDefault = %v, want %v", got, want)
+	}
 	if got, want := defaults["verboseDefault"], "on"; got != want {
 		t.Fatalf("verboseDefault = %v, want %v", got, want)
+	}
+	tools := cfg["tools"].(map[string]any)
+	if got, want := tools["deny"], []any{"image"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("tools.deny = %#v, want %#v", got, want)
 	}
 }
 
@@ -129,6 +162,67 @@ func TestRenderAgentOpenClawConfigUsesBridgeWhenBaseURLEmpty(t *testing.T) {
 		if strings.Contains(text, placeholder) {
 			t.Fatalf("rendered OpenClaw config leaked template placeholder %q:\n%s", placeholder, text)
 		}
+	}
+}
+
+func TestRenderAgentOpenClawConfigUsesCodexResponsesModelMetadata(t *testing.T) {
+	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
+		ListenAddr:       "127.0.0.1:18080",
+		AdvertiseBaseURL: "http://127.0.0.1:18080",
+		AccessToken:      "shared-token",
+	}, config.ModelConfig{
+		Provider:        "codex",
+		ModelID:         "gpt-5.5",
+		ReasoningEffort: "high",
+	}, testBaseURLResolver, nil)
+	if err != nil {
+		t.Fatalf("renderAgentOpenClawConfig() error = %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	models := cfg["models"].(map[string]any)
+	providers := models["providers"].(map[string]any)
+	llm := providers["csgclaw-llm"].(map[string]any)
+	if got, want := llm["api"], "openai-codex-responses"; got != want {
+		t.Fatalf("csgclaw-llm api = %v, want %v", got, want)
+	}
+	modelList := llm["models"].([]any)
+	entry := modelList[0].(map[string]any)
+	if got, want := entry["api"], "openai-codex-responses"; got != want {
+		t.Fatalf("model api = %v, want %v", got, want)
+	}
+	if got, want := entry["reasoning"], true; got != want {
+		t.Fatalf("model reasoning = %v, want %v", got, want)
+	}
+	if got, want := entry["input"], []any{"text", "image"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("model input = %#v, want %#v", got, want)
+	}
+	compat := entry["compat"].(map[string]any)
+	if got, want := compat["supportsReasoningEffort"], true; got != want {
+		t.Fatalf("model compat.supportsReasoningEffort = %v, want %v", got, want)
+	}
+	if got, want := compat["supportedReasoningEfforts"], []any{"low", "medium", "high", "xhigh"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("model compat.supportedReasoningEfforts = %#v, want %#v", got, want)
+	}
+	wantReasoningMap := map[string]any{
+		"minimal": "low",
+		"low":     "low",
+		"medium":  "medium",
+		"high":    "high",
+		"xhigh":   "xhigh",
+	}
+	if got := compat["reasoningEffortMap"]; !reflect.DeepEqual(got, wantReasoningMap) {
+		t.Fatalf("model compat.reasoningEffortMap = %#v, want %#v", got, wantReasoningMap)
+	}
+	if got, want := compat["supportsUsageInStreaming"], true; got != want {
+		t.Fatalf("model compat.supportsUsageInStreaming = %v, want %v", got, want)
+	}
+	agents := cfg["agents"].(map[string]any)
+	defaults := agents["defaults"].(map[string]any)
+	if got, want := defaults["thinkingDefault"], "high"; got != want {
+		t.Fatalf("thinkingDefault = %v, want %v", got, want)
 	}
 }
 

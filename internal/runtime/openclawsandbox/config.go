@@ -26,7 +26,8 @@ const (
 	BoxProjectsDir    = BoxDir + "/workspace/projects"
 	BoxGatewayLogPath = BoxDir + "/gateway.log"
 
-	openClawBridgeProviderID = "csgclaw-llm"
+	openClawBridgeProviderID  = "csgclaw-llm"
+	openClawCodexResponsesAPI = "openai-codex-responses"
 )
 
 type BaseURLResolver func(config.ServerConfig) string
@@ -190,10 +191,40 @@ func updateOpenClawModelProvider(cfg map[string]any, botID string, server config
 	}
 	entry["id"] = modelID
 	entry["name"] = modelID
-	return updateOpenClawPrimaryModel(cfg, openClawBridgeProviderID, modelID)
+	applyOpenClawCodexModelProfile(llm, entry, modelCfg)
+	return updateOpenClawAgentDefaults(cfg, openClawBridgeProviderID, modelCfg)
 }
 
-func updateOpenClawPrimaryModel(cfg map[string]any, providerID, modelID string) error {
+func applyOpenClawCodexModelProfile(providerCfg, entry map[string]any, modelCfg config.ModelConfig) {
+	if !isCodexProfileProvider(modelCfg.Provider) {
+		return
+	}
+	providerCfg["api"] = openClawCodexResponsesAPI
+	entry["api"] = openClawCodexResponsesAPI
+	entry["reasoning"] = true
+	entry["input"] = []any{"text", "image"}
+	compat, _ := entry["compat"].(map[string]any)
+	if compat == nil {
+		compat = map[string]any{}
+	}
+	compat["supportsReasoningEffort"] = true
+	compat["supportedReasoningEfforts"] = []any{"low", "medium", "high", "xhigh"}
+	compat["reasoningEffortMap"] = map[string]any{
+		"minimal": "low",
+		"low":     "low",
+		"medium":  "medium",
+		"high":    "high",
+		"xhigh":   "xhigh",
+	}
+	compat["supportsUsageInStreaming"] = true
+	entry["compat"] = compat
+}
+
+func isCodexProfileProvider(provider string) bool {
+	return strings.EqualFold(strings.TrimSpace(provider), "codex")
+}
+
+func updateOpenClawAgentDefaults(cfg map[string]any, providerID string, modelCfg config.ModelConfig) error {
 	agents, ok := cfg["agents"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("embedded openclaw config is missing agents")
@@ -206,7 +237,10 @@ func updateOpenClawPrimaryModel(cfg map[string]any, providerID, modelID string) 
 	if !ok {
 		return fmt.Errorf("embedded openclaw config is missing agents.defaults.model")
 	}
-	modelBlock["primary"] = providerID + "/" + modelID
+	modelBlock["primary"] = providerID + "/" + strings.TrimSpace(modelCfg.ModelID)
+	if thinkingDefault := strings.TrimSpace(modelCfg.ReasoningEffort); thinkingDefault != "" {
+		defaults["thinkingDefault"] = thinkingDefault
+	}
 	return nil
 }
 
