@@ -305,8 +305,8 @@ func modelConfigFromProfile(profile AgentProfile) config.ModelConfig {
 	profile = normalizeProfile(profile, profile.Name, profile.Description)
 	return config.ModelConfig{
 		Provider:        profile.Provider,
-		BaseURL:         profile.BaseURL,
-		APIKey:          profile.APIKey,
+		BaseURL:         profileBaseURL(profile),
+		APIKey:          profileAPIKey(profile),
 		ModelID:         profile.ModelID,
 		ReasoningEffort: profile.ReasoningEffort,
 	}.Resolved()

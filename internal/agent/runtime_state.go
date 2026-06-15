@@ -127,8 +127,8 @@ func (s *Service) runtimeProfileForAgent(a Agent) agentruntime.Profile {
 
 func (s *Service) runtimeProfileForKind(runtimeKind, agentID, fallbackName, fallbackDescription string, profile AgentProfile) agentruntime.Profile {
 	profile = normalizeProfile(profile, fallbackName, fallbackDescription)
-	baseURL := profile.BaseURL
-	apiKey := profile.APIKey
+	baseURL := profileBaseURL(profile)
+	apiKey := profileAPIKey(profile)
 	env := normalizeStringMap(profile.Env)
 
 	if runtimeKind == RuntimeKindCodex {

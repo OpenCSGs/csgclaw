@@ -986,16 +986,17 @@ export function applyTemplateToDraft(
 
 export function draftToProfile(draft: AgentDraft, options: DraftProfileOptions = {}): JSONRecord {
   const requestOptions = parseJSONMap(draft.requestOptionsText);
+  const usesAPIProvider = draft.provider === "api";
   return {
     name: options.name || draft.name || MANAGER_AGENT_NAME,
     description: options.description || draft.description || DEFAULT_MANAGER_DESCRIPTION,
     provider: draft.provider,
-    base_url: draft.base_url,
-    api_key: draft.api_key,
+    base_url: usesAPIProvider ? draft.base_url : "",
+    api_key: usesAPIProvider ? draft.api_key : "",
     model_id: draft.model_id,
     reasoning_effort: draft.reasoning_effort || DEFAULT_REASONING_EFFORT,
     enable_fast_mode: Boolean(draft.enable_fast_mode),
-    headers: parseJSONMap(draft.headersText),
+    headers: usesAPIProvider ? parseJSONMap(draft.headersText) : {},
     request_options: requestOptions,
     env: envRowsToMap(draft.envRows),
   };

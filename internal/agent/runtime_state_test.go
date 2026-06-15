@@ -208,6 +208,33 @@ func TestPicoClawRuntimeHostResolveRuntimeProfilePreservesAPIProfile(t *testing.
 	}
 }
 
+func TestRuntimeProfileForKindUsesEffectiveCSGHubLiteTarget(t *testing.T) {
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	profile := svc.runtimeProfileForKind(RuntimeKindPicoClawSandbox, "u-alice", "alice", "", AgentProfile{
+		Name:     "alice",
+		Provider: ProviderCSGHubLite,
+		ModelID:  "Qwen3-0.6B-GGUF",
+		BaseURL:  "https://api.deepseek.com",
+		APIKey:   "stale-key",
+	})
+
+	if got, want := profile.BaseURL, defaultCSGHubLiteBaseURL; got != want {
+		t.Fatalf("runtimeProfileForKind().BaseURL = %q, want CSGHub Lite default %q", got, want)
+	}
+	if got, want := profile.APIKey, defaultCSGHubLiteAPIKey; got != want {
+		t.Fatalf("runtimeProfileForKind().APIKey = %q, want CSGHub Lite default key", got)
+	}
+}
+
 func TestRuntimeRecordForAgentPreservesEmptyRuntimeKind(t *testing.T) {
 	rt := runtimeRecordForAgent(Agent{
 		ID:        "u-alice",

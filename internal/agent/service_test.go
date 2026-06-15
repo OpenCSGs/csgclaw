@@ -981,6 +981,62 @@ func TestCreateWorkerCodexRuntimeContinuesWhenResponsesUnsupported(t *testing.T)
 	}
 }
 
+func TestCreateWorkerCodexRuntimeCSGHubLiteProbeUsesDefaultEndpoint(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			validate: func(_ context.Context, current agentruntime.RuntimeConfigSnapshot) error {
+				if current.Profile.Provider != ProviderCSGHubLite {
+					t.Fatalf("responses probe provider = %q, want %q", current.Profile.Provider, ProviderCSGHubLite)
+				}
+				if current.Profile.BaseURL != defaultCSGHubLiteBaseURL {
+					t.Fatalf("responses probe baseURL = %q, want CSGHub Lite default %q", current.Profile.BaseURL, defaultCSGHubLiteBaseURL)
+				}
+				if current.Profile.APIKey != defaultCSGHubLiteAPIKey {
+					t.Fatalf("responses probe apiKey = %q, want CSGHub Lite default key", current.Profile.APIKey)
+				}
+				return nil
+			},
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-alice"}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeKind: RuntimeKindCodex,
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderCSGHubLite,
+			BaseURL:         "https://api.deepseek.com",
+			APIKey:          "stale-key",
+			ModelID:         "Qwen3-0.6B-GGUF",
+			ProfileComplete: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
+	}
+	if got.BoxID != "codex-session-alice" {
+		t.Fatalf("CreateWorker().BoxID = %q, want codex-session-alice", got.BoxID)
+	}
+}
+
 func TestUpdateCodexAgentProfilePatchRestartsActiveBridge(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 

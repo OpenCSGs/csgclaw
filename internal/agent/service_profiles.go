@@ -419,11 +419,12 @@ func runtimeConfigChangeForAgent(previousProfile, currentProfile AgentProfile, p
 }
 
 func runtimeConfigSnapshotForAgent(profile AgentProfile, options map[string]any) agentruntime.RuntimeConfigSnapshot {
+	profile = normalizeProfile(profile, profile.Name, profile.Description)
 	return agentruntime.RuntimeConfigSnapshot{
 		Profile: agentruntime.RuntimeProfileConfig{
 			Provider:        strings.TrimSpace(profile.Provider),
-			BaseURL:         strings.TrimRight(strings.TrimSpace(profile.BaseURL), "/"),
-			APIKey:          strings.TrimSpace(profile.APIKey),
+			BaseURL:         profileBaseURL(profile),
+			APIKey:          profileAPIKey(profile),
 			ModelID:         strings.TrimSpace(profile.ModelID),
 			ReasoningEffort: strings.TrimSpace(profile.ReasoningEffort),
 			Headers:         normalizeStringMap(profile.Headers),

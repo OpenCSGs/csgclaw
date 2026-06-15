@@ -217,7 +217,7 @@ describe("agent model helpers", () => {
         envRows: [{ key: "MODEL_HOME", value: "/models" }],
         headersText: '{"Authorization":"Bearer test"}',
         model_id: "Qwen/Qwen3-0.6B-GGUF",
-        provider: "csghub_lite",
+        provider: "api",
         reasoning_effort: "",
         requestOptionsText: '{"top_p":0.9}',
         runtime_kind: "picoclaw_sandbox",
@@ -230,6 +230,31 @@ describe("agent model helpers", () => {
       name: "manager",
       reasoning_effort: "medium",
       request_options: { top_p: 0.9 },
+    });
+  });
+
+  it("does not serialize hidden OpenAPI fields for CSGHub Lite profiles", () => {
+    expect(
+      draftToProfile({
+        api_key: "stale-key",
+        api_key_preview: "",
+        api_key_set: false,
+        base_url: "https://api.deepseek.com",
+        enable_fast_mode: false,
+        envRows: [],
+        headersText: '{"X-Stale":"1"}',
+        model_id: "Qwen3-0.6B-GGUF",
+        provider: "csghub_lite",
+        reasoning_effort: "medium",
+        requestOptionsText: "{}",
+        runtime_kind: "codex",
+      }),
+    ).toMatchObject({
+      provider: "csghub_lite",
+      base_url: "",
+      api_key: "",
+      headers: {},
+      model_id: "Qwen3-0.6B-GGUF",
     });
   });
 

@@ -24,6 +24,7 @@ import (
 	"csgclaw/internal/llm"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
+	codexruntime "csgclaw/internal/runtime/codex"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/sandbox"
@@ -47,7 +48,7 @@ func init() {
 		}
 		return runtimewiring.WithOpenClawSandboxRuntime(nil)(s)
 	})
-	_ = agent.TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
+	_ = codexruntime.TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
 		return nil
 	})
 }
@@ -1227,7 +1228,7 @@ func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
 }
 
 func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
-	svc := mustNewSeededService(t, []agent.Agent{
+	svc := mustNewSeededServiceWithOptions(t, []agent.Agent{
 		{
 			ID:          "u-alice",
 			Name:        "alice",
@@ -1243,7 +1244,7 @@ func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 			ProfileComplete: true,
 			CreatedAt:       time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC),
 		},
-	})
+	}, agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}))
 
 	srv := &Handler{svc: svc}
 	body := `{"description":"new role","agent_profile":{"name":"alice","provider":"csghub_lite","model_id":"new-model","env":{"A":"B"}}}`
@@ -5070,7 +5071,20 @@ func mustNewSeededService(t *testing.T, agents []agent.Agent) *agent.Service {
 	return svc
 }
 
+func mustNewSeededServiceWithOptions(t *testing.T, agents []agent.Agent, opts ...agent.ServiceOption) *agent.Service {
+	t.Helper()
+
+	svc, _ := mustNewSeededServiceWithPathAndOptions(t, agents, opts...)
+	return svc
+}
+
 func mustNewSeededServiceWithPath(t *testing.T, agents []agent.Agent) (*agent.Service, string) {
+	t.Helper()
+
+	return mustNewSeededServiceWithPathAndOptions(t, agents)
+}
+
+func mustNewSeededServiceWithPathAndOptions(t *testing.T, agents []agent.Agent, opts ...agent.ServiceOption) (*agent.Service, string) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
@@ -5090,18 +5104,21 @@ func mustNewSeededServiceWithPath(t *testing.T, agents []agent.Agent) (*agent.Se
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
 
-	svc, err := agent.NewService(config.ModelConfig{
-		Provider: config.ProviderLLMAPI,
-		BaseURL:  "http://127.0.0.1:4000",
-		APIKey:   "sk-test",
-		ModelID:  "model-1",
-	}, config.ServerConfig{}, "manager-image:test", statePath,
+	serviceOpts := []agent.ServiceOption{
 		agent.WithHubService(hubSvc),
 		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{
 			DefaultManagerTemplate: config.DefaultBootstrapManagerTemplate,
 			DefaultWorkerTemplate:  config.DefaultBootstrapWorkerTemplate,
 		}),
-	)
+	}
+	serviceOpts = append(serviceOpts, opts...)
+
+	svc, err := agent.NewService(config.ModelConfig{
+		Provider: config.ProviderLLMAPI,
+		BaseURL:  "http://127.0.0.1:4000",
+		APIKey:   "sk-test",
+		ModelID:  "model-1",
+	}, config.ServerConfig{}, "manager-image:test", statePath, serviceOpts...)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
