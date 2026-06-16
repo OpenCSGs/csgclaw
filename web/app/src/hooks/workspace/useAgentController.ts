@@ -103,6 +103,10 @@ type AgentWithProfile = {
 const AGENT_RUNTIME_SYNC_INTERVAL_MS = 2_000;
 const AGENT_RUNTIME_SYNC_TIMEOUT_MS = 120_000;
 
+export function shouldReturnToAgentOverviewAfterAgentMissing(activePane: { type?: string; id?: string | undefined } | null | undefined) {
+  return activePane?.type === WorkspacePaneTypes.agent;
+}
+
 export function useAgentController({
   activeConversationId,
   activePane,
@@ -339,14 +343,10 @@ export function useAgentController({
     if (!agentsLoaded) {
       return;
     }
-    if (!agents.some((item) => item.id === activePane.id)) {
-      if (activeConversationId) {
-        selectConversation(activeConversationId, { replace: true });
-      } else {
-        selectComputer({ replace: true });
-      }
+    if (shouldReturnToAgentOverviewAfterAgentMissing(activePane) && !agents.some((item) => item.id === activePane.id)) {
+      selectComputer({ replace: true });
     }
-  }, [agents, agentsLoaded, activePane, activeConversationId, selectComputer, selectConversation]);
+  }, [agents, agentsLoaded, activePane, selectComputer]);
 
   useEffect(() => {
     if (agentPageNavigationBlocker.state !== "blocked") {
