@@ -47,6 +47,12 @@ func (s *Service) AddRoomMembers(req apitypes.AddRoomMembersRequest) (im.Room, e
 	return s.im.AddRoomMembers(req)
 }
 
+func (s *Service) RemoveRoomMembers(req apitypes.AddRoomMembersRequest) (im.Room, error) {
+	req.InviterID = botIDToUserID(req.InviterID)
+	req.UserIDs = botIDsToUserIDs(req.UserIDs)
+	return s.im.RemoveRoomMembers(req)
+}
+
 func (s *Service) ListMessages(roomID string) ([]im.Message, error) {
 	return s.im.ListMessages(roomID)
 }

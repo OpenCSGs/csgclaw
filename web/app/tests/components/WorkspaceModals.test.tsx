@@ -40,6 +40,9 @@ describe("WorkspaceModals", () => {
     const { container } = render(
       <InviteMembersModal
         candidates={[avatarUser]}
+        currentUserID="u-test"
+        members={[avatarUser]}
+        allowMemberRemoval={false}
         inviteUserIDs={[]}
         onClose={() => {}}
         onInvite={() => {}}

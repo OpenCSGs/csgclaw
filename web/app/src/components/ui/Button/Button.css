@@ -211,6 +211,15 @@
   box-shadow: none;
 }
 
+.csg-icon-button.btn-tertiary-gray,
+.csg-icon-button.btn-tertiary-color,
+.csg-icon-button.btn-link-gray,
+.csg-icon-button.btn-link-color,
+.csg-icon-button.btn-tertiary-danger,
+.csg-icon-button.btn-link-danger {
+  box-shadow: none;
+}
+
 .btn-tertiary-gray {
   color: var(--portal-gray-600);
 }

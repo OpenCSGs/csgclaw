@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction } from "react";
-import { BoxIcon, TerminalIcon, Logs, RefreshCw, X } from "lucide-react";
+import { BoxIcon, TerminalIcon, RefreshCw, X } from "lucide-react";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
@@ -18,7 +18,7 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@/components/ui";
-import { AddUserIcon, IconImage, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
+import { AddUserIcon, IconImage, TrashIcon, WrenchIcon } from "@/components/ui/Icons";
 import {
   type ComposerMentionUser,
   type ComposerSegment,
@@ -107,10 +107,13 @@ export type ConversationPaneProps = {
   messageActionBusy: string;
   messageActionError: MessageActionError;
   messageListRef: RefObject<HTMLElement | null>;
+  memberActionBusyID: string;
+  memberActionError: string;
   onApplyMention: (user: MentionPickerUser) => void;
   onApplySlashCandidate?: (name: string) => void;
   onApplyThreadSlashCandidate?: (name: string) => void;
   onClearRoomMessages?: (id: string) => VoidOrPromise;
+  onClearMemberActionError: () => void;
   onCloseThread: () => void;
   onComposerCompositionEnd: () => void;
   onComposerCompositionStart: () => void;
@@ -120,6 +123,7 @@ export type ConversationPaneProps = {
   onInviteAction: () => void;
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
+  onRemoveMember: (memberID: string) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onProviderLogin: (provider: string) => VoidOrPromise;
   onSendMessage: () => VoidOrPromise;
@@ -163,13 +167,10 @@ export function ConversationPane({
   selectedMessageCount,
   logAgent,
   conversationMembers,
-  showMemberList,
-  onToggleMemberList,
   showChannelTools,
   onToggleChannelTools,
   showToolCalls,
   onToggleToolCalls,
-  memberMenuRef,
   channelToolsRef,
   messageListRef,
   editorRef,
@@ -292,65 +293,23 @@ export function ConversationPane({
                   <strong>{selectedMessageCount}</strong>
                 </div>
                 <div className="chat-title truncate">{conversation.title}</div>
-                <div ref={memberMenuRef} className="header-menu">
-                  <Button
-                    className="member-badge-button"
-                    active={showMemberList}
-                    aria-label={t("membersTitle")}
-                    aria-pressed={showMemberList}
-                    title={t("membersTitle")}
-                    onClick={() => {
-                      onToggleMemberList((value) => !value);
-                      onToggleChannelTools(false);
-                    }}
-                  >
-                    <span className="icon-button-mark" aria-hidden="true">
-                      <UsersIcon />
-                    </span>
-                    <span className="member-badge-count">{conversationMembers.length}</span>
-                  </Button>
-                  {showMemberList ? (
-                    <div className="header-popover members-popover">
-                      <div className="header-popover-title">{t("membersTitle")}</div>
-                      <div className="members-popover-list">
-                        {conversationMembers.map((user) => (
-                          <div key={user.id} className="member-row">
-                            <button
-                              type="button"
-                              className="avatar avatar-button"
-                              aria-label={`${t("profilePreview")} ${user.name}`}
-                              onClick={(event) => onPreviewUser(user, event.currentTarget)}
-                            >
-                              <AgentAvatarContent
-                                avatar={user.avatar}
-                                fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)}
-                              />
-                            </button>
-                            <div className="member-row-main">
-                              <div className="member-row-name">{user.name}</div>
-                              <div className="member-row-meta">
-                                @{user.handle} · {localizeRole(user.role || "", t)}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
               </div>
             </div>
             <div className="chat-title-actions">
               {logAgent ? (
                 <Button
-                  className="icon-button"
+                  className="icon-button log-button"
                   active={logModalOpen}
+                  iconOnly
+                  size="lg"
+                  variant="secondaryGray"
                   aria-label={t("agentLogs")}
-                  title={t("agentLogs")}
+                  data-tooltip={t("agentLogs")}
+                  data-tooltip-side="bottom"
                   onClick={openAgentLogs}
                 >
                   <span className="icon-button-mark" aria-hidden="true">
-                    <Logs size={18} strokeWidth={2} />
+                    {IconImage("log")}
                   </span>
                 </Button>
               ) : null}
@@ -358,12 +317,15 @@ export function ConversationPane({
                 <Button
                   className="icon-button"
                   active={showChannelTools}
+                  iconOnly
+                  size="lg"
+                  variant="secondaryGray"
                   aria-label={t("channelTools")}
                   aria-expanded={showChannelTools}
-                  title={t("channelTools")}
+                  data-tooltip={t("channelTools")}
+                  data-tooltip-side="bottom"
                   onClick={() => {
                     onToggleChannelTools((value) => !value);
-                    onToggleMemberList(false);
                   }}
                 >
                   <span className="icon-button-mark">
@@ -409,9 +371,13 @@ export function ConversationPane({
                 ) : null}
               </div>
               <Button
-                className="icon-button"
+                className="icon-button member-management-button"
+                iconOnly
+                size="lg"
+                variant="secondaryGray"
                 aria-label={inviteActionLabel}
-                title={inviteActionLabel}
+                data-tooltip={inviteActionLabel}
+                data-tooltip-side="bottom"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -497,13 +463,12 @@ export function ConversationPane({
                       type="button"
                       className="thread-hover-button"
                       aria-label={t("replyInThread")}
+                      data-tooltip={t("replyInThread")}
+                      data-tooltip-side="top"
                       onClick={() => onOpenThread(message)}
                     >
                       <span className="thread-hover-icon" aria-hidden="true">
                         {IconImage("rooms")}
-                      </span>
-                      <span className="thread-action-tooltip" aria-hidden="true">
-                        {t("replyInThread")}
                       </span>
                     </button>
                   </div>
@@ -1376,9 +1341,9 @@ function MessageTimestamp({ parts }: { parts: MessageTimestampParts }) {
     <time
       className="message-timestamp"
       dateTime={parts.dateTime}
-      title={parts.tooltip}
       aria-label={parts.tooltip}
       data-tooltip={parts.tooltip}
+      data-tooltip-side="top"
       tabIndex={0}
     >
       {parts.shortLabel}
@@ -1395,8 +1360,8 @@ function MessageTimeDivider({ parts }: { parts: MessageTimestampParts }) {
       <time
         className="message-time-divider-label"
         dateTime={parts.dateTime}
-        title={parts.tooltip}
         data-tooltip={parts.tooltip}
+        data-tooltip-side="top"
         tabIndex={0}
       >
         {parts.dividerLabel}

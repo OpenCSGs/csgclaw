@@ -114,10 +114,14 @@ function renderThreadPane({
   onClearRoomMessages = vi.fn(),
   onDeleteRoom = vi.fn(),
   onPreviewUser = vi.fn(),
+  onRemoveMember = vi.fn(),
   replies = [],
   showToolCalls = false,
   mentionCandidates = [],
   mentionIndex = 0,
+  memberActionBusyID = "",
+  memberActionError = "",
+  onClearMemberActionError = vi.fn(),
   onApplyMention = vi.fn(),
 }: {
   conversationMembers?: IMUser[];
@@ -129,6 +133,10 @@ function renderThreadPane({
   onDeleteRoom?: (id: string) => void;
   onApplyMention?: (user: IMUser) => void;
   onPreviewUser?: (user: IMUser) => void;
+  onRemoveMember?: (memberID: string) => void;
+  memberActionBusyID?: string;
+  memberActionError?: string;
+  onClearMemberActionError?: () => void;
   replies?: ThreadView["replies"];
   showToolCalls?: boolean;
 } = {}) {
@@ -187,8 +195,11 @@ function renderThreadPane({
         messageActionBusy=""
         messageActionError={{}}
         messageListRef={createRef<HTMLElement>()}
+        memberActionBusyID={memberActionBusyID}
+        memberActionError={memberActionError}
         onApplyMention={onApplyMention}
         onClearRoomMessages={onClearRoomMessages}
+        onClearMemberActionError={onClearMemberActionError}
         onCloseThread={() => {}}
         onComposerCompositionEnd={() => {}}
         onComposerCompositionStart={() => {}}
@@ -197,6 +208,7 @@ function renderThreadPane({
         onInviteAction={() => {}}
         onMessageAction={() => {}}
         onOpenThread={() => {}}
+        onRemoveMember={onRemoveMember}
         onProviderLogin={() => {}}
         onPreviewUser={onPreviewUser}
         onSendMessage={() => {}}
@@ -267,9 +279,12 @@ describe("ConversationPane", () => {
           messageActionBusy=""
           messageActionError={{}}
           messageListRef={createRef<HTMLElement>()}
+          memberActionBusyID=""
+          memberActionError=""
           onApplyMention={() => {}}
           onApplySlashCandidate={() => {}}
           onClearRoomMessages={() => {}}
+          onClearMemberActionError={() => {}}
           onCloseThread={() => {}}
           onComposerCompositionEnd={() => {}}
           onComposerCompositionStart={() => {}}
@@ -278,6 +293,7 @@ describe("ConversationPane", () => {
           onInviteAction={() => {}}
           onMessageAction={() => {}}
           onOpenThread={() => {}}
+          onRemoveMember={() => {}}
           onProviderLogin={() => {}}
           onPreviewUser={() => {}}
           onSendMessage={() => {}}

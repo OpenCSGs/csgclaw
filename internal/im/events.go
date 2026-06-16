@@ -12,6 +12,7 @@ const (
 	EventTypeThreadUpdated            = "thread.updated"
 	EventTypeRoomCreated              = "room.created"
 	EventTypeRoomMembersAdded         = "room.members_added"
+	EventTypeRoomMembersRemoved       = "room.members_removed"
 	EventTypeRoomMessagesCleared      = "room.messages_cleared"
 	EventTypeConversationCreated      = "conversation.created"
 	EventTypeConversationMembersAdded = "conversation.members_added"

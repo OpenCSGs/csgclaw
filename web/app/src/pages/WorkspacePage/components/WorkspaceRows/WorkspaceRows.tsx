@@ -106,8 +106,9 @@ export function WorkspaceGroup({
               className="workspace-add-button"
               draggable={false}
               aria-label={addLabel || title}
-              title={addLabel || title}
               data-tooltip={addLabel || title}
+              data-tooltip-side="bottom"
+              data-tooltip-align="end"
               onDragStart={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.preventDefault();

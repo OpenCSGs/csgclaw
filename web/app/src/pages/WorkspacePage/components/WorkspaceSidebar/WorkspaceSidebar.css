@@ -2852,31 +2852,6 @@
   height: 15px;
 }
 
-.workspace-add-button[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  z-index: var(--z-page-popover);
-  top: calc(100% + 6px);
-  right: 0;
-  display: none;
-  min-width: max-content;
-  max-width: 120px;
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--portal-gray-700);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
-  box-shadow: var(--shadow-lg);
-  pointer-events: none;
-}
-
-.workspace-add-button[data-tooltip]:hover::after,
-.workspace-add-button[data-tooltip]:focus-visible::after {
-  display: block;
-}
 
 .workspace-row {
   min-height: 32px;
@@ -3057,11 +3032,6 @@
 :root[data-theme="dark"] .workspace-add-button:hover:not(:disabled),
 :root[data-theme="dark"] .workspace-add-button:focus-visible {
   background: rgba(208, 213, 221, 0.1);
-  color: var(--portal-gray-200);
-}
-
-:root[data-theme="dark"] .workspace-add-button[data-tooltip]::after {
-  background: var(--panel-strong);
   color: var(--portal-gray-200);
 }
 

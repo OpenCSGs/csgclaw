@@ -4271,50 +4271,22 @@ select,
   gap: 8px;
 }
 
-.chat-panel > .chat-header .member-badge-button.btn,
 .chat-panel > .chat-header .chat-title-actions .btn.icon-button {
-  width: 36px;
-  min-width: 36px;
-  max-width: 36px;
-  height: 36px;
-  min-height: 36px;
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   border-radius: 10px;
 }
 
-.chat-panel > .chat-header .member-badge-button {
-  overflow: visible;
-}
-
-.chat-panel > .chat-header .member-badge-button .btn-content {
+.chat-panel > .chat-header .chat-title-actions .btn.icon-button .btn-content {
   width: 100%;
   height: 100%;
 }
 
-.chat-panel > .chat-header .member-badge-button .icon-button-mark,
 .chat-panel > .chat-header .chat-title-actions .icon-button .icon-button-mark {
-  width: 17px;
-  height: 17px;
-}
-
-.chat-panel > .chat-header .member-badge-button .member-badge-count {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 4px;
-  border: 1px solid var(--surface);
-  border-radius: 999px;
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 12px;
-  text-align: center;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.16);
-}
-
-:root[data-theme="dark"] .chat-panel > .chat-header .member-badge-button .member-badge-count {
-  border-color: var(--panel);
+  width: 20px;
+  height: 20px;
 }

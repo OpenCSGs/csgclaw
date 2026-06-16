@@ -1715,6 +1715,89 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	return s.presentRoomLocked(*room, messagePresentationLocale(req.Locale)), nil
 }
 
+func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
+	roomID := strings.TrimSpace(req.RoomID)
+	inviterID := strings.TrimSpace(req.InviterID)
+	if roomID == "" {
+		return Room{}, fmt.Errorf("room_id is required")
+	}
+	if inviterID == "" {
+		return Room{}, fmt.Errorf("inviter_id is required")
+	}
+	if len(req.UserIDs) == 0 {
+		return Room{}, fmt.Errorf("user_ids is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	room, ok := s.rooms[roomID]
+	if !ok {
+		return Room{}, fmt.Errorf("room not found")
+	}
+	inviterID = s.resolveRoomUserIDLocked(inviterID)
+	if _, ok := s.users[inviterID]; !ok {
+		return Room{}, fmt.Errorf("inviter not found")
+	}
+	if !slices.Contains(room.Members, inviterID) {
+		return Room{}, fmt.Errorf("inviter is not a room member")
+	}
+	if room.IsDirect {
+		return Room{}, fmt.Errorf("cannot remove members from direct room")
+	}
+
+	removing := make(map[string]struct{}, len(req.UserIDs))
+	for _, userID := range req.UserIDs {
+		userID = s.resolveRoomUserIDLocked(userID)
+		if userID == "" {
+			continue
+		}
+		if _, ok := s.users[userID]; !ok {
+			return Room{}, fmt.Errorf("user not found: %s", userID)
+		}
+		if userID == inviterID {
+			continue
+		}
+		removing[userID] = struct{}{}
+	}
+	if len(removing) == 0 {
+		return Room{}, fmt.Errorf("no removable users")
+	}
+
+	remaining := make([]string, 0, len(room.Members))
+	removedIDs := make([]string, 0, len(removing))
+	for _, memberID := range room.Members {
+		if _, ok := removing[memberID]; ok {
+			removedIDs = append(removedIDs, memberID)
+			continue
+		}
+		remaining = append(remaining, memberID)
+	}
+	if len(removedIDs) == 0 {
+		return Room{}, fmt.Errorf("no matching users to remove")
+	}
+
+	room.Members = remaining
+	room.Subtitle = formatRoomSubtitle(len(room.Members))
+	room.Messages = append(room.Messages, Message{
+		ID:       fmt.Sprintf("msg-%d", time.Now().UnixNano()),
+		SenderID: inviterID,
+		Kind:     MessageKindEvent,
+		Event: &EventPayload{
+			Key:       "room_members_removed",
+			ActorID:   inviterID,
+			TargetIDs: append([]string(nil), removedIDs...),
+		},
+		CreatedAt: time.Now().UTC(),
+		Mentions:  s.mentionsForUserIDs(removedIDs),
+	})
+	if err := s.saveLocked(); err != nil {
+		return Room{}, err
+	}
+
+	return s.presentRoomLocked(*room, messagePresentationLocale(req.Locale)), nil
+}
+
 func (s *Service) AddConversationMembers(req AddConversationMembersRequest) (Conversation, error) {
 	return s.AddRoomMembers(req)
 }
@@ -1862,6 +1945,8 @@ func (s *Service) localizeSystemText(locale, key, actorID, title string, userIDs
 			return fmt.Sprintf("%s created the room", actor)
 		case "room_members_added":
 			return fmt.Sprintf("%s invited %s to join the room", actor, strings.Join(targets, ", "))
+		case "room_members_removed":
+			return fmt.Sprintf("%s removed %s from the room", actor, strings.Join(targets, ", "))
 		}
 	default:
 		switch key {
@@ -1869,6 +1954,8 @@ func (s *Service) localizeSystemText(locale, key, actorID, title string, userIDs
 			return fmt.Sprintf("%s 创建了房间", actor)
 		case "room_members_added":
 			return fmt.Sprintf("%s 邀请 %s 加入了房间", actor, strings.Join(targets, "、"))
+		case "room_members_removed":
+			return fmt.Sprintf("%s 将 %s 移出了房间", actor, strings.Join(targets, "、"))
 		}
 	}
 	return ""

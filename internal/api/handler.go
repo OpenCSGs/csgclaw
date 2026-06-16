@@ -1429,6 +1429,15 @@ func (h *Handler) handleRoomMembersByID(w http.ResponseWriter, r *http.Request, 
 	writeJSON(w, http.StatusOK, members)
 }
 
+func (h *Handler) handleRoomMembersRemovePath(w http.ResponseWriter, r *http.Request) {
+	id := pathValue(r, "id")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	h.handleRemoveRoomMembersRequest(w, r, id)
+}
+
 func (h *Handler) handleUserByID(w http.ResponseWriter, r *http.Request) {
 	id := pathValue(r, "id")
 	if id == "" {
@@ -1718,6 +1727,43 @@ func (h *Handler) handleAddRoomMembers(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 	h.publishRoomEvent(im.EventTypeRoomMembersAdded, room)
+	writeJSON(w, http.StatusOK, room)
+}
+
+func (h *Handler) handleRemoveRoomMembersRequest(w http.ResponseWriter, r *http.Request, pathRoomID string) {
+	channel, ok := h.requireLocalChannel(w)
+	if !ok {
+		return
+	}
+	var req addRoomMembersRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	pathRoomID = strings.TrimSpace(pathRoomID)
+	if pathRoomID != "" {
+		bodyRoomID := strings.TrimSpace(req.RoomID)
+		if bodyRoomID != "" && bodyRoomID != pathRoomID {
+			http.Error(w, "room_id does not match path room id", http.StatusBadRequest)
+			return
+		}
+		req.RoomID = pathRoomID
+	}
+
+	serviceReq, err := req.toServiceRequest()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	serviceReq.InviterID = h.resolveCSGClawParticipantUserID(serviceReq.InviterID)
+	serviceReq.UserIDs = h.resolveCSGClawParticipantUserIDs(serviceReq.UserIDs)
+
+	room, err := channel.RemoveRoomMembers(serviceReq)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.publishRoomEvent(im.EventTypeRoomMembersRemoved, room)
 	writeJSON(w, http.StatusOK, room)
 }
 

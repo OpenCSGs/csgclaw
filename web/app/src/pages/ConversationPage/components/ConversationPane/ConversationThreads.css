@@ -110,50 +110,6 @@
   height: 18px;
 }
 
-.thread-action-tooltip {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 10px);
-  min-height: 34px;
-  padding: 7px 11px;
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: var(--shadow-md);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-50%) translateY(4px);
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
-}
-
-.thread-action-tooltip::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  width: 8px;
-  height: 8px;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  background: inherit;
-  transform: translate(-50%, -4px) rotate(45deg);
-}
-
-.thread-hover-button:hover .thread-action-tooltip,
-.thread-hover-button:focus-visible .thread-action-tooltip {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
 .message-thread-actions {
   margin-top: 8px;
   display: flex;

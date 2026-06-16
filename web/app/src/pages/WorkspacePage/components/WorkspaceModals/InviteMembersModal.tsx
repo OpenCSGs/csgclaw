@@ -1,5 +1,6 @@
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button as CSGButton } from "@/components/ui/Button";
+import { TrashIcon } from "@/components/ui/Icons";
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { IMUser, TranslateFn } from "@/models/conversations";
@@ -39,21 +40,37 @@ function AvatarStack({ users }: { users: IMUser[] }) {
 export type InviteMembersModalProps = {
   candidates: IMUser[];
   inviteUserIDs: string[];
+  members: IMUser[];
+  memberActionBusyID?: string;
+  memberActionError?: string;
+  currentUserID?: string;
+  allowMemberRemoval?: boolean;
+  onRemoveMember?: (memberID: string) => void | Promise<void>;
+  onClearMemberActionError?: () => void;
   onClose: () => void;
   onInvite: () => void | Promise<void>;
   onInviteUserIDsChange: Dispatch<SetStateAction<string[]>>;
   submitError?: string;
   t: TranslateFn;
+  onPreviewUser?: (user: IMUser, anchor: HTMLElement) => void;
 };
 
 export function InviteMembersModal({
   t,
   candidates,
   inviteUserIDs,
+  members,
+  memberActionBusyID = "",
+  memberActionError = "",
+  currentUserID = "",
+  allowMemberRemoval = true,
+  onRemoveMember,
+  onClearMemberActionError = () => {},
   onInviteUserIDsChange,
   submitError,
   onClose,
   onInvite,
+  onPreviewUser,
 }: InviteMembersModalProps) {
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimerRef = useRef<number | null>(null);
@@ -90,17 +107,69 @@ export function InviteMembersModal({
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-card invite-members-modal" onClick={(event) => event.stopPropagation()}>
+      <div className="modal-card invite-members-modal member-management-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <div className="modal-title">{t("inviteTitle")}</div>
-            <div className="modal-subtitle">{t("inviteSubtitle")}</div>
+            <div className="modal-title">{t("memberManagementTitle")}</div>
+            <div className="modal-subtitle">{t("memberManagementSubtitle")}</div>
           </div>
           <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
         <div className={`invite-members-content${isScrolling ? " is-scrolling" : ""}`} onScroll={onScrollContent}>
-          <div className="field">
-            <span>{t("inviteCandidates")}</span>
+          <div className="field member-management-section">
+            <span>{t("currentMembers")}</span>
+            <div className="selection-list create-room-member-list">
+              {members.map((user, index) => {
+                const removable = allowMemberRemoval && Boolean(onRemoveMember) && user.id !== currentUserID;
+                const isBusy = memberActionBusyID === user.id;
+                return (
+                  <div key={user.id} className="selection-item create-room-member-row member-management-row">
+                    {onPreviewUser ? (
+                      <button
+                        type="button"
+                        className="avatar avatar-button"
+                        aria-label={`${t("profilePreview")} ${user.name}`}
+                        onClick={(event) => onPreviewUser(user, event.currentTarget)}
+                      >
+                        <MemberAvatar user={user} index={index} />
+                      </button>
+                    ) : (
+                      <MemberAvatar user={user} index={index} />
+                    )}
+                    <span className="create-room-member-copy">
+                      <strong>{user.name}</strong>
+                      <small>@{user.handle}</small>
+                    </span>
+                    {removable ? (
+                      <CSGButton
+                        className="member-row-remove"
+                        iconOnly
+                        size="md"
+                        variant="tertiaryGray"
+                        aria-label={`${t("removeMember")} ${user.name}`}
+                        title={`${t("removeMember")} ${user.name}`}
+                        loading={isBusy}
+                        loadingLabel={t("removing")}
+                        onClick={() => {
+                          onClearMemberActionError();
+                          onRemoveMember?.(user.id);
+                        }}
+                      >
+                        <span className="icon-button-mark" aria-hidden="true">
+                          <TrashIcon />
+                        </span>
+                      </CSGButton>
+                    ) : (
+                      <span className="member-role-badge">{t("memberOwner")}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {memberActionError ? <div className="form-error members-popover-error">{memberActionError}</div> : null}
+          </div>
+          <div className="field member-management-section">
+            <span>{t("addMembers")}</span>
             <div className="selection-list create-room-member-list">
               {candidates.length > 0 ? (
                 <>
@@ -153,9 +222,15 @@ export function InviteMembersModal({
           <CSGButton variant="secondaryGray" size="md" onClick={onClose}>
             {t("cancel")}
           </CSGButton>
-          <CSGButton variant="primary" size="md" disabled={inviteUserIDs.length === 0} onClick={onInvite}>
-            {t("sendInvite")}
-          </CSGButton>
+          {candidates.length > 0 ? (
+            <CSGButton variant="primary" size="md" disabled={inviteUserIDs.length === 0} onClick={onInvite}>
+              {t("inviteSelectedMembers")}
+            </CSGButton>
+          ) : (
+            <CSGButton variant="primary" size="md" onClick={onClose}>
+              {t("done")}
+            </CSGButton>
+          )}
         </div>
       </div>
     </div>
