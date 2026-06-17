@@ -114,7 +114,8 @@ describe("SidebarUserButton", () => {
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(screen.getByText("v0.3.0")).toBeInTheDocument();
+    expect(screen.getByText("Local build")).toBeInTheDocument();
+    expect(screen.queryByText("v0.3.0")).not.toBeInTheDocument();
     expect(screen.queryByText("v0.3.0 -> v0.3.1")).not.toBeInTheDocument();
     expect(screen.queryByText("Update & Restart")).not.toBeInTheDocument();
     expect(screen.queryByText("Manual upgrade")).not.toBeInTheDocument();
@@ -147,7 +148,38 @@ describe("SidebarUserButton", () => {
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
     expect(screen.getByText("Local build")).toBeInTheDocument();
-    expect(screen.getByText("v0.3.5+local")).toBeInTheDocument();
+    expect(screen.queryByText("v0.3.5+local")).not.toBeInTheDocument();
+    expect(screen.queryByText("Update & Restart")).not.toBeInTheDocument();
+  });
+
+  it("treats dirty git describe versions as local builds", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.10-21-g4dd4395-dirty"
+        showUpgradeControls={true}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        t={t}
+        theme="light"
+        upgradeStatus={{
+          ...updateAvailableStatus,
+          current_version: "v0.3.10-21-g4dd4395-dirty",
+          latest_version: "v0.3.11",
+          update_available: true,
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByText("Local build")).toBeInTheDocument();
+    expect(screen.queryByText("v0.3.10-21-g4dd4395-dirty")).not.toBeInTheDocument();
+    expect(screen.queryByText("v0.3.10-21-g4dd4395-dirty -> v0.3.11")).not.toBeInTheDocument();
     expect(screen.queryByText("Update & Restart")).not.toBeInTheDocument();
   });
 

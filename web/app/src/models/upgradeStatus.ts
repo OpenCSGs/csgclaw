@@ -26,7 +26,17 @@ export function formatSidebarVersionLabel(version: unknown): string {
 
 export function isLocalBuildVersion(version: unknown): boolean {
   const raw = typeof version === "string" ? version.trim() : "";
-  return raw.length > 0 && raw !== "dev" && raw.endsWith("+local");
+  return (
+    raw.length > 0 &&
+    (raw === "dev" || raw.endsWith("+local") || raw.endsWith("-dirty") || /-\d+-g[0-9a-f]+/i.test(raw))
+  );
+}
+
+export function isLocalBuildUpgradeStatus(status: UpgradeStatus | null | undefined, version: unknown): boolean {
+  return (
+    isLocalBuildVersion(version) ||
+    Boolean(status && status.auto_upgrade_supported === false && status.auto_upgrade_unsupported_reason)
+  );
 }
 
 export function normalizeUpgradeStatus(status: unknown): UpgradeStatus | null {

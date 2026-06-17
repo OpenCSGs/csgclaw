@@ -1,6 +1,8 @@
 import {
   formatSidebarVersionLabel,
   hasUpgradeAttention,
+  isLocalBuildUpgradeStatus,
+  isLocalBuildVersion,
   normalizeUpgradeStatus,
   upgradeStatusLabel,
 } from "@/models/upgradeStatus";
@@ -11,6 +13,21 @@ describe("upgrade status helpers", () => {
     expect(formatSidebarVersionLabel("")).toBe("dev");
     expect(formatSidebarVersionLabel("v0.2.1")).toBe("v0.2.1");
     expect(formatSidebarVersionLabel("0.2.1")).toBe("v0.2.1");
+  });
+
+  it("detects local build versions and unsupported local installs", () => {
+    expect(isLocalBuildVersion("v0.3.10-21-g4dd4395-dirty")).toBe(true);
+    expect(isLocalBuildVersion("v0.3.10-21-g4dd4395")).toBe(true);
+    expect(isLocalBuildVersion("v0.3.10+local")).toBe(true);
+    expect(isLocalBuildVersion("dev")).toBe(true);
+    expect(isLocalBuildVersion("v0.3.11")).toBe(false);
+    expect(isLocalBuildUpgradeStatus({ ...baseUpgradeStatus, auto_upgrade_supported: false }, "v0.3.11")).toBe(false);
+    expect(
+      isLocalBuildUpgradeStatus(
+        { ...baseUpgradeStatus, auto_upgrade_supported: false, auto_upgrade_unsupported_reason: "not_official_bundle" },
+        "v0.3.11",
+      ),
+    ).toBe(true);
   });
 
   it("normalizes loose upgrade status payloads", () => {
