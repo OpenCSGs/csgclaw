@@ -65,6 +65,9 @@ func (c Client) officialInstallRoot() (string, error) {
 		if err := validateBundleDir(root); err == nil {
 			return root, nil
 		}
+		if isLegacyOfficialInstallRoot(root) {
+			return root, nil
+		}
 	}
 	return "", ErrNotOfficialBundle
 }
@@ -102,6 +105,53 @@ func bundleInstallRoot(exePath string) (string, bool) {
 		return "", false
 	}
 	return filepath.Dir(binDir), true
+}
+
+func isLegacyOfficialInstallRoot(root string) bool {
+	root = filepath.Clean(strings.TrimSpace(root))
+	if root == "" || filepath.Base(root) != "csgclaw" {
+		return false
+	}
+	if _, err := os.Lstat(bundleMarkerPath(root)); err == nil {
+		return false
+	} else if !os.IsNotExist(err) {
+		return false
+	}
+	if !isOfficialInstallerManagedPath(root) {
+		return false
+	}
+	if hasSourceCheckoutMarker(root) {
+		return false
+	}
+	if _, err := requiredBundleExecutable(root, "csgclaw"); err != nil {
+		return false
+	}
+	if _, err := optionalBundleExecutable(root, "boxlite"); err != nil {
+		return false
+	}
+	return true
+}
+
+func isOfficialInstallerManagedPath(root string) bool {
+	versionDir := filepath.Dir(root)
+	libAppDir := filepath.Dir(versionDir)
+	libDir := filepath.Dir(libAppDir)
+	if filepath.Base(libAppDir) != "csgclaw" {
+		return false
+	}
+	if filepath.Base(libDir) != "lib" {
+		return false
+	}
+	return filepath.Base(versionDir) != "." && filepath.Base(versionDir) != string(filepath.Separator)
+}
+
+func hasSourceCheckoutMarker(root string) bool {
+	for _, name := range []string{".git", "go.mod", "go.work"} {
+		if _, err := os.Lstat(filepath.Join(root, name)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (c Client) AutoUpgradeSupport() AutoUpgradeSupport {

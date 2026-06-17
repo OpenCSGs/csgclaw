@@ -41,19 +41,17 @@ export function SidebarUserButton({
 }: SidebarUserButtonProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const upgradeAttention = showUpgradeControls && hasUpgradeAttention(upgradeStatus, upgradePhase, upgradeBusy);
-  const upgradeRunning = showUpgradeControls ? upgradeBusy || Boolean(upgradeStatus?.upgrading) : false;
-  const upgradeIssue = showUpgradeControls ? upgradeError || upgradeStatus?.last_error || "" : "";
+  const upgradeControlsAvailable = showUpgradeControls && upgradeStatus?.auto_upgrade_supported !== false;
+  const upgradeAttention = upgradeControlsAvailable && hasUpgradeAttention(upgradeStatus, upgradePhase, upgradeBusy);
+  const upgradeRunning = upgradeControlsAvailable ? upgradeBusy || Boolean(upgradeStatus?.upgrading) : false;
+  const upgradeIssue = upgradeControlsAvailable ? upgradeError || upgradeStatus?.last_error || "" : "";
   const currentVersion = upgradeStatus?.current_version || appVersion;
-  const upgradeView = showUpgradeControls
+  const upgradeView = upgradeControlsAvailable
     ? {
         actionLabel: upgradeMenuActionText({
           phase: upgradePhase,
           running: upgradeRunning,
           issue: upgradeIssue,
-          manualUpgradeRequired: Boolean(
-            upgradeStatus?.update_available && upgradeStatus.auto_upgrade_supported === false,
-          ),
           manualRestartRequired: Boolean(upgradeStatus?.manual_restart_required),
           t,
         }),
@@ -191,7 +189,7 @@ export function SidebarUserButton({
               ) : null}
             </div>
             <strong className="sidebar-version-value">
-              {upgradeView ? upgradeView.versionLabel : formatSidebarVersionLabel(appVersion)}
+              {upgradeView ? upgradeView.versionLabel : formatSidebarVersionLabel(currentVersion)}
             </strong>
             {upgradeView?.issue ? <div className="sidebar-version-error">{upgradeView.issue}</div> : null}
           </div>
@@ -205,14 +203,12 @@ function upgradeMenuActionText({
   phase,
   running,
   issue,
-  manualUpgradeRequired,
   manualRestartRequired,
   t,
 }: {
   phase: UpgradePhase;
   running: boolean;
   issue: string;
-  manualUpgradeRequired: boolean;
   manualRestartRequired: boolean;
   t: TranslateFn;
 }): string {
@@ -221,9 +217,6 @@ function upgradeMenuActionText({
   }
   if (phase === "manual_restart" || manualRestartRequired) {
     return t("upgradeViewProgress");
-  }
-  if (manualUpgradeRequired) {
-    return t("upgradeManualAction");
   }
   if (running || phase === "starting" || phase === "restarting" || issue || phase === "error") {
     return t("upgradeViewProgress");

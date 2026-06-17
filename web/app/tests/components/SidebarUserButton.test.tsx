@@ -12,7 +12,6 @@ const labels: Record<string, string> = {
   themeSwitcher: "Theme",
   upgradeAction: "Update & Restart",
   upgradeLocalBuild: "Local build",
-  upgradeManualAction: "Manual upgrade",
   versionInfo: "Version",
   versionSettings: "Version and updates",
   configSettingsMenu: "Settings",
@@ -90,7 +89,7 @@ describe("SidebarUserButton", () => {
     expect(onOpenUpgrade).toHaveBeenCalledTimes(1);
   });
 
-  it("shows manual upgrade action for non-official installs", async () => {
+  it("hides upgrade actions for non-official installs", async () => {
     const user = userEvent.setup();
     const onOpenUpgrade = vi.fn();
 
@@ -115,9 +114,11 @@ describe("SidebarUserButton", () => {
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(screen.getByText("v0.3.0 -> v0.3.1")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Manual upgrade" }));
-    expect(onOpenUpgrade).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("v0.3.0")).toBeInTheDocument();
+    expect(screen.queryByText("v0.3.0 -> v0.3.1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Update & Restart")).not.toBeInTheDocument();
+    expect(screen.queryByText("Manual upgrade")).not.toBeInTheDocument();
+    expect(onOpenUpgrade).not.toHaveBeenCalled();
   });
 
   it("shows local build state without upgrade actions", async () => {

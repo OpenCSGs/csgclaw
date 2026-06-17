@@ -549,6 +549,48 @@ func TestClientInstallPreparedRejectsSourceLikeBundleWithoutMarker(t *testing.T)
 	assertFileContent(t, filepath.Join(installRoot, "keep-me"), "user file")
 }
 
+func TestClientInstallPreparedAllowsLegacyOfficialBundleWithoutMarker(t *testing.T) {
+	installRoot := writeBundleFilesWithoutMarker(t, legacyOfficialInstallParent(t), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw"): "#!/bin/sh\n# old\n",
+		filepath.Join("csgclaw", "README.md"):      "old",
+	})
+	preparedRoot := writeBundleDir(t, t.TempDir(), "new")
+	client := Client{
+		ExecutablePath: func() (string, error) {
+			return filepath.Join(installRoot, "bin", "csgclaw"), nil
+		},
+	}
+
+	installed, err := client.InstallPrepared(PreparedBundle{BundleDir: preparedRoot})
+	if err != nil {
+		t.Fatalf("InstallPrepared() error = %v", err)
+	}
+	if got, want := installed.InstallRoot, installRoot; got != want {
+		t.Fatalf("InstallRoot = %q, want %q", got, want)
+	}
+	assertFileContent(t, filepath.Join(installRoot, "README.md"), "new")
+	assertFileContent(t, filepath.Join(installRoot, bundleMarkerFileName), `{"app":"csgclaw","layout":"official-bundle","version":"test"}`)
+}
+
+func TestClientInstallPreparedRejectsLegacyOfficialPathWithSourceMarker(t *testing.T) {
+	installRoot := writeBundleFilesWithoutMarker(t, legacyOfficialInstallParent(t), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw"): "#!/bin/sh\n",
+		filepath.Join("csgclaw", "go.mod"):         "module csgclaw\n",
+		filepath.Join("csgclaw", "keep-me"):        "user file",
+	})
+	client := Client{
+		ExecutablePath: func() (string, error) {
+			return filepath.Join(installRoot, "bin", "csgclaw"), nil
+		},
+	}
+
+	_, err := client.InstallPrepared(PreparedBundle{BundleDir: writeBundleDir(t, t.TempDir(), "new")})
+	if err == nil || !strings.Contains(err.Error(), "not installed from an official csgclaw bundle") {
+		t.Fatalf("InstallPrepared() error = %v, want non-bundle install error", err)
+	}
+	assertFileContent(t, filepath.Join(installRoot, "keep-me"), "user file")
+}
+
 func TestClientInstallPreparedReplacesBundleFromSymlinkedExecutable(t *testing.T) {
 	installParent := t.TempDir()
 	installRoot := writeBundleDir(t, installParent, "old")
@@ -678,6 +720,25 @@ func TestClientAutoUpgradeSupportReportsNonOfficialBundle(t *testing.T) {
 	}
 	if got.Reason != "not_official_bundle" {
 		t.Fatalf("Reason = %q, want not_official_bundle", got.Reason)
+	}
+}
+
+func TestClientAutoUpgradeSupportReportsLegacyOfficialBundle(t *testing.T) {
+	installRoot := writeBundleFilesWithoutMarker(t, legacyOfficialInstallParent(t), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw"): "#!/bin/sh\n",
+	})
+	client := Client{
+		ExecutablePath: func() (string, error) {
+			return filepath.Join(installRoot, "bin", "csgclaw"), nil
+		},
+	}
+
+	got := client.AutoUpgradeSupport()
+	if !got.Supported {
+		t.Fatalf("AutoUpgradeSupport().Supported = false, reason=%q", got.Reason)
+	}
+	if got.InstallRoot != installRoot {
+		t.Fatalf("InstallRoot = %q, want %q", got.InstallRoot, installRoot)
 	}
 }
 
@@ -941,6 +1002,11 @@ func withBundleMarker(files map[string]string) map[string]string {
 		out[filepath.Join("csgclaw", bundleMarkerFileName)] = `{"app":"csgclaw","layout":"official-bundle","version":"test"}`
 	}
 	return out
+}
+
+func legacyOfficialInstallParent(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), ".local", "lib", "csgclaw", "v0.3.10")
 }
 
 func assertFileContent(t *testing.T, path, want string) {
