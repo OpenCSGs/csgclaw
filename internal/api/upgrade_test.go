@@ -123,7 +123,9 @@ func TestHandleUpgradeStatusMethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleUpgradeApply(t *testing.T) {
-	manager := upgrade.NewManager(stubUpgradeChecker{err: errors.New("unused")}, "v0.2.5", upgrade.ManagerOptions{})
+	manager := upgrade.NewManager(stubUpgradeChecker{err: errors.New("unused")}, "v0.2.5", upgrade.ManagerOptions{
+		AutoUpgradeSupported: true,
+	})
 	srv := &Handler{}
 	srv.SetUpgradeManager(manager)
 	srv.SetUpgradeConfigPath("/tmp/csgclaw.toml")
@@ -157,6 +159,29 @@ func TestHandleUpgradeApply(t *testing.T) {
 	}
 }
 
+func TestHandleUpgradeApplyRejectsNonOfficialInstall(t *testing.T) {
+	manager := upgrade.NewManager(stubUpgradeChecker{err: errors.New("unused")}, "v0.2.5", upgrade.ManagerOptions{
+		AutoUpgradeUnsupportedReason: "not_official_bundle",
+	})
+	srv := &Handler{}
+	srv.SetUpgradeManager(manager)
+	srv.SetUpgradeApplyFunc(func(upgrade.ApplyHelperOptions) error {
+		t.Fatal("upgrade helper should not be started for non-official installs")
+		return nil
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/upgrade/apply", nil)
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusConflict, rec.Body.String())
+	}
+	if status := manager.Status(); status.Upgrading || status.LastError != "" {
+		t.Fatalf("manager.Status() = %+v, want upgrading false and no last_error", status)
+	}
+}
+
 func TestHandleUpgradeApplyServiceUnavailable(t *testing.T) {
 	srv := &Handler{}
 
@@ -184,7 +209,9 @@ func TestHandleUpgradeApplyMethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleUpgradeApplyHelperFailure(t *testing.T) {
-	manager := upgrade.NewManager(stubUpgradeChecker{err: errors.New("unused")}, "v0.2.5", upgrade.ManagerOptions{})
+	manager := upgrade.NewManager(stubUpgradeChecker{err: errors.New("unused")}, "v0.2.5", upgrade.ManagerOptions{
+		AutoUpgradeSupported: true,
+	})
 	srv := &Handler{}
 	srv.SetUpgradeManager(manager)
 	srv.SetUpgradeApplyFunc(func(upgrade.ApplyHelperOptions) error {

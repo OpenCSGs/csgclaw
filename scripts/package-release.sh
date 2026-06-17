@@ -140,6 +140,9 @@ if [ "$APP" = "csgclaw" ]; then
   mkdir -p "$stage_dir"
   binary_output="${stage_dir}/${binary_name}"
   archive_source="${APP}"
+  cat > "${tmpdir}/${APP}/.csgclaw-bundle.json" <<EOF
+{"app":"csgclaw","layout":"official-bundle","version":"${VERSION}"}
+EOF
 fi
 
 if [ -n "$GO_BUILD_TAGS" ]; then

@@ -2,6 +2,8 @@
 import type { TranslateFn } from "@/models/conversations";
 
 export type UpgradeStatus = {
+  auto_upgrade_supported: boolean;
+  auto_upgrade_unsupported_reason: string;
   checking: boolean;
   current_version: string;
   last_checked_at: unknown;
@@ -33,6 +35,9 @@ export function normalizeUpgradeStatus(status: unknown): UpgradeStatus | null {
   }
   const source = status as Partial<Record<keyof UpgradeStatus, unknown>>;
   return {
+    auto_upgrade_supported: source.auto_upgrade_supported !== false,
+    auto_upgrade_unsupported_reason:
+      typeof source.auto_upgrade_unsupported_reason === "string" ? source.auto_upgrade_unsupported_reason : "",
     current_version: typeof source.current_version === "string" ? source.current_version : "",
     latest_version: typeof source.latest_version === "string" ? source.latest_version : "",
     update_available: Boolean(source.update_available),

@@ -119,7 +119,7 @@ func usage(run *command.Context, fs *flag.FlagSet) {
 	fmt.Fprintf(run.Stderr, "  %s upgrade --no-restart\n", run.Program)
 	fmt.Fprintln(run.Stderr)
 	fmt.Fprintln(run.Stderr, "Common failure cases:")
-	fmt.Fprintln(run.Stderr, "  Automatic install requires an official release bundle layout (<install-root>/bin/csgclaw[.exe]).")
+	fmt.Fprintln(run.Stderr, "  Automatic install requires an official release bundle marker and layout (<install-root>/bin/csgclaw[.exe]).")
 	fmt.Fprintln(run.Stderr, "  Automatic restart only supports the default PID path (~/.csgclaw/server.pid).")
 	fmt.Fprintln(run.Stderr)
 	fmt.Fprintln(run.Stderr, "Flags:")

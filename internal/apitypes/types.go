@@ -160,14 +160,16 @@ type VersionResponse struct {
 }
 
 type UpgradeStatus struct {
-	CurrentVersion        string     `json:"current_version"`
-	LatestVersion         string     `json:"latest_version,omitempty"`
-	UpdateAvailable       bool       `json:"update_available"`
-	Checking              bool       `json:"checking"`
-	Upgrading             bool       `json:"upgrading"`
-	ManualRestartRequired bool       `json:"manual_restart_required,omitempty"`
-	LastCheckedAt         *time.Time `json:"last_checked_at,omitempty"`
-	LastError             string     `json:"last_error,omitempty"`
+	CurrentVersion               string     `json:"current_version"`
+	LatestVersion                string     `json:"latest_version,omitempty"`
+	UpdateAvailable              bool       `json:"update_available"`
+	Checking                     bool       `json:"checking"`
+	Upgrading                    bool       `json:"upgrading"`
+	ManualRestartRequired        bool       `json:"manual_restart_required,omitempty"`
+	AutoUpgradeSupported         bool       `json:"auto_upgrade_supported"`
+	AutoUpgradeUnsupportedReason string     `json:"auto_upgrade_unsupported_reason,omitempty"`
+	LastCheckedAt                *time.Time `json:"last_checked_at,omitempty"`
+	LastError                    string     `json:"last_error,omitempty"`
 }
 
 type UpgradeActionResponse struct {

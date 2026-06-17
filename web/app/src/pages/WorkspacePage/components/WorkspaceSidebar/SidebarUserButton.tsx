@@ -51,6 +51,9 @@ export function SidebarUserButton({
           phase: upgradePhase,
           running: upgradeRunning,
           issue: upgradeIssue,
+          manualUpgradeRequired: Boolean(
+            upgradeStatus?.update_available && upgradeStatus.auto_upgrade_supported === false,
+          ),
           manualRestartRequired: Boolean(upgradeStatus?.manual_restart_required),
           t,
         }),
@@ -202,12 +205,14 @@ function upgradeMenuActionText({
   phase,
   running,
   issue,
+  manualUpgradeRequired,
   manualRestartRequired,
   t,
 }: {
   phase: UpgradePhase;
   running: boolean;
   issue: string;
+  manualUpgradeRequired: boolean;
   manualRestartRequired: boolean;
   t: TranslateFn;
 }): string {
@@ -216,6 +221,9 @@ function upgradeMenuActionText({
   }
   if (phase === "manual_restart" || manualRestartRequired) {
     return t("upgradeViewProgress");
+  }
+  if (manualUpgradeRequired) {
+    return t("upgradeManualAction");
   }
   if (running || phase === "starting" || phase === "restarting" || issue || phase === "error") {
     return t("upgradeViewProgress");

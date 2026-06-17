@@ -521,6 +521,10 @@ func (h *Handler) handleUpgradeApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upgrade manager is not configured", http.StatusServiceUnavailable)
 		return
 	}
+	if status := h.upgradeManager.Status(); !status.AutoUpgradeSupported {
+		http.Error(w, "current installation is not an official csgclaw bundle; please upgrade manually", http.StatusConflict)
+		return
+	}
 
 	apply := h.upgradeApply
 	if apply == nil {

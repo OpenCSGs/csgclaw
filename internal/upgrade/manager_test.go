@@ -54,6 +54,31 @@ func TestManagerRefreshUpdatesStatus(t *testing.T) {
 	}
 }
 
+func TestManagerIncludesAutoUpgradeSupport(t *testing.T) {
+	manager := NewManager(fakeChecker{
+		check: func(_ context.Context, _ string) (CheckResult, error) {
+			return CheckResult{
+				CurrentVersion:  "v0.2.5",
+				LatestVersion:   "v0.2.7",
+				UpdateAvailable: true,
+			}, nil
+		},
+	}, "v0.2.5", ManagerOptions{
+		AutoUpgradeSupported:         false,
+		AutoUpgradeUnsupportedReason: "not_official_bundle",
+	})
+
+	manager.Refresh(context.Background())
+
+	status := manager.Status()
+	if status.AutoUpgradeSupported {
+		t.Fatal("AutoUpgradeSupported = true, want false")
+	}
+	if got, want := status.AutoUpgradeUnsupportedReason, "not_official_bundle"; got != want {
+		t.Fatalf("AutoUpgradeUnsupportedReason = %q, want %q", got, want)
+	}
+}
+
 func TestManagerRefreshKeepsLastKnownVersionOnError(t *testing.T) {
 	now := time.Date(2026, 5, 6, 13, 0, 0, 0, time.UTC)
 	call := 0

@@ -12,6 +12,7 @@ const labels: Record<string, string> = {
   themeSwitcher: "Theme",
   upgradeAction: "Update & Restart",
   upgradeLocalBuild: "Local build",
+  upgradeManualAction: "Manual upgrade",
   versionInfo: "Version",
   versionSettings: "Version and updates",
   configSettingsMenu: "Settings",
@@ -22,6 +23,8 @@ function t(key: string): string {
 }
 
 const updateAvailableStatus: UpgradeStatus = {
+  auto_upgrade_supported: true,
+  auto_upgrade_unsupported_reason: "",
   checking: false,
   current_version: "v0.3.0",
   last_checked_at: "",
@@ -84,6 +87,36 @@ describe("SidebarUserButton", () => {
 
     expect(screen.getByText("v0.3.0 -> v0.3.1")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Update & Restart" }));
+    expect(onOpenUpgrade).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows manual upgrade action for non-official installs", async () => {
+    const user = userEvent.setup();
+    const onOpenUpgrade = vi.fn();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        showUpgradeControls={true}
+        locale="en"
+        onOpenUpgrade={onOpenUpgrade}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        t={t}
+        theme="light"
+        upgradeStatus={{
+          ...updateAvailableStatus,
+          auto_upgrade_supported: false,
+          auto_upgrade_unsupported_reason: "not_official_bundle",
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByText("v0.3.0 -> v0.3.1")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Manual upgrade" }));
     expect(onOpenUpgrade).toHaveBeenCalledTimes(1);
   });
 

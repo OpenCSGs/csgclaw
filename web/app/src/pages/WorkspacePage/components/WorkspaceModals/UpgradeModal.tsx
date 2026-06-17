@@ -26,16 +26,22 @@ export function UpgradeModal({
   onApply,
 }: UpgradeModalProps) {
   const currentVersion = upgradeStatus?.current_version || appVersion || "dev";
+  const manualUpgradeRequired = Boolean(
+    upgradeStatus?.update_available && upgradeStatus.auto_upgrade_supported === false,
+  );
   const statusLabel = isLocalBuildVersion(currentVersion)
     ? t("upgradeStatusLocal")
-    : upgradeStatusLabel(upgradePhase, t);
+    : manualUpgradeRequired
+      ? t("upgradeStatusManualUpgrade")
+      : upgradeStatusLabel(upgradePhase, t);
+  const subtitle = manualUpgradeRequired ? t("upgradeManualUpgradeSubtitle") : t("upgradeSubtitle");
   return (
     <div className="modal-backdrop">
       <div className="modal-card upgrade-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
             <div className="modal-title">{t("upgradeTitle")}</div>
-            <div className="modal-subtitle">{t("upgradeSubtitle")}</div>
+            <div className="modal-subtitle">{subtitle}</div>
           </div>
           <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
@@ -62,14 +68,16 @@ export function UpgradeModal({
           <p>
             {upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required
               ? t("upgradeManualRestartBody")
-              : upgradePhase === "done"
-                ? t("upgradeDoneBody")
-                : upgradePhase === "restarting" ||
-                    upgradePhase === "starting" ||
-                    upgradeBusy ||
-                    upgradeStatus?.upgrading
-                  ? t("upgradeContinueUsing")
-                  : t("upgradeConfirmBody")}
+              : manualUpgradeRequired
+                ? t("upgradeManualUpgradeBody")
+                : upgradePhase === "done"
+                  ? t("upgradeDoneBody")
+                  : upgradePhase === "restarting" ||
+                      upgradePhase === "starting" ||
+                      upgradeBusy ||
+                      upgradeStatus?.upgrading
+                    ? t("upgradeContinueUsing")
+                    : t("upgradeConfirmBody")}
           </p>
         </div>
         {upgradeError || upgradeStatus?.last_error ? (
@@ -79,6 +87,10 @@ export function UpgradeModal({
           {upgradePhase === "done" ? (
             <Button variant="primary" size="md" onClick={() => window.location.reload()}>
               {t("upgradeRefresh")}
+            </Button>
+          ) : manualUpgradeRequired ? (
+            <Button variant="secondaryGray" size="md" onClick={onClose}>
+              {t("close")}
             </Button>
           ) : upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required ? (
             <Button variant="secondaryGray" size="md" onClick={onClose}>

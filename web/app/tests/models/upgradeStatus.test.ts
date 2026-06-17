@@ -23,10 +23,14 @@ describe("upgrade status helpers", () => {
         last_error: 404,
         latest_version: "v0.2.1",
         manual_restart_required: "yes",
+        auto_upgrade_supported: false,
+        auto_upgrade_unsupported_reason: "not_official_bundle",
         update_available: true,
         upgrading: "",
       }),
     ).toEqual({
+      auto_upgrade_supported: false,
+      auto_upgrade_unsupported_reason: "not_official_bundle",
       checking: true,
       current_version: "v0.2.0",
       last_checked_at: 123,
@@ -36,6 +40,10 @@ describe("upgrade status helpers", () => {
       update_available: true,
       upgrading: false,
     });
+  });
+
+  it("defaults missing auto-upgrade support to true for older servers", () => {
+    expect(normalizeUpgradeStatus({ current_version: "v0.2.0" })?.auto_upgrade_supported).toBe(true);
   });
 
   it("maps upgrade phases through translated labels", () => {
@@ -63,6 +71,8 @@ describe("upgrade status helpers", () => {
 });
 
 const baseUpgradeStatus: UpgradeStatus = {
+  auto_upgrade_supported: true,
+  auto_upgrade_unsupported_reason: "",
   checking: false,
   current_version: "v0.2.0",
   last_checked_at: "",

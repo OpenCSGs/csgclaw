@@ -493,11 +493,15 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	}
 	apiURL := apiBaseURL(cfg.Server)
 	imURL := imOpenURL(apiURL)
-	upgradeManager := upgrade.NewManager(upgrade.Client{
+	upgradeClient := upgrade.Client{
 		HTTPClient: http.DefaultClient,
 		GOOS:       runtime.GOOS,
 		GOARCH:     runtime.GOARCH,
-	}, appversion.Current(), upgrade.ManagerOptions{
+	}
+	upgradeSupport := upgradeClient.AutoUpgradeSupport()
+	upgradeManager := upgrade.NewManager(upgradeClient, appversion.Current(), upgrade.ManagerOptions{
+		AutoUpgradeSupported:         upgradeSupport.Supported,
+		AutoUpgradeUnsupportedReason: upgradeSupport.Reason,
 		OnStatusChange: func(status apitypes.UpgradeStatus) {
 			if imBus == nil {
 				return
