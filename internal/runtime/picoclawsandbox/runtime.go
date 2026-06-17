@@ -85,8 +85,13 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 	if participantID == "" {
 		participantID = strings.TrimSpace(req.AgentID)
 	}
-	if _, err := EnsureConfig(agentHome, participantID, req.AgentID, gateway.Server, configModelFromProfile(profile), fixedBaseURL(gateway.ManagerBaseURL)); err != nil {
+	if _, err := EnsureConfig(agentHome, participantID, req.AgentID, gateway.Server, configModelFromProfile(profile), fixedBaseURL(gateway.ManagerBaseURL), r.CurrentFeishuProvider()); err != nil {
 		return err
+	}
+	if gateway.DisableInternalCSGClawChannel {
+		if err := disableCSGClawChannel(agentHome); err != nil {
+			return err
+		}
 	}
 	workspaceRoot := r.Layout(agentHome).WorkspaceRoot
 	if err := sandboxgateway.EnsureEmbeddedWorkspace(gateway.WorkspaceTemplate, workspaceRoot); err != nil {

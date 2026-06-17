@@ -48,7 +48,7 @@ import {
   updateDrafts,
 } from "@/models/composer";
 import { WorkspacePaneTypes } from "@/models/routing";
-import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
+import { isAgentRunning, normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
 import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace, type SlashSkillOption } from "@/models/slashCommands";
 import { localizeError } from "@/shared/i18n";
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
@@ -107,6 +107,7 @@ export function useConversationController({
   navigatePane,
   onMessageAction,
   onProviderLogin,
+  onRefreshAgentState,
   onUpgradeStatusChange,
   preferredFallbackConversationId = "",
   rooms,
@@ -156,6 +157,9 @@ export function useConversationController({
   const shouldAutoScrollRef = useRef(true);
   const autoScrollConversationRef = useRef(activeConversationId);
   const activeThreadKeyRef = useRef("");
+  const agentsRef = useRef(agents);
+  const usersByIdRef = useRef<Map<string, IMUser>>(new Map());
+  const refreshAgentStateRef = useRef(onRefreshAgentState);
 
   const usersById = useMemo(() => {
     const result = new Map<string, IMUser>();
@@ -322,6 +326,12 @@ export function useConversationController({
   }, [activeConversationId, activeThreadRootID]);
 
   useEffect(() => {
+    agentsRef.current = agents;
+    usersByIdRef.current = usersById;
+    refreshAgentStateRef.current = onRefreshAgentState;
+  }, [agents, onRefreshAgentState, usersById]);
+
+  useEffect(() => {
     const unsubscribe = subscribeIMEvents((payload: IMServerEvent) => {
       setBootstrapData((current) => applyIMEvent(current, payload));
       if ((payload?.type === "thread.created" || payload?.type === "thread.updated") && payload.thread) {
@@ -330,6 +340,14 @@ export function useConversationController({
         }
       }
       if (payload?.type === "message.created" && payload.message) {
+        const senderID = String(payload.message.sender_id || "").trim();
+        if (senderID) {
+          const sender = usersByIdRef.current.get(senderID) ?? { id: senderID };
+          const senderAgent = agentsRef.current.find((agent) => agentMatchesUser(agent, sender));
+          if (senderAgent?.id && !isAgentRunning(senderAgent)) {
+            void refreshAgentStateRef.current(String(senderAgent.id));
+          }
+        }
         if (threadMessageKey(payload.room_id, payload.message) === activeThreadKeyRef.current) {
           setActiveThreadView((current) => appendReplyToThreadView(current, payload.message) ?? null);
         }

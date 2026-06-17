@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 )
 
@@ -47,13 +48,13 @@ func WorkspaceConfigRoot(agentHome string) string {
 	return Root(agentHome)
 }
 
-func EnsureConfig(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) (string, error) {
+func EnsureConfig(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProviders ...feishu.AgentCredentialProvider) (string, error) {
 	hostRoot := Root(agentHome)
 	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create picoclaw config dir: %w", err)
 	}
 
-	data, err := RenderConfig(participantID, agentID, server, model, resolveBaseURL)
+	data, err := RenderConfig(participantID, agentID, server, model, resolveBaseURL, feishuProviders...)
 	if err != nil {
 		return "", err
 	}
@@ -69,7 +70,7 @@ func EnsureConfig(agentHome, participantID, agentID string, server config.Server
 	return hostRoot, nil
 }
 
-func RenderConfig(participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver) ([]byte, error) {
+func RenderConfig(participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProviders ...feishu.AgentCredentialProvider) ([]byte, error) {
 	participantID = strings.TrimSpace(participantID)
 	agentID = strings.TrimSpace(agentID)
 	if participantID == "" {
@@ -89,12 +90,54 @@ func RenderConfig(participantID, agentID string, server config.ServerConfig, mod
 	if err := updateCSGClawChannel(cfg, participantID, server, resolveBaseURL); err != nil {
 		return nil, err
 	}
+	if err := updateFeishuChannel(cfg, agentID, firstFeishuProvider(feishuProviders)); err != nil {
+		return nil, err
+	}
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode manager picoclaw config: %w", err)
 	}
 	return data, nil
+}
+
+func updateFeishuChannel(cfg map[string]any, agentID string, provider feishu.AgentCredentialProvider) error {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" || provider == nil {
+		return nil
+	}
+	_, app, ok := provider.BotConfigForAgent(agentID)
+	if !ok {
+		return nil
+	}
+	appID := strings.TrimSpace(app.AppID)
+	appSecret := strings.TrimSpace(app.AppSecret)
+	if appID == "" || appSecret == "" {
+		return nil
+	}
+
+	channels, ok := cfg["channels"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("embedded manager picoclaw config is missing channels")
+	}
+	channel, _ := channels["feishu"].(map[string]any)
+	if channel == nil {
+		channel = map[string]any{}
+		channels["feishu"] = channel
+	}
+	channel["enabled"] = true
+	channel["app_id"] = appID
+	channel["app_secret"] = appSecret
+	return nil
+}
+
+func firstFeishuProvider(providers []feishu.AgentCredentialProvider) feishu.AgentCredentialProvider {
+	for _, provider := range providers {
+		if provider != nil {
+			return provider
+		}
+	}
+	return nil
 }
 
 func updateModelList(cfg map[string]any, agentID string, server config.ServerConfig, modelCfg config.ModelConfig, resolveBaseURL BaseURLResolver) error {
@@ -159,6 +202,35 @@ func updateCSGClawChannel(cfg map[string]any, participantID string, server confi
 	delete(channel, "bot_id")
 	channel["participant_id"] = participantID
 	channel["enabled"] = true
+	return nil
+}
+
+func disableCSGClawChannel(agentHome string) error {
+	configPath := filepath.Join(Root(agentHome), HostConfig)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read picoclaw config: %w", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("decode picoclaw config: %w", err)
+	}
+	channels, ok := cfg["channels"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("picoclaw config is missing channels")
+	}
+	channel, ok := channels["csgclaw"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("picoclaw config is missing channels.csgclaw")
+	}
+	channel["enabled"] = false
+	updated, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode picoclaw config: %w", err)
+	}
+	if err := os.WriteFile(configPath, append(updated, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write picoclaw config: %w", err)
+	}
 	return nil
 }
 

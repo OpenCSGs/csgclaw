@@ -258,6 +258,12 @@
   white-space: nowrap;
 }
 
+.agent-badge.ready {
+  border-color: color-mix(in oklab, var(--portal-success-700) 28%, var(--line));
+  background: var(--portal-success-50);
+  color: var(--portal-success-700);
+}
+
 .agent-status.running {
   color: var(--mention);
   border-color: oklch(0.62 0.11 152 / 0.44);

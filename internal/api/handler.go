@@ -34,29 +34,30 @@ import (
 )
 
 type Handler struct {
-	svc                  *agent.Service
-	participant          *participant.Service
-	im                   *im.Service
-	csgclaw              *csgclawchannel.Service
-	imBus                *im.Bus
-	imProvisioner        *im.Provisioner
-	participantBridge    *im.ParticipantBridge
-	feishu               *feishu.Service
-	llm                  *llm.Service
-	hub                  *hub.Service
-	teamSvc              *team.Service
-	teamAdapter          team.TeamChannelAdapter
-	configPath           string
-	serverAccessToken    string
-	serverNoAuth         bool
-	upgradeManager       *upgrade.Manager
-	upgradeConfigPath    string
-	upgradeApply         func(upgrade.ApplyHelperOptions) error
-	serverRestartApply   func(upgrade.RestartHelperOptions) error
-	localRuntimeImages   func(context.Context, config.Config) ([]string, error)
-	notificationDeliver  notification.Fanouter
-	activityDecider      ActivityDecider
-	localDirectoryPicker func(context.Context) (string, error)
+	svc                        *agent.Service
+	participant                *participant.Service
+	im                         *im.Service
+	csgclaw                    *csgclawchannel.Service
+	imBus                      *im.Bus
+	imProvisioner              *im.Provisioner
+	participantBridge          *im.ParticipantBridge
+	feishu                     *feishu.Service
+	llm                        *llm.Service
+	hub                        *hub.Service
+	teamSvc                    *team.Service
+	teamAdapter                team.TeamChannelAdapter
+	configPath                 string
+	serverAccessToken          string
+	serverNoAuth               bool
+	upgradeManager             *upgrade.Manager
+	upgradeConfigPath          string
+	upgradeApply               func(upgrade.ApplyHelperOptions) error
+	serverRestartApply         func(upgrade.RestartHelperOptions) error
+	localRuntimeImages         func(context.Context, config.Config) ([]string, error)
+	notificationDeliver        notification.Fanouter
+	activityDecider            ActivityDecider
+	localDirectoryPicker       func(context.Context) (string, error)
+	feishuRegistrationStateDir string
 
 	participantActivityTurnsMu sync.Mutex
 	participantActivityTurns   map[string]participantActivityTurn
@@ -122,7 +123,7 @@ type agentResponse struct {
 	Status               string                             `json:"status"`
 	CreatedAt            time.Time                          `json:"created_at"`
 	Profile              string                             `json:"profile,omitempty"`
-	RuntimeOptions       map[string]any                     `json:"runtime_options,omitempty"`
+	RuntimeOptions       map[string]any                     `json:"runtime_options"`
 	RuntimeOptionSchemas []agentruntime.RuntimeOptionSchema `json:"runtime_option_schemas,omitempty"`
 	AgentProfile         agent.AgentProfileView             `json:"agent_profile,omitempty"`
 	ProfileComplete      bool                               `json:"profile_complete"`
@@ -2003,6 +2004,10 @@ func presentAgent(item agent.Agent) agentResponse {
 	if strings.TrimSpace(av.Description) == strings.TrimSpace(item.Description) {
 		av.Description = ""
 	}
+	runtimeOptions := item.RuntimeOptions
+	if runtimeOptions == nil {
+		runtimeOptions = map[string]any{}
+	}
 	return agentResponse{
 		ID:               item.ID,
 		Name:             item.Name,
@@ -2017,7 +2022,7 @@ func presentAgent(item agent.Agent) agentResponse {
 		Status:           item.Status,
 		CreatedAt:        item.CreatedAt,
 		Profile:          item.Profile,
-		RuntimeOptions:   item.RuntimeOptions,
+		RuntimeOptions:   runtimeOptions,
 		AgentProfile:     av,
 		ProfileComplete:  item.ProfileComplete,
 		DetectionResults: append([]agent.ProfileDetectionResult(nil), item.DetectionResults...),

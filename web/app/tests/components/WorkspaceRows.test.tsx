@@ -1,5 +1,9 @@
 import { render, screen } from "@testing-library/react";
-import { WorkspaceConversationRow, WorkspaceThreadRow } from "@/pages/WorkspacePage/components/WorkspaceRows";
+import {
+  WorkspaceAgentRow,
+  WorkspaceConversationRow,
+  WorkspaceThreadRow,
+} from "@/pages/WorkspacePage/components/WorkspaceRows";
 import { avatarFallbackText } from "@/shared/avatar";
 import type { IMConversation, ThreadView, TranslateFn } from "@/models/conversations";
 
@@ -14,6 +18,35 @@ const t: TranslateFn = (key, params = {}) => {
 };
 
 describe("WorkspaceRows", () => {
+  it("renders a Feishu badge on connected agent rows", () => {
+    render(
+      <WorkspaceAgentRow
+        active={false}
+        item={{
+          id: "u-dev",
+          name: "dev",
+          provider: "api",
+          model_id: "gpt-test",
+          participants: [
+            {
+              agent_id: "u-dev",
+              channel: "feishu",
+              channel_user_kind: "app_id",
+              id: "dev",
+              type: "agent",
+            },
+          ],
+        }}
+        onSelect={() => {}}
+        t={t}
+      />,
+    );
+
+    const badge = screen.getByLabelText("feishuConnected");
+    expect(badge).toBeInTheDocument();
+    expect(badge.querySelector("img")).toHaveAttribute("src", "icons/feishu.png");
+  });
+
   it("renders direct message rows without room avatar placeholders", () => {
     const usersById = new Map([
       ["u-local", { id: "u-local", name: "本地用户", avatar: "LU" }],

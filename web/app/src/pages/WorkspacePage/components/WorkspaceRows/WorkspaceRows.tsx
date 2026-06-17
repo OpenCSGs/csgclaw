@@ -1,6 +1,7 @@
 import {
   agentModelID,
   formatProviderLabel,
+  hasConnectedAgentChannel,
   isAgentIncomplete,
   isAgentRestartNeeded,
   isAgentUpgradeNeeded,
@@ -218,6 +219,7 @@ export function WorkspaceAgentRow({
   const restartNeeded = isAgentRestartNeeded(item);
   const upgradeNeeded = isAgentUpgradeNeeded(item);
   const running = isAgentRunning(item);
+  const feishuConnected = hasConnectedAgentChannel(item, "feishu");
   const meta = notification
     ? notificationBotMetaLabel(item, t)
     : `${formatProviderLabel(item.provider || item.agent_profile?.provider)} · ${agentModelID(item)}`;
@@ -256,6 +258,15 @@ export function WorkspaceAgentRow({
         <span className="workspace-row-meta truncate">{meta}</span>
       </span>
       <span className="workspace-row-badges">
+        {feishuConnected ? (
+          <span
+            className="workspace-channel-badge feishu-channel-badge"
+            aria-label={t("feishuConnected")}
+            title={t("feishuConnected")}
+          >
+            <img src="icons/feishu.png" alt="" />
+          </span>
+        ) : null}
         {incomplete ? <span className="mini-badge warn">{t("profileIncompleteBadge")}</span> : null}
         {upgradeNeeded ? <span className="mini-badge warn">{t("profileUpgradeRequired")}</span> : null}
         {restartNeeded ? <span className="mini-badge warn">{t("profileRestartRequired")}</span> : null}

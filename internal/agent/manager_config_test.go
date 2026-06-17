@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/templates"
@@ -193,6 +194,46 @@ func TestAgentPicoClawConfigNeedsParticipantRecreateRejectsLegacyBotID(t *testin
 	}
 	if agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID) {
 		t.Fatal("agentPicoClawConfigNeedsParticipantRecreate() = true, want false for current participant bridge fields")
+	}
+}
+
+func TestAgentPicoClawConfigNeedsFeishuRecreateWhenConfiguredChannelIsStale(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(config dir) error = %v", err)
+	}
+	provider := testStaticFeishuProvider{apps: map[string]feishu.AppConfig{
+		ManagerUserID: {AppID: "cli_manager", AppSecret: "manager-secret"},
+	}}
+
+	staleConfig := `{"channels":{"feishu":{"enabled":false,"app_id":"","app_secret":""}}}`
+	if err := os.WriteFile(configPath, []byte(staleConfig), 0o600); err != nil {
+		t.Fatalf("WriteFile(stale config) error = %v", err)
+	}
+	if !agentPicoClawConfigNeedsFeishuRecreate(ManagerName, ManagerUserID, provider) {
+		t.Fatal("agentPicoClawConfigNeedsFeishuRecreate() = false, want true for disabled configured Feishu channel")
+	}
+
+	wrongSecretConfig := `{"channels":{"feishu":{"enabled":true,"app_id":"cli_manager","app_secret":"old-secret"}}}`
+	if err := os.WriteFile(configPath, []byte(wrongSecretConfig), 0o600); err != nil {
+		t.Fatalf("WriteFile(wrong secret config) error = %v", err)
+	}
+	if !agentPicoClawConfigNeedsFeishuRecreate(ManagerName, ManagerUserID, provider) {
+		t.Fatal("agentPicoClawConfigNeedsFeishuRecreate() = false, want true for stale Feishu secret")
+	}
+
+	currentConfig := `{"channels":{"feishu":{"enabled":true,"app_id":"cli_manager","app_secret":"manager-secret"}}}`
+	if err := os.WriteFile(configPath, []byte(currentConfig), 0o600); err != nil {
+		t.Fatalf("WriteFile(current config) error = %v", err)
+	}
+	if agentPicoClawConfigNeedsFeishuRecreate(ManagerName, ManagerUserID, provider) {
+		t.Fatal("agentPicoClawConfigNeedsFeishuRecreate() = true, want false for current Feishu config")
+	}
+	if agentPicoClawConfigNeedsFeishuRecreate(ManagerName, ManagerUserID, nil) {
+		t.Fatal("agentPicoClawConfigNeedsFeishuRecreate() = true, want false without configured Feishu provider")
 	}
 }
 

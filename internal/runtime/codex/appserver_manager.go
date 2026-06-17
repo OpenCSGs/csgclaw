@@ -21,7 +21,7 @@ const appServerStopTimeout = 3 * time.Second
 
 var (
 	appServerSemanticInactivityTimeout  = 2 * time.Minute
-	appServerFirstTurnNoProgressTimeout = 30 * time.Second
+	appServerFirstTurnNoProgressTimeout = 90 * time.Second
 )
 
 var appServerCommandContext = exec.CommandContext

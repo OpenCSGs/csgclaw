@@ -147,7 +147,7 @@ export function AgentRow({
           {formatProviderLabel(item.provider || item.agent_profile?.provider)} · {agentModelID(item)}
         </div>
         <div className="agent-badges">
-          <span className={`agent-badge ${incomplete ? "warn" : ""}`}>
+          <span className={`agent-badge ${incomplete ? "warn" : "ready"}`}>
             {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
           </span>
           {upgradeNeeded ? <span className="agent-badge warn">{t("profileUpgradeRequired")}</span> : null}

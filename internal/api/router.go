@@ -171,6 +171,11 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 		})
 
 		// Feishu channel routes.
+		r.Route("/feishu/registrations", func(r chi.Router) {
+			r.Post("/", h.createFeishuRegistration)
+			r.Get("/{registration_id}", h.getFeishuRegistration)
+			r.Post("/{registration_id}:finalize", h.finalizeFeishuRegistration)
+		})
 		r.Route("/feishu/users", func(r chi.Router) {
 			r.Get("/", h.listFeishuUsers)
 			r.Post("/", h.createFeishuUser)

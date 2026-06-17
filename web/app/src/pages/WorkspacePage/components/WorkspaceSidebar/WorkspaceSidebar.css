@@ -772,6 +772,24 @@
   gap: 4px;
 }
 
+.workspace-channel-badge {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in oklab, var(--line) 76%, transparent);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.workspace-channel-badge img {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
 .workspace-row-time {
   color: var(--muted);
   font-size: 11px;

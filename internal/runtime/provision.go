@@ -43,4 +43,7 @@ type GatewayProvision struct {
 	AgentHome         string
 	ProjectsRoot      string
 	WorkspaceTemplate string
+	// DisableInternalCSGClawChannel keeps a gateway runtime from subscribing to
+	// CSGClaw's internal channel while still allowing it to use the LLM bridge.
+	DisableInternalCSGClawChannel bool
 }

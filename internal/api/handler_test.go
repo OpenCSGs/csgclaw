@@ -1271,7 +1271,7 @@ func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 }
 
 func TestHandleAgentsPatchFieldMaskClearsRuntimeOptions(t *testing.T) {
-	svc := mustNewSeededService(t, []agent.Agent{
+	svc := mustNewSeededServiceWithOptions(t, []agent.Agent{
 		{
 			ID:          "u-alice",
 			Name:        "alice",
@@ -1289,7 +1289,7 @@ func TestHandleAgentsPatchFieldMaskClearsRuntimeOptions(t *testing.T) {
 			ProfileComplete: true,
 			CreatedAt:       time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC),
 		},
-	})
+	}, agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}))
 
 	srv := &Handler{svc: svc}
 	body := `{"runtime_options":{},"field_mask":["runtime_options"]}`

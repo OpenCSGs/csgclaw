@@ -264,6 +264,35 @@ func updateOpenClawCsgclawChannel(cfg map[string]any, participantID string, serv
 	return nil
 }
 
+func disableOpenClawCsgclawChannel(agentHome string) error {
+	configPath := filepath.Join(Root(agentHome), HostConfig)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read openclaw config: %w", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("decode openclaw config: %w", err)
+	}
+	channels, ok := cfg["channels"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("openclaw config is missing channels")
+	}
+	ch, ok := channels["csgclaw"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("openclaw config is missing channels.csgclaw")
+	}
+	ch["enabled"] = false
+	updated, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode openclaw config: %w", err)
+	}
+	if err := os.WriteFile(configPath, append(updated, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write openclaw config: %w", err)
+	}
+	return nil
+}
+
 func updateOpenClawFeishuChannel(cfg map[string]any, agentID string, provider feishu.AgentCredentialProvider) error {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" || provider == nil {

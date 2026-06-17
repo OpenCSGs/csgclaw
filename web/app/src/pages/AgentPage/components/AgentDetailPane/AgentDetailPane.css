@@ -28,10 +28,13 @@
   width: var(--agent-detail-content-width);
   margin-top: 0;
   gap: var(--agent-detail-section-gap);
+  padding: 0;
+  overflow: visible;
 }
 
 .agent-detail-pane > .entity-header,
 .agent-detail-pane > .entity-grid,
+.agent-detail-pane > .agent-channels-section,
 .agent-detail-pane > .agent-instructions-section,
 .agent-detail-pane > .form-error,
 .agent-detail-pane > .form-warning {
@@ -47,6 +50,18 @@
   font-size: 14px;
   font-weight: 650;
   line-height: 1.5;
+}
+
+.agent-detail-pane > .form-warning.success {
+  border-color: color-mix(in oklab, var(--portal-success-700) 30%, var(--line));
+  background: var(--portal-success-50);
+  color: var(--portal-success-700);
+}
+
+.agent-detail-pane > .form-warning.info {
+  border-color: color-mix(in oklab, var(--primary) 28%, var(--line));
+  background: color-mix(in oklab, var(--primary) 8%, var(--surface));
+  color: color-mix(in oklab, var(--primary-strong) 60%, var(--text));
 }
 
 .agent-detail-pane .entity-header {
@@ -115,6 +130,127 @@
   font-size: 11px;
   font-weight: 650;
   white-space: nowrap;
+}
+
+.agent-channels-section {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-channels-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+
+.agent-channel-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--field);
+}
+
+.agent-channel-icon {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in oklab, var(--line) 75%, transparent);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.agent-channel-icon img {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.agent-channel-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.agent-channel-name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 18px;
+}
+
+.agent-channel-status {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+}
+
+.agent-channel-status.connected {
+  border-color: color-mix(in oklab, var(--portal-success-700) 28%, var(--line));
+  background: var(--portal-success-50);
+  color: var(--portal-success-700);
+}
+
+.agent-channel-status.pending {
+  color: var(--portal-warning-700);
+}
+
+:root[data-theme="dark"] .agent-channel-row {
+  border-color: rgba(208, 213, 221, 0.18);
+  background: var(--field);
+}
+
+:root[data-theme="dark"] .agent-channel-icon {
+  border-color: rgba(208, 213, 221, 0.18);
+  background: var(--panel-strong);
+}
+
+:root[data-theme="dark"] .agent-channel-status.connected {
+  border-color: color-mix(in oklab, var(--portal-success-500) 34%, var(--line));
+  background: color-mix(in oklab, var(--portal-success-500) 14%, transparent);
+  color: color-mix(in oklab, var(--portal-success-500) 86%, var(--text));
+}
+
+:root[data-theme="dark"] .agent-channel-status.pending {
+  color: color-mix(in oklab, var(--portal-warning-700) 78%, var(--text));
+}
+
+.agent-channel-detail {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.agent-channel-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.agent-channel-actions .btn {
+  --btn-height: 34px;
+  --btn-min-width: 0;
+  --btn-padding-x: 11px;
+
+  gap: 6px;
+  border-radius: 9px;
 }
 
 .agent-detail-pane .entity-avatar {

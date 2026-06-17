@@ -8,16 +8,19 @@ import {
   createManagerAgentRequest,
   createNotificationBotRequest,
   deleteBotRequest,
+  deleteFeishuParticipantRequest,
   fetchAgent,
   fetchAgentProfile,
   fetchAgentProfileDefaults,
   fetchAgentSkills,
   fetchAgentSkillsFile,
+  finalizeFeishuRegistrationRequest,
   patchNotificationBotRequest,
   runAgentActionRequest,
+  startFeishuRegistrationRequest,
   updateAgentRequest,
 } from "@/api/agents";
-import type { AgentUpdatePayload, FetchAgentsOptions } from "@/api/agents";
+import type { AgentUpdatePayload, FeishuRegistration, FetchAgentsOptions } from "@/api/agents";
 import { publishAgentTemplateRequest } from "@/api/hub";
 import { createUserRequest, inviteRoomUsersRequest, joinAgentToRoomRequest } from "@/api/im";
 import { createTeamRequest, fetchTeams } from "@/api/tasks";
@@ -34,6 +37,7 @@ import {
 } from "@/shared/constants/agents";
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 import { selectUnusedAgentAvatar } from "@/shared/avatarOptions";
+import { FEISHU_REGISTRATIONS_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   applyTemplateToDraft,
   advanceAgentProgress,
@@ -49,6 +53,7 @@ import {
   draftRuntimeOptionsForSave,
   draftToProfile,
   ensureNotifierPullSubscriptionDraft,
+  feishuAgentParticipant,
   isAgentRunning,
   isManagerAgent,
   isNotificationBotAgent,
@@ -95,13 +100,104 @@ type ManagerRebuildOptions = {
 type AgentModalMode = "create" | "edit";
 type AgentAction = "delete" | "recreate" | "start" | "stop" | "upgrade";
 
+type FeishuPendingRegistration = FeishuRegistration & {
+  agent_id: string;
+  registration_id: string;
+};
+
 type AgentWithProfile = {
   agent: AgentLike;
   profile?: AgentProfileLike | null;
 };
 
+type AgentPageNoticeTone = "info" | "warning" | "success";
+type FeishuActionKind = "connect" | "disconnect" | "finalize";
+
 const AGENT_RUNTIME_SYNC_INTERVAL_MS = 2_000;
 const AGENT_RUNTIME_SYNC_TIMEOUT_MS = 120_000;
+const FEISHU_CHANNEL_ACTION = "feishu";
+const FEISHU_REGISTRATION_DEFAULT_POLL_SECONDS = 3;
+const FEISHU_REGISTRATION_MIN_POLL_SECONDS = 1;
+const FEISHU_REGISTRATION_MAX_POLL_SECONDS = 30;
+
+function feishuActionKey(agentID: string, action: FeishuActionKind): string {
+  return `${agentID}:${FEISHU_CHANNEL_ACTION}:${action}`;
+}
+
+function feishuRegistrationExpired(registration: FeishuRegistration | null | undefined, now = Date.now()): boolean {
+  const expiresAt = Date.parse(String(registration?.expires_at || ""));
+  return Number.isFinite(expiresAt) && expiresAt <= now;
+}
+
+function normalizeFeishuPendingRegistration(
+  registration: FeishuRegistration | null | undefined,
+  fallbackAgentID: string,
+): FeishuPendingRegistration | null {
+  const registrationID = String(registration?.registration_id || "").trim();
+  const agentID = String(registration?.agent_id || fallbackAgentID || "").trim();
+  if (!registrationID || !agentID || feishuRegistrationExpired(registration)) {
+    return null;
+  }
+  return {
+    ...registration,
+    agent_id: agentID,
+    registration_id: registrationID,
+  };
+}
+
+function feishuRegistrationPollDelayMs(registration: FeishuRegistration | null | undefined): number {
+  const rawSeconds = Number(registration?.next_poll_seconds);
+  const seconds = Number.isFinite(rawSeconds) && rawSeconds > 0 ? rawSeconds : FEISHU_REGISTRATION_DEFAULT_POLL_SECONDS;
+  return Math.min(FEISHU_REGISTRATION_MAX_POLL_SECONDS, Math.max(FEISHU_REGISTRATION_MIN_POLL_SECONDS, seconds)) * 1000;
+}
+
+function pruneFeishuPendingRegistrations(
+  registrations: Record<string, FeishuPendingRegistration>,
+): Record<string, FeishuPendingRegistration> {
+  const next: Record<string, FeishuPendingRegistration> = {};
+  Object.entries(registrations).forEach(([agentID, registration]) => {
+    const normalized = normalizeFeishuPendingRegistration(registration, agentID);
+    if (normalized) {
+      next[normalized.agent_id] = normalized;
+    }
+  });
+  return next;
+}
+
+function loadFeishuPendingRegistrations(): Record<string, FeishuPendingRegistration> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const raw = window.localStorage.getItem(FEISHU_REGISTRATIONS_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const decoded = JSON.parse(raw);
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+      return {};
+    }
+    return pruneFeishuPendingRegistrations(decoded as Record<string, FeishuPendingRegistration>);
+  } catch {
+    return {};
+  }
+}
+
+function saveFeishuPendingRegistrations(registrations: Record<string, FeishuPendingRegistration>): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const pruned = pruneFeishuPendingRegistrations(registrations);
+  try {
+    if (Object.keys(pruned).length === 0) {
+      window.localStorage.removeItem(FEISHU_REGISTRATIONS_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(FEISHU_REGISTRATIONS_STORAGE_KEY, JSON.stringify(pruned));
+  } catch {
+    // Persistence is best-effort; the in-memory state still drives the current tab.
+  }
+}
 
 export function shouldReturnToAgentOverviewAfterAgentMissing(
   activePane: { type?: string; id?: string | undefined } | null | undefined,
@@ -157,7 +253,13 @@ export function useAgentController({
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPageError, setAgentPageError] = useState("");
   const [agentPageNotice, setAgentPageNotice] = useState("");
+  const [agentPageNoticeTone, setAgentPageNoticeTone] = useState<AgentPageNoticeTone>("warning");
   const agentPageNoticeTimerRef = useRef<number | null>(null);
+  const [feishuPendingRegistrations, setFeishuPendingRegistrations] = useState<
+    Record<string, FeishuPendingRegistration>
+  >(() => loadFeishuPendingRegistrations());
+  const feishuAutoFinalizeActiveRef = useRef<Set<string>>(new Set());
+  const refreshAgentStateRef = useRef<(agentID: string) => Promise<AgentLike | null>>(async () => null);
   const [teamActionBusy, setTeamActionBusy] = useState(false);
   const [teamActionError, setTeamActionError] = useState("");
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
@@ -209,6 +311,13 @@ export function useAgentController({
     }
     return agentItems.find((item) => item.id === activePane.id) ?? null;
   }, [agentItems, activePane]);
+  const selectedFeishuPendingRegistration = useMemo(() => {
+    const agentID = String(selectedAgentForPage?.id || "").trim();
+    if (!agentID) {
+      return null;
+    }
+    return normalizeFeishuPendingRegistration(feishuPendingRegistrations[agentID], agentID);
+  }, [feishuPendingRegistrations, selectedAgentForPage?.id]);
   const skillsAgentID = selectedAgentForPage?.id || "";
   const agentSkillsQuery = useQuery({
     queryKey: workspaceQueryKeys.agentSkills(skillsAgentID),
@@ -288,15 +397,18 @@ export function useAgentController({
       agentPageNoticeTimerRef.current = null;
     }
     setAgentPageNotice("");
+    setAgentPageNoticeTone("warning");
   }, []);
 
-  const showAgentPageNotice = useCallback((message: string) => {
+  const showAgentPageNotice = useCallback((message: string, tone: AgentPageNoticeTone = "warning") => {
     if (agentPageNoticeTimerRef.current !== null) {
       window.clearTimeout(agentPageNoticeTimerRef.current);
     }
     setAgentPageNotice(message);
+    setAgentPageNoticeTone(tone);
     agentPageNoticeTimerRef.current = window.setTimeout(() => {
       setAgentPageNotice("");
+      setAgentPageNoticeTone("warning");
       agentPageNoticeTimerRef.current = null;
     }, 5000);
   }, []);
@@ -570,6 +682,10 @@ export function useAgentController({
       }
     }
   }
+
+  useEffect(() => {
+    refreshAgentStateRef.current = refreshAgentState;
+  });
 
   async function syncAgentStateUntilRunning(
     agentID: string,
@@ -1114,6 +1230,148 @@ export function useAgentController({
     }
   }
 
+  const updateFeishuPendingRegistrations = useCallback(
+    (updater: (current: Record<string, FeishuPendingRegistration>) => Record<string, FeishuPendingRegistration>) => {
+      setFeishuPendingRegistrations((current) => {
+        const next = pruneFeishuPendingRegistrations(updater(current));
+        saveFeishuPendingRegistrations(next);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const completeFeishuPendingRegistration = useCallback(
+    async (
+      pending: FeishuPendingRegistration,
+      options: { background?: boolean; showPendingNotice?: boolean } = {},
+    ): Promise<void> => {
+      const agentID = String(pending.agent_id || "").trim();
+      const registrationID = String(pending.registration_id || "").trim();
+      if (!agentID || !registrationID || feishuAutoFinalizeActiveRef.current.has(registrationID)) {
+        return;
+      }
+      const background = Boolean(options.background);
+      const busyKey = feishuActionKey(agentID, "finalize");
+      feishuAutoFinalizeActiveRef.current.add(registrationID);
+      if (!background) {
+        setAgentActionBusy(busyKey);
+        setAgentPageError("");
+      }
+      try {
+        const result = await finalizeFeishuRegistrationRequest(registrationID);
+        if (String(result?.status || "").trim() === "pending") {
+          const nextPending = normalizeFeishuPendingRegistration({ ...pending, ...result }, agentID) ?? pending;
+          updateFeishuPendingRegistrations((current) => ({
+            ...current,
+            [agentID]: nextPending,
+          }));
+          if (options.showPendingNotice) {
+            showAgentPageNotice(t("feishuConnectPending"));
+          }
+          return;
+        }
+        updateFeishuPendingRegistrations((current) => {
+          const next = { ...current };
+          delete next[agentID];
+          return next;
+        });
+        await refreshAgentStateRef.current(agentID);
+        showAgentPageNotice(t("feishuConnectConfigured"), "success");
+      } catch (err) {
+        if (!background) {
+          setAgentPageError(errorMessage(err, t("feishuConnectFailed")));
+        }
+      } finally {
+        feishuAutoFinalizeActiveRef.current.delete(registrationID);
+        if (!background) {
+          setAgentActionBusy((current) => (current === busyKey ? "" : current));
+        }
+      }
+    },
+    [showAgentPageNotice, t, updateFeishuPendingRegistrations],
+  );
+
+  useEffect(() => {
+    const timers: number[] = [];
+    Object.entries(feishuPendingRegistrations).forEach(([agentID, registration]) => {
+      const pending = normalizeFeishuPendingRegistration(registration, agentID);
+      if (!pending || agentActionBusy || feishuAutoFinalizeActiveRef.current.has(pending.registration_id)) {
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        void completeFeishuPendingRegistration(pending, { background: true });
+      }, feishuRegistrationPollDelayMs(pending));
+      timers.push(timer);
+    });
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [agentActionBusy, completeFeishuPendingRegistration, feishuPendingRegistrations]);
+
+  async function startFeishuConnect(item: AgentLike | null | undefined): Promise<void> {
+    const agentID = String(item?.id || "").trim();
+    if (!agentID || agentActionBusy) {
+      return;
+    }
+    setAgentActionBusy(feishuActionKey(agentID, "connect"));
+    setAgentPageError("");
+    try {
+      const registration = await startFeishuRegistrationRequest(agentID);
+      const pending = normalizeFeishuPendingRegistration(registration, agentID);
+      if (!pending) {
+        throw new Error(t("feishuConnectFailed"));
+      }
+      updateFeishuPendingRegistrations((current) => ({
+        ...current,
+        [pending.agent_id]: pending,
+      }));
+      const connectURL = String(pending.connect_url || "").trim();
+      if (connectURL) {
+        window.open(connectURL, "_blank", "noopener,noreferrer");
+      }
+      showAgentPageNotice(t("feishuConnectStarted"), "info");
+    } catch (err) {
+      setAgentPageError(errorMessage(err, t("feishuConnectFailed")));
+    } finally {
+      setAgentActionBusy("");
+    }
+  }
+
+  async function finalizeFeishuConnect(item: AgentLike | null | undefined): Promise<void> {
+    const agentID = String(item?.id || "").trim();
+    const pending = normalizeFeishuPendingRegistration(feishuPendingRegistrations[agentID], agentID);
+    if (!agentID || !pending || agentActionBusy) {
+      return;
+    }
+    await completeFeishuPendingRegistration(pending, { showPendingNotice: true });
+  }
+
+  async function disconnectFeishu(item: AgentLike | null | undefined): Promise<void> {
+    const agentID = String(item?.id || "").trim();
+    const participantID = String(feishuAgentParticipant(item)?.id || "").trim();
+    if (!agentID || !participantID || agentActionBusy) {
+      return;
+    }
+    const busyKey = feishuActionKey(agentID, "disconnect");
+    setAgentActionBusy(busyKey);
+    setAgentPageError("");
+    try {
+      await deleteFeishuParticipantRequest(participantID);
+      updateFeishuPendingRegistrations((current) => {
+        const next = { ...current };
+        delete next[agentID];
+        return next;
+      });
+      await refreshAgentStateRef.current(agentID);
+      showAgentPageNotice(t("feishuDisconnectConfigured"), "success");
+    } catch (err) {
+      setAgentPageError(errorMessage(err, t("feishuDisconnectFailed")));
+    } finally {
+      setAgentActionBusy((current) => (current === busyKey ? "" : current));
+    }
+  }
+
   async function deletePreviewBot(item: AgentLike | null | undefined) {
     if (!item?.id || agentActionBusy) {
       return false;
@@ -1302,6 +1560,7 @@ export function useAgentController({
     openEditAgentModal,
     runningAgentCount,
     runAgentAction,
+    refreshAgentState,
     selectedAgentForPage,
     teams: teamsQuery.data ?? [],
     teamsLoading: teamsQuery.isLoading,
@@ -1323,6 +1582,9 @@ export function useAgentController({
       publishBusy: agentPagePublishBusy,
       saveError: agentPageError,
       notice: agentPageNotice,
+      noticeTone: agentPageNoticeTone,
+      feishuConnectBusy: agentActionBusy.includes(`:${FEISHU_CHANNEL_ACTION}:`) ? agentActionBusy : "",
+      feishuPendingRegistration: selectedFeishuPendingRegistration,
       authStatuses: cliproxyAuthStatuses,
       authBusyProvider: cliproxyAuthBusy,
       notifierWebhookPublicOrigin,
@@ -1341,6 +1603,9 @@ export function useAgentController({
       onDelete: (item: AgentLike | null | undefined) => runAgentAction(item, "delete"),
       onInvite: inviteAgentToRoom,
       onOpenDM: openAgentDirectMessage,
+      onStartFeishuConnect: startFeishuConnect,
+      onFinalizeFeishuConnect: finalizeFeishuConnect,
+      onDisconnectFeishu: disconnectFeishu,
       teamActionBusy,
       teamActionError,
       onCreateTeam: createAgentTeam,

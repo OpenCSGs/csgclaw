@@ -197,6 +197,7 @@ export type UseConversationControllerArgs = {
     message: MessageLike | null | undefined,
   ) => void | Promise<void>;
   onProviderLogin: (provider: string | null | undefined) => Promise<void>;
+  onRefreshAgentState: (agentID: string) => Promise<AgentLike | null>;
   onUpgradeStatusChange: (payload: unknown) => void;
   preferredFallbackConversationId?: string;
   rooms: IMConversation[];

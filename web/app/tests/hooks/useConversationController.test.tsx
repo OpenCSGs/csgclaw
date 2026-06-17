@@ -5,8 +5,10 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import type { IMConversation, IMData, IMMessage, IMUser, TranslateFn } from "@/models/conversations";
 import type { AgentLike } from "@/models/agents";
 
+const subscribeIMEventsMock = vi.fn();
+
 vi.mock("@/shared/realtime/imEvents", () => ({
-  subscribeIMEvents: () => () => {},
+  subscribeIMEvents: (handler: (payload: unknown) => void) => subscribeIMEventsMock(handler),
 }));
 
 const t: TranslateFn = (key) => key;
@@ -56,8 +58,15 @@ function dataWithMessages(messages: IMMessage[]): IMData {
   };
 }
 
-function renderConversationController(initialProps: { data?: IMData; messageListActive?: boolean } = {}) {
-  const agents: AgentLike[] = [
+function renderConversationController(
+  options: {
+    agents?: AgentLike[];
+    data?: IMData;
+    messageListActive?: boolean;
+    onRefreshAgentState?: (agentID: string) => Promise<AgentLike | null>;
+  } = {},
+) {
+  const agents: AgentLike[] = options.agents ?? [
     {
       id: "u-demo",
       name: "demo",
@@ -88,6 +97,7 @@ function renderConversationController(initialProps: { data?: IMData; messageList
         navigatePane: vi.fn(),
         onMessageAction: vi.fn(),
         onProviderLogin: vi.fn(),
+        onRefreshAgentState: options.onRefreshAgentState ?? vi.fn(),
         onUpgradeStatusChange: vi.fn(),
         rooms: data.rooms,
         selectComputer: vi.fn(),
@@ -99,11 +109,16 @@ function renderConversationController(initialProps: { data?: IMData; messageList
         t,
         theme: "light",
       }),
-    { initialProps },
+    { initialProps: { data: options.data, messageListActive: options.messageListActive } },
   );
 }
 
 describe("useConversationController", () => {
+  beforeEach(() => {
+    subscribeIMEventsMock.mockReset();
+    subscribeIMEventsMock.mockReturnValue(() => {});
+  });
+
   it("opens create-room modal from a direct message", () => {
     const { result } = renderConversationController();
 
@@ -164,5 +179,40 @@ describe("useConversationController", () => {
     });
 
     await waitFor(() => expect(messageList.scrollTop).toBe(1120));
+  });
+
+  it("refreshes a non-running agent when that agent sends a message", () => {
+    let eventHandler: ((payload: unknown) => void) | null = null;
+    subscribeIMEventsMock.mockImplementation((handler: (payload: unknown) => void) => {
+      eventHandler = handler;
+      return () => {};
+    });
+    const onRefreshAgentState = vi.fn(async () => null);
+    renderConversationController({
+      agents: [
+        {
+          id: "u-demo",
+          name: "demo",
+          handle: "demo",
+          role: "worker",
+          runtime_kind: "picoclaw_sandbox",
+          status: "unknown",
+        },
+      ],
+      onRefreshAgentState,
+    });
+
+    act(() => {
+      eventHandler?.({
+        message: {
+          content: "reply",
+          sender_id: "u-demo",
+        },
+        room_id: directConversation.id,
+        type: "message.created",
+      });
+    });
+
+    expect(onRefreshAgentState).toHaveBeenCalledWith("u-demo");
   });
 });

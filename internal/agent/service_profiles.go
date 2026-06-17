@@ -176,7 +176,8 @@ func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
 	participantID := participantIDForAgent(got.Name, got.ID)
 	switch strings.TrimSpace(got.RuntimeKind) {
 	case RuntimeKindPicoClawSandbox:
-		if _, err := ensureAgentPicoClawConfigForParticipant(got.Name, participantID, got.ID, s.server, modelCfg); err != nil {
+		feishuProvider := s.currentFeishuProviderForRuntime(RuntimeKindPicoClawSandbox)
+		if _, err := ensureAgentPicoClawConfigForParticipantWithResolver(got.Name, participantID, got.ID, s.server, modelCfg, resolveManagerBaseURL, feishuProvider); err != nil {
 			return fmt.Errorf("sync gateway picoclaw config: %w", err)
 		}
 	case RuntimeKindOpenClawSandbox:
@@ -184,14 +185,7 @@ func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
 		if err != nil {
 			return err
 		}
-		var feishuProvider feishu.AgentCredentialProvider
-		if rt, err := s.runtimeForKind(RuntimeKindOpenClawSandbox); err == nil {
-			if fp, ok := rt.(interface {
-				CurrentFeishuProvider() feishu.AgentCredentialProvider
-			}); ok {
-				feishuProvider = fp.CurrentFeishuProvider()
-			}
-		}
+		feishuProvider := s.currentFeishuProviderForRuntime(RuntimeKindOpenClawSandbox)
 		if _, err := openclawsandbox.EnsureConfig(agentHome, participantID, got.ID, s.server, modelCfg, resolveManagerBaseURL, feishuProvider); err != nil {
 			return fmt.Errorf("sync gateway openclaw config: %w", err)
 		}
@@ -208,6 +202,23 @@ func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
 	current.AgentProfile.EnvRestartRequired = false
 	s.agents[got.ID] = current
 	return s.saveLocked()
+}
+
+func (s *Service) currentFeishuProviderForRuntime(runtimeKind string) feishu.AgentCredentialProvider {
+	if s == nil {
+		return nil
+	}
+	rt, err := s.runtimeForKind(runtimeKind)
+	if err != nil {
+		return nil
+	}
+	current, ok := rt.(interface {
+		CurrentFeishuProvider() feishu.AgentCredentialProvider
+	})
+	if !ok {
+		return nil
+	}
+	return current.CurrentFeishuProvider()
 }
 
 func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Agent, error) {

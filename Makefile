@@ -159,11 +159,9 @@ bump-openclaw-embed-version: bump-docker-embed-version
 # Sync embed agent.toml image refs from version when missing or out of sync (no docker).
 ensure-docker-embed-manifests:
 	@mkdir -p "$(GOCACHE)"
-	@chmod +x scripts/list-docker-embed-templates.sh scripts/check-docker-embed-manifests.sh
-	@if ! scripts/check-docker-embed-manifests.sh; then \
-	  printf '%s\n' "docker embed agent.toml version/ref out of sync; running sync-docker-embed-image-refs"; \
-	  $(MAKE) sync-docker-embed-image-refs; \
-	fi
+	@chmod +x scripts/list-docker-embed-templates.sh scripts/check-docker-embed-manifests.sh scripts/sync-docker-embed-image-refs.sh scripts/ensure-docker-embed-manifests.sh
+	@ACR_REGISTRY="$(ACR_REGISTRY)" \
+		scripts/ensure-docker-embed-manifests.sh
 
 build-docker-embed-images: stage-docker-embed-cli bump-docker-embed-version
 	chmod +x scripts/build-docker-embed-images.sh
