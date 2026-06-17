@@ -203,7 +203,7 @@ export function AgentProfileModal({
           <section className="profile-section agent-identity-section">
             <div className="agent-identity-layout">
               <div className="field agent-avatar-field">
-                <span className="sr-only">{t("agentAvatar")}</span>
+                <span className="field-label">{t("agentAvatar")}</span>
                 <AgentAvatarPicker
                   value={agentDraft.avatar}
                   t={t}
@@ -248,6 +248,7 @@ export function AgentProfileModal({
               >
                 <span className="workspace-tab-copy">
                   <strong>{t("createAgentKindWorker")}</strong>
+                  <small>{t("createAgentKindWorkerDescription")}</small>
                 </span>
               </Button>
               <Button
@@ -259,6 +260,7 @@ export function AgentProfileModal({
               >
                 <span className="workspace-tab-copy">
                   <strong>{t("createAgentKindNotification")}</strong>
+                  <small>{t("createAgentKindNotificationDescription")}</small>
                 </span>
               </Button>
             </div>

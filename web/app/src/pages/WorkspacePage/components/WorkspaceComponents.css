@@ -530,12 +530,13 @@
 .field textarea,
 .field select {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 14px 16px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  padding: var(--input-padding-md);
   font: inherit;
-  color: var(--text);
-  background: var(--field);
+  color: var(--input-text);
+  background: var(--input-background);
+  box-shadow: var(--input-shadow);
   outline: none;
 }
 
@@ -1891,6 +1892,13 @@
   box-shadow: var(--focus-ring);
 }
 
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
+
 .workspace-add-button,
 .env-remove-button {
   position: relative;
@@ -2882,11 +2890,11 @@ button[disabled],
 .profile-section .field textarea,
 .profile-section .field select,
 .env-row input {
-  border-color: var(--portal-gray-300);
-  border-radius: var(--radius-md);
-  background: var(--field);
-  color: var(--text);
-  box-shadow: var(--shadow-xs);
+  border-color: var(--input-border);
+  border-radius: var(--input-radius);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
 }
 
 :root[data-theme="dark"] .field input,
@@ -2896,8 +2904,10 @@ button[disabled],
 :root[data-theme="dark"] .profile-section .field textarea,
 :root[data-theme="dark"] .profile-section .field select,
 :root[data-theme="dark"] .env-row input {
-  border-color: rgba(208, 213, 221, 0.18);
-  box-shadow: none;
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
 }
 
 .field input:hover,
@@ -2907,7 +2917,7 @@ button[disabled],
 .profile-section .field textarea:hover,
 .profile-section .field select:hover,
 .env-row input:hover {
-  border-color: var(--portal-gray-400);
+  border-color: var(--input-border-hover);
 }
 
 .profile-section,

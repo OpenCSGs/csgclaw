@@ -15,11 +15,12 @@
 .field textarea,
 .field select {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 14px 16px;
-  background: var(--field);
-  color: var(--text);
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  padding: var(--input-padding-md);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
   font: inherit;
   outline: none;
 }
@@ -32,21 +33,23 @@
 .field input:hover,
 .field textarea:hover,
 .field select:hover {
-  border-color: oklch(0.77 0.16 164 / 0.38);
+  border-color: var(--input-border-hover);
 }
 
 .field input:focus,
 .field textarea:focus,
 .field select:focus {
-  border-color: var(--portal-brand-500);
-  box-shadow: var(--focus-ring);
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
 }
 
 .field input:disabled,
 .field textarea:disabled,
 .field select:disabled {
+  border-color: var(--input-border);
+  background-color: var(--input-background-disabled);
+  color: var(--input-text-disabled);
   cursor: not-allowed;
-  opacity: 0.65;
 }
 
 .field-hint,

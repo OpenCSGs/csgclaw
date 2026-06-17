@@ -13,7 +13,7 @@
   --input-text-placeholder: var(--portal-gray-500);
   --input-text-disabled: var(--portal-gray-500);
   --input-shadow: var(--shadow-xs);
-  --input-shadow-focus: var(--shadow-xs), var(--focus-ring);
+  --input-shadow-focus: 0 0 0 4px rgba(77, 106, 214, 0.24), var(--shadow-xs);
   --input-shadow-error-focus: var(--shadow-xs), var(--error-focus-ring);
 }
 

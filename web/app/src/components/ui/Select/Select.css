@@ -1,9 +1,9 @@
 .csg-select-trigger {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--field);
-  color: var(--text);
-  box-shadow: var(--shadow-xs);
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
   font: inherit;
   outline: none;
   text-align: left;
@@ -29,29 +29,31 @@
 }
 
 .csg-select-trigger-md {
-  min-height: 44px;
-  padding: 10px 14px;
-  font-size: 14px;
-  line-height: 22px;
+  min-height: var(--input-height-md);
+  padding: var(--input-padding-md);
+  font-size: 16px;
+  line-height: 24px;
 }
 
 .csg-select-trigger:hover:not(:disabled) {
-  border-color: oklch(0.77 0.16 164 / 0.38);
+  border-color: var(--input-border-hover);
 }
 
 .csg-select-trigger:focus-visible,
 .csg-select-trigger[data-state="open"] {
-  border-color: var(--portal-brand-500);
-  box-shadow: var(--focus-ring);
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
 }
 
 .csg-select-trigger:disabled {
+  border-color: var(--input-border);
+  background: var(--input-background-disabled);
+  color: var(--input-text-disabled);
   cursor: not-allowed;
-  opacity: 0.65;
 }
 
 .csg-select-trigger[data-placeholder] .csg-select-value {
-  color: var(--muted);
+  color: var(--input-text-placeholder);
 }
 
 .field .csg-select-value,

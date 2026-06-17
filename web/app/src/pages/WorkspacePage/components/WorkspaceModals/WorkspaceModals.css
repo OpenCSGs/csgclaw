@@ -646,27 +646,53 @@
 }
 
 .profile-modal.agent-modal .modal-header {
-  padding: 0 0 14px;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 0 0 20px;
+  background: var(--portal-white);
+  border-bottom: 1px solid var(--portal-gray-200);
+}
+
+.profile-modal.agent-modal .modal-header > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.profile-modal.agent-modal .modal-title {
+  color: var(--portal-gray-900);
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.profile-modal.agent-modal .modal-subtitle {
+  color: var(--portal-gray-600);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
 }
 
 .modal-card .modal-header .modal-close {
-  width: 34px;
-  min-width: 34px;
-  height: 34px;
-  min-height: 34px;
-  padding: 0;
-  margin: 0 2px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 8px;
+  margin: -8px -8px 0 0;
   border: 0;
+  border-radius: 8px;
   background: transparent;
-  color: var(--portal-gray-500);
+  color: var(--portal-gray-400);
   box-shadow: none;
   transform: none;
 }
 
 .modal-card .modal-header .modal-close-icon,
 .modal-card .modal-header .modal-close-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
 }
 
 .modal-card .modal-header .modal-close:hover:not(:disabled),
@@ -758,7 +784,7 @@
   width: 44px;
   min-width: 44px;
   margin: 0;
-  padding-top: 28px;
+  padding-top: 0;
 }
 
 .agent-identity-section .agent-name-field {
@@ -801,6 +827,16 @@
 .profile-runtime-grid > .field,
 .profile-runtime-grid > .selection-item {
   min-width: 0;
+}
+
+.profile-modal.agent-modal .profile-runtime-grid .csg-select-trigger,
+.profile-modal.agent-modal .profile-runtime-grid .csg-select-trigger:hover,
+.profile-modal.agent-modal .profile-runtime-grid .csg-select-trigger:focus-visible,
+.profile-modal.agent-modal .profile-runtime-grid .csg-select-trigger[data-state="open"],
+.profile-modal.agent-modal .profile-runtime-grid .selection-item.compact-toggle-row,
+.profile-modal.agent-modal .profile-runtime-grid .selection-item.compact-toggle-row:hover,
+.profile-modal.agent-modal .profile-runtime-grid .selection-item.compact-toggle-row:focus-within {
+  box-shadow: none;
 }
 
 .profile-runtime-grid .profile-model-error {
@@ -1177,8 +1213,8 @@
 
 .profile-modal.agent-modal .profile-editor-shell {
   min-width: 0;
-  padding-left: 0;
-  padding-right: 0;
+  gap: 20px;
+  padding: 16px 0;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -1209,6 +1245,89 @@
 
 .profile-modal.agent-modal .profile-section {
   min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.profile-modal.agent-modal .agent-identity-section {
+  padding: 0;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab {
+  justify-content: flex-start;
+  min-width: 0;
+  height: 74px;
+  padding: 12px 16px;
+  border: 1px solid var(--portal-gray-300);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--portal-gray-700);
+  box-shadow: none;
+  transform: none;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:hover,
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:focus-visible {
+  border-color: var(--portal-gray-300);
+  background: transparent;
+  color: var(--portal-gray-700);
+  box-shadow: none;
+  transform: none;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab.active {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-25);
+  color: var(--portal-brand-600);
+  box-shadow: none;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab .btn-content,
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy {
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab .btn-content {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  text-align: left;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy strong {
+  color: var(--portal-gray-700);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab.active .workspace-tab-copy strong {
+  color: var(--portal-brand-600);
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy small {
+  color: var(--portal-gray-600);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
 }
 
 .profile-section {
@@ -1257,11 +1376,11 @@
 .env-row input {
   width: 100%;
   min-height: 44px;
-  border: 1px solid var(--portal-gray-300);
-  border-radius: var(--radius-md);
-  background-color: var(--portal-white);
-  color: var(--portal-gray-900);
-  box-shadow: var(--shadow-xs);
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  background-color: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
   font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 400;
@@ -1302,7 +1421,7 @@
 .profile-section .field input::placeholder,
 .profile-section .field textarea::placeholder,
 .env-row input::placeholder {
-  color: var(--portal-gray-500);
+  color: var(--input-text-placeholder);
 }
 
 .modal-card .field input:hover,
@@ -1312,7 +1431,7 @@
 .profile-section .field textarea:hover,
 .profile-section .field select:hover,
 .env-row input:hover {
-  border-color: var(--portal-gray-400);
+  border-color: var(--input-border-hover);
 }
 
 .modal-card .field input:focus,
@@ -1322,10 +1441,8 @@
 .profile-section .field textarea:focus,
 .profile-section .field select:focus,
 .env-row input:focus {
-  border-color: var(--portal-brand-500);
-  box-shadow:
-    var(--shadow-xs),
-    0 0 0 4px rgba(77, 106, 214, 0.24);
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
 }
 
 .modal-card .field input:disabled,
@@ -1335,9 +1452,9 @@
 .profile-section .field textarea:disabled,
 .profile-section .field select:disabled,
 .env-row input:disabled {
-  border-color: var(--portal-gray-200);
-  background-color: var(--portal-gray-50);
-  color: var(--portal-gray-500);
+  border-color: var(--input-border);
+  background-color: var(--input-background-disabled);
+  color: var(--input-text-disabled);
   cursor: not-allowed;
 }
 
@@ -1740,6 +1857,10 @@
 }
 
 @media (max-width: 640px) {
+  .profile-modal.agent-modal .agent-create-kind-tabbar {
+    grid-template-columns: 1fr;
+  }
+
   .agent-basics-grid {
     grid-template-columns: 44px minmax(0, 1fr);
   }
