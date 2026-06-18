@@ -101,20 +101,24 @@ def configure_csgclaw(args, state: dict, result: dict) -> dict:
     agent_id = state["agent_id"]
     response: dict[str, Any] = {}
     candidate_admin_open_id = str(result.get("open_id") or "").strip()
-    if agent_id == "u-manager" and candidate_admin_open_id:
+    if candidate_admin_open_id:
+        admin_bind_args = [
+            "participant",
+            "bind",
+            "--channel",
+            "feishu",
+            "--feishu-kind",
+            "human",
+            "--admin",
+            "--open-id",
+            candidate_admin_open_id,
+        ]
+        candidate_admin_name = str(result.get("name") or "").strip()
+        if candidate_admin_name:
+            admin_bind_args.extend(["--name", candidate_admin_name])
         response["admin_bind"] = csgclaw_cli_json(
             args,
-            [
-                "participant",
-                "bind",
-                "--channel",
-                "feishu",
-                "--feishu-kind",
-                "human",
-                "--admin",
-                "--open-id",
-                candidate_admin_open_id,
-            ],
+            admin_bind_args,
         )
     bot_bind_args = [
         "participant",
@@ -133,13 +137,10 @@ def configure_csgclaw(args, state: dict, result: dict) -> dict:
     if role == "worker" and args.recreate in ("auto", "worker"):
         bot_bind_args.append("--restart")
     response["bot_bind"] = csgclaw_cli_json(args, bot_bind_args, input_text=result["app_secret"])
-    if agent_id == "u-manager":
-        if candidate_admin_open_id:
-            response["admin_open_id"] = candidate_admin_open_id
-            response["admin_open_id_source"] = "manager_registration"
-        else:
-            response.pop("admin_open_id", None)
-    elif agent_id != "u-manager":
+    if candidate_admin_open_id:
+        response["admin_open_id"] = candidate_admin_open_id
+        response["admin_open_id_source"] = "registration"
+    else:
         response.pop("admin_open_id", None)
     return response
 

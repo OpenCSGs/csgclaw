@@ -37,6 +37,7 @@ type ParticipantSender struct {
 	ID          string `json:"id"`
 	Username    string `json:"username,omitempty"`
 	DisplayName string `json:"display_name,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type ParticipantMessageContext struct {
@@ -360,6 +361,7 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 			ID:          sender.ID,
 			Username:    sender.Handle,
 			DisplayName: sender.Name,
+			Description: sender.Description,
 		},
 		SenderID:      sender.ID,
 		Text:          text,

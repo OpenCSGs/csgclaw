@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import {
   WorkspaceAgentRow,
   WorkspaceConversationRow,
+  WorkspaceHumanRow,
   WorkspaceThreadRow,
 } from "@/pages/WorkspacePage/components/WorkspaceRows";
 import { avatarFallbackText } from "@/shared/avatar";
@@ -34,6 +35,34 @@ describe("WorkspaceRows", () => {
               channel_user_kind: "app_id",
               id: "dev",
               type: "agent",
+            },
+          ],
+        }}
+        onSelect={() => {}}
+        t={t}
+      />,
+    );
+
+    const badge = screen.getByLabelText("feishuConnected");
+    expect(badge).toBeInTheDocument();
+    expect(badge.querySelector("img")).toHaveAttribute("src", "icons/feishu.png");
+  });
+
+  it("renders a Feishu badge on connected human rows", () => {
+    render(
+      <WorkspaceHumanRow
+        active={false}
+        user={{
+          id: "admin",
+          name: "Admin",
+          handle: "admin",
+          participants: [
+            {
+              channel: "feishu",
+              channel_user_kind: "open_id",
+              channel_user_ref: "ou_admin",
+              id: "admin",
+              type: "human",
             },
           ],
         }}

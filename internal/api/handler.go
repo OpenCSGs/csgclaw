@@ -629,10 +629,11 @@ func (h *Handler) publishUpdatedAgentUser(updated agent.Agent) {
 		return
 	}
 	user, ok, err := h.im.UpdateAgentUser(im.UpdateAgentUserRequest{
-		ID:     updated.ID,
-		Name:   updated.Name,
-		Role:   updated.Role,
-		Avatar: updated.Avatar,
+		ID:          updated.ID,
+		Name:        updated.Name,
+		Description: updated.Description,
+		Role:        updated.Role,
+		Avatar:      updated.Avatar,
 	})
 	if err != nil || !ok {
 		return
@@ -1134,7 +1135,7 @@ func (h *Handler) handleIMBootstrap(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, presentBootstrap(h.im.Bootstrap()))
+	writeJSON(w, http.StatusOK, h.presentBootstrap(h.im.Bootstrap()))
 }
 
 func (h *Handler) handleRooms(w http.ResponseWriter, r *http.Request) {
@@ -1167,7 +1168,7 @@ func (h *Handler) handleUsers(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, h.im.ListUsers())
+		writeJSON(w, http.StatusOK, h.presentUsers(h.im.ListUsers()))
 	case http.MethodPost:
 		h.handleCreateUser(w, r)
 	default:
@@ -1522,6 +1523,7 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 	id := strings.TrimSpace(req.ID)
 	name := strings.TrimSpace(req.Name)
+	description := strings.TrimSpace(req.Description)
 	handle := strings.TrimSpace(req.Handle)
 	role := strings.TrimSpace(req.Role)
 	rawID := id
@@ -1543,7 +1545,7 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if id == agent.ManagerParticipantID {
 		if user, ok := h.im.User(id); ok {
-			writeJSON(w, http.StatusCreated, user)
+			writeJSON(w, http.StatusCreated, h.presentUser(user))
 			return
 		}
 	}
@@ -1578,7 +1580,7 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			if room, ok := h.directRoomWithMembers(im.AdminUserID, user.ID); ok {
 				h.publishRoomEvent(im.EventTypeRoomCreated, room)
 			}
-			writeJSON(w, http.StatusCreated, user)
+			writeJSON(w, http.StatusCreated, h.presentUser(user))
 			return
 		}
 		http.Error(w, "created worker user not found", http.StatusInternalServerError)
@@ -1586,17 +1588,54 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := provisioner.EnsureAgentUser(r.Context(), im.AgentIdentity{
-		ID:     id,
-		Name:   name,
-		Handle: handle,
-		Role:   role,
+		ID:          id,
+		Name:        name,
+		Description: description,
+		Handle:      handle,
+		Role:        role,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, result.User)
+	writeJSON(w, http.StatusCreated, h.presentUser(result.User))
+}
+
+func (h *Handler) updateCsgclawUser(w http.ResponseWriter, r *http.Request) {
+	if h.im == nil {
+		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id := pathValue(r, "id")
+	if strings.TrimSpace(id) == "" {
+		http.NotFound(w, r)
+		return
+	}
+	var req apitypes.UpdateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	updated, ok, err := h.im.UpdateUser(im.UpdateUserRequest{
+		ID:          id,
+		Name:        req.Name,
+		Description: req.Description,
+		Handle:      req.Handle,
+		Role:        req.Role,
+		Avatar:      req.Avatar,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	presented := h.presentUser(updated)
+	h.publishUserEvent(im.EventTypeUserUpdated, presented)
+	writeJSON(w, http.StatusOK, presented)
 }
 
 func shouldCreateWorkerForUser(id, role string) bool {
@@ -1884,13 +1923,58 @@ func roomIDFromQuery(r *http.Request) (string, error) {
 	return roomID, nil
 }
 
-func presentBootstrap(state im.Bootstrap) imBootstrapResponse {
+func (h *Handler) presentBootstrap(state im.Bootstrap) imBootstrapResponse {
 	return imBootstrapResponse{
 		CurrentUserID:      state.CurrentUserID,
-		Users:              state.Users,
+		Users:              h.presentUsers(state.Users),
 		Rooms:              state.Rooms,
 		InviteDraftUserIDs: state.InviteDraftUserIDs,
 	}
+}
+
+func (h *Handler) presentUsers(users []im.User) []im.User {
+	out := make([]im.User, 0, len(users))
+	for _, user := range users {
+		out = append(out, h.presentUser(user))
+	}
+	return out
+}
+
+func (h *Handler) presentUser(user im.User) im.User {
+	if user.ID == im.AdminUserID && strings.TrimSpace(user.Description) == "" {
+		user.Description = im.DefaultAdminDescription
+	}
+	user.Participants = h.humanParticipantsForUser(user)
+	return user
+}
+
+func (h *Handler) humanParticipantsForUser(user im.User) []apitypes.Participant {
+	if h == nil || h.participant == nil || strings.TrimSpace(user.ID) == "" {
+		return nil
+	}
+	items := h.participant.List(participant.ListOptions{Type: participant.TypeHuman})
+	matches := make([]apitypes.Participant, 0, len(items))
+	for _, item := range items {
+		if !humanParticipantMatchesUser(item, user) {
+			continue
+		}
+		matches = append(matches, item)
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+	return presentParticipants(matches)
+}
+
+func humanParticipantMatchesUser(item apitypes.Participant, user im.User) bool {
+	if !strings.EqualFold(strings.TrimSpace(item.Type), participant.TypeHuman) {
+		return false
+	}
+	userID := strings.TrimSpace(user.ID)
+	if userID == "" {
+		return false
+	}
+	return strings.TrimSpace(item.ID) == userID || strings.TrimSpace(item.ChannelUserRef) == userID
 }
 
 func presentAgents(items []agent.Agent) []agentResponse {

@@ -9,6 +9,9 @@ import {
   formatMessagePreviewText,
   splitMessagePreviewText,
   formatTime,
+  feishuHumanParticipant,
+  hasConnectedHumanChannel,
+  humanConnectedChannels,
   isAgentRosterEvent,
   isToolCallMessage,
   latestAt,
@@ -190,6 +193,42 @@ describe("conversation model helpers", () => {
     expect(agentMatchesUser({ handle: "Worker" }, { handle: "worker", id: "u-2" })).toBe(true);
     expect(agentMatchesUser({ name: "Manager" }, { id: "u-3", name: "manager" })).toBe(true);
     expect(agentMatchesUser(null, { id: "u-1" })).toBe(false);
+  });
+
+  it("detects Feishu-bound human channels from participants", () => {
+    const user = {
+      id: "admin",
+      name: "Admin",
+      participants: [
+        {
+          channel: "feishu",
+          channel_user_kind: "open_id",
+          channel_user_ref: "ou_admin",
+          id: "admin",
+          name: "龙韵",
+          type: "human",
+        },
+        {
+          agent_id: "u-dev",
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "dev",
+          type: "agent",
+        },
+      ],
+    };
+
+    expect(feishuHumanParticipant(user)?.channel_user_ref).toBe("ou_admin");
+    expect(humanConnectedChannels(user)).toEqual([
+      {
+        id: "feishu",
+        name: "Feishu",
+        participantID: "admin",
+        channelUserName: "龙韵",
+        channelUserRef: "ou_admin",
+      },
+    ]);
+    expect(hasConnectedHumanChannel(user, "feishu")).toBe(true);
   });
 
   it("applies IM events without duplicating messages and keeps rooms sorted by latest activity", () => {

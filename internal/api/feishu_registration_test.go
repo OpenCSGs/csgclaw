@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
 )
@@ -76,7 +78,14 @@ func TestFinalizeFeishuRegistrationBindsWorkerParticipant(t *testing.T) {
 	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{completeWorkerAgent("u-dev", "dev")},
 		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
 	)
-	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              "admin",
+		Channel:         participant.ChannelFeishu,
+		Type:            participant.TypeHuman,
+		Name:            "admin",
+		ChannelUserRef:  "ou_old_admin",
+		ChannelUserKind: participant.ChannelUserKindOpenID,
+	}}), participant.WithAgentService(agentSvc))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
@@ -111,12 +120,72 @@ func TestFinalizeFeishuRegistrationBindsWorkerParticipant(t *testing.T) {
 	if got := stored.ChannelAppConfig[participant.ChannelAppConfigAppSecretKey]; got != "dev-secret" {
 		t.Fatalf("stored app_secret = %#v, want real secret", got)
 	}
+	admin, ok := participantSvc.Get(participant.ChannelFeishu, "admin")
+	if !ok {
+		t.Fatal("feishu:admin participant was not stored")
+	}
+	if admin.Type != participant.TypeHuman || admin.ChannelUserKind != participant.ChannelUserKindOpenID || admin.ChannelUserRef != "ou_admin" {
+		t.Fatalf("admin participant = %+v, want idempotent Feishu human binding to registration open_id", admin)
+	}
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/registrations/"+url.PathEscape(registrationID), nil)
 	srv.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("registration state status after successful finalize = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestFinalizeFeishuRegistrationResolvesAdminNameFromFeishuOpenAPI(t *testing.T) {
+	accounts := newFakeFeishuAccountsServerWithOpenAPI(t, map[string]any{
+		"client_id":     "cli_dev",
+		"client_secret": "dev-secret",
+		"user_info": map[string]any{
+			"open_id": "ou_admin",
+		},
+	}, map[string]any{
+		"code":                0,
+		"msg":                 "ok",
+		"tenant_access_token": "tenant-token",
+		"expire":              7200,
+	}, map[string]any{
+		"code": 0,
+		"msg":  "ok",
+		"data": map[string]any{
+			"user": map[string]any{
+				"name":    "龙韵",
+				"open_id": "ou_admin",
+			},
+		},
+	})
+	defer accounts.Close()
+	withFeishuRegistrationAccountsBaseURL(t, accounts.URL)
+	withFeishuOpenAPIBaseURL(t, accounts.URL)
+
+	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{completeWorkerAgent("u-dev", "dev")},
+		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
+	)
+	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+	srv := &Handler{
+		svc:                        agentSvc,
+		participant:                participantSvc,
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+	}
+	registrationID := startFeishuRegistrationForTest(t, srv, "u-dev")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/feishu/registrations/"+url.PathEscape(registrationID)+":finalize", nil)
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	admin, ok := participantSvc.Get(participant.ChannelFeishu, "admin")
+	if !ok {
+		t.Fatal("feishu:admin participant was not stored")
+	}
+	if admin.Name != "龙韵" {
+		t.Fatalf("admin participant name = %q, want Feishu user name", admin.Name)
 	}
 }
 
@@ -305,33 +374,59 @@ func startFeishuRegistrationForTest(t *testing.T, srv *Handler, agentID string) 
 
 func newFakeFeishuAccountsServer(t *testing.T, pollResponse map[string]any) *httptest.Server {
 	t.Helper()
+	return newFakeFeishuAccountsServerWithOpenAPI(t, pollResponse, nil, nil)
+}
+
+func newFakeFeishuAccountsServerWithOpenAPI(t *testing.T, pollResponse, tokenResponse, userResponse map[string]any) *httptest.Server {
+	t.Helper()
 	if pollResponse == nil {
 		pollResponse = map[string]any{"error": "authorization_pending"}
 	}
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/oauth/v1/app/registration" {
-			http.NotFound(w, r)
-			return
-		}
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		switch r.Form.Get("action") {
-		case "init":
-			writeJSON(w, http.StatusOK, map[string]any{"supported_auth_methods": []string{"client_secret"}})
-		case "begin":
-			writeJSON(w, http.StatusOK, map[string]any{
-				"device_code":               "device-1",
-				"verification_uri_complete": "https://feishu.example/verify?existing=1",
-				"user_code":                 "ABCD-EFGH",
-				"interval":                  3,
-				"expire_in":                 600,
-			})
-		case "poll":
-			writeJSON(w, http.StatusOK, pollResponse)
+		switch {
+		case r.URL.Path == "/oauth/v1/app/registration":
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			switch r.Form.Get("action") {
+			case "init":
+				writeJSON(w, http.StatusOK, map[string]any{"supported_auth_methods": []string{"client_secret"}})
+			case "begin":
+				writeJSON(w, http.StatusOK, map[string]any{
+					"device_code":               "device-1",
+					"verification_uri_complete": "https://feishu.example/verify?existing=1",
+					"user_code":                 "ABCD-EFGH",
+					"interval":                  3,
+					"expire_in":                 600,
+				})
+			case "poll":
+				writeJSON(w, http.StatusOK, pollResponse)
+			default:
+				http.Error(w, "unexpected action "+r.Form.Get("action"), http.StatusBadRequest)
+			}
+		case r.URL.Path == "/open-apis/auth/v3/tenant_access_token/internal":
+			if tokenResponse == nil {
+				http.NotFound(w, r)
+				return
+			}
+			writeJSON(w, http.StatusOK, tokenResponse)
+		case r.URL.Path == "/open-apis/contact/v3/users/ou_admin":
+			if userResponse == nil {
+				http.NotFound(w, r)
+				return
+			}
+			if got := r.URL.Query().Get("user_id_type"); got != "open_id" {
+				http.Error(w, fmt.Sprintf("user_id_type = %q, want open_id", got), http.StatusBadRequest)
+				return
+			}
+			if got := strings.TrimSpace(r.Header.Get("Authorization")); got != "Bearer tenant-token" {
+				http.Error(w, fmt.Sprintf("Authorization = %q, want bearer tenant token", got), http.StatusUnauthorized)
+				return
+			}
+			writeJSON(w, http.StatusOK, userResponse)
 		default:
-			http.Error(w, "unexpected action "+r.Form.Get("action"), http.StatusBadRequest)
+			http.NotFound(w, r)
 		}
 	}))
 }
@@ -342,6 +437,15 @@ func withFeishuRegistrationAccountsBaseURL(t *testing.T, baseURL string) {
 	feishuRegistrationAccountsBaseURL = baseURL
 	t.Cleanup(func() {
 		feishuRegistrationAccountsBaseURL = old
+	})
+}
+
+func withFeishuOpenAPIBaseURL(t *testing.T, baseURL string) {
+	t.Helper()
+	old := feishuOpenAPIBaseURL
+	feishuOpenAPIBaseURL = baseURL
+	t.Cleanup(func() {
+		feishuOpenAPIBaseURL = old
 	})
 }
 

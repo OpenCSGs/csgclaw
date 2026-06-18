@@ -29,22 +29,33 @@ type LegacyBot struct {
 }
 
 type User struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Handle    string    `json:"handle"`
-	Role      string    `json:"role"`
-	Avatar    string    `json:"avatar"`
-	IsOnline  bool      `json:"is_online"`
-	LastSeen  string    `json:"last_seen,omitempty"`
-	AccentHex string    `json:"accent_hex"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	Description  string        `json:"description,omitempty"`
+	Handle       string        `json:"handle"`
+	Role         string        `json:"role"`
+	Avatar       string        `json:"avatar"`
+	IsOnline     bool          `json:"is_online"`
+	LastSeen     string        `json:"last_seen,omitempty"`
+	AccentHex    string        `json:"accent_hex"`
+	Participants []Participant `json:"participants,omitempty"`
+	CreatedAt    time.Time     `json:"created_at,omitempty"`
 }
 
 type CreateUserRequest struct {
-	ID     string `json:"id,omitempty"`
-	Name   string `json:"name"`
-	Handle string `json:"handle,omitempty"`
-	Role   string `json:"role,omitempty"`
+	ID          string `json:"id,omitempty"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Handle      string `json:"handle,omitempty"`
+	Role        string `json:"role,omitempty"`
+}
+
+type UpdateUserRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Handle      *string `json:"handle,omitempty"`
+	Role        *string `json:"role,omitempty"`
+	Avatar      *string `json:"avatar,omitempty"`
 }
 
 type Mention struct {

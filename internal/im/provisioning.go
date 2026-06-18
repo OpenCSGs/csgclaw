@@ -41,11 +41,12 @@ func (p *Provisioner) EnsureAgentUser(_ context.Context, identity AgentIdentity)
 	}
 
 	user, room, err := p.service.EnsureAgentUser(EnsureAgentUserRequest{
-		ID:     identity.ID,
-		Name:   identity.Name,
-		Handle: identity.Handle,
-		Role:   identity.Role,
-		Avatar: identity.Avatar,
+		ID:          identity.ID,
+		Name:        identity.Name,
+		Description: identity.Description,
+		Handle:      identity.Handle,
+		Role:        identity.Role,
+		Avatar:      identity.Avatar,
 	})
 	if err != nil {
 		return ProvisionResult{}, err

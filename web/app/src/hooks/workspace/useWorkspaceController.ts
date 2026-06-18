@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
-import { patchParticipantAvatarRequest } from "@/api/participants";
+import { patchCsgclawUserRequest, patchParticipantAvatarRequest } from "@/api/participants";
 import { createTranslator } from "@/shared/i18n";
 import {
   agentMatchesUser,
@@ -357,6 +357,8 @@ export function useWorkspaceController() {
   const selectedHuman = selectedHumanID ? (conversation.usersById.get(selectedHumanID) ?? null) : null;
   const [humanAvatarBusyID, setHumanAvatarBusyID] = useState("");
   const [humanAvatarError, setHumanAvatarError] = useState("");
+  const [humanDescriptionBusyID, setHumanDescriptionBusyID] = useState("");
+  const [humanDescriptionError, setHumanDescriptionError] = useState("");
   const updateHumanAvatar = useCallback(
     async (avatar: string) => {
       const selected = selectedHuman;
@@ -396,6 +398,39 @@ export function useWorkspaceController() {
     [selectedHuman, setBootstrapData, t],
   );
   const humanAvatarBusy = Boolean(selectedHuman?.id && humanAvatarBusyID === selectedHuman.id);
+  const updateHumanDescription = useCallback(
+    async (description: string) => {
+      const selected = selectedHuman;
+      const nextDescription = String(description || "").trim();
+      if (!selected?.id || String(selected.description || "").trim() === nextDescription) {
+        return;
+      }
+
+      setHumanDescriptionBusyID(selected.id);
+      setHumanDescriptionError("");
+      try {
+        const updated = await patchCsgclawUserRequest(selected.id, { description: nextDescription });
+        setBootstrapData((current) => {
+          if (!current) {
+            return current;
+          }
+          const existing = current.users.find((item) => item.id === selected.id) ?? selected;
+          return upsertUserInData(current, {
+            ...existing,
+            ...updated,
+            description: String(updated.description || nextDescription),
+            participants: updated.participants ?? existing.participants,
+          });
+        });
+      } catch (error) {
+        setHumanDescriptionError(errorMessage(error, t("humanDescriptionSaveFailed")));
+      } finally {
+        setHumanDescriptionBusyID((current) => (current === selected.id ? "" : current));
+      }
+    },
+    [selectedHuman, setBootstrapData, t],
+  );
+  const humanDescriptionBusy = Boolean(selectedHuman?.id && humanDescriptionBusyID === selectedHuman.id);
   const floatingChatAgent = useMemo(
     () =>
       resolveDirectConversationAgent(
@@ -551,8 +586,11 @@ export function useWorkspaceController() {
       locale,
       avatarBusy: humanAvatarBusy,
       avatarError: selectedHuman ? humanAvatarError : "",
+      descriptionBusy: humanDescriptionBusy,
+      descriptionError: selectedHuman ? humanDescriptionError : "",
       user: selectedHuman,
       onAvatarChange: updateHumanAvatar,
+      onDescriptionSave: updateHumanDescription,
     },
     conversationViewProps: {
       ...conversation.conversationViewProps,

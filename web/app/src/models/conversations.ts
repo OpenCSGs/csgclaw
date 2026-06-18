@@ -5,15 +5,48 @@ import { renderSlashCommandPreviewText } from "@/models/slashCommands";
 export type LocaleCode = "zh" | "en" | string;
 export type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
 
+export type IMParticipantLike = {
+  agent_id?: string | null;
+  channel?: string | null;
+  channel_app_ref?: string | null;
+  channel_user_kind?: string | null;
+  channel_user_ref?: string | null;
+  id?: string | null;
+  lifecycle_status?: string | null;
+  mentionable?: boolean | null;
+  metadata?: Record<string, unknown> | null;
+  name?: string | null;
+  type?: string | null;
+};
+
 export type IMUser = {
   accent_hex?: string | null;
   avatar?: string | null;
+  description?: string | null;
   handle?: string | null;
   id: string;
   is_online?: boolean | null;
   name?: string | null;
+  participants?: IMParticipantLike[] | null;
   role?: string | null;
   user_id?: string | null;
+};
+
+export type HumanChannelID = "feishu";
+
+export type HumanConnectedChannel = {
+  channelUserName?: string;
+  channelUserRef?: string;
+  id: HumanChannelID;
+  name: string;
+  participantID: string;
+};
+
+export const HUMAN_CHANNELS: Record<HumanChannelID, { id: HumanChannelID; name: string }> = {
+  feishu: {
+    id: "feishu",
+    name: "Feishu",
+  },
 };
 
 export type MessageMention = string | { id?: string | null };
@@ -327,6 +360,50 @@ export function agentMatchesUser(
     Boolean(agentHandle && userHandle && agentHandle === userHandle) ||
     Boolean(agentName && userName && agentName === userName)
   );
+}
+
+export function feishuHumanParticipant(user: IMUser | null | undefined): IMParticipantLike | null {
+  const participant = user?.participants?.find((candidate) => {
+    if (String(candidate?.channel || "").trim() !== "feishu") {
+      return false;
+    }
+    if (String(candidate?.type || "").trim() !== "human") {
+      return false;
+    }
+    if (String(candidate?.channel_user_kind || "").trim() !== "open_id") {
+      return false;
+    }
+    return Boolean(String(candidate?.id || "").trim() && String(candidate?.channel_user_ref || "").trim());
+  });
+  return participant ?? null;
+}
+
+export function humanParticipantDisplayName(participant: IMParticipantLike | null | undefined): string {
+  const name = String(participant?.name || "").trim();
+  if (name) {
+    return name;
+  }
+  return String(participant?.channel_user_ref || "").trim();
+}
+
+export function humanConnectedChannels(user: IMUser | null | undefined): HumanConnectedChannel[] {
+  const feishuParticipant = feishuHumanParticipant(user);
+  if (!feishuParticipant) {
+    return [];
+  }
+  return [
+    {
+      id: "feishu",
+      name: HUMAN_CHANNELS.feishu.name,
+      participantID: String(feishuParticipant.id || ""),
+      channelUserName: humanParticipantDisplayName(feishuParticipant),
+      channelUserRef: String(feishuParticipant.channel_user_ref || ""),
+    },
+  ];
+}
+
+export function hasConnectedHumanChannel(user: IMUser | null | undefined, channelID: HumanChannelID): boolean {
+  return humanConnectedChannels(user).some((channel) => channel.id === channelID);
 }
 
 export function normalizeComparable(value: unknown): string {

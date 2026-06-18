@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
 )
 
 func TestHandleCsgclawChannelRoutesMirrorLocalCollections(t *testing.T) {
@@ -77,6 +79,111 @@ func TestHandleCsgclawChannelRoutesMirrorLocalCollections(t *testing.T) {
 			t.Fatalf("messages = %+v, want msg-1 through csgclaw channel route", got)
 		}
 	})
+}
+
+func TestHandleCsgclawUsersShowsHumanDescriptionAndBoundChannels(t *testing.T) {
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              "admin",
+		Channel:         participant.ChannelFeishu,
+		Type:            participant.TypeHuman,
+		Name:            "admin",
+		ChannelUserRef:  "ou_admin",
+		ChannelUserKind: participant.ChannelUserKindOpenID,
+		ChannelAppConfig: map[string]any{
+			"app_secret": "should-redact",
+		},
+	}, {
+		ID:              "dev",
+		Channel:         participant.ChannelFeishu,
+		Type:            participant.TypeAgent,
+		Name:            "dev",
+		ChannelUserRef:  "cli_dev",
+		ChannelUserKind: participant.ChannelUserKindAppID,
+		AgentID:         "u-dev",
+	}}))
+	srv := &Handler{
+		im: im.NewServiceFromBootstrap(im.Bootstrap{
+			CurrentUserID: "admin",
+			Users: []im.User{{
+				ID:       "admin",
+				Name:     "admin",
+				Handle:   "admin",
+				Role:     "admin",
+				IsOnline: true,
+			}},
+		}),
+		participant: participantSvc,
+	}
+
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/users", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got []im.User
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode users: %v", err)
+	}
+	admin, ok := findUserByID(got, "admin")
+	if !ok {
+		t.Fatalf("users = %+v, want admin", got)
+	}
+	if !strings.Contains(admin.Description, "@admin") || !strings.Contains(admin.Description, "double-check") {
+		t.Fatalf("admin description = %q, want default prompt for agent requests", admin.Description)
+	}
+	if len(admin.Participants) != 1 {
+		t.Fatalf("admin participants = %+v, want only bound Feishu human participant", admin.Participants)
+	}
+	bound := admin.Participants[0]
+	if bound.Channel != participant.ChannelFeishu || bound.Type != participant.TypeHuman || bound.ChannelUserRef != "ou_admin" {
+		t.Fatalf("admin participant = %+v, want Feishu human open_id binding", bound)
+	}
+	if gotSecret := bound.ChannelAppConfig["app_secret"]; gotSecret == "should-redact" {
+		t.Fatalf("admin participant leaked app_secret: %+v", bound.ChannelAppConfig)
+	}
+}
+
+func TestHandleCsgclawUserPatchUpdatesDescription(t *testing.T) {
+	srv := &Handler{
+		im: im.NewServiceFromBootstrap(im.Bootstrap{
+			CurrentUserID: "admin",
+			Users: []im.User{{
+				ID:          "admin",
+				Name:        "admin",
+				Handle:      "admin",
+				Role:        "admin",
+				Description: "old prompt",
+			}},
+		}),
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/channels/csgclaw/users/admin", strings.NewReader(`{"description":"Ask this human to confirm risky changes."}`))
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got im.User
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode user: %v", err)
+	}
+	if got.Description != "Ask this human to confirm risky changes." {
+		t.Fatalf("description = %q, want patched description", got.Description)
+	}
+	reloaded, ok := srv.im.User("admin")
+	if !ok || reloaded.Description != got.Description {
+		t.Fatalf("stored user = %+v, ok=%v, want patched description persisted", reloaded, ok)
+	}
+}
+
+func findUserByID(users []im.User, id string) (im.User, bool) {
+	for _, user := range users {
+		if user.ID == id {
+			return user, true
+		}
+	}
+	return im.User{}, false
 }
 
 func TestHandleCsgclawChannelNestedRoutesMirrorLocalMutations(t *testing.T) {

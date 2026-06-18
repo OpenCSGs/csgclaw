@@ -102,20 +102,31 @@ type AddRoomMembersRequest = apitypes.AddRoomMembersRequest
 type AddConversationMembersRequest = AddRoomMembersRequest
 
 type EnsureAgentUserRequest struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Handle string `json:"handle"`
-	Role   string `json:"role"`
-	Avatar string `json:"avatar,omitempty"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Handle      string `json:"handle"`
+	Role        string `json:"role"`
+	Avatar      string `json:"avatar,omitempty"`
 }
 
 type EnsureWorkerUserRequest = EnsureAgentUserRequest
 
 type UpdateAgentUserRequest struct {
-	ID     string `json:"id"`
-	Name   string `json:"name,omitempty"`
-	Role   string `json:"role,omitempty"`
-	Avatar string `json:"avatar,omitempty"`
+	ID          string `json:"id"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Role        string `json:"role,omitempty"`
+	Avatar      string `json:"avatar,omitempty"`
+}
+
+type UpdateUserRequest struct {
+	ID          string
+	Name        *string
+	Description *string
+	Handle      *string
+	Role        *string
+	Avatar      *string
 }
 
 type AddAgentToConversationRequest struct {
@@ -171,6 +182,7 @@ func HasMentionTagForUser(content, userID string) bool {
 const (
 	sessionsDirName          = "sessions"
 	AdminUserID              = "admin"
+	DefaultAdminDescription  = "Human operator. Agents can @admin to ask clarifying questions, request confirmation, and double-check important decisions before continuing."
 	adminUserID              = AdminUserID
 	legacyAdminUserID        = "u-admin"
 	managerParticipantUserID = "manager"
@@ -548,13 +560,14 @@ func ensureUsers(users []User) []User {
 	}
 	if !hasUserHandle(result, "admin") {
 		result = append(result, User{
-			ID:        adminUserID,
-			Name:      "admin",
-			Handle:    "admin",
-			Role:      "admin",
-			Avatar:    "AD",
-			IsOnline:  true,
-			AccentHex: "#dc2626",
+			ID:          adminUserID,
+			Name:        "admin",
+			Description: DefaultAdminDescription,
+			Handle:      "admin",
+			Role:        "admin",
+			Avatar:      "AD",
+			IsOnline:    true,
+			AccentHex:   "#dc2626",
 		})
 	} else {
 		for i := range result {
@@ -562,6 +575,9 @@ func ensureUsers(users []User) []User {
 				result[i].ID = adminUserID
 				result[i].Name = "admin"
 				result[i].Role = "admin"
+				if strings.TrimSpace(result[i].Description) == "" {
+					result[i].Description = DefaultAdminDescription
+				}
 			}
 		}
 	}
@@ -635,8 +651,10 @@ func dropLegacyManagerUserDuplicates(users []User) []User {
 
 func normalizeUser(user User) User {
 	user.Name = strings.ToLower(strings.TrimSpace(user.Name))
+	user.Description = strings.TrimSpace(user.Description)
 	user.Handle = strings.ToLower(strings.TrimSpace(user.Handle))
 	user.Role = strings.ToLower(strings.TrimSpace(user.Role))
+	user.Participants = nil
 	return user
 }
 
@@ -1267,6 +1285,7 @@ func (s *Service) DeleteUser(userID string) error {
 func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, error) {
 	id := strings.TrimSpace(req.ID)
 	name := strings.ToLower(strings.TrimSpace(req.Name))
+	description := strings.TrimSpace(req.Description)
 	handle := strings.ToLower(strings.TrimSpace(req.Handle))
 	role := strings.ToLower(strings.TrimSpace(req.Role))
 	avatar := strings.TrimSpace(req.Avatar)
@@ -1300,14 +1319,15 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 	}
 
 	user := User{
-		ID:        id,
-		Name:      name,
-		Handle:    handle,
-		Role:      role,
-		Avatar:    avatar,
-		IsOnline:  true,
-		AccentHex: accentHexForID(id),
-		CreatedAt: time.Now().UTC(),
+		ID:          id,
+		Name:        name,
+		Description: description,
+		Handle:      handle,
+		Role:        role,
+		Avatar:      avatar,
+		IsOnline:    true,
+		AccentHex:   accentHexForID(id),
+		CreatedAt:   time.Now().UTC(),
 	}
 	s.users[id] = user
 	s.byHandle[strings.ToLower(handle)] = id
@@ -1352,19 +1372,23 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 			role = "worker"
 		}
 		user = User{
-			ID:        id,
-			Name:      name,
-			Handle:    handle,
-			Role:      role,
-			Avatar:    strings.TrimSpace(req.Avatar),
-			IsOnline:  true,
-			AccentHex: accentHexForID(id),
-			CreatedAt: time.Now().UTC(),
+			ID:          id,
+			Name:        name,
+			Description: strings.TrimSpace(req.Description),
+			Handle:      handle,
+			Role:        role,
+			Avatar:      strings.TrimSpace(req.Avatar),
+			IsOnline:    true,
+			AccentHex:   accentHexForID(id),
+			CreatedAt:   time.Now().UTC(),
 		}
 		ok = true
 	}
 	if name := strings.TrimSpace(req.Name); name != "" {
 		user.Name = name
+	}
+	if description := strings.TrimSpace(req.Description); description != "" {
+		user.Description = description
 	}
 	if role := strings.TrimSpace(req.Role); role != "" {
 		user.Role = role
@@ -1373,6 +1397,67 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 		user.Avatar = avatar
 	}
 	user = normalizeUser(user)
+	if strings.TrimSpace(user.Avatar) == "" {
+		user.Avatar = initials(user.Name)
+	}
+	s.users[id] = user
+	if err := s.saveLocked(); err != nil {
+		return User{}, false, err
+	}
+	return user, true, nil
+}
+
+func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
+	id := strings.TrimSpace(req.ID)
+	if id == "" {
+		return User{}, false, fmt.Errorf("id is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	user, ok := s.users[id]
+	if !ok {
+		return User{}, false, nil
+	}
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			return User{}, false, fmt.Errorf("name is required")
+		}
+		user.Name = name
+	}
+	if req.Description != nil {
+		user.Description = strings.TrimSpace(*req.Description)
+		if user.ID == adminUserID && user.Description == "" {
+			user.Description = DefaultAdminDescription
+		}
+	}
+	if req.Handle != nil {
+		handle := strings.ToLower(strings.TrimSpace(*req.Handle))
+		if handle == "" {
+			return User{}, false, fmt.Errorf("handle is required")
+		}
+		if existingID, ok := s.byHandle[handle]; ok && existingID != id {
+			return User{}, false, fmt.Errorf("handle %q already exists", handle)
+		}
+		delete(s.byHandle, strings.ToLower(strings.TrimSpace(user.Handle)))
+		user.Handle = handle
+		s.byHandle[handle] = id
+	}
+	if req.Role != nil {
+		role := strings.ToLower(strings.TrimSpace(*req.Role))
+		if role != "" {
+			user.Role = role
+		}
+	}
+	if req.Avatar != nil {
+		user.Avatar = strings.TrimSpace(*req.Avatar)
+	}
+	user = normalizeUser(user)
+	if user.ID == adminUserID && strings.TrimSpace(user.Description) == "" {
+		user.Description = DefaultAdminDescription
+	}
 	if strings.TrimSpace(user.Avatar) == "" {
 		user.Avatar = initials(user.Name)
 	}

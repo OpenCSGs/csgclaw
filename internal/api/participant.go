@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -85,7 +86,7 @@ func (h *Handler) handleParticipantByIDPath(w http.ResponseWriter, r *http.Reque
 		}
 		writeJSON(w, http.StatusOK, presentParticipant(updated))
 	case http.MethodDelete:
-		_, ok, err := h.participant.Delete(r.Context(), channelName, id, participant.DeleteOptions{
+		deleted, ok, err := h.participant.Delete(r.Context(), channelName, id, participant.DeleteOptions{
 			DeleteAgent: r.URL.Query().Get("delete_agent"),
 		})
 		if err != nil {
@@ -96,10 +97,54 @@ func (h *Handler) handleParticipantByIDPath(w http.ResponseWriter, r *http.Reque
 			http.NotFound(w, r)
 			return
 		}
+		if err := h.recreateFeishuAgentAfterDisconnect(r.Context(), deleted, r.URL.Query().Get("delete_agent")); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (h *Handler) recreateFeishuAgentAfterDisconnect(ctx context.Context, deleted apitypes.Participant, deleteAgentMode string) error {
+	if !strings.EqualFold(strings.TrimSpace(deleted.Channel), participant.ChannelFeishu) {
+		return nil
+	}
+	if strings.TrimSpace(deleteAgentMode) != "" {
+		return nil
+	}
+	if strings.TrimSpace(deleted.Type) != participant.TypeAgent {
+		return nil
+	}
+	agentID := strings.TrimSpace(deleted.AgentID)
+	if agentID == "" {
+		return nil
+	}
+	if h == nil || h.svc == nil {
+		return fmt.Errorf("agent service is required to disconnect feishu participant %q", deleted.ID)
+	}
+	if h.participant != nil {
+		for _, item := range h.participant.List(participant.ListOptions{
+			Channel: participant.ChannelFeishu,
+			Type:    participant.TypeAgent,
+			AgentID: agentID,
+		}) {
+			if strings.TrimSpace(item.ID) == strings.TrimSpace(deleted.ID) {
+				continue
+			}
+			if strings.TrimSpace(item.ChannelUserKind) != participant.ChannelUserKindAppID {
+				continue
+			}
+			if _, _, err := h.participant.Delete(ctx, participant.ChannelFeishu, item.ID, participant.DeleteOptions{}); err != nil {
+				return fmt.Errorf("delete feishu participant %q for agent %q: %w", item.ID, agentID, err)
+			}
+		}
+	}
+	if _, err := h.svc.Recreate(ctx, agentID); err != nil {
+		return fmt.Errorf("recreate agent %q after disconnecting feishu participant %q: %w", agentID, deleted.ID, err)
+	}
+	return nil
 }
 
 func (h *Handler) handleParticipantEvents(w http.ResponseWriter, r *http.Request) {

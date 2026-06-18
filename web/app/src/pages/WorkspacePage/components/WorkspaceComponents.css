@@ -3898,6 +3898,120 @@ select,
   border-radius: 12px;
 }
 
+.human-description-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.human-description-field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 16px;
+}
+
+.human-description-field textarea {
+  width: 100%;
+  min-height: 108px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+  padding: 10px 12px;
+}
+
+.human-description-field textarea:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--primary) 70%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 14%, transparent);
+}
+
+.human-description-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.human-channel-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  padding: 12px;
+}
+
+.human-channel-icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.human-channel-icon img {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.human-channel-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.human-channel-name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 18px;
+}
+
+.human-channel-status {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+}
+
+.human-channel-status.connected {
+  border-color: color-mix(in oklab, var(--portal-success-700) 28%, var(--line));
+  background: var(--portal-success-50);
+  color: var(--portal-success-700);
+}
+
+.human-channel-detail {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.human-channel-detail strong {
+  color: var(--text);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
 :root[data-theme="dark"] .computer-summary-item {
   background: var(--panel-strong);
   box-shadow: none;
@@ -3909,6 +4023,23 @@ select,
 :root[data-theme="dark"] .human-info-panel {
   background: var(--panel);
   box-shadow: none;
+}
+
+:root[data-theme="dark"] .human-channel-row,
+:root[data-theme="dark"] .human-description-field textarea {
+  border-color: rgba(208, 213, 221, 0.18);
+  background: var(--field);
+}
+
+:root[data-theme="dark"] .human-channel-icon {
+  border-color: rgba(208, 213, 221, 0.18);
+  background: var(--panel-strong);
+}
+
+:root[data-theme="dark"] .human-channel-status.connected {
+  border-color: color-mix(in oklab, var(--portal-success-500) 34%, var(--line));
+  background: color-mix(in oklab, var(--portal-success-500) 14%, transparent);
+  color: color-mix(in oklab, var(--portal-success-500) 86%, var(--text));
 }
 
 @media (max-width: 900px) {

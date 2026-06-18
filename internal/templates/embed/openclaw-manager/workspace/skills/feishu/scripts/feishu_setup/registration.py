@@ -128,8 +128,17 @@ def extract_success(state: dict, res: dict) -> Optional[dict]:
             "app_secret": res["client_secret"],
             "domain": domain,
             "open_id": user_info.get("open_id"),
+            "name": user_display_name(user_info),
         }
     return None
+
+
+def user_display_name(user_info: dict) -> str:
+    for key in ("name", "display_name", "nickname", "en_name"):
+        value = str(user_info.get(key) or "").strip()
+        if value:
+            return value
+    return ""
 
 
 def poll_until_success(args, state: dict, wait: bool) -> Optional[dict]:

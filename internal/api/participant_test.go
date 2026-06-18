@@ -16,6 +16,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
+	agentruntime "csgclaw/internal/runtime"
 )
 
 func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
@@ -178,6 +179,155 @@ func TestCreateFeishuBotParticipantRedactsChannelAppConfigSecretViaAPI(t *testin
 	}
 	if got, want := stored.ChannelAppConfig["app_secret"], "dev-secret"; got != want {
 		t.Fatalf("stored channel_app_config.app_secret = %#v, want %q", got, want)
+	}
+}
+
+func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		agentID       string
+		agentName     string
+		role          string
+		participantID string
+	}{
+		{
+			name:          "worker",
+			agentID:       "u-dev",
+			agentName:     "dev",
+			role:          agent.RoleWorker,
+			participantID: "dev",
+		},
+		{
+			name:          "manager",
+			agentID:       agent.ManagerUserID,
+			agentName:     "manager",
+			role:          agent.RoleManager,
+			participantID: "manager",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var recreated []string
+			target := completeWorkerAgent(tc.agentID, tc.agentName)
+			target.Role = tc.role
+			agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{target},
+				agent.WithRuntime(fakeCompatRuntime{
+					kind: agent.RuntimeKindPicoClawSandbox,
+					new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+						recreated = append(recreated, spec.AgentID)
+						return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-" + spec.AgentName}, nil
+					},
+				}),
+			)
+			participantSvc := participant.NewService(
+				participant.NewMemoryStore([]apitypes.Participant{{
+					ID:              tc.participantID,
+					Channel:         participant.ChannelFeishu,
+					Type:            participant.TypeAgent,
+					Name:            tc.agentName,
+					ChannelUserKind: participant.ChannelUserKindAppID,
+					ChannelAppConfig: map[string]any{
+						"app_id":     "cli_" + tc.agentName,
+						"app_secret": tc.agentName + "-secret",
+					},
+					AgentID:         tc.agentID,
+					LifecycleStatus: participant.LifecycleStatusActive,
+					Mentionable:     true,
+				}}),
+				participant.WithAgentService(agentSvc),
+			)
+			srv := &Handler{
+				svc:         agentSvc,
+				participant: participantSvc,
+			}
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/feishu/participants/"+tc.participantID, nil)
+			srv.Routes().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusNoContent {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+			}
+			if _, ok := participantSvc.Get(participant.ChannelFeishu, tc.participantID); ok {
+				t.Fatalf("participant feishu:%s still exists after delete", tc.participantID)
+			}
+			if len(recreated) != 1 || recreated[0] != tc.agentID {
+				t.Fatalf("recreated = %#v, want only %q", recreated, tc.agentID)
+			}
+			got, ok := agentSvc.Agent(tc.agentID)
+			if !ok {
+				t.Fatalf("agent %q not found after recreate", tc.agentID)
+			}
+			if got.BoxID != "box-"+tc.agentName {
+				t.Fatalf("agent BoxID = %q, want recreated runtime handle %q", got.BoxID, "box-"+tc.agentName)
+			}
+		})
+	}
+}
+
+func TestDeleteFeishuAgentParticipantRemovesSameAgentFeishuBotsBeforeRecreate(t *testing.T) {
+	var recreated []string
+	target := completeWorkerAgent("u-dev", "dev")
+	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{target},
+		agent.WithRuntime(fakeCompatRuntime{
+			kind: agent.RuntimeKindPicoClawSandbox,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				recreated = append(recreated, spec.AgentID)
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-" + spec.AgentName}, nil
+			},
+		}),
+	)
+	participantSvc := participant.NewService(
+		participant.NewMemoryStore([]apitypes.Participant{
+			{
+				ID:              "dev",
+				Channel:         participant.ChannelFeishu,
+				Type:            participant.TypeAgent,
+				Name:            "dev",
+				ChannelUserKind: participant.ChannelUserKindAppID,
+				ChannelAppConfig: map[string]any{
+					"app_id":     "cli_dev",
+					"app_secret": "dev-secret",
+				},
+				AgentID:         "u-dev",
+				LifecycleStatus: participant.LifecycleStatusActive,
+				Mentionable:     true,
+			},
+			{
+				ID:              "legacy-dev",
+				Channel:         participant.ChannelFeishu,
+				Type:            participant.TypeAgent,
+				Name:            "legacy dev",
+				ChannelUserKind: participant.ChannelUserKindAppID,
+				ChannelAppConfig: map[string]any{
+					"app_id":     "cli_legacy_dev",
+					"app_secret": "legacy-dev-secret",
+				},
+				AgentID:         "u-dev",
+				LifecycleStatus: participant.LifecycleStatusActive,
+				Mentionable:     true,
+			},
+		}),
+		participant.WithAgentService(agentSvc),
+	)
+	srv := &Handler{
+		svc:         agentSvc,
+		participant: participantSvc,
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/feishu/participants/dev", nil)
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	for _, id := range []string{"dev", "legacy-dev"} {
+		if _, ok := participantSvc.Get(participant.ChannelFeishu, id); ok {
+			t.Fatalf("participant feishu:%s still exists after disconnect", id)
+		}
+	}
+	if len(recreated) != 1 || recreated[0] != "u-dev" {
+		t.Fatalf("recreated = %#v, want only %q", recreated, "u-dev")
 	}
 }
 

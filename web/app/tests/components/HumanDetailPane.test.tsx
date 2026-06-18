@@ -6,8 +6,12 @@ const labels: Record<string, string> = {
   handleLabel: "Handle",
   humanDetailTitle: "Human profile",
   humanIdentitySection: "Identity",
+  humanChannelsSection: "Channels",
+  humanDescriptionLabel: "Description",
+  humanDescriptionSave: "Save description",
   humanStatusOffline: "Offline",
   humanStatusOnline: "Online",
+  humanFeishuBoundUser: "Bound user",
   agentAvatar: "Avatar",
   agentAvatarStyle3D: "3D",
   agentAvatarStyleCartoon: "Cartoon",
@@ -24,6 +28,9 @@ const labels: Record<string, string> = {
   profileLocalRuntime: "Workspace",
   roleLabel: "Role",
   userIDLabel: "User ID",
+  feishuChannelName: "Feishu",
+  feishuConnected: "Connected",
+  feishuDisconnected: "Disconnected",
 };
 
 const t: TranslateFn = (key) => labels[key] ?? key;
@@ -35,6 +42,17 @@ const admin: IMUser = {
   role: "admin",
   avatar: "avatar/cartoon-1.png",
   is_online: true,
+  description: "Agents can @admin to double-check risky changes.",
+  participants: [
+    {
+      channel: "feishu",
+      channel_user_kind: "open_id",
+      channel_user_ref: "ou_admin",
+      id: "admin",
+      name: "龙韵",
+      type: "human",
+    },
+  ],
 };
 
 describe("HumanDetailPane", () => {
@@ -49,11 +67,9 @@ describe("HumanDetailPane", () => {
 
     expect(screen.getByRole("button", { name: "Edit avatar: Cartoon 1" })).toBeInTheDocument();
 
-    const sections = container.querySelectorAll(".human-info-section");
     const identityFields = container.querySelector(".human-identity-fields");
     const avatarSection = container.querySelector(".human-avatar-section");
-    expect(sections).toHaveLength(1);
-    expect(sections[0]).toHaveClass("human-identity-section");
+    expect(container.querySelector(".human-identity-section")).toBeInTheDocument();
     expect(identityFields).toBeInTheDocument();
     expect(identityFields?.children).toHaveLength(3);
     expect(avatarSection).not.toBeInTheDocument();
@@ -79,5 +95,27 @@ describe("HumanDetailPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(onAvatarChange).toHaveBeenCalledWith("avatar/cartoon-2.png");
+  });
+
+  it("shows Feishu channel binding details", () => {
+    render(<HumanDetailPane locale="en" t={t} user={admin} />);
+
+    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
+    expect(screen.getByText("Feishu")).toBeInTheDocument();
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+    expect(screen.getByText("龙韵")).toBeInTheDocument();
+    expect(screen.queryByText("ou_admin")).not.toBeInTheDocument();
+  });
+
+  it("allows saving the human description", () => {
+    const onDescriptionSave = vi.fn();
+    render(<HumanDetailPane locale="en" onDescriptionSave={onDescriptionSave} t={t} user={admin} />);
+
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "Ask me to confirm product decisions." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save description" }));
+
+    expect(onDescriptionSave).toHaveBeenCalledWith("Ask me to confirm product decisions.");
   });
 });

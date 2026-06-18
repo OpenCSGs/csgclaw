@@ -35,6 +35,28 @@ func TestEnsureWorkerUserCreatesUserAndBootstrapRoom(t *testing.T) {
 	}
 }
 
+func TestParticipantEventIncludesSenderDescription(t *testing.T) {
+	evt := messageEventForParticipant(
+		Room{ID: "room-1", Members: []string{"admin", "u-dev"}},
+		User{
+			ID:          "admin",
+			Name:        "Admin",
+			Handle:      "admin",
+			Description: "Agents can @admin to ask clarifying questions.",
+		},
+		Message{
+			ID:       "msg-1",
+			SenderID: "admin",
+			Content:  "please check",
+		},
+		"u-dev",
+	)
+
+	if evt.Sender.Description != "Agents can @admin to ask clarifying questions." {
+		t.Fatalf("sender description = %q, want human prompt in participant event", evt.Sender.Description)
+	}
+}
+
 func TestEnsureWorkerUserRejectsDuplicateHandle(t *testing.T) {
 	svc := NewService()
 	_, _, err := svc.EnsureAgentUser(EnsureAgentUserRequest{

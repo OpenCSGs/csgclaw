@@ -149,6 +149,7 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 		r.Route("/csgclaw/users", func(r chi.Router) {
 			r.Get("/", h.listUsers)
 			r.Post("/", h.createUser)
+			r.Patch("/{id}", h.updateCsgclawUser)
 			r.Delete("/{id}", h.deleteCsgclawUser)
 		})
 		r.Route("/csgclaw/rooms", func(r chi.Router) {

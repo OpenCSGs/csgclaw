@@ -14,6 +14,7 @@ import {
   formatMessagePreviewText,
   formatThreadReplyCount,
   formatTime,
+  hasConnectedHumanChannel,
   isDirectConversation,
   resolveConversationUser,
 } from "@/models/conversations";
@@ -167,6 +168,7 @@ export function WorkspaceHumanRow({ user, active, t, onPreview, onSelect }: Work
   const displayName = user.name || user.handle || user.id;
   const handle = user.handle ? `@${user.handle}` : user.id;
   const role = localizeRole(user.role || "admin", t);
+  const feishuConnected = hasConnectedHumanChannel(user, "feishu");
 
   return (
     <button className={`workspace-row human-nav-row ${active ? "active" : ""}`} onClick={() => onSelect(user)}>
@@ -194,6 +196,17 @@ export function WorkspaceHumanRow({ user, active, t, onPreview, onSelect }: Work
         <span className="workspace-row-meta truncate">
           {handle} · {role}
         </span>
+      </span>
+      <span className="workspace-row-badges">
+        {feishuConnected ? (
+          <span
+            className="workspace-channel-badge feishu-channel-badge"
+            aria-label={t("feishuConnected")}
+            title={t("feishuConnected")}
+          >
+            <img src="icons/feishu.png" alt="" />
+          </span>
+        ) : null}
       </span>
     </button>
   );

@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"csgclaw/internal/agent"
 	"csgclaw/internal/config"
 	"csgclaw/internal/participant"
 	"csgclaw/internal/participant/feishubind"
@@ -29,6 +28,8 @@ var (
 	feishuRegistrationAccountsBaseURL = "https://accounts.feishu.cn"
 	feishuRegistrationHTTPClient      = http.DefaultClient
 	feishuRegistrationNow             = time.Now
+	feishuOpenAPIBaseURL              = "https://open.feishu.cn"
+	feishuOpenAPIHTTPClient           = http.DefaultClient
 )
 
 type createFeishuRegistrationRequest struct {
@@ -179,12 +180,17 @@ func (h *Handler) finalizeFeishuRegistration(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if state.AgentID == agent.ManagerUserID {
-		if openID := openIDFromRegistrationResult(poll); openID != "" {
-			if _, err := feishubind.BindAdminHuman(r.Context(), h.participant, openID, "admin"); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
+	userInfo := userInfoFromRegistrationResult(poll)
+	if userInfo.OpenID != "" {
+		adminName := userInfo.Name
+		if adminName == "" {
+			if resolvedName, err := feishuOpenAPIUserDisplayName(r.Context(), appID, appSecret, userInfo.OpenID); err == nil {
+				adminName = resolvedName
 			}
+		}
+		if _, err := feishubind.BindAdminHuman(r.Context(), h.participant, userInfo.OpenID, adminName); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 	}
 	result, err := feishubind.BindBot(r.Context(), h.svc, h.participant, state.AgentID, appID, appSecret, true)
@@ -410,12 +416,129 @@ func pendingFeishuRegistration(values map[string]any) bool {
 	}
 }
 
-func openIDFromRegistrationResult(values map[string]any) string {
+type feishuRegistrationUserInfo struct {
+	OpenID string
+	Name   string
+}
+
+func userInfoFromRegistrationResult(values map[string]any) feishuRegistrationUserInfo {
 	userInfo, ok := values["user_info"].(map[string]any)
 	if !ok {
-		return ""
+		return feishuRegistrationUserInfo{}
 	}
-	return stringFromMap(userInfo, "open_id")
+	return feishuRegistrationUserInfo{
+		OpenID: stringFromMap(userInfo, "open_id"),
+		Name:   displayNameFromFeishuUserInfo(userInfo),
+	}
+}
+
+func displayNameFromFeishuUserInfo(userInfo map[string]any) string {
+	for _, key := range []string{"name", "display_name", "nickname", "en_name"} {
+		if value := stringFromMap(userInfo, key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func feishuOpenAPIUserDisplayName(ctx context.Context, appID, appSecret, openID string) (string, error) {
+	openID = strings.TrimSpace(openID)
+	if openID == "" {
+		return "", fmt.Errorf("open_id is required")
+	}
+	token, err := feishuTenantAccessToken(ctx, appID, appSecret)
+	if err != nil {
+		return "", err
+	}
+	endpoint := strings.TrimRight(feishuOpenAPIBaseURL, "/") + "/open-apis/contact/v3/users/" + url.PathEscape(openID)
+	reqURL, err := url.Parse(endpoint)
+	if err != nil {
+		return "", err
+	}
+	query := reqURL.Query()
+	query.Set("user_id_type", "open_id")
+	reqURL.RawQuery = query.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	decoded, err := feishuOpenAPIDo(req)
+	if err != nil {
+		return "", err
+	}
+	if code := intFromMap(decoded, "code", 0); code != 0 {
+		return "", fmt.Errorf("feishu user info api error: code=%d msg=%s", code, stringFromMap(decoded, "msg"))
+	}
+	data, _ := decoded["data"].(map[string]any)
+	user, _ := data["user"].(map[string]any)
+	name := displayNameFromFeishuUserInfo(user)
+	if name == "" {
+		return "", fmt.Errorf("feishu user info: empty name")
+	}
+	return name, nil
+}
+
+func feishuTenantAccessToken(ctx context.Context, appID, appSecret string) (string, error) {
+	appID = strings.TrimSpace(appID)
+	appSecret = strings.TrimSpace(appSecret)
+	if appID == "" || appSecret == "" {
+		return "", fmt.Errorf("feishu app credentials are required")
+	}
+	body, err := json.Marshal(map[string]string{
+		"app_id":     appID,
+		"app_secret": appSecret,
+	})
+	if err != nil {
+		return "", err
+	}
+	endpoint := strings.TrimRight(feishuOpenAPIBaseURL, "/") + "/open-apis/auth/v3/tenant_access_token/internal"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	decoded, err := feishuOpenAPIDo(req)
+	if err != nil {
+		return "", err
+	}
+	if code := intFromMap(decoded, "code", 0); code != 0 {
+		return "", fmt.Errorf("feishu tenant token api error: code=%d msg=%s", code, stringFromMap(decoded, "msg"))
+	}
+	token := stringFromMap(decoded, "tenant_access_token")
+	if token == "" {
+		return "", fmt.Errorf("feishu tenant token api returned empty token")
+	}
+	return token, nil
+}
+
+func feishuOpenAPIDo(req *http.Request) (map[string]any, error) {
+	client := feishuOpenAPIHTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("feishu open api request: %w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read feishu open api response: %w", err)
+	}
+	var decoded map[string]any
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			return nil, fmt.Errorf("decode feishu open api response: %w", err)
+		}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("feishu open api status %d", resp.StatusCode)
+	}
+	if decoded == nil {
+		decoded = map[string]any{}
+	}
+	return decoded, nil
 }
 
 func appendFeishuLauncherParams(rawURL string) string {
