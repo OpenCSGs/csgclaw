@@ -424,14 +424,19 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 		}
 	}
 	svc.mu.RUnlock()
+	feishuProvider := svc.currentFeishuProviderForRuntime(RuntimeKindPicoClawSandbox)
 	recreateForParticipantBridgeConfig := !forceRecreate && agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID)
-	if _, err := ensureAgentPicoClawConfigForParticipantWithResolver(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, modelCfg, svc.resolveManagerBaseURL); err != nil {
+	recreateForFeishuConfig := !forceRecreate && agentPicoClawConfigNeedsFeishuRecreate(ManagerName, ManagerUserID, feishuProvider)
+	if _, err := ensureAgentPicoClawConfigForParticipantWithResolver(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, modelCfg, svc.resolveManagerBaseURL, feishuProvider); err != nil {
 		return err
 	}
 	if recreateForParticipantBridgeConfig {
 		log.Printf("bootstrap manager PicoClaw config uses legacy bot bridge fields; recreating manager to load participant bridge config")
 	}
-	_, err = svc.EnsureManager(ctx, forceRecreate || recreateForParticipantBridgeConfig)
+	if recreateForFeishuConfig {
+		log.Printf("bootstrap manager PicoClaw config is missing current Feishu channel credentials; recreating manager to load Feishu channel config")
+	}
+	_, err = svc.EnsureManager(ctx, forceRecreate || recreateForParticipantBridgeConfig || recreateForFeishuConfig)
 	return err
 }
 

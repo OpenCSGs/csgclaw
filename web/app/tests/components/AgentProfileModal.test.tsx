@@ -190,7 +190,6 @@ describe("AgentProfileModal", () => {
       />,
     );
 
-    expect(screen.getByText("Runtime Options")).toBeInTheDocument();
     expect(screen.getByDisplayValue("/tmp/project")).toBeInTheDocument();
     expect(screen.getByText("本地工作目录")).toBeInTheDocument();
     expect(screen.getByText("留空时使用默认 Agent 工作目录。")).toBeInTheDocument();

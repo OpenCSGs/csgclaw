@@ -32,6 +32,39 @@
   z-index: 3;
 }
 
+.member-badge-button {
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.member-badge-button:hover {
+  transform: translateY(-1px);
+}
+
+.member-badge-button.active {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.member-badge-count {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .chat-title-row .chat-title {
   flex: 0 1 auto;
   min-width: 0;
@@ -66,6 +99,11 @@
 }
 
 .tools-menu .header-popover {
+  left: auto;
+  right: 0;
+}
+
+.members-popover {
   left: auto;
   right: 0;
 }
@@ -117,6 +155,41 @@
 .tool-menu-icon svg {
   width: 100%;
   height: 100%;
+}
+
+.members-popover-list {
+  margin-top: 10px;
+  display: grid;
+}
+
+.member-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.member-row .avatar {
+  width: 40px;
+  height: 40px;
+  flex-basis: 40px;
+  border-radius: 50%;
+  font-size: 13px;
+}
+
+.member-row-main {
+  min-width: 0;
+}
+
+.member-row-name {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.member-row-meta {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .member-management-modal .field {

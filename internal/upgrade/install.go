@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -20,8 +21,16 @@ var (
 	nowUTC       = func() time.Time { return time.Now().UTC() }
 )
 
+var ErrNotOfficialBundle = errors.New("current executable is not installed from an official csgclaw bundle")
+
 type InstalledBundle struct {
 	InstallRoot string `json:"install_root,omitempty"`
+}
+
+type AutoUpgradeSupport struct {
+	Supported   bool
+	Reason      string
+	InstallRoot string
 }
 
 func (c Client) InstallPrepared(prepared PreparedBundle) (InstalledBundle, error) {
@@ -56,8 +65,11 @@ func (c Client) officialInstallRoot() (string, error) {
 		if err := validateBundleDir(root); err == nil {
 			return root, nil
 		}
+		if isLegacyOfficialInstallRoot(root) {
+			return root, nil
+		}
 	}
-	return "", fmt.Errorf("current executable is not installed from an official csgclaw bundle")
+	return "", ErrNotOfficialBundle
 }
 
 func (c Client) resolvedExecutablePath() (string, error) {
@@ -95,6 +107,72 @@ func bundleInstallRoot(exePath string) (string, bool) {
 	return filepath.Dir(binDir), true
 }
 
+func isLegacyOfficialInstallRoot(root string) bool {
+	root = filepath.Clean(strings.TrimSpace(root))
+	if root == "" || filepath.Base(root) != "csgclaw" {
+		return false
+	}
+	if _, err := os.Lstat(bundleMarkerPath(root)); err == nil {
+		return false
+	} else if !os.IsNotExist(err) {
+		return false
+	}
+	if !isOfficialInstallerManagedPath(root) {
+		return false
+	}
+	if hasSourceCheckoutMarker(root) {
+		return false
+	}
+	if _, err := requiredBundleExecutable(root, "csgclaw"); err != nil {
+		return false
+	}
+	if _, err := optionalBundleExecutable(root, "boxlite"); err != nil {
+		return false
+	}
+	return true
+}
+
+func isOfficialInstallerManagedPath(root string) bool {
+	versionDir := filepath.Dir(root)
+	libAppDir := filepath.Dir(versionDir)
+	libDir := filepath.Dir(libAppDir)
+	if filepath.Base(libAppDir) != "csgclaw" {
+		return false
+	}
+	if filepath.Base(libDir) != "lib" {
+		return false
+	}
+	return filepath.Base(versionDir) != "." && filepath.Base(versionDir) != string(filepath.Separator)
+}
+
+func hasSourceCheckoutMarker(root string) bool {
+	for _, name := range []string{".git", "go.mod", "go.work"} {
+		if _, err := os.Lstat(filepath.Join(root, name)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (c Client) AutoUpgradeSupport(currentVersion string) AutoUpgradeSupport {
+	currentVersion = strings.TrimSpace(currentVersion)
+	if currentVersion == "dev" || isLocalBuildVersion(currentVersion) {
+		return AutoUpgradeSupport{Reason: "local_build"}
+	}
+
+	root, err := c.officialInstallRoot()
+	if err == nil {
+		return AutoUpgradeSupport{
+			Supported:   true,
+			InstallRoot: root,
+		}
+	}
+	if errors.Is(err, ErrNotOfficialBundle) {
+		return AutoUpgradeSupport{Reason: "not_official_bundle"}
+	}
+	return AutoUpgradeSupport{Reason: "unknown"}
+}
+
 func isCSGClawExecutableName(name string) bool {
 	switch strings.TrimSpace(name) {
 	case "csgclaw", "csgclaw.exe":
@@ -105,6 +183,10 @@ func isCSGClawExecutableName(name string) bool {
 }
 
 func installBundle(bundleDir, installRoot string) error {
+	if err := validateBundleDir(installRoot); err != nil && !isLegacyOfficialInstallRoot(installRoot) {
+		return fmt.Errorf("%w: invalid current bundle: %v", ErrNotOfficialBundle, err)
+	}
+
 	parentDir := filepath.Dir(installRoot)
 	baseName := filepath.Base(installRoot)
 

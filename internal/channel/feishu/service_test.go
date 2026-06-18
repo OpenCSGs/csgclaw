@@ -370,6 +370,153 @@ func TestFeishuSendMessageUsesSenderAppAndStoresLocalMessage(t *testing.T) {
 	}
 }
 
+func TestFeishuUpdateMessageUsesSenderAppAndUpdatesLocalMessage(t *testing.T) {
+	var gotApp AppConfig
+	var gotReq UpdateMessageRequest
+	svc := NewServiceWithUpdateMessage(
+		map[string]AppConfig{"manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, app AppConfig, req UpdateMessageRequest) (UpdateMessageResponse, error) {
+			gotApp = app
+			gotReq = req
+			return UpdateMessageResponse{MessageID: req.MessageID}, nil
+		},
+	)
+	svc.rooms["oc_alpha"] = &im.Room{
+		ID:      "oc_alpha",
+		Title:   "alpha",
+		Members: []string{"manager"},
+		Messages: []im.Message{
+			{ID: "om_root", SenderID: "ou_manager", Kind: im.MessageKindMessage, Content: "\u200b"},
+		},
+	}
+
+	message, err := svc.UpdateMessage(UpdateMessageRequest{
+		RoomID:    "oc_alpha",
+		SenderID:  "manager",
+		MessageID: "om_root",
+		Content:   "final answer",
+	})
+	if err != nil {
+		t.Fatalf("UpdateMessage() error = %v", err)
+	}
+
+	if gotApp.AppID != "cli_manager" {
+		t.Fatalf("update app = %+v, want manager app", gotApp)
+	}
+	if gotReq.RoomID != "oc_alpha" || gotReq.SenderID != "manager" || gotReq.MessageID != "om_root" || gotReq.Content != "final answer" {
+		t.Fatalf("update request = %+v, want room/sender/message/content", gotReq)
+	}
+	if message.ID != "om_root" || message.SenderID != "ou_manager" || message.Content != "final answer" {
+		t.Fatalf("message = %+v, want updated local root", message)
+	}
+	if got := svc.rooms["oc_alpha"].Messages[0].Content; got != "final answer" {
+		t.Fatalf("stored root content = %q, want final answer", got)
+	}
+}
+
+func TestFeishuUpdateMessageRequiresRoomID(t *testing.T) {
+	svc := NewServiceWithUpdateMessage(
+		map[string]AppConfig{"manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(context.Context, AppConfig, UpdateMessageRequest) (UpdateMessageResponse, error) {
+			t.Fatal("updateMessage should not be called without room_id")
+			return UpdateMessageResponse{}, nil
+		},
+	)
+
+	_, err := svc.UpdateMessage(UpdateMessageRequest{
+		SenderID:  "manager",
+		MessageID: "om_root",
+		Content:   "final answer",
+	})
+	if err == nil || !strings.Contains(err.Error(), "room_id is required") {
+		t.Fatalf("UpdateMessage() error = %v, want room_id validation", err)
+	}
+}
+
+func TestFeishuMessageReactionUsesSenderApp(t *testing.T) {
+	var gotCreateApp AppConfig
+	var gotCreateReq CreateMessageReactionRequest
+	var gotDeleteApp AppConfig
+	var gotDeleteReq DeleteMessageReactionRequest
+	svc := NewServiceWithMessageReaction(
+		map[string]AppConfig{"manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, app AppConfig, req CreateMessageReactionRequest) (CreateMessageReactionResponse, error) {
+			gotCreateApp = app
+			gotCreateReq = req
+			return CreateMessageReactionResponse{ReactionID: "reaction-1"}, nil
+		},
+		func(_ context.Context, app AppConfig, req DeleteMessageReactionRequest) error {
+			gotDeleteApp = app
+			gotDeleteReq = req
+			return nil
+		},
+	)
+
+	created, err := svc.CreateMessageReaction(CreateMessageReactionRequest{
+		SenderID:  "manager",
+		MessageID: "om_user",
+		EmojiType: "Pin",
+	})
+	if err != nil {
+		t.Fatalf("CreateMessageReaction() error = %v", err)
+	}
+	if created.ReactionID != "reaction-1" {
+		t.Fatalf("ReactionID = %q, want reaction-1", created.ReactionID)
+	}
+	if gotCreateApp.AppID != "cli_manager" {
+		t.Fatalf("create app = %+v, want manager app", gotCreateApp)
+	}
+	if gotCreateReq.SenderID != "manager" || gotCreateReq.MessageID != "om_user" || gotCreateReq.EmojiType != "Pin" {
+		t.Fatalf("create request = %+v, want sender/message/emoji", gotCreateReq)
+	}
+
+	if err := svc.DeleteMessageReaction(DeleteMessageReactionRequest{
+		SenderID:   "manager",
+		MessageID:  "om_user",
+		ReactionID: created.ReactionID,
+	}); err != nil {
+		t.Fatalf("DeleteMessageReaction() error = %v", err)
+	}
+	if gotDeleteApp.AppID != "cli_manager" {
+		t.Fatalf("delete app = %+v, want manager app", gotDeleteApp)
+	}
+	if gotDeleteReq.SenderID != "manager" || gotDeleteReq.MessageID != "om_user" || gotDeleteReq.ReactionID != "reaction-1" {
+		t.Fatalf("delete request = %+v, want sender/message/reaction", gotDeleteReq)
+	}
+}
+
+func TestFeishuSendMessagePassesThreadRootIDForReply(t *testing.T) {
+	var gotReq SendMessageRequest
+	svc := NewServiceWithSendMessage(
+		map[string]AppConfig{"manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, _ AppConfig, req SendMessageRequest) (SendMessageResponse, error) {
+			gotReq = req
+			return SendMessageResponse{MessageID: "om_reply", SenderOpenID: "ou_manager"}, nil
+		},
+	)
+	svc.rooms["oc_alpha"] = &im.Room{ID: "oc_alpha", Title: "alpha", Members: []string{"u-manager"}}
+
+	message, err := svc.SendMessage(im.CreateMessageRequest{
+		RoomID:   "oc_alpha",
+		SenderID: "u-manager",
+		Content:  "thread reply",
+		RelatesTo: &im.MessageRelation{
+			RelType: im.RelationTypeThread,
+			EventID: "om_root",
+		},
+	})
+	if err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+
+	if gotReq.ThreadRootID != "om_root" {
+		t.Fatalf("send request = %+v, want thread reply request", gotReq)
+	}
+	if message.RelatesTo == nil || message.RelatesTo.RelType != im.RelationTypeThread || message.RelatesTo.EventID != "om_root" {
+		t.Fatalf("message.RelatesTo = %+v, want thread relation", message.RelatesTo)
+	}
+}
+
 func TestFeishuSendMessageKeepsSlashShorthandAsPlainMessage(t *testing.T) {
 	var gotReq SendMessageRequest
 	svc := NewServiceWithSendMessage(

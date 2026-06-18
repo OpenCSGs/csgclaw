@@ -19,6 +19,7 @@ type liveSession struct {
 	spec                 SessionSpec
 	conversationSessions map[string]string
 	turnWaiters          map[string]*appServerTurnWaiter
+	fallbackCompleted    map[string]struct{}
 	appProtocol          string
 }
 

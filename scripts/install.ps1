@@ -93,6 +93,42 @@ function Test-CommandAvailable {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Write-LauncherCmd {
+    param(
+        [string]$Path,
+        [string]$TargetExePath
+    )
+
+    $escapedTarget = $TargetExePath.Replace('%', '%%')
+    $content = @(
+        "@echo off",
+        "`"$escapedTarget`" %*"
+    ) -join "`r`n"
+    Set-Content -LiteralPath $Path -Value $content -Encoding ASCII
+}
+
+function Install-Launcher {
+    param([string]$TargetExePath)
+
+    $launcherExePath = Join-Path $InstallDir "${App}.exe"
+    $launcherCmdPath = Join-Path $InstallDir "${App}.cmd"
+
+    if (Test-Path -LiteralPath $launcherExePath) {
+        Remove-Item -LiteralPath $launcherExePath -Force
+    }
+    if (Test-Path -LiteralPath $launcherCmdPath) {
+        Remove-Item -LiteralPath $launcherCmdPath -Force
+    }
+
+    try {
+        New-Item -ItemType SymbolicLink -Path $launcherExePath -Target $TargetExePath | Out-Null
+        return $launcherExePath
+    } catch {
+        Write-LauncherCmd -Path $launcherCmdPath -TargetExePath $TargetExePath
+        return $launcherCmdPath
+    }
+}
+
 function Install-Bundle {
     param(
         [string]$ResolvedVersion,
@@ -133,13 +169,14 @@ function Install-Bundle {
         $installedBundlePath = Join-Path $installRoot $App
         Copy-Item -LiteralPath $bundlePath -Destination $installedBundlePath -Recurse
 
-        $targetExePath = Join-Path $InstallDir "${App}.exe"
-        Copy-Item -LiteralPath (Join-Path $installedBundlePath "bin\${App}.exe") -Destination $targetExePath -Force
+        $targetExePath = Join-Path $installedBundlePath "bin\${App}.exe"
+        $launcherPath = Install-Launcher -TargetExePath $targetExePath
 
         $pathUpdated = Add-InstallDirToUserPath
 
         Write-Host ""
         Write-Host "Installed $App $ResolvedVersion to $targetExePath"
+        Write-Host "Launcher: $launcherPath"
         Write-Host ""
         Write-Host "Next steps:"
         Write-Host "  $App serve"

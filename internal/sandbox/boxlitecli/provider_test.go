@@ -8,7 +8,9 @@ import (
 	"os/exec"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"csgclaw/internal/sandbox"
 )
@@ -227,6 +229,153 @@ func TestRunForwardsOutputAndPreservesExitCode(t *testing.T) {
 	}
 }
 
+func TestRuntimeRunSerializesCommandsForSameHome(t *testing.T) {
+	runner := newBlockingRunner()
+	rt1, err := NewProvider(WithRunner(runner)).Open(context.Background(), "/tmp/boxlite-home")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	rt2, err := NewProvider(WithRunner(runner)).Open(context.Background(), "/tmp/boxlite-home/./")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	inst1 := &Instance{runtime: rt1.(*Runtime), idOrName: "box-1"}
+	inst2 := &Instance{runtime: rt2.(*Runtime), idOrName: "box-2"}
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := inst1.Info(context.Background())
+		firstDone <- err
+	}()
+	runner.waitForCall(t, 1)
+
+	secondStarted := make(chan struct{})
+	secondDone := make(chan error, 1)
+	go func() {
+		close(secondStarted)
+		_, err := inst2.Info(context.Background())
+		secondDone <- err
+	}()
+	<-secondStarted
+	runner.assertNoAdditionalCall(t)
+	runner.releaseAll()
+
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first Info() error = %v", err)
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second Info() error = %v", err)
+	}
+	if got := runner.maxActive(); got != 1 {
+		t.Fatalf("max active commands = %d, want 1 for same home", got)
+	}
+}
+
+func TestRuntimeRunAllowsConcurrentCommandsForDifferentHomes(t *testing.T) {
+	runner := newBlockingRunner()
+	rt1, err := NewProvider(WithRunner(runner)).Open(context.Background(), "/tmp/boxlite-home-a")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	rt2, err := NewProvider(WithRunner(runner)).Open(context.Background(), "/tmp/boxlite-home-b")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	inst1 := &Instance{runtime: rt1.(*Runtime), idOrName: "box-1"}
+	inst2 := &Instance{runtime: rt2.(*Runtime), idOrName: "box-2"}
+
+	firstDone := make(chan error, 1)
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := inst1.Info(context.Background())
+		firstDone <- err
+	}()
+	go func() {
+		_, err := inst2.Info(context.Background())
+		secondDone <- err
+	}()
+	runner.waitForCall(t, 2)
+	runner.releaseAll()
+
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first Info() error = %v", err)
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second Info() error = %v", err)
+	}
+	if got := runner.maxActive(); got != 2 {
+		t.Fatalf("max active commands = %d, want 2 for different homes", got)
+	}
+}
+
+func TestRuntimeRunRespectsContextWhileWaitingForHomeLock(t *testing.T) {
+	runner := newBlockingRunner()
+	rt1, err := NewProvider(WithRunner(runner)).Open(context.Background(), "/tmp/boxlite-home")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	rt2, err := NewProvider(WithRunner(runner)).Open(context.Background(), "/tmp/boxlite-home/./")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	inst1 := &Instance{runtime: rt1.(*Runtime), idOrName: "box-1"}
+	inst2 := &Instance{runtime: rt2.(*Runtime), idOrName: "box-2"}
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := inst1.Info(context.Background())
+		firstDone <- err
+	}()
+	runner.waitForCall(t, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	secondStarted := make(chan struct{})
+	secondDone := make(chan error, 1)
+	go func() {
+		close(secondStarted)
+		_, err := inst2.Info(ctx)
+		secondDone <- err
+	}()
+	<-secondStarted
+	cancel()
+
+	select {
+	case err = <-secondDone:
+	case <-time.After(time.Second):
+		runner.releaseAll()
+		t.Fatal("timed out waiting for canceled command")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("second Info() error = %v, want context canceled", err)
+	}
+	if got := runner.callCount(); got != 1 {
+		t.Fatalf("runner call count = %d, want 1 after canceled wait", got)
+	}
+	runner.releaseAll()
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first Info() error = %v", err)
+	}
+}
+
+func TestRuntimeRunDoesNotExecuteWithAlreadyCanceledContext(t *testing.T) {
+	runner := &fakeRunner{}
+	rt, err := NewProvider(WithRunner(runner)).Open(context.Background(), "/tmp/boxlite-home")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	inst := &Instance{runtime: rt.(*Runtime), idOrName: "box-1"}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = inst.Info(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Info() error = %v, want context canceled", err)
+	}
+	if got := len(runner.requests); got != 0 {
+		t.Fatalf("runner call count = %d, want 0 for already canceled context", got)
+	}
+}
+
 func TestNotFoundErrorsMapToSandboxNotFound(t *testing.T) {
 	runner := &fakeRunner{
 		results: []fakeResult{{
@@ -330,6 +479,76 @@ func TestIntegrationCreateStartExecRemove(t *testing.T) {
 type fakeRunner struct {
 	requests []CommandRequest
 	results  []fakeResult
+}
+
+type blockingRunner struct {
+	mu      sync.Mutex
+	entered chan struct{}
+	release chan struct{}
+	active  int
+	max     int
+	calls   int
+}
+
+func newBlockingRunner() *blockingRunner {
+	return &blockingRunner{
+		entered: make(chan struct{}, 16),
+		release: make(chan struct{}),
+	}
+}
+
+func (r *blockingRunner) Run(_ context.Context, _ CommandRequest) (CommandResult, error) {
+	r.mu.Lock()
+	r.calls++
+	r.active++
+	if r.active > r.max {
+		r.max = r.active
+	}
+	r.mu.Unlock()
+
+	r.entered <- struct{}{}
+	<-r.release
+
+	r.mu.Lock()
+	r.active--
+	r.mu.Unlock()
+	return CommandResult{Stdout: []byte(`[{"Id":"box-id","Name":"agent","Created":"2026-04-18T07:31:25.471080+00:00","Status":"running"}]`)}, nil
+}
+
+func (r *blockingRunner) waitForCall(t *testing.T, count int) {
+	t.Helper()
+	for i := 0; i < count; i++ {
+		select {
+		case <-r.entered:
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for runner call %d", i+1)
+		}
+	}
+}
+
+func (r *blockingRunner) assertNoAdditionalCall(t *testing.T) {
+	t.Helper()
+	select {
+	case <-r.entered:
+		t.Fatal("runner received an additional command before the first home command was released")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func (r *blockingRunner) releaseAll() {
+	close(r.release)
+}
+
+func (r *blockingRunner) maxActive() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.max
+}
+
+func (r *blockingRunner) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls
 }
 
 type fakeResult struct {

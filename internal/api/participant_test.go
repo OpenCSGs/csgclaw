@@ -681,6 +681,77 @@ func TestPublishParticipantEventDeliversToParticipantIDWhenRoomUsesChannelUserRe
 	}
 }
 
+func TestCSGClawMessageRouteDeliversToCanonicalParticipantWhenRoomUsesAgentID(t *testing.T) {
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin", Handle: "admin"},
+			{ID: "u-agent-hhtz4b", Name: "qa", Handle: "qa"},
+		},
+		Rooms: []im.Room{{
+			ID:       "room-1",
+			IsDirect: true,
+			Members:  []string{"u-admin", "u-agent-hhtz4b"},
+		}},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              "agent-hhtz4b",
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeAgent,
+		Name:            "qa",
+		ChannelUserRef:  "u-agent-hhtz4b",
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		AgentID:         "u-agent-hhtz4b",
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}))
+	bridge := im.NewParticipantBridge("secret")
+	bus := im.NewBus()
+	events, cancel := bridge.Subscribe("agent-hhtz4b")
+	defer cancel()
+	srv := &Handler{
+		im:                imSvc,
+		csgclaw:           csgclawchannel.NewService(imSvc),
+		imBus:             bus,
+		participant:       participantSvc,
+		participantBridge: bridge,
+		serverNoAuth:      true,
+	}
+	busEvents, cancelBus := bus.Subscribe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for evt := range busEvents {
+			srv.PublishParticipantEvent(evt)
+		}
+	}()
+	defer func() {
+		cancelBus()
+		<-done
+	}()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/messages", strings.NewReader(`{
+		"room_id": "room-1",
+		"sender_id": "u-admin",
+		"content": "hello qa"
+	}`))
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	select {
+	case evt := <-events:
+		if evt.MessageID == "" || evt.RoomID != "room-1" || evt.Context.Account != "agent-hhtz4b" || evt.Text != "hello qa" {
+			t.Fatalf("event = %+v, want route-created message delivered to canonical participant", evt)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for route-created canonical participant bridge event")
+	}
+}
+
 func TestParticipantEventsRouteReceivesParticipantIDQueue(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",

@@ -7,16 +7,21 @@ import {
   fetchAgentProfile,
   fetchAgentProfileDefaults,
   fetchAgentProfileModels,
+  fetchAgentSkills,
   fetchAgentWorkspace,
+  deleteFeishuParticipantRequest,
+  finalizeFeishuRegistrationRequest,
   runAgentActionRequest,
+  startFeishuRegistrationRequest,
   updateAgentRequest,
 } from "@/api/agents";
+import { createUserRequest } from "@/api/im";
 import { createTeamRequest, fetchTeams } from "@/api/tasks";
 import { useAgentController } from "@/hooks/workspace/useAgentController";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
-import type { IMData, TranslateFn } from "@/models/conversations";
+import type { IMConversation, IMData, TranslateFn } from "@/models/conversations";
 import { AGENT_AVATAR_OPTIONS } from "@/shared/avatarOptions";
 
 vi.mock("react-router-dom", async () => {
@@ -48,9 +53,21 @@ vi.mock("@/api/agents", async () => {
     fetchAgentProfile: vi.fn(),
     fetchAgentProfileDefaults: vi.fn(),
     fetchAgentProfileModels: vi.fn(),
+    fetchAgentSkills: vi.fn(),
     fetchAgentWorkspace: vi.fn(),
+    deleteFeishuParticipantRequest: vi.fn(),
+    finalizeFeishuRegistrationRequest: vi.fn(),
     runAgentActionRequest: vi.fn(),
+    startFeishuRegistrationRequest: vi.fn(),
     updateAgentRequest: vi.fn(),
+  };
+});
+
+vi.mock("@/api/im", async () => {
+  const actual = await vi.importActual<typeof import("@/api/im")>("@/api/im");
+  return {
+    ...actual,
+    createUserRequest: vi.fn(),
   };
 });
 
@@ -100,6 +117,8 @@ const incompleteProfile: AgentProfileLike = {
   provider: "csghub_lite",
 };
 
+const feishuRegistrationStorageKey = "csgclaw.im.feishuRegistrations";
+
 const t: TranslateFn = (key) => key;
 
 function createWrapper() {
@@ -127,6 +146,9 @@ function useAgentControllerHarness(
   const refreshWorkspaceAgents = vi.fn(async () => [oldAgent]);
   const selectAgentRef = useRef(vi.fn());
   const selectAgent = selectAgentRef.current;
+  const selectConversationRef = useRef(vi.fn());
+  const selectConversation = selectConversationRef.current;
+  const data = options.data ?? null;
 
   const controller = useAgentController({
     activeConversationId: "",
@@ -140,7 +162,7 @@ function useAgentControllerHarness(
       isFetched: true,
     } as UseQueryResult<AgentLike[]>,
     bootstrapConfig: null,
-    data: options.data ?? null,
+    data,
     hubTemplates: [],
     locale: "en",
     managerProfile: options.managerProfile ?? null,
@@ -149,10 +171,10 @@ function useAgentControllerHarness(
     refreshWorkspaceBootstrap: vi.fn(async () => null),
     refreshWorkspaceBootstrapConfig: vi.fn(async () => null),
     refreshWorkspaceManagerProfile: vi.fn(async () => null),
-    rooms: [],
+    rooms: data?.rooms ?? [],
     selectAgent,
     selectComputer: vi.fn(),
-    selectConversation: vi.fn(),
+    selectConversation,
     selectHub: vi.fn(),
     setAgentsData: (value: AgentLike[] | ((current: AgentLike[]) => AgentLike[])) => {
       setAgents((current) => (typeof value === "function" ? value(current) : value));
@@ -161,7 +183,7 @@ function useAgentControllerHarness(
     t,
   });
 
-  return { controller, selectAgent };
+  return { controller, selectAgent, selectConversation };
 }
 
 describe("useAgentController", () => {
@@ -171,15 +193,24 @@ describe("useAgentController", () => {
     vi.mocked(fetchAgentProfileDefaults).mockReset();
     vi.mocked(fetchAgentProfileModels).mockReset();
     vi.mocked(fetchAgentWorkspace).mockReset();
+    vi.mocked(createUserRequest).mockReset();
+    vi.mocked(fetchAgentSkills).mockReset();
+    vi.mocked(deleteFeishuParticipantRequest).mockReset();
+    vi.mocked(finalizeFeishuRegistrationRequest).mockReset();
     vi.mocked(createTeamRequest).mockReset();
     vi.mocked(fetchTeams).mockReset();
     vi.mocked(runAgentActionRequest).mockReset();
+    vi.mocked(startFeishuRegistrationRequest).mockReset();
     vi.mocked(updateAgentRequest).mockReset();
+    window.localStorage.removeItem(feishuRegistrationStorageKey);
     vi.mocked(fetchAgent).mockResolvedValueOnce(oldAgent).mockResolvedValueOnce(latestAgent);
     vi.mocked(fetchAgentProfile).mockResolvedValue(profile);
     vi.mocked(fetchAgentProfileDefaults).mockResolvedValue(profile);
     vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: [] });
     vi.mocked(fetchAgentWorkspace).mockResolvedValue({ entries: [] });
+    vi.mocked(createUserRequest).mockResolvedValue({ id: "u-worker", name: "worker" });
+    vi.mocked(fetchAgentSkills).mockResolvedValue({ entries: [] });
+    vi.mocked(deleteFeishuParticipantRequest).mockResolvedValue(undefined);
     vi.mocked(createTeamRequest).mockResolvedValue({
       channel: "csgclaw",
       created_at: "2026-06-10T00:00:00Z",
@@ -195,21 +226,40 @@ describe("useAgentController", () => {
       ...oldAgent,
       image: actionImage,
     });
+    vi.mocked(startFeishuRegistrationRequest).mockResolvedValue({
+      agent_id: "u-dev",
+      connect_url: "https://feishu.example/connect",
+      expires_at: "2999-01-01T00:00:00Z",
+      next_poll_seconds: 1,
+      participant_id: "dev",
+      registration_id: "reg-dev",
+      status: "started",
+    });
+    vi.mocked(finalizeFeishuRegistrationRequest).mockResolvedValue({
+      agent_id: "u-dev",
+      config_saved: true,
+      participant_id: "dev",
+      status: "configured",
+    });
     vi.mocked(updateAgentRequest).mockResolvedValue(latestAgent);
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem(feishuRegistrationStorageKey);
   });
 
   it("refreshes the selected agent detail from a cache-busted agent fetch after upgrade", async () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.agentViewProps.draft?.image).toBe(oldImage));
-    await waitFor(() => expect(fetchAgentWorkspace).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(1));
 
     await act(async () => {
       await result.current.agentViewProps.onUpgrade?.(oldAgent);
     });
 
     await waitFor(() => expect(result.current.agentViewProps.item?.image).toBe(latestImage));
-    await waitFor(() => expect(fetchAgentWorkspace).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(2));
     expect(result.current.agentViewProps.draft?.image).toBe(latestImage);
     expect(result.current.agentViewProps.savedDraft?.image).toBe(latestImage);
     expect(runAgentActionRequest).toHaveBeenCalledWith("u-manager", "upgrade");
@@ -220,13 +270,13 @@ describe("useAgentController", () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.agentViewProps.draft?.image).toBe(oldImage));
-    await waitFor(() => expect(fetchAgentWorkspace).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(1));
 
     await act(async () => {
       await result.current.agentViewProps.onSave?.();
     });
 
-    await waitFor(() => expect(fetchAgentWorkspace).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(2));
     expect(updateAgentRequest).toHaveBeenCalledWith(
       "u-manager",
       expect.objectContaining({
@@ -251,6 +301,78 @@ describe("useAgentController", () => {
     );
     expect(result.current.controller.agentViewProps.notice).toBe("profileIncompleteRedirectNotice");
     expect("managerProfileSetupModalProps" in result.current.controller).toBe(false);
+  });
+
+  it("routes manager direct messages to their conversation page", async () => {
+    const directConversation: IMConversation = {
+      id: "dm-manager",
+      is_direct: true,
+      members: ["u-admin", "manager"],
+      messages: [],
+      title: "manager",
+    };
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          agents: [oldAgent],
+          data: {
+            current_user_id: "u-admin",
+            rooms: [directConversation],
+            users: [
+              { id: "u-admin", name: "admin" },
+              { id: "manager", name: "manager" },
+            ],
+          },
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.controller.agentViewProps.onOpenDM(oldAgent);
+    });
+
+    expect(result.current.selectConversation).toHaveBeenCalledWith("dm-manager", { rooms: [directConversation] });
+    expect(createUserRequest).not.toHaveBeenCalled();
+  });
+
+  it("routes worker direct messages to their conversation page", async () => {
+    const workerAgent: AgentLike = {
+      id: "agent-worker",
+      name: "worker",
+      role: "worker",
+      runtime_kind: "picoclaw_sandbox",
+      status: "running",
+      user_id: "u-worker",
+    };
+    const directConversation: IMConversation = {
+      id: "dm-worker",
+      is_direct: true,
+      members: ["u-admin", "u-worker"],
+      messages: [],
+      title: "worker",
+    };
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          agents: [oldAgent, workerAgent],
+          data: {
+            current_user_id: "u-admin",
+            rooms: [directConversation],
+            users: [
+              { id: "u-admin", name: "admin" },
+              { id: "u-worker", name: "worker" },
+            ],
+          },
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.controller.agentViewProps.onOpenDM(workerAgent);
+    });
+
+    expect(result.current.selectConversation).toHaveBeenCalledWith("dm-worker", { rooms: [directConversation] });
+    expect(createUserRequest).not.toHaveBeenCalled();
   });
 
   it("clears the manager setup redirect notice after a short timeout", async () => {
@@ -301,6 +423,256 @@ describe("useAgentController", () => {
       member_agent_ids: ["u-manager"],
       title: "teamNewFallbackTitle",
     });
+  });
+
+  it("starts Feishu connection by storing the pending registration and opening Feishu", async () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const workerAgent: AgentLike = {
+      ...oldAgent,
+      id: "u-dev",
+      name: "dev",
+      role: "worker",
+    };
+    try {
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+            agents: [workerAgent],
+          }).controller,
+        { wrapper: createWrapper() },
+      );
+
+      await act(async () => {
+        await result.current.agentViewProps.onStartFeishuConnect?.(workerAgent);
+      });
+
+      expect(startFeishuRegistrationRequest).toHaveBeenCalledWith("u-dev");
+      expect(openSpy).toHaveBeenCalledWith("https://feishu.example/connect", "_blank", "noopener,noreferrer");
+      expect(result.current.agentViewProps.notice).toBe("feishuConnectStarted");
+      expect(result.current.agentViewProps.noticeTone).toBe("info");
+      expect(result.current.agentViewProps.feishuPendingRegistration?.registration_id).toBe("reg-dev");
+      expect(JSON.parse(window.localStorage.getItem(feishuRegistrationStorageKey) || "{}")).toMatchObject({
+        "u-dev": {
+          agent_id: "u-dev",
+          registration_id: "reg-dev",
+        },
+      });
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
+  it("finalizes Feishu connection and refreshes the selected agent participants", async () => {
+    const workerAgent: AgentLike = {
+      ...oldAgent,
+      id: "u-dev",
+      name: "dev",
+      role: "worker",
+    };
+    const connectedWorker: AgentLike = {
+      ...workerAgent,
+      participants: [
+        {
+          agent_id: "u-dev",
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "dev",
+          type: "agent",
+        },
+      ],
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(connectedWorker);
+    window.localStorage.setItem(
+      feishuRegistrationStorageKey,
+      JSON.stringify({
+        "u-dev": {
+          agent_id: "u-dev",
+          connect_url: "https://feishu.example/connect",
+          expires_at: "2999-01-01T00:00:00Z",
+          participant_id: "dev",
+          registration_id: "reg-dev",
+        },
+      }),
+    );
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+          agents: [workerAgent],
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(result.current.agentViewProps.feishuPendingRegistration?.registration_id).toBe("reg-dev"),
+    );
+
+    await act(async () => {
+      await result.current.agentViewProps.onFinalizeFeishuConnect?.(workerAgent);
+    });
+
+    expect(finalizeFeishuRegistrationRequest).toHaveBeenCalledWith("reg-dev");
+    await waitFor(() => expect(result.current.agentViewProps.item?.participants?.[0]?.channel).toBe("feishu"));
+    expect(result.current.agentViewProps.notice).toBe("feishuConnectConfigured");
+    expect(result.current.agentViewProps.noticeTone).toBe("success");
+    expect(window.localStorage.getItem(feishuRegistrationStorageKey)).toBeNull();
+  });
+
+  it("disconnects Feishu by deleting the connected participant and refreshing the agent", async () => {
+    const workerAgent: AgentLike = {
+      ...oldAgent,
+      id: "u-dev",
+      name: "dev",
+      role: "worker",
+      participants: [
+        {
+          agent_id: "u-dev",
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "dev",
+          type: "agent",
+        },
+      ],
+    };
+    const disconnectedWorker: AgentLike = {
+      ...workerAgent,
+      participants: [],
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(disconnectedWorker);
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+          agents: [workerAgent],
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.agentViewProps.onDisconnectFeishu?.(workerAgent);
+    });
+
+    expect(deleteFeishuParticipantRequest).toHaveBeenCalledWith("dev");
+    await waitFor(() => expect(result.current.agentViewProps.item?.participants).toEqual([]));
+    expect(result.current.agentViewProps.notice).toBe("feishuDisconnectConfigured");
+    expect(result.current.agentViewProps.noticeTone).toBe("success");
+  });
+
+  it("automatically finalizes a pending Feishu connection after the user authorizes in Feishu", async () => {
+    vi.useFakeTimers();
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const workerAgent: AgentLike = {
+      ...oldAgent,
+      id: "u-dev",
+      name: "dev",
+      role: "worker",
+    };
+    const connectedWorker: AgentLike = {
+      ...workerAgent,
+      participants: [
+        {
+          agent_id: "u-dev",
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "dev",
+          type: "agent",
+        },
+      ],
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(connectedWorker);
+
+    try {
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+            agents: [workerAgent],
+          }).controller,
+        { wrapper: createWrapper() },
+      );
+
+      await act(async () => {
+        await result.current.agentViewProps.onStartFeishuConnect?.(workerAgent);
+      });
+
+      expect(result.current.agentViewProps.feishuPendingRegistration?.registration_id).toBe("reg-dev");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      vi.useRealTimers();
+
+      expect(finalizeFeishuRegistrationRequest).toHaveBeenCalledWith("reg-dev");
+      await waitFor(() => expect(result.current.agentViewProps.item?.participants?.[0]?.channel).toBe("feishu"));
+      expect(result.current.agentViewProps.notice).toBe("feishuConnectConfigured");
+      expect(result.current.agentViewProps.noticeTone).toBe("success");
+      expect(window.localStorage.getItem(feishuRegistrationStorageKey)).toBeNull();
+    } finally {
+      openSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps automatic Feishu polling out of the visible channel busy state", async () => {
+    vi.useFakeTimers();
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const workerAgent: AgentLike = {
+      ...oldAgent,
+      id: "u-dev",
+      name: "dev",
+      role: "worker",
+    };
+    let resolveFinalize: (value: Awaited<ReturnType<typeof finalizeFeishuRegistrationRequest>>) => void = () => {};
+    vi.mocked(finalizeFeishuRegistrationRequest).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFinalize = resolve;
+        }),
+    );
+
+    try {
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+            agents: [workerAgent],
+          }).controller,
+        { wrapper: createWrapper() },
+      );
+
+      await act(async () => {
+        await result.current.agentViewProps.onStartFeishuConnect?.(workerAgent);
+      });
+
+      expect(result.current.agentViewProps.feishuPendingRegistration?.registration_id).toBe("reg-dev");
+      expect(result.current.agentViewProps.feishuConnectBusy).toBe("");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+
+      expect(finalizeFeishuRegistrationRequest).toHaveBeenCalledWith("reg-dev");
+      expect(result.current.agentViewProps.feishuConnectBusy).toBe("");
+
+      await act(async () => {
+        resolveFinalize({
+          agent_id: "u-dev",
+          participant_id: "dev",
+          registration_id: "reg-dev",
+          status: "pending",
+        });
+        await Promise.resolve();
+      });
+    } finally {
+      openSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it("initializes create agent drafts with an unused built-in avatar", async () => {

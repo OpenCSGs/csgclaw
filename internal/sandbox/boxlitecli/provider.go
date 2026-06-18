@@ -147,6 +147,12 @@ func (r *Runtime) inspect(ctx context.Context, idOrName string) (sandbox.Info, e
 }
 
 func (r *Runtime) run(ctx context.Context, args []string, stdout, stderr interface{ Write([]byte) (int, error) }) (CommandResult, error) {
+	release, err := acquireBoxliteHomeLock(ctx, r.homeDir)
+	if err != nil {
+		return CommandResult{ExitCode: -1}, err
+	}
+	defer release()
+
 	req := CommandRequest{
 		Path:   r.path,
 		Args:   r.baseArgs(args),

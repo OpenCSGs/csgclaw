@@ -10,12 +10,14 @@ import {
   agentDraftWithRuntimeFieldsFromAgent,
   agentRuntimePollSettled,
   agentStatusLabel,
+  agentConnectedChannels,
   draftNotifierRuntimeOptionsForSave,
   draftRuntimeOptionsForSave,
   draftToProfile,
   ensureNotifierPullSubscriptionDraft,
   envRowsToMap,
   formatProviderLabel,
+  hasConnectedAgentChannel,
   isAgentIncomplete,
   agentPageLLMProfileChanged,
   agentProfilePageSaveDisabled,
@@ -200,6 +202,36 @@ describe("agent model helpers", () => {
 
     expect(resolveAgentChannelUserID({ id: "u-manager", role: "manager" })).toBe("manager");
     expect(resolveAgentChannelUserID({ id: "u-worker" })).toBe("u-worker");
+  });
+
+  it("detects app-backed Feishu agent channel connections from participants", () => {
+    const item = {
+      id: "u-dev",
+      participants: [
+        {
+          agent_id: "u-dev",
+          channel: "csgclaw",
+          id: "dev",
+          type: "agent",
+        },
+        {
+          agent_id: "u-dev",
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "dev",
+          type: "agent",
+        },
+      ],
+    };
+
+    expect(agentConnectedChannels(item).map((channel) => channel.id)).toEqual(["feishu"]);
+    expect(hasConnectedAgentChannel(item, "feishu")).toBe(true);
+    expect(
+      hasConnectedAgentChannel(
+        { id: "u-dev", participants: [{ channel: "feishu", id: "admin", type: "human" }] },
+        "feishu",
+      ),
+    ).toBe(false);
   });
 
   it("keeps JSON profile fields object-shaped", () => {

@@ -1,0 +1,644 @@
+.root {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: var(--z-page-overlay);
+  pointer-events: none;
+}
+
+.root.collapsed {
+  bottom: var(--floating-chat-collapsed-bottom, 104px);
+  transform: translateX(var(--floating-chat-drag-x, 0));
+  transition: transform 180ms ease;
+}
+
+.root.collapsed.dragging {
+  transition: none;
+}
+
+.root > * {
+  pointer-events: auto;
+}
+
+.launcher {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+  touch-action: none;
+}
+
+.launcher:hover {
+  border-color: color-mix(in oklab, var(--primary) 32%, var(--line));
+  background: color-mix(in oklab, var(--primary) 5%, var(--panel));
+  transform: translateY(-1px);
+}
+
+.launcher:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring), var(--shadow-md);
+}
+
+.root.dragging .launcher {
+  cursor: grabbing;
+  transform: none;
+}
+
+.root.guided .launcher::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border: 1px solid color-mix(in oklab, var(--primary) 30%, transparent);
+  border-radius: 50%;
+  opacity: 0;
+  animation: manager-guide-pulse 2100ms ease-out infinite;
+}
+
+.root.guided .launcher::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  background: var(--portal-success-500);
+  box-shadow: var(--shadow-xs);
+}
+
+.launcherAvatar {
+  width: 34px;
+  height: 34px;
+  position: relative;
+  border-radius: 8px;
+  overflow: visible;
+}
+
+.launcherAvatar :global(.agent-avatar-image),
+.emptyAvatar :global(.agent-avatar-image) {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  display: block;
+}
+
+.launcherAvatar :global(.agent-avatar-fallback),
+.emptyAvatar :global(.agent-avatar-fallback) {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+
+.launcherIcon {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  color: var(--primary-strong);
+  box-shadow: var(--shadow-xs);
+}
+
+.statusDot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  background: var(--portal-gray-400);
+}
+
+.statusDot.online {
+  background: var(--portal-success-500);
+}
+
+.launcherCount,
+.actionCount {
+  position: absolute;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border: 1px solid var(--panel);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+}
+
+.launcherCount {
+  top: -5px;
+  right: -5px;
+}
+
+.actionCount {
+  top: -4px;
+  right: -4px;
+}
+
+.panel {
+  position: relative;
+  width: min(var(--floating-chat-panel-width, 640px), calc(100vw - 32px));
+  min-width: min(340px, calc(100vw - 32px));
+  max-width: min(840px, calc(100vw - 32px));
+  height: min(var(--floating-chat-panel-height, 640px), calc(100dvh - 32px));
+  min-height: min(400px, calc(100dvh - 32px));
+  max-height: min(760px, calc(100dvh - 32px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+  box-shadow:
+    0 22px 48px rgba(16, 24, 40, 0.22),
+    var(--shadow-md);
+  animation: rise-in 180ms ease both;
+}
+
+.panel.resizing {
+  user-select: none;
+}
+
+.resizeHandle {
+  position: absolute;
+  z-index: 8;
+  background: transparent;
+  touch-action: none;
+}
+
+.resizeHandle.left {
+  top: 10px;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  cursor: ew-resize;
+}
+
+.resizeHandle.top {
+  top: 0;
+  right: 0;
+  left: 10px;
+  height: 5px;
+  cursor: ns-resize;
+}
+
+.resizeHandle.corner {
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+
+.resizeHandle.left:hover,
+.resizeHandle.top:hover,
+.resizeHandle.corner:hover {
+  background: transparent;
+}
+
+.resizeHandle.left:hover {
+  box-shadow: inset 2px 0 0 color-mix(in oklab, var(--primary) 34%, transparent);
+}
+
+.resizeHandle.top:hover {
+  box-shadow: inset 0 2px 0 color-mix(in oklab, var(--primary) 34%, transparent);
+}
+
+.resizeHandle.corner:hover {
+  box-shadow:
+    inset 2px 0 0 color-mix(in oklab, var(--primary) 34%, transparent),
+    inset 0 2px 0 color-mix(in oklab, var(--primary) 34%, transparent);
+}
+
+.conversation {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+.conversation > :global(.chat-header) {
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.conversation > :global(.chat-header) :global(.chat-title-bar) {
+  min-height: 36px;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.conversation > :global(.chat-header) :global(.chat-title-row),
+.conversation > :global(.chat-header) :global(.chat-subtitle) {
+  display: none;
+}
+
+.conversation > :global(.chat-header) :global(.chat-title-group) {
+  gap: 2px 8px;
+}
+
+.conversation > :global(.chat-header) :global(.chat-kicker) {
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.conversation > :global(.chat-header) :global(.chat-title) {
+  font-size: 16px;
+  line-height: 20px;
+}
+
+.conversation > :global(.chat-header) :global(.chat-subtitle) {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.conversation > :global(.chat-header) :global(.chat-title-actions) {
+  gap: 6px;
+}
+
+.conversation > :global(.chat-header) :global(.member-badge-button.btn),
+.conversation > :global(.chat-header) :global(.chat-title-actions .btn.icon-button) {
+  width: 32px;
+  min-width: 32px;
+  max-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border-radius: 8px;
+}
+
+.topicsButton,
+.collapseButton {
+  position: relative;
+}
+
+.conversation > :global(.messages) {
+  padding: 16px;
+  gap: 14px;
+  background: var(--panel);
+}
+
+.prompts {
+  min-height: 100%;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 22px;
+  color: var(--text);
+}
+
+.promptsCopy {
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.promptsCopy strong {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 24px;
+}
+
+.promptsCopy span {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.promptList {
+  width: min(100%, 380px);
+  display: grid;
+  gap: 10px;
+}
+
+.prompt {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 520;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.prompt:hover,
+.prompt:focus-visible {
+  border-color: color-mix(in oklab, var(--primary) 30%, var(--line));
+  background: var(--primary-soft);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.promptIcon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--primary-strong);
+}
+
+.conversation :global(.message-row) {
+  max-width: min(100%, 88%);
+  gap: 9px;
+}
+
+.conversation :global(.message-row > .avatar.avatar-button) {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.conversation :global(.message-bubble) {
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.conversation :global(.message-meta) {
+  margin-bottom: 4px;
+  gap: 7px;
+  font-size: 11px;
+}
+
+.conversation > :global(.composer) {
+  padding: 12px;
+}
+
+.conversation :global(.composer-input-wrap) {
+  min-height: 58px;
+}
+
+.conversation :global(.composer-editor) {
+  min-height: 58px;
+  max-height: 118px;
+  padding: 13px 56px 12px 12px;
+  font-size: 14px;
+}
+
+.conversation :global(.composer-placeholder) {
+  top: 13px;
+  left: 12px;
+  right: 56px;
+  font-size: 14px;
+}
+
+.conversation :global(.composer-send-button) {
+  right: 8px;
+  bottom: 8px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+}
+
+.conversation :global(.composer-tip) {
+  display: none;
+}
+
+.emptyPanel {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--panel);
+}
+
+.emptyHeader {
+  min-height: 58px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  background: var(--surface);
+}
+
+.emptyAvatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.emptyTitleBlock {
+  min-width: 0;
+}
+
+.emptyTitle {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptySubtitle {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptyBody,
+.threadEmpty {
+  min-height: 0;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.emptyBody strong,
+.threadEmpty strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.emptyMark {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--panel-strong);
+  color: var(--primary-strong);
+}
+
+.threadDialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 0;
+  overflow: hidden;
+}
+
+.threadHeader {
+  align-items: center;
+}
+
+.threadBody {
+  padding: 12px;
+}
+
+.threadList {
+  display: grid;
+  gap: 8px;
+}
+
+.threadRow {
+  width: 100%;
+  min-height: 62px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.threadRow:hover:not(:disabled),
+.threadRow:focus-visible:not(:disabled) {
+  border-color: color-mix(in oklab, var(--primary) 28%, var(--line));
+  background: var(--primary-soft);
+  outline: none;
+}
+
+.threadRow:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.threadIcon {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  color: var(--primary-strong);
+}
+
+.threadMain {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.threadTitle {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.threadMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+:global(:root[data-theme="dark"]) .panel,
+:global(:root[data-theme="dark"]) .launcher,
+:global(:root[data-theme="dark"]) .launcherIcon,
+:global(:root[data-theme="dark"]) .threadRow,
+:global(:root[data-theme="dark"]) .threadIcon {
+  box-shadow: none;
+}
+
+@keyframes manager-guide-pulse {
+  0% {
+    opacity: 0.72;
+    transform: scale(0.92);
+  }
+
+  72%,
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+@media (max-width: 720px) {
+  .root {
+    right: 12px;
+  }
+
+  .root.expanded {
+    bottom: 12px;
+  }
+
+  .panel {
+    width: min(var(--floating-chat-panel-width, 640px), calc(100vw - 24px));
+    min-width: min(320px, calc(100vw - 24px));
+    height: min(var(--floating-chat-panel-height, 620px), calc(100dvh - 24px));
+    min-height: min(400px, calc(100dvh - 24px));
+  }
+
+  .prompts {
+    padding: 20px;
+  }
+}

@@ -10,6 +10,7 @@ import (
 	stdruntime "runtime"
 	"strings"
 
+	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/runtime/picoclawsandbox"
 )
@@ -49,12 +50,12 @@ func ensureAgentPicoClawConfigForParticipant(agentName, participantID, agentID s
 	return ensureAgentPicoClawConfigForParticipantWithResolver(agentName, participantID, agentID, server, model, resolveManagerBaseURL)
 }
 
-func ensureAgentPicoClawConfigForParticipantWithResolver(agentName, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL picoclawsandbox.BaseURLResolver) (string, error) {
+func ensureAgentPicoClawConfigForParticipantWithResolver(agentName, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL picoclawsandbox.BaseURLResolver, feishuProviders ...feishu.AgentCredentialProvider) (string, error) {
 	agentHome, err := agentHomeDir(agentName)
 	if err != nil {
 		return "", err
 	}
-	return picoclawsandbox.EnsureConfig(agentHome, participantID, agentID, server, model, resolveBaseURL)
+	return picoclawsandbox.EnsureConfig(agentHome, participantID, agentID, server, model, resolveBaseURL, feishuProviders...)
 }
 
 func managerPicoClawRoot() (string, error) {
@@ -117,6 +118,56 @@ func agentPicoClawConfigNeedsParticipantRecreate(agentName, participantID string
 		return true
 	}
 	if _, ok := channel["bot_id"]; ok {
+		return true
+	}
+	return false
+}
+
+func agentPicoClawConfigNeedsFeishuRecreate(agentName, agentID string, provider feishu.AgentCredentialProvider) bool {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" || provider == nil {
+		return false
+	}
+	_, app, ok := provider.BotConfigForAgent(agentID)
+	if !ok {
+		return false
+	}
+	appID := strings.TrimSpace(app.AppID)
+	appSecret := strings.TrimSpace(app.AppSecret)
+	if appID == "" || appSecret == "" {
+		return false
+	}
+
+	root, err := agentPicoClawRoot(agentName)
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(root, picoclawsandbox.HostConfig))
+	if err != nil {
+		return true
+	}
+
+	var cfg struct {
+		Channels map[string]json.RawMessage `json:"channels"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return true
+	}
+	raw := cfg.Channels["feishu"]
+	if len(raw) == 0 {
+		return true
+	}
+	var channel map[string]any
+	if err := json.Unmarshal(raw, &channel); err != nil {
+		return true
+	}
+	if enabled, ok := channel["enabled"].(bool); !ok || !enabled {
+		return true
+	}
+	if got, ok := channel["app_id"].(string); !ok || strings.TrimSpace(got) != appID {
+		return true
+	}
+	if got, ok := channel["app_secret"].(string); !ok || strings.TrimSpace(got) != appSecret {
 		return true
 	}
 	return false

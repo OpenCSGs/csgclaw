@@ -11,53 +11,24 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"csgclaw/internal/channelbridge"
 )
 
-type BotEvent struct {
-	MessageID     string            `json:"message_id"`
-	RoomID        string            `json:"room_id"`
-	ChatType      string            `json:"chat_type"`
-	Text          string            `json:"text"`
-	Mentions      []string          `json:"mentions,omitempty"`
-	ThreadRootID  string            `json:"thread_root_id,omitempty"`
-	ThreadContext *BotThreadContext `json:"thread_context,omitempty"`
-}
-
-type BotThreadContext struct {
-	RootMessageID string                    `json:"root_message_id"`
-	Context       []BotThreadContextMessage `json:"context,omitempty"`
-	Summary       BotThreadContextSummary   `json:"summary"`
-}
-
-type BotThreadContextMessage struct {
-	ID        string `json:"id,omitempty"`
-	SenderID  string `json:"sender_id,omitempty"`
-	Content   string `json:"content,omitempty"`
-	CreatedAt string `json:"created_at,omitempty"`
-}
-
-type BotThreadContextSummary struct {
-	RootExcerpt  string `json:"root_excerpt,omitempty"`
-	MessageCount int    `json:"message_count,omitempty"`
-	BeforeCount  int    `json:"before_count,omitempty"`
-	AfterCount   int    `json:"after_count,omitempty"`
-}
-
-type SendMessageRequest struct {
-	RoomID       string `json:"room_id"`
-	Text         string `json:"text"`
-	MessageID    string `json:"message_id,omitempty"`
-	ThreadRootID string `json:"thread_root_id,omitempty"`
-}
-
-type SendMessageResponse struct {
-	MessageID string `json:"message_id"`
-}
-
-type BotClient interface {
-	StreamEvents(ctx context.Context, botID, lastEventID string) (<-chan BotEvent, <-chan error)
-	SendMessage(ctx context.Context, botID string, req SendMessageRequest) (SendMessageResponse, error)
-}
+type BotEvent = channelbridge.BotEvent
+type BotThreadContext = channelbridge.BotThreadContext
+type BotThreadContextMessage = channelbridge.BotThreadContextMessage
+type BotThreadContextSummary = channelbridge.BotThreadContextSummary
+type SendMessageRequest = channelbridge.SendMessageRequest
+type SendMessageResponse = channelbridge.SendMessageResponse
+type UpdateMessageRequest = channelbridge.UpdateMessageRequest
+type UpdateMessageResponse = channelbridge.UpdateMessageResponse
+type AddMessageReactionRequest = channelbridge.AddMessageReactionRequest
+type AddMessageReactionResponse = channelbridge.AddMessageReactionResponse
+type DeleteMessageReactionRequest = channelbridge.DeleteMessageReactionRequest
+type BotClient = channelbridge.BotClient
+type MessageUpdater = channelbridge.MessageUpdater
+type MessageReactor = channelbridge.MessageReactor
 
 type HTTPClient struct {
 	BaseURL     string

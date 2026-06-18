@@ -22,6 +22,8 @@ function t(key: string): string {
 }
 
 const updateAvailableStatus: UpgradeStatus = {
+  auto_upgrade_supported: true,
+  auto_upgrade_unsupported_reason: "",
   checking: false,
   current_version: "v0.3.0",
   last_checked_at: "",
@@ -87,6 +89,39 @@ describe("SidebarUserButton", () => {
     expect(onOpenUpgrade).toHaveBeenCalledTimes(1);
   });
 
+  it("hides upgrade actions for non-official installs", async () => {
+    const user = userEvent.setup();
+    const onOpenUpgrade = vi.fn();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        showUpgradeControls={true}
+        locale="en"
+        onOpenUpgrade={onOpenUpgrade}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        t={t}
+        theme="light"
+        upgradeStatus={{
+          ...updateAvailableStatus,
+          auto_upgrade_supported: false,
+          auto_upgrade_unsupported_reason: "not_official_bundle",
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.queryByText("Local build")).not.toBeInTheDocument();
+    expect(screen.getByText("v0.3.0")).toBeInTheDocument();
+    expect(screen.queryByText("v0.3.0 -> v0.3.1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Update & Restart")).not.toBeInTheDocument();
+    expect(screen.queryByText("Manual upgrade")).not.toBeInTheDocument();
+    expect(onOpenUpgrade).not.toHaveBeenCalled();
+  });
+
   it("shows local build state without upgrade actions", async () => {
     const user = userEvent.setup();
 
@@ -113,7 +148,38 @@ describe("SidebarUserButton", () => {
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
     expect(screen.getByText("Local build")).toBeInTheDocument();
-    expect(screen.getByText("v0.3.5+local")).toBeInTheDocument();
+    expect(screen.queryByText("v0.3.5+local")).not.toBeInTheDocument();
+    expect(screen.queryByText("Update & Restart")).not.toBeInTheDocument();
+  });
+
+  it("treats dirty git describe versions as local builds", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.10-21-g4dd4395-dirty"
+        showUpgradeControls={true}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        t={t}
+        theme="light"
+        upgradeStatus={{
+          ...updateAvailableStatus,
+          current_version: "v0.3.10-21-g4dd4395-dirty",
+          latest_version: "v0.3.11",
+          update_available: true,
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByText("Local build")).toBeInTheDocument();
+    expect(screen.queryByText("v0.3.10-21-g4dd4395-dirty")).not.toBeInTheDocument();
+    expect(screen.queryByText("v0.3.10-21-g4dd4395-dirty -> v0.3.11")).not.toBeInTheDocument();
     expect(screen.queryByText("Update & Restart")).not.toBeInTheDocument();
   });
 

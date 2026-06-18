@@ -101,6 +101,27 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	}
 }
 
+func TestAppServerManagerEnsureSessionHandlesThreadNotificationBeforeResponse(t *testing.T) {
+	withAppServerHelperCommand(t, "conversation-thread-notification-before-result")
+	dir := t.TempDir()
+	spec := testAppServerSessionSpec(dir)
+	manager := newAppServerManager(testAppServerManagerDeps())
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	thread, err := manager.EnsureSession(ctx, SessionHandle{RuntimeID: spec.RuntimeID}, "room-1")
+	if err != nil {
+		t.Fatalf("EnsureSession(conversation) error = %v", err)
+	}
+	if thread != "conversation-thread-2" {
+		t.Fatalf("conversation thread = %q, want conversation-thread-2", thread)
+	}
+}
+
 func TestAppServerManagerStopClosesPendingRequests(t *testing.T) {
 	withAppServerHelperCommand(t, "pending")
 	dir := t.TempDir()
@@ -164,6 +185,40 @@ func TestAppServerManagerPromptCompletesTurn(t *testing.T) {
 	events := sink.snapshot()
 	if len(events) != 2 ||
 		events[0].Kind != SessionEventTextDelta ||
+		events[1].Kind != SessionEventPromptCompleted ||
+		events[1].SessionID != session.SessionID {
+		t.Fatalf("events = %#v, want text delta then prompt completed event", events)
+	}
+}
+
+func TestAppServerManagerPromptCompletesOnAgentMessageWithoutTurnCompleted(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-agent-message-complete")
+	dir := t.TempDir()
+	spec := testAppServerSessionSpec(dir)
+	sink := &recordingSink{}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+	session, err := manager.Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	resp, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+		SessionID: session.SessionID,
+		Prompt:    []PromptContentBlock{TextBlock("hello codex")},
+	})
+	if err != nil {
+		t.Fatalf("Prompt() error = %v", err)
+	}
+	if resp.StopReason != StopReasonEndTurn {
+		t.Fatalf("StopReason = %q, want %q", resp.StopReason, StopReasonEndTurn)
+	}
+
+	waitForRuntime(t, func() bool { return len(sink.snapshot()) >= 2 })
+	events := sink.snapshot()
+	if len(events) != 2 ||
+		events[0].Kind != SessionEventTextDelta ||
+		events[0].Text != "done" ||
 		events[1].Kind != SessionEventPromptCompleted ||
 		events[1].SessionID != session.SessionID {
 		t.Fatalf("events = %#v, want text delta then prompt completed event", events)
@@ -273,6 +328,15 @@ func TestAppServerManagerPromptNoProgressTimeout(t *testing.T) {
 	events := sink.snapshot()
 	if len(events) != 1 || events[0].Kind != SessionEventPromptFailed {
 		t.Fatalf("events = %#v, want one prompt failed event", events)
+	}
+}
+
+func TestAppServerManagerDefaultNoProgressTimeoutIsFastFail(t *testing.T) {
+	if appServerFirstTurnNoProgressTimeout <= 0 {
+		t.Fatalf("appServerFirstTurnNoProgressTimeout = %s, want positive fast-fail timeout", appServerFirstTurnNoProgressTimeout)
+	}
+	if appServerSemanticInactivityTimeout <= appServerFirstTurnNoProgressTimeout {
+		t.Fatalf("semantic timeout = %s, no-progress timeout = %s, want semantic timeout longer than no-progress timeout", appServerSemanticInactivityTimeout, appServerFirstTurnNoProgressTimeout)
 	}
 }
 
@@ -687,6 +751,18 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			}
 			return rpcResult(msg["id"], map[string]any{"threadId": fmt.Sprintf("conversation-thread-%d", index)}), true
 		})
+	case "conversation-thread-notification-before-result":
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			if msg["method"] != "thread/start" {
+				return nil, false
+			}
+			if index == 1 {
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			}
+			threadID := fmt.Sprintf("conversation-thread-%d", index)
+			writeRPCNotification(t, "thread/started", map[string]any{"threadId": threadID})
+			return rpcResult(msg["id"], map[string]any{"threadId": threadID}), true
+		})
 	case "pending":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			if msg["method"] == "thread/start" {
@@ -704,6 +780,20 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-1"}})
 				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "item-1", "type": "agentMessage", "text": "done"}})
 				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-1", "status": "completed"}})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-1"}), true
+			default:
+				return nil, false
+			}
+		})
+	case "prompt-agent-message-complete":
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "turn/start":
+				assertTurnStartParams(t, msg, "main-thread", "medium", "hello codex")
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-1"}})
+				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "item-1", "type": "agentMessage", "text": "done"}})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-1"}), true
 			default:
 				return nil, false

@@ -3,7 +3,14 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
 import { patchParticipantAvatarRequest } from "@/api/participants";
 import { createTranslator } from "@/shared/i18n";
-import { upsertUserInData } from "@/models/conversations";
+import {
+  agentMatchesUser,
+  isDirectConversation,
+  resolveConversationUser,
+  upsertUserInData,
+} from "@/models/conversations";
+import { isAgentRunning, resolveAgentAvatarFallback, resolveAgentChannelUserID } from "@/models/agents";
+import { MANAGER_AGENT_ID, MANAGER_AGENT_NAME, MANAGER_PARTICIPANT_ID } from "@/shared/constants/agents";
 import { WorkspacePaneTypes, paneFromLocation } from "@/models/routing";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
 import { useWorkspaceData } from "./useWorkspaceData";
@@ -17,8 +24,9 @@ import { useConversationController } from "./useConversationController";
 import { useProfilePreviewController } from "./useProfilePreviewController";
 import { useTaskController } from "./useTaskController";
 import type { CreateTeamPayload } from "@/api/tasks";
+import type { AgentLike } from "@/models/agents";
 import type { HubTemplate } from "@/models/hubWorkspace";
-import type { IMData, IMUser } from "@/models/conversations";
+import type { IMConversation, IMData, IMUser } from "@/models/conversations";
 
 function isBootstrapAdminUser(user: IMUser | null | undefined) {
   return (
@@ -38,6 +46,58 @@ function initialsForIdentity(name: string) {
     return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
   }
   return trimmed.slice(0, 2).toUpperCase();
+}
+
+function resolveManagerDirectConversation(
+  rooms: readonly IMConversation[],
+  currentUserID: string,
+  managerAgent: AgentLike | null | undefined,
+): IMConversation | null {
+  if (!currentUserID) {
+    return null;
+  }
+  const managerUserIDs = new Set(
+    [
+      resolveAgentChannelUserID(managerAgent),
+      managerAgent?.id,
+      managerAgent?.user_id,
+      MANAGER_PARTICIPANT_ID,
+      MANAGER_AGENT_ID,
+    ]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean),
+  );
+  return (
+    rooms.find(
+      (room) =>
+        isDirectConversation(room) &&
+        room.members.includes(currentUserID) &&
+        room.members.some((memberID) => memberID !== currentUserID && managerUserIDs.has(memberID)),
+    ) ?? null
+  );
+}
+
+function resolveDirectConversationAgent(
+  conversation: IMConversation | null | undefined,
+  currentUserID: string,
+  usersById: Map<string, IMUser>,
+  agents: readonly AgentLike[],
+): AgentLike | null {
+  if (!conversation || !currentUserID || !isDirectConversation(conversation)) {
+    return null;
+  }
+  const otherMemberID = conversation.members.find((id) => id && id !== currentUserID) ?? "";
+  const directUser = resolveConversationUser(conversation, currentUserID, usersById);
+  return (
+    agents.find((item) => {
+      const channelUserID = resolveAgentChannelUserID(item);
+      return (
+        Boolean(otherMemberID && (item.id === otherMemberID || item.user_id === otherMemberID)) ||
+        Boolean(channelUserID && channelUserID === otherMemberID) ||
+        agentMatchesUser(item, directUser)
+      );
+    }) ?? null
+  );
 }
 
 function withLocalIdentity(data: IMData | null, fallbackName: string): IMData | null {
@@ -78,6 +138,8 @@ export function useWorkspaceController() {
   const setTheme = useWorkspaceUiStore((state) => state.setTheme);
   const showToolCalls = useWorkspaceUiStore((state) => state.showToolCalls);
   const setShowToolCalls = useWorkspaceUiStore((state) => state.setShowToolCalls);
+  const floatingChatOpen = useWorkspaceUiStore((state) => state.floatingChatOpen);
+  const setFloatingChatOpen = useWorkspaceUiStore((state) => state.setFloatingChatOpen);
   const isSidebarCollapsed = useWorkspaceUiStore((state) => state.isSidebarCollapsed);
   const setIsSidebarCollapsed = useWorkspaceUiStore((state) => state.setIsSidebarCollapsed);
   const collapsedWorkspaceGroups = useWorkspaceUiStore((state) => state.collapsedWorkspaceGroups);
@@ -132,6 +194,7 @@ export function useWorkspaceController() {
     setActiveConversationId,
     rooms,
   });
+  const ignoreFloatingChatNavigation = useCallback(() => {}, []);
   const shell = useWorkspaceShellController({
     activeConversationId,
     activePane,
@@ -197,6 +260,10 @@ export function useWorkspaceController() {
     setSelectedHubTemplateId,
     t,
   });
+  const managerDirectConversation = useMemo(
+    () => resolveManagerDirectConversation(rooms, displayData?.current_user_id ?? "", agent.managerAgent),
+    [agent.managerAgent, displayData?.current_user_id, rooms],
+  );
   const conversation = useConversationController({
     activeConversationId,
     activePane,
@@ -212,7 +279,9 @@ export function useWorkspaceController() {
     navigatePane,
     onMessageAction: agent.handleMessageAction,
     onProviderLogin: agent.loginCLIProxyProvider,
+    onRefreshAgentState: agent.refreshAgentState,
     onUpgradeStatusChange: upgrade.handleUpgradeStatusChange,
+    preferredFallbackConversationId: managerDirectConversation?.id ?? "",
     rooms,
     selectComputer,
     selectConversation,
@@ -223,9 +292,51 @@ export function useWorkspaceController() {
     t,
     theme,
   });
+  const floatingChatTargetConversation = managerDirectConversation;
+  const floatingChatConversationID = floatingChatTargetConversation?.id ?? "";
+  const floatingChatRooms = useMemo(
+    () => (floatingChatTargetConversation ? [floatingChatTargetConversation] : []),
+    [floatingChatTargetConversation],
+  );
+  const floatingChatPane = useMemo(
+    () => ({ type: WorkspacePaneTypes.conversation, id: floatingChatConversationID }),
+    [floatingChatConversationID],
+  );
+  const floatingConversation = useConversationController({
+    activeConversationId: floatingChatConversationID,
+    activePane: floatingChatPane,
+    agents,
+    autoSelectFallbackConversation: false,
+    authBusyProvider: agent.cliproxyAuthBusy,
+    authStatuses: agent.cliproxyAuthStatuses,
+    data: displayData,
+    locale,
+    managerProfile,
+    managerProfileIncomplete: agent.managerProfileIncomplete,
+    messageActionBusy: agent.messageActionBusy,
+    messageActionError: agent.messageActionError,
+    messageListActive: floatingChatOpen,
+    navigatePane: ignoreFloatingChatNavigation,
+    onMessageAction: agent.handleMessageAction,
+    onProviderLogin: agent.loginCLIProxyProvider,
+    onRefreshAgentState: agent.refreshAgentState,
+    onUpgradeStatusChange: upgrade.handleUpgradeStatusChange,
+    rooms: floatingChatRooms,
+    selectComputer: ignoreFloatingChatNavigation,
+    selectConversation: ignoreFloatingChatNavigation,
+    setActiveConversationId: ignoreFloatingChatNavigation,
+    setBootstrapData,
+    showToolCalls,
+    setShowToolCalls,
+    t,
+    theme,
+  });
   const profilePreview = useProfilePreviewController({
     agentItems: agent.agentItems,
-    closeConversationTools: conversation.closeConversationTools,
+    closeConversationTools: () => {
+      conversation.closeConversationTools();
+      floatingConversation.closeConversationTools();
+    },
     openAgentDirectMessage: agent.openAgentDirectMessage,
     selectAgent,
     t,
@@ -285,6 +396,38 @@ export function useWorkspaceController() {
     [selectedHuman, setBootstrapData, t],
   );
   const humanAvatarBusy = Boolean(selectedHuman?.id && humanAvatarBusyID === selectedHuman.id);
+  const floatingChatAgent = useMemo(
+    () =>
+      resolveDirectConversationAgent(
+        floatingChatTargetConversation,
+        displayData?.current_user_id ?? "",
+        conversation.usersById,
+        agent.agentItems,
+      ),
+    [agent.agentItems, conversation.usersById, displayData?.current_user_id, floatingChatTargetConversation],
+  );
+  const floatingChatUser =
+    floatingChatTargetConversation && displayData?.current_user_id
+      ? (resolveConversationUser(floatingChatTargetConversation, displayData.current_user_id, conversation.usersById) ??
+        null)
+      : null;
+  const floatingChatTitle =
+    floatingChatUser?.name || floatingChatAgent?.name || agent.managerAgent?.name || MANAGER_AGENT_NAME;
+  const floatingChatAvatar = floatingChatUser?.avatar || floatingChatAgent?.avatar || null;
+  const floatingChatAvatarFallback = floatingChatAgent
+    ? resolveAgentAvatarFallback(floatingChatAgent, conversation.usersById)
+    : initialsForIdentity(floatingChatTitle);
+  const floatingChatConversation = floatingConversation.conversationViewProps.conversation;
+  const floatingChatConversationProps = floatingChatConversation
+    ? {
+        ...floatingConversation.conversationViewProps,
+        agents: agent.agentItems,
+        conversation: floatingChatConversation,
+        onPreviewUser: profilePreview.openParticipantPreview,
+        showInviteAction: false,
+        threadDisplay: "dialog" as const,
+      }
+    : null;
 
   function selectHubTemplate(item: HubTemplate | null | undefined) {
     if (!item?.id) {
@@ -308,6 +451,17 @@ export function useWorkspaceController() {
     shellClassName: shell.shellClassName,
     mainPanelHasThread: Boolean(conversation.activeThreadRootID && conversation.selectedConversation),
     activePane,
+    floatingChatProps: {
+      avatar: floatingChatAvatar,
+      avatarFallback: floatingChatAvatarFallback,
+      chatProps: floatingChatConversationProps,
+      locale,
+      online: floatingChatAgent ? isAgentRunning(floatingChatAgent) : Boolean(floatingChatUser?.is_online),
+      open: floatingChatOpen,
+      t,
+      title: floatingChatTitle,
+      onOpenChange: setFloatingChatOpen,
+    },
     sidebarProps: {
       isSidebarCollapsed,
       onCollapseSidebar: () => setIsSidebarCollapsed(true),

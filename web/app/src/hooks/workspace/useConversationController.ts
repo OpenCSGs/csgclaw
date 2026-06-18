@@ -49,7 +49,7 @@ import {
   updateDrafts,
 } from "@/models/composer";
 import { WorkspacePaneTypes } from "@/models/routing";
-import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
+import { isAgentRunning, normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
 import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace, type SlashSkillOption } from "@/models/slashCommands";
 import { localizeError } from "@/shared/i18n";
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
@@ -98,6 +98,7 @@ export function useConversationController({
   activeConversationId,
   activePane,
   agents,
+  autoSelectFallbackConversation = true,
   authBusyProvider,
   authStatuses,
   data,
@@ -107,7 +108,9 @@ export function useConversationController({
   navigatePane,
   onMessageAction,
   onProviderLogin,
+  onRefreshAgentState,
   onUpgradeStatusChange,
+  preferredFallbackConversationId = "",
   rooms,
   selectComputer,
   selectConversation,
@@ -119,6 +122,7 @@ export function useConversationController({
   theme,
   messageActionBusy,
   messageActionError,
+  messageListActive = true,
 }: UseConversationControllerArgs) {
   const [draftsByConversationId, setDraftsByConversationId] = useState<DraftsByConversationId>({});
   const [threadDraftsByKey, setThreadDraftsByKey] = useState<DraftsByThreadKey>({});
@@ -156,6 +160,9 @@ export function useConversationController({
   const shouldAutoScrollRef = useRef(true);
   const autoScrollConversationRef = useRef(activeConversationId);
   const activeThreadKeyRef = useRef("");
+  const agentsRef = useRef(agents);
+  const usersByIdRef = useRef<Map<string, IMUser>>(new Map());
+  const refreshAgentStateRef = useRef(onRefreshAgentState);
 
   const usersById = useMemo(() => {
     const result = new Map<string, IMUser>();
@@ -321,6 +328,12 @@ export function useConversationController({
   }, [activeConversationId, activeThreadRootID]);
 
   useEffect(() => {
+    agentsRef.current = agents;
+    usersByIdRef.current = usersById;
+    refreshAgentStateRef.current = onRefreshAgentState;
+  }, [agents, onRefreshAgentState, usersById]);
+
+  useEffect(() => {
     const unsubscribe = subscribeIMEvents((payload: IMServerEvent) => {
       setBootstrapData((current) => applyIMEvent(current, payload));
       if ((payload?.type === "thread.created" || payload?.type === "thread.updated") && payload.thread) {
@@ -329,6 +342,14 @@ export function useConversationController({
         }
       }
       if (payload?.type === "message.created" && payload.message) {
+        const senderID = String(payload.message.sender_id || "").trim();
+        if (senderID) {
+          const sender = usersByIdRef.current.get(senderID) ?? { id: senderID };
+          const senderAgent = agentsRef.current.find((agent) => agentMatchesUser(agent, sender));
+          if (senderAgent?.id && !isAgentRunning(senderAgent)) {
+            void refreshAgentStateRef.current(String(senderAgent.id));
+          }
+        }
         if (threadMessageKey(payload.room_id, payload.message) === activeThreadKeyRef.current) {
           setActiveThreadView((current) => appendReplyToThreadView(current, payload.message) ?? null);
         }
@@ -494,7 +515,13 @@ export function useConversationController({
     if (!data) {
       return;
     }
-    const fallbackConversationId = data.rooms[0]?.id ?? "";
+    if (!autoSelectFallbackConversation) {
+      return;
+    }
+    const preferredFallbackID = String(preferredFallbackConversationId || "").trim();
+    const fallbackConversationId = data.rooms.some((room) => room.id === preferredFallbackID)
+      ? preferredFallbackID
+      : (data.rooms[0]?.id ?? "");
     if (!activeConversationId) {
       if (fallbackConversationId) {
         setActiveConversationId(fallbackConversationId);
@@ -532,9 +559,14 @@ export function useConversationController({
     selectComputer,
     selectConversation,
     setActiveConversationId,
+    autoSelectFallbackConversation,
+    preferredFallbackConversationId,
   ]);
 
   useEffect(() => {
+    if (!messageListActive) {
+      return;
+    }
     const el = messageListRef.current;
     if (!el) {
       return;
@@ -546,9 +578,12 @@ export function useConversationController({
     updateAutoScrollState();
     el.addEventListener("scroll", updateAutoScrollState);
     return () => el.removeEventListener("scroll", updateAutoScrollState);
-  }, [activeConversationId]);
+  }, [activeConversationId, messageListActive]);
 
   useLayoutEffect(() => {
+    if (!messageListActive) {
+      return;
+    }
     if (activePane.type !== WorkspacePaneTypes.conversation) {
       return;
     }
@@ -559,9 +594,12 @@ export function useConversationController({
     autoScrollConversationRef.current = activeConversationId;
     el.scrollTop = el.scrollHeight;
     shouldAutoScrollRef.current = true;
-  }, [activePane.type, activeConversationId]);
+  }, [activePane.type, activeConversationId, messageListActive]);
 
   useEffect(() => {
+    if (!messageListActive) {
+      return;
+    }
     const el = messageListRef.current;
     if (autoScrollConversationRef.current !== activeConversationId) {
       autoScrollConversationRef.current = activeConversationId;
@@ -572,7 +610,7 @@ export function useConversationController({
       return;
     }
     el.scrollTop = el.scrollHeight;
-  }, [visibleMessages.length, activeConversationId]);
+  }, [visibleMessages.length, activeConversationId, messageListActive]);
 
   useEffect(() => {
     const editor = editorRef.current;

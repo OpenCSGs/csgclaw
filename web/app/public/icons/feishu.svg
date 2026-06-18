@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img">
+  <title>Feishu</title>
+  <rect width="32" height="32" rx="7" fill="#fff"/>
+  <path fill="#00d6b9" d="M7.2 9.4c0-1 .8-1.8 1.8-1.8h5.6c1 0 1.8.8 1.8 1.8v4.9H9c-1 0-1.8-.8-1.8-1.8V9.4z"/>
+  <path fill="#3370ff" d="M17.4 7.6H23c1 0 1.8.8 1.8 1.8v5.1c0 1-.8 1.8-1.8 1.8h-7.4V9.4c0-1 .8-1.8 1.8-1.8z"/>
+  <path fill="#ffb300" d="M7.2 17.6c0-1 .8-1.8 1.8-1.8h7.4v6.8c0 1-.8 1.8-1.8 1.8H9c-1 0-1.8-.8-1.8-1.8v-5z"/>
+  <path fill="#ff5b4c" d="M15.6 15.8H23c1 0 1.8.8 1.8 1.8v5c0 1-.8 1.8-1.8 1.8h-5.6c-1 0-1.8-.8-1.8-1.8v-6.8z"/>
+  <path fill="#fff" d="M12.4 12.4h7.2v7.2h-7.2z"/>
+</svg>

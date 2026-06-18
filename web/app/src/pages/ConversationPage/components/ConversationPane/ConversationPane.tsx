@@ -1,159 +1,13 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction } from "react";
-import { BoxIcon, TerminalIcon, RefreshCw, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
-import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
-import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
-import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
-import { AgentAvatarContent } from "@/components/business/AgentAvatar";
-import { avatarFallbackText } from "@/shared/avatar";
 import {
-  Button,
-  DialogBody,
-  DialogCloseButton,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogRoot,
-  DialogTitle,
-} from "@/components/ui";
-import { AddUserIcon, IconImage, TrashIcon, WrenchIcon } from "@/components/ui/Icons";
-import {
-  type ComposerMentionUser,
-  type ComposerSegment,
-  insertComposerSegmentsAtSelection,
-  areComposerSegmentsEqual,
-  removeAdjacentMentionToken,
-  getComposerMentionState,
-  insertComposerLineBreak,
-  parseComposerSegments,
-  renderComposerSegments,
-  insertPlainTextAtSelection,
-  replaceMentionQueryWithToken,
-  getMentionCandidates,
-  normalizeComposerSegmentsForDisplay,
-  segmentsToPlainText,
-  normalizeTextMentions,
-  getCollapsedSelectionTextOffset,
-  placeCaretAtEnd,
-} from "@/models/composer";
-import {
-  isAgentRunning,
-  normalizeAuthProviderName,
-  providerNeedsAuth,
-  resolveAgentAvatarFallback,
-} from "@/models/agents";
-import type { AgentLike, AgentProfileLike } from "@/models/agents";
-import type { SlashPickerCandidate } from "@/models/slashCommands";
-import {
-  agentMatchesUser,
-  formatEventMessage,
-  formatMessageTimestampParts,
-  formatThreadReplyCount,
-  getConversationDescription,
-  type IMConversation,
-  type IMMessage,
-  type IMUser,
-  isDirectConversation,
-  isEventMessage,
-  isToolCallMessage,
-  type LocaleCode,
-  type MessageTimestampParts,
-  type ThreadView,
-  type TranslateFn,
-  type UsersById,
-} from "@/models/conversations";
-import { localizeRole } from "@/shared/i18n";
-import type { ThemeMode } from "@/shared/theme/theme";
-import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
-
-type ThreadMentionState = {
-  endOffset: number;
-  end: number;
-  query: string;
-  startOffset: number;
-  start: number;
-  textNode?: Node;
-};
-
-type BooleanStateSetter = Dispatch<SetStateAction<boolean>>;
-type MentionPickerUser = ComposerMentionUser & Pick<IMUser, "avatar" | "role">;
-type VoidOrPromise = void | Promise<void>;
-
-export type ConversationPaneProps = {
-  activeThreadRootID?: string;
-  activeThreadView?: ThreadView | null;
-  agents?: AgentLike[];
-  authBusyProvider: string;
-  authStatuses: CLIProxyAuthStatusMap;
-  channelToolsRef: RefObject<HTMLDivElement | null>;
-  composerError: string;
-  conversation: IMConversation;
-  conversationMembers: IMUser[];
-  currentUserID?: string;
-  draftSegments: ComposerSegment[];
-  draftText: string;
-  editorRef: RefObject<HTMLDivElement | null>;
-  inviteActionLabel: string;
-  locale: LocaleCode;
-  logAgent?: AgentLike | null;
-  managerProfile?: AgentProfileLike | null;
-  managerProfileIncomplete?: boolean | null;
-  memberMenuRef: RefObject<HTMLDivElement | null>;
-  mentionCandidates: MentionPickerUser[];
-  mentionIndex: number;
-  mentionableUsersByHandle: Map<string, ComposerMentionUser>;
-  messageActionBusy: string;
-  messageActionError: MessageActionError;
-  messageListRef: RefObject<HTMLElement | null>;
-  memberActionBusyID: string;
-  memberActionError: string;
-  onApplyMention: (user: MentionPickerUser) => void;
-  onApplySlashCandidate?: (name: string) => void;
-  onApplyThreadSlashCandidate?: (name: string) => void;
-  onClearRoomMessages?: (id: string) => VoidOrPromise;
-  onClearMemberActionError: () => void;
-  onCloseThread: () => void;
-  onComposerCompositionEnd: () => void;
-  onComposerCompositionStart: () => void;
-  onComposerKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
-  onDeleteRoom: (id: string) => VoidOrPromise;
-  onDismissThreadSlashPicker?: () => void;
-  onInviteAction: () => void;
-  onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
-  onOpenThread: (message: IMMessage) => VoidOrPromise;
-  onRemoveMember: (memberID: string) => VoidOrPromise;
-  onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
-  onProviderLogin: (provider: string) => VoidOrPromise;
-  onSendMessage: () => VoidOrPromise;
-  onSendThreadReply: () => VoidOrPromise;
-  onSetThreadSlashIndex?: (index: number) => void;
-  onSyncComposer: () => void;
-  onThreadDraftChange: (segments: ComposerSegment[]) => void;
-  onToggleChannelTools: BooleanStateSetter;
-  onToggleMemberList: BooleanStateSetter;
-  onToggleToolCalls: BooleanStateSetter;
-  selectedMessageCount: number;
-  showChannelTools: boolean;
-  showMemberList: boolean;
-  showToolCalls: boolean;
-  slashCandidates?: SlashPickerCandidate[];
-  slashIndex?: number;
-  slashPickerLoading?: boolean;
-  slashPickerOpen?: boolean;
-  t: TranslateFn;
-  theme: ThemeMode;
-  threadDraftSegments: ComposerSegment[];
-  threadError: string;
-  threadLoading: boolean;
-  threadSlashCandidates?: SlashPickerCandidate[];
-  threadSlashIndex?: number;
-  threadSlashPickerLoading?: boolean;
-  threadSlashPickerOpen?: boolean;
-  usersById: UsersById;
-  visibleMessages: IMMessage[];
-};
+  Conversation,
+  type ConversationPaneProps,
+  useConversationDraftEditorSync,
+} from "@/components/business/ConversationPane";
+import { normalizeAuthProviderName } from "@/models/agents";
+import { getConversationDescription, isDirectConversation } from "@/models/conversations";
 
 export function ConversationPane({
   conversation,
@@ -233,6 +87,8 @@ export function ConversationPane({
   const logAgentName = logAgent?.name || conversation.title || "";
   const composerDisabled = Boolean(managerProfileIncomplete);
 
+  useConversationDraftEditorSync(editorRef, draftSegments);
+
   useEffect(() => {
     setLogModalOpen(false);
     setLogContent("");
@@ -242,24 +98,7 @@ export function ConversationPane({
     setDeleteRoomDialogOpen(false);
   }, [conversation.id, logAgentID]);
 
-  useLayoutEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) {
-      return;
-    }
-    const currentSegments = parseComposerSegments(editor);
-    if (!areComposerSegmentsEqual(currentSegments, draftSegments)) {
-      const currentText = segmentsToPlainText(currentSegments);
-      const nextText = segmentsToPlainText(draftSegments);
-      const selectionOffset = getCollapsedSelectionTextOffset(editor);
-      renderComposerSegments(editor, draftSegments);
-      if (currentText === nextText && selectionOffset === currentText.length) {
-        placeCaretAtEnd(editor);
-      }
-    }
-  }, [draftSegments]);
-
-  async function refreshAgentLogs() {
+  const refreshAgentLogs = useCallback(async () => {
     if (!logAgentID) {
       return;
     }
@@ -272,347 +111,122 @@ export function ConversationPane({
     } finally {
       setLogLoading(false);
     }
-  }
+  }, [logAgentID, t]);
 
-  function openAgentLogs() {
+  const handleOpenAgentLogs = useCallback(() => {
     setLogModalOpen(true);
     void refreshAgentLogs();
-  }
+  }, [refreshAgentLogs]);
+
+  const handleOpenClearMessagesDialog = useCallback(() => {
+    onToggleChannelTools(false);
+    setClearMessagesDialogOpen(true);
+  }, [onToggleChannelTools]);
+
+  const handleOpenDeleteRoomDialog = useCallback(() => {
+    onToggleChannelTools(false);
+    setDeleteRoomDialogOpen(true);
+  }, [onToggleChannelTools]);
+
+  const threadPanel = activeThreadRootID ? (
+    <Conversation.ThreadPanel
+      thread={activeThreadView}
+      loading={threadLoading}
+      error={threadError}
+      draftSegments={threadDraftSegments}
+      disabled={composerDisabled}
+      usersById={usersById}
+      locale={locale}
+      theme={theme}
+      showToolCalls={showToolCalls}
+      t={t}
+      onClose={onCloseThread}
+      onDraftChange={onThreadDraftChange}
+      threadSlashCandidates={threadSlashCandidates}
+      threadSlashIndex={threadSlashIndex}
+      threadSlashPickerLoading={threadSlashPickerLoading}
+      threadSlashPickerOpen={threadSlashPickerOpen}
+      onApplyThreadSlashCandidate={onApplyThreadSlashCandidate}
+      onDismissThreadSlashPicker={onDismissThreadSlashPicker}
+      onSetThreadSlashIndex={onSetThreadSlashIndex}
+      mentionableUsers={conversationMembers}
+      onPreviewUser={onPreviewUser}
+      onSend={onSendThreadReply}
+    />
+  ) : null;
 
   return (
     <>
-      <header className="chat-header">
-        <div className="chat-header-main">
-          <div className="chat-title-bar">
-            <div className="chat-title-row">
-              <div className="chat-title-group">
-                <div className="chat-kicker">
-                  <span>
-                    {isDirectConversation(conversation) ? t("directMessagesSection") : t("conversationLabel")}
-                  </span>
-                  <strong>{selectedMessageCount}</strong>
-                </div>
-                <div className="chat-title truncate">{conversation.title}</div>
-              </div>
-            </div>
-            <div className="chat-title-actions">
-              {logAgent ? (
-                <Button
-                  className="icon-button log-button"
-                  active={logModalOpen}
-                  iconOnly
-                  size="lg"
-                  variant="secondaryGray"
-                  aria-label={t("agentLogs")}
-                  data-tooltip={t("agentLogs")}
-                  data-tooltip-side="bottom"
-                  onClick={openAgentLogs}
-                >
-                  <span className="icon-button-mark" aria-hidden="true">
-                    {IconImage("log")}
-                  </span>
-                </Button>
-              ) : null}
-              <div ref={channelToolsRef} className="header-menu tools-menu">
-                <Button
-                  className="icon-button"
-                  active={showChannelTools}
-                  iconOnly
-                  size="lg"
-                  variant="secondaryGray"
-                  aria-label={t("channelTools")}
-                  aria-expanded={showChannelTools}
-                  data-tooltip={t("channelTools")}
-                  data-tooltip-side="bottom"
-                  onClick={() => {
-                    onToggleChannelTools((value) => !value);
-                  }}
-                >
-                  <span className="icon-button-mark">
-                    <WrenchIcon />
-                  </span>
-                </Button>
-                {showChannelTools ? (
-                  <div className="header-popover tools-popover">
-                    <div className="header-popover-title">{t("channelTools")}</div>
-                    <Button className="tool-menu-row" onClick={() => onToggleToolCalls((value) => !value)}>
-                      <span>{showToolCalls ? t("toggleToolCallsHide") : t("toggleToolCallsShow")}</span>
-                      <strong>{showToolCalls ? t("enabled") : t("disabled")}</strong>
-                    </Button>
-                    <Button
-                      variant="outlineDanger"
-                      className="tool-menu-row danger"
-                      onClick={() => {
-                        onToggleChannelTools(false);
-                        setClearMessagesDialogOpen(true);
-                      }}
-                    >
-                      <span>{t("clearRoomMessages")}</span>
-                      <span className="tool-menu-icon" aria-hidden="true">
-                        <TrashIcon />
-                      </span>
-                    </Button>
-                    {!isDirectConversation(conversation) ? (
-                      <Button
-                        variant="outlineDanger"
-                        className="tool-menu-row danger"
-                        onClick={() => {
-                          onToggleChannelTools(false);
-                          setDeleteRoomDialogOpen(true);
-                        }}
-                      >
-                        <span>{t("deleteRoom")}</span>
-                        <span className="tool-menu-icon" aria-hidden="true">
-                          <TrashIcon />
-                        </span>
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-              <Button
-                className="icon-button member-management-button"
-                iconOnly
-                size="lg"
-                variant="secondaryGray"
-                aria-label={inviteActionLabel}
-                data-tooltip={inviteActionLabel}
-                data-tooltip-side="bottom"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onInviteAction();
-                }}
-              >
-                <span className="icon-button-mark">
-                  <AddUserIcon />
-                </span>
-              </Button>
-            </div>
-          </div>
-          {description ? <div className="chat-subtitle">{description}</div> : null}
-        </div>
-      </header>
+      <Conversation.Header
+        channelToolsRef={channelToolsRef}
+        conversation={conversation}
+        conversationMembers={conversationMembers}
+        description={description}
+        inviteActionLabel={inviteActionLabel}
+        logAgent={logAgent}
+        logModalOpen={logModalOpen}
+        selectedMessageCount={selectedMessageCount}
+        showChannelTools={showChannelTools}
+        showInviteAction={true}
+        showMemberListAction={false}
+        showToolCalls={showToolCalls}
+        t={t}
+        onClearMessages={handleOpenClearMessagesDialog}
+        onDeleteRoom={handleOpenDeleteRoomDialog}
+        onInviteAction={onInviteAction}
+        onOpenAgentLogs={handleOpenAgentLogs}
+        onPreviewUser={onPreviewUser}
+        onToggleChannelTools={onToggleChannelTools}
+        onToggleToolCalls={onToggleToolCalls}
+      />
 
-      <section ref={messageListRef} className="messages">
-        {conversation.messages.length === 0 ? (
-          <div className="messages-empty rich-empty">
-            <span aria-hidden="true" className="rich-empty-mark">
-              {">"}
-            </span>
-            <strong>{t("noMessages")}</strong>
-          </div>
-        ) : visibleMessages.length === 0 ? (
-          <div className="messages-empty rich-empty">
-            <span aria-hidden="true" className="rich-empty-mark">
-              #
-            </span>
-            <strong>{t("noVisibleMessages")}</strong>
-          </div>
-        ) : null}
-        {visibleMessages.map((message, index) => {
-          const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
-          const previousMessage = visibleMessages[index - 1];
-          const showDivider = shouldShowMessageDateDivider(previousMessage, message);
+      <Conversation.MessageList
+        agents={agents}
+        conversation={conversation}
+        currentUserID={currentUserID}
+        emptyStateSlot={<></>}
+        locale={locale}
+        messageActionBusy={messageActionBusy}
+        messageActionError={messageActionError}
+        messageListRef={messageListRef}
+        t={t}
+        theme={theme}
+        usersById={usersById}
+        visibleMessages={visibleMessages}
+        onMessageAction={onMessageAction}
+        onOpenThread={onOpenThread}
+        onPreviewUser={onPreviewUser}
+      />
 
-          if (isEventMessage(message)) {
-            return (
-              <Fragment key={message.id || `event-${index}`}>
-                {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
-                <div className="message-event-row">
-                  <div className="message-event-text">{formatEventMessage(message, usersById, locale)}</div>
-                </div>
-              </Fragment>
-            );
-          }
-          const user = usersById.get(message.sender_id || "");
-          if (!user) {
-            return null;
-          }
-          const own = message.sender_id === currentUserID;
-          const isAdmin = user?.role === "admin";
-          const messageAgent = agents.find((item) => agentMatchesUser(item, user));
-          const messageAgentRunning = isAgentRunning(messageAgent);
-          const messageAvatar = messageAgent?.avatar || user.avatar;
-          const messageAvatarFallback = messageAgent
-            ? resolveAgentAvatarFallback(messageAgent, usersById)
-            : avatarFallbackText(user.avatar, user.name, user.handle, user.id);
-          const threadSummary = message.thread;
-          const latestThreadReply = threadSummary?.latest_reply;
-          return (
-            <Fragment key={message.id || `message-${index}`}>
-              {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
-              <div className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""}`.trim()}>
-                <button
-                  type="button"
-                  className="avatar avatar-button"
-                  aria-label={`${t("profilePreview")} ${user.name}`}
-                  onClick={(event) => onPreviewUser(user, event.currentTarget)}
-                >
-                  <AgentAvatarContent avatar={messageAvatar} fallback={messageAvatarFallback} />
-                  {messageAgent ? (
-                    <span
-                      className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`}
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                </button>
-                <div className="message-card">
-                  <div className="message-hover-actions">
-                    <button
-                      type="button"
-                      className="thread-hover-button"
-                      aria-label={t("replyInThread")}
-                      data-tooltip={t("replyInThread")}
-                      data-tooltip-side="top"
-                      onClick={() => onOpenThread(message)}
-                    >
-                      <span className="thread-hover-icon" aria-hidden="true">
-                        {IconImage("rooms")}
-                      </span>
-                    </button>
-                  </div>
-                  <div className="message-meta">
-                    <span className="message-author">{user.name}</span>
-                    <MessageTimestamp parts={timestampParts} />
-                  </div>
-                  <div className="message-bubble">
-                    <MessageContent
-                      key={`${message.id}:${theme}`}
-                      content={message.content}
-                      message={message}
-                      actionBusy={messageActionBusy}
-                      actionError={messageActionError}
-                      onAction={onMessageAction}
-                    />
-                  </div>
-                  {threadSummary ? (
-                    <div className="message-thread-actions has-thread-summary">
-                      <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
-                        <span aria-hidden="true">{IconImage("rooms")}</span>
-                        <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
-                      </button>
-                      {latestThreadReply ? (
-                        <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
-                          <span>{t("latestThreadReply")}</span>
-                          <strong className="truncate">
-                            <MessagePreviewText content={latestThreadReply.content} />
-                          </strong>
-                        </button>
-                      ) : (
-                        <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
-                          <span>{t("threadStarted")}</span>
-                          <strong>{formatThreadReplyCount(threadSummary.reply_count, t)}</strong>
-                        </button>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </Fragment>
-          );
-        })}
-      </section>
-
-      <footer className="composer">
-        {slashPickerOpen ? (
-          <SlashPicker
-            candidates={slashCandidates}
-            activeIndex={slashIndex}
-            loading={slashPickerLoading}
-            t={t}
-            onSelect={(name) => onApplySlashCandidate?.(name)}
-          />
-        ) : null}
-        {mentionCandidates.length > 0 ? (
-          <MentionPicker users={mentionCandidates} activeIndex={mentionIndex} t={t} onSelect={onApplyMention} />
-        ) : null}
-        {managerProfile &&
-        providerNeedsAuth(managerProfile.provider) &&
-        authStatuses[managerProvider]?.authenticated === false ? (
-          <CLIProxyAuthControl
-            provider={managerProfile.provider}
-            t={t}
-            status={authStatuses[managerProvider]}
-            busy={authBusyProvider === managerProvider}
-            onLogin={onProviderLogin}
-          />
-        ) : null}
-        <div className="composer-box">
-          <div className="composer-input-wrap">
-            {draftSegments.length === 0 ? (
-              <div className="composer-placeholder" aria-hidden="true">
-                {composerDisabled ? t("profileIncomplete") : t("inputPlaceholder")}
-              </div>
-            ) : null}
-            <div
-              ref={editorRef}
-              className={`composer-editor ${composerDisabled ? "disabled" : ""}`}
-              contentEditable={composerDisabled ? "false" : "true"}
-              suppressContentEditableWarning={true}
-              aria-label={t("inputPlaceholder")}
-              onInput={onSyncComposer}
-              onClick={onSyncComposer}
-              onKeyDown={onComposerKeyDown}
-              onCompositionStart={onComposerCompositionStart}
-              onCompositionEnd={onComposerCompositionEnd}
-              onKeyUp={onSyncComposer}
-              onPaste={(event) => {
-                event.preventDefault();
-                const pasted = event.clipboardData?.getData("text/plain") ?? "";
-                const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByHandle);
-                if (segments.some((segment) => segment.type === "mention")) {
-                  insertComposerSegmentsAtSelection(segments);
-                } else {
-                  insertPlainTextAtSelection(pasted);
-                }
-                onSyncComposer();
-              }}
-            />
-            <Button
-              variant="primary"
-              className="composer-send-button"
-              aria-label={t("send")}
-              title={t("send")}
-              disabled={composerDisabled || !draftText.trim()}
-              onClick={onSendMessage}
-            >
-              <span className="composer-send-main" aria-hidden="true">
-                {IconImage("send")}
-              </span>
-            </Button>
-          </div>
-        </div>
-        {composerError ? <div className="form-error composer-error">{composerError}</div> : null}
-        <div className="composer-tip">{t("composerTip")}</div>
-      </footer>
-      {activeThreadRootID ? (
-        <ThreadPanel
-          thread={activeThreadView}
-          loading={threadLoading}
-          error={threadError}
-          draftSegments={threadDraftSegments}
-          disabled={composerDisabled}
-          usersById={usersById}
-          locale={locale}
-          theme={theme}
-          showToolCalls={showToolCalls}
-          t={t}
-          onClose={onCloseThread}
-          onDraftChange={onThreadDraftChange}
-          threadSlashCandidates={threadSlashCandidates}
-          threadSlashIndex={threadSlashIndex}
-          threadSlashPickerLoading={threadSlashPickerLoading}
-          threadSlashPickerOpen={threadSlashPickerOpen}
-          onApplyThreadSlashCandidate={onApplyThreadSlashCandidate}
-          onDismissThreadSlashPicker={onDismissThreadSlashPicker}
-          onSetThreadSlashIndex={onSetThreadSlashIndex}
-          mentionableUsers={conversationMembers}
-          onPreviewUser={onPreviewUser}
-          onSend={onSendThreadReply}
-        />
-      ) : null}
-      <RoomDangerConfirmDialog
+      <Conversation.Composer
+        authBusyProvider={authBusyProvider}
+        authStatuses={authStatuses}
+        composerDisabled={composerDisabled}
+        composerError={composerError}
+        draftSegments={draftSegments}
+        draftText={draftText}
+        editorRef={editorRef}
+        managerProfile={managerProfile}
+        managerProvider={managerProvider}
+        mentionCandidates={mentionCandidates}
+        mentionIndex={mentionIndex}
+        mentionableUsersByHandle={mentionableUsersByHandle}
+        slashCandidates={slashCandidates}
+        slashIndex={slashIndex}
+        slashPickerLoading={slashPickerLoading}
+        slashPickerOpen={slashPickerOpen}
+        t={t}
+        onApplyMention={onApplyMention}
+        onApplySlashCandidate={onApplySlashCandidate}
+        onComposerCompositionEnd={onComposerCompositionEnd}
+        onComposerCompositionStart={onComposerCompositionStart}
+        onComposerKeyDown={onComposerKeyDown}
+        onProviderLogin={onProviderLogin}
+        onSendMessage={onSendMessage}
+        onSyncComposer={onSyncComposer}
+      />
+      {threadPanel}
+      <Conversation.RoomDangerConfirmDialog
         cancelLabel={t("cancel")}
         closeLabel={t("close")}
         confirmLabel={t("clearRoomMessagesConfirm")}
@@ -626,7 +240,7 @@ export function ConversationPane({
         onOpenChange={setClearMessagesDialogOpen}
       />
       {!isDirectConversation(conversation) ? (
-        <RoomDangerConfirmDialog
+        <Conversation.RoomDangerConfirmDialog
           cancelLabel={t("cancel")}
           closeLabel={t("close")}
           confirmLabel={t("deleteRoomConfirm")}
@@ -641,7 +255,7 @@ export function ConversationPane({
         />
       ) : null}
       {logModalOpen && logAgent ? (
-        <AgentLogsDialog
+        <Conversation.AgentLogsDialog
           agentName={logAgentName}
           content={logContent}
           error={logError}
@@ -653,751 +267,4 @@ export function ConversationPane({
       ) : null}
     </>
   );
-}
-
-type SlashPickerNavigationInput = {
-  event: ReactKeyboardEvent<HTMLElement>;
-  candidates: SlashPickerCandidate[];
-  activeIndex: number;
-  pickerOpen: boolean;
-  onIndexChange: (index: number) => void;
-  onApply: (value: string) => void;
-  onDismiss: () => void;
-  onPrepareNavigation?: () => void;
-};
-
-function handleSlashPickerNavigation({
-  event,
-  candidates,
-  activeIndex,
-  pickerOpen,
-  onIndexChange,
-  onApply,
-  onDismiss,
-  onPrepareNavigation,
-}: SlashPickerNavigationInput): boolean {
-  if (!pickerOpen) {
-    return false;
-  }
-  if (event.key === "ArrowDown" && candidates.length > 0) {
-    event.preventDefault();
-    onPrepareNavigation?.();
-    onIndexChange((activeIndex + 1) % candidates.length);
-    return true;
-  }
-  if (event.key === "ArrowUp" && candidates.length > 0) {
-    event.preventDefault();
-    onPrepareNavigation?.();
-    onIndexChange((activeIndex - 1 + candidates.length) % candidates.length);
-    return true;
-  }
-  if (event.key === "Enter" && !event.shiftKey && candidates.length > 0) {
-    event.preventDefault();
-    onApply((candidates[activeIndex] ?? candidates[0])?.name ?? "");
-    return true;
-  }
-  if (event.key === "Escape") {
-    event.preventDefault();
-    onDismiss();
-    return true;
-  }
-  return false;
-}
-
-type MentionPickerProps = {
-  activeIndex?: number;
-  className?: string;
-  onSelect: (user: MentionPickerUser) => void;
-  showRole?: boolean;
-  t: TranslateFn;
-  users?: MentionPickerUser[];
-};
-
-function MentionPicker({
-  users = [],
-  activeIndex = 0,
-  className = "",
-  showRole = true,
-  t,
-  onSelect,
-}: MentionPickerProps) {
-  const activeOptionRef = useRef<HTMLButtonElement | null>(null);
-  const activeUserID = users[activeIndex]?.id || "";
-
-  useLayoutEffect(() => {
-    activeOptionRef.current?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex, activeUserID, users.length]);
-
-  return (
-    <div className={`mention-picker ${className}`.trim()} role="listbox">
-      {users.map((user, index) => (
-        <button
-          key={user.id}
-          ref={index === activeIndex ? activeOptionRef : null}
-          role="option"
-          aria-selected={index === activeIndex}
-          className={`mention-option ${index === activeIndex ? "active" : ""}`}
-          onMouseDown={(event) => {
-            event.preventDefault();
-            onSelect(user);
-          }}
-        >
-          <span className="avatar">
-            <AgentAvatarContent
-              avatar={user.avatar}
-              fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)}
-            />
-          </span>
-          <div>
-            <div className="message-author">{user.name}</div>
-            <div className="conversation-preview">
-              @{user.handle}
-              {showRole ? ` · ${localizeRole(user.role || "", t)}` : ""}
-            </div>
-          </div>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-type SlashPickerProps = {
-  activeIndex?: number;
-  candidates?: SlashPickerCandidate[];
-  className?: string;
-  loading?: boolean;
-  onSelect: (name: string) => void;
-  t: TranslateFn;
-};
-
-function SlashPicker({
-  candidates = [],
-  activeIndex = 0,
-  loading = false,
-  className = "",
-  t,
-  onSelect,
-}: SlashPickerProps) {
-  const activeOptionRef = useRef<HTMLButtonElement | null>(null);
-  const activeCandidate = candidates[activeIndex] || null;
-  const activeCandidateKey = activeCandidate ? `${activeCandidate.type}:${activeCandidate.name}` : "";
-
-  useLayoutEffect(() => {
-    activeOptionRef.current?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex, activeCandidateKey, candidates.length]);
-
-  return (
-    <div className={`mention-picker slash-picker ${className}`.trim()} role="listbox">
-      {loading ? <div className="slash-picker-empty">{t("slashPickerLoading")}</div> : null}
-      {!loading && candidates.length === 0 ? <div className="slash-picker-empty">{t("slashPickerEmpty")}</div> : null}
-      {candidates.map((candidate, index) => (
-        <button
-          key={`${candidate.type}:${candidate.name}`}
-          ref={index === activeIndex ? activeOptionRef : null}
-          role="option"
-          aria-selected={index === activeIndex}
-          className={`mention-option slash-option ${candidate.type === "command" ? "command-option" : "skill-slash-option"} ${index === activeIndex ? "active" : ""}`}
-          onMouseDown={(event) => {
-            event.preventDefault();
-            onSelect(candidate.name);
-          }}
-        >
-          <span className="slash-option-mark" aria-hidden="true">
-            {candidate.type === "command" ? (
-              <TerminalIcon size={18} strokeWidth={1.8} />
-            ) : (
-              <BoxIcon size={18} strokeWidth={1.8} />
-            )}
-          </span>
-          <div className="slash-option-copy">
-            <span className="message-author">{candidate.name}</span>
-            {candidate.description ? <span className="slash-option-description">{candidate.description}</span> : null}
-          </div>
-          <span className="slash-option-kind">
-            {candidate.type === "command" ? t("slashPickerCommandKind") : t("slashPickerSkillKind")}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-type RoomDangerConfirmDialogProps = {
-  cancelLabel: string;
-  closeLabel: string;
-  confirmLabel: string;
-  description: string;
-  open: boolean;
-  title: string;
-  onConfirm: () => void;
-  onOpenChange: (open: boolean) => void;
-};
-
-function RoomDangerConfirmDialog({
-  cancelLabel,
-  closeLabel,
-  confirmLabel,
-  description,
-  open,
-  title,
-  onConfirm,
-  onOpenChange,
-}: RoomDangerConfirmDialogProps) {
-  return (
-    <DialogRoot open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="room-danger-dialog" overlayClassName="room-danger-backdrop">
-        <DialogHeader className="room-danger-header">
-          <div className="room-danger-copy">
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
-          </div>
-          <DialogCloseButton className="room-danger-close" label={closeLabel} size="sm" variant="tertiaryGray" />
-        </DialogHeader>
-        <div className="room-danger-actions">
-          <Button className="room-danger-button" size="sm" variant="secondaryGray" onClick={() => onOpenChange(false)}>
-            {cancelLabel}
-          </Button>
-          <Button className="room-danger-button" size="sm" variant="danger" onClick={onConfirm}>
-            {confirmLabel}
-          </Button>
-        </div>
-      </DialogContent>
-    </DialogRoot>
-  );
-}
-
-type AgentLogsDialogProps = {
-  agentName: string;
-  content: string;
-  error: string;
-  loading: boolean;
-  onClose: () => void;
-  onRefresh: () => VoidOrPromise;
-  t: TranslateFn;
-};
-
-function AgentLogsDialog({ agentName, content, error, loading, t, onClose, onRefresh }: AgentLogsDialogProps) {
-  const logsViewerRef = useRef<HTMLPreElement | null>(null);
-  const displayContent = content || (loading ? t("agentLogsLoading") : t("agentLogsEmpty"));
-
-  useLayoutEffect(() => {
-    const viewer = logsViewerRef.current;
-    if (!viewer) {
-      return;
-    }
-    viewer.scrollTop = viewer.scrollHeight;
-  }, [content, error, loading]);
-
-  return (
-    <DialogRoot
-      open={true}
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-    >
-      <DialogContent className="agent-logs-modal" overlayClassName="agent-logs-backdrop">
-        <DialogHeader className="agent-logs-header">
-          <div>
-            <DialogTitle>{t("agentLogsTitle")}</DialogTitle>
-            <DialogDescription>{agentName}</DialogDescription>
-          </div>
-          <div className="agent-logs-header-actions">
-            <Button
-              className="icon-button agent-logs-refresh"
-              aria-label={t("refreshLogs")}
-              title={t("refreshLogs")}
-              loading={loading}
-              loadingLabel={t("agentLogsLoading")}
-              onClick={onRefresh}
-            >
-              <span className="icon-button-mark" aria-hidden="true">
-                <RefreshCw size={18} strokeWidth={2} />
-              </span>
-            </Button>
-            <DialogCloseButton className="icon-button" label={t("close")} />
-          </div>
-        </DialogHeader>
-        <DialogBody className="agent-logs-body">
-          {error ? <div className="form-error agent-logs-error">{error}</div> : null}
-          <pre ref={logsViewerRef} className="agent-logs-viewer">
-            {displayContent}
-          </pre>
-        </DialogBody>
-      </DialogContent>
-    </DialogRoot>
-  );
-}
-
-type ThreadPanelProps = {
-  disabled: boolean;
-  draftSegments: ComposerSegment[];
-  error: string;
-  loading: boolean;
-  locale: LocaleCode;
-  mentionableUsers?: MentionPickerUser[];
-  onApplyThreadSlashCandidate?: (name: string) => void;
-  onClose: () => void;
-  onDismissThreadSlashPicker?: () => void;
-  onDraftChange: (segments: ComposerSegment[]) => void;
-  onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
-  onSend: () => VoidOrPromise;
-  onSetThreadSlashIndex?: (index: number) => void;
-  showToolCalls: boolean;
-  t: TranslateFn;
-  theme: ThemeMode;
-  thread?: ThreadView | null;
-  threadSlashCandidates?: SlashPickerCandidate[];
-  threadSlashIndex?: number;
-  threadSlashPickerLoading?: boolean;
-  threadSlashPickerOpen?: boolean;
-  usersById: UsersById;
-};
-
-function ThreadPanel({
-  thread,
-  loading,
-  error,
-  draftSegments,
-  disabled,
-  usersById,
-  locale,
-  theme,
-  showToolCalls,
-  t,
-  onClose,
-  onDraftChange,
-  threadSlashCandidates = [],
-  threadSlashIndex = 0,
-  threadSlashPickerLoading = false,
-  threadSlashPickerOpen = false,
-  onApplyThreadSlashCandidate = (_name) => {},
-  onDismissThreadSlashPicker = () => {},
-  onSetThreadSlashIndex = (_index) => {},
-  onPreviewUser,
-  mentionableUsers = [],
-  onSend,
-}: ThreadPanelProps) {
-  const threadBodyRef = useRef<HTMLDivElement | null>(null);
-  const threadEditorRef = useRef<HTMLDivElement | null>(null);
-  const [mentionState, setMentionState] = useState<ThreadMentionState | null>(null);
-  const [mentionIndex, setMentionIndex] = useState(0);
-  const root = thread?.root ?? null;
-  const replies = thread?.replies ?? [];
-  const visibleRoot = showToolCalls || !isToolCallMessage(root) ? root : null;
-  const visibleReplies = showToolCalls ? replies : replies.filter((message) => !isToolCallMessage(message));
-  const latestReplyID = visibleReplies[visibleReplies.length - 1]?.id || "";
-  const mentionableUsersByHandle = useMemo(() => {
-    const result = new Map<string, (typeof mentionableUsers)[number]>();
-    mentionableUsers.forEach((user) => {
-      const handle = String(user.handle || user.name || user.id || "")
-        .trim()
-        .toLowerCase();
-      if (!handle) {
-        return;
-      }
-      if (!result.has(handle)) {
-        result.set(handle, user);
-      }
-    });
-    return result;
-  }, [mentionableUsers]);
-  const displayDraftSegments = useMemo(() => normalizeComposerSegmentsForDisplay(draftSegments || []), [draftSegments]);
-  const threadMentionCandidates = useMemo(() => {
-    if (!mentionState) {
-      return [];
-    }
-    return getMentionCandidates(mentionableUsers, mentionState.query) as MentionPickerUser[];
-  }, [mentionState, mentionableUsers]);
-
-  useLayoutEffect(() => {
-    const threadBody = threadBodyRef.current;
-    if (!threadBody || !root) {
-      return;
-    }
-    const scrollToBottom = () => {
-      threadBody.scrollTop = threadBody.scrollHeight;
-    };
-    scrollToBottom();
-    const frame = window.requestAnimationFrame(scrollToBottom);
-    return () => window.cancelAnimationFrame(frame);
-  }, [root, visibleReplies.length, latestReplyID, loading]);
-
-  useLayoutEffect(() => {
-    const editor = threadEditorRef.current;
-    if (!editor) {
-      return;
-    }
-    const currentSegments = parseComposerSegments(editor);
-    if (!areComposerSegmentsEqual(currentSegments, displayDraftSegments)) {
-      const currentText = segmentsToPlainText(currentSegments);
-      const nextText = segmentsToPlainText(displayDraftSegments);
-      const selectionOffset = getCollapsedSelectionTextOffset(editor);
-      renderComposerSegments(editor, displayDraftSegments);
-      if (currentText === nextText && selectionOffset === currentText.length) {
-        placeCaretAtEnd(editor);
-      }
-    }
-  }, [displayDraftSegments]);
-
-  function syncThreadDraft(target = threadEditorRef.current) {
-    if (!target) {
-      return;
-    }
-    const segments = normalizeComposerSegmentsForDisplay(parseComposerSegments(target) as ComposerSegment[]);
-    onDraftChange(segments);
-    syncThreadMentionState(target);
-  }
-
-  function syncThreadMentionState(target = threadEditorRef.current) {
-    if (!target) {
-      setMentionState(null);
-      return;
-    }
-    const nextMentionState = getComposerMentionState(target);
-    if (!nextMentionState) {
-      setMentionState(null);
-      setMentionIndex(0);
-      return;
-    }
-    const normalized: ThreadMentionState = {
-      end: nextMentionState.endOffset,
-      endOffset: nextMentionState.endOffset,
-      query: nextMentionState.query,
-      start: nextMentionState.startOffset,
-      startOffset: nextMentionState.startOffset,
-      textNode: nextMentionState.textNode,
-    };
-    const mentionChanged =
-      !mentionState ||
-      mentionState.start !== normalized.start ||
-      mentionState.end !== normalized.end ||
-      mentionState.query !== normalized.query;
-    setMentionState(normalized);
-    if (mentionChanged) {
-      setMentionIndex(0);
-    }
-  }
-
-  function insertThreadMention(user: MentionPickerUser | null | undefined) {
-    const target = threadEditorRef.current;
-    if (!target || !mentionState || !user) {
-      return;
-    }
-    if (!replaceMentionQueryWithToken(target, mentionState, user)) {
-      return;
-    }
-    syncThreadDraft(target);
-    setMentionState(null);
-    setMentionIndex(0);
-    requestAnimationFrame(() => {
-      if (threadEditorRef.current !== target) {
-        return;
-      }
-      target.focus();
-    });
-  }
-
-  return (
-    <aside className="thread-panel" aria-label={t("threadPanelTitle")}>
-      <div className="thread-panel-header">
-        <div>
-          <div className="thread-panel-kicker">{t("threadPanelTitle")}</div>
-          <div className="thread-panel-title truncate">
-            {visibleRoot ? (
-              <MessagePreviewText
-                content={thread?.summary?.context_summary?.root_excerpt || visibleRoot.content || ""}
-              />
-            ) : (
-              t("noVisibleMessages")
-            )}
-          </div>
-        </div>
-        <Button className="icon-button" aria-label={t("close")} title={t("close")} onClick={onClose}>
-          <span className="icon-button-mark" aria-hidden="true">
-            <X size={18} strokeWidth={2} />
-          </span>
-        </Button>
-      </div>
-      <div ref={threadBodyRef} className="thread-panel-body">
-        {loading && !root ? <div className="thread-empty">{t("loading")}</div> : null}
-        {error ? <div className="form-error">{error}</div> : null}
-        {visibleRoot ? (
-          <div className="thread-root">
-            <ThreadMessage
-              message={visibleRoot}
-              usersById={usersById}
-              locale={locale}
-              theme={theme}
-              t={t}
-              onPreviewUser={onPreviewUser}
-            />
-          </div>
-        ) : null}
-        <div className="thread-replies">
-          <div className="thread-section-title">{formatThreadReplyCount(visibleReplies.length, t)}</div>
-          {visibleReplies.length > 0 ? (
-            visibleReplies.map((message) => (
-              <ThreadMessage
-                key={message.id}
-                message={message}
-                usersById={usersById}
-                locale={locale}
-                theme={theme}
-                t={t}
-                onPreviewUser={onPreviewUser}
-              />
-            ))
-          ) : (
-            <div className="thread-empty">{t("threadNoReplies")}</div>
-          )}
-        </div>
-      </div>
-      <div className="thread-composer">
-        {threadSlashPickerOpen ? (
-          <SlashPicker
-            candidates={threadSlashCandidates}
-            activeIndex={threadSlashIndex}
-            loading={threadSlashPickerLoading}
-            className="thread-slash-picker"
-            t={t}
-            onSelect={(name) => onApplyThreadSlashCandidate(name)}
-          />
-        ) : null}
-        {threadMentionCandidates.length > 0 ? (
-          <MentionPicker
-            users={threadMentionCandidates}
-            activeIndex={mentionIndex}
-            className="thread-mention-picker"
-            showRole={false}
-            t={t}
-            onSelect={insertThreadMention}
-          />
-        ) : null}
-        <div
-          ref={threadEditorRef}
-          contentEditable={!disabled}
-          suppressContentEditableWarning={true}
-          role="textbox"
-          aria-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
-          aria-label={t("threadComposerPlaceholder")}
-          className={`thread-composer-editor ${disabled ? "disabled" : ""}`}
-          data-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
-          onInput={(event) => syncThreadDraft(event.currentTarget)}
-          onClick={(event) => syncThreadMentionState(event.currentTarget)}
-          onKeyDown={(event) => {
-            if (disabled) {
-              return;
-            }
-            if (event.key === "Backspace" && removeAdjacentMentionToken(threadEditorRef.current, "backward")) {
-              event.preventDefault();
-              syncThreadDraft(event.currentTarget);
-              return;
-            }
-            if (event.key === "Delete" && removeAdjacentMentionToken(threadEditorRef.current, "forward")) {
-              event.preventDefault();
-              syncThreadDraft(event.currentTarget);
-              return;
-            }
-            if (
-              handleSlashPickerNavigation({
-                event,
-                candidates: threadSlashCandidates,
-                activeIndex: threadSlashIndex,
-                pickerOpen: threadSlashPickerOpen,
-                onIndexChange: (value) => onSetThreadSlashIndex(value),
-                onApply: (value) => onApplyThreadSlashCandidate(value),
-                onDismiss: () => {
-                  onDismissThreadSlashPicker();
-                  setMentionState(null);
-                  setMentionIndex(0);
-                },
-                onPrepareNavigation: () => {
-                  setMentionState(null);
-                  setMentionIndex(0);
-                },
-              })
-            ) {
-              return;
-            }
-            if (threadMentionCandidates.length > 0) {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setMentionIndex((value) => (value + 1) % threadMentionCandidates.length);
-                return;
-              }
-              if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setMentionIndex(
-                  (value) => (value - 1 + threadMentionCandidates.length) % threadMentionCandidates.length,
-                );
-                return;
-              }
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                insertThreadMention(threadMentionCandidates[mentionIndex]);
-                return;
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setMentionState(null);
-                setMentionIndex(0);
-                return;
-              }
-            }
-            if (event.key === "Enter" && event.shiftKey) {
-              event.preventDefault();
-              insertComposerLineBreak(threadEditorRef.current);
-              syncThreadDraft(threadEditorRef.current);
-              return;
-            }
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              onSend();
-            }
-          }}
-          onKeyUp={(event) => syncThreadMentionState(event.currentTarget)}
-          onPaste={(event) => {
-            event.preventDefault();
-            const pasted = event.clipboardData?.getData("text/plain") ?? "";
-            const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByHandle);
-            if (segments.some((segment) => segment.type === "mention")) {
-              insertComposerSegmentsAtSelection(segments);
-            } else {
-              insertPlainTextAtSelection(pasted);
-            }
-            syncThreadDraft(threadEditorRef.current);
-          }}
-          onCompositionEnd={() => {
-            syncThreadDraft(threadEditorRef.current);
-          }}
-        />
-        <Button
-          variant="primary"
-          className="thread-send-button"
-          disabled={disabled || !segmentsToPlainText(draftSegments || []).trim()}
-          onClick={onSend}
-        >
-          <span aria-hidden="true">{IconImage("send")}</span>
-          <span>{t("send")}</span>
-        </Button>
-      </div>
-    </aside>
-  );
-}
-
-type ThreadMessageProps = {
-  compact?: boolean;
-  locale: LocaleCode;
-  message: IMMessage;
-  onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
-  t: TranslateFn;
-  theme: ThemeMode;
-  usersById: UsersById;
-};
-
-function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, compact = false }: ThreadMessageProps) {
-  const user = usersById.get(message.sender_id || "");
-  const fallbackName = message.sender_id || "";
-  const avatar = user?.avatar || fallbackName.slice(0, 1).toUpperCase();
-  const name = user?.name || user?.handle || fallbackName;
-  const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
-
-  return (
-    <div className={`thread-message ${compact ? "compact" : ""}`.trim()}>
-      {user ? (
-        <button
-          type="button"
-          className="thread-message-avatar"
-          aria-label={`${t("profilePreview")} ${name}`}
-          onClick={(event) => onPreviewUser(user, event.currentTarget)}
-        >
-          <AgentAvatarContent avatar={avatar} fallback={avatar} />
-        </button>
-      ) : (
-        <div className="thread-message-avatar" aria-hidden="true">
-          <AgentAvatarContent avatar={avatar} fallback={avatar} />
-        </div>
-      )}
-      <div className="thread-message-main">
-        <div className="message-meta">
-          <span className="message-author">{name}</span>
-          <MessageTimestamp parts={timestampParts} />
-        </div>
-        <div className="thread-message-bubble">
-          <MessageContent key={`${message.id}:${theme}`} content={message.content} message={message} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MessageTimestamp({ parts }: { parts: MessageTimestampParts }) {
-  if (!parts.shortLabel) {
-    return null;
-  }
-  return (
-    <time
-      className="message-timestamp"
-      dateTime={parts.dateTime}
-      aria-label={parts.tooltip}
-      data-tooltip={parts.tooltip}
-      data-tooltip-side="top"
-      tabIndex={0}
-    >
-      {parts.shortLabel}
-    </time>
-  );
-}
-
-function MessageTimeDivider({ parts }: { parts: MessageTimestampParts }) {
-  if (!parts.dividerLabel) {
-    return null;
-  }
-  return (
-    <div className="message-time-divider">
-      <time
-        className="message-time-divider-label"
-        dateTime={parts.dateTime}
-        data-tooltip={parts.tooltip}
-        data-tooltip-side="top"
-        tabIndex={0}
-      >
-        {parts.dividerLabel}
-      </time>
-    </div>
-  );
-}
-
-function shouldShowMessageDateDivider(
-  previousMessage: IMMessage | null | undefined,
-  currentMessage: IMMessage | null | undefined,
-): boolean {
-  if (!previousMessage) {
-    return hasValidMessageTime(currentMessage);
-  }
-  return !isSameMessageDate(previousMessage, currentMessage);
-}
-
-function isSameMessageDate(
-  previousMessage: IMMessage | null | undefined,
-  currentMessage: IMMessage | null | undefined,
-): boolean {
-  const previousAt = Date.parse(previousMessage?.created_at || "");
-  const currentAt = Date.parse(currentMessage?.created_at || "");
-  if (!Number.isFinite(previousAt) || !Number.isFinite(currentAt)) {
-    return false;
-  }
-  const previousDate = new Date(previousAt);
-  const currentDate = new Date(currentAt);
-  return (
-    previousDate.getFullYear() === currentDate.getFullYear() &&
-    previousDate.getMonth() === currentDate.getMonth() &&
-    previousDate.getDate() === currentDate.getDate()
-  );
-}
-
-function hasValidMessageTime(message: IMMessage | null | undefined): boolean {
-  return Number.isFinite(Date.parse(message?.created_at || ""));
 }

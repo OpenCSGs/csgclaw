@@ -177,13 +177,14 @@ Behavior:
 - `csgclaw upgrade --check` prints the current version, latest version, update availability, and matched asset name.
 - `csgclaw upgrade` downloads the matching release archive, validates it, installs the full official bundle, and restarts the daemon if one is running.
 - `csgclaw upgrade --no-restart` installs the new bundle but leaves the current daemon process unchanged.
-- Automatic install supports only the official bundle layout, where the executable resolves to `<install-root>/bin/csgclaw` or `<install-root>/bin/csgclaw.exe`.
+- Automatic install supports only the official bundle layout, where the executable resolves to a dedicated `csgclaw/bin/csgclaw` or `csgclaw/bin/csgclaw.exe` tree. The updater never replaces a shared prefix such as `~/.local` or `/usr/local`.
 - On Windows, release assets use `.zip`; other currently supported release assets use `.tar.gz`.
 - Automatic restart supports only the default PID path `~/.csgclaw/server.pid`. If the daemon was started with custom PID or startup flags, use `--no-restart` and restart manually.
 
 Common failure cases:
 
-- Source builds or manually copied single binaries can use `--check`, but automatic install is rejected because there is no official bundle root to replace.
+- Source builds or manually copied single binaries can use `--check`, but automatic install is rejected because there is no dedicated bundle root to replace.
+- To migrate a binary copied into `~/.local/bin`, rerun `curl -fsSL https://csgclaw.opencsg.com/install.sh | bash`. The installer stores the managed bundle under `~/.local/lib/csgclaw` and replaces only `~/.local/bin/csgclaw` with a symlink; other files in `~/.local/bin` are left untouched.
 - If the downloaded archive fails size or SHA256 validation, the CLI aborts before installation and asks you to retry later or report a broken release.
 - If the release archive is malformed or missing `bin/csgclaw` / `bin/csgclaw.exe`, the CLI aborts before installation.
 - `bin/boxlite` is optional. Bundles without it remain valid and will default to Docker when `[sandbox].provider` is unset.

@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -28,10 +27,12 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/app/channelwiring"
 	"csgclaw/internal/app/runtimewiring"
-	"csgclaw/internal/channel/codexbridge"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/channel/feishu/participantprovider"
+	"csgclaw/internal/channelbridge"
+	"csgclaw/internal/channelbridge/codexbridge"
+	"csgclaw/internal/channelbridge/codexmanager"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
@@ -40,7 +41,6 @@ import (
 	"csgclaw/internal/modelprovider"
 	internalonboard "csgclaw/internal/onboard"
 	"csgclaw/internal/participant"
-	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/server"
@@ -127,6 +127,9 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	logPath := fs.String("log", defaultLogPath, "log file path, daemon mode only")
 	pidPath := fs.String("pid", defaultPIDPath, "pid file path, daemon mode only")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := validateServeInstallation(); err != nil {
 		return err
 	}
 	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
@@ -232,6 +235,9 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := validateServeInstallation(); err != nil {
+		return err
+	}
 	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
 	defer restoreAuthDetect()
 
@@ -283,12 +289,32 @@ func serveForeground(ctx context.Context, run *command.Context, cfg config.Confi
 	return serveForegroundWithConfigPath(ctx, run, cfg, "", output)
 }
 
+func validateServeInstallation() error {
+	currentVersion := appversion.Current()
+	support := (upgrade.Client{}).AutoUpgradeSupport(currentVersion)
+	if support.Supported || support.Reason == "local_build" {
+		return nil
+	}
+	platform, command := officialInstallGuidance(runtime.GOOS)
+	return fmt.Errorf("refuse to start release %s: %w\nInstall the official bundle on %s with:\n  %s\n拒绝启动正式版本 %s：当前程序并非从官方 CSGClaw bundle 安装。\n请在 %s 上执行：\n  %s", currentVersion, upgrade.ErrNotOfficialBundle, platform, command, currentVersion, platform, command)
+}
+
+func officialInstallGuidance(goos string) (string, string) {
+	if goos == "windows" {
+		return "Windows", "curl.exe -fsSL https://csgclaw.opencsg.com/install.ps1 | powershell -ExecutionPolicy Bypass -Command -"
+	}
+	return "macOS/Linux", "curl -fsSL https://csgclaw.opencsg.com/install.sh | bash"
+}
+
 type serveOptions struct {
 	NoBrowser    bool
 	NoAuthDetect bool
 }
 
 func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
+	if err := validateServeInstallation(); err != nil {
+		return err
+	}
 	_ = preflightDefaultModelProvider(ctx, cfg)
 	imBus := im.NewBus()
 	feishuProvider, feishuSvc, err := buildFeishuComponents()
@@ -473,7 +499,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if serveOpts.NoAuthDetect && svc != nil {
 		svc.SetStartupProfileDetectionDisabled(true)
 	}
-	codexBridgeMgr, err := NewCodexBridgeManager(cfg, svc)
+	codexBridgeMgr, err := NewCodexBridgeManager(cfg, svc, feishuSvc)
 	if err != nil {
 		return err
 	}
@@ -493,11 +519,16 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	}
 	apiURL := apiBaseURL(cfg.Server)
 	imURL := imOpenURL(apiURL)
-	upgradeManager := upgrade.NewManager(upgrade.Client{
+	currentVersion := appversion.Current()
+	upgradeClient := upgrade.Client{
 		HTTPClient: http.DefaultClient,
 		GOOS:       runtime.GOOS,
 		GOARCH:     runtime.GOARCH,
-	}, appversion.Current(), upgrade.ManagerOptions{
+	}
+	upgradeSupport := upgradeClient.AutoUpgradeSupport(currentVersion)
+	upgradeManager := upgrade.NewManager(upgradeClient, currentVersion, upgrade.ManagerOptions{
+		AutoUpgradeSupported:         upgradeSupport.Supported,
+		AutoUpgradeUnsupportedReason: upgradeSupport.Reason,
 		OnStatusChange: func(status apitypes.UpgradeStatus) {
 			if imBus == nil {
 				return
@@ -893,12 +924,7 @@ func newAgentTemplateHubService(cfg config.HubConfig) (*hub.Service, error) {
 	return hub.NewService(cfg.Resolved(), hub.DefaultStoreFactory)
 }
 
-type codexBridgeManager interface {
-	Start(context.Context) error
-	EnsureAgent(context.Context, agent.Agent) error
-	StopAgent(string)
-	Close()
-}
+type codexBridgeManager = codexmanager.Manager
 
 func channelActivityDecider(m codexBridgeManager) api.ActivityDecider {
 	withPermissions, ok := m.(interface {
@@ -914,203 +940,27 @@ func channelActivityDecider(m codexBridgeManager) api.ActivityDecider {
 	return runtimecodex.NewPermissionActivityDecider(csgclawchannel.ChannelID, decider)
 }
 
-type serveCodexBridgeManager struct {
-	svc     *agent.Service
-	runtime *runtimecodex.Runtime
-	bridge  *codexbridge.Service
-	mu      sync.Mutex
-	active  map[string]bool
-}
-
-func newCodexBridgeManager(cfg config.Config, svc *agent.Service) (codexBridgeManager, error) {
+func newCodexBridgeManager(cfg config.Config, svc *agent.Service, feishuSvc *feishu.Service) (codexBridgeManager, error) {
 	if svc == nil {
 		return nil, nil
 	}
-	rt, err := svc.Runtime(agentruntime.KindCodex)
-	if err != nil {
-		return nil, nil
-	}
-	codexRuntime, ok := rt.(*runtimecodex.Runtime)
-	if !ok {
-		return nil, fmt.Errorf("runtime %q has unexpected type %T", agentruntime.KindCodex, rt)
-	}
-	events, ok := codexRuntime.EventSink().(*runtimecodex.EventSink)
-	if !ok || events == nil {
-		return nil, fmt.Errorf("runtime %q is missing codex event sink", agentruntime.KindCodex)
-	}
-	return &serveCodexBridgeManager{
-		svc:     svc,
-		runtime: codexRuntime,
-		bridge: codexbridge.NewService(&codexbridge.HTTPClient{
+	opts := codexmanager.Options{
+		Agents:    svc,
+		Runtimes:  svc,
+		Restarter: svc,
+		CSGClawClient: &codexbridge.HTTPClient{
 			BaseURL:     apiBaseURL(cfg.Server),
 			Token:       cfg.Server.AccessToken,
 			MentionOnly: true,
-		}, codexRuntime.SessionManager(), events),
-		active: make(map[string]bool),
-	}, nil
-}
-
-func (m *serveCodexBridgeManager) Start(ctx context.Context) error {
-	if m == nil || m.svc == nil || m.runtime == nil || m.bridge == nil {
-		return nil
+		},
 	}
-	agents := m.svc.List()
-	var startErr error
-	for _, a := range agents {
-		if !shouldRestoreCodexBridgeOnStartup(a) {
-			continue
-		}
-		session, err := m.ensureSession(ctx, a)
-		if err != nil {
-			startErr = errors.Join(startErr, fmt.Errorf("%s: %w", a.Name, err))
-			continue
-		}
-		if err := m.bridge.StartBot(ctx, codexBridgeBindingForAgent(a, session.SessionID)); err != nil {
-			startErr = errors.Join(startErr, fmt.Errorf("%s: %w", a.Name, err))
+	if feishuSvc != nil {
+		if provider := feishuSvc.ConfigProvider(); provider != nil {
+			opts.FeishuClient = channelbridge.NewFeishuClient(feishuSvc)
+			opts.FeishuProvider = provider
 		}
 	}
-	return startErr
-}
-
-func (m *serveCodexBridgeManager) EnsureAgent(ctx context.Context, a agent.Agent) error {
-	if m == nil || m.svc == nil || m.runtime == nil || m.bridge == nil {
-		return nil
-	}
-	if !shouldStartCodexBridge(a) {
-		m.StopAgent(a.ID)
-		return nil
-	}
-	if !m.beginEnsure(a.ID) {
-		return nil
-	}
-	defer m.finishEnsure(a.ID)
-	session, err := m.ensureSession(ctx, a)
-	if err != nil {
-		return err
-	}
-	// Force a fresh bot-event subscription even when the binding is unchanged.
-	// This repairs cases where the bridge worker exists but missed its initial
-	// subscription window and would otherwise be treated as a no-op restart.
-	m.stopAgentBridge(a)
-	return m.bridge.StartBot(ctx, codexBridgeBindingForAgent(a, session.SessionID))
-}
-
-func codexBridgeBindingForAgent(a agent.Agent, sessionID string) codexbridge.Binding {
-	return codexbridge.Binding{
-		BotID:     agent.ParticipantIDForAgent(a.Name, a.ID),
-		RuntimeID: strings.TrimSpace(a.RuntimeID),
-		SessionID: strings.TrimSpace(sessionID),
-	}
-}
-
-func (m *serveCodexBridgeManager) beginEnsure(agentID string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	agentID = strings.TrimSpace(agentID)
-	if agentID == "" {
-		return false
-	}
-	if m.active[agentID] {
-		return false
-	}
-	m.active[agentID] = true
-	return true
-}
-
-func (m *serveCodexBridgeManager) finishEnsure(agentID string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	agentID = strings.TrimSpace(agentID)
-	if agentID == "" {
-		return
-	}
-	delete(m.active, agentID)
-}
-
-func (m *serveCodexBridgeManager) StopAgent(agentID string) {
-	if m == nil || m.bridge == nil {
-		return
-	}
-	m.bridge.StopBot(strings.TrimSpace(agentID))
-	participantID := agent.ParticipantIDForAgent("", agentID)
-	if participantID != strings.TrimSpace(agentID) {
-		m.bridge.StopBot(participantID)
-	}
-}
-
-func (m *serveCodexBridgeManager) stopAgentBridge(a agent.Agent) {
-	if m == nil || m.bridge == nil {
-		return
-	}
-	m.bridge.StopBot(strings.TrimSpace(a.ID))
-	participantID := agent.ParticipantIDForAgent(a.Name, a.ID)
-	if participantID != strings.TrimSpace(a.ID) {
-		m.bridge.StopBot(participantID)
-	}
-}
-
-func (m *serveCodexBridgeManager) Close() {
-	if m == nil || m.bridge == nil {
-		return
-	}
-	m.bridge.Close()
-}
-
-func (m *serveCodexBridgeManager) PermissionDecider() runtimecodex.PermissionDecider {
-	if m == nil || m.runtime == nil {
-		return nil
-	}
-	return m.runtime.PermissionBroker()
-}
-
-func (m *serveCodexBridgeManager) ensureSession(ctx context.Context, a agent.Agent) (*runtimecodex.Session, error) {
-	handle := runtimecodex.SessionHandle{RuntimeID: strings.TrimSpace(a.RuntimeID)}
-	session, err := m.runtime.SessionManager().Session(handle)
-	if err == nil {
-		return session, nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-
-	if _, stopErr := m.svc.Stop(ctx, a.ID); stopErr != nil && !strings.Contains(stopErr.Error(), "not found") {
-		return nil, stopErr
-	}
-	updated, startErr := m.svc.Start(ctx, a.ID)
-	if startErr != nil {
-		return nil, startErr
-	}
-	session, err = m.runtime.SessionManager().Session(runtimecodex.SessionHandle{RuntimeID: strings.TrimSpace(updated.RuntimeID)})
-	if err != nil {
-		return nil, err
-	}
-	return session, nil
-}
-
-func shouldStartCodexBridge(a agent.Agent) bool {
-	if !strings.EqualFold(strings.TrimSpace(a.Role), agent.RoleWorker) {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(a.RuntimeKind), agent.RuntimeKindCodex) {
-		return false
-	}
-	if !(a.ProfileComplete || a.AgentProfile.ProfileComplete) {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(a.Status), string(agentruntime.StateRunning))
-}
-
-func shouldRestoreCodexBridgeOnStartup(a agent.Agent) bool {
-	if !strings.EqualFold(strings.TrimSpace(a.Role), agent.RoleWorker) {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(a.RuntimeKind), agent.RuntimeKindCodex) {
-		return false
-	}
-	if !(a.ProfileComplete || a.AgentProfile.ProfileComplete) {
-		return false
-	}
-	return !strings.EqualFold(strings.TrimSpace(a.Status), string(agentruntime.StateStopped))
+	return codexmanager.New(opts)
 }
 
 func sandboxServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {

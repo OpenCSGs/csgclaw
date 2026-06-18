@@ -17,6 +17,7 @@ type MaybeUpdater<T> = T | ((current: T) => T);
 export type WorkspaceUiState = {
   activeConversationId: string;
   collapsedWorkspaceGroups: CollapsedWorkspaceGroups;
+  floatingChatOpen: boolean;
   isSidebarCollapsed: boolean;
   locale: LocaleCode;
   selectedHubTemplateId: string;
@@ -26,6 +27,7 @@ export type WorkspaceUiState = {
   workspaceTab: WorkspaceTab;
   setActiveConversationId: (activeConversationId: string) => void;
   setCollapsedWorkspaceGroups: (value: MaybeUpdater<CollapsedWorkspaceGroups>) => void;
+  setFloatingChatOpen: (value: MaybeUpdater<boolean>) => void;
   setIsSidebarCollapsed: (value: MaybeUpdater<boolean>) => void;
   setLocale: (locale: LocaleCode) => void;
   setSelectedHubTemplateId: (value: MaybeUpdater<string>) => void;
@@ -44,12 +46,17 @@ export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   isSidebarCollapsed: window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true",
   collapsedWorkspaceGroups: readCollapsedWorkspaceGroups(),
   activeConversationId: initialPane.type === WorkspacePaneTypes.conversation ? String(initialPane.id ?? "") : "",
+  floatingChatOpen: false,
   workspaceTab: workspaceTabForPane(initialPane),
   selectedHubTemplateId: "",
   selectedHubWorkspacePath: "",
 
   setLocale: (locale) => set({ locale }),
   setTheme: (theme) => set({ theme }),
+  setFloatingChatOpen: (value) =>
+    set((state) => ({
+      floatingChatOpen: typeof value === "function" ? value(state.floatingChatOpen) : value,
+    })),
   setShowToolCalls: (value) =>
     set((state) => ({
       showToolCalls: typeof value === "function" ? value(state.showToolCalls) : value,

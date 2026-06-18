@@ -43,3 +43,5 @@ docker/
 # Vendored native libraries / SDK dist fetched on demand
 third_party/boxlite-go/libboxlite.a
 third_party/boxlite-go/boxlite-c*/
+
+.playwright-cli

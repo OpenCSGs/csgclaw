@@ -25,7 +25,53 @@ import (
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/server"
 	"csgclaw/internal/upgrade"
+	appversion "csgclaw/internal/version"
 )
+
+func TestValidateServeInstallationRejectsReleaseOutsideBundle(t *testing.T) {
+	originalVersion := appversion.Version
+	appversion.Version = "v0.3.12"
+	t.Cleanup(func() { appversion.Version = originalVersion })
+
+	err := validateServeInstallation()
+	if !errors.Is(err, upgrade.ErrNotOfficialBundle) {
+		t.Fatalf("validateServeInstallation() error = %v, want ErrNotOfficialBundle", err)
+	}
+	if !strings.Contains(err.Error(), "拒绝启动正式版本") {
+		t.Fatalf("validateServeInstallation() error = %q, want Chinese guidance", err)
+	}
+	if !strings.Contains(err.Error(), "curl -fsSL https://csgclaw.opencsg.com/install.sh | bash") {
+		t.Fatalf("validateServeInstallation() error = %q, want official install command", err)
+	}
+}
+
+func TestOfficialInstallGuidance(t *testing.T) {
+	tests := []struct {
+		goos string
+		want string
+	}{
+		{goos: "darwin", want: "curl -fsSL https://csgclaw.opencsg.com/install.sh | bash"},
+		{goos: "linux", want: "curl -fsSL https://csgclaw.opencsg.com/install.sh | bash"},
+		{goos: "windows", want: "curl.exe -fsSL https://csgclaw.opencsg.com/install.ps1 | powershell -ExecutionPolicy Bypass -Command -"},
+	}
+
+	for _, tt := range tests {
+		_, got := officialInstallGuidance(tt.goos)
+		if got != tt.want {
+			t.Fatalf("officialInstallGuidance(%q) command = %q, want %q", tt.goos, got, tt.want)
+		}
+	}
+}
+
+func TestValidateServeInstallationAllowsLocalBuild(t *testing.T) {
+	originalVersion := appversion.Version
+	appversion.Version = "v0.3.12+local"
+	t.Cleanup(func() { appversion.Version = originalVersion })
+
+	if err := validateServeInstallation(); err != nil {
+		t.Fatalf("validateServeInstallation() error = %v", err)
+	}
+}
 
 func TestServeForegroundPreflightsCSGHubLiteProvider(t *testing.T) {
 	restore := stubServeDependencies(t)
@@ -981,7 +1027,7 @@ func TestServeForegroundStartsCodexBridgesAfterConfiguredAgents(t *testing.T) {
 		<-releaseAgents
 		return nil
 	}
-	NewCodexBridgeManager = func(config.Config, *agent.Service) (codexBridgeManager, error) {
+	NewCodexBridgeManager = func(config.Config, *agent.Service, *feishu.Service) (codexBridgeManager, error) {
 		return &fakeCodexBridgeManager{
 			start: func(context.Context) error {
 				select {
@@ -1021,134 +1067,6 @@ func TestServeForegroundStartsCodexBridgesAfterConfiguredAgents(t *testing.T) {
 	case <-bridgeClosed:
 	case <-time.After(time.Second):
 		t.Fatal("codex bridge manager did not close")
-	}
-}
-
-func TestShouldStartCodexBridge(t *testing.T) {
-	cases := []struct {
-		name  string
-		agent agent.Agent
-		want  bool
-	}{
-		{
-			name: "running codex worker with complete profile",
-			agent: agent.Agent{
-				ID:              "u-alice",
-				Role:            agent.RoleWorker,
-				RuntimeKind:     agent.RuntimeKindCodex,
-				Status:          string(agentruntime.StateRunning),
-				ProfileComplete: true,
-			},
-			want: true,
-		},
-		{
-			name: "stopped worker",
-			agent: agent.Agent{
-				ID:              "u-alice",
-				Role:            agent.RoleWorker,
-				RuntimeKind:     agent.RuntimeKindCodex,
-				Status:          string(agentruntime.StateStopped),
-				ProfileComplete: true,
-			},
-		},
-		{
-			name: "manager is excluded",
-			agent: agent.Agent{
-				ID:              agent.ManagerUserID,
-				Role:            agent.RoleManager,
-				RuntimeKind:     agent.RuntimeKindCodex,
-				Status:          string(agentruntime.StateRunning),
-				ProfileComplete: true,
-			},
-		},
-		{
-			name: "non-codex worker is excluded",
-			agent: agent.Agent{
-				ID:              "u-alice",
-				Role:            agent.RoleWorker,
-				RuntimeKind:     agent.RuntimeKindPicoClawSandbox,
-				Status:          string(agentruntime.StateRunning),
-				ProfileComplete: true,
-			},
-		},
-		{
-			name: "incomplete profile is excluded",
-			agent: agent.Agent{
-				ID:          "u-alice",
-				Role:        agent.RoleWorker,
-				RuntimeKind: agent.RuntimeKindCodex,
-				Status:      string(agentruntime.StateRunning),
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		if got := shouldStartCodexBridge(tc.agent); got != tc.want {
-			t.Fatalf("%s: shouldStartCodexBridge() = %v, want %v", tc.name, got, tc.want)
-		}
-	}
-}
-
-func TestShouldRestoreCodexBridgeOnStartup(t *testing.T) {
-	cases := []struct {
-		name  string
-		agent agent.Agent
-		want  bool
-	}{
-		{
-			name: "running codex worker is restored",
-			agent: agent.Agent{
-				ID:              "u-alice",
-				Role:            agent.RoleWorker,
-				RuntimeKind:     agent.RuntimeKindCodex,
-				Status:          string(agentruntime.StateRunning),
-				ProfileComplete: true,
-			},
-			want: true,
-		},
-		{
-			name: "exited codex worker is restored",
-			agent: agent.Agent{
-				ID:              "u-alice",
-				Role:            agent.RoleWorker,
-				RuntimeKind:     agent.RuntimeKindCodex,
-				Status:          string(agentruntime.StateExited),
-				ProfileComplete: true,
-			},
-			want: true,
-		},
-		{
-			name: "stopped codex worker stays stopped",
-			agent: agent.Agent{
-				ID:              "u-alice",
-				Role:            agent.RoleWorker,
-				RuntimeKind:     agent.RuntimeKindCodex,
-				Status:          string(agentruntime.StateStopped),
-				ProfileComplete: true,
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		if got := shouldRestoreCodexBridgeOnStartup(tc.agent); got != tc.want {
-			t.Fatalf("%s: shouldRestoreCodexBridgeOnStartup() = %v, want %v", tc.name, got, tc.want)
-		}
-	}
-}
-
-func TestCodexBridgeBindingUsesParticipantIDForWorker(t *testing.T) {
-	binding := codexBridgeBindingForAgent(agent.Agent{
-		ID:          "u-agent-3l6htd",
-		Name:        "dev",
-		RuntimeKind: agent.RuntimeKindCodex,
-		RuntimeID:   "rt-u-agent-3l6htd",
-	}, "sess-dev")
-
-	if binding.BotID != "agent-3l6htd" {
-		t.Fatalf("BotID = %q, want participant ID agent-3l6htd", binding.BotID)
-	}
-	if binding.RuntimeID != "rt-u-agent-3l6htd" || binding.SessionID != "sess-dev" {
-		t.Fatalf("binding = %+v, want runtime/session preserved", binding)
 	}
 }
 
@@ -1608,7 +1526,7 @@ func stubServeDependencies(t *testing.T) func() {
 	NewLLMService = func(config.Config, *agent.Service) (*llm.Service, error) { return nil, nil }
 	EnsureBootstrapManager = func(context.Context, *agent.Service) error { return nil }
 	StartConfiguredAgents = func(context.Context, *agent.Service) error { return nil }
-	NewCodexBridgeManager = func(config.Config, *agent.Service) (codexBridgeManager, error) { return nil, nil }
+	NewCodexBridgeManager = func(config.Config, *agent.Service, *feishu.Service) (codexBridgeManager, error) { return nil, nil }
 	EnsureCLIProxy = func(context.Context) error { return nil }
 	ShutdownCLIProxy = func(context.Context) error { return nil }
 	CheckModelProvider = checkModelProvider

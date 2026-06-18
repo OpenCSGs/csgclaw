@@ -2,6 +2,8 @@
 import type { TranslateFn } from "@/models/conversations";
 
 export type UpgradeStatus = {
+  auto_upgrade_supported: boolean;
+  auto_upgrade_unsupported_reason: string;
   checking: boolean;
   current_version: string;
   last_checked_at: unknown;
@@ -24,7 +26,19 @@ export function formatSidebarVersionLabel(version: unknown): string {
 
 export function isLocalBuildVersion(version: unknown): boolean {
   const raw = typeof version === "string" ? version.trim() : "";
-  return raw.length > 0 && raw !== "dev" && raw.endsWith("+local");
+  return (
+    raw.length > 0 &&
+    (raw === "dev" || raw.endsWith("+local") || raw.endsWith("-dirty") || /-\d+-g[0-9a-f]+/i.test(raw))
+  );
+}
+
+export function isLocalBuildUpgradeStatus(status: UpgradeStatus | null | undefined, version: unknown): boolean {
+  return (
+    isLocalBuildVersion(version) ||
+    Boolean(
+      status && status.auto_upgrade_supported === false && status.auto_upgrade_unsupported_reason === "local_build",
+    )
+  );
 }
 
 export function normalizeUpgradeStatus(status: unknown): UpgradeStatus | null {
@@ -33,6 +47,9 @@ export function normalizeUpgradeStatus(status: unknown): UpgradeStatus | null {
   }
   const source = status as Partial<Record<keyof UpgradeStatus, unknown>>;
   return {
+    auto_upgrade_supported: source.auto_upgrade_supported !== false,
+    auto_upgrade_unsupported_reason:
+      typeof source.auto_upgrade_unsupported_reason === "string" ? source.auto_upgrade_unsupported_reason : "",
     current_version: typeof source.current_version === "string" ? source.current_version : "",
     latest_version: typeof source.latest_version === "string" ? source.latest_version : "",
     update_available: Boolean(source.update_available),

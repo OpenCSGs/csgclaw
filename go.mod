@@ -11,6 +11,8 @@ require (
 	golang.org/x/term v0.37.0
 )
 
+require github.com/gogo/protobuf v1.3.2 // indirect
+
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/redis/go-redis/v9 v9.19.0 // indirect

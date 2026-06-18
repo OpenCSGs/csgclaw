@@ -14,7 +14,7 @@ import (
 	"time"
 
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
-	"csgclaw/internal/channel/runtimebridge"
+	"csgclaw/internal/channelbridge/runtimebridge"
 	runtimecodex "csgclaw/internal/runtime/codex"
 )
 
@@ -24,10 +24,34 @@ type streamResult struct {
 }
 
 type fakeBotClient struct {
-	mu          sync.Mutex
-	streams     map[string][]streamResult
-	streamCtxs  []context.Context
-	sendRecords []SendMessageRequest
+	mu                 sync.Mutex
+	streams            map[string][]streamResult
+	streamCtxs         []context.Context
+	sendRecords        []SendMessageRequest
+	updateRecords      []updateRecord
+	addReactions       []reactionAddRecord
+	delReactions       []reactionDeleteRecord
+	ops                []string
+	updateErr          error
+	addReactionErr     error
+	deleteReactionErr  error
+	addReactionStarted chan struct{}
+	addReactionBlock   <-chan struct{}
+}
+
+type updateRecord struct {
+	botID string
+	req   UpdateMessageRequest
+}
+
+type reactionAddRecord struct {
+	botID string
+	req   AddMessageReactionRequest
+}
+
+type reactionDeleteRecord struct {
+	botID string
+	req   DeleteMessageReactionRequest
 }
 
 func (c *fakeBotClient) StreamEvents(ctx context.Context, botID, _ string) (<-chan BotEvent, <-chan error) {
@@ -59,7 +83,58 @@ func (c *fakeBotClient) SendMessage(_ context.Context, _ string, req SendMessage
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.sendRecords = append(c.sendRecords, req)
+	c.ops = append(c.ops, "send:"+req.Text)
 	return SendMessageResponse{MessageID: "sent-" + strconv.Itoa(len(c.sendRecords))}, nil
+}
+
+func (c *fakeBotClient) UpdateMessage(_ context.Context, botID string, req UpdateMessageRequest) (UpdateMessageResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.updateRecords = append(c.updateRecords, updateRecord{botID: botID, req: req})
+	c.ops = append(c.ops, "update:"+req.MessageID+":"+req.Text)
+	if c.updateErr != nil {
+		return UpdateMessageResponse{}, c.updateErr
+	}
+	return UpdateMessageResponse{MessageID: req.MessageID}, nil
+}
+
+func (c *fakeBotClient) AddMessageReaction(ctx context.Context, botID string, req AddMessageReactionRequest) (AddMessageReactionResponse, error) {
+	signal(c.addReactionStarted)
+	if c.addReactionBlock != nil {
+		select {
+		case <-ctx.Done():
+			return AddMessageReactionResponse{}, ctx.Err()
+		case <-c.addReactionBlock:
+		}
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.addReactions = append(c.addReactions, reactionAddRecord{botID: botID, req: req})
+	reactionID := "reaction-" + strconv.Itoa(len(c.addReactions))
+	c.ops = append(c.ops, "reaction-add:"+req.MessageID+":"+req.EmojiType)
+	if c.addReactionErr != nil {
+		return AddMessageReactionResponse{}, c.addReactionErr
+	}
+	return AddMessageReactionResponse{ReactionID: reactionID}, nil
+}
+
+func (c *fakeBotClient) DeleteMessageReaction(_ context.Context, botID string, req DeleteMessageReactionRequest) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.delReactions = append(c.delReactions, reactionDeleteRecord{botID: botID, req: req})
+	c.ops = append(c.ops, "reaction-delete:"+req.MessageID+":"+req.ReactionID)
+	return c.deleteReactionErr
+}
+
+func signal(ch chan struct{}) {
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
 }
 
 func (c *fakeBotClient) sentTexts() []string {
@@ -77,6 +152,38 @@ func (c *fakeBotClient) sentRecords() []SendMessageRequest {
 	defer c.mu.Unlock()
 	out := make([]SendMessageRequest, len(c.sendRecords))
 	copy(out, c.sendRecords)
+	return out
+}
+
+func (c *fakeBotClient) updates() []updateRecord {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]updateRecord, len(c.updateRecords))
+	copy(out, c.updateRecords)
+	return out
+}
+
+func (c *fakeBotClient) reactionAdds() []reactionAddRecord {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]reactionAddRecord, len(c.addReactions))
+	copy(out, c.addReactions)
+	return out
+}
+
+func (c *fakeBotClient) reactionDeletes() []reactionDeleteRecord {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]reactionDeleteRecord, len(c.delReactions))
+	copy(out, c.delReactions)
+	return out
+}
+
+func (c *fakeBotClient) operationLog() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, len(c.ops))
+	copy(out, c.ops)
 	return out
 }
 
@@ -223,6 +330,47 @@ func TestServiceRoundTrip(t *testing.T) {
 	})
 }
 
+func TestServiceInjectsChannelContextForFeishuEvents(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{
+		Channel:       "feishu",
+		ParticipantID: "manager",
+		MessageID:     "om_1",
+		RoomID:        "oc_alpha",
+		ChatType:      "group",
+		Text:          "安排 dev 做一下",
+	}
+
+	sink := runtimecodex.NewEventSink()
+	client := &fakeBotClient{
+		streams: map[string][]streamResult{
+			"manager": {{events: stream, errs: errs}},
+		},
+	}
+	prompter := &fakePrompter{}
+
+	svc := NewService(client, prompter, sink)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "manager", RuntimeID: "rt-manager", SessionID: "sess-manager"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	waitFor(t, func() bool {
+		texts := prompter.texts()
+		return len(texts) == 1 &&
+			strings.Contains(texts[0], "channel: feishu") &&
+			strings.Contains(texts[0], "room_id: oc_alpha") &&
+			strings.Contains(texts[0], "participant_id: manager") &&
+			strings.Contains(texts[0], "Current message:\n安排 dev 做一下")
+	})
+}
+
 func TestServiceEnsuresConversationSessionAndInjectsHiddenThreadContext(t *testing.T) {
 	t.Parallel()
 
@@ -340,17 +488,17 @@ func TestServiceUsesConversationScopedSessionsAndThreadReplies(t *testing.T) {
 	})
 }
 
-func TestServiceThreadsTopLevelToolCallsUnderFinalResponse(t *testing.T) {
+func TestServiceThreadsTopLevelToolCallsBesideFinalResponse(t *testing.T) {
 	for _, chatType := range []string{"direct", "group"} {
 		chatType := chatType
 		t.Run(chatType, func(t *testing.T) {
 			t.Parallel()
-			assertServiceThreadsTopLevelToolCallsUnderFinalResponse(t, chatType)
+			assertServiceThreadsTopLevelToolCallsBesideFinalResponse(t, chatType)
 		})
 	}
 }
 
-func assertServiceThreadsTopLevelToolCallsUnderFinalResponse(t *testing.T, chatType string) {
+func assertServiceThreadsTopLevelToolCallsBesideFinalResponse(t *testing.T, chatType string) {
 	t.Helper()
 	stream := make(chan BotEvent, 1)
 	errs := make(chan error)
@@ -420,10 +568,392 @@ func assertServiceThreadsTopLevelToolCallsUnderFinalResponse(t *testing.T, chatT
 			strings.Contains(records[2].Text, runtimebridge.AgentToolMsgType) &&
 			strings.Contains(records[2].Text, "command output") &&
 			records[3].RoomID == "room-1" &&
-			records[3].MessageID == "sent-1" &&
 			records[3].ThreadRootID == "" &&
 			records[3].Text == "done"
 	})
+}
+
+func TestServiceAddsAndRemovesFeishuProcessingPinAroundFinalReply(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{
+		Channel:       "feishu",
+		ParticipantID: "manager",
+		MessageID:     "om-user",
+		RoomID:        "oc-alpha",
+		ChatType:      "group",
+		Text:          "你好",
+	}
+
+	sink := runtimecodex.NewEventSink()
+	client := &fakeBotClient{
+		streams: map[string][]streamResult{
+			"manager": {{events: stream, errs: errs}},
+		},
+	}
+	prompter := &fakePrompter{
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventTextDelta,
+				Text:      "收到",
+			})
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventPromptCompleted,
+			})
+			return nil
+		},
+	}
+
+	svc := NewService(client, prompter, sink)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "manager", RuntimeID: "rt-1", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	waitFor(t, func() bool {
+		return len(client.sentRecords()) == 1 && len(client.reactionAdds()) == 1 && len(client.reactionDeletes()) == 1
+	})
+
+	adds := client.reactionAdds()
+	if adds[0].botID != "manager" || adds[0].req.MessageID != "om-user" || adds[0].req.EmojiType != processingPinEmoji {
+		t.Fatalf("add reaction = %+v, want Pin on inbound message", adds[0])
+	}
+	deletes := client.reactionDeletes()
+	if deletes[0].botID != "manager" || deletes[0].req.MessageID != "om-user" || deletes[0].req.ReactionID != "reaction-1" {
+		t.Fatalf("delete reaction = %+v, want same inbound reaction", deletes[0])
+	}
+	if got := client.sentTexts(); !slices.Equal(got, []string{"收到"}) {
+		t.Fatalf("sent texts = %+v, want final reply", got)
+	}
+}
+
+func TestServiceDoesNotBlockPromptOnFeishuProcessingPin(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{
+		Channel:       "feishu",
+		ParticipantID: "manager",
+		MessageID:     "om-user",
+		RoomID:        "oc-alpha",
+		ChatType:      "group",
+		Text:          "你好",
+	}
+
+	sink := runtimecodex.NewEventSink()
+	unblockReaction := make(chan struct{})
+	reactionStarted := make(chan struct{}, 1)
+	promptStarted := make(chan struct{}, 1)
+	client := &fakeBotClient{
+		streams: map[string][]streamResult{
+			"manager": {{events: stream, errs: errs}},
+		},
+		addReactionStarted: reactionStarted,
+		addReactionBlock:   unblockReaction,
+	}
+	prompter := &fakePrompter{
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
+			signal(promptStarted)
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventTextDelta,
+				Text:      "收到",
+			})
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventPromptCompleted,
+			})
+			return nil
+		},
+	}
+
+	svc := NewService(client, prompter, sink)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "manager", RuntimeID: "rt-1", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	select {
+	case <-reactionStarted:
+	case <-time.After(time.Second):
+		t.Fatal("processing reaction did not start")
+	}
+	select {
+	case <-promptStarted:
+	case <-time.After(time.Second):
+		t.Fatal("prompt did not start while processing reaction was blocked")
+	}
+	close(unblockReaction)
+	waitFor(t, func() bool {
+		return slices.Equal(client.sentTexts(), []string{"收到"})
+	})
+}
+
+func TestServiceIgnoresFeishuProcessingPinAddFailure(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{
+		Channel:       "feishu",
+		ParticipantID: "manager",
+		MessageID:     "om-user",
+		RoomID:        "oc-alpha",
+		ChatType:      "group",
+		Text:          "你好",
+	}
+
+	sink := runtimecodex.NewEventSink()
+	client := &fakeBotClient{
+		streams: map[string][]streamResult{
+			"manager": {{events: stream, errs: errs}},
+		},
+		addReactionErr: errors.New("reaction denied"),
+	}
+	prompter := &fakePrompter{
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventTextDelta,
+				Text:      "收到",
+			})
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventPromptCompleted,
+			})
+			return nil
+		},
+	}
+
+	svc := NewService(client, prompter, sink)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "manager", RuntimeID: "rt-1", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	waitFor(t, func() bool {
+		return slices.Equal(client.sentTexts(), []string{"收到"}) && len(client.reactionAdds()) == 1
+	})
+	if got := client.reactionDeletes(); len(got) != 0 {
+		t.Fatalf("reaction deletes = %+v, want none after add failure", got)
+	}
+}
+
+func TestServiceIgnoresFeishuProcessingPinDeleteFailure(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{
+		Channel:       "feishu",
+		ParticipantID: "manager",
+		MessageID:     "om-user",
+		RoomID:        "oc-alpha",
+		ChatType:      "group",
+		Text:          "你好",
+	}
+
+	sink := runtimecodex.NewEventSink()
+	client := &fakeBotClient{
+		streams: map[string][]streamResult{
+			"manager": {{events: stream, errs: errs}},
+		},
+		deleteReactionErr: errors.New("delete denied"),
+	}
+	prompter := &fakePrompter{
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventTextDelta,
+				Text:      "收到",
+			})
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventPromptCompleted,
+			})
+			return nil
+		},
+	}
+
+	svc := NewService(client, prompter, sink)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "manager", RuntimeID: "rt-1", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	waitFor(t, func() bool {
+		return slices.Equal(client.sentTexts(), []string{"收到"}) && len(client.reactionAdds()) == 1 && len(client.reactionDeletes()) == 1
+	})
+}
+
+func TestServiceUpdatesFeishuGeneratedToolRootWithFinalResponse(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{
+		Channel:       "feishu",
+		ParticipantID: "manager",
+		MessageID:     "om-user",
+		RoomID:        "oc-alpha",
+		ChatType:      "group",
+		Text:          "run it",
+	}
+
+	sink := runtimecodex.NewEventSink()
+	client := &fakeBotClient{
+		streams: map[string][]streamResult{
+			"manager": {{events: stream, errs: errs}},
+		},
+	}
+	prompter := &fakePrompter{
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID:        handle.RuntimeID,
+				SessionID:        req.SessionID,
+				Kind:             runtimecodex.SessionEventToolCallStart,
+				ToolCallID:       "tool-1",
+				ToolTitle:        "Run shell command",
+				ToolStatus:       "pending",
+				ToolInputSummary: `{"cmd":"pwd"}`,
+			})
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventTextDelta,
+				Text:      "done",
+			})
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventPromptCompleted,
+			})
+			return nil
+		},
+	}
+
+	svc := NewService(client, prompter, sink)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "manager", RuntimeID: "rt-1", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	waitFor(t, func() bool {
+		return len(client.sentRecords()) == 2 && len(client.updates()) == 1
+	})
+	records := client.sentRecords()
+	if records[0].RoomID != "oc-alpha" || records[0].ThreadRootID != "" || records[0].Text != turnPlaceholderText {
+		t.Fatalf("placeholder record = %+v, want top-level generated root", records[0])
+	}
+	if records[1].RoomID != "oc-alpha" || records[1].ThreadRootID != "sent-1" || !strings.Contains(records[1].Text, runtimebridge.AgentToolMsgType) {
+		t.Fatalf("tool record = %+v, want activity reply under generated root", records[1])
+	}
+	updates := client.updates()
+	if updates[0].botID != "manager" ||
+		updates[0].req.RoomID != "oc-alpha" ||
+		updates[0].req.MessageID != "sent-1" ||
+		updates[0].req.Text != "done" {
+		t.Fatalf("update record = %+v, want final response replacing generated root", updates[0])
+	}
+}
+
+func TestServiceFallsBackWhenFeishuGeneratedRootUpdateFails(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{
+		Channel:       "feishu",
+		ParticipantID: "manager",
+		MessageID:     "om-user",
+		RoomID:        "oc-alpha",
+		ChatType:      "group",
+		Text:          "run it",
+	}
+
+	sink := runtimecodex.NewEventSink()
+	client := &fakeBotClient{
+		streams: map[string][]streamResult{
+			"manager": {{events: stream, errs: errs}},
+		},
+		updateErr: errors.New("update denied"),
+	}
+	prompter := &fakePrompter{
+		prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID:        handle.RuntimeID,
+				SessionID:        req.SessionID,
+				Kind:             runtimecodex.SessionEventToolCallStart,
+				ToolCallID:       "tool-1",
+				ToolTitle:        "Run shell command",
+				ToolStatus:       "pending",
+				ToolInputSummary: `{"cmd":"pwd"}`,
+			})
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventTextDelta,
+				Text:      "done",
+			})
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventPromptCompleted,
+			})
+			return nil
+		},
+	}
+
+	svc := NewService(client, prompter, sink)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "manager", RuntimeID: "rt-1", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	waitFor(t, func() bool {
+		return len(client.sentRecords()) == 3 && len(client.updates()) == 1
+	})
+	records := client.sentRecords()
+	if records[0].Text != turnPlaceholderText || records[0].ThreadRootID != "" {
+		t.Fatalf("placeholder record = %+v, want top-level generated root", records[0])
+	}
+	if records[1].ThreadRootID != "sent-1" || !strings.Contains(records[1].Text, runtimebridge.AgentToolMsgType) {
+		t.Fatalf("tool record = %+v, want activity reply under generated root", records[1])
+	}
+	if records[2].ThreadRootID != "sent-1" || records[2].Text != "done" {
+		t.Fatalf("fallback record = %+v, want final response inside generated root", records[2])
+	}
 }
 
 func TestServiceKeepsToolActivityInsideExistingThread(t *testing.T) {
@@ -837,8 +1367,8 @@ func TestServiceProjectsToolEventsAsAgentActivity(t *testing.T) {
 	if records[1].ThreadRootID != "sent-1" {
 		t.Fatalf("tool activity ThreadRootID = %q, want sent-1", records[1].ThreadRootID)
 	}
-	if records[2].Text != turnCompleteText || records[2].MessageID != "sent-1" || records[2].ThreadRootID != "" {
-		t.Fatalf("completion record = %+v, want root placeholder replacement", records[2])
+	if records[2].Text != turnCompleteText || records[2].ThreadRootID != "sent-1" {
+		t.Fatalf("completion record = %+v, want completion inside activity thread", records[2])
 	}
 	text := records[1].Text
 	if strings.Contains(text, "Running tool:") {
@@ -1048,9 +1578,6 @@ func TestServiceUsesStableMessageIDForPermissionDecisionActivity(t *testing.T) {
 	sent := client.sentRecords()
 	if sent[0].Text != turnPlaceholderText || sent[0].ThreadRootID != "" {
 		t.Fatalf("placeholder record = %+v, want top-level blank root", sent[0])
-	}
-	if sent[1].MessageID == "" || sent[1].MessageID != sent[2].MessageID {
-		t.Fatalf("permission message ids = %q / %q, want stable non-empty id", sent[1].MessageID, sent[2].MessageID)
 	}
 	if sent[1].ThreadRootID != "sent-1" || sent[2].ThreadRootID != "sent-1" {
 		t.Fatalf("permission thread roots = %q / %q, want sent-1", sent[1].ThreadRootID, sent[2].ThreadRootID)
@@ -1281,6 +1808,8 @@ func waitFor(t *testing.T, fn func() bool) {
 }
 
 var _ BotClient = (*fakeBotClient)(nil)
+var _ MessageUpdater = (*fakeBotClient)(nil)
+var _ MessageReactor = (*fakeBotClient)(nil)
 var _ SessionPrompter = (*fakePrompter)(nil)
 
 func TestWorkerReturnsPromptError(t *testing.T) {

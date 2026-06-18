@@ -1,4 +1,5 @@
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
+import { FloatingChat } from "../FloatingChat";
 import { ProfilePreviewPopover } from "../ProfilePreviewPopover";
 import {
   AgentProfileModal,
@@ -15,6 +16,7 @@ export function WorkspaceOverlays() {
 
   return (
     <>
+      {controller.floatingChatProps ? <FloatingChat {...controller.floatingChatProps} /> : null}
       {controller.profilePreviewProps ? <ProfilePreviewPopover {...controller.profilePreviewProps} /> : null}
       {controller.createRoomModalProps ? <CreateRoomModal {...controller.createRoomModalProps} /> : null}
       {controller.createTeamModalProps ? <CreateTeamModal {...controller.createTeamModalProps} /> : null}

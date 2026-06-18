@@ -187,7 +187,7 @@ func TestRunHelpIncludesUpgradeGuidance(t *testing.T) {
 		"csgclaw upgrade [flags]",
 		"csgclaw upgrade --check",
 		"csgclaw upgrade --no-restart",
-		"Automatic install requires an official release bundle layout",
+		"Automatic install requires an official release bundle marker and layout",
 		"Automatic restart only supports the default PID path",
 	} {
 		if !strings.Contains(stderr.String(), want) {
@@ -249,7 +249,8 @@ func TestRunInstallErrorExplainsBundleRequirement(t *testing.T) {
 	}
 	for _, want := range []string{
 		"not installed from an official csgclaw bundle",
-		"Install the official release bundle to use automatic upgrade",
+		"curl -fsSL https://csgclaw.opencsg.com/install.sh | bash",
+		"replaces only ~/.local/bin/csgclaw with a symlink",
 		"csgclaw upgrade --check",
 	} {
 		if !strings.Contains(err.Error(), want) {
@@ -360,6 +361,7 @@ func jsonResponse(status int, body string) *http.Response {
 func releaseTarball(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 
+	files = withOfficialBundleMarker(files)
 	var buf bytes.Buffer
 	gzw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gzw)
@@ -381,14 +383,26 @@ func releaseTarball(t *testing.T, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
+func withOfficialBundleMarker(files map[string]string) map[string]string {
+	out := make(map[string]string, len(files)+1)
+	for name, content := range files {
+		out[name] = content
+	}
+	if _, ok := out["csgclaw/.csgclaw-bundle.json"]; !ok {
+		out["csgclaw/.csgclaw-bundle.json"] = `{"app":"csgclaw","layout":"official-bundle","version":"test"}`
+	}
+	return out
+}
+
 func writeInstalledBundle(t *testing.T, parentDir, marker string) string {
 	t.Helper()
 
 	root := filepath.Join(parentDir, "csgclaw")
 	for path, content := range map[string]string{
-		filepath.Join(root, "bin", "csgclaw"): "#!/bin/sh\n# " + marker + "\n",
-		filepath.Join(root, "bin", "boxlite"): "#!/bin/sh\n# " + marker + " boxlite\n",
-		filepath.Join(root, "README.md"):      marker,
+		filepath.Join(root, ".csgclaw-bundle.json"): `{"app":"csgclaw","layout":"official-bundle","version":"test"}`,
+		filepath.Join(root, "bin", "csgclaw"):       "#!/bin/sh\n# " + marker + "\n",
+		filepath.Join(root, "bin", "boxlite"):       "#!/bin/sh\n# " + marker + " boxlite\n",
+		filepath.Join(root, "README.md"):            marker,
 	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(path), err)

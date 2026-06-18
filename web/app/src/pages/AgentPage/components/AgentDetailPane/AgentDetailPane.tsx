@@ -1,4 +1,14 @@
-import { Check, Edit3, MoreHorizontal } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  CircleDashed,
+  Edit3,
+  ExternalLink,
+  Link2,
+  MoreHorizontal,
+  RefreshCw,
+  Unlink2,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import { PROVIDERS, REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
@@ -17,7 +27,9 @@ import {
   agentToDraft,
   formatProviderLabel,
   formatRuntimeKindLabel,
+  hasConnectedAgentChannel,
   isAgentIncomplete,
+  isNotificationBotAgent,
   isAgentRestartNeeded,
   isAgentUpgradeNeeded,
   isAgentRunning,
@@ -45,6 +57,16 @@ import {
 
 type VoidOrPromise = void | Promise<void>;
 type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
+type AgentNoticeTone = "info" | "warning" | "success";
+
+type FeishuPendingRegistrationView = {
+  connect_url?: string;
+  expires_at?: string;
+  next_poll_seconds?: number;
+  registration_id?: string;
+  status?: string;
+  user_code?: string;
+} | null;
 
 export type AgentDetailPaneProps = {
   activeRoom?: IMConversation | null;
@@ -53,12 +75,15 @@ export type AgentDetailPaneProps = {
   busyKey?: string;
   draft?: AgentDraft | null;
   error?: string;
+  feishuConnectBusy?: string;
+  feishuPendingRegistration?: FeishuPendingRegistrationView;
   hasUnsavedChanges?: boolean;
   item: AgentLike;
   modelBusy?: boolean;
   modelError?: unknown;
   models?: string[];
   notice?: string;
+  noticeTone?: AgentNoticeTone;
   notifierWebhookPublicOrigin?: string;
   onDelete: AgentActionHandler;
   onDraftChange?: (draft: AgentDraft) => void;
@@ -69,7 +94,10 @@ export type AgentDetailPaneProps = {
   onRecreate: AgentActionHandler;
   onSave?: () => VoidOrPromise;
   onStart: AgentActionHandler;
+  onStartFeishuConnect?: AgentActionHandler;
   onStop: AgentActionHandler;
+  onFinalizeFeishuConnect?: AgentActionHandler;
+  onDisconnectFeishu?: AgentActionHandler;
   onUpgrade?: AgentActionHandler;
   publishBusy?: boolean;
   locale?: LocaleCode;
@@ -89,11 +117,14 @@ export function AgentDetailPane({
   activeRoom = null,
   busyKey = "",
   error = "",
+  feishuConnectBusy = "",
+  feishuPendingRegistration = null,
   draft,
   savedDraft = null,
   hasUnsavedChanges: hasUnsavedChangesProp = undefined,
   models = [],
   notice = "",
+  noticeTone = "warning",
   modelBusy = false,
   modelError = null,
   saving = false,
@@ -114,6 +145,8 @@ export function AgentDetailPane({
   onStart,
   onStop,
   onRecreate,
+  onStartFeishuConnect,
+  onDisconnectFeishu,
   onUpgrade,
   onDelete,
   onInvite,
@@ -284,9 +317,19 @@ export function AgentDetailPane({
       {error ? <div className="form-error">{error}</div> : null}
       {saveError ? <div className="form-error">{saveError}</div> : null}
       {notice ? (
-        <div className="form-warning" role="status">
+        <div className={`form-warning ${noticeTone === "warning" ? "" : noticeTone}`.trim()} role="status">
           {notice}
         </div>
+      ) : null}
+      {!isNotificationBotAgent(item) ? (
+        <AgentChannelsSection
+          item={item}
+          t={t}
+          busyKey={feishuConnectBusy.startsWith(`${item.id}:`) ? feishuConnectBusy : ""}
+          pendingRegistration={feishuPendingRegistration}
+          onStartFeishuConnect={onStartFeishuConnect}
+          onDisconnectFeishu={onDisconnectFeishu}
+        />
       ) : null}
       {!draft ? (
         <>
@@ -524,6 +567,107 @@ export function AgentDetailPane({
           </section>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+type AgentChannelsSectionProps = {
+  busyKey: string;
+  item: AgentLike;
+  onDisconnectFeishu?: AgentActionHandler;
+  onStartFeishuConnect?: AgentActionHandler;
+  pendingRegistration?: FeishuPendingRegistrationView;
+  t: TranslateFn;
+};
+
+function AgentChannelsSection({
+  item,
+  t,
+  busyKey,
+  pendingRegistration = null,
+  onDisconnectFeishu,
+  onStartFeishuConnect,
+}: AgentChannelsSectionProps) {
+  const connected = hasConnectedAgentChannel(item, "feishu");
+  const pending = Boolean(pendingRegistration?.registration_id);
+  const actionBusy = Boolean(busyKey);
+  const connectBusy = busyKey.endsWith(":feishu:connect") || busyKey.endsWith(":feishu:finalize");
+  const disconnectBusy = busyKey.endsWith(":feishu:disconnect");
+  const statusLabel = connected ? t("feishuConnected") : pending ? t("feishuPending") : t("feishuDisconnected");
+  const statusIcon = connected ? (
+    <CheckCircle2 aria-hidden="true" size={16} strokeWidth={2.2} />
+  ) : pending ? (
+    <CircleDashed aria-hidden="true" size={16} strokeWidth={2.2} />
+  ) : (
+    <Link2 aria-hidden="true" size={16} strokeWidth={2.2} />
+  );
+  const connectLabel = connected ? t("feishuReconnect") : t("feishuConnect");
+  const canStart = Boolean(onStartFeishuConnect);
+  const canDisconnect = connected && Boolean(onDisconnectFeishu);
+  const connectURL = String(pendingRegistration?.connect_url || "").trim();
+
+  return (
+    <section className="profile-section agent-channels-section" aria-labelledby="agent-channels-title">
+      <h2 id="agent-channels-title" className="profile-section-title agent-channels-title">
+        {t("agentChannelsTitle")}
+      </h2>
+      <div className="agent-channel-row">
+        <span className="agent-channel-icon" aria-hidden="true">
+          <img src="icons/feishu.png" alt="" />
+        </span>
+        <span className="agent-channel-main">
+          <span className="agent-channel-name">{t("feishuChannelName")}</span>
+          <span className={`agent-channel-status ${connected ? "connected" : pending ? "pending" : ""}`.trim()}>
+            {statusIcon}
+            {statusLabel}
+          </span>
+          {pending ? <span className="agent-channel-detail">{t("feishuPendingDetail")}</span> : null}
+        </span>
+        <span className="agent-channel-actions">
+          {pending && connectURL ? (
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              type="button"
+              disabled={actionBusy}
+              onClick={() => window.open(connectURL, "_blank", "noopener,noreferrer")}
+            >
+              <ExternalLink aria-hidden="true" size={15} strokeWidth={2} />
+              {t("feishuOpenConnection")}
+            </Button>
+          ) : null}
+          <Button
+            variant={connected ? "secondaryGray" : "primary"}
+            size="sm"
+            type="button"
+            loading={connectBusy && !pending}
+            loadingLabel={connectLabel}
+            disabled={!canStart || actionBusy}
+            onClick={() => onStartFeishuConnect?.(item)}
+          >
+            {connected ? (
+              <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
+            ) : (
+              <Link2 aria-hidden="true" size={15} strokeWidth={2} />
+            )}
+            {connectLabel}
+          </Button>
+          {connected ? (
+            <Button
+              variant="outlineDanger"
+              size="sm"
+              type="button"
+              loading={disconnectBusy}
+              loadingLabel={t("feishuDisconnect")}
+              disabled={!canDisconnect || actionBusy}
+              onClick={() => onDisconnectFeishu?.(item)}
+            >
+              <Unlink2 aria-hidden="true" size={15} strokeWidth={2} />
+              {t("feishuDisconnect")}
+            </Button>
+          ) : null}
+        </span>
+      </div>
     </section>
   );
 }

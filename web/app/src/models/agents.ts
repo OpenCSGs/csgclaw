@@ -114,6 +114,21 @@ export type AgentLike = AgentProfileLike & {
     | null;
 };
 
+export type AgentChannelID = "feishu";
+
+export type AgentConnectedChannel = {
+  id: AgentChannelID;
+  name: string;
+  participantID: string;
+};
+
+export const AGENT_CHANNELS: Record<AgentChannelID, { id: AgentChannelID; name: string }> = {
+  feishu: {
+    id: "feishu",
+    name: "Feishu",
+  },
+};
+
 export type AvatarLikeUser = {
   avatar?: string | null;
   handle?: string | null;
@@ -330,6 +345,47 @@ export function resolveAgentChannelUserID(item: AgentLike | null | undefined): s
     return MANAGER_PARTICIPANT_ID;
   }
   return String(item.user_id || item.id || "").trim();
+}
+
+export function feishuAgentParticipant(
+  item: AgentLike | null | undefined,
+): NonNullable<AgentLike["participants"]>[number] | null {
+  const agentID = String(item?.id ?? "").trim();
+  const participant = item?.participants?.find((candidate) => {
+    if (String(candidate?.channel || "").trim() !== "feishu") {
+      return false;
+    }
+    if (String(candidate?.type || "").trim() !== "agent") {
+      return false;
+    }
+    if (String(candidate?.channel_user_kind || "").trim() !== "app_id") {
+      return false;
+    }
+    if (!String(candidate?.id || "").trim()) {
+      return false;
+    }
+    const participantAgentID = String(candidate?.agent_id || "").trim();
+    return !agentID || !participantAgentID || participantAgentID === agentID;
+  });
+  return participant ?? null;
+}
+
+export function agentConnectedChannels(item: AgentLike | null | undefined): AgentConnectedChannel[] {
+  const feishuParticipant = feishuAgentParticipant(item);
+  if (!feishuParticipant) {
+    return [];
+  }
+  return [
+    {
+      id: "feishu",
+      name: AGENT_CHANNELS.feishu.name,
+      participantID: String(feishuParticipant.id || ""),
+    },
+  ];
+}
+
+export function hasConnectedAgentChannel(item: AgentLike | null | undefined, channelID: AgentChannelID): boolean {
+  return agentConnectedChannels(item).some((channel) => channel.id === channelID);
 }
 
 export function normalizeNotifierDeliveryMode(mode: unknown): string {

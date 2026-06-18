@@ -3,23 +3,26 @@ package codexbridge
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
-	"csgclaw/internal/channel/runtimebridge"
+	"csgclaw/internal/channelbridge/runtimebridge"
 	runtimecodex "csgclaw/internal/runtime/codex"
 	"csgclaw/internal/slashcommand"
 )
 
 const (
-	defaultQueueSize    = 32
-	defaultSeenWindow   = 256
-	defaultPromptSettle = 150 * time.Millisecond
-	localChannel        = csgclawchannel.ChannelID
-	turnPlaceholderText = "\u200b"
-	turnCompleteText    = "Done."
+	defaultQueueSize          = 32
+	defaultSeenWindow         = 256
+	defaultPromptSettle       = 150 * time.Millisecond
+	localChannel              = csgclawchannel.ChannelID
+	turnPlaceholderText       = "\u200b"
+	turnCompleteText          = "Done."
+	processingPinEmoji        = "Pin"
+	processingReactionTimeout = 2 * time.Second
 )
 
 type Binding struct {
@@ -93,6 +96,11 @@ func (s *Service) StartBot(ctx context.Context, binding Binding) error {
 
 	if existing := s.workers[binding.BotID]; existing != nil {
 		if sameBinding(existing.binding, binding) {
+			slog.Debug("codex bridge bot already running",
+				"bot_id", binding.BotID,
+				"runtime_id", binding.RuntimeID,
+				"session_id", binding.SessionID,
+			)
 			return nil
 		}
 		existing.cancel()
@@ -113,6 +121,11 @@ func (s *Service) StartBot(ctx context.Context, binding Binding) error {
 		done:        make(chan struct{}),
 	}
 	s.workers[binding.BotID] = w
+	slog.Debug("codex bridge bot started",
+		"bot_id", binding.BotID,
+		"runtime_id", binding.RuntimeID,
+		"session_id", binding.SessionID,
+	)
 	go w.run(workerCtx)
 	return nil
 }
@@ -132,8 +145,10 @@ func (s *Service) StopBot(botID string) {
 	s.mu.Unlock()
 
 	if w != nil {
+		slog.Debug("codex bridge bot stopping", "bot_id", botID)
 		w.cancel()
 		<-w.done
+		slog.Debug("codex bridge bot stopped", "bot_id", botID)
 	}
 }
 
@@ -234,11 +249,16 @@ func (w *worker) enqueue(ctx context.Context, evt BotEvent) {
 }
 
 func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-chan runtimecodex.SessionEvent) error {
+	eventStartedAt := time.Now()
+	cleanupProcessingReaction := w.startProcessingReaction(ctx, evt)
+	defer cleanupProcessingReaction(context.Background())
 	if cmd, ok, err := slashcommand.Parse(evt.Text); err == nil && ok && slashcommand.IsNewConversationCommand(cmd) {
+		cleanupProcessingReaction(ctx)
 		return w.handleConversationReset(ctx, evt)
 	} else if err != nil {
 		renderer := runtimebridge.NewTurnRenderer()
 		renderer.SetPromptError(err.Error())
+		cleanupProcessingReaction(ctx)
 		_, err := w.flushTurn(ctx, evt.RoomID, evt.ThreadRootID, renderer)
 		return err
 	}
@@ -246,14 +266,28 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 	if err != nil {
 		renderer := runtimebridge.NewTurnRenderer()
 		renderer.SetPromptError(err.Error())
+		cleanupProcessingReaction(ctx)
 		_, err := w.flushTurn(ctx, evt.RoomID, evt.ThreadRootID, renderer)
 		return err
 	}
 	req := runtimecodex.PromptRequest{
 		SessionID: sessionID,
-		Prompt:    []runtimecodex.PromptContentBlock{runtimecodex.TextBlock(w.promptText(evt))},
 		Meta:      cloneMeta(w.binding.PromptMeta),
 	}
+	promptText := w.promptText(evt)
+	req.Prompt = []runtimecodex.PromptContentBlock{runtimecodex.TextBlock(promptText)}
+	slog.Debug("codex bridge prompt start",
+		"bot_id", w.binding.BotID,
+		"runtime_id", w.binding.RuntimeID,
+		"session_id", sessionID,
+		"channel", strings.TrimSpace(evt.Channel),
+		"room_id", strings.TrimSpace(evt.RoomID),
+		"message_id", strings.TrimSpace(evt.MessageID),
+		"thread_root_id", strings.TrimSpace(evt.ThreadRootID),
+		"prompt_bytes", len(promptText),
+		"event_text_bytes", len(strings.TrimSpace(evt.Text)),
+		"has_thread_context", evt.ThreadContext != nil,
+	)
 	renderer := runtimebridge.NewTurnRenderer()
 	turnRootID := strings.TrimSpace(evt.ThreadRootID)
 	var generatedRootID string
@@ -276,8 +310,15 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 		return generatedRootID, nil
 	}
 	flushTurn := func() (string, error) {
-		if generatedRootID != "" {
-			return w.flushTurnWithFirstMessageID(ctx, evt.RoomID, "", generatedRootID, renderer)
+		cleanupProcessingReaction(ctx)
+		if generatedRootID == "" {
+			return w.flushTurn(ctx, evt.RoomID, turnRootID, renderer)
+		}
+		if w.canUpdateGeneratedTurnRoot(evt) {
+			return w.flushTurnByUpdatingRoot(ctx, evt.RoomID, generatedRootID, renderer)
+		}
+		if len(renderer.FinalMessages()) == 0 {
+			return w.flushTurnWithEmptyCompletion(ctx, evt.RoomID, generatedRootID, renderer)
 		}
 		return w.flushTurn(ctx, evt.RoomID, turnRootID, renderer)
 	}
@@ -287,7 +328,16 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 	}
 	promptDone := make(chan promptResult, 1)
 	go func() {
+		promptStartedAt := time.Now()
 		_, err := w.service.prompter.Prompt(ctx, runtimecodex.SessionHandle{RuntimeID: w.binding.RuntimeID}, req)
+		slog.Debug("codex bridge prompt returned",
+			"bot_id", w.binding.BotID,
+			"runtime_id", w.binding.RuntimeID,
+			"session_id", sessionID,
+			"message_id", strings.TrimSpace(evt.MessageID),
+			"duration", time.Since(promptStartedAt),
+			"error", err,
+		)
 		promptDone <- promptResult{err: err}
 	}()
 
@@ -323,6 +373,14 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 			}
 			renderer.ApplyText(event)
 			if isTerminalEvent(event.Kind) && promptReturned {
+				slog.Debug("codex bridge terminal event flush",
+					"bot_id", w.binding.BotID,
+					"runtime_id", w.binding.RuntimeID,
+					"session_id", sessionID,
+					"message_id", strings.TrimSpace(evt.MessageID),
+					"kind", string(event.Kind),
+					"elapsed", time.Since(eventStartedAt),
+				)
 				_, err := flushTurn()
 				return err
 			}
@@ -336,6 +394,13 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 			settleTimer.Reset(w.service.promptSettle)
 		case <-settleTimer.C:
 			if promptReturned {
+				slog.Debug("codex bridge settle flush",
+					"bot_id", w.binding.BotID,
+					"runtime_id", w.binding.RuntimeID,
+					"session_id", sessionID,
+					"message_id", strings.TrimSpace(evt.MessageID),
+					"elapsed", time.Since(eventStartedAt),
+				)
 				_, err := flushTurn()
 				return err
 			}
@@ -385,39 +450,168 @@ func (w *worker) clearContextCache(conversationKey string) {
 }
 
 func (w *worker) flushTurn(ctx context.Context, roomID, threadRootID string, renderer *runtimebridge.TurnRenderer) (string, error) {
-	return w.flushTurnWithFirstMessageID(ctx, roomID, threadRootID, "", renderer)
+	return w.flushTurnMessages(ctx, roomID, threadRootID, false, renderer)
 }
 
-func (w *worker) flushTurnWithFirstMessageID(ctx context.Context, roomID, threadRootID, firstMessageID string, renderer *runtimebridge.TurnRenderer) (string, error) {
-	var firstSentMessageID string
-	replaceMessageID := strings.TrimSpace(firstMessageID)
+func (w *worker) flushTurnWithEmptyCompletion(ctx context.Context, roomID, threadRootID string, renderer *runtimebridge.TurnRenderer) (string, error) {
+	return w.flushTurnMessages(ctx, roomID, threadRootID, true, renderer)
+}
+
+func (w *worker) flushTurnByUpdatingRoot(ctx context.Context, roomID, rootMessageID string, renderer *runtimebridge.TurnRenderer) (string, error) {
 	messages := renderer.FinalMessages()
-	if len(messages) == 0 && replaceMessageID != "" {
+	if len(messages) == 0 {
 		messages = []string{turnCompleteText}
 	}
-	for idx, text := range messages {
+	if len(messages) == 0 {
+		return strings.TrimSpace(rootMessageID), nil
+	}
+	if err := w.updateMessage(ctx, roomID, rootMessageID, messages[0]); err != nil {
+		slog.Warn("codex bridge update generated turn root failed; sending completion inside activity thread",
+			"bot_id", w.binding.BotID,
+			"room_id", strings.TrimSpace(roomID),
+			"message_id", strings.TrimSpace(rootMessageID),
+			"text_bytes", len(strings.TrimSpace(messages[0])),
+			"error", err,
+		)
+		return w.flushMessages(ctx, roomID, rootMessageID, messages)
+	}
+	if len(messages) > 1 {
+		if _, err := w.flushMessages(ctx, roomID, rootMessageID, messages[1:]); err != nil {
+			return "", err
+		}
+	}
+	return strings.TrimSpace(rootMessageID), nil
+}
+
+func (w *worker) flushTurnMessages(ctx context.Context, roomID, threadRootID string, includeEmptyCompletion bool, renderer *runtimebridge.TurnRenderer) (string, error) {
+	messages := renderer.FinalMessages()
+	if len(messages) == 0 && includeEmptyCompletion {
+		messages = []string{turnCompleteText}
+	}
+	return w.flushMessages(ctx, roomID, threadRootID, messages)
+}
+
+func (w *worker) flushMessages(ctx context.Context, roomID, threadRootID string, messages []string) (string, error) {
+	var firstSentMessageID string
+	for _, text := range messages {
 		req := SendMessageRequest{
 			RoomID:       roomID,
 			Text:         text,
 			ThreadRootID: strings.TrimSpace(threadRootID),
-		}
-		if idx == 0 && replaceMessageID != "" {
-			req.MessageID = replaceMessageID
-			req.ThreadRootID = ""
 		}
 		messageID, err := w.sendMessageRequest(ctx, req)
 		if err != nil {
 			return "", err
 		}
 		if firstSentMessageID == "" {
-			if req.MessageID != "" {
-				firstSentMessageID = req.MessageID
-			} else {
-				firstSentMessageID = messageID
-			}
+			firstSentMessageID = messageID
 		}
 	}
 	return firstSentMessageID, nil
+}
+
+func (w *worker) canUpdateGeneratedTurnRoot(evt BotEvent) bool {
+	if !strings.EqualFold(strings.TrimSpace(evt.Channel), "feishu") {
+		return false
+	}
+	_, ok := w.service.client.(MessageUpdater)
+	return ok
+}
+
+func (w *worker) startProcessingReaction(ctx context.Context, evt BotEvent) func(context.Context) {
+	if !strings.EqualFold(strings.TrimSpace(evt.Channel), "feishu") {
+		return func(context.Context) {}
+	}
+	messageID := strings.TrimSpace(evt.MessageID)
+	if messageID == "" {
+		return func(context.Context) {}
+	}
+	reactor, ok := w.service.client.(MessageReactor)
+	if !ok {
+		return func(context.Context) {}
+	}
+
+	addCtx, cancelAdd := contextWithDefaultTimeout(ctx, processingReactionTimeout)
+	resultCh := make(chan processingReactionResult, 1)
+	go func() {
+		defer cancelAdd()
+		resp, err := reactor.AddMessageReaction(addCtx, w.binding.BotID, AddMessageReactionRequest{
+			MessageID: messageID,
+			EmojiType: processingPinEmoji,
+		})
+		if err != nil {
+			slog.Debug("codex bridge add processing reaction failed",
+				"bot_id", w.binding.BotID,
+				"room_id", strings.TrimSpace(evt.RoomID),
+				"message_id", messageID,
+				"emoji_type", processingPinEmoji,
+				"error", err,
+			)
+			resultCh <- processingReactionResult{}
+			return
+		}
+		resultCh <- processingReactionResult{reactionID: strings.TrimSpace(resp.ReactionID)}
+	}()
+
+	var once sync.Once
+	return func(cleanupCtx context.Context) {
+		once.Do(func() {
+			cancelAdd()
+			go w.deleteProcessingReaction(cleanupCtx, evt, reactor, messageID, resultCh)
+		})
+	}
+}
+
+type processingReactionResult struct {
+	reactionID string
+}
+
+func (w *worker) deleteProcessingReaction(cleanupCtx context.Context, evt BotEvent, reactor MessageReactor, messageID string, resultCh <-chan processingReactionResult) {
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), processingReactionTimeout)
+	defer cancelWait()
+
+	var result processingReactionResult
+	select {
+	case result = <-resultCh:
+	case <-waitCtx.Done():
+		slog.Debug("codex bridge processing reaction cleanup timed out",
+			"bot_id", w.binding.BotID,
+			"room_id", strings.TrimSpace(evt.RoomID),
+			"message_id", messageID,
+			"emoji_type", processingPinEmoji,
+		)
+		return
+	}
+	reactionID := strings.TrimSpace(result.reactionID)
+	if reactionID == "" {
+		return
+	}
+
+	deleteCtx, cancelDelete := contextWithDefaultTimeout(cleanupCtx, processingReactionTimeout)
+	defer cancelDelete()
+	if err := reactor.DeleteMessageReaction(deleteCtx, w.binding.BotID, DeleteMessageReactionRequest{
+		MessageID:  messageID,
+		ReactionID: reactionID,
+	}); err != nil {
+		slog.Debug("codex bridge delete processing reaction failed",
+			"bot_id", w.binding.BotID,
+			"room_id", strings.TrimSpace(evt.RoomID),
+			"message_id", messageID,
+			"reaction_id", reactionID,
+			"emoji_type", processingPinEmoji,
+			"error", err,
+		)
+	}
+}
+
+func contextWithDefaultTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (w *worker) sendMessage(ctx context.Context, roomID, threadRootID, text string) (string, error) {
@@ -432,23 +626,82 @@ func (w *worker) sendActivity(ctx context.Context, roomID, threadRootID string, 
 	_, err := w.sendMessageRequest(ctx, SendMessageRequest{
 		RoomID:       roomID,
 		Text:         activity.Text,
-		MessageID:    activity.MessageID,
 		ThreadRootID: strings.TrimSpace(threadRootID),
 	})
 	return err
 }
 
+func (w *worker) updateMessage(ctx context.Context, roomID, messageID, text string) error {
+	text = strings.TrimSpace(text)
+	messageID = strings.TrimSpace(messageID)
+	if text == "" || messageID == "" {
+		return nil
+	}
+	updater, ok := w.service.client.(MessageUpdater)
+	if !ok {
+		return fmt.Errorf("message update is not supported")
+	}
+	updateStartedAt := time.Now()
+	resp, err := updater.UpdateMessage(ctx, w.binding.BotID, UpdateMessageRequest{
+		RoomID:    strings.TrimSpace(roomID),
+		MessageID: messageID,
+		Text:      text,
+	})
+	if err != nil {
+		slog.Debug("codex bridge update message failed",
+			"bot_id", w.binding.BotID,
+			"room_id", strings.TrimSpace(roomID),
+			"message_id", messageID,
+			"text_bytes", len(text),
+			"duration", time.Since(updateStartedAt),
+			"error", err,
+		)
+		return err
+	}
+	slog.Debug("codex bridge update message completed",
+		"bot_id", w.binding.BotID,
+		"room_id", strings.TrimSpace(roomID),
+		"message_id", messageID,
+		"updated_message_id", strings.TrimSpace(resp.MessageID),
+		"text_bytes", len(text),
+		"duration", time.Since(updateStartedAt),
+	)
+	return nil
+}
+
 func (w *worker) sendMessageRequest(ctx context.Context, req SendMessageRequest) (string, error) {
 	req.Text = strings.TrimSpace(req.Text)
-	req.MessageID = strings.TrimSpace(req.MessageID)
 	req.ThreadRootID = strings.TrimSpace(req.ThreadRootID)
 	if req.Text == "" {
 		return "", nil
 	}
+	mode := "create"
+	if req.ThreadRootID != "" {
+		mode = "reply"
+	}
+	sendStartedAt := time.Now()
 	resp, err := w.service.client.SendMessage(ctx, w.binding.BotID, req)
 	if err != nil {
+		slog.Debug("codex bridge send message failed",
+			"bot_id", w.binding.BotID,
+			"room_id", strings.TrimSpace(req.RoomID),
+			"thread_root_id", strings.TrimSpace(req.ThreadRootID),
+			"mode", mode,
+			"text_bytes", len(req.Text),
+			"duration", time.Since(sendStartedAt),
+			"error", err,
+		)
 		return "", err
 	}
+	slog.Debug("codex bridge send message completed",
+		"bot_id", w.binding.BotID,
+		"room_id", strings.TrimSpace(req.RoomID),
+		"thread_root_id", strings.TrimSpace(req.ThreadRootID),
+		"sent_message_id", strings.TrimSpace(resp.MessageID),
+		"mode", mode,
+		"text_bytes", len(req.Text),
+		"duration", time.Since(sendStartedAt),
+	)
 	return strings.TrimSpace(resp.MessageID), nil
 }
 
@@ -471,28 +724,35 @@ func (w *worker) sessionID(ctx context.Context, evt BotEvent) (string, error) {
 func (w *worker) promptText(evt BotEvent) string {
 	text := strings.TrimSpace(evt.Text)
 	key := conversationKey(evt)
-	if key == "" || evt.ThreadContext == nil {
-		return text
-	}
 
-	w.mu.Lock()
-	_, sent := w.contextSent[key]
-	if !sent {
-		w.contextSent[key] = struct{}{}
-	}
-	w.mu.Unlock()
-	if sent {
-		return text
-	}
-
-	contextText := formatHiddenThreadContext(evt.ThreadContext)
+	contextText := joinHiddenContexts(
+		formatHiddenChannelContext(w.binding, evt),
+		formatHiddenThreadContext(evt.ThreadContext),
+	)
 	if contextText == "" {
 		return text
 	}
+
+	if key != "" {
+		w.mu.Lock()
+		_, sent := w.contextSent[key]
+		if !sent {
+			w.contextSent[key] = struct{}{}
+		}
+		w.mu.Unlock()
+		if sent {
+			return text
+		}
+	}
+
 	if text == "" {
 		return contextText
 	}
-	return contextText + "\n\nCurrent thread message:\n" + text
+	currentLabel := "Current message:\n"
+	if evt.ThreadContext != nil {
+		currentLabel = "Current thread message:\n"
+	}
+	return contextText + "\n\n" + currentLabel + text
 }
 
 func (w *worker) accept(evt BotEvent) bool {
@@ -580,6 +840,46 @@ func conversationKey(evt BotEvent) string {
 		return roomID
 	}
 	return roomID + ":" + threadRootID
+}
+
+func joinHiddenContexts(values ...string) string {
+	var parts []string
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			parts = append(parts, value)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func formatHiddenChannelContext(binding Binding, evt BotEvent) string {
+	channel := strings.TrimSpace(evt.Channel)
+	if channel == "" || strings.EqualFold(channel, localChannel) {
+		return ""
+	}
+	roomID := strings.TrimSpace(evt.RoomID)
+	participantID := strings.TrimSpace(evt.ParticipantID)
+	if participantID == "" {
+		participantID = strings.TrimSpace(binding.BotID)
+	}
+	var b strings.Builder
+	b.WriteString("Current channel context for CSGClaw CLI operations.\n")
+	b.WriteString("- channel: ")
+	b.WriteString(channel)
+	b.WriteByte('\n')
+	if roomID != "" {
+		b.WriteString("- room_id: ")
+		b.WriteString(roomID)
+		b.WriteByte('\n')
+	}
+	if participantID != "" {
+		b.WriteString("- participant_id: ")
+		b.WriteString(participantID)
+		b.WriteByte('\n')
+	}
+	b.WriteString("Use these values when a skill asks for <current_channel>, <target_room_id>, or message create/list channel flags.")
+	return strings.TrimSpace(b.String())
 }
 
 func formatHiddenThreadContext(context *BotThreadContext) string {

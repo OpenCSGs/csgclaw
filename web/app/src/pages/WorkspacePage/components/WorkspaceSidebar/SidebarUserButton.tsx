@@ -4,7 +4,7 @@ import { Button } from "@/components/ui";
 import { MoonIcon, SunIcon } from "@/components/ui/Icons";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
-import { formatSidebarVersionLabel, hasUpgradeAttention, isLocalBuildVersion } from "@/models/upgradeStatus";
+import { formatSidebarVersionLabel, hasUpgradeAttention, isLocalBuildUpgradeStatus } from "@/models/upgradeStatus";
 import { classNames } from "@/shared/lib/classNames";
 import type { ThemeMode } from "@/shared/theme/theme";
 
@@ -41,11 +41,14 @@ export function SidebarUserButton({
 }: SidebarUserButtonProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const upgradeAttention = showUpgradeControls && hasUpgradeAttention(upgradeStatus, upgradePhase, upgradeBusy);
-  const upgradeRunning = showUpgradeControls ? upgradeBusy || Boolean(upgradeStatus?.upgrading) : false;
-  const upgradeIssue = showUpgradeControls ? upgradeError || upgradeStatus?.last_error || "" : "";
   const currentVersion = upgradeStatus?.current_version || appVersion;
-  const upgradeView = showUpgradeControls
+  const localBuild = isLocalBuildUpgradeStatus(upgradeStatus, currentVersion);
+  const upgradeControlsAvailable =
+    showUpgradeControls && !localBuild && upgradeStatus?.auto_upgrade_supported !== false;
+  const upgradeAttention = upgradeControlsAvailable && hasUpgradeAttention(upgradeStatus, upgradePhase, upgradeBusy);
+  const upgradeRunning = upgradeControlsAvailable ? upgradeBusy || Boolean(upgradeStatus?.upgrading) : false;
+  const upgradeIssue = upgradeControlsAvailable ? upgradeError || upgradeStatus?.last_error || "" : "";
+  const upgradeView = upgradeControlsAvailable
     ? {
         actionLabel: upgradeMenuActionText({
           phase: upgradePhase,
@@ -55,7 +58,6 @@ export function SidebarUserButton({
           t,
         }),
         issue: upgradeIssue,
-        localBuild: isLocalBuildVersion(currentVersion),
         running: upgradeRunning,
         versionLabel:
           upgradeStatus?.update_available && upgradeStatus.latest_version
@@ -169,7 +171,7 @@ export function SidebarUserButton({
           <div className="sidebar-version-panel">
             <div className="sidebar-version-heading">
               <span className="sidebar-menu-label">{t("versionInfo")}</span>
-              {upgradeView?.localBuild ? (
+              {localBuild ? (
                 <span className="sidebar-version-status">{t("upgradeLocalBuild")}</span>
               ) : upgradeAttention && upgradeView ? (
                 <Button
@@ -187,9 +189,11 @@ export function SidebarUserButton({
                 </Button>
               ) : null}
             </div>
-            <strong className="sidebar-version-value">
-              {upgradeView ? upgradeView.versionLabel : formatSidebarVersionLabel(appVersion)}
-            </strong>
+            {localBuild ? null : (
+              <strong className="sidebar-version-value">
+                {upgradeView ? upgradeView.versionLabel : formatSidebarVersionLabel(currentVersion)}
+              </strong>
+            )}
             {upgradeView?.issue ? <div className="sidebar-version-error">{upgradeView.issue}</div> : null}
           </div>
         </div>

@@ -94,6 +94,9 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
   const section = parts[0] || "";
   const id = parts[1] || "";
 
+  if (!section) {
+    return { type: WorkspacePaneTypes.conversation, id: "" };
+  }
   if (section === WorkspaceRouteSegments.computer) {
     return { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
   }

@@ -96,7 +96,7 @@ describe("legacy UI contract", () => {
   it("keeps thread context hidden and shows the thread affordance as a message hover toolbar", () => {
     expect(source).toContain("message-hover-actions");
     expect(source).toContain("thread-hover-button");
-    expect(source).toContain("thread-action-tooltip");
+    expect(source).toContain('data-tooltip={t("replyInThread")}');
     expect(source).toContain('threads: "threads"');
     expect(source).toContain("WorkspaceThreadRow");
     expect(source).toContain('threadsTab: "Threads"');
@@ -105,7 +105,7 @@ describe("legacy UI contract", () => {
     expect(source).not.toContain('className="thread-context"');
     expect(source).not.toContain('t("threadContext")');
     expect(styles).toContain(".message-row:hover .message-hover-actions");
-    expect(styles).toContain(".thread-hover-button:hover .thread-action-tooltip");
+    expect(styles).toContain("[data-tooltip]:hover::after");
     expect(source).toContain("message-thread-actions has-thread-summary");
     expect(source).toContain("const threadBodyRef = useRef<HTMLDivElement | null>(null);");
     expect(source).toContain("threadBody.scrollTop = threadBody.scrollHeight;");

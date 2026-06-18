@@ -1,7 +1,7 @@
 import { createRef, useRef, useState } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ConversationPane } from "@/pages/ConversationPage/components/ConversationPane/ConversationPane";
+import { ConversationPane } from "@/pages/ConversationPage/components/ConversationPane";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
 import type { IMConversation, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import {
@@ -373,8 +373,8 @@ describe("ConversationPane", () => {
           title: item.getAttribute("title"),
         })),
       ).toEqual([
-        { text: "5月11日", title: "2026-05-11 10:25:00", tooltip: "2026-05-11 10:25:00" },
-        { text: "5月12日", title: "2026-05-12 09:15:00", tooltip: "2026-05-12 09:15:00" },
+        { text: "5月11日", title: null, tooltip: "2026-05-11 10:25:00" },
+        { text: "5月12日", title: null, tooltip: "2026-05-12 09:15:00" },
       ]);
       expect(container.querySelector(".message-row .message-timestamp")).toHaveAttribute(
         "data-tooltip",

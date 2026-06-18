@@ -1,4 +1,5 @@
 export * from "./AgentAvatar";
+export * from "./ConversationPane";
 export * from "./MessageContent";
 export * from "./RoomAvatar";
 export * from "./ProfileControls";

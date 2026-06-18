@@ -1,6 +1,8 @@
 import {
   formatSidebarVersionLabel,
   hasUpgradeAttention,
+  isLocalBuildUpgradeStatus,
+  isLocalBuildVersion,
   normalizeUpgradeStatus,
   upgradeStatusLabel,
 } from "@/models/upgradeStatus";
@@ -13,6 +15,27 @@ describe("upgrade status helpers", () => {
     expect(formatSidebarVersionLabel("0.2.1")).toBe("v0.2.1");
   });
 
+  it("detects local build versions and unsupported local installs", () => {
+    expect(isLocalBuildVersion("v0.3.10-21-g4dd4395-dirty")).toBe(true);
+    expect(isLocalBuildVersion("v0.3.10-21-g4dd4395")).toBe(true);
+    expect(isLocalBuildVersion("v0.3.10+local")).toBe(true);
+    expect(isLocalBuildVersion("dev")).toBe(true);
+    expect(isLocalBuildVersion("v0.3.11")).toBe(false);
+    expect(isLocalBuildUpgradeStatus({ ...baseUpgradeStatus, auto_upgrade_supported: false }, "v0.3.11")).toBe(false);
+    expect(
+      isLocalBuildUpgradeStatus(
+        { ...baseUpgradeStatus, auto_upgrade_supported: false, auto_upgrade_unsupported_reason: "not_official_bundle" },
+        "v0.3.11",
+      ),
+    ).toBe(false);
+    expect(
+      isLocalBuildUpgradeStatus(
+        { ...baseUpgradeStatus, auto_upgrade_supported: false, auto_upgrade_unsupported_reason: "local_build" },
+        "v0.3.11",
+      ),
+    ).toBe(true);
+  });
+
   it("normalizes loose upgrade status payloads", () => {
     expect(normalizeUpgradeStatus(null)).toBeNull();
     expect(
@@ -23,10 +46,14 @@ describe("upgrade status helpers", () => {
         last_error: 404,
         latest_version: "v0.2.1",
         manual_restart_required: "yes",
+        auto_upgrade_supported: false,
+        auto_upgrade_unsupported_reason: "not_official_bundle",
         update_available: true,
         upgrading: "",
       }),
     ).toEqual({
+      auto_upgrade_supported: false,
+      auto_upgrade_unsupported_reason: "not_official_bundle",
       checking: true,
       current_version: "v0.2.0",
       last_checked_at: 123,
@@ -36,6 +63,10 @@ describe("upgrade status helpers", () => {
       update_available: true,
       upgrading: false,
     });
+  });
+
+  it("defaults missing auto-upgrade support to true for older servers", () => {
+    expect(normalizeUpgradeStatus({ current_version: "v0.2.0" })?.auto_upgrade_supported).toBe(true);
   });
 
   it("maps upgrade phases through translated labels", () => {
@@ -63,6 +94,8 @@ describe("upgrade status helpers", () => {
 });
 
 const baseUpgradeStatus: UpgradeStatus = {
+  auto_upgrade_supported: true,
+  auto_upgrade_unsupported_reason: "",
   checking: false,
   current_version: "v0.2.0",
   last_checked_at: "",

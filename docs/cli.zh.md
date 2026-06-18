@@ -177,13 +177,14 @@ csgclaw upgrade [flags]
 - `csgclaw upgrade --check` 会输出当前版本、最新版本、是否可升级，以及匹配到的 asset 名称。
 - `csgclaw upgrade` 会下载当前平台对应的 release archive，完成校验，安装完整官方 bundle，并在检测到 daemon 运行时自动重启。
 - `csgclaw upgrade --no-restart` 会安装新 bundle，但不会影响当前正在运行的 daemon 进程。
-- 自动安装只支持官方 bundle 布局，也就是当前可执行文件能够解析回 `<install-root>/bin/csgclaw` 或 `<install-root>/bin/csgclaw.exe`。
+- 自动安装只支持官方 bundle 布局，也就是当前可执行文件能够解析回独占的 `csgclaw/bin/csgclaw` 或 `csgclaw/bin/csgclaw.exe` 目录树。升级器绝不会整体替换 `~/.local`、`/usr/local` 这类共享目录。
 - Windows 平台的 release asset 使用 `.zip`；当前其他支持的平台使用 `.tar.gz`。
 - 自动重启只支持默认 PID 路径 `~/.csgclaw/server.pid`。如果 daemon 是用自定义 PID 或其他启动参数拉起的，请改用 `--no-restart` 后手动重启。
 
 常见失败场景：
 
-- 源码构建或手工复制单个二进制的安装方式可以使用 `--check`，但自动安装会被拒绝，因为没有可原子替换的官方 bundle 根目录。
+- 源码构建或手工复制单个二进制的安装方式可以使用 `--check`，但自动安装会被拒绝，因为没有可独占替换的 bundle 根目录。
+- 如果曾把二进制手工复制到 `~/.local/bin`，可重新执行 `curl -fsSL https://csgclaw.opencsg.com/install.sh | bash` 完成迁移。安装器会把受管 bundle 放到 `~/.local/lib/csgclaw`，并且只把 `~/.local/bin/csgclaw` 替换为软链接，不会改动 `~/.local/bin` 中的其他文件。
 - 如果下载后的 archive 没通过 size 或 SHA256 校验，CLI 会在安装前中止，并提示稍后重试或反馈 release 异常。
 - 如果 release archive 结构不合法，或者缺少 `bin/csgclaw` / `bin/csgclaw.exe`，CLI 会在安装前中止。
 - `bin/boxlite` 现在是可选的。没有它的 bundle 仍然是合法官方 bundle，并且在 `[sandbox].provider` 未设置时默认回退到 Docker。

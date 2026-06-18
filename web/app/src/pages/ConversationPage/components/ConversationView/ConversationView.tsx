@@ -1,5 +1,5 @@
+import type { ConversationPaneProps } from "@/components/business/ConversationPane";
 import { ConversationPane } from "../ConversationPane";
-import type { ConversationPaneProps } from "../ConversationPane";
 
 type ConversationViewProps = Partial<Omit<ConversationPaneProps, "conversation" | "t">> & {
   conversation?: ConversationPaneProps["conversation"] | null;

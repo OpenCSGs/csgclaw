@@ -12,6 +12,10 @@ import {
 import type { IMData, LocaleCode, TranslateFn } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
 
+vi.mock("@/shared/realtime/imEvents", () => ({
+  subscribeIMEvents: () => () => {},
+}));
+
 const t: TranslateFn = (key) =>
   ({
     sendFailed: "Failed to send the message. Please retry.",
@@ -65,6 +69,7 @@ function useConversationControllerTestHarness() {
     navigatePane: () => {},
     onMessageAction: () => {},
     onProviderLogin: async () => {},
+    onRefreshAgentState: async () => null,
     onUpgradeStatusChange: () => {},
     rooms: data?.rooms ?? [],
     selectComputer: () => {},
@@ -81,6 +86,70 @@ function useConversationControllerTestHarness() {
 }
 
 describe("useConversationController slash skill helpers", () => {
+  it("prefers the manager direct conversation for the empty conversation route", async () => {
+    const managerData: IMData = {
+      ...testData,
+      rooms: [
+        {
+          id: "room-general",
+          is_direct: false,
+          members: ["u-admin"],
+          messages: [],
+          title: "general",
+        },
+        {
+          id: "dm-manager",
+          is_direct: true,
+          members: ["u-admin", "u-manager"],
+          messages: [],
+          title: "manager",
+        },
+      ],
+    };
+    const navigatePane = vi.fn();
+    const setActiveConversationId = vi.fn();
+
+    renderHook(() =>
+      useConversationController({
+        activeConversationId: "",
+        activePane: { type: WorkspacePaneTypes.conversation, id: "" },
+        agents: [],
+        authBusyProvider: "",
+        authStatuses: {},
+        data: managerData,
+        locale: "en" as LocaleCode,
+        managerProfile: null,
+        managerProfileIncomplete: false,
+        messageActionBusy: "",
+        messageActionError: {},
+        navigatePane,
+        onMessageAction: () => {},
+        onProviderLogin: async () => {},
+        onRefreshAgentState: async () => null,
+        onUpgradeStatusChange: () => {},
+        preferredFallbackConversationId: "dm-manager",
+        rooms: managerData.rooms,
+        selectComputer: () => {},
+        selectConversation: () => {},
+        setActiveConversationId,
+        setBootstrapData: () => {},
+        setShowToolCalls: () => {},
+        showToolCalls: false,
+        t,
+        theme: "light",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(setActiveConversationId).toHaveBeenCalledWith("dm-manager");
+    });
+    expect(navigatePane).toHaveBeenCalledWith(
+      { type: WorkspacePaneTypes.conversation, id: "dm-manager" },
+      managerData.rooms,
+      { replace: true },
+    );
+  });
+
   it("keeps the skill picker open only while editing the command name", () => {
     expect(slashPickerQueryForDraft("/")).toBe("");
     expect(slashPickerQueryForDraft("  /sk")).toBe("sk");

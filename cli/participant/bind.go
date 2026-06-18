@@ -9,8 +9,7 @@ import (
 	"text/tabwriter"
 
 	"csgclaw/cli/command"
-	"csgclaw/internal/agent"
-	"csgclaw/internal/apiclient"
+	agentpkg "csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
 	participantpkg "csgclaw/internal/participant"
 )
@@ -25,6 +24,15 @@ type bindResult struct {
 	RestartStatus   string   `json:"restart_status,omitempty"`
 	RestartError    string   `json:"restart_error,omitempty"`
 	Warnings        []string `json:"warnings,omitempty"`
+}
+
+type bindAPIClient interface {
+	ListParticipants(ctx context.Context, channel, typ, agentID string) ([]apitypes.Participant, error)
+	ListAgents(ctx context.Context) ([]apitypes.Agent, error)
+	GetAgent(ctx context.Context, id string) (apitypes.Agent, error)
+	CreateParticipant(ctx context.Context, req participantpkg.CreateRequest) (apitypes.Participant, error)
+	UpdateParticipant(ctx context.Context, channel, id string, req participantpkg.UpdateRequest) (apitypes.Participant, error)
+	RecreateAgent(ctx context.Context, id string) (apitypes.Agent, error)
 }
 
 func (c cmd) runBind(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
@@ -77,18 +85,11 @@ func (c cmd) runBindFeishuHuman(ctx context.Context, run *command.Context, globa
 		name = "admin"
 	}
 	client := run.APIClient(globals)
-	participantID := "admin"
-	item, err := upsertFeishuAdminParticipant(ctx, client, participantID, name, openID)
+	result, err := bindFeishuAdminHumanRemote(ctx, client, openID, name)
 	if err != nil {
-		return fmt.Errorf("bind feishu admin human participant_id=%q: %w", participantID, err)
+		return err
 	}
-	return renderBindResult(globals.Output, run.Stdout, bindResult{
-		Status:          "configured",
-		Channel:         participantpkg.ChannelFeishu,
-		ParticipantType: participantpkg.TypeHuman,
-		ParticipantID:   item.ID,
-		ConfigSaved:     true,
-	})
+	return renderBindResult(globals.Output, run.Stdout, result)
 }
 
 func (c cmd) runBindFeishuBot(ctx context.Context, run *command.Context, globals command.GlobalOptions, agentRef, appID, secretFile, secretEnv string, secretStdin bool, restart bool) error {
@@ -105,71 +106,17 @@ func (c cmd) runBindFeishuBot(ctx context.Context, run *command.Context, globals
 		return err
 	}
 	client := run.APIClient(globals)
-	target, err := resolveBindAgent(ctx, client, agentRef)
+	result, err := bindFeishuBotRemote(ctx, client, agentRef, appID, appSecret, restart)
 	if err != nil {
-		return fmt.Errorf("bind feishu bot resolve agent %q: %w", agentRef, err)
+		return err
 	}
-	participantID := agent.ParticipantIDForAgent(target.Name, target.ID)
-	item, warnings, err := upsertFeishuBotParticipant(ctx, client, participantID, target, appID, appSecret)
-	if err != nil {
-		return fmt.Errorf("bind feishu bot participant_id=%q agent_id=%q: %w", participantID, target.ID, err)
-	}
-	for _, warning := range warnings {
+	for _, warning := range result.Warnings {
 		fmt.Fprintln(run.Stderr, "warning:", warning)
 	}
-
-	result := bindResult{
-		Status:          "configured",
-		Channel:         participantpkg.ChannelFeishu,
-		ParticipantType: participantpkg.TypeAgent,
-		ParticipantID:   item.ID,
-		AgentID:         target.ID,
-		ConfigSaved:     true,
-		Warnings:        warnings,
-	}
-	if restart {
-		if strings.EqualFold(target.ID, agent.ManagerUserID) || strings.EqualFold(target.Role, agent.RoleManager) {
-			result.RestartStatus = "manager_restart_required"
-		} else {
-			if _, err := client.RecreateAgent(ctx, target.ID); err != nil {
-				fmt.Fprintf(run.Stderr, "pt bind failed at recreate: agent_id=%s participant_id=%s error=%v\n", target.ID, item.ID, err)
-				result.Status = "partial"
-				result.RestartStatus = "recreate_failed"
-				result.RestartError = err.Error()
-				return renderBindResult(globals.Output, run.Stdout, result)
-			}
-			result.RestartStatus = "worker_recreated"
-		}
-	} else {
-		result.RestartStatus = "restart_skipped"
+	if result.RestartStatus == "recreate_failed" {
+		fmt.Fprintf(run.Stderr, "pt bind failed at recreate: agent_id=%s participant_id=%s error=%s\n", result.AgentID, result.ParticipantID, result.RestartError)
 	}
 	return renderBindResult(globals.Output, run.Stdout, result)
-}
-
-func resolveBindAgent(ctx context.Context, client *apiclient.Client, ref string) (apitypes.Agent, error) {
-	ref = strings.TrimSpace(ref)
-	for _, candidate := range bindAgentIDCandidates(ref) {
-		if got, err := client.GetAgent(ctx, candidate); err == nil {
-			return got, nil
-		}
-	}
-	agents, err := client.ListAgents(ctx)
-	if err != nil {
-		return apitypes.Agent{}, err
-	}
-	var matches []apitypes.Agent
-	for _, item := range agents {
-		if strings.EqualFold(strings.TrimSpace(item.Name), ref) {
-			matches = append(matches, item)
-		}
-	}
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-	if len(matches) > 1 {
-		return apitypes.Agent{}, fmt.Errorf("agent name %q matched multiple agents", ref)
-	}
-	return apitypes.Agent{}, fmt.Errorf("agent %q not found", ref)
 }
 
 func normalizeChannel(channelName string) string {
@@ -228,7 +175,110 @@ func readSecret(stdin io.Reader, filePath, envName string, fromStdin bool) (stri
 	return secret, nil
 }
 
-func bindAgentIDCandidates(ref string) []string {
+func bindFeishuAdminHumanRemote(ctx context.Context, client bindAPIClient, openID, name string) (bindResult, error) {
+	if client == nil {
+		return bindResult{}, fmt.Errorf("API client is required")
+	}
+	openID = strings.TrimSpace(openID)
+	if openID == "" {
+		return bindResult{}, fmt.Errorf("open_id is required")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "admin"
+	}
+	participantID := "admin"
+	item, err := upsertAdminParticipantRemote(ctx, client, participantID, name, openID)
+	if err != nil {
+		return bindResult{}, fmt.Errorf("bind feishu admin human participant_id=%q: %w", participantID, err)
+	}
+	return bindResult{
+		Status:          "configured",
+		Channel:         participantpkg.ChannelFeishu,
+		ParticipantType: participantpkg.TypeHuman,
+		ParticipantID:   item.ID,
+		ConfigSaved:     true,
+	}, nil
+}
+
+func bindFeishuBotRemote(ctx context.Context, client bindAPIClient, agentRef, appID, appSecret string, restart bool) (bindResult, error) {
+	if client == nil {
+		return bindResult{}, fmt.Errorf("API client is required")
+	}
+	agentRef = strings.TrimSpace(agentRef)
+	if agentRef == "" {
+		return bindResult{}, fmt.Errorf("agent is required")
+	}
+	appID = strings.TrimSpace(appID)
+	if appID == "" {
+		return bindResult{}, fmt.Errorf("app_id is required")
+	}
+	appSecret = strings.TrimSpace(appSecret)
+	if appSecret == "" {
+		return bindResult{}, fmt.Errorf("app_secret is required")
+	}
+	target, err := resolveAgentRemote(ctx, client, agentRef)
+	if err != nil {
+		return bindResult{}, fmt.Errorf("resolve agent %q: %w", agentRef, err)
+	}
+	participantID := agentpkg.ParticipantIDForAgent(target.Name, target.ID)
+	item, warnings, err := upsertBotParticipantRemote(ctx, client, participantID, target, appID, appSecret)
+	if err != nil {
+		return bindResult{}, fmt.Errorf("bind feishu bot participant_id=%q agent_id=%q: %w", participantID, target.ID, err)
+	}
+
+	result := bindResult{
+		Status:          "configured",
+		Channel:         participantpkg.ChannelFeishu,
+		ParticipantType: participantpkg.TypeAgent,
+		ParticipantID:   item.ID,
+		AgentID:         target.ID,
+		ConfigSaved:     true,
+		Warnings:        warnings,
+	}
+	if restart {
+		if strings.EqualFold(target.ID, agentpkg.ManagerUserID) || strings.EqualFold(target.Role, agentpkg.RoleManager) {
+			result.RestartStatus = "manager_restart_required"
+		} else if _, err := client.RecreateAgent(ctx, target.ID); err != nil {
+			result.Status = "partial"
+			result.RestartStatus = "recreate_failed"
+			result.RestartError = err.Error()
+		} else {
+			result.RestartStatus = "worker_recreated"
+		}
+	} else {
+		result.RestartStatus = "restart_skipped"
+	}
+	return result, nil
+}
+
+func resolveAgentRemote(ctx context.Context, client bindAPIClient, ref string) (apitypes.Agent, error) {
+	ref = strings.TrimSpace(ref)
+	for _, candidate := range agentIDCandidates(ref) {
+		if got, err := client.GetAgent(ctx, candidate); err == nil {
+			return got, nil
+		}
+	}
+	agents, err := client.ListAgents(ctx)
+	if err != nil {
+		return apitypes.Agent{}, err
+	}
+	var matches []apitypes.Agent
+	for _, item := range agents {
+		if strings.EqualFold(strings.TrimSpace(item.Name), ref) {
+			matches = append(matches, item)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	if len(matches) > 1 {
+		return apitypes.Agent{}, fmt.Errorf("agent name %q matched multiple agents", ref)
+	}
+	return apitypes.Agent{}, fmt.Errorf("agent %q not found", ref)
+}
+
+func agentIDCandidates(ref string) []string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return nil
@@ -240,8 +290,8 @@ func bindAgentIDCandidates(ref string) []string {
 	return candidates
 }
 
-func upsertFeishuAdminParticipant(ctx context.Context, client *apiclient.Client, participantID, name, openID string) (apitypes.Participant, error) {
-	existing, ok, err := findParticipantByID(ctx, client, participantpkg.ChannelFeishu, participantID)
+func upsertAdminParticipantRemote(ctx context.Context, client bindAPIClient, participantID, name, openID string) (apitypes.Participant, error) {
+	existing, ok, err := findParticipantByIDRemote(ctx, client, participantpkg.ChannelFeishu, participantID)
 	if err != nil {
 		return apitypes.Participant{}, err
 	}
@@ -268,7 +318,7 @@ func upsertFeishuAdminParticipant(ctx context.Context, client *apiclient.Client,
 	})
 }
 
-func upsertFeishuBotParticipant(ctx context.Context, client *apiclient.Client, participantID string, target apitypes.Agent, appID, appSecret string) (apitypes.Participant, []string, error) {
+func upsertBotParticipantRemote(ctx context.Context, client bindAPIClient, participantID string, target apitypes.Agent, appID, appSecret string) (apitypes.Participant, []string, error) {
 	all, err := client.ListParticipants(ctx, participantpkg.ChannelFeishu, "", "")
 	if err != nil {
 		return apitypes.Participant{}, nil, err
@@ -276,8 +326,7 @@ func upsertFeishuBotParticipant(ctx context.Context, client *apiclient.Client, p
 	var existing apitypes.Participant
 	hasExisting := false
 	var warnings []string
-	for i := range all {
-		item := all[i]
+	for _, item := range all {
 		if item.ID == participantID {
 			existing = item
 			hasExisting = true
@@ -332,7 +381,7 @@ func upsertFeishuBotParticipant(ctx context.Context, client *apiclient.Client, p
 	return created, warnings, err
 }
 
-func findParticipantByID(ctx context.Context, client *apiclient.Client, channel, id string) (apitypes.Participant, bool, error) {
+func findParticipantByIDRemote(ctx context.Context, client bindAPIClient, channel, id string) (apitypes.Participant, bool, error) {
 	items, err := client.ListParticipants(ctx, channel, "", "")
 	if err != nil {
 		return apitypes.Participant{}, false, err

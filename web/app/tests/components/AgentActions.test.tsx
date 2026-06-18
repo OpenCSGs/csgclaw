@@ -16,6 +16,17 @@ const labels: Record<string, string> = {
   agentSaved: "Saved",
   agentSaveChanges: "Save changes",
   agentUpdateSave: "Save",
+  agentChannelsTitle: "Channels",
+  feishuChannelName: "Feishu",
+  feishuConnect: "Connect Feishu",
+  feishuReconnect: "Reconnect Feishu",
+  feishuDisconnect: "Disconnect Feishu",
+  feishuCompleteConnection: "Complete connection",
+  feishuPending: "Waiting",
+  feishuPendingDetail: "Waiting for Feishu authorization. CSGClaw will finish automatically.",
+  feishuConnected: "Connected",
+  feishuDisconnected: "Disconnected",
+  feishuOpenConnection: "Open Feishu",
   openDM: "DM",
   profileCompleteBadge: "Complete",
   profileFastMode: "Fast mode",
@@ -66,6 +77,7 @@ describe("agent action visibility", () => {
     );
 
     expect(screen.getByText("Recreate required")).toBeInTheDocument();
+    expect(screen.getByText("Complete")).toHaveClass("ready");
     expect(screen.getByRole("button", { name: "Upgrade", hidden: true })).toBeInTheDocument();
   });
 
@@ -154,6 +166,161 @@ describe("agent action visibility", () => {
     expect(screen.getByRole("menuitem", { name: "Recreate" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Upgrade" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+  });
+
+  it("shows Feishu connect and reconnect controls in the agent detail channels section", async () => {
+    const user = userEvent.setup();
+    const onStartFeishuConnect = vi.fn();
+    const onDisconnectFeishu = vi.fn();
+    const draft = agentToDraft(worker);
+    const { rerender } = render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={draft}
+        savedDraft={draft}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onStartFeishuConnect={onStartFeishuConnect}
+        onFinalizeFeishuConnect={vi.fn()}
+        onDisconnectFeishu={onDisconnectFeishu}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
+    expect(document.querySelector(".agent-channel-icon img")).toHaveAttribute("src", "icons/feishu.png");
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Disconnect Feishu" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Connect Feishu" }));
+    expect(onStartFeishuConnect).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
+
+    rerender(
+      <AgentDetailPane
+        item={{
+          ...worker,
+          participants: [
+            {
+              agent_id: worker.id,
+              channel: "feishu",
+              channel_user_kind: "app_id",
+              id: "worker-1",
+              type: "agent",
+            },
+          ],
+        }}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={draft}
+        savedDraft={draft}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onStartFeishuConnect={onStartFeishuConnect}
+        onFinalizeFeishuConnect={vi.fn()}
+        onDisconnectFeishu={onDisconnectFeishu}
+        notice="Feishu connection configured."
+        noticeTone="success"
+      />,
+    );
+
+    expect(screen.getByText("Connected")).toHaveClass("connected");
+    expect(screen.getByText("Feishu connection configured.")).toHaveClass("success");
+    expect(screen.getByRole("button", { name: "Reconnect Feishu" })).toBeInTheDocument();
+    const channelActionButtons = Array.from(document.querySelectorAll(".agent-channel-actions .btn"));
+    expect(channelActionButtons.map((button) => button.textContent?.trim())).toEqual([
+      "Reconnect Feishu",
+      "Disconnect Feishu",
+    ]);
+    const disconnectButton = screen.getByRole("button", { name: "Disconnect Feishu" });
+    expect(disconnectButton).toHaveClass("btn-outline-danger");
+    await user.click(disconnectButton);
+    expect(onDisconnectFeishu).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
+  });
+
+  it("shows pending Feishu authorization without requiring a manual completion action", () => {
+    const draft = agentToDraft(worker);
+    render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={draft}
+        savedDraft={draft}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        feishuPendingRegistration={{
+          connect_url: "https://feishu.example/connect",
+          registration_id: "reg-worker",
+          status: "pending",
+        }}
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onStartFeishuConnect={vi.fn()}
+        onFinalizeFeishuConnect={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Waiting")).toBeInTheDocument();
+    expect(
+      screen.getByText("Waiting for Feishu authorization. CSGClaw will finish automatically."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Feishu" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Complete connection" })).not.toBeInTheDocument();
   });
 
   it("keeps upgrade action visible in worker detail panes when backend marks an agent restart required", () => {

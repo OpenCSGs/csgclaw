@@ -15,9 +15,11 @@ type Checker interface {
 }
 
 type ManagerOptions struct {
-	CheckInterval  time.Duration
-	Now            func() time.Time
-	OnStatusChange func(apitypes.UpgradeStatus)
+	CheckInterval                time.Duration
+	Now                          func() time.Time
+	OnStatusChange               func(apitypes.UpgradeStatus)
+	AutoUpgradeSupported         bool
+	AutoUpgradeUnsupportedReason string
 }
 
 type Manager struct {
@@ -49,7 +51,9 @@ func NewManager(checker Checker, currentVersion string, opts ManagerOptions) *Ma
 		now:            now,
 		onStatusChange: opts.OnStatusChange,
 		status: apitypes.UpgradeStatus{
-			CurrentVersion: currentVersion,
+			CurrentVersion:               currentVersion,
+			AutoUpgradeSupported:         opts.AutoUpgradeSupported,
+			AutoUpgradeUnsupportedReason: opts.AutoUpgradeUnsupportedReason,
 		},
 	}
 }
@@ -217,5 +221,7 @@ func shouldNotifyStatusChange(previous, current apitypes.UpgradeStatus) bool {
 		previous.UpdateAvailable != current.UpdateAvailable ||
 		previous.Upgrading != current.Upgrading ||
 		previous.ManualRestartRequired != current.ManualRestartRequired ||
-		previous.LastError != current.LastError
+		previous.LastError != current.LastError ||
+		previous.AutoUpgradeSupported != current.AutoUpgradeSupported ||
+		previous.AutoUpgradeUnsupportedReason != current.AutoUpgradeUnsupportedReason
 }

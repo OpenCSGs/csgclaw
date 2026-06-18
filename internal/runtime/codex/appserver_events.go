@@ -95,6 +95,16 @@ func (m *appServerManager) handleRawTurnCompleted(runtimeID string, live *liveSe
 	switch status {
 	case "", "completed", "success", "succeeded":
 		if !live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, turnID: turnID, activity: "turn:completed"}) {
+			if live.consumeFallbackCompleted(threadID) {
+				if live.appClient != nil {
+					live.appClient.logDebug("codex app-server ignored duplicate turn completion after agent message",
+						"runtime_id", runtimeID,
+						"thread_id", threadID,
+						"turn_id", turnID,
+					)
+				}
+				return
+			}
 			m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: StopReasonEndTurn}))
 		}
 	case "cancelled", "canceled", "aborted", "interrupted":
@@ -230,6 +240,16 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 				Text:      text,
 				Payload:   item,
 			})
+		}
+		if live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, activity: "item:agentMessage:completed", progress: true}) {
+			live.markFallbackCompleted(threadID)
+			if live.appClient != nil {
+				live.appClient.logDebug("codex app-server completed turn from agent message",
+					"runtime_id", runtimeID,
+					"thread_id", threadID,
+					"item_id", itemID,
+				)
+			}
 		}
 	}
 }

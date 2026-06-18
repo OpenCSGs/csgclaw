@@ -74,6 +74,8 @@ export function useUpgradeController({
             setUpgradeBusy(false);
             setUpgradePhase("done");
             setUpgradeStatusData((current) => ({
+              auto_upgrade_supported: current?.auto_upgrade_supported ?? true,
+              auto_upgrade_unsupported_reason: current?.auto_upgrade_unsupported_reason ?? "",
               current_version: version,
               latest_version: version,
               last_checked_at: current?.last_checked_at ?? "",
@@ -124,6 +126,13 @@ export function useUpgradeController({
     if (upgradeBusy || upgradeStatus?.upgrading) {
       return;
     }
+    if (upgradeStatus?.update_available && upgradeStatus.auto_upgrade_supported === false) {
+      setUpgradeBusy(false);
+      setUpgradeError("");
+      setUpgradePhase("idle");
+      setShowUpgradeModal(true);
+      return;
+    }
 
     setUpgradeBusy(true);
     setUpgradeError("");
@@ -133,6 +142,9 @@ export function useUpgradeController({
       await applyUpgradeRequest();
       setUpgradePhase("restarting");
       setUpgradeStatusData((current) => ({
+        auto_upgrade_supported: current?.auto_upgrade_supported ?? upgradeStatus?.auto_upgrade_supported ?? true,
+        auto_upgrade_unsupported_reason:
+          current?.auto_upgrade_unsupported_reason ?? upgradeStatus?.auto_upgrade_unsupported_reason ?? "",
         current_version: current?.current_version || appVersion,
         latest_version: current?.latest_version || upgradeStatus?.latest_version || "",
         update_available: current?.update_available ?? Boolean(upgradeStatus?.update_available),

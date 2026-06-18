@@ -288,6 +288,9 @@ func archiveTargetPath(rootDir, name string) (string, error) {
 }
 
 func inspectBundleDir(bundleDir string) (BundleLayout, error) {
+	if err := validateBundleMarker(bundleDir); err != nil {
+		return BundleLayout{}, err
+	}
 	csgclawPath, err := requiredBundleExecutable(bundleDir, "csgclaw")
 	if err != nil {
 		return BundleLayout{}, err

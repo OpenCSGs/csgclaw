@@ -8,6 +8,10 @@ import {
 } from "@/models/routing";
 
 describe("task routing", () => {
+  it("uses the conversation pane as the default workspace pane", () => {
+    expect(paneFromLocation("/")).toEqual({ type: WorkspacePaneTypes.conversation, id: "" });
+  });
+
   it("parses the teams route as a team pane", () => {
     expect(paneFromLocation("/teams/team-7")).toEqual({ type: WorkspacePaneTypes.team, id: "team-7" });
   });

@@ -65,6 +65,26 @@ export type HostDirectoryPickResult =
   | { status: "canceled" }
   | { status: "unavailable" };
 
+export type FeishuRegistration = {
+  agent_id?: string;
+  connect_url?: string;
+  expires_at?: string;
+  next_poll_seconds?: number;
+  participant_id?: string;
+  registration_id?: string;
+  status?: string;
+  user_code?: string;
+};
+
+export type FeishuRegistrationFinalizeResult = FeishuRegistration & {
+  channel?: string;
+  config_saved?: boolean;
+  participant_type?: string;
+  restart_error?: string;
+  restart_status?: string;
+  warnings?: string[];
+};
+
 function modelPayload(draft: AgentProfileModelRequest): AgentProfileModelRequest {
   return {
     agent_id: draft.agent_id,
@@ -178,7 +198,9 @@ export async function pickHostDirectoryRequest(): Promise<HostDirectoryPickResul
 }
 
 export function updateAgentRequest(agentID: string, payload: AgentUpdatePayload): Promise<AgentLike> {
-  const fieldMask = Object.keys(payload).filter((key) => key !== "field_mask" && payload[key as keyof AgentUpdatePayload] !== undefined);
+  const fieldMask = Object.keys(payload).filter(
+    (key) => key !== "field_mask" && payload[key as keyof AgentUpdatePayload] !== undefined,
+  );
   return patch(`api/v1/agents/${encodeURIComponent(agentID)}`, {
     ...payload,
     field_mask: fieldMask,
@@ -240,8 +262,24 @@ export function deleteBotRequest(botID: string, options: DeleteBotOptions = {}):
   return del(`api/v1/channels/csgclaw/participants/${encodeURIComponent(botID)}${query ? `?${query}` : ""}`);
 }
 
+export function deleteFeishuParticipantRequest(participantID: string): Promise<void> {
+  return del(`api/v1/channels/feishu/participants/${encodeURIComponent(participantID)}`);
+}
+
 export function runAgentActionRequest(agentID: string, action: string): Promise<AgentLike> {
   return post(`api/v1/agents/${encodeURIComponent(agentID)}/${action}`);
+}
+
+export function startFeishuRegistrationRequest(agentID: string): Promise<FeishuRegistration> {
+  return post("api/v1/channels/feishu/registrations", { agent_id: agentID });
+}
+
+export function fetchFeishuRegistrationRequest(registrationID: string): Promise<FeishuRegistration> {
+  return get(`api/v1/channels/feishu/registrations/${encodeURIComponent(registrationID)}`);
+}
+
+export function finalizeFeishuRegistrationRequest(registrationID: string): Promise<FeishuRegistrationFinalizeResult> {
+  return post(`api/v1/channels/feishu/registrations/${encodeURIComponent(registrationID)}:finalize`, {});
 }
 
 function participantToAgentLike(participant: ParticipantLike): AgentLike {
