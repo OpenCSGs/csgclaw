@@ -45,8 +45,8 @@ printf '%s' "$APP_SECRET" | csgclaw-cli participant bind \
   --restart
 ```
 
-For manager, `--restart` returns `restart_status=manager_restart_required`; the
-Web UI must perform the safe manager rebuild action.
+For manager, `--restart` recreates the manager runtime and returns
+`restart_status=manager_recreated` when the recreate succeeds.
 
 ## Participant Shape
 

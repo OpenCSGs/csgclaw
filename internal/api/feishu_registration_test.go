@@ -234,7 +234,9 @@ func TestFinalizeFeishuRegistrationBindsManagerAdminHuman(t *testing.T) {
 
 	manager := completeWorkerAgent(agent.ManagerUserID, "manager")
 	manager.Role = agent.RoleManager
-	agentSvc, _ := mustNewSeededServiceWithPath(t, []agent.Agent{manager})
+	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{manager},
+		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
+	)
 	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
 	srv := &Handler{
 		svc:                        agentSvc,
@@ -254,8 +256,8 @@ func TestFinalizeFeishuRegistrationBindsManagerAdminHuman(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if result["restart_status"] != "manager_restart_required" || result["participant_id"] != "manager" {
-		t.Fatalf("finalize result = %#v, want manager restart required for manager participant", result)
+	if result["restart_status"] != "manager_recreated" || result["participant_id"] != "manager" {
+		t.Fatalf("finalize result = %#v, want manager recreated for manager participant", result)
 	}
 	admin, ok := participantSvc.Get(participant.ChannelFeishu, "admin")
 	if !ok {

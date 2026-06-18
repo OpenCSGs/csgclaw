@@ -86,14 +86,16 @@ func BindBot(ctx context.Context, agentSvc *agent.Service, participantSvc *parti
 		Warnings:        warnings,
 	}
 	if restart {
+		restartStatus := "worker_recreated"
 		if strings.EqualFold(target.ID, agent.ManagerUserID) || strings.EqualFold(target.Role, agent.RoleManager) {
-			result.RestartStatus = "manager_restart_required"
-		} else if _, err := agentSvc.Recreate(ctx, target.ID); err != nil {
+			restartStatus = "manager_recreated"
+		}
+		if _, err := agentSvc.Recreate(ctx, target.ID); err != nil {
 			result.Status = "partial"
 			result.RestartStatus = "recreate_failed"
 			result.RestartError = err.Error()
 		} else {
-			result.RestartStatus = "worker_recreated"
+			result.RestartStatus = restartStatus
 		}
 	} else {
 		result.RestartStatus = "restart_skipped"

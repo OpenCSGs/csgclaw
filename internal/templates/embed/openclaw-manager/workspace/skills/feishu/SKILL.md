@@ -247,7 +247,7 @@ Return the printed JSON object exactly as the chat response. Do not summarize it
 
 The script writes Feishu config through `csgclaw-cli participant bind` because sandboxed skills should not edit host files directly.
 
-For `u-manager`, `bind-manager` binds `feishu:admin` when `--open-id` is provided, binds `feishu:manager` with `--restart`, then prints a top-level action card:
+For `u-manager`, `bind-manager` binds `feishu:admin` when `--open-id` is provided, binds `feishu:manager` without direct restart from inside the manager runtime, then prints a top-level action card:
 
 ```bash
 printf '%s' '[REDACTED]' | python /home/node/.openclaw/workspace/skills/feishu/scripts/feishu_register.py bind-manager --open-id ou_xxx --app-id cli_xxx --app-secret-stdin
@@ -265,7 +265,7 @@ Expected wrapper response shape:
   "config": {
     "bot_bind": {
       "participant_id": "manager",
-      "restart_status": "manager_restart_required"
+      "restart_status": "restart_skipped"
     }
   },
   "actions": [

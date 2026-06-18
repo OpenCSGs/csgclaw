@@ -514,8 +514,8 @@ Currently, only Feishu is supported.
 - `--app-secret-file string`: read Feishu app secret from file.
 - `--app-secret-env string`: read Feishu app secret from env var.
 - `--app-secret-stdin`: read Feishu app secret from stdin.
-- `--restart`: recreate worker after saving config. If the target is manager, `--restart` marks `restart_status` as
-  `manager_restart_required` and does not attempt automatic recreate.
+- `--restart`: recreate the target agent after saving config. Manager targets return `restart_status=manager_recreated`
+  when the recreate succeeds.
 
 `participant bind` behavior:
 
@@ -523,8 +523,7 @@ Currently, only Feishu is supported.
 - `--feishu-kind human` requires `--admin` and `--open-id`.
 - `--feishu-kind bot` requires `--agent` and `--app-id`.
 - For bot binding, exactly one of `--app-secret-file`, `--app-secret-env`, or `--app-secret-stdin` is required.
-- `--restart` defaults to `false`; include it only when you want worker to be recreated. For manager targets, the command
-  returns `restart_status=manager_restart_required` so the user can complete the manager bootstrap flow safely.
+- `--restart` defaults to `false`; include it only when you want the target agent to be recreated.
 - `pt bind` is equivalent to `participant bind`.
 
 #### `room`

@@ -36,7 +36,7 @@ class ManagerActionCardTest(unittest.TestCase):
             return {
                 "participant_id": "manager",
                 "agent_id": "u-manager",
-                "restart_status": "manager_restart_required",
+                "restart_status": "restart_skipped",
             }
 
         commands.csgclaw_cli_json = fake_csgclaw_cli_json
@@ -64,9 +64,9 @@ class ManagerActionCardTest(unittest.TestCase):
         self.assertEqual(payload["setup_status"], "configured")
         self.assertEqual(payload["agent_id"], "u-manager")
         self.assertEqual(payload["bot_id"], "u-manager")
-        self.assertEqual(payload["config"]["bot_bind"]["restart_status"], "manager_restart_required")
+        self.assertEqual(payload["config"]["bot_bind"]["restart_status"], "restart_skipped")
         self.assertEqual(payload["actions"][0]["id"], "rebuild-manager")
-        self.assertTrue(any("--restart" in call[0] for call in calls))
+        self.assertFalse(any("--restart" in call[0] for call in calls))
         self.assertTrue(any("--app-secret-env" in call[0] for call in calls))
 
     def test_manager_finalize_promotes_action_card_to_top_level(self):
@@ -93,7 +93,7 @@ class ManagerActionCardTest(unittest.TestCase):
             "bot_bind": {
                 "participant_id": "manager",
                 "agent_id": "u-manager",
-                "restart_status": "manager_restart_required",
+                "restart_status": "restart_skipped",
             },
         }
         commands.delete_state = lambda args, registration_id: None

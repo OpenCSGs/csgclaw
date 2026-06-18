@@ -101,7 +101,6 @@ def cmd_bind_manager(args: argparse.Namespace) -> int:
         "--app-id",
         app_id,
         *secret_args,
-        "--restart",
     ]
     config["bot_bind"] = csgclaw_cli_json(args, bot_bind_args, input_text=input_text)
     setup_status = "configured"

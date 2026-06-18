@@ -585,7 +585,7 @@ func TestExecuteParticipantBindBotReportsPartialResultWhenWorkerRecreateFails(t 
 	}
 }
 
-func TestExecuteParticipantBindBotReportsManagerRestartRequiredWithRestartFlag(t *testing.T) {
+func TestExecuteParticipantBindBotRecreatesManagerWhenRestartFlagSet(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	call := 0
 	app := &App{
@@ -629,6 +629,11 @@ func TestExecuteParticipantBindBotReportsManagerRestartRequiredWithRestartFlag(t
 					t.Fatalf("agent_binding = %#v, want reuse u-manager", agentBinding)
 				}
 				return jsonResponse(http.StatusCreated, feishuBotParticipantResponse("manager", "manager", "u-manager", "cli_manager")), nil
+			case 4:
+				if req.Method != http.MethodPost || req.URL.String() != "http://example.test/api/v1/agents/u-manager/recreate" {
+					t.Fatalf("request %d = %s %s, want manager recreate", call, req.Method, req.URL.String())
+				}
+				return jsonResponse(http.StatusCreated, `{"id":"u-manager","name":"manager","role":"manager","status":"running","created_at":"2026-04-12T09:00:00Z"}`), nil
 			default:
 				t.Fatalf("unexpected request %d: %s %s", call, req.Method, req.URL.String())
 				return nil, nil
@@ -650,13 +655,13 @@ func TestExecuteParticipantBindBotReportsManagerRestartRequiredWithRestartFlag(t
 	if err != nil {
 		t.Fatalf("Execute() error = %v; stderr=%s", err, stderr.String())
 	}
-	if call != 3 {
-		t.Fatalf("request count = %d, want 3", call)
+	if call != 4 {
+		t.Fatalf("request count = %d, want 4", call)
 	}
 	if strings.Contains(stdout.String(), "secret-value") || strings.Contains(stderr.String(), "secret-value") {
 		t.Fatalf("output leaked app secret: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	for _, want := range []string{`"participant_id": "manager"`, `"agent_id": "u-manager"`, `"restart_status": "manager_restart_required"`} {
+	for _, want := range []string{`"participant_id": "manager"`, `"agent_id": "u-manager"`, `"restart_status": "manager_recreated"`} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want %s", stdout.String(), want)
 		}

@@ -44,7 +44,7 @@ printf '%s' "$APP_SECRET" | csgclaw-cli participant bind \
   --restart
 ```
 
-对 manager 使用 `--restart` 时会返回 `restart_status=manager_restart_required`；需要由 Web UI 触发安全的 manager rebuild。
+对 manager 使用 `--restart` 时会重建 manager runtime；重建成功后返回 `restart_status=manager_recreated`。
 
 ## Participant 结构
 

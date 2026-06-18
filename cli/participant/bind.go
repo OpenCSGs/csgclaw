@@ -51,7 +51,7 @@ func (c cmd) runBind(ctx context.Context, run *command.Context, args []string, g
 	secretFile := fs.String("app-secret-file", "", "read Feishu app secret from file")
 	secretEnv := fs.String("app-secret-env", "", "read Feishu app secret from environment variable")
 	secretStdin := fs.Bool("app-secret-stdin", false, "read Feishu app secret from stdin")
-	restart := fs.Bool("restart", false, "recreate worker after bot config is saved; manager returns restart_status=manager_restart_required")
+	restart := fs.Bool("restart", false, "recreate agent after bot config is saved")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -237,14 +237,16 @@ func bindFeishuBotRemote(ctx context.Context, client bindAPIClient, agentRef, ap
 		Warnings:        warnings,
 	}
 	if restart {
+		restartStatus := "worker_recreated"
 		if strings.EqualFold(target.ID, agentpkg.ManagerUserID) || strings.EqualFold(target.Role, agentpkg.RoleManager) {
-			result.RestartStatus = "manager_restart_required"
-		} else if _, err := client.RecreateAgent(ctx, target.ID); err != nil {
+			restartStatus = "manager_recreated"
+		}
+		if _, err := client.RecreateAgent(ctx, target.ID); err != nil {
 			result.Status = "partial"
 			result.RestartStatus = "recreate_failed"
 			result.RestartError = err.Error()
 		} else {
-			result.RestartStatus = "worker_recreated"
+			result.RestartStatus = restartStatus
 		}
 	} else {
 		result.RestartStatus = "restart_skipped"

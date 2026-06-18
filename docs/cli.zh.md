@@ -514,7 +514,7 @@ csgclaw participant delete <id> [flags]
 - `--app-secret-file string`：从文件读取 app secret。
 - `--app-secret-env string`：从环境变量读取 app secret。
 - `--app-secret-stdin`：从 stdin 读取 app secret。
-- `--restart`：保存后重建 worker。对 manager 生效时返回 `restart_status=manager_restart_required`，并由安全流程触发重建。
+- `--restart`：保存后重建目标 Agent。manager 重建成功时返回 `restart_status=manager_recreated`。
 
 `participant bind` 行为说明：
 
@@ -522,8 +522,7 @@ csgclaw participant delete <id> [flags]
 - `--feishu-kind human` 需要 `--admin` 和 `--open-id`。
 - `--feishu-kind bot` 需要 `--agent`、`--app-id`。
 - bot 绑定时，`--app-secret-file`、`--app-secret-env`、`--app-secret-stdin` 只能三选一。
-- `--restart` 默认关闭；不传时仅写配置。仅对 worker 生效为自动重建；manager 返回
-  `restart_status=manager_restart_required`，需要外部流程完成重建。
+- `--restart` 默认关闭；不传时仅写配置。传入后会重建目标 Agent。
 - `pt bind` 与 `participant bind` 完全等价。
 
 #### `room`
