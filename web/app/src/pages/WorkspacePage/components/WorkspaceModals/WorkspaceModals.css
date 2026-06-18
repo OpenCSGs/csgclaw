@@ -809,6 +809,13 @@
 
 .agent-advanced-summary {
   width: fit-content;
+  color: var(--field-label-color);
+  font-family: var(--font-sans);
+  font-size: var(--field-label-font-size);
+  font-weight: var(--field-label-font-weight);
+  line-height: var(--field-label-line-height);
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   list-style-position: inside;
   user-select: none;
