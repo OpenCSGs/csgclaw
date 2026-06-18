@@ -7,7 +7,7 @@ import {
   deleteRoomRequest,
   fetchThreadRequest,
   inviteRoomUsersRequest,
-  removeRoomUsersRequest,
+  removeRoomUserRequest,
   sendMessageRequest,
   startThreadRequest,
 } from "@/api/im";
@@ -849,10 +849,10 @@ export function useConversationController({
     setMemberActionBusyID(memberID);
     setMemberActionError("");
     try {
-      const updated = await removeRoomUsersRequest({
+      const updated = await removeRoomUserRequest({
         room_id: activeConversation.id,
         inviter_id: data.current_user_id,
-        user_ids: [memberID],
+        member_id: memberID,
         locale,
       });
       setBootstrapData((current) => upsertConversationInData(current, updated));

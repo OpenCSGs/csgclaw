@@ -110,6 +110,9 @@ func (h *Handler) listRoomMembers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) addRoomMembers(w http.ResponseWriter, r *http.Request) {
 	h.handleRoomMembersByIDPath(w, r)
 }
+func (h *Handler) deleteRoomMember(w http.ResponseWriter, r *http.Request) {
+	h.handleRoomMemberDeletePath(w, r)
+}
 func (h *Handler) createIMRoomMembersInvite(w http.ResponseWriter, r *http.Request) {
 	h.handleIMRoomMembers(w, r)
 }

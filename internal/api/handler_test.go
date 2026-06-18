@@ -582,6 +582,35 @@ func TestHandleRoomsMembersAddsCsgclawMember(t *testing.T) {
 	}
 }
 
+func TestHandleRoomsMembersDeletesCsgclawMember(t *testing.T) {
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "Admin", Handle: "admin", Role: "admin"},
+			{ID: "u-alice", Name: "Alice", Handle: "alice", Role: "worker"},
+		},
+		Rooms: []im.Room{
+			{ID: "room-1", Title: "Ops", Members: []string{"u-admin", "u-alice"}},
+		},
+	})
+	srv := &Handler{im: imSvc}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/rooms/room-1/members/u-alice", strings.NewReader(`{"inviter_id":"u-admin"}`))
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var room im.Room
+	if err := json.NewDecoder(rec.Body).Decode(&room); err != nil {
+		t.Fatalf("decode room: %v", err)
+	}
+	if len(room.Members) != 1 || room.Members[0] != "admin" {
+		t.Fatalf("members = %+v, want only admin", room.Members)
+	}
+}
+
 func TestHandleAgentsListReturnsUnifiedAgents(t *testing.T) {
 	svc := mustNewSeededService(t, []agent.Agent{
 		{ID: "u-manager", Name: "manager", Role: agent.RoleManager, CreatedAt: time.Date(2026, 3, 28, 9, 0, 0, 0, time.UTC)},

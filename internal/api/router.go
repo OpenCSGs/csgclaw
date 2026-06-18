@@ -90,7 +90,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Route("/members", func(r chi.Router) {
 					r.Get("/", h.listRoomMembers)
 					r.Post("/", h.addRoomMembers)
-					r.Post("/remove", h.handleRoomMembersRemovePath)
+					r.Delete("/{member_id}", h.deleteRoomMember)
 				})
 			})
 			r.Post("/invite", h.createIMRoomMembersInvite)
