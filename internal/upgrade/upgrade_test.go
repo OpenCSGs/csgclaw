@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -549,6 +550,20 @@ func TestClientInstallPreparedRejectsSourceLikeBundleWithoutMarker(t *testing.T)
 	assertFileContent(t, filepath.Join(installRoot, "keep-me"), "user file")
 }
 
+func TestInstallBundleRejectsUnsafeInstallRoot(t *testing.T) {
+	sharedRoot := t.TempDir()
+	keepPath := filepath.Join(sharedRoot, "keep-me")
+	if err := os.WriteFile(keepPath, []byte("user file"), 0o644); err != nil {
+		t.Fatalf("WriteFile(keep-me) error = %v", err)
+	}
+
+	err := installBundle(writeBundleDir(t, t.TempDir(), "new"), sharedRoot)
+	if !errors.Is(err, ErrNotOfficialBundle) {
+		t.Fatalf("installBundle() error = %v, want ErrNotOfficialBundle", err)
+	}
+	assertFileContent(t, keepPath, "user file")
+}
+
 func TestClientInstallPreparedAllowsLegacyOfficialBundleWithoutMarker(t *testing.T) {
 	installRoot := writeBundleFilesWithoutMarker(t, legacyOfficialInstallParent(t), map[string]string{
 		filepath.Join("csgclaw", "bin", "csgclaw"): "#!/bin/sh\n# old\n",
@@ -695,12 +710,29 @@ func TestClientAutoUpgradeSupportReportsOfficialBundle(t *testing.T) {
 		},
 	}
 
-	got := client.AutoUpgradeSupport()
+	got := client.AutoUpgradeSupport("v0.3.11")
 	if !got.Supported {
 		t.Fatalf("AutoUpgradeSupport().Supported = false, reason=%q", got.Reason)
 	}
 	if got.InstallRoot != installRoot {
 		t.Fatalf("InstallRoot = %q, want %q", got.InstallRoot, installRoot)
+	}
+}
+
+func TestClientAutoUpgradeSupportSkipsBundleDetectionForLocalBuild(t *testing.T) {
+	client := Client{ExecutablePath: func() (string, error) {
+		t.Fatal("local builds should not inspect the executable path")
+		return "", nil
+	}}
+
+	for _, version := range []string{"dev", "dev+local", "v0.3.11+local"} {
+		got := client.AutoUpgradeSupport(version)
+		if got.Supported {
+			t.Fatalf("AutoUpgradeSupport(%q).Supported = true, want false", version)
+		}
+		if got.Reason != "local_build" {
+			t.Fatalf("AutoUpgradeSupport(%q).Reason = %q, want local_build", version, got.Reason)
+		}
 	}
 }
 
@@ -714,7 +746,7 @@ func TestClientAutoUpgradeSupportReportsNonOfficialBundle(t *testing.T) {
 		},
 	}
 
-	got := client.AutoUpgradeSupport()
+	got := client.AutoUpgradeSupport("v0.3.11")
 	if got.Supported {
 		t.Fatal("AutoUpgradeSupport().Supported = true, want false")
 	}
@@ -733,7 +765,7 @@ func TestClientAutoUpgradeSupportReportsLegacyOfficialBundle(t *testing.T) {
 		},
 	}
 
-	got := client.AutoUpgradeSupport()
+	got := client.AutoUpgradeSupport("v0.3.11")
 	if !got.Supported {
 		t.Fatalf("AutoUpgradeSupport().Supported = false, reason=%q", got.Reason)
 	}

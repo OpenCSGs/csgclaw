@@ -129,6 +129,9 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := validateServeInstallation(); err != nil {
+		return err
+	}
 	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
 	defer restoreAuthDetect()
 
@@ -232,6 +235,9 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := validateServeInstallation(); err != nil {
+		return err
+	}
 	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
 	defer restoreAuthDetect()
 
@@ -283,12 +289,32 @@ func serveForeground(ctx context.Context, run *command.Context, cfg config.Confi
 	return serveForegroundWithConfigPath(ctx, run, cfg, "", output)
 }
 
+func validateServeInstallation() error {
+	currentVersion := appversion.Current()
+	support := (upgrade.Client{}).AutoUpgradeSupport(currentVersion)
+	if support.Supported || support.Reason == "local_build" {
+		return nil
+	}
+	platform, command := officialInstallGuidance(runtime.GOOS)
+	return fmt.Errorf("refuse to start release %s: %w\nInstall the official bundle on %s with:\n  %s\n拒绝启动正式版本 %s：当前程序并非从官方 CSGClaw bundle 安装。\n请在 %s 上执行：\n  %s", currentVersion, upgrade.ErrNotOfficialBundle, platform, command, currentVersion, platform, command)
+}
+
+func officialInstallGuidance(goos string) (string, string) {
+	if goos == "windows" {
+		return "Windows", "curl.exe -fsSL https://csgclaw.opencsg.com/install.ps1 | powershell -ExecutionPolicy Bypass -Command -"
+	}
+	return "macOS/Linux", "curl -fsSL https://csgclaw.opencsg.com/install.sh | bash"
+}
+
 type serveOptions struct {
 	NoBrowser    bool
 	NoAuthDetect bool
 }
 
 func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
+	if err := validateServeInstallation(); err != nil {
+		return err
+	}
 	_ = preflightDefaultModelProvider(ctx, cfg)
 	imBus := im.NewBus()
 	feishuProvider, feishuSvc, err := buildFeishuComponents()
@@ -493,13 +519,14 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	}
 	apiURL := apiBaseURL(cfg.Server)
 	imURL := imOpenURL(apiURL)
+	currentVersion := appversion.Current()
 	upgradeClient := upgrade.Client{
 		HTTPClient: http.DefaultClient,
 		GOOS:       runtime.GOOS,
 		GOARCH:     runtime.GOARCH,
 	}
-	upgradeSupport := upgradeClient.AutoUpgradeSupport()
-	upgradeManager := upgrade.NewManager(upgradeClient, appversion.Current(), upgrade.ManagerOptions{
+	upgradeSupport := upgradeClient.AutoUpgradeSupport(currentVersion)
+	upgradeManager := upgrade.NewManager(upgradeClient, currentVersion, upgrade.ManagerOptions{
 		AutoUpgradeSupported:         upgradeSupport.Supported,
 		AutoUpgradeUnsupportedReason: upgradeSupport.Reason,
 		OnStatusChange: func(status apitypes.UpgradeStatus) {

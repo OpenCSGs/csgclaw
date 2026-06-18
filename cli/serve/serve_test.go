@@ -25,7 +25,53 @@ import (
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/server"
 	"csgclaw/internal/upgrade"
+	appversion "csgclaw/internal/version"
 )
+
+func TestValidateServeInstallationRejectsReleaseOutsideBundle(t *testing.T) {
+	originalVersion := appversion.Version
+	appversion.Version = "v0.3.12"
+	t.Cleanup(func() { appversion.Version = originalVersion })
+
+	err := validateServeInstallation()
+	if !errors.Is(err, upgrade.ErrNotOfficialBundle) {
+		t.Fatalf("validateServeInstallation() error = %v, want ErrNotOfficialBundle", err)
+	}
+	if !strings.Contains(err.Error(), "拒绝启动正式版本") {
+		t.Fatalf("validateServeInstallation() error = %q, want Chinese guidance", err)
+	}
+	if !strings.Contains(err.Error(), "curl -fsSL https://csgclaw.opencsg.com/install.sh | bash") {
+		t.Fatalf("validateServeInstallation() error = %q, want official install command", err)
+	}
+}
+
+func TestOfficialInstallGuidance(t *testing.T) {
+	tests := []struct {
+		goos string
+		want string
+	}{
+		{goos: "darwin", want: "curl -fsSL https://csgclaw.opencsg.com/install.sh | bash"},
+		{goos: "linux", want: "curl -fsSL https://csgclaw.opencsg.com/install.sh | bash"},
+		{goos: "windows", want: "curl.exe -fsSL https://csgclaw.opencsg.com/install.ps1 | powershell -ExecutionPolicy Bypass -Command -"},
+	}
+
+	for _, tt := range tests {
+		_, got := officialInstallGuidance(tt.goos)
+		if got != tt.want {
+			t.Fatalf("officialInstallGuidance(%q) command = %q, want %q", tt.goos, got, tt.want)
+		}
+	}
+}
+
+func TestValidateServeInstallationAllowsLocalBuild(t *testing.T) {
+	originalVersion := appversion.Version
+	appversion.Version = "v0.3.12+local"
+	t.Cleanup(func() { appversion.Version = originalVersion })
+
+	if err := validateServeInstallation(); err != nil {
+		t.Fatalf("validateServeInstallation() error = %v", err)
+	}
+}
 
 func TestServeForegroundPreflightsCSGHubLiteProvider(t *testing.T) {
 	restore := stubServeDependencies(t)

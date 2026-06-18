@@ -68,6 +68,9 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		_ = applyArtifacts.ClearStatus()
 		return renderResult(globals.Output, run.Stdout, result)
 	}
+	if support := client.AutoUpgradeSupport(appversion.Current()); !support.Supported {
+		return fail(upgrade.ErrNotOfficialBundle)
+	}
 	if result.Asset == nil {
 		return fail(fmt.Errorf("matched release asset is required for installation"))
 	}
@@ -133,7 +136,7 @@ func explainError(program string, err error) error {
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "not installed from an official csgclaw bundle"):
-		return fmt.Errorf("%w\nInstall the official release bundle to use automatic upgrade, or run `%s upgrade --check` for version check only.", err, program)
+		return fmt.Errorf("%w\nThis installation can check versions but cannot replace files automatically. Migrate it safely with:\n  curl -fsSL https://csgclaw.opencsg.com/install.sh | bash\nThe installer keeps the managed bundle under ~/.local/lib/csgclaw and replaces only ~/.local/bin/csgclaw with a symlink. You can also run `%s upgrade --check` for version check only.", err, program)
 	case strings.Contains(msg, "downloaded size mismatch"), strings.Contains(msg, "downloaded sha256 mismatch"):
 		return fmt.Errorf("%w\nThe downloaded archive did not match the published metadata. Retry later or report the broken release.", err)
 	case strings.Contains(msg, "release bundle is missing"), strings.Contains(msg, "release archive contains unsupported entry"):

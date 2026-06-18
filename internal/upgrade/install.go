@@ -154,7 +154,12 @@ func hasSourceCheckoutMarker(root string) bool {
 	return false
 }
 
-func (c Client) AutoUpgradeSupport() AutoUpgradeSupport {
+func (c Client) AutoUpgradeSupport(currentVersion string) AutoUpgradeSupport {
+	currentVersion = strings.TrimSpace(currentVersion)
+	if currentVersion == "dev" || isLocalBuildVersion(currentVersion) {
+		return AutoUpgradeSupport{Reason: "local_build"}
+	}
+
 	root, err := c.officialInstallRoot()
 	if err == nil {
 		return AutoUpgradeSupport{
@@ -178,6 +183,10 @@ func isCSGClawExecutableName(name string) bool {
 }
 
 func installBundle(bundleDir, installRoot string) error {
+	if err := validateBundleDir(installRoot); err != nil && !isLegacyOfficialInstallRoot(installRoot) {
+		return fmt.Errorf("%w: invalid current bundle: %v", ErrNotOfficialBundle, err)
+	}
+
 	parentDir := filepath.Dir(installRoot)
 	baseName := filepath.Base(installRoot)
 

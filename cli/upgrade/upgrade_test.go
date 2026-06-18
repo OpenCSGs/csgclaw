@@ -249,7 +249,8 @@ func TestRunInstallErrorExplainsBundleRequirement(t *testing.T) {
 	}
 	for _, want := range []string{
 		"not installed from an official csgclaw bundle",
-		"Install the official release bundle to use automatic upgrade",
+		"curl -fsSL https://csgclaw.opencsg.com/install.sh | bash",
+		"replaces only ~/.local/bin/csgclaw with a symlink",
 		"csgclaw upgrade --check",
 	} {
 		if !strings.Contains(err.Error(), want) {
