@@ -101,14 +101,6 @@
   margin-top: 0;
 }
 
-.create-room-modal .create-room-field span,
-.create-room-modal .create-room-field .field-label {
-  color: var(--portal-gray-700);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 22px;
-}
-
 .create-room-modal .field-required-star {
   order: -1;
   color: var(--portal-error-400);
@@ -435,13 +427,6 @@
   margin-top: 0;
 }
 
-.invite-members-content .field > span {
-  color: var(--portal-gray-700);
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
-}
-
 .invite-members-modal .selection-list {
   gap: 16px;
 }
@@ -741,6 +726,100 @@
   text-transform: uppercase;
 }
 
+.profile-section-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.profile-section-heading .profile-section-title {
+  color: var(--portal-gray-700);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.profile-section-description {
+  margin: 0;
+  color: var(--portal-gray-600);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+}
+
+.agent-section-form {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--portal-gray-200);
+  border-radius: 12px;
+  background: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-section-form-content,
+.agent-section-form .agent-basics-grid {
+  width: 100%;
+  min-width: 0;
+  padding: 16px;
+}
+
+.agent-section-form-content {
+  display: grid;
+  gap: 16px;
+}
+
+.agent-model-form-content {
+  gap: 10px;
+}
+
+.agent-instructions-section .profile-grid-compact {
+  padding: 4px;
+}
+
+:root[data-theme="dark"] .agent-section-form {
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.profile-section-subtitle {
+  color: var(--field-label-color);
+  font-size: var(--field-label-font-size);
+  font-weight: 500;
+  line-height: var(--field-label-line-height);
+}
+
+.profile-model-api-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.agent-advanced-summary {
+  width: fit-content;
+  cursor: pointer;
+  list-style-position: inside;
+  user-select: none;
+}
+
+.agent-advanced-summary:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--input-border-focus);
+  outline-offset: 4px;
+}
+
 .profile-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
@@ -810,7 +889,14 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-  align-items: end;
+  align-items: start;
+}
+
+.profile-modal.agent-modal .field-hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
 }
 
 .agent-modal .agent-avatar-field .agent-avatar-picker {
@@ -819,14 +905,33 @@
 
 .profile-runtime-grid {
   display: grid;
-  grid-template-columns: minmax(150px, 0.9fr) minmax(220px, 1.25fr) minmax(220px, 1.25fr) minmax(120px, 0.65fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   align-items: start;
 }
 
 .profile-runtime-grid > .field,
 .profile-runtime-grid > .selection-item {
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
+}
+
+.profile-runtime-grid .csg-select-trigger,
+.profile-runtime-grid .agent-fast-mode-field .compact-toggle-row {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.profile-runtime-grid .csg-select-value,
+.profile-runtime-grid .csg-select-value > span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-modal.agent-modal .profile-runtime-grid .csg-select-trigger,
@@ -890,12 +995,6 @@
   margin-top: 0;
 }
 
-.profile-section .field span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 720;
-}
-
 .api-key-field {
   min-width: 0;
 }
@@ -945,7 +1044,6 @@
 }
 
 .profile-section .field input,
-.profile-section .field textarea,
 .profile-section .field select {
   min-height: 38px;
   padding: 9px 11px;
@@ -953,7 +1051,18 @@
 }
 
 .profile-section .field textarea.compact-textarea {
-  min-height: 64px;
+  min-height: 116px;
+  padding: var(--textarea-padding-md);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 24px;
+}
+
+.profile-modal.agent-modal .field:has(textarea) > .field-hint {
+  color: var(--portal-gray-600);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
 }
 
 .profile-section .field textarea.compact-json {
@@ -1200,6 +1309,67 @@
 
 .selection-item.compact-toggle-row span {
   white-space: nowrap;
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row {
+  align-self: stretch;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: var(--input-height-md);
+  padding: 11px 12px;
+  cursor: pointer;
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"] {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 1px solid var(--portal-gray-300);
+  border-radius: 4px;
+  background: var(--portal-white);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:hover {
+  border-color: var(--portal-brand-300);
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:focus-visible {
+  border-color: var(--portal-brand-300);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:checked {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:checked::after {
+  width: 5px;
+  height: 8px;
+  border: solid var(--portal-white);
+  border-width: 0 2px 2px 0;
+  content: "";
+  transform: translateY(-1px) rotate(45deg);
+}
+
+.profile-modal.agent-modal .agent-fast-mode-help {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--portal-gray-600);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .selection-item:hover {
@@ -1458,16 +1628,6 @@
   cursor: not-allowed;
 }
 
-.modal-card .field span,
-.modal-card .field .field-label,
-.profile-section .field span,
-.profile-section .field .field-label {
-  color: var(--portal-gray-700);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 20px;
-}
-
 .modal-card .selection-item.compact-toggle-row,
 .profile-section .selection-item.compact-toggle-row {
   border-color: var(--portal-gray-300);
@@ -1707,13 +1867,6 @@
 
 .manager-rebuild-modal .field {
   gap: 8px;
-}
-
-.manager-rebuild-modal .field > span {
-  color: var(--portal-gray-700);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
 }
 
 .manager-rebuild-image-option {

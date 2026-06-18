@@ -4,15 +4,18 @@
   margin-top: 18px;
 }
 
-.field span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.035em;
+.field > .field-label,
+.field > span:not(.field-hint),
+.field > .field-label-with-help {
+  color: var(--field-label-color);
+  font-family: var(--font-sans);
+  font-size: var(--field-label-font-size);
+  font-weight: var(--field-label-font-weight);
+  line-height: var(--field-label-line-height);
+  letter-spacing: 0;
 }
 
 .field input,
-.field textarea,
 .field select {
   width: 100%;
   border: 1px solid var(--input-border);
@@ -26,25 +29,22 @@
 }
 
 .field textarea {
+  width: 100%;
   min-height: 96px;
-  resize: vertical;
 }
 
 .field input:hover,
-.field textarea:hover,
 .field select:hover {
   border-color: var(--input-border-hover);
 }
 
 .field input:focus,
-.field textarea:focus,
 .field select:focus {
   border-color: var(--input-border-focus);
   box-shadow: var(--input-shadow-focus);
 }
 
 .field input:disabled,
-.field textarea:disabled,
 .field select:disabled {
   border-color: var(--input-border);
   background-color: var(--input-background-disabled);

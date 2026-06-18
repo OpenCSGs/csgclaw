@@ -506,11 +506,6 @@
   margin-top: 18px;
 }
 
-.field span {
-  font-size: 14px;
-  font-weight: 650;
-}
-
 .field .field-label {
   display: inline-flex;
   align-items: center;
@@ -2041,15 +2036,6 @@
   gap: 8px;
 }
 
-.field .field-label,
-.field span,
-.profile-section .field span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.035em;
-}
-
 .selection-list,
 .profile-section,
 .entity-field,
@@ -2869,9 +2855,6 @@ button[disabled],
   backdrop-filter: none;
 }
 
-.field .field-label,
-.field span,
-.profile-section .field span,
 .entity-field span,
 .metric span,
 .profile-section-title,
@@ -3123,9 +3106,6 @@ select,
 :root[data-theme="dark"] .message-meta .message-author,
 :root[data-theme="dark"] .message-row .message-card .message-meta .message-author,
 :root[data-theme="dark"] .message-row.own .message-card .message-meta .message-author,
-:root[data-theme="dark"] .field .field-label,
-:root[data-theme="dark"] .field span,
-:root[data-theme="dark"] .profile-section .field span,
 :root[data-theme="dark"] .entity-field span,
 :root[data-theme="dark"] .metric span,
 :root[data-theme="dark"] .preview-title,

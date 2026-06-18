@@ -2,6 +2,7 @@
 :root {
   --input-height-md: 44px;
   --input-padding-md: 10px 14px;
+  --textarea-padding-md: 12px 14px;
   --input-radius: var(--radius-md);
   --input-background: var(--portal-white);
   --input-background-disabled: var(--portal-gray-50);
@@ -15,6 +16,66 @@
   --input-shadow: var(--shadow-xs);
   --input-shadow-focus: 0 0 0 4px rgba(77, 106, 214, 0.24), var(--shadow-xs);
   --input-shadow-error-focus: var(--shadow-xs), var(--error-focus-ring);
+  --field-label-color: var(--portal-gray-700);
+  --field-label-font-size: 14px;
+  --field-label-font-weight: 400;
+  --field-label-line-height: 22px;
+}
+
+:root body textarea {
+  width: 100%;
+  min-height: 116px;
+  padding: var(--textarea-padding-md);
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  background-color: var(--input-background);
+  box-shadow: var(--input-shadow);
+  color: var(--input-text);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 24px;
+  outline: none;
+  resize: vertical;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+:root body textarea::placeholder {
+  color: var(--input-text-placeholder);
+}
+
+:root body textarea:hover:not(:disabled, [aria-invalid="true"]) {
+  border-color: var(--input-border-hover);
+}
+
+:root body textarea:focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
+
+:root body textarea:disabled {
+  border-color: var(--input-border);
+  background-color: var(--input-background-disabled);
+  color: var(--input-text-disabled);
+  cursor: not-allowed;
+}
+
+:root body textarea:disabled::placeholder {
+  color: var(--input-text-disabled);
+}
+
+:root body :where(.field[data-invalid="true"]) textarea,
+:root body textarea[aria-invalid="true"] {
+  border-color: var(--input-border-error);
+}
+
+:root body :where(.field[data-invalid="true"]) textarea:focus,
+:root body textarea[aria-invalid="true"]:focus {
+  box-shadow: var(--input-shadow-error-focus);
 }
 
 :root[data-theme="dark"] {
@@ -26,6 +87,7 @@
   --input-shadow: none;
   --input-shadow-focus: var(--focus-ring);
   --input-shadow-error-focus: var(--error-focus-ring);
+  --field-label-color: var(--muted);
 }
 
 :root

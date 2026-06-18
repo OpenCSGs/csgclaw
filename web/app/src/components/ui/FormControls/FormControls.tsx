@@ -13,7 +13,7 @@ export type FieldProps = {
 export function Field({ children, className, error, hint, label }: FieldProps) {
   return (
     <label className={classNames("field", className)} data-invalid={error ? "true" : undefined}>
-      {label ? <span>{label}</span> : null}
+      {label ? <span className="field-label">{label}</span> : null}
       {children}
       {hint ? <small className="field-hint">{hint}</small> : null}
       {error ? <div className="form-error">{error}</div> : null}
