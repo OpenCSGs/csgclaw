@@ -35,7 +35,9 @@ export function isLocalBuildVersion(version: unknown): boolean {
 export function isLocalBuildUpgradeStatus(status: UpgradeStatus | null | undefined, version: unknown): boolean {
   return (
     isLocalBuildVersion(version) ||
-    Boolean(status && status.auto_upgrade_supported === false && status.auto_upgrade_unsupported_reason)
+    Boolean(
+      status && status.auto_upgrade_supported === false && status.auto_upgrade_unsupported_reason === "local_build",
+    )
   );
 }
 

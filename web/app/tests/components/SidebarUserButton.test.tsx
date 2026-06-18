@@ -114,8 +114,8 @@ describe("SidebarUserButton", () => {
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(screen.getByText("Local build")).toBeInTheDocument();
-    expect(screen.queryByText("v0.3.0")).not.toBeInTheDocument();
+    expect(screen.queryByText("Local build")).not.toBeInTheDocument();
+    expect(screen.getByText("v0.3.0")).toBeInTheDocument();
     expect(screen.queryByText("v0.3.0 -> v0.3.1")).not.toBeInTheDocument();
     expect(screen.queryByText("Update & Restart")).not.toBeInTheDocument();
     expect(screen.queryByText("Manual upgrade")).not.toBeInTheDocument();

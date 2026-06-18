@@ -27,6 +27,12 @@ describe("upgrade status helpers", () => {
         { ...baseUpgradeStatus, auto_upgrade_supported: false, auto_upgrade_unsupported_reason: "not_official_bundle" },
         "v0.3.11",
       ),
+    ).toBe(false);
+    expect(
+      isLocalBuildUpgradeStatus(
+        { ...baseUpgradeStatus, auto_upgrade_supported: false, auto_upgrade_unsupported_reason: "local_build" },
+        "v0.3.11",
+      ),
     ).toBe(true);
   });
 
