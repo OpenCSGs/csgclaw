@@ -205,35 +205,6 @@ func updateCSGClawChannel(cfg map[string]any, participantID string, server confi
 	return nil
 }
 
-func disableCSGClawChannel(agentHome string) error {
-	configPath := filepath.Join(Root(agentHome), HostConfig)
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return fmt.Errorf("read picoclaw config: %w", err)
-	}
-	var cfg map[string]any
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return fmt.Errorf("decode picoclaw config: %w", err)
-	}
-	channels, ok := cfg["channels"].(map[string]any)
-	if !ok {
-		return fmt.Errorf("picoclaw config is missing channels")
-	}
-	channel, ok := channels["csgclaw"].(map[string]any)
-	if !ok {
-		return fmt.Errorf("picoclaw config is missing channels.csgclaw")
-	}
-	channel["enabled"] = false
-	updated, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode picoclaw config: %w", err)
-	}
-	if err := os.WriteFile(configPath, append(updated, '\n'), 0o600); err != nil {
-		return fmt.Errorf("write picoclaw config: %w", err)
-	}
-	return nil
-}
-
 func RenderSecurityConfig(server config.ServerConfig, model config.ModelConfig) string {
 	modelID := model.ModelID
 	apiKey := strings.TrimSpace(server.AccessToken)

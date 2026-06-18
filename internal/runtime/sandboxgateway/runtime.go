@@ -354,9 +354,6 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 	workspaceLayout := prepared.WorkspaceLayout
 	projectsRoot := prepared.ProjectsRoot
 	envVars := r.deps.BuildRuntimeEnv(managerBaseURL, prepared.Server.AccessToken, participantID, agentID, llmBaseURL, modelID, r.CurrentFeishuProvider())
-	if prepared.DisableInternalCSGClawChannel {
-		disableInternalCSGClawEnv(envVars)
-	}
 	r.deps.AddProfileEnv(envVars, profile.Env)
 	homeEnv := r.homeEnv()
 	projectsGuestPath := r.projectsGuestPath()
@@ -402,15 +399,14 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 }
 
 type PreparedGatewayProvision struct {
-	AgentID                       string
-	ParticipantID                 string
-	ModelID                       string
-	Profile                       agentruntime.Profile
-	WorkspaceLayout               WorkspaceLayout
-	ProjectsRoot                  string
-	ManagerBaseURL                string
-	Server                        config.ServerConfig
-	DisableInternalCSGClawChannel bool
+	AgentID         string
+	ParticipantID   string
+	ModelID         string
+	Profile         agentruntime.Profile
+	WorkspaceLayout WorkspaceLayout
+	ProjectsRoot    string
+	ManagerBaseURL  string
+	Server          config.ServerConfig
 }
 
 func FinalizePreparedGatewayProvision(req agentruntime.ProvisionRequest, workspaceLayout WorkspaceLayout) (PreparedGatewayProvision, error) {
@@ -440,27 +436,15 @@ func FinalizePreparedGatewayProvision(req agentruntime.ProvisionRequest, workspa
 		}
 	}
 	return PreparedGatewayProvision{
-		AgentID:                       agentID,
-		ParticipantID:                 participantID,
-		ModelID:                       modelID,
-		Profile:                       profile,
-		WorkspaceLayout:               workspaceLayout,
-		ProjectsRoot:                  strings.TrimSpace(gateway.ProjectsRoot),
-		ManagerBaseURL:                strings.TrimRight(strings.TrimSpace(gateway.ManagerBaseURL), "/"),
-		Server:                        gateway.Server,
-		DisableInternalCSGClawChannel: gateway.DisableInternalCSGClawChannel,
+		AgentID:         agentID,
+		ParticipantID:   participantID,
+		ModelID:         modelID,
+		Profile:         profile,
+		WorkspaceLayout: workspaceLayout,
+		ProjectsRoot:    strings.TrimSpace(gateway.ProjectsRoot),
+		ManagerBaseURL:  strings.TrimRight(strings.TrimSpace(gateway.ManagerBaseURL), "/"),
+		Server:          gateway.Server,
 	}, nil
-}
-
-func disableInternalCSGClawEnv(envVars map[string]string) {
-	if envVars == nil {
-		return
-	}
-	envVars["PICOCLAW_CHANNELS_CSGCLAW_ENABLED"] = "false"
-	delete(envVars, "PICOCLAW_CHANNELS_CSGCLAW_BASE_URL")
-	delete(envVars, "PICOCLAW_CHANNELS_CSGCLAW_ACCESS_TOKEN")
-	delete(envVars, "PICOCLAW_CHANNELS_CSGCLAW_PARTICIPANT_ID")
-	delete(envVars, "CSGCLAW_BOT_ID")
 }
 
 func (r *Runtime) RememberPreparedGatewayProvision(agentID string, prepared PreparedGatewayProvision) {
