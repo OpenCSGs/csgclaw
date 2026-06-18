@@ -68,8 +68,7 @@ func (h *Handler) createFeishuRegistration(w http.ResponseWriter, r *http.Reques
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	localClient := feishubind.NewLocalClient(h.svc, h.participant)
-	target, err := feishubind.ResolveAgent(r.Context(), localClient, req.AgentID)
+	target, err := feishubind.ResolveAgent(h.svc, req.AgentID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -180,16 +179,15 @@ func (h *Handler) finalizeFeishuRegistration(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	localClient := feishubind.NewLocalClient(h.svc, h.participant)
 	if state.AgentID == agent.ManagerUserID {
 		if openID := openIDFromRegistrationResult(poll); openID != "" {
-			if _, err := feishubind.BindAdminHuman(r.Context(), localClient, openID, "admin"); err != nil {
+			if _, err := feishubind.BindAdminHuman(r.Context(), h.participant, openID, "admin"); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 		}
 	}
-	result, err := feishubind.BindBot(r.Context(), localClient, state.AgentID, appID, appSecret, true)
+	result, err := feishubind.BindBot(r.Context(), h.svc, h.participant, state.AgentID, appID, appSecret, true)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

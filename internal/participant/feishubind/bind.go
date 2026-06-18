@@ -6,18 +6,8 @@ import (
 	"strings"
 
 	"csgclaw/internal/agent"
-	"csgclaw/internal/apitypes"
 	"csgclaw/internal/participant"
 )
-
-type Client interface {
-	ListParticipants(ctx context.Context, channel, typ, agentID string) ([]apitypes.Participant, error)
-	ListAgents(ctx context.Context) ([]apitypes.Agent, error)
-	GetAgent(ctx context.Context, id string) (apitypes.Agent, error)
-	CreateParticipant(ctx context.Context, req participant.CreateRequest) (apitypes.Participant, error)
-	UpdateParticipant(ctx context.Context, channel, id string, req participant.UpdateRequest) (apitypes.Participant, error)
-	RecreateAgent(ctx context.Context, id string) (apitypes.Agent, error)
-}
 
 type Result struct {
 	Status          string   `json:"status"`
@@ -31,9 +21,9 @@ type Result struct {
 	Warnings        []string `json:"warnings,omitempty"`
 }
 
-func BindAdminHuman(ctx context.Context, client Client, openID, name string) (Result, error) {
-	if client == nil {
-		return Result{}, fmt.Errorf("feishu bind client is required")
+func BindAdminHuman(ctx context.Context, participantSvc *participant.Service, openID, name string) (Result, error) {
+	if participantSvc == nil {
+		return Result{}, fmt.Errorf("participant service is required")
 	}
 	openID = strings.TrimSpace(openID)
 	if openID == "" {
@@ -44,7 +34,7 @@ func BindAdminHuman(ctx context.Context, client Client, openID, name string) (Re
 		name = "admin"
 	}
 	participantID := "admin"
-	item, err := upsertAdminParticipant(ctx, client, participantID, name, openID)
+	item, err := upsertAdminParticipant(ctx, participantSvc, participantID, name, openID)
 	if err != nil {
 		return Result{}, fmt.Errorf("bind feishu admin human participant_id=%q: %w", participantID, err)
 	}
@@ -57,9 +47,12 @@ func BindAdminHuman(ctx context.Context, client Client, openID, name string) (Re
 	}, nil
 }
 
-func BindBot(ctx context.Context, client Client, agentRef, appID, appSecret string, restart bool) (Result, error) {
-	if client == nil {
-		return Result{}, fmt.Errorf("feishu bind client is required")
+func BindBot(ctx context.Context, agentSvc *agent.Service, participantSvc *participant.Service, agentRef, appID, appSecret string, restart bool) (Result, error) {
+	if agentSvc == nil {
+		return Result{}, fmt.Errorf("agent service is required")
+	}
+	if participantSvc == nil {
+		return Result{}, fmt.Errorf("participant service is required")
 	}
 	agentRef = strings.TrimSpace(agentRef)
 	if agentRef == "" {
@@ -73,12 +66,12 @@ func BindBot(ctx context.Context, client Client, agentRef, appID, appSecret stri
 	if appSecret == "" {
 		return Result{}, fmt.Errorf("app_secret is required")
 	}
-	target, err := ResolveAgent(ctx, client, agentRef)
+	target, err := ResolveAgent(agentSvc, agentRef)
 	if err != nil {
 		return Result{}, fmt.Errorf("resolve agent %q: %w", agentRef, err)
 	}
 	participantID := agent.ParticipantIDForAgent(target.Name, target.ID)
-	item, warnings, err := upsertBotParticipant(ctx, client, participantID, target, appID, appSecret)
+	item, warnings, err := upsertBotParticipant(ctx, participantSvc, participantID, target, appID, appSecret)
 	if err != nil {
 		return Result{}, fmt.Errorf("bind feishu bot participant_id=%q agent_id=%q: %w", participantID, target.ID, err)
 	}
@@ -95,7 +88,7 @@ func BindBot(ctx context.Context, client Client, agentRef, appID, appSecret stri
 	if restart {
 		if strings.EqualFold(target.ID, agent.ManagerUserID) || strings.EqualFold(target.Role, agent.RoleManager) {
 			result.RestartStatus = "manager_restart_required"
-		} else if _, err := client.RecreateAgent(ctx, target.ID); err != nil {
+		} else if _, err := agentSvc.Recreate(ctx, target.ID); err != nil {
 			result.Status = "partial"
 			result.RestartStatus = "recreate_failed"
 			result.RestartError = err.Error()
@@ -108,19 +101,18 @@ func BindBot(ctx context.Context, client Client, agentRef, appID, appSecret stri
 	return result, nil
 }
 
-func ResolveAgent(ctx context.Context, client Client, ref string) (apitypes.Agent, error) {
+func ResolveAgent(agentSvc *agent.Service, ref string) (agent.Agent, error) {
+	if agentSvc == nil {
+		return agent.Agent{}, fmt.Errorf("agent service is required")
+	}
 	ref = strings.TrimSpace(ref)
 	for _, candidate := range agentIDCandidates(ref) {
-		if got, err := client.GetAgent(ctx, candidate); err == nil {
+		if got, ok := agentSvc.Agent(candidate); ok {
 			return got, nil
 		}
 	}
-	agents, err := client.ListAgents(ctx)
-	if err != nil {
-		return apitypes.Agent{}, err
-	}
-	var matches []apitypes.Agent
-	for _, item := range agents {
+	var matches []agent.Agent
+	for _, item := range agentSvc.List() {
 		if strings.EqualFold(strings.TrimSpace(item.Name), ref) {
 			matches = append(matches, item)
 		}
@@ -129,12 +121,12 @@ func ResolveAgent(ctx context.Context, client Client, ref string) (apitypes.Agen
 		return matches[0], nil
 	}
 	if len(matches) > 1 {
-		return apitypes.Agent{}, fmt.Errorf("agent name %q matched multiple agents", ref)
+		return agent.Agent{}, fmt.Errorf("agent name %q matched multiple agents", ref)
 	}
-	return apitypes.Agent{}, fmt.Errorf("agent %q not found", ref)
+	return agent.Agent{}, fmt.Errorf("agent %q not found", ref)
 }
 
-func CanonicalParticipantID(target apitypes.Agent) string {
+func CanonicalParticipantID(target agent.Agent) string {
 	return agent.ParticipantIDForAgent(target.Name, target.ID)
 }
 
@@ -150,23 +142,30 @@ func agentIDCandidates(ref string) []string {
 	return candidates
 }
 
-func upsertAdminParticipant(ctx context.Context, client Client, participantID, name, openID string) (apitypes.Participant, error) {
-	existing, ok, err := findParticipantByID(ctx, client, participant.ChannelFeishu, participantID)
+func upsertAdminParticipant(ctx context.Context, participantSvc *participant.Service, participantID, name, openID string) (participant.Participant, error) {
+	existing, ok, err := findParticipantByID(participantSvc, participant.ChannelFeishu, participantID)
 	if err != nil {
-		return apitypes.Participant{}, err
+		return participant.Participant{}, err
 	}
 	if ok {
 		if existing.Type != participant.TypeHuman {
-			return apitypes.Participant{}, fmt.Errorf("existing participant type is %q, want %q", existing.Type, participant.TypeHuman)
+			return participant.Participant{}, fmt.Errorf("existing participant type is %q, want %q", existing.Type, participant.TypeHuman)
 		}
 		kind := participant.ChannelUserKindOpenID
-		return client.UpdateParticipant(ctx, participant.ChannelFeishu, participantID, participant.UpdateRequest{
+		updated, ok, err := participantSvc.Update(ctx, participant.ChannelFeishu, participantID, participant.UpdateRequest{
 			Name:            &name,
 			ChannelUserRef:  &openID,
 			ChannelUserKind: &kind,
 		})
+		if err != nil {
+			return participant.Participant{}, err
+		}
+		if !ok {
+			return participant.Participant{}, fmt.Errorf("participant %s:%s not found", participant.ChannelFeishu, participantID)
+		}
+		return updated, nil
 	}
-	return client.CreateParticipant(ctx, participant.CreateRequest{
+	return participantSvc.Create(ctx, participant.CreateRequest{
 		ID:      participantID,
 		Channel: participant.ChannelFeishu,
 		Type:    participant.TypeHuman,
@@ -178,12 +177,9 @@ func upsertAdminParticipant(ctx context.Context, client Client, participantID, n
 	})
 }
 
-func upsertBotParticipant(ctx context.Context, client Client, participantID string, target apitypes.Agent, appID, appSecret string) (apitypes.Participant, []string, error) {
-	all, err := client.ListParticipants(ctx, participant.ChannelFeishu, "", "")
-	if err != nil {
-		return apitypes.Participant{}, nil, err
-	}
-	var existing apitypes.Participant
+func upsertBotParticipant(ctx context.Context, participantSvc *participant.Service, participantID string, target agent.Agent, appID, appSecret string) (participant.Participant, []string, error) {
+	all := participantSvc.List(participant.ListOptions{Channel: participant.ChannelFeishu})
+	var existing participant.Participant
 	hasExisting := false
 	var warnings []string
 	for _, item := range all {
@@ -207,24 +203,30 @@ func upsertBotParticipant(ctx context.Context, client Client, participantID stri
 	}
 	if hasExisting {
 		if existing.Type != participant.TypeAgent {
-			return apitypes.Participant{}, warnings, fmt.Errorf("existing participant type is %q, want %q", existing.Type, participant.TypeAgent)
+			return participant.Participant{}, warnings, fmt.Errorf("existing participant type is %q, want %q", existing.Type, participant.TypeAgent)
 		}
 		if strings.TrimSpace(existing.AgentID) != "" && strings.TrimSpace(existing.AgentID) != strings.TrimSpace(target.ID) {
-			return apitypes.Participant{}, warnings, fmt.Errorf("existing participant is bound to agent %q", existing.AgentID)
+			return participant.Participant{}, warnings, fmt.Errorf("existing participant is bound to agent %q", existing.AgentID)
 		}
 		name := displayName
 		agentID := target.ID
 		channelUserRef := ""
-		updated, err := client.UpdateParticipant(ctx, participant.ChannelFeishu, participantID, participant.UpdateRequest{
+		updated, ok, err := participantSvc.Update(ctx, participant.ChannelFeishu, participantID, participant.UpdateRequest{
 			Name:             &name,
 			ChannelUserRef:   &channelUserRef,
 			ChannelUserKind:  &kind,
 			ChannelAppConfig: cfg,
 			AgentID:          &agentID,
 		})
+		if err != nil {
+			return participant.Participant{}, warnings, err
+		}
+		if !ok {
+			return participant.Participant{}, warnings, fmt.Errorf("participant %s:%s not found", participant.ChannelFeishu, participantID)
+		}
 		return updated, warnings, err
 	}
-	created, err := client.CreateParticipant(ctx, participant.CreateRequest{
+	created, err := participantSvc.Create(ctx, participant.CreateRequest{
 		ID:               participantID,
 		Channel:          participant.ChannelFeishu,
 		Type:             participant.TypeAgent,
@@ -241,15 +243,15 @@ func upsertBotParticipant(ctx context.Context, client Client, participantID stri
 	return created, warnings, err
 }
 
-func findParticipantByID(ctx context.Context, client Client, channel, id string) (apitypes.Participant, bool, error) {
-	items, err := client.ListParticipants(ctx, channel, "", "")
-	if err != nil {
-		return apitypes.Participant{}, false, err
+func findParticipantByID(participantSvc *participant.Service, channel, id string) (participant.Participant, bool, error) {
+	if participantSvc == nil {
+		return participant.Participant{}, false, fmt.Errorf("participant service is required")
 	}
+	items := participantSvc.List(participant.ListOptions{Channel: channel})
 	for _, item := range items {
 		if item.ID == id {
 			return item, true, nil
 		}
 	}
-	return apitypes.Participant{}, false, nil
+	return participant.Participant{}, false, nil
 }
