@@ -1,4 +1,4 @@
-import { del, get, patch, post, put, requestText } from "@/api/client";
+import { del, get, patch, post, put, requestText, type ApiError } from "@/api/client";
 import { BOT_TYPE_NOTIFICATION, MANAGER_AGENT_ID } from "@/shared/constants/agents";
 import type { AgentLike, AgentProfileLike, AgentProfileModelsResponse, JSONRecord, RuntimeKind } from "@/models/agents";
 import type { WorkspaceFile, WorkspaceListing } from "@/models/workspace";
@@ -280,8 +280,16 @@ export function runAgentActionRequest(agentID: string, action: string): Promise<
   return post(`api/v1/agents/${encodeURIComponent(agentID)}/${action}`);
 }
 
-export function startFeishuRegistrationRequest(agentID: string): Promise<FeishuRegistration> {
-  return post("api/v1/channels/feishu/registrations", { agent_id: agentID });
+export async function startFeishuRegistrationRequest(agentID: string): Promise<FeishuRegistration> {
+  try {
+    return await post("api/v1/channels/feishu/registrations", { agent_id: agentID });
+  } catch (error) {
+    const pending = pendingFeishuRegistrationFromAPIError(error);
+    if (pending) {
+      return pending;
+    }
+    throw error;
+  }
 }
 
 export function fetchFeishuRegistrationRequest(registrationID: string): Promise<FeishuRegistration> {
@@ -290,6 +298,27 @@ export function fetchFeishuRegistrationRequest(registrationID: string): Promise<
 
 export function finalizeFeishuRegistrationRequest(registrationID: string): Promise<FeishuRegistrationFinalizeResult> {
   return post(`api/v1/channels/feishu/registrations/${encodeURIComponent(registrationID)}:finalize`, {});
+}
+
+function pendingFeishuRegistrationFromAPIError(error: unknown): FeishuRegistration | null {
+  const apiError = error as ApiError | null;
+  if (!apiError || apiError.status !== 409) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(apiError.message) as Partial<FeishuRegistration>;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      String(parsed.registration_id || "").trim() &&
+      String(parsed.status || "").trim() === "pending"
+    ) {
+      return parsed as FeishuRegistration;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function participantToAgentLike(participant: ParticipantLike): AgentLike {
