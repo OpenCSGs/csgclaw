@@ -11,6 +11,10 @@ import (
 	"csgclaw/internal/runtime"
 )
 
+const (
+	testBuiltinOpenClawImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260623.23-csgclaw"
+)
+
 func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	store := NewBuiltinStore()
 
@@ -55,8 +59,8 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get(openclaw-worker) error = %v", err)
 	}
-	if openclawItem.Image == "" {
-		t.Fatal("Get(openclaw-worker).Image is empty")
+	if got, want := openclawItem.Image, testBuiltinOpenClawImage; got != want {
+		t.Fatalf("Get(openclaw-worker).Image = %q, want %q", got, want)
 	}
 
 	workspace, err := store.FetchWorkspace(context.Background(), "picoclaw-worker")

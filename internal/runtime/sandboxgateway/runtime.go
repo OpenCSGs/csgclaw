@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,7 @@ type Dependencies struct {
 	FeishuProvider feishu.AgentCredentialProvider
 
 	SandboxProviderName func() string
+	SandboxToolsDir     func() (string, error)
 	EnsureRuntime       func(agentName string) (sandbox.Runtime, error)
 	RuntimeHome         func(agentName string) (string, error)
 	CloseRuntime        func(homeDir string, rt sandbox.Runtime) error
@@ -63,6 +65,8 @@ type Dependencies struct {
 	ReadinessProbe     GatewayReadinessProbe
 	StreamLogs         func(ctx context.Context, agentID string, follow bool, lines int, w io.Writer) error
 }
+
+const sandboxToolsGuestDir = "/opt/csgclaw/bin"
 
 type GatewayReadinessProbe struct {
 	Name     string
@@ -379,6 +383,13 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 	if gatewayCommand == "" {
 		return sandbox.CreateSpec{}, fmt.Errorf("gateway command is required")
 	}
+	toolsDir, mountTools, err := r.resolveSandboxToolsDir()
+	if err != nil {
+		return sandbox.CreateSpec{}, err
+	}
+	if mountTools {
+		gatewayCommand = "export PATH=" + sandboxToolsGuestDir + ":$PATH; " + gatewayCommand
+	}
 	envVars["HOME"] = homeEnv
 	spec := sandbox.CreateSpec{
 		Image:      image,
@@ -395,7 +406,51 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 		sandbox.Mount{HostPath: workspaceLayout.MountHostPath, GuestPath: workspaceLayout.MountGuestPath},
 		sandbox.Mount{HostPath: projectsRoot, GuestPath: projectsGuestPath},
 	)
+	if mountTools {
+		spec.Mounts = append(spec.Mounts, sandbox.Mount{
+			HostPath:  toolsDir,
+			GuestPath: sandboxToolsGuestDir,
+			ReadOnly:  true,
+		})
+	}
 	return spec, nil
+}
+
+func (r *Runtime) resolveSandboxToolsDir() (string, bool, error) {
+	if r == nil || r.deps.SandboxToolsDir == nil {
+		return "", false, nil
+	}
+	provider := ""
+	if r.deps.SandboxProviderName != nil {
+		provider = strings.TrimSpace(r.deps.SandboxProviderName())
+	}
+	if provider != config.DockerProvider && provider != config.BoxLiteProvider && provider != config.CSGHubProvider {
+		return "", false, nil
+	}
+	dir, err := r.deps.SandboxToolsDir()
+	if err != nil {
+		return "", false, fmt.Errorf("resolve sandbox tools directory: %w", err)
+	}
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return "", false, fmt.Errorf("sandbox tools directory is required")
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return "", false, fmt.Errorf("stat sandbox tools directory %q: %w", dir, err)
+	}
+	if !info.IsDir() {
+		return "", false, fmt.Errorf("sandbox tools path %q is not a directory", dir)
+	}
+	cliPath := filepath.Join(dir, "csgclaw-cli")
+	cliInfo, err := os.Stat(cliPath)
+	if err != nil {
+		return "", false, fmt.Errorf("stat sandbox CLI %q: %w", cliPath, err)
+	}
+	if !cliInfo.Mode().IsRegular() {
+		return "", false, fmt.Errorf("sandbox CLI %q is not a regular file", cliPath)
+	}
+	return dir, true, nil
 }
 
 type PreparedGatewayProvision struct {

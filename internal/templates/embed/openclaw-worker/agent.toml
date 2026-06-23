@@ -6,4 +6,4 @@ updated_at = "2026-06-23T03:50:49Z"
 version = "0.1.5"
 
 [image]
-ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw-worker:0.1.5"
+ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260623.23-csgclaw"

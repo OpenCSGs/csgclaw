@@ -219,30 +219,97 @@ func imageNeedsTemplateVersionUpgrade(current string, latest defaultAgentImage) 
 		return false
 	}
 	if !strings.EqualFold(currentRepo, latestRepo) {
-		if !isLegacyPicoClawRepositoryUpgrade(currentRepo, latestRepo) {
+		if !isCompatibleRepositoryUpgrade(currentRepo, latestRepo) {
 			return false
 		}
-		_, ok := parseSemanticVersion(latestVersion)
-		return ok
+		return isComparableImageVersion(dockerImageTag(latestImage)) || isComparableImageVersion(latestVersion)
+	}
+	latestTag := dockerImageTag(latestImage)
+	if latestTag != "" {
+		if cmp, ok := compareImageVersions(currentTag, latestTag); ok {
+			return cmp < 0
+		}
 	}
 	if latestVersion == "" {
 		return false
 	}
-	if cmp, ok := compareSemanticVersions(currentTag, latestVersion); ok {
+	if cmp, ok := compareImageVersions(currentTag, latestVersion); ok {
 		return cmp < 0
 	}
 	return true
 }
 
-func isLegacyPicoClawRepositoryUpgrade(currentRepo, latestRepo string) bool {
-	if !strings.EqualFold(dockerImageRepositoryName(currentRepo), "picoclaw") {
+func isComparableImageVersion(value string) bool {
+	_, ok := parseImageVersion(value)
+	return ok
+}
+
+func compareImageVersions(current, latest string) (int, bool) {
+	if cmp, ok := compareSemanticVersions(current, latest); ok {
+		return cmp, true
+	}
+	currentVersion, ok := parseImageVersion(current)
+	if !ok {
+		return 0, false
+	}
+	latestVersion, ok := parseImageVersion(latest)
+	if !ok || len(currentVersion) != len(latestVersion) {
+		return 0, false
+	}
+	for i := range currentVersion {
+		if currentVersion[i] != latestVersion[i] {
+			return compareInts(currentVersion[i], latestVersion[i]), true
+		}
+	}
+	return 0, true
+}
+
+func parseImageVersion(value string) ([]int, bool) {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "v")
+	if value == "" {
+		return nil, false
+	}
+	if beforeBuild, _, ok := strings.Cut(value, "+"); ok {
+		value = beforeBuild
+	}
+	if beforePre, _, ok := strings.Cut(value, "-"); ok {
+		value = beforePre
+	}
+	parts := strings.Split(value, ".")
+	if len(parts) == 0 {
+		return nil, false
+	}
+	out := make([]int, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			return nil, false
+		}
+		parsed, err := strconv.Atoi(part)
+		if err != nil {
+			return nil, false
+		}
+		out = append(out, parsed)
+	}
+	return out, true
+}
+
+func isCompatibleRepositoryUpgrade(currentRepo, latestRepo string) bool {
+	return hasCompatibleRepositoryFamily(currentRepo, latestRepo) || hasCompatibleRepositoryFamily(latestRepo, currentRepo)
+}
+
+func hasCompatibleRepositoryFamily(baseRepo, variantRepo string) bool {
+	baseName := dockerImageRepositoryName(baseRepo)
+	if baseName == "" {
 		return false
 	}
-	latestName := dockerImageRepositoryName(latestRepo)
-	if !strings.EqualFold(latestName, "picoclaw-manager") && !strings.EqualFold(latestName, "picoclaw-worker") {
+	variantName := dockerImageRepositoryName(variantRepo)
+	if variantName == "" {
 		return false
 	}
-	return strings.EqualFold(dockerImageRepositoryParent(currentRepo), dockerImageRepositoryParent(latestRepo))
+	if !strings.EqualFold(dockerImageRepositoryParent(baseRepo), dockerImageRepositoryParent(variantRepo)) {
+		return false
+	}
+	return strings.EqualFold(variantName, baseName+"-manager") || strings.EqualFold(variantName, baseName+"-worker")
 }
 
 func dockerImageRepositoryName(repo string) string {

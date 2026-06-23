@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"csgclaw/internal/runtimeassets"
 )
 
 var (
@@ -50,6 +52,9 @@ func (c Client) InstallPrepared(prepared PreparedBundle) (InstalledBundle, error
 	}
 	if err := installBundle(prepared.BundleDir, installRoot); err != nil {
 		return InstalledBundle{}, err
+	}
+	if _, err := runtimeassets.RefreshFromBundle(installRoot); err != nil {
+		return InstalledBundle{}, fmt.Errorf("refresh runtime assets: %w", err)
 	}
 	return InstalledBundle{InstallRoot: installRoot}, nil
 }

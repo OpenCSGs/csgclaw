@@ -230,13 +230,13 @@ PicoClaw 当前复用了 sandbox home 概念；Codex 是 host-process runtime，
 建议缓存目录：
 
 ```text
-~/.csgclaw/bin/codex-acp
+~/.csgclaw/sandbox-tools/codex-acp
 ```
 
 或带版本：
 
 ```text
-~/.csgclaw/bin/codex-acp/<version>/codex-acp
+~/.csgclaw/sandbox-tools/codex-acp/<version>/codex-acp
 ```
 
 建议把“下载地址/版本”收敛为配置项，但第一版可先支持：

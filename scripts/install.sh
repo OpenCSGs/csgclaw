@@ -5,6 +5,8 @@ APP="${APP:-csgclaw}"
 VERSION="${VERSION:-latest}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 LIB_DIR="${LIB_DIR:-$HOME/.local/lib/${APP}}"
+CSGCLAW_HOME="${CSGCLAW_HOME:-$HOME/.csgclaw}"
+SANDBOX_TOOLS_DIR="${SANDBOX_TOOLS_DIR:-${CSGCLAW_HOME}/sandbox-tools}"
 # All release metadata and downloads use this host (override per env if needed).
 MIRROR_HOST="${MIRROR_HOST:-https://csgclaw.opencsg.com}"
 BASE_URL="${BASE_URL:-${MIRROR_HOST}/releases}"
@@ -99,7 +101,7 @@ main() {
   need_cmd mktemp
   need_cmd install
 
-  local os arch version archive_name download_url archive_path extracted_path bundle_path bundle_bin_path install_root
+  local os arch version archive_name download_url archive_path extracted_path bundle_path bundle_bin_path bundle_cli_path install_root
   os="$(detect_os)"
   arch="$(detect_arch)"
   ensure_supported_platform "$os" "$arch"
@@ -121,11 +123,16 @@ main() {
   tar -xzf "$archive_path" -C "$TMPDIR_INSTALL"
   bundle_path="${TMPDIR_INSTALL}/${APP}"
   bundle_bin_path="${bundle_path}/bin/${APP}"
+  bundle_cli_path="${bundle_path}/bin/csgclaw_dir/csgclaw-cli"
 
   ensure_install_dir
   ensure_lib_dir
 
   if [ -f "$bundle_bin_path" ]; then
+    if [ ! -f "$bundle_cli_path" ]; then
+      echo "archive did not contain ${APP}/bin/csgclaw_dir/csgclaw-cli" >&2
+      exit 1
+    fi
     install_root="${LIB_DIR}/${version}"
     rm -rf "$install_root"
     mkdir -p "$install_root"
@@ -142,8 +149,12 @@ main() {
     extracted_path="${INSTALL_DIR}/${APP}"
   fi
 
+  mkdir -p "$SANDBOX_TOOLS_DIR"
+  install -m 0755 "$bundle_cli_path" "${SANDBOX_TOOLS_DIR}/csgclaw-cli"
+
   cat <<EOF
 Installed ${APP} ${version} to ${extracted_path}
+Installed sandbox CLI to ${SANDBOX_TOOLS_DIR}/csgclaw-cli
 
 Next steps:
   ${APP} serve

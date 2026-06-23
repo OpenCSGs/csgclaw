@@ -22,6 +22,7 @@ VERSION_PKG="${VERSION_PKG:-csgclaw/internal/version}"
 BOXLITE_CLI_VERSION="${BOXLITE_CLI_VERSION:-v0.9.0}"
 BOXLITE_CLI_BASE_URL="${BOXLITE_CLI_BASE_URL:-https://github.com/boxlite-ai/boxlite/releases/download}"
 WEB_STATIC_DIST_DIR="${WEB_STATIC_DIST_DIR:-web/static-dist}"
+SANDBOX_CLI_CMD_PATH="${SANDBOX_CLI_CMD_PATH:-./cmd/csgclaw-cli}"
 LDFLAGS="-X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.Commit=${COMMIT} -X ${VERSION_PKG}.BuildTime=${BUILD_TIME}"
 if [ "$APP" = "csgclaw-cli" ]; then
   LDFLAGS="-s -w ${LDFLAGS}"
@@ -151,6 +152,13 @@ if [ -n "$GO_BUILD_TAGS" ]; then
 else
   env GOOS="$GOOS_TARGET" GOARCH="$GOARCH_TARGET" GOCACHE="$GOCACHE" \
     go build -ldflags "${LDFLAGS}" -o "${binary_output}" "${CMD_PATH}"
+fi
+
+if [ "$APP" = "csgclaw" ]; then
+  sandbox_cli_dir="${stage_dir}/csgclaw_dir"
+  mkdir -p "$sandbox_cli_dir"
+  env CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH_TARGET" GOCACHE="$GOCACHE" \
+    go build -ldflags "-s -w ${LDFLAGS}" -o "${sandbox_cli_dir}/csgclaw-cli" "${SANDBOX_CLI_CMD_PATH}"
 fi
 
 if [ "$APP" = "csgclaw" ] && [ "$INCLUDE_BOXLITE" = "1" ]; then

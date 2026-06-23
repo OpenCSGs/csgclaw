@@ -65,7 +65,13 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 func TestGatewayCreateSpecMountsPicoClawRuntimeRoot(t *testing.T) {
 	agentHome := t.TempDir()
 	projectsRoot := t.TempDir()
+	toolsDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(toolsDir, "csgclaw-cli"), []byte("cli"), 0o755); err != nil {
+		t.Fatalf("WriteFile(csgclaw-cli) error = %v", err)
+	}
 	rt := New(Dependencies{
+		SandboxProviderName: func() string { return config.DockerProvider },
+		SandboxToolsDir:     func() (string, error) { return toolsDir, nil },
 		BuildRuntimeEnv: func(_, _, _, _, _, _ string, _ feishu.AgentCredentialProvider) map[string]string {
 			return map[string]string{}
 		},
@@ -92,8 +98,8 @@ func TestGatewayCreateSpecMountsPicoClawRuntimeRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GatewayCreateSpec() error = %v", err)
 	}
-	if len(spec.Mounts) != 2 {
-		t.Fatalf("GatewayCreateSpec() mounts = %+v, want 2 mounts", spec.Mounts)
+	if len(spec.Mounts) != 3 {
+		t.Fatalf("GatewayCreateSpec() mounts = %+v, want 3 mounts", spec.Mounts)
 	}
 	if got, want := spec.Mounts[0].HostPath, Root(agentHome); got != want {
 		t.Fatalf("runtime root mount host = %q, want %q", got, want)
@@ -107,9 +113,21 @@ func TestGatewayCreateSpecMountsPicoClawRuntimeRoot(t *testing.T) {
 	if got, want := spec.Mounts[1].GuestPath, BoxProjectsDir; got != want {
 		t.Fatalf("projects mount guest = %q, want %q", got, want)
 	}
+	if got, want := spec.Mounts[2].HostPath, toolsDir; got != want {
+		t.Fatalf("tools mount host = %q, want %q", got, want)
+	}
+	if got, want := spec.Mounts[2].GuestPath, "/opt/csgclaw/bin"; got != want {
+		t.Fatalf("tools mount guest = %q, want %q", got, want)
+	}
+	if !spec.Mounts[2].ReadOnly {
+		t.Fatal("tools mount is writable, want read-only")
+	}
 	cmd := strings.Join(spec.Cmd, " ")
 	if strings.Contains(cmd, "/csgclaw-projects") || strings.Contains(cmd, "ln -sfn") {
 		t.Fatalf("GatewayCreateSpec() cmd = %q, want direct projects mount without symlink setup", spec.Cmd)
+	}
+	if !strings.Contains(cmd, "PATH=/opt/csgclaw/bin:$PATH") {
+		t.Fatalf("GatewayCreateSpec() cmd = %q, want sandbox tools on PATH", spec.Cmd)
 	}
 	runUser, err := hostuser.RunUser()
 	if err != nil {

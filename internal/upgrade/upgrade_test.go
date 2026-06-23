@@ -644,6 +644,29 @@ func TestClientInstallPreparedReplacesBundleFromSymlinkedExecutable(t *testing.T
 	assertFileContent(t, filepath.Join(installRoot, "bin", "boxlite"), "#!/bin/sh\n# new boxlite\n")
 }
 
+func TestClientInstallPreparedRefreshesSandboxCLI(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	installParent := t.TempDir()
+	installRoot := writeBundleDir(t, installParent, "old")
+	preparedRoot := writeBundleFiles(t, t.TempDir(), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw"):                    "#!/bin/sh\n# new\n",
+		filepath.Join("csgclaw", "bin", "boxlite"):                    "#!/bin/sh\n# new boxlite\n",
+		filepath.Join("csgclaw", "bin", "csgclaw_dir", "csgclaw-cli"): "#!/bin/sh\n# new sandbox cli\n",
+		filepath.Join("csgclaw", "README.md"):                         "new",
+	})
+	client := Client{
+		ExecutablePath: func() (string, error) {
+			return filepath.Join(installRoot, "bin", "csgclaw"), nil
+		},
+	}
+
+	if _, err := client.InstallPrepared(PreparedBundle{BundleDir: preparedRoot}); err != nil {
+		t.Fatalf("InstallPrepared() error = %v", err)
+	}
+	assertFileContent(t, filepath.Join(home, ".csgclaw", "sandbox-tools", "csgclaw-cli"), "#!/bin/sh\n# new sandbox cli\n")
+}
+
 func TestClientInstallPreparedReplacesWindowsBundle(t *testing.T) {
 	installParent := t.TempDir()
 	installRoot := writeBundleFiles(t, installParent, map[string]string{

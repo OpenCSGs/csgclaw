@@ -1,198 +1,80 @@
-# Build Guide
+# Build and release
 
-English | [中文](build.zh.md)
-
-This document describes the repository `Makefile` targets for local development, testing, packaging, and optional docker embed image builds.
-
-Run all commands from the repository root. For a quick summary at any time:
-
-```bash
-make help
-```
-
-## Prerequisites
-
-- Go toolchain (see `go.mod` for the required version)
-- `pnpm` for the Web UI (`scripts/web-pnpm.sh` wraps installation checks)
-- Docker, when building embed template images locally
-- `boxlite` CLI, when running or testing with the BoxLite sandbox provider (see [docs/config.md](config.md))
+This document describes the repository build, test, and release commands.
 
 ## Default build
 
-The default goal is `build`:
-
 ```bash
 make
-# same as:
-make build
+# same as: make build
 ```
 
-This builds:
+The default build:
 
-1. Web UI assets into `web/static-dist/`
-2. Embed template `agent.toml` image refs when missing or out of sync with `version` (see [Embed templates](#embed-templates))
-3. `bin/csgclaw` (server CLI)
-4. `bin/csgclaw-cli` for the current platform
+1. Builds the Web UI into `web/static-dist/`.
+2. Builds `bin/csgclaw` and the host-platform `bin/csgclaw-cli`.
+3. Builds a static Linux `csgclaw-cli` for the current CPU architecture into `~/.csgclaw/sandbox-tools/csgclaw-cli`.
 
-**Docker images are not built.** Use `make build-all` for a full local build including embed template images.
+`make build-all` is retained as an alias of `make build`. CSGClaw no longer builds derived PicoClaw/OpenClaw images locally.
 
-After a successful build:
+Useful targets:
 
-```bash
-./bin/csgclaw serve
-# or
-make run
-```
+| Target | Description |
+|---|---|
+| `make build-server-bin` | Build `bin/csgclaw` and host-platform `bin/csgclaw-cli` |
+| `make install-sandbox-cli` | Build Linux `csgclaw-cli` into `~/.csgclaw/sandbox-tools` |
+| `make run` | Build and run `csgclaw serve` |
+| `make fmt` | Format Go sources |
+| `make test` | Run `go test ./...` |
 
-## Full build
+Override the sandbox CLI destination with `SANDBOX_TOOLS_DIR=/path make install-sandbox-cli`.
 
-`build-all` builds the Web UI, bumps each embed template's `version` and syncs `image.ref`, rebuilds `csgclaw` (so embed matches image tags), then docker-builds all templates with a `Dockerfile` (**no `dist/` output**):
+## Runtime images
 
-```bash
-make build-all
-```
+Manager and worker templates have different embedded workspaces but share one image per runtime:
 
-Use this when you need local PicoClaw or OpenClaw embed images. It can be slow.
+| Runtime | Fixed image |
+|---|---|
+| OpenClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw` |
+| PicoClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.10` |
+
+These refs are stored directly in the builtin `agent.toml` files. They have no template `version` field, no generated tag, and no CSGClaw CI image-build workflow.
 
 ## Web UI
 
 | Target | Description |
-|--------|-------------|
-| `make web-install` | Install Web UI dependencies (`pnpm install --frozen-lockfile`) |
-| `make web-dev` | Run the Vite dev server |
-| `make build-web` | Build the Web UI into `web/static-dist/` |
+|---|---|
+| `make web-install` | Install dependencies with the pinned pnpm toolchain |
+| `make web-dev` | Start the Vite development server |
+| `make build-web` | Build assets into `web/static-dist/` |
 
-`make build-web` auto-runs `web-install` when `node_modules` is missing.
-
-Frontend structure and verification details: [docs/web/development.md](web/development.md).
-
-## Go binaries
-
-| Target | Output | Notes |
-|--------|--------|-------|
-| `make build-server-bin` | `bin/csgclaw`, `bin/csgclaw-cli` | Both binaries for the current platform; CLI uses `CGO_ENABLED=0` |
-| `make stage-docker-embed-cli` | `bin/csgclaw-cli` (linux, host arch) | Linux CLI copied into docker embed images |
-
-`csgclaw-cli` is built with `CGO_ENABLED=0` so it runs inside sandbox images. Release CI uses the same setting (`scripts/release-build-all.sh`).
-
-## Embed templates
-
-Builtin runtime templates live under `internal/templates/embed/<name>/` and are embedded directly via `go:embed` (`agent.toml`, `workspace/`, etc.). Each docker embed template carries a `version` field and matching `image.ref`.
-
-**Local (before PR)**: `make build-all` runs two independent steps:
-
-1. **version/ref (bump)**: increments the last segment and syncs `image.ref` per template only when `cmd/csgclaw-cli/` or that template's `Dockerfile` differs from git `HEAD` and working-tree `version` still matches `HEAD` (at most once vs baseline). `workspace/` changes do not bump. Force: `DOCKER_EMBED_FORCE_BUMP=1`.
-2. **Docker images (build)**: `csgclaw-cli` changed → build all embed images; one `Dockerfile` changed → build that template only; repeatable without changing `version`. Skips when no image inputs changed. Force all: `DOCKER_EMBED_FORCE_BUILD=1`. Explicit targets (e.g. `make build-picoclaw-manager-image`) always build the named image.
-
-Then rebuilds `csgclaw` (`workspace` ships via `go:embed`, not the sandbox image).
-
-**GitLab CI (main)**: reads committed `version` / `image.ref`, builds and pushes images **without** modifying `agent.toml`; runs when embed `agent.toml` changed in the pushed range (`CI_COMMIT_BEFORE_SHA..HEAD`) or `version` differs from the compare base.
-
-| Target | Description |
-|--------|-------------|
-| `make sync-docker-embed-image-refs` | Sync `image.ref` from current `version` (no bump) |
-| `make bump-docker-embed-version` | Bump (or skip per image-input rules) `version` and sync `image.ref` per template (independent of docker build) |
-| `make ensure-docker-embed-manifests` | Run `sync-docker-embed-image-refs` when `image.ref` is missing or out of sync with `version` (used by `make build` / `make test`) |
-
-Templates with a `Dockerfile` are discovered by `scripts/list-docker-embed-templates.sh` (currently `openclaw-manager`, `openclaw-worker`, `picoclaw-manager`, and `picoclaw-worker`).
-
-If `image.ref` is empty or out of sync with `version`, run:
-
-```bash
-make sync-docker-embed-image-refs
-```
-
-## Docker embed images (optional)
-
-Local Docker image builds are **optional** and can be slow. The usual entry point is `make build-all`. Use individual targets when you only need one image.
-
-### When images are built
-
-| Command | Builds Docker images? |
-|---------|------------------------|
-| `make` / `make build` | No |
-| `make build-all` | Yes |
-| `make build-docker-embed-runtime-embed` | Yes (bump versions + images, without rebuilding binaries) |
-
-### Image build targets
-
-| Target | Description |
-|--------|-------------|
-| `make build-docker-embed-images` | Bump versions and build all embed templates that have a `Dockerfile` |
-| `make build-picoclaw-manager-image` | Bump manager version and build manager image only |
-| `make build-picoclaw-worker-image` | Bump worker version and build worker image only |
-| `make build-openclaw-manager-image` | Bump manager version and build manager image only |
-| `make build-openclaw-worker-image` | Bump worker version and build worker image only |
-| `make build-docker-embed-runtime-embed` | Alias for `build-docker-embed-images` |
-
-Alias targets `build-picoclaw-runtime-embed`, `build-openclaw-runtime-embed`, `sync-picoclaw-embed-image-refs`, `sync-openclaw-embed-image-refs`, and similar names remain for compatibility.
-
-### Useful variables
-
-```bash
-# Registry (default shown)
-ACR_REGISTRY=opencsg-registry.cn-beijing.cr.aliyuncs.com
-
-# Upstream base images default to embed Dockerfile ARG values.
-# Optional override: PICOCLAW_BASE_IMAGE=registry.example/opencsghq/picoclaw:tag make build-all
-# Optional override: OPENCLAW_BASE_IMAGE=registry.example/opencsghq/openclaw:tag make build-all
-
-# Default OpenClaw base image:
-# opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw
-
-# Example: local pre-PR image test (bumps version and updates image.ref, e.g. 0.1.0 -> 0.1.1)
-make build-all
-```
-
-Resulting images follow:
-
-```text
-${ACR_REGISTRY}/opencsghq/picoclaw-manager:<agent.toml version>
-${ACR_REGISTRY}/opencsghq/picoclaw-worker:<agent.toml version>
-${ACR_REGISTRY}/opencsghq/openclaw-manager:<agent.toml version>
-${ACR_REGISTRY}/opencsghq/openclaw-worker:<agent.toml version>
-```
-
-OpenClaw embed images use `OPENCLAW_IMAGE` from the OpenClaw embed Dockerfiles. Make sure `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw` exists locally or in the registry before running `make build-all`, or override it with `OPENCLAW_BASE_IMAGE=...`.
-
-After a successful image build, the matching `agent.toml` files are updated in place (`version` and `image.ref`).
-
-Build context is the repository root; Dockerfiles expect `bin/csgclaw-cli` (linux) to be present—`stage-docker-embed-cli` creates it.
-
-### BoxLite vs local Docker images
-
-Images built with `make build-docker-embed-images` are stored in the **Docker** image store. **BoxLite does not use Docker images directly**; pull images into BoxLite with `boxlite pull …` or use a registry BoxLite can reach. See [docs/config.md](config.md) for sandbox provider settings.
-
-## Test, format, and clean
-
-| Target | Description |
-|--------|-------------|
-| `make test` | `ensure-docker-embed-manifests`, then `go test ./...` (does not overwrite committed version/ref) |
-| `make fmt` | Format Go sources under `cli/`, `cmd/`, `internal/`, `web/` |
-| `make clean` | Remove `bin/`, `dist/`, and `.gocache/` |
-
-For targeted Go tests:
-
-```bash
-go test ./internal/agent/ -run TestName
-go test ./...
-```
+See [web development](web/development.md) before changing the Vite application.
 
 ## Packaging and release
 
-Maintainer targets:
+Every official `csgclaw` bundle contains:
+
+```text
+csgclaw/
+  bin/
+    csgclaw[.exe]
+    boxlite[.exe]                 # supported platforms only
+    csgclaw_dir/
+      csgclaw-cli                # Linux, same CPU architecture as the release
+```
+
+The installer copies the sandbox CLI to `~/.csgclaw/sandbox-tools/csgclaw-cli`. Runtime startup also synchronizes it from the installed bundle for upgrade compatibility.
 
 | Target | Description |
-|--------|-------------|
-| `make package` | Build Web UI and package current platform binary |
-| `make package-all` | Full build plus `csgclaw` and `csgclaw-cli` packages |
-| `make release` | Cross-platform release bundles (darwin/linux, arm64/amd64) |
+|---|---|
+| `make package` | Package the current platform |
+| `make package-all` | Build and package the current platform artifacts |
+| `make release` | Build the configured cross-platform release bundles |
 
-CI release flows use `.github/workflows/release.yml` (tag) and GitLab CI (tag for release archives; **main branch** builds and pushes docker embed images from committed `version`, without editing `agent.toml`). Tag releases embed `agent.toml` from the tag commit as-is.
+Release CI uses `.github/workflows/release.yml` and `.gitlab/ci.yml`. GitLab CI publishes CSGClaw release artifacts and the CSGClaw product image; it does not build PicoClaw/OpenClaw runtime images.
 
 ## Related docs
 
-- [docs/config.md](config.md) — sandbox providers (BoxLite, Docker, CSGHub)
-- [docs/web/development.md](web/development.md) — Web UI development
-- [docs/architecture.md](architecture.md) — system layout
-- `Makefile` — source of truth for targets and defaults
+- [Configuration](config.md)
+- [Architecture](architecture.md)
+- [Web development](web/development.md)

@@ -1,8 +1,6 @@
 # Release on tag v* / workflow_dispatch.
 #
-# Container images for embed templates are built on GitLab CI (main branch, ACR).
-# This workflow:
-#   1. Builds csgclaw / csgclaw-cli release archives with embed agent.toml from the tag commit
+# Builds release archives; csgclaw bundles include the Linux sandbox CLI.
 #
 # <version> is the git tag (v*) or workflow_dispatch input.
 
@@ -23,7 +21,6 @@ permissions:
 
 env:
   BOXLITE_CLI_VERSION: v0.9.0
-  ACR_REGISTRY: opencsg-registry.cn-beijing.cr.aliyuncs.com
 
 jobs:
   prepare:
@@ -125,18 +122,16 @@ jobs:
           name: web-static-dist
           path: web/static-dist
 
-      - name: Verify embed agent manifests are present
+      - name: Verify builtin agent image refs
         shell: bash
         run: |
-          chmod +x scripts/list-docker-embed-templates.sh
-          while IFS= read -r name; do
-            test -f "internal/templates/embed/${name}/agent.toml"
-            grep '^ref = ' "internal/templates/embed/${name}/agent.toml"
-            if grep -q '^ref = ""' "internal/templates/embed/${name}/agent.toml"; then
-              echo "missing image ref in internal/templates/embed/${name}/agent.toml" >&2
+          for manifest in internal/templates/embed/*/agent.toml; do
+            grep '^ref = ' "${manifest}"
+            if grep -q '^ref = ""' "${manifest}"; then
+              echo "missing image ref in ${manifest}" >&2
               exit 1
             fi
-          done < <(./scripts/list-docker-embed-templates.sh)
+          done
 
       - name: Set up Go
         uses: actions/setup-go@v5

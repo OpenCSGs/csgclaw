@@ -1,198 +1,80 @@
-# 构建指南
+# 构建与发布
 
-[English](build.md) | 中文
-
-本文说明仓库 `Makefile` 中的本地开发、测试、打包，以及可选的 docker embed 镜像构建命令。
-
-请在仓库根目录执行以下命令。随时可运行：
-
-```bash
-make help
-```
-
-## 前置条件
-
-- Go 工具链（版本见 `go.mod`）
-- Web UI 需要 `pnpm`（`scripts/web-pnpm.sh` 会检查安装）
-- 本地构建 embed 模板镜像时需要 Docker
-- 使用 BoxLite sandbox 运行或测试时需要 `boxlite` CLI（见 [docs/config.zh.md](config.zh.md)）
+本文说明仓库中的构建、测试与发布命令。
 
 ## 默认构建
 
-默认目标是 `build`：
-
 ```bash
 make
-# 等价于：
-make build
+# 等价于：make build
 ```
 
-会依次构建：
+默认构建会：
 
-1. Web UI 产物到 `web/static-dist/`
-2. 缺失或与 `version` 不一致时同步 embed 模板 `agent.toml` 的 `image.ref`（见 [Embed 模板](#embed-模板)）
-3. `bin/csgclaw`（服务端 CLI）
-4. 当前平台的 `bin/csgclaw-cli`
+1. 将 Web UI 构建到 `web/static-dist/`。
+2. 构建 `bin/csgclaw` 和宿主平台的 `bin/csgclaw-cli`。
+3. 按当前 CPU 架构构建静态 Linux `csgclaw-cli`，安装到 `~/.csgclaw/sandbox-tools/csgclaw-cli`。
 
-**不会构建 Docker 镜像。** 需要完整本地环境（含 embed 镜像）时使用 `make build-all`。
+`make build-all` 保留为 `make build` 的别名。CSGClaw 不再在本地构建派生的 PicoClaw/OpenClaw 镜像。
 
-构建完成后可运行：
+常用 target：
 
-```bash
-./bin/csgclaw serve
-# 或
-make run
-```
+| Target | 说明 |
+|---|---|
+| `make build-server-bin` | 构建 `bin/csgclaw` 和宿主平台的 `bin/csgclaw-cli` |
+| `make install-sandbox-cli` | 将 Linux `csgclaw-cli` 构建到 `~/.csgclaw/sandbox-tools` |
+| `make run` | 构建并运行 `csgclaw serve` |
+| `make fmt` | 格式化 Go 源码 |
+| `make test` | 运行 `go test ./...` |
 
-## 完整构建
+可以通过 `SANDBOX_TOOLS_DIR=/path make install-sandbox-cli` 覆盖沙盒 CLI 的安装目录。
 
-`build-all` 会构建 Web UI、递增各 embed 模板的 `version` 并同步 `image.ref`、编译 `csgclaw`（使 embed 与镜像 tag 一致），再 docker build 所有带 `Dockerfile` 的模板（**不产生 `dist/`**）：
+## 运行时镜像
 
-```bash
-make build-all
-```
+Manager 与 Worker 模板保留不同的内置 workspace，但同一种 runtime 共用一个镜像：
 
-需要本地 PicoClaw 或 OpenClaw embed 镜像时使用，可能较慢。
+| Runtime | 固定镜像 |
+|---|---|
+| OpenClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw` |
+| PicoClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.10` |
+
+固定引用直接写在内置 `agent.toml` 中，不再包含模板 `version` 字段，不再生成镜像 tag，也不再由 CSGClaw CI 构建这些运行时镜像。
 
 ## Web UI
 
-| 目标 | 说明 |
-|------|------|
-| `make web-install` | 安装 Web UI 依赖（`pnpm install --frozen-lockfile`） |
+| Target | 说明 |
+|---|---|
+| `make web-install` | 使用固定 pnpm 工具链安装依赖 |
 | `make web-dev` | 启动 Vite 开发服务器 |
-| `make build-web` | 构建 Web UI 到 `web/static-dist/` |
+| `make build-web` | 构建到 `web/static-dist/` |
 
-缺少 `node_modules` 时，`make build-web` 会自动执行 `web-install`。
-
-前端结构与验证说明见 [docs/web/development.zh.md](web/development.zh.md)。
-
-## Go 二进制
-
-| 目标 | 输出 | 说明 |
-|------|------|------|
-| `make build-server-bin` | `bin/csgclaw`、`bin/csgclaw-cli` | 当前平台两个二进制；CLI 使用 `CGO_ENABLED=0` |
-| `make stage-docker-embed-cli` | `bin/csgclaw-cli`（linux，宿主机架构） | 打入 docker embed 镜像的 Linux CLI |
-
-`csgclaw-cli` 使用 `CGO_ENABLED=0` 构建，以便在沙箱镜像中运行。Release CI 同样使用该设置（`scripts/release-build-all.sh`）。
-
-## Embed 模板
-
-内置运行时模板位于 `internal/templates/embed/<name>/`，通过 `go:embed` 直接嵌入（`agent.toml`、`workspace/` 等）。每个 docker embed 模板在 `agent.toml` 中有 `version` 字段与对应的 `image.ref`。
-
-**本地（PR 前）**：`make build-all` 分两步，互不影响：
-
-1. **version/ref（bump）**：仅当 `cmd/csgclaw-cli/` 或某模板 `Dockerfile` 相对 git `HEAD` 有改动，且工作区 `version` 仍等于 `HEAD` 时，对该模板 `version` 末段 +1 并同步 `image.ref`；相对基线最多自增一次。`workspace/` 改动不 bump。强制递增：`DOCKER_EMBED_FORCE_BUMP=1`。
-2. **Docker 镜像（build）**：`csgclaw-cli` 改动 → 构建全部 embed 镜像；某模板 `Dockerfile` 改动 → 仅构建该模板；可多次构建，不改变 `version`。无改动时跳过 docker build。强制全建：`DOCKER_EMBED_FORCE_BUILD=1`。单独 target（如 `make build-picoclaw-manager-image`）始终构建指定镜像。
-
-随后编译 `csgclaw`（`workspace` 改动通过 `go:embed` 进入二进制，无需 bump 镜像版本）。
-
-**GitLab CI（main）**：仅读取已提交的 `version` / `image.ref` 构建并 push 镜像，**不会**修改 `agent.toml`；当本次 push 范围内（`CI_COMMIT_BEFORE_SHA..HEAD`）embed `agent.toml` 发生变化或 `version` 相对 compare base 改变时触发构建。
-
-| 目标 | 说明 |
-|------|------|
-| `make sync-docker-embed-image-refs` | 按当前 `version` 同步 `image.ref`（不递增） |
-| `make bump-docker-embed-version` | 按镜像输入规则递增（或跳过）各模板 `version` 并同步 `image.ref`（与 docker build 独立） |
-| `make ensure-docker-embed-manifests` | `image.ref` 缺失或与 `version` 不一致时调用 `sync-docker-embed-image-refs`（`make build` / `make test` 使用） |
-
-带 `Dockerfile` 的模板由 `scripts/list-docker-embed-templates.sh` 发现（当前为 `openclaw-manager`、`openclaw-worker`、`picoclaw-manager` 和 `picoclaw-worker`）。
-
-若 `image.ref` 为空或与 `version` 不一致，请执行：
-
-```bash
-make sync-docker-embed-image-refs
-```
-
-## Docker embed 镜像（可选）
-
-本地 Docker 镜像构建为**可选项**，可能较慢。常用入口是 `make build-all`；只需单个镜像时使用下方独立 target。
-
-### 何时会构建镜像
-
-| 命令 | 是否构建 Docker 镜像 |
-|------|----------------------|
-| `make` / `make build` | 否 |
-| `make build-all` | 是 |
-| `make build-docker-embed-runtime-embed` | 是（递增 version + 构建镜像，不重建二进制） |
-
-### 镜像构建目标
-
-| 目标 | 说明 |
-|------|------|
-| `make build-docker-embed-images` | 递增 version 并构建所有带 `Dockerfile` 的 embed 模板 |
-| `make build-picoclaw-manager-image` | 递增 manager version 并仅构建 manager 镜像 |
-| `make build-picoclaw-worker-image` | 递增 worker version 并仅构建 worker 镜像 |
-| `make build-openclaw-manager-image` | 递增 manager version 并仅构建 manager 镜像 |
-| `make build-openclaw-worker-image` | 递增 worker version 并仅构建 worker 镜像 |
-| `make build-docker-embed-runtime-embed` | `build-docker-embed-images` 的别名 |
-
-兼容别名包括 `build-picoclaw-runtime-embed`、`build-openclaw-runtime-embed`、`sync-picoclaw-embed-image-refs`、`sync-openclaw-embed-image-refs` 等。
-
-### 常用变量
-
-```bash
-# registry（默认值）
-ACR_REGISTRY=opencsg-registry.cn-beijing.cr.aliyuncs.com
-
-# 上游基础镜像默认见各 embed Dockerfile 的 ARG。
-# 可选覆盖：PICOCLAW_BASE_IMAGE=registry.example/opencsghq/picoclaw:tag make build-all
-# 可选覆盖：OPENCLAW_BASE_IMAGE=registry.example/opencsghq/openclaw:tag make build-all
-
-# 默认 OpenClaw 基础镜像：
-# opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw
-
-# 示例：PR 前本地镜像测试（会递增 version 并更新 image.ref，如 0.1.0 -> 0.1.1）
-make build-all
-```
-
-产物镜像命名：
-
-```text
-${ACR_REGISTRY}/opencsghq/picoclaw-manager:<agent.toml version>
-${ACR_REGISTRY}/opencsghq/picoclaw-worker:<agent.toml version>
-${ACR_REGISTRY}/opencsghq/openclaw-manager:<agent.toml version>
-${ACR_REGISTRY}/opencsghq/openclaw-worker:<agent.toml version>
-```
-
-OpenClaw embed 镜像使用 OpenClaw embed Dockerfile 中的 `OPENCLAW_IMAGE`。运行 `make build-all` 前需要确保 `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw` 已存在于本地或 registry；也可以用 `OPENCLAW_BASE_IMAGE=...` 覆盖。
-
-镜像构建成功后，对应的 `agent.toml` 会原地更新（`version` 与 `image.ref`）。
-
-构建上下文为仓库根目录；Dockerfile 需要 `bin/csgclaw-cli`（linux），由 `stage-docker-embed-cli` 生成。
-
-### BoxLite 与本地 Docker 镜像
-
-`make build-docker-embed-images` 构建的镜像保存在 **Docker** 镜像存储中。**BoxLite 不会直接使用 Docker 镜像**；需通过 `boxlite pull …` 拉取，或使用 BoxLite 可访问的 registry。Sandbox 配置见 [docs/config.zh.md](config.zh.md)。
-
-## 测试、格式化与清理
-
-| 目标 | 说明 |
-|------|------|
-| `make test` | 先 `ensure-docker-embed-manifests`，再 `go test ./...`（不修改已提交的 version/ref） |
-| `make fmt` | 格式化 `cli/`、`cmd/`、`internal/`、`web/` 下的 Go 源码 |
-| `make clean` | 删除 `bin/`、`dist/`、`.gocache/` |
-
-针对性测试：
-
-```bash
-go test ./internal/agent/ -run TestName
-go test ./...
-```
+修改 Vite 应用前请阅读 [Web 开发文档](web/development.zh.md)。
 
 ## 打包与发布
 
-维护者常用目标：
+每个正式 `csgclaw` bundle 包含：
 
-| 目标 | 说明 |
-|------|------|
-| `make package` | 构建 Web UI 并打包当前平台二进制 |
-| `make package-all` | 完整构建并打包 `csgclaw` 与 `csgclaw-cli` |
-| `make release` | 跨平台 release bundle（darwin/linux，arm64/amd64） |
+```text
+csgclaw/
+  bin/
+    csgclaw[.exe]
+    boxlite[.exe]                 # 仅支持的平台
+    csgclaw_dir/
+      csgclaw-cli                # Linux，CPU 架构与 release 一致
+```
 
-CI 发布流程见 `.github/workflows/release.yml`（tag）与 GitLab CI（tag 打 release 包；**main 分支**按已提交的 `version` 构建并 push docker embed 镜像，不修改 `agent.toml`）。Tag release 直接使用 tag commit 中已提交的 `agent.toml`。
+安装脚本会把沙盒 CLI 复制到 `~/.csgclaw/sandbox-tools/csgclaw-cli`。为兼容自动升级，运行时启动时也会从已安装 bundle 同步该文件。
+
+| Target | 说明 |
+|---|---|
+| `make package` | 打包当前平台 |
+| `make package-all` | 构建并打包当前平台产物 |
+| `make release` | 构建配置的跨平台 release bundle |
+
+发布 CI 使用 `.github/workflows/release.yml` 和 `.gitlab/ci.yml`。GitLab CI 发布 CSGClaw release 产物和 CSGClaw 产品镜像，不再构建 PicoClaw/OpenClaw 运行时镜像。
 
 ## 相关文档
 
-- [docs/config.zh.md](config.zh.md) — sandbox 提供者（BoxLite、Docker、CSGHub）
-- [docs/web/development.zh.md](web/development.zh.md) — Web UI 开发
-- [docs/architecture.md](architecture.md) — 系统结构
-- `Makefile` — target 与默认值的权威来源
+- [配置](config.zh.md)
+- [架构](architecture.md)
+- [Web 开发](web/development.zh.md)
