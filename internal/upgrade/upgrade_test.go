@@ -672,6 +672,105 @@ func TestClientInstallPreparedReplacesWindowsBundle(t *testing.T) {
 	assertFileContent(t, filepath.Join(installRoot, "bin", "csgclaw.exe"), "@echo off\r\nREM new\r\n")
 }
 
+func TestClientInstallPreparedUsesOriginalExecutableEnv(t *testing.T) {
+	installParent := t.TempDir()
+	installRoot := writeBundleFiles(t, installParent, map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw.exe"): "@echo off\r\nREM old\r\n",
+		filepath.Join("csgclaw", "README.md"):          "old",
+	})
+	preparedRoot := writeBundleFiles(t, t.TempDir(), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw.exe"): "@echo off\r\nREM new\r\n",
+		filepath.Join("csgclaw", "README.md"):          "new",
+	})
+
+	t.Setenv(originalExecutableEnvVar, filepath.Join(installRoot, "bin", "csgclaw.exe"))
+
+	installed, err := Client{}.InstallPrepared(PreparedBundle{BundleDir: preparedRoot})
+	if err != nil {
+		t.Fatalf("InstallPrepared() error = %v", err)
+	}
+	if got, want := installed.InstallRoot, installRoot; got != want {
+		t.Fatalf("InstallRoot = %q, want %q", got, want)
+	}
+	assertFileContent(t, filepath.Join(installRoot, "README.md"), "new")
+}
+
+func TestClientInstallPreparedResolvesWindowsLauncherLayout(t *testing.T) {
+	appHome := filepath.Join(t.TempDir(), "csgclaw")
+	installRoot := writeBundleFilesWithoutMarker(t, filepath.Join(appHome, "lib", "csgclaw", "v0.3.10"), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw.exe"): "@echo off\r\nREM old\r\n",
+		filepath.Join("csgclaw", "README.md"):          "old",
+	})
+	launcherDir := filepath.Join(appHome, "bin")
+	if err := os.MkdirAll(launcherDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", launcherDir, err)
+	}
+	launcherPath := filepath.Join(launcherDir, "csgclaw.exe")
+	if err := os.WriteFile(launcherPath, []byte("launcher"), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", launcherPath, err)
+	}
+	if err := os.WriteFile(bundleMarkerPath(appHome), []byte(`{"app":"csgclaw","layout":"official-bundle"}`), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", bundleMarkerPath(appHome), err)
+	}
+	preparedRoot := writeBundleFiles(t, t.TempDir(), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw.exe"): "@echo off\r\nREM new\r\n",
+		filepath.Join("csgclaw", "README.md"):          "new",
+	})
+
+	client := Client{
+		ExecutablePath: func() (string, error) {
+			return launcherPath, nil
+		},
+	}
+
+	installed, err := client.InstallPrepared(PreparedBundle{BundleDir: preparedRoot})
+	if err != nil {
+		t.Fatalf("InstallPrepared() error = %v", err)
+	}
+	if got, want := installed.InstallRoot, installRoot; got != want {
+		t.Fatalf("InstallRoot = %q, want %q", got, want)
+	}
+	assertFileContent(t, filepath.Join(installRoot, "README.md"), "new")
+}
+
+func TestClientInstallPreparedDoesNotReplaceLauncherRootWhenInnerBundleMissing(t *testing.T) {
+	appHome := filepath.Join(t.TempDir(), "csgclaw")
+	launcherDir := filepath.Join(appHome, "bin")
+	libDir := filepath.Join(appHome, "lib", "csgclaw")
+	if err := os.MkdirAll(launcherDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", launcherDir, err)
+	}
+	if err := os.MkdirAll(libDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", libDir, err)
+	}
+	launcherPath := filepath.Join(launcherDir, "csgclaw.exe")
+	if err := os.WriteFile(launcherPath, []byte("launcher"), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", launcherPath, err)
+	}
+	if err := os.WriteFile(bundleMarkerPath(appHome), []byte(`{"app":"csgclaw","layout":"official-bundle"}`), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", bundleMarkerPath(appHome), err)
+	}
+	keepPath := filepath.Join(appHome, "keep-me")
+	if err := os.WriteFile(keepPath, []byte("user file"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", keepPath, err)
+	}
+
+	client := Client{
+		ExecutablePath: func() (string, error) {
+			return launcherPath, nil
+		},
+	}
+
+	_, err := client.InstallPrepared(PreparedBundle{BundleDir: writeBundleFiles(t, t.TempDir(), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw.exe"): "@echo off\r\nREM new\r\n",
+		filepath.Join("csgclaw", "README.md"):          "new",
+	})})
+	if err == nil || !strings.Contains(err.Error(), "not installed from an official csgclaw bundle") {
+		t.Fatalf("InstallPrepared() error = %v, want non-bundle install error", err)
+	}
+	assertFileContent(t, keepPath, "user file")
+}
+
 func TestClientInstallPreparedRollsBackOnRenameFailure(t *testing.T) {
 	installParent := t.TempDir()
 	installRoot := writeBundleDir(t, installParent, "old")

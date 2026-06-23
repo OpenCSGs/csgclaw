@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -20,6 +21,8 @@ var (
 	openFile     = os.OpenFile
 	nowUTC       = func() time.Time { return time.Now().UTC() }
 )
+
+const originalExecutableEnvVar = "CSGCLAW_ORIGINAL_EXECUTABLE"
 
 var ErrNotOfficialBundle = errors.New("current executable is not installed from an official csgclaw bundle")
 
@@ -62,6 +65,12 @@ func (c Client) officialInstallRoot() (string, error) {
 		if !ok {
 			continue
 		}
+		if launcherRoot, ok := installedBundleRootFromLauncher(root); ok {
+			return launcherRoot, nil
+		}
+		if isLauncherInstallRoot(root) {
+			continue
+		}
 		if err := validateBundleDir(root); err == nil {
 			return root, nil
 		}
@@ -75,6 +84,9 @@ func (c Client) officialInstallRoot() (string, error) {
 func (c Client) resolvedExecutablePath() (string, error) {
 	if c.ExecutablePath != nil {
 		return c.ExecutablePath()
+	}
+	if exe := strings.TrimSpace(os.Getenv(originalExecutableEnvVar)); exe != "" {
+		return exe, nil
 	}
 	return os.Executable()
 }
@@ -143,6 +155,55 @@ func isOfficialInstallerManagedPath(root string) bool {
 		return false
 	}
 	return filepath.Base(versionDir) != "." && filepath.Base(versionDir) != string(filepath.Separator)
+}
+
+func installedBundleRootFromLauncher(root string) (string, bool) {
+	root = filepath.Clean(strings.TrimSpace(root))
+	if !isLauncherInstallRoot(root) {
+		return "", false
+	}
+
+	libDir := filepath.Join(root, "lib", "csgclaw")
+	entries, err := readDir(libDir)
+	if err != nil {
+		return "", false
+	}
+
+	type bundleCandidate struct {
+		version string
+		root    string
+	}
+
+	var candidates []bundleCandidate
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		bundleRoot := filepath.Join(libDir, entry.Name(), "csgclaw")
+		if err := validateBundleDir(bundleRoot); err != nil && !isLegacyOfficialInstallRoot(bundleRoot) {
+			continue
+		}
+		candidates = append(candidates, bundleCandidate{
+			version: entry.Name(),
+			root:    bundleRoot,
+		})
+	}
+	if len(candidates) == 0 {
+		return "", false
+	}
+	slices.SortFunc(candidates, func(a, b bundleCandidate) int {
+		return compareSemver(b.version, a.version)
+	})
+	return candidates[0].root, true
+}
+
+func isLauncherInstallRoot(root string) bool {
+	root = filepath.Clean(strings.TrimSpace(root))
+	if root == "" || filepath.Base(root) != "csgclaw" {
+		return false
+	}
+	info, err := os.Lstat(filepath.Join(root, "lib", "csgclaw"))
+	return err == nil && info.IsDir()
 }
 
 func hasSourceCheckoutMarker(root string) bool {

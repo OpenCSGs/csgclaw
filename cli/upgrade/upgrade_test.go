@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"io"
 	"net/http"
@@ -85,6 +86,84 @@ func TestRunNoRestartInstallsBundle(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want substring %q", stdout.String(), want)
 		}
+	}
+	assertFileContent(t, filepath.Join(installRoot, "README.md"), "new")
+}
+
+func TestRunWindowsNoRestartDoesNotStopDaemon(t *testing.T) {
+	originalVersion := appversion.Version
+	appversion.Version = "v0.2.5"
+	t.Cleanup(func() { appversion.Version = originalVersion })
+
+	originalGOOS := currentGOOS
+	originalStop := stopDaemonFromExecutable
+	originalStart := startDaemonFromExecutable
+	currentGOOS = "windows"
+	stopDaemonFromExecutable = func(context.Context) (internalupgrade.RestartResult, error) {
+		t.Fatal("stopDaemonFromExecutable should not be called with --no-restart")
+		return internalupgrade.RestartResult{}, nil
+	}
+	startDaemonFromExecutable = func(context.Context, internalupgrade.RestartOptions) error {
+		t.Fatal("startDaemonFromExecutable should not be called with --no-restart")
+		return nil
+	}
+	t.Cleanup(func() {
+		currentGOOS = originalGOOS
+		stopDaemonFromExecutable = originalStop
+		startDaemonFromExecutable = originalStart
+	})
+
+	installRoot := writeInstalledBundle(t, t.TempDir(), "old")
+	archive := releaseTarball(t, map[string]string{
+		"csgclaw/bin/csgclaw": "#!/bin/sh\n# new\n",
+		"csgclaw/bin/boxlite": "#!/bin/sh\n# new boxlite\n",
+		"csgclaw/README.md":   "new",
+	})
+	sum := sha256.Sum256(archive)
+
+	originalClientFactory := newUpgradeClient
+	newUpgradeClient = func(run *command.Context) internalupgrade.Client {
+		return internalupgrade.Client{
+			HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				switch req.URL.String() {
+				case "https://example.test/releases/latest":
+					return jsonResponse(http.StatusOK, `{
+						"name":"v0.2.7",
+						"assets":[{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","browser_download_url":"https://downloads.example.test/csgclaw.tar.gz","size":`+strconv.Itoa(len(archive))+`,"sha256":"`+hex.EncodeToString(sum[:])+`"}]
+					}`), nil
+				case "https://downloads.example.test/csgclaw.tar.gz":
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Status:     http.StatusText(http.StatusOK),
+						Header:     make(http.Header),
+						Body:       io.NopCloser(bytes.NewReader(archive)),
+					}, nil
+				default:
+					t.Fatalf("unexpected URL %q", req.URL.String())
+					return nil, nil
+				}
+			}),
+			LatestURL: "https://example.test/releases/latest",
+			GOOS:      "darwin",
+			GOARCH:    "arm64",
+			ExecutablePath: func() (string, error) {
+				return filepath.Join(installRoot, "bin", "csgclaw"), nil
+			},
+		}
+	}
+	t.Cleanup(func() { newUpgradeClient = originalClientFactory })
+
+	var stdout bytes.Buffer
+	err := NewCmd().Run(context.Background(), &command.Context{
+		Program: "csgclaw",
+		Stdout:  &stdout,
+		Stderr:  &bytes.Buffer{},
+	}, []string{"--no-restart"}, command.GlobalOptions{Output: "table"})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Restart skipped") {
+		t.Fatalf("stdout = %q, want restart skipped", stdout.String())
 	}
 	assertFileContent(t, filepath.Join(installRoot, "README.md"), "new")
 }
@@ -169,6 +248,95 @@ func TestRunRestartsRunningDaemonAfterInstall(t *testing.T) {
 	}
 	if got := string(logData); got != "stop\nserve --daemon\n" {
 		t.Fatalf("restart log = %q, want stop then serve", got)
+	}
+}
+
+func TestRunWindowsRestartsStoppedDaemonWhenInstallFails(t *testing.T) {
+	originalVersion := appversion.Version
+	appversion.Version = "v0.2.5"
+	t.Cleanup(func() { appversion.Version = originalVersion })
+
+	originalGOOS := currentGOOS
+	originalStop := stopDaemonFromExecutable
+	originalStart := startDaemonFromExecutable
+	originalInstall := installPrepared
+	currentGOOS = "windows"
+	stopCalls := 0
+	startCalls := 0
+	stopDaemonFromExecutable = func(context.Context) (internalupgrade.RestartResult, error) {
+		stopCalls++
+		return internalupgrade.RestartResult{DaemonWasRunning: true}, nil
+	}
+	startDaemonFromExecutable = func(_ context.Context, opts internalupgrade.RestartOptions) error {
+		startCalls++
+		if opts.ConfigPath != "/tmp/csgclaw-test-config.toml" {
+			t.Fatalf("ConfigPath = %q, want test config path", opts.ConfigPath)
+		}
+		return nil
+	}
+	installPrepared = func(internalupgrade.Client, internalupgrade.PreparedBundle) (internalupgrade.InstalledBundle, error) {
+		return internalupgrade.InstalledBundle{}, errors.New("install exploded")
+	}
+	t.Cleanup(func() {
+		currentGOOS = originalGOOS
+		stopDaemonFromExecutable = originalStop
+		startDaemonFromExecutable = originalStart
+		installPrepared = originalInstall
+	})
+
+	installRoot := writeInstalledBundle(t, t.TempDir(), "old")
+	archive := releaseTarball(t, map[string]string{
+		"csgclaw/bin/csgclaw": "#!/bin/sh\n# new\n",
+		"csgclaw/bin/boxlite": "#!/bin/sh\n# new boxlite\n",
+		"csgclaw/README.md":   "new",
+	})
+	sum := sha256.Sum256(archive)
+
+	originalClientFactory := newUpgradeClient
+	newUpgradeClient = func(run *command.Context) internalupgrade.Client {
+		return internalupgrade.Client{
+			HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				switch req.URL.String() {
+				case "https://example.test/releases/latest":
+					return jsonResponse(http.StatusOK, `{
+						"name":"v0.2.7",
+						"assets":[{"name":"csgclaw_v0.2.7_darwin_arm64.tar.gz","browser_download_url":"https://downloads.example.test/csgclaw.tar.gz","size":`+strconv.Itoa(len(archive))+`,"sha256":"`+hex.EncodeToString(sum[:])+`"}]
+					}`), nil
+				case "https://downloads.example.test/csgclaw.tar.gz":
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Status:     http.StatusText(http.StatusOK),
+						Header:     make(http.Header),
+						Body:       io.NopCloser(bytes.NewReader(archive)),
+					}, nil
+				default:
+					t.Fatalf("unexpected URL %q", req.URL.String())
+					return nil, nil
+				}
+			}),
+			LatestURL: "https://example.test/releases/latest",
+			GOOS:      "darwin",
+			GOARCH:    "arm64",
+			ExecutablePath: func() (string, error) {
+				return filepath.Join(installRoot, "bin", "csgclaw"), nil
+			},
+		}
+	}
+	t.Cleanup(func() { newUpgradeClient = originalClientFactory })
+
+	err := NewCmd().Run(context.Background(), &command.Context{
+		Program: "csgclaw",
+		Stdout:  &bytes.Buffer{},
+		Stderr:  &bytes.Buffer{},
+	}, nil, command.GlobalOptions{Output: "table", Config: "/tmp/csgclaw-test-config.toml"})
+	if err == nil || !strings.Contains(err.Error(), "install exploded") {
+		t.Fatalf("Run() error = %v, want install failure", err)
+	}
+	if stopCalls != 1 {
+		t.Fatalf("stop calls = %d, want 1", stopCalls)
+	}
+	if startCalls != 1 {
+		t.Fatalf("start calls = %d, want 1", startCalls)
 	}
 }
 
