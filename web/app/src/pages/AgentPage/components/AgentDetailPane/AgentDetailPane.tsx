@@ -11,7 +11,7 @@ import {
   Trash2,
   Unlink2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
 import { errorMessage } from "@/api/client";
 import { PROVIDERS, REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
@@ -67,6 +67,7 @@ import {
 type VoidOrPromise = void | Promise<void>;
 type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
 type AgentNoticeTone = "info" | "warning" | "success";
+type AgentProfileSectionID = "channels" | "runtime" | "model" | "instructions" | "skills" | "advanced";
 
 type FeishuPendingRegistrationView = {
   connect_url?: string;
@@ -180,11 +181,20 @@ export function AgentDetailPane({
   onDeleteSkill,
 }: AgentDetailPaneProps) {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [activeProfileSection, setActiveProfileSection] = useState<AgentProfileSectionID>("channels");
   const [addSkillsDialogOpen, setAddSkillsDialogOpen] = useState(false);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
   const [skillPendingDelete, setSkillPendingDelete] = useState<SlashSkillOption | null>(null);
+  const [profileTabScrollPadding, setProfileTabScrollPadding] = useState(0);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const profileScrollRegionRef = useRef<HTMLDivElement | null>(null);
+  const channelsSectionRef = useRef<HTMLElement | null>(null);
+  const runtimeSectionRef = useRef<HTMLElement | null>(null);
+  const modelSectionRef = useRef<HTMLElement | null>(null);
+  const instructionsSectionRef = useRef<HTMLElement | null>(null);
+  const skillsSectionRef = useRef<HTMLElement | null>(null);
+  const advancedSectionRef = useRef<HTMLElement | null>(null);
   const isManager = item.role === "manager" || item.id === "u-manager";
   const running = isAgentRunning(item);
   const draftBelongsToItem = Boolean(draft) && String(draft?.agent_id ?? "").trim() === String(item?.id ?? "").trim();
@@ -200,6 +210,58 @@ export function AgentDetailPane({
   const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
   const updateDraft = (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
   const runtimeOptionSchemas = runtimeOptionSchemasForAgent(draft?.runtime_kind || item.runtime_kind, item);
+  const isNotifierDraft = Boolean(draft && isNotifierRuntimeDraftOnAgentPage(draft, item));
+  const profileSections = draft
+    ? [
+        ...(!isNotificationBotAgent(item)
+          ? [{ id: "channels" as const, label: t("agentChannelsTitle"), ref: channelsSectionRef }]
+          : []),
+        { id: "runtime" as const, label: t("profileRuntimeSection"), ref: runtimeSectionRef },
+        {
+          id: "model" as const,
+          label: isNotifierDraft ? t("profileNotifierSection") : t("profileModelSection"),
+          ref: modelSectionRef,
+        },
+        ...(!isNotifierDraft
+          ? [{ id: "instructions" as const, label: t("agentInstructions"), ref: instructionsSectionRef }]
+          : []),
+        ...(workspaceSupported
+          ? [{ id: "skills" as const, label: t("agentProfileSkillsTab"), ref: skillsSectionRef }]
+          : []),
+        { id: "advanced" as const, label: t("profileAdvanced"), ref: advancedSectionRef },
+      ]
+    : [];
+
+  function scrollToProfileSection(section: (typeof profileSections)[number]): void {
+    setActiveProfileSection(section.id);
+    const target = section.ref.current;
+    const scroller = profileScrollRegionRef.current;
+    if (!target || !scroller) {
+      return;
+    }
+    const targetRect = target.getBoundingClientRect();
+    const nextPadding = Math.max(0, Math.ceil(scroller.clientHeight - targetRect.height));
+    setProfileTabScrollPadding(nextPadding);
+    window.requestAnimationFrame(() => {
+      const nextTarget = section.ref.current;
+      const nextScroller = profileScrollRegionRef.current;
+      if (!nextTarget || !nextScroller) {
+        return;
+      }
+      const scrollerTop = nextScroller.getBoundingClientRect().top;
+      const targetTop = nextTarget.getBoundingClientRect().top;
+      const nextScrollTop = nextScroller.scrollTop + targetTop - scrollerTop;
+      if (typeof nextScroller.scrollTo === "function") {
+        nextScroller.scrollTo({ top: nextScrollTop });
+      } else {
+        nextScroller.scrollTop = nextScrollTop;
+      }
+    });
+  }
+
+  function clearProfileTabScrollPadding(): void {
+    setProfileTabScrollPadding((current) => (current ? 0 : current));
+  }
 
   useEffect(() => {
     if (!draft) {
@@ -243,419 +305,512 @@ export function AgentDetailPane({
 
   return (
     <section className="entity-pane agent-detail-pane">
-      <header className="entity-header">
-        {draft ? (
-          <div className="entity-avatar agent-header-avatar-picker">
-            <AgentAvatarPicker
-              value={draft.avatar || item.avatar}
-              t={t}
-              mode="edit"
-              onChange={(avatar) => updateDraft({ avatar })}
-            />
-          </div>
-        ) : (
-          <div className="entity-avatar">
-            <AgentAvatarContent
-              avatar={item.avatar}
-              fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)}
-            />
-          </div>
-        )}
-        <div className="entity-heading">
-          <div className="entity-title-row">
-            <h1>{item.name}</h1>
-            <span className={`agent-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
-            <span className={`status-pill ${running ? "online" : ""}`}>{agentStatusLabel(item.status, t)}</span>
-            <span className={`status-pill profile-state-pill ${incomplete ? "warn" : "ready"}`}>
-              {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
-            </span>
-            {upgradeNeeded ? (
-              <span className="status-pill profile-state-pill warn">{t("profileUpgradeRequired")}</span>
-            ) : null}
-            {restartNeeded ? (
-              <span className="status-pill profile-state-pill warn">{t("profileRestartRequired")}</span>
-            ) : null}
-          </div>
+      <div className="agent-profile-fixed-header">
+        <header className="entity-header">
           {draft ? (
-            isEditingDescription ? (
-              <label className="field entity-description-field">
-                <span className="sr-only">{t("agentDescription")}</span>
-                <textarea
-                  ref={descriptionInputRef}
-                  className="compact-textarea"
-                  value={draft.description}
-                  onBlur={() => setIsEditingDescription(false)}
-                  onInput={(event) => updateDraft({ description: event.currentTarget.value })}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      event.currentTarget.blur();
-                    }
-                  }}
-                  placeholder={t("agentDescription")}
-                />
-              </label>
-            ) : (
-              <button
-                type="button"
-                className={`entity-description-display ${draft.description ? "" : "is-empty"}`.trim()}
-                aria-label={t("editDescription")}
-                onClick={() => setIsEditingDescription(true)}
-              >
-                <span className="entity-description-display-copy">{draft.description || t("agentDescription")}</span>
-                <span className="entity-description-display-icon" aria-hidden="true">
-                  <Edit3 size={16} strokeWidth={1.8} />
-                </span>
-              </button>
-            )
-          ) : item.description ? (
-            <div className="entity-description-text">{item.description}</div>
-          ) : null}
-        </div>
-        <div className="entity-toolbar">
-          <Button
-            variant="secondaryGray"
-            size="md"
-            disabled={busyKey.startsWith(busyPrefix)}
-            onClick={() => onOpenDM(item)}
-          >
-            {t("openDM")}
-          </Button>
-          {onUpgrade ? (
+            <div className="entity-avatar agent-header-avatar-picker">
+              <AgentAvatarPicker
+                value={draft.avatar || item.avatar}
+                t={t}
+                mode="edit"
+                onChange={(avatar) => updateDraft({ avatar })}
+              />
+            </div>
+          ) : (
+            <div className="entity-avatar">
+              <AgentAvatarContent
+                avatar={item.avatar}
+                fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)}
+              />
+            </div>
+          )}
+          <div className="entity-heading">
+            <div className="entity-title-row">
+              <h1>{item.name}</h1>
+              <span className={`agent-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
+              <span className={`status-pill ${running ? "online" : ""}`}>{agentStatusLabel(item.status, t)}</span>
+              <span className={`status-pill profile-state-pill ${incomplete ? "warn" : "ready"}`}>
+                {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
+              </span>
+              {upgradeNeeded ? (
+                <span className="status-pill profile-state-pill warn">{t("profileUpgradeRequired")}</span>
+              ) : null}
+              {restartNeeded ? (
+                <span className="status-pill profile-state-pill warn">{t("profileRestartRequired")}</span>
+              ) : null}
+            </div>
+            {draft ? (
+              isEditingDescription ? (
+                <label className="field entity-description-field">
+                  <span className="sr-only">{t("agentDescription")}</span>
+                  <textarea
+                    ref={descriptionInputRef}
+                    className="compact-textarea"
+                    value={draft.description}
+                    onBlur={() => setIsEditingDescription(false)}
+                    onInput={(event) => updateDraft({ description: event.currentTarget.value })}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      }
+                    }}
+                    placeholder={t("agentDescription")}
+                  />
+                </label>
+              ) : (
+                <button
+                  type="button"
+                  className={`entity-description-display ${draft.description ? "" : "is-empty"}`.trim()}
+                  aria-label={t("editDescription")}
+                  onClick={() => setIsEditingDescription(true)}
+                >
+                  <span className="entity-description-display-copy">{draft.description || t("agentDescription")}</span>
+                  <span className="entity-description-display-icon" aria-hidden="true">
+                    <Edit3 size={16} strokeWidth={1.8} />
+                  </span>
+                </button>
+              )
+            ) : item.description ? (
+              <div className="entity-description-text">{item.description}</div>
+            ) : null}
+          </div>
+          <div className="entity-toolbar">
             <Button
-              variant="primary"
+              variant="secondaryGray"
               size="md"
-              disabled={busyKey.startsWith(busyPrefix) || incomplete}
-              onClick={() => onUpgrade(item)}
+              disabled={busyKey.startsWith(busyPrefix)}
+              onClick={() => onOpenDM(item)}
             >
-              {t("agentUpgrade")}
+              {t("openDM")}
             </Button>
-          ) : null}
-          <AgentActionsMenu
+            {onUpgrade ? (
+              <Button
+                variant="primary"
+                size="md"
+                disabled={busyKey.startsWith(busyPrefix) || incomplete}
+                onClick={() => onUpgrade(item)}
+              >
+                {t("agentUpgrade")}
+              </Button>
+            ) : null}
+            <AgentActionsMenu
+              item={item}
+              t={t}
+              activeRoom={activeRoom}
+              busy={busyKey.startsWith(busyPrefix)}
+              incomplete={incomplete}
+              isManager={isManager}
+              running={running}
+              upgradeNeeded={upgradeNeeded}
+              canPublish={canPublish}
+              publishBusy={publishBusy}
+              onStart={onStart}
+              onStop={onStop}
+              onRecreate={onRecreate}
+              onInvite={onInvite}
+              onDelete={onDelete}
+              onPublish={onPublish}
+            />
+            {draft && (hasUnsavedChanges || saving) ? (
+              <Button
+                variant="primary"
+                size="md"
+                loading={saving}
+                loadingLabel={t("agentSavingChanges")}
+                disabled={saveDisabled}
+                onClick={onSave}
+              >
+                {t("agentSaveChanges")}
+              </Button>
+            ) : draft && incomplete ? (
+              <span className="agent-save-status warn" role="status">
+                {t("agentProfileSetupRequired")}
+              </span>
+            ) : draft ? (
+              <span className="agent-save-status" role="status">
+                <Check aria-hidden="true" size={16} strokeWidth={2.5} />
+                {t("agentSaved")}
+              </span>
+            ) : null}
+          </div>
+        </header>
+        {error ? <div className="form-error">{error}</div> : null}
+        {saveError ? <div className="form-error">{saveError}</div> : null}
+        {notice ? (
+          <div className={`form-warning ${noticeTone === "warning" ? "" : noticeTone}`.trim()} role="status">
+            {notice}
+          </div>
+        ) : null}
+        {profileSections.length ? (
+          <nav className="agent-profile-section-nav" aria-label={t("agentProfileSectionNavLabel")}>
+            {profileSections.map((section, index) => {
+              const active =
+                section.id === activeProfileSection ||
+                (index === 0 && !profileSections.some((item) => item.id === activeProfileSection));
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  className={`agent-profile-section-tab ${active ? "active" : ""}`.trim()}
+                  aria-current={active ? "location" : undefined}
+                  aria-controls={`agent-profile-${section.id}`}
+                  onClick={() => scrollToProfileSection(section)}
+                >
+                  {section.label}
+                </button>
+              );
+            })}
+          </nav>
+        ) : null}
+      </div>
+      <div
+        ref={profileScrollRegionRef}
+        className="agent-profile-scroll-region"
+        onWheel={clearProfileTabScrollPadding}
+        onTouchStart={clearProfileTabScrollPadding}
+      >
+        {!isNotificationBotAgent(item) ? (
+          <AgentChannelsSection
+            sectionRef={channelsSectionRef}
             item={item}
             t={t}
-            activeRoom={activeRoom}
-            busy={busyKey.startsWith(busyPrefix)}
-            incomplete={incomplete}
-            isManager={isManager}
-            running={running}
-            upgradeNeeded={upgradeNeeded}
-            canPublish={canPublish}
-            publishBusy={publishBusy}
-            onStart={onStart}
-            onStop={onStop}
-            onRecreate={onRecreate}
-            onInvite={onInvite}
-            onDelete={onDelete}
-            onPublish={onPublish}
+            busyKey={feishuConnectBusy.startsWith(`${item.id}:`) ? feishuConnectBusy : ""}
+            pendingRegistration={feishuPendingRegistration}
+            onStartFeishuConnect={onStartFeishuConnect}
+            onDisconnectFeishu={onDisconnectFeishu}
           />
-          {draft && (hasUnsavedChanges || saving) ? (
-            <Button
-              variant="primary"
-              size="md"
-              loading={saving}
-              loadingLabel={t("agentSavingChanges")}
-              disabled={saveDisabled}
-              onClick={onSave}
+        ) : null}
+        {!draft ? (
+          <>
+            <div className="entity-grid">
+              <div className="entity-field">
+                <span>{t("profileRuntimeKind")}</span>
+                <strong>{formatRuntimeKindLabel(item.runtime_kind, t)}</strong>
+              </div>
+              <div className="entity-field">
+                <span>{t("profileProvider")}</span>
+                <strong>{formatProviderLabel(provider)}</strong>
+              </div>
+              <div className="entity-field">
+                <span>{t("profileModel")}</span>
+                <strong>{agentModelID(item)}</strong>
+              </div>
+              <div className="entity-field">
+                <span>{t("profileReasoning")}</span>
+                <strong>{item.reasoning_effort || item.agent_profile?.reasoning_effort || "medium"}</strong>
+              </div>
+              <div className="entity-field">
+                <span>{t("profileFastMode")}</span>
+                <strong>{item.enable_fast_mode || item.agent_profile?.enable_fast_mode ? "on" : "off"}</strong>
+              </div>
+            </div>
+            <section className="profile-section agent-instructions-section">
+              <div className="profile-section-title">{t("agentInstructions")}</div>
+              <div className="agent-instructions-body">{item.instructions || "-"}</div>
+            </section>
+          </>
+        ) : null}
+        {draft ? (
+          <div className="profile-editor-shell agent-page-editor">
+            <section
+              ref={runtimeSectionRef}
+              id="agent-profile-runtime"
+              className="profile-section agent-profile-scroll-target"
             >
-              {t("agentSaveChanges")}
-            </Button>
-          ) : draft && incomplete ? (
-            <span className="agent-save-status warn" role="status">
-              {t("agentProfileSetupRequired")}
-            </span>
-          ) : draft ? (
-            <span className="agent-save-status" role="status">
-              <Check aria-hidden="true" size={16} strokeWidth={2.5} />
-              {t("agentSaved")}
-            </span>
-          ) : null}
-        </div>
-      </header>
-      {error ? <div className="form-error">{error}</div> : null}
-      {saveError ? <div className="form-error">{saveError}</div> : null}
-      {notice ? (
-        <div className={`form-warning ${noticeTone === "warning" ? "" : noticeTone}`.trim()} role="status">
-          {notice}
-        </div>
-      ) : null}
-      {!isNotificationBotAgent(item) ? (
-        <AgentChannelsSection
-          item={item}
-          t={t}
-          busyKey={feishuConnectBusy.startsWith(`${item.id}:`) ? feishuConnectBusy : ""}
-          pendingRegistration={feishuPendingRegistration}
-          onStartFeishuConnect={onStartFeishuConnect}
-          onDisconnectFeishu={onDisconnectFeishu}
-        />
-      ) : null}
-      {!draft ? (
-        <>
-          <div className="entity-grid">
-            <div className="entity-field">
-              <span>{t("profileRuntimeKind")}</span>
-              <strong>{formatRuntimeKindLabel(item.runtime_kind, t)}</strong>
-            </div>
-            <div className="entity-field">
-              <span>{t("profileProvider")}</span>
-              <strong>{formatProviderLabel(provider)}</strong>
-            </div>
-            <div className="entity-field">
-              <span>{t("profileModel")}</span>
-              <strong>{agentModelID(item)}</strong>
-            </div>
-            <div className="entity-field">
-              <span>{t("profileReasoning")}</span>
-              <strong>{item.reasoning_effort || item.agent_profile?.reasoning_effort || "medium"}</strong>
-            </div>
-            <div className="entity-field">
-              <span>{t("profileFastMode")}</span>
-              <strong>{item.enable_fast_mode || item.agent_profile?.enable_fast_mode ? "on" : "off"}</strong>
-            </div>
-          </div>
-          <section className="profile-section agent-instructions-section">
-            <div className="profile-section-title">{t("agentInstructions")}</div>
-            <div className="agent-instructions-body">{item.instructions || "-"}</div>
-          </section>
-        </>
-      ) : null}
-      {draft ? (
-        <div className="profile-editor-shell agent-page-editor">
-          <section className="profile-section">
-            <div className="profile-section-title">{t("profileBasics")}</div>
-            <div className="profile-grid-compact">
-              {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-                <div className="agent-runtime-image-row span-2">
-                  <label className="field">
-                    <span>{t("profileRuntimeKind")}</span>
-                    <input value={draft.runtime_kind || item.runtime_kind || ""} readOnly disabled />
-                  </label>
-                  <label className="field agent-image-field">
-                    <span>{t("agentImage")}</span>
-                    <input
-                      className="long-image-input"
-                      value={draft.image}
-                      title={draft.image}
-                      readOnly
-                      disabled
-                      onInput={(event) => updateDraft({ image: event.currentTarget.value })}
-                      placeholder={t("agentImagePlaceholder")}
+              <div className="profile-section-heading">
+                <div className="profile-section-title">{t("profileRuntimeSection")}</div>
+                <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
+              </div>
+              <div className="agent-section-form">
+                <div className="profile-grid-compact agent-page-form-content">
+                  {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
+                    <div className="agent-runtime-image-row span-2">
+                      <label className="field">
+                        <span>{t("profileRuntimeKind")}</span>
+                        <input value={draft.runtime_kind || item.runtime_kind || ""} readOnly disabled />
+                      </label>
+                      <label className="field agent-image-field">
+                        <span>{t("agentImage")}</span>
+                        <input
+                          className="long-image-input"
+                          value={draft.image}
+                          title={draft.image}
+                          readOnly
+                          disabled
+                          onInput={(event) => updateDraft({ image: event.currentTarget.value })}
+                          placeholder={t("agentImagePlaceholder")}
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <label className="field">
+                      <span>{t("profileRuntimeKind")}</span>
+                      <input value={draft.runtime_kind || item.runtime_kind || ""} readOnly disabled />
+                    </label>
+                  )}
+                  {!isNotifierRuntimeDraftOnAgentPage(draft, item) && runtimeOptionSchemas.length > 0 ? (
+                    <RuntimeOptionsFields
+                      draft={draft}
+                      locale={locale}
+                      schemas={runtimeOptionSchemas}
+                      onDraftChange={onDraftChange || (() => {})}
+                      embedded
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </section>
+
+            {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
+              <section
+                ref={modelSectionRef}
+                id="agent-profile-model"
+                className="profile-section agent-profile-scroll-target"
+              >
+                <div className="profile-section-heading">
+                  <div className="profile-section-title">{t("profileModelSection")}</div>
+                  <p className="profile-section-description">{t("profileModelSectionDescription")}</p>
+                </div>
+                <div className="agent-section-form">
+                  <div className="agent-page-form-content agent-model-form-content">
+                    <div className="profile-runtime-grid">
+                      <label className="field">
+                        <span>{t("profileProvider")}</span>
+                        <Select
+                          value={draft.provider}
+                          onValueChange={(value) => updateDraft({ provider: value, model_id: "" })}
+                          triggerProps={{ "aria-label": t("profileProvider") }}
+                          options={PROVIDERS.map((provider) => ({
+                            value: provider,
+                            label: formatProviderLabel(provider),
+                          }))}
+                        />
+                      </label>
+                      <label className="field">
+                        {requiredFieldLabel(t("profileModel"))}
+                        <Select
+                          value={draft.model_id}
+                          required
+                          onValueChange={(value) => updateDraft({ model_id: value })}
+                          triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
+                          options={[
+                            { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileSelectModel") },
+                            ...models.map((model) => ({ value: model, label: model })),
+                            ...(draft.model_id && !models.includes(draft.model_id)
+                              ? [{ value: draft.model_id, label: draft.model_id }]
+                              : []),
+                          ]}
+                        />
+                        {modelError ? (
+                          <span className="field-hint error">{errorMessage(modelError, t("modelLoadFailed"))}</span>
+                        ) : null}
+                      </label>
+                      <label className="field">
+                        <span>{t("profileReasoning")}</span>
+                        <Select
+                          value={draft.reasoning_effort}
+                          onValueChange={(value) => updateDraft({ reasoning_effort: value })}
+                          triggerProps={{ "aria-label": t("profileReasoning") }}
+                          options={REASONING_EFFORTS.map((effort) => ({ value: effort, label: effort }))}
+                        />
+                      </label>
+                      <div className="field agent-fast-mode-field">
+                        <span>{t("profileFastMode")}</span>
+                        <label className="selection-item compact-toggle-row">
+                          <input
+                            type="checkbox"
+                            checked={draft.enable_fast_mode}
+                            aria-label={t("profileFastMode")}
+                            onChange={() => updateDraft({ enable_fast_mode: !draft.enable_fast_mode })}
+                          />
+                          <small className="agent-fast-mode-help">{t("profileFastModeHelp")}</small>
+                        </label>
+                      </div>
+                    </div>
+                    <CLIProxyAuthControl
+                      provider={draft.provider}
+                      t={t}
+                      status={authStatuses?.[normalizeAuthProviderName(draft.provider)]}
+                      busy={authBusyProvider === normalizeAuthProviderName(draft.provider)}
+                      onLogin={onProviderLogin}
+                    />
+                    {draft.provider === "api" ? (
+                      <div className="profile-model-api-section">
+                        <div className="profile-section-subtitle">{t("profileAPIProvider")}</div>
+                        <div className="profile-api-grid">
+                          <label className="field">
+                            {requiredFieldLabel(t("profileBaseURL"))}
+                            <input
+                              value={draft.base_url}
+                              required
+                              aria-required="true"
+                              onInput={(event) => updateDraft({ base_url: event.currentTarget.value })}
+                              placeholder="https://api.openai.com/v1"
+                            />
+                          </label>
+                          <APIKeyField
+                            value={draft.api_key}
+                            onInput={(event) => updateDraft({ api_key: event.currentTarget.value })}
+                            profile={draft}
+                            required={!draft.api_key_set}
+                            t={t}
+                          />
+                          <label className="field span-2">
+                            <span>{t("profileHeaders")}</span>
+                            <textarea
+                              className="compact-textarea"
+                              value={draft.headersText}
+                              onInput={(event) => updateDraft({ headersText: event.currentTarget.value })}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <div
+                ref={modelSectionRef as Ref<HTMLDivElement>}
+                id="agent-profile-model"
+                className="agent-profile-scroll-target"
+              >
+                <NotifierControls
+                  agentID={item.id || ""}
+                  draft={draft}
+                  t={t}
+                  webhookPublicOrigin={notifierWebhookPublicOrigin}
+                  onPatch={(patch) => updateDraft(patch)}
+                />
+              </div>
+            )}
+
+            {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
+              <section
+                ref={instructionsSectionRef}
+                id="agent-profile-instructions"
+                className="profile-section agent-instructions-section agent-profile-scroll-target"
+              >
+                <div className="profile-grid-compact">
+                  <label className="field span-2">
+                    <span>{t("agentInstructions")}</span>
+                    <textarea
+                      className="compact-textarea"
+                      value={draft.instructions || ""}
+                      onInput={(event) => updateDraft({ instructions: event.currentTarget.value })}
+                      placeholder={t("agentInstructionsPlaceholder")}
                     />
                   </label>
                 </div>
-              ) : (
-                <label className="field">
-                  <span>{t("profileRuntimeKind")}</span>
-                  <input value={draft.runtime_kind || item.runtime_kind || ""} readOnly disabled />
-                </label>
-              )}
-              {!isNotifierRuntimeDraftOnAgentPage(draft, item) && runtimeOptionSchemas.length > 0 ? (
-                <RuntimeOptionsFields
-                  draft={draft}
-                  locale={locale}
-                  schemas={runtimeOptionSchemas}
-                  onDraftChange={onDraftChange || (() => {})}
-                  embedded
-                />
-              ) : null}
-            </div>
-          </section>
+              </section>
+            ) : null}
 
-          {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-            <section className="profile-section">
-              <div className="profile-section-title">{t("profileModelSection")}</div>
-              <div className="profile-runtime-grid">
-                <label className="field">
-                  <span>{t("profileProvider")}</span>
-                  <Select
-                    value={draft.provider}
-                    onValueChange={(value) => updateDraft({ provider: value, model_id: "" })}
-                    triggerProps={{ "aria-label": t("profileProvider") }}
-                    options={PROVIDERS.map((provider) => ({
-                      value: provider,
-                      label: formatProviderLabel(provider),
-                    }))}
-                  />
-                </label>
-                <label className="field">
-                  {requiredFieldLabel(t("profileModel"))}
-                  <Select
-                    value={draft.model_id}
-                    required
-                    onValueChange={(value) => updateDraft({ model_id: value })}
-                    triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
-                    options={[
-                      { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileSelectModel") },
-                      ...models.map((model) => ({ value: model, label: model })),
-                      ...(draft.model_id && !models.includes(draft.model_id)
-                        ? [{ value: draft.model_id, label: draft.model_id }]
-                        : []),
-                    ]}
-                  />
-                  {modelError ? (
-                    <span className="field-hint error">{errorMessage(modelError, t("modelLoadFailed"))}</span>
-                  ) : null}
-                </label>
-                <label className="field">
-                  <span>{t("profileReasoning")}</span>
-                  <Select
-                    value={draft.reasoning_effort}
-                    onValueChange={(value) => updateDraft({ reasoning_effort: value })}
-                    triggerProps={{ "aria-label": t("profileReasoning") }}
-                    options={REASONING_EFFORTS.map((effort) => ({ value: effort, label: effort }))}
-                  />
-                </label>
-                <label className="selection-item compact-toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={draft.enable_fast_mode}
-                    onChange={() => updateDraft({ enable_fast_mode: !draft.enable_fast_mode })}
-                  />
-                  <span>{t("profileFastMode")}</span>
-                </label>
-              </div>
-              <CLIProxyAuthControl
-                provider={draft.provider}
-                t={t}
-                status={authStatuses?.[normalizeAuthProviderName(draft.provider)]}
-                busy={authBusyProvider === normalizeAuthProviderName(draft.provider)}
-                onLogin={onProviderLogin}
-              />
-            </section>
-          ) : (
-            <NotifierControls
-              agentID={item.id || ""}
-              draft={draft}
-              t={t}
-              webhookPublicOrigin={notifierWebhookPublicOrigin}
-              onPatch={(patch) => updateDraft(patch)}
-            />
-          )}
-
-          {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-            <section className="profile-section">
-              <div className="profile-grid-compact">
-                <label className="field span-2">
-                  <span>{t("agentInstructions")}</span>
-                  <textarea
-                    className="compact-textarea"
-                    value={draft.instructions || ""}
-                    onInput={(event) => updateDraft({ instructions: event.currentTarget.value })}
-                  />
-                </label>
-              </div>
-            </section>
-          ) : null}
-
-          {!isNotifierRuntimeDraftOnAgentPage(draft, item) && draft.provider === "api" ? (
-            <section className="profile-section">
-              <div className="profile-section-title">{t("profileAPIProvider")}</div>
-              <div className="profile-api-grid">
-                <label className="field">
-                  {requiredFieldLabel(t("profileBaseURL"))}
-                  <input
-                    value={draft.base_url}
-                    required
-                    aria-required="true"
-                    onInput={(event) => updateDraft({ base_url: event.currentTarget.value })}
-                    placeholder="https://api.openai.com/v1"
-                  />
-                </label>
-                <APIKeyField
-                  value={draft.api_key}
-                  onInput={(event) => updateDraft({ api_key: event.currentTarget.value })}
-                  profile={draft}
-                  required={!draft.api_key_set}
-                  t={t}
-                />
-                <label className="field span-2">
-                  <span>{t("profileHeaders")}</span>
-                  <textarea
-                    className="compact-textarea"
-                    value={draft.headersText}
-                    onInput={(event) => updateDraft({ headersText: event.currentTarget.value })}
-                  />
-                </label>
-              </div>
-            </section>
-          ) : null}
-
-          {workspaceSupported ? (
-            <section className="profile-section agent-skills-section">
-              <div className="profile-section-title agent-skills-title">
-                <div className="agent-skills-title-copy">
-                  <span>{t("agentSkillsTitle")}</span>
-                  <small>{skills.length}</small>
+            {workspaceSupported ? (
+              <section
+                ref={skillsSectionRef}
+                id="agent-profile-skills"
+                className="profile-section agent-skills-section agent-profile-scroll-target"
+              >
+                <div className="profile-section-heading">
+                  <div className="profile-section-title">{t("agentSkillsTitle")}</div>
+                  <p className="profile-section-description">{t("agentSkillsDescription")}</p>
                 </div>
-                <Button
-                  className="agent-skill-icon-button"
-                  variant="secondaryGray"
-                  size="sm"
-                  aria-label={t("agentSkillAdd")}
-                  title={t("agentSkillAdd")}
-                  disabled={skillCandidatesLoading || skillAddBusy}
-                  onClick={() => setAddSkillsDialogOpen(true)}
-                >
-                  <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
-                </Button>
-              </div>
-              {skillsError ? <div className="form-error">{skillsError}</div> : null}
-              {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
-              {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
-              {skillsLoading ? <div className="agent-skills-empty">{t("agentSkillsLoading")}</div> : null}
-              {!skillsLoading && !skills.length ? (
-                <div className="agent-skills-empty">{t("agentSkillsEmpty")}</div>
-              ) : null}
-              {!skillsLoading && skills.length ? (
-                <div className="agent-skills-list">
-                  {skills.map((skill) => (
-                    <article key={skill.name} className="agent-skill-card">
-                      <div className="agent-skill-card-header">
-                        <div className="agent-skill-name">{skill.name}</div>
-                        <Button
-                          className="agent-skill-icon-button"
-                          variant="outlineDanger"
-                          size="sm"
-                          aria-label={t("agentDeleteSkill")}
-                          title={t("agentDeleteSkill")}
-                          disabled={skillDeleteBusy}
-                          onClick={() => {
-                            setSkillPendingDelete(skill);
-                            setDeleteSkillDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
-                        </Button>
+                <div className="agent-section-form">
+                  <div className="agent-page-form-content agent-skills-form-content">
+                    <div className="agent-skills-title">
+                      <div className="agent-skills-title-copy">
+                        <span>{t("agentSkillsTitle")}</span>
+                        <small>{skills.length}</small>
                       </div>
-                      <p className="agent-skill-description">{skill.description || "-"}</p>
-                    </article>
-                  ))}
+                      <Button
+                        className="agent-skill-icon-button"
+                        variant="secondaryGray"
+                        size="sm"
+                        aria-label={t("agentSkillAdd")}
+                        title={t("agentSkillAdd")}
+                        disabled={skillCandidatesLoading || skillAddBusy}
+                        onClick={() => setAddSkillsDialogOpen(true)}
+                      >
+                        <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
+                      </Button>
+                    </div>
+                    {skillsError ? <div className="form-error">{skillsError}</div> : null}
+                    {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
+                    {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
+                    {skillsLoading ? <div className="agent-skills-empty">{t("agentSkillsLoading")}</div> : null}
+                    {!skillsLoading && !skills.length ? (
+                      <div className="agent-skills-empty">{t("agentSkillsEmpty")}</div>
+                    ) : null}
+                    {!skillsLoading && skills.length ? (
+                      <div className="agent-skills-list">
+                        {skills.map((skill) => (
+                          <article key={skill.name} className="agent-skill-card">
+                            <div className="agent-skill-card-header">
+                              <div className="agent-skill-name">{skill.name}</div>
+                              <Button
+                                className="agent-skill-icon-button"
+                                variant="outlineDanger"
+                                size="sm"
+                                aria-label={t("agentDeleteSkill")}
+                                title={t("agentDeleteSkill")}
+                                disabled={skillDeleteBusy}
+                                onClick={() => {
+                                  setSkillPendingDelete(skill);
+                                  setDeleteSkillDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                              </Button>
+                            </div>
+                            <p className="agent-skill-description">{skill.description || "-"}</p>
+                          </article>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              ) : null}
-            </section>
-          ) : null}
+              </section>
+            ) : null}
 
-          <section className="profile-section">
-            <div className="profile-section-title">{t("profileAdvanced")}</div>
-            <div className="profile-advanced-grid">
-              {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-                <label className="field profile-json-field">
-                  <span>{t("profileRequestOptions")}</span>
-                  <textarea
-                    className="compact-json"
-                    value={draft.requestOptionsText}
-                    onInput={(event) => updateDraft({ requestOptionsText: event.currentTarget.value })}
-                  />
-                </label>
-              ) : null}
-              <div className="field profile-env-field">
-                <span>{t("profileEnv")}</span>
-                <EnvKeyValueEditor rows={draft.envRows} t={t} onChange={(rows) => updateDraft({ envRows: rows })} />
+            <section
+              ref={advancedSectionRef}
+              id="agent-profile-advanced"
+              className="profile-section agent-advanced-section agent-profile-scroll-target"
+            >
+              <div className="profile-section-heading">
+                <div className="profile-section-title">{t("profileAdvanced")}</div>
+                <p className="profile-section-description">{t("profileAdvancedDescription")}</p>
               </div>
-            </div>
-          </section>
-        </div>
-      ) : null}
+              <div className="agent-section-form">
+                <div className="profile-advanced-grid agent-page-form-content">
+                  {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
+                    <label className="field profile-json-field">
+                      <span>{t("profileRequestOptions")}</span>
+                      <textarea
+                        className="compact-json"
+                        value={draft.requestOptionsText}
+                        onInput={(event) => updateDraft({ requestOptionsText: event.currentTarget.value })}
+                      />
+                    </label>
+                  ) : null}
+                  <div className="field profile-env-field">
+                    <span>{t("profileEnv")}</span>
+                    <EnvKeyValueEditor rows={draft.envRows} t={t} onChange={(rows) => updateDraft({ envRows: rows })} />
+                  </div>
+                </div>
+              </div>
+            </section>
+            {profileTabScrollPadding ? (
+              <div
+                className="agent-profile-scroll-spacer"
+                style={{ height: profileTabScrollPadding }}
+                aria-hidden="true"
+              />
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       <DialogRoot open={addSkillsDialogOpen} onOpenChange={setAddSkillsDialogOpen}>
         <DialogContent className="agent-skills-dialog">
           <DialogHeader className="agent-skills-dialog-header">
@@ -699,7 +854,12 @@ export function AgentDetailPane({
             )}
           </div>
           <div className="agent-skills-dialog-actions">
-            <Button variant="secondaryGray" size="sm" disabled={skillAddBusy} onClick={() => setAddSkillsDialogOpen(false)}>
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              disabled={skillAddBusy}
+              onClick={() => setAddSkillsDialogOpen(false)}
+            >
               {t("cancel")}
             </Button>
             <Button
@@ -724,7 +884,10 @@ export function AgentDetailPane({
           }
         }}
       >
-        <DialogContent className="agent-skills-dialog agent-skill-delete-dialog">
+        <DialogContent
+          className="agent-skills-dialog agent-skill-delete-dialog"
+          overlayClassName="agent-skill-delete-backdrop"
+        >
           <DialogHeader className="agent-skills-dialog-header">
             <div className="agent-skills-dialog-copy">
               <DialogTitle>{t("agentDeleteSkill")}</DialogTitle>
@@ -734,9 +897,11 @@ export function AgentDetailPane({
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          <div className="agent-skills-dialog-body">
-            {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
-          </div>
+          {skillDeleteError ? (
+            <div className="agent-skills-dialog-body agent-skill-delete-dialog-body">
+              <div className="form-error">{skillDeleteError}</div>
+            </div>
+          ) : null}
           <div className="agent-skills-dialog-actions">
             <Button
               variant="secondaryGray"
@@ -765,10 +930,12 @@ type AgentChannelsSectionProps = {
   onDisconnectFeishu?: AgentActionHandler;
   onStartFeishuConnect?: AgentActionHandler;
   pendingRegistration?: FeishuPendingRegistrationView;
+  sectionRef?: Ref<HTMLElement>;
   t: TranslateFn;
 };
 
 function AgentChannelsSection({
+  sectionRef,
   item,
   t,
   busyKey,
@@ -795,10 +962,18 @@ function AgentChannelsSection({
   const connectURL = String(pendingRegistration?.connect_url || "").trim();
 
   return (
-    <section className="profile-section agent-channels-section" aria-labelledby="agent-channels-title">
-      <h2 id="agent-channels-title" className="profile-section-title agent-channels-title">
-        {t("agentChannelsTitle")}
-      </h2>
+    <section
+      ref={sectionRef}
+      id="agent-profile-channels"
+      className="profile-section agent-channels-section agent-profile-scroll-target"
+      aria-labelledby="agent-channels-title"
+    >
+      <div className="profile-section-heading">
+        <h2 id="agent-channels-title" className="profile-section-title agent-channels-title">
+          {t("agentChannelsTitle")}
+        </h2>
+        <p className="profile-section-description">{t("agentChannelsDescription")}</p>
+      </div>
       <div className="agent-channel-row">
         <span className="agent-channel-icon" aria-hidden="true">
           <img src="icons/feishu.png" alt="" />

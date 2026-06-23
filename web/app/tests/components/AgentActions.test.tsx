@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AgentDetailPane, AgentRow, NotificationParticipantDetailPane } from "@/pages/AgentPage/components";
 import { agentToDraft } from "@/models/agents";
@@ -13,10 +13,13 @@ const labels: Record<string, string> = {
   agentStop: "Stop",
   agentUpgrade: "Upgrade",
   agentMoreActions: "More",
+  agentProfileSectionNavLabel: "Profile sections",
+  agentProfileSkillsTab: "skills",
   agentSaved: "Saved",
   agentSaveChanges: "Save changes",
   agentUpdateSave: "Save",
   agentChannelsTitle: "Channels",
+  agentChannelsDescription: "Manage external channels.",
   agentSkillAdd: "Add skill",
   agentSkillAddSubtitle: "Candidates come from global skills.",
   agentSkillAddEmpty: "No skills are available to add.",
@@ -34,15 +37,18 @@ const labels: Record<string, string> = {
   feishuOpenConnection: "Open Feishu",
   openDM: "DM",
   profileCompleteBadge: "Complete",
+  profileAdvanced: "Advanced",
   profileFastMode: "Fast mode",
   profileModel: "Model",
   profileModelSection: "Model",
   profileProvider: "Provider",
   profileReasoning: "Reasoning",
+  profileRequestOptions: "Request options",
   profileRestartRequired: "Recreate required",
   profileNotifierSection: "Notifications",
   profileUpgradeRequired: "Upgrade required",
   profileRuntimeKind: "Runtime",
+  profileRuntimeSection: "Runtime environment",
   agentName: "Name",
   agentDescription: "Description",
   agentImage: "Image",
@@ -214,6 +220,7 @@ describe("agent action visibility", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
+    expect(screen.getByText("Manage external channels.")).toBeInTheDocument();
     expect(document.querySelector(".agent-channel-icon img")).toHaveAttribute("src", "icons/feishu.png");
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Disconnect Feishu" })).not.toBeInTheDocument();
@@ -811,5 +818,73 @@ describe("agent action visibility", () => {
 
     expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows advanced profile options by default", () => {
+    const draft = agentToDraft(worker);
+    const { container } = render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        draft={draft}
+        savedDraft={draft}
+        models={[]}
+        authStatuses={{}}
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    const advancedSection = container.querySelector("#agent-profile-advanced");
+    expect(advancedSection).toBeInTheDocument();
+    expect(within(advancedSection as HTMLElement).getByText("Advanced")).toBeInTheDocument();
+    expect(within(advancedSection as HTMLElement).getByText("Request options")).toBeInTheDocument();
+  });
+
+  it("navigates to profile sections from the horizontal tabs", async () => {
+    const user = userEvent.setup();
+    const draft = agentToDraft(worker);
+    const scrollTo = vi.fn();
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    HTMLElement.prototype.scrollTo = scrollTo;
+
+    try {
+      render(
+        <AgentDetailPane
+          item={worker}
+          t={t}
+          draft={draft}
+          savedDraft={draft}
+          models={[]}
+          authStatuses={{}}
+          workspaceSupported
+          onDraftChange={vi.fn()}
+          onSave={vi.fn()}
+          onStart={vi.fn()}
+          onStop={vi.fn()}
+          onRecreate={vi.fn()}
+          onDelete={vi.fn()}
+          onInvite={vi.fn()}
+          onOpenDM={vi.fn()}
+        />,
+      );
+
+      const navigation = screen.getByRole("navigation", { name: "Profile sections" });
+      const modelTab = within(navigation).getByRole("button", { name: "Model" });
+      expect(within(navigation).getAllByRole("button")).toHaveLength(6);
+
+      await user.click(modelTab);
+
+      expect(modelTab).toHaveAttribute("aria-current", "location");
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 0 }));
+    } finally {
+      HTMLElement.prototype.scrollTo = originalScrollTo;
+    }
   });
 });
