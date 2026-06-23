@@ -911,7 +911,25 @@
   gap: 8px;
   min-height: var(--input-height-md);
   padding: 11px 12px;
+  border-color: var(--portal-gray-300);
+  background: var(--portal-white);
+  color: var(--portal-gray-700);
+  box-shadow: var(--shadow-xs);
   cursor: pointer;
+}
+
+.agent-detail-pane .agent-fast-mode-field .compact-toggle-row:hover,
+.agent-detail-pane .agent-fast-mode-field .compact-toggle-row:focus-within {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-25);
+  color: var(--portal-brand-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-detail-pane .agent-fast-mode-field .compact-toggle-row:has(input:checked) {
+  border-color: var(--portal-brand-300);
+  background: var(--portal-brand-50);
+  color: var(--portal-brand-700);
 }
 
 .agent-detail-pane .agent-fast-mode-field input[type="checkbox"] {
@@ -1128,6 +1146,44 @@
 
 :root[data-theme="dark"] .agent-profile-section-tab:focus-visible {
   outline-color: #0e9384;
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field .compact-toggle-row,
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field .compact-toggle-row:has(input:checked) {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field .compact-toggle-row:hover,
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field .compact-toggle-row:focus-within {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-help {
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field input[type="checkbox"] {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field input[type="checkbox"]:hover,
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field input[type="checkbox"]:focus-visible {
+  border-color: var(--input-border);
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field input[type="checkbox"]:checked {
+  border-color: var(--portal-gray-300);
+  background: var(--portal-gray-300);
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field input[type="checkbox"]:checked::after {
+  border-color: var(--panel);
 }
 
 @media (max-width: 1100px) {
