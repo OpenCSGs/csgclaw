@@ -162,7 +162,7 @@ body::after {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   font-size: 12px;
   font-weight: 400;
   line-height: 16px;
@@ -246,8 +246,8 @@ body::after {
 }
 
 :root[data-theme="dark"] [data-tooltip]::after {
-  border-color: var(--portal-gray-700);
-  background: var(--portal-gray-900);
-  color: var(--portal-white);
+  border-color: var(--gray-700);
+  background: var(--gray-900);
+  color: var(--white);
   box-shadow: none;
 }

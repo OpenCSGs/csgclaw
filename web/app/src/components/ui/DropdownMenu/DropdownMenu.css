@@ -39,7 +39,7 @@
 
 .csg-dropdown-menu-item.danger:hover,
 .csg-dropdown-menu-item.danger[data-highlighted] {
-  background: var(--portal-error-50);
+  background: var(--error-50);
   color: var(--danger);
 }
 

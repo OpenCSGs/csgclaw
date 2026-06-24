@@ -23,16 +23,14 @@
 
 .csg-select-trigger-sm {
   min-height: 36px;
-  padding: 8px 12px;
-  font-size: 12px;
-  line-height: 18px;
+  padding: var(--space-2) var(--space-3);
+  font: var(--text-xs-medium);
 }
 
 .csg-select-trigger-md {
   min-height: var(--input-height-md);
   padding: var(--input-padding-md);
-  font-size: 16px;
-  line-height: 24px;
+  font: var(--text-md-normal);
 }
 
 .csg-select-trigger:hover:not(:disabled) {
@@ -92,16 +90,14 @@
 
 .csg-select-label {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
+  font: var(--text-xs-semibold);
 }
 
 .csg-select-item {
   min-height: 36px;
   color: var(--text);
   cursor: default;
-  font-size: 14px;
-  line-height: 20px;
+  font: var(--text-sm-normal);
   outline: none;
   user-select: none;
 }

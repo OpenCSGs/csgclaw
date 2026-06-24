@@ -1,7 +1,7 @@
 .root {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  right: var(--space-6);
+  bottom: var(--space-6);
   z-index: var(--z-page-overlay);
   pointer-events: none;
 }
@@ -60,7 +60,7 @@
 .root.guided .launcher::before {
   content: "";
   position: absolute;
-  inset: -6px;
+  inset: calc(-1 * 6px);
   border: 1px solid color-mix(in oklab, var(--primary) 30%, transparent);
   border-radius: 50%;
   opacity: 0;
@@ -72,11 +72,11 @@
   position: absolute;
   top: 6px;
   right: 6px;
-  width: 8px;
-  height: 8px;
+  width: var(--space-2);
+  height: var(--space-2);
   border: 2px solid var(--panel);
   border-radius: 50%;
-  background: var(--portal-success-500);
+  background: var(--success-500);
   box-shadow: var(--shadow-xs);
 }
 
@@ -84,7 +84,7 @@
   width: 34px;
   height: 34px;
   position: relative;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: visible;
 }
 
@@ -92,7 +92,7 @@
 .emptyAvatar :global(.agent-avatar-image) {
   width: 100%;
   height: 100%;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: block;
 }
 
@@ -100,7 +100,7 @@
 .emptyAvatar :global(.agent-avatar-fallback) {
   width: 100%;
   height: 100%;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
 }
@@ -112,7 +112,7 @@
   width: 22px;
   height: 22px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
   background: var(--surface);
@@ -128,11 +128,11 @@
   height: 10px;
   border: 2px solid var(--panel);
   border-radius: 50%;
-  background: var(--portal-gray-400);
+  background: var(--gray-400);
 }
 
 .statusDot.online {
-  background: var(--portal-success-500);
+  background: var(--success-500);
 }
 
 .launcherCount,
@@ -142,7 +142,7 @@
   height: 16px;
   padding: 0 5px;
   border: 1px solid var(--panel);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -150,7 +150,7 @@
   color: var(--on-primary);
   font-family: var(--font-mono);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: var(--font-weight-semibold);
   line-height: 14px;
 }
 
@@ -173,7 +173,7 @@
   min-height: min(400px, calc(100dvh - 32px));
   max-height: min(760px, calc(100dvh - 32px));
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--panel);
   box-shadow:
@@ -247,13 +247,13 @@
 }
 
 .conversation > :global(.chat-header) {
-  padding: 10px 12px;
+  padding: 10px var(--space-3);
   background: var(--surface);
 }
 
 .conversation > :global(.chat-header) :global(.chat-title-bar) {
   min-height: 36px;
-  gap: 8px;
+  gap: var(--space-2);
   justify-content: flex-end;
 }
 
@@ -263,7 +263,7 @@
 }
 
 .conversation > :global(.chat-header) :global(.chat-title-group) {
-  gap: 2px 8px;
+  gap: 2px var(--space-2);
 }
 
 .conversation > :global(.chat-header) :global(.chat-kicker) {
@@ -272,13 +272,13 @@
 }
 
 .conversation > :global(.chat-header) :global(.chat-title) {
-  font-size: 16px;
+  font: var(--text-md-normal);
   line-height: 20px;
 }
 
 .conversation > :global(.chat-header) :global(.chat-subtitle) {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs-size);
 }
 
 .conversation > :global(.chat-header) :global(.chat-title-actions) {
@@ -292,7 +292,7 @@
   max-width: 32px;
   height: 32px;
   min-height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .topicsButton,
@@ -301,14 +301,14 @@
 }
 
 .conversation > :global(.messages) {
-  padding: 16px;
+  padding: var(--space-4);
   gap: 14px;
   background: var(--panel);
 }
 
 .prompts {
   min-height: 100%;
-  padding: 24px;
+  padding: var(--space-6);
   display: grid;
   place-items: center;
   align-content: center;
@@ -324,14 +324,13 @@
 
 .promptsCopy strong {
   color: var(--text);
-  font-size: 18px;
-  font-weight: 750;
+  font: var(--text-lg-semibold);
   line-height: 24px;
 }
 
 .promptsCopy span {
   color: var(--muted);
-  font-size: 14px;
+  font: var(--text-sm-normal);
   line-height: 20px;
 }
 
@@ -346,7 +345,7 @@
   min-height: 46px;
   padding: 0 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   gap: 10px;
@@ -354,8 +353,7 @@
   background: var(--field);
   color: var(--text);
   font: inherit;
-  font-size: 14px;
-  font-weight: 520;
+  font: var(--text-sm-medium);
   line-height: 20px;
   text-align: left;
   cursor: pointer;
@@ -390,23 +388,23 @@
   width: 28px;
   height: 28px;
   flex-basis: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 11px;
 }
 
 .conversation :global(.message-bubble) {
-  padding: 10px 12px;
-  font-size: 14px;
+  padding: 10px var(--space-3);
+  font-size: var(--text-sm-size);
 }
 
 .conversation :global(.message-meta) {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
   gap: 7px;
   font-size: 11px;
 }
 
 .conversation > :global(.composer) {
-  padding: 12px;
+  padding: var(--space-3);
 }
 
 .conversation :global(.composer-input-wrap) {
@@ -417,14 +415,14 @@
   min-height: 58px;
   max-height: 118px;
   padding: 13px 56px 12px 12px;
-  font-size: 14px;
+  font-size: var(--text-sm-size);
 }
 
 .conversation :global(.composer-placeholder) {
   top: 13px;
   left: 12px;
   right: 56px;
-  font-size: 14px;
+  font-size: var(--text-sm-size);
 }
 
 .conversation :global(.composer-send-button) {
@@ -449,7 +447,7 @@
 
 .emptyHeader {
   min-height: 58px;
-  padding: 10px 12px;
+  padding: 10px var(--space-3);
   border-bottom: 1px solid var(--line);
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto auto;
@@ -461,7 +459,7 @@
 .emptyAvatar {
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -472,8 +470,7 @@
 .emptyTitle {
   overflow: hidden;
   color: var(--text);
-  font-size: 16px;
-  font-weight: 700;
+  font: var(--text-md-semibold);
   line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -482,8 +479,8 @@
 .emptySubtitle {
   overflow: hidden;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--text-xs-size);
+  line-height: var(--space-4);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -491,7 +488,7 @@
 .emptyBody,
 .threadEmpty {
   min-height: 0;
-  padding: 24px;
+  padding: var(--space-6);
   display: grid;
   place-items: center;
   align-content: center;
@@ -503,15 +500,14 @@
 .emptyBody strong,
 .threadEmpty strong {
   color: var(--text);
-  font-size: 14px;
-  font-weight: 650;
+  font: var(--text-sm-medium);
 }
 
 .emptyMark {
   width: 38px;
   height: 38px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
   background: var(--panel-strong);
@@ -529,12 +525,12 @@
 }
 
 .threadBody {
-  padding: 12px;
+  padding: var(--space-3);
 }
 
 .threadList {
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .threadRow {
@@ -542,7 +538,7 @@
   min-height: 62px;
   padding: 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 10px;
@@ -570,7 +566,7 @@
   width: 34px;
   height: 34px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
   background: var(--surface);
@@ -580,13 +576,12 @@
 .threadMain {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .threadTitle {
   overflow: hidden;
-  font-size: 14px;
-  font-weight: 650;
+  font: var(--text-sm-medium);
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -595,10 +590,10 @@
 .threadMeta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   color: var(--muted);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--text-xs-size);
+  line-height: var(--space-4);
 }
 
 :global(:root[data-theme="dark"]) .panel,
@@ -624,11 +619,11 @@
 
 @media (max-width: 720px) {
   .root {
-    right: 12px;
+    right: var(--space-3);
   }
 
   .root.expanded {
-    bottom: 12px;
+    bottom: var(--space-3);
   }
 
   .panel {
@@ -639,6 +634,6 @@
   }
 
   .prompts {
-    padding: 20px;
+    padding: var(--space-5);
   }
 }

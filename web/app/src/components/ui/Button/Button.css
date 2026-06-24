@@ -37,9 +37,9 @@
 .btn[disabled] {
   cursor: not-allowed;
   pointer-events: none;
-  border-color: var(--portal-gray-200);
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-400);
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
   box-shadow: var(--shadow-xs);
 }
 
@@ -128,75 +128,75 @@
 }
 
 .btn-primary {
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
 .btn-primary:hover:not(:disabled) {
-  border-color: var(--portal-brand-700);
-  background: var(--portal-brand-700);
-  color: var(--portal-white);
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
 .btn-primary:focus-visible {
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
   box-shadow:
     var(--shadow-xs),
-    0 0 0 4px rgba(77, 106, 214, 0.2);
+    0 0 0 var(--space-1) color-mix(in srgb, var(--brand-500) 20%, transparent);
 }
 
 .btn-primary.btn-loading:disabled,
 .btn-primary.btn-loading[disabled] {
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
   opacity: 0.9;
 }
 
 .btn-secondary-gray {
-  border-color: var(--portal-gray-300);
-  background: var(--portal-white);
-  color: var(--portal-gray-700);
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
   box-shadow: var(--shadow-xs);
 }
 
 .btn-secondary-gray:hover:not(:disabled) {
-  border-color: var(--portal-gray-300);
-  background: var(--portal-gray-50);
-  color: var(--portal-gray-800);
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
 }
 
 .btn-secondary-gray:focus-visible {
-  border-color: var(--portal-gray-300);
-  background: var(--portal-white);
-  color: var(--portal-gray-700);
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
   box-shadow:
     var(--shadow-xs),
-    0 0 0 4px rgba(152, 162, 179, 0.14);
+    0 0 0 var(--space-1) color-mix(in srgb, var(--gray-400) 14%, transparent);
 }
 
 .btn-secondary-color {
-  border-color: color-mix(in oklab, var(--portal-brand-600) 28%, var(--line));
-  background: color-mix(in oklab, var(--portal-brand-600) 10%, var(--surface));
-  color: var(--portal-brand-700);
+  border-color: color-mix(in oklab, var(--brand-600) 28%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 10%, var(--surface));
+  color: var(--brand-700);
   box-shadow: var(--shadow-xs);
 }
 
 .btn-secondary-color:hover:not(:disabled) {
-  border-color: color-mix(in oklab, var(--portal-brand-600) 38%, var(--line));
-  background: color-mix(in oklab, var(--portal-brand-600) 15%, var(--surface));
-  color: var(--portal-brand-800);
+  border-color: color-mix(in oklab, var(--brand-600) 38%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 15%, var(--surface));
+  color: var(--brand-800);
 }
 
 .btn-secondary-color:focus-visible {
-  border-color: var(--portal-brand-300);
-  background: var(--portal-white);
-  color: var(--portal-brand-700);
+  border-color: var(--brand-300);
+  background: var(--white);
+  color: var(--brand-700);
   box-shadow: var(--shadow-xs), var(--focus-ring);
 }
 
@@ -221,22 +221,22 @@
 }
 
 .btn-tertiary-gray {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
 }
 
 .btn-tertiary-gray:hover:not(:disabled) {
-  background: var(--portal-gray-50);
-  color: var(--portal-gray-700);
+  background: var(--gray-50);
+  color: var(--gray-700);
 }
 
 .btn-tertiary-color,
 .btn-link-color {
-  color: var(--portal-brand-700);
+  color: var(--brand-700);
 }
 
 .btn-tertiary-color:hover:not(:disabled) {
-  background: var(--portal-brand-50);
-  color: var(--portal-brand-800);
+  background: var(--brand-50);
+  color: var(--brand-800);
 }
 
 .btn-tertiary-gray:focus-visible,
@@ -255,15 +255,15 @@
 }
 
 .btn-link-gray {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
 }
 
 .btn-link-gray:hover:not(:disabled) {
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
 }
 
 .btn-link-color:hover:not(:disabled) {
-  color: var(--portal-brand-800);
+  color: var(--brand-800);
 }
 
 .btn-link-gray:focus-visible,
@@ -272,16 +272,16 @@
 }
 
 .btn-danger {
-  border-color: var(--portal-error-600);
-  background: var(--portal-error-600);
-  color: var(--portal-white);
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
 .btn-danger:hover:not(:disabled) {
-  border-color: var(--portal-error-700);
-  background: var(--portal-error-700);
-  color: var(--portal-white);
+  border-color: var(--error-700);
+  background: var(--error-700);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
@@ -292,16 +292,16 @@
 }
 
 .btn-outline-danger {
-  border-color: color-mix(in oklab, var(--portal-error-600) 32%, var(--line));
-  background: color-mix(in oklab, var(--portal-error-600) 8%, var(--surface));
-  color: var(--portal-error-700);
+  border-color: color-mix(in oklab, var(--error-600) 32%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 8%, var(--surface));
+  color: var(--error-700);
   box-shadow: var(--shadow-xs);
 }
 
 .btn-outline-danger:hover:not(:disabled) {
-  border-color: color-mix(in oklab, var(--portal-error-600) 46%, var(--line));
-  background: color-mix(in oklab, var(--portal-error-600) 14%, var(--surface));
-  color: var(--portal-error-800);
+  border-color: color-mix(in oklab, var(--error-600) 46%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 14%, var(--surface));
+  color: var(--error-800);
 }
 
 .btn-outline-danger:focus-visible {
@@ -312,16 +312,16 @@
 
 .btn-tertiary-danger,
 .btn-link-danger {
-  color: var(--portal-error-700);
+  color: var(--error-700);
 }
 
 .btn-tertiary-danger:hover:not(:disabled) {
-  background: var(--portal-error-50);
-  color: var(--portal-error-800);
+  background: var(--error-50);
+  color: var(--error-800);
 }
 
 .btn-link-danger:hover:not(:disabled) {
-  color: var(--portal-error-800);
+  color: var(--error-800);
 }
 
 .btn-tertiary-danger:focus-visible,
@@ -337,9 +337,9 @@
 .btn-danger[disabled],
 .btn-outline-danger:disabled,
 .btn-outline-danger[disabled] {
-  border-color: var(--portal-gray-200);
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-400);
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
   box-shadow: var(--shadow-xs);
   opacity: 1;
 }
@@ -352,7 +352,7 @@
 .btn-link-danger:disabled {
   border-color: transparent;
   background: transparent;
-  color: var(--portal-gray-400);
+  color: var(--gray-400);
   box-shadow: none;
 }
 
@@ -427,77 +427,77 @@
 }
 
 :root[data-theme="dark"] .btn-secondary-gray {
-  border-color: rgba(208, 213, 221, 0.18);
-  background: var(--portal-gray-800);
-  color: var(--portal-gray-25);
+  border-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
+  background: var(--gray-800);
+  color: var(--gray-25);
   box-shadow: none;
 }
 
 :root[data-theme="dark"] .btn-secondary-gray:hover:not(:disabled) {
-  border-color: rgba(208, 213, 221, 0.28);
-  background: #253044;
-  color: var(--portal-gray-25);
+  border-color: color-mix(in srgb, var(--gray-300) 28%, transparent);
+  background: color-mix(in srgb, var(--gray-800) 78%, var(--gray-blue-900));
+  color: var(--gray-25);
 }
 
 :root[data-theme="dark"] .btn-primary {
-  border-color: rgba(172, 189, 255, 0.34);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: color-mix(in srgb, var(--brand-100) 34%, transparent);
+  background: var(--brand-600);
+  color: var(--white);
 }
 
 :root[data-theme="dark"] .btn-primary:hover:not(:disabled) {
-  border-color: rgba(172, 189, 255, 0.44);
-  background: var(--portal-brand-700);
-  color: var(--portal-white);
+  border-color: color-mix(in srgb, var(--brand-100) 44%, transparent);
+  background: var(--brand-700);
+  color: var(--white);
 }
 
 :root[data-theme="dark"] .btn-outline-danger {
-  border-color: rgba(253, 162, 155, 0.2);
-  background: rgba(217, 45, 32, 0.1);
-  color: #fda29b;
+  border-color: color-mix(in srgb, var(--error-300) 20%, transparent);
+  background: color-mix(in srgb, var(--error-600) 10%, transparent);
+  color: var(--error-300);
 }
 
 :root[data-theme="dark"] .btn-danger {
-  border-color: rgba(253, 162, 155, 0.32);
-  background: color-mix(in oklab, var(--portal-error-600) 86%, var(--portal-error-800));
-  color: var(--portal-white);
+  border-color: color-mix(in srgb, var(--error-300) 32%, transparent);
+  background: color-mix(in oklab, var(--error-600) 86%, var(--error-800));
+  color: var(--white);
 }
 
 :root[data-theme="dark"] .btn-danger:hover:not(:disabled) {
-  border-color: rgba(253, 162, 155, 0.42);
-  background: var(--portal-error-700);
-  color: var(--portal-white);
+  border-color: color-mix(in srgb, var(--error-300) 42%, transparent);
+  background: var(--error-700);
+  color: var(--white);
 }
 
 :root[data-theme="dark"] .btn-outline-danger:hover:not(:disabled) {
-  border-color: rgba(253, 162, 155, 0.32);
-  background: rgba(217, 45, 32, 0.22);
-  color: #fecdca;
+  border-color: color-mix(in srgb, var(--error-300) 32%, transparent);
+  background: color-mix(in srgb, var(--error-600) 22%, transparent);
+  color: var(--error-200);
 }
 
 :root[data-theme="dark"] .btn-tertiary-gray,
 :root[data-theme="dark"] .btn-link-gray {
-  color: var(--portal-gray-300);
+  color: var(--gray-300);
 }
 
 :root[data-theme="dark"] .btn-tertiary-gray:hover:not(:disabled) {
-  background: var(--portal-gray-800);
-  color: var(--portal-gray-25);
+  background: var(--gray-800);
+  color: var(--gray-25);
 }
 
 :root[data-theme="dark"] .btn:disabled,
 :root[data-theme="dark"] .btn[disabled] {
-  border-color: rgba(208, 213, 221, 0.12);
-  background: rgba(208, 213, 221, 0.08);
-  color: var(--portal-gray-500);
+  border-color: color-mix(in srgb, var(--gray-300) 12%, transparent);
+  background: color-mix(in srgb, var(--gray-300) 8%, transparent);
+  color: var(--gray-500);
   box-shadow: none;
 }
 
 :root[data-theme="dark"] .btn-primary.btn-loading:disabled,
 :root[data-theme="dark"] .btn-primary.btn-loading[disabled] {
-  border-color: rgba(172, 189, 255, 0.34);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: color-mix(in srgb, var(--brand-100) 34%, transparent);
+  background: var(--brand-600);
+  color: var(--white);
   opacity: 0.9;
 }
 
@@ -509,6 +509,6 @@
 :root[data-theme="dark"] .btn-link-danger:disabled {
   border-color: transparent;
   background: transparent;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   box-shadow: none;
 }

@@ -9,7 +9,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -19,9 +19,9 @@
 
   gap: var(--agent-detail-section-gap);
   justify-items: center;
-  padding: 24px 32px 28px;
+  padding: var(--space-6) var(--space-8) 28px;
   background:
-    linear-gradient(180deg, var(--portal-white) 0, var(--portal-white) 138px, transparent 138px), var(--portal-gray-25);
+    linear-gradient(180deg, var(--white) 0, var(--white) 138px, transparent 138px), var(--gray-25);
 }
 
 .agent-detail-pane .profile-editor-shell.agent-page-editor {
@@ -42,20 +42,19 @@
 }
 
 .agent-detail-pane > .form-warning {
-  border: 1px solid color-mix(in oklab, var(--portal-warning-700) 30%, var(--line));
-  border-radius: 12px;
-  background: var(--portal-warning-50);
-  color: var(--portal-warning-700);
-  padding: 12px 14px;
-  font-size: 14px;
-  font-weight: 650;
+  border: 1px solid color-mix(in oklab, var(--warning-700) 30%, var(--line));
+  border-radius: var(--radius-xl);
+  background: var(--warning-50);
+  color: var(--warning-700);
+  padding: var(--space-3) 14px;
+  font: var(--text-sm-medium);
   line-height: 1.5;
 }
 
 .agent-detail-pane > .form-warning.success {
-  border-color: color-mix(in oklab, var(--portal-success-700) 30%, var(--line));
-  background: var(--portal-success-50);
-  color: var(--portal-success-700);
+  border-color: color-mix(in oklab, var(--success-700) 30%, var(--line));
+  background: var(--success-50);
+  color: var(--success-700);
 }
 
 .agent-detail-pane > .form-warning.info {
@@ -67,10 +66,10 @@
 .agent-detail-pane .entity-header {
   grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   background: var(--surface);
   box-shadow: var(--shadow-xs);
 }
@@ -80,7 +79,7 @@
   --btn-min-width: 80px;
   --btn-padding-x: 16px;
 
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .agent-save-status {
@@ -91,20 +90,19 @@
   justify-content: center;
   gap: 6px;
   padding: 0 14px;
-  color: var(--portal-success-700);
-  font-size: 14px;
-  font-weight: 650;
+  color: var(--success-700);
+  font: var(--text-sm-medium);
   white-space: nowrap;
 }
 
 .agent-save-status.warn {
-  color: oklch(0.72 0.16 35);
+  color: var(--warning-700);
 }
 
 .field-hint.error {
   display: block;
   margin-top: 6px;
-  color: oklch(0.72 0.16 35);
+  color: var(--warning-700);
 }
 
 .agent-actions-menu-trigger {
@@ -118,23 +116,23 @@
   width: 8px;
   height: 8px;
   border: 2px solid var(--surface);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--warning);
 }
 
 .agent-actions-menu-badge {
   padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--portal-warning-50);
-  color: var(--portal-warning-700);
+  border-radius: var(--radius-full);
+  background: var(--warning-50);
+  color: var(--warning-700);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   white-space: nowrap;
 }
 
 .agent-channels-section {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .agent-channels-title {
@@ -149,11 +147,11 @@
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) max-content;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   min-height: 54px;
-  padding: 10px 12px;
+  padding: 10px var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--field);
 }
 
@@ -164,7 +162,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid color-mix(in oklab, var(--line) 75%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 
@@ -177,13 +175,13 @@
 .agent-channel-main {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .agent-channel-name {
   color: var(--text);
-  font-size: 14px;
-  font-weight: 720;
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-semibold);
   line-height: 18px;
 }
 
@@ -193,55 +191,55 @@
   align-items: center;
   gap: 6px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 2px 7px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-semibold);
   line-height: 16px;
 }
 
 .agent-channel-status.connected {
-  border-color: color-mix(in oklab, var(--portal-success-700) 28%, var(--line));
-  background: var(--portal-success-50);
-  color: var(--portal-success-700);
+  border-color: color-mix(in oklab, var(--success-700) 28%, var(--line));
+  background: var(--success-50);
+  color: var(--success-700);
 }
 
 .agent-channel-status.pending {
-  color: var(--portal-warning-700);
+  color: var(--warning-700);
 }
 
 :root[data-theme="dark"] .agent-channel-row {
-  border-color: rgba(208, 213, 221, 0.18);
+  border-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
   background: var(--field);
 }
 
 :root[data-theme="dark"] .agent-channel-icon {
-  border-color: rgba(208, 213, 221, 0.18);
+  border-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
   background: var(--panel-strong);
 }
 
 :root[data-theme="dark"] .agent-channel-status.connected {
-  border-color: color-mix(in oklab, var(--portal-success-500) 34%, var(--line));
-  background: color-mix(in oklab, var(--portal-success-500) 14%, transparent);
-  color: color-mix(in oklab, var(--portal-success-500) 86%, var(--text));
+  border-color: color-mix(in oklab, var(--success-500) 34%, var(--line));
+  background: color-mix(in oklab, var(--success-500) 14%, transparent);
+  color: color-mix(in oklab, var(--success-500) 86%, var(--text));
 }
 
 :root[data-theme="dark"] .agent-channel-status.pending {
-  color: color-mix(in oklab, var(--portal-warning-700) 78%, var(--text));
+  color: color-mix(in oklab, var(--warning-700) 78%, var(--text));
 }
 
 .agent-channel-detail {
   color: var(--muted);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--text-xs-size);
+  line-height: var(--space-4);
 }
 
 .agent-channel-actions {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .agent-channel-actions .btn {
@@ -250,7 +248,7 @@
   --btn-padding-x: 11px;
 
   gap: 6px;
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
 }
 
 .agent-detail-pane .entity-avatar {
@@ -307,7 +305,7 @@
 
 .agent-detail-pane .entity-title-row h1 {
   font-size: 23px;
-  line-height: 30px;
+  line-height: var(--text-xl-line-height);
 }
 
 .agent-detail-pane .entity-title-row {
@@ -350,7 +348,7 @@
 .agent-detail-pane .entity-description-display-copy {
   min-width: 0;
   overflow: hidden;
-  font-size: 14px;
+  font-size: var(--text-sm-size);
   line-height: 1.6;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -385,7 +383,7 @@
 
 .agent-detail-pane .entity-description-text {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-sm-size);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -393,7 +391,7 @@
 
 .agent-skills-section {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .agent-detail-pane .agent-skills-title {
@@ -410,19 +408,18 @@
 }
 
 .agent-detail-pane .agent-skills-title span {
-  color: var(--portal-gray-700);
-  font-size: 14px;
-  font-weight: 600;
+  color: var(--gray-700);
+  font: var(--text-sm-semibold);
   line-height: 20px;
 }
 
 .agent-detail-pane .agent-skills-title small {
   min-width: 16px;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--text-xs-line-height);
   text-align: left;
 }
 
@@ -434,9 +431,9 @@
 .agent-skill-card {
   display: grid;
   gap: 6px;
-  padding: 12px 14px;
+  padding: var(--space-3) 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--surface);
 }
 
@@ -444,7 +441,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .agent-skill-card-header .btn {
@@ -463,8 +460,8 @@
 
 .agent-skill-name {
   color: var(--text);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-semibold);
   line-height: 1.4;
 }
 
@@ -479,7 +476,7 @@
 
 .agent-skills-empty {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-sm-size);
   line-height: 1.6;
 }
 
@@ -493,13 +490,13 @@
 
 .agent-skills-dialog-copy {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .agent-skills-dialog-body {
   display: grid;
-  gap: 12px;
-  padding: 20px 22px;
+  gap: var(--space-3);
+  padding: var(--space-5) 22px;
 }
 
 .agent-skill-candidates-list {
@@ -513,11 +510,11 @@
 .agent-skill-candidate {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--space-3);
   align-items: start;
-  padding: 12px 14px;
+  padding: var(--space-3) 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--surface);
   cursor: pointer;
 }
@@ -534,13 +531,13 @@
 .agent-skill-candidate-copy {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .agent-skills-dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 16px 22px 22px;
   border-top: 1px solid var(--line);
 }
@@ -556,7 +553,7 @@
 .agent-skills-dialog .csg-dialog-description {
   max-width: 440px;
   margin-top: 6px;
-  font-size: 14px;
+  font-size: var(--text-sm-size);
   line-height: 1.5;
 }
 
@@ -564,39 +561,39 @@
   width: 8px;
   height: 8px;
   flex: 0 0 auto;
-  border-radius: 999px;
-  background: oklch(0.48 0.02 248);
+  border-radius: var(--radius-full);
+  background: var(--gray-500);
 }
 
 .agent-detail-pane .agent-status-dot.online {
-  background: var(--portal-success-700);
-  box-shadow: 0 0 0 3px rgba(6, 118, 71, 0.12);
+  background: var(--success-700);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success-700) 12%, transparent);
 }
 
 .agent-detail-pane .status-pill {
   min-height: 26px;
   padding: 3px 10px;
   font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 18px;
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--text-xs-line-height);
 }
 
 .agent-detail-pane .profile-state-pill.ready {
-  border-color: rgba(23, 178, 106, 0.28);
-  background: var(--portal-success-50);
-  color: var(--portal-success-700);
+  border-color: color-mix(in srgb, var(--success-500) 28%, transparent);
+  background: var(--success-50);
+  color: var(--success-700);
 }
 
 .agent-detail-pane .profile-state-pill.warn {
-  border-color: color-mix(in oklab, var(--portal-warning-700) 28%, var(--line));
-  background: var(--portal-warning-50);
-  color: var(--portal-warning-700);
+  border-color: color-mix(in oklab, var(--warning-700) 28%, var(--line));
+  background: var(--warning-50);
+  color: var(--warning-700);
 }
 
 .agent-detail-pane .profile-section {
   padding: 14px 16px 16px;
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   background: var(--surface);
 }
 
@@ -621,7 +618,7 @@
 .agent-detail-pane .profile-api-grid,
 .agent-detail-pane .profile-advanced-grid {
   align-items: start;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .agent-detail-pane .profile-runtime-grid {
@@ -632,7 +629,7 @@
 .agent-detail-pane .field textarea,
 .agent-detail-pane .csg-select-trigger {
   min-height: 42px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .agent-detail-pane .agent-image-field {
@@ -643,7 +640,7 @@
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
   align-items: start;
 }
 
@@ -676,7 +673,7 @@
   overflow-y: auto;
   padding-right: 4px;
   scrollbar-width: thin;
-  scrollbar-color: var(--portal-gray-400) transparent;
+  scrollbar-color: var(--gray-400) transparent;
 }
 
 .agent-detail-pane .profile-env-field .env-editor::-webkit-scrollbar {
@@ -688,19 +685,19 @@
 }
 
 .agent-detail-pane .profile-env-field .env-editor::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .agent-detail-pane .agent-workspace-section {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .agent-detail-pane .agent-workspace-panels {
   display: grid;
   grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--space-3);
   min-height: 420px;
 }
 

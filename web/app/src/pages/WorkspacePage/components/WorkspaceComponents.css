@@ -259,9 +259,9 @@
 }
 
 .agent-badge.ready {
-  border-color: color-mix(in oklab, var(--portal-success-700) 28%, var(--line));
-  background: var(--portal-success-50);
-  color: var(--portal-success-700);
+  border-color: color-mix(in oklab, var(--success-700) 28%, var(--line));
+  background: var(--success-50);
+  color: var(--success-700);
 }
 
 .agent-status.running {
@@ -637,8 +637,8 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-500);
+  background: var(--gray-100);
+  color: var(--gray-500);
   cursor: pointer;
   overflow: visible;
   box-shadow: none;
@@ -651,14 +651,14 @@
 
 .agent-avatar-trigger:hover,
 .agent-avatar-picker:not(.edit-mode).open .agent-avatar-trigger {
-  background: color-mix(in oklab, var(--portal-gray-100) 84%, var(--portal-brand-500));
-  color: var(--portal-brand-600);
+  background: color-mix(in oklab, var(--gray-100) 84%, var(--brand-500));
+  color: var(--brand-600);
 }
 
 .agent-avatar-picker.edit-mode.empty-avatar .agent-avatar-trigger:hover,
 .agent-avatar-picker.edit-mode.empty-avatar .agent-avatar-trigger:focus-visible {
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-700);
+  background: var(--gray-100);
+  color: var(--gray-700);
 }
 
 :root[data-theme="dark"] .agent-avatar-picker.edit-mode.empty-avatar .agent-avatar-trigger {
@@ -675,8 +675,8 @@
 .agent-avatar-picker.edit-mode.open .agent-avatar-trigger,
 .agent-avatar-picker.edit-mode.open .agent-avatar-trigger:hover,
 .agent-avatar-picker.edit-mode.open .agent-avatar-trigger:focus-visible {
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-500);
+  background: var(--gray-100);
+  color: var(--gray-500);
   box-shadow: none;
   pointer-events: none;
 }
@@ -708,7 +708,7 @@
   justify-content: center;
   border-radius: inherit;
   background: rgba(0, 0, 0, 0.24);
-  color: var(--portal-white);
+  color: var(--white);
   opacity: 0;
   pointer-events: none;
   transition: opacity 160ms ease;
@@ -727,7 +727,7 @@
   z-index: calc(var(--z-popover) + 1);
   padding: 8px 12px;
   border-radius: 8px;
-  background: var(--portal-gray-900);
+  background: var(--gray-900);
   color: #fff;
   font-size: 12px;
   font-weight: 400;
@@ -761,7 +761,7 @@
   bottom: -5px;
   width: 10px;
   height: 10px;
-  background: var(--portal-gray-900);
+  background: var(--gray-900);
   content: "";
   transform: translateX(-50%) rotate(45deg);
 }
@@ -796,8 +796,8 @@
   .agent-avatar-trigger:focus-visible
   .agent-avatar-edit-overlay
   svg {
-  color: var(--portal-white);
-  stroke: var(--portal-white);
+  color: var(--white);
+  stroke: var(--white);
 }
 
 .agent-avatar-picker.edit-mode.open .agent-avatar-edit-overlay,
@@ -809,8 +809,8 @@
 .agent-avatar-picker.edit-mode.suppress-trigger-hover .agent-avatar-trigger,
 .agent-avatar-picker.edit-mode.suppress-trigger-hover .agent-avatar-trigger:hover,
 .agent-avatar-picker.edit-mode.suppress-trigger-hover .agent-avatar-trigger:focus-visible {
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-500);
+  background: var(--gray-100);
+  color: var(--gray-500);
   box-shadow: none;
 }
 
@@ -847,9 +847,9 @@
   max-height: 360px;
   padding: 12px;
   overflow-y: auto;
-  border: 1px solid var(--portal-gray-200);
+  border: 1px solid var(--gray-200);
   border-radius: var(--radius-md);
-  background: var(--portal-white);
+  background: var(--white);
   box-shadow: var(--shadow-lg);
 }
 
@@ -876,11 +876,11 @@
   max-height: calc(100dvh - 48px);
   overflow: hidden;
   border-radius: 12px;
-  background: var(--portal-white);
+  background: var(--white);
   box-shadow:
     0 20px 24px -4px rgba(16, 24, 40, 0.08),
     0 8px 8px -4px rgba(16, 24, 40, 0.03);
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
 }
 
 :root[data-theme="dark"] .agent-avatar-editor-modal {
@@ -912,14 +912,14 @@
 }
 
 .agent-avatar-editor-heading h2 {
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
   font-size: 18px;
   font-weight: 500;
   line-height: 28px;
 }
 
 .agent-avatar-editor-heading p {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 14px;
   font-weight: 300;
   line-height: 22px;
@@ -948,14 +948,14 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--portal-gray-400);
+  color: var(--gray-400);
   cursor: pointer;
 }
 
 .agent-avatar-editor-close:hover,
 .agent-avatar-editor-close:focus-visible {
-  color: var(--portal-gray-700);
-  background: var(--portal-gray-100);
+  color: var(--gray-700);
+  background: var(--gray-100);
   outline: none;
 }
 
@@ -983,7 +983,7 @@
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  border-bottom: 1px solid var(--portal-gray-200);
+  border-bottom: 1px solid var(--gray-200);
 }
 
 :root[data-theme="dark"] .agent-avatar-editor-tabs {
@@ -997,7 +997,7 @@
   border-bottom: 2px solid transparent;
   border-radius: 0;
   background: transparent;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
@@ -1010,7 +1010,7 @@
 
 .agent-avatar-editor-tab:hover,
 .agent-avatar-editor-tab:focus-visible {
-  color: var(--portal-brand-700);
+  color: var(--brand-700);
   outline: none;
 }
 
@@ -1020,8 +1020,8 @@
 }
 
 .agent-avatar-editor-tab.active {
-  border-bottom-color: var(--portal-brand-600);
-  color: var(--portal-brand-700);
+  border-bottom-color: var(--brand-600);
+  color: var(--brand-700);
 }
 
 :root[data-theme="dark"] .agent-avatar-editor-tab.active {
@@ -1071,10 +1071,10 @@
   justify-content: center;
   gap: 12px;
   padding: 16px 24px;
-  border: 1px solid var(--portal-gray-200);
+  border: 1px solid var(--gray-200);
   border-radius: 12px;
-  background: var(--portal-white);
-  color: var(--portal-gray-600);
+  background: var(--white);
+  color: var(--gray-600);
   cursor: pointer;
 }
 
@@ -1086,13 +1086,13 @@
 
 .agent-avatar-upload-dropzone:hover,
 .agent-avatar-upload-dropzone:focus-visible {
-  border-color: var(--portal-brand-500);
+  border-color: var(--brand-500);
   outline: none;
   box-shadow: 0 0 0 4px rgba(77, 106, 214, 0.12);
 }
 
 .agent-avatar-upload-dropzone.error {
-  border-color: var(--portal-error-300);
+  border-color: var(--error-300);
 }
 
 .agent-avatar-upload-icon {
@@ -1103,10 +1103,10 @@
   min-width: 40px;
   height: 40px;
   min-height: 40px;
-  border: 1px solid var(--portal-gray-200);
+  border: 1px solid var(--gray-200);
   border-radius: 8px;
-  background: var(--portal-white);
-  color: var(--portal-gray-700);
+  background: var(--white);
+  color: var(--gray-700);
   box-shadow: var(--shadow-xs);
 }
 
@@ -1124,7 +1124,7 @@
 }
 
 .agent-avatar-upload-copy span {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 14px;
   font-weight: 300;
   line-height: 22px;
@@ -1135,7 +1135,7 @@
 }
 
 .agent-avatar-upload-copy strong {
-  color: var(--portal-brand-700);
+  color: var(--brand-700);
   font-weight: 500;
 }
 
@@ -1145,7 +1145,7 @@
 
 .agent-avatar-upload-copy small,
 .agent-avatar-upload-error {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 12px;
   font-weight: 300;
   line-height: 18px;
@@ -1156,7 +1156,7 @@
 }
 
 .agent-avatar-upload-error {
-  color: var(--portal-error-700);
+  color: var(--error-700);
 }
 
 .agent-avatar-upload-input {
@@ -1215,7 +1215,7 @@
   left: 50%;
   width: 256px;
   height: 256px;
-  border: 2px solid var(--portal-brand-500);
+  border: 2px solid var(--brand-500);
   transform: translate(-50%, -50%);
 }
 
@@ -1223,8 +1223,8 @@
   position: absolute;
   width: 12px;
   height: 12px;
-  border: 2px solid var(--portal-brand-500);
-  background: var(--portal-white);
+  border: 2px solid var(--brand-500);
+  background: var(--white);
 }
 
 .agent-avatar-cropper-frame span:nth-child(1) {
@@ -1253,9 +1253,9 @@
   bottom: 8px;
   display: inline-flex;
   overflow: hidden;
-  border: 1px solid var(--portal-gray-300);
+  border: 1px solid var(--gray-300);
   border-radius: 8px;
-  background: var(--portal-white);
+  background: var(--white);
   box-shadow: var(--shadow-xs);
   transform: translateX(-50%);
 }
@@ -1273,9 +1273,9 @@
   min-height: 40px;
   padding: 8px 12px;
   border: 0;
-  border-right: 1px solid var(--portal-gray-300);
-  background: var(--portal-white);
-  color: var(--portal-gray-700);
+  border-right: 1px solid var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
   cursor: pointer;
 }
 
@@ -1303,10 +1303,10 @@
   min-width: 0;
   min-height: 44px;
   padding: 10px 16px;
-  border: 1px solid var(--portal-gray-300);
+  border: 1px solid var(--gray-300);
   border-radius: 8px;
-  background: var(--portal-white);
-  color: var(--portal-gray-700);
+  background: var(--white);
+  color: var(--gray-700);
   box-shadow: var(--shadow-xs);
   cursor: pointer;
   font-size: 16px;
@@ -1325,9 +1325,9 @@
 }
 
 .agent-avatar-editor-button.primary {
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
 }
 
 :root[data-theme="dark"] .agent-avatar-editor-button.primary {
@@ -1337,9 +1337,9 @@
 }
 
 .agent-avatar-editor-button.primary:disabled {
-  border-color: var(--portal-gray-200);
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-400);
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
   cursor: not-allowed;
 }
 
@@ -2273,9 +2273,9 @@
 .btn[disabled] {
   cursor: not-allowed;
   pointer-events: none;
-  background: var(--portal-gray-100);
-  border-color: var(--portal-gray-200);
-  color: var(--portal-gray-400);
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+  color: var(--gray-400);
   box-shadow: var(--shadow-xs);
 }
 
@@ -2311,9 +2311,9 @@
 .send-button,
 .composer-send-button,
 .preview-action-button-primary {
-  border-color: color-mix(in oklab, var(--portal-brand-600) 24%, var(--line));
-  background: color-mix(in oklab, var(--portal-brand-600) 8%, var(--surface));
-  color: var(--portal-brand-700);
+  border-color: color-mix(in oklab, var(--brand-600) 24%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 8%, var(--surface));
+  color: var(--brand-700);
   box-shadow: var(--shadow-xs);
 }
 
@@ -2322,9 +2322,9 @@
 .send-button:hover:not(:disabled),
 .composer-send-button:hover:not(:disabled),
 .preview-action-button-primary:hover:not(:disabled) {
-  border-color: color-mix(in oklab, var(--portal-brand-600) 34%, var(--line));
-  background: color-mix(in oklab, var(--portal-brand-600) 12%, var(--surface));
-  color: var(--portal-brand-800);
+  border-color: color-mix(in oklab, var(--brand-600) 34%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 12%, var(--surface));
+  color: var(--brand-800);
   box-shadow: var(--shadow-xs);
 }
 
@@ -2333,9 +2333,9 @@
 .send-button:focus-visible,
 .composer-send-button:focus-visible,
 .preview-action-button-primary:focus-visible {
-  border-color: color-mix(in oklab, var(--portal-brand-600) 42%, var(--line));
-  background: color-mix(in oklab, var(--portal-brand-600) 10%, var(--surface));
-  color: var(--portal-brand-800);
+  border-color: color-mix(in oklab, var(--brand-600) 42%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 10%, var(--surface));
+  color: var(--brand-800);
   box-shadow:
     var(--shadow-xs),
     0 0 0 4px rgba(77, 106, 214, 0.14);
@@ -2349,9 +2349,9 @@
 .agent-action-text,
 .tool-menu-row,
 .member-badge-button {
-  border-color: var(--portal-gray-300);
-  background: var(--portal-white);
-  color: var(--portal-gray-700);
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
   box-shadow: var(--shadow-xs);
 }
 
@@ -2363,9 +2363,9 @@
 .agent-action-text:hover:not(:disabled),
 .tool-menu-row:hover:not(:disabled),
 .member-badge-button:hover:not(:disabled) {
-  border-color: var(--portal-gray-300);
-  background: var(--portal-gray-50);
-  color: var(--portal-gray-800);
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
   box-shadow: var(--shadow-xs);
 }
 
@@ -2377,9 +2377,9 @@
 .agent-action-text:focus-visible,
 .tool-menu-row:focus-visible,
 .member-badge-button:focus-visible {
-  border-color: var(--portal-gray-300);
-  background: var(--portal-white);
-  color: var(--portal-gray-700);
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
   box-shadow:
     var(--shadow-xs),
     0 0 0 4px rgba(152, 162, 179, 0.14);
@@ -2390,9 +2390,9 @@
 .icon-button.active,
 .member-badge-button.active,
 .workspace-tab.active {
-  border-color: color-mix(in oklab, var(--portal-brand-600) 20%, var(--line));
-  background: color-mix(in oklab, var(--portal-brand-600) 5%, var(--surface));
-  color: var(--portal-brand-700);
+  border-color: color-mix(in oklab, var(--brand-600) 20%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 5%, var(--surface));
+  color: var(--brand-700);
   box-shadow: var(--shadow-xs);
 }
 
@@ -2400,27 +2400,27 @@
 .csg-button-secondary-color:hover:not(:disabled),
 .icon-button.active:hover:not(:disabled),
 .member-badge-button.active:hover:not(:disabled) {
-  border-color: color-mix(in oklab, var(--portal-brand-600) 28%, var(--line));
-  background: color-mix(in oklab, var(--portal-brand-600) 9%, var(--surface));
-  color: var(--portal-brand-800);
+  border-color: color-mix(in oklab, var(--brand-600) 28%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 9%, var(--surface));
+  color: var(--brand-800);
   box-shadow: var(--shadow-xs);
 }
 
 .btn-danger,
 .csg-button-danger,
 .danger-button {
-  border-color: color-mix(in oklab, var(--portal-error-600) 24%, var(--line));
-  background: color-mix(in oklab, var(--portal-error-600) 7%, var(--surface));
-  color: var(--portal-error-700);
+  border-color: color-mix(in oklab, var(--error-600) 24%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 7%, var(--surface));
+  color: var(--error-700);
   box-shadow: var(--shadow-xs);
 }
 
 .btn-danger:hover:not(:disabled),
 .csg-button-danger:hover:not(:disabled),
 .danger-button:hover:not(:disabled) {
-  border-color: color-mix(in oklab, var(--portal-error-600) 34%, var(--line));
-  background: color-mix(in oklab, var(--portal-error-600) 10%, var(--surface));
-  color: var(--portal-error-800);
+  border-color: color-mix(in oklab, var(--error-600) 34%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 10%, var(--surface));
+  color: var(--error-800);
 }
 
 .btn-outline-danger,
@@ -2429,9 +2429,9 @@
 .agent-icon-button.danger,
 .tool-menu-row.danger,
 .conversation-delete-button {
-  border-color: color-mix(in oklab, var(--portal-error-600) 18%, var(--line));
+  border-color: color-mix(in oklab, var(--error-600) 18%, var(--line));
   background: var(--surface);
-  color: var(--portal-error-700);
+  color: var(--error-700);
   box-shadow: var(--shadow-xs);
 }
 
@@ -2441,9 +2441,9 @@
 .agent-icon-button.danger:hover:not(:disabled),
 .tool-menu-row.danger:hover:not(:disabled),
 .conversation-delete-button:hover:not(:disabled) {
-  border-color: color-mix(in oklab, var(--portal-error-600) 28%, var(--line));
-  background: color-mix(in oklab, var(--portal-error-600) 6%, var(--surface));
-  color: var(--portal-error-800);
+  border-color: color-mix(in oklab, var(--error-600) 28%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 6%, var(--surface));
+  color: var(--error-800);
 }
 
 .btn-ghost,
@@ -2454,7 +2454,7 @@
 .env-remove-button {
   border-color: transparent;
   background: transparent;
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   box-shadow: none;
 }
 
@@ -2465,8 +2465,8 @@
 .workspace-add-button:hover:not(:disabled),
 .env-remove-button:hover:not(:disabled) {
   border-color: transparent;
-  background: var(--portal-gray-50);
-  color: var(--portal-gray-700);
+  background: var(--gray-50);
+  color: var(--gray-700);
   box-shadow: none;
 }
 
@@ -2536,9 +2536,9 @@ button[disabled],
 .danger-button:disabled {
   cursor: not-allowed;
   pointer-events: none;
-  background: var(--portal-gray-100);
-  border-color: var(--portal-gray-200);
-  color: var(--portal-gray-400);
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+  color: var(--gray-400);
   box-shadow: var(--shadow-xs);
   opacity: 1;
 }
@@ -2551,7 +2551,7 @@ button[disabled],
 .btn-link-danger:disabled {
   border-color: transparent;
   background: transparent;
-  color: var(--portal-gray-400);
+  color: var(--gray-400);
   box-shadow: none;
 }
 
@@ -2566,8 +2566,8 @@ button[disabled],
 :root[data-theme="dark"] .icon-button,
 :root[data-theme="dark"] .agent-icon-button {
   border-color: rgba(208, 213, 221, 0.18);
-  background: var(--portal-gray-800);
-  color: var(--portal-gray-25);
+  background: var(--gray-800);
+  color: var(--gray-25);
   box-shadow: none;
 }
 
@@ -2584,7 +2584,7 @@ button[disabled],
 :root[data-theme="dark"] .agent-icon-button:hover:not(:disabled) {
   border-color: rgba(208, 213, 221, 0.28);
   background: #253044;
-  color: var(--portal-gray-25);
+  color: var(--gray-25);
 }
 
 :root[data-theme="dark"] .btn-primary,
@@ -2592,9 +2592,9 @@ button[disabled],
 :root[data-theme="dark"] .send-button,
 :root[data-theme="dark"] .composer-send-button,
 :root[data-theme="dark"] .preview-action-button-primary {
-  border-color: var(--portal-brand-300);
-  background: var(--portal-brand-300);
-  color: var(--portal-gray-950);
+  border-color: var(--brand-300);
+  background: var(--brand-300);
+  color: var(--gray-950);
 }
 
 :root[data-theme="dark"] .btn-primary:hover:not(:disabled),
@@ -2602,9 +2602,9 @@ button[disabled],
 :root[data-theme="dark"] .send-button:hover:not(:disabled),
 :root[data-theme="dark"] .composer-send-button:hover:not(:disabled),
 :root[data-theme="dark"] .preview-action-button-primary:hover:not(:disabled) {
-  border-color: var(--portal-brand-100);
-  background: var(--portal-brand-100);
-  color: var(--portal-gray-950);
+  border-color: var(--brand-100);
+  background: var(--brand-100);
+  color: var(--gray-950);
 }
 
 :root[data-theme="dark"] .btn-outline-danger,
@@ -2630,7 +2630,7 @@ button[disabled],
 :root[data-theme="dark"] .danger-button:disabled {
   border-color: rgba(208, 213, 221, 0.12);
   background: rgba(208, 213, 221, 0.08);
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   box-shadow: none;
 }
 
@@ -2642,7 +2642,7 @@ button[disabled],
 :root[data-theme="dark"] .btn-link-danger:disabled {
   border-color: transparent;
   background: transparent;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   box-shadow: none;
 }
 
@@ -2702,7 +2702,7 @@ button[disabled],
 .workspace-row:hover,
 .conversation-item:hover .conversation-item-main,
 .entity-list-main-button:hover {
-  background: var(--portal-gray-50);
+  background: var(--gray-50);
 }
 
 :root[data-theme="dark"] .workspace-tab:hover,
@@ -2714,8 +2714,8 @@ button[disabled],
 .workspace-tab.active,
 .workspace-row.active,
 .conversation-item.active .conversation-item-main {
-  border-color: var(--portal-brand-100);
-  background: var(--portal-brand-25);
+  border-color: var(--brand-100);
+  background: var(--brand-25);
   color: var(--primary-strong);
   box-shadow: none;
 }
@@ -2732,7 +2732,7 @@ button[disabled],
 .entity-avatar,
 .rich-empty-mark {
   border-color: var(--line);
-  background: var(--portal-brand-25);
+  background: var(--brand-25);
   color: var(--primary-strong);
 }
 
@@ -2752,7 +2752,7 @@ button[disabled],
   border-color: var(--line);
   border-radius: var(--radius-md);
   background: var(--field);
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   box-shadow: var(--shadow-xs);
 }
 
@@ -2785,9 +2785,9 @@ button[disabled],
 .preview-action-button:hover:not(:disabled),
 .workspace-add-button:hover,
 .env-remove-button:hover {
-  border-color: var(--portal-gray-300);
-  background: var(--portal-gray-50);
-  color: var(--portal-gray-800);
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
   transform: none;
 }
 
@@ -2810,9 +2810,9 @@ button[disabled],
 
 .icon-button.active,
 .member-badge-button.active {
-  border-color: var(--portal-brand-300);
-  background: var(--portal-brand-25);
-  color: var(--portal-brand-700);
+  border-color: var(--brand-300);
+  background: var(--brand-25);
+  color: var(--brand-700);
 }
 
 .composer-editor:focus,
@@ -2823,25 +2823,25 @@ button[disabled],
 .send-button:focus-visible,
 .secondary-button:focus-visible,
 .modal-close:focus-visible {
-  border-color: var(--portal-brand-500);
+  border-color: var(--brand-500);
   box-shadow: var(--focus-ring);
 }
 
 .composer-send-button,
 .send-button,
 .preview-action-button-primary {
-  border-color: var(--portal-brand-600);
+  border-color: var(--brand-600);
   border-radius: 6px;
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  background: var(--brand-600);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
 .composer-send-button:hover:not(:disabled),
 .send-button:hover:not(:disabled),
 .preview-action-button-primary:hover:not(:disabled) {
-  border-color: var(--portal-brand-700);
-  background: var(--portal-brand-700);
+  border-color: var(--brand-700);
+  background: var(--brand-700);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
@@ -2935,8 +2935,8 @@ button[disabled],
 
 .agent-row.manager,
 .selection-item.selection-all-item {
-  border-color: var(--portal-brand-100);
-  background: var(--portal-brand-25);
+  border-color: var(--brand-100);
+  background: var(--brand-25);
 }
 
 :root[data-theme="dark"] .agent-row.manager,
@@ -2948,13 +2948,13 @@ button[disabled],
 .agent-status.running,
 .status-pill.online,
 .workspace-status-dot.online {
-  color: var(--portal-success-700);
+  color: var(--success-700);
 }
 
 .mini-badge.warn,
 .agent-badge.warn {
-  color: var(--portal-warning-700);
-  background: var(--portal-warning-50);
+  color: var(--warning-700);
+  background: var(--warning-50);
 }
 
 .form-error,
@@ -2962,8 +2962,8 @@ button[disabled],
 .preview-action-button-danger,
 .agent-icon-button.danger {
   border-color: rgba(217, 45, 32, 0.28);
-  background: var(--portal-error-50);
-  color: var(--portal-error-600);
+  background: var(--error-50);
+  color: var(--error-600);
 }
 
 .entity-pane {
@@ -2987,7 +2987,7 @@ button[disabled],
 
 .messages-empty,
 .rich-empty {
-  border-color: var(--portal-gray-200);
+  border-color: var(--gray-200);
   border-style: solid;
   background: var(--surface);
 }
@@ -3248,7 +3248,7 @@ select,
 :root[data-theme="dark"] .profile-section .field textarea::placeholder,
 :root[data-theme="dark"] .env-row input::placeholder,
 :root[data-theme="dark"] .composer-editor:empty::before {
-  color: var(--portal-gray-400);
+  color: var(--gray-400);
 }
 
 .btn-primary,
@@ -3257,9 +3257,9 @@ select,
 .composer-send-button,
 .preview-action-button-primary,
 .preview-action-button.preview-action-button-primary {
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
@@ -3269,9 +3269,9 @@ select,
 .composer-send-button:hover:not(:disabled),
 .preview-action-button-primary:hover:not(:disabled),
 .preview-action-button.preview-action-button-primary:hover:not(:disabled) {
-  border-color: var(--portal-brand-700);
-  background: var(--portal-brand-700);
-  color: var(--portal-white);
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
@@ -3282,9 +3282,9 @@ select,
 .composer-send-button:active:not(:disabled),
 .preview-action-button-primary:active:not(:disabled),
 .preview-action-button.preview-action-button-primary:active:not(:disabled) {
-  border-color: var(--portal-brand-700);
-  background: var(--portal-brand-700);
-  color: var(--portal-white);
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
@@ -3295,9 +3295,9 @@ select,
 .composer-send-button:focus-visible,
 .preview-action-button-primary:focus-visible,
 .preview-action-button.preview-action-button-primary:focus-visible {
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
   box-shadow:
     var(--shadow-xs),
     0 0 0 4px rgba(77, 106, 214, 0.24);
@@ -3315,9 +3315,9 @@ select,
 .preview-action-button-primary[disabled],
 .preview-action-button.preview-action-button-primary:disabled,
 .preview-action-button.preview-action-button-primary[disabled] {
-  border-color: var(--portal-gray-200);
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-400);
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
   box-shadow: var(--shadow-xs);
   opacity: 1;
   transform: none;
@@ -3347,7 +3347,7 @@ select,
 :root[data-theme="dark"] .composer-send-button:focus-visible,
 :root[data-theme="dark"] .preview-action-button-primary:focus-visible,
 :root[data-theme="dark"] .preview-action-button.preview-action-button-primary:focus-visible {
-  color: var(--portal-white);
+  color: var(--white);
 }
 
 .btn-outline-danger.preview-action-button-danger,
@@ -3358,10 +3358,10 @@ select,
   min-height: 42px;
   padding: 10px 14px;
   gap: 4px;
-  border: 1px solid var(--portal-error-600);
+  border: 1px solid var(--error-600);
   border-radius: 6px;
-  background: var(--portal-error-600);
-  color: var(--portal-white);
+  background: var(--error-600);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   font-size: 14px;
   font-weight: 500;
@@ -3377,7 +3377,7 @@ select,
 .danger-button:hover:not(:disabled) {
   border-color: #b42318;
   background: #b42318;
-  color: var(--portal-white);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
@@ -3389,7 +3389,7 @@ select,
 .danger-button:active:not(:disabled) {
   border-color: #b42318;
   background: #b42318;
-  color: var(--portal-white);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
@@ -3399,9 +3399,9 @@ select,
 .preview-action-button.preview-action-button-danger:focus-visible,
 .csg-button-outline-danger:focus-visible,
 .danger-button:focus-visible {
-  border-color: var(--portal-error-600);
-  background: var(--portal-error-600);
-  color: var(--portal-white);
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
   box-shadow:
     var(--shadow-xs),
     0 0 0 4px rgba(240, 68, 56, 0.24);
@@ -3417,9 +3417,9 @@ select,
 .csg-button-outline-danger[disabled],
 .danger-button:disabled,
 .danger-button[disabled] {
-  border-color: var(--portal-gray-200);
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-400);
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
   box-shadow: var(--shadow-xs);
   opacity: 1;
   transform: none;
@@ -3445,7 +3445,7 @@ select,
 :root[data-theme="dark"] .preview-action-button.preview-action-button-danger:focus-visible,
 :root[data-theme="dark"] .csg-button-outline-danger:focus-visible,
 :root[data-theme="dark"] .danger-button:focus-visible {
-  color: var(--portal-white);
+  color: var(--white);
 }
 
 :root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger,
@@ -3453,10 +3453,10 @@ select,
   min-height: 42px;
   padding: 10px 14px;
   gap: 4px;
-  border: 1px solid var(--portal-error-600);
+  border: 1px solid var(--error-600);
   border-radius: 6px;
-  background: var(--portal-error-600);
-  color: var(--portal-white);
+  background: var(--error-600);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   font-size: 14px;
   font-weight: 500;
@@ -3475,16 +3475,16 @@ select,
   .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:active:not(:disabled) {
   border-color: #b42318;
   background: #b42318;
-  color: var(--portal-white);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
 
 :root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:focus-visible,
 :root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:focus-visible {
-  border-color: var(--portal-error-600);
-  background: var(--portal-error-600);
-  color: var(--portal-white);
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
   box-shadow:
     var(--shadow-xs),
     0 0 0 4px rgba(240, 68, 56, 0.24);
@@ -3494,9 +3494,9 @@ select,
 :root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger[disabled],
 :root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:disabled,
 :root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger[disabled] {
-  border-color: var(--portal-gray-200);
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-400);
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
   box-shadow: var(--shadow-xs);
   opacity: 1;
   transform: none;
@@ -3538,7 +3538,7 @@ select,
 }
 
 .preview-title {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 12px;
   font-weight: 700;
   line-height: 18px;
@@ -3564,7 +3564,7 @@ select,
   gap: 12px;
   padding: 12px;
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--portal-brand-25), var(--surface));
+  background: linear-gradient(135deg, var(--brand-25), var(--surface));
 }
 
 .preview-avatar {
@@ -3591,14 +3591,14 @@ select,
 }
 
 .preview-name {
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
   font-size: 21px;
   font-weight: 700;
   line-height: 26px;
 }
 
 .preview-meta {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 14px;
   line-height: 20px;
 }
@@ -4081,9 +4081,9 @@ select,
 }
 
 .human-channel-status.connected {
-  border-color: color-mix(in oklab, var(--portal-success-700) 28%, var(--line));
-  background: var(--portal-success-50);
-  color: var(--portal-success-700);
+  border-color: color-mix(in oklab, var(--success-700) 28%, var(--line));
+  background: var(--success-50);
+  color: var(--success-700);
 }
 
 :root[data-theme="dark"] .computer-summary-item {
@@ -4111,9 +4111,9 @@ select,
 }
 
 :root[data-theme="dark"] .human-channel-status.connected {
-  border-color: color-mix(in oklab, var(--portal-success-500) 34%, var(--line));
-  background: color-mix(in oklab, var(--portal-success-500) 14%, transparent);
-  color: color-mix(in oklab, var(--portal-success-500) 86%, var(--text));
+  border-color: color-mix(in oklab, var(--success-500) 34%, var(--line));
+  background: color-mix(in oklab, var(--success-500) 14%, transparent);
+  color: color-mix(in oklab, var(--success-500) 86%, var(--text));
 }
 
 @media (max-width: 900px) {
@@ -4155,9 +4155,9 @@ select,
 .preview-action-button-primary,
 .preview-action-button.preview-action-button-primary {
   border-radius: 6px;
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
@@ -4173,9 +4173,9 @@ select,
 .composer-send-button:active:not(:disabled),
 .preview-action-button-primary:active:not(:disabled),
 .preview-action-button.preview-action-button-primary:active:not(:disabled) {
-  border-color: var(--portal-brand-700);
-  background: var(--portal-brand-700);
-  color: var(--portal-white);
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
@@ -4186,9 +4186,9 @@ select,
 .composer-send-button:focus-visible,
 .preview-action-button-primary:focus-visible,
 .preview-action-button.preview-action-button-primary:focus-visible {
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
   box-shadow:
     var(--shadow-xs),
     0 0 0 4px rgba(77, 106, 214, 0.2);
@@ -4200,9 +4200,9 @@ select,
 .agent-icon-button.danger,
 .conversation-delete-button {
   border-radius: 6px;
-  border-color: var(--portal-error-600);
-  background: var(--portal-error-600);
-  color: var(--portal-white);
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
@@ -4213,9 +4213,9 @@ select,
 .tool-menu-row.danger,
 :root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger {
   border-radius: 6px;
-  border-color: color-mix(in oklab, var(--portal-error-600) 32%, var(--line));
-  background: color-mix(in oklab, var(--portal-error-600) 8%, var(--surface));
-  color: var(--portal-error-700);
+  border-color: color-mix(in oklab, var(--error-600) 32%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 8%, var(--surface));
+  color: var(--error-700);
   box-shadow: var(--shadow-xs);
 }
 
@@ -4229,9 +4229,9 @@ select,
 .danger-button:active:not(:disabled),
 .agent-icon-button.danger:active:not(:disabled),
 .conversation-delete-button:active:not(:disabled) {
-  border-color: var(--portal-error-700);
-  background: var(--portal-error-700);
-  color: var(--portal-white);
+  border-color: var(--error-700);
+  background: var(--error-700);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
@@ -4250,9 +4250,9 @@ select,
   .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:hover:not(:disabled),
 :root[data-theme="light"]
   .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:active:not(:disabled) {
-  border-color: color-mix(in oklab, var(--portal-error-600) 46%, var(--line));
-  background: color-mix(in oklab, var(--portal-error-600) 14%, var(--surface));
-  color: var(--portal-error-800);
+  border-color: color-mix(in oklab, var(--error-600) 46%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 14%, var(--surface));
+  color: var(--error-800);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
@@ -4262,9 +4262,9 @@ select,
 .danger-button:focus-visible,
 .agent-icon-button.danger:focus-visible,
 .conversation-delete-button:focus-visible {
-  border-color: var(--portal-error-600);
-  background: var(--portal-error-600);
-  color: var(--portal-white);
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
   box-shadow:
     var(--shadow-xs),
     0 0 0 4px rgba(240, 68, 56, 0.16);
@@ -4276,9 +4276,9 @@ select,
 .preview-action-button.preview-action-button-danger:focus-visible,
 .tool-menu-row.danger:focus-visible,
 :root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:focus-visible {
-  border-color: color-mix(in oklab, var(--portal-error-600) 38%, var(--line));
-  background: color-mix(in oklab, var(--portal-error-600) 8%, var(--surface));
-  color: var(--portal-error-800);
+  border-color: color-mix(in oklab, var(--error-600) 38%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 8%, var(--surface));
+  color: var(--error-800);
   box-shadow:
     var(--shadow-xs),
     0 0 0 4px rgba(240, 68, 56, 0.14);
@@ -4291,8 +4291,8 @@ select,
 :root[data-theme="dark"] .preview-action-button-primary,
 :root[data-theme="dark"] .preview-action-button.preview-action-button-primary {
   border-color: rgba(172, 189, 255, 0.34);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  background: var(--brand-600);
+  color: var(--white);
 }
 
 :root[data-theme="dark"] .btn-primary:hover:not(:disabled),
@@ -4308,8 +4308,8 @@ select,
 :root[data-theme="dark"] .preview-action-button-primary:active:not(:disabled),
 :root[data-theme="dark"] .preview-action-button.preview-action-button-primary:active:not(:disabled) {
   border-color: rgba(172, 189, 255, 0.44);
-  background: var(--portal-brand-700);
-  color: var(--portal-white);
+  background: var(--brand-700);
+  color: var(--white);
 }
 
 :root[data-theme="dark"] .btn-danger,
@@ -4318,8 +4318,8 @@ select,
 :root[data-theme="dark"] .agent-icon-button.danger,
 :root[data-theme="dark"] .conversation-delete-button {
   border-color: rgba(253, 162, 155, 0.32);
-  background: color-mix(in oklab, var(--portal-error-600) 86%, var(--portal-error-800));
-  color: var(--portal-white);
+  background: color-mix(in oklab, var(--error-600) 86%, var(--error-800));
+  color: var(--white);
 }
 
 :root[data-theme="dark"] .btn-outline-danger,
@@ -4344,8 +4344,8 @@ select,
 :root[data-theme="dark"] .agent-icon-button.danger:active:not(:disabled),
 :root[data-theme="dark"] .conversation-delete-button:active:not(:disabled) {
   border-color: rgba(253, 162, 155, 0.42);
-  background: var(--portal-error-700);
-  color: var(--portal-white);
+  background: var(--error-700);
+  color: var(--white);
 }
 
 :root[data-theme="dark"] .btn-outline-danger:hover:not(:disabled),
@@ -4401,9 +4401,9 @@ select,
 .conversation-delete-button[disabled],
 :root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:disabled,
 :root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger[disabled] {
-  border-color: var(--portal-gray-200);
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-400);
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
   box-shadow: var(--shadow-xs);
   opacity: 1;
   transform: none;
@@ -4445,7 +4445,7 @@ select,
 :root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger[disabled] {
   border-color: rgba(208, 213, 221, 0.12);
   background: rgba(208, 213, 221, 0.08);
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   box-shadow: none;
 }
 

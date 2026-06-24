@@ -229,7 +229,7 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-weight: 650;
 }
 
@@ -239,15 +239,15 @@
 
 .workspace-preview-mode-button:hover:not(:disabled),
 .workspace-preview-mode-button:focus-visible {
-  background: color-mix(in srgb, var(--portal-gray-100) 70%, transparent);
-  color: var(--portal-gray-800);
+  background: color-mix(in srgb, var(--gray-100) 70%, transparent);
+  color: var(--gray-800);
   box-shadow: none;
 }
 
 .workspace-preview-mode-button.active,
 .workspace-preview-mode-button[aria-selected="true"] {
-  background: color-mix(in srgb, var(--portal-gray-100) 82%, var(--surface) 18%);
-  color: var(--portal-gray-900);
+  background: color-mix(in srgb, var(--gray-100) 82%, var(--surface) 18%);
+  color: var(--gray-900);
   box-shadow: none;
 }
 
@@ -263,7 +263,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   font: inherit;
   box-shadow: none;
   cursor: pointer;
@@ -275,8 +275,8 @@
 
 .workspace-preview-close-button:hover:not(:disabled),
 .workspace-preview-close-button:focus-visible {
-  background: color-mix(in srgb, var(--portal-gray-100) 78%, transparent);
-  color: var(--portal-gray-900);
+  background: color-mix(in srgb, var(--gray-100) 78%, transparent);
+  color: var(--gray-900);
   box-shadow: none;
 }
 
@@ -412,7 +412,7 @@
 }
 
 .workspace-preview-markdown a {
-  color: var(--portal-brand-700);
+  color: var(--brand-700);
   text-decoration: none;
 }
 

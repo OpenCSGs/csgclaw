@@ -1,11 +1,11 @@
 .root {
   position: absolute;
-  right: -4px;
+  right: calc(-1 * var(--space-1));
   bottom: 62px;
   display: flex;
   align-items: center;
   isolation: isolate;
-  filter: drop-shadow(0 14px 28px rgba(41, 61, 140, 0.18));
+  filter: drop-shadow(0 14px 28px color-mix(in srgb, var(--brand-800) 18%, transparent));
   animation: guide-rise 280ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
 
@@ -17,15 +17,15 @@
   z-index: 0;
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radius-base);
   box-shadow:
-    1px 1px 0 rgba(77, 106, 214, 0.24),
-    6px 8px 18px rgba(41, 61, 140, 0.12);
+    1px 1px 0 color-mix(in srgb, var(--brand-500) 24%, transparent),
+    6px 8px 18px color-mix(in srgb, var(--brand-800) 12%, transparent);
   background: linear-gradient(
     135deg,
-    rgba(237, 241, 255, 0.98) 0%,
-    rgba(218, 229, 255, 0.98) 56%,
-    rgba(221, 247, 244, 0.98) 100%
+    color-mix(in srgb, var(--blue-dark-50) 98%, transparent) 0%,
+    color-mix(in srgb, var(--brand-50) 98%, transparent) 56%,
+    color-mix(in srgb, var(--teal-50) 98%, transparent) 100%
   );
   transform: rotate(45deg);
   pointer-events: none;
@@ -36,16 +36,16 @@
   z-index: 1;
   isolation: isolate;
   min-height: 56px;
-  padding: 0 50px 0 24px;
-  border: 1px solid rgba(77, 106, 214, 0.26);
-  border-radius: 999px;
+  padding: 0 50px 0 var(--space-6);
+  border: 1px solid color-mix(in srgb, var(--brand-500) 26%, transparent);
+  border-radius: var(--radius-full);
   display: inline-flex;
   align-items: center;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.92), transparent 0 12px, rgba(255, 255, 255, 0) 32px),
-    linear-gradient(135deg, rgba(245, 247, 255, 0.98) 0%, rgba(225, 233, 255, 0.98) 58%, rgba(220, 247, 244, 0.98) 100%);
-  color: #21315f;
+    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--white) 92%, transparent), transparent 0 12px, rgba(255, 255, 255, 0) 32px),
+    linear-gradient(135deg, color-mix(in srgb, var(--blue-dark-25) 98%, transparent) 0%, color-mix(in srgb, var(--brand-50) 98%, transparent) 58%, color-mix(in srgb, var(--teal-50) 98%, transparent) 100%);
+  color: var(--gray-blue-800);
   font: inherit;
   font-size: 15px;
   font-weight: 760;
@@ -54,9 +54,9 @@
   white-space: nowrap;
   cursor: pointer;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    inset 0 -1px 0 rgba(50, 80, 189, 0.1),
-    0 10px 24px rgba(62, 91, 201, 0.16);
+    inset 0 1px 0 color-mix(in srgb, var(--white) 82%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--brand-600) 10%, transparent),
+    0 10px 24px color-mix(in srgb, var(--brand-600) 16%, transparent);
   transform: translateZ(0);
   transition:
     box-shadow 180ms ease,
@@ -69,7 +69,7 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(110deg, transparent 0 31%, rgba(255, 255, 255, 0.46) 44%, transparent 58% 100%);
+  background: linear-gradient(110deg, transparent 0 31%, color-mix(in srgb, var(--white) 46%, transparent) 44%, transparent 58% 100%);
   transform: translateX(-90%);
   animation: guide-shine 3400ms ease-in-out infinite;
 }
@@ -81,17 +81,17 @@
   z-index: -1;
   border-radius: inherit;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 60%),
-    radial-gradient(circle at 88% 22%, rgba(77, 106, 214, 0.12), transparent 28%);
+    linear-gradient(180deg, color-mix(in srgb, var(--white) 70%, transparent), transparent 60%),
+    radial-gradient(circle at 88% 22%, color-mix(in srgb, var(--brand-500) 12%, transparent), transparent 28%);
   pointer-events: none;
 }
 
 .callout:hover {
   filter: saturate(1.04) brightness(1.015);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.84),
-    inset 0 -1px 0 rgba(50, 80, 189, 0.1),
-    0 14px 28px rgba(62, 91, 201, 0.22);
+    inset 0 1px 0 color-mix(in srgb, var(--white) 84%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--brand-600) 10%, transparent),
+    0 14px 28px color-mix(in srgb, var(--brand-600) 22%, transparent);
   transform: translateY(-1px);
 }
 
@@ -99,14 +99,14 @@
 .dismiss:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 3px rgba(255, 255, 255, 0.78),
-    0 0 0 6px rgba(50, 80, 189, 0.24);
+    0 0 0 3px color-mix(in srgb, var(--white) 78%, transparent),
+    0 0 0 6px color-mix(in srgb, var(--brand-600) 24%, transparent);
 }
 
 .title {
   position: relative;
   z-index: 1;
-  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.72);
+  text-shadow: 0 1px 12px color-mix(in srgb, var(--white) 72%, transparent);
 }
 
 .trail {
@@ -116,15 +116,15 @@
   height: 24px;
   border-radius: 50%;
   background:
-    radial-gradient(circle at center, rgba(77, 106, 214, 0.3) 0 2px, transparent 3px),
-    radial-gradient(circle at 72% 26%, rgba(77, 106, 214, 0.22) 0 1px, transparent 2px),
-    radial-gradient(circle at 30% 78%, rgba(38, 196, 181, 0.2) 0 1px, transparent 2px);
+    radial-gradient(circle at center, color-mix(in srgb, var(--brand-500) 30%, transparent) 0 2px, transparent 3px),
+    radial-gradient(circle at 72% 26%, color-mix(in srgb, var(--brand-500) 22%, transparent) 0 1px, transparent 2px),
+    radial-gradient(circle at 30% 78%, color-mix(in srgb, var(--teal-400) 20%, transparent) 0 1px, transparent 2px);
 }
 
 .dismiss {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: calc(-1 * var(--space-1));
+  right: calc(-1 * var(--space-1));
   z-index: 2;
   width: 22px;
   height: 22px;
@@ -133,12 +133,12 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.92);
-  color: #4d5f98;
+  background: color-mix(in srgb, var(--white) 92%, transparent);
+  color: var(--gray-blue-500);
   cursor: pointer;
   box-shadow:
-    0 6px 14px rgba(31, 41, 76, 0.14),
-    inset 0 0 0 1px rgba(77, 106, 214, 0.18);
+    0 6px 14px color-mix(in srgb, var(--gray-blue-900) 14%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--brand-500) 18%, transparent);
   transition:
     background 160ms ease,
     color 160ms ease,
@@ -146,8 +146,8 @@
 }
 
 .dismiss:hover {
-  background: #ffffff;
-  color: #182230;
+  background: var(--white);
+  color: var(--gray-800);
   transform: scale(1.04);
 }
 
@@ -155,7 +155,7 @@
 .dismiss span::after {
   width: 9px;
   height: 1.5px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   display: block;
   background: currentColor;
 }
@@ -170,12 +170,12 @@
 }
 
 :global(:root[data-theme="dark"]) .root {
-  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.34));
+  filter: drop-shadow(0 18px 36px color-mix(in srgb, var(--black) 34%, transparent));
 }
 
 :global(:root[data-theme="dark"]) .dismiss {
-  background: rgba(16, 24, 40, 0.9);
-  color: #d5ddff;
+  background: color-mix(in srgb, var(--gray-900) 90%, transparent);
+  color: var(--brand-100);
 }
 
 @keyframes guide-rise {
@@ -204,7 +204,7 @@
 
 @media (max-width: 720px) {
   .root {
-    right: -2px;
+    right: calc(-1 * 2px);
   }
 
   .callout {

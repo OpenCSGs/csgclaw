@@ -353,8 +353,8 @@
 }
 
 .message-row.own .message-content :not(pre) > code {
-  background: color-mix(in oklab, var(--portal-brand-50) 44%, var(--portal-white));
-  color: var(--portal-brand-700);
+  background: color-mix(in oklab, var(--brand-50) 44%, var(--white));
+  color: var(--brand-700);
 }
 
 .message-row.admin .message-content :not(pre) > code {
@@ -363,8 +363,8 @@
 }
 
 .message-row.own .structured-message-badge {
-  background: color-mix(in oklab, var(--portal-brand-50) 42%, transparent);
-  color: var(--portal-brand-700);
+  background: color-mix(in oklab, var(--brand-50) 42%, transparent);
+  color: var(--brand-700);
 }
 
 .message-row.admin .structured-message-badge {
@@ -373,7 +373,7 @@
 }
 
 .message-row.own .structured-message-subtitle {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
 }
 
 .message-row.admin .structured-message-subtitle {
@@ -381,8 +381,8 @@
 }
 
 .message-row.own .structured-message-details {
-  background: color-mix(in oklab, var(--portal-white) 56%, var(--portal-brand-25));
-  border-color: color-mix(in oklab, var(--portal-brand-300) 24%, transparent);
+  background: color-mix(in oklab, var(--white) 56%, var(--brand-25));
+  border-color: color-mix(in oklab, var(--brand-300) 24%, transparent);
 }
 
 .message-row.admin .structured-message-details {
@@ -391,7 +391,7 @@
 }
 
 .message-row.own .structured-message-details summary {
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
 }
 
 .message-row.admin .structured-message-details summary {
@@ -399,8 +399,8 @@
 }
 
 .message-row.own .message-content blockquote {
-  color: var(--portal-gray-700);
-  border-left-color: color-mix(in oklab, var(--portal-brand-600) 32%, transparent);
+  color: var(--gray-700);
+  border-left-color: color-mix(in oklab, var(--brand-600) 32%, transparent);
 }
 
 .message-row.admin .message-content blockquote {
@@ -409,7 +409,7 @@
 }
 
 .message-row.own .message-content th {
-  background: color-mix(in oklab, var(--portal-brand-50) 32%, transparent);
+  background: color-mix(in oklab, var(--brand-50) 32%, transparent);
 }
 
 .message-row.admin .message-content th {
@@ -418,7 +418,7 @@
 
 .message-row.own .message-content th,
 .message-row.own .message-content td {
-  border-color: color-mix(in oklab, var(--portal-brand-300) 22%, transparent);
+  border-color: color-mix(in oklab, var(--brand-300) 22%, transparent);
 }
 
 .message-row.admin .message-content th,
@@ -427,33 +427,33 @@
 }
 
 .message-row.admin.own .message-content :not(pre) > code {
-  background: color-mix(in oklab, var(--portal-brand-50) 44%, var(--portal-white));
-  color: var(--portal-brand-700);
+  background: color-mix(in oklab, var(--brand-50) 44%, var(--white));
+  color: var(--brand-700);
 }
 
 .message-row.admin.own .structured-message-badge {
-  background: color-mix(in oklab, var(--portal-brand-50) 42%, transparent);
-  color: var(--portal-brand-700);
+  background: color-mix(in oklab, var(--brand-50) 42%, transparent);
+  color: var(--brand-700);
 }
 
 .message-row.admin.own .structured-message-subtitle,
 .message-row.admin.own .structured-message-details summary,
 .message-row.admin.own .message-content blockquote {
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
 }
 
 .message-row.admin.own .structured-message-details {
-  background: color-mix(in oklab, var(--portal-white) 56%, var(--portal-brand-25));
-  border-color: color-mix(in oklab, var(--portal-brand-300) 24%, transparent);
+  background: color-mix(in oklab, var(--white) 56%, var(--brand-25));
+  border-color: color-mix(in oklab, var(--brand-300) 24%, transparent);
 }
 
 .message-row.admin.own .message-content th {
-  background: color-mix(in oklab, var(--portal-brand-50) 32%, transparent);
+  background: color-mix(in oklab, var(--brand-50) 32%, transparent);
 }
 
 .message-row.admin.own .message-content th,
 .message-row.admin.own .message-content td {
-  border-color: color-mix(in oklab, var(--portal-brand-300) 22%, transparent);
+  border-color: color-mix(in oklab, var(--brand-300) 22%, transparent);
 }
 
 .message-content code,
@@ -482,13 +482,13 @@
 
 .message-content :not(pre) > code {
   border-radius: 6px;
-  background: var(--portal-gray-100);
-  color: var(--portal-brand-700);
+  background: var(--gray-100);
+  color: var(--brand-700);
 }
 
 :root[data-theme="dark"] .message-content :not(pre) > code {
   background: rgba(208, 213, 221, 0.12);
-  color: var(--portal-brand-100);
+  color: var(--brand-100);
 }
 
 .message-content pre,
@@ -496,14 +496,14 @@
 .structured-message-json {
   border-radius: var(--radius-md);
   border-color: var(--line);
-  background: color-mix(in oklab, var(--portal-white) 84%, var(--portal-gray-200));
-  color: var(--portal-gray-900);
+  background: color-mix(in oklab, var(--white) 84%, var(--gray-200));
+  color: var(--gray-900);
 }
 
 .structured-message-details,
 .message-content .mermaid {
   border-radius: var(--radius-md);
-  background: var(--portal-gray-50);
+  background: var(--gray-50);
 }
 
 :root[data-theme="dark"] .message-content pre,
@@ -519,14 +519,14 @@
 }
 
 .message-row:not(.own) .message-bubble .message-content p {
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
   font-size: 16px;
   font-weight: 300;
   line-height: 24px;
 }
 
 .message-row.own .message-bubble .message-content p {
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
   font-size: 16px;
   font-weight: 300;
   line-height: 24px;
@@ -537,7 +537,7 @@
 .message-row.own .message-bubble .message-content p > .message-mention,
 .message-row.own .message-bubble .message-content p > .message-slash-token,
 .message-row.admin.own .message-bubble .message-content .message-mention {
-  color: var(--portal-brand-700);
+  color: var(--brand-700);
 }
 
 :root[data-theme="dark"] .message-row:not(.own) .message-bubble .message-content p {
@@ -554,28 +554,28 @@
 
 :root[data-theme="dark"] .message-row.own .message-content :not(pre) > code,
 :root[data-theme="dark"] .message-row.own .structured-message-badge {
-  background: color-mix(in oklab, var(--portal-white) 14%, transparent);
-  color: color-mix(in oklab, var(--portal-white) 92%, transparent);
+  background: color-mix(in oklab, var(--white) 14%, transparent);
+  color: color-mix(in oklab, var(--white) 92%, transparent);
 }
 
 :root[data-theme="dark"] .message-row.own .structured-message-subtitle,
 :root[data-theme="dark"] .message-row.own .structured-message-details summary,
 :root[data-theme="dark"] .message-row.own .message-content blockquote {
-  color: color-mix(in oklab, var(--portal-white) 82%, transparent);
+  color: color-mix(in oklab, var(--white) 82%, transparent);
 }
 
 :root[data-theme="dark"] .message-row.own .structured-message-details {
-  background: color-mix(in oklab, var(--portal-white) 8%, transparent);
-  border-color: color-mix(in oklab, var(--portal-white) 14%, transparent);
+  background: color-mix(in oklab, var(--white) 8%, transparent);
+  border-color: color-mix(in oklab, var(--white) 14%, transparent);
 }
 
 :root[data-theme="dark"] .message-row.own .message-content th {
-  background: color-mix(in oklab, var(--portal-white) 12%, transparent);
+  background: color-mix(in oklab, var(--white) 12%, transparent);
 }
 
 :root[data-theme="dark"] .message-row.own .message-content th,
 :root[data-theme="dark"] .message-row.own .message-content td {
-  border-color: color-mix(in oklab, var(--portal-white) 16%, transparent);
+  border-color: color-mix(in oklab, var(--white) 16%, transparent);
 }
 
 .agent-activity-card {
@@ -601,8 +601,8 @@
   width: 24px;
   height: 24px;
   border-radius: 6px;
-  background: color-mix(in oklab, var(--portal-brand-600) 12%, transparent);
-  color: var(--portal-brand-700);
+  background: color-mix(in oklab, var(--brand-600) 12%, transparent);
+  color: var(--brand-700);
 }
 
 .agent-activity-title-group {
@@ -627,7 +627,7 @@
 .agent-activity-badge {
   border-radius: 999px;
   padding: 4px 8px;
-  background: var(--portal-gray-100);
+  background: var(--gray-100);
   color: var(--muted);
   font-size: 11px;
   font-weight: 750;
@@ -637,14 +637,14 @@
 
 .agent-activity-badge.status-running,
 .agent-activity-badge.status-pending {
-  background: color-mix(in oklab, var(--portal-brand-600) 12%, transparent);
-  color: var(--portal-brand-700);
+  background: color-mix(in oklab, var(--brand-600) 12%, transparent);
+  color: var(--brand-700);
 }
 
 .agent-activity-badge.status-completed,
 .agent-activity-badge.status-allowed {
-  background: var(--portal-success-50);
-  color: var(--portal-success-700);
+  background: var(--success-50);
+  color: var(--success-700);
 }
 
 .agent-activity-badge.status-failed,
@@ -683,7 +683,7 @@
 }
 
 .agent-activity-allow-always {
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--portal-brand-700) 24%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--brand-700) 24%, transparent);
 }
 
 .agent-activity-error {
@@ -694,18 +694,18 @@
 }
 
 .message-row.own .agent-activity-card {
-  border-color: color-mix(in oklab, var(--portal-brand-300) 22%, transparent);
-  background: color-mix(in oklab, var(--portal-white) 54%, var(--portal-brand-25));
+  border-color: color-mix(in oklab, var(--brand-300) 22%, transparent);
+  background: color-mix(in oklab, var(--white) 54%, var(--brand-25));
 }
 
 .message-row.own .agent-activity-icon,
 .message-row.own .agent-activity-badge {
-  background: color-mix(in oklab, var(--portal-brand-600) 12%, transparent);
-  color: var(--portal-brand-700);
+  background: color-mix(in oklab, var(--brand-600) 12%, transparent);
+  color: var(--brand-700);
 }
 
 .message-row.own .agent-activity-subtitle {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
 }
 
 :root[data-theme="dark"] .agent-activity-card {
@@ -713,16 +713,16 @@
 }
 
 :root[data-theme="dark"] .message-row.own .agent-activity-card {
-  border-color: color-mix(in oklab, var(--portal-white) 16%, transparent);
-  background: color-mix(in oklab, var(--portal-white) 8%, transparent);
+  border-color: color-mix(in oklab, var(--white) 16%, transparent);
+  background: color-mix(in oklab, var(--white) 8%, transparent);
 }
 
 :root[data-theme="dark"] .message-row.own .agent-activity-icon,
 :root[data-theme="dark"] .message-row.own .agent-activity-badge {
-  background: color-mix(in oklab, var(--portal-white) 14%, transparent);
-  color: color-mix(in oklab, var(--portal-white) 92%, transparent);
+  background: color-mix(in oklab, var(--white) 14%, transparent);
+  color: color-mix(in oklab, var(--white) 92%, transparent);
 }
 
 :root[data-theme="dark"] .message-row.own .agent-activity-subtitle {
-  color: color-mix(in oklab, var(--portal-white) 78%, transparent);
+  color: color-mix(in oklab, var(--white) 78%, transparent);
 }

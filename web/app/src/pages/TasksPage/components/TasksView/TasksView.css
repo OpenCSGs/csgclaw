@@ -123,8 +123,8 @@
 }
 
 .task-toolbar-button.btn-secondary-gray:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--portal-gray-300) 80%, var(--border-subtle));
-  background: color-mix(in srgb, var(--portal-gray-50) 70%, var(--surface));
+  border-color: color-mix(in srgb, var(--gray-300) 80%, var(--border-subtle));
+  background: color-mix(in srgb, var(--gray-50) 70%, var(--surface));
   color: var(--text);
 }
 
@@ -139,7 +139,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   cursor: pointer;
   transition:
     background-color 140ms ease,
@@ -147,7 +147,7 @@
 }
 
 .task-dialog-close-btn:hover {
-  background: color-mix(in srgb, var(--portal-gray-200) 60%, transparent);
+  background: color-mix(in srgb, var(--gray-200) 60%, transparent);
   color: var(--text);
 }
 
@@ -164,7 +164,7 @@
   overflow-y: hidden;
   padding: 8px;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--portal-gray-400) 58%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--gray-400) 58%, transparent) transparent;
 }
 
 .tasks-kanban-scroll::-webkit-scrollbar {
@@ -184,7 +184,7 @@
 .task-board-column-body::-webkit-scrollbar-thumb {
   border: 1px solid transparent;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--portal-gray-400) 62%, transparent);
+  background: color-mix(in srgb, var(--gray-400) 62%, transparent);
   background-clip: content-box;
 }
 
@@ -198,8 +198,8 @@
 }
 
 .task-board-column {
-  --task-column-bg: color-mix(in srgb, var(--portal-gray-100) 32%, var(--surface));
-  --task-status-color: var(--portal-gray-600);
+  --task-column-bg: color-mix(in srgb, var(--gray-100) 32%, var(--surface));
+  --task-status-color: var(--gray-600);
 
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -240,7 +240,7 @@
   padding: 4px;
   border-radius: 8px;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--portal-gray-400) 58%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--gray-400) 58%, transparent) transparent;
 }
 
 .task-board-card {
@@ -265,7 +265,7 @@
 
 .task-board-card:hover {
   border-color: color-mix(in srgb, var(--accent-strong) 18%, var(--border-subtle));
-  background: color-mix(in srgb, var(--portal-gray-25) 82%, var(--surface));
+  background: color-mix(in srgb, var(--gray-25) 82%, var(--surface));
   box-shadow:
     0 6px 12px -8px rgb(15 23 42 / 0.16),
     0 1px 1px rgb(16 24 40 / 0.04);
@@ -334,95 +334,95 @@
 }
 
 .task-board-column-blocked {
-  --task-column-bg: color-mix(in srgb, var(--portal-success-50) 48%, var(--surface));
-  --task-status-color: var(--portal-success-700);
+  --task-column-bg: color-mix(in srgb, var(--success-50) 48%, var(--surface));
+  --task-status-color: var(--success-700);
 }
 
 .task-board-column-in_progress {
-  --task-column-bg: color-mix(in srgb, var(--portal-warning-50) 54%, var(--surface));
-  --task-status-color: var(--portal-warning-700);
+  --task-column-bg: color-mix(in srgb, var(--warning-50) 54%, var(--surface));
+  --task-status-color: var(--warning-700);
 }
 
 .task-board-column-completed {
-  --task-column-bg: color-mix(in srgb, #eff6ff 54%, var(--surface));
-  --task-status-color: var(--portal-brand-600);
+  --task-column-bg: color-mix(in srgb, var(--blue-50) 54%, var(--surface));
+  --task-status-color: var(--brand-600);
 }
 
 .task-board-column-failed,
 .task-board-column-cancelled {
-  --task-column-bg: color-mix(in srgb, var(--portal-error-50) 50%, var(--surface));
-  --task-status-color: var(--portal-error-600);
+  --task-column-bg: color-mix(in srgb, var(--error-50) 50%, var(--surface));
+  --task-status-color: var(--error-600);
 }
 
 .task-board-column-pending,
 .task-board-column-assigned {
-  --task-column-bg: color-mix(in srgb, var(--portal-gray-100) 34%, var(--surface));
-  --task-status-color: var(--portal-gray-700);
+  --task-column-bg: color-mix(in srgb, var(--gray-100) 34%, var(--surface));
+  --task-status-color: var(--gray-700);
 }
 
 .task-status-pill.task-status-blocked,
 .task-board-column-blocked .task-board-column-head {
-  color: var(--portal-success-700);
+  color: var(--success-700);
 }
 
 .task-status-pill.task-status-in_progress,
 .task-board-column-in_progress .task-board-column-head {
-  color: var(--portal-warning-700);
+  color: var(--warning-700);
 }
 
 .task-status-pill.task-status-completed,
 .task-board-column-completed .task-board-column-head {
-  color: var(--portal-brand-600);
+  color: var(--brand-600);
 }
 
 .task-status-pill.task-status-failed,
 .task-status-pill.task-status-cancelled,
 .task-board-column-failed .task-board-column-head,
 .task-board-column-cancelled .task-board-column-head {
-  color: var(--portal-error-600);
+  color: var(--error-600);
 }
 
 .task-status-pill.task-status-pending,
 .task-status-pill.task-status-assigned,
 .task-board-column-pending .task-board-column-head,
 .task-board-column-assigned .task-board-column-head {
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
 }
 
 :root[data-theme="dark"] .task-board-column {
-  --task-column-bg: color-mix(in srgb, var(--portal-gray-700) 14%, var(--surface));
-  --task-status-color: var(--portal-gray-300);
+  --task-column-bg: color-mix(in srgb, var(--gray-700) 14%, var(--surface));
+  --task-status-color: var(--gray-300);
 }
 
 :root[data-theme="dark"] .task-board-column-blocked {
-  --task-column-bg: color-mix(in srgb, var(--portal-success-700) 12%, var(--surface));
-  --task-status-color: var(--portal-success-500);
+  --task-column-bg: color-mix(in srgb, var(--success-700) 12%, var(--surface));
+  --task-status-color: var(--success-500);
 }
 
 :root[data-theme="dark"] .task-board-column-in_progress {
-  --task-column-bg: color-mix(in srgb, var(--portal-warning-700) 12%, var(--surface));
-  --task-status-color: var(--portal-warning-50);
+  --task-column-bg: color-mix(in srgb, var(--warning-700) 12%, var(--surface));
+  --task-status-color: var(--warning-50);
 }
 
 :root[data-theme="dark"] .task-board-column-completed {
-  --task-column-bg: color-mix(in srgb, var(--portal-brand-600) 13%, var(--surface));
-  --task-status-color: var(--portal-brand-100);
+  --task-column-bg: color-mix(in srgb, var(--brand-600) 13%, var(--surface));
+  --task-status-color: var(--brand-100);
 }
 
 :root[data-theme="dark"] .task-board-column-failed,
 :root[data-theme="dark"] .task-board-column-cancelled {
-  --task-column-bg: color-mix(in srgb, var(--portal-error-600) 13%, var(--surface));
-  --task-status-color: var(--portal-error-300);
+  --task-column-bg: color-mix(in srgb, var(--error-600) 13%, var(--surface));
+  --task-status-color: var(--error-300);
 }
 
 :root[data-theme="dark"] .task-board-column-pending,
 :root[data-theme="dark"] .task-board-column-assigned {
-  --task-column-bg: color-mix(in srgb, var(--portal-gray-700) 12%, var(--surface));
-  --task-status-color: var(--portal-gray-300);
+  --task-column-bg: color-mix(in srgb, var(--gray-700) 12%, var(--surface));
+  --task-status-color: var(--gray-300);
 }
 
 :root[data-theme="dark"] .task-board-card:hover {
-  background: color-mix(in srgb, var(--portal-gray-800) 72%, var(--surface));
+  background: color-mix(in srgb, var(--gray-800) 72%, var(--surface));
 }
 
 .task-detail-dialog {
@@ -469,7 +469,7 @@
 
 .task-detail-dialog-subtitle {
   margin: 0;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 400;
@@ -496,7 +496,7 @@
   padding: 26px 30px 30px;
   border-right: 1px solid var(--line);
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--portal-gray-400) 58%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--gray-400) 58%, transparent) transparent;
 }
 
 .task-detail-main::-webkit-scrollbar {
@@ -509,7 +509,7 @@
 
 .task-detail-main::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: color-mix(in srgb, var(--portal-gray-400) 62%, transparent);
+  background: color-mix(in srgb, var(--gray-400) 62%, transparent);
 }
 
 .task-detail-description-block,
@@ -592,20 +592,20 @@
   margin-top: 4px;
   border: 2px solid var(--surface);
   border-radius: 999px;
-  background: var(--portal-gray-400);
+  background: var(--gray-400);
   box-shadow: 0 0 0 1px var(--line);
 }
 
 .task-activity-item-success .task-activity-marker {
-  background: var(--portal-success-500);
+  background: var(--success-500);
 }
 
 .task-activity-item-warning .task-activity-marker {
-  background: var(--portal-warning-700);
+  background: var(--warning-700);
 }
 
 .task-activity-item-danger .task-activity-marker {
-  background: var(--portal-error-600);
+  background: var(--error-600);
 }
 
 .task-activity-content {
@@ -648,8 +648,8 @@
   padding: 2px 7px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--portal-gray-50) 72%, var(--surface));
-  color: var(--portal-gray-600);
+  background: color-mix(in srgb, var(--gray-50) 72%, var(--surface));
+  color: var(--gray-600);
   font-size: 12px;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -679,7 +679,7 @@
   min-width: 0;
   overflow: auto;
   padding: 24px 22px 28px;
-  background: color-mix(in srgb, var(--portal-gray-25) 70%, var(--surface));
+  background: color-mix(in srgb, var(--gray-25) 70%, var(--surface));
 }
 
 .task-detail-tags {
@@ -722,16 +722,16 @@
 }
 
 :root[data-theme="dark"] .task-detail-aside {
-  background: color-mix(in srgb, var(--portal-gray-950) 28%, var(--surface));
+  background: color-mix(in srgb, var(--gray-950) 28%, var(--surface));
 }
 
 :root[data-theme="dark"] .task-activity-subject {
-  background: color-mix(in srgb, var(--portal-gray-800) 54%, var(--surface));
-  color: var(--portal-gray-300);
+  background: color-mix(in srgb, var(--gray-800) 54%, var(--surface));
+  color: var(--gray-300);
 }
 
 :root[data-theme="dark"] .task-detail-tag {
-  background: color-mix(in srgb, var(--portal-gray-800) 50%, var(--surface));
+  background: color-mix(in srgb, var(--gray-800) 50%, var(--surface));
 }
 
 .task-create-dialog {

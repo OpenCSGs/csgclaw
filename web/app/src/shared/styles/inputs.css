@@ -2,24 +2,24 @@
 :root {
   --input-height-md: 44px;
   --input-padding-md: 10px 14px;
-  --textarea-padding-md: 12px 14px;
+  --textarea-padding-md: var(--space-3) 14px;
   --input-radius: var(--radius-md);
-  --input-background: var(--portal-white);
-  --input-background-disabled: var(--portal-gray-50);
-  --input-border: var(--portal-gray-300);
-  --input-border-hover: var(--portal-gray-400);
-  --input-border-focus: var(--portal-brand-300);
-  --input-border-error: var(--portal-error-300);
-  --input-text: var(--portal-gray-900);
-  --input-text-placeholder: var(--portal-gray-500);
-  --input-text-disabled: var(--portal-gray-500);
+  --input-background: var(--white);
+  --input-background-disabled: var(--gray-50);
+  --input-border: var(--gray-300);
+  --input-border-hover: var(--gray-400);
+  --input-border-focus: var(--brand-300);
+  --input-border-error: var(--error-300);
+  --input-text: var(--gray-900);
+  --input-text-placeholder: var(--gray-500);
+  --input-text-disabled: var(--gray-500);
   --input-shadow: var(--shadow-xs);
-  --input-shadow-focus: 0 0 0 4px rgba(77, 106, 214, 0.24), var(--shadow-xs);
+  --input-shadow-focus: var(--focus-ring), var(--shadow-xs);
   --input-shadow-error-focus: var(--shadow-xs), var(--error-focus-ring);
-  --field-label-color: var(--portal-gray-700);
-  --field-label-font-size: 14px;
-  --field-label-font-weight: 400;
-  --field-label-line-height: 22px;
+  --field-label-color: var(--gray-700);
+  --field-label-font-size: var(--text-sm-size);
+  --field-label-font-weight: var(--font-weight-normal);
+  --field-label-line-height: var(--text-sm-line-height);
 }
 
 :root body textarea {
@@ -31,10 +31,7 @@
   background-color: var(--input-background);
   box-shadow: var(--input-shadow);
   color: var(--input-text);
-  font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 300;
-  line-height: 24px;
+  font: var(--text-md-light);
   outline: none;
   resize: vertical;
   transition:
@@ -82,7 +79,7 @@
   --input-background: var(--field);
   --input-background-disabled: var(--panel-strong);
   --input-border: var(--line);
-  --input-border-hover: var(--portal-gray-600);
+  --input-border-hover: var(--gray-600);
   --input-text: var(--text);
   --input-shadow: none;
   --input-shadow-focus: var(--focus-ring);
@@ -113,10 +110,7 @@
   background-color: var(--input-background);
   box-shadow: var(--input-shadow);
   color: var(--input-text);
-  font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 24px;
+  font: var(--text-md-normal);
   outline: none;
   transition:
     border-color 160ms ease,
@@ -315,7 +309,7 @@
 
 :root body :where(.field[data-invalid="true"]) .form-error {
   margin-top: 0;
-  color: var(--portal-error-500);
+  color: var(--error-500);
   font-size: 14px;
   font-weight: 300;
   line-height: 22px;

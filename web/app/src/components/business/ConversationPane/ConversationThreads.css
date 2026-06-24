@@ -1,7 +1,7 @@
 .messages {
   overflow-x: hidden;
   scrollbar-width: thin;
-  scrollbar-color: var(--portal-gray-400) transparent;
+  scrollbar-color: var(--gray-400) transparent;
 }
 
 .messages::-webkit-scrollbar,
@@ -18,7 +18,7 @@
 .messages::-webkit-scrollbar-thumb,
 .thread-panel-body::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
+  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .chat-panel {
@@ -203,7 +203,7 @@
   align-content: start;
   gap: 16px;
   scrollbar-width: thin;
-  scrollbar-color: var(--portal-gray-400) transparent;
+  scrollbar-color: var(--gray-400) transparent;
 }
 
 .thread-root,
@@ -327,7 +327,7 @@ button.thread-message-avatar:focus-visible {
 
 .thread-composer-editor:focus-visible {
   outline: none;
-  border-color: var(--portal-brand-500);
+  border-color: var(--brand-500);
   box-shadow: var(--focus-ring);
 }
 
@@ -338,7 +338,7 @@ button.thread-message-avatar:focus-visible {
 }
 
 .thread-composer textarea:focus {
-  border-color: var(--portal-brand-500);
+  border-color: var(--brand-500);
   box-shadow: var(--focus-ring);
 }
 

@@ -492,7 +492,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: var(--portal-gray-400) transparent;
+  scrollbar-color: var(--gray-400) transparent;
   padding: 8px;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(148, 163, 184, 0.24);
@@ -512,7 +512,7 @@
 
 .mention-picker::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
+  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .mention-option {
@@ -830,15 +830,15 @@
 }
 
 .message-row.own .message-bubble {
-  border-color: var(--portal-brand-600);
+  border-color: var(--brand-600);
 }
 
 :root[data-theme="dark"] .message-row.own .message-bubble {
-  border-color: var(--portal-brand-300);
+  border-color: var(--brand-300);
 }
 
 .message-row.admin .message-bubble {
-  border-color: var(--portal-gray-200);
+  border-color: var(--gray-200);
   background: var(--admin-bubble);
   color: var(--admin-text);
 }
@@ -881,48 +881,48 @@
   min-width: 40px;
   min-height: 40px;
   padding: 0;
-  border: 1px solid var(--portal-brand-600);
+  border: 1px solid var(--brand-600);
   border-radius: var(--radius-md);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  background: var(--brand-600);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
 .composer-send-button:hover:not(:disabled),
 .btn.composer-send-button:hover:not(:disabled) {
-  border-color: var(--portal-brand-700);
-  background: var(--portal-brand-700);
-  color: var(--portal-white);
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
 
 .composer-send-button:active:not(:disabled),
 .btn.composer-send-button:active:not(:disabled) {
-  border-color: var(--portal-brand-700);
-  background: var(--portal-brand-700);
-  color: var(--portal-white);
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
   transform: none;
 }
 
 .composer-send-button:focus-visible,
 .btn.composer-send-button:focus-visible {
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
   box-shadow:
     var(--shadow-xs),
-    0 0 0 4px rgba(77, 106, 214, 0.24);
+    0 0 0 var(--space-1) color-mix(in srgb, var(--brand-500) 24%, transparent);
 }
 
 .composer-send-button:disabled,
 .composer-send-button[disabled],
 .btn.composer-send-button:disabled,
 .btn.composer-send-button[disabled] {
-  border-color: var(--portal-gray-200);
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-400);
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
   box-shadow: var(--shadow-xs);
   opacity: 1;
 }
@@ -956,52 +956,52 @@
 }
 
 .message-row:not(.own) .message-bubble {
-  border-color: var(--portal-gray-300);
+  border-color: var(--gray-300);
 }
 
 .message-row.own .message-bubble {
   padding: 10px 14px;
   border: 0;
   border-radius: var(--radius-md) 0 var(--radius-md) var(--radius-md);
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  background: var(--brand-600);
+  color: var(--white);
   box-shadow: none;
   font-size: 16px;
   line-height: 24px;
 }
 
 :root[data-theme="dark"] .message-row.own .message-bubble {
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  background: var(--brand-600);
+  color: var(--white);
 }
 
 :root[data-theme="dark"] .message-row.own .message-mention,
 :root[data-theme="dark"] .message-row.own .message-slash-token,
 :root[data-theme="dark"] .message-row.own .mention {
-  color: var(--portal-white);
+  color: var(--white);
 }
 
 .message-row.own .message-mention,
 .message-row.own .message-slash-token,
 .message-row.own .mention {
-  color: var(--portal-brand-700);
+  color: var(--brand-700);
 }
 
 .message-author {
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   font-size: 14px;
   font-weight: 400;
   line-height: 22px;
 }
 
 :root[data-theme="dark"] .message-author {
-  color: var(--portal-gray-300);
+  color: var(--gray-300);
 }
 
 .message-meta .message-author,
 .message-row .message-card .message-meta .message-author,
 .message-row.own .message-card .message-meta .message-author {
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   font-size: 14px;
   font-weight: 400;
   line-height: 22px;
@@ -1010,12 +1010,12 @@
 :root[data-theme="dark"] .message-meta .message-author,
 :root[data-theme="dark"] .message-row .message-card .message-meta .message-author,
 :root[data-theme="dark"] .message-row.own .message-card .message-meta .message-author {
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
 }
 
 .chat-title-bar .chat-title-row .chat-title-group .chat-title,
 .chat-title {
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
   font-size: 18px;
   font-weight: 500;
   line-height: 28px;
@@ -1097,8 +1097,8 @@
   padding: 0 4px;
   border: 1px solid var(--surface);
   border-radius: 999px;
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  background: var(--brand-600);
+  color: var(--white);
   font-size: 10px;
   font-weight: 700;
   line-height: 13px;
@@ -1121,8 +1121,8 @@
   padding: 16px;
   border: 0;
   border-radius: 8px;
-  background: var(--portal-white);
-  color: var(--portal-gray-900);
+  background: var(--white);
+  color: var(--gray-900);
   box-shadow:
     0 20px 24px -4px rgba(16, 24, 40, 0.12),
     0 8px 8px -4px rgba(16, 24, 40, 0.04);
@@ -1144,7 +1144,7 @@
 
 .room-danger-dialog .csg-dialog-title {
   margin: 0;
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
   font-size: 13px;
   font-weight: 600;
   line-height: 18px;
@@ -1153,7 +1153,7 @@
 
 .room-danger-dialog .csg-dialog-description {
   margin: 4px 0 0;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   font-size: 11px;
   line-height: 16px;
   letter-spacing: 0;
@@ -1168,14 +1168,14 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: var(--portal-gray-400);
+  color: var(--gray-400);
   box-shadow: none;
 }
 
 .room-danger-close.csg-dialog-close:hover:not(:disabled),
 .room-danger-close.csg-dialog-close:focus-visible {
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-600);
+  background: var(--gray-100);
+  color: var(--gray-600);
   box-shadow: none;
 }
 
@@ -1204,31 +1204,31 @@
 }
 
 .csg-dialog-content.room-danger-dialog .room-danger-actions .btn-secondary-gray {
-  border-color: var(--portal-gray-300);
-  background: var(--portal-white);
-  color: var(--portal-gray-700);
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
   box-shadow: var(--shadow-xs);
 }
 
 .csg-dialog-content.room-danger-dialog .room-danger-actions .btn-secondary-gray:hover:not(:disabled),
 .csg-dialog-content.room-danger-dialog .room-danger-actions .btn-secondary-gray:focus-visible {
-  border-color: var(--portal-gray-300);
-  background: var(--portal-gray-50);
-  color: var(--portal-gray-800);
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
 }
 
 .csg-dialog-content.room-danger-dialog .room-danger-actions .btn-danger {
-  border-color: var(--portal-error-600);
-  background: var(--portal-error-600);
-  color: var(--portal-white);
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
 .csg-dialog-content.room-danger-dialog .room-danger-actions .btn-danger:hover:not(:disabled),
 .csg-dialog-content.room-danger-dialog .room-danger-actions .btn-danger:focus-visible {
-  border-color: var(--portal-error-700);
-  background: var(--portal-error-700);
-  color: var(--portal-white);
+  border-color: var(--error-700);
+  background: var(--error-700);
+  color: var(--white);
 }
 
 .agent-logs-backdrop {
@@ -1333,27 +1333,27 @@
 }
 
 :root[data-theme="dark"] .csg-dialog-content.room-danger-dialog {
-  background: var(--portal-white);
-  color: var(--portal-gray-900);
+  background: var(--white);
+  color: var(--gray-900);
 }
 
 :root[data-theme="dark"] .room-danger-dialog .csg-dialog-title {
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
 }
 
 :root[data-theme="dark"] .room-danger-dialog .csg-dialog-description {
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
 }
 
 :root[data-theme="dark"] .room-danger-close.csg-dialog-close {
   background: transparent;
-  color: var(--portal-gray-400);
+  color: var(--gray-400);
 }
 
 :root[data-theme="dark"] .room-danger-close.csg-dialog-close:hover:not(:disabled),
 :root[data-theme="dark"] .room-danger-close.csg-dialog-close:focus-visible {
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-600);
+  background: var(--gray-100);
+  color: var(--gray-600);
 }
 
 :root[data-theme="dark"] .csg-dialog-content.agent-logs-modal .agent-logs-viewer {
@@ -1400,20 +1400,20 @@
 
 .message-row:not(.own) .message-bubble {
   border-color: transparent;
-  background: color-mix(in oklab, var(--portal-gray-100) 72%, var(--portal-gray-200));
-  color: var(--portal-gray-900);
+  background: color-mix(in oklab, var(--gray-100) 72%, var(--gray-200));
+  color: var(--gray-900);
 }
 
 .message-row.admin .message-bubble {
   border-color: transparent;
-  background: color-mix(in oklab, var(--portal-gray-100) 72%, var(--portal-gray-200));
-  color: var(--portal-gray-900);
+  background: color-mix(in oklab, var(--gray-100) 72%, var(--gray-200));
+  color: var(--gray-900);
 }
 
 .message-row.own .message-bubble {
   border-radius: 8px;
   background: #d9e8ff;
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
   opacity: 1;
 }
 
@@ -1525,7 +1525,7 @@
   padding: 8px;
   border-color: rgba(148, 163, 184, 0.18);
   border-radius: 18px;
-  background: color-mix(in oklch, var(--portal-white) 96%, transparent);
+  background: color-mix(in oklch, var(--white) 96%, transparent);
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
 }
 
@@ -1598,7 +1598,7 @@
 
 /* Preserve the message display design after the latest main refinements. */
 :root[data-theme="light"] .messages {
-  background: var(--portal-white);
+  background: var(--white);
 }
 
 .message-row:not(.own) {
@@ -1625,13 +1625,13 @@
   width: 10px;
   height: 10px;
   border-radius: 5px;
-  background: var(--portal-gray-500);
-  outline: 1.5px solid var(--portal-white);
+  background: var(--gray-500);
+  outline: 1.5px solid var(--white);
   outline-offset: 0;
 }
 
 .message-avatar-status.online {
-  background: var(--portal-success-500);
+  background: var(--success-500);
 }
 
 .message-row:not(.own) .message-card {
@@ -1646,7 +1646,7 @@
   justify-content: flex-start;
   gap: 8px;
   margin-bottom: 6px;
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 12px;
   font-weight: 300;
   line-height: 18px;
@@ -1660,7 +1660,7 @@
   padding: 10px 14px;
   border-color: transparent;
   border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
-  background: color-mix(in oklab, var(--portal-gray-100) 72%, var(--portal-gray-200));
+  background: color-mix(in oklab, var(--gray-100) 72%, var(--gray-200));
   color: var(--admin-text);
   box-shadow: none;
 }
@@ -1682,7 +1682,7 @@
   justify-self: end;
   gap: 8px;
   margin-bottom: 6px;
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 12px;
   font-weight: 300;
   line-height: 18px;
@@ -1696,8 +1696,8 @@
   padding: 10px 14px;
   border: 0;
   border-radius: var(--radius-md) 0 var(--radius-md) var(--radius-md);
-  background: color-mix(in oklab, var(--portal-brand-50) 62%, var(--portal-white));
-  color: var(--portal-gray-900);
+  background: color-mix(in oklab, var(--brand-50) 62%, var(--white));
+  color: var(--gray-900);
   box-shadow: none;
 }
 
@@ -1709,17 +1709,17 @@
 
 :root[data-theme="dark"] .message-row:not(.own) .message-meta,
 :root[data-theme="dark"] .message-row.own .message-meta {
-  color: var(--portal-gray-400);
+  color: var(--gray-400);
 }
 
 :root[data-theme="dark"] .message-row:not(.own) .message-meta .message-author,
 :root[data-theme="dark"] .message-row.own .message-meta .message-author {
-  color: var(--portal-gray-300);
+  color: var(--gray-300);
 }
 
 :root[data-theme="dark"] .message-row.own .message-bubble {
-  background: var(--portal-brand-600);
-  color: var(--portal-white);
+  background: var(--brand-600);
+  color: var(--white);
 }
 
 @media (max-width: 720px) {

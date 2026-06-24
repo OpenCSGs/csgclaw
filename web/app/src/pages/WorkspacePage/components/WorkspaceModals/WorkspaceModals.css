@@ -4,7 +4,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: var(--space-5);
 }
 
 .modal-card {
@@ -14,7 +14,7 @@
   max-height: calc(100vh - 40px);
   overflow: auto;
   overscroll-behavior: contain;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--panel);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
@@ -23,19 +23,19 @@
 .modal-actions {
   position: relative;
   z-index: 1;
-  margin-top: 20px;
-  padding-top: 16px;
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--line);
 }
 
 .modal-title {
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .create-room-modal {
-  --create-room-modal-bg: var(--portal-white);
-  --create-room-title-color: var(--portal-gray-900);
-  --create-room-subtitle-color: var(--portal-gray-600);
+  --create-room-modal-bg: var(--white);
+  --create-room-title-color: var(--gray-900);
+  --create-room-subtitle-color: var(--gray-600);
 
   display: flex;
   flex-direction: column;
@@ -43,11 +43,11 @@
   max-height: min(770px, calc(100dvh - 40px));
   overflow: hidden;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--create-room-modal-bg);
   box-shadow:
-    0 20px 24px -4px rgba(16, 24, 40, 0.08),
-    0 8px 8px -4px rgba(16, 24, 40, 0.03);
+    0 20px 24px -4px color-mix(in srgb, var(--gray-900) 8%, transparent),
+    0 8px 8px -4px color-mix(in srgb, var(--gray-900) 3%, transparent);
 }
 
 .create-room-modal .modal-header {
@@ -61,39 +61,33 @@
 
 .create-room-modal .modal-title {
   color: var(--create-room-title-color);
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 28px;
+  font: var(--text-lg-medium);
 }
 
 .create-room-modal .modal-subtitle {
-  margin-top: 4px;
+  margin-top: var(--space-1);
   color: var(--create-room-subtitle-color);
-  font-size: 14px;
-  font-weight: 300;
-  line-height: 22px;
+  font: var(--text-sm-light);
 }
 
 .create-room-modal-content {
   display: grid;
   flex: 1 1 auto;
-  gap: 24px;
+  gap: var(--space-6);
   min-height: 0;
   overflow: auto;
   padding: 0;
-  margin-top: 20px;
+  margin-top: var(--space-5);
 }
 
 .create-room-section {
   display: grid;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .create-room-section-title {
-  color: var(--portal-gray-700);
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
+  color: var(--gray-700);
+  font: var(--text-md-medium);
 }
 
 .create-room-modal .create-room-field {
@@ -103,9 +97,9 @@
 
 .create-room-modal .field-required-star {
   order: -1;
-  color: var(--portal-error-400);
-  font-size: 14px;
-  font-weight: 500;
+  color: var(--error-400);
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-medium);
   line-height: 1;
 }
 
@@ -119,32 +113,32 @@
 }
 
 .create-room-member-list {
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .create-room-modal .create-room-member-row {
   grid-template-columns: auto auto minmax(0, 1fr);
   min-height: 68px;
   gap: 14px;
-  padding: 12px 14px;
-  border-color: var(--portal-gray-300);
-  border-radius: 8px;
-  background: var(--portal-white);
+  padding: var(--space-3) 14px;
+  border-color: var(--gray-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
   box-shadow: var(--shadow-xs);
   cursor: pointer;
 }
 
 .create-room-modal .create-room-member-row:hover {
-  border-color: var(--portal-gray-400);
+  border-color: var(--gray-400);
 }
 
 .create-room-modal .create-room-member-row:has(input:focus-visible) {
-  border-color: var(--portal-brand-300);
+  border-color: var(--brand-300);
   box-shadow: var(--shadow-xs), var(--focus-ring);
 }
 
 .create-room-modal .create-room-member-row:has(input:checked) {
-  border-color: var(--portal-brand-300);
+  border-color: var(--brand-300);
 }
 
 .create-room-modal .create-room-member-row > input[type="checkbox"] {
@@ -152,25 +146,21 @@
   height: 16px;
   min-height: 16px;
   margin: 0;
-  accent-color: var(--portal-brand-600);
+  accent-color: var(--brand-600);
 }
 
 .create-room-member-copy {
   display: grid;
   min-width: 0;
-  color: var(--portal-gray-600);
-  font-size: 14px;
-  font-weight: 300;
-  line-height: 22px;
+  color: var(--gray-600);
+  font: var(--text-sm-light);
 }
 
 .create-room-member-copy strong {
   min-width: 0;
   overflow: hidden;
-  color: var(--portal-gray-700);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 22px;
+  color: var(--gray-700);
+  font: var(--text-sm-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -178,10 +168,8 @@
 .create-room-member-copy small {
   min-width: 0;
   overflow: hidden;
-  color: var(--portal-gray-600);
-  font-size: 14px;
-  font-weight: 300;
-  line-height: 22px;
+  color: var(--gray-600);
+  font: var(--text-sm-light);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -194,11 +182,11 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--avatar-default-bg);
   color: var(--avatar-default-fg);
   font-weight: var(--avatar-default-weight);
-  font-size: 14px;
+  font-size: var(--text-sm-size);
   line-height: 1;
 }
 
@@ -207,8 +195,8 @@
   width: 24px;
   height: 24px;
   flex-basis: 24px;
-  border: 1.5px solid var(--portal-white);
-  font-size: 12px;
+  border: 1.5px solid var(--white);
+  font-size: var(--text-xs-size);
 }
 
 .create-room-avatar .agent-avatar-image {
@@ -266,12 +254,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--avatar-default-bg);
   color: var(--avatar-default-fg);
   font-weight: var(--avatar-default-weight);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--text-xs-size);
+  line-height: var(--text-xs-line-height);
 }
 
 .create-room-error {
@@ -280,9 +268,9 @@
 
 .create-room-modal .modal-actions {
   flex: 0 0 auto;
-  gap: 12px;
+  gap: var(--space-3);
   margin-top: 0;
-  padding: 24px 0 0;
+  padding: var(--space-6) 0 0;
   border: 0;
 }
 
@@ -290,10 +278,8 @@
   flex: 1 1 0;
   min-width: 0;
   height: 44px;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
+  border-radius: var(--radius-md);
+  font: var(--text-md-medium);
 }
 
 .create-room-modal .modal-header .modal-close {
@@ -302,7 +288,7 @@
   height: 44px;
   min-height: 44px;
   margin: -8px -8px 0 0;
-  color: var(--portal-gray-400);
+  color: var(--gray-400);
 }
 
 @media (max-width: 680px) {
@@ -318,7 +304,7 @@
   }
 
   .create-room-modal .modal-actions {
-    padding-top: 24px;
+    padding-top: var(--space-6);
   }
 }
 
@@ -329,15 +315,15 @@
 }
 
 :root[data-theme="dark"] .create-room-modal .create-room-section-title {
-  color: #98a2b3;
+  color: var(--gray-400);
 }
 
 :root[data-theme="dark"] .create-room-modal .create-room-member-copy strong {
-  color: #eaecf0;
+  color: var(--gray-200);
 }
 
 :root[data-theme="dark"] .create-room-modal .create-room-member-copy small {
-  color: #98a2b3;
+  color: var(--gray-400);
 }
 
 :root[data-theme="dark"] .create-room-modal .modal-header .modal-close {
@@ -351,20 +337,20 @@
 }
 
 .invite-members-modal {
-  --invite-modal-bg: var(--portal-white);
-  --invite-title-color: var(--portal-gray-900);
-  --invite-subtitle-color: var(--portal-gray-600);
+  --invite-modal-bg: var(--white);
+  --invite-title-color: var(--gray-900);
+  --invite-subtitle-color: var(--gray-600);
   width: min(640px, 100%);
   max-height: min(770px, calc(100dvh - 40px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--invite-modal-bg);
   box-shadow:
-    0 20px 24px -4px rgba(16, 24, 40, 0.08),
-    0 8px 8px -4px rgba(16, 24, 40, 0.03);
+    0 20px 24px -4px color-mix(in srgb, var(--gray-900) 8%, transparent),
+    0 8px 8px -4px color-mix(in srgb, var(--gray-900) 3%, transparent);
 }
 
 .invite-members-modal .modal-header {
@@ -378,17 +364,13 @@
 
 .invite-members-modal .modal-title {
   color: var(--invite-title-color);
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 28px;
+  font: var(--text-lg-medium);
 }
 
 .invite-members-modal .modal-subtitle {
-  margin-top: 4px;
+  margin-top: var(--space-1);
   color: var(--invite-subtitle-color);
-  font-size: 14px;
-  font-weight: 300;
-  line-height: 22px;
+  font: var(--text-sm-light);
 }
 
 .invite-members-content {
@@ -410,25 +392,25 @@
 
 .invite-members-content::-webkit-scrollbar-thumb {
   background-color: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-base);
 }
 
 .invite-members-content.is-scrolling {
-  scrollbar-color: var(--portal-gray-400) transparent;
+  scrollbar-color: var(--gray-400) transparent;
 }
 
 .invite-members-content.is-scrolling::-webkit-scrollbar-thumb {
-  background-color: var(--portal-gray-400);
+  background-color: var(--gray-400);
 }
 
 .invite-members-content .field {
-  gap: 16px;
-  padding-top: 20px;
+  gap: var(--space-4);
+  padding-top: var(--space-5);
   margin-top: 0;
 }
 
 .invite-members-modal .selection-list {
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .invite-members-modal .create-room-avatar-stack .create-room-avatar,
@@ -447,16 +429,16 @@
 }
 
 .invite-members-modal .create-room-member-row:hover {
-  border-color: var(--portal-gray-400);
+  border-color: var(--gray-400);
 }
 
 .invite-members-modal .create-room-member-row:has(input:focus-visible) {
-  border-color: var(--portal-brand-300);
+  border-color: var(--brand-300);
   box-shadow: var(--shadow-xs), var(--focus-ring);
 }
 
 .invite-members-modal .create-room-member-row:has(input:checked) {
-  border-color: var(--portal-brand-300);
+  border-color: var(--brand-300);
 }
 
 .invite-members-modal .create-room-member-row > input[type="checkbox"] {
@@ -464,7 +446,7 @@
   height: 16px;
   min-height: 16px;
   margin: 0;
-  accent-color: var(--portal-brand-600);
+  accent-color: var(--brand-600);
 }
 
 .invite-members-modal .create-room-member-row > input[type="checkbox"]:focus-visible {
@@ -474,20 +456,18 @@
 
 .invite-members-modal .modal-actions {
   flex: 0 0 auto;
-  margin-top: 24px;
+  margin-top: var(--space-6);
   padding: 0;
   border: 0;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .invite-members-modal .modal-actions .btn {
   flex: 1 1 0;
   min-width: 0;
   height: 44px;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
+  border-radius: var(--radius-md);
+  font: var(--text-md-medium);
 }
 
 :root[data-theme="dark"] .invite-members-modal {
@@ -498,11 +478,11 @@
 
 .agent-create-progress {
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
   margin-top: 14px;
-  padding: 12px;
+  padding: var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in oklab, var(--surface) 88%, var(--panel));
 }
 
@@ -510,20 +490,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .agent-create-progress-header strong {
-  font-size: 12px;
+  font-size: var(--text-xs-size);
   color: var(--muted);
 }
 
 .agent-create-progress-track {
   height: 7px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: color-mix(in oklab, var(--line) 52%, transparent);
 }
 
@@ -545,7 +525,7 @@
 .agent-create-progress-steps span {
   padding: 3px 7px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--panel);
 }
 
@@ -576,9 +556,9 @@
 .selection-item {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: center;
-  padding: 12px 14px;
+  padding: var(--space-3) 14px;
   border: 1px solid var(--line);
 }
 
@@ -632,31 +612,27 @@
 
 .profile-modal.agent-modal .modal-header {
   align-items: flex-start;
-  gap: 16px;
+  gap: var(--space-4);
   padding: 0 0 20px;
-  background: var(--portal-white);
-  border-bottom: 1px solid var(--portal-gray-200);
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-200);
 }
 
 .profile-modal.agent-modal .modal-header > div:first-child {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
 .profile-modal.agent-modal .modal-title {
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
   font-family: var(--font-sans);
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 28px;
+  font: var(--text-lg-medium);
 }
 
 .profile-modal.agent-modal .modal-subtitle {
-  color: var(--portal-gray-600);
-  font-size: 14px;
-  font-weight: 300;
-  line-height: 22px;
+  color: var(--gray-600);
+  font: var(--text-sm-light);
 }
 
 .modal-card .modal-header .modal-close {
@@ -667,9 +643,9 @@
   padding: 8px;
   margin: -8px -8px 0 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--portal-gray-400);
+  color: var(--gray-400);
   box-shadow: none;
   transform: none;
 }
@@ -684,7 +660,7 @@
 .modal-card .modal-header .modal-close:active:not(:disabled) {
   border: 0;
   background: transparent;
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   box-shadow: none;
   transform: none;
 }
@@ -692,8 +668,8 @@
 .modal-card .modal-header .modal-close:focus-visible {
   border: 0;
   background: transparent;
-  color: var(--portal-gray-700);
-  box-shadow: 0 0 0 4px rgba(152, 162, 179, 0.14);
+  color: var(--gray-700);
+  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--gray-400) 14%, transparent);
 }
 
 .manager-rebuild-submit {
@@ -706,7 +682,7 @@
   min-height: 0;
   overflow-y: auto;
   margin-top: 14px;
-  padding: 14px 24px 18px;
+  padding: 14px var(--space-6) 18px;
   overscroll-behavior: contain;
 }
 
@@ -714,7 +690,7 @@
   display: grid;
   gap: 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 
@@ -732,20 +708,16 @@
 }
 
 .profile-section-heading .profile-section-title {
-  color: var(--portal-gray-700);
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 28px;
+  color: var(--gray-700);
+  font: var(--text-lg-medium);
   letter-spacing: 0;
   text-transform: none;
 }
 
 .profile-section-description {
   margin: 0;
-  color: var(--portal-gray-600);
-  font-size: 14px;
-  font-weight: 300;
-  line-height: 22px;
+  color: var(--gray-600);
+  font: var(--text-sm-light);
 }
 
 .agent-section-form {
@@ -760,9 +732,9 @@
   height: auto;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--portal-gray-200);
-  border-radius: 12px;
-  background: var(--portal-white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-xl);
+  background: var(--white);
   box-shadow: var(--shadow-xs);
 }
 
@@ -770,12 +742,12 @@
 .agent-section-form .agent-basics-grid {
   width: 100%;
   min-width: 0;
-  padding: 16px;
+  padding: var(--space-4);
 }
 
 .agent-section-form-content {
   display: grid;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .agent-model-form-content {
@@ -802,8 +774,8 @@
 .profile-model-api-section {
   display: grid;
   gap: 10px;
-  margin-top: 4px;
-  padding-top: 16px;
+  margin-top: var(--space-1);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--line);
 }
 
@@ -822,9 +794,9 @@
 }
 
 .agent-advanced-summary:focus-visible {
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   outline: 2px solid var(--input-border-focus);
-  outline-offset: 4px;
+  outline-offset: var(--space-1);
 }
 
 .profile-grid {
@@ -844,7 +816,7 @@
 .agent-basics-grid {
   grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr);
   align-items: end;
-  column-gap: 16px;
+  column-gap: var(--space-4);
 }
 
 .agent-basics-grid > .span-2 {
@@ -860,7 +832,7 @@
 .agent-identity-layout {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
-  gap: 16px;
+  gap: var(--space-4);
   align-items: start;
 }
 
@@ -895,15 +867,15 @@
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--space-4);
   align-items: start;
 }
 
 .profile-modal.agent-modal .field-hint {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 18px;
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--text-xs-line-height);
 }
 
 .agent-modal .agent-avatar-field .agent-avatar-picker {
@@ -957,10 +929,10 @@
   max-width: none;
   margin: 0;
   padding: 9px 11px;
-  border-radius: 8px;
-  color: var(--portal-error-700);
-  font-size: 12px;
-  font-weight: 600;
+  border-radius: var(--radius-md);
+  color: var(--error-700);
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-semibold);
   line-height: 1.35;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -972,28 +944,28 @@
   gap: 10px;
   align-items: center;
   min-height: 40px;
-  padding: 8px 10px;
+  padding: var(--space-2) 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--field);
 }
 
 .auth-status-dot {
   width: 9px;
   height: 9px;
-  border-radius: 999px;
-  background: #d69321;
+  border-radius: var(--radius-full);
+  background: var(--warning-500);
 }
 
 .auth-status-row.connected .auth-status-dot {
-  background: #2f9e60;
+  background: var(--success-600);
 }
 
 .auth-status-message {
   min-width: 0;
   color: var(--text);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-semibold);
   overflow-wrap: anywhere;
 }
 
@@ -1066,7 +1038,7 @@
 }
 
 .profile-modal.agent-modal .field:has(textarea) > .field-hint {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 14px;
   font-weight: 300;
   line-height: 22px;
@@ -1128,7 +1100,7 @@
 }
 
 .detection-row.failed span {
-  color: oklch(0.72 0.16 35);
+  color: var(--warning-700);
 }
 
 .detection-row small {
@@ -1203,18 +1175,18 @@
 }
 
 .upgrade-status-card.done {
-  border-color: color-mix(in oklab, var(--portal-success-700) 32%, var(--line));
-  background: var(--portal-success-50);
+  border-color: color-mix(in oklab, var(--success-700) 32%, var(--line));
+  background: var(--success-50);
 }
 
 .upgrade-status-card.done .upgrade-status-dot {
-  background: var(--portal-success-700);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--portal-success-700) 16%, transparent);
+  background: var(--success-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--success-700) 16%, transparent);
 }
 
 .upgrade-status-card.error {
   border-color: color-mix(in oklab, var(--danger) 32%, var(--line));
-  background: var(--portal-error-50);
+  background: var(--error-50);
 }
 
 .upgrade-status-card.error .upgrade-status-dot {
@@ -1223,13 +1195,13 @@
 }
 
 .upgrade-status-card.manual_restart {
-  border-color: color-mix(in oklab, var(--portal-warning-700) 32%, var(--line));
-  background: var(--portal-warning-50);
+  border-color: color-mix(in oklab, var(--warning-700) 32%, var(--line));
+  background: var(--warning-50);
 }
 
 .upgrade-status-card.manual_restart .upgrade-status-dot {
-  background: var(--portal-warning-700);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--portal-warning-700) 16%, transparent);
+  background: var(--warning-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--warning-700) 16%, transparent);
 }
 
 .profile-model-row {
@@ -1337,32 +1309,32 @@
   min-height: 16px;
   margin: 2px 0 0;
   padding: 0;
-  border: 1px solid var(--portal-gray-300);
+  border: 1px solid var(--gray-300);
   border-radius: 4px;
-  background: var(--portal-white);
+  background: var(--white);
   box-shadow: var(--shadow-xs);
   cursor: pointer;
 }
 
 .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:hover {
-  border-color: var(--portal-brand-300);
+  border-color: var(--brand-300);
 }
 
 .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:focus-visible {
-  border-color: var(--portal-brand-300);
+  border-color: var(--brand-300);
   outline: none;
   box-shadow: var(--focus-ring);
 }
 
 .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:checked {
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-600);
+  border-color: var(--brand-600);
+  background: var(--brand-600);
 }
 
 .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:checked::after {
   width: 5px;
   height: 8px;
-  border: solid var(--portal-white);
+  border: solid var(--white);
   border-width: 0 2px 2px 0;
   content: "";
   transform: translateY(-1px) rotate(45deg);
@@ -1371,7 +1343,7 @@
 .profile-modal.agent-modal .agent-fast-mode-help {
   flex: 1 1 auto;
   min-width: 0;
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 14px;
   font-weight: 400;
   line-height: 20px;
@@ -1380,7 +1352,7 @@
 }
 
 .selection-item:hover {
-  border-color: oklch(0.77 0.16 164 / 0.38);
+  border-color: color-mix(in srgb, var(--success-400) 38%, transparent);
 }
 
 .profile-editor-shell {
@@ -1413,11 +1385,11 @@
 }
 
 .profile-modal.agent-modal .profile-editor-shell.is-scrolling {
-  scrollbar-color: var(--portal-gray-400) transparent;
+  scrollbar-color: var(--gray-400) transparent;
 }
 
 .profile-modal.agent-modal .profile-editor-shell.is-scrolling::-webkit-scrollbar-thumb {
-  background-color: var(--portal-gray-400);
+  background-color: var(--gray-400);
 }
 
 .profile-modal.agent-modal .profile-section {
@@ -1446,27 +1418,27 @@
   min-width: 0;
   height: 74px;
   padding: 12px 16px;
-  border: 1px solid var(--portal-gray-300);
+  border: 1px solid var(--gray-300);
   border-radius: 8px;
   background: transparent;
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   box-shadow: none;
   transform: none;
 }
 
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:hover,
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:focus-visible {
-  border-color: var(--portal-gray-300);
+  border-color: var(--gray-300);
   background: transparent;
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   box-shadow: none;
   transform: none;
 }
 
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab.active {
-  border-color: var(--portal-brand-600);
-  background: var(--portal-brand-25);
-  color: var(--portal-brand-600);
+  border-color: var(--brand-600);
+  background: var(--brand-25);
+  color: var(--brand-600);
   box-shadow: none;
 }
 
@@ -1489,18 +1461,18 @@
 }
 
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy strong {
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   font-size: 16px;
   font-weight: 500;
   line-height: 24px;
 }
 
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab.active .workspace-tab-copy strong {
-  color: var(--portal-brand-600);
+  color: var(--brand-600);
 }
 
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy small {
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 300;
@@ -1512,7 +1484,7 @@
 }
 
 .modal-backdrop {
-  background: rgba(12, 17, 29, 0.56);
+  background: color-mix(in srgb, var(--gray-950) 56%, transparent);
   backdrop-filter: none;
 }
 
@@ -1637,9 +1609,9 @@
 
 .modal-card .selection-item.compact-toggle-row,
 .profile-section .selection-item.compact-toggle-row {
-  border-color: var(--portal-gray-300);
-  background: var(--portal-white);
-  color: var(--portal-gray-700);
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
   box-shadow: var(--shadow-xs);
 }
 
@@ -1647,17 +1619,17 @@
 .profile-section .selection-item.compact-toggle-row:hover,
 .modal-card .selection-item.compact-toggle-row:focus-within,
 .profile-section .selection-item.compact-toggle-row:focus-within {
-  border-color: var(--portal-brand-300);
-  background: var(--portal-brand-25);
-  color: var(--portal-brand-700);
+  border-color: var(--brand-300);
+  background: var(--brand-25);
+  color: var(--brand-700);
   box-shadow: var(--shadow-xs);
 }
 
 .modal-card .selection-item.compact-toggle-row:has(input:checked),
 .profile-section .selection-item.compact-toggle-row:has(input:checked) {
-  border-color: var(--portal-brand-300);
-  background: var(--portal-brand-50);
-  color: var(--portal-brand-700);
+  border-color: var(--brand-300);
+  background: var(--brand-50);
+  color: var(--brand-700);
 }
 
 :root[data-theme="dark"] .modal-card .field input:hover,
@@ -1667,7 +1639,7 @@
 :root[data-theme="dark"] .profile-section .field textarea:hover,
 :root[data-theme="dark"] .profile-section .field select:hover,
 :root[data-theme="dark"] .env-row input:hover {
-  border-color: #475467;
+  border-color: var(--gray-600);
 }
 
 :root[data-theme="dark"] .upgrade-summary {
@@ -1676,13 +1648,13 @@
 }
 
 :root[data-theme="dark"] .upgrade-status-card.done {
-  border-color: rgba(23, 178, 106, 0.38);
-  background: rgba(23, 178, 106, 0.12);
+  border-color: color-mix(in srgb, var(--success-500) 38%, transparent);
+  background: color-mix(in srgb, var(--success-500) 12%, transparent);
 }
 
 :root[data-theme="dark"] .upgrade-status-card.error {
-  border-color: rgba(217, 45, 32, 0.42);
-  background: rgba(217, 45, 32, 0.12);
+  border-color: color-mix(in srgb, var(--error-600) 42%, transparent);
+  background: color-mix(in srgb, var(--error-600) 12%, transparent);
 }
 
 .profile-preview-popover .preview-header .modal-close {
@@ -1694,7 +1666,7 @@
   margin: 0 2px;
   border: 0;
   background: transparent;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   box-shadow: none;
   display: inline-flex;
   align-items: center;
@@ -1711,7 +1683,7 @@
 .profile-preview-popover .preview-header .modal-close:hover:not(:disabled) {
   border: 0;
   background: transparent;
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   box-shadow: none;
   transform: none;
 }
@@ -1719,7 +1691,7 @@
 .profile-preview-popover .preview-header .modal-close:active:not(:disabled) {
   border: 0;
   background: transparent;
-  color: var(--portal-gray-700);
+  color: var(--gray-700);
   box-shadow: none;
   transform: none;
 }
@@ -1727,15 +1699,15 @@
 .profile-preview-popover .preview-header .modal-close:focus-visible {
   border: 0;
   background: transparent;
-  color: var(--portal-gray-700);
-  box-shadow: 0 0 0 4px rgba(152, 162, 179, 0.14);
+  color: var(--gray-700);
+  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--gray-400) 14%, transparent);
 }
 
 .profile-preview-popover .preview-header .modal-close:disabled,
 .profile-preview-popover .preview-header .modal-close[disabled] {
   border: 0;
   background: transparent;
-  color: var(--portal-gray-400);
+  color: var(--gray-400);
   box-shadow: none;
   opacity: 1;
   transform: none;
@@ -1744,7 +1716,7 @@
 :root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close {
   border: 0;
   background: transparent;
-  color: #d0d5dd;
+  color: var(--gray-300);
   box-shadow: none;
 }
 
@@ -1752,15 +1724,15 @@
 :root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close:active:not(:disabled) {
   border: 0;
   background: transparent;
-  color: var(--portal-white);
+  color: var(--white);
   box-shadow: none;
 }
 
 :root[data-theme="dark"] .profile-preview-popover .preview-header .modal-close:focus-visible {
   border: 0;
   background: transparent;
-  color: #d0d5dd;
-  box-shadow: 0 0 0 4px rgba(152, 162, 179, 0.16);
+  color: var(--gray-300);
+  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--gray-400) 16%, transparent);
 }
 
 .modal-card .profile-advanced-grid,
@@ -1785,7 +1757,7 @@
   overflow-y: auto;
   padding-right: 4px;
   scrollbar-width: thin;
-  scrollbar-color: var(--portal-gray-400) transparent;
+  scrollbar-color: var(--gray-400) transparent;
 }
 
 .modal-card .profile-advanced-grid .env-editor::-webkit-scrollbar,
@@ -1800,8 +1772,8 @@
 
 .modal-card .profile-advanced-grid .env-editor::-webkit-scrollbar-thumb,
 .profile-section .profile-advanced-grid .env-editor::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .modal-card .profile-advanced-grid .env-row,
@@ -1834,7 +1806,7 @@
 }
 
 .manager-rebuild-modal .modal-title {
-  color: var(--portal-gray-900);
+  color: var(--gray-900);
   font-size: 24px;
   font-weight: 700;
   line-height: 32px;
@@ -1842,7 +1814,7 @@
 
 .manager-rebuild-modal .modal-subtitle {
   margin-top: 2px;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   font-size: 15px;
   font-weight: 400;
   line-height: 22px;

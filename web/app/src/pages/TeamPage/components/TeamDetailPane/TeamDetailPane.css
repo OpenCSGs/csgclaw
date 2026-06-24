@@ -5,7 +5,7 @@
   justify-items: center;
   padding: 24px 32px 28px;
   background:
-    linear-gradient(180deg, var(--portal-white) 0, var(--portal-white) 138px, transparent 138px), var(--portal-gray-25);
+    linear-gradient(180deg, var(--white) 0, var(--white) 138px, transparent 138px), var(--gray-25);
 }
 
 .team-detail-pane > .entity-header,
@@ -73,7 +73,7 @@
   flex-shrink: 0;
   min-height: 24px;
   padding: 2px 10px;
-  border: 1px solid color-mix(in srgb, var(--portal-success-500, #17b26a) 24%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--success-500, #17b26a) 24%, var(--line));
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 500;
@@ -82,14 +82,14 @@
 }
 
 .team-detail-pane .entity-title-row .status-pill.online {
-  background: var(--portal-success-50);
-  color: var(--portal-success-700);
+  background: var(--success-50);
+  color: var(--success-700);
 }
 
 .team-detail-pane .entity-heading p {
   margin: 0;
   max-width: 56rem;
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 13px;
   line-height: 1.55;
 }
@@ -99,8 +99,8 @@
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--portal-brand-600) 10%, transparent);
-  color: var(--portal-brand-600);
+  background: color-mix(in srgb, var(--brand-600) 10%, transparent);
+  color: var(--brand-600);
 }
 
 .team-detail-avatar svg {
@@ -166,7 +166,7 @@
 
 .team-profile-block p {
   margin: 2px 0 0;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   font-size: 12px;
   font-weight: 400;
   line-height: 18px;
@@ -181,14 +181,14 @@
 
 .team-detail-panel-head p {
   margin: 4px 0 0;
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 13px;
   line-height: 1.45;
 }
 
 .team-member-main > span:last-child {
   margin: 2px 0 0;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   font-size: 12px;
   line-height: 18px;
 }
@@ -227,7 +227,7 @@
 .team-detail-fields .team-detail-field .team-detail-label {
   flex: 1 1 auto;
   min-width: 0;
-  color: var(--portal-gray-500);
+  color: var(--gray-500);
   font-size: 13px;
   font-weight: 400;
   line-height: 20px;
@@ -236,7 +236,7 @@
 .team-detail-fields .team-detail-field .team-detail-value {
   flex: 0 1 58%;
   min-width: 0;
-  color: var(--portal-gray-800);
+  color: var(--gray-800);
   font-size: 13px;
   font-weight: 500;
   line-height: 20px;
@@ -338,8 +338,8 @@
 
 .team-member-row:not(.team-member-static):hover,
 .team-task-row:hover {
-  border-color: color-mix(in srgb, var(--portal-brand-600) 32%, var(--line));
-  background: color-mix(in srgb, var(--portal-brand-600) 5%, var(--surface));
+  border-color: color-mix(in srgb, var(--brand-600) 32%, var(--line));
+  background: color-mix(in srgb, var(--brand-600) 5%, var(--surface));
   transform: translateY(-1px);
 }
 
@@ -426,7 +426,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   font-size: 12px;
   line-height: 18px;
 }
@@ -447,7 +447,7 @@
   justify-self: end;
   border-radius: 999px;
   background: var(--panel-soft);
-  color: var(--portal-gray-600);
+  color: var(--gray-600);
   padding: 4px 10px;
   font-size: 12px;
   font-weight: 500;
@@ -457,13 +457,13 @@
 
 .team-task-status-pending,
 .team-task-status-assigned {
-  background: var(--portal-gray-100);
-  color: var(--portal-gray-700);
+  background: var(--gray-100);
+  color: var(--gray-700);
 }
 
 .team-task-status-in_progress {
-  background: color-mix(in srgb, var(--portal-brand-600) 12%, transparent);
-  color: var(--portal-brand-700);
+  background: color-mix(in srgb, var(--brand-600) 12%, transparent);
+  color: var(--brand-700);
 }
 
 .team-task-status-completed {
@@ -472,14 +472,14 @@
 }
 
 .team-task-status-blocked {
-  background: var(--portal-warning-50);
-  color: var(--portal-warning-700);
+  background: var(--warning-50);
+  color: var(--warning-700);
 }
 
 .team-task-status-failed,
 .team-task-status-cancelled {
-  background: color-mix(in srgb, var(--portal-error-600) 12%, transparent);
-  color: var(--portal-error-600);
+  background: color-mix(in srgb, var(--error-600) 12%, transparent);
+  color: var(--error-600);
 }
 
 .team-members-dialog {
@@ -495,7 +495,7 @@
   overflow: auto;
   padding-right: 4px;
   scrollbar-width: thin;
-  scrollbar-color: var(--portal-gray-400) transparent;
+  scrollbar-color: var(--gray-400) transparent;
 }
 
 .team-members-dialog-list::-webkit-scrollbar {
@@ -508,7 +508,7 @@
 
 .team-members-dialog-list::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: color-mix(in oklch, var(--portal-gray-400) 70%, transparent);
+  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .team-members-dialog-error {
