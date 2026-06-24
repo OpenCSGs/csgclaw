@@ -20,7 +20,7 @@ const (
 	ModelProviderIDCodex      = ProviderCodex
 	ModelProviderIDClaude     = ProviderClaudeCode
 
-	ModelProviderKindOpenCSG          = ProviderCSGHub
+	ModelProviderKindOpenCSG          = ProviderOpenCSG
 	ModelProviderKindCSGHubLite       = ProviderCSGHubLite
 	ModelProviderKindCodex            = ProviderCodex
 	ModelProviderKindClaudeCode       = ProviderClaudeCode
@@ -92,7 +92,7 @@ func NormalizeModelProviderID(id string) string {
 	switch id {
 	case "", "legacy-inline":
 		return ""
-	case "opencsg", "open-csg", ProviderCSGHub:
+	case ProviderOpenCSG, "open-csg", ProviderCSGHub:
 		return ModelProviderIDOpenCSG
 	case "csghub_lite", "csghublite", modelprovider.CSGHubLiteProviderName:
 		return ModelProviderIDCSGHubLite

@@ -183,7 +183,7 @@ export function SidebarUserButton({
           <div className="sidebar-menu-divider"></div>
           <div className="sidebar-csghub-panel">
             <div className="sidebar-csghub-heading">
-              <span className="sidebar-csghub-kicker">CSGHub</span>
+              <span className="sidebar-csghub-kicker">{t("csghubAccount")}</span>
               <span className={classNames("sidebar-csghub-state", accountAuthenticated && "is-authenticated")}>
                 {accountAuthenticated ? t("csghubSignedIn") : t("csghubNotSignedIn")}
               </span>

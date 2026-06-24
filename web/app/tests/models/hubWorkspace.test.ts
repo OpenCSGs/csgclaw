@@ -28,7 +28,11 @@ describe("hub workspace helpers", () => {
       isVisibleInHubTemplateList({ id: "builtin.picoclaw-manager", role: "manager", source: { kind: "builtin" } }),
     ).toBe(false);
     expect(
-      isVisibleInHubTemplateList({ id: "official.review-bot", role: "manager", source: { kind: "remote", name: "official" } }),
+      isVisibleInHubTemplateList({
+        id: "official.review-bot",
+        role: "manager",
+        source: { kind: "remote", name: "official" },
+      }),
     ).toBe(true);
     expect(
       isVisibleInHubTemplateList({ id: "team.review-bot", role: "worker", source: { kind: "remote", name: "team" } }),

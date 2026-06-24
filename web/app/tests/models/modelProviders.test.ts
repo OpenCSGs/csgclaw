@@ -13,7 +13,7 @@ describe("model provider catalog helpers", () => {
       providers: [
         {
           id: "opencsg",
-          kind: "csghub",
+          kind: "opencsg",
           builtin: true,
           display_name: "OpenCSG",
           base_url: "https://ai.space.opencsg.com/v1",

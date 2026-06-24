@@ -70,6 +70,9 @@ models = ["gpt-test"]
 			t.Fatalf("providers[%d].id = %q, want %q; providers=%+v", i, got.Providers[i].ID, want, got.Providers)
 		}
 	}
+	if got.Providers[0].Kind != "opencsg" {
+		t.Fatalf("opencsg kind = %q, want opencsg", got.Providers[0].Kind)
+	}
 	if got.Providers[4].APIKey != "" {
 		t.Fatalf("custom provider leaked api_key = %q", got.Providers[4].APIKey)
 	}

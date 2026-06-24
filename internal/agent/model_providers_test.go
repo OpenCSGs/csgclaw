@@ -70,6 +70,24 @@ func TestCheckModelProviderUsesOpenCSGAIGatewayCredentials(t *testing.T) {
 	}
 }
 
+func TestModelProviderCatalogExposesOpenCSGKind(t *testing.T) {
+	catalog := ModelProviderCatalogFromLLM(config.LLMConfig{})
+
+	var provider ModelProviderSummary
+	for _, item := range catalog.Providers {
+		if item.ID == ModelProviderIDOpenCSG {
+			provider = item
+			break
+		}
+	}
+	if provider.ID == "" {
+		t.Fatalf("OpenCSG provider missing from catalog: %+v", catalog.Providers)
+	}
+	if provider.Kind != ModelProviderIDOpenCSG {
+		t.Fatalf("OpenCSG provider kind = %q, want %q", provider.Kind, ModelProviderIDOpenCSG)
+	}
+}
+
 func TestRefreshModelProviderCatalogReplacesStaleProfileModels(t *testing.T) {
 	llm := config.LLMConfig{
 		Default: "openai.gpt-old",

@@ -15,10 +15,10 @@ const labels: Record<string, string> = {
   versionInfo: "Version",
   versionSettings: "Version and updates",
   configSettingsMenu: "Settings",
-  csghubAccount: "CSGHub account",
+  csghubAccount: "OpenCSG",
   csghubLoginPending: "Waiting for auth",
   csghubLoginPendingDetail: "Finish authorization",
-  csghubLoginRequired: "Sign in with CSGHub",
+  csghubLoginRequired: "Sign in with OpenCSG",
   csghubNotSignedIn: "Not signed in",
   csghubSignIn: "Sign in",
   csghubSigningIn: "Signing in...",
@@ -216,7 +216,7 @@ describe("SidebarUserButton", () => {
     expect(onOpenConfigSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("shows CSGHub sign-in when no account is connected", async () => {
+  it("shows OpenCSG sign-in when no account is connected", async () => {
     const user = userEvent.setup();
     const onLogin = vi.fn();
 
@@ -238,14 +238,14 @@ describe("SidebarUserButton", () => {
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(screen.getByText("CSGHub")).toBeInTheDocument();
+    expect(screen.getByText("OpenCSG")).toBeInTheDocument();
     expect(screen.getAllByText("Not signed in")).toHaveLength(2);
-    expect(screen.queryByText("Sign in with CSGHub")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign in with OpenCSG")).not.toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Sign in" }));
     expect(onLogin).toHaveBeenCalledTimes(1);
   });
 
-  it("shows CSGHub account metadata and signs out", async () => {
+  it("shows OpenCSG account metadata and signs out", async () => {
     const user = userEvent.setup();
     const onLogout = vi.fn();
 
