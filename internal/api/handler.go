@@ -1104,6 +1104,7 @@ func agentProfileFromAPI(req *apitypes.CreateAgentProfile) agent.AgentProfile {
 		Name:            req.Name,
 		Description:     req.Description,
 		Provider:        req.Provider,
+		ModelProviderID: req.ModelProviderID,
 		BaseURL:         req.BaseURL,
 		APIKey:          req.APIKey,
 		Headers:         req.Headers,

@@ -97,4 +97,27 @@ describe("useProfileModelOptions", () => {
     );
     await waitFor(() => expect(result.current.draft?.model_id).toBe("gpt-auto"));
   });
+
+  it("probes CSGHub models without manual API fields", async () => {
+    vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["deepseek-v4-flash"] });
+
+    renderHook(
+      () =>
+        useProfileModelOptions({
+          draft: apiDraft({ provider: "csghub" }),
+          onDraftChange: vi.fn(),
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(fetchAgentProfileModels).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api_key: "",
+          base_url: "",
+          provider: "csghub",
+        }),
+      ),
+    );
+  });
 });

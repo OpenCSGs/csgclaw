@@ -79,6 +79,17 @@ func ensureConfigState(path string) (config.Config, error) {
 	if hasExistingConfig && cfg.NeedsMigrationRewrite() {
 		needsSave = true
 	}
+	modelsPath, err := config.ModelsPathForConfigPath(path)
+	if err != nil {
+		return config.Config{}, err
+	}
+	if _, err := os.Stat(modelsPath); err != nil {
+		if os.IsNotExist(err) {
+			needsSave = true
+		} else {
+			return config.Config{}, fmt.Errorf("stat models config: %w", err)
+		}
+	}
 	if needsSave {
 		if err := cfg.Save(path); err != nil {
 			return config.Config{}, err

@@ -176,7 +176,9 @@ body::after {
   opacity: 1;
 }
 
-[data-tooltip-side="bottom"]:not([data-tooltip-side="top"]):not([data-tooltip-side="left"]):not([data-tooltip-side="right"])::after,
+[data-tooltip-side="bottom"]:not([data-tooltip-side="top"]):not([data-tooltip-side="left"]):not(
+    [data-tooltip-side="right"]
+  )::after,
 [data-tooltip-side="bottom"]::after {
   top: calc(100% + 10px);
   left: 50%;

@@ -17,7 +17,14 @@ export const BOT_CREATE_KIND_WORKER = "worker";
 /** Create-agent modal tab: notification bot (no sandbox). */
 export const BOT_CREATE_KIND_NOTIFICATION = "notification";
 
-export const PROVIDERS = ["csghub_lite", "codex", "claude_code", "api"];
+export const PROVIDER_OPTIONS = [
+  { value: "csghub_lite", label: "CSGHub Lite" },
+  { value: "csghub", label: "CSGHub" },
+  { value: "codex", label: "Codex" },
+  { value: "claude_code", label: "Claude Code" },
+  { value: "api", label: "OpenAI API" },
+] as const;
+export const PROVIDERS = PROVIDER_OPTIONS.map((option) => option.value);
 export const RUNTIME_KIND_OPTIONS = [
   { value: "picoclaw_sandbox", label: "picoclaw_sandbox" },
   { value: "openclaw_sandbox", label: "openclaw_sandbox" },

@@ -13,10 +13,15 @@ const (
 )
 
 type ProviderConfig struct {
-	BaseURL         string
-	APIKey          string
-	Models          []string
-	ReasoningEffort string
+	DisplayName     string            `json:"display_name,omitempty"`
+	BaseURL         string            `json:"base_url,omitempty"`
+	APIKey          string            `json:"api_key,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	Models          []string          `json:"models,omitempty"`
+	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
+	Status          string            `json:"status,omitempty"`
+	Message         string            `json:"message,omitempty"`
+	LastCheckedAt   string            `json:"last_checked_at,omitempty"`
 }
 
 type ModelValidationError struct {
@@ -110,10 +115,15 @@ func (c SandboxConfig) Validate() error {
 
 func (c ProviderConfig) Resolved() ProviderConfig {
 	out := c
+	out.DisplayName = strings.TrimSpace(out.DisplayName)
 	out.BaseURL = strings.TrimRight(strings.TrimSpace(out.BaseURL), "/")
 	out.APIKey = strings.TrimSpace(out.APIKey)
+	out.Headers = normalizeHeaderMap(out.Headers)
 	out.ReasoningEffort = strings.ToLower(strings.TrimSpace(out.ReasoningEffort))
 	out.Models = normalizeModelIDs(out.Models)
+	out.Status = strings.ToLower(strings.TrimSpace(out.Status))
+	out.Message = strings.TrimSpace(out.Message)
+	out.LastCheckedAt = strings.TrimSpace(out.LastCheckedAt)
 	return out
 }
 

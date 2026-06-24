@@ -15,6 +15,15 @@ const labels: Record<string, string> = {
   versionInfo: "Version",
   versionSettings: "Version and updates",
   configSettingsMenu: "Settings",
+  csghubAccount: "CSGHub account",
+  csghubLoginPending: "Waiting for auth",
+  csghubLoginPendingDetail: "Finish authorization",
+  csghubLoginRequired: "Sign in with CSGHub",
+  csghubNotSignedIn: "Not signed in",
+  csghubSignIn: "Sign in",
+  csghubSigningIn: "Signing in...",
+  csghubSignedIn: "Signed in",
+  csghubSignOut: "Sign out",
 };
 
 function t(key: string): string {
@@ -205,5 +214,72 @@ describe("SidebarUserButton", () => {
     await user.click(screen.getByRole("button", { name: "Settings" }));
     await user.click(screen.getByRole("menuitem", { name: "Settings" }));
     expect(onOpenConfigSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows CSGHub sign-in when no account is connected", async () => {
+    const user = userEvent.setup();
+    const onLogin = vi.fn();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        showUpgradeControls={false}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        onLogin={onLogin}
+        t={t}
+        theme="light"
+        upgradeStatus={updateAvailableStatus}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByText("CSGHub")).toBeInTheDocument();
+    expect(screen.getAllByText("Not signed in")).toHaveLength(2);
+    expect(screen.queryByText("Sign in with CSGHub")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Sign in" }));
+    expect(onLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows CSGHub account metadata and signs out", async () => {
+    const user = userEvent.setup();
+    const onLogout = vi.fn();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        showUpgradeControls={false}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        onLogout={onLogout}
+        authStatus={{
+          authenticated: true,
+          user_id: "alice",
+          user_uuid: "user-1",
+          avatar: "https://example.test/avatar.png",
+          base_url: "https://hub.example.test",
+          portal_url: "https://hub.example.test/portal",
+          logged_in_at: "2026-06-22T09:00:00Z",
+        }}
+        t={t}
+        theme="light"
+        upgradeStatus={updateAvailableStatus}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByText("Signed in")).toBeInTheDocument();
+    expect(screen.getByText("alice")).toBeInTheDocument();
+    expect(screen.queryByText("https://hub.example.test")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
+    expect(onLogout).toHaveBeenCalledTimes(1);
   });
 });

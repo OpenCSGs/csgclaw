@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"csgclaw/internal/auth"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/csghub/csghubsdk"
 )
@@ -548,10 +549,20 @@ func (i *Instance) valid() error {
 
 func loadRuntimeConfigFromEnv() (runtimeConfig, error) {
 	baseURL := strings.TrimSpace(os.Getenv("CSGHUB_API_BASE_URL"))
+	token := strings.TrimSpace(os.Getenv("CSGHUB_USER_TOKEN"))
+	if baseURL == "" || token == "" {
+		if authBaseURL, authToken, ok := loadRuntimeCredentialsFromAuthStore(); ok {
+			if baseURL == "" {
+				baseURL = authBaseURL
+			}
+			if token == "" {
+				token = authToken
+			}
+		}
+	}
 	if baseURL == "" {
 		return runtimeConfig{}, fmt.Errorf("CSGHUB_API_BASE_URL is required")
 	}
-	token := strings.TrimSpace(os.Getenv("CSGHUB_USER_TOKEN"))
 	if token == "" {
 		return runtimeConfig{}, fmt.Errorf("CSGHUB_USER_TOKEN is required")
 	}
@@ -607,6 +618,18 @@ func loadRuntimeConfigFromEnv() (runtimeConfig, error) {
 		pollInterval:    pollInterval,
 		namePrefix:      strings.TrimSpace(os.Getenv("CSGCLAW_NAME")),
 	}, nil
+}
+
+func loadRuntimeCredentialsFromAuthStore() (baseURL, token string, ok bool) {
+	store, err := auth.DefaultStore()
+	if err != nil {
+		return "", "", false
+	}
+	baseURL, token, ok, err = store.Credentials()
+	if err != nil {
+		return "", "", false
+	}
+	return baseURL, token, ok
 }
 
 func normalizePVCSubpath(raw string) string {

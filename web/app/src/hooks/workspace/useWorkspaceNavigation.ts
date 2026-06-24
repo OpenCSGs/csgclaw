@@ -52,6 +52,17 @@ export function useWorkspaceNavigation({
     [navigatePane, rooms],
   );
 
+  const selectModelProvider = useCallback(
+    (item: { id?: string | null } | null | undefined, options: NavigatePaneOptions = {}) => {
+      if (!item?.id) {
+        return;
+      }
+      const next: WorkspacePane = { type: WorkspacePaneTypes.modelProvider, id: item.id };
+      navigatePane(next, rooms, options);
+    },
+    [navigatePane, rooms],
+  );
+
   const selectHuman = useCallback(
     (item: { id?: string | null } | null | undefined, options: NavigatePaneOptions = {}) => {
       if (!item?.id) {
@@ -113,6 +124,7 @@ export function useWorkspaceNavigation({
     selectConversation,
     selectAgent,
     selectHuman,
+    selectModelProvider,
     selectTeam,
     selectComputer,
     selectHub,

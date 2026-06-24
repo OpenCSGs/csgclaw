@@ -16,6 +16,7 @@ import type { Translator } from "./types";
 export type NotifierControlsProps = {
   agentID?: string;
   draft: AgentDraft;
+  hideHeading?: boolean;
   onPatch: (patch: Partial<AgentDraft>) => void;
   /** Resolved from config.toml advertise_base_url (or listen_addr when empty); not user-editable. */
   webhookPublicOrigin: string;
@@ -31,7 +32,14 @@ function FieldLabelWithHelp({ children, detail, summary }: { children: ReactNode
   );
 }
 
-export function NotifierControls({ agentID, draft, onPatch, t, webhookPublicOrigin }: NotifierControlsProps) {
+export function NotifierControls({
+  agentID,
+  draft,
+  hideHeading = false,
+  onPatch,
+  t,
+  webhookPublicOrigin,
+}: NotifierControlsProps) {
   const deliveryMode = draft.notifier_delivery_mode || "webhook";
   const publicWebhookURL = notifierPushWebhookNotifyURL(
     webhookPublicOrigin,
@@ -54,10 +62,12 @@ export function NotifierControls({ agentID, draft, onPatch, t, webhookPublicOrig
 
   return (
     <div className="profile-section">
-      <div className="profile-section-heading">
-        <div className="profile-section-title">{t("profileNotifierSection")}</div>
-        <p className="profile-section-description">{t("profileNotifierSectionDescription")}</p>
-      </div>
+      {!hideHeading ? (
+        <div className="profile-section-heading">
+          <div className="profile-section-title">{t("profileNotifierSection")}</div>
+          <p className="profile-section-description">{t("profileNotifierSectionDescription")}</p>
+        </div>
+      ) : null}
       <div className="agent-section-form">
         <div className="agent-section-form-content agent-notifier-form-content">
           <div className="profile-grid profile-grid-compact">

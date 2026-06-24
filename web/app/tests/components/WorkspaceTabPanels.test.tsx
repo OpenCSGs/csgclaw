@@ -165,7 +165,7 @@ describe("WorkspaceTabPanels", () => {
     ).toHaveClass("active");
   });
 
-  it("moves older default agent section order to the current Human placement", () => {
+  it("moves older default agent section order to the current Models and Human placement", () => {
     window.localStorage.setItem(
       WORKSPACE_SECTION_ORDER_STORAGE_KEY,
       JSON.stringify({ agents: ["agents", "teams", "computers", "notifications"] }),
@@ -176,7 +176,7 @@ describe("WorkspaceTabPanels", () => {
       (button) => button.textContent,
     );
 
-    expect(groupLabels).toEqual(["Agents1", "Human1", "Computers1", "Notifications0", "Teams0"]);
+    expect(groupLabels).toEqual(["Agents1", "modelsSection0", "Human1", "Computers1", "Notifications0", "Teams0"]);
   });
 
   it("renders hub templates and skills in separate workspace groups", () => {

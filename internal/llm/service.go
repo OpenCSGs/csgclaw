@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/auth"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/codexmodel"
 	"csgclaw/internal/config"
@@ -1153,6 +1154,8 @@ func (s *Service) agentProfileWebsocketTarget(ctx context.Context, profile agent
 		return strings.TrimRight(baseURL, "/") + "/v1", cliproxy.LocalAPIKey, nil
 	case agent.ProviderClaudeCode:
 		return s.agentProfileTarget(ctx, profile)
+	case agent.ProviderCSGHub:
+		return csghubAIGatewayTarget(ctx, s.client)
 	default:
 		return agent.ProfileBaseURL(profile), agent.ProfileAPIKey(profile), nil
 	}
@@ -1169,9 +1172,26 @@ func (s *Service) agentProfileTarget(ctx context.Context, profile agent.AgentPro
 			return "", "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("embedded cliproxy unavailable: %v", err)}
 		}
 		return baseURL, cliproxy.LocalAPIKey, nil
+	case agent.ProviderCSGHub:
+		return csghubAIGatewayTarget(ctx, s.client)
 	default:
 		return agent.ProfileBaseURL(profile), agent.ProfileAPIKey(profile), nil
 	}
+}
+
+func csghubAIGatewayTarget(ctx context.Context, client *http.Client) (string, string, error) {
+	store, err := auth.DefaultStore()
+	if err != nil {
+		return "", "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("csghub auth unavailable: %v", err)}
+	}
+	baseURL, apiKey, ok, err := store.EnsureAIGatewayCredentials(ctx, client)
+	if err != nil {
+		return "", "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("csghub auth unavailable: %v", err)}
+	}
+	if !ok {
+		return "", "", &HTTPError{Status: http.StatusUnauthorized, Message: "csghub login is required"}
+	}
+	return baseURL, apiKey, nil
 }
 
 func ensureCLIProxyAuthenticated(ctx context.Context, provider string) error {

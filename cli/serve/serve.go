@@ -50,14 +50,15 @@ import (
 )
 
 var (
-	RunServer          = server.Run
-	NewAgentService    = newAgentService
-	NewIMService       = newIMService
-	NewFeishuService   = newFeishuService
-	NewLLMService      = newLLMService
-	NewTeamService     = newTeamService
-	CheckModelProvider = checkModelProvider
-	EnsureCLIProxy     = func(ctx context.Context) error {
+	RunServer                 = server.Run
+	NewAgentService           = newAgentService
+	NewIMService              = newIMService
+	NewFeishuService          = newFeishuService
+	NewLLMService             = newLLMService
+	NewTeamService            = newTeamService
+	CheckModelProvider        = checkModelProvider
+	CheckCatalogModelProvider = agent.CheckModelProvider
+	EnsureCLIProxy            = func(ctx context.Context) error {
 		return cliproxy.Default().EnsureStarted(ctx)
 	}
 	ShutdownCLIProxy = func(ctx context.Context) error {
@@ -145,7 +146,14 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 		return err
 	}
 
-	cfg, err := loadConfig(globals.Config)
+	configPath := strings.TrimSpace(globals.Config)
+	if configPath == "" {
+		configPath, err = config.DefaultPath()
+		if err != nil {
+			return err
+		}
+	}
+	cfg, err := loadConfig(configPath)
 	if err != nil {
 		return err
 	}
@@ -154,9 +162,11 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	}
 
 	if *daemon {
-		return serveBackground(run, cfg, globals, *logPath, *pidPath, *logLevel, *noBrowser, *noAuthDetect)
+		serveGlobals := globals
+		serveGlobals.Config = configPath
+		return serveBackground(run, cfg, serveGlobals, *logPath, *pidPath, *logLevel, *noBrowser, *noAuthDetect)
 	}
-	return serveForegroundWithConfigPath(ctx, run, cfg, globals.Config, globals.Output, serveOptions{
+	return serveForegroundWithConfigPath(ctx, run, cfg, configPath, globals.Output, serveOptions{
 		NoBrowser:    *noBrowser,
 		NoAuthDetect: *noAuthDetect,
 	})
@@ -251,7 +261,15 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 		defer removePIDFile(*pidPath)
 	}
 
-	cfg, err := loadConfig(*configPathFlag)
+	configPath := strings.TrimSpace(*configPathFlag)
+	var err error
+	if configPath == "" {
+		configPath, err = config.DefaultPath()
+		if err != nil {
+			return err
+		}
+	}
+	cfg, err := loadConfig(configPath)
 	if err != nil {
 		return err
 	}
@@ -279,7 +297,7 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	if err != nil {
 		return err
 	}
-	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, *configPathFlag, globals.Output, serveOptions{
+	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, globals.Output, serveOptions{
 		NoBrowser:    *noBrowser,
 		NoAuthDetect: *noAuthDetect,
 	})
@@ -499,6 +517,12 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if serveOpts.NoAuthDetect && svc != nil {
 		svc.SetStartupProfileDetectionDisabled(true)
 	}
+	if refreshed, results, err := refreshStartupModelProviders(ctx, cfg, configPath, svc); err != nil {
+		slog.Warn("refresh model provider catalog at startup failed", "error", err)
+	} else {
+		cfg = refreshed
+		logStartupModelProviderRefresh(results)
+	}
 	codexBridgeMgr, err := NewCodexBridgeManager(cfg, svc, feishuSvc)
 	if err != nil {
 		return err
@@ -558,6 +582,8 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
+	ensureBootstrapManager := EnsureBootstrapManager
+	startConfiguredAgents := StartConfiguredAgents
 	return RunServer(server.Options{
 		ListenAddr:        cfg.Server.ListenAddr,
 		Service:           svc,
@@ -593,10 +619,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 				}()
 			}
 			go func() {
-				if err := EnsureBootstrapManager(ctx, svc); err != nil {
+				if err := ensureBootstrapManager(ctx, svc); err != nil {
 					slog.Warn("bootstrap manager failed to start", "error", err)
 				}
-				if err := StartConfiguredAgents(ctx, svc); err != nil {
+				if err := startConfiguredAgents(ctx, svc); err != nil {
 					slog.Warn("some configured agents failed to start", "error", err)
 				}
 				if codexBridgeMgr != nil {
@@ -607,6 +633,39 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 			}()
 		},
 	})
+}
+
+func refreshStartupModelProviders(ctx context.Context, cfg config.Config, configPath string, svc *agent.Service) (config.Config, []agent.ModelProviderCheckResult, error) {
+	configPath = strings.TrimSpace(configPath)
+	if configPath == "" {
+		return cfg, nil, nil
+	}
+	llmCfg := cfg.Models
+	if llmCfg.IsZero() && !cfg.LLM.IsZero() {
+		llmCfg = cfg.LLM
+	}
+	updatedLLM, results, changed := agent.RefreshModelProviderCatalog(ctx, llmCfg, CheckCatalogModelProvider)
+	if !changed {
+		return cfg, results, nil
+	}
+	cfg.Models = updatedLLM
+	cfg.LLM = updatedLLM
+	if err := cfg.Save(configPath); err != nil {
+		return cfg, results, err
+	}
+	if svc != nil {
+		svc.SetLLMConfig(updatedLLM)
+	}
+	return cfg, results, nil
+}
+
+func logStartupModelProviderRefresh(results []agent.ModelProviderCheckResult) {
+	for _, result := range results {
+		if result.Status != agent.ModelProviderStatusConnected || len(result.Models) == 0 {
+			continue
+		}
+		slog.Info("refreshed model provider catalog", "provider", result.ID, "models", len(result.Models))
+	}
 }
 
 func configureFeishuService(feishuSvc *feishu.Service, svc *agent.Service) {
@@ -771,7 +830,6 @@ func printEffectiveConfig(run *command.Context, cfg config.Config, output string
 }
 
 func formatEffectiveConfig(cfg config.Config) string {
-	llmCfg := effectiveLLMConfig(cfg)
 	resolvedHub := cfg.Hub.Resolved()
 	content := fmt.Sprintf(`[server]
 listen_addr = %q
@@ -814,10 +872,6 @@ kind = %q
 		}
 		content += fmt.Sprintf("enabled = %t\n", registry.Enabled)
 	}
-	content += fmt.Sprintf(`
-[models]
-default = %q
-`, llmCfg.DefaultSelector()) + formatEffectiveProviders(llmCfg)
 
 	return content
 }

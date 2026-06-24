@@ -29,6 +29,15 @@ describe("task routing", () => {
     expect(pathForPane({ type: WorkspacePaneTypes.human, id: "u-admin" })).toBe("/humans/u-admin");
   });
 
+  it("parses model provider routes as agent-tab model panes", () => {
+    expect(paneFromLocation("/models/csghub-lite")).toEqual({
+      type: WorkspacePaneTypes.modelProvider,
+      id: "csghub-lite",
+    });
+    expect(pathForPane({ type: WorkspacePaneTypes.modelProvider, id: "openai" })).toBe("/models/openai");
+    expect(workspaceTabForPane({ type: WorkspacePaneTypes.modelProvider, id: "openai" })).toBe(WorkspaceTabs.agents);
+  });
+
   it("parses the tasks route as a task pane", () => {
     expect(paneFromLocation("/tasks/task-7")).toEqual({ type: WorkspacePaneTypes.task, id: "task-7" });
   });

@@ -15,6 +15,9 @@ const labels: Record<string, string> = {
   editAgentTitle: "Edit Agent",
   profileBasics: "Basics",
   profileModelSection: "Model",
+  profileModel: "Model",
+  modelProviderModelSearch: "Search models",
+  modelProviderNoModels: "No models",
   profileRuntimeOptions: "Runtime Options",
   profileProvider: "Provider",
   profileRuntimeKind: "Runtime",
@@ -133,7 +136,7 @@ describe("AgentProfileModal", () => {
       />,
     );
 
-    const modelSectionTitle = screen.getByText("Model");
+    const modelSectionTitle = screen.getAllByText("Model")[0];
     const instructionSectionTitle = screen.getAllByText("Instructions")[0];
     expect(instructionSectionTitle).toBeInTheDocument();
     expect(screen.getByDisplayValue("reply in Chinese")).toBeInTheDocument();
@@ -193,6 +196,157 @@ describe("AgentProfileModal", () => {
     expect(screen.getByDisplayValue("/tmp/project")).toBeInTheDocument();
     expect(screen.getByText("本地工作目录")).toBeInTheDocument();
     expect(screen.getByText("留空时使用默认 Agent 工作目录。")).toBeInTheDocument();
+  });
+
+  it("shows provider logos only in the provider field, not in the model field", () => {
+    const { container } = render(
+      <AgentProfileModal
+        t={t}
+        agentModalMode="edit"
+        editingAgent={worker}
+        agentDraft={{
+          ...agentToDraft(worker),
+          model_provider_id: "opencsg-aigateway",
+          model_id: "MiniMax-M2.5",
+        }}
+        modelProviders={{
+          providers: [
+            {
+              id: "opencsg-aigateway",
+              kind: "openai_compatible",
+              display_name: "OpenCSG AIGateway",
+              builtin: false,
+              base_url: "https://aigateway.opencsg.com/v1",
+              api_key_set: true,
+              models: ["MiniMax-M2.5"],
+              status: "connected",
+            },
+          ],
+          builtinProviders: [],
+          customProviders: [
+            {
+              id: "opencsg-aigateway",
+              kind: "openai_compatible",
+              display_name: "OpenCSG AIGateway",
+              builtin: false,
+              base_url: "https://aigateway.opencsg.com/v1",
+              api_key_set: true,
+              models: ["MiniMax-M2.5"],
+              status: "connected",
+            },
+          ],
+        }}
+        onAgentDraftChange={vi.fn()}
+        onAgentModelsReset={vi.fn()}
+        hubTemplates={[]}
+        bootstrapConfig={{}}
+        managerAgent={null}
+        agentModels={[]}
+        agentModelBusy={false}
+        locale="en"
+        authStatuses={{}}
+        authBusyProvider=""
+        agentCreateBotKind="worker"
+        onAgentCreateBotKindChange={vi.fn()}
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onProviderLogin={vi.fn()}
+        agentError=""
+        agentProgress={null}
+        agentBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    const fields = container.querySelectorAll(".agent-model-config-grid .field");
+    const providerField = fields[0];
+    const modelField = fields[1];
+    expect(providerField?.querySelector(".model-option-avatar")).not.toBeNull();
+    expect(modelField?.querySelector(".model-option-avatar")).toBeNull();
+    expect(modelField?.querySelector(".model-option-provider")).toBeNull();
+    expect(modelField?.textContent).toContain("MiniMax-M2.5");
+    expect(modelField?.textContent).not.toContain("OpenCSG AIGateway");
+  });
+
+  it("filters model choices inside the agent model selector", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AgentProfileModal
+        t={t}
+        agentModalMode="edit"
+        editingAgent={worker}
+        agentDraft={{
+          ...agentToDraft(worker),
+          model_provider_id: "opencsg-aigateway",
+          model_id: "MiniMax-M2.5",
+        }}
+        modelProviders={{
+          providers: [
+            {
+              id: "opencsg-aigateway",
+              kind: "openai_compatible",
+              display_name: "OpenCSG AIGateway",
+              builtin: false,
+              base_url: "https://aigateway.opencsg.com/v1",
+              api_key_set: true,
+              models: ["MiniMax-M2.5", "Qwen3-235B", "gpt-5-high"],
+              status: "connected",
+            },
+          ],
+          builtinProviders: [],
+          customProviders: [
+            {
+              id: "opencsg-aigateway",
+              kind: "openai_compatible",
+              display_name: "OpenCSG AIGateway",
+              builtin: false,
+              base_url: "https://aigateway.opencsg.com/v1",
+              api_key_set: true,
+              models: ["MiniMax-M2.5", "Qwen3-235B", "gpt-5-high"],
+              status: "connected",
+            },
+          ],
+        }}
+        onAgentDraftChange={vi.fn()}
+        onAgentModelsReset={vi.fn()}
+        hubTemplates={[]}
+        bootstrapConfig={{}}
+        managerAgent={null}
+        agentModels={[]}
+        agentModelBusy={false}
+        locale="en"
+        authStatuses={{}}
+        authBusyProvider=""
+        agentCreateBotKind="worker"
+        onAgentCreateBotKindChange={vi.fn()}
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onProviderLogin={vi.fn()}
+        agentError=""
+        agentProgress={null}
+        agentBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Model" }));
+    const searchInput = screen.getByRole("searchbox", { name: "Search models" });
+    await user.type(searchInput, "qwen");
+
+    expect(searchInput).toHaveFocus();
+    expect(searchInput).toHaveValue("qwen");
+    expect(screen.getByRole("option", { name: "Qwen3-235B" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "MiniMax-M2.5" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "gpt-5-high" })).not.toBeInTheDocument();
+
+    await user.keyboard("{Backspace}{Backspace}{Backspace}{Backspace}");
+
+    expect(searchInput).toHaveFocus();
+    expect(searchInput).toHaveValue("");
+    expect(screen.getByRole("option", { name: "MiniMax-M2.5" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Qwen3-235B" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "gpt-5-high" })).toBeInTheDocument();
   });
 
   it("allows choosing a directory runtime option path", async () => {

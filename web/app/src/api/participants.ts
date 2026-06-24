@@ -15,9 +15,6 @@ export function patchParticipantAvatarRequest(participantID: string, avatar: str
   });
 }
 
-export function patchCsgclawUserRequest(
-  userID: string,
-  payload: { description?: string },
-): Promise<IMUser> {
+export function patchCsgclawUserRequest(userID: string, payload: { description?: string }): Promise<IMUser> {
   return patch<IMUser>(`api/v1/channels/csgclaw/users/${encodeURIComponent(userID)}`, payload);
 }
