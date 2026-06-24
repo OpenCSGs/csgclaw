@@ -61,19 +61,19 @@ models = ["gpt-test"]
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(got.Providers) < 4 {
-		t.Fatalf("providers len = %d, want at least 4: %+v", len(got.Providers), got.Providers)
+	if len(got.Providers) < 5 {
+		t.Fatalf("providers len = %d, want at least 5: %+v", len(got.Providers), got.Providers)
 	}
-	wantOrder := []string{"csghub-lite", "codex", "claude_code", "openai"}
+	wantOrder := []string{"opencsg", "csghub-lite", "codex", "claude_code", "openai"}
 	for i, want := range wantOrder {
 		if got.Providers[i].ID != want {
 			t.Fatalf("providers[%d].id = %q, want %q; providers=%+v", i, got.Providers[i].ID, want, got.Providers)
 		}
 	}
-	if got.Providers[3].APIKey != "" {
-		t.Fatalf("custom provider leaked api_key = %q", got.Providers[3].APIKey)
+	if got.Providers[4].APIKey != "" {
+		t.Fatalf("custom provider leaked api_key = %q", got.Providers[4].APIKey)
 	}
-	if !got.Providers[3].APIKeySet {
+	if !got.Providers[4].APIKeySet {
 		t.Fatalf("custom provider api_key_set = false, want true")
 	}
 }

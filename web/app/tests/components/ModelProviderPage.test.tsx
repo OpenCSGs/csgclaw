@@ -17,10 +17,17 @@ const labels: Record<string, string> = {
   agentDelete: "Delete",
   agentName: "Name",
   agentUpdateSave: "Save",
+  csghubLoginPending: "Waiting for sign-in",
+  csghubNotSignedIn: "Not signed in",
+  csghubSignIn: "Sign in",
+  modelProviderAIGatewayAddress: "AI Gateway address",
   modelProviderCheck: "Check",
   modelProviderConfiguration: "Configuration",
   modelProviderConnected: "Connected",
   modelProviderCustomSettings: "OpenAI-compatible provider settings",
+  modelProviderOpenCSGSettings: "OpenCSG built-in models are served by AI Gateway.",
+  modelProviderOpenCSGSignInRequired:
+    "Sign in in Settings to access OpenCSG Models. The model list is available after your OpenCSG account is connected.",
   modelProviderModelCount: "{count} models",
   modelProviderModelSearch: "Search models",
   modelProviderModels: "Models",
@@ -55,17 +62,28 @@ function createCatalog(providerOverrides: Record<string, unknown> = {}) {
   });
 }
 
-function renderModelProviderPage(catalog = createCatalog()) {
+function renderModelProviderPage(
+  catalog = createCatalog(),
+  providerID = "openai",
+  controllerOverrides: Record<string, unknown> = {},
+) {
   const refreshWorkspaceModelProviders = vi.fn().mockResolvedValue(null);
   const renderPage = (nextCatalog = catalog) => (
     <WorkspaceControllerProvider
       controller={
         {
-          activePane: { type: WorkspacePaneTypes.modelProvider, id: "openai" },
+          activePane: { type: WorkspacePaneTypes.modelProvider, id: providerID },
           modelProviders: nextCatalog,
           ready: true,
           refreshWorkspaceModelProviders,
+          sidebarProps: {
+            authBusy: false,
+            authPending: false,
+            authStatus: { authenticated: true },
+            onLogin: vi.fn(),
+          },
           t,
+          ...controllerOverrides,
         } as never
       }
     >
@@ -76,6 +94,7 @@ function renderModelProviderPage(catalog = createCatalog()) {
   const view = render(renderPage());
 
   return {
+    container: view.container,
     refreshWorkspaceModelProviders,
     rerenderWithCatalog: (nextCatalog: ReturnType<typeof createCatalog>) => view.rerender(renderPage(nextCatalog)),
   };
@@ -176,5 +195,51 @@ describe("ModelProviderPage", () => {
 
     expect(screen.queryByText("gpt-4.1")).not.toBeInTheDocument();
     expect(screen.getByText("No models")).toBeInTheDocument();
+  });
+
+  it("shows the OpenCSG built-in model page with sign-in guidance and AI Gateway address", async () => {
+    const user = userEvent.setup();
+    const onLogin = vi.fn();
+    const { container } = renderModelProviderPage(
+      normalizeModelProviderCatalog({
+        providers: [
+          {
+            id: "opencsg",
+            kind: "csghub",
+            display_name: "OpenCSG",
+            builtin: true,
+            base_url: "https://ai.space.opencsg.com/v1",
+            models: [],
+            status: "unknown",
+          },
+        ],
+      }),
+      "opencsg",
+      {
+        sidebarProps: {
+          authBusy: false,
+          authPending: false,
+          authStatus: { authenticated: false },
+          onLogin,
+        },
+      },
+    );
+
+    expect(await screen.findByRole("heading", { name: "OpenCSG" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Sign in in Settings to access OpenCSG Models. The model list is available after your OpenCSG account is connected.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("AI Gateway address")).toBeInTheDocument();
+    expect(screen.getAllByText("https://ai.space.opencsg.com/v1")).toHaveLength(2);
+    expect(container.querySelector(".model-provider-header-avatar")).toHaveAttribute(
+      "src",
+      "model-providers/opencsg.png",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(onLogin).toHaveBeenCalledTimes(1);
   });
 });

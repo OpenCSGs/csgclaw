@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, RefreshCw, Save, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2 } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { ModelProviderModelList } from "@/components/business/ProfileControls";
 import { Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
+import { isAuthenticated } from "@/models/auth";
 import {
   modelProviderAvatarPath,
   parseModelProviderModelsText,
@@ -64,7 +65,9 @@ export function ModelProviderPage() {
   const [saveStatus, setSaveStatus] = useState("");
   const [error, setError] = useState("");
   const isBuiltinCLI = provider?.id === "codex" || provider?.id === "claude_code";
-  const canEditEndpoint = Boolean(provider && !isBuiltinCLI);
+  const isOpenCSG = provider?.id === "opencsg";
+  const canEditEndpoint = Boolean(provider && !isBuiltinCLI && !isOpenCSG);
+  const opencsgAuthenticatedForCheck = controller.ready && isAuthenticated(controller.sidebarProps?.authStatus);
 
   const runCheckForDraft = useCallback(
     async (baseURL: string, apiKey: string, options: { showError?: boolean } = {}) => {
@@ -125,8 +128,11 @@ export function ModelProviderPage() {
     if (!providerID) {
       return;
     }
+    if (isOpenCSG && !opencsgAuthenticatedForCheck) {
+      return;
+    }
     void runCheckForDraft(providerBaseURL, "", { showError: true });
-  }, [providerBaseURL, providerID, runCheckForDraft]);
+  }, [isOpenCSG, opencsgAuthenticatedForCheck, providerBaseURL, providerID, runCheckForDraft]);
 
   useEffect(() => {
     if (!providerID || !canEditEndpoint) {
@@ -166,11 +172,25 @@ export function ModelProviderPage() {
     );
   }
 
-  const effectiveTone = providerStatusTone(checkState.status, provider);
+  const authStatus = controller.sidebarProps?.authStatus ?? null;
+  const authBusy = Boolean(controller.sidebarProps?.authBusy);
+  const authPending = Boolean(controller.sidebarProps?.authPending);
+  const opencsgSignedIn = isOpenCSG ? isAuthenticated(authStatus) : true;
+  const effectiveTone = isOpenCSG && !opencsgSignedIn ? "warning" : providerStatusTone(checkState.status, provider);
   const providerSubtitle = isBuiltinCLI ? provider.kind : provider.base_url || draft.baseURL || provider.kind;
   const modelList = parseModelProviderModelsText(draft.modelsText);
+  const showOpenCSGSignIn = isOpenCSG && !opencsgSignedIn;
   const checkMessage =
-    checkState.message || (checkState.status === "connected" ? t("modelProviderConnected") : t("modelProviderCheck"));
+    showOpenCSGSignIn || !checkState.status
+      ? ""
+      : checkState.message ||
+        (checkState.status === "connected" ? t("modelProviderConnected") : t("modelProviderCheck"));
+  const statusLabel =
+    isOpenCSG && !opencsgSignedIn
+      ? t("csghubNotSignedIn")
+      : checkState.status === "connected" || effectiveTone === "online"
+        ? t("modelProviderConnected")
+        : checkState.status;
 
   async function runCheck() {
     await runCheckForDraft(draft.baseURL, draft.apiKey, { showError: true });
@@ -232,21 +252,29 @@ export function ModelProviderPage() {
         </div>
         <div className={`model-provider-status-pill ${effectiveTone}`}>
           <span className={`workspace-status-dot ${effectiveTone}`} aria-hidden="true"></span>
-          <span>
-            {checkState.status === "connected" || effectiveTone === "online"
-              ? t("modelProviderConnected")
-              : checkState.status}
-          </span>
+          <span>{statusLabel}</span>
         </div>
         <div className="model-provider-actions">
           <Button variant="secondaryGray" onClick={runCheck} disabled={Boolean(busy)}>
             <RefreshCw size={16} aria-hidden="true" />
             {busy === "check" ? t("profileLoadingModels") : t("modelProviderCheck")}
           </Button>
-          <Button variant="primary" onClick={saveProvider} disabled={Boolean(busy)}>
-            <Save size={16} aria-hidden="true" />
-            {busy === "save" ? t("profileLoadingModels") : t("agentUpdateSave")}
-          </Button>
+          {!isOpenCSG ? (
+            <Button variant="primary" onClick={saveProvider} disabled={Boolean(busy)}>
+              <Save size={16} aria-hidden="true" />
+              {busy === "save" ? t("profileLoadingModels") : t("agentUpdateSave")}
+            </Button>
+          ) : null}
+          {showOpenCSGSignIn ? (
+            <Button
+              variant="secondaryColor"
+              onClick={() => void controller.sidebarProps?.onLogin?.()}
+              disabled={authBusy || authPending}
+            >
+              <LogIn size={16} aria-hidden="true" />
+              {authPending ? t("csghubLoginPending") : t("csghubSignIn")}
+            </Button>
+          ) : null}
           {!provider.builtin ? (
             <Button
               variant="outlineDanger"
@@ -263,6 +291,12 @@ export function ModelProviderPage() {
 
       {error ? <div className="form-error">{error}</div> : null}
       {saveStatus ? <div className="model-provider-save-status">{saveStatus}</div> : null}
+      {showOpenCSGSignIn ? (
+        <div className="model-provider-notice warning opencsg-signin-warning">
+          <AlertCircle size={16} aria-hidden="true" />
+          <span>{t("modelProviderOpenCSGSignInRequired")}</span>
+        </div>
+      ) : null}
       {checkMessage ? (
         <div className={`model-provider-notice ${effectiveTone === "warning" ? "warning" : "success"}`}>
           {effectiveTone === "warning" ? (
@@ -278,49 +312,64 @@ export function ModelProviderPage() {
         <section className="model-provider-card">
           <div className="model-provider-card-heading">
             <h2>{t("modelProviderConfiguration")}</h2>
-            <p>{provider.builtin ? t("modelProviderBuiltinSettings") : t("modelProviderCustomSettings")}</p>
+            <p>
+              {isOpenCSG
+                ? t("modelProviderOpenCSGSettings")
+                : provider.builtin
+                  ? t("modelProviderBuiltinSettings")
+                  : t("modelProviderCustomSettings")}
+            </p>
           </div>
-          <div className="model-provider-form-grid">
-            {!provider.builtin ? (
-              <label className="field">
-                <span>{t("agentName")}</span>
-                <input
-                  value={draft.displayName}
-                  onInput={(event) => {
-                    const value = event.currentTarget.value;
-                    setDraft((current) => ({ ...current, displayName: value }));
-                  }}
-                />
-              </label>
-            ) : null}
-            {canEditEndpoint ? (
-              <>
+          {isOpenCSG ? (
+            <div className="opencsg-gateway-panel">
+              <div className="opencsg-gateway-address">
+                <span>{t("modelProviderAIGatewayAddress")}</span>
+                <code>{provider.base_url || draft.baseURL}</code>
+              </div>
+            </div>
+          ) : (
+            <div className="model-provider-form-grid">
+              {!provider.builtin ? (
                 <label className="field">
-                  {t("profileBaseURL")}
+                  <span>{t("agentName")}</span>
                   <input
-                    value={draft.baseURL}
+                    value={draft.displayName}
                     onInput={(event) => {
                       const value = event.currentTarget.value;
-                      setDraft((current) => ({ ...current, baseURL: value }));
-                    }}
-                    placeholder="https://api.openai.com/v1"
-                  />
-                </label>
-                <label className="field">
-                  <span>{t("profileAPIKey")}</span>
-                  <input
-                    value={draft.apiKey}
-                    type="password"
-                    placeholder={provider.api_key_set ? provider.api_key_preview || "••••" : ""}
-                    onInput={(event) => {
-                      const value = event.currentTarget.value;
-                      setDraft((current) => ({ ...current, apiKey: value }));
+                      setDraft((current) => ({ ...current, displayName: value }));
                     }}
                   />
                 </label>
-              </>
-            ) : null}
-          </div>
+              ) : null}
+              {canEditEndpoint ? (
+                <>
+                  <label className="field">
+                    {t("profileBaseURL")}
+                    <input
+                      value={draft.baseURL}
+                      onInput={(event) => {
+                        const value = event.currentTarget.value;
+                        setDraft((current) => ({ ...current, baseURL: value }));
+                      }}
+                      placeholder="https://api.openai.com/v1"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t("profileAPIKey")}</span>
+                    <input
+                      value={draft.apiKey}
+                      type="password"
+                      placeholder={provider.api_key_set ? provider.api_key_preview || "••••" : ""}
+                      onInput={(event) => {
+                        const value = event.currentTarget.value;
+                        setDraft((current) => ({ ...current, apiKey: value }));
+                      }}
+                    />
+                  </label>
+                </>
+              ) : null}
+            </div>
+          )}
         </section>
 
         <section className="model-provider-card model-provider-models-card">

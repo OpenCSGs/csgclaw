@@ -16,8 +16,9 @@ import (
 const authCallbackPath = "/api/v1/auth/callback"
 
 type authLoginRequest struct {
-	ReturnURL   string `json:"return_url,omitempty"`
-	CallbackURL string `json:"-"`
+	ReturnURL         string `json:"return_url,omitempty"`
+	SuppressReturnURL bool   `json:"suppress_return_url,omitempty"`
+	CallbackURL       string `json:"-"`
 }
 
 var appAuthStatus = func(r *http.Request) (auth.Status, error) {
@@ -90,7 +91,7 @@ func (h *Handler) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	if req.ReturnURL == "" {
+	if req.ReturnURL == "" && !req.SuppressReturnURL {
 		req.ReturnURL = r.Referer()
 	}
 	if req.CallbackURL == "" {

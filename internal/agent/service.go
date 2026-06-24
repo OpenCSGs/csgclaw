@@ -428,20 +428,25 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	if svc == nil {
 		return nil
 	}
-	_, defaultModel, err := svc.llm.Resolve("")
-	if err != nil {
-		return err
-	}
-	modelCfg := defaultModel
+	var modelCfg config.ModelConfig
+	hasManagerProfile := false
 	svc.mu.RLock()
 	if manager, ok := svc.agents[ManagerUserID]; ok {
 		profile := normalizeProfileForAgentRuntime(manager.AgentProfile, manager.RuntimeOptions, manager.Name, manager.Description, manager.RuntimeKind, nil)
 		profile = svc.hydrateProfileFromCatalogLocked(profile)
 		if profile.ProfileComplete {
 			modelCfg = modelConfigFromProfile(profile)
+			hasManagerProfile = true
 		}
 	}
 	svc.mu.RUnlock()
+	if !hasManagerProfile {
+		_, defaultModel, err := svc.llm.Resolve("")
+		if err != nil {
+			return err
+		}
+		modelCfg = defaultModel
+	}
 	feishuProvider := svc.currentFeishuProviderForRuntime(RuntimeKindPicoClawSandbox)
 	recreateForParticipantBridgeConfig := !forceRecreate && agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID)
 	recreateForFeishuConfig := !forceRecreate && agentPicoClawConfigNeedsFeishuRecreate(ManagerName, ManagerUserID, feishuProvider)
@@ -454,7 +459,7 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	if recreateForFeishuConfig {
 		log.Printf("bootstrap manager PicoClaw config is missing current Feishu channel credentials; recreating manager to load Feishu channel config")
 	}
-	_, err = svc.EnsureManager(ctx, forceRecreate || recreateForParticipantBridgeConfig || recreateForFeishuConfig)
+	_, err := svc.EnsureManager(ctx, forceRecreate || recreateForParticipantBridgeConfig || recreateForFeishuConfig)
 	return err
 }
 
@@ -572,6 +577,9 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		_ = s.closeRuntime(runtimeHome, rt)
 	}()
 	if forceRecreate {
+		if err := provisionBootstrapManagerRuntime(); err != nil {
+			return Agent{}, err
+		}
 		rt, err = s.cleanupBootstrapManagerForRecreate(ctx, rt, runtimeHome, runtimeKind)
 		if err != nil {
 			return Agent{}, err

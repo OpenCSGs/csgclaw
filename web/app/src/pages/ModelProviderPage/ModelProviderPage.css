@@ -222,6 +222,40 @@
   gap: 16px;
 }
 
+.opencsg-gateway-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.opencsg-gateway-address {
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.32fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--field);
+}
+
+.opencsg-gateway-address span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 17px;
+}
+
+.opencsg-gateway-address code {
+  min-width: 0;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
 .model-provider-status-body {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr);
@@ -289,6 +323,10 @@
   .model-provider-form-grid {
     grid-template-columns: 1fr;
   }
+
+  .opencsg-gateway-address {
+    grid-template-columns: 1fr;
+  }
 }
 
 :root[data-theme="dark"] .model-provider-page {
@@ -309,6 +347,10 @@
 }
 
 :root[data-theme="dark"] .model-provider-status-body {
+  background: var(--panel-strong);
+}
+
+:root[data-theme="dark"] .opencsg-gateway-address {
   background: var(--panel-strong);
 }
 
