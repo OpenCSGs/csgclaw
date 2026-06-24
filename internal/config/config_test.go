@@ -140,6 +140,98 @@ models = ["minimax-m2.7"]
 	}
 }
 
+func TestLoadSaveModelsProviderDisplayNameAndHeadersJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[models]
+default = "openai.gpt-4.1"
+
+[models.providers.openai]
+display_name = "Team OpenAI"
+base_url = "https://api.openai.example/v1"
+api_key = "sk-team"
+headers_json = "{\"X-CSG-Trace\":\"dev\",\"X-Org\":\"eng\"}"
+models = ["gpt-4.1", "gpt-4o-mini"]
+reasoning_effort = "high"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	provider := cfg.Models.Providers["openai"]
+	if got, want := provider.DisplayName, "Team OpenAI"; got != want {
+		t.Fatalf("DisplayName = %q, want %q", got, want)
+	}
+	if got, want := provider.ReasoningEffort, "high"; got != want {
+		t.Fatalf("ReasoningEffort = %q, want %q while loading legacy config", got, want)
+	}
+	if got, want := cfg.Model.ReasoningEffort, "high"; got != want {
+		t.Fatalf("cfg.Model.ReasoningEffort = %q, want %q while loading legacy config", got, want)
+	}
+	if got, want := provider.Headers["X-CSG-Trace"], "dev"; got != want {
+		t.Fatalf("Headers[X-CSG-Trace] = %q, want %q", got, want)
+	}
+	if got, want := provider.Headers["X-Org"], "eng"; got != want {
+		t.Fatalf("Headers[X-Org] = %q, want %q", got, want)
+	}
+
+	savedPath := filepath.Join(dir, "saved.toml")
+	if err := cfg.Save(savedPath); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	saved, err := os.ReadFile(savedPath)
+	if err != nil {
+		t.Fatalf("ReadFile(saved) error = %v", err)
+	}
+	savedText := string(saved)
+	if strings.Contains(savedText, "[models]") || strings.Contains(savedText, "[models.providers.openai]") {
+		t.Fatalf("saved config should not contain model provider sections:\n%s", savedText)
+	}
+
+	modelsPath, err := ModelsPathForConfigPath(savedPath)
+	if err != nil {
+		t.Fatalf("ModelsPathForConfigPath() error = %v", err)
+	}
+	savedModels, ok, err := LoadModels(modelsPath)
+	if err != nil {
+		t.Fatalf("LoadModels() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("LoadModels() ok = false, want true")
+	}
+	savedProvider := savedModels.Providers["openai"]
+	if got, want := savedProvider.DisplayName, "Team OpenAI"; got != want {
+		t.Fatalf("saved DisplayName = %q, want %q", got, want)
+	}
+	if got, want := savedProvider.Headers["X-CSG-Trace"], "dev"; got != want {
+		t.Fatalf("saved Headers[X-CSG-Trace] = %q, want %q", got, want)
+	}
+	if got, want := savedProvider.Headers["X-Org"], "eng"; got != want {
+		t.Fatalf("saved Headers[X-Org] = %q, want %q", got, want)
+	}
+	if got := savedProvider.ReasoningEffort; got != "" {
+		t.Fatalf("saved ReasoningEffort = %q, want empty because reasoning is stored on agent profiles", got)
+	}
+
+	reloaded, err := Load(savedPath)
+	if err != nil {
+		t.Fatalf("Load(saved) error = %v", err)
+	}
+	if got, want := reloaded.Models.Providers["openai"].Headers["X-Org"], "eng"; got != want {
+		t.Fatalf("reloaded Headers[X-Org] = %q, want %q", got, want)
+	}
+	if got := reloaded.Models.Providers["openai"].ReasoningEffort; got != "" {
+		t.Fatalf("reloaded ReasoningEffort = %q, want empty from models.json", got)
+	}
+}
+
 func TestBootstrapValidateUsesDefaultTemplatesWhenUnset(t *testing.T) {
 	cfg := BootstrapConfig{
 		DefaultManagerTemplate: "",
@@ -865,8 +957,8 @@ func TestSaveWritesModelsSection(t *testing.T) {
 	if !strings.Contains(content, "show_upgrade = true") {
 		t.Fatalf("saved config missing server show_upgrade:\n%s", content)
 	}
-	if !strings.Contains(content, "[models]") || !strings.Contains(content, "[models.providers.default]") {
-		t.Fatalf("saved config missing models sections:\n%s", content)
+	if strings.Contains(content, "[models]") || strings.Contains(content, "[models.providers.default]") {
+		t.Fatalf("saved config should not contain models sections:\n%s", content)
 	}
 	if !strings.Contains(content, "[sandbox]") || !strings.Contains(content, `provider = "boxlite"`) {
 		t.Fatalf("saved config missing sandbox section:\n%s", content)
@@ -880,11 +972,22 @@ func TestSaveWritesModelsSection(t *testing.T) {
 	if !strings.Contains(content, `storage_path = "/mnt/csgclaw"`) {
 		t.Fatalf("saved config missing storage_path:\n%s", content)
 	}
-	if !strings.Contains(content, `default = "default.minimax-m2.7"`) {
-		t.Fatalf("saved config missing canonical models.default:\n%s", content)
+	modelsPath, err := ModelsPathForConfigPath(path)
+	if err != nil {
+		t.Fatalf("ModelsPathForConfigPath() error = %v", err)
 	}
-	if !strings.Contains(content, `models = ["minimax-m2.7"]`) {
-		t.Fatalf("saved config missing models array:\n%s", content)
+	savedModels, ok, err := LoadModels(modelsPath)
+	if err != nil {
+		t.Fatalf("LoadModels() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("LoadModels() ok = false, want true")
+	}
+	if got, want := savedModels.Default, "default.minimax-m2.7"; got != want {
+		t.Fatalf("saved models default = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(savedModels.Providers["default"].Models, ","), "minimax-m2.7"; got != want {
+		t.Fatalf("saved models provider models = %q, want %q", got, want)
 	}
 	if strings.Contains(content, "[llm]") || strings.Contains(content, "model_id = ") {
 		t.Fatalf("saved config should not contain legacy llm/profile keys:\n%s", content)
@@ -940,16 +1043,32 @@ func TestSaveWritesCSGHubLiteProvider(t *testing.T) {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	content := string(data)
-	for _, want := range []string{
-		`default = "csghub-lite.Qwen/Qwen3-0.6B-GGUF"`,
-		`[models.providers.csghub-lite]`,
-		`base_url = "http://127.0.0.1:11435/v1"`,
-		`api_key = "local"`,
-		`models = ["Qwen/Qwen3-0.6B-GGUF", "Qwen/Qwen3-1.7B-GGUF"]`,
-	} {
-		if !strings.Contains(content, want) {
-			t.Fatalf("saved config missing %q:\n%s", want, content)
-		}
+	if strings.Contains(content, "[models]") || strings.Contains(content, "[models.providers.csghub-lite]") {
+		t.Fatalf("saved config should not contain models sections:\n%s", content)
+	}
+	modelsPath, err := ModelsPathForConfigPath(path)
+	if err != nil {
+		t.Fatalf("ModelsPathForConfigPath() error = %v", err)
+	}
+	savedModels, ok, err := LoadModels(modelsPath)
+	if err != nil {
+		t.Fatalf("LoadModels() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("LoadModels() ok = false, want true")
+	}
+	provider := savedModels.Providers["csghub-lite"]
+	if got, want := savedModels.Default, "csghub-lite.Qwen/Qwen3-0.6B-GGUF"; got != want {
+		t.Fatalf("saved models default = %q, want %q", got, want)
+	}
+	if got, want := provider.BaseURL, "http://127.0.0.1:11435/v1"; got != want {
+		t.Fatalf("saved BaseURL = %q, want %q", got, want)
+	}
+	if got, want := provider.APIKey, "local"; got != want {
+		t.Fatalf("saved APIKey = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(provider.Models, ","), "Qwen/Qwen3-0.6B-GGUF,Qwen/Qwen3-1.7B-GGUF"; got != want {
+		t.Fatalf("saved Models = %q, want %q", got, want)
 	}
 }
 
@@ -1027,17 +1146,26 @@ name = "official"
 kind = "remote"
 url = "https://csgclaw.opencsg.com"
 enabled = true
-
-[models]
-default = "default.local.minimax-m2.5"
-
-[models.providers.default]
-base_url = "http://127.0.0.1:4000"
-api_key = "sk"
-models = ["local.minimax-m2.5"]
 `
 	if got := string(data); got != want {
 		t.Fatalf("saved config mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+	modelsPath, err := ModelsPathForConfigPath(path)
+	if err != nil {
+		t.Fatalf("ModelsPathForConfigPath() error = %v", err)
+	}
+	savedModels, ok, err := LoadModels(modelsPath)
+	if err != nil {
+		t.Fatalf("LoadModels() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("LoadModels() ok = false, want true")
+	}
+	if got, want := savedModels.Default, "default.local.minimax-m2.5"; got != want {
+		t.Fatalf("saved models default = %q, want %q", got, want)
+	}
+	if got, want := savedModels.Providers["default"].BaseURL, "http://127.0.0.1:4000"; got != want {
+		t.Fatalf("saved model BaseURL = %q, want %q", got, want)
 	}
 }
 
@@ -1417,15 +1545,40 @@ reasoning_effort = "${REASONING_EFFORT}"
 		`default_publish_registry = "${HUB_PUBLISH_REGISTRY}"`,
 		`url = "https://${HUB_URL}"`,
 		`token = "${HUB_TOKEN}"`,
-		`default = "${MODEL_SELECTOR}"`,
-		`base_url = "https://${MODEL_BASE_HOST}/v1"`,
-		`api_key = "${MODEL_API_KEY}"`,
-		`models = ["${MODEL_ID}", "gpt-static"]`,
-		`reasoning_effort = "${REASONING_EFFORT}"`,
 	} {
 		if !strings.Contains(saved, want) {
 			t.Fatalf("saved config missing %q:\n%s", want, saved)
 		}
+	}
+	if strings.Contains(saved, "[models]") || strings.Contains(saved, "MODEL_API_KEY") {
+		t.Fatalf("saved config should not contain model settings:\n%s", saved)
+	}
+	modelsPath, err := ModelsPathForConfigPath(path)
+	if err != nil {
+		t.Fatalf("ModelsPathForConfigPath() error = %v", err)
+	}
+	savedModels, ok, err := LoadModels(modelsPath)
+	if err != nil {
+		t.Fatalf("LoadModels() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("LoadModels() ok = false, want true")
+	}
+	if got, want := savedModels.Default, "remote.gpt-env"; got != want {
+		t.Fatalf("saved models default = %q, want %q", got, want)
+	}
+	savedProvider := savedModels.Providers["remote"]
+	if got, want := savedProvider.BaseURL, "https://models.example.test/v1"; got != want {
+		t.Fatalf("saved model BaseURL = %q, want %q", got, want)
+	}
+	if got, want := savedProvider.APIKey, "sk-env"; got != want {
+		t.Fatalf("saved model APIKey = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(savedProvider.Models, ","), "gpt-env,gpt-static"; got != want {
+		t.Fatalf("saved model list = %q, want %q", got, want)
+	}
+	if got := savedProvider.ReasoningEffort; got != "" {
+		t.Fatalf("saved reasoning effort = %q, want empty because reasoning is stored on agent profiles", got)
 	}
 	if strings.Contains(saved, "[channels.feishu") {
 		t.Fatalf("saved config should not contain feishu channel config:\n%s", saved)
@@ -1483,8 +1636,6 @@ models = ["${MODEL_ID}", "gpt-static"]
 		`listen_addr = "0.0.0.0:19090"`,
 		`advertise_base_url = "http://5.6.7.8:19090"`,
 		`access_token = "changed_access_token"`,
-		`default = "remote.gpt-changed"`,
-		`models = ["gpt-changed"]`,
 	} {
 		if !strings.Contains(saved, want) {
 			t.Fatalf("saved config missing %q:\n%s", want, saved)
@@ -1499,6 +1650,26 @@ models = ["${MODEL_ID}", "gpt-static"]
 		if strings.Contains(saved, stale) {
 			t.Fatalf("saved config kept stale placeholder %q:\n%s", stale, saved)
 		}
+	}
+	if strings.Contains(saved, "[models]") {
+		t.Fatalf("saved config should not contain model settings:\n%s", saved)
+	}
+	modelsPath, err := ModelsPathForConfigPath(path)
+	if err != nil {
+		t.Fatalf("ModelsPathForConfigPath() error = %v", err)
+	}
+	savedModels, ok, err := LoadModels(modelsPath)
+	if err != nil {
+		t.Fatalf("LoadModels() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("LoadModels() ok = false, want true")
+	}
+	if got, want := savedModels.Default, "remote.gpt-changed"; got != want {
+		t.Fatalf("saved models default = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(savedModels.Providers["remote"].Models, ","), "gpt-changed"; got != want {
+		t.Fatalf("saved model list = %q, want %q", got, want)
 	}
 }
 

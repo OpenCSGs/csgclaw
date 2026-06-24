@@ -71,6 +71,7 @@ import {
   normalizeRuntimeKind,
   normalizeTemplateSelection,
   pickDefaultAgentTemplate,
+  profileSelectorFromDraft,
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
   resolveAgentChannelUserID,
@@ -87,10 +88,10 @@ import type {
   RuntimeKind,
 } from "@/models/agents";
 import { isDirectConversation, resolveRoomInviterID } from "@/models/conversations";
+import { modelProviderOptionsFromCatalog } from "@/models/modelProviders";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace } from "@/models/slashCommands";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
-import { useProfileModelOptions } from "./useProfileModelOptions";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
 import type { IMConversation } from "@/models/conversations";
@@ -219,16 +220,20 @@ export function useAgentController({
   hubTemplates,
   locale,
   managerProfile,
+  modelProviders = null,
+  modelProvidersLoaded = false,
   refreshHubTemplates,
   refreshWorkspaceAgents,
   refreshWorkspaceBootstrap,
   refreshWorkspaceBootstrapConfig,
   refreshWorkspaceManagerProfile,
+  refreshWorkspaceModelProviders = async () => null,
   rooms,
   selectAgent,
   selectComputer,
   selectConversation,
   selectHub,
+  selectModelProvider = () => {},
   setAgentsData,
   setSelectedHubTemplateId,
   t,
@@ -385,25 +390,17 @@ export function useAgentController({
     queryFn: fetchTeams,
   });
 
-  const {
-    models: agentModels,
-    modelBusy: agentModelBusy,
-    resetModels: resetAgentModels,
-  } = useProfileModelOptions({
-    draft: agentDraft,
-    enabled: Boolean(showAgentModal),
-    onDraftChange: setAgentDraft,
-  });
-  const {
-    models: agentPageModels,
-    modelBusy: agentPageModelBusy,
-    modelError: agentPageModelError,
-    resetModels: resetAgentPageModels,
-  } = useProfileModelOptions({
-    draft: agentPageDraft,
-    enabled: activePane.type === WorkspacePaneTypes.agent,
-    onDraftChange: setAgentPageDraft,
-  });
+  const agentModelOptions = useMemo(() => modelProviderOptionsFromCatalog(modelProviders), [modelProviders]);
+  const agentPageModelOptions = useMemo(() => modelProviderOptionsFromCatalog(modelProviders), [modelProviders]);
+  const agentModelBusy = Boolean(showAgentModal && !modelProvidersLoaded);
+  const agentPageModelBusy = Boolean(activePane.type === WorkspacePaneTypes.agent && !modelProvidersLoaded);
+  const agentPageModelError = "";
+  const resetAgentModels = useCallback(() => {
+    void refreshWorkspaceModelProviders();
+  }, [refreshWorkspaceModelProviders]);
+  const resetAgentPageModels = useCallback(() => {
+    void refreshWorkspaceModelProviders();
+  }, [refreshWorkspaceModelProviders]);
   const { cliproxyAuthStatuses, setCLIProxyAuthStatus } = useCLIProxyAuthStatuses(
     [
       managerProfile?.provider,
@@ -970,6 +967,14 @@ export function useAgentController({
     });
   }
 
+  function canApplyAgentPageProfileSaveImmediately(
+    saved: AgentLike | null | undefined,
+    profileChanged: boolean,
+    runtimeOptionsChanged: boolean,
+  ): boolean {
+    return Boolean(saved?.id && saved.id !== MANAGER_AGENT_ID && profileChanged && !runtimeOptionsChanged);
+  }
+
   async function saveAgentPage(): Promise<void> {
     const draftToSave = agentPageDraft;
     if (!draftToSave || !selectedAgentForPage?.id) {
@@ -1023,6 +1028,7 @@ export function useAgentController({
       };
       if (profileChanged) {
         payload.agent_profile = profile;
+        payload.profile = profileSelectorFromDraft(draft);
       }
       if (runtimeOptionsChanged) {
         payload.runtime_options = runtimeOptions || {};
@@ -1050,6 +1056,13 @@ export function useAgentController({
       const managerBeforeSave = selectedAgentForPage;
       const profileIncompleteBeforeSave = !isAgentProfileMarkedComplete(agentPageSavedDraft);
       const saved = await updateAgentRequest(selectedAgentForPage.id, payload);
+      if (canApplyAgentPageProfileSaveImmediately(saved, profileChanged, runtimeOptionsChanged)) {
+        applyAgentListUpdate(saved);
+        const savedDraft = agentToDraft(saved);
+        setAgentPageDraft(savedDraft);
+        setAgentPageSavedDraft(savedDraft);
+        return;
+      }
       await refreshAgentsWithUpdatedAgent(saved);
       if (saved.id === MANAGER_AGENT_ID && profileChanged) {
         void syncManagerRuntimeAfterProfileSave(managerBeforeSave, profileIncompleteBeforeSave);
@@ -1169,6 +1182,7 @@ export function useAgentController({
         runtime_kind: runtimeKind,
         from_template: agentDraft.from_template || "",
         agent_profile: profile,
+        profile: profileSelectorFromDraft(draft),
       };
       const editingDraftBaseline = editingAgent ? agentToDraft(editingAgent) : null;
       const runtimeOptionsChanged = !isCreate
@@ -1189,6 +1203,7 @@ export function useAgentController({
             description: payload.description,
             instructions: payload.instructions,
             agent_profile: payload.agent_profile,
+            profile: payload.profile,
             ...(payload.runtime_options !== undefined ? { runtime_options: payload.runtime_options } : {}),
           });
       await refreshAgents();
@@ -1641,6 +1656,7 @@ export function useAgentController({
     runningAgentCount,
     runAgentAction,
     refreshAgentState,
+    selectModelProvider,
     selectedAgentForPage,
     teams: teamsQuery.data ?? [],
     teamsLoading: teamsQuery.isLoading,
@@ -1655,7 +1671,9 @@ export function useAgentController({
       draft: agentPageDraft,
       savedDraft: agentPageSavedDraft,
       hasUnsavedChanges: agentPageHasUnsavedChanges,
-      models: agentPageModels,
+      models: agentPageModelOptions.map((option) => option.modelID),
+      modelOptions: agentPageModelOptions,
+      modelProviders,
       modelBusy: agentPageModelBusy,
       modelError: agentPageModelError,
       saving: agentPageBusy,
@@ -1723,7 +1741,9 @@ export function useAgentController({
             hubTemplates,
             bootstrapConfig,
             managerAgent,
-            agentModels,
+            agentModels: agentModelOptions.map((option) => option.modelID),
+            agentModelOptions,
+            modelProviders,
             agentModelBusy,
             authStatuses: cliproxyAuthStatuses,
             authBusyProvider: cliproxyAuthBusy,

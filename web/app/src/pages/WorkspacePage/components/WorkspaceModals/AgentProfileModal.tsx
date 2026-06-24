@@ -4,19 +4,16 @@ import {
   BOT_TYPE_NORMAL,
   BOT_TYPE_NOTIFICATION,
   DEFAULT_RUNTIME_KIND,
-  PROVIDER_OPTIONS,
   WORKER_RUNTIME_KIND_OPTIONS,
 } from "@/shared/constants/agents";
 import { useEffect, useRef, useState, type SetStateAction } from "react";
 import {
   AgentCreateProgress,
   type AgentCreateProgressProps,
-  APIKeyField,
-  CLIProxyAuthControl,
   EnvKeyValueEditor,
   isBlank,
+  ModelOptionLabel,
   NotifierControls,
-  profileBaseURLMissing,
   requiredFieldLabel,
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
@@ -28,7 +25,6 @@ import {
   ensureNotifierPullSubscriptionDraft,
   formatRuntimeKindLabel,
   isNotificationBotDraftContext,
-  normalizeAuthProviderName,
   normalizeRuntimeKind,
   normalizeTemplateSelection,
   notifierFormIsComplete,
@@ -38,10 +34,17 @@ import {
   templateMatchesRuntime,
 } from "@/models/agents";
 import type { AgentDraft, AgentLike, RuntimeBootstrapConfig } from "@/models/agents";
+import {
+  modelProviderAvatarPath,
+  modelProviderSelectOptionsFromCatalog,
+  providerNameForProviderID,
+  selectorForProviderModel,
+  type ModelProviderCatalog,
+  type ModelProviderOption,
+} from "@/models/modelProviders";
 import type { TranslateFn } from "@/models/conversations";
 import type { LocaleCode } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
-import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import { ModalCloseButton } from "./ModalCloseButton";
 
 type AgentModalMode = "create" | "edit";
@@ -55,10 +58,12 @@ export type AgentProfileModalProps = {
   agentError?: string;
   agentModelBusy?: boolean;
   agentModalMode: AgentModalMode;
+  agentModelOptions?: ModelProviderOption[];
+  modelProviders?: ModelProviderCatalog | null;
   agentModels?: string[];
   agentProgress?: AgentCreateProgressProps["progress"];
   authBusyProvider?: string;
-  authStatuses?: CLIProxyAuthStatusMap;
+  authStatuses?: unknown;
   bootstrapConfig?: RuntimeBootstrapConfig | null;
   editingAgent?: AgentLike | null;
   hubTemplates?: HubTemplate[];
@@ -86,12 +91,11 @@ export function AgentProfileModal({
   hubTemplates = [],
   bootstrapConfig = null,
   managerAgent = null,
+  agentModelOptions = [],
+  modelProviders = null,
   agentModels = [],
   agentModelBusy = false,
-  authStatuses = {},
-  authBusyProvider = "",
   notifierWebhookPublicOrigin = "",
-  onProviderLogin,
   agentError = "",
   agentProgress = null,
   agentBusy = false,
@@ -112,6 +116,28 @@ export function AgentProfileModal({
         agentModalMode === "edit" ? editingAgent : null,
         bootstrapConfig,
       );
+  const fallbackProviderID = String(agentDraft.model_provider_id || "").trim();
+  const fallbackModelOptions =
+    agentModelOptions.length > 0
+      ? agentModelOptions
+      : fallbackProviderID
+        ? agentModels.map((model) => ({
+            value: selectorForProviderModel(fallbackProviderID, model),
+            label: `${fallbackProviderID} / ${model}`,
+            providerID: fallbackProviderID,
+            providerDisplayName: fallbackProviderID,
+            providerAvatar: modelProviderAvatarPath(fallbackProviderID),
+            modelID: model,
+          }))
+        : [];
+  const providerOptions = modelProviderSelectOptionsFromCatalog(modelProviders, fallbackModelOptions);
+  const selectedProviderID =
+    agentDraft.model_provider_id ||
+    providerOptions.find((option) => option.models.includes(agentDraft.model_id))?.id ||
+    "";
+  const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
+  const selectedProviderModels = selectedProvider?.models ?? [];
+  const selectedModelValue = agentDraft.model_id || "";
 
   useEffect(
     () => () => {
@@ -200,10 +226,12 @@ export function AgentProfileModal({
           onScroll={onEditorShellScroll}
         >
           <section className="profile-section agent-identity-section">
-            <div className="profile-section-heading">
-              <div className="profile-section-title">{t("profileBasics")}</div>
-              <p className="profile-section-description">{t("profileBasicsDescription")}</p>
-            </div>
+            {!isNotificationContext ? (
+              <div className="profile-section-heading">
+                <div className="profile-section-title">{t("profileBasics")}</div>
+                <p className="profile-section-description">{t("profileBasicsDescription")}</p>
+              </div>
+            ) : null}
             <div className="agent-section-form">
               <div className="agent-section-form-content agent-basics-form-content">
                 <div className="agent-identity-layout">
@@ -388,6 +416,7 @@ export function AgentProfileModal({
             <NotifierControls
               agentID={agentModalMode === "edit" ? editingAgent?.id || "" : ""}
               draft={agentDraft}
+              hideHeading
               t={t}
               webhookPublicOrigin={notifierWebhookPublicOrigin}
               onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
@@ -401,31 +430,78 @@ export function AgentProfileModal({
                 </div>
                 <div className="agent-section-form">
                   <div className="agent-section-form-content agent-model-form-content">
-                    <div className="profile-runtime-grid">
+                    <div className="profile-runtime-grid agent-model-config-grid">
                       <label className="field">
-                        <span>{t("profileProvider")}</span>
+                        {requiredFieldLabel(t("profileProvider"))}
                         <Select
-                          value={agentDraft.provider}
+                          value={selectedProviderID}
+                          required
                           onValueChange={(value) => {
-                            onAgentDraftChange({ ...agentDraft, provider: value, model_id: "" });
-                            onAgentModelsReset();
+                            const nextProvider = providerOptions.find((option) => option.id === value);
+                            if (!nextProvider) {
+                              onAgentDraftChange({ ...agentDraft, model_id: "", model_provider_id: "" });
+                              return;
+                            }
+                            onAgentDraftChange({
+                              ...agentDraft,
+                              provider: providerNameForProviderID(nextProvider.id),
+                              model_provider_id: nextProvider.id,
+                              model_id: nextProvider.models[0] || "",
+                            });
                           }}
-                          triggerProps={{ "aria-label": t("profileProvider") }}
-                          options={PROVIDER_OPTIONS}
+                          triggerProps={{ "aria-label": t("profileProvider"), "aria-required": true }}
+                          options={[
+                            {
+                              value: "",
+                              label: agentModelBusy ? t("profileLoadingModels") : t("profileProviderSelect"),
+                            },
+                            ...providerOptions.map((option) => ({
+                              value: option.value,
+                              label: (
+                                <ModelOptionLabel
+                                  avatar={option.avatar}
+                                  model={option.displayName}
+                                  provider={
+                                    option.models.length
+                                      ? t("modelProviderModelCount", { count: option.models.length })
+                                      : t("modelProviderNoModels")
+                                  }
+                                />
+                              ),
+                              textValue: option.displayName,
+                            })),
+                          ]}
                         />
                       </label>
                       <label className="field">
                         {requiredFieldLabel(t("profileModel"))}
                         <Select
-                          value={agentDraft.model_id}
+                          value={selectedModelValue}
                           required
+                          disabled={!selectedProviderID || !selectedProviderModels.length}
                           onValueChange={(value) => onAgentDraftChange({ ...agentDraft, model_id: value })}
+                          searchable
+                          searchPlaceholder={t("modelProviderModelSearch")}
+                          emptyLabel={t("modelProviderNoModels")}
                           triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
                           options={[
-                            { value: "", label: agentModelBusy ? t("profileLoadingModels") : t("profileSelectModel") },
-                            ...agentModels.map((model) => ({ value: model, label: model })),
-                            ...(agentDraft.model_id && !agentModels.includes(agentDraft.model_id)
-                              ? [{ value: agentDraft.model_id, label: agentDraft.model_id }]
+                            {
+                              value: "",
+                              label: selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
+                            },
+                            ...selectedProviderModels.map((modelID) => ({
+                              value: modelID,
+                              label: <ModelOptionLabel model={modelID} showAvatar={false} />,
+                              textValue: modelID,
+                            })),
+                            ...(selectedModelValue && !selectedProviderModels.includes(selectedModelValue)
+                              ? [
+                                  {
+                                    value: selectedModelValue,
+                                    label: <ModelOptionLabel model={selectedModelValue} showAvatar={false} />,
+                                    textValue: selectedModelValue,
+                                  },
+                                ]
                               : []),
                           ]}
                         />
@@ -444,7 +520,7 @@ export function AgentProfileModal({
                       </label>
                       <div className="field agent-fast-mode-field">
                         <span>{t("profileFastMode")}</span>
-                        <label className="selection-item compact-toggle-row">
+                        <label className="selection-item compact-toggle-row agent-fast-mode-toggle">
                           <input
                             type="checkbox"
                             checked={agentDraft.enable_fast_mode}
@@ -457,51 +533,6 @@ export function AgentProfileModal({
                         </label>
                       </div>
                     </div>
-                    <CLIProxyAuthControl
-                      provider={agentDraft.provider}
-                      t={t}
-                      status={authStatuses[normalizeAuthProviderName(agentDraft.provider)]}
-                      busy={authBusyProvider === normalizeAuthProviderName(agentDraft.provider)}
-                      onLogin={onProviderLogin}
-                    />
-                    {agentDraft.provider === "api" ? (
-                      <div className="profile-model-api-section">
-                        <div className="profile-section-subtitle">{t("profileAPIProvider")}</div>
-                        <div className="profile-api-grid">
-                          <label className="field">
-                            {requiredFieldLabel(t("profileBaseURL"))}
-                            <input
-                              value={agentDraft.base_url}
-                              required
-                              aria-required="true"
-                              onInput={(event) =>
-                                onAgentDraftChange({ ...agentDraft, base_url: event.currentTarget.value })
-                              }
-                              placeholder="https://api.openai.com/v1"
-                            />
-                          </label>
-                          <APIKeyField
-                            value={agentDraft.api_key}
-                            onInput={(event) =>
-                              onAgentDraftChange({ ...agentDraft, api_key: event.currentTarget.value })
-                            }
-                            profile={agentDraft}
-                            required={!agentDraft.api_key_set}
-                            t={t}
-                          />
-                          <label className="field span-2">
-                            <span>{t("profileHeaders")}</span>
-                            <textarea
-                              className="compact-textarea"
-                              value={agentDraft.headersText}
-                              onInput={(event) =>
-                                onAgentDraftChange({ ...agentDraft, headersText: event.currentTarget.value })
-                              }
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
               </section>
@@ -523,16 +554,6 @@ export function AgentProfileModal({
               <details className="profile-section agent-advanced-section">
                 <summary className="profile-section-title agent-advanced-summary">{t("profileAdvanced")}</summary>
                 <div className="profile-advanced-grid">
-                  <label className="field">
-                    <span>{t("profileRequestOptions")}</span>
-                    <textarea
-                      className="compact-json"
-                      value={agentDraft.requestOptionsText}
-                      onInput={(event) =>
-                        onAgentDraftChange({ ...agentDraft, requestOptionsText: event.currentTarget.value })
-                      }
-                    />
-                  </label>
                   <div className="field">
                     <span>{t("profileEnv")}</span>
                     <EnvKeyValueEditor
@@ -560,7 +581,7 @@ export function AgentProfileModal({
               isBlank(agentDraft.name) ||
               (isNotificationContext
                 ? !notifierFormIsComplete(agentDraft, editingAgent)
-                : !agentDraft.model_id || profileBaseURLMissing(agentDraft))
+                : !agentDraft.model_provider_id || !agentDraft.model_id)
             }
             loading={agentBusy}
             onClick={onSave}

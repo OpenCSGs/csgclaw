@@ -57,6 +57,7 @@ type UpdateRequest struct {
 	Instructions   *string         `json:"instructions,omitempty"`
 	Image          *string         `json:"image,omitempty"`
 	Avatar         *string         `json:"avatar,omitempty"`
+	Profile        *string         `json:"profile,omitempty"`
 	RuntimeOptions *map[string]any `json:"runtime_options,omitempty"`
 	AgentProfile   *AgentProfile   `json:"agent_profile,omitempty"`
 	FieldMask      []string        `json:"field_mask,omitempty"`

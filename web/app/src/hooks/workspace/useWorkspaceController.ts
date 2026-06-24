@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
+import { checkModelProvider, createModelProvider, type ModelProviderPayload } from "@/api/modelProviders";
 import { patchCsgclawUserRequest, patchParticipantAvatarRequest } from "@/api/participants";
 import { createTranslator } from "@/shared/i18n";
 import {
@@ -159,6 +160,8 @@ export function useWorkspaceController() {
     managerProfile,
     agents,
     agentsLoaded,
+    modelProviders,
+    modelProvidersLoaded,
     hubTemplates,
     hubLoaded,
     appVersion,
@@ -173,6 +176,7 @@ export function useWorkspaceController() {
     refreshWorkspaceAppVersion,
     refreshWorkspaceManagerProfile,
     refreshWorkspaceAgents,
+    refreshWorkspaceModelProviders,
     refreshWorkspaceHubTemplates,
   } = useWorkspaceData();
   const t = useMemo(() => createTranslator(locale), [locale]);
@@ -186,6 +190,7 @@ export function useWorkspaceController() {
     selectAgent,
     selectHuman,
     selectTeam,
+    selectModelProvider,
     selectComputer,
     selectHub,
     selectTasks,
@@ -249,8 +254,11 @@ export function useWorkspaceController() {
     hubTemplates,
     locale,
     managerProfile,
+    modelProviders,
+    modelProvidersLoaded,
     refreshHubTemplates,
     refreshWorkspaceAgents,
+    refreshWorkspaceModelProviders,
     refreshWorkspaceBootstrap,
     refreshWorkspaceBootstrapConfig,
     refreshWorkspaceManagerProfile,
@@ -259,6 +267,7 @@ export function useWorkspaceController() {
     selectComputer,
     selectConversation,
     selectHub,
+    selectModelProvider,
     setAgentsData,
     setSelectedHubTemplateId,
     t,
@@ -358,6 +367,9 @@ export function useWorkspaceController() {
   const selectedTeamTasks = selectedTeam ? task.tasks.filter((item) => item.team_id === selectedTeam.id) : [];
   const selectedHumanID = activePane.type === WorkspacePaneTypes.human ? String(activePane.id || "") : "";
   const selectedHuman = selectedHumanID ? (conversation.usersById.get(selectedHumanID) ?? null) : null;
+  const [showCreateModelProviderModal, setShowCreateModelProviderModal] = useState(false);
+  const [createModelProviderBusy, setCreateModelProviderBusy] = useState(false);
+  const [createModelProviderError, setCreateModelProviderError] = useState("");
   const [humanAvatarBusyID, setHumanAvatarBusyID] = useState("");
   const [humanAvatarError, setHumanAvatarError] = useState("");
   const [humanDescriptionBusyID, setHumanDescriptionBusyID] = useState("");
@@ -487,6 +499,37 @@ export function useWorkspaceController() {
     navigatePane({ type: WorkspacePaneTypes.hub, id: item.name, resourceType: "skill" }, rooms);
   }
 
+  function openCreateModelProviderModal() {
+    setCreateModelProviderError("");
+    setShowCreateModelProviderModal(true);
+  }
+
+  async function createOpenAIModelProvider(payload: ModelProviderPayload) {
+    if (createModelProviderBusy) {
+      return;
+    }
+    setCreateModelProviderBusy(true);
+    setCreateModelProviderError("");
+    try {
+      const created = await createModelProvider({ ...payload, id: "openai" });
+      if (created.id && payload.base_url && (payload.api_key || created.api_key_set)) {
+        try {
+          await checkModelProvider(created.id, payload);
+        } catch (_) {
+          // The provider was saved; the detail page can still surface a later manual check failure.
+        }
+      }
+      const refreshed = await refreshWorkspaceModelProviders();
+      const next = refreshed?.providers.find((provider) => provider.id === created.id) ?? created;
+      selectModelProvider(next);
+      setShowCreateModelProviderModal(false);
+    } catch (_) {
+      setCreateModelProviderError(t("modelProviderCreateFailed"));
+    } finally {
+      setCreateModelProviderBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (activePane.type !== WorkspacePaneTypes.hub) {
       return;
@@ -519,15 +562,24 @@ export function useWorkspaceController() {
     return {
       ready: false,
       loadingText: loadingError || t("loading"),
+      activePane,
+      modelProviders,
+      modelProvidersLoaded,
+      refreshWorkspaceModelProviders,
+      t,
     };
   }
 
   return {
     ready: true,
     loadingText: "",
+    t,
     shellClassName: shell.shellClassName,
     mainPanelHasThread: Boolean(conversation.activeThreadRootID && conversation.selectedConversation),
     activePane,
+    modelProviders,
+    modelProvidersLoaded,
+    refreshWorkspaceModelProviders,
     floatingChatProps: {
       avatar: floatingChatAvatar,
       avatarFallback: floatingChatAvatarFallback,
@@ -551,6 +603,8 @@ export function useWorkspaceController() {
       currentWorkspaceLabel: shell.currentWorkspaceLabel,
       runningAgentCount: agent.runningAgentCount,
       agentItems: agent.agentItems,
+      modelProviders,
+      modelProvidersLoaded,
       workerAgentItems: agent.workerAgentItems,
       notificationAgentItems: agent.notificationAgentItems,
       teams: agent.teams,
@@ -574,6 +628,7 @@ export function useWorkspaceController() {
       onToggleWorkspaceGroup: shell.toggleWorkspaceGroup,
       onCreateRoom: () => conversation.openCreateRoomModal(),
       onCreateAgent: agent.openCreateAgentModal,
+      onCreateModelProvider: openCreateModelProviderModal,
       onCreateNotificationParticipant: agent.openCreateNotificationParticipantModal,
       onCreateTeam: async (payload: CreateTeamPayload) => {
         await agent.agentViewProps.onCreateTeam?.({
@@ -597,6 +652,7 @@ export function useWorkspaceController() {
       onSelectThread: conversation.openThreadInConversation,
       onPreviewUser: profilePreview.openParticipantPreview,
       onSelectAgent: selectAgent,
+      onSelectModelProvider: selectModelProvider,
       onSelectHuman: selectHuman,
       onPreviewAgent: profilePreview.openAgentPreview,
       onSelectComputer: selectComputer,
@@ -670,6 +726,21 @@ export function useWorkspaceController() {
     inviteMembersModalProps: conversation.inviteMembersModalProps,
     upgradeModalProps: upgrade.upgradeModalProps,
     configModalProps: configSettings.configModalProps,
+    createModelProviderModalProps: showCreateModelProviderModal
+      ? {
+          busy: createModelProviderBusy,
+          error: createModelProviderError,
+          modelProviders,
+          onClose: () => {
+            if (!createModelProviderBusy) {
+              setShowCreateModelProviderModal(false);
+            }
+          },
+          onCreate: createOpenAIModelProvider,
+          onCheckAccess: (payload: ModelProviderPayload) => checkModelProvider("openai-draft", payload),
+          t,
+        }
+      : null,
     agentProfileModalProps: agent.agentProfileModalProps,
     managerRebuildModalProps: agent.managerRebuildModalProps,
   };

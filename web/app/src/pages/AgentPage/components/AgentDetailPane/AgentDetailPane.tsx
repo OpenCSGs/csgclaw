@@ -13,11 +13,10 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
-import { PROVIDER_OPTIONS, REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
+import { REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
-  APIKeyField,
-  CLIProxyAuthControl,
   EnvKeyValueEditor,
+  ModelOptionLabel,
   NotifierControls,
   requiredFieldLabel,
   RuntimeOptionsFields,
@@ -36,16 +35,22 @@ import {
   isAgentUpgradeNeeded,
   isAgentRunning,
   isNotifierRuntimeDraftOnAgentPage,
-  normalizeAuthProviderName,
   normalizeRuntimeKind,
   runtimeOptionSchemasForAgent,
 } from "@/models/agents";
 import type { AgentDraft, AgentLike } from "@/models/agents";
+import {
+  modelProviderAvatarPath,
+  modelProviderSelectOptionsFromCatalog,
+  providerNameForProviderID,
+  selectorForProviderModel,
+  type ModelProviderCatalog,
+  type ModelProviderOption,
+} from "@/models/modelProviders";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import type { LocaleCode } from "@/models/conversations";
 import type { SkillSummary } from "@/models/skillhub";
 import type { SlashSkillOption } from "@/models/slashCommands";
-import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import {
@@ -80,7 +85,7 @@ type FeishuPendingRegistrationView = {
 export type AgentDetailPaneProps = {
   activeRoom?: IMConversation | null;
   authBusyProvider?: string;
-  authStatuses?: CLIProxyAuthStatusMap;
+  authStatuses?: unknown;
   busyKey?: string;
   draft?: AgentDraft | null;
   error?: string;
@@ -90,6 +95,8 @@ export type AgentDetailPaneProps = {
   item: AgentLike;
   modelBusy?: boolean;
   modelError?: unknown;
+  modelOptions?: ModelProviderOption[];
+  modelProviders?: ModelProviderCatalog | null;
   models?: string[];
   notice?: string;
   noticeTone?: AgentNoticeTone;
@@ -140,6 +147,7 @@ export function AgentDetailPane({
   draft,
   savedDraft = null,
   hasUnsavedChanges: hasUnsavedChangesProp = undefined,
+  modelOptions = [],
   models = [],
   notice = "",
   noticeTone = "warning",
@@ -147,9 +155,8 @@ export function AgentDetailPane({
   modelError = null,
   saving = false,
   publishBusy = false,
+  modelProviders = null,
   saveError = "",
-  authStatuses = {},
-  authBusyProvider = "",
   locale = "en",
   notifierWebhookPublicOrigin = "",
   skills = [],
@@ -166,7 +173,6 @@ export function AgentDetailPane({
   onDraftChange,
   onSave,
   onPublish,
-  onProviderLogin,
   onStart,
   onStop,
   onRecreate,
@@ -200,6 +206,28 @@ export function AgentDetailPane({
   const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
   const updateDraft = (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
   const runtimeOptionSchemas = runtimeOptionSchemasForAgent(draft?.runtime_kind || item.runtime_kind, item);
+  const fallbackProviderID = String(draft?.model_provider_id || "").trim();
+  const fallbackModelOptions =
+    modelOptions.length > 0
+      ? modelOptions
+      : fallbackProviderID
+        ? models.map((model) => ({
+            value: selectorForProviderModel(fallbackProviderID, model),
+            label: `${fallbackProviderID} / ${model}`,
+            providerID: fallbackProviderID,
+            providerDisplayName: fallbackProviderID,
+            providerAvatar: modelProviderAvatarPath(fallbackProviderID),
+            modelID: model,
+          }))
+        : [];
+  const providerOptions = modelProviderSelectOptionsFromCatalog(modelProviders, fallbackModelOptions);
+  const selectedProviderID =
+    draft?.model_provider_id ||
+    providerOptions.find((option) => option.models.includes(draft?.model_id || ""))?.id ||
+    "";
+  const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
+  const selectedProviderModels = selectedProvider?.models ?? [];
+  const selectedModelValue = draft?.model_id || "";
 
   useEffect(() => {
     if (!draft) {
@@ -464,28 +492,74 @@ export function AgentDetailPane({
           {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
             <section className="profile-section">
               <div className="profile-section-title">{t("profileModelSection")}</div>
-              <div className="profile-runtime-grid">
+              <div className="profile-runtime-grid agent-model-config-grid">
                 <label className="field">
-                  <span>{t("profileProvider")}</span>
+                  {requiredFieldLabel(t("profileProvider"))}
                   <Select
-                    value={draft.provider}
-                    onValueChange={(value) => updateDraft({ provider: value, model_id: "" })}
-                    triggerProps={{ "aria-label": t("profileProvider") }}
-                    options={PROVIDER_OPTIONS}
+                    value={selectedProviderID}
+                    required
+                    onValueChange={(value) => {
+                      const nextProvider = providerOptions.find((option) => option.id === value);
+                      if (!nextProvider) {
+                        updateDraft({ model_id: "", model_provider_id: "" });
+                        return;
+                      }
+                      updateDraft({
+                        provider: providerNameForProviderID(nextProvider.id),
+                        model_provider_id: nextProvider.id,
+                        model_id: nextProvider.models[0] || "",
+                      });
+                    }}
+                    triggerProps={{ "aria-label": t("profileProvider"), "aria-required": true }}
+                    options={[
+                      { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileProviderSelect") },
+                      ...providerOptions.map((option) => ({
+                        value: option.value,
+                        label: (
+                          <ModelOptionLabel
+                            avatar={option.avatar}
+                            model={option.displayName}
+                            provider={
+                              option.models.length
+                                ? t("modelProviderModelCount", { count: option.models.length })
+                                : t("modelProviderNoModels")
+                            }
+                          />
+                        ),
+                        textValue: option.displayName,
+                      })),
+                    ]}
                   />
                 </label>
                 <label className="field">
                   {requiredFieldLabel(t("profileModel"))}
                   <Select
-                    value={draft.model_id}
+                    value={selectedModelValue}
                     required
+                    disabled={!selectedProviderID || !selectedProviderModels.length}
                     onValueChange={(value) => updateDraft({ model_id: value })}
+                    searchable
+                    searchPlaceholder={t("modelProviderModelSearch")}
+                    emptyLabel={t("modelProviderNoModels")}
                     triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
                     options={[
-                      { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileSelectModel") },
-                      ...models.map((model) => ({ value: model, label: model })),
-                      ...(draft.model_id && !models.includes(draft.model_id)
-                        ? [{ value: draft.model_id, label: draft.model_id }]
+                      {
+                        value: "",
+                        label: selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
+                      },
+                      ...selectedProviderModels.map((modelID) => ({
+                        value: modelID,
+                        label: <ModelOptionLabel model={modelID} showAvatar={false} />,
+                        textValue: modelID,
+                      })),
+                      ...(selectedModelValue && !selectedProviderModels.includes(selectedModelValue)
+                        ? [
+                            {
+                              value: selectedModelValue,
+                              label: <ModelOptionLabel model={selectedModelValue} showAvatar={false} />,
+                              textValue: selectedModelValue,
+                            },
+                          ]
                         : []),
                     ]}
                   />
@@ -502,22 +576,19 @@ export function AgentDetailPane({
                     options={REASONING_EFFORTS.map((effort) => ({ value: effort, label: effort }))}
                   />
                 </label>
-                <label className="selection-item compact-toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={draft.enable_fast_mode}
-                    onChange={() => updateDraft({ enable_fast_mode: !draft.enable_fast_mode })}
-                  />
+                <div className="field agent-fast-mode-field">
                   <span>{t("profileFastMode")}</span>
-                </label>
+                  <label className="selection-item compact-toggle-row agent-fast-mode-toggle">
+                    <input
+                      type="checkbox"
+                      checked={draft.enable_fast_mode}
+                      aria-label={t("profileFastMode")}
+                      onChange={() => updateDraft({ enable_fast_mode: !draft.enable_fast_mode })}
+                    />
+                    <small className="agent-fast-mode-help">{t("profileFastModeHelp")}</small>
+                  </label>
+                </div>
               </div>
-              <CLIProxyAuthControl
-                provider={draft.provider}
-                t={t}
-                status={authStatuses?.[normalizeAuthProviderName(draft.provider)]}
-                busy={authBusyProvider === normalizeAuthProviderName(draft.provider)}
-                onLogin={onProviderLogin}
-              />
             </section>
           ) : (
             <NotifierControls
@@ -538,39 +609,6 @@ export function AgentDetailPane({
                     className="compact-textarea"
                     value={draft.instructions || ""}
                     onInput={(event) => updateDraft({ instructions: event.currentTarget.value })}
-                  />
-                </label>
-              </div>
-            </section>
-          ) : null}
-
-          {!isNotifierRuntimeDraftOnAgentPage(draft, item) && draft.provider === "api" ? (
-            <section className="profile-section">
-              <div className="profile-section-title">{t("profileAPIProvider")}</div>
-              <div className="profile-api-grid">
-                <label className="field">
-                  {requiredFieldLabel(t("profileBaseURL"))}
-                  <input
-                    value={draft.base_url}
-                    required
-                    aria-required="true"
-                    onInput={(event) => updateDraft({ base_url: event.currentTarget.value })}
-                    placeholder="https://api.openai.com/v1"
-                  />
-                </label>
-                <APIKeyField
-                  value={draft.api_key}
-                  onInput={(event) => updateDraft({ api_key: event.currentTarget.value })}
-                  profile={draft}
-                  required={!draft.api_key_set}
-                  t={t}
-                />
-                <label className="field span-2">
-                  <span>{t("profileHeaders")}</span>
-                  <textarea
-                    className="compact-textarea"
-                    value={draft.headersText}
-                    onInput={(event) => updateDraft({ headersText: event.currentTarget.value })}
                   />
                 </label>
               </div>
@@ -632,25 +670,15 @@ export function AgentDetailPane({
             </section>
           ) : null}
 
-          <section className="profile-section">
-            <div className="profile-section-title">{t("profileAdvanced")}</div>
+          <details className="profile-section agent-advanced-section">
+            <summary className="profile-section-title agent-advanced-summary">{t("profileAdvanced")}</summary>
             <div className="profile-advanced-grid">
-              {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-                <label className="field profile-json-field">
-                  <span>{t("profileRequestOptions")}</span>
-                  <textarea
-                    className="compact-json"
-                    value={draft.requestOptionsText}
-                    onInput={(event) => updateDraft({ requestOptionsText: event.currentTarget.value })}
-                  />
-                </label>
-              ) : null}
               <div className="field profile-env-field">
                 <span>{t("profileEnv")}</span>
                 <EnvKeyValueEditor rows={draft.envRows} t={t} onChange={(rows) => updateDraft({ envRows: rows })} />
               </div>
             </div>
-          </section>
+          </details>
         </div>
       ) : null}
       <DialogRoot open={addSkillsDialogOpen} onOpenChange={setAddSkillsDialogOpen}>

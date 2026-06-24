@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -242,6 +243,7 @@ type rawConfigValues struct {
 	skill         rawSkillConfig
 	modelsDefault string
 	models        map[string]rawProviderConfig
+	modelsPath    string
 	resolved      *rawConfigValues
 }
 
@@ -251,8 +253,10 @@ type rawBootstrapConfigMeta struct {
 }
 
 type rawProviderConfig struct {
+	DisplayName     string
 	BaseURL         string
 	APIKey          string
+	HeadersJSON     string
 	Models          []string
 	ReasoningEffort string
 }
@@ -611,12 +615,23 @@ func Load(path string) (Config, error) {
 				provider := modelsCfg.Providers[name]
 				rawProvider := cfg.raw.models[name]
 				switch key {
+				case "display_name":
+					rawProvider.DisplayName = parseRawStringValue(rawValue)
+					provider.DisplayName = value
 				case "base_url":
 					rawProvider.BaseURL = parseRawStringValue(rawValue)
 					provider.BaseURL = value
 				case "api_key":
 					rawProvider.APIKey = parseRawStringValue(rawValue)
 					provider.APIKey = value
+				case "headers_json":
+					headersJSON := parseQuotedStringValue(rawValue)
+					rawProvider.HeadersJSON = headersJSON
+					headers, parseErr := parseHeadersJSON(headersJSON)
+					if parseErr != nil {
+						return Config{}, fmt.Errorf("parse models.providers.%s.headers_json: %w", name, parseErr)
+					}
+					provider.Headers = headers
 				case "models":
 					rawProvider.Models, _ = parseRawStringArray(rawValue)
 					models, parseErr := parseStringArray(rawValue)
@@ -666,6 +681,18 @@ func Load(path string) (Config, error) {
 		cfg.LLM = cfg.Models
 		cfg.syncModelFromLLM()
 	}
+	modelsPath, err := ModelsPathForConfigPath(path)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.raw.modelsPath = modelsPath
+	if modelsFileCfg, ok, err := LoadModels(modelsPath); err != nil {
+		return Config{}, err
+	} else if ok {
+		cfg.Models = modelsFileCfg.Normalized()
+		cfg.LLM = cfg.Models
+		cfg.syncModelFromLLM()
+	}
 	cfg.raw.resolved = cfg.resolvedRawValues()
 	return cfg, nil
 }
@@ -676,9 +703,18 @@ func (c Config) Save(path string) error {
 	}
 
 	cfg := c
-	writeModels := cfg.hasStaticLLMConfig()
-	if writeModels {
+	modelsPath, err := ModelsPathForConfigPath(path)
+	if err != nil {
+		return err
+	}
+	llmForStorage := cfg.llmConfigForStorage()
+	if !llmForStorage.IsZero() {
+		cfg.Models = llmForStorage.Normalized()
+		cfg.LLM = cfg.Models
 		cfg.syncModelFromLLM()
+	}
+	if err := SaveModels(modelsPath, llmForStorage); err != nil {
+		return err
 	}
 	resolvedSandbox := cfg.Sandbox.Resolved()
 	loadedRaw := cfg.raw.resolvedOrZero()
@@ -751,30 +787,6 @@ base_url = %q
 			fmt.Fprintf(&b, "non_suspicious_only = %t\n", resolvedSkill.NonSuspiciousOnly)
 		}
 	}
-	if writeModels {
-		llmCfg := cfg.effectiveLLMConfig()
-		defaultSelector := llmCfg.DefaultSelector()
-		fmt.Fprintf(&b, `
-[models]
-default = %q
-`, cfg.rawOrResolvedString(cfg.raw.modelsDefault, loadedRaw.modelsDefault, defaultSelector))
-
-		for _, name := range sortedProviderNames(llmCfg.Providers) {
-			provider := llmCfg.Providers[name].Resolved()
-			rawProvider := cfg.raw.models[name]
-			loadedProvider := loadedRaw.models[name]
-			fmt.Fprintf(&b, `
-[models.providers.%s]
-base_url = %q
-api_key = %q
-models = %s
-`, name, cfg.rawOrResolvedString(rawProvider.BaseURL, loadedProvider.BaseURL, provider.BaseURL), cfg.rawOrResolvedString(rawProvider.APIKey, loadedProvider.APIKey, provider.APIKey), formatStringArray(cfg.rawOrResolvedStringArray(rawProvider.Models, loadedProvider.Models, provider.Models)))
-			if provider.ReasoningEffort != "" {
-				fmt.Fprintf(&b, "reasoning_effort = %q\n", cfg.rawOrResolvedString(rawProvider.ReasoningEffort, loadedProvider.ReasoningEffort, provider.ReasoningEffort))
-			}
-		}
-	}
-
 	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
@@ -785,7 +797,10 @@ func (c Config) NeedsMigrationRewrite() bool {
 	// Transitional compatibility for legacy slash-separated bootstrap template refs.
 	// After old configs are no longer supported in the field, remove this rewrite
 	// trigger together with the slash-to-dot normalization path.
-	return c.raw.bootstrapMeta.LegacyManagerTemplateSlash || c.raw.bootstrapMeta.LegacyWorkerTemplateSlash
+	return c.raw.bootstrapMeta.LegacyManagerTemplateSlash ||
+		c.raw.bootstrapMeta.LegacyWorkerTemplateSlash ||
+		strings.TrimSpace(c.raw.modelsDefault) != "" ||
+		len(c.raw.models) > 0
 }
 
 func (c Config) hasStaticLLMConfig() bool {
@@ -798,6 +813,19 @@ func (c Config) hasStaticLLMConfig() bool {
 		strings.TrimSpace(model.APIKey) != "" ||
 		strings.TrimSpace(model.ModelID) != "" ||
 		strings.TrimSpace(model.ReasoningEffort) != ""
+}
+
+func (c Config) llmConfigForStorage() LLMConfig {
+	switch {
+	case !c.Models.IsZero():
+		return c.Models.Normalized()
+	case !c.LLM.IsZero():
+		return c.LLM.Normalized()
+	case c.hasStaticLLMConfig():
+		return SingleProfileLLM(c.Model).Normalized()
+	default:
+		return newLLMConfig()
+	}
 }
 
 func modelsProviderSectionName(section string) (string, bool) {
@@ -899,6 +927,14 @@ func parseRawStringValue(raw string) string {
 	return strings.Trim(strings.TrimSpace(raw), `"`)
 }
 
+func parseQuotedStringValue(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if value, err := strconv.Unquote(raw); err == nil {
+		return expandEnv(value)
+	}
+	return parseStringValue(raw)
+}
+
 func findRawHubRegistry(registries []rawHubRegistryConfig, name string) rawHubRegistryConfig {
 	name = strings.TrimSpace(name)
 	for _, registry := range registries {
@@ -977,6 +1013,30 @@ func formatStringArray(values []string) string {
 	return "[" + strings.Join(quoted, ", ") + "]"
 }
 
+func parseHeadersJSON(value string) (map[string]string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	var decoded map[string]string
+	if err := json.Unmarshal([]byte(value), &decoded); err != nil {
+		return nil, err
+	}
+	return normalizeHeaderMap(decoded), nil
+}
+
+func formatHeadersJSON(values map[string]string) string {
+	values = normalizeHeaderMap(values)
+	if len(values) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(values)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
 func normalizeSandboxProvider(provider string) string {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	switch provider {
@@ -1012,6 +1072,28 @@ func normalizeStringList(values []string) []string {
 		}
 		seen[value] = struct{}{}
 		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func normalizeHeaderMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		if key == "" || strings.EqualFold(key, "authorization") || strings.EqualFold(key, "content-type") {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out[key] = value
 	}
 	if len(out) == 0 {
 		return nil
@@ -1153,11 +1235,17 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 	for name, rawProvider := range c.raw.models {
 		provider := c.Models.Providers[name].Resolved()
 		loadedProvider := rawProviderConfig{}
+		if rawProvider.DisplayName != "" {
+			loadedProvider.DisplayName = provider.DisplayName
+		}
 		if rawProvider.BaseURL != "" {
 			loadedProvider.BaseURL = provider.BaseURL
 		}
 		if rawProvider.APIKey != "" {
 			loadedProvider.APIKey = provider.APIKey
+		}
+		if rawProvider.HeadersJSON != "" {
+			loadedProvider.HeadersJSON = formatHeadersJSON(provider.Headers)
 		}
 		if len(rawProvider.Models) > 0 {
 			loadedProvider.Models = append([]string(nil), provider.Models...)

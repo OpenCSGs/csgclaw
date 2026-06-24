@@ -19,6 +19,7 @@ import {
 } from "@/shared/constants/agents";
 import { avatarFallbackText } from "@/shared/avatar";
 import type { LocaleCode } from "@/models/conversations";
+import { providerIDForProvider, providerNameForProviderID, selectorForProviderModel } from "@/models/modelProviders";
 
 export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | string;
 export type BotType = typeof BOT_TYPE_NORMAL | typeof BOT_TYPE_NOTIFICATION | string;
@@ -68,6 +69,7 @@ export type AgentProfileLike = {
   headers?: JSONRecord | null;
   image_upgrade_required?: boolean | null;
   model_id?: string | null;
+  model_provider_id?: string | null;
   profile_complete?: boolean | null;
   provider?: ProviderName | null;
   reasoning_effort?: string | null;
@@ -153,6 +155,7 @@ export type AgentDraft = {
   headersText: string;
   image?: string;
   model_id: string;
+  model_provider_id?: string;
   name?: string;
   notifier_delivery_complete?: boolean;
   notifier_delivery_mode?: string;
@@ -856,9 +859,11 @@ export function profileToDraft(profile: AgentProfileLike | null | undefined, age
   const notifier = notifierFlatFromSources(profile, agent);
   const { notifier: _notifier, ...requestOptionsWithoutNotifier } = requestOptions;
   const notifierProfile = notifierProfileSummaryFlags(profile, agent);
+  const modelProviderID = String(profile?.model_provider_id || "").trim() || providerIDForProvider(profile?.provider);
   return {
     runtime_kind: normalizeRuntimeKind(profile?.runtime_kind),
-    provider: profile?.provider || DEFAULT_PROVIDER,
+    provider: profile?.provider || providerNameForProviderID(modelProviderID) || DEFAULT_PROVIDER,
+    model_provider_id: modelProviderID,
     base_url: profile?.base_url || "",
     api_key: "",
     api_key_set: Boolean(profile?.api_key_set),
@@ -888,6 +893,7 @@ export function modelRequestKey(draft: Partial<AgentDraft> | null | undefined): 
   return JSON.stringify({
     agent_id: draft.agent_id || "",
     provider: draft.provider || "",
+    model_provider_id: draft.model_provider_id || "",
     base_url: draft.base_url || "",
     api_key: draft.api_key || "",
     headersText: draft.headersText || "",
@@ -1043,17 +1049,18 @@ export function applyTemplateToDraft(
 
 export function draftToProfile(draft: AgentDraft, options: DraftProfileOptions = {}): JSONRecord {
   const requestOptions = parseJSONMap(draft.requestOptionsText);
-  const usesAPIProvider = draft.provider === "api";
+  const modelProviderID = String(draft.model_provider_id || "").trim();
   return {
     name: options.name || draft.name || MANAGER_AGENT_NAME,
     description: options.description || draft.description || DEFAULT_MANAGER_DESCRIPTION,
-    provider: draft.provider,
-    base_url: usesAPIProvider ? draft.base_url : "",
-    api_key: usesAPIProvider ? draft.api_key : "",
+    provider: modelProviderID ? providerNameForProviderID(modelProviderID) : draft.provider,
+    model_provider_id: modelProviderID,
+    base_url: "",
+    api_key: "",
     model_id: draft.model_id,
     reasoning_effort: draft.reasoning_effort || DEFAULT_REASONING_EFFORT,
     enable_fast_mode: Boolean(draft.enable_fast_mode),
-    headers: usesAPIProvider ? parseJSONMap(draft.headersText) : {},
+    headers: {},
     request_options: requestOptions,
     env: envRowsToMap(draft.envRows),
   };
@@ -1301,15 +1308,16 @@ export function isAgentProfileDraftComplete(draft: Partial<AgentDraft> | null | 
   if (!String(draft?.model_id ?? "").trim()) {
     return false;
   }
-  if (draft?.provider === "api") {
-    if (!String(draft.base_url ?? "").trim()) {
-      return false;
-    }
-    if (!String(draft.api_key ?? "").trim() && !draft.api_key_set) {
-      return false;
-    }
+  const modelProviderID = String(draft?.model_provider_id ?? "").trim();
+  return Boolean(modelProviderID);
+}
+
+export function profileSelectorFromDraft(draft: Partial<AgentDraft> | null | undefined): string {
+  const providerID = String(draft?.model_provider_id ?? "").trim();
+  if (!providerID) {
+    return "";
   }
-  return true;
+  return selectorForProviderModel(providerID, String(draft?.model_id ?? "").trim());
 }
 
 export function llmProfilePayloadForCompare(draft: AgentDraft | null | undefined): string {
@@ -1323,6 +1331,7 @@ export function llmProfilePayloadForCompare(draft: AgentDraft | null | undefined
   });
   return JSON.stringify({
     provider: profile.provider,
+    model_provider_id: profile.model_provider_id,
     base_url: profile.base_url,
     api_key: profile.api_key,
     model_id: profile.model_id,

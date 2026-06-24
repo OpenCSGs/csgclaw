@@ -131,7 +131,14 @@ export function useWorkspaceHubSelection({
     if (selectedHubSkillName) {
       await refetchSkillTree();
     }
-  }, [refetchHubTemplateDetail, refetchSkillTree, refetchSkills, refreshTemplates, selectedHubSkillName, selectedHubTemplateId]);
+  }, [
+    refetchHubTemplateDetail,
+    refetchSkillTree,
+    refetchSkills,
+    refreshTemplates,
+    selectedHubSkillName,
+    selectedHubTemplateId,
+  ]);
 
   return {
     templates: hubTemplates,

@@ -11,6 +11,7 @@ import type {
 } from "@/models/conversations";
 import type { AuthStatus } from "@/models/auth";
 import type { HubTemplate } from "@/models/hubWorkspace";
+import type { ModelProvider, ModelProviderCatalog } from "@/models/modelProviders";
 import type { SkillSummary } from "@/models/skillhub";
 import type { CollapsedWorkspaceGroups, WorkspacePane, WorkspaceTab } from "@/models/routing";
 import type { WorkspaceTask, WorkspaceTeam } from "@/models/tasks";
@@ -37,9 +38,12 @@ export type WorkspaceSidebarProps = {
   hub: WorkspaceHubController["hub"];
   isSidebarCollapsed: boolean;
   locale: LocaleCode;
+  modelProviders?: ModelProviderCatalog | null;
+  modelProvidersLoaded?: boolean;
   notificationAgentItems: AgentLike[];
   onCollapseSidebar: () => void;
   onCreateAgent: () => void | Promise<void>;
+  onCreateModelProvider?: () => void | Promise<void>;
   onCreateTeam: (payload: CreateTeamPayload) => Promise<void>;
   onOpenCreateTeam: () => void | Promise<void>;
   onOpenCreateTask: () => void | Promise<void>;
@@ -59,6 +63,7 @@ export type WorkspaceSidebarProps = {
   onSelectHub: () => void;
   onSelectHubSkill: (item: SkillSummary | null | undefined) => void;
   onSelectHubTemplate: (item: HubTemplate | null | undefined) => void;
+  onSelectModelProvider?: (item: ModelProvider | null | undefined) => void;
   onSelectTeam: (item: WorkspaceTeam | null | undefined) => void;
   onSelectTask: (taskID?: string) => void;
   onSelectThread: (conversationID: string, message: IMMessage | null | undefined) => void | Promise<void>;

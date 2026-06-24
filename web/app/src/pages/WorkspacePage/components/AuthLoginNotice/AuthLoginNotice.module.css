@@ -20,7 +20,11 @@
   border: 1px solid color-mix(in oklab, var(--line) 75%, var(--surface) 25%);
   border-radius: 14px;
   background:
-    linear-gradient(125deg, color-mix(in oklab, var(--surface) 88%, white 12%), color-mix(in oklab, var(--surface) 96%, black 4%)),
+    linear-gradient(
+      125deg,
+      color-mix(in oklab, var(--surface) 88%, white 12%),
+      color-mix(in oklab, var(--surface) 96%, black 4%)
+    ),
     var(--surface);
   color: var(--text);
   box-shadow:
@@ -41,13 +45,12 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    linear-gradient(
-      120deg,
-      color-mix(in oklab, var(--portal-success-50) 22%, transparent),
-      transparent 55%,
-      color-mix(in oklab, var(--portal-brand-100) 22%, transparent)
-    );
+  background: linear-gradient(
+    120deg,
+    color-mix(in oklab, var(--portal-success-50) 22%, transparent),
+    transparent 55%,
+    color-mix(in oklab, var(--portal-brand-100) 22%, transparent)
+  );
   opacity: 0.3;
 }
 

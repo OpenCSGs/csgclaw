@@ -813,6 +813,14 @@
   height: 17px;
 }
 
+.workspace-row-icon img {
+  width: 22px;
+  height: 22px;
+  display: block;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
 .workspace-row-icon.avatar-icon {
   background: var(--avatar-default-bg);
   color: var(--avatar-default-fg);
@@ -879,6 +887,21 @@
   flex: 0 0 auto;
   border-radius: 999px;
   background: oklch(0.48 0.02 248);
+}
+
+.workspace-status-dot.neutral {
+  background: var(--portal-gray-300);
+}
+
+.workspace-status-dot.warning {
+  background: var(--portal-warning-700);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--portal-warning-700) 14%, transparent);
+}
+
+.workspace-provider-divider {
+  height: 1px;
+  margin: 5px 10px;
+  background: var(--line);
 }
 
 .template-source-badge {
@@ -3143,6 +3166,14 @@
 .workspace-row-icon .svg-icon {
   width: 15px;
   height: 15px;
+}
+
+.workspace-row-icon img {
+  width: 22px;
+  height: 22px;
+  display: block;
+  border-radius: 7px;
+  object-fit: cover;
 }
 
 .workspace-row-icon.avatar-icon {

@@ -47,6 +47,7 @@ type AgentProfile struct {
 	Name                 string            `json:"name,omitempty"`
 	Description          string            `json:"description,omitempty"`
 	Provider             string            `json:"provider,omitempty"`
+	ModelProviderID      string            `json:"model_provider_id,omitempty"`
 	BaseURL              string            `json:"base_url,omitempty"`
 	APIKey               string            `json:"api_key,omitempty"`
 	Headers              map[string]string `json:"headers,omitempty"`
@@ -64,6 +65,7 @@ type AgentProfileView struct {
 	Name                 string                   `json:"name,omitempty"`
 	Description          string                   `json:"description,omitempty"`
 	Provider             string                   `json:"provider,omitempty"`
+	ModelProviderID      string                   `json:"model_provider_id,omitempty"`
 	BaseURL              string                   `json:"base_url,omitempty"`
 	APIKeySet            bool                     `json:"api_key_set,omitempty"`
 	APIKeyPreview        string                   `json:"api_key_preview,omitempty"`
@@ -109,7 +111,11 @@ func normalizeProfile(profile AgentProfile, fallbackName, fallbackDescription st
 	if out.Description == "" {
 		out.Description = strings.TrimSpace(fallbackDescription)
 	}
+	out.ModelProviderID = NormalizeModelProviderID(out.ModelProviderID)
 	out.Provider = normalizeProfileProvider(out.Provider)
+	if out.ModelProviderID != "" {
+		out.Provider = ProfileProviderForModelProviderID(out.ModelProviderID)
+	}
 	out.BaseURL = strings.TrimRight(strings.TrimSpace(out.BaseURL), "/")
 	out.APIKey = strings.TrimSpace(out.APIKey)
 	out.ModelID = strings.TrimSpace(out.ModelID)
@@ -154,6 +160,9 @@ func normalizeProfileProvider(provider string) string {
 func profileIsComplete(profile AgentProfile) bool {
 	if strings.TrimSpace(profile.Name) == "" {
 		return false
+	}
+	if strings.TrimSpace(profile.ModelProviderID) != "" {
+		return strings.TrimSpace(profile.ModelID) != ""
 	}
 	switch normalizeProfileProvider(profile.Provider) {
 	case ProviderAPI:
@@ -234,6 +243,7 @@ func profileViewWithAgentRuntimeOptions(profile AgentProfile, _ map[string]any, 
 		Name:                 profile.Name,
 		Description:          profile.Description,
 		Provider:             profile.Provider,
+		ModelProviderID:      profile.ModelProviderID,
 		BaseURL:              profile.BaseURL,
 		APIKeySet:            strings.TrimSpace(profile.APIKey) != "",
 		APIKeyPreview:        apiKeyPreview(profile.APIKey),
@@ -281,7 +291,10 @@ func RedactedProfileView(profile AgentProfile, detection []ProfileDetectionResul
 }
 
 func profileSelector(profile AgentProfile) string {
-	provider := normalizeProfileProvider(profile.Provider)
+	provider := NormalizeModelProviderID(profile.ModelProviderID)
+	if provider == "" {
+		provider = normalizeProfileProvider(profile.Provider)
+	}
 	modelID := strings.TrimSpace(profile.ModelID)
 	if provider == "" || modelID == "" {
 		return ""
@@ -301,15 +314,28 @@ func profileFromLegacy(name, description, provider, modelID, reasoning string) A
 
 func profileFromConfigModel(name, description string, model config.ModelConfig) AgentProfile {
 	model = model.Resolved()
-	return normalizeProfile(AgentProfile{
+	modelProviderID := ""
+	if providerID, modelID, ok := splitModelProviderSelector(name); ok && modelID == model.ModelID {
+		modelProviderID = providerID
+	}
+	profile := normalizeProfile(AgentProfile{
 		Name:            name,
 		Description:     description,
 		Provider:        model.Provider,
+		ModelProviderID: modelProviderID,
 		BaseURL:         model.BaseURL,
 		APIKey:          model.APIKey,
 		ModelID:         model.ModelID,
 		ReasoningEffort: model.ReasoningEffort,
 	}, name, description)
+	if modelProviderID != "" {
+		profile.Provider = ProfileProviderForModelProviderID(modelProviderID)
+		profile.BaseURL = ""
+		profile.APIKey = ""
+		profile.Headers = nil
+		profile.ProfileComplete = profileIsComplete(profile)
+	}
+	return profile
 }
 
 func modelConfigFromProfile(profile AgentProfile) config.ModelConfig {
@@ -328,6 +354,14 @@ func profileBaseURL(profile AgentProfile) string {
 	case ProviderAPI:
 		return strings.TrimRight(strings.TrimSpace(profile.BaseURL), "/")
 	case ProviderCSGHubLite:
+		if NormalizeModelProviderID(profile.ModelProviderID) == ModelProviderIDCSGHubLite {
+			if baseURL := strings.TrimRight(strings.TrimSpace(profile.BaseURL), "/"); baseURL != "" {
+				return baseURL
+			}
+		}
+		if baseURL := strings.TrimRight(strings.TrimSpace(profile.BaseURL), "/"); baseURL != "" && strings.EqualFold(strings.TrimSpace(profile.Provider), ModelProviderIDCSGHubLite) {
+			return baseURL
+		}
 		return defaultCSGHubLiteBaseURL
 	case ProviderCSGHub:
 		return ""
@@ -347,6 +381,14 @@ func profileAPIKey(profile AgentProfile) string {
 	case ProviderAPI:
 		return strings.TrimSpace(profile.APIKey)
 	case ProviderCSGHubLite:
+		if NormalizeModelProviderID(profile.ModelProviderID) == ModelProviderIDCSGHubLite {
+			if apiKey := strings.TrimSpace(profile.APIKey); apiKey != "" {
+				return apiKey
+			}
+		}
+		if apiKey := strings.TrimSpace(profile.APIKey); apiKey != "" && strings.EqualFold(strings.TrimSpace(profile.Provider), ModelProviderIDCSGHubLite) {
+			return apiKey
+		}
 		return defaultCSGHubLiteAPIKey
 	case ProviderCSGHub:
 		return ""

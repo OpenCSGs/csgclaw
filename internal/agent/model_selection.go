@@ -46,6 +46,11 @@ func (s *Service) inferProfileForAgent(got Agent) string {
 }
 
 func (s *Service) modelConfigForAgent(got Agent) (string, config.ModelConfig, error) {
+	if selector := profileSelector(got.AgentProfile); selector != "" {
+		if profile := s.hydrateProfileFromCatalog(got.AgentProfile); profile.ModelProviderID != "" && profile.ProfileComplete {
+			return selector, modelConfigFromProfile(profile), nil
+		}
+	}
 	profile := s.inferProfileForAgent(got)
 	if profile == "" {
 		return "", config.ModelConfig{}, fmt.Errorf("no llm profile could be resolved for agent %q", strings.TrimSpace(got.ID))

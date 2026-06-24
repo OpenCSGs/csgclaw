@@ -32,6 +32,198 @@
   font-weight: 650;
 }
 
+.create-model-provider-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100dvh - 40px));
+  overflow: hidden;
+  padding: 0;
+}
+
+.create-model-provider-modal .modal-header {
+  align-items: flex-start;
+  flex: 0 0 auto;
+  min-height: auto;
+  padding: 18px 28px 16px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in oklab, var(--panel) 94%, transparent);
+}
+
+.create-model-provider-modal .modal-header > div:first-child {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 10px;
+  min-width: 0;
+}
+
+.create-model-provider-modal .modal-title {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.create-model-provider-body {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 16px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin: 0;
+  padding: 18px 28px;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.create-model-provider-body::-webkit-scrollbar {
+  width: 8px;
+  height: 0;
+}
+
+.create-model-provider-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.create-model-provider-body::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 6px;
+}
+
+.create-model-provider-body.is-scrolling {
+  scrollbar-color: var(--portal-gray-400) transparent;
+}
+
+.create-model-provider-body.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: var(--portal-gray-400);
+}
+
+.create-model-provider-body .field {
+  margin-top: 0;
+}
+
+.create-model-provider-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--field) 74%, transparent);
+  box-shadow: var(--shadow-xs);
+}
+
+.create-model-provider-section-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.create-model-provider-section-heading > div {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 740;
+  letter-spacing: 0;
+  line-height: 20px;
+}
+
+.create-model-provider-section-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 540;
+  line-height: 17px;
+}
+
+.create-model-provider-identity {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.create-model-provider-avatar-field {
+  display: grid;
+  grid-template-rows: 22px 44px;
+  gap: 8px;
+}
+
+.create-model-provider-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow-xs);
+}
+
+.create-model-provider-avatar img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.create-model-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.create-model-provider-span-2 {
+  grid-column: 1 / -1;
+}
+
+.create-model-provider-modal .field input,
+.create-model-provider-modal .field textarea {
+  min-height: 44px;
+  font-size: 14px;
+}
+
+.create-model-provider-modal .field .model-provider-model-search input {
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+}
+
+.create-model-provider-modal .field .model-provider-model-search input:hover,
+.create-model-provider-modal .field .model-provider-model-search input:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.create-model-provider-modal .field textarea {
+  min-height: 112px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 20px;
+  resize: vertical;
+}
+
+.create-model-provider-modal .form-error {
+  margin: 0;
+  border-color: color-mix(in oklab, var(--portal-error-700) 34%, var(--line));
+  background: color-mix(in oklab, var(--portal-error-500) 11%, var(--panel));
+  color: var(--portal-error-500);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.create-model-provider-modal .modal-actions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 0;
+  padding: 18px 28px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in oklab, var(--panel) 94%, transparent);
+}
+
 .create-room-modal {
   --create-room-modal-bg: var(--portal-white);
   --create-room-title-color: var(--portal-gray-900);
@@ -917,6 +1109,32 @@
   align-items: start;
 }
 
+.profile-runtime-grid.agent-model-config-grid {
+  grid-template-columns: minmax(180px, 1.05fr) minmax(240px, 1.4fr) minmax(150px, 0.9fr) minmax(190px, 0.9fr);
+}
+
+.profile-runtime-grid.agent-model-config-grid > .field {
+  display: grid;
+  grid-template-rows: 22px 60px;
+  gap: 7px;
+}
+
+.profile-runtime-grid.agent-model-config-grid .csg-select-trigger,
+.profile-runtime-grid.agent-model-config-grid .agent-fast-mode-toggle {
+  height: 60px;
+  min-height: 60px;
+}
+
+.profile-runtime-grid.agent-model-config-grid .csg-select-trigger {
+  align-items: center;
+}
+
+.profile-runtime-grid.agent-model-config-grid .csg-select-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
 .profile-runtime-grid > .field,
 .profile-runtime-grid > .selection-item {
   width: 100%;
@@ -1327,21 +1545,32 @@
   cursor: pointer;
 }
 
+.profile-modal.agent-modal .agent-model-config-grid .agent-fast-mode-field .compact-toggle-row {
+  align-items: center;
+  height: 60px;
+  min-height: 60px;
+}
+
 .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"] {
   appearance: none;
   display: grid;
   place-items: center;
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
-  min-height: 16px;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
   margin: 2px 0 0;
   padding: 0;
-  border: 1px solid var(--portal-gray-300);
-  border-radius: 4px;
+  border: 1.5px solid var(--portal-gray-300);
+  border-radius: 5px;
   background: var(--portal-white);
   box-shadow: var(--shadow-xs);
   cursor: pointer;
+}
+
+.profile-modal.agent-modal .agent-model-config-grid .agent-fast-mode-field input[type="checkbox"] {
+  margin-top: 0;
 }
 
 .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:hover {
@@ -1361,7 +1590,7 @@
 
 .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:checked::after {
   width: 5px;
-  height: 8px;
+  height: 9px;
   border: solid var(--portal-white);
   border-width: 0 2px 2px 0;
   content: "";
@@ -1505,6 +1734,62 @@
   font-size: 14px;
   font-weight: 300;
   line-height: 22px;
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-header {
+  background: var(--panel);
+  border-bottom-color: rgba(208, 213, 221, 0.14);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-title {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-subtitle {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-header .modal-close {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-header .modal-close:hover:not(:disabled),
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-header .modal-close:active:not(:disabled),
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-header .modal-close:focus-visible {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab {
+  border-color: rgba(208, 213, 221, 0.18);
+  background: color-mix(in oklab, var(--field) 88%, transparent);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:hover,
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:focus-visible {
+  border-color: rgba(101, 132, 248, 0.44);
+  background: color-mix(in oklab, var(--field) 84%, var(--primary) 8%);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab.active {
+  border-color: rgba(101, 132, 248, 0.72);
+  background: rgba(77, 106, 214, 0.2);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy strong,
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .agent-create-kind-tabbar
+  .workspace-tab.active
+  .workspace-tab-copy
+  strong {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy small {
+  color: var(--muted);
 }
 
 .profile-section {
@@ -1660,6 +1945,77 @@
   color: var(--portal-brand-700);
 }
 
+.agent-fast-mode-toggle input[type="checkbox"] {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid var(--portal-gray-400);
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+}
+
+.agent-fast-mode-toggle input[type="checkbox"]:checked {
+  border-color: var(--portal-brand-600);
+  background: var(--portal-brand-600);
+}
+
+.agent-fast-mode-toggle input[type="checkbox"]:checked::after {
+  width: 5px;
+  height: 9px;
+  border: solid var(--portal-white);
+  border-width: 0 2px 2px 0;
+  content: "";
+  transform: translateY(-1px) rotate(45deg);
+}
+
+.agent-fast-mode-toggle input[type="checkbox"]:focus-visible {
+  border-color: var(--portal-brand-300);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row.agent-fast-mode-toggle,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-fast-mode-toggle {
+  border-color: rgba(208, 213, 221, 0.18);
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row.agent-fast-mode-toggle:hover,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-fast-mode-toggle:hover,
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row.agent-fast-mode-toggle:focus-within,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-fast-mode-toggle:focus-within {
+  border-color: rgba(101, 132, 248, 0.52);
+  background: #182230;
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row.agent-fast-mode-toggle:has(input:checked),
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-fast-mode-toggle:has(input:checked) {
+  border-color: rgba(101, 132, 248, 0.72);
+  background: rgba(77, 106, 214, 0.2);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .agent-fast-mode-toggle input[type="checkbox"] {
+  border-color: rgba(208, 213, 221, 0.36);
+  background: #101828;
+}
+
+:root[data-theme="dark"] .agent-fast-mode-toggle input[type="checkbox"]:checked {
+  border-color: #84adff;
+  background: #6384f8;
+}
+
 :root[data-theme="dark"] .modal-card .field input:hover,
 :root[data-theme="dark"] .modal-card .field textarea:hover,
 :root[data-theme="dark"] .modal-card .field select:hover,
@@ -1765,6 +2121,7 @@
 
 .modal-card .profile-advanced-grid,
 .profile-section .profile-advanced-grid {
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 12px;
 }

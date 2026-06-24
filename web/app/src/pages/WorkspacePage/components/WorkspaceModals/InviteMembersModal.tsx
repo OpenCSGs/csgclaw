@@ -107,7 +107,10 @@ export function InviteMembersModal({
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-card invite-members-modal member-management-modal" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="modal-card invite-members-modal member-management-modal"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="modal-header">
           <div>
             <div className="modal-title">{t("memberManagementTitle")}</div>

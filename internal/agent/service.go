@@ -392,6 +392,23 @@ func NewServiceWithLLM(llmCfg config.LLMConfig, server config.ServerConfig, mana
 	return svc, nil
 }
 
+func (s *Service) SetLLMConfig(llmCfg config.LLMConfig) {
+	if s == nil {
+		return
+	}
+	llmCfg = llmCfg.Normalized()
+	defaultSelector, defaultModel, err := llmCfg.Resolve("")
+	s.mu.Lock()
+	s.llm = llmCfg
+	if err == nil {
+		s.model = defaultModel
+		if strings.TrimSpace(s.profileDefaults.ModelProviderID) != "" || strings.TrimSpace(s.profileDefaults.Provider) == "" {
+			s.profileDefaults = profileFromConfigModel(defaultSelector, "", defaultModel)
+		}
+	}
+	s.mu.Unlock()
+}
+
 func EnsureBootstrapState(ctx context.Context, statePath string, server config.ServerConfig, model config.ModelConfig, managerImage string, forceRecreate bool) error {
 	return EnsureBootstrapStateWithLLM(ctx, statePath, server, config.SingleProfileLLM(model), managerImage, forceRecreate)
 }
@@ -419,6 +436,7 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	svc.mu.RLock()
 	if manager, ok := svc.agents[ManagerUserID]; ok {
 		profile := normalizeProfileForAgentRuntime(manager.AgentProfile, manager.RuntimeOptions, manager.Name, manager.Description, manager.RuntimeKind, nil)
+		profile = svc.hydrateProfileFromCatalogLocked(profile)
 		if profile.ProfileComplete {
 			modelCfg = modelConfigFromProfile(profile)
 		}
@@ -1274,7 +1292,8 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 	if got.AgentProfile.EnvRestartRequired || got.AgentProfile.ImageUpgradeRequired {
 		return s.Recreate(ctx, id)
 	}
-	if err := s.validateRuntimeConfig(ctx, strings.TrimSpace(got.RuntimeKind), runtimeConfigSnapshotForAgent(got.AgentProfile, got.RuntimeOptions)); err != nil {
+	startProfile := s.hydrateProfileFromCatalog(normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil))
+	if err := s.validateRuntimeConfig(ctx, strings.TrimSpace(got.RuntimeKind), runtimeConfigSnapshotForAgent(startProfile, got.RuntimeOptions)); err != nil {
 		return Agent{}, err
 	}
 
@@ -1592,10 +1611,11 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	if err != nil {
 		return Agent{}, err
 	}
-	if err := s.validateRuntimeConfig(ctx, runtimeKind, runtimeConfigSnapshotForAgent(resolvedProfile, spec.RuntimeOptions)); err != nil {
+	runtimeResolvedProfile := s.hydrateProfileFromCatalog(resolvedProfile)
+	if err := s.validateRuntimeConfig(ctx, runtimeKind, runtimeConfigSnapshotForAgent(runtimeResolvedProfile, spec.RuntimeOptions)); err != nil {
 		return Agent{}, err
 	}
-	runtimeProfile := s.runtimeProfileForKind(runtimeKind, id, name, description, resolvedProfile)
+	runtimeProfile := s.runtimeProfileForKind(runtimeKind, id, name, description, runtimeResolvedProfile)
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
 		RuntimeID:        runtimeIDForAgentID(id),
 		AgentID:          id,
@@ -1618,7 +1638,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		defer func() {
 			_ = s.closeRuntime(runtimeHome, rt)
 		}()
-		box, info, err := s.createGatewayBox(ctx, rt, image, name, id, resolvedProfile)
+		box, info, err := s.createGatewayBox(ctx, rt, image, name, id, runtimeResolvedProfile)
 		if err != nil {
 			return Agent{}, fmt.Errorf("create worker box: %w", err)
 		}

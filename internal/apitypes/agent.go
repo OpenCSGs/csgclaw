@@ -41,6 +41,7 @@ type CreateAgentProfile struct {
 	Name            string            `json:"name,omitempty"`
 	Description     string            `json:"description,omitempty"`
 	Provider        string            `json:"provider,omitempty"`
+	ModelProviderID string            `json:"model_provider_id,omitempty"`
 	BaseURL         string            `json:"base_url,omitempty"`
 	APIKey          string            `json:"api_key,omitempty"`
 	Headers         map[string]string `json:"headers,omitempty"`

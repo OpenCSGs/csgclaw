@@ -11,6 +11,8 @@ export function WorkspaceSidebar({
   onLocaleChange,
   t,
   agentItems,
+  modelProviders = null,
+  modelProvidersLoaded = false,
   workerAgentItems,
   notificationAgentItems,
   workspaceTab,
@@ -33,6 +35,7 @@ export function WorkspaceSidebar({
   onToggleWorkspaceGroup,
   onCreateRoom,
   onCreateAgent,
+  onCreateModelProvider,
   onCreateNotificationParticipant,
   onOpenCreateTeam,
   onOpenCreateTask,
@@ -48,6 +51,7 @@ export function WorkspaceSidebar({
   onSelectThread,
   onPreviewUser,
   onSelectAgent,
+  onSelectModelProvider,
   onSelectHuman,
   onPreviewAgent,
   onSelectComputer,
@@ -132,6 +136,7 @@ export function WorkspaceSidebar({
             onToggleWorkspaceGroup={onToggleWorkspaceGroup}
             onCreateRoom={onCreateRoom}
             onCreateAgent={onCreateAgent}
+            onCreateModelProvider={onCreateModelProvider}
             onCreateNotificationParticipant={onCreateNotificationParticipant}
             onOpenCreateTeam={onOpenCreateTeam}
             onOpenCreateTask={onOpenCreateTask}
@@ -147,9 +152,12 @@ export function WorkspaceSidebar({
             onPreviewUser={onPreviewUser}
             onSelectHuman={onSelectHuman}
             agentItems={agentItems}
+            modelProviders={modelProviders}
+            modelProvidersLoaded={modelProvidersLoaded}
             workerAgentItems={workerAgentItems}
             notificationAgentItems={notificationAgentItems}
             onSelectAgent={onSelectAgent}
+            onSelectModelProvider={onSelectModelProvider}
             onPreviewAgent={onPreviewAgent}
             onSelectComputer={onSelectComputer}
           />

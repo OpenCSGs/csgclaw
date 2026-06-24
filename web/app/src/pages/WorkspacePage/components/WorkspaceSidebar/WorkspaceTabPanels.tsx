@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { HubIcon, UsersIcon } from "@/components/ui/Icons";
 import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
+import { modelProviderAvatarPath, providerStatusTone, type ModelProvider } from "@/models/modelProviders";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { displayTaskTeam, displayTeam, resolveTaskSidebarPhase, rootTasks, taskChildren } from "@/models/tasks";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
@@ -34,6 +35,7 @@ const MessageSectionIds = {
 } as const;
 
 const AgentSectionIds = {
+  models: "models",
   agents: "agents",
   humans: "humans",
   teams: "teams",
@@ -69,8 +71,11 @@ type WorkspaceTabPanelsProps = Pick<
   | "directMessages"
   | "hub"
   | "locale"
+  | "modelProviders"
+  | "modelProvidersLoaded"
   | "notificationAgentItems"
   | "onCreateAgent"
+  | "onCreateModelProvider"
   | "onCreateNotificationParticipant"
   | "onCreateRoom"
   | "onOpenCreateTask"
@@ -83,6 +88,7 @@ type WorkspaceTabPanelsProps = Pick<
   | "onSelectHuman"
   | "onSelectHubSkill"
   | "onSelectHubTemplate"
+  | "onSelectModelProvider"
   | "onSelectTask"
   | "onSelectTeam"
   | "onSelectThread"
@@ -106,12 +112,21 @@ const LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS: readonly (readonly MessageSectionId
 
 const LEGACY_DEFAULT_AGENT_SECTION_ORDERS: readonly (readonly AgentSectionId[])[] = [
   [AgentSectionIds.agents, AgentSectionIds.teams, AgentSectionIds.computers, AgentSectionIds.notifications],
+  [
+    AgentSectionIds.models,
+    AgentSectionIds.agents,
+    AgentSectionIds.humans,
+    AgentSectionIds.computers,
+    AgentSectionIds.notifications,
+    AgentSectionIds.teams,
+  ],
 ];
 
 const DEFAULT_SECTION_ORDERS = {
   [SectionPanels.messages]: [MessageSectionIds.directMessages, MessageSectionIds.rooms, MessageSectionIds.threads],
   [SectionPanels.agents]: [
     AgentSectionIds.agents,
+    AgentSectionIds.models,
     AgentSectionIds.humans,
     AgentSectionIds.computers,
     AgentSectionIds.notifications,
@@ -349,11 +364,15 @@ export function WorkspaceTabPanels({
   onSelectHuman,
   onSelectHubSkill,
   agentItems,
+  modelProviders = null,
+  modelProvidersLoaded = false,
   workerAgentItems = agentItems,
   notificationAgentItems = [],
   onSelectAgent,
+  onSelectModelProvider = () => {},
   onPreviewAgent,
   onSelectComputer,
+  onCreateModelProvider,
 }: WorkspaceTabPanelsProps) {
   const [skillUploadOpen, setSkillUploadOpen] = useState(false);
   const hubTemplates = hub?.templates ?? [];
@@ -435,6 +454,7 @@ export function WorkspaceTabPanels({
       value === MessageSectionIds.rooms ||
       value === MessageSectionIds.directMessages ||
       value === MessageSectionIds.threads ||
+      value === AgentSectionIds.models ||
       value === AgentSectionIds.agents ||
       value === AgentSectionIds.humans ||
       value === AgentSectionIds.teams ||
@@ -550,7 +570,60 @@ export function WorkspaceTabPanels({
     );
   }
 
+  function renderModelProviderRow(provider: ModelProvider) {
+    const tone = providerStatusTone(provider.status, provider);
+    const modelCount = provider.models.length;
+    const metaParts = [
+      modelCount ? t("modelProviderModelCount", { count: modelCount }) : t("modelProviderNoModels"),
+      provider.message || (provider.status === "connected" ? t("modelProviderConnected") : ""),
+    ].filter(Boolean);
+    return (
+      <button
+        key={provider.id}
+        className={`workspace-row model-provider-row ${
+          activePane.type === WorkspacePaneTypes.modelProvider && activePane.id === provider.id ? "active" : ""
+        }`}
+        onClick={() => onSelectModelProvider(provider)}
+      >
+        <span className="workspace-row-icon">
+          <img src={modelProviderAvatarPath(provider)} alt="" aria-hidden="true" />
+        </span>
+        <span className="workspace-row-main">
+          <span className="workspace-row-title-line">
+            <span className="workspace-row-title truncate">{provider.display_name || provider.id}</span>
+            <span className={`workspace-status-dot ${tone}`} aria-hidden="true"></span>
+          </span>
+          <span className="workspace-row-meta truncate">{metaParts.join(" · ") || provider.kind}</span>
+        </span>
+      </button>
+    );
+  }
+
   function renderAgentSection(id: SectionId) {
+    if (id === AgentSectionIds.models) {
+      const providers = modelProviders?.providers ?? [];
+      const builtins = modelProviders?.builtinProviders ?? [];
+      const custom = modelProviders?.customProviders ?? [];
+      return (
+        <WorkspaceGroup
+          key={id}
+          id="models"
+          title={t("modelsSection")}
+          count={providers.length}
+          collapsed={Boolean(collapsedWorkspaceGroups.models)}
+          onToggle={() => onToggleWorkspaceGroup("models")}
+          onAdd={onCreateModelProvider}
+          addLabel={t("modelProviderAdd")}
+          addIcon={<Plus aria-hidden="true" size={16} />}
+          {...sectionDragProps(SectionPanels.agents, id)}
+        >
+          {!modelProvidersLoaded ? <div className="workspace-empty">{t("profileLoadingModels")}</div> : null}
+          {modelProvidersLoaded && builtins.map(renderModelProviderRow)}
+          {modelProvidersLoaded && custom.length ? <div className="workspace-provider-divider" /> : null}
+          {modelProvidersLoaded && custom.map(renderModelProviderRow)}
+        </WorkspaceGroup>
+      );
+    }
     if (id === AgentSectionIds.agents) {
       return (
         <WorkspaceGroup

@@ -63,6 +63,15 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Delete("/skills/{name}", h.deleteSkill)
 		r.Get("/skills/tree", h.getSkillTree)
 		r.Get("/skills/file", h.getSkillFile)
+		r.Route("/model-providers", func(r chi.Router) {
+			r.Get("/", h.handleModelProviders)
+			r.Post("/", h.handleModelProviders)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Put("/", h.handleModelProviderByID)
+				r.Delete("/", h.handleModelProviderByID)
+				r.Post("/check", h.checkModelProvider)
+			})
+		})
 		r.Route("/cliproxy/auth", func(r chi.Router) {
 			r.Get("/status", h.handleCLIProxyAuthStatus)
 			r.Post("/login", h.handleCLIProxyAuthLogin)

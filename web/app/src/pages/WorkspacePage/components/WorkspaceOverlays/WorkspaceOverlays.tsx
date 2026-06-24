@@ -4,6 +4,7 @@ import { FloatingChat } from "../FloatingChat";
 import { ProfilePreviewPopover } from "../ProfilePreviewPopover";
 import {
   AgentProfileModal,
+  CreateModelProviderModal,
   CreateRoomModal,
   CreateTeamModal,
   InviteMembersModal,
@@ -18,10 +19,17 @@ export function WorkspaceOverlays() {
 
   return (
     <>
-      <AuthLoginNotice notice={controller.authNotice} closeLabel={closeLabel} onDismiss={controller.onDismissAuthNotice} />
+      <AuthLoginNotice
+        notice={controller.authNotice}
+        closeLabel={closeLabel}
+        onDismiss={controller.onDismissAuthNotice}
+      />
       {controller.floatingChatProps ? <FloatingChat {...controller.floatingChatProps} /> : null}
       {controller.profilePreviewProps ? <ProfilePreviewPopover {...controller.profilePreviewProps} /> : null}
       {controller.createRoomModalProps ? <CreateRoomModal {...controller.createRoomModalProps} /> : null}
+      {controller.createModelProviderModalProps ? (
+        <CreateModelProviderModal {...controller.createModelProviderModalProps} />
+      ) : null}
       {controller.createTeamModalProps ? <CreateTeamModal {...controller.createTeamModalProps} /> : null}
       {controller.inviteMembersModalProps ? <InviteMembersModal {...controller.inviteMembersModalProps} /> : null}
       {controller.upgradeModalProps ? <UpgradeModal {...controller.upgradeModalProps} /> : null}

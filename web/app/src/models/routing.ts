@@ -10,6 +10,7 @@ export const WorkspacePaneTypes = {
   human: "human",
   team: "team",
   computer: "computer",
+  modelProvider: "model_provider",
   hub: "hub",
   task: "task",
 } as const;
@@ -47,6 +48,8 @@ export const WorkspaceRouteSegments = {
   human: "human",
   teams: "teams",
   team: "team",
+  models: "models",
+  model: "model",
   hub: "hub",
   templates: "templates",
   skills: "skills",
@@ -64,6 +67,7 @@ export const WorkspaceRouteSegments = {
 const agentRouteSegments = new Set<string>([WorkspaceRouteSegments.agents, WorkspaceRouteSegments.agent]);
 const humanRouteSegments = new Set<string>([WorkspaceRouteSegments.humans, WorkspaceRouteSegments.human]);
 const teamRouteSegments = new Set<string>([WorkspaceRouteSegments.teams, WorkspaceRouteSegments.team]);
+const modelRouteSegments = new Set<string>([WorkspaceRouteSegments.models, WorkspaceRouteSegments.model]);
 const conversationRouteSegments = new Set<string>([
   WorkspaceRouteSegments.channels,
   WorkspaceRouteSegments.channel,
@@ -118,6 +122,11 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
       ? { type: WorkspacePaneTypes.team, id }
       : { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
   }
+  if (modelRouteSegments.has(section)) {
+    return id
+      ? { type: WorkspacePaneTypes.modelProvider, id }
+      : { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
+  }
   if (section === WorkspaceRouteSegments.hub) {
     return { type: WorkspacePaneTypes.hub, id: DefaultWorkspacePaneIds.hub };
   }
@@ -155,6 +164,9 @@ export function pathForPane(
   }
   if (pane.type === WorkspacePaneTypes.team && pane.id) {
     return `/${WorkspaceRouteSegments.teams}/${encodeURIComponent(pane.id)}`;
+  }
+  if (pane.type === WorkspacePaneTypes.modelProvider && pane.id) {
+    return `/${WorkspaceRouteSegments.models}/${encodeURIComponent(pane.id)}`;
   }
   if (pane.type === WorkspacePaneTypes.hub) {
     if (pane.resourceType === "template" && pane.id) {
@@ -199,6 +211,7 @@ export function workspaceTabForPane(pane: WorkspacePane | null | undefined): Wor
     pane?.type === WorkspacePaneTypes.agent ||
     pane?.type === WorkspacePaneTypes.human ||
     pane?.type === WorkspacePaneTypes.team ||
+    pane?.type === WorkspacePaneTypes.modelProvider ||
     pane?.type === WorkspacePaneTypes.computer
   ) {
     return WorkspaceTabs.agents;

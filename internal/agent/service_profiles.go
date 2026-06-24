@@ -70,12 +70,14 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	}
 	previous := current
 	normalized := normalizeProfileForAgentRuntime(profile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, nil)
+	runtimePrevious := s.hydrateProfileFromCatalogLocked(previous.AgentProfile)
+	runtimeNormalized := s.hydrateProfileFromCatalogLocked(normalized)
 	runtimeKind := strings.TrimSpace(current.RuntimeKind)
 	runtimeRunning := isRuntimeRunning(current)
-	change := runtimeConfigChangeForAgent(previous.AgentProfile, normalized, previous.RuntimeOptions, current.RuntimeOptions)
+	change := runtimeConfigChangeForAgent(runtimePrevious, runtimeNormalized, previous.RuntimeOptions, current.RuntimeOptions)
 	s.mu.Unlock()
 
-	if normalized.ProfileComplete {
+	if runtimeNormalized.ProfileComplete {
 		if err := s.validateRuntimeConfig(context.Background(), runtimeKind, change.Current); err != nil {
 			return AgentProfileView{}, err
 		}
@@ -136,6 +138,7 @@ func gatewayProfileRuntimeRestartRequired(current Agent, next AgentProfile) bool
 
 func profileRuntimeInputsEqual(a, b AgentProfile) bool {
 	return strings.TrimSpace(a.Provider) == strings.TrimSpace(b.Provider) &&
+		strings.TrimSpace(a.ModelProviderID) == strings.TrimSpace(b.ModelProviderID) &&
 		strings.TrimRight(strings.TrimSpace(a.BaseURL), "/") == strings.TrimRight(strings.TrimSpace(b.BaseURL), "/") &&
 		strings.TrimSpace(a.APIKey) == strings.TrimSpace(b.APIKey) &&
 		strings.TrimSpace(a.ModelID) == strings.TrimSpace(b.ModelID) &&
@@ -148,6 +151,7 @@ func (s *Service) syncGatewayAfterProfileChange(ctx context.Context, id string, 
 	if s == nil || !normalized.ProfileComplete {
 		return nil
 	}
+	runtimeNormalized := s.hydrateProfileFromCatalog(normalized)
 	got, ok := s.Agent(id)
 	if !ok || !isGatewayRuntimeKind(strings.TrimSpace(got.RuntimeKind)) {
 		return nil
@@ -159,7 +163,7 @@ func (s *Service) syncGatewayAfterProfileChange(ctx context.Context, id string, 
 		return err
 	}
 	if gatewayProfileRuntimeRestartRequired(previous, normalized) {
-		return s.syncGatewayHostConfig(got, normalized)
+		return s.syncGatewayHostConfig(got, runtimeNormalized)
 	}
 	if restartRequired {
 		_, err := s.Recreate(ctx, id)
@@ -302,7 +306,26 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		}
 		current.Avatar = strings.TrimSpace(*req.Avatar)
 	}
+	if updateRequested("profile", req.Profile != nil) {
+		if req.Profile == nil {
+			s.mu.Unlock()
+			return Agent{}, fmt.Errorf("field_mask includes profile but request is missing profile")
+		}
+		current.Profile = strings.TrimSpace(*req.Profile)
+	}
 	agentProfileUpdated := updateRequested("agent_profile", req.AgentProfile != nil)
+	if !agentProfileUpdated && strings.TrimSpace(current.Profile) != "" {
+		if selected, ok := CatalogProviderModelConfig(s.llm, current.Profile); ok {
+			selected.Name = current.AgentProfile.Name
+			selected.Description = current.AgentProfile.Description
+			selected.ReasoningEffort = current.AgentProfile.ReasoningEffort
+			selected.EnableFastMode = current.AgentProfile.EnableFastMode
+			selected.RequestOptions = current.AgentProfile.RequestOptions
+			selected.Env = current.AgentProfile.Env
+			req.AgentProfile = &selected
+			agentProfileUpdated = true
+		}
+	}
 	if agentProfileUpdated || runtimeOptionsUpdated {
 		profileUpdated = true
 		profile := current.AgentProfile
@@ -332,7 +355,9 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 			current.RuntimeOptions = nextAgentRuntimeOptions(current.RuntimeKind, current.RuntimeOptions, mergedFlat)
 		}
 		normalized := normalizeProfileForAgentRuntime(profile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, mergedFlat)
-		change := runtimeConfigChangeForAgent(previous.AgentProfile, normalized, previous.RuntimeOptions, current.RuntimeOptions)
+		runtimePrevious := s.hydrateProfileFromCatalogLocked(previous.AgentProfile)
+		runtimeNormalized := s.hydrateProfileFromCatalogLocked(normalized)
+		change := runtimeConfigChangeForAgent(runtimePrevious, runtimeNormalized, previous.RuntimeOptions, current.RuntimeOptions)
 		restartRequired = profileRestartRequired(previous, normalized)
 		controllerRestartRequired, err := s.runtimeConfigRestartRequired(runtimeKind, change)
 		if err != nil {
@@ -348,7 +373,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		if current.ProfileComplete && strings.EqualFold(strings.TrimSpace(current.Status), "profile_incomplete") {
 			current.Status = string(sandbox.StateStopped)
 		}
-		if normalized.ProfileComplete {
+		if runtimeNormalized.ProfileComplete {
 			s.mu.Unlock()
 			if err := s.validateRuntimeConfig(ctx, runtimeKind, change.Current); err != nil {
 				return Agent{}, err
@@ -445,6 +470,39 @@ func runtimeConfigSnapshotForAgent(profile AgentProfile, options map[string]any)
 	}
 }
 
+func (s *Service) hydrateProfileFromCatalog(profile AgentProfile) AgentProfile {
+	if s == nil {
+		return profile
+	}
+	s.mu.RLock()
+	out := s.hydrateProfileFromCatalogLocked(profile)
+	s.mu.RUnlock()
+	return out
+}
+
+func (s *Service) hydrateProfileFromCatalogLocked(profile AgentProfile) AgentProfile {
+	if s == nil {
+		return profile
+	}
+	out := cloneProfile(profile)
+	providerID := NormalizeModelProviderID(out.ModelProviderID)
+	if providerID == "" {
+		return out
+	}
+	out.ModelProviderID = providerID
+	out.Provider = ProfileProviderForModelProviderID(providerID)
+	if provider, ok := ModelProviderConfigForProfile(s.llm, out); ok {
+		out.BaseURL = provider.BaseURL
+		out.APIKey = provider.APIKey
+		out.Headers = cloneStringMap(provider.Headers)
+		if strings.TrimSpace(out.ReasoningEffort) == "" && strings.TrimSpace(provider.ReasoningEffort) != "" {
+			out.ReasoningEffort = provider.ReasoningEffort
+		}
+	}
+	out.ProfileComplete = profileIsComplete(out)
+	return out
+}
+
 func (s *Service) validateRuntimeConfig(ctx context.Context, runtimeKind string, current agentruntime.RuntimeConfigSnapshot) error {
 	if s == nil {
 		return fmt.Errorf("agent service is required")
@@ -499,6 +557,8 @@ func (s *Service) reconcileRuntimeConfig(ctx context.Context, previous, current 
 	if !ok {
 		return nil
 	}
+	previous.AgentProfile = s.hydrateProfileFromCatalog(previous.AgentProfile)
+	current.AgentProfile = s.hydrateProfileFromCatalog(current.AgentProfile)
 	return controller.ReconcileConfig(ctx, runtimeHandleForAgent(current), runtimeConfigChangeForAgent(previous.AgentProfile, current.AgentProfile, previous.RuntimeOptions, current.RuntimeOptions))
 }
 
@@ -546,6 +606,7 @@ func (s *Service) ResolvedAgentProfile(agentID string) (AgentProfile, error) {
 		return AgentProfile{}, fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
 	}
 	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil)
+	profile = s.hydrateProfileFromCatalog(profile)
 	if !profile.ProfileComplete {
 		return AgentProfile{}, fmt.Errorf("agent %q profile is incomplete", strings.TrimSpace(agentID))
 	}
@@ -578,6 +639,7 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
 	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil)
+	profile = s.hydrateProfileFromCatalog(profile)
 	if !profile.ProfileComplete {
 		return Agent{}, fmt.Errorf("agent %q profile is incomplete", id)
 	}
@@ -724,6 +786,25 @@ func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgent
 	}
 
 	profile := spec.AgentProfile
+	if strings.TrimSpace(spec.Profile) != "" {
+		if selected, ok := CatalogProviderModelConfig(s.llm, spec.Profile); ok {
+			selected.Name = profile.Name
+			selected.Description = profile.Description
+			if strings.TrimSpace(selected.Name) == "" {
+				selected.Name = spec.Name
+			}
+			if strings.TrimSpace(selected.Description) == "" {
+				selected.Description = spec.Description
+			}
+			if strings.TrimSpace(profile.ReasoningEffort) != "" {
+				selected.ReasoningEffort = profile.ReasoningEffort
+			}
+			selected.EnableFastMode = profile.EnableFastMode
+			selected.RequestOptions = profile.RequestOptions
+			selected.Env = profile.Env
+			profile = selected
+		}
+	}
 	rk := strings.TrimSpace(spec.RuntimeKind)
 	if isGatewayRuntimeKind(rk) {
 		if strings.TrimSpace(profile.Provider) == "" || strings.TrimSpace(profile.ModelID) == "" {
@@ -760,6 +841,7 @@ func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgent
 	profile = s.withDefaultAPIKeyForMatchingProfile(profile)
 	runtimeOptionsAfterPatch := runtimeOptionsAfterPatch(rk, nil, spec.RuntimeOptions)
 	profile = normalizeProfileForAgentRuntime(profile, nil, spec.Name, spec.Description, spec.RuntimeKind, runtimeOptionsAfterPatch)
+	runtimeProfile := s.hydrateProfileFromCatalog(profile)
 	if !profile.ProfileComplete {
 		detected, _ := s.DetectDefaultProfile(ctx)
 		if detected.ProfileComplete {
@@ -768,6 +850,9 @@ func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgent
 			det := normalizeProfileForAgentRuntime(detected, nil, spec.Name, spec.Description, spec.RuntimeKind, nil)
 			return det, nil
 		}
+		return AgentProfile{}, fmt.Errorf("agent profile is incomplete")
+	}
+	if !runtimeProfile.ProfileComplete {
 		return AgentProfile{}, fmt.Errorf("agent profile is incomplete")
 	}
 	if len(runtimeOptionsAfterPatch) > 0 {

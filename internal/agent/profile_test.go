@@ -36,6 +36,69 @@ func TestDetectDefaultProfileUsesCSGHubLiteWhenAvailable(t *testing.T) {
 	}
 }
 
+func TestLoadMigratesInlineAPIProfileToCatalogProviderReference(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	agentState := []Agent{{
+		ID:          "u-alice",
+		Name:        "alice",
+		Role:        RoleWorker,
+		RuntimeKind: RuntimeKindCodex,
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.openai.example/v1",
+			APIKey:          "sk-team",
+			Headers:         map[string]string{"X-CSG-Trace": "dev"},
+			ModelID:         "gpt-test",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}}
+	data, err := json.Marshal(map[string]any{"agents": agentState})
+	if err != nil {
+		t.Fatalf("Marshal(state) error = %v", err)
+	}
+	if err := os.WriteFile(statePath, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("WriteFile(state) error = %v", err)
+	}
+
+	svc, err := NewServiceWithLLM(config.LLMConfig{
+		Default: "openai.gpt-test",
+		Providers: map[string]config.ProviderConfig{
+			"openai": {
+				BaseURL: "https://api.openai.example/v1",
+				APIKey:  "sk-team",
+				Headers: map[string]string{"X-CSG-Trace": "dev"},
+				Models:  []string{"gpt-test"},
+			},
+		},
+	}, config.ServerConfig{}, "manager-image:test", statePath)
+	if err != nil {
+		t.Fatalf("NewServiceWithLLM() error = %v", err)
+	}
+
+	got, ok := svc.Agent("u-alice")
+	if !ok {
+		t.Fatal("Agent(u-alice) missing")
+	}
+	if got.Profile != "openai.gpt-test" {
+		t.Fatalf("Agent().Profile = %q, want openai.gpt-test", got.Profile)
+	}
+	if got.AgentProfile.ModelProviderID != "openai" {
+		t.Fatalf("AgentProfile.ModelProviderID = %q, want openai", got.AgentProfile.ModelProviderID)
+	}
+	if got.AgentProfile.BaseURL != "" || got.AgentProfile.APIKey != "" || len(got.AgentProfile.Headers) != 0 {
+		t.Fatalf("stored AgentProfile kept inline credentials: %+v", got.AgentProfile)
+	}
+	resolved, err := svc.ResolvedAgentProfile("u-alice")
+	if err != nil {
+		t.Fatalf("ResolvedAgentProfile() error = %v", err)
+	}
+	if resolved.BaseURL != "https://api.openai.example/v1" || resolved.APIKey != "sk-team" || resolved.Headers["X-CSG-Trace"] != "dev" {
+		t.Fatalf("ResolvedAgentProfile() = %+v, want catalog credentials", resolved)
+	}
+}
+
 func TestDetectDefaultProfileFallsBackToCodex(t *testing.T) {
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"data":[{"id":"gpt-codex"}]}`))

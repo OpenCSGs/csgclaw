@@ -96,6 +96,68 @@
   font-weight: 700;
 }
 
+.csg-select-search {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  margin: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--input-background);
+  color: var(--muted);
+  box-shadow: var(--input-shadow);
+}
+
+.csg-select-search:focus-within {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
+
+.csg-select-search input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  height: 34px;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--input-text);
+  box-shadow: none !important;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.csg-select-search input:hover,
+.csg-select-search input:focus {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.csg-select-search input::-webkit-search-cancel-button,
+.csg-select-search input::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+
+.csg-select-search input::placeholder {
+  color: var(--input-text-placeholder);
+}
+
+.csg-select-empty {
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
 .csg-select-item {
   min-height: 36px;
   color: var(--text);

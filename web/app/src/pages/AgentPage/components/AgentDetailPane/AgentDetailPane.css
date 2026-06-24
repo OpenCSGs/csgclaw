@@ -628,11 +628,96 @@
   grid-template-columns: minmax(180px, 0.95fr) minmax(240px, 1.35fr) minmax(140px, 0.8fr) minmax(150px, 0.7fr);
 }
 
+.agent-detail-pane .agent-model-config-grid {
+  grid-template-columns: minmax(220px, 1.05fr) minmax(320px, 1.5fr) minmax(190px, 0.9fr) minmax(220px, 0.85fr);
+  align-items: start;
+}
+
+.agent-detail-pane .agent-model-config-grid > .field {
+  display: grid;
+  grid-template-rows: 24px 64px;
+  gap: 8px;
+}
+
+.agent-detail-pane .agent-model-config-grid .csg-select-trigger,
+.agent-detail-pane .agent-model-config-grid .agent-fast-mode-toggle {
+  height: 64px;
+  min-height: 64px;
+}
+
+.agent-detail-pane .agent-model-config-grid .csg-select-trigger {
+  align-items: center;
+}
+
+.agent-detail-pane .agent-model-config-grid .csg-select-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
 .agent-detail-pane .field input,
 .agent-detail-pane .field textarea,
 .agent-detail-pane .csg-select-trigger {
   min-height: 42px;
   border-radius: 10px;
+}
+
+.agent-detail-pane .agent-fast-mode-field .compact-toggle-row {
+  align-self: stretch;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 10px 14px;
+}
+
+.agent-detail-pane .agent-fast-mode-toggle input[type="checkbox"] {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid color-mix(in oklab, var(--muted) 58%, var(--line));
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+}
+
+.agent-detail-pane .agent-fast-mode-toggle input[type="checkbox"]:hover {
+  border-color: color-mix(in oklab, var(--primary) 52%, var(--line));
+}
+
+.agent-detail-pane .agent-fast-mode-toggle input[type="checkbox"]:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.agent-detail-pane .agent-fast-mode-toggle input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.agent-detail-pane .agent-fast-mode-toggle input[type="checkbox"]:checked::after {
+  width: 5px;
+  height: 9px;
+  border: solid var(--on-primary);
+  border-width: 0 2px 2px 0;
+  content: "";
+  transform: translateY(-1px) rotate(45deg);
+}
+
+.agent-detail-pane .agent-fast-mode-help {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 620;
+  line-height: 20px;
 }
 
 .agent-detail-pane .agent-image-field {
@@ -663,7 +748,7 @@
 }
 
 .agent-detail-pane .profile-advanced-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.92fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .agent-detail-pane .profile-json-field,

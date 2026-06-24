@@ -88,9 +88,7 @@ export async function createTeamRequest(payload: CreateTeamPayload): Promise<Wor
     request.member_participant_ids = payload.member_participant_ids;
   }
 
-  const team = normalizeTeam(
-    await post<unknown>("/api/v1/teams", request),
-  );
+  const team = normalizeTeam(await post<unknown>("/api/v1/teams", request));
   if (!team) {
     throw new Error("Invalid team response");
   }

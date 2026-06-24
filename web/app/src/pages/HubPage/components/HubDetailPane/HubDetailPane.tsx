@@ -212,171 +212,171 @@ export function HubDetailPane({
           className={`hub-workbench hub-inspector-panel ${isInspectorScrolling ? "is-scrolling" : ""}`}
           onScroll={handleInspectorScroll}
         >
-            {activeResourceType === "template" && selectedTemplate ? (
-              <>
-                <div className="hub-inspector-hero">
-                  <div className="hub-inspector-hero-row">
-                    <div className="hub-inspector-brand">
-                      <div className="hub-inspector-icon">
-                        <HubIcon />
-                      </div>
-                      <div className="hub-inspector-copy">
-                        <h2>{selectedTemplate.name || selectedTemplate.id}</h2>
-                        <p>{selectedTemplate.description || selectedTemplate.id}</p>
-                        <div className="hub-inspector-badge-row">
-                          <span className="mini-badge template-role-badge">
-                            {localizeRole(selectedTemplate.role || "worker", t)}
-                          </span>
-                          <span className="mini-badge template-runtime-badge">
-                            {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind || "-"}
-                          </span>
-                          <span className="mini-badge template-source-badge">
-                            <span className="template-source-badge-dot" aria-hidden="true"></span>
-                            {localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}
-                          </span>
-                        </div>
+          {activeResourceType === "template" && selectedTemplate ? (
+            <>
+              <div className="hub-inspector-hero">
+                <div className="hub-inspector-hero-row">
+                  <div className="hub-inspector-brand">
+                    <div className="hub-inspector-icon">
+                      <HubIcon />
+                    </div>
+                    <div className="hub-inspector-copy">
+                      <h2>{selectedTemplate.name || selectedTemplate.id}</h2>
+                      <p>{selectedTemplate.description || selectedTemplate.id}</p>
+                      <div className="hub-inspector-badge-row">
+                        <span className="mini-badge template-role-badge">
+                          {localizeRole(selectedTemplate.role || "worker", t)}
+                        </span>
+                        <span className="mini-badge template-runtime-badge">
+                          {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind || "-"}
+                        </span>
+                        <span className="mini-badge template-source-badge">
+                          <span className="template-source-badge-dot" aria-hidden="true"></span>
+                          {localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}
+                        </span>
                       </div>
                     </div>
-                    <div className="hub-template-actions">
-                      <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
-                        <span>{t("createAgent")}</span>
-                      </Button>
-                      {canDeleteTemplate ? (
-                        <Button
-                          variant="danger"
-                          size="md"
-                          loading={deleteBusy}
-                          disabled={deleteBusy}
-                          onClick={() => onDeleteTemplate?.(selectedTemplate)}
-                        >
-                          {t("hubDeleteTemplate")}
-                        </Button>
-                      ) : null}
-                    </div>
                   </div>
-                </div>
-
-                <div className="hub-inspector-grid">
-                  <div className="hub-inspector-field">
-                    <span>{t("roleLabel")}</span>
-                    <strong>{localizeRole(selectedTemplate.role || "worker", t)}</strong>
-                  </div>
-                  <div className="hub-inspector-field">
-                    <span>{t("hubSourceLabel")}</span>
-                    <strong>{localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}</strong>
-                  </div>
-                  <div className="hub-inspector-field">
-                    <span>{t("hubRuntimeLabel")}</span>
-                    <strong>{selectedTemplate.runtime_kind || "-"}</strong>
-                  </div>
-                  <div className="hub-inspector-field">
-                    <span>{t("hubImageLabel")}</span>
-                    <strong className="hub-field-value-multiline">{selectedTemplate.image || "-"}</strong>
-                  </div>
-                  <div className="hub-inspector-field">
-                    <span>{t("hubUpdatedAtLabel")}</span>
-                    <strong>{formatHubDateTime(selectedTemplate.updated_at, locale)}</strong>
-                  </div>
-                </div>
-
-                <div className="hub-workspace-block">
-                  <span className="hub-section-label">{t("hubWorkspaceTemplateLabel")}</span>
-                  <div className="hub-workspace-panels">
-                    <WorkspaceFileTree
-                      className="hub-workspace-tree"
-                      entries={workspaceEntries}
-                      loading={detailLoading}
-                      loadingText={t("hubWorkspaceLoading")}
-                      emptyText={t("hubWorkspacePreviewHint")}
-                      selectedPath={selectedWorkspacePath}
-                      onSelectFile={onSelectWorkspaceFile}
-                    />
-                    <WorkspaceFilePreview
-                      className="hub-workspace-preview"
-                      file={workspaceFile}
-                      loading={workspaceFileLoading}
-                      error={workspaceFileError}
-                      loadingText={t("hubWorkspaceFileLoading")}
-                      emptyTitle={t("hubWorkspacePreviewTitle")}
-                      emptyHint={t("hubWorkspacePreviewHint")}
-                      emptyIcon={<HubPreviewEmptyIcon />}
-                      binaryText={t("hubWorkspaceBinary")}
-                      emptyFileText={t("hubWorkspaceEmptyFile")}
-                      previewText={t("workspacePreviewPreviewTab")}
-                      codeText={t("workspacePreviewCodeTab")}
-                      viewToggleLabel={t("workspacePreviewViewMode")}
-                      closeText={t("close")}
-                      truncatedText={t("workspacePreviewTruncated")}
-                    />
-                  </div>
-                </div>
-              </>
-            ) : activeResourceType === "skill" && selectedSkill ? (
-              <>
-                <div className="hub-inspector-hero">
-                  <div className="hub-inspector-hero-row">
-                    <div className="hub-inspector-brand">
-                      <div className="hub-inspector-icon hub-skill-card-icon">
-                        <FileCode2 aria-hidden="true" />
-                      </div>
-                      <div className="hub-inspector-copy">
-                        <h2>{selectedSkill.name}</h2>
-                        <p>{selectedSkill.description || selectedSkill.name}</p>
-                      </div>
-                    </div>
-                    <div className="hub-template-actions">
+                  <div className="hub-template-actions">
+                    <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
+                      <span>{t("createAgent")}</span>
+                    </Button>
+                    {canDeleteTemplate ? (
                       <Button
-                        className="hub-skill-delete-button"
-                        variant="outlineDanger"
+                        variant="danger"
                         size="md"
-                        disabled={skillDeleteBusy}
-                        onClick={() => setDeleteSkillDialogOpen(true)}
+                        loading={deleteBusy}
+                        disabled={deleteBusy}
+                        onClick={() => onDeleteTemplate?.(selectedTemplate)}
                       >
-                        {t("hubDeleteSkill")}
+                        {t("hubDeleteTemplate")}
                       </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="hub-inspector-grid">
+                <div className="hub-inspector-field">
+                  <span>{t("roleLabel")}</span>
+                  <strong>{localizeRole(selectedTemplate.role || "worker", t)}</strong>
+                </div>
+                <div className="hub-inspector-field">
+                  <span>{t("hubSourceLabel")}</span>
+                  <strong>{localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}</strong>
+                </div>
+                <div className="hub-inspector-field">
+                  <span>{t("hubRuntimeLabel")}</span>
+                  <strong>{selectedTemplate.runtime_kind || "-"}</strong>
+                </div>
+                <div className="hub-inspector-field">
+                  <span>{t("hubImageLabel")}</span>
+                  <strong className="hub-field-value-multiline">{selectedTemplate.image || "-"}</strong>
+                </div>
+                <div className="hub-inspector-field">
+                  <span>{t("hubUpdatedAtLabel")}</span>
+                  <strong>{formatHubDateTime(selectedTemplate.updated_at, locale)}</strong>
+                </div>
+              </div>
+
+              <div className="hub-workspace-block">
+                <span className="hub-section-label">{t("hubWorkspaceTemplateLabel")}</span>
+                <div className="hub-workspace-panels">
+                  <WorkspaceFileTree
+                    className="hub-workspace-tree"
+                    entries={workspaceEntries}
+                    loading={detailLoading}
+                    loadingText={t("hubWorkspaceLoading")}
+                    emptyText={t("hubWorkspacePreviewHint")}
+                    selectedPath={selectedWorkspacePath}
+                    onSelectFile={onSelectWorkspaceFile}
+                  />
+                  <WorkspaceFilePreview
+                    className="hub-workspace-preview"
+                    file={workspaceFile}
+                    loading={workspaceFileLoading}
+                    error={workspaceFileError}
+                    loadingText={t("hubWorkspaceFileLoading")}
+                    emptyTitle={t("hubWorkspacePreviewTitle")}
+                    emptyHint={t("hubWorkspacePreviewHint")}
+                    emptyIcon={<HubPreviewEmptyIcon />}
+                    binaryText={t("hubWorkspaceBinary")}
+                    emptyFileText={t("hubWorkspaceEmptyFile")}
+                    previewText={t("workspacePreviewPreviewTab")}
+                    codeText={t("workspacePreviewCodeTab")}
+                    viewToggleLabel={t("workspacePreviewViewMode")}
+                    closeText={t("close")}
+                    truncatedText={t("workspacePreviewTruncated")}
+                  />
+                </div>
+              </div>
+            </>
+          ) : activeResourceType === "skill" && selectedSkill ? (
+            <>
+              <div className="hub-inspector-hero">
+                <div className="hub-inspector-hero-row">
+                  <div className="hub-inspector-brand">
+                    <div className="hub-inspector-icon hub-skill-card-icon">
+                      <FileCode2 aria-hidden="true" />
+                    </div>
+                    <div className="hub-inspector-copy">
+                      <h2>{selectedSkill.name}</h2>
+                      <p>{selectedSkill.description || selectedSkill.name}</p>
                     </div>
                   </div>
-                </div>
-
-                <div className="hub-workspace-block">
-                  <div className="hub-workspace-panels">
-                    <WorkspaceFileTree
-                      className="hub-workspace-tree"
-                      entries={skillEntries}
-                      loading={skillTreeLoading}
-                      loadingText={t("hubSkillFilesLoading")}
-                      emptyText={skillTreeError || t("hubSkillFilesEmpty")}
-                      selectedPath={selectedSkillPath}
-                      onSelectFile={onSelectSkillFile}
-                    />
-                    <WorkspaceFilePreview
-                      className="hub-workspace-preview"
-                      file={skillFile}
-                      loading={skillFileLoading}
-                      error={skillFileError}
-                      loadingText={t("hubWorkspaceFileLoading")}
-                      emptyTitle={t("hubSkillPreviewTitle")}
-                      emptyHint={t("hubSkillPreviewHint")}
-                      emptyIcon={<HubPreviewEmptyIcon />}
-                      binaryText={t("hubWorkspaceBinary")}
-                      emptyFileText={t("hubWorkspaceEmptyFile")}
-                      previewText={t("workspacePreviewPreviewTab")}
-                      codeText={t("workspacePreviewCodeTab")}
-                      viewToggleLabel={t("workspacePreviewViewMode")}
-                      closeText={t("close")}
-                      truncatedText={t("workspacePreviewTruncated")}
-                    />
+                  <div className="hub-template-actions">
+                    <Button
+                      className="hub-skill-delete-button"
+                      variant="outlineDanger"
+                      size="md"
+                      disabled={skillDeleteBusy}
+                      onClick={() => setDeleteSkillDialogOpen(true)}
+                    >
+                      {t("hubDeleteSkill")}
+                    </Button>
                   </div>
                 </div>
-              </>
-            ) : (
-              <div className="empty-state shell-empty-state hub-empty-state">
-                <span className="rich-empty-mark" aria-hidden="true">
-                  *
-                </span>
-                <strong>{templates.length || skills.length ? t("hubLoading") : t("hubEmpty")}</strong>
               </div>
-            )}
+
+              <div className="hub-workspace-block">
+                <div className="hub-workspace-panels">
+                  <WorkspaceFileTree
+                    className="hub-workspace-tree"
+                    entries={skillEntries}
+                    loading={skillTreeLoading}
+                    loadingText={t("hubSkillFilesLoading")}
+                    emptyText={skillTreeError || t("hubSkillFilesEmpty")}
+                    selectedPath={selectedSkillPath}
+                    onSelectFile={onSelectSkillFile}
+                  />
+                  <WorkspaceFilePreview
+                    className="hub-workspace-preview"
+                    file={skillFile}
+                    loading={skillFileLoading}
+                    error={skillFileError}
+                    loadingText={t("hubWorkspaceFileLoading")}
+                    emptyTitle={t("hubSkillPreviewTitle")}
+                    emptyHint={t("hubSkillPreviewHint")}
+                    emptyIcon={<HubPreviewEmptyIcon />}
+                    binaryText={t("hubWorkspaceBinary")}
+                    emptyFileText={t("hubWorkspaceEmptyFile")}
+                    previewText={t("workspacePreviewPreviewTab")}
+                    codeText={t("workspacePreviewCodeTab")}
+                    viewToggleLabel={t("workspacePreviewViewMode")}
+                    closeText={t("close")}
+                    truncatedText={t("workspacePreviewTruncated")}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="empty-state shell-empty-state hub-empty-state">
+              <span className="rich-empty-mark" aria-hidden="true">
+                *
+              </span>
+              <strong>{templates.length || skills.length ? t("hubLoading") : t("hubEmpty")}</strong>
+            </div>
+          )}
         </div>
       )}
       <DialogRoot open={deleteSkillDialogOpen} onOpenChange={setDeleteSkillDialogOpen}>
