@@ -1,5 +1,6 @@
 import "./WorkspaceComponents.css";
 
+export * from "./AuthLoginNotice";
 export * from "./FloatingChat";
 export * from "./ProfilePreviewPopover";
 export * from "./WorkspaceLayout";

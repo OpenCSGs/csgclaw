@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/auth"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 )
@@ -80,6 +81,103 @@ func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "remote result") {
 		t.Fatalf("body = %s, want remote result", body)
+	}
+}
+
+func TestChatCompletionsUsesCSGHubAIGatewayAuthStore(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var gotAuth string
+	var gotModel string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("path = %q, want /v1/chat/completions", r.URL.Path)
+		}
+		gotAuth = r.Header.Get("Authorization")
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		gotModel, _ = payload["model"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"remote result"},"finish_reason":"stop"}]}`))
+	}))
+	defer upstream.Close()
+	t.Setenv("CSGHUB_AIGATEWAY_BASE_URL", upstream.URL)
+
+	var sawBuiltin bool
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/namespaces/user-1/apikeys/builtin" {
+			t.Fatalf("hub path = %q, want builtin api key path", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("current_user"); got != "alice" {
+			t.Fatalf("current_user = %q, want alice", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
+			t.Fatalf("hub Authorization = %q, want access token", got)
+		}
+		sawBuiltin = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"msg":"OK","data":{"token":"gk_aigateway-key"}}`))
+	}))
+	defer hub.Close()
+
+	store, err := auth.DefaultStore()
+	if err != nil {
+		t.Fatalf("DefaultStore() error = %v", err)
+	}
+	if err := store.Save(auth.Record{
+		Tokens: auth.Tokens{AccessToken: "access-token"},
+		Account: auth.Account{
+			BaseURL:  hub.URL,
+			UserID:   "alice",
+			UserUUID: "user-1",
+		},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
+		{
+			ID:          agent.ManagerUserID,
+			Name:        agent.ManagerName,
+			Role:        agent.RoleManager,
+			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
+				Provider:        agent.ProviderCSGHub,
+				ModelID:         "deepseek-v4-flash",
+				ReasoningEffort: "medium",
+				ProfileComplete: true,
+			},
+			ProfileComplete: true,
+			CreatedAt:       time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	})
+
+	svc := NewService(config.ModelConfig{}, agentSvc)
+	_, status, _, err := svc.ChatCompletions(context.Background(), agent.ManagerUserID, []byte(`{"model":"client-model","messages":[{"role":"user","content":"hello"}]}`))
+	if err != nil {
+		t.Fatalf("ChatCompletions() error = %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", status, http.StatusOK)
+	}
+	if gotAuth != "Bearer gk_aigateway-key" {
+		t.Fatalf("Authorization = %q, want aigateway key", gotAuth)
+	}
+	if gotModel != "deepseek-v4-flash" {
+		t.Fatalf("model = %q, want deepseek-v4-flash", gotModel)
+	}
+	if !sawBuiltin {
+		t.Fatal("builtin api key endpoint was not called")
+	}
+	credentials, ok, err := store.LoadCSGHubProviderCredentials()
+	if err != nil || !ok {
+		t.Fatalf("LoadCSGHubProviderCredentials() = %+v, %v, %v", credentials, ok, err)
+	}
+	if credentials.AIGatewayBuiltinAPIKey != "gk_aigateway-key" {
+		t.Fatalf("stored AIGatewayBuiltinAPIKey = %q, want cached aigateway key", credentials.AIGatewayBuiltinAPIKey)
 	}
 }
 

@@ -12,6 +12,8 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/sandbox"
+	"csgclaw/internal/sandbox/sandboxtest"
 )
 
 func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
@@ -97,6 +99,22 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 
 func TestCreateManagerParticipantBootstrapsAdminParticipant(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	rt := sandboxtest.NewRuntime()
+	agent.SetTestHooks(
+		func(*agent.Service, string) (sandbox.Runtime, error) {
+			return rt, nil
+		},
+		func(*agent.Service, context.Context, sandbox.Runtime, string, string, string, agent.AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			info := sandbox.Info{
+				ID:    "box-manager",
+				Name:  agent.ManagerName,
+				State: sandbox.StateRunning,
+			}
+			inst := sandboxtest.NewInstance(info)
+			return inst, info, nil
+		},
+	)
+	t.Cleanup(agent.ResetTestHooks)
 
 	dir := t.TempDir()
 	agentsPath := filepath.Join(dir, "agents.json")
@@ -250,11 +268,22 @@ models = ["gpt-test"]
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if !strings.Contains(string(data), `[models.providers.default]`) {
-		t.Fatalf("saved config should preserve static llm config:\n%s", string(data))
+	if strings.Contains(string(data), `[models.providers.default]`) || strings.Contains(string(data), `api_key = "secret"`) {
+		t.Fatalf("saved config should migrate static llm config out of config.toml:\n%s", string(data))
 	}
-	if !strings.Contains(string(data), `api_key = "secret"`) {
-		t.Fatalf("saved config should preserve model API key entry:\n%s", string(data))
+	modelsPath, err := config.ModelsPathForConfigPath(configPath)
+	if err != nil {
+		t.Fatalf("ModelsPathForConfigPath() error = %v", err)
+	}
+	models, ok, err := config.LoadModels(modelsPath)
+	if err != nil {
+		t.Fatalf("LoadModels() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("LoadModels() ok = false, want true")
+	}
+	if got, want := models.Providers["default"].APIKey, "secret"; got != want {
+		t.Fatalf("models API key = %q, want %q", got, want)
 	}
 }
 
@@ -323,8 +352,22 @@ models = ["gpt-test"]
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if string(data) != original {
-		t.Fatalf("EnsureState() rewrote complete config.\nGot:\n%s\nWant:\n%s", string(data), original)
+	if strings.Contains(string(data), "[models]") || strings.Contains(string(data), "[models.providers.default]") {
+		t.Fatalf("EnsureState() should migrate models out of config.toml:\n%s", string(data))
+	}
+	modelsPath, err := config.ModelsPathForConfigPath(configPath)
+	if err != nil {
+		t.Fatalf("ModelsPathForConfigPath() error = %v", err)
+	}
+	models, ok, err := config.LoadModels(modelsPath)
+	if err != nil {
+		t.Fatalf("LoadModels() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("LoadModels() ok = false, want true")
+	}
+	if got, want := models.Default, "default.gpt-test"; got != want {
+		t.Fatalf("models default = %q, want %q", got, want)
 	}
 }
 
@@ -393,8 +436,22 @@ models = ["gpt-test"]
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if string(data) != original {
-		t.Fatalf("EnsureState() rewrote complete config.\nGot:\n%s\nWant:\n%s", string(data), original)
+	if strings.Contains(string(data), "[models]") || strings.Contains(string(data), "[models.providers.default]") {
+		t.Fatalf("EnsureState() should migrate models out of config.toml:\n%s", string(data))
+	}
+	modelsPath, err := config.ModelsPathForConfigPath(configPath)
+	if err != nil {
+		t.Fatalf("ModelsPathForConfigPath() error = %v", err)
+	}
+	models, ok, err := config.LoadModels(modelsPath)
+	if err != nil {
+		t.Fatalf("LoadModels() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("LoadModels() ok = false, want true")
+	}
+	if got, want := models.Providers["default"].BaseURL, "http://llm.test/v1"; got != want {
+		t.Fatalf("models BaseURL = %q, want %q", got, want)
 	}
 }
 

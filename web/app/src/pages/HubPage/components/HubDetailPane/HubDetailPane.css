@@ -570,7 +570,8 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 24px;
+  padding: 16px 22px 22px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 960px) {

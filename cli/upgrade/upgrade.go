@@ -19,10 +19,20 @@ type cmd struct{}
 var newUpgradeClient = func(run *command.Context) upgrade.Client {
 	return upgrade.Client{
 		HTTPClient: run.HTTPClient,
-		GOOS:       runtime.GOOS,
+		GOOS:       currentGOOS,
 		GOARCH:     runtime.GOARCH,
 	}
 }
+
+var (
+	currentGOOS     = runtime.GOOS
+	installPrepared = func(client upgrade.Client, prepared upgrade.PreparedBundle) (upgrade.InstalledBundle, error) {
+		return client.InstallPrepared(prepared)
+	}
+	stopDaemonFromExecutable  = upgrade.StopDaemonFromExecutable
+	startDaemonFromExecutable = upgrade.StartDaemonFromExecutable
+	startInstalledDaemon      = upgrade.StartInstalledDaemon
+)
 
 func NewCmd() command.Command {
 	return cmd{}
@@ -81,8 +91,21 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	}
 	defer os.RemoveAll(prepared.WorkDir)
 
-	installed, err := client.InstallPrepared(prepared)
+	var stopped upgrade.RestartResult
+	if currentGOOS == "windows" && !*noRestart {
+		stopped, err = stopDaemonFromExecutable(ctx)
+		if err != nil {
+			return fail(err)
+		}
+	}
+
+	installed, err := installPrepared(client, prepared)
 	if err != nil {
+		if currentGOOS == "windows" && stopped.DaemonWasRunning {
+			if restartErr := startDaemonFromExecutable(ctx, upgrade.RestartOptions{ConfigPath: globals.Config}); restartErr != nil {
+				return fail(fmt.Errorf("%w\nAlso failed to restart daemon that was running before upgrade: %v", err, restartErr))
+			}
+		}
 		return fail(err)
 	}
 	if *noRestart {
@@ -90,11 +113,24 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		return renderInstallResult(globals.Output, run.Stdout, result, installed, upgrade.RestartResult{}, run.Program, true)
 	}
 
-	restarted, err := client.RestartIfRunning(ctx, installed, upgrade.RestartOptions{
-		ConfigPath: globals.Config,
-	})
-	if err != nil {
-		return fail(err)
+	restarted := upgrade.RestartResult{}
+	if currentGOOS == "windows" {
+		restarted = stopped
+		if stopped.DaemonWasRunning {
+			restarted, err = startInstalledDaemon(ctx, installed, upgrade.RestartOptions{
+				ConfigPath: globals.Config,
+			})
+			if err != nil {
+				return fail(err)
+			}
+		}
+	} else {
+		restarted, err = client.RestartIfRunning(ctx, installed, upgrade.RestartOptions{
+			ConfigPath: globals.Config,
+		})
+		if err != nil {
+			return fail(err)
+		}
 	}
 	if !*noRestart && !restarted.DaemonWasRunning {
 		if recordErr := applyArtifacts.RecordManualRestartRequired("manual restart required"); recordErr != nil {

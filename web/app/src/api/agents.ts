@@ -39,6 +39,7 @@ export type AgentUpdatePayload = {
   instructions?: string;
   image?: string;
   name?: string;
+  profile?: string;
   role?: string;
   runtime_kind?: RuntimeKind;
   runtime_options?: JSONRecord;
@@ -237,6 +238,7 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
         avatar: payload.avatar,
         runtime_kind: payload.runtime_kind,
         from_template: payload.from_template,
+        profile: payload.profile,
         runtime_options: payload.runtime_options,
         agent_profile: payload.agent_profile,
       },

@@ -5,6 +5,8 @@ $Version = if ($env:VERSION) { $env:VERSION } else { "latest" }
 $AppHome = if ($env:APP_HOME) { $env:APP_HOME } else { Join-Path $HOME "AppData\Local\Programs\csgclaw" }
 $InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR } else { Join-Path $AppHome "bin" }
 $LibDir = if ($env:LIB_DIR) { $env:LIB_DIR } else { Join-Path $AppHome "lib\csgclaw" }
+$CSGClawHome = if ($env:CSGCLAW_HOME) { $env:CSGCLAW_HOME } else { Join-Path $HOME ".csgclaw" }
+$SandboxToolsDir = if ($env:SANDBOX_TOOLS_DIR) { $env:SANDBOX_TOOLS_DIR } else { Join-Path $CSGClawHome "sandbox-tools" }
 $MirrorHost = if ($env:MIRROR_HOST) { $env:MIRROR_HOST } else { "https://csgclaw.opencsg.com" }
 $BaseUrl = if ($env:BASE_URL) { $env:BASE_URL } else { "$MirrorHost/releases" }
 $LatestReleaseUrl = if ($env:LATEST_RELEASE_URL) { $env:LATEST_RELEASE_URL } else { "$MirrorHost/releases/latest" }
@@ -153,12 +155,18 @@ function Install-Bundle {
         $bundlePath = Join-Path $extractDir $App
         $bundleBinPath = Join-Path $bundlePath "bin"
         $bundleExePath = Join-Path $bundleBinPath "${App}.exe"
+        $bundleCliPath = Join-Path $bundleBinPath "csgclaw_dir\csgclaw-cli"
         if (-not (Test-Path -LiteralPath $bundleExePath)) {
             throw "Archive did not contain $App/bin/${App}.exe"
+        }
+        if (-not (Test-Path -LiteralPath $bundleCliPath)) {
+            throw "Archive did not contain $App/bin/csgclaw_dir/csgclaw-cli"
         }
 
         Ensure-Directory -Path $InstallDir
         Ensure-Directory -Path $LibDir
+        Ensure-Directory -Path $SandboxToolsDir
+        Copy-Item -LiteralPath $bundleCliPath -Destination (Join-Path $SandboxToolsDir "csgclaw-cli") -Force
 
         $installRoot = Join-Path $LibDir $ResolvedVersion
         if (Test-Path -LiteralPath $installRoot) {
@@ -177,6 +185,7 @@ function Install-Bundle {
         Write-Host ""
         Write-Host "Installed $App $ResolvedVersion to $targetExePath"
         Write-Host "Launcher: $launcherPath"
+        Write-Host "Sandbox CLI: $(Join-Path $SandboxToolsDir 'csgclaw-cli')"
         Write-Host ""
         Write-Host "Next steps:"
         Write-Host "  $App serve"

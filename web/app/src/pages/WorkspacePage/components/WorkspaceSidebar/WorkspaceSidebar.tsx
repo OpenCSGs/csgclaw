@@ -11,6 +11,8 @@ export function WorkspaceSidebar({
   onLocaleChange,
   t,
   agentItems,
+  modelProviders = null,
+  modelProvidersLoaded = false,
   workerAgentItems,
   notificationAgentItems,
   workspaceTab,
@@ -23,12 +25,17 @@ export function WorkspaceSidebar({
   activePane,
   activeThreadRootID,
   currentUserID,
+  authBusy,
+  authError,
+  authPending,
+  authStatus,
   usersById,
   collapsedWorkspaceGroups,
   showUpgradeControls,
   onToggleWorkspaceGroup,
   onCreateRoom,
   onCreateAgent,
+  onCreateModelProvider,
   onCreateNotificationParticipant,
   onOpenCreateTeam,
   onOpenCreateTask,
@@ -44,6 +51,7 @@ export function WorkspaceSidebar({
   onSelectThread,
   onPreviewUser,
   onSelectAgent,
+  onSelectModelProvider,
   onSelectHuman,
   onPreviewAgent,
   onSelectComputer,
@@ -54,6 +62,8 @@ export function WorkspaceSidebar({
   upgradeError,
   onOpenUpgrade,
   onOpenConfigSettings,
+  onLogin,
+  onLogout,
   taskItems,
   teams,
   planningTaskID = "",
@@ -90,6 +100,12 @@ export function WorkspaceSidebar({
             showUpgradeControls={showUpgradeControls}
             onOpenUpgrade={onOpenUpgrade}
             onOpenConfigSettings={onOpenConfigSettings}
+            authStatus={authStatus}
+            authBusy={authBusy}
+            authPending={authPending}
+            authError={authError}
+            onLogin={onLogin}
+            onLogout={onLogout}
             t={t}
           />
         </div>
@@ -120,6 +136,7 @@ export function WorkspaceSidebar({
             onToggleWorkspaceGroup={onToggleWorkspaceGroup}
             onCreateRoom={onCreateRoom}
             onCreateAgent={onCreateAgent}
+            onCreateModelProvider={onCreateModelProvider}
             onCreateNotificationParticipant={onCreateNotificationParticipant}
             onOpenCreateTeam={onOpenCreateTeam}
             onOpenCreateTask={onOpenCreateTask}
@@ -135,9 +152,12 @@ export function WorkspaceSidebar({
             onPreviewUser={onPreviewUser}
             onSelectHuman={onSelectHuman}
             agentItems={agentItems}
+            modelProviders={modelProviders}
+            modelProvidersLoaded={modelProvidersLoaded}
             workerAgentItems={workerAgentItems}
             notificationAgentItems={notificationAgentItems}
             onSelectAgent={onSelectAgent}
+            onSelectModelProvider={onSelectModelProvider}
             onPreviewAgent={onPreviewAgent}
             onSelectComputer={onSelectComputer}
           />

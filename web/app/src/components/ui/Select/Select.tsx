@@ -1,6 +1,6 @@
 import { Select as RadixSelect } from "radix-ui";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
-import { forwardRef } from "react";
+import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { forwardRef, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef, ReactNode } from "react";
 import { classNames } from "@/shared/lib/classNames";
 
@@ -155,49 +155,163 @@ export type SelectProps = Omit<SelectRootProps, "children"> & {
   children?: ReactNode;
   contentClassName?: string;
   contentProps?: Omit<SelectContentProps, "children" | "className">;
+  emptyLabel?: ReactNode;
   options?: readonly SelectOption[];
   placeholder?: ReactNode;
+  searchable?: boolean;
+  searchPlaceholder?: string;
   size?: SelectSize;
   triggerClassName?: string;
   triggerProps?: Omit<SelectTriggerProps, "children" | "className" | "placeholder" | "size">;
 };
+
+function optionSearchText(option: SelectOption) {
+  if (option.textValue) {
+    return option.textValue;
+  }
+  if (typeof option.label === "string" || typeof option.label === "number") {
+    return String(option.label);
+  }
+  return option.value;
+}
 
 export function Select({
   children,
   contentClassName,
   contentProps,
   defaultValue,
+  emptyLabel,
   onValueChange,
+  onOpenChange,
   options,
   placeholder,
+  searchable = false,
+  searchPlaceholder = "Search",
   size = "md",
   triggerClassName,
   triggerProps,
   value,
   ...props
 }: SelectProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const contentRef = useRef<ComponentRef<typeof RadixSelect.Content>>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const hasEmptyOption = Boolean(options?.some((option) => option.value === ""));
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
+  const filteredOptions = useMemo(() => {
+    if (!options) {
+      return [];
+    }
+    if (!searchable || !normalizedSearchQuery) {
+      return options;
+    }
+    return options.filter((option) => {
+      if (option.value === "") {
+        return false;
+      }
+      return optionSearchText(option).toLocaleLowerCase().includes(normalizedSearchQuery);
+    });
+  }, [normalizedSearchQuery, options, searchable]);
+  const shouldRenderSearch = searchable && Boolean(options?.length);
+  const resolvedContentProps = searchable
+    ? ({
+        side: "bottom",
+        align: "start",
+        avoidCollisions: false,
+        ...contentProps,
+      } satisfies SelectProps["contentProps"])
+    : contentProps;
+
+  useLayoutEffect(() => {
+    if (!shouldRenderSearch || typeof document === "undefined") {
+      return;
+    }
+    const activeElement = document.activeElement;
+    if (
+      searchInputRef.current &&
+      contentRef.current?.contains(activeElement) &&
+      activeElement !== searchInputRef.current
+    ) {
+      searchInputRef.current.focus({ preventScroll: true });
+    }
+  }, [searchQuery, shouldRenderSearch, filteredOptions.length]);
 
   return (
     <SelectRoot
       value={toRadixValue(value, hasEmptyOption)}
       defaultValue={toRadixValue(defaultValue, hasEmptyOption)}
       onValueChange={onValueChange ? (nextValue) => onValueChange(fromRadixValue(nextValue)) : undefined}
+      onOpenChange={(open) => {
+        if (!open) {
+          setSearchQuery("");
+        }
+        onOpenChange?.(open);
+      }}
       {...props}
     >
       <SelectTrigger className={triggerClassName} placeholder={placeholder} size={size} {...triggerProps} />
-      <SelectContent className={contentClassName} {...contentProps}>
+      <SelectContent ref={contentRef} className={contentClassName} {...resolvedContentProps}>
         {children ??
-          options?.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={toRadixValue(option.value, hasEmptyOption) ?? option.value}
-              disabled={option.disabled}
-              textValue={option.textValue}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
+          (options ? (
+            <>
+              {shouldRenderSearch ? (
+                <div className="csg-select-search" onPointerDown={(event) => event.stopPropagation()}>
+                  <Search aria-hidden="true" size={15} strokeWidth={2} />
+                  <input
+                    ref={searchInputRef}
+                    aria-label={searchPlaceholder}
+                    autoComplete="off"
+                    onBlur={(event) => {
+                      const nextFocusedElement = event.relatedTarget;
+                      if (
+                        contentRef.current &&
+                        nextFocusedElement instanceof Node &&
+                        contentRef.current.contains(nextFocusedElement)
+                      ) {
+                        const input = event.currentTarget;
+                        queueMicrotask(() => {
+                          if (
+                            contentRef.current?.contains(document.activeElement) &&
+                            document.activeElement !== input
+                          ) {
+                            input.focus({ preventScroll: true });
+                          }
+                        });
+                      }
+                    }}
+                    onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                    onKeyDownCapture={(event) => {
+                      if (event.key !== "Escape" && event.key !== "Tab") {
+                        event.stopPropagation();
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Escape" && event.key !== "Tab") {
+                        event.stopPropagation();
+                      }
+                    }}
+                    placeholder={searchPlaceholder}
+                    type="search"
+                    value={searchQuery}
+                  />
+                </div>
+              ) : null}
+              {filteredOptions.length ? (
+                filteredOptions.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={toRadixValue(option.value, hasEmptyOption) ?? option.value}
+                    disabled={option.disabled}
+                    textValue={option.textValue}
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))
+              ) : (
+                <div className="csg-select-empty">{emptyLabel ?? "No options"}</div>
+              )}
+            </>
+          ) : null)}
       </SelectContent>
     </SelectRoot>
   );

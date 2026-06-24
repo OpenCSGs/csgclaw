@@ -1,0 +1,335 @@
+package auth
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"csgclaw/internal/config"
+)
+
+const (
+	authFileName               = "auth.json"
+	providerAuthDirName        = "auth"
+	csgHubProviderAuthFileName = "csghub.json"
+	DefaultAIGatewayBaseURL    = "https://ai.space.opencsg.com/v1"
+)
+
+type Record struct {
+	Tokens      Tokens    `json:"tokens"`
+	Account     Account   `json:"account"`
+	LastRefresh time.Time `json:"last_refresh"`
+}
+
+type Tokens struct {
+	AccessToken string `json:"access_token"`
+}
+
+type Account struct {
+	UserID     string    `json:"user_id"`
+	UserUUID   string    `json:"user_uuid"`
+	Avatar     string    `json:"avatar"`
+	BaseURL    string    `json:"base_url"`
+	PortalURL  string    `json:"portal_url"`
+	LoggedInAt time.Time `json:"logged_in_at"`
+}
+
+type CSGHubProviderCredentials struct {
+	AIGatewayBuiltinAPIKey string `json:"ai_gateway_builtin_api_key"`
+}
+
+type Status struct {
+	Authenticated bool       `json:"authenticated"`
+	UserID        string     `json:"user_id,omitempty"`
+	UserUUID      string     `json:"user_uuid,omitempty"`
+	Avatar        string     `json:"avatar,omitempty"`
+	BaseURL       string     `json:"base_url,omitempty"`
+	PortalURL     string     `json:"portal_url,omitempty"`
+	LoggedInAt    *time.Time `json:"logged_in_at,omitempty"`
+}
+
+type Store struct {
+	path                   string
+	csgHubProviderAuthPath string
+}
+
+func NewStore(path string) Store {
+	return Store{path: strings.TrimSpace(path)}
+}
+
+func NewStoreWithProviderPath(path, csgHubProviderAuthPath string) Store {
+	return Store{
+		path:                   strings.TrimSpace(path),
+		csgHubProviderAuthPath: strings.TrimSpace(csgHubProviderAuthPath),
+	}
+}
+
+func DefaultPath() (string, error) {
+	dir, err := config.DefaultDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve auth dir: %w", err)
+	}
+	return filepath.Join(dir, authFileName), nil
+}
+
+func DefaultCSGHubProviderPath() (string, error) {
+	dir, err := config.DefaultDomainDir(providerAuthDirName)
+	if err != nil {
+		return "", fmt.Errorf("resolve provider auth dir: %w", err)
+	}
+	return filepath.Join(dir, csgHubProviderAuthFileName), nil
+}
+
+func DefaultStore() (Store, error) {
+	path, err := DefaultPath()
+	if err != nil {
+		return Store{}, err
+	}
+	providerPath, err := DefaultCSGHubProviderPath()
+	if err != nil {
+		return Store{}, err
+	}
+	return NewStoreWithProviderPath(path, providerPath), nil
+}
+
+func (s Store) Path() (string, error) {
+	path := strings.TrimSpace(s.path)
+	if path != "" {
+		return path, nil
+	}
+	return DefaultPath()
+}
+
+func (s Store) CSGHubProviderPath() (string, error) {
+	path := strings.TrimSpace(s.csgHubProviderAuthPath)
+	if path != "" {
+		return path, nil
+	}
+	authPath := strings.TrimSpace(s.path)
+	if authPath != "" {
+		return filepath.Join(filepath.Dir(authPath), providerAuthDirName, csgHubProviderAuthFileName), nil
+	}
+	return DefaultCSGHubProviderPath()
+}
+
+func (s Store) Load() (Record, bool, error) {
+	path, err := s.Path()
+	if err != nil {
+		return Record{}, false, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Record{}, false, nil
+		}
+		return Record{}, false, fmt.Errorf("read auth store: %w", err)
+	}
+	var record Record
+	if err := json.Unmarshal(data, &record); err != nil {
+		return Record{}, false, fmt.Errorf("decode auth store: %w", err)
+	}
+	return normalizeRecord(record), true, nil
+}
+
+func (s Store) Save(record Record) error {
+	path, err := s.Path()
+	if err != nil {
+		return err
+	}
+	record = normalizeRecord(record)
+	if record.Tokens.AccessToken == "" {
+		return fmt.Errorf("auth access token is required")
+	}
+	if record.Account.BaseURL == "" {
+		return fmt.Errorf("auth base url is required")
+	}
+	if err := writeJSONFile(path, record); err != nil {
+		return fmt.Errorf("write auth store: %w", err)
+	}
+	return nil
+}
+
+func (s Store) Delete() error {
+	path, err := s.Path()
+	if err != nil {
+		return err
+	}
+	if err := removeFile(path); err != nil {
+		return fmt.Errorf("delete auth store: %w", err)
+	}
+	providerPath, err := s.CSGHubProviderPath()
+	if err != nil {
+		return err
+	}
+	if err := removeFile(providerPath); err != nil {
+		return fmt.Errorf("delete csghub provider auth store: %w", err)
+	}
+	return nil
+}
+
+func (s Store) Status() (Status, error) {
+	record, ok, err := s.Load()
+	if err != nil {
+		return Status{}, err
+	}
+	if !ok {
+		return Status{}, nil
+	}
+	return record.Status(), nil
+}
+
+func (s Store) Credentials() (baseURL, token string, ok bool, err error) {
+	record, found, err := s.Load()
+	if err != nil || !found {
+		return "", "", false, err
+	}
+	baseURL = strings.TrimRight(strings.TrimSpace(record.Account.BaseURL), "/")
+	token = strings.TrimSpace(record.Tokens.AccessToken)
+	return baseURL, token, baseURL != "" && token != "", nil
+}
+
+func (s Store) LoadCSGHubProviderCredentials() (CSGHubProviderCredentials, bool, error) {
+	path, err := s.CSGHubProviderPath()
+	if err != nil {
+		return CSGHubProviderCredentials{}, false, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return CSGHubProviderCredentials{}, false, nil
+		}
+		return CSGHubProviderCredentials{}, false, fmt.Errorf("read csghub provider auth store: %w", err)
+	}
+	var credentials CSGHubProviderCredentials
+	if err := json.Unmarshal(data, &credentials); err != nil {
+		return CSGHubProviderCredentials{}, false, fmt.Errorf("decode csghub provider auth store: %w", err)
+	}
+	return normalizeCSGHubProviderCredentials(credentials), true, nil
+}
+
+func (s Store) SaveCSGHubProviderCredentials(credentials CSGHubProviderCredentials) error {
+	path, err := s.CSGHubProviderPath()
+	if err != nil {
+		return err
+	}
+	credentials = normalizeCSGHubProviderCredentials(credentials)
+	if credentials.AIGatewayBuiltinAPIKey == "" {
+		return fmt.Errorf("csghub ai gateway api key is required")
+	}
+	if err := writeJSONFile(path, credentials); err != nil {
+		return fmt.Errorf("write csghub provider auth store: %w", err)
+	}
+	return nil
+}
+
+func (s Store) AIGatewayCredentials() (baseURL, apiKey string, ok bool, err error) {
+	baseURL = AIGatewayBaseURL("")
+	credentials, found, err := s.LoadCSGHubProviderCredentials()
+	if err != nil {
+		return "", "", false, err
+	}
+	if !found {
+		return baseURL, "", false, nil
+	}
+	apiKey = strings.TrimSpace(credentials.AIGatewayBuiltinAPIKey)
+	if !isBuiltinAIGatewayAPIKey(apiKey) {
+		apiKey = ""
+	}
+	return baseURL, apiKey, baseURL != "" && apiKey != "", nil
+}
+
+func (r Record) Status() Status {
+	r = normalizeRecord(r)
+	if r.Tokens.AccessToken == "" {
+		return Status{}
+	}
+	status := Status{
+		Authenticated: true,
+		UserID:        r.Account.UserID,
+		UserUUID:      r.Account.UserUUID,
+		Avatar:        r.Account.Avatar,
+		BaseURL:       r.Account.BaseURL,
+		PortalURL:     r.Account.PortalURL,
+	}
+	if !r.Account.LoggedInAt.IsZero() {
+		loggedInAt := r.Account.LoggedInAt
+		status.LoggedInAt = &loggedInAt
+	}
+	return status
+}
+
+func normalizeRecord(record Record) Record {
+	record.Tokens.AccessToken = strings.TrimSpace(record.Tokens.AccessToken)
+	record.Account.UserID = strings.TrimSpace(record.Account.UserID)
+	record.Account.UserUUID = strings.TrimSpace(record.Account.UserUUID)
+	record.Account.Avatar = strings.TrimSpace(record.Account.Avatar)
+	record.Account.BaseURL = strings.TrimRight(strings.TrimSpace(record.Account.BaseURL), "/")
+	record.Account.PortalURL = strings.TrimSpace(record.Account.PortalURL)
+	if record.LastRefresh.IsZero() {
+		record.LastRefresh = record.Account.LoggedInAt
+	}
+	if record.LastRefresh.IsZero() {
+		record.LastRefresh = time.Now().UTC()
+	}
+	return record
+}
+
+func normalizeCSGHubProviderCredentials(credentials CSGHubProviderCredentials) CSGHubProviderCredentials {
+	credentials.AIGatewayBuiltinAPIKey = strings.TrimSpace(credentials.AIGatewayBuiltinAPIKey)
+	return credentials
+}
+
+func writeJSONFile(path string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode json: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create parent dir: %w", err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+		return err
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("secure file: %w", err)
+	}
+	return nil
+}
+
+func removeFile(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func AIGatewayBaseURL(_ string) string {
+	if baseURL := normalizeAIGatewayBaseURL(os.Getenv("CSGHUB_AIGATEWAY_BASE_URL")); baseURL != "" {
+		return baseURL
+	}
+	if baseURL := normalizeAIGatewayBaseURL(os.Getenv("CSGHUB_AIGATEWAY_URL")); baseURL != "" {
+		return baseURL
+	}
+	return DefaultAIGatewayBaseURL
+}
+
+func normalizeAIGatewayBaseURL(raw string) string {
+	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return raw
+	}
+	if !strings.HasSuffix(strings.TrimRight(u.Path, "/"), "/v1") {
+		u.Path = strings.TrimRight(u.Path, "/") + "/v1"
+	}
+	u.RawQuery = ""
+	u.Fragment = ""
+	return strings.TrimRight(u.String(), "/")
+}

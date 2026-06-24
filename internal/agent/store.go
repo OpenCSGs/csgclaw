@@ -192,7 +192,7 @@ func (s *Service) readState() (map[string]Agent, error) {
 	var state persistedState
 	if err := json.Unmarshal(data, &state); err == nil && state.isObject() {
 		if strings.TrimSpace(state.ProfileDefaults.Provider) != "" || strings.TrimSpace(state.ProfileDefaults.ModelID) != "" || strings.TrimSpace(state.ProfileDefaults.BaseURL) != "" {
-			s.profileDefaults = normalizeProfile(state.ProfileDefaults, "", "")
+			s.profileDefaults = s.catalogReferenceForLoadedProfile(normalizeProfile(state.ProfileDefaults, "", ""))
 		}
 		s.detectionResults = append([]ProfileDetectionResult(nil), state.DetectionResults...)
 		runtimes := make(map[string]RuntimeRecord, len(state.Runtimes))
@@ -304,6 +304,7 @@ func (s *Service) normalizeLoadedAgent(a Agent) (Agent, error) {
 		}
 	}
 	a.AgentProfile = normalizeProfile(a.AgentProfile, a.Name, a.Description)
+	a.AgentProfile = s.catalogReferenceForLoadedProfile(a.AgentProfile)
 	a.AgentProfile = normalizeProfileForAgentRuntime(a.AgentProfile, a.RuntimeOptions, a.Name, a.Description, a.RuntimeKind, nil)
 	a.ProfileComplete = a.AgentProfile.ProfileComplete
 	a.Profile = profileSelector(a.AgentProfile)
@@ -311,4 +312,14 @@ func (s *Service) normalizeLoadedAgent(a Agent) (Agent, error) {
 		a.Status = string(sandbox.StateRunning)
 	}
 	return a, nil
+}
+
+func (s *Service) catalogReferenceForLoadedProfile(profile AgentProfile) AgentProfile {
+	if s == nil {
+		return profile
+	}
+	if migrated, ok := CatalogReferenceProfile(s.llm, profile); ok {
+		return migrated
+	}
+	return profile
 }

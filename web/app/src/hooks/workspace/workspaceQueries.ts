@@ -5,6 +5,7 @@ import type { AgentProfileModelRequest } from "@/api/agents";
 import { fetchBootstrap, fetchBootstrapConfig, fetchRuntimeImages, fetchVersion } from "@/api/app";
 import type { FetchVersionOptions } from "@/api/app";
 import { fetchHubTemplate, fetchHubTemplates, fetchHubWorkspaceFile } from "@/api/hub";
+import { fetchModelProviders } from "@/api/modelProviders";
 import { fetchSkillFile, fetchSkills, fetchSkillTree } from "@/api/skills";
 import { fetchManagerProfile } from "@/api/agents";
 import { fetchUpgradeStatus } from "@/api/upgrade";
@@ -19,6 +20,7 @@ import type { AgentLike, AgentProfileLike, AgentProfileModelsResponse, RuntimeBo
 import { normalizeIMData } from "@/models/conversations";
 import type { IMData } from "@/models/conversations";
 import type { HubTemplate, HubWorkspaceFile } from "@/models/hubWorkspace";
+import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceFile, WorkspaceListing } from "@/models/workspace";
 import { normalizeUpgradeStatus } from "@/models/upgradeStatus";
@@ -31,6 +33,7 @@ export const workspaceQueryKeys = {
   bootstrapConfig: () => [WORKSPACE_QUERY_SCOPE, "bootstrap-config"] as const,
   managerProfile: () => [WORKSPACE_QUERY_SCOPE, "manager-profile"] as const,
   agents: () => [WORKSPACE_QUERY_SCOPE, "agents"] as const,
+  modelProviders: () => [WORKSPACE_QUERY_SCOPE, "model-providers"] as const,
   runtimeImages: () => [WORKSPACE_QUERY_SCOPE, "runtime-images"] as const,
   hubTemplates: () => [WORKSPACE_QUERY_SCOPE, "hub-templates"] as const,
   hubTemplate: (templateID: string | null | undefined) =>
@@ -53,6 +56,7 @@ export const workspaceQueryKeys = {
     [WORKSPACE_QUERY_SCOPE, "agent-profile-models", requestKey || ""] as const,
   cliProxyAuthStatus: (provider: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "cliproxy-auth-status", provider || ""] as const,
+  authStatus: () => [WORKSPACE_QUERY_SCOPE, "auth-status"] as const,
   appVersion: () => [WORKSPACE_QUERY_SCOPE, "app-version"] as const,
   upgradeStatus: () => [WORKSPACE_QUERY_SCOPE, "upgrade-status"] as const,
 };
@@ -142,6 +146,13 @@ export function useWorkspaceAgentsQuery(): UseQueryResult<AgentLike[]> {
   return useQuery<AgentLike[]>({
     queryKey: workspaceQueryKeys.agents(),
     queryFn: () => fetchAgents(),
+  });
+}
+
+export function useWorkspaceModelProvidersQuery(): UseQueryResult<ModelProviderCatalog> {
+  return useQuery<ModelProviderCatalog>({
+    queryKey: workspaceQueryKeys.modelProviders(),
+    queryFn: fetchModelProviders,
   });
 }
 

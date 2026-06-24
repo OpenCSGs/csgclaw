@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -135,6 +137,27 @@ func TestDeleteStopsBoxBeforeForceRemove(t *testing.T) {
 	}
 	if strings.Join(calls, ",") != "stop,remove" {
 		t.Fatalf("Delete() sandbox calls = %q, want stop then remove", strings.Join(calls, ","))
+	}
+}
+
+func TestResolveSandboxToolsDirSupportsCSGHubProvider(t *testing.T) {
+	toolsDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(toolsDir, "csgclaw-cli"), []byte("cli"), 0o755); err != nil {
+		t.Fatalf("WriteFile(csgclaw-cli) error = %v", err)
+	}
+	rt := New(Dependencies{
+		SandboxProviderName: func() string { return config.CSGHubProvider },
+		SandboxToolsDir:     func() (string, error) { return toolsDir, nil },
+	})
+	got, mount, err := rt.resolveSandboxToolsDir()
+	if err != nil {
+		t.Fatalf("resolveSandboxToolsDir() error = %v", err)
+	}
+	if !mount {
+		t.Fatal("resolveSandboxToolsDir() mount = false, want true")
+	}
+	if got != toolsDir {
+		t.Fatalf("resolveSandboxToolsDir() dir = %q, want %q", got, toolsDir)
 	}
 }
 

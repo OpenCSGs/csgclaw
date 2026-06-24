@@ -249,7 +249,8 @@ describe("agent model helpers", () => {
         envRows: [{ key: "MODEL_HOME", value: "/models" }],
         headersText: '{"Authorization":"Bearer test"}',
         model_id: "Qwen/Qwen3-0.6B-GGUF",
-        provider: "api",
+        model_provider_id: "csghub-lite",
+        provider: "csghub_lite",
         reasoning_effort: "",
         requestOptionsText: '{"top_p":0.9}',
         runtime_kind: "picoclaw_sandbox",
@@ -258,7 +259,7 @@ describe("agent model helpers", () => {
       description: "Manager Worker Dispatch",
       enable_fast_mode: true,
       env: { MODEL_HOME: "/models" },
-      headers: { Authorization: "Bearer test" },
+      headers: {},
       name: "manager",
       reasoning_effort: "medium",
       request_options: { top_p: 0.9 },
@@ -287,6 +288,29 @@ describe("agent model helpers", () => {
       api_key: "",
       headers: {},
       model_id: "Qwen3-0.6B-GGUF",
+    });
+
+    expect(
+      draftToProfile({
+        api_key: "stale-key",
+        api_key_preview: "",
+        api_key_set: false,
+        base_url: "https://api.deepseek.com",
+        enable_fast_mode: false,
+        envRows: [],
+        headersText: '{"X-Stale":"1"}',
+        model_id: "deepseek-v4-flash",
+        provider: "csghub",
+        reasoning_effort: "medium",
+        requestOptionsText: "{}",
+        runtime_kind: "picoclaw_sandbox",
+      }),
+    ).toMatchObject({
+      provider: "csghub",
+      base_url: "",
+      api_key: "",
+      headers: {},
+      model_id: "deepseek-v4-flash",
     });
   });
 
@@ -565,6 +589,7 @@ describe("agent model helpers", () => {
     expect(providerNeedsAuth("claude")).toBe(true);
     expect(providerNeedsAuth("api")).toBe(false);
     expect(formatProviderLabel("csghub_lite")).toBe("CSGHub Lite");
+    expect(formatProviderLabel("csghub")).toBe("CSGHub");
   });
 
   it("advances agent creation progress toward each step target", () => {
@@ -626,6 +651,7 @@ describe("agent model helpers", () => {
       agent_profile: {
         profile_complete: false,
         provider: "api",
+        model_provider_id: "openai",
         api_key_set: true,
         base_url: "https://api.example/v1",
         model_id: "glm-5.1",
@@ -727,7 +753,7 @@ describe("agent model helpers", () => {
     expect(agentProfilePageSaveDisabled(modelChangedDraft, { id: "u-manager" }, { savedDraft })).toBe(true);
   });
 
-  it("requires API key or stored key flag for API provider draft completeness", () => {
+  it("requires a catalog provider reference for model draft completeness", () => {
     expect(
       isAgentProfileDraftComplete({
         provider: "api",
@@ -740,6 +766,7 @@ describe("agent model helpers", () => {
         provider: "api",
         api_key_set: true,
         base_url: "https://api.example.test/v1",
+        model_provider_id: "openai",
         model_id: "gpt-test",
       }),
     ).toBe(true);

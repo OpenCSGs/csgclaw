@@ -397,6 +397,50 @@ func TestServeForegroundContinuesWhenCSGHubLiteUnavailable(t *testing.T) {
 	}
 }
 
+func TestRefreshStartupModelProvidersSavesDiscoveredModels(t *testing.T) {
+	origCheckCatalogModelProvider := CheckCatalogModelProvider
+	t.Cleanup(func() { CheckCatalogModelProvider = origCheckCatalogModelProvider })
+	CheckCatalogModelProvider = func(_ context.Context, input agent.ModelProviderCheckInput) agent.ModelProviderCheckResult {
+		if input.ID != agent.ModelProviderIDCodex {
+			return agent.ModelProviderCheckResult{ID: input.ID, Status: agent.ModelProviderStatusFailed}
+		}
+		return agent.ModelProviderCheckResult{
+			ID:     input.ID,
+			Status: agent.ModelProviderStatusConnected,
+			Models: []string{"gpt-5.5", "gpt-5.5-codex"},
+		}
+	}
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.Config{
+		Server: config.ServerConfig{
+			ListenAddr:  "127.0.0.1:18080",
+			AccessToken: "secret",
+		},
+		Sandbox: config.SandboxConfig{
+			Provider: config.DefaultSandboxProvider,
+		},
+	}
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("Save(config) error = %v", err)
+	}
+
+	refreshed, _, err := refreshStartupModelProviders(context.Background(), cfg, configPath, nil)
+	if err != nil {
+		t.Fatalf("refreshStartupModelProviders() error = %v", err)
+	}
+	if got := refreshed.Models.Providers[agent.ModelProviderIDCodex].Models; len(got) != 2 || got[0] != "gpt-5.5" || got[1] != "gpt-5.5-codex" {
+		t.Fatalf("refreshed codex models = %+v, want discovered models", got)
+	}
+	saved, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Load(config) error = %v", err)
+	}
+	if got := saved.Models.Providers[agent.ModelProviderIDCodex].Models; len(got) != 2 || got[0] != "gpt-5.5" || got[1] != "gpt-5.5-codex" {
+		t.Fatalf("saved codex models = %+v, want discovered models", got)
+	}
+}
+
 func TestServeForegroundOpensIMURLWhenBrowserAllowed(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
@@ -814,16 +858,12 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		"effective config:\n",
 		`listen_addr = "127.0.0.1:18080"`,
 		`advertise_base_url = "http://example.test"`,
-		`api_key = "sk*****et"`,
 		`access_token = "pc*****et"`,
 		`no_auth = true`,
 		`show_upgrade = true`,
 		`[sandbox]`,
 		fmt.Sprintf(`provider = %q`, config.DockerProvider),
 		`debian_registries_override = []`,
-		`[models]`,
-		`default = "default.model-test"`,
-		`[models.providers.default]`,
 		"CSGClaw IM is available at: http://example.test/",
 	} {
 		if !strings.Contains(got, want) {
@@ -1161,10 +1201,6 @@ models = ["${MODEL_ID}"]
 		`no_auth = true`,
 		`default_manager_template = "builtin.picoclaw-manager"`,
 		`default_worker_template = "builtin.picoclaw-worker"`,
-		`default = "remote.gpt-env"`,
-		`base_url = "https://models.example.test/v1"`,
-		`api_key = "sk*********et"`,
-		`models = ["gpt-env"]`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("effective config missing %q:\n%s", want, got)
@@ -1316,14 +1352,6 @@ kind = "remote"
 url = "https://hub.example.com"
 token = "hu******et"
 enabled = true
-
-[models]
-default = "default.local.minimax-m2.5"
-
-[models.providers.default]
-base_url = "http://127.0.0.1:4000"
-api_key = "sk*****et"
-models = ["local.minimax-m2.5"]
 `
 	if got := formatEffectiveConfig(cfg); got != want {
 		t.Fatalf("formatEffectiveConfig() mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
@@ -1510,6 +1538,7 @@ func stubServeDependencies(t *testing.T) func() {
 	origDetectBootstrapState := DetectBootstrapState
 	origEnsureBootstrapState := EnsureBootstrapState
 	origCheckModelProvider := CheckModelProvider
+	origCheckCatalogModelProvider := CheckCatalogModelProvider
 	origOpenBrowser := OpenBrowser
 	origWaitForHealthy := WaitForHealthy
 	RunServer = func(opts server.Options) error {
@@ -1530,6 +1559,9 @@ func stubServeDependencies(t *testing.T) func() {
 	EnsureCLIProxy = func(context.Context) error { return nil }
 	ShutdownCLIProxy = func(context.Context) error { return nil }
 	CheckModelProvider = checkModelProvider
+	CheckCatalogModelProvider = func(context.Context, agent.ModelProviderCheckInput) agent.ModelProviderCheckResult {
+		return agent.ModelProviderCheckResult{Status: agent.ModelProviderStatusFailed}
+	}
 	OpenBrowser = func(string) error { return nil }
 	WaitForHealthy = func(string, time.Duration) error { return nil }
 	DetectBootstrapState = func(internalonboard.DetectStateOptions) (internalonboard.DetectStateResult, error) {
@@ -1557,6 +1589,7 @@ func stubServeDependencies(t *testing.T) func() {
 		DetectBootstrapState = origDetectBootstrapState
 		EnsureBootstrapState = origEnsureBootstrapState
 		CheckModelProvider = origCheckModelProvider
+		CheckCatalogModelProvider = origCheckCatalogModelProvider
 		OpenBrowser = origOpenBrowser
 		WaitForHealthy = origWaitForHealthy
 	}

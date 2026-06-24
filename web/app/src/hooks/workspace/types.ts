@@ -7,6 +7,7 @@ import type { MessageAction, MessageActionError, MessageLike } from "@/component
 import type { AgentLike, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
 import type { IMConversation, IMData, IMUser, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
+import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { CollapsedWorkspaceGroups, WorkspacePane, WorkspaceTab } from "@/models/routing";
 import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import type { ThemeMode } from "@/shared/theme/theme";
@@ -38,6 +39,7 @@ export type WorkspaceNavigationController = {
   selectConversation: (id: string, options?: NavigatePaneOptions) => void;
   selectHuman: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
   selectHub: (options?: NavigatePaneOptions) => void;
+  selectModelProvider: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
   selectTeam: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
   selectTasks: (taskID?: string, options?: NavigatePaneOptions) => void;
 };
@@ -222,16 +224,20 @@ export type UseAgentControllerArgs = {
   hubTemplates: HubTemplate[];
   locale: LocaleCode;
   managerProfile: AgentProfileLike | null;
+  modelProviders?: ModelProviderCatalog | null;
+  modelProvidersLoaded?: boolean;
   refreshHubTemplates: () => Promise<void>;
   refreshWorkspaceAgents: (options?: FetchAgentsOptions) => Promise<AgentLike[]>;
   refreshWorkspaceBootstrap: () => Promise<IMData | null>;
   refreshWorkspaceBootstrapConfig: () => Promise<RuntimeBootstrapConfig | null>;
   refreshWorkspaceManagerProfile: () => Promise<AgentProfileLike | null>;
+  refreshWorkspaceModelProviders?: () => Promise<ModelProviderCatalog | null>;
   rooms: IMConversation[];
   selectAgent: WorkspaceNavigationController["selectAgent"];
   selectComputer: WorkspaceNavigationController["selectComputer"];
   selectConversation: WorkspaceNavigationController["selectConversation"];
   selectHub: WorkspaceNavigationController["selectHub"];
+  selectModelProvider?: WorkspaceNavigationController["selectModelProvider"];
   setAgentsData: WorkspaceQuerySetter<AgentLike[]>;
   setSelectedHubTemplateId: WorkspaceUiState["setSelectedHubTemplateId"];
   t: TranslateFn;

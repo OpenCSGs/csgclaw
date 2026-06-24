@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/auth"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/csghub/csghubsdk"
 )
@@ -36,6 +37,7 @@ func writeSandboxState(w http.ResponseWriter, name, image, status string) {
 }
 
 func TestOpenRequiresBaseURL(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("CSGHUB_API_BASE_URL", "")
 	t.Setenv("CSGHUB_USER_TOKEN", "token-test")
 	_, err := NewProvider().Open(context.Background(), "")
@@ -44,6 +46,64 @@ func TestOpenRequiresBaseURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "CSGHUB_API_BASE_URL is required") {
 		t.Fatalf("Open() error = %q", err)
+	}
+}
+
+func TestOpenFallsBackToAuthStore(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CSGHUB_API_BASE_URL", "")
+	t.Setenv("CSGHUB_USER_TOKEN", "")
+
+	store, err := auth.DefaultStore()
+	if err != nil {
+		t.Fatalf("DefaultStore() error = %v", err)
+	}
+	if err := store.Save(auth.Record{
+		Tokens:  auth.Tokens{AccessToken: "stored-token"},
+		Account: auth.Account{BaseURL: "https://stored-hub.example.test"},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	rtAny, err := NewProvider().Open(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	rt := rtAny.(*Runtime)
+	if got, want := rt.cfg.clientCfg.BaseURL, "https://stored-hub.example.test"; got != want {
+		t.Fatalf("BaseURL = %q, want %q", got, want)
+	}
+	if got, want := rt.cfg.clientCfg.Token, "stored-token"; got != want {
+		t.Fatalf("Token = %q, want %q", got, want)
+	}
+}
+
+func TestOpenPrefersEnvOverAuthStore(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CSGHUB_API_BASE_URL", "https://env-hub.example.test")
+	t.Setenv("CSGHUB_USER_TOKEN", "env-token")
+
+	store, err := auth.DefaultStore()
+	if err != nil {
+		t.Fatalf("DefaultStore() error = %v", err)
+	}
+	if err := store.Save(auth.Record{
+		Tokens:  auth.Tokens{AccessToken: "stored-token"},
+		Account: auth.Account{BaseURL: "https://stored-hub.example.test"},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	rtAny, err := NewProvider().Open(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	rt := rtAny.(*Runtime)
+	if got, want := rt.cfg.clientCfg.BaseURL, "https://env-hub.example.test"; got != want {
+		t.Fatalf("BaseURL = %q, want %q", got, want)
+	}
+	if got, want := rt.cfg.clientCfg.Token, "env-token"; got != want {
+		t.Fatalf("Token = %q, want %q", got, want)
 	}
 }
 

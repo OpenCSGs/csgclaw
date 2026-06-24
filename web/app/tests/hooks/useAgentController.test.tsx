@@ -157,8 +157,16 @@ function useAgentControllerHarness(
     managerProfile?: AgentProfileLike | null;
   } = {},
 ) {
-  const [agents, setAgents] = useState<AgentLike[]>(options.agents ?? [oldAgent]);
-  const refreshWorkspaceAgents = vi.fn(async () => [oldAgent]);
+  const initialAgents = options.agents ?? [oldAgent];
+  const [agents, setAgents] = useState<AgentLike[]>(initialAgents);
+  const refreshWorkspaceAgentsRef = useRef(vi.fn(async () => initialAgents));
+  const refreshWorkspaceBootstrapRef = useRef(vi.fn(async () => null));
+  const refreshWorkspaceBootstrapConfigRef = useRef(vi.fn(async () => null));
+  const refreshWorkspaceManagerProfileRef = useRef(vi.fn(async () => null));
+  const refreshWorkspaceAgents = refreshWorkspaceAgentsRef.current;
+  const refreshWorkspaceBootstrap = refreshWorkspaceBootstrapRef.current;
+  const refreshWorkspaceBootstrapConfig = refreshWorkspaceBootstrapConfigRef.current;
+  const refreshWorkspaceManagerProfile = refreshWorkspaceManagerProfileRef.current;
   const selectAgentRef = useRef(vi.fn());
   const selectAgent = selectAgentRef.current;
   const selectConversationRef = useRef(vi.fn());
@@ -183,9 +191,9 @@ function useAgentControllerHarness(
     managerProfile: options.managerProfile ?? null,
     refreshHubTemplates: vi.fn(async () => undefined),
     refreshWorkspaceAgents,
-    refreshWorkspaceBootstrap: vi.fn(async () => null),
-    refreshWorkspaceBootstrapConfig: vi.fn(async () => null),
-    refreshWorkspaceManagerProfile: vi.fn(async () => null),
+    refreshWorkspaceBootstrap,
+    refreshWorkspaceBootstrapConfig,
+    refreshWorkspaceManagerProfile,
     rooms: data?.rooms ?? [],
     selectAgent,
     selectComputer: vi.fn(),
@@ -198,7 +206,15 @@ function useAgentControllerHarness(
     t,
   });
 
-  return { controller, selectAgent, selectConversation };
+  return {
+    controller,
+    refreshWorkspaceAgents,
+    refreshWorkspaceBootstrap,
+    refreshWorkspaceBootstrapConfig,
+    refreshWorkspaceManagerProfile,
+    selectAgent,
+    selectConversation,
+  };
 }
 
 describe("useAgentController", () => {
@@ -310,6 +326,76 @@ describe("useAgentController", () => {
         name: "manager",
       }),
     );
+  });
+
+  it("does not wait for bootstrap or skill refresh after saving only the selected agent model", async () => {
+    const aiGatewayAgent: AgentLike = {
+      agent_profile: {
+        model_id: "MiniMax-M2.4",
+        model_provider_id: "opencsg-aigateway",
+        profile_complete: true,
+        provider: "api",
+      },
+      id: "u-worker",
+      image: "worker:latest",
+      instructions: "reply briefly",
+      model_id: "MiniMax-M2.4",
+      model_provider_id: "opencsg-aigateway",
+      name: "worker",
+      profile_complete: true,
+      provider: "api",
+      role: "worker",
+      runtime_kind: "picoclaw_sandbox",
+      status: "running",
+    };
+    const savedAgent: AgentLike = {
+      ...aiGatewayAgent,
+      agent_profile: {
+        ...aiGatewayAgent.agent_profile,
+        model_id: "MiniMax-M2.5",
+      },
+      model_id: "MiniMax-M2.5",
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValueOnce(aiGatewayAgent).mockResolvedValue(savedAgent);
+    vi.mocked(fetchAgentProfile).mockResolvedValue(aiGatewayAgent.agent_profile ?? {});
+    vi.mocked(updateAgentRequest).mockResolvedValue(savedAgent);
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
+          agents: [aiGatewayAgent],
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.controller.agentViewProps.draft?.model_id).toBe("MiniMax-M2.4"));
+    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      const draft = result.current.controller.agentViewProps.draft;
+      result.current.controller.agentViewProps.onDraftChange?.({
+        ...draft!,
+        model_id: "MiniMax-M2.5",
+      });
+    });
+
+    await act(async () => {
+      await result.current.controller.agentViewProps.onSave?.();
+    });
+
+    expect(updateAgentRequest).toHaveBeenCalledWith(
+      "u-worker",
+      expect.objectContaining({
+        agent_profile: expect.objectContaining({
+          model_id: "MiniMax-M2.5",
+          model_provider_id: "opencsg-aigateway",
+        }),
+      }),
+    );
+    expect(result.current.refreshWorkspaceBootstrap).not.toHaveBeenCalled();
+    expect(fetchAgentSkills).toHaveBeenCalledTimes(1);
   });
 
   it("loads global skill candidates and filters already-installed agent skills", async () => {

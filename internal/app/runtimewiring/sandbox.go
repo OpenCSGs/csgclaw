@@ -2,13 +2,17 @@ package runtimewiring
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/channel/feishu"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/sandboxgateway"
+	"csgclaw/internal/runtimeassets"
 	"csgclaw/internal/sandbox"
 )
 
@@ -19,6 +23,7 @@ func withSandboxRuntimeHost(host agent.PicoClawRuntimeHost, feishuProvider feish
 		return agent.WithRuntime(newRuntime(sandboxgateway.Dependencies{
 			FeishuProvider:      feishuProvider,
 			SandboxProviderName: host.SandboxProviderName,
+			SandboxToolsDir:     sandboxToolsDir,
 			EnsureRuntime:       host.EnsureRuntime,
 			RuntimeHome:         host.RuntimeHome,
 			CloseRuntime:        host.CloseRuntime,
@@ -55,6 +60,25 @@ func withSandboxRuntimeHost(host agent.PicoClawRuntimeHost, feishuProvider feish
 			StreamLogs:      host.StreamLogs,
 		}))(s)
 	}
+}
+
+func sandboxToolsDir() (string, error) {
+	dir, err := runtimeassets.DefaultSandboxToolsDir()
+	if err != nil {
+		return "", err
+	}
+	cliPath := filepath.Join(dir, runtimeassets.SandboxCLIName)
+	if _, err := runtimeassets.RefreshFromCurrentExecutable(); err != nil {
+		return "", err
+	}
+	info, err := os.Stat(cliPath)
+	if err != nil {
+		return "", fmt.Errorf("sandbox CLI is not installed at %s: %w", cliPath, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("sandbox CLI path %s is not a regular file", cliPath)
+	}
+	return dir, nil
 }
 
 func updateRuntimeFeishuProvider(svc *agent.Service, runtimeKind string, provider feishu.AgentCredentialProvider) {

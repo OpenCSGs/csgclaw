@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -16,9 +17,8 @@ func TestStartRestartHelperIncludesConfigPath(t *testing.T) {
 		startRestartCommand = origCommand
 	})
 
-	startRestartExecutable = func() (string, error) {
-		return "/tmp/csgclaw", nil
-	}
+	helperPath := writeTestRestartHelperExecutable(t)
+	startRestartExecutable = func() (string, error) { return helperPath, nil }
 
 	var gotName string
 	var gotArgs []string
@@ -26,7 +26,7 @@ func TestStartRestartHelperIncludesConfigPath(t *testing.T) {
 	startRestartCommand = func(name string, args ...string) *exec.Cmd {
 		gotName = name
 		gotArgs = append([]string(nil), args...)
-		startedCmd = exec.Command("sh", "-c", "exit 0")
+		startedCmd = testRestartNoopCommand()
 		return startedCmd
 	}
 
@@ -38,8 +38,8 @@ func TestStartRestartHelperIncludesConfigPath(t *testing.T) {
 		t.Fatalf("StartRestartHelper() error = %v", err)
 	}
 
-	if gotName != "/tmp/csgclaw" {
-		t.Fatalf("command name = %q, want %q", gotName, "/tmp/csgclaw")
+	if gotName != helperPath {
+		t.Fatalf("command name = %q, want %q", gotName, helperPath)
 	}
 	wantArgs := []string{"--config", configPath, "_restart"}
 	if !reflect.DeepEqual(gotArgs, wantArgs) {
@@ -64,6 +64,26 @@ func TestStartRestartHelperIncludesConfigPath(t *testing.T) {
 			t.Fatalf("command env missing %q in %#v", want, startedCmd.Env)
 		}
 	}
+}
+
+func writeTestRestartHelperExecutable(t *testing.T) string {
+	t.Helper()
+	name := "csgclaw"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte("helper"), 0o700); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	}
+	return path
+}
+
+func testRestartNoopCommand() *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/c", "exit", "0")
+	}
+	return exec.Command("sh", "-c", "exit 0")
 }
 
 func TestConsumeRestartStatusManualRestartRequired(t *testing.T) {

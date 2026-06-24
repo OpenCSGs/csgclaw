@@ -4643,6 +4643,68 @@ func TestCompareSemanticVersions(t *testing.T) {
 	}
 }
 
+func TestImageNeedsTemplateVersionUpgradeWithSharedRepositoryMigration(t *testing.T) {
+	tests := []struct {
+		name    string
+		current string
+		latest  defaultAgentImage
+	}{
+		{
+			name:    "picoclaw worker to shared image",
+			current: "registry.example/opencsghq/picoclaw-worker:0.1.4",
+			latest: defaultAgentImage{
+				image:   "registry.example/opencsghq/picoclaw:2026.6.23",
+				version: "0.1.5",
+			},
+		},
+		{
+			name:    "openclaw manager to shared image",
+			current: "registry.example/opencsghq/openclaw-manager:0.1.5",
+			latest: defaultAgentImage{
+				image:   "registry.example/opencsghq/openclaw:20260623.23-csgclaw",
+				version: "0.1.6",
+			},
+		},
+		{
+			name:    "picoclaw shared image tag bump",
+			current: "registry.example/opencsghq/picoclaw:2026.6.22",
+			latest: defaultAgentImage{
+				image:   "registry.example/opencsghq/picoclaw:2026.6.23",
+				version: "0.1.5",
+			},
+		},
+		{
+			name:    "openclaw shared image tag bump",
+			current: "registry.example/opencsghq/openclaw:20260623.22-csgclaw",
+			latest: defaultAgentImage{
+				image:   "registry.example/opencsghq/openclaw:20260623.23-csgclaw",
+				version: "0.1.6",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !imageNeedsTemplateVersionUpgrade(tt.current, tt.latest) {
+				t.Fatalf("imageNeedsTemplateVersionUpgrade(%q, %#v) = false, want true", tt.current, tt.latest)
+			}
+		})
+	}
+}
+
+func TestImageNeedsTemplateVersionUpgradeIgnoresCurrentSharedImageTag(t *testing.T) {
+	latest := defaultAgentImage{
+		image:   "registry.example/opencsghq/picoclaw:2026.6.23",
+		version: "0.1.5",
+	}
+	if imageNeedsTemplateVersionUpgrade("registry.example/opencsghq/picoclaw:2026.6.23", latest) {
+		t.Fatal("imageNeedsTemplateVersionUpgrade() = true, want false for current shared tag")
+	}
+	if imageNeedsTemplateVersionUpgrade("registry.example/opencsghq/picoclaw:2026.6.24", latest) {
+		t.Fatal("imageNeedsTemplateVersionUpgrade() = true, want false for newer shared tag")
+	}
+}
+
 func TestAgentMarksOutdatedManagerImageUpgradeRequiredFromDefaultTemplateVersion(t *testing.T) {
 	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 

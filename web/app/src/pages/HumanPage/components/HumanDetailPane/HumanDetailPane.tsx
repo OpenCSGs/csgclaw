@@ -111,7 +111,9 @@ export function HumanDetailPane({
                 aria-label={t("humanDescriptionLabel")}
                 onClick={() => setIsEditingDescription(true)}
               >
-                <span className="entity-description-display-copy">{descriptionDraft || t("humanDescriptionLabel")}</span>
+                <span className="entity-description-display-copy">
+                  {descriptionDraft || t("humanDescriptionLabel")}
+                </span>
                 <span className="entity-description-display-icon" aria-hidden="true">
                   <Edit3 size={16} strokeWidth={1.8} />
                 </span>

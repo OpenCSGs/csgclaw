@@ -1,0 +1,175 @@
+.toastViewport {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: var(--z-tooltip);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+  max-width: 420px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.toastRoot {
+  position: relative;
+  width: 100%;
+  border: 1px solid color-mix(in oklab, var(--line) 75%, var(--surface) 25%);
+  border-radius: 14px;
+  background:
+    linear-gradient(
+      125deg,
+      color-mix(in oklab, var(--surface) 88%, white 12%),
+      color-mix(in oklab, var(--surface) 96%, black 4%)
+    ),
+    var(--surface);
+  color: var(--text);
+  box-shadow:
+    0 18px 44px color-mix(in oklab, var(--shadow) 18%, transparent),
+    inset 0 1px 0 color-mix(in oklab, #ffffff 16%, transparent);
+  list-style: none;
+  backdrop-filter: blur(2px);
+  padding: 12px 12px 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.toastRoot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    color-mix(in oklab, var(--portal-success-50) 22%, transparent),
+    transparent 55%,
+    color-mix(in oklab, var(--portal-brand-100) 22%, transparent)
+  );
+  opacity: 0.3;
+}
+
+.toastRoot[data-state="open"] {
+  animation: toastEnter 200ms cubic-bezier(0.2, 1, 0.2, 1) both;
+}
+
+.toastRoot[data-state="closed"] {
+  animation: toastExit 160ms ease-in both;
+}
+
+.toastBody {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.toastAvatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--field) 75%, var(--surface));
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.toastAvatar :global(.agent-avatar-image) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.toastAvatar :global(.agent-avatar-fallback) {
+  width: 100%;
+  height: 100%;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--portal-brand-700);
+  background: color-mix(in oklab, var(--portal-brand-100) 30%, transparent);
+}
+
+.toastText {
+  min-width: 0;
+}
+
+.toastTitle {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.toastMessage {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.toastClose {
+  position: relative;
+  z-index: 1;
+  align-self: flex-start;
+  margin-left: 8px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.toastClose:hover {
+  background: color-mix(in oklab, var(--surface) 86%, black 14%);
+  color: var(--text);
+}
+
+.toastClose:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--primary) 50%, transparent);
+  outline-offset: 2px;
+}
+
+@keyframes toastEnter {
+  from {
+    transform: translate3d(12px, -8px, 0) scale(0.985);
+    opacity: 0;
+  }
+
+  to {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes toastExit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(12px, -6px, 0);
+  }
+}
