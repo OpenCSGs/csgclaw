@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"csgclaw/internal/templates"
+	hubtemplates "csgclaw/internal/hub/templates"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -175,5 +175,5 @@ func loadManifestFS(srcFS fs.FS, manifestPath, label string) (string, templateMa
 }
 
 func templateIDFromManifestPath(path string) string {
-	return templates.TemplateIDFromManifestPath(filepath.ToSlash(strings.TrimSpace(path)))
+	return hubtemplates.TemplateIDFromManifestPath(filepath.ToSlash(strings.TrimSpace(path)))
 }

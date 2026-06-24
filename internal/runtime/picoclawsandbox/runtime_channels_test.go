@@ -6,8 +6,8 @@ import (
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
+	"csgclaw/internal/hub/templates"
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/templates"
 )
 
 func TestRuntimeSetFeishuProviderUpdatesGatewayCreateSpecEnv(t *testing.T) {

@@ -69,7 +69,7 @@ Do not use this skill for generic Feishu webhook integrations or non-CSGClaw Fei
    - `CSGCLAW_ACCESS_TOKEN`, unless server auth is disabled
 3. The script is run from the deployed skill directory:
    - inside manager box: typically `~/.picoclaw/workspace/skills/feishu` or your configured skill root
-   - host repo path: `internal/templates/embed/picoclaw-manager/workspace/skills/feishu`
+   - host repo path: `internal/hub/templates/manager/picoclaw/workspace/skills/feishu`
 4. Server build supports:
    - `csgclaw-cli participant bind`
    - `POST /api/v1/channels/feishu/participants`

@@ -1,4 +1,4 @@
-package skillhub
+package local
 
 import (
 	"bytes"

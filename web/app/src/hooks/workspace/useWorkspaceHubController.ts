@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { deleteHubTemplateRequest } from "@/api/hub";
 import { deleteSkillRequest, uploadSkillArchive } from "@/api/skills";
-import { isDeletableHubTemplate } from "@/models/hubWorkspace";
+import { isDeletableHubTemplate, isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { SkillSummary } from "@/models/skillhub";
 import { workspaceQueryKeys } from "./workspaceQueries";
@@ -64,8 +64,13 @@ export function useWorkspaceHubController({
     }
   }, [hubTemplatesQuery.isSuccess, hubTemplatesQuery.dataUpdatedAt]);
 
+  const visibleHubTemplates = useMemo(
+    () => hubTemplates.filter((item) => isVisibleInHubTemplateList(item)),
+    [hubTemplates],
+  );
+
   const hub = useWorkspaceHubSelection({
-    templates: hubTemplates,
+    templates: visibleHubTemplates,
     templatesQuery: hubTemplatesQuery,
     loaded: hubLoaded,
     manualError: hubManualError || hubDeleteError || skillDeleteError,

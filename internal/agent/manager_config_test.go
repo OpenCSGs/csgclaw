@@ -12,8 +12,8 @@ import (
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
+	"csgclaw/internal/hub/templates"
 	"csgclaw/internal/runtime/picoclawsandbox"
-	"csgclaw/internal/templates"
 )
 
 func TestRenderManagerSecurityConfig(t *testing.T) {

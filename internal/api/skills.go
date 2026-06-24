@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"csgclaw/internal/skillhub"
+	skilllocal "csgclaw/internal/skill/local"
 	"csgclaw/internal/utils/filebrowse"
 )
 
@@ -18,15 +18,15 @@ func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	root, err := skillhub.SkillsRoot()
+	root, err := skilllocal.SkillsRoot()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	items, err := skillhub.List(root)
+	items, err := skilllocal.List(root)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			writeJSON(w, http.StatusOK, []skillhub.SkillSummary{})
+			writeJSON(w, http.StatusOK, []skilllocal.SkillSummary{})
 			return
 		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -40,7 +40,7 @@ func (h *Handler) handleSkillUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	root, err := skillhub.SkillsRoot()
+	root, err := skilllocal.SkillsRoot()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -57,15 +57,15 @@ func (h *Handler) handleSkillUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "read skill zip file failed", http.StatusBadRequest)
 		return
 	}
-	item, err := skillhub.InstallArchive(root, header.Filename, archive)
+	item, err := skilllocal.InstallArchive(root, header.Filename, archive)
 	if err != nil {
 		switch {
-		case errors.Is(err, skillhub.ErrSkillAlreadyExists):
+		case errors.Is(err, skilllocal.ErrSkillAlreadyExists):
 			http.Error(w, err.Error(), http.StatusConflict)
-		case errors.Is(err, skillhub.ErrSkillArchiveEmpty),
-			errors.Is(err, skillhub.ErrSkillArchiveUnsafe),
-			errors.Is(err, skillhub.ErrSkillArchiveInvalid),
-			errors.Is(err, skillhub.ErrSKILLMDMissing):
+		case errors.Is(err, skilllocal.ErrSkillArchiveEmpty),
+			errors.Is(err, skilllocal.ErrSkillArchiveUnsafe),
+			errors.Is(err, skilllocal.ErrSkillArchiveInvalid),
+			errors.Is(err, skilllocal.ErrSKILLMDMissing):
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -86,13 +86,13 @@ func (h *Handler) handleSkillByName(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	root, err := skillhub.SkillsRoot()
+	root, err := skilllocal.SkillsRoot()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	name := chi.URLParam(r, "name")
-	if err := skillhub.Delete(root, name); err != nil {
+	if err := skilllocal.Delete(root, name); err != nil {
 		switch {
 		case errors.Is(err, os.ErrNotExist):
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -115,7 +115,7 @@ func (h *Handler) handleSkillBrowse(w http.ResponseWriter, r *http.Request, brow
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	root, err := skillhub.SkillsRoot()
+	root, err := skilllocal.SkillsRoot()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

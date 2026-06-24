@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"csgclaw/internal/skillhub"
+	skilllocal "csgclaw/internal/skill/local"
 )
 
 var (
@@ -35,7 +35,7 @@ func (s *Service) BatchAddSkills(agentID string, skillNames []string) error {
 	if !ok {
 		return fmt.Errorf("agent %q not found", agentID)
 	}
-	globalRoot, err := skillhub.SkillsRoot()
+	globalRoot, err := skilllocal.SkillsRoot()
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (s *Service) DeleteSkill(agentID, skillName string) error {
 	if err != nil {
 		return err
 	}
-	return skillhub.Delete(targetRoot, skillName)
+	return skilllocal.Delete(targetRoot, skillName)
 }
 
 func normalizeAgentSkillName(name string) (string, error) {

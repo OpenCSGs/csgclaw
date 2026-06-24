@@ -3,6 +3,7 @@ import {
   formatHubDateTime,
   formatHubTemplateCount,
   isDeletableHubTemplate,
+  isVisibleInHubTemplateList,
 } from "@/models/hubWorkspace";
 
 describe("hub workspace helpers", () => {
@@ -17,6 +18,21 @@ describe("hub workspace helpers", () => {
     expect(isDeletableHubTemplate({ id: "local.gitlab-assistant", source: { kind: "local" } })).toBe(true);
     expect(isDeletableHubTemplate({ id: "builtin.picoclaw-worker", source: { kind: "builtin" } })).toBe(false);
     expect(isDeletableHubTemplate({ id: "official.review-bot", source: { kind: "remote" } })).toBe(false);
+  });
+
+  it("shows worker templates and official remote templates in hub lists", () => {
+    expect(
+      isVisibleInHubTemplateList({ id: "builtin.picoclaw-worker", role: "worker", source: { kind: "builtin" } }),
+    ).toBe(true);
+    expect(
+      isVisibleInHubTemplateList({ id: "builtin.picoclaw-manager", role: "manager", source: { kind: "builtin" } }),
+    ).toBe(false);
+    expect(
+      isVisibleInHubTemplateList({ id: "official.review-bot", role: "manager", source: { kind: "remote", name: "official" } }),
+    ).toBe(true);
+    expect(
+      isVisibleInHubTemplateList({ id: "team.review-bot", role: "worker", source: { kind: "remote", name: "team" } }),
+    ).toBe(false);
   });
 
   it("formats localized template counts", () => {

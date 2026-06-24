@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"csgclaw/internal/templates"
+	"csgclaw/internal/hub/templates"
 )
 
 func TestRuntimeTemplateFSEmbedsCompleteTemplateUnits(t *testing.T) {
@@ -18,23 +18,23 @@ func TestRuntimeTemplateFSEmbedsCompleteTemplateUnits(t *testing.T) {
 	}{
 		{
 			name:         "openclaw manager",
-			manifestPath: "embed/openclaw-manager/agent.toml",
-			workspaceDoc: "embed/openclaw-manager/workspace/AGENTS.md",
+			manifestPath: "manager/openclaw/agent.toml",
+			workspaceDoc: "manager/openclaw/workspace/AGENTS.md",
 		},
 		{
 			name:         "picoclaw manager",
-			manifestPath: "embed/picoclaw-manager/agent.toml",
-			workspaceDoc: "embed/picoclaw-manager/workspace/AGENT.md",
+			manifestPath: "manager/picoclaw/agent.toml",
+			workspaceDoc: "manager/picoclaw/workspace/AGENT.md",
 		},
 		{
 			name:         "picoclaw worker",
-			manifestPath: "embed/picoclaw-worker/agent.toml",
-			workspaceDoc: "embed/picoclaw-worker/workspace/AGENT.md",
+			manifestPath: "worker/picoclaw/agent.toml",
+			workspaceDoc: "worker/picoclaw/workspace/AGENT.md",
 		},
 		{
 			name:         "openclaw worker",
-			manifestPath: "embed/openclaw-worker/agent.toml",
-			workspaceDoc: "embed/openclaw-worker/workspace/AGENTS.md",
+			manifestPath: "worker/openclaw/agent.toml",
+			workspaceDoc: "worker/openclaw/workspace/AGENTS.md",
 		},
 	}
 
@@ -69,7 +69,7 @@ func TestOpenClawWorkerTemplateUsesOpenClawBootstrapFiles(t *testing.T) {
 		"HEARTBEAT.md",
 	}
 	for _, name := range required {
-		path := "embed/openclaw-worker/workspace/" + name
+		path := "worker/openclaw/workspace/" + name
 		data, err := fs.ReadFile(templates.FS(), path)
 		if err != nil {
 			t.Fatalf("ReadFile(%q) error = %v", path, err)
@@ -80,10 +80,10 @@ func TestOpenClawWorkerTemplateUsesOpenClawBootstrapFiles(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		"embed/openclaw-worker/workspace/AGENT.md",
-		"embed/openclaw-worker/workspace/MEMORY.md",
-		"embed/openclaw-worker/workspace/memory/MEMORY.md",
-		"embed/openclaw-worker/workspace/BOOTSTRAP.md",
+		"worker/openclaw/workspace/AGENT.md",
+		"worker/openclaw/workspace/MEMORY.md",
+		"worker/openclaw/workspace/memory/MEMORY.md",
+		"worker/openclaw/workspace/BOOTSTRAP.md",
 	} {
 		if _, err := fs.Stat(templates.FS(), path); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("Stat(%q) error = %v, want fs.ErrNotExist", path, err)

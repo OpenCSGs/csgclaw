@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/hub/templates"
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/templates"
 )
 
 func TestProvisionPreparesGatewayAssets(t *testing.T) {

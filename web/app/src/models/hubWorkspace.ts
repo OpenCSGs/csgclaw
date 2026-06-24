@@ -6,6 +6,8 @@ export type HubWorkspaceEntry = WorkspaceEntry;
 export type HubWorkspaceFile = WorkspaceFile;
 
 export const HUB_REGISTRY_KIND_LOCAL = "local";
+export const HUB_REGISTRY_KIND_REMOTE = "remote";
+export const OFFICIAL_HUB_REGISTRY_NAME = "official";
 
 export type HubTemplateSource = {
   name?: string | null;
@@ -17,6 +19,24 @@ export function isDeletableHubTemplate(template: HubTemplate | null | undefined)
     String(template?.source?.kind ?? "")
       .trim()
       .toLowerCase() === HUB_REGISTRY_KIND_LOCAL
+  );
+}
+
+export function isVisibleInHubTemplateList(template: HubTemplate | null | undefined): boolean {
+  const sourceKind = String(template?.source?.kind ?? "")
+    .trim()
+    .toLowerCase();
+  if (sourceKind === HUB_REGISTRY_KIND_REMOTE) {
+    return (
+      String(template?.source?.name ?? "")
+        .trim()
+        .toLowerCase() === OFFICIAL_HUB_REGISTRY_NAME
+    );
+  }
+  return (
+    String(template?.role ?? "")
+      .trim()
+      .toLowerCase() === "worker"
   );
 }
 

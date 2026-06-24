@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"csgclaw/internal/templates"
+	"csgclaw/internal/hub/templates"
 )
 
 var (

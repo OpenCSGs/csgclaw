@@ -17,6 +17,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/hub"
+	"csgclaw/internal/hub/templates"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
@@ -25,7 +26,6 @@ import (
 	"csgclaw/internal/sandbox/boxlitecli"
 	"csgclaw/internal/sandbox/hostuser"
 	"csgclaw/internal/sandbox/sandboxtest"
-	"csgclaw/internal/templates"
 )
 
 func init() {

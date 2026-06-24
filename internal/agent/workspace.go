@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"csgclaw/internal/hub/templates"
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/templates"
 )
 
 var (

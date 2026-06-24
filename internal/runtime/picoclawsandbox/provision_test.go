@@ -9,9 +9,9 @@ import (
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
+	"csgclaw/internal/hub/templates"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox/hostuser"
-	"csgclaw/internal/templates"
 )
 
 func TestProvisionPreparesGatewayAssets(t *testing.T) {

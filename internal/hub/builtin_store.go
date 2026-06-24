@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"csgclaw/internal/templates"
+	hubtemplates "csgclaw/internal/hub/templates"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -20,7 +20,7 @@ func NewBuiltinStore() *BuiltinStore {
 }
 
 func (s *BuiltinStore) List(context.Context) ([]Template, error) {
-	builtins := templates.Builtins()
+	builtins := hubtemplates.Builtins()
 	ids := make([]string, 0, len(builtins))
 	for _, item := range builtins {
 		id := strings.TrimSpace(item.ID)
@@ -82,7 +82,7 @@ func (s *BuiltinStore) FetchWorkspace(_ context.Context, id string) (WorkspaceRe
 	if err != nil {
 		return WorkspaceRef{}, fmt.Errorf("create builtin hub workspace temp dir: %w", err)
 	}
-	if err := copyWorkspaceTreeFS(templates.FS(), root, tmpDir, "builtin hub workspace"); err != nil {
+	if err := copyWorkspaceTreeFS(hubtemplates.FS(), root, tmpDir, "builtin hub workspace"); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return WorkspaceRef{}, err
 	}
@@ -102,7 +102,7 @@ func (s *BuiltinStore) loadManifest(id string) (templateManifest, error) {
 		return templateManifest{}, err
 	}
 	manifestPath := s.manifestPath(id)
-	data, err := fs.ReadFile(templates.FS(), manifestPath)
+	data, err := fs.ReadFile(hubtemplates.FS(), manifestPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return templateManifest{}, fmt.Errorf("%w: %s", ErrTemplateNotFound, id)
@@ -120,24 +120,24 @@ func (s *BuiltinStore) loadManifest(id string) (templateManifest, error) {
 }
 
 func (s *BuiltinStore) manifestPath(id string) string {
-	item, ok := templates.LookupBuiltin(id)
+	item, ok := hubtemplates.LookupBuiltin(id)
 	if !ok {
 		return filepath.ToSlash(filepath.Join("builtin", id, localManifestFileName))
 	}
-	return templates.ManifestPath(item.Root)
+	return hubtemplates.ManifestPath(item.Root)
 }
 
 func (s *BuiltinStore) workspacePath(id string) string {
-	item, ok := templates.LookupBuiltin(id)
+	item, ok := hubtemplates.LookupBuiltin(id)
 	if !ok {
 		return filepath.ToSlash(filepath.Join("builtin", id, localWorkspaceDirName))
 	}
-	return templates.WorkspacePath(item.Root)
+	return hubtemplates.WorkspacePath(item.Root)
 }
 
 func (s *BuiltinStore) workspaceRef(id string) WorkspaceRef {
 	path := s.workspacePath(id)
-	info, err := fs.Stat(templates.FS(), path)
+	info, err := fs.Stat(hubtemplates.FS(), path)
 	if err != nil || !info.IsDir() {
 		return WorkspaceRef{}
 	}
