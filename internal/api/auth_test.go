@@ -72,27 +72,6 @@ func TestHandleAuthLogin(t *testing.T) {
 	}
 }
 
-func TestHandleAuthLoginCanSuppressReturnURL(t *testing.T) {
-	var gotReturnURL string
-	restore := stubAuthLogin(func(_ *http.Request, req authLoginRequest) (auth.LoginResponse, error) {
-		gotReturnURL = req.ReturnURL
-		return auth.LoginResponse{LoginURL: "https://iam.example.test/login"}, nil
-	})
-	defer restore()
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"suppress_return_url":true}`))
-	req.Host = "127.0.0.1:18080"
-	req.Header.Set("Referer", "http://127.0.0.1:18080/#/models/opencsg")
-	(&Handler{}).Routes().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if gotReturnURL != "" {
-		t.Fatalf("return_url = %q, want empty when suppressed", gotReturnURL)
-	}
-}
-
 func TestHandleAuthCallback(t *testing.T) {
 	var gotToken string
 	restore := stubAuthCallback(func(r *http.Request) (string, error) {

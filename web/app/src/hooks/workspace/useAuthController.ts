@@ -67,19 +67,17 @@ export function useAuthController(t: TranslateFn): AuthController {
     if (busyAction) {
       return;
     }
-    const loginWindow = openLoginWindow();
     setBusyAction("login");
     setAuthError("");
     try {
-      const loginResp = normalizeLoginResponse(await beginAuthLogin("", { suppressReturnURL: true }));
+      const loginResp = normalizeLoginResponse(await beginAuthLogin(window.location.href));
       if (!loginResp.login_url) {
         throw new Error(t("csghubLoginURLMissing"));
       }
       markPendingAuthLogin();
       setLoginPending(true);
-      navigateLoginWindow(loginWindow, loginResp.login_url);
+      window.location.assign(loginResp.login_url);
     } catch (err) {
-      closeLoginWindow(loginWindow);
       clearPendingAuthLogin();
       setLoginPending(false);
       setAuthError(errorMessage(err, t("csghubLoginFailed")));
@@ -187,34 +185,6 @@ export function useAuthController(t: TranslateFn): AuthController {
 
 async function fetchNormalizedAuthStatus(): Promise<AuthStatus> {
   return normalizeAuthStatus(await fetchAuthStatus());
-}
-
-function openLoginWindow(): Window | null {
-  try {
-    const loginWindow = window.open("about:blank", "_blank");
-    if (loginWindow) {
-      loginWindow.opener = null;
-    }
-    return loginWindow;
-  } catch (_) {
-    return null;
-  }
-}
-
-function navigateLoginWindow(loginWindow: Window | null, loginURL: string) {
-  if (loginWindow) {
-    loginWindow.location.href = loginURL;
-    return;
-  }
-  window.open(loginURL, "_blank", "noopener,noreferrer");
-}
-
-function closeLoginWindow(loginWindow: Window | null) {
-  try {
-    loginWindow?.close();
-  } catch (_) {
-    // Some browser contexts do not allow scripts to close the opened tab.
-  }
 }
 
 function markPendingAuthLogin() {

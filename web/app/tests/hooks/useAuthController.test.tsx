@@ -63,16 +63,11 @@ describe("useAuthController", () => {
     expect(result.current.notice).toBeNull();
   });
 
-  it("opens OpenCSG login in a new tab without returning that tab to CSGClaw", async () => {
+  it("redirects the current tab to OpenCSG login and back to CSGClaw", async () => {
     vi.mocked(fetchAuthStatus).mockResolvedValue({ authenticated: false });
-    vi.mocked(beginAuthLogin).mockResolvedValue({ login_url: "https://opencsg.com/sso/login?redirect_url=callback" });
-    const openedTab = {
-      close: vi.fn(),
-      location: {
-        href: "",
-      },
-    };
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(openedTab as unknown as Window);
+    vi.mocked(beginAuthLogin).mockResolvedValue({ login_url: "#/opencsg-login?redirect_url=callback" });
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    const returnURL = window.location.href;
 
     const { result } = renderHook(() => useAuthController(t), { wrapper: createWrapper() });
 
@@ -80,9 +75,9 @@ describe("useAuthController", () => {
       await result.current.login();
     });
 
-    expect(openSpy).toHaveBeenCalledWith("about:blank", "_blank");
-    expect(beginAuthLogin).toHaveBeenCalledWith("", { suppressReturnURL: true });
-    expect(openedTab.location.href).toBe("https://opencsg.com/sso/login?redirect_url=callback");
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(beginAuthLogin).toHaveBeenCalledWith(returnURL);
+    expect(window.location.hash).toBe("#/opencsg-login?redirect_url=callback");
     expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBe("1");
   });
 });
