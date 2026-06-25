@@ -925,6 +925,8 @@ func parseBoolValue(raw string) (bool, error) {
 
 func parseRawStringValue(raw string) string {
 	raw = strings.TrimSpace(raw)
+	// Preserve escaped TOML string content such as Windows paths so later
+	// save cycles do not introduce double-escaping.
 	if value, err := strconv.Unquote(raw); err == nil {
 		return value
 	}
