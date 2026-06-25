@@ -258,7 +258,7 @@ func resolveAgentRemote(ctx context.Context, client bindAPIClient, ref string) (
 	ref = strings.TrimSpace(ref)
 	for _, candidate := range agentIDCandidates(ref) {
 		if got, err := client.GetAgent(ctx, candidate); err == nil {
-			return got, nil
+			return canonicalRemoteAgent(got), nil
 		}
 	}
 	agents, err := client.ListAgents(ctx)
@@ -272,7 +272,7 @@ func resolveAgentRemote(ctx context.Context, client bindAPIClient, ref string) (
 		}
 	}
 	if len(matches) == 1 {
-		return matches[0], nil
+		return canonicalRemoteAgent(matches[0]), nil
 	}
 	if len(matches) > 1 {
 		return apitypes.Agent{}, fmt.Errorf("agent name %q matched multiple agents", ref)
@@ -285,11 +285,35 @@ func agentIDCandidates(ref string) []string {
 	if ref == "" {
 		return nil
 	}
-	candidates := []string{ref}
-	if !strings.HasPrefix(ref, "u-") {
-		candidates = append(candidates, "u-"+ref)
+	candidates := []string{ref, agentpkg.CanonicalID(ref)}
+	suffix := strings.TrimPrefix(agentpkg.CanonicalID(ref), agentpkg.AgentIDPrefix)
+	if suffix != "" {
+		candidates = append(candidates, "u-"+suffix, suffix)
 	}
-	return candidates
+	return compactUniqueStrings(candidates)
+}
+
+func canonicalRemoteAgent(item apitypes.Agent) apitypes.Agent {
+	item.ID = agentpkg.CanonicalID(item.ID)
+	item.RuntimeID = strings.TrimSpace(item.RuntimeID)
+	return item
+}
+
+func compactUniqueStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func upsertAdminParticipantRemote(ctx context.Context, client bindAPIClient, participantID, name, openID string) (apitypes.Participant, error) {

@@ -24,8 +24,8 @@ import (
 
 const (
 	ManagerName          = "manager"
-	ManagerParticipantID = "manager"
-	ManagerUserID        = "u-manager"
+	ManagerParticipantID = "pt-manager"
+	ManagerUserID        = "agent-manager"
 	managerHostPort      = 18790
 	managerGuestPort     = 18790
 	managerDebugMode     = true
@@ -47,7 +47,7 @@ var osRemoveAll = os.RemoveAll
 var defaultSandboxProvider sandbox.Provider = unconfiguredSandboxProvider{}
 var testDefaultServiceOption ServiceOption
 
-const removeAllRetryAttempts = 5
+const removeAllRetryAttempts = 12
 
 var errDefaultTemplateRuntimeMismatch = errors.New("default template runtime mismatch")
 
@@ -88,7 +88,7 @@ func SetTestHooks(
 	testEnsureRuntimeHook = ensureRuntime
 	if ensureRuntime != nil {
 		testEnsureRuntimeAtHomeHook = func(s *Service, _ string) (sandbox.Runtime, error) {
-			return ensureRuntime(s, ManagerName)
+			return ensureRuntime(s, ManagerUserID)
 		}
 	} else {
 		testEnsureRuntimeAtHomeHook = nil
@@ -169,6 +169,7 @@ type Service struct {
 	managerImage            string
 	gatewayRuntime          string
 	state                   string
+	agentsRoot              string
 	sandbox                 sandbox.Provider
 	mu                      sync.RWMutex
 	runtimes                map[string]sandbox.Runtime
@@ -200,7 +201,7 @@ func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
 	if !ok {
 		return hub.PublishSpec{}, fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
 	}
-	workspaceRoot, err := s.agentWorkspaceRoot(got.Name, got.RuntimeKind)
+	workspaceRoot, err := s.agentWorkspaceRoot(got.ID, got.RuntimeKind)
 	if err != nil {
 		return hub.PublishSpec{}, err
 	}
@@ -363,6 +364,7 @@ func NewServiceWithLLM(llmCfg config.LLMConfig, server config.ServerConfig, mana
 		server:          server,
 		managerImage:    managerImage,
 		state:           statePath,
+		agentsRoot:      serviceAgentsRoot(statePath),
 		sandbox:         defaultSandboxProvider,
 		runtimes:        make(map[string]sandbox.Runtime),
 		agents:          make(map[string]Agent),
@@ -448,9 +450,9 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 		modelCfg = defaultModel
 	}
 	feishuProvider := svc.currentFeishuProviderForRuntime(RuntimeKindPicoClawSandbox)
-	recreateForParticipantBridgeConfig := !forceRecreate && agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID)
-	recreateForFeishuConfig := !forceRecreate && agentPicoClawConfigNeedsFeishuRecreate(ManagerName, ManagerUserID, feishuProvider)
-	if _, err := ensureAgentPicoClawConfigForParticipantWithResolver(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, modelCfg, svc.resolveManagerBaseURL, feishuProvider); err != nil {
+	recreateForParticipantBridgeConfig := !forceRecreate && svc.agentPicoClawConfigNeedsParticipantRecreate(ManagerUserID, ManagerParticipantID)
+	recreateForFeishuConfig := !forceRecreate && svc.agentPicoClawConfigNeedsFeishuRecreate(ManagerUserID, feishuProvider)
+	if _, err := svc.ensureAgentPicoClawConfigForParticipantWithResolver(ManagerName, ManagerParticipantID, ManagerUserID, svc.server, modelCfg, svc.resolveManagerBaseURL, feishuProvider); err != nil {
 		return err
 	}
 	if recreateForParticipantBridgeConfig {
@@ -569,7 +571,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 	if err != nil {
 		return Agent{}, err
 	}
-	runtimeHome, err := s.sandboxRuntimeHome(ManagerName)
+	runtimeHome, err := s.sandboxRuntimeHome(ManagerUserID)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -727,12 +729,12 @@ func (s *Service) cleanupBootstrapManagerForRecreate(ctx context.Context, rt san
 		return rt, fmt.Errorf("close bootstrap manager runtime before recreate: %w", err)
 	}
 	rt = nil
-	managerHome, err := agentHomeDir(ManagerName)
+	managerHome, err := s.agentHomeDir(ManagerUserID)
 	if err != nil {
 		return nil, err
 	}
 	sourceRuntimeKind := s.managerSkillPreservationSourceRuntimeKind(runtimeKind)
-	restoreSkills, cleanupSkills, err := s.prepareWorkspaceSkillsPreservation(ManagerName, sourceRuntimeKind, runtimeKind, RoleManager)
+	restoreSkills, cleanupSkills, err := s.prepareWorkspaceSkillsPreservation(ManagerUserID, sourceRuntimeKind, runtimeKind, RoleManager)
 	if err != nil {
 		return nil, fmt.Errorf("prepare bootstrap manager skills preservation: %w", err)
 	}
@@ -1038,7 +1040,7 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 	}
 
 	s.mu.RLock()
-	existing, ok := s.agents[id]
+	existing, _, ok := s.agentByIDLocked(id)
 	s.mu.RUnlock()
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
@@ -1168,10 +1170,7 @@ func shouldCreateWorkerSpec(spec CreateAgentSpec) bool {
 }
 
 func normalizeCreateID(id string) string {
-	if strings.EqualFold(strings.TrimSpace(id), ManagerName) {
-		return ManagerUserID
-	}
-	return strings.TrimSpace(id)
+	return canonicalAgentID(id)
 }
 
 func (s *Service) Agent(id string) (Agent, bool) {
@@ -1200,12 +1199,21 @@ func (s *Service) agentSnapshot(id string) (Agent, bool) {
 		return Agent{}, false
 	}
 	s.mu.RLock()
-	a, ok := s.agents[strings.TrimSpace(id)]
+	a, _, ok := s.agentByIDLocked(id)
 	s.mu.RUnlock()
 	if !ok {
 		return Agent{}, false
 	}
 	return *cloneAgent(&a), true
+}
+
+func (s *Service) agentByIDLocked(id string) (Agent, string, bool) {
+	for _, key := range agentIDAliases(id) {
+		if a, ok := s.agents[key]; ok {
+			return a, key, true
+		}
+	}
+	return Agent{}, "", false
 }
 
 func (s *Service) agentSnapshotByName(name string) (Agent, bool) {
@@ -1274,7 +1282,7 @@ func (s *Service) refreshAgentBoxID(id string, got Agent, resolvedKey string, bo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	current, ok := s.agents[id]
+	current, key, ok := s.agentByIDLocked(id)
 	if !ok {
 		return nil
 	}
@@ -1282,7 +1290,7 @@ func (s *Service) refreshAgentBoxID(id string, got Agent, resolvedKey string, bo
 		return nil
 	}
 	current.BoxID = info.ID
-	s.agents[id] = current
+	s.agents[key] = current
 	s.syncRuntimeRecordLocked(current)
 	return s.saveLocked()
 }
@@ -1383,24 +1391,24 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	}
 
 	s.mu.RLock()
-	existing, ok := s.agents[id]
+	existing, _, ok := s.agentByIDLocked(id)
 	s.mu.RUnlock()
 	if !ok {
 		return fmt.Errorf("agent %q not found", id)
 	}
 
-	s.stopLifecycleAgent(id)
+	s.stopLifecycleAgent(existing.ID)
 
 	if runtimeImpl, err := s.runtimeForKind(strings.TrimSpace(existing.RuntimeKind)); err == nil && strings.TrimSpace(existing.BoxID) != "" {
 		if err := runtimeImpl.Delete(ctx, runtimeHandleForAgent(existing)); err != nil && !sandbox.IsNotFound(err) {
 			return fmt.Errorf("remove agent box: %w", err)
 		}
 	} else {
-		rt, ensureErr := s.ensureRuntime(existing.Name)
+		rt, ensureErr := s.ensureRuntime(existing.ID)
 		if ensureErr != nil {
 			return ensureErr
 		}
-		runtimeHome, homeErr := s.sandboxRuntimeHome(existing.Name)
+		runtimeHome, homeErr := s.sandboxRuntimeHome(existing.ID)
 		if homeErr != nil {
 			return homeErr
 		}
@@ -1412,7 +1420,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		}
 	}
 
-	agentHome, err := agentHomeDir(existing.Name)
+	agentHome, err := s.agentHomeDir(existing.ID)
 	if err != nil {
 		return err
 	}
@@ -1422,14 +1430,14 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 	s.mu.Lock()
 
-	current, ok := s.agents[id]
+	current, key, ok := s.agentByIDLocked(id)
 	if !ok {
 		s.mu.Unlock()
 		return fmt.Errorf("agent %q not found", id)
 	}
-	delete(s.agents, id)
+	delete(s.agents, key)
 	s.deleteRuntimeRecordLocked(current.RuntimeID)
-	runtimeHome, err := s.sandboxRuntimeHome(current.Name)
+	runtimeHome, err := s.sandboxRuntimeHome(current.ID)
 	if err != nil {
 		s.mu.Unlock()
 		return err
@@ -1587,13 +1595,22 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		return Agent{}, fmt.Errorf("name %q is reserved", name)
 	}
 	if id == "" {
-		// id = fmt.Sprintf("%s-%d", RoleWorker, time.Now().UnixNano())
-		id = fmt.Sprintf("u-%s", name)
+		var err error
+		id, err = newAgentID()
+		if err != nil {
+			return Agent{}, err
+		}
+	} else {
+		var err error
+		id, err = normalizeExplicitAgentID(id)
+		if err != nil {
+			return Agent{}, err
+		}
 	}
 
 	s.mu.RLock()
 	idExists := false
-	if _, ok := s.agents[id]; ok {
+	if _, _, ok := s.agentByIDLocked(id); ok {
 		idExists = true
 	}
 	nameExists := s.hasNameLocked(name)
@@ -1635,11 +1652,11 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		return Agent{}, fmt.Errorf("provision worker runtime: %w", err)
 	}
 	if testCreateGatewayBoxHook != nil && isGatewayRuntimeKind(runtimeKind) {
-		rt, err := s.ensureRuntime(name)
+		rt, err := s.ensureRuntime(id)
 		if err != nil {
 			return Agent{}, err
 		}
-		runtimeHome, err := s.sandboxRuntimeHome(name)
+		runtimeHome, err := s.sandboxRuntimeHome(id)
 		if err != nil {
 			return Agent{}, err
 		}
@@ -1691,7 +1708,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 func (s *Service) persistStartingWorker(ctx context.Context, id, name, description, instructions, image, avatar, runtimeKind string, profile AgentProfile, runtimeOptions map[string]any) error {
 	s.mu.Lock()
 
-	if _, ok := s.agents[id]; ok {
+	if _, _, ok := s.agentByIDLocked(id); ok {
 		s.mu.Unlock()
 		return fmt.Errorf("agent id %q already exists", id)
 	}
@@ -1730,7 +1747,7 @@ func (s *Service) removeStartingWorker(ctx context.Context, id string) error {
 func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, instructions, image, avatar, runtimeKind string, profile AgentProfile, createRuntimeExt map[string]any, info agentruntime.Info) (Agent, error) {
 	s.mu.Lock()
 
-	if existing, ok := s.agents[id]; ok && !isStartingWorker(existing) {
+	if existing, _, ok := s.agentByIDLocked(id); ok && !isStartingWorker(existing) {
 		s.mu.Unlock()
 		return Agent{}, fmt.Errorf("agent id %q already exists", id)
 	}
@@ -1862,9 +1879,18 @@ func ParticipantIDForAgent(agentName, agentID string) string {
 
 func participantIDFromAgentID(agentID string) string {
 	agentID = strings.TrimSpace(agentID)
-	withoutPrefix := strings.TrimPrefix(agentID, "u-")
-	if withoutPrefix != "" && withoutPrefix != agentID {
-		return withoutPrefix
+	if strings.HasPrefix(agentID, AgentIDPrefix) {
+		suffix := strings.TrimPrefix(agentID, AgentIDPrefix)
+		if suffix != "" {
+			return "pt-" + suffix
+		}
+	}
+	if strings.HasPrefix(agentID, "u-") {
+		suffix := strings.TrimPrefix(agentID, "u-")
+		suffix = strings.TrimPrefix(suffix, AgentIDPrefix)
+		if suffix != "" {
+			return "pt-" + suffix
+		}
 	}
 	return agentID
 }
@@ -1873,7 +1899,7 @@ func (s *Service) gatewayProvisionRequest(runtimeKind, agentName, agentID string
 	if s == nil {
 		return nil, fmt.Errorf("agent service is required")
 	}
-	agentHome, err := agentHomeDir(agentName)
+	agentHome, err := s.agentHomeDir(agentID)
 	if err != nil {
 		return nil, err
 	}

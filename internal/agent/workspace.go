@@ -58,24 +58,24 @@ func ensureWorkspaceAtRoot(hostRoot, template string) (string, error) {
 	return hostRoot, nil
 }
 
-func (s *Service) agentWorkspaceRoot(agentName, runtimeKind string) (string, error) {
-	layout, err := s.agentLayout(agentName, runtimeKind)
+func (s *Service) agentWorkspaceRoot(agentID, runtimeKind string) (string, error) {
+	layout, err := s.agentLayout(agentID, runtimeKind)
 	if err != nil {
 		return "", err
 	}
 	return layout.WorkspaceRoot, nil
 }
 
-func (s *Service) agentSkillsRoot(agentName, runtimeKind string) (string, error) {
-	layout, err := s.agentLayout(agentName, runtimeKind)
+func (s *Service) agentSkillsRoot(agentID, runtimeKind string) (string, error) {
+	layout, err := s.agentLayout(agentID, runtimeKind)
 	if err != nil {
 		return "", err
 	}
 	return layout.SkillsRoot, nil
 }
 
-func (s *Service) agentLayout(agentName, runtimeKind string) (agentruntime.Layout, error) {
-	agentHome, err := agentHomeDir(agentName)
+func (s *Service) agentLayout(agentID, runtimeKind string) (agentruntime.Layout, error) {
+	agentHome, err := s.agentHomeDir(agentID)
 	if err != nil {
 		return agentruntime.Layout{}, err
 	}
@@ -122,7 +122,7 @@ func overlayWorkspaceTree(srcRoot, dstRoot string) error {
 	return copyWorkspaceFS(os.DirFS(srcRoot), ".", dstRoot, "workspace", true)
 }
 
-func (s *Service) prepareWorkspaceSkillsPreservation(agentName, sourceRuntimeKind, targetRuntimeKind, role string) (func() error, func(), error) {
+func (s *Service) prepareWorkspaceSkillsPreservation(agentID, sourceRuntimeKind, targetRuntimeKind, role string) (func() error, func(), error) {
 	sourceRuntimeKind = strings.TrimSpace(sourceRuntimeKind)
 	targetRuntimeKind = strings.TrimSpace(targetRuntimeKind)
 	if sourceRuntimeKind == "" {
@@ -131,7 +131,7 @@ func (s *Service) prepareWorkspaceSkillsPreservation(agentName, sourceRuntimeKin
 	if targetRuntimeKind == "" {
 		targetRuntimeKind = sourceRuntimeKind
 	}
-	sourceSkills, err := s.agentSkillsRoot(agentName, sourceRuntimeKind)
+	sourceSkills, err := s.agentSkillsRoot(agentID, sourceRuntimeKind)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -179,7 +179,7 @@ func (s *Service) prepareWorkspaceSkillsPreservation(agentName, sourceRuntimeKin
 		if empty, err := directoryEmpty(preservedSkills); err != nil || empty {
 			return err
 		}
-		targetSkills, err := s.agentSkillsRoot(agentName, targetRuntimeKind)
+		targetSkills, err := s.agentSkillsRoot(agentID, targetRuntimeKind)
 		if err != nil {
 			return err
 		}
@@ -191,12 +191,12 @@ func (s *Service) prepareWorkspaceSkillsPreservation(agentName, sourceRuntimeKin
 	return restore, cleanup, nil
 }
 
-func (s *Service) refreshGatewayTemplateSkills(agentName, runtimeKind, role string) error {
+func (s *Service) refreshGatewayTemplateSkills(agentID, runtimeKind, role string) error {
 	runtimeKind = strings.TrimSpace(runtimeKind)
 	if !isGatewayRuntimeKind(runtimeKind) {
 		return nil
 	}
-	skillsRoot, err := s.agentSkillsRoot(agentName, runtimeKind)
+	skillsRoot, err := s.agentSkillsRoot(agentID, runtimeKind)
 	if err != nil {
 		return err
 	}

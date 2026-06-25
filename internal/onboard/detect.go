@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"csgclaw/internal/agent"
@@ -113,7 +112,11 @@ func DetectState(opts DetectStateOptions) (DetectStateResult, error) {
 	}
 	result.ManagerAgentComplete = managerAgentComplete(agentState)
 
-	store, err := openParticipantStore(filepath.Join(filepath.Dir(imStatePath), "participants.json"))
+	participantsPath, err := defaultParticipantsPath()
+	if err != nil {
+		return DetectStateResult{}, err
+	}
+	store, err := openParticipantStore(participantsPath)
 	if err != nil {
 		return DetectStateResult{}, err
 	}
@@ -132,13 +135,13 @@ func imBootstrapComplete(state im.Bootstrap) bool {
 	if !hasIMUser(state.Users, im.AdminUserID, "admin", "admin") {
 		return false
 	}
-	if !hasIMUser(state.Users, agent.ManagerParticipantID, "manager", "manager") {
+	if !hasIMUser(state.Users, im.ManagerUserID, "manager", "manager") {
 		return false
 	}
 	for _, room := range state.Rooms {
 		if room.IsDirect &&
 			len(room.Members) == 2 &&
-			containsMember(room.Members, im.AdminUserID) &&
+			containsMember(room.Members, "pt-admin") &&
 			containsMember(room.Members, agent.ManagerParticipantID) {
 			return true
 		}
@@ -193,7 +196,7 @@ func adminParticipantComplete(items []participant.Participant) bool {
 		if strings.TrimSpace(item.Channel) != participant.ChannelCSGClaw {
 			continue
 		}
-		if strings.TrimSpace(item.ID) != im.AdminUserID {
+		if strings.TrimSpace(item.ID) != participant.BootstrapAdminParticipantID {
 			continue
 		}
 		if !strings.EqualFold(strings.TrimSpace(item.Type), participant.TypeHuman) {

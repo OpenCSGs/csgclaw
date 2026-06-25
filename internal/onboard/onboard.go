@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"csgclaw/internal/agent"
@@ -21,6 +20,7 @@ var (
 	EnsureIMBootstrapState   = im.EnsureBootstrapState
 	defaultAgentsPath        = config.DefaultAgentsPath
 	defaultIMStatePath       = config.DefaultIMStatePath
+	defaultParticipantsPath  = config.DefaultStatePath
 )
 
 type EnsureStateOptions struct {
@@ -159,7 +159,11 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 	if err != nil {
 		return participant.Participant{}, err
 	}
-	store, err := participant.NewStore(filepath.Join(filepath.Dir(imStatePath), "participants.json"))
+	participantsPath, err := defaultParticipantsPath()
+	if err != nil {
+		return participant.Participant{}, err
+	}
+	store, err := participant.NewStore(participantsPath)
 	if err != nil {
 		return participant.Participant{}, err
 	}

@@ -21,7 +21,7 @@ func (h *Handler) handleCsgclawRoomMembersByID(w http.ResponseWriter, r *http.Re
 }
 
 func (h *Handler) handleCsgclawUserByID(w http.ResponseWriter, r *http.Request) {
-	id := pathValue(r, "id")
+	id := pathValueOrLastSegment(r, "id")
 	if id == "" {
 		http.NotFound(w, r)
 		return

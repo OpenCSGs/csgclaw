@@ -137,11 +137,29 @@ func agentIDCandidates(ref string) []string {
 	if ref == "" {
 		return nil
 	}
-	candidates := []string{ref}
-	if !strings.HasPrefix(ref, "u-") {
-		candidates = append(candidates, "u-"+ref)
+	candidates := []string{ref, agent.CanonicalID(ref)}
+	suffix := strings.TrimPrefix(agent.CanonicalID(ref), agent.AgentIDPrefix)
+	if suffix != "" {
+		candidates = append(candidates, "u-"+suffix, suffix)
 	}
-	return candidates
+	return compactAgentIDCandidates(candidates)
+}
+
+func compactAgentIDCandidates(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func upsertAdminParticipant(ctx context.Context, participantSvc *participant.Service, participantID, name, openID string) (participant.Participant, error) {

@@ -8,6 +8,7 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	"csgclaw/internal/team"
 )
@@ -17,7 +18,7 @@ func (h *Handler) handleListTeams(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, apiTeams(svc.ListTeams()))
+	writeJSON(w, http.StatusOK, apiTeamsWithPresenter(svc.ListTeams(), h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleCreateTeam(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +48,7 @@ func (h *Handler) handleCreateTeam(w http.ResponseWriter, r *http.Request) {
 		writeTeamError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, apiTeam(created))
+	writeJSON(w, http.StatusCreated, apiTeamWithPresenter(created, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) resolveCreateTeamAgents(req apitypes.CreateTeamRequest) (string, []string, error) {
@@ -59,10 +60,13 @@ func (h *Handler) resolveCreateTeamAgents(req apitypes.CreateTeamRequest) (strin
 		}
 		leadAgentID = resolved
 	}
+	if leadAgentID != "" {
+		leadAgentID = agent.CanonicalID(leadAgentID)
+	}
 
 	memberAgentIDs := req.MemberAgentIDs
 	if len(req.MemberAgentIDs) > 0 {
-		memberAgentIDs = req.MemberAgentIDs
+		memberAgentIDs = canonicalAgentIDs(req.MemberAgentIDs)
 	} else if len(req.MemberParticipantIDs) > 0 {
 		memberAgentIDs = make([]string, 0, len(req.MemberParticipantIDs))
 		for _, participantID := range req.MemberParticipantIDs {
@@ -73,11 +77,25 @@ func (h *Handler) resolveCreateTeamAgents(req apitypes.CreateTeamRequest) (strin
 			if strings.TrimSpace(resolved) == "" {
 				continue
 			}
-			memberAgentIDs = append(memberAgentIDs, resolved)
+			memberAgentIDs = append(memberAgentIDs, agent.CanonicalID(resolved))
 		}
 	}
 
 	return leadAgentID, memberAgentIDs, nil
+}
+
+func canonicalAgentIDs(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			out = append(out, agent.CanonicalID(id))
+		}
+	}
+	return out
 }
 
 func (h *Handler) resolveCreateTeamParticipantID(field, id string) (string, error) {
@@ -85,7 +103,7 @@ func (h *Handler) resolveCreateTeamParticipantID(field, id string) (string, erro
 	if id == "" {
 		return "", nil
 	}
-	if id == agent.ManagerParticipantID {
+	if id == agent.ManagerParticipantID || id == agent.ManagerName || id == "u-manager" || id == im.ManagerUserID {
 		return agent.ManagerUserID, nil
 	}
 	if h != nil && h.participant != nil {
@@ -111,7 +129,7 @@ func (h *Handler) handleGetTeam(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, team.ErrTeamNotFound.Error(), http.StatusNotFound)
 		return
 	}
-	writeJSON(w, http.StatusOK, apiTeam(item))
+	writeJSON(w, http.StatusOK, apiTeamWithPresenter(item, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleListTeamTasks(w http.ResponseWriter, r *http.Request) {

@@ -167,12 +167,12 @@ func MentionTagUserIDs(content string) []string {
 }
 
 func HasMentionTagForUser(content, userID string) bool {
-	userID = strings.TrimSpace(userID)
+	userID = canonicalIMParticipantID(userID)
 	if userID == "" {
 		return false
 	}
 	for _, id := range MentionTagUserIDs(content) {
-		if id == userID {
+		if canonicalIMParticipantID(id) == userID {
 			return true
 		}
 	}
@@ -180,13 +180,20 @@ func HasMentionTagForUser(content, userID string) bool {
 }
 
 const (
-	sessionsDirName          = "sessions"
-	AdminUserID              = "admin"
-	DefaultAdminDescription  = "Human operator. Agents can @admin to ask clarifying questions, request confirmation, and double-check important decisions before continuing."
-	adminUserID              = AdminUserID
-	legacyAdminUserID        = "u-admin"
-	managerParticipantUserID = "manager"
-	legacyManagerUserID      = "u-manager"
+	sessionsDirName                 = "sessions"
+	threadsDirName                  = "threads"
+	adminParticipantID              = "pt-admin"
+	managerParticipantID            = "pt-manager"
+	AdminUserID                     = "user-admin"
+	ManagerUserID                   = "user-manager"
+	DefaultAdminDescription         = "Human operator. Agents can @admin to ask clarifying questions, request confirmation, and double-check important decisions before continuing."
+	adminUserID                     = AdminUserID
+	legacyBareAdminUserID           = "admin"
+	legacyAdminUserID               = "u-admin"
+	managerParticipantUserID        = ManagerUserID
+	legacyManagerParticipantID      = "manager"
+	legacyTypedManagerParticipantID = "pt-manager"
+	legacyManagerUserID             = "u-manager"
 )
 
 type persistedBootstrap struct {
@@ -197,14 +204,28 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
-	ID          string        `json:"id"`
-	Title       string        `json:"title"`
-	Subtitle    string        `json:"subtitle"`
-	Description string        `json:"description,omitempty"`
-	IsDirect    bool          `json:"is_direct,omitempty"`
-	Members     []string      `json:"members"`
-	Messages    string        `json:"messages"`
-	Threads     []ThreadState `json:"threads,omitempty"`
+	ID          string            `json:"id"`
+	Title       string            `json:"title"`
+	Subtitle    string            `json:"subtitle"`
+	Description string            `json:"description,omitempty"`
+	IsDirect    bool              `json:"is_direct,omitempty"`
+	Members     []string          `json:"members"`
+	Messages    string            `json:"messages"`
+	Threads     []persistedThread `json:"threads,omitempty"`
+}
+
+type persistedThread struct {
+	RootMessageID string               `json:"root_message_id"`
+	CreatedAt     time.Time            `json:"created_at"`
+	Summary       ThreadContextSummary `json:"summary"`
+	Context       []Message            `json:"context,omitempty"`
+}
+
+type persistedThreadContext struct {
+	RootMessageID string               `json:"root_message_id"`
+	CreatedAt     time.Time            `json:"created_at"`
+	Context       []Message            `json:"context"`
+	Summary       ThreadContextSummary `json:"summary"`
 }
 
 func (r *persistedRoom) UnmarshalJSON(data []byte) error {
@@ -326,6 +347,10 @@ func ensureBootstrapDirs(path string) error {
 	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
 		return fmt.Errorf("create im sessions dir: %w", err)
 	}
+	threadsDir := filepath.Join(filepath.Dir(path), threadsDirName)
+	if err := os.MkdirAll(threadsDir, 0o755); err != nil {
+		return fmt.Errorf("create im threads dir: %w", err)
+	}
 	return nil
 }
 
@@ -368,6 +393,10 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 		if err != nil {
 			return nil, err
 		}
+		threads, err := loadRoomThreads(statePath, room.ID, room.Threads)
+		if err != nil {
+			return nil, err
+		}
 		loaded = append(loaded, Room{
 			ID:          room.ID,
 			Title:       room.Title,
@@ -376,7 +405,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			IsDirect:    room.IsDirect,
 			Members:     append([]string(nil), room.Members...),
 			Messages:    messages,
-			Threads:     cloneThreadStates(room.Threads),
+			Threads:     threads,
 		})
 	}
 	return loaded, nil
@@ -394,6 +423,59 @@ func loadRoomMessages(statePath, roomID, relativePath string) ([]Message, error)
 	return loadMessagesJSONL(sessionPath, roomID)
 }
 
+func loadRoomThreads(statePath, roomID string, refs []persistedThread) ([]ThreadState, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	threads := make([]ThreadState, 0, len(refs))
+	for _, ref := range refs {
+		rootID := strings.TrimSpace(ref.RootMessageID)
+		if rootID == "" {
+			continue
+		}
+		state := ThreadState{
+			RootMessageID: rootID,
+			CreatedAt:     ref.CreatedAt,
+			Context:       cloneMessages(ref.Context),
+			Summary:       ref.Summary,
+		}
+		if stored, ok, err := loadThreadContextFile(statePath, roomID, rootID); err != nil {
+			return nil, err
+		} else if ok {
+			if !stored.CreatedAt.IsZero() {
+				state.CreatedAt = stored.CreatedAt
+			}
+			if len(stored.Context) > 0 {
+				state.Context = cloneMessages(stored.Context)
+			}
+			if !threadContextSummaryEmpty(stored.Summary) {
+				state.Summary = stored.Summary
+			}
+		}
+		threads = append(threads, state)
+	}
+	return threads, nil
+}
+
+func loadThreadContextFile(statePath, roomID, rootMessageID string) (persistedThreadContext, bool, error) {
+	path := threadContextPath(statePath, roomID, rootMessageID)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return persistedThreadContext{}, false, nil
+		}
+		return persistedThreadContext{}, false, fmt.Errorf("read im thread context: %w", err)
+	}
+	var stored persistedThreadContext
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return persistedThreadContext{}, false, fmt.Errorf("decode im thread context: %w", err)
+	}
+	if strings.TrimSpace(stored.RootMessageID) == "" {
+		stored.RootMessageID = rootMessageID
+	}
+	return stored, true, nil
+}
+
 func savePersistedBootstrap(statePath string, state Bootstrap) (persistedBootstrap, error) {
 	persisted := persistedBootstrapFromState(state)
 
@@ -404,6 +486,9 @@ func savePersistedBootstrap(statePath string, state Bootstrap) (persistedBootstr
 	persisted.Rooms = rooms
 
 	if err := cleanupSessionFiles(statePath, rooms); err != nil {
+		return persistedBootstrap{}, err
+	}
+	if err := cleanupThreadFiles(statePath, rooms); err != nil {
 		return persistedBootstrap{}, err
 	}
 	return persisted, nil
@@ -434,6 +519,9 @@ func savePersistedRooms(statePath string, rooms []Room) ([]persistedRoom, error)
 		if err := saveRoomMessagesForState(statePath, room); err != nil {
 			return nil, err
 		}
+		if err := saveRoomThreadsForState(statePath, room); err != nil {
+			return nil, err
+		}
 		persisted = append(persisted, persistedRoomFromRoom(room))
 	}
 	return persisted, nil
@@ -442,6 +530,34 @@ func savePersistedRooms(statePath string, rooms []Room) ([]persistedRoom, error)
 func saveRoomMessagesForState(statePath string, room Room) error {
 	relativePath := sessionRelativePath(room.ID)
 	return saveMessagesJSONL(filepath.Join(filepath.Dir(statePath), filepath.FromSlash(relativePath)), room.ID, room.Messages)
+}
+
+func saveRoomThreadsForState(statePath string, room Room) error {
+	for _, thread := range room.Threads {
+		rootID := strings.TrimSpace(thread.RootMessageID)
+		if rootID == "" {
+			continue
+		}
+		stored := persistedThreadContext{
+			RootMessageID: rootID,
+			CreatedAt:     thread.CreatedAt,
+			Context:       cloneMessages(thread.Context),
+			Summary:       thread.Summary,
+		}
+		data, err := json.MarshalIndent(stored, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encode im thread context: %w", err)
+		}
+		data = append(data, '\n')
+		path := threadContextPath(statePath, room.ID, rootID)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return fmt.Errorf("create im thread context dir: %w", err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			return fmt.Errorf("write im thread context: %w", err)
+		}
+	}
+	return nil
 }
 
 func persistedRoomFromRoom(room Room) persistedRoom {
@@ -453,8 +569,27 @@ func persistedRoomFromRoom(room Room) persistedRoom {
 		IsDirect:    room.IsDirect,
 		Members:     append([]string(nil), room.Members...),
 		Messages:    sessionRelativePath(room.ID),
-		Threads:     cloneThreadStates(room.Threads),
+		Threads:     persistedThreadsFromStates(room.Threads),
 	}
+}
+
+func persistedThreadsFromStates(states []ThreadState) []persistedThread {
+	if len(states) == 0 {
+		return nil
+	}
+	refs := make([]persistedThread, 0, len(states))
+	for _, state := range states {
+		rootID := strings.TrimSpace(state.RootMessageID)
+		if rootID == "" {
+			continue
+		}
+		refs = append(refs, persistedThread{
+			RootMessageID: rootID,
+			CreatedAt:     state.CreatedAt,
+			Summary:       state.Summary,
+		})
+	}
+	return refs
 }
 
 func cleanupSessionFiles(statePath string, rooms []persistedRoom) error {
@@ -519,8 +654,74 @@ func cleanupStaleSessionBlobRooms(sessionsDir string, rooms []persistedRoom) err
 	return nil
 }
 
+func cleanupThreadFiles(statePath string, rooms []persistedRoom) error {
+	threadsRoot := filepath.Join(filepath.Dir(statePath), threadsDirName)
+	entries, err := os.ReadDir(threadsRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read im threads dir: %w", err)
+	}
+
+	keepRooms := make(map[string]map[string]struct{}, len(rooms))
+	for _, room := range rooms {
+		roomID := strings.TrimSpace(room.ID)
+		if roomID == "" {
+			continue
+		}
+		roots := make(map[string]struct{}, len(room.Threads))
+		for _, thread := range room.Threads {
+			rootID := strings.TrimSpace(thread.RootMessageID)
+			if rootID != "" {
+				roots[rootID+".json"] = struct{}{}
+			}
+		}
+		keepRooms[roomID] = roots
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		roomID := entry.Name()
+		roomDir := filepath.Join(threadsRoot, roomID)
+		keepThreads, ok := keepRooms[roomID]
+		if !ok {
+			if err := os.RemoveAll(roomDir); err != nil {
+				return fmt.Errorf("remove stale im thread room dir: %w", err)
+			}
+			continue
+		}
+		threadEntries, err := os.ReadDir(roomDir)
+		if err != nil {
+			return fmt.Errorf("read im thread room dir: %w", err)
+		}
+		for _, threadEntry := range threadEntries {
+			if threadEntry.IsDir() {
+				continue
+			}
+			if _, ok := keepThreads[threadEntry.Name()]; ok {
+				continue
+			}
+			if err := os.Remove(filepath.Join(roomDir, threadEntry.Name())); err != nil {
+				return fmt.Errorf("remove stale im thread context: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
 func sessionRelativePath(roomID string) string {
 	return filepath.ToSlash(filepath.Join(sessionsDirName, roomID+".jsonl"))
+}
+
+func threadContextPath(statePath, roomID, rootMessageID string) string {
+	return filepath.Join(filepath.Dir(statePath), threadsDirName, roomID, rootMessageID+".json")
+}
+
+func threadContextSummaryEmpty(summary ThreadContextSummary) bool {
+	return summary.RootExcerpt == "" && summary.MessageCount == 0 && summary.BeforeCount == 0 && summary.AfterCount == 0
 }
 
 func EnsureBootstrapState(path string) error {
@@ -543,9 +744,11 @@ func normalizeBootstrap(state Bootstrap) Bootstrap {
 	state.Users = ensureUsers(state.Users)
 	state.Rooms = migrateLegacyAdminRoomRefs(cloneRooms(state.Rooms), adminAliases)
 	state.Rooms = migrateLegacyManagerRoomRefs(state.Rooms, managerAliases)
+	state.Rooms = migrateRoomRefsToParticipantIDs(state.Rooms)
 	if !containsUserID(state.Users, state.CurrentUserID) {
 		state.CurrentUserID = migrateLegacyAdminID(state.CurrentUserID, adminAliases)
 		state.CurrentUserID = migrateLegacyManagerID(state.CurrentUserID, managerAliases)
+		state.CurrentUserID = canonicalIMUserID(state.CurrentUserID)
 		if !containsUserID(state.Users, state.CurrentUserID) {
 			state.CurrentUserID = defaultCurrentUserID(state.Users)
 		}
@@ -650,6 +853,7 @@ func dropLegacyManagerUserDuplicates(users []User) []User {
 }
 
 func normalizeUser(user User) User {
+	user.ID = canonicalIMUserID(user.ID)
 	user.Name = strings.ToLower(strings.TrimSpace(user.Name))
 	user.Description = strings.TrimSpace(user.Description)
 	user.Handle = strings.ToLower(strings.TrimSpace(user.Handle))
@@ -690,8 +894,9 @@ func defaultCurrentUserID(users []User) string {
 
 func adminUserAliases(users []User) map[string]struct{} {
 	aliases := map[string]struct{}{
-		legacyAdminUserID: {},
-		adminUserID:       {},
+		legacyBareAdminUserID: {},
+		legacyAdminUserID:     {},
+		adminUserID:           {},
 	}
 	for _, user := range users {
 		id := strings.TrimSpace(user.ID)
@@ -709,8 +914,10 @@ func adminUserAliases(users []User) map[string]struct{} {
 
 func managerUserAliases(users []User) map[string]struct{} {
 	aliases := map[string]struct{}{
-		legacyManagerUserID:      {},
-		managerParticipantUserID: {},
+		legacyManagerUserID:             {},
+		legacyManagerParticipantID:      {},
+		legacyTypedManagerParticipantID: {},
+		managerParticipantUserID:        {},
 	}
 	for _, user := range users {
 		id := strings.TrimSpace(user.ID)
@@ -768,6 +975,59 @@ func migrateLegacyManagerRoomRefs(rooms []Room, managerAliases map[string]struct
 		}
 	}
 	return rooms
+}
+
+func migrateRoomRefsToParticipantIDs(rooms []Room) []Room {
+	for i := range rooms {
+		rooms[i].Members = canonicalParticipantIDs(rooms[i].Members)
+		for j := range rooms[i].Messages {
+			rooms[i].Messages[j].SenderID = canonicalIMParticipantID(rooms[i].Messages[j].SenderID)
+			rooms[i].Messages[j].Content = migrateMentionTagsToParticipantIDs(rooms[i].Messages[j].Content)
+			if rooms[i].Messages[j].Event != nil {
+				rooms[i].Messages[j].Event.ActorID = canonicalIMParticipantID(rooms[i].Messages[j].Event.ActorID)
+				rooms[i].Messages[j].Event.TargetIDs = canonicalParticipantIDs(rooms[i].Messages[j].Event.TargetIDs)
+			}
+			for k := range rooms[i].Messages[j].Mentions {
+				rooms[i].Messages[j].Mentions[k].ID = canonicalIMParticipantID(rooms[i].Messages[j].Mentions[k].ID)
+			}
+		}
+	}
+	return rooms
+}
+
+func canonicalParticipantIDs(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		id = canonicalIMParticipantID(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func migrateMentionTagsToParticipantIDs(content string) string {
+	return mentionTagPattern.ReplaceAllStringFunc(content, func(tag string) string {
+		matches := mentionTagPattern.FindStringSubmatch(tag)
+		if len(matches) <= 1 {
+			return tag
+		}
+		oldID := strings.TrimSpace(matches[1])
+		newID := canonicalIMParticipantID(oldID)
+		if newID == "" || newID == oldID {
+			return tag
+		}
+		return strings.Replace(tag, `user_id="`+oldID+`"`, `user_id="`+newID+`"`, 1)
+	})
 }
 
 func migrateLegacyAdminIDs(ids []string, adminAliases map[string]struct{}) []string {
@@ -848,7 +1108,7 @@ func migrateLegacyManagerMentionTags(content string, managerAliases map[string]s
 
 func ensureAdminManagerRoom(rooms []Room) []Room {
 	for _, room := range rooms {
-		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(room, adminUserID) && containsUserIDInRoom(room, managerParticipantUserID) {
+		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(room, adminParticipantID) && containsUserIDInRoom(room, managerParticipantID) {
 			normalized := room
 			if normalized.Title == "Admin & Manager" {
 				normalized.Title = "admin & manager"
@@ -878,11 +1138,11 @@ func ensureAdminManagerRoom(rooms []Room) []Room {
 		Subtitle:    formatConversationSubtitle(2),
 		Description: "Bootstrap room for admin and manager.",
 		IsDirect:    true,
-		Members:     []string{adminUserID, managerParticipantUserID},
+		Members:     []string{adminParticipantID, managerParticipantID},
 		Messages: []Message{
 			{
 				ID:        fmt.Sprintf("msg-%d", now.UnixNano()+1),
-				SenderID:  managerParticipantUserID,
+				SenderID:  managerParticipantID,
 				Content:   "Bootstrap room created for admin and manager.",
 				CreatedAt: now,
 			},
@@ -892,8 +1152,9 @@ func ensureAdminManagerRoom(rooms []Room) []Room {
 }
 
 func containsUserIDInRoom(room Room, userID string) bool {
+	want := canonicalIMParticipantID(userID)
 	for _, memberID := range room.Members {
-		if memberID == userID {
+		if canonicalIMParticipantID(memberID) == want {
 			return true
 		}
 	}
@@ -988,10 +1249,10 @@ func (s *Service) ListMembers(roomID string) ([]User, error) {
 	}
 
 	users := make([]User, 0, len(room.Members))
-	for _, userID := range room.Members {
-		user, ok := s.users[userID]
+	for _, participantID := range room.Members {
+		user, ok := s.userForParticipantLocked(participantID)
 		if !ok {
-			return nil, fmt.Errorf("member user not found: %s", userID)
+			return nil, fmt.Errorf("member user not found: %s", participantID)
 		}
 		users = append(users, user)
 	}
@@ -1000,15 +1261,15 @@ func (s *Service) ListMembers(roomID string) ([]User, error) {
 
 // RoomIDsForMember returns sorted room IDs where the given user is a member (including direct rooms).
 func (s *Service) RoomIDsForMember(userID string) []string {
-	userID = strings.TrimSpace(userID)
-	if userID == "" {
+	participantID := canonicalIMParticipantID(userID)
+	if participantID == "" {
 		return nil
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var ids []string
 	for id, room := range s.rooms {
-		if slices.Contains(room.Members, userID) {
+		if slices.Contains(room.Members, participantID) {
 			ids = append(ids, id)
 		}
 	}
@@ -1238,18 +1499,19 @@ func (s *Service) DeleteUser(userID string) error {
 
 	delete(s.users, userID)
 	delete(s.byHandle, strings.ToLower(user.Handle))
+	participantID := participantIDForUserID(userID)
 
 	for id, room := range s.rooms {
 		members := make([]string, 0, len(room.Members))
 		for _, memberID := range room.Members {
-			if memberID != userID {
+			if memberID != participantID {
 				members = append(members, memberID)
 			}
 		}
 
 		messages := make([]Message, 0, len(room.Messages))
 		for _, message := range room.Messages {
-			if message.SenderID != userID {
+			if message.SenderID != participantID {
 				messages = append(messages, message)
 			}
 		}
@@ -1283,7 +1545,7 @@ func (s *Service) DeleteUser(userID string) error {
 }
 
 func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, error) {
-	id := strings.TrimSpace(req.ID)
+	id := canonicalIMUserID(req.ID)
 	name := strings.ToLower(strings.TrimSpace(req.Name))
 	description := strings.TrimSpace(req.Description)
 	handle := strings.ToLower(strings.TrimSpace(req.Handle))
@@ -1356,6 +1618,7 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	id = s.resolveUserIDLocked(id)
 	user, ok := s.users[id]
 	if !ok {
 		name := strings.TrimSpace(req.Name)
@@ -1416,6 +1679,7 @@ func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	id = s.resolveUserIDLocked(id)
 	user, ok := s.users[id]
 	if !ok {
 		return User{}, false, nil
@@ -1438,7 +1702,7 @@ func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
 		if handle == "" {
 			return User{}, false, fmt.Errorf("handle is required")
 		}
-		if existingID, ok := s.byHandle[handle]; ok && existingID != id {
+		if existingID, ok := s.byHandle[handle]; ok && s.resolveUserIDLocked(existingID) != id {
 			return User{}, false, fmt.Errorf("handle %q already exists", handle)
 		}
 		delete(s.byHandle, strings.ToLower(strings.TrimSpace(user.Handle)))
@@ -1485,10 +1749,11 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	senderID = s.resolveUserIDLocked(senderID)
-	if _, ok := s.users[senderID]; !ok {
+	senderUserID := s.resolveUserIDLocked(senderID)
+	if _, ok := s.users[senderUserID]; !ok {
 		return Message{}, fmt.Errorf("sender not found")
 	}
+	senderID = participantIDForUserID(senderUserID)
 	content, err := s.contentWithMentionPrefixLocked(content, req.MentionID)
 	if err != nil {
 		return Message{}, err
@@ -1533,9 +1798,11 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.users[senderID]; !ok {
+	senderUserID := s.resolveUserIDLocked(senderID)
+	if _, ok := s.users[senderUserID]; !ok {
 		return Message{}, fmt.Errorf("sender not found")
 	}
+	senderID = participantIDForUserID(senderUserID)
 	content, err := s.contentWithMentionPrefixLocked(content, mentionID)
 	if err != nil {
 		return Message{}, err
@@ -1604,19 +1871,22 @@ func (s *Service) DeliverEvent(req DeliverEventRequest) (Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.users[senderID]; !ok {
+	senderUserID := s.resolveUserIDLocked(senderID)
+	if _, ok := s.users[senderUserID]; !ok {
 		return Message{}, fmt.Errorf("sender not found")
 	}
+	senderID = participantIDForUserID(senderUserID)
 	room, ok := s.rooms[roomID]
 	if !ok {
 		return Message{}, fmt.Errorf("room not found")
 	}
 	mentions := s.extractMentions(content)
 	if mentionID != "" {
-		if _, ok := s.users[mentionID]; !ok {
+		mentionUserID := s.resolveUserIDLocked(mentionID)
+		if _, ok := s.users[mentionUserID]; !ok {
 			return Message{}, fmt.Errorf("mentioned user not found")
 		}
-		mentions = appendMissingMentions(mentions, s.mentionsForUserIDs([]string{mentionID}))
+		mentions = appendMissingMentions(mentions, s.mentionsForUserIDs([]string{mentionUserID}))
 	}
 
 	message := s.newMessage(req.MessageID, senderID, MessageKindEvent, content)
@@ -1653,7 +1923,7 @@ func (s *Service) publishMessageCreatedLocked(roomID, senderID string, message M
 	if s.bus == nil {
 		return
 	}
-	sender, ok := s.users[senderID]
+	sender, ok := s.userForParticipantLocked(senderID)
 	if !ok {
 		return
 	}
@@ -1681,12 +1951,13 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	creatorID = s.resolveRoomUserIDLocked(creatorID)
-	if _, ok := s.users[creatorID]; !ok {
+	creatorUserID := s.resolveRoomUserIDLocked(creatorID)
+	if _, ok := s.users[creatorUserID]; !ok {
 		return Room{}, fmt.Errorf("creator not found")
 	}
+	creatorID = participantIDForUserID(creatorUserID)
 
-	members, err := s.normalizeMembers(creatorID, req.MemberIDs)
+	members, err := s.normalizeMembers(creatorUserID, req.MemberIDs)
 	if err != nil {
 		return Room{}, err
 	}
@@ -1744,10 +2015,11 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	if !ok {
 		return Room{}, fmt.Errorf("room not found")
 	}
-	inviterID = s.resolveRoomUserIDLocked(inviterID)
-	if _, ok := s.users[inviterID]; !ok {
+	inviterUserID := s.resolveRoomUserIDLocked(inviterID)
+	if _, ok := s.users[inviterUserID]; !ok {
 		return Room{}, fmt.Errorf("inviter not found")
 	}
+	inviterID = participantIDForUserID(inviterUserID)
 	if !slices.Contains(room.Members, inviterID) {
 		return Room{}, fmt.Errorf("inviter is not a room member")
 	}
@@ -1769,12 +2041,13 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		if _, ok := s.users[userID]; !ok {
 			return Room{}, fmt.Errorf("user not found: %s", userID)
 		}
-		if _, ok := existing[userID]; ok {
+		participantID := participantIDForUserID(userID)
+		if _, ok := existing[participantID]; ok {
 			continue
 		}
-		existing[userID] = struct{}{}
-		room.Members = append(room.Members, userID)
-		addedIDs = append(addedIDs, userID)
+		existing[participantID] = struct{}{}
+		room.Members = append(room.Members, participantID)
+		addedIDs = append(addedIDs, participantID)
 	}
 	if len(addedIDs) == 0 {
 		return Room{}, fmt.Errorf("no new users to invite")
@@ -1820,10 +2093,11 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	if !ok {
 		return Room{}, fmt.Errorf("room not found")
 	}
-	inviterID = s.resolveRoomUserIDLocked(inviterID)
-	if _, ok := s.users[inviterID]; !ok {
+	inviterUserID := s.resolveRoomUserIDLocked(inviterID)
+	if _, ok := s.users[inviterUserID]; !ok {
 		return Room{}, fmt.Errorf("inviter not found")
 	}
+	inviterID = participantIDForUserID(inviterUserID)
 	if !slices.Contains(room.Members, inviterID) {
 		return Room{}, fmt.Errorf("inviter is not a room member")
 	}
@@ -1840,10 +2114,11 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		if _, ok := s.users[userID]; !ok {
 			return Room{}, fmt.Errorf("user not found: %s", userID)
 		}
-		if userID == inviterID {
+		participantID := participantIDForUserID(userID)
+		if participantID == inviterID {
 			continue
 		}
-		removing[userID] = struct{}{}
+		removing[participantID] = struct{}{}
 	}
 	if len(removing) == 0 {
 		return Room{}, fmt.Errorf("no removable users")
@@ -1939,29 +2214,31 @@ func (s *Service) extractMentions(content string) []Mention {
 	seen := make(map[string]struct{}, len(tagMatches)+len(handleMatches))
 	mentions := make([]Mention, 0, len(tagMatches)+len(handleMatches))
 	for _, match := range tagMatches {
-		userID := strings.TrimSpace(match[1])
+		userID := s.resolveUserIDLocked(match[1])
 		user, ok := s.users[userID]
 		if !ok {
 			continue
 		}
-		if _, exists := seen[userID]; exists {
+		participantID := participantIDForUserID(userID)
+		if _, exists := seen[participantID]; exists {
 			continue
 		}
-		seen[userID] = struct{}{}
+		seen[participantID] = struct{}{}
 		mentions = append(mentions, Mention{
-			ID:   userID,
+			ID:   participantID,
 			Name: s.userMentionName(user),
 		})
 	}
 	for _, match := range handleMatches {
 		handle := strings.ToLower(match[2])
 		if userID, ok := s.byHandle[handle]; ok {
-			if _, exists := seen[userID]; exists {
+			participantID := participantIDForUserID(userID)
+			if _, exists := seen[participantID]; exists {
 				continue
 			}
-			seen[userID] = struct{}{}
+			seen[participantID] = struct{}{}
 			mentions = append(mentions, Mention{
-				ID:   userID,
+				ID:   participantID,
 				Name: s.userMentionName(s.users[userID]),
 			})
 		}
@@ -1970,8 +2247,9 @@ func (s *Service) extractMentions(content string) []Mention {
 }
 
 func (s *Service) normalizeMembers(creatorID string, memberIDs []string) ([]string, error) {
-	seen := map[string]struct{}{creatorID: {}}
-	members := []string{creatorID}
+	creatorParticipantID := participantIDForUserID(creatorID)
+	seen := map[string]struct{}{creatorParticipantID: {}}
+	members := []string{creatorParticipantID}
 	for _, userID := range memberIDs {
 		userID = s.resolveRoomUserIDLocked(userID)
 		if userID == "" {
@@ -1980,11 +2258,12 @@ func (s *Service) normalizeMembers(creatorID string, memberIDs []string) ([]stri
 		if _, ok := s.users[userID]; !ok {
 			return nil, fmt.Errorf("user not found: %s", userID)
 		}
-		if _, ok := seen[userID]; ok {
+		participantID := participantIDForUserID(userID)
+		if _, ok := seen[participantID]; ok {
 			continue
 		}
-		seen[userID] = struct{}{}
-		members = append(members, userID)
+		seen[participantID] = struct{}{}
+		members = append(members, participantID)
 	}
 	return members, nil
 }
@@ -2047,7 +2326,7 @@ func (s *Service) localizeSystemText(locale, key, actorID, title string, userIDs
 }
 
 func (s *Service) userDisplayName(userID string) string {
-	if user, ok := s.users[userID]; ok {
+	if user, ok := s.userForParticipantLocked(userID); ok {
 		if strings.TrimSpace(user.Name) != "" {
 			return user.Name
 		}
@@ -2095,18 +2374,46 @@ func formatConversationSubtitle(count int) string {
 func (s *Service) presentRoomLocked(room Room, locale string) Room {
 	cloned := cloneRoom(room)
 	cloned.Messages = s.presentMessagesLocked(room, false, locale)
+	cloned.MemberNames = s.roomMemberNamesLocked(cloned.Members)
 	if !cloned.IsDirect || len(cloned.Members) != 2 {
 		return cloned
 	}
 
+	currentParticipantID := participantIDForUserID(s.currentUserID)
+	if cloned.Members[0] != currentParticipantID && cloned.Members[1] != currentParticipantID {
+		return cloned
+	}
 	otherID := cloned.Members[0]
-	if otherID == s.currentUserID {
+	if otherID == currentParticipantID {
 		otherID = cloned.Members[1]
 	}
-	if user, ok := s.users[otherID]; ok && strings.TrimSpace(user.Name) != "" {
+	if user, ok := s.userForParticipantLocked(otherID); ok && strings.TrimSpace(user.Name) != "" {
 		cloned.Title = user.Name
 	}
 	return cloned
+}
+
+func (s *Service) roomMemberNamesLocked(memberIDs []string) []string {
+	if len(memberIDs) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(memberIDs))
+	for _, id := range memberIDs {
+		name := ""
+		if user, ok := s.userForParticipantLocked(id); ok {
+			name = strings.TrimSpace(user.Name)
+		}
+		if name == "" {
+			name = strings.TrimSpace(id)
+		}
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return names
 }
 
 func (s *Service) presentConversationLocked(conv Conversation) Conversation {
@@ -2116,6 +2423,7 @@ func (s *Service) presentConversationLocked(conv Conversation) Conversation {
 func cloneRoom(room Room) Room {
 	cloned := room
 	cloned.Members = append([]string(nil), room.Members...)
+	cloned.MemberNames = append([]string(nil), room.MemberNames...)
 	cloned.Messages = cloneMessages(room.Messages)
 	cloned.Threads = cloneThreadStates(room.Threads)
 	return cloned
@@ -2369,7 +2677,7 @@ func (s *Service) threadParticipantsLocked(room Room, rootMessageID string, repl
 			return
 		}
 		seen[userID] = struct{}{}
-		if user, ok := s.users[userID]; ok {
+		if user, ok := s.userForParticipantLocked(userID); ok {
 			participants = append(participants, Mention{ID: userID, Name: s.userMentionName(user)})
 			return
 		}
@@ -2385,7 +2693,7 @@ func (s *Service) threadParticipantsLocked(room Room, rootMessageID string, repl
 }
 
 func (s *Service) threadUserParticipatedLocked(room Room, rootMessageID string, replies []Message, userID string) bool {
-	userID = strings.TrimSpace(userID)
+	userID = canonicalIMParticipantID(userID)
 	if userID == "" {
 		return false
 	}
@@ -2600,7 +2908,8 @@ func (s *Service) contentWithMentionPrefixLocked(content, mentionID string) (str
 		displayName = mentionID
 	}
 
-	prefix := fmt.Sprintf("<at user_id=\"%s\">%s</at>", mentionID, displayName)
+	participantID := participantIDForUserID(mentionID)
+	prefix := fmt.Sprintf("<at user_id=\"%s\">%s</at>", participantID, displayName)
 	if content == prefix || strings.HasPrefix(content, prefix+" ") {
 		return content, nil
 	}
@@ -2624,12 +2933,13 @@ func (s *Service) mentionsForUserIDs(userIDs []string) []Mention {
 	}
 	mentions := make([]Mention, 0, len(userIDs))
 	for _, userID := range userIDs {
+		userID = s.resolveUserIDLocked(userID)
 		user, ok := s.users[userID]
 		if !ok {
 			continue
 		}
 		mentions = append(mentions, Mention{
-			ID:   userID,
+			ID:   participantIDForUserID(userID),
 			Name: s.userMentionName(user),
 		})
 	}
@@ -2733,11 +3043,12 @@ func (s *Service) bootstrapLocked() Bootstrap {
 }
 
 func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, bool) {
+	agentParticipantID := participantIDForUserID(agentID)
 	for _, room := range s.rooms {
 		if len(room.Members) != 2 {
 			continue
 		}
-		if containsUserIDInRoom(*room, adminUserID) && containsUserIDInRoom(*room, agentID) {
+		if containsUserIDInRoom(*room, adminParticipantID) && containsUserIDInRoom(*room, agentParticipantID) {
 			presented := s.presentRoomLocked(*room, "")
 			return &presented, false
 		}
@@ -2750,11 +3061,11 @@ func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, 
 		Subtitle:    formatRoomSubtitle(2),
 		Description: fmt.Sprintf("Bootstrap room for admin and %s.", agentName),
 		IsDirect:    true,
-		Members:     []string{adminUserID, agentID},
+		Members:     []string{adminParticipantID, agentParticipantID},
 		Messages: []Message{
 			{
 				ID:        fmt.Sprintf("msg-%d", now.UnixNano()+1),
-				SenderID:  agentID,
+				SenderID:  agentParticipantID,
 				Content:   fmt.Sprintf("Bootstrap room created for admin and %s.", agentName),
 				CreatedAt: now,
 			},

@@ -10,12 +10,15 @@ import (
 	"time"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/localstore"
 )
 
 const (
 	authFileName               = "auth.json"
 	providerAuthDirName        = "auth"
 	csgHubProviderAuthFileName = "csghub.json"
+	rootAuthSectionName        = "auth"
+	openCSGAuthKey             = "opencsg"
 	DefaultAIGatewayBaseURL    = "https://ai.space.opencsg.com/v1"
 )
 
@@ -57,6 +60,13 @@ type Store struct {
 	csgHubProviderAuthPath string
 }
 
+type openCSGAuthRecord struct {
+	Tokens                 Tokens    `json:"tokens,omitempty"`
+	Account                Account   `json:"account,omitempty"`
+	LastRefresh            time.Time `json:"last_refresh,omitempty"`
+	AIGatewayBuiltinAPIKey string    `json:"ai_gateway_builtin_api_key,omitempty"`
+}
+
 func NewStore(path string) Store {
 	return Store{path: strings.TrimSpace(path)}
 }
@@ -69,19 +79,15 @@ func NewStoreWithProviderPath(path, csgHubProviderAuthPath string) Store {
 }
 
 func DefaultPath() (string, error) {
-	dir, err := config.DefaultDir()
+	path, err := config.DefaultStatePath()
 	if err != nil {
-		return "", fmt.Errorf("resolve auth dir: %w", err)
+		return "", fmt.Errorf("resolve auth state path: %w", err)
 	}
-	return filepath.Join(dir, authFileName), nil
+	return path, nil
 }
 
 func DefaultCSGHubProviderPath() (string, error) {
-	dir, err := config.DefaultDomainDir(providerAuthDirName)
-	if err != nil {
-		return "", fmt.Errorf("resolve provider auth dir: %w", err)
-	}
-	return filepath.Join(dir, csgHubProviderAuthFileName), nil
+	return DefaultPath()
 }
 
 func DefaultStore() (Store, error) {
@@ -89,11 +95,7 @@ func DefaultStore() (Store, error) {
 	if err != nil {
 		return Store{}, err
 	}
-	providerPath, err := DefaultCSGHubProviderPath()
-	if err != nil {
-		return Store{}, err
-	}
-	return NewStoreWithProviderPath(path, providerPath), nil
+	return NewStore(path), nil
 }
 
 func (s Store) Path() (string, error) {
@@ -111,6 +113,9 @@ func (s Store) CSGHubProviderPath() (string, error) {
 	}
 	authPath := strings.TrimSpace(s.path)
 	if authPath != "" {
+		if localstore.IsRootStatePath(authPath) {
+			return authPath, nil
+		}
 		return filepath.Join(filepath.Dir(authPath), providerAuthDirName, csgHubProviderAuthFileName), nil
 	}
 	return DefaultCSGHubProviderPath()
@@ -120,6 +125,16 @@ func (s Store) Load() (Record, bool, error) {
 	path, err := s.Path()
 	if err != nil {
 		return Record{}, false, err
+	}
+	if localstore.IsRootStatePath(path) {
+		state, ok, err := s.loadRootOpenCSGAuth(path)
+		if err != nil || !ok {
+			return Record{}, false, err
+		}
+		if !hasOpenCSGAccountAuth(state) {
+			return Record{}, false, nil
+		}
+		return normalizeRecord(state.Record()), true, nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -147,6 +162,25 @@ func (s Store) Save(record Record) error {
 	if record.Account.BaseURL == "" {
 		return fmt.Errorf("auth base url is required")
 	}
+	if localstore.IsRootStatePath(path) {
+		authState, _, err := readRootAuthState(path)
+		if err != nil {
+			return err
+		}
+		openCSG := openCSGAuthRecord{}
+		if existing, ok := authState[openCSGAuthKey]; ok && len(existing) > 0 {
+			if err := json.Unmarshal(existing, &openCSG); err != nil {
+				return fmt.Errorf("decode root opencsg auth: %w", err)
+			}
+		}
+		openCSG.Tokens = record.Tokens
+		openCSG.Account = record.Account
+		openCSG.LastRefresh = record.LastRefresh
+		if err := setRootOpenCSGAuth(path, authState, openCSG); err != nil {
+			return fmt.Errorf("write auth store: %w", err)
+		}
+		return nil
+	}
 	if err := writeJSONFile(path, record); err != nil {
 		return fmt.Errorf("write auth store: %w", err)
 	}
@@ -157,6 +191,20 @@ func (s Store) Delete() error {
 	path, err := s.Path()
 	if err != nil {
 		return err
+	}
+	if localstore.IsRootStatePath(path) {
+		authState, found, err := readRootAuthState(path)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
+		delete(authState, openCSGAuthKey)
+		if err := localstore.WriteSection(path, rootAuthSectionName, authState); err != nil {
+			return fmt.Errorf("delete auth store: %w", err)
+		}
+		return nil
 	}
 	if err := removeFile(path); err != nil {
 		return fmt.Errorf("delete auth store: %w", err)
@@ -197,6 +245,16 @@ func (s Store) LoadCSGHubProviderCredentials() (CSGHubProviderCredentials, bool,
 	if err != nil {
 		return CSGHubProviderCredentials{}, false, err
 	}
+	if localstore.IsRootStatePath(path) {
+		state, ok, err := s.loadRootOpenCSGAuth(path)
+		if err != nil || !ok {
+			return CSGHubProviderCredentials{}, false, err
+		}
+		credentials := normalizeCSGHubProviderCredentials(CSGHubProviderCredentials{
+			AIGatewayBuiltinAPIKey: state.AIGatewayBuiltinAPIKey,
+		})
+		return credentials, credentials.AIGatewayBuiltinAPIKey != "", nil
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -219,6 +277,23 @@ func (s Store) SaveCSGHubProviderCredentials(credentials CSGHubProviderCredentia
 	credentials = normalizeCSGHubProviderCredentials(credentials)
 	if credentials.AIGatewayBuiltinAPIKey == "" {
 		return fmt.Errorf("csghub ai gateway api key is required")
+	}
+	if localstore.IsRootStatePath(path) {
+		authState, _, err := readRootAuthState(path)
+		if err != nil {
+			return err
+		}
+		openCSG := openCSGAuthRecord{}
+		if existing, ok := authState[openCSGAuthKey]; ok && len(existing) > 0 {
+			if err := json.Unmarshal(existing, &openCSG); err != nil {
+				return fmt.Errorf("decode root opencsg auth: %w", err)
+			}
+		}
+		openCSG.AIGatewayBuiltinAPIKey = credentials.AIGatewayBuiltinAPIKey
+		if err := setRootOpenCSGAuth(path, authState, openCSG); err != nil {
+			return fmt.Errorf("write csghub provider auth store: %w", err)
+		}
+		return nil
 	}
 	if err := writeJSONFile(path, credentials); err != nil {
 		return fmt.Errorf("write csghub provider auth store: %w", err)
@@ -281,6 +356,69 @@ func normalizeRecord(record Record) Record {
 func normalizeCSGHubProviderCredentials(credentials CSGHubProviderCredentials) CSGHubProviderCredentials {
 	credentials.AIGatewayBuiltinAPIKey = strings.TrimSpace(credentials.AIGatewayBuiltinAPIKey)
 	return credentials
+}
+
+func (s Store) loadRootOpenCSGAuth(path string) (openCSGAuthRecord, bool, error) {
+	authState, found, err := readRootAuthState(path)
+	if err != nil || !found {
+		return openCSGAuthRecord{}, false, err
+	}
+	raw, ok := authState[openCSGAuthKey]
+	if !ok || len(raw) == 0 || string(raw) == "null" {
+		return openCSGAuthRecord{}, false, nil
+	}
+	var state openCSGAuthRecord
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return openCSGAuthRecord{}, false, fmt.Errorf("decode root opencsg auth: %w", err)
+	}
+	return state, hasOpenCSGAuth(state), nil
+}
+
+func readRootAuthState(path string) (map[string]json.RawMessage, bool, error) {
+	authState := make(map[string]json.RawMessage)
+	found, err := localstore.ReadSection(path, rootAuthSectionName, &authState)
+	if err != nil {
+		return nil, false, err
+	}
+	if authState == nil {
+		authState = make(map[string]json.RawMessage)
+	}
+	return authState, found, nil
+}
+
+func setRootOpenCSGAuth(path string, authState map[string]json.RawMessage, state openCSGAuthRecord) error {
+	if authState == nil {
+		authState = make(map[string]json.RawMessage)
+	}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("encode root opencsg auth: %w", err)
+	}
+	authState[openCSGAuthKey] = raw
+	return localstore.WriteSection(path, rootAuthSectionName, authState)
+}
+
+func (r openCSGAuthRecord) Record() Record {
+	return Record{
+		Tokens:      r.Tokens,
+		Account:     r.Account,
+		LastRefresh: r.LastRefresh,
+	}
+}
+
+func hasOpenCSGAuth(state openCSGAuthRecord) bool {
+	return strings.TrimSpace(state.Tokens.AccessToken) != "" ||
+		strings.TrimSpace(state.Account.BaseURL) != "" ||
+		strings.TrimSpace(state.Account.UserID) != "" ||
+		strings.TrimSpace(state.Account.UserUUID) != "" ||
+		strings.TrimSpace(state.AIGatewayBuiltinAPIKey) != ""
+}
+
+func hasOpenCSGAccountAuth(state openCSGAuthRecord) bool {
+	return strings.TrimSpace(state.Tokens.AccessToken) != "" ||
+		strings.TrimSpace(state.Account.BaseURL) != "" ||
+		strings.TrimSpace(state.Account.UserID) != "" ||
+		strings.TrimSpace(state.Account.UserUUID) != ""
 }
 
 func writeJSONFile(path string, value any) error {

@@ -127,11 +127,15 @@ func TestCreateManagerParticipantBootstrapsAdminParticipant(t *testing.T) {
 		t.Fatalf("createManagerParticipant() error = %v", err)
 	}
 
-	store, err := participant.NewStore(filepath.Join(filepath.Dir(imStatePath), "participants.json"))
+	participantsPath, err := defaultParticipantsPath()
+	if err != nil {
+		t.Fatalf("defaultParticipantsPath() error = %v", err)
+	}
+	store, err := participant.NewStore(participantsPath)
 	if err != nil {
 		t.Fatalf("participant.NewStore() error = %v", err)
 	}
-	admin, ok := store.Get(participant.ChannelCSGClaw, im.AdminUserID)
+	admin, ok := store.Get(participant.ChannelCSGClaw, "pt-admin")
 	if !ok {
 		t.Fatal("admin participant was not created")
 	}
@@ -166,11 +170,13 @@ func TestEnsureStateNoAuthDetectCreatesManagerWithoutDetectionResults(t *testing
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	var state struct {
-		Agents []struct {
-			ID               string                         `json:"id"`
-			ProfileComplete  bool                           `json:"profile_complete"`
-			AgentProfile     agent.AgentProfile             `json:"agent_profile"`
-			DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
+		Agents struct {
+			Items []struct {
+				ID               string                         `json:"id"`
+				ProfileComplete  bool                           `json:"profile_complete"`
+				AgentProfile     agent.AgentProfile             `json:"agent_profile"`
+				DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
+			} `json:"items"`
 		} `json:"agents"`
 	}
 	if err := json.Unmarshal(data, &state); err != nil {
@@ -182,9 +188,9 @@ func TestEnsureStateNoAuthDetectCreatesManagerWithoutDetectionResults(t *testing
 		AgentProfile     agent.AgentProfile             `json:"agent_profile"`
 		DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
 	}
-	for i := range state.Agents {
-		if state.Agents[i].ID == agent.ManagerUserID {
-			manager = &state.Agents[i]
+	for i := range state.Agents.Items {
+		if state.Agents.Items[i].ID == agent.ManagerUserID {
+			manager = &state.Agents.Items[i]
 			break
 		}
 	}

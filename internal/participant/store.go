@@ -12,6 +12,9 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/config"
+	"csgclaw/internal/im"
+	"csgclaw/internal/localstore"
 )
 
 type Store struct {
@@ -22,6 +25,11 @@ type Store struct {
 
 type persistedState struct {
 	Participants []apitypes.Participant `json:"participants"`
+}
+
+type rootParticipantsState struct {
+	Items        []apitypes.Participant `json:"items"`
+	Participants []apitypes.Participant `json:"participants,omitempty"`
 }
 
 type legacyBotState struct {
@@ -165,6 +173,18 @@ func (s *Store) readState() (map[string]apitypes.Participant, error) {
 	if s.path == "" {
 		return items, nil
 	}
+	if root, ok, err := s.readRootParticipantsState(); err != nil {
+		return nil, err
+	} else if ok {
+		for _, item := range rootParticipants(root) {
+			item = normalizeStoredParticipant(item)
+			if item.Channel == "" || item.ID == "" {
+				return nil, fmt.Errorf("decode participant state: channel and id are required")
+			}
+			items[storeKey(item.Channel, item.ID)] = item
+		}
+		return items, nil
+	}
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -186,6 +206,25 @@ func (s *Store) readState() (map[string]apitypes.Participant, error) {
 	return items, nil
 }
 
+func (s *Store) readRootParticipantsState() (rootParticipantsState, bool, error) {
+	if !s.pathLooksLikeRootState() {
+		return rootParticipantsState{}, false, nil
+	}
+	var root rootParticipantsState
+	ok, err := localstore.ReadSection(s.path, "participants", &root)
+	if err != nil {
+		return rootParticipantsState{}, false, err
+	}
+	return root, ok, nil
+}
+
+func rootParticipants(root rootParticipantsState) []apitypes.Participant {
+	if len(root.Items) > 0 {
+		return root.Items
+	}
+	return root.Participants
+}
+
 func (s *Store) saveLocked() error {
 	if s.path == "" {
 		return nil
@@ -195,6 +234,9 @@ func (s *Store) saveLocked() error {
 		items = append(items, cloneParticipant(item))
 	}
 	sortParticipants(items)
+	if s.shouldWriteRootParticipantsState() {
+		return localstore.WriteSection(s.path, "participants", rootParticipantsState{Items: items})
+	}
 	data, err := json.MarshalIndent(persistedState{Participants: items}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode participant state: %w", err)
@@ -206,6 +248,48 @@ func (s *Store) saveLocked() error {
 		return fmt.Errorf("write participant state: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) shouldWriteRootParticipantsState() bool {
+	if strings.TrimSpace(s.path) == "" {
+		return false
+	}
+	if s.pathIsDefaultRootStatePath() {
+		return true
+	}
+	return participantRootSectionExists(s.path)
+}
+
+func (s *Store) pathLooksLikeRootState() bool {
+	if strings.TrimSpace(s.path) == "" {
+		return false
+	}
+	if participantRootSectionExists(s.path) {
+		return true
+	}
+	return s.pathIsDefaultRootStatePath()
+}
+
+func (s *Store) pathIsDefaultRootStatePath() bool {
+	path := strings.TrimSpace(s.path)
+	return filepath.Base(path) == config.StateFileName && filepath.Base(filepath.Dir(path)) == config.AppDirName
+}
+
+func participantRootSectionExists(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return false
+	}
+	value, ok := raw["participants"]
+	if !ok || len(value) == 0 {
+		return false
+	}
+	var probe map[string]any
+	return json.Unmarshal(value, &probe) == nil
 }
 
 func normalizeStoredParticipant(item apitypes.Participant) apitypes.Participant {
@@ -276,6 +360,7 @@ func migrateLegacyCSGClawAdminParticipant(items map[string]apitypes.Participant)
 	changed := false
 	adminKey := storeKey(ChannelCSGClaw, bootstrapAdminParticipantID)
 	legacyKey := storeKey(ChannelCSGClaw, legacyAdminParticipantID)
+	legacyBareKey := storeKey(ChannelCSGClaw, legacyBareAdminParticipantID)
 	if legacy, ok := items[legacyKey]; ok && isLegacyStoredAdminParticipant(legacy) {
 		next := repairStoredAdminParticipant(legacy)
 		if existing, exists := items[adminKey]; exists {
@@ -283,6 +368,15 @@ func migrateLegacyCSGClawAdminParticipant(items map[string]apitypes.Participant)
 		}
 		items[adminKey] = next
 		delete(items, legacyKey)
+		changed = true
+	}
+	if legacy, ok := items[legacyBareKey]; ok && isLegacyStoredAdminParticipant(legacy) {
+		next := repairStoredAdminParticipant(legacy)
+		if existing, exists := items[adminKey]; exists {
+			next = mergeAdminParticipant(existing, next)
+		}
+		items[adminKey] = next
+		delete(items, legacyBareKey)
 		changed = true
 	}
 
@@ -295,7 +389,7 @@ func migrateLegacyCSGClawAdminParticipant(items map[string]apitypes.Participant)
 
 func isLegacyStoredAdminParticipant(item apitypes.Participant) bool {
 	item = normalizeStoredParticipant(item)
-	return item.Channel == ChannelCSGClaw && item.ID == legacyAdminParticipantID
+	return item.Channel == ChannelCSGClaw && (item.ID == legacyAdminParticipantID || item.ID == legacyBareAdminParticipantID)
 }
 
 func adminParticipantNeedsRepair(item apitypes.Participant) bool {
@@ -305,7 +399,7 @@ func adminParticipantNeedsRepair(item apitypes.Participant) bool {
 	}
 	return item.Type != TypeHuman ||
 		item.Name == "" ||
-		item.ChannelUserRef != bootstrapAdminParticipantID ||
+		item.ChannelUserRef != im.AdminUserID ||
 		item.ChannelUserKind != ChannelUserKindLocalUserID ||
 		item.AgentID != "" ||
 		item.LifecycleStatus == "" ||
@@ -318,9 +412,9 @@ func repairStoredAdminParticipant(item apitypes.Participant) apitypes.Participan
 	item.Channel = ChannelCSGClaw
 	item.Type = TypeHuman
 	if item.Name == "" {
-		item.Name = bootstrapAdminParticipantID
+		item.Name = "admin"
 	}
-	item.ChannelUserRef = bootstrapAdminParticipantID
+	item.ChannelUserRef = im.AdminUserID
 	item.ChannelUserKind = ChannelUserKindLocalUserID
 	item.AgentID = ""
 	if item.LifecycleStatus == "" {
@@ -390,11 +484,12 @@ func migrateLegacyCSGClawAgentParticipantIDs(items map[string]apitypes.Participa
 		next := item
 		legacyID := strings.TrimSpace(next.ID)
 		next.ID = nextID
-		if strings.TrimSpace(next.ChannelUserRef) == "" {
-			next.ChannelUserRef = legacyID
+		suffix := strings.TrimPrefix(nextID, "pt-")
+		if strings.TrimSpace(next.ChannelUserRef) == "" || strings.TrimSpace(next.ChannelUserRef) == legacyID {
+			next.ChannelUserRef = "user-" + suffix
 		}
-		if strings.TrimSpace(next.AgentID) == "" {
-			next.AgentID = legacyID
+		if strings.TrimSpace(next.AgentID) == "" || strings.TrimSpace(next.AgentID) == legacyID {
+			next.AgentID = "agent-" + suffix
 		}
 		next = normalizeStoredParticipant(next)
 
@@ -432,7 +527,7 @@ func legacyCSGClawAgentParticipantID(item apitypes.Participant) (string, bool) {
 	if id == "" || id == item.ID {
 		return "", false
 	}
-	return id, true
+	return "pt-" + id, true
 }
 
 func sameAgentParticipantBinding(a, b apitypes.Participant) bool {
@@ -498,9 +593,17 @@ func mergeLegacyBotState(participantPath string, items map[string]apitypes.Parti
 	data, err := os.ReadFile(legacyPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", false, nil
+			if rootLegacyPath := legacyBotPathForRootParticipantState(participantPath); rootLegacyPath != "" && rootLegacyPath != legacyPath {
+				legacyPath = rootLegacyPath
+				data, err = os.ReadFile(legacyPath)
+			}
 		}
-		return legacyPath, true, fmt.Errorf("read legacy bot state: %w", err)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return "", false, nil
+			}
+			return legacyPath, true, fmt.Errorf("read legacy bot state: %w", err)
+		}
 	}
 
 	var state legacyBotState
@@ -520,6 +623,14 @@ func mergeLegacyBotState(participantPath string, items map[string]apitypes.Parti
 		items[key] = item
 	}
 	return legacyPath, true, nil
+}
+
+func legacyBotPathForRootParticipantState(participantPath string) string {
+	participantPath = strings.TrimSpace(participantPath)
+	if filepath.Base(participantPath) != config.StateFileName {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(participantPath), "im", "bots.json")
 }
 
 func participantFromLegacyBot(b apitypes.LegacyBot, now time.Time) (apitypes.Participant, error) {
@@ -558,9 +669,17 @@ func participantFromLegacyBot(b apitypes.LegacyBot, now time.Time) (apitypes.Par
 		agentID = ""
 	}
 	id := legacyID
+	if channel == ChannelCSGClaw && typ == TypeAgent && strings.HasPrefix(legacyID, "u-") {
+		suffix := strings.TrimPrefix(legacyID, "u-")
+		if suffix != "" {
+			id = "pt-" + suffix
+			channelUserRef = "user-" + suffix
+			agentID = "agent-" + suffix
+		}
+	}
 	if isLegacyCSGClawManagerBot(b, typ, channel, agentID) {
 		id = agent.ManagerParticipantID
-		channelUserRef = agent.ManagerParticipantID
+		channelUserRef = im.ManagerUserID
 		if agentID == "" {
 			agentID = agent.ManagerUserID
 		}

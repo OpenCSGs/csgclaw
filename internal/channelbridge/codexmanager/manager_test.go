@@ -134,8 +134,8 @@ func TestBindingForAgentUsesParticipantIDForWorker(t *testing.T) {
 		RuntimeID:   "rt-u-agent-3l6htd",
 	}, "sess-dev")
 
-	if binding.BotID != "agent-3l6htd" {
-		t.Fatalf("BotID = %q, want participant ID agent-3l6htd", binding.BotID)
+	if binding.BotID != "pt-3l6htd" {
+		t.Fatalf("BotID = %q, want participant ID pt-3l6htd", binding.BotID)
 	}
 	if binding.RuntimeID != "rt-u-agent-3l6htd" || binding.SessionID != "sess-dev" {
 		t.Fatalf("binding = %+v, want runtime/session preserved", binding)

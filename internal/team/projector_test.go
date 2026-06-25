@@ -157,11 +157,11 @@ func TestProjectionFailureAppendsAuditEventWithoutBreakingTaskState(t *testing.T
 }
 
 func TestProjectionSenderParticipantIDMapsWebActorToLead(t *testing.T) {
-	if got := projectionSenderParticipantID("web", "manager"); got != "manager" {
-		t.Fatalf("projectionSenderParticipantID(web) = %q, want manager", got)
+	if got := projectionSenderParticipantID("web", "manager"); got != "pt-manager" {
+		t.Fatalf("projectionSenderParticipantID(web) = %q, want pt-manager", got)
 	}
-	if got := projectionSenderParticipantID("alice", "manager"); got != "alice" {
-		t.Fatalf("projectionSenderParticipantID(alice) = %q, want alice", got)
+	if got := projectionSenderParticipantID("alice", "manager"); got != "pt-alice" {
+		t.Fatalf("projectionSenderParticipantID(alice) = %q, want pt-alice", got)
 	}
 }
 
@@ -220,8 +220,8 @@ func TestProjectorRenderTaskLifecycleMessages(t *testing.T) {
 	if execMessages[1].Kind != im.MessageKindMessage || !strings.Contains(execMessages[1].Content, "dispatched task-15") || strings.Contains(execMessages[1].Content, "dispatched task-15 to") || !strings.Contains(execMessages[1].Content, "claim --team team-5 --task task-15 --participant-id backend-dev") {
 		t.Fatalf("dispatch projection = %q, want @mention task dispatch with claim command", execMessages[1].Content)
 	}
-	if len(execMessages[1].Mentions) != 1 || execMessages[1].Mentions[0].ID != "u-backend-dev" {
-		t.Fatalf("dispatch mentions = %+v, want u-backend-dev mention", execMessages[1].Mentions)
+	if len(execMessages[1].Mentions) != 1 || execMessages[1].Mentions[0].ID != "pt-backend-dev" {
+		t.Fatalf("dispatch mentions = %+v, want pt-backend-dev mention", execMessages[1].Mentions)
 	}
 	if strings.Contains(execMessages[1].Content, "HTTP fallback") || strings.Contains(execMessages[1].Content, "Dispatched by") {
 		t.Fatalf("dispatch projection = %q, should not include HTTP fallback or dispatched-by line", execMessages[1].Content)
@@ -303,8 +303,8 @@ func TestProjectorResolvesWorkerAliasSender(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("ListMessages() len = %d, want 1", len(messages))
 	}
-	if messages[0].SenderID != "u-p-w-1512" {
-		t.Fatalf("projected sender = %q, want u-p-w-1512", messages[0].SenderID)
+	if messages[0].SenderID != "pt-p-w-1512" {
+		t.Fatalf("projected sender = %q, want pt-p-w-1512", messages[0].SenderID)
 	}
 	if !strings.Contains(messages[0].Content, "p-w-1512 claimed task-22") {
 		t.Fatalf("projected content = %q, want claim message", messages[0].Content)

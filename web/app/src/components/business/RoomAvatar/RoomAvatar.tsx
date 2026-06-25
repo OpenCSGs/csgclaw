@@ -1,5 +1,6 @@
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
+import { localIdentitiesMatch, resolveUserByLocalIdentity } from "@/models/conversations";
 import type { IMConversation, IMUser, UsersById } from "@/models/conversations";
 import "./RoomAvatar.css";
 
@@ -58,8 +59,8 @@ export function resolveRoomAvatarMembers(
   currentUserID?: string | null,
 ): RoomAvatarMember[] {
   return (conversation?.members || [])
-    .filter((memberID) => memberID !== currentUserID)
-    .map((memberID) => usersById.get(memberID))
+    .filter((memberID) => !localIdentitiesMatch(memberID, currentUserID))
+    .map((memberID) => resolveUserByLocalIdentity(memberID, usersById))
     .filter((member): member is IMUser => Boolean(member))
     .map((member) => ({
       id: member.id,

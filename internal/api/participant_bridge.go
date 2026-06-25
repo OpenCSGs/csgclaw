@@ -161,7 +161,7 @@ func (h *Handler) participantBridgeTargetForRoomMember(memberID string) particip
 			return participantBridgeTargetForParticipant(item, memberID)
 		}
 	}
-	return newParticipantBridgeTarget(memberID, memberID)
+	return newParticipantBridgeTarget(csgclawParticipantIDFromAny(memberID), participantIdentityAliases(memberID)...)
 }
 
 func (h *Handler) participantBridgeTargetForBridgeID(bridgeID string) participantBridgeTarget {
@@ -183,7 +183,7 @@ func (h *Handler) participantBridgeTargetForBridgeID(bridgeID string) participan
 	if bridgeID == agent.ManagerParticipantID {
 		return newParticipantBridgeTarget(agent.ManagerParticipantID, agent.ManagerUserID)
 	}
-	return newParticipantBridgeTarget(bridgeID, bridgeID)
+	return newParticipantBridgeTarget(csgclawParticipantIDFromAny(bridgeID), participantIdentityAliases(bridgeID)...)
 }
 
 func participantBridgeTargetForParticipant(item apitypes.Participant, aliases ...string) participantBridgeTarget {
@@ -200,9 +200,78 @@ func isCSGClawAgentParticipant(item apitypes.Participant) bool {
 
 func participantMatchesIdentity(item apitypes.Participant, id string) bool {
 	id = strings.TrimSpace(id)
-	return id != "" && (strings.TrimSpace(item.ID) == id ||
+	if id == "" {
+		return false
+	}
+	if strings.TrimSpace(item.ID) == id ||
 		strings.TrimSpace(item.ChannelUserRef) == id ||
-		strings.TrimSpace(item.AgentID) == id)
+		strings.TrimSpace(item.AgentID) == id {
+		return true
+	}
+	if !strings.EqualFold(strings.TrimSpace(item.Channel), participant.ChannelCSGClaw) {
+		return false
+	}
+	idAliases := participantIdentityAliasSet(id)
+	for _, value := range []string{item.ID, item.ChannelUserRef, item.AgentID} {
+		for _, alias := range participantIdentityAliases(value) {
+			if _, ok := idAliases[alias]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func participantIdentityAliasSet(id string) map[string]struct{} {
+	aliases := participantIdentityAliases(id)
+	out := make(map[string]struct{}, len(aliases))
+	for _, alias := range aliases {
+		out[alias] = struct{}{}
+	}
+	return out
+}
+
+func participantIdentityAliases(id string) []string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	suffix := localIdentitySuffix(id)
+	if suffix == "" {
+		return []string{id}
+	}
+	aliases := []string{
+		"pt-" + suffix,
+		"user-" + suffix,
+		agent.AgentIDPrefix + suffix,
+		"u-" + suffix,
+		suffix,
+		id,
+	}
+	if suffix == "admin" {
+		aliases = append(aliases, "admin", "u-admin")
+	}
+	if suffix == "manager" {
+		aliases = append(aliases, "manager", "u-manager", agent.ManagerUserID, agent.ManagerParticipantID, im.ManagerUserID)
+	}
+	return compactParticipantAliases(aliases)
+}
+
+func compactParticipantAliases(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func roomForParticipantBridgeTarget(room im.Room, target participantBridgeTarget) im.Room {
@@ -519,7 +588,14 @@ func (h *Handler) runtimeAgentIDForBridgeID(id string) string {
 			}
 		}
 	}
-	return id
+	switch csgclawParticipantIDFromAny(id) {
+	case "", "pt-admin":
+		return ""
+	case agent.ManagerParticipantID:
+		return agent.ManagerUserID
+	default:
+		return workerAgentIDFromUserID(id)
+	}
 }
 
 func hasLaterMessageFrom(messages []im.Message, senderID string) bool {

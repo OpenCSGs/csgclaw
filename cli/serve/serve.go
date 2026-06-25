@@ -37,6 +37,7 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/localstore"
 	"csgclaw/internal/modelprovider"
 	internalonboard "csgclaw/internal/onboard"
 	"csgclaw/internal/participant"
@@ -142,6 +143,9 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	}
 	defer restore()
 
+	if err := migrateLocalStore(); err != nil {
+		return err
+	}
 	if err := ensureServeBootstrapState(ctx, globals.Config, *noAuthDetect); err != nil {
 		return err
 	}
@@ -282,6 +286,9 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	}
 	defer restore()
 	_ = preflightDefaultModelProvider(ctx, cfg)
+	if err := migrateLocalStore(); err != nil {
+		return err
+	}
 
 	printEffectiveConfig(run, cfg, globals.Output)
 	imBus := im.NewBus()
@@ -334,6 +341,9 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 		return err
 	}
 	_ = preflightDefaultModelProvider(ctx, cfg)
+	if err := migrateLocalStore(); err != nil {
+		return err
+	}
 	imBus := im.NewBus()
 	feishuProvider, feishuSvc, err := buildFeishuComponents()
 	if err != nil {
@@ -1021,6 +1031,22 @@ func sandboxServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, err
 	return sandboxproviders.ServiceOptions(cfg)
 }
 
+func migrateLocalStore() error {
+	root, err := config.DefaultDir()
+	if err != nil {
+		return err
+	}
+	if localstore.NeedsTypedIDMigration(root) {
+		if _, err := localstore.MigrateTypedIDs(localstore.MigrateOptions{Root: root}); err != nil {
+			return fmt.Errorf("migrate local store: %w", err)
+		}
+	}
+	if err := localstore.ReconcileTypedAgentDirs(root); err != nil {
+		return fmt.Errorf("reconcile local store agent dirs: %w", err)
+	}
+	return nil
+}
+
 func newIMService(bus *im.Bus) (*im.Service, error) {
 	imStatePath, err := config.DefaultIMStatePath()
 	if err != nil {
@@ -1077,11 +1103,7 @@ func newFeishuService(provider feishu.Provider) (*feishu.Service, error) {
 }
 
 func defaultParticipantsPath() (string, error) {
-	imStatePath, err := config.DefaultIMStatePath()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(filepath.Dir(imStatePath), "participants.json"), nil
+	return config.DefaultStatePath()
 }
 
 func newLLMService(cfg config.Config, svc *agent.Service) (*llm.Service, error) {

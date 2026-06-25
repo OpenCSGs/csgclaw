@@ -58,7 +58,8 @@ func (s *Service) Get(channel, id string) (apitypes.Participant, bool) {
 	if s == nil || s.store == nil {
 		return apitypes.Participant{}, false
 	}
-	return s.store.Get(channel, id)
+	item, _, ok := s.getByID(channel, id)
+	return item, ok
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Participant, error) {
@@ -120,12 +121,16 @@ func (s *Service) EnsureBootstrapAdmin(_ context.Context) (apitypes.Participant,
 
 	now := time.Now().UTC()
 	createdAt := now
-	existing, ok := s.store.Get(ChannelCSGClaw, im.AdminUserID)
+	existing, ok := s.store.Get(ChannelCSGClaw, bootstrapAdminParticipantID)
 	legacyExisting, legacyOK := s.store.Get(ChannelCSGClaw, legacyAdminParticipantID)
+	legacyBareExisting, legacyBareOK := s.store.Get(ChannelCSGClaw, legacyBareAdminParticipantID)
 	source := existing
 	hasLegacySource := false
 	if !ok && legacyOK && isLegacyAdminParticipant(legacyExisting) {
 		source = legacyExisting
+		hasLegacySource = true
+	} else if !ok && legacyBareOK && isLegacyAdminParticipant(legacyBareExisting) {
+		source = legacyBareExisting
 		hasLegacySource = true
 	}
 	if (ok || hasLegacySource) && !source.CreatedAt.IsZero() {
@@ -155,7 +160,7 @@ func (s *Service) EnsureBootstrapAdmin(_ context.Context) (apitypes.Participant,
 	}
 
 	item := apitypes.Participant{
-		ID:              im.AdminUserID,
+		ID:              bootstrapAdminParticipantID,
 		Channel:         ChannelCSGClaw,
 		Type:            TypeHuman,
 		Name:            name,
@@ -179,6 +184,11 @@ func (s *Service) EnsureBootstrapAdmin(_ context.Context) (apitypes.Participant,
 			return apitypes.Participant{}, err
 		}
 	}
+	if legacyBareOK && isLegacyAdminParticipant(legacyBareExisting) {
+		if _, _, err := s.store.Delete(ChannelCSGClaw, legacyBareAdminParticipantID); err != nil {
+			return apitypes.Participant{}, err
+		}
+	}
 	return item, nil
 }
 
@@ -199,15 +209,18 @@ func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Particip
 		createdAt = now
 	}
 	existing, ok := s.store.Get(ChannelCSGClaw, agent.ManagerParticipantID)
-	legacyExisting, legacyOK := s.store.Get(ChannelCSGClaw, agent.ManagerUserID)
+	legacyExisting, legacyOK := s.store.Get(ChannelCSGClaw, legacyManagerAgentID)
+	legacyBareExisting, legacyBareOK := s.store.Get(ChannelCSGClaw, legacyManagerParticipantID)
 	legacyItems := s.legacyManagerParticipants()
 	source := existing
 	if !ok && legacyOK && isLegacyManagerParticipant(legacyExisting) {
 		source = legacyExisting
+	} else if !ok && legacyBareOK && isLegacyManagerParticipant(legacyBareExisting) {
+		source = legacyBareExisting
 	} else if !ok && len(legacyItems) > 0 {
 		source = legacyItems[0]
 	}
-	hasLegacySource := legacyOK && isLegacyManagerParticipant(legacyExisting) || len(legacyItems) > 0
+	hasLegacySource := legacyOK && isLegacyManagerParticipant(legacyExisting) || legacyBareOK && isLegacyManagerParticipant(legacyBareExisting) || len(legacyItems) > 0
 	if (ok || hasLegacySource) && !source.CreatedAt.IsZero() {
 		createdAt = source.CreatedAt.UTC()
 	}
@@ -234,7 +247,7 @@ func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Particip
 	}
 	if s.im != nil {
 		if _, _, err := s.im.EnsureAgentUser(im.EnsureAgentUserRequest{
-			ID:     agent.ManagerParticipantID,
+			ID:     im.ManagerUserID,
 			Name:   name,
 			Handle: "manager",
 			Role:   agent.RoleManager,
@@ -250,7 +263,7 @@ func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Particip
 		Type:            TypeAgent,
 		Name:            name,
 		Avatar:          avatar,
-		ChannelUserRef:  agent.ManagerParticipantID,
+		ChannelUserRef:  im.ManagerUserID,
 		ChannelUserKind: ChannelUserKindLocalUserID,
 		AgentID:         manager.ID,
 		LifecycleStatus: LifecycleStatusActive,
@@ -266,7 +279,12 @@ func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Particip
 		return item, err
 	}
 	if legacyOK && isLegacyManagerParticipant(legacyExisting) {
-		if _, _, err := s.store.Delete(ChannelCSGClaw, agent.ManagerUserID); err != nil {
+		if _, _, err := s.store.Delete(ChannelCSGClaw, legacyManagerAgentID); err != nil {
+			return apitypes.Participant{}, err
+		}
+	}
+	if legacyBareOK && isLegacyManagerParticipant(legacyBareExisting) {
+		if _, _, err := s.store.Delete(ChannelCSGClaw, legacyManagerParticipantID); err != nil {
 			return apitypes.Participant{}, err
 		}
 	}
@@ -279,12 +297,17 @@ func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Particip
 }
 
 const (
-	bootstrapAdminParticipantID = "admin"
-	legacyAdminParticipantID    = "u-admin"
+	BootstrapAdminParticipantID  = "pt-admin"
+	bootstrapAdminParticipantID  = BootstrapAdminParticipantID
+	legacyBareAdminParticipantID = "admin"
+	legacyAdminParticipantID     = "u-admin"
+	legacyManagerParticipantID   = "manager"
+	legacyManagerAgentID         = "u-manager"
 )
 
 func isLegacyAdminParticipant(item apitypes.Participant) bool {
-	if strings.TrimSpace(item.ID) != legacyAdminParticipantID {
+	id := strings.TrimSpace(item.ID)
+	if id != legacyAdminParticipantID && id != legacyBareAdminParticipantID {
 		return false
 	}
 	if strings.TrimSpace(item.Channel) != ChannelCSGClaw {
@@ -299,11 +322,14 @@ func (s *Service) legacyManagerParticipants() []apitypes.Participant {
 	}
 	var out []apitypes.Participant
 	for _, item := range s.store.List(ListOptions{Channel: ChannelCSGClaw, Type: TypeAgent}) {
-		if strings.TrimSpace(item.ID) == agent.ManagerParticipantID || strings.TrimSpace(item.ID) == agent.ManagerUserID {
+		if strings.TrimSpace(item.ID) == agent.ManagerParticipantID {
 			continue
 		}
 		if strings.TrimSpace(item.AgentID) == agent.ManagerUserID ||
+			strings.TrimSpace(item.AgentID) == legacyManagerAgentID ||
 			strings.TrimSpace(item.ChannelUserRef) == agent.ManagerUserID ||
+			strings.TrimSpace(item.ChannelUserRef) == legacyManagerAgentID ||
+			strings.TrimSpace(item.ChannelUserRef) == legacyManagerParticipantID ||
 			strings.EqualFold(strings.TrimSpace(item.Name), agent.ManagerName) {
 			out = append(out, item)
 		}
@@ -312,16 +338,19 @@ func (s *Service) legacyManagerParticipants() []apitypes.Participant {
 }
 
 func isLegacyManagerParticipant(item apitypes.Participant) bool {
-	if strings.TrimSpace(item.ID) != agent.ManagerUserID {
+	id := strings.TrimSpace(item.ID)
+	if id != legacyManagerAgentID && id != legacyManagerParticipantID && id != agent.ManagerUserID {
 		return false
 	}
 	if strings.TrimSpace(item.Channel) != ChannelCSGClaw {
 		return false
 	}
-	if strings.TrimSpace(item.AgentID) == agent.ManagerUserID {
+	if strings.TrimSpace(item.AgentID) == agent.ManagerUserID || strings.TrimSpace(item.AgentID) == legacyManagerAgentID {
 		return true
 	}
-	if strings.TrimSpace(item.ChannelUserRef) == agent.ManagerUserID {
+	if strings.TrimSpace(item.ChannelUserRef) == agent.ManagerUserID ||
+		strings.TrimSpace(item.ChannelUserRef) == legacyManagerAgentID ||
+		strings.TrimSpace(item.ChannelUserRef) == legacyManagerParticipantID {
 		return true
 	}
 	return strings.EqualFold(strings.TrimSpace(item.Name), agent.ManagerName)
@@ -336,7 +365,7 @@ func (s *Service) Update(_ context.Context, channel, id string, req UpdateReques
 	if channel == "" || id == "" {
 		return apitypes.Participant{}, false, fmt.Errorf("channel and id are required")
 	}
-	item, ok := s.store.Get(channel, id)
+	item, _, ok := s.getByID(channel, id)
 	if !ok {
 		return apitypes.Participant{}, false, nil
 	}
@@ -446,7 +475,7 @@ func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOpt
 		return apitypes.Participant{}, false, fmt.Errorf("channel and id are required")
 	}
 
-	existing, ok := s.store.Get(channel, id)
+	existing, deleteID, ok := s.getByID(channel, id)
 	if !ok {
 		return apitypes.Participant{}, false, nil
 	}
@@ -466,7 +495,7 @@ func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOpt
 		}
 	}
 
-	deleted, ok, err := s.store.Delete(channel, id)
+	deleted, ok, err := s.store.Delete(channel, deleteID)
 	if err != nil || !ok {
 		return deleted, ok, err
 	}
@@ -479,6 +508,32 @@ func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOpt
 		}
 	}
 	return deleted, true, nil
+}
+
+func (s *Service) getByID(channel, id string) (apitypes.Participant, string, bool) {
+	if s == nil || s.store == nil {
+		return apitypes.Participant{}, "", false
+	}
+	channel = normalizeChannel(channel)
+	rawID := strings.TrimSpace(id)
+	for _, candidate := range participantLookupIDs(rawID) {
+		if item, ok := s.store.Get(channel, candidate); ok {
+			return item, candidate, true
+		}
+	}
+	return apitypes.Participant{}, "", false
+}
+
+func participantLookupIDs(id string) []string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	typed := canonicalParticipantID(slugify(id))
+	if typed == "" || typed == id {
+		return []string{id}
+	}
+	return []string{typed, id}
 }
 
 func (s *Service) deleteUnreferencedCSGClawAgentUser(deleted apitypes.Participant) error {
@@ -545,10 +600,13 @@ func (s *Service) normalizeCreateRequest(req CreateRequest) (normalizedCreateReq
 	}
 	if channelUser.Ref == "" && channel == ChannelCSGClaw {
 		if typ == TypeAgent {
-			channelUser.Ref = defaultAgentID(id)
+			channelUser.Ref = defaultUserID(id)
 		} else {
-			channelUser.Ref = id
+			channelUser.Ref = defaultUserID(id)
 		}
+	}
+	if channel == ChannelCSGClaw && channelUser.Ref != "" {
+		channelUser.Ref = canonicalUserID(channelUser.Ref)
 	}
 	if channelUser.Kind == "" {
 		switch channel {
@@ -657,23 +715,88 @@ func feishuConfigString(values map[string]any, key string) string {
 }
 
 func (s *Service) resolveParticipantID(channel, typ string, req CreateRequest) (string, error) {
-	if id := slugify(req.ID); id != "" {
-		return id, nil
+	if rawID := strings.TrimSpace(req.ID); rawID != "" {
+		id := slugify(rawID)
+		return canonicalParticipantID(id), nil
 	}
 	stable := strings.TrimSpace(req.ChannelUser.Ref)
 	if stable == "" {
 		stable = strings.TrimSpace(req.AgentBinding.AgentID)
 	}
-	if strings.HasPrefix(stable, "u-") && typ == TypeAgent {
-		stable = strings.TrimPrefix(stable, "u-")
-	}
 	if slug := slugify(stable); slug != "" {
+		if strings.HasPrefix(slug, "user-") {
+			slug = strings.TrimPrefix(slug, "user-")
+		}
+		if strings.HasPrefix(slug, "agent-") {
+			slug = strings.TrimPrefix(slug, "agent-")
+		}
+		if !strings.HasPrefix(slug, "pt-") {
+			slug = "pt-" + strings.TrimPrefix(slug, "u-")
+		}
 		if _, ok := s.store.Get(channel, slug); !ok {
 			return slug, nil
 		}
 		return slug + "-" + randomSuffix(), nil
 	}
-	return typ + "-" + randomSuffix(), nil
+	return "pt-" + randomSuffix(), nil
+}
+
+func canonicalParticipantID(id string) string {
+	id = strings.TrimSpace(id)
+	switch id {
+	case "", "admin", "u-admin", "user-admin":
+		if id == "" {
+			return ""
+		}
+		return bootstrapAdminParticipantID
+	case "manager", "u-manager", "user-manager", "agent-manager":
+		return agent.ManagerParticipantID
+	}
+	if strings.HasPrefix(id, "pt-") {
+		return id
+	}
+	if suffix := trimLocalIdentityPrefixes(id); suffix != "" {
+		return "pt-" + suffix
+	}
+	return "pt-" + id
+}
+
+func canonicalUserID(id string) string {
+	id = strings.TrimSpace(id)
+	switch id {
+	case "", "admin", "u-admin", "pt-admin":
+		if id == "" {
+			return ""
+		}
+		return im.AdminUserID
+	case "manager", "u-manager", "pt-manager", "agent-manager":
+		return im.ManagerUserID
+	}
+	if strings.HasPrefix(id, "user-") {
+		return id
+	}
+	if suffix := trimLocalIdentityPrefixes(id); suffix != "" {
+		return "user-" + suffix
+	}
+	return "user-" + id
+}
+
+func trimLocalIdentityPrefixes(id string) string {
+	id = strings.TrimSpace(id)
+	for {
+		next := id
+		for _, prefix := range []string{"user-", "agent-", "pt-", "u-"} {
+			if strings.HasPrefix(next, prefix) {
+				next = strings.TrimPrefix(next, prefix)
+				break
+			}
+		}
+		if next == id {
+			break
+		}
+		id = next
+	}
+	return strings.TrimSpace(id)
 }
 
 func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRequest) (string, error) {
@@ -687,7 +810,7 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if _, ok := s.agents.Agent(req.AgentBinding.AgentID); !ok {
 			return "", fmt.Errorf("agent %q not found", req.AgentBinding.AgentID)
 		}
-		return req.AgentBinding.AgentID, nil
+		return agent.CanonicalID(req.AgentBinding.AgentID), nil
 	case BindingModeCreate:
 		if s.agents == nil {
 			return "", fmt.Errorf("agent service is required")
@@ -731,10 +854,11 @@ func (s *Service) ensureChannelIdentity(_ context.Context, req normalizedCreateR
 	if req.Type == TypeAgent {
 		role = agent.RoleWorker
 	}
+	handle := csgclawHandleForParticipant(req)
 	if _, _, err := s.im.EnsureAgentUser(im.EnsureAgentUserRequest{
 		ID:     req.ChannelUser.Ref,
 		Name:   req.Name,
-		Handle: req.ID,
+		Handle: handle,
 		Role:   role,
 		Avatar: req.Avatar,
 	}); err != nil {
@@ -747,6 +871,29 @@ func (s *Service) ensureChannelIdentity(_ context.Context, req normalizedCreateR
 		Avatar: req.Avatar,
 	})
 	return err
+}
+
+func csgclawHandleForParticipant(req normalizedCreateRequest) string {
+	for _, value := range []string{req.ChannelUser.Ref, req.ID} {
+		value = strings.TrimSpace(value)
+		for {
+			next := value
+			for _, prefix := range []string{"user-", "pt-", "agent-", "u-"} {
+				if strings.HasPrefix(next, prefix) {
+					next = strings.TrimPrefix(next, prefix)
+					break
+				}
+			}
+			if next == value {
+				break
+			}
+			value = next
+		}
+		if value != "" {
+			return value
+		}
+	}
+	return strings.TrimSpace(req.Name)
 }
 
 func normalizeChannel(channel string) string {
@@ -787,7 +934,19 @@ func normalizeBindingMode(mode string) string {
 }
 
 func defaultAgentID(participantID string) string {
-	return "u-" + strings.TrimSpace(participantID)
+	suffix := strings.TrimPrefix(strings.TrimSpace(participantID), "pt-")
+	if suffix == "" {
+		suffix = randomSuffix()
+	}
+	return "agent-" + suffix
+}
+
+func defaultUserID(participantID string) string {
+	suffix := strings.TrimPrefix(strings.TrimSpace(participantID), "pt-")
+	if suffix == "" {
+		suffix = randomSuffix()
+	}
+	return "user-" + suffix
 }
 
 func slugify(raw string) string {

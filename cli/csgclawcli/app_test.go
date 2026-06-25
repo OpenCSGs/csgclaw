@@ -459,7 +459,7 @@ func TestExecuteParticipantBindBotWritesConfigAndRecreatesWorkerWhenRestartFlagS
 				channelUser, _ := payload["channel_user"].(map[string]any)
 				appConfig, _ := payload["channel_app_config"].(map[string]any)
 				agentBinding, _ := payload["agent_binding"].(map[string]any)
-				if payload["id"] != "dev" || payload["type"] != "agent" || payload["name"] != "dev" {
+				if payload["id"] != "pt-dev" || payload["type"] != "agent" || payload["name"] != "dev" {
 					t.Fatalf("payload = %#v, want canonical dev agent participant", payload)
 				}
 				if channelUser["kind"] != "app_id" || channelUser["ref"] != nil {
@@ -468,12 +468,12 @@ func TestExecuteParticipantBindBotWritesConfigAndRecreatesWorkerWhenRestartFlagS
 				if appConfig["app_id"] != "cli_dev" || appConfig["app_secret"] != "secret-value" {
 					t.Fatalf("channel_app_config = %#v, want app credentials", appConfig)
 				}
-				if agentBinding["mode"] != "reuse" || agentBinding["agent_id"] != "u-dev" {
-					t.Fatalf("agent_binding = %#v, want reuse u-dev", agentBinding)
+				if agentBinding["mode"] != "reuse" || agentBinding["agent_id"] != "agent-dev" {
+					t.Fatalf("agent_binding = %#v, want reuse agent-dev", agentBinding)
 				}
-				return jsonResponse(http.StatusCreated, feishuBotParticipantResponse("dev", "dev", "u-dev", "cli_dev")), nil
+				return jsonResponse(http.StatusCreated, feishuBotParticipantResponse("pt-dev", "dev", "agent-dev", "cli_dev")), nil
 			case 4:
-				if req.Method != http.MethodPost || req.URL.String() != "http://example.test/api/v1/agents/u-dev/recreate" {
+				if req.Method != http.MethodPost || req.URL.String() != "http://example.test/api/v1/agents/agent-dev/recreate" {
 					t.Fatalf("request %d = %s %s, want worker recreate", call, req.Method, req.URL.String())
 				}
 				return jsonResponse(http.StatusCreated, `{"id":"u-dev","name":"dev","role":"worker","status":"running","created_at":"2026-04-12T09:00:00Z"}`), nil
@@ -504,7 +504,7 @@ func TestExecuteParticipantBindBotWritesConfigAndRecreatesWorkerWhenRestartFlagS
 	if strings.Contains(stdout.String(), "secret-value") || strings.Contains(stderr.String(), "secret-value") {
 		t.Fatalf("output leaked app secret: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	for _, want := range []string{`"participant_id": "dev"`, `"agent_id": "u-dev"`, `"restart_status": "worker_recreated"`} {
+	for _, want := range []string{`"participant_id": "pt-dev"`, `"agent_id": "agent-dev"`, `"restart_status": "worker_recreated"`} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want %s", stdout.String(), want)
 		}
@@ -535,9 +535,9 @@ func TestExecuteParticipantBindBotReportsPartialResultWhenWorkerRecreateFails(t 
 				if req.Method != http.MethodPost || req.URL.String() != "http://example.test/api/v1/channels/feishu/participants" {
 					t.Fatalf("request %d = %s %s, want participant create", call, req.Method, req.URL.String())
 				}
-				return jsonResponse(http.StatusCreated, feishuBotParticipantResponse("dev", "dev", "u-dev", "cli_dev")), nil
+				return jsonResponse(http.StatusCreated, feishuBotParticipantResponse("pt-dev", "dev", "agent-dev", "cli_dev")), nil
 			case 4:
-				if req.Method != http.MethodPost || req.URL.String() != "http://example.test/api/v1/agents/u-dev/recreate" {
+				if req.Method != http.MethodPost || req.URL.String() != "http://example.test/api/v1/agents/agent-dev/recreate" {
 					t.Fatalf("request %d = %s %s, want worker recreate", call, req.Method, req.URL.String())
 				}
 				return jsonResponse(http.StatusInternalServerError, `recreate failed`), nil
@@ -570,8 +570,8 @@ func TestExecuteParticipantBindBotReportsPartialResultWhenWorkerRecreateFails(t 
 	}
 	for _, want := range []string{
 		`"status": "partial"`,
-		`"participant_id": "dev"`,
-		`"agent_id": "u-dev"`,
+		`"participant_id": "pt-dev"`,
+		`"agent_id": "agent-dev"`,
 		`"config_saved": true`,
 		`"restart_status": "recreate_failed"`,
 		`"restart_error":`,
@@ -580,7 +580,7 @@ func TestExecuteParticipantBindBotReportsPartialResultWhenWorkerRecreateFails(t 
 			t.Fatalf("stdout = %q, want %s", stdout.String(), want)
 		}
 	}
-	if !strings.Contains(stderr.String(), "pt bind failed at recreate: agent_id=u-dev participant_id=dev") {
+	if !strings.Contains(stderr.String(), "pt bind failed at recreate: agent_id=agent-dev participant_id=pt-dev") {
 		t.Fatalf("stderr = %q, want recreate failure context", stderr.String())
 	}
 }
@@ -616,7 +616,7 @@ func TestExecuteParticipantBindBotRecreatesManagerWhenRestartFlagSet(t *testing.
 				channelUser, _ := payload["channel_user"].(map[string]any)
 				appConfig, _ := payload["channel_app_config"].(map[string]any)
 				agentBinding, _ := payload["agent_binding"].(map[string]any)
-				if payload["id"] != "manager" || payload["type"] != "agent" || payload["name"] != "manager" {
+				if payload["id"] != "pt-manager" || payload["type"] != "agent" || payload["name"] != "manager" {
 					t.Fatalf("payload = %#v, want canonical manager agent participant", payload)
 				}
 				if channelUser["kind"] != "app_id" || channelUser["ref"] != nil {
@@ -625,12 +625,12 @@ func TestExecuteParticipantBindBotRecreatesManagerWhenRestartFlagSet(t *testing.
 				if appConfig["app_id"] != "cli_manager" || appConfig["app_secret"] != "secret-value" {
 					t.Fatalf("channel_app_config = %#v, want app credentials", appConfig)
 				}
-				if agentBinding["mode"] != "reuse" || agentBinding["agent_id"] != "u-manager" {
-					t.Fatalf("agent_binding = %#v, want reuse u-manager", agentBinding)
+				if agentBinding["mode"] != "reuse" || agentBinding["agent_id"] != "agent-manager" {
+					t.Fatalf("agent_binding = %#v, want reuse agent-manager", agentBinding)
 				}
-				return jsonResponse(http.StatusCreated, feishuBotParticipantResponse("manager", "manager", "u-manager", "cli_manager")), nil
+				return jsonResponse(http.StatusCreated, feishuBotParticipantResponse("pt-manager", "manager", "agent-manager", "cli_manager")), nil
 			case 4:
-				if req.Method != http.MethodPost || req.URL.String() != "http://example.test/api/v1/agents/u-manager/recreate" {
+				if req.Method != http.MethodPost || req.URL.String() != "http://example.test/api/v1/agents/agent-manager/recreate" {
 					t.Fatalf("request %d = %s %s, want manager recreate", call, req.Method, req.URL.String())
 				}
 				return jsonResponse(http.StatusCreated, `{"id":"u-manager","name":"manager","role":"manager","status":"running","created_at":"2026-04-12T09:00:00Z"}`), nil
@@ -661,7 +661,7 @@ func TestExecuteParticipantBindBotRecreatesManagerWhenRestartFlagSet(t *testing.
 	if strings.Contains(stdout.String(), "secret-value") || strings.Contains(stderr.String(), "secret-value") {
 		t.Fatalf("output leaked app secret: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	for _, want := range []string{`"participant_id": "manager"`, `"agent_id": "u-manager"`, `"restart_status": "manager_recreated"`} {
+	for _, want := range []string{`"participant_id": "pt-manager"`, `"agent_id": "agent-manager"`, `"restart_status": "manager_recreated"`} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want %s", stdout.String(), want)
 		}
@@ -699,7 +699,7 @@ func TestExecuteParticipantBindBotDefaultsToNoRestart(t *testing.T) {
 				channelUser, _ := payload["channel_user"].(map[string]any)
 				appConfig, _ := payload["channel_app_config"].(map[string]any)
 				agentBinding, _ := payload["agent_binding"].(map[string]any)
-				if payload["id"] != "dev" || payload["type"] != "agent" || payload["name"] != "dev" {
+				if payload["id"] != "pt-dev" || payload["type"] != "agent" || payload["name"] != "dev" {
 					t.Fatalf("payload = %#v, want canonical dev agent participant", payload)
 				}
 				if channelUser["kind"] != "app_id" || channelUser["ref"] != nil {
@@ -708,10 +708,10 @@ func TestExecuteParticipantBindBotDefaultsToNoRestart(t *testing.T) {
 				if appConfig["app_id"] != "cli_dev" || appConfig["app_secret"] != "secret-value" {
 					t.Fatalf("channel_app_config = %#v, want app credentials", appConfig)
 				}
-				if agentBinding["mode"] != "reuse" || agentBinding["agent_id"] != "u-dev" {
-					t.Fatalf("agent_binding = %#v, want reuse u-dev", agentBinding)
+				if agentBinding["mode"] != "reuse" || agentBinding["agent_id"] != "agent-dev" {
+					t.Fatalf("agent_binding = %#v, want reuse agent-dev", agentBinding)
 				}
-				return jsonResponse(http.StatusCreated, feishuBotParticipantResponse("dev", "dev", "u-dev", "cli_dev")), nil
+				return jsonResponse(http.StatusCreated, feishuBotParticipantResponse("pt-dev", "dev", "agent-dev", "cli_dev")), nil
 			default:
 				t.Fatalf("unexpected request %d: %s %s", call, req.Method, req.URL.String())
 				return nil, nil
@@ -738,7 +738,7 @@ func TestExecuteParticipantBindBotDefaultsToNoRestart(t *testing.T) {
 	if strings.Contains(stdout.String(), "secret-value") || strings.Contains(stderr.String(), "secret-value") {
 		t.Fatalf("output leaked app secret: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	for _, want := range []string{"\"participant_id\": \"dev\"", "\"agent_id\": \"u-dev\"", "\"restart_status\": \"restart_skipped\""} {
+	for _, want := range []string{"\"participant_id\": \"pt-dev\"", "\"agent_id\": \"agent-dev\"", "\"restart_status\": \"restart_skipped\""} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want %s", stdout.String(), want)
 		}

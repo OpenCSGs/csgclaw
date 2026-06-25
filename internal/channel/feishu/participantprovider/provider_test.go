@@ -19,7 +19,7 @@ func TestProviderReadsBotAndAdminConfigFromParticipants(t *testing.T) {
 	now := time.Date(2026, 6, 11, 10, 0, 0, 0, time.UTC)
 	items := []apitypes.Participant{
 		{
-			ID:              "admin",
+			ID:              "pt-admin-fdb06a89",
 			Channel:         participant.ChannelFeishu,
 			Type:            participant.TypeHuman,
 			Name:            "admin",
@@ -30,7 +30,7 @@ func TestProviderReadsBotAndAdminConfigFromParticipants(t *testing.T) {
 			CreatedAt:       now,
 		},
 		{
-			ID:              agent.ManagerParticipantID,
+			ID:              "pt-manager-ec18f310",
 			Channel:         participant.ChannelFeishu,
 			Type:            participant.TypeAgent,
 			Name:            agent.ManagerName,
@@ -45,7 +45,7 @@ func TestProviderReadsBotAndAdminConfigFromParticipants(t *testing.T) {
 			CreatedAt:       now,
 		},
 		{
-			ID:              "dev",
+			ID:              "pt-dev-8c6a6a8c",
 			Channel:         participant.ChannelFeishu,
 			Type:            participant.TypeAgent,
 			Name:            "Dev",
@@ -71,10 +71,10 @@ func TestProviderReadsBotAndAdminConfigFromParticipants(t *testing.T) {
 	if !ok {
 		t.Fatal("BotConfigForAgent(manager) ok = false, want true")
 	}
-	if participantID != agent.ManagerParticipantID || app.AppID != "cli_manager" || app.AppSecret != "manager-secret" {
+	if participantID != "pt-manager-ec18f310" || app.AppID != "cli_manager" || app.AppSecret != "manager-secret" {
 		t.Fatalf("manager config = participant_id=%q app=%+v, want manager app", participantID, app)
 	}
-	app, ok = provider.BotConfig("dev")
+	app, ok = provider.BotConfig("pt-dev-8c6a6a8c")
 	if !ok || app.AppID != "cli_dev" || app.AppSecret != "dev-secret" {
 		t.Fatalf("BotConfig(dev) = %+v, ok=%v; want dev app", app, ok)
 	}
@@ -82,15 +82,15 @@ func TestProviderReadsBotAndAdminConfigFromParticipants(t *testing.T) {
 	if !ok || adminOpenID != "ou_admin" {
 		t.Fatalf("DefaultAdminOpenID() = %q, ok=%v; want ou_admin", adminOpenID, ok)
 	}
-	adminOpenID, ok = provider.MentionOpenID("admin")
+	adminOpenID, ok = provider.MentionOpenID("pt-admin-fdb06a89")
 	if !ok || adminOpenID != "ou_admin" {
 		t.Fatalf("MentionOpenID(admin) = %q, ok=%v; want ou_admin", adminOpenID, ok)
 	}
-	if openID, ok := provider.MentionOpenID("dev"); ok || openID != "" {
+	if openID, ok := provider.MentionOpenID("pt-dev-8c6a6a8c"); ok || openID != "" {
 		t.Fatalf("MentionOpenID(dev) = %q, ok=%v; want no human mention open_id for app-backed agent", openID, ok)
 	}
 	snapshot := provider.Snapshot()
-	if snapshot.AdminOpenID != "ou_admin" || snapshot.Bots[agent.ManagerParticipantID].AppID != "cli_manager" || snapshot.Bots["dev"].AppSecret != "dev-secret" {
+	if snapshot.AdminOpenID != "ou_admin" || snapshot.Bots["pt-manager-ec18f310"].AppID != "cli_manager" || snapshot.Bots["pt-dev-8c6a6a8c"].AppSecret != "dev-secret" {
 		t.Fatalf("Snapshot() = %+v, want participant-backed config", snapshot)
 	}
 }

@@ -17,13 +17,17 @@ import {
   appendMessageToData,
   appendReplyToThreadView,
   applyIMEvent,
+  buildUsersById,
   applyThreadToData,
   conversationThreadViews,
   isDirectConversation,
   isThreadReply,
   isToolCallMessage,
+  localIdentitiesMatch,
+  participantIDForLocalIdentity,
   removeConversationFromData,
   resolveConversationUser,
+  resolveUserByLocalIdentity,
   THREAD_RELATION_TYPE,
   threadKey,
   threadMessageKey,
@@ -54,7 +58,7 @@ import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace, type SlashSkil
 import { localizeError } from "@/shared/i18n";
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
-import type { IMMessage, IMServerEvent, IMUser, ThreadView } from "@/models/conversations";
+import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import type { UseConversationControllerArgs } from "./types";
 
@@ -92,6 +96,17 @@ function clearThreadDraftsForConversation(current: DraftsByThreadKey, conversati
     next[key] = value;
   }
   return changed ? next : current;
+}
+
+function conversationMemberParticipantIDs(conversation: IMConversation | null | undefined): Set<string> {
+  return new Set((conversation?.members || []).map((id) => participantIDForLocalIdentity(id)).filter(Boolean));
+}
+
+function conversationHasLocalIdentity(
+  conversation: IMConversation | null | undefined,
+  id: string | null | undefined,
+): boolean {
+  return (conversation?.members || []).some((memberID) => localIdentitiesMatch(memberID, id));
 }
 
 export function useConversationController({
@@ -164,11 +179,7 @@ export function useConversationController({
   const usersByIdRef = useRef<Map<string, IMUser>>(new Map());
   const refreshAgentStateRef = useRef(onRefreshAgentState);
 
-  const usersById = useMemo(() => {
-    const result = new Map<string, IMUser>();
-    data?.users.forEach((user) => result.set(user.id, user));
-    return result;
-  }, [data]);
+  const usersById = useMemo(() => buildUsersById(data?.users), [data]);
   const activeConversation = useMemo(
     () => data?.rooms.find((item) => item.id === activeConversationId) ?? null,
     [data, activeConversationId],
@@ -208,7 +219,9 @@ export function useConversationController({
     }
 
     const directUser = resolveConversationUser(selectedConversation, data.current_user_id, usersById);
-    const otherMembers = selectedConversation.members.filter((id) => id && id !== data.current_user_id);
+    const otherMembers = selectedConversation.members.filter(
+      (id) => id && !localIdentitiesMatch(id, data.current_user_id),
+    );
     if (otherMembers.length !== 1) {
       return null;
     }
@@ -222,10 +235,10 @@ export function useConversationController({
     }
 
     return selectedConversation.members
-      .filter((memberId) => memberId !== data?.current_user_id)
+      .filter((memberId) => !localIdentitiesMatch(memberId, data?.current_user_id))
       .map((memberId) => ({
         memberId: memberId,
-        user: usersById.get(memberId),
+        user: resolveUserByLocalIdentity(memberId, usersById),
       }))
       .filter((entry) =>
         agents.some((agent) => agent.id === entry.memberId || (entry.user && agentMatchesUser(agent, entry.user))),
@@ -245,10 +258,12 @@ export function useConversationController({
     return "";
   }, [activeConversationAgentMembers, logAgent?.id]);
   const activeConversationMembers = activeConversation
-    ? activeConversation.members.map((id) => usersById.get(id)).filter((user): user is IMUser => Boolean(user))
+    ? activeConversation.members
+        .map((id) => resolveUserByLocalIdentity(id, usersById))
+        .filter((user): user is IMUser => Boolean(user))
     : [];
   const inviteCandidates = activeConversation
-    ? data?.users.filter((user) => !activeConversation.members.includes(user.id)) || []
+    ? data?.users.filter((user) => !conversationHasLocalIdentity(activeConversation, user.id)) || []
     : [];
   const inviteActionLabel = t("memberManagement");
 
@@ -256,9 +271,9 @@ export function useConversationController({
     if (!data || !composerMentionState) {
       return [];
     }
-    const allowed = new Set(activeConversation?.members ?? []);
+    const allowed = conversationMemberParticipantIDs(activeConversation);
     return getMentionCandidates(
-      data.users.filter((user) => allowed.has(user.id)),
+      data.users.filter((user) => allowed.has(participantIDForLocalIdentity(user.id))),
       composerMentionState.query,
     );
   }, [data, activeConversation, composerMentionState]);
@@ -267,9 +282,9 @@ export function useConversationController({
     if (!data) {
       return result;
     }
-    const allowed = new Set(activeConversation?.members ?? []);
+    const allowed = conversationMemberParticipantIDs(activeConversation);
     data.users
-      .filter((user) => allowed.has(user.id))
+      .filter((user) => allowed.has(participantIDForLocalIdentity(user.id)))
       .forEach((user) => {
         const handle = String(user.handle ?? "")
           .trim()
@@ -344,7 +359,7 @@ export function useConversationController({
       if (payload?.type === "message.created" && payload.message) {
         const senderID = String(payload.message.sender_id || "").trim();
         if (senderID) {
-          const sender = usersByIdRef.current.get(senderID) ?? { id: senderID };
+          const sender = resolveUserByLocalIdentity(senderID, usersByIdRef.current) ?? { id: senderID };
           const senderAgent = agentsRef.current.find((agent) => agentMatchesUser(agent, sender));
           if (senderAgent?.id && !isAgentRunning(senderAgent)) {
             void refreshAgentStateRef.current(String(senderAgent.id));

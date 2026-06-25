@@ -87,7 +87,7 @@ import type {
   AgentTemplateLike,
   RuntimeKind,
 } from "@/models/agents";
-import { isDirectConversation, resolveRoomInviterID } from "@/models/conversations";
+import { isDirectConversation, localIdentitiesMatch, resolveRoomInviterID } from "@/models/conversations";
 import { modelProviderOptionsFromCatalog } from "@/models/modelProviders";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace } from "@/models/slashCommands";
@@ -1616,7 +1616,10 @@ export function useAgentController({
     }
     return (
       roomList.find(
-        (room) => isDirectConversation(room) && room.members.includes(currentUserID) && room.members.includes(userID),
+        (room) =>
+          isDirectConversation(room) &&
+          room.members.some((memberID) => localIdentitiesMatch(memberID, currentUserID)) &&
+          room.members.some((memberID) => localIdentitiesMatch(memberID, userID)),
       ) ?? null
     );
   }

@@ -123,7 +123,7 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 				if want := hostHome; spec.HomeDir != want {
 					t.Fatalf("HomeDir = %q, want host HOME %q", spec.HomeDir, want)
 				}
-				if want := filepath.Join(root, "alice", ".codex", "home"); spec.CodexHomeDir != want {
+				if want := filepath.Join(root, "agent-alice", ".codex", "home"); spec.CodexHomeDir != want {
 					t.Fatalf("CodexHomeDir = %q, want %q", spec.CodexHomeDir, want)
 				}
 				return &Session{
@@ -172,7 +172,7 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 		t.Fatalf("Info() handle id = %q, want sess-1", info.HandleID)
 	}
 
-	metaPath := filepath.Join(root, "alice", ".codex", runtimeFileName)
+	metaPath := filepath.Join(root, "agent-alice", ".codex", runtimeFileName)
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
 		t.Fatalf("read runtime metadata: %v", err)
@@ -185,7 +185,7 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 		t.Fatalf("runtime metadata binary path = %q", meta.BinaryPath)
 	}
 
-	authRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", "auth.json"))
+	authRaw, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", "auth.json"))
 	if err != nil {
 		t.Fatalf("read seeded runtime auth: %v", err)
 	}
@@ -193,15 +193,15 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 		t.Fatalf("runtime auth = %q, want copied host auth", string(authRaw))
 	}
 
-	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", "home", configFileName),
+	assertRuntimeConfigContains(t, filepath.Join(root, "agent-alice", ".codex", "home", configFileName),
 		`model = "gpt-5.5"`,
 		`model_provider = "proxy"`,
 		`model_catalog_json = "model_catalog.json"`,
 		`wire_api = "responses"`,
 		`supports_websockets = false`,
 	)
-	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", "home", modelCatalogFileName), "gpt-5.5")
-	agentsRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", "AGENTS.md"))
+	assertRuntimeModelCatalog(t, filepath.Join(root, "agent-alice", ".codex", "home", modelCatalogFileName), "gpt-5.5")
+	agentsRaw, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md"))
 	if err != nil {
 		t.Fatalf("read codex home AGENTS.md: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestRuntimeCreateUsesLocalWorkspaceDir(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", "AGENTS.md"))
+	raw, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md"))
 	if err != nil {
 		t.Fatalf("read codex home AGENTS.md: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestRefreshCodexHomeAgentsFileCreatesManagedFileWhenMissing(t *testing.T) {
 		t.Fatalf("RefreshCodexHomeAgentsFile() error = %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", "AGENTS.md"))
+	raw, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md"))
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestRefreshCodexHomeAgentsFileAppendsManagedBlockToExistingUserFile(t *test
 		return AgentRef{ID: "u-alice", Name: "alice", RuntimeID: h.RuntimeID, Instructions: "Use Chinese in docs."}, nil
 	})
 
-	agentsPath := filepath.Join(root, "alice", ".codex", "home", "AGENTS.md")
+	agentsPath := filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md")
 	if err := os.MkdirAll(filepath.Dir(agentsPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +420,7 @@ func TestRefreshCodexHomeAgentsFileReplacesExistingInstructionsBlock(t *testing.
 		return AgentRef{ID: "u-alice", Name: "alice", RuntimeID: h.RuntimeID, Instructions: "New instructions."}, nil
 	})
 
-	agentsPath := filepath.Join(root, "alice", ".codex", "home", "AGENTS.md")
+	agentsPath := filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md")
 	if err := os.MkdirAll(filepath.Dir(agentsPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +469,7 @@ func TestRefreshCodexHomeAgentsFileIsIdempotent(t *testing.T) {
 	if err := rt.RefreshCodexHomeAgentsFile(context.Background(), handle); err != nil {
 		t.Fatalf("first RefreshCodexHomeAgentsFile() error = %v", err)
 	}
-	agentsPath := filepath.Join(root, "alice", ".codex", "home", "AGENTS.md")
+	agentsPath := filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md")
 	first, err := os.ReadFile(agentsPath)
 	if err != nil {
 		t.Fatalf("read first AGENTS.md: %v", err)
@@ -507,7 +507,7 @@ func TestSyncWorkspaceAgentsFileRefreshesCodexHomeAgentsFileWithoutTouchingWorks
 		}, nil
 	})
 
-	homeAgentsPath := filepath.Join(root, "alice", ".codex", "home", "AGENTS.md")
+	homeAgentsPath := filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md")
 	if err := os.MkdirAll(filepath.Dir(homeAgentsPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -564,7 +564,7 @@ func TestSyncWorkspaceAgentsFileCreatesCodexHomeAgentsFileWhenWorkspaceChanges(t
 		t.Fatalf("SyncWorkspaceAgentsFile() error = %v", err)
 	}
 
-	homeRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", "AGENTS.md"))
+	homeRaw, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md"))
 	if err != nil {
 		t.Fatalf("read codex home AGENTS.md: %v", err)
 	}
@@ -637,7 +637,7 @@ func TestRuntimeStopAndDelete(t *testing.T) {
 	if err := rt.Delete(context.Background(), handle); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "alice", ".codex")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(root, "agent-alice", ".codex")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("runtime dir still exists, stat err = %v", err)
 	}
 }
@@ -730,7 +730,7 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runtimeAuthPath := filepath.Join(root, "alice", ".codex", "home", "auth.json")
+	runtimeAuthPath := filepath.Join(root, "agent-alice", ".codex", "home", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(runtimeAuthPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -785,7 +785,7 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 	if string(authRaw) != `{"tokens":{"access_token":"runtime","refresh_token":"runtime-refresh"}}` {
 		t.Fatalf("runtime auth = %q, want existing runtime auth preserved", string(authRaw))
 	}
-	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", "home", configFileName),
+	assertRuntimeConfigContains(t, filepath.Join(root, "agent-alice", ".codex", "home", configFileName),
 		`sandbox_mode = "workspace-write"`,
 		`sandbox_workspace_write.network_access = true`,
 		`features.multi_agent = false`,
@@ -856,13 +856,13 @@ func TestRuntimeCreateWritesConfigWhenHostAuthIsSeeded(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", "home", configFileName),
+	assertRuntimeConfigContains(t, filepath.Join(root, "agent-alice", ".codex", "home", configFileName),
 		`model = "gpt-5.5"`,
 		`model_catalog_json = "model_catalog.json"`,
 		`wire_api = "responses"`,
 		`supports_websockets = false`,
 	)
-	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", "home", modelCatalogFileName), "gpt-5.5")
+	assertRuntimeModelCatalog(t, filepath.Join(root, "agent-alice", ".codex", "home", modelCatalogFileName), "gpt-5.5")
 }
 
 func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
@@ -911,6 +911,22 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 		t.Fatalf("initial handle id = %q, want main-thread", handle.HandleID)
 	}
 
+	legacyWorkspaceDir := filepath.Join(root, "alice", ".codex", "workspace")
+	legacyCodexHomeDir := filepath.Join(root, "alice", ".codex", "home")
+	if err := os.MkdirAll(legacyWorkspaceDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(legacy workspace) error = %v", err)
+	}
+	if err := writeJSONFile(os.WriteFile, filepath.Join(root, "agent-alice", ".codex", sessionFileName), sessionMetadata{
+		RuntimeID:    "rt-u-alice",
+		SessionID:    "main-thread",
+		WorkspaceDir: legacyWorkspaceDir,
+		HomeDir:      hostHome,
+		CodexHomeDir: legacyCodexHomeDir,
+		StartedAt:    time.Date(2026, 6, 25, 8, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("write legacy session metadata: %v", err)
+	}
+
 	reloaded := New(deps)
 	manager := reloaded.SessionManager()
 	session, err := manager.Session(SessionHandle{RuntimeID: "rt-u-alice"})
@@ -920,12 +936,28 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 	if session.SessionID != "resumed-thread" {
 		t.Fatalf("hydrated session id = %q, want resumed-thread", session.SessionID)
 	}
-	homeAgentsRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", "AGENTS.md"))
+	if want := filepath.Join(root, "agent-alice", ".codex", "workspace"); session.WorkspaceDir != want {
+		t.Fatalf("hydrated workspace dir = %q, want %q", session.WorkspaceDir, want)
+	}
+	if want := filepath.Join(root, "agent-alice", ".codex", "home"); session.CodexHomeDir != want {
+		t.Fatalf("hydrated codex home dir = %q, want %q", session.CodexHomeDir, want)
+	}
+	if _, err := os.Stat(filepath.Join(legacyCodexHomeDir, "AGENTS.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy codex home AGENTS.md stat error = %v, want not exist", err)
+	}
+	homeAgentsRaw, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md"))
 	if err != nil {
 		t.Fatalf("read hydrated codex home AGENTS.md: %v", err)
 	}
 	if !strings.Contains(string(homeAgentsRaw), "Resume with repo-specific instructions.") {
 		t.Fatalf("hydrated codex home AGENTS.md = %q, want refreshed instructions", string(homeAgentsRaw))
+	}
+	var persisted sessionMetadata
+	if err := readJSONFile(os.ReadFile, filepath.Join(root, "agent-alice", ".codex", sessionFileName), &persisted); err != nil {
+		t.Fatalf("read hydrated session metadata: %v", err)
+	}
+	if want := filepath.Join(root, "agent-alice", ".codex", "home"); persisted.CodexHomeDir != want {
+		t.Fatalf("persisted codex home dir = %q, want %q", persisted.CodexHomeDir, want)
 	}
 	if _, err := os.Stat(filepath.Join(session.WorkspaceDir, "AGENTS.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("workspace AGENTS.md stat error = %v, want not exist", err)
@@ -1003,7 +1035,7 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	configRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", configFileName))
+	configRaw, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", configFileName))
 	if err != nil {
 		t.Fatalf("read seeded runtime config: %v", err)
 	}
@@ -1088,8 +1120,8 @@ func TestRuntimeCreateCopiesHostCodexSkills(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	assertRuntimeSkillFile(t, filepath.Join(root, "alice", ".codex", "home", "skills", "demo", "SKILL.md"), "# Demo\n", 0o644)
-	assertRuntimeSkillFile(t, filepath.Join(root, "alice", ".codex", "home", "skills", "demo", "scripts", "run.sh"), "#!/bin/sh\necho ready\n", 0o755)
+	assertRuntimeSkillFile(t, filepath.Join(root, "agent-alice", ".codex", "home", "skills", "demo", "SKILL.md"), "# Demo\n", 0o644)
+	assertRuntimeSkillFile(t, filepath.Join(root, "agent-alice", ".codex", "home", "skills", "demo", "scripts", "run.sh"), "#!/bin/sh\necho ready\n", 0o755)
 }
 
 func TestRuntimeCreateRefreshesCodexSkillsFromHost(t *testing.T) {
@@ -1104,7 +1136,7 @@ func TestRuntimeCreateRefreshesCodexSkillsFromHost(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runtimeSkillsRoot := filepath.Join(root, "alice", ".codex", "home", "skills")
+	runtimeSkillsRoot := filepath.Join(root, "agent-alice", ".codex", "home", "skills")
 	if err := os.MkdirAll(filepath.Join(runtimeSkillsRoot, "stale"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1233,7 +1265,7 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	configRaw, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", configFileName))
+	configRaw, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", configFileName))
 	if err != nil {
 		t.Fatalf("read runtime config: %v", err)
 	}
@@ -1397,14 +1429,14 @@ func TestRuntimeCreateAlwaysWritesResponsesConfig(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	assertRuntimeConfigContains(t, filepath.Join(root, "alice", ".codex", "home", configFileName),
+	assertRuntimeConfigContains(t, filepath.Join(root, "agent-alice", ".codex", "home", configFileName),
 		`model = "deepseek-v4-pro"`,
 		`model_catalog_json = "model_catalog.json"`,
 		`wire_api = "responses"`,
 		`supports_websockets = false`,
 	)
-	assertRuntimeModelCatalog(t, filepath.Join(root, "alice", ".codex", "home", modelCatalogFileName), "deepseek-v4-pro")
-	configText, err := os.ReadFile(filepath.Join(root, "alice", ".codex", "home", configFileName))
+	assertRuntimeModelCatalog(t, filepath.Join(root, "agent-alice", ".codex", "home", modelCatalogFileName), "deepseek-v4-pro")
+	configText, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", configFileName))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1415,7 +1447,7 @@ func TestRuntimeCreateAlwaysWritesResponsesConfig(t *testing.T) {
 
 func TestRuntimeCreateRemovesStaleConfigWhenAuthExists(t *testing.T) {
 	root := t.TempDir()
-	runtimeRoot := filepath.Join(root, "alice", ".codex", "home")
+	runtimeRoot := filepath.Join(root, "agent-alice", ".codex", "home")
 	if err := os.MkdirAll(runtimeRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}

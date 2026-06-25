@@ -633,6 +633,55 @@ describe("useAgentController", () => {
     expect(createUserRequest).not.toHaveBeenCalled();
   });
 
+  it("routes migrated worker direct messages by participant id", async () => {
+    const workerAgent: AgentLike = {
+      id: "agent-dahym7",
+      name: "qa",
+      participants: [
+        {
+          agent_id: "agent-dahym7",
+          channel: "csgclaw",
+          channel_user_ref: "user-dahym7",
+          id: "pt-dahym7",
+          type: "agent",
+        },
+      ],
+      role: "worker",
+      runtime_kind: "picoclaw_sandbox",
+      status: "running",
+      user_id: "user-dahym7",
+    };
+    const directConversation: IMConversation = {
+      id: "dm-qa",
+      is_direct: true,
+      members: ["pt-admin", "pt-dahym7"],
+      messages: [],
+      title: "qa",
+    };
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          agents: [oldAgent, workerAgent],
+          data: {
+            current_user_id: "user-admin",
+            rooms: [directConversation],
+            users: [
+              { id: "user-admin", name: "admin" },
+              { id: "user-dahym7", name: "qa" },
+            ],
+          },
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.controller.agentViewProps.onOpenDM(workerAgent);
+    });
+
+    expect(result.current.selectConversation).toHaveBeenCalledWith("dm-qa", { rooms: [directConversation] });
+    expect(createUserRequest).not.toHaveBeenCalled();
+  });
+
   it("clears the manager setup redirect notice after a short timeout", async () => {
     vi.useFakeTimers();
     try {

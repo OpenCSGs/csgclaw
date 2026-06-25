@@ -552,7 +552,7 @@ func TestHandleRoomsMembersListsCsgclawMembers(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&members); err != nil {
 		t.Fatalf("decode members: %v", err)
 	}
-	if len(members) != 2 || members[0].ID != "admin" || members[1].ID != "u-alice" {
+	if len(members) != 2 || members[0].ID != "user-admin" || members[1].ID != "user-alice" {
 		t.Fatalf("members = %+v, want room members", members)
 	}
 }
@@ -581,8 +581,8 @@ func TestHandleRoomsMembersAddsCsgclawMember(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&room); err != nil {
 		t.Fatalf("decode room: %v", err)
 	}
-	if len(room.Members) != 2 || room.Members[1] != "u-alice" {
-		t.Fatalf("members = %+v, want u-admin and u-alice", room.Members)
+	if len(room.Members) != 2 || room.Members[1] != "pt-alice" {
+		t.Fatalf("members = %+v, want pt-admin and pt-alice", room.Members)
 	}
 }
 
@@ -610,7 +610,7 @@ func TestHandleRoomsMembersDeletesCsgclawMember(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&room); err != nil {
 		t.Fatalf("decode room: %v", err)
 	}
-	if len(room.Members) != 1 || room.Members[0] != "admin" {
+	if len(room.Members) != 1 || room.Members[0] != "pt-admin" {
 		t.Fatalf("members = %+v, want only admin", room.Members)
 	}
 }
@@ -638,17 +638,16 @@ func TestHandleAgentsListReturnsUnifiedAgents(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("len(agents) = %d, want 3; body=%s", len(got), rec.Body.String())
 	}
-	if got[0].ID != "u-manager" || got[1].ID != "u-alice" || got[2].ID != "agent-1" {
+	if got[0].ID != "agent-manager" || got[1].ID != "agent-alice" || got[2].ID != "agent-1" {
 		t.Fatalf("agents = %+v, want manager/worker/agent in CreatedAt order", got)
 	}
 }
 
 func TestHandleAgentsListHydratesStatusFromSandboxInfo(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	runtimeHome, err := agentSandboxRuntimeHomeForTest("alice")
-	if err != nil {
-		t.Fatalf("agentSandboxRuntimeHomeForTest() error = %v", err)
-	}
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agents.json")
+	runtimeHome := filepath.Join(dir, "agents", "agent-alice", config.RuntimeHomeDirName)
 	provider := sandboxtest.NewProvider()
 	rt := sandboxtest.NewRuntime()
 	rt.Instances["box-stored"] = sandboxtest.NewInstance(sandbox.Info{
@@ -659,8 +658,6 @@ func TestHandleAgentsListHydratesStatusFromSandboxInfo(t *testing.T) {
 	})
 	provider.Runtimes[runtimeHome] = rt
 
-	dir := t.TempDir()
-	statePath := filepath.Join(dir, "agents.json")
 	if err := writeSeededAgents(statePath, []agent.Agent{
 		{ID: "u-alice", Name: "alice", BoxID: "box-stored", Role: agent.RoleWorker, Status: "stale", CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
 	}); err != nil {
@@ -710,8 +707,8 @@ func TestHandleAgentsGetByIDReturnsAgent(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "u-alice" || got.Name != "alice" || got.Role != agent.RoleWorker {
-		t.Fatalf("agent = %+v, want u-alice/alice/worker", got)
+	if got.ID != "agent-alice" || got.Name != "alice" || got.Role != agent.RoleWorker {
+		t.Fatalf("agent = %+v, want agent-alice/alice/worker", got)
 	}
 }
 
@@ -1371,8 +1368,8 @@ func TestHandleAgentsGetByIDReloadsStateBeforeLookup(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "u-bob" || got.Name != "bob" {
-		t.Fatalf("agent = %+v, want u-bob/bob", got)
+	if got.ID != "agent-bob" || got.Name != "bob" {
+		t.Fatalf("agent = %+v, want agent-bob/bob", got)
 	}
 }
 
@@ -1699,8 +1696,8 @@ func TestHandleAgentStopStopsCodexBridge(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(bridge.stopCalls) != 1 || bridge.stopCalls[0] != "u-alice" {
-		t.Fatalf("StopAgent() calls = %v, want [u-alice]", bridge.stopCalls)
+	if len(bridge.stopCalls) != 1 || bridge.stopCalls[0] != "agent-alice" {
+		t.Fatalf("StopAgent() calls = %v, want [agent-alice]", bridge.stopCalls)
 	}
 }
 
@@ -1758,7 +1755,7 @@ func TestHandleAgentsCreateDoesNotProvisionIMUser(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "u-alice" || got.Role != agent.RoleWorker {
+	if !strings.HasPrefix(got.ID, "agent-") || got.Role != agent.RoleWorker {
 		t.Fatalf("agent = %+v, want worker alias result", got)
 	}
 	if _, ok := srv.im.User("u-alice"); ok {
@@ -1856,8 +1853,8 @@ func TestHandleAgentsCreateCodexWorkerEnsuresCodexBridge(t *testing.T) {
 	if len(bridge.ensureCalls) != 1 {
 		t.Fatalf("EnsureAgent() calls = %d, want 1", len(bridge.ensureCalls))
 	}
-	if bridge.ensureCalls[0].ID != "u-alice" || bridge.ensureCalls[0].RuntimeKind != agent.RuntimeKindCodex {
-		t.Fatalf("EnsureAgent() got %+v, want codex worker u-alice", bridge.ensureCalls[0])
+	if !strings.HasPrefix(bridge.ensureCalls[0].ID, "agent-") || bridge.ensureCalls[0].RuntimeKind != agent.RuntimeKindCodex {
+		t.Fatalf("EnsureAgent() got %+v, want codex worker typed agent ID", bridge.ensureCalls[0])
 	}
 }
 
@@ -1912,7 +1909,7 @@ func TestHandleAgentsCreateReplaceUsesUnifiedServiceEntry(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "u-alice" || got.Name != "alice-v2" || got.Role != agent.RoleWorker {
+	if got.ID != "agent-alice" || got.Name != "alice-v2" || got.Role != agent.RoleWorker {
 		t.Fatalf("agent = %+v, want replaced worker", got)
 	}
 	if got.RuntimeKind != agent.RuntimeKindPicoClawSandbox {
@@ -1950,7 +1947,7 @@ func TestHandleAgentsCreateReplaceFieldMaskMergesInService(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "u-alice" || got.Name != "alice-v2" || got.Description != "worker" || got.Image != "agent-image:v1" {
+	if got.ID != "agent-alice" || got.Name != "alice-v2" || got.Description != "worker" || got.Image != "agent-image:v1" {
 		t.Fatalf("agent = %+v, want masked replace preserving unmasked fields", got)
 	}
 }
@@ -3346,7 +3343,7 @@ func TestHandleRoomsInviteAliasAddsConversationMembers(t *testing.T) {
 	if got.ID != "room-1" {
 		t.Fatalf("conversation id = %q, want %q", got.ID, "room-1")
 	}
-	if !containsMember(got.Members, "manager") {
+	if !containsMember(got.Members, "pt-manager") {
 		t.Fatalf("members = %+v, want manager to be invited", got.Members)
 	}
 }
@@ -3500,7 +3497,7 @@ func TestHandleUsersCreateProvisionsIMUser(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "u-alice" || got.Name != "alice" || got.Handle != "alice" || got.Role != "worker" {
+	if got.ID != "user-alice" || got.Name != "alice" || got.Handle != "alice" || got.Role != "worker" {
 		t.Fatalf("user = %+v, want normalized provisioned user", got)
 	}
 
@@ -3508,13 +3505,13 @@ func TestHandleUsersCreateProvisionsIMUser(t *testing.T) {
 		t.Fatal("User(u-alice) ok = false, want true after create")
 	}
 	rooms := srv.im.ListRooms()
-	if len(rooms) != 1 || !containsMember(rooms[0].Members, "admin") || !containsMember(rooms[0].Members, "u-alice") {
+	if len(rooms) != 1 || !containsMember(rooms[0].Members, "pt-admin") || !containsMember(rooms[0].Members, "pt-alice") {
 		t.Fatalf("rooms = %+v, want one bootstrap room with admin and u-alice", rooms)
 	}
 
 	first := mustReceiveIMEvent(t, events)
-	if first.Type != im.EventTypeUserCreated || first.User == nil || first.User.ID != "u-alice" {
-		t.Fatalf("first event = %+v, want user_created for u-alice", first)
+	if first.Type != im.EventTypeUserCreated || first.User == nil || first.User.ID != "user-alice" {
+		t.Fatalf("first event = %+v, want user_created for user-alice", first)
 	}
 	second := mustReceiveIMEvent(t, events)
 	if second.Type != im.EventTypeRoomCreated || second.Room == nil || second.Room.ID == "" {
@@ -3555,30 +3552,92 @@ func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T)
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "u-qa" || got.Name != "qa" || got.Handle != "qa" || got.Role != "worker" {
+	if got.ID != "user-qa" || got.Name != "qa" || got.Handle != "qa" || got.Role != "worker" {
 		t.Fatalf("user = %+v, want qa worker user", got)
 	}
 
-	created, ok := agentSvc.Agent("u-qa")
+	created, ok := agentSvc.Agent("agent-qa")
 	if !ok {
-		t.Fatal("Agent(u-qa) ok = false, want worker agent created with IM user")
+		t.Fatal("Agent(agent-qa) ok = false, want worker agent created with IM user")
 	}
 	if created.Name != "qa" || created.Role != agent.RoleWorker {
 		t.Fatalf("agent = %+v, want qa worker", created)
 	}
 
 	participants := participantSvc.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent})
-	if len(participants) != 1 || participants[0].ID != "qa" || participants[0].AgentID != "u-qa" || participants[0].ChannelUserRef != "u-qa" {
+	if len(participants) != 1 || participants[0].ID != "pt-qa" || participants[0].AgentID != "agent-qa" || participants[0].ChannelUserRef != "user-qa" {
 		t.Fatalf("participants = %+v, want one qa worker participant", participants)
 	}
 
 	first := mustReceiveIMEvent(t, events)
-	if first.Type != im.EventTypeUserCreated || first.User == nil || first.User.ID != "u-qa" {
-		t.Fatalf("first event = %+v, want user_created for u-qa", first)
+	if first.Type != im.EventTypeUserCreated || first.User == nil || first.User.ID != "user-qa" {
+		t.Fatalf("first event = %+v, want user_created for user-qa", first)
 	}
 	second := mustReceiveIMEvent(t, events)
-	if second.Type != im.EventTypeRoomCreated || second.Room == nil || !containsMember(second.Room.Members, "u-qa") {
+	if second.Type != im.EventTypeRoomCreated || second.Room == nil || !containsMember(second.Room.Members, "pt-qa") {
 		t.Fatalf("second event = %+v, want qa direct room", second)
+	}
+}
+
+func TestHandleUsersCreateReusesExistingWorkerParticipant(t *testing.T) {
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: im.AdminUserID,
+		Users: []im.User{{
+			ID:     im.AdminUserID,
+			Name:   "admin",
+			Handle: "admin",
+			Role:   "admin",
+		}, {
+			ID:     "user-dahym7",
+			Name:   "qa",
+			Handle: "agent-dahym7",
+			Role:   "worker",
+		}},
+		Rooms: []im.Room{{
+			ID:       "room-qa",
+			Title:    "qa",
+			Members:  []string{"pt-admin", "pt-dahym7"},
+			IsDirect: true,
+		}},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              "pt-dahym7",
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeAgent,
+		Name:            "qa",
+		ChannelUserRef:  "user-dahym7",
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		AgentID:         "agent-dahym7",
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}))
+	srv := &Handler{
+		svc:         &agent.Service{},
+		im:          imSvc,
+		participant: participantSvc,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"user-dahym7","name":"qa","handle":"qa","role":"worker"}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var got im.User
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.ID != "user-dahym7" || got.Name != "qa" {
+		t.Fatalf("user = %+v, want existing qa user", got)
+	}
+	rooms := imSvc.ListRooms()
+	if len(rooms) != 1 || rooms[0].ID != "room-qa" || !containsMember(rooms[0].Members, "pt-dahym7") {
+		t.Fatalf("rooms = %+v, want existing qa DM preserved", rooms)
+	}
+	participants := participantSvc.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent})
+	if len(participants) != 1 || participants[0].ID != "pt-dahym7" {
+		t.Fatalf("participants = %+v, want existing participant only", participants)
 	}
 }
 
@@ -3611,11 +3670,11 @@ func TestHandleUsersCreateManagerAgentIDReturnsParticipantUser(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != agent.ManagerParticipantID || got.Handle != agent.ManagerName {
+	if got.ID != im.ManagerUserID || got.Handle != agent.ManagerName {
 		t.Fatalf("user = %+v, want existing manager participant user", got)
 	}
-	if _, ok := imSvc.User(agent.ManagerUserID); ok {
-		t.Fatalf("legacy runtime user %q was created", agent.ManagerUserID)
+	if _, ok := imSvc.User(im.ManagerUserID); !ok {
+		t.Fatalf("manager user %q missing after create", agent.ManagerUserID)
 	}
 }
 
@@ -3793,10 +3852,10 @@ func TestHandleMessagesPostCreatesMessage(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.SenderID != "admin" || got.Content != "hello @manager" {
+	if got.SenderID != "pt-admin" || got.Content != "hello @manager" {
 		t.Fatalf("message = %+v, want sender/content populated", got)
 	}
-	if len(got.Mentions) != 1 || got.Mentions[0].ID != "manager" || got.Mentions[0].Name != "manager" {
+	if len(got.Mentions) != 1 || got.Mentions[0].ID != "pt-manager" || got.Mentions[0].Name != "manager" {
 		t.Fatalf("mentions = %+v, want manager", got.Mentions)
 	}
 }
@@ -4095,10 +4154,10 @@ func TestHandleMessagesPostPrefixesMentionID(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.Content != `<at user_id="u-dev">dev</at> hi` {
-		t.Fatalf(`content = %q, want <at user_id="u-dev">dev</at> hi`, got.Content)
+	if got.Content != `<at user_id="pt-dev">dev</at> hi` {
+		t.Fatalf(`content = %q, want <at user_id="pt-dev">dev</at> hi`, got.Content)
 	}
-	if len(got.Mentions) != 1 || got.Mentions[0].ID != "u-dev" || got.Mentions[0].Name != "dev" {
+	if len(got.Mentions) != 1 || got.Mentions[0].ID != "pt-dev" || got.Mentions[0].Name != "dev" {
 		t.Fatalf("mentions = %+v, want u-dev", got.Mentions)
 	}
 }
@@ -4444,7 +4503,7 @@ func TestHandleRoomsPostCreatesRoom(t *testing.T) {
 	if got.Title != "Launch" {
 		t.Fatalf("conversation.Title = %q, want Launch", got.Title)
 	}
-	if !containsMember(got.Members, "admin") || !containsMember(got.Members, "u-alice") || !containsMember(got.Members, "manager") {
+	if !containsMember(got.Members, "pt-admin") || !containsMember(got.Members, "pt-alice") || !containsMember(got.Members, "pt-manager") {
 		t.Fatalf("members = %+v, want admin, alice, and manager", got.Members)
 	}
 }
@@ -4472,7 +4531,7 @@ func TestHandleRoomsPostUsesCsgclawChannelAdapter(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsMember(got.Members, "admin") || !containsMember(got.Members, "u-alice") {
+	if !containsMember(got.Members, "pt-admin") || !containsMember(got.Members, "pt-alice") {
 		t.Fatalf("members = %+v, want trimmed bot IDs", got.Members)
 	}
 }
@@ -5393,7 +5452,7 @@ func TestReplayRecentBotMessagesReplaysParticipantRoomUsingChannelUserRef(t *tes
 
 	select {
 	case evt := <-events:
-		if evt.MessageID != "msg-qa" || evt.Context.Account != "agent-hhtz4b" {
+		if evt.MessageID != "msg-qa" || evt.Context.Account != "pt-hhtz4b" {
 			t.Fatalf("replayed event = %+v, want participant-keyed QA replay", evt)
 		}
 	case <-time.After(time.Second):
@@ -5878,14 +5937,6 @@ func normalizeSeededAgents(agents []agent.Agent) []agent.Agent {
 		}
 	}
 	return out
-}
-
-func agentSandboxRuntimeHomeForTest(agentName string) (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(homeDir, config.AppDirName, "agents", agentName, config.RuntimeHomeDirName), nil
 }
 
 func containsMember(members []string, want string) bool {

@@ -240,11 +240,29 @@ func RenderTeamApprovals(output string, w io.Writer, approvals []apitypes.TeamAp
 
 func RenderAgentsTable(w io.Writer, agents []apitypes.Agent) error {
 	tw := NewTableWriter(w)
-	fmt.Fprintln(tw, "ID\tNAME\tROLE\tSTATUS\tRUNTIME\tPROFILE\tIMAGE")
+	showParticipants := agentsHaveParticipants(agents)
+	if showParticipants {
+		fmt.Fprintln(tw, "ID\tNAME\tROLE\tSTATUS\tRUNTIME\tPROFILE\tPARTICIPANTS\tIMAGE")
+	} else {
+		fmt.Fprintln(tw, "ID\tNAME\tROLE\tSTATUS\tRUNTIME\tPROFILE\tIMAGE")
+	}
 	for _, a := range agents {
+		if showParticipants {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Name, a.Role, a.Status, displayAgentField(a.RuntimeKind), displayAgentProfile(a.Profile), displayParticipantList(a.ParticipantNames, a.ParticipantIDs), displayAgentField(a.Image))
+			continue
+		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Name, a.Role, a.Status, displayAgentField(a.RuntimeKind), displayAgentProfile(a.Profile), displayAgentField(a.Image))
 	}
 	return tw.Flush()
+}
+
+func agentsHaveParticipants(agents []apitypes.Agent) bool {
+	for _, item := range agents {
+		if len(item.ParticipantNames) > 0 || len(item.ParticipantIDs) > 0 || len(item.Participants) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func displayAgentField(value string) string {
@@ -261,15 +279,15 @@ func displayAgentProfile(profile string) string {
 
 func RenderParticipantsTable(w io.Writer, participants []apitypes.Participant) error {
 	tw := NewTableWriter(w)
-	fmt.Fprintln(tw, "ID\tNAME\tTYPE\tCHANNEL\tAGENT_ID\tCHANNEL_USER\tAPP_REF\tSTATUS")
+	fmt.Fprintln(tw, "ID\tNAME\tTYPE\tCHANNEL\tAGENT\tUSER\tAPP_REF\tSTATUS")
 	for _, p := range participants {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			displayValueField(p.ID),
 			displayValueField(p.Name),
 			displayValueField(p.Type),
 			displayValueField(p.Channel),
-			displayValueField(p.AgentID),
-			displayValueField(p.ChannelUserRef),
+			displayNameWithID(p.AgentName, p.AgentID),
+			displayNameWithID(p.UserName, firstNonEmpty(p.UserID, p.ChannelUserRef)),
 			displayValueField(p.ChannelAppRef),
 			displayValueField(p.LifecycleStatus),
 		)
@@ -285,13 +303,87 @@ func displayValueField(value string) string {
 	return value
 }
 
+func displayNameWithID(name, id string) string {
+	name = strings.TrimSpace(name)
+	id = strings.TrimSpace(id)
+	switch {
+	case name != "" && id != "" && name != id:
+		return name + "(" + id + ")"
+	case name != "":
+		return name
+	case id != "":
+		return id
+	default:
+		return "-"
+	}
+}
+
+func displayParticipantList(names, ids []string) string {
+	if len(names) == 0 && len(ids) == 0 {
+		return "-"
+	}
+	if len(names) == 0 {
+		return displayList(ids)
+	}
+	values := make([]string, 0, len(names))
+	for i, name := range names {
+		id := ""
+		if i < len(ids) {
+			id = ids[i]
+		}
+		values = append(values, displayNameWithID(name, id))
+	}
+	return strings.Join(values, ",")
+}
+
+func displayList(values []string) string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	if len(out) == 0 {
+		return "-"
+	}
+	return strings.Join(out, ",")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func RenderRoomsTable(w io.Writer, rooms []apitypes.Room) error {
 	tw := NewTableWriter(w)
-	fmt.Fprintln(tw, "ID\tTITLE\tDIRECT\tMEMBERS\tMESSAGES")
+	showNames := roomsHaveMemberNames(rooms)
+	if showNames {
+		fmt.Fprintln(tw, "ID\tTITLE\tDIRECT\tMEMBERS\tMEMBER_NAMES\tMESSAGES")
+	} else {
+		fmt.Fprintln(tw, "ID\tTITLE\tDIRECT\tMEMBERS\tMESSAGES")
+	}
 	for _, room := range rooms {
+		if showNames {
+			fmt.Fprintf(tw, "%s\t%s\t%t\t%d\t%s\t%d\n", room.ID, room.Title, room.IsDirect, len(room.Members), displayList(room.MemberNames), len(room.Messages))
+			continue
+		}
 		fmt.Fprintf(tw, "%s\t%s\t%t\t%d\t%d\n", room.ID, room.Title, room.IsDirect, len(room.Members), len(room.Messages))
 	}
 	return tw.Flush()
+}
+
+func roomsHaveMemberNames(rooms []apitypes.Room) bool {
+	for _, room := range rooms {
+		if len(room.MemberNames) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func RenderUsersTable(w io.Writer, users []apitypes.User) error {
@@ -316,7 +408,7 @@ func RenderTeamsTable(w io.Writer, teams []apitypes.Team) error {
 	tw := NewTableWriter(w)
 	fmt.Fprintln(tw, "ID\tROOM\tCHANNEL\tLEAD_AGENT\tSTATUS\tTITLE")
 	for _, item := range teams {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", displayValueField(item.ID), displayValueField(item.RoomID), displayValueField(item.Channel), displayValueField(item.LeadAgentID), displayValueField(item.Status), displayValueField(item.Title))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", displayValueField(item.ID), displayValueField(item.RoomID), displayValueField(item.Channel), displayNameWithID(item.LeadAgentName, item.LeadAgentID), displayValueField(item.Status), displayValueField(item.Title))
 	}
 	return tw.Flush()
 }
@@ -325,7 +417,7 @@ func RenderTeamTasksTable(w io.Writer, tasks []apitypes.TeamTask) error {
 	tw := NewTableWriter(w)
 	fmt.Fprintln(tw, "ID\tTEAM\tSTATUS\tASSIGNED\tCLAIMED\tPRIORITY\tTITLE")
 	for _, item := range tasks {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", displayValueField(item.ID), displayValueField(item.TeamID), displayValueField(item.Status), displayValueField(item.AssignedTo), displayValueField(item.ClaimedBy), item.Priority, displayValueField(item.Title))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", displayValueField(item.ID), displayValueField(item.TeamID), displayValueField(item.Status), displayNameWithID(item.AssignedToAgentName, item.AssignedTo), displayNameWithID(item.ClaimedByAgentName, item.ClaimedBy), item.Priority, displayValueField(item.Title))
 	}
 	return tw.Flush()
 }

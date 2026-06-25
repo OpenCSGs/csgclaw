@@ -106,10 +106,24 @@ func apiTeam(item team.TeamMeta) apitypes.Team {
 	}
 }
 
+func apiTeamWithPresenter(item team.TeamMeta, presenter teamIdentityPresenter) apitypes.Team {
+	resp := apiTeam(item)
+	resp.LeadAgentName = presenter.displayAgentName(resp.LeadAgentID)
+	return resp
+}
+
 func apiTeams(items []team.TeamMeta) []apitypes.Team {
 	resp := make([]apitypes.Team, 0, len(items))
 	for _, item := range items {
 		resp = append(resp, apiTeam(item))
+	}
+	return resp
+}
+
+func apiTeamsWithPresenter(items []team.TeamMeta, presenter teamIdentityPresenter) []apitypes.Team {
+	resp := make([]apitypes.Team, 0, len(items))
+	for _, item := range items {
+		resp = append(resp, apiTeamWithPresenter(item, presenter))
 	}
 	return resp
 }
@@ -163,9 +177,51 @@ func (p teamIdentityPresenter) addName(id string, name string) {
 		return
 	}
 	p.namesByID[id] = name
-	if strings.HasPrefix(id, "u-") && len(id) > len("u-") {
-		p.namesByID[strings.TrimPrefix(id, "u-")] = name
+	for _, alias := range teamIdentityAliases(id) {
+		p.namesByID[alias] = name
 	}
+}
+
+func teamIdentityAliases(id string) []string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	aliases := make([]string, 0, 4)
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || value == id {
+			return
+		}
+		for _, existing := range aliases {
+			if existing == value {
+				return
+			}
+		}
+		aliases = append(aliases, value)
+	}
+	switch {
+	case strings.HasPrefix(id, "pt-"):
+		suffix := strings.TrimPrefix(id, "pt-")
+		add(suffix)
+		add("agent-" + suffix)
+		add("u-" + suffix)
+	case strings.HasPrefix(id, "agent-"):
+		suffix := strings.TrimPrefix(id, "agent-")
+		add(suffix)
+		add("pt-" + suffix)
+		add("u-" + suffix)
+	case strings.HasPrefix(id, "u-"):
+		suffix := strings.TrimPrefix(id, "u-")
+		add(suffix)
+		add("pt-" + suffix)
+		add("agent-" + suffix)
+	default:
+		add("pt-" + id)
+		add("agent-" + id)
+		add("u-" + id)
+	}
+	return aliases
 }
 
 func (p teamIdentityPresenter) agentDisplayName(id string) string {

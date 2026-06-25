@@ -39,7 +39,7 @@ func (s *Service) BatchAddSkills(agentID string, skillNames []string) error {
 	if err != nil {
 		return err
 	}
-	targetRoot, err := s.agentSkillsRoot(got.Name, got.RuntimeKind)
+	targetRoot, err := s.agentSkillsRoot(got.ID, got.RuntimeKind)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (s *Service) DeleteSkill(agentID, skillName string) error {
 	if !ok {
 		return fmt.Errorf("agent %q not found", agentID)
 	}
-	targetRoot, err := s.agentSkillsRoot(got.Name, got.RuntimeKind)
+	targetRoot, err := s.agentSkillsRoot(got.ID, got.RuntimeKind)
 	if err != nil {
 		return err
 	}

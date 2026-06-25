@@ -25,10 +25,26 @@ type RuntimeRecord struct {
 
 func normalizeRuntimeID(runtimeID, agentID string) string {
 	runtimeID = strings.TrimSpace(runtimeID)
-	if runtimeID != "" {
+	agentID = canonicalAgentID(agentID)
+	if runtimeID == "" {
+		return runtimeIDForAgentID(agentID)
+	}
+	if strings.HasPrefix(runtimeID, "rt-u-") {
+		legacyAgentID := strings.TrimPrefix(runtimeID, "rt-")
+		if migrated := runtimeIDForAgentID(canonicalAgentID(legacyAgentID)); migrated != "" {
+			return migrated
+		}
+	}
+	if runtimeID == "rt-"+ManagerName {
+		return runtimeIDForAgentID(ManagerUserID)
+	}
+	if strings.HasPrefix(runtimeID, "rt-"+AgentIDPrefix) {
 		return runtimeID
 	}
-	return runtimeIDForAgentID(agentID)
+	if agentID != "" && strings.TrimPrefix(runtimeID, "rt-") == strings.TrimPrefix(agentID, AgentIDPrefix) {
+		return runtimeIDForAgentID(agentID)
+	}
+	return runtimeID
 }
 
 func runtimeIDForAgentID(agentID string) string {
@@ -37,6 +53,28 @@ func runtimeIDForAgentID(agentID string) string {
 		return ""
 	}
 	return "rt-" + agentID
+}
+
+func runtimeIDLookupAliases(runtimeID string) []string {
+	runtimeID = strings.TrimSpace(runtimeID)
+	if runtimeID == "" {
+		return nil
+	}
+	aliases := []string{runtimeID}
+	switch {
+	case strings.HasPrefix(runtimeID, "rt-u-"):
+		if migrated := runtimeIDForAgentID(canonicalAgentID(strings.TrimPrefix(runtimeID, "rt-"))); migrated != "" {
+			aliases = append(aliases, migrated)
+		}
+	case runtimeID == "rt-"+ManagerName:
+		aliases = append(aliases, runtimeIDForAgentID(ManagerUserID))
+	case strings.HasPrefix(runtimeID, "rt-") && !strings.HasPrefix(runtimeID, "rt-"+AgentIDPrefix):
+		suffix := strings.TrimPrefix(runtimeID, "rt-")
+		if suffix != "" {
+			aliases = append(aliases, runtimeIDForAgentID(AgentIDPrefix+suffix))
+		}
+	}
+	return aliases
 }
 
 func isGatewayRuntimeKind(kind string) bool {

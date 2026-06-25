@@ -44,8 +44,8 @@ func TestCreateFeishuRegistrationStoresSafeState(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if created["participant_id"] != "dev" || created["agent_id"] != "u-dev" {
-		t.Fatalf("registration response = %#v, want canonical dev participant for u-dev", created)
+	if created["participant_id"] != "pt-dev" || created["agent_id"] != "agent-dev" {
+		t.Fatalf("registration response = %#v, want canonical dev participant for agent-dev", created)
 	}
 	connectURL := strings.TrimSpace(created["connect_url"].(string))
 	if !strings.Contains(connectURL, "from=csgclaw") || !strings.Contains(connectURL, "tp=csgclaw") {
@@ -107,15 +107,15 @@ func TestFinalizeFeishuRegistrationBindsWorkerParticipant(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if result["participant_id"] != "dev" || result["config_saved"] != true || result["restart_status"] != "worker_recreated" {
+	if result["participant_id"] != "pt-dev" || result["config_saved"] != true || result["restart_status"] != "worker_recreated" {
 		t.Fatalf("finalize result = %#v, want saved dev config and worker recreate", result)
 	}
-	stored, ok := participantSvc.Get(participant.ChannelFeishu, "dev")
+	stored, ok := participantSvc.Get(participant.ChannelFeishu, "pt-dev")
 	if !ok {
 		t.Fatal("feishu:dev participant was not stored")
 	}
-	if stored.AgentID != "u-dev" || stored.ChannelUserKind != participant.ChannelUserKindAppID {
-		t.Fatalf("stored participant = %+v, want app-backed u-dev Feishu participant", stored)
+	if stored.AgentID != "agent-dev" || stored.ChannelUserKind != participant.ChannelUserKindAppID {
+		t.Fatalf("stored participant = %+v, want app-backed agent-dev Feishu participant", stored)
 	}
 	if got := stored.ChannelAppConfig[participant.ChannelAppConfigAppSecretKey]; got != "dev-secret" {
 		t.Fatalf("stored app_secret = %#v, want real secret", got)
@@ -210,7 +210,7 @@ func TestFinalizeFeishuRegistrationPendingDoesNotBind(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusAccepted, rec.Body.String())
 	}
-	if _, ok := participantSvc.Get(participant.ChannelFeishu, "dev"); ok {
+	if _, ok := participantSvc.Get(participant.ChannelFeishu, "pt-dev"); ok {
 		t.Fatal("feishu:dev participant was stored while registration is still pending")
 	}
 }
@@ -283,7 +283,7 @@ func TestFinalizeFeishuRegistrationDeniedAndExpiredDoNotBind(t *testing.T) {
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.wantStatus, rec.Body.String())
 			}
-			if _, ok := participantSvc.Get(participant.ChannelFeishu, "dev"); ok {
+			if _, ok := participantSvc.Get(participant.ChannelFeishu, "pt-dev"); ok {
 				t.Fatal("feishu:dev participant was stored after failed finalize")
 			}
 		})
@@ -325,7 +325,7 @@ func TestFinalizeFeishuRegistrationBindsManagerAdminHuman(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if result["restart_status"] != "manager_recreated" || result["participant_id"] != "manager" {
+	if result["restart_status"] != "manager_recreated" || result["participant_id"] != "pt-manager" {
 		t.Fatalf("finalize result = %#v, want manager recreated for manager participant", result)
 	}
 	admin, ok := participantSvc.Get(participant.ChannelFeishu, "admin")

@@ -88,7 +88,6 @@ func (c *appServerClient) request(ctx context.Context, method string, params any
 	}
 }
 
-
 // notify sends a JSON-RPC notification (no id, no response expected) to the
 // codex app-server. Used for the "initialized" notification that completes
 // the app-server handshake.

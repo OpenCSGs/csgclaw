@@ -288,8 +288,11 @@ func (a *CSGClawAdapter) channelUserIDForParticipant(participantID string) strin
 			}
 		}
 	}
-	if participantID == agent.ManagerParticipantID || participantID == im.AdminUserID {
-		return participantID
+	if participantID == agent.ManagerParticipantID {
+		return im.ManagerUserID
+	}
+	if participantID == "pt-admin" || participantID == im.AdminUserID {
+		return im.AdminUserID
 	}
 	if a != nil && a.im != nil {
 		if user, ok := a.im.User(participantID); ok {
@@ -299,11 +302,12 @@ func (a *CSGClawAdapter) channelUserIDForParticipant(participantID string) strin
 			return resolved
 		}
 	}
-	return "u-" + participantID
+	return "user-" + strings.TrimPrefix(cleanParticipantID(participantID), "pt-")
 }
 
 func participantDisplayName(participantID string) string {
 	name := strings.TrimSpace(strings.TrimPrefix(participantID, "bot-"))
+	name = strings.TrimSpace(strings.TrimPrefix(name, "pt-"))
 	name = strings.TrimSpace(strings.TrimPrefix(name, "u-"))
 	name = strings.ReplaceAll(name, "_", "-")
 	if name == "" {
@@ -314,6 +318,7 @@ func participantDisplayName(participantID string) string {
 
 func participantHandle(participantID string) string {
 	handle := strings.ToLower(strings.TrimSpace(participantID))
+	handle = strings.TrimPrefix(handle, "pt-")
 	handle = strings.ReplaceAll(handle, "_", "-")
 	if handle == "" {
 		return strings.ToLower(strings.TrimSpace(participantID))

@@ -242,9 +242,10 @@ func renderSingleEvent(event TeamEvent, renderer projectionRenderer, meta TeamMe
 }
 
 func projectionSenderParticipantID(actorID, leadAgentID string) string {
+	rawActorID := strings.TrimSpace(actorID)
 	actorID = cleanParticipantID(actorID)
 	leadAgentID = cleanParticipantID(leadAgentID)
-	if actorID == "" || actorID == "web" {
+	if actorID == "" || rawActorID == "web" {
 		return leadAgentID
 	}
 	return actorID

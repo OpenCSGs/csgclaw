@@ -164,8 +164,8 @@ func TestPublishMessageEventIncludesThreadRootAndContext(t *testing.T) {
 		if evt.ThreadRootID != root.ID {
 			t.Fatalf("ThreadRootID = %q, want %q", evt.ThreadRootID, root.ID)
 		}
-		if len(evt.Mentions) != 1 || evt.Mentions[0] != "u-bot" {
-			t.Fatalf("Mentions = %+v, want [u-bot]", evt.Mentions)
+		if len(evt.Mentions) != 1 || evt.Mentions[0] != "pt-bot" {
+			t.Fatalf("Mentions = %+v, want [pt-bot]", evt.Mentions)
 		}
 		if evt.Channel != "csgclaw" || evt.ChatID != room.ID {
 			t.Fatalf("PicoClaw event address = channel %q chat_id %q, want csgclaw %q", evt.Channel, evt.ChatID, room.ID)
@@ -227,11 +227,11 @@ func TestPublishMessageEventNormalizesPlainThreadMentionForPicoClaw(t *testing.T
 		if evt.ThreadRootID != root.ID {
 			t.Fatalf("ThreadRootID = %q, want %q", evt.ThreadRootID, root.ID)
 		}
-		if evt.Text != `<at user_id="u-qa">qa</at> please check this` {
+		if evt.Text != `<at user_id="pt-qa">qa</at> please check this` {
 			t.Fatalf("Text = %q, want PicoClaw mention tag", evt.Text)
 		}
-		if len(evt.Mentions) != 1 || evt.Mentions[0] != "u-qa" || !evt.Context.Mentioned {
-			t.Fatalf("Mentions = %+v context = %+v, want u-qa mentioned", evt.Mentions, evt.Context)
+		if len(evt.Mentions) != 1 || evt.Mentions[0] != "pt-qa" || !evt.Context.Mentioned {
+			t.Fatalf("Mentions = %+v context = %+v, want pt-qa mentioned", evt.Mentions, evt.Context)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("PublishMessageEvent() timed out waiting for event")
@@ -252,7 +252,7 @@ func TestEnqueueMessageEventWithTextKeepsGroupMentionVisible(t *testing.T) {
 	message := Message{
 		ID:        "msg-new",
 		SenderID:  "u-admin",
-		Content:   `<slash-command name="new" arg="conversation"></slash-command> <at user_id="u-qa">qa</at>`,
+		Content:   `<slash-command name="new" arg="conversation"></slash-command> <at user_id="pt-qa">qa</at>`,
 		CreatedAt: time.Now().UTC(),
 		Mentions:  []Mention{{ID: "u-qa", Name: "qa"}},
 	}
@@ -263,11 +263,11 @@ func TestEnqueueMessageEventWithTextKeepsGroupMentionVisible(t *testing.T) {
 
 	select {
 	case evt := <-events:
-		if evt.Text != `/clear <at user_id="u-qa">qa</at>` {
+		if evt.Text != `/clear <at user_id="pt-qa">qa</at>` {
 			t.Fatalf("Text = %q, want action text with mention tag", evt.Text)
 		}
-		if len(evt.Mentions) != 1 || evt.Mentions[0] != "u-qa" || !evt.Context.Mentioned {
-			t.Fatalf("Mentions = %+v context = %+v, want u-qa mentioned", evt.Mentions, evt.Context)
+		if len(evt.Mentions) != 1 || evt.Mentions[0] != "pt-qa" || !evt.Context.Mentioned {
+			t.Fatalf("Mentions = %+v context = %+v, want pt-qa mentioned", evt.Mentions, evt.Context)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("EnqueueMessageEventWithText() timed out waiting for event")
@@ -291,7 +291,7 @@ func TestPublishMessageEventQueuesUntilParticipantSubscribes(t *testing.T) {
 
 	missed := bridge.PublishMessageEvent(room, sender, message)
 	if len(missed) != 1 || missed[0] != "u-bot" {
-		t.Fatalf("PublishMessageEvent() missed = %v, want [u-bot]", missed)
+		t.Fatalf("PublishMessageEvent() missed = %v, want [pt-bot]", missed)
 	}
 
 	events, cancel := bridge.Subscribe("u-bot")

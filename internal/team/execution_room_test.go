@@ -62,8 +62,8 @@ func TestTaskExecutionRoomMemberParticipantIDsIncludesWorkerAgents(t *testing.T)
 
 	directory := NewCSGClawTeamDirectory(imSvc, nil)
 	got := teamSvc.taskExecutionRoomMemberParticipantIDs(directory, meta, parent)
-	if len(got) != 1 || got[0] != "p-w-1315" {
-		t.Fatalf("taskExecutionRoomMemberParticipantIDs() = %v, want [p-w-1315]", got)
+	if len(got) != 1 || got[0] != "pt-p-w-1315" {
+		t.Fatalf("taskExecutionRoomMemberParticipantIDs() = %v, want [pt-p-w-1315]", got)
 	}
 }
 
@@ -109,7 +109,7 @@ func TestTaskExecutionRoomMemberParticipantIDsMapsLocalManagerParticipantToLead(
 
 	directory := NewCSGClawTeamDirectory(imSvc, nil)
 	got := teamSvc.taskExecutionRoomMemberParticipantIDs(directory, meta, parent)
-	if len(got) != 1 || got[0] != "worker" {
-		t.Fatalf("taskExecutionRoomMemberParticipantIDs() = %v, want [worker]", got)
+	if len(got) != 1 || got[0] != "pt-worker" {
+		t.Fatalf("taskExecutionRoomMemberParticipantIDs() = %v, want [pt-worker]", got)
 	}
 }

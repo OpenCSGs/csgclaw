@@ -13,6 +13,9 @@ type Participant struct {
 	ChannelAppRef    string         `json:"channel_app_ref,omitempty"`
 	ChannelAppConfig map[string]any `json:"channel_app_config,omitempty"`
 	AgentID          string         `json:"agent_id,omitempty"`
+	AgentName        string         `json:"agent_name,omitempty"`
+	UserID           string         `json:"user_id,omitempty"`
+	UserName         string         `json:"user_name,omitempty"`
 	LifecycleStatus  string         `json:"lifecycle_status"`
 	Presence         string         `json:"presence,omitempty"`
 	Mentionable      bool           `json:"mentionable"`

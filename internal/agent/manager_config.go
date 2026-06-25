@@ -51,27 +51,43 @@ func ensureAgentPicoClawConfigForParticipant(agentName, participantID, agentID s
 }
 
 func ensureAgentPicoClawConfigForParticipantWithResolver(agentName, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL picoclawsandbox.BaseURLResolver, feishuProviders ...feishu.AgentCredentialProvider) (string, error) {
-	agentHome, err := agentHomeDir(agentName)
+	agentHome, err := agentHomeDir(agentID)
 	if err != nil {
 		return "", err
 	}
+	return ensureAgentPicoClawConfigAtHome(agentHome, participantID, agentID, server, model, resolveBaseURL, feishuProviders...)
+}
+
+func (s *Service) ensureAgentPicoClawConfigForParticipantWithResolver(agentName, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL picoclawsandbox.BaseURLResolver, feishuProviders ...feishu.AgentCredentialProvider) (string, error) {
+	agentHome, err := s.agentHomeDir(agentID)
+	if err != nil {
+		return "", err
+	}
+	return ensureAgentPicoClawConfigAtHome(agentHome, participantID, agentID, server, model, resolveBaseURL, feishuProviders...)
+}
+
+func ensureAgentPicoClawConfigAtHome(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL picoclawsandbox.BaseURLResolver, feishuProviders ...feishu.AgentCredentialProvider) (string, error) {
 	return picoclawsandbox.EnsureConfig(agentHome, participantID, agentID, server, model, resolveBaseURL, feishuProviders...)
 }
 
 func managerPicoClawRoot() (string, error) {
-	return agentPicoClawRoot(ManagerName)
+	return agentPicoClawRoot(ManagerUserID)
 }
 
 func agentWorkspacePicoClawConfigRoot(agentName string) (string, error) {
 	return agentPicoClawRoot(agentName)
 }
 
-func agentPicoClawRoot(agentName string) (string, error) {
-	homeDir, err := os.UserHomeDir()
+func agentPicoClawRoot(agentID string) (string, error) {
+	homeDir, err := agentHomeDir(agentID)
 	if err != nil {
-		return "", fmt.Errorf("resolve host home dir: %w", err)
+		return "", err
 	}
-	return picoclawsandbox.Root(filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, agentName)), nil
+	return picoclawRootForAgentHome(homeDir), nil
+}
+
+func picoclawRootForAgentHome(homeDir string) string {
+	return picoclawsandbox.Root(homeDir)
 }
 
 func renderManagerPicoClawConfig(server config.ServerConfig, model config.ModelConfig) ([]byte, error) {
@@ -91,6 +107,18 @@ func agentPicoClawConfigNeedsParticipantRecreate(agentName, participantID string
 	if err != nil {
 		return false
 	}
+	return agentPicoClawConfigNeedsParticipantRecreateAtRoot(root, participantID)
+}
+
+func (s *Service) agentPicoClawConfigNeedsParticipantRecreate(agentID, participantID string) bool {
+	agentHome, err := s.agentHomeDir(agentID)
+	if err != nil {
+		return false
+	}
+	return agentPicoClawConfigNeedsParticipantRecreateAtRoot(picoclawRootForAgentHome(agentHome), participantID)
+}
+
+func agentPicoClawConfigNeedsParticipantRecreateAtRoot(root, participantID string) bool {
 	data, err := os.ReadFile(filepath.Join(root, picoclawsandbox.HostConfig))
 	if err != nil {
 		return false
@@ -124,6 +152,22 @@ func agentPicoClawConfigNeedsParticipantRecreate(agentName, participantID string
 }
 
 func agentPicoClawConfigNeedsFeishuRecreate(agentName, agentID string, provider feishu.AgentCredentialProvider) bool {
+	root, err := agentPicoClawRoot(agentName)
+	if err != nil {
+		return false
+	}
+	return agentPicoClawConfigNeedsFeishuRecreateAtRoot(root, agentID, provider)
+}
+
+func (s *Service) agentPicoClawConfigNeedsFeishuRecreate(agentID string, provider feishu.AgentCredentialProvider) bool {
+	agentHome, err := s.agentHomeDir(agentID)
+	if err != nil {
+		return false
+	}
+	return agentPicoClawConfigNeedsFeishuRecreateAtRoot(picoclawRootForAgentHome(agentHome), agentID, provider)
+}
+
+func agentPicoClawConfigNeedsFeishuRecreateAtRoot(root, agentID string, provider feishu.AgentCredentialProvider) bool {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" || provider == nil {
 		return false
@@ -138,10 +182,6 @@ func agentPicoClawConfigNeedsFeishuRecreate(agentName, agentID string, provider 
 		return false
 	}
 
-	root, err := agentPicoClawRoot(agentName)
-	if err != nil {
-		return false
-	}
 	data, err := os.ReadFile(filepath.Join(root, picoclawsandbox.HostConfig))
 	if err != nil {
 		return true

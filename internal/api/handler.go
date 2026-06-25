@@ -128,6 +128,8 @@ type agentResponse struct {
 	AgentProfile         agent.AgentProfileView             `json:"agent_profile,omitempty"`
 	ProfileComplete      bool                               `json:"profile_complete"`
 	DetectionResults     []agent.ProfileDetectionResult     `json:"detection_results,omitempty"`
+	ParticipantIDs       []string                           `json:"participant_ids,omitempty"`
+	ParticipantNames     []string                           `json:"participant_names,omitempty"`
 	Participants         []apitypes.Participant             `json:"participants,omitempty"`
 }
 
@@ -1527,11 +1529,7 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	description := strings.TrimSpace(req.Description)
 	handle := strings.TrimSpace(req.Handle)
 	role := strings.TrimSpace(req.Role)
-	rawID := id
-	id = h.resolveCSGClawParticipantUserID(id)
-	if rawID == agent.ManagerUserID {
-		id = agent.ManagerParticipantID
-	}
+	id = h.resolveCSGClawLocalUserID(id)
 
 	if id == "" {
 		http.Error(w, "id is required", http.StatusBadRequest)
@@ -1544,7 +1542,7 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if handle == "" {
 		handle = name
 	}
-	if id == agent.ManagerParticipantID {
+	if id == im.ManagerUserID {
 		if user, ok := h.im.User(id); ok {
 			writeJSON(w, http.StatusCreated, h.presentUser(user))
 			return
@@ -1553,6 +1551,33 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 	if h.participant != nil && h.svc != nil && shouldCreateWorkerForUser(id, role) {
 		participantID := workerParticipantIDFromUserID(id)
+		workerAgentID := workerAgentIDFromUserID(id)
+		if existing, ok := h.participant.Get(participant.ChannelCSGClaw, participantID); ok && strings.TrimSpace(existing.Type) == participant.TypeAgent {
+			userID := firstNonEmptyString(existing.ChannelUserRef, id)
+			_, userExisted := h.im.User(userID)
+			_, roomExisted := h.directRoomWithMembers(workerParticipantIDFromUserID(im.AdminUserID), existing.ID)
+			user, room, err := h.ensureUserForExistingCSGClawAgentParticipant(existing, im.EnsureAgentUserRequest{
+				ID:          userID,
+				Name:        firstNonEmptyString(existing.Name, name),
+				Description: description,
+				Handle:      firstNonEmptyString(handle, existing.Name, existing.ID),
+				Role:        firstNonEmptyString(role, agent.RoleWorker),
+				Avatar:      existing.Avatar,
+			})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			presented := h.presentUser(user)
+			if !userExisted {
+				h.publishUserEvent(im.EventTypeUserCreated, presented)
+			}
+			if !roomExisted && room != nil {
+				h.publishRoomEvent(im.EventTypeRoomCreated, *room)
+			}
+			writeJSON(w, http.StatusCreated, presented)
+			return
+		}
 		created, err := h.participant.Create(r.Context(), participant.CreateRequest{
 			ID:      participantID,
 			Channel: participant.ChannelCSGClaw,
@@ -1564,9 +1589,9 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			},
 			AgentBinding: participant.AgentBindingSpec{
 				Mode:    participant.BindingModeCreate,
-				AgentID: id,
+				AgentID: workerAgentID,
 				Agent: &agent.CreateAgentSpec{
-					ID:   id,
+					ID:   workerAgentID,
 					Name: name,
 					Role: agent.RoleWorker,
 				},
@@ -1578,7 +1603,7 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		if user, ok := h.im.User(created.ChannelUserRef); ok {
 			h.publishUserEvent(im.EventTypeUserCreated, user)
-			if room, ok := h.directRoomWithMembers(im.AdminUserID, user.ID); ok {
+			if room, ok := h.directRoomWithMembers(workerParticipantIDFromUserID(im.AdminUserID), workerParticipantIDFromUserID(user.ID)); ok {
 				h.publishRoomEvent(im.EventTypeRoomCreated, room)
 			}
 			writeJSON(w, http.StatusCreated, h.presentUser(user))
@@ -1603,12 +1628,31 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, h.presentUser(result.User))
 }
 
+func (h *Handler) ensureUserForExistingCSGClawAgentParticipant(item apitypes.Participant, req im.EnsureAgentUserRequest) (im.User, *im.Room, error) {
+	if h == nil || h.im == nil {
+		return im.User{}, nil, fmt.Errorf("im service is not configured")
+	}
+	if strings.TrimSpace(req.ID) == "" {
+		req.ID = firstNonEmptyString(item.ChannelUserRef, item.ID)
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		req.Name = firstNonEmptyString(item.Name, item.ID)
+	}
+	if strings.TrimSpace(req.Handle) == "" {
+		req.Handle = firstNonEmptyString(item.Name, item.ID)
+	}
+	if strings.TrimSpace(req.Role) == "" {
+		req.Role = agent.RoleWorker
+	}
+	return h.im.EnsureAgentUser(req)
+}
+
 func (h *Handler) updateCsgclawUser(w http.ResponseWriter, r *http.Request) {
 	if h.im == nil {
 		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	id := pathValue(r, "id")
+	id := pathValueOrLastSegment(r, "id")
 	if strings.TrimSpace(id) == "" {
 		http.NotFound(w, r)
 		return
@@ -1631,7 +1675,7 @@ func (h *Handler) updateCsgclawUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		http.NotFound(w, r)
+		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
 	presented := h.presentUser(updated)
@@ -1639,10 +1683,25 @@ func (h *Handler) updateCsgclawUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, presented)
 }
 
+func pathValueOrLastSegment(r *http.Request, key string) string {
+	if value := pathValue(r, key); value != "" {
+		return value
+	}
+	if r == nil || r.URL == nil {
+		return ""
+	}
+	path := strings.Trim(strings.TrimSpace(r.URL.Path), "/")
+	if path == "" {
+		return ""
+	}
+	parts := strings.Split(path, "/")
+	return strings.TrimSpace(parts[len(parts)-1])
+}
+
 func shouldCreateWorkerForUser(id, role string) bool {
 	id = strings.TrimSpace(id)
 	switch strings.ToLower(id) {
-	case "", im.AdminUserID, "u-admin", agent.ManagerUserID:
+	case "", im.AdminUserID, "u-admin", "admin", "pt-admin", im.ManagerUserID, "u-manager", "manager", agent.ManagerParticipantID, agent.ManagerUserID:
 		return false
 	}
 
@@ -1658,11 +1717,62 @@ func shouldCreateWorkerForUser(id, role string) bool {
 
 func workerParticipantIDFromUserID(id string) string {
 	id = strings.TrimSpace(id)
-	withoutPrefix := strings.TrimPrefix(id, "u-")
-	if withoutPrefix != "" && withoutPrefix != id {
-		return withoutPrefix
+	switch id {
+	case "", im.AdminUserID, "u-admin", "admin", "pt-admin":
+		if id == "" {
+			return ""
+		}
+		return "pt-admin"
+	case im.ManagerUserID, "u-manager", "manager", "pt-manager", agent.ManagerUserID:
+		return agent.ManagerParticipantID
 	}
-	return id
+	suffix := localIdentitySuffix(id)
+	if suffix == "" {
+		return ""
+	}
+	return "pt-" + suffix
+}
+
+func workerAgentIDFromUserID(id string) string {
+	id = strings.TrimSpace(id)
+	switch id {
+	case "", im.AdminUserID, "u-admin", "admin", "pt-admin":
+		return ""
+	case im.ManagerUserID, "u-manager", "manager", "pt-manager", agent.ManagerUserID:
+		return agent.ManagerUserID
+	}
+	suffix := localIdentitySuffix(id)
+	if suffix == "" {
+		return ""
+	}
+	return agent.AgentIDPrefix + suffix
+}
+
+func localIdentitySuffix(id string) string {
+	id = strings.TrimSpace(id)
+	for {
+		trimmed := id
+		for _, prefix := range []string{"user-", "agent-", "pt-", "u-"} {
+			if strings.HasPrefix(trimmed, prefix) {
+				trimmed = strings.TrimPrefix(trimmed, prefix)
+				break
+			}
+		}
+		if trimmed == id {
+			break
+		}
+		id = trimmed
+	}
+	return strings.TrimSpace(id)
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func (h *Handler) directRoomWithMembers(left, right string) (im.Room, bool) {
@@ -1975,7 +2085,30 @@ func humanParticipantMatchesUser(item apitypes.Participant, user im.User) bool {
 	if userID == "" {
 		return false
 	}
-	return strings.TrimSpace(item.ID) == userID || strings.TrimSpace(item.ChannelUserRef) == userID
+	return localUserIDFromAny(item.ID) == userID ||
+		localUserIDFromAny(item.ChannelUserRef) == userID ||
+		strings.TrimSpace(item.ID) == userID ||
+		strings.TrimSpace(item.ChannelUserRef) == userID
+}
+
+func localUserIDFromAny(id string) string {
+	id = strings.TrimSpace(id)
+	switch id {
+	case "":
+		return ""
+	case "admin", "u-admin", "pt-admin":
+		return im.AdminUserID
+	case "manager", "u-manager", "pt-manager", agent.ManagerUserID:
+		return im.ManagerUserID
+	}
+	if strings.HasPrefix(id, "user-") {
+		return id
+	}
+	suffix := localIdentitySuffix(id)
+	if suffix == "" {
+		return ""
+	}
+	return "user-" + suffix
 }
 
 func presentAgents(items []agent.Agent) []agentResponse {
@@ -1991,12 +2124,16 @@ func (h *Handler) presentAgentsForRequest(r *http.Request, items []agent.Agent) 
 	for _, item := range items {
 		out = append(out, h.presentAgentResponse(item))
 	}
-	if !includeParticipants(r) || h == nil || h.participant == nil {
+	if h == nil || h.participant == nil {
 		return out
 	}
-	byAgent := participantsByAgentID(presentParticipants(h.participant.List(participant.ListOptions{})))
+	byAgent := participantsByAgentID(h.presentParticipants(h.participant.List(participant.ListOptions{})))
 	for i := range out {
-		out[i].Participants = byAgent[out[i].ID]
+		items := byAgent[out[i].ID]
+		out[i].ParticipantIDs, out[i].ParticipantNames = participantSummaries(items)
+		if includeParticipants(r) {
+			out[i].Participants = items
+		}
 	}
 	return out
 }
@@ -2006,7 +2143,8 @@ func (h *Handler) presentAgentForRequest(r *http.Request, item agent.Agent) agen
 	if !includeParticipants(r) || h == nil || h.participant == nil {
 		return resp
 	}
-	resp.Participants = presentParticipants(h.participant.List(participant.ListOptions{AgentID: item.ID}))
+	resp.Participants = h.presentParticipants(h.participant.List(participant.ListOptions{AgentID: item.ID}))
+	resp.ParticipantIDs, resp.ParticipantNames = participantSummaries(resp.Participants)
 	return resp
 }
 
@@ -2066,9 +2204,61 @@ func participantsByAgentID(items []apitypes.Participant) map[string][]apitypes.P
 		if strings.TrimSpace(item.AgentID) == "" {
 			continue
 		}
-		out[item.AgentID] = append(out[item.AgentID], item)
+		for _, id := range participantAgentIndexKeys(item.AgentID) {
+			out[id] = append(out[id], item)
+		}
 	}
 	return out
+}
+
+func participantAgentIndexKeys(id string) []string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	typed := agent.CanonicalID(id)
+	keys := []string{typed}
+	for _, alias := range []string{id, strings.TrimPrefix(typed, agent.AgentIDPrefix), "u-" + strings.TrimPrefix(typed, agent.AgentIDPrefix)} {
+		alias = strings.TrimSpace(alias)
+		if alias == "" {
+			continue
+		}
+		seen := false
+		for _, key := range keys {
+			if key == alias {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			keys = append(keys, alias)
+		}
+	}
+	return keys
+}
+
+func participantSummaries(items []apitypes.Participant) ([]string, []string) {
+	ids := make([]string, 0, len(items))
+	names := make([]string, 0, len(items))
+	for _, item := range items {
+		if id := strings.TrimSpace(item.ID); id != "" {
+			ids = append(ids, id)
+		}
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			name = strings.TrimSpace(item.ID)
+		}
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(ids) == 0 {
+		ids = nil
+	}
+	if len(names) == 0 {
+		names = nil
+	}
+	return ids, names
 }
 
 func (h *Handler) resolveCSGClawParticipantMessageRequest(req im.CreateMessageRequest) im.CreateMessageRequest {
@@ -2093,30 +2283,70 @@ func (h *Handler) resolveCSGClawParticipantUserIDs(ids []string) []string {
 func (h *Handler) resolveCSGClawParticipantUserID(id string) string {
 	id = strings.TrimSpace(id)
 	if id == "" || h == nil || h.participant == nil {
-		if id == agent.ManagerUserID {
-			return agent.ManagerParticipantID
-		}
-		return id
+		return csgclawParticipantIDFromAny(id)
 	}
 	item, ok := h.participant.Get(participant.ChannelCSGClaw, id)
 	if ok {
-		if ref := strings.TrimSpace(item.ChannelUserRef); ref != "" {
-			return ref
+		if participantID := strings.TrimSpace(item.ID); participantID != "" {
+			return participantID
 		}
-		return id
+		return csgclawParticipantIDFromAny(id)
 	}
-	for _, candidate := range h.participant.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, AgentID: id}) {
-		if ref := strings.TrimSpace(candidate.ChannelUserRef); ref != "" {
-			return ref
+	for _, candidate := range h.participant.List(participant.ListOptions{Channel: participant.ChannelCSGClaw}) {
+		if !participantMatchesIdentity(candidate, id) {
+			continue
 		}
 		if participantID := strings.TrimSpace(candidate.ID); participantID != "" {
 			return participantID
 		}
 	}
-	if id == agent.ManagerUserID {
+	return csgclawParticipantIDFromAny(id)
+}
+
+func (h *Handler) resolveCSGClawLocalUserID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
+	}
+	if h != nil && h.im != nil {
+		if user, ok := h.im.User(id); ok {
+			return strings.TrimSpace(user.ID)
+		}
+	}
+	switch id {
+	case "admin", "u-admin", "pt-admin":
+		return im.AdminUserID
+	case "manager", "u-manager", "pt-manager", agent.ManagerUserID:
+		return im.ManagerUserID
+	}
+	if strings.HasPrefix(id, "user-") {
+		return id
+	}
+	suffix := localIdentitySuffix(id)
+	if suffix == "" {
+		return ""
+	}
+	return "user-" + suffix
+}
+
+func csgclawParticipantIDFromAny(id string) string {
+	id = strings.TrimSpace(id)
+	switch id {
+	case "":
+		return ""
+	case "admin", "u-admin", "user-admin", "pt-admin":
+		return "pt-admin"
+	case "manager", "u-manager", "user-manager", "pt-manager", agent.ManagerUserID:
 		return agent.ManagerParticipantID
 	}
-	return id
+	if strings.HasPrefix(id, "pt-") {
+		return id
+	}
+	suffix := localIdentitySuffix(id)
+	if suffix == "" {
+		return ""
+	}
+	return "pt-" + suffix
 }
 
 func presentAgent(item agent.Agent) agentResponse {

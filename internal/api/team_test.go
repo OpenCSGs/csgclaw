@@ -159,11 +159,11 @@ func TestTeamTaskResponsesIncludeParticipantDisplayNames(t *testing.T) {
 	if len(batchResp.Tasks) != 1 {
 		t.Fatalf("batch tasks len = %d, want 1", len(batchResp.Tasks))
 	}
-	if batchResp.Tasks[0].AssignedTo != "agent-ymkx7q" || batchResp.Tasks[0].AssignedToAgentName != "data-2-worker" {
-		t.Fatalf("batch assigned = %q/%q, want agent-ymkx7q/data-2-worker", batchResp.Tasks[0].AssignedTo, batchResp.Tasks[0].AssignedToAgentName)
+	if batchResp.Tasks[0].AssignedTo != "pt-ymkx7q" || batchResp.Tasks[0].AssignedToAgentName != "data-2-worker" {
+		t.Fatalf("batch assigned = %q/%q, want pt-ymkx7q/data-2-worker", batchResp.Tasks[0].AssignedTo, batchResp.Tasks[0].AssignedToAgentName)
 	}
-	if batchResp.Tasks[0].CreatedBy != "manager" || batchResp.Tasks[0].CreatedByAgentName != "manager" {
-		t.Fatalf("batch creator = %q/%q, want manager/manager", batchResp.Tasks[0].CreatedBy, batchResp.Tasks[0].CreatedByAgentName)
+	if batchResp.Tasks[0].CreatedBy != "pt-manager" || batchResp.Tasks[0].CreatedByAgentName != "manager" {
+		t.Fatalf("batch creator = %q/%q, want pt-manager/manager", batchResp.Tasks[0].CreatedBy, batchResp.Tasks[0].CreatedByAgentName)
 	}
 
 	globalReq := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
@@ -192,7 +192,7 @@ func TestTeamTaskResponsesIncludeParticipantDisplayNames(t *testing.T) {
 	}
 	var taskEvent apitypes.TeamEvent
 	for _, event := range events {
-		if event.TargetID == "agent-ymkx7q" {
+		if event.TargetID == "pt-ymkx7q" {
 			taskEvent = event
 			break
 		}
@@ -244,7 +244,7 @@ func TestTeamRoutesCreateResolvesAgentIDs(t *testing.T) {
 	if !ok {
 		t.Fatalf("room %q not found", created.RoomID)
 	}
-	if !containsMember(room.Members, agent.ManagerParticipantID) || !containsMember(room.Members, "u-worker") {
+	if !containsMember(room.Members, agent.ManagerParticipantID) || !containsMember(room.Members, "pt-worker") {
 		t.Fatalf("room members = %v, want manager participant and worker channel user", room.Members)
 	}
 }
@@ -320,7 +320,7 @@ func TestTeamPlanAutoStartCreatesExecutionRoomAndDispatches(t *testing.T) {
 	if len(batchResp.Tasks) != 2 {
 		t.Fatalf("batch tasks len = %d, want 2", len(batchResp.Tasks))
 	}
-	if batchResp.Tasks[0].CreatedBy != "manager" || batchResp.Tasks[1].CreatedBy != "manager" {
+	if batchResp.Tasks[0].CreatedBy != "pt-manager" || batchResp.Tasks[1].CreatedBy != "pt-manager" {
 		t.Fatalf("batch task creators = %q/%q, want team lead manager", batchResp.Tasks[0].CreatedBy, batchResp.Tasks[1].CreatedBy)
 	}
 	parentID := batchResp.Tasks[0].ID
@@ -346,7 +346,7 @@ func TestTeamPlanAutoStartCreatesExecutionRoomAndDispatches(t *testing.T) {
 	if !ok {
 		t.Fatalf("Room(%s) ok = false, want true", planResp.Task.RoomID)
 	}
-	if !roomContainsMention(taskRoom, "dispatched "+childID, "u-worker") {
+	if !roomContainsMention(taskRoom, "dispatched "+childID, "pt-worker") {
 		t.Fatalf("task room messages missing dispatch mention: %+v", taskRoom.Messages)
 	}
 	if roomContains(taskRoom, "started assigning tasks") {
@@ -373,7 +373,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		if payload.Model != "gpt-planner" {
 			t.Fatalf("planner model = %q, want gpt-planner", payload.Model)
 		}
-		if len(payload.Messages) < 2 || !strings.Contains(payload.Messages[1].Content, "writer") || !strings.Contains(payload.Messages[1].Content, "release writer") {
+		if len(payload.Messages) < 2 || !strings.Contains(payload.Messages[1].Content, "pt-writer") || !strings.Contains(payload.Messages[1].Content, "writer") {
 			t.Fatalf("planner context messages = %+v, want team member capabilities", payload.Messages)
 		}
 		sawPlannerRequest = true
@@ -389,8 +389,8 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 						"content": `{
 							"plan_summary": "Split because writing and verification are separate roles.",
 							"tasks": [
-								{"id_ref":"draft","title":"Draft release note","assign_to":"writer","priority":"high","goal":"Draft the release note","assignee_reason":"writer is the release writer","deliverable":"release note draft"},
-								{"id_ref":"verify","title":"Verify release checklist","assign_to":"tester","depends_on_refs":["draft"],"priority":8,"goal":"Verify the release checklist","assignee_reason":"tester owns verification","deliverable":"passed checklist"}
+								{"id_ref":"draft","title":"Draft release note","assign_to":"pt-writer","priority":"high","goal":"Draft the release note","assignee_reason":"writer is the release writer","deliverable":"release note draft"},
+								{"id_ref":"verify","title":"Verify release checklist","assign_to":"pt-tester","depends_on_refs":["draft"],"priority":8,"goal":"Verify the release checklist","assignee_reason":"tester owns verification","deliverable":"passed checklist"}
 							]
 						}`,
 					},
@@ -426,7 +426,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 			CreatedAt:   time.Date(2026, 5, 30, 9, 0, 1, 0, time.UTC),
 		},
 		{
-			ID:          "u-tester",
+			ID:          "pt-tester",
 			Name:        "tester",
 			Description: "release verifier",
 			Role:        agent.RoleWorker,
@@ -466,7 +466,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		t.Fatalf("decode batch response: %v", err)
 	}
 	parent := batchResp.Tasks[0]
-	if parent.CreatedBy != "manager" {
+	if parent.CreatedBy != "pt-manager" {
 		t.Fatalf("parent.CreatedBy = %q, want team lead manager", parent.CreatedBy)
 	}
 
@@ -486,7 +486,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 	if len(planResp.CreatedTasks) != 2 {
 		t.Fatalf("created plan tasks len = %d, want 2", len(planResp.CreatedTasks))
 	}
-	if planResp.CreatedTasks[0].CreatedBy != "manager" || planResp.CreatedTasks[1].CreatedBy != "manager" {
+	if planResp.CreatedTasks[0].CreatedBy != "pt-manager" || planResp.CreatedTasks[1].CreatedBy != "pt-manager" {
 		t.Fatalf("planned task creators = %q/%q, want team lead manager", planResp.CreatedTasks[0].CreatedBy, planResp.CreatedTasks[1].CreatedBy)
 	}
 	if planResp.Task.PlanSummary == "" || !strings.Contains(planResp.CreatedTasks[0].Body, "Assignee reason") {
@@ -527,7 +527,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 	if roomContains(teamRoom, "created execution room") || roomContains(teamRoom, startResp.Task.RoomID) {
 		t.Fatalf("team room should not receive execution room notice: %+v", teamRoom.Messages)
 	}
-	if !roomContainsMention(taskRoom, "dispatched "+planResp.CreatedTasks[0].ID, "u-writer") || !roomContains(taskRoom, "claim --team "+created.ID+" --task "+planResp.CreatedTasks[0].ID+" --participant-id writer") {
+	if !roomContainsMention(taskRoom, "dispatched "+planResp.CreatedTasks[0].ID, "pt-writer") || !roomContains(taskRoom, "claim --team "+created.ID+" --task "+planResp.CreatedTasks[0].ID+" --participant-id pt-writer") {
 		t.Fatalf("task room messages missing first dispatch: %+v", taskRoom.Messages)
 	}
 	if roomContains(taskRoom, "started assigning tasks") {
@@ -547,7 +547,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		t.Fatalf("complete writer status = %d, want %d: %s", completeRec.Code, http.StatusOK, completeRec.Body.String())
 	}
 	taskRoom, _ = imSvc.Room(startResp.Task.RoomID)
-	if !roomContainsMention(taskRoom, "dispatched "+planResp.CreatedTasks[1].ID, "u-tester") {
+	if !roomContainsMention(taskRoom, "dispatched "+planResp.CreatedTasks[1].ID, "pt-tester") {
 		t.Fatalf("task room messages missing successor dispatch: %+v", taskRoom.Messages)
 	}
 
@@ -916,8 +916,8 @@ func TestTeamRoomCommandReassignsTask(t *testing.T) {
 	if !ok {
 		t.Fatalf("GetTask(%s) ok = false, want true", task.ID)
 	}
-	if updated.AssignedTo != "worker-b" || updated.Status != team.TaskStatusAssigned {
-		t.Fatalf("updated task = %+v, want assigned to worker-b", updated)
+	if updated.AssignedTo != "pt-worker-b" || updated.Status != team.TaskStatusAssigned {
+		t.Fatalf("updated task = %+v, want assigned to pt-worker-b", updated)
 	}
 }
 

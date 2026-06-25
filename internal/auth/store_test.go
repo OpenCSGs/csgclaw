@@ -251,6 +251,158 @@ func TestEnsureAIGatewayCredentialsFetchesAndCachesBuiltinAPIKey(t *testing.T) {
 	}
 }
 
+func TestDefaultStorePersistsOpenCSGAuthInRootState(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	store, err := DefaultStore()
+	if err != nil {
+		t.Fatalf("DefaultStore() error = %v", err)
+	}
+	loggedInAt := time.Date(2026, 6, 25, 7, 0, 0, 0, time.UTC)
+	if err := store.Save(Record{
+		Tokens: Tokens{AccessToken: " access-token "},
+		Account: Account{
+			UserID:     " alice ",
+			UserUUID:   " user-uuid ",
+			Avatar:     " https://example.test/avatar.png ",
+			BaseURL:    " https://hub.example.test/ ",
+			PortalURL:  " https://hub.example.test/welcome ",
+			LoggedInAt: loggedInAt,
+		},
+		LastRefresh: loggedInAt,
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if err := store.SaveCSGHubProviderCredentials(CSGHubProviderCredentials{
+		AIGatewayBuiltinAPIKey: " gk_api-key ",
+	}); err != nil {
+		t.Fatalf("SaveCSGHubProviderCredentials() error = %v", err)
+	}
+
+	statePath := filepath.Join(home, ".csgclaw", "state.json")
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read root state: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".csgclaw", "auth.json")); !os.IsNotExist(err) {
+		t.Fatalf("legacy root auth store exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".csgclaw", "auth", "csghub.json")); !os.IsNotExist(err) {
+		t.Fatalf("legacy provider auth store exists: %v", err)
+	}
+
+	var state map[string]any
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatalf("decode root state: %v", err)
+	}
+	authState := state["auth"].(map[string]any)
+	openCSG := authState["opencsg"].(map[string]any)
+	tokens := openCSG["tokens"].(map[string]any)
+	account := openCSG["account"].(map[string]any)
+	if tokens["access_token"] != "access-token" {
+		t.Fatalf("tokens.access_token = %v, want access-token", tokens["access_token"])
+	}
+	if account["user_id"] != "alice" || account["base_url"] != "https://hub.example.test" {
+		t.Fatalf("account = %#v, want normalized alice account", account)
+	}
+	if openCSG["ai_gateway_builtin_api_key"] != "gk_api-key" {
+		t.Fatalf("ai gateway key = %v, want gk_api-key", openCSG["ai_gateway_builtin_api_key"])
+	}
+
+	record, ok, err := store.Load()
+	if err != nil || !ok {
+		t.Fatalf("Load() = %+v, %v, %v", record, ok, err)
+	}
+	if record.Tokens.AccessToken != "access-token" || record.Account.UserID != "alice" {
+		t.Fatalf("record = %+v, want normalized root-state record", record)
+	}
+	credentials, ok, err := store.LoadCSGHubProviderCredentials()
+	if err != nil || !ok {
+		t.Fatalf("LoadCSGHubProviderCredentials() = %+v, %v, %v", credentials, ok, err)
+	}
+	if credentials.AIGatewayBuiltinAPIKey != "gk_api-key" {
+		t.Fatalf("AIGatewayBuiltinAPIKey = %q, want gk_api-key", credentials.AIGatewayBuiltinAPIKey)
+	}
+	status, err := store.Status()
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	statusRaw, err := json.Marshal(status)
+	if err != nil {
+		t.Fatalf("marshal status: %v", err)
+	}
+	if strings.Contains(string(statusRaw), "access-token") || strings.Contains(string(statusRaw), "gk_api-key") {
+		t.Fatalf("status leaks secrets: %s", statusRaw)
+	}
+
+	if err := store.Delete(); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if record, ok, err := store.Load(); err != nil || ok {
+		t.Fatalf("Load() after delete = %+v, %v, %v, want missing", record, ok, err)
+	}
+	if credentials, ok, err := store.LoadCSGHubProviderCredentials(); err != nil || ok {
+		t.Fatalf("LoadCSGHubProviderCredentials() after delete = %+v, %v, %v, want missing", credentials, ok, err)
+	}
+}
+
+func TestDefaultStorePreservesUnrelatedRootStateSections(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	statePath := filepath.Join(home, ".csgclaw", "state.json")
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initial := map[string]any{
+		"version":         1,
+		"agents":          map[string]any{"items": []map[string]any{{"id": "agent-manager"}}},
+		"model_providers": map[string]any{"items": map[string]any{"openai": map[string]any{"display_name": "OpenAI"}}},
+		"auth": map[string]any{
+			"future": map[string]any{"enabled": true},
+		},
+	}
+	data, err := json.MarshalIndent(initial, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal initial state: %v", err)
+	}
+	if err := os.WriteFile(statePath, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write initial state: %v", err)
+	}
+
+	store, err := DefaultStore()
+	if err != nil {
+		t.Fatalf("DefaultStore() error = %v", err)
+	}
+	if err := store.Save(Record{
+		Tokens:  Tokens{AccessToken: "access-token"},
+		Account: Account{BaseURL: "https://hub.example.test"},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if err := store.SaveCSGHubProviderCredentials(CSGHubProviderCredentials{
+		AIGatewayBuiltinAPIKey: "gk_api-key",
+	}); err != nil {
+		t.Fatalf("SaveCSGHubProviderCredentials() error = %v", err)
+	}
+
+	var state map[string]any
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read root state: %v", err)
+	}
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatalf("decode root state: %v", err)
+	}
+	if _, ok := state["agents"].(map[string]any); !ok {
+		t.Fatalf("agents section was not preserved: %#v", state)
+	}
+	authState := state["auth"].(map[string]any)
+	if _, ok := authState["future"].(map[string]any); !ok {
+		t.Fatalf("future auth key was not preserved: %#v", authState)
+	}
+}
+
 func newTestStore(t *testing.T) Store {
 	t.Helper()
 	root := t.TempDir()

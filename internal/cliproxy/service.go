@@ -30,7 +30,7 @@ const (
 
 	reservedLegacyCLIProxyPort = 8300 + 17
 
-	authDirName    = "auth"
+	authDirName    = "cliproxy-auth"
 	configDirName  = authDirName
 	configFileName = "config.yaml"
 

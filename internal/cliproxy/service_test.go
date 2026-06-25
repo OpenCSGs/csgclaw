@@ -266,7 +266,7 @@ func TestConfiguredAuthDirExpandsHome(t *testing.T) {
 	if err != nil {
 		t.Fatalf("configuredAuthDir returned error: %v", err)
 	}
-	want := filepath.Join(home, ".csgclaw", "auth")
+	want := filepath.Join(home, ".csgclaw", "cliproxy-auth")
 	if got != want {
 		t.Fatalf("configuredAuthDir = %q, want %q", got, want)
 	}
@@ -281,7 +281,7 @@ func TestConfigDirDefaultsToAuthDomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("configDir returned error: %v", err)
 	}
-	want := filepath.Join(home, ".csgclaw", "auth")
+	want := filepath.Join(home, ".csgclaw", "cliproxy-auth")
 	if got != want {
 		t.Fatalf("configDir = %q, want %q", got, want)
 	}

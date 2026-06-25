@@ -38,8 +38,8 @@ func TestDeliverMessagePublishesMessageCreatedEvent(t *testing.T) {
 		if evt.Type != EventTypeMessageCreated || evt.Message == nil {
 			t.Fatalf("event = %+v, want message.created", evt)
 		}
-		if len(evt.Message.Mentions) == 0 || evt.Message.Mentions[0].ID != "u-p-w-0604" {
-			t.Fatalf("mentions = %+v, want u-p-w-0604", evt.Message.Mentions)
+		if len(evt.Message.Mentions) == 0 || evt.Message.Mentions[0].ID != "pt-p-w-0604" {
+			t.Fatalf("mentions = %+v, want pt-p-w-0604", evt.Message.Mentions)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for message.created event")

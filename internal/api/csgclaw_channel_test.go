@@ -45,7 +45,7 @@ func TestHandleCsgclawChannelRoutesMirrorLocalCollections(t *testing.T) {
 		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 			t.Fatalf("decode users: %v", err)
 		}
-		if len(got) < 2 || got[0].ID != "admin" {
+		if len(got) < 2 || got[0].ID != "user-admin" {
 			t.Fatalf("users = %+v, want local users through csgclaw channel route", got)
 		}
 	})
@@ -124,7 +124,7 @@ func TestHandleCsgclawUsersShowsHumanDescriptionAndBoundChannels(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode users: %v", err)
 	}
-	admin, ok := findUserByID(got, "admin")
+	admin, ok := findUserByID(got, "user-admin")
 	if !ok {
 		t.Fatalf("users = %+v, want admin", got)
 	}
@@ -229,7 +229,7 @@ func TestHandleCsgclawChannelNestedRoutesMirrorLocalMutations(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&members); err != nil {
 		t.Fatalf("decode members: %v", err)
 	}
-	if !testUsersContain(members, "u-bob") {
+	if !testUsersContain(members, "user-bob") {
 		t.Fatalf("members = %+v, want u-bob through csgclaw channel route", members)
 	}
 

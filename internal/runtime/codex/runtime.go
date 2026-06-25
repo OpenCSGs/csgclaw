@@ -112,7 +112,7 @@ type BinaryProvider interface {
 type Dependencies struct {
 	BinaryProvider BinaryProvider
 	ResolveAgent   func(h agentruntime.Handle) (AgentRef, error)
-	AgentHome      func(agentName string) (string, error)
+	AgentHome      func(agentID string) (string, error)
 	Manager        Manager
 	EventSink      SessionEventSink
 	Permission     PermissionBroker
@@ -153,11 +153,15 @@ func (r *Runtime) WorkspaceRoot(agentHome string) string {
 	return r.Layout(agentHome).WorkspaceRoot
 }
 
-func (r *Runtime) resolveWorkspaceDir(agentName string, runtimeOptions map[string]any) (string, error) {
+func canonicalRuntimeAgentID(agentID string) string {
+	return agent.CanonicalID(agentID)
+}
+
+func (r *Runtime) resolveWorkspaceDir(agentID string, runtimeOptions map[string]any) (string, error) {
 	if r.deps.AgentHome == nil {
 		return "", fmt.Errorf("agent home resolver is required")
 	}
-	agentHome, err := r.deps.AgentHome(strings.TrimSpace(agentName))
+	agentHome, err := r.deps.AgentHome(canonicalRuntimeAgentID(agentID))
 	if err != nil {
 		return "", err
 	}
@@ -186,7 +190,8 @@ func (r *Runtime) PermissionBroker() PermissionBroker {
 }
 
 func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-	if err := r.ensureRuntimeHome(spec.AgentName); err != nil {
+	spec.AgentID = canonicalRuntimeAgentID(spec.AgentID)
+	if err := r.ensureRuntimeHome(spec.AgentID); err != nil {
 		return agentruntime.Handle{}, err
 	}
 	spec.Profile = spec.Profile.Normalized()
@@ -380,15 +385,16 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	if strings.TrimSpace(spec.AgentName) == "" || strings.TrimSpace(spec.AgentID) == "" {
 		return nil, fmt.Errorf("agent name and id are required")
 	}
+	spec.AgentID = canonicalRuntimeAgentID(spec.AgentID)
 	agentRef, err := r.resolveAgent(agentruntime.Handle{RuntimeID: runtimeID})
 	if err != nil {
 		return nil, err
 	}
-	dirs, err := r.ensureRuntimeDirs(spec.AgentName)
+	dirs, err := r.ensureRuntimeDirs(spec.AgentID)
 	if err != nil {
 		return nil, err
 	}
-	workspaceDir, err := r.resolveWorkspaceDir(spec.AgentName, agentRef.RuntimeOptions)
+	workspaceDir, err := r.resolveWorkspaceDir(spec.AgentID, agentRef.RuntimeOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -447,15 +453,19 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if err != nil {
 		return nil, err
 	}
-	sessionMeta, err := r.readSessionMetadata(runtimeID)
-	if err != nil {
-		return nil, err
-	}
-	runtimeDir, err := r.runtimeDirForHandle(agentruntime.Handle{RuntimeID: runtimeID})
-	if err != nil {
+	if _, err := r.readSessionMetadata(runtimeID); err != nil {
 		return nil, err
 	}
 	agentRef, err := r.resolveAgent(agentruntime.Handle{RuntimeID: runtimeID})
+	if err != nil {
+		return nil, err
+	}
+	agentID := canonicalRuntimeAgentID(firstNonEmpty(agentRef.ID, meta.AgentID))
+	dirs, err := r.ensureRuntimeDirs(agentID)
+	if err != nil {
+		return nil, err
+	}
+	workspaceDir, err := r.resolveWorkspaceDir(agentID, agentRef.RuntimeOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -467,15 +477,27 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 
 	spec := SessionSpec{
 		RuntimeID:    runtimeID,
-		AgentID:      firstNonEmpty(agentRef.ID, meta.AgentID),
+		AgentID:      agentID,
 		AgentName:    firstNonEmpty(agentRef.Name, meta.AgentName),
 		BinaryPath:   strings.TrimSpace(meta.BinaryPath),
-		RuntimeDir:   runtimeDir,
-		WorkspaceDir: strings.TrimSpace(sessionMeta.WorkspaceDir),
-		HomeDir:      strings.TrimSpace(sessionMeta.HomeDir),
-		CodexHomeDir: strings.TrimSpace(sessionMeta.CodexHomeDir),
-		StderrPath:   filepath.Join(runtimeDir, homeDirName, stderrLogFileName),
+		RuntimeDir:   dirs.Root,
+		WorkspaceDir: workspaceDir,
+		HomeDir:      r.hostSessionHomeDir(dirs.Home),
+		CodexHomeDir: dirs.CodexHome,
+		StderrPath:   dirs.StderrLog,
 		Profile:      agentRef.Profile.Normalized(),
+	}
+	if err := r.mkdirAll(spec.WorkspaceDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create codex workspace dir %s: %w", spec.WorkspaceDir, err)
+	}
+	if err := r.seedCodexHomeAuth(spec.CodexHomeDir); err != nil {
+		return nil, err
+	}
+	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.Profile); err != nil {
+		return nil, err
+	}
+	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
+		return nil, err
 	}
 	if err := r.refreshCodexHomeAgentsFile(agentruntime.Handle{RuntimeID: runtimeID}, spec.CodexHomeDir); err != nil {
 		return nil, err
@@ -627,8 +649,8 @@ func (r *Runtime) ensureBinary(ctx context.Context) (string, error) {
 	return r.deps.BinaryProvider.Ensure(ctx)
 }
 
-func (r *Runtime) ensureRuntimeHome(agentName string) error {
-	_, err := r.ensureRuntimeDirs(agentName)
+func (r *Runtime) ensureRuntimeHome(agentID string) error {
+	_, err := r.ensureRuntimeDirs(agentID)
 	return err
 }
 
@@ -642,8 +664,8 @@ func (r *Runtime) hostSessionHomeDir(fallback string) string {
 	return fallback
 }
 
-func (r *Runtime) ensureRuntimeDirs(agentName string) (runtimeDirs, error) {
-	root, err := r.runtimeDirForAgent(agentName)
+func (r *Runtime) ensureRuntimeDirs(agentID string) (runtimeDirs, error) {
+	root, err := r.runtimeDirForAgent(agentID)
 	if err != nil {
 		return runtimeDirs{}, err
 	}
@@ -667,14 +689,14 @@ func (r *Runtime) runtimeDirForHandle(h agentruntime.Handle) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return r.runtimeDirForAgent(agentRef.Name)
+	return r.runtimeDirForAgent(agentRef.ID)
 }
 
-func (r *Runtime) runtimeDirForAgent(agentName string) (string, error) {
+func (r *Runtime) runtimeDirForAgent(agentID string) (string, error) {
 	if r.deps.AgentHome == nil {
 		return "", fmt.Errorf("agent home resolver is required")
 	}
-	agentHome, err := r.deps.AgentHome(strings.TrimSpace(agentName))
+	agentHome, err := r.deps.AgentHome(canonicalRuntimeAgentID(agentID))
 	if err != nil {
 		return "", err
 	}
@@ -689,7 +711,7 @@ func (r *Runtime) stderrLogPath(h agentruntime.Handle) (string, error) {
 	if r.deps.AgentHome == nil {
 		return "", fmt.Errorf("agent home resolver is required")
 	}
-	agentHome, err := r.deps.AgentHome(strings.TrimSpace(agentRef.Name))
+	agentHome, err := r.deps.AgentHome(canonicalRuntimeAgentID(agentRef.ID))
 	if err != nil {
 		return "", err
 	}
@@ -714,6 +736,7 @@ func (r *Runtime) resolveAgent(h agentruntime.Handle) (AgentRef, error) {
 	if strings.TrimSpace(agentRef.Name) == "" || strings.TrimSpace(agentRef.ID) == "" {
 		return AgentRef{}, fmt.Errorf("resolved agent is incomplete")
 	}
+	agentRef.ID = canonicalRuntimeAgentID(agentRef.ID)
 	return agentRef, nil
 }
 
@@ -722,15 +745,15 @@ func (r *Runtime) RefreshCodexHomeAgentsFile(_ context.Context, h agentruntime.H
 	if err != nil {
 		return err
 	}
-	codexHomeDir, err := r.resolveCodexHomeDir(agentRef.Name)
+	codexHomeDir, err := r.resolveCodexHomeDir(agentRef.ID)
 	if err != nil {
 		return err
 	}
 	return r.refreshCodexHomeAgentsFile(h, codexHomeDir)
 }
 
-func (r *Runtime) resolveCodexHomeDir(agentName string) (string, error) {
-	dirs, err := r.ensureRuntimeDirs(agentName)
+func (r *Runtime) resolveCodexHomeDir(agentID string) (string, error) {
+	dirs, err := r.ensureRuntimeDirs(agentID)
 	if err != nil {
 		return "", err
 	}

@@ -1,6 +1,8 @@
 package im
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -283,6 +285,41 @@ func TestThreadStatePersistsAcrossReload(t *testing.T) {
 	}
 	if view.Summary.ReplyCount != 1 {
 		t.Fatalf("reloaded summary = %+v, want one reply", view.Summary)
+	}
+}
+
+func TestThreadContextPersistsOutOfLine(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	svc := NewServiceFromBootstrap(threadTestBootstrap())
+	svc.statePath = statePath
+
+	if _, _, err := svc.StartThread(StartThreadRequest{RoomID: "room-1", RootMessageID: "msg-4"}); err != nil {
+		t.Fatalf("StartThread() error = %v", err)
+	}
+
+	stateData, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("ReadFile(state.json) error = %v", err)
+	}
+	if strings.Contains(string(stateData), `"context"`) {
+		t.Fatalf("state.json contains inline thread context: %s", string(stateData))
+	}
+
+	contextPath := filepath.Join(dir, "threads", "room-1", "msg-4.json")
+	contextData, err := os.ReadFile(contextPath)
+	if err != nil {
+		t.Fatalf("ReadFile(thread context) error = %v", err)
+	}
+	var stored struct {
+		RootMessageID string    `json:"root_message_id"`
+		Context       []Message `json:"context"`
+	}
+	if err := json.Unmarshal(contextData, &stored); err != nil {
+		t.Fatalf("Unmarshal(thread context) error = %v", err)
+	}
+	if stored.RootMessageID != "msg-4" || len(stored.Context) != 6 {
+		t.Fatalf("thread context = %+v, want msg-4 with six messages", stored)
 	}
 }
 

@@ -40,12 +40,12 @@ func TestManagerPlanContextResolvesLocalManagerParticipantToLead(t *testing.T) {
 		Title: "Research",
 	})
 
-	if len(planCtx.AssignableMemberIDs) != 1 || planCtx.AssignableMemberIDs[0] != "worker" {
-		t.Fatalf("assignable_member_ids = %v, want [worker]", planCtx.AssignableMemberIDs)
+	if len(planCtx.AssignableMemberIDs) != 1 || planCtx.AssignableMemberIDs[0] != "pt-worker" {
+		t.Fatalf("assignable_member_ids = %v, want [pt-worker]", planCtx.AssignableMemberIDs)
 	}
 	managerCount := 0
 	for _, member := range planCtx.Members {
-		if member.ID == "manager" {
+		if member.ID == "pt-manager" {
 			managerCount++
 		}
 	}
@@ -57,30 +57,30 @@ func TestManagerPlanContextResolvesLocalManagerParticipantToLead(t *testing.T) {
 type plannerAliasDirectory struct{}
 
 func (plannerAliasDirectory) TeamRoomMemberIDs(string) []string {
-	return []string{"manager", "worker"}
+	return []string{"pt-manager", "pt-worker"}
 }
 
 func (plannerAliasDirectory) UserProfile(id string) (MemberProfile, bool) {
 	switch id {
-	case "manager":
-		return MemberProfile{ID: "manager", Name: "manager", Role: "worker"}, true
-	case "worker":
-		return MemberProfile{ID: "worker", Name: "worker", Role: "worker"}, true
+	case "pt-manager":
+		return MemberProfile{ID: "pt-manager", Name: "manager", Role: "manager"}, true
+	case "pt-worker":
+		return MemberProfile{ID: "pt-worker", Name: "worker", Role: "worker"}, true
 	default:
 		return MemberProfile{}, false
 	}
 }
 
 func (plannerAliasDirectory) AgentProfile(id string) (MemberProfile, bool) {
-	if id == "u-manager" {
-		return MemberProfile{ID: "u-manager", Name: "manager", Role: "manager"}, true
+	if id == "agent-manager" {
+		return MemberProfile{ID: "agent-manager", Name: "manager", Role: "manager"}, true
 	}
 	return MemberProfile{}, false
 }
 
 func (plannerAliasDirectory) ResolveAgentID(id string) string {
-	if id == "manager" {
-		return "u-manager"
+	if id == "pt-manager" || id == "manager" {
+		return "agent-manager"
 	}
-	return "u-" + id
+	return "agent-" + strings.TrimPrefix(cleanParticipantID(id), "pt-")
 }

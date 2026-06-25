@@ -2,12 +2,9 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
-	"text/tabwriter"
 
 	"csgclaw/cli/command"
 	"csgclaw/internal/apiclient"
@@ -107,24 +104,7 @@ func writeJSON(w io.Writer, v any) error {
 }
 
 func renderAgentsTable(w io.Writer, agents []apitypes.Agent) error {
-	tw := newTableWriter(w)
-	fmt.Fprintln(tw, "ID\tNAME\tROLE\tSTATUS\tRUNTIME\tPROFILE\tIMAGE")
-	for _, a := range agents {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Name, a.Role, a.Status, displayAgentField(a.RuntimeKind), displayAgentProfile(a.Profile), displayAgentField(a.Image))
-	}
-	return tw.Flush()
-}
-
-func displayAgentField(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "-"
-	}
-	return value
-}
-
-func displayAgentProfile(profile string) string {
-	return displayAgentField(profile)
+	return command.RenderAgentsTable(w, agents)
 }
 
 func renderRoomsTable(w io.Writer, rooms []apitypes.Room) error {
@@ -133,8 +113,4 @@ func renderRoomsTable(w io.Writer, rooms []apitypes.Room) error {
 
 func renderUsersTable(w io.Writer, users []apitypes.User) error {
 	return command.RenderUsersTable(w, users)
-}
-
-func newTableWriter(w io.Writer) *tabwriter.Writer {
-	return command.NewTableWriter(w)
 }

@@ -11,6 +11,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
+	"csgclaw/internal/localstore"
 	"csgclaw/internal/participant"
 )
 
@@ -61,17 +62,17 @@ func TestDetectStateCompleteBootstrapReportsComplete(t *testing.T) {
 		t.Fatalf("DefaultIMStatePath() error = %v", err)
 	}
 	if err := im.SaveBootstrap(imStatePath, im.Bootstrap{
-		CurrentUserID: "u-admin",
+		CurrentUserID: im.AdminUserID,
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin", Role: "admin"},
-			{ID: agent.ManagerParticipantID, Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: im.AdminUserID, Name: "admin", Handle: "admin", Role: "admin"},
+			{ID: im.ManagerUserID, Name: "manager", Handle: "manager", Role: "manager"},
 		},
 		Rooms: []im.Room{
 			{
 				ID:       "room-bootstrap",
 				Title:    "admin & manager",
 				IsDirect: true,
-				Members:  []string{"u-admin", agent.ManagerParticipantID},
+				Members:  []string{participant.BootstrapAdminParticipantID, agent.ManagerParticipantID},
 			},
 		},
 	}); err != nil {
@@ -94,7 +95,7 @@ func TestDetectStateCompleteBootstrapReportsComplete(t *testing.T) {
 		t.Fatalf("writeManagerBotState() error = %v", err)
 	}
 	if err := writeParticipantsState(t, []apitypes.Participant{{
-		ID:              im.AdminUserID,
+		ID:              participant.BootstrapAdminParticipantID,
 		Channel:         participant.ChannelCSGClaw,
 		Type:            participant.TypeHuman,
 		Name:            "admin",
@@ -188,7 +189,7 @@ func TestDetectStateFlagsMissingAdminParticipantWhenManagerParticipantExists(t *
 		Channel:         participant.ChannelCSGClaw,
 		Type:            participant.TypeAgent,
 		Name:            "manager",
-		ChannelUserRef:  agent.ManagerParticipantID,
+		ChannelUserRef:  im.ManagerUserID,
 		ChannelUserKind: participant.ChannelUserKindLocalUserID,
 		AgentID:         agent.ManagerUserID,
 		LifecycleStatus: participant.LifecycleStatusActive,
@@ -227,15 +228,18 @@ func writeManagerAgentState(t *testing.T) error {
 	}
 
 	state := map[string]any{
-		"agents": []map[string]any{
-			{
-				"id":           agent.ManagerUserID,
-				"name":         agent.ManagerName,
-				"role":         agent.RoleManager,
-				"runtime_kind": agent.RuntimeKindPicoClawSandbox,
-				"image":        "manager-image:test",
-				"status":       "running",
-				"created_at":   time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC).Format(time.RFC3339Nano),
+		"version": 1,
+		"agents": map[string]any{
+			"items": []map[string]any{
+				{
+					"id":           agent.ManagerUserID,
+					"name":         agent.ManagerName,
+					"role":         agent.RoleManager,
+					"runtime_kind": agent.RuntimeKindPicoClawSandbox,
+					"image":        "manager-image:test",
+					"status":       "running",
+					"created_at":   time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC).Format(time.RFC3339Nano),
+				},
 			},
 		},
 	}
@@ -270,22 +274,15 @@ func writeManagerBotState(t *testing.T, manager apitypes.LegacyBot) error {
 func writeParticipantsState(t *testing.T, participants []apitypes.Participant) error {
 	t.Helper()
 
-	imStatePath, err := config.DefaultIMStatePath()
+	path, err := config.DefaultStatePath()
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(filepath.Dir(imStatePath), "participants.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 
-	data, err := json.MarshalIndent(map[string]any{
-		"participants": participants,
-	}, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	return localstore.WriteSection(path, "participants", map[string]any{"items": participants})
 }
 
 func assertLegacyBotsMigrated(t *testing.T) {
@@ -300,7 +297,11 @@ func assertLegacyBotsMigrated(t *testing.T) {
 		t.Fatalf("bots.json still exists after participant migration; stat err=%v", err)
 	}
 
-	store, err := participant.NewStore(filepath.Join(filepath.Dir(imStatePath), "participants.json"))
+	participantsPath, err := config.DefaultStatePath()
+	if err != nil {
+		t.Fatalf("DefaultStatePath() error = %v", err)
+	}
+	store, err := participant.NewStore(participantsPath)
 	if err != nil {
 		t.Fatalf("participant.NewStore() error = %v", err)
 	}
@@ -308,8 +309,8 @@ func assertLegacyBotsMigrated(t *testing.T) {
 	if !ok {
 		t.Fatal("manager participant was not created from legacy bots.json")
 	}
-	if got.AgentID != agent.ManagerUserID || got.ChannelUserRef != agent.ManagerParticipantID {
-		t.Fatalf("manager participant = %+v, want agent %q and channel user %q", got, agent.ManagerUserID, agent.ManagerParticipantID)
+	if got.AgentID != agent.ManagerUserID || got.ChannelUserRef != im.ManagerUserID {
+		t.Fatalf("manager participant = %+v, want agent %q and channel user %q", got, agent.ManagerUserID, im.ManagerUserID)
 	}
 	if _, ok := store.Get(participant.ChannelCSGClaw, agent.ManagerUserID); ok {
 		t.Fatalf("manager participant was migrated under old agent id %q", agent.ManagerUserID)

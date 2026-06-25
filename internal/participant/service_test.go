@@ -44,11 +44,11 @@ func TestCreateAgentParticipantUsesStableParticipantIDForDefaultAgentID(t *testi
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if created.ID != "qa" {
-		t.Fatalf("participant ID = %q, want qa", created.ID)
+	if created.ID != "pt-qa" {
+		t.Fatalf("participant ID = %q, want pt-qa", created.ID)
 	}
-	if created.AgentID != "u-qa" {
-		t.Fatalf("agent ID = %q, want u-qa", created.AgentID)
+	if created.AgentID != "agent-qa" {
+		t.Fatalf("agent ID = %q, want agent-qa", created.AgentID)
 	}
 	if _, ok := agentSvc.Agent("u-qa"); !ok {
 		t.Fatal("agent u-qa was not created")
@@ -56,8 +56,8 @@ func TestCreateAgentParticipantUsesStableParticipantIDForDefaultAgentID(t *testi
 	if _, ok := agentSvc.Agent("u-qa-display-name"); ok {
 		t.Fatal("agent ID was derived from editable display name")
 	}
-	if user, ok := imSvc.User("u-qa"); !ok || !strings.EqualFold(user.Name, "QA Display Name") {
-		t.Fatalf("channel user = %+v, ok=%v; want u-qa display user", user, ok)
+	if user, ok := imSvc.User("user-qa"); !ok || !strings.EqualFold(user.Name, "QA Display Name") {
+		t.Fatalf("channel user = %+v, ok=%v; want user-qa display user", user, ok)
 	}
 }
 
@@ -109,7 +109,7 @@ func TestCreateParticipantAssignsUnusedBuiltInAvatar(t *testing.T) {
 	if created.Avatar != availableAvatar {
 		t.Fatalf("participant avatar = %q, want unused %q", created.Avatar, availableAvatar)
 	}
-	if user, ok := imSvc.User("u-qa"); !ok || user.Avatar != availableAvatar {
+	if user, ok := imSvc.User("user-qa"); !ok || user.Avatar != availableAvatar {
 		t.Fatalf("channel user = %+v, ok=%v; want avatar %q", user, ok, availableAvatar)
 	}
 	if runtimeAgent, ok := agentSvc.Agent("u-qa"); !ok || runtimeAgent.Avatar != availableAvatar {
@@ -154,8 +154,8 @@ func TestCreateAgentParticipantCanReuseExistingAgentWithDifferentParticipantID(t
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if created.ID != "test" || created.AgentID != "u-qa" {
-		t.Fatalf("created participant = %+v, want id test bound to u-qa", created)
+	if created.ID != "pt-test" || created.AgentID != "agent-qa" {
+		t.Fatalf("created participant = %+v, want id pt-test bound to agent-qa", created)
 	}
 	if created.ChannelUserRef != "ou_xxx" || created.ChannelAppRef != "cli_xxx" {
 		t.Fatalf("created participant channel identity = %+v, want Feishu app/open_id scope", created)
@@ -241,8 +241,8 @@ func TestEnsureBootstrapAdminCreatesHumanParticipantWithoutAgent(t *testing.T) {
 		t.Fatalf("EnsureBootstrapAdmin() error = %v", err)
 	}
 
-	if created.ID != im.AdminUserID {
-		t.Fatalf("participant ID = %q, want %q", created.ID, im.AdminUserID)
+	if created.ID != bootstrapAdminParticipantID {
+		t.Fatalf("participant ID = %q, want %q", created.ID, bootstrapAdminParticipantID)
 	}
 	if created.Type != TypeHuman {
 		t.Fatalf("participant type = %q, want %q", created.Type, TypeHuman)
@@ -262,7 +262,7 @@ func TestEnsureBootstrapAdminCreatesHumanParticipantWithoutAgent(t *testing.T) {
 	if created.Avatar == "" {
 		t.Fatal("admin participant avatar is empty, want initialized built-in avatar")
 	}
-	if _, ok := store.Get(ChannelCSGClaw, im.AdminUserID); !ok {
+	if _, ok := store.Get(ChannelCSGClaw, bootstrapAdminParticipantID); !ok {
 		t.Fatal("store missing admin participant")
 	}
 	if user, ok := imSvc.User(im.AdminUserID); !ok || user.ID != im.AdminUserID || user.Handle != "admin" || user.Role != "admin" || user.Avatar != created.Avatar {
@@ -295,8 +295,8 @@ func TestEnsureBootstrapAdminRenamesLegacyAdminParticipant(t *testing.T) {
 		t.Fatalf("EnsureBootstrapAdmin() error = %v", err)
 	}
 
-	if created.ID != im.AdminUserID || created.Type != TypeHuman {
-		t.Fatalf("admin participant = %+v, want human participant %q", created, im.AdminUserID)
+	if created.ID != bootstrapAdminParticipantID || created.Type != TypeHuman {
+		t.Fatalf("admin participant = %+v, want human participant %q", created, bootstrapAdminParticipantID)
 	}
 	if created.AgentID != "" {
 		t.Fatalf("agent ID = %q, want empty after admin migration", created.AgentID)
@@ -355,14 +355,14 @@ func TestEnsureBootstrapManagerUsesDefaultParticipantIDSeparateFromAgentID(t *te
 	if created.AgentID != agent.ManagerUserID {
 		t.Fatalf("agent ID = %q, want %q", created.AgentID, agent.ManagerUserID)
 	}
-	if created.ChannelUserRef != agent.ManagerParticipantID {
-		t.Fatalf("channel user ref = %q, want %q", created.ChannelUserRef, agent.ManagerParticipantID)
+	if created.ChannelUserRef != im.ManagerUserID {
+		t.Fatalf("channel user ref = %q, want %q", created.ChannelUserRef, im.ManagerUserID)
 	}
 	if created.Avatar == "" {
 		t.Fatal("manager participant avatar is empty, want initialized built-in avatar")
 	}
-	if user, ok := imSvc.User(agent.ManagerParticipantID); !ok || user.ID != agent.ManagerParticipantID || user.Avatar != created.Avatar {
-		t.Fatalf("manager channel user = %+v, ok=%v; want local user %q", user, ok, agent.ManagerParticipantID)
+	if user, ok := imSvc.User(im.ManagerUserID); !ok || user.ID != im.ManagerUserID || user.Avatar != created.Avatar {
+		t.Fatalf("manager channel user = %+v, ok=%v; want local user %q", user, ok, im.ManagerUserID)
 	}
 	if manager, ok := agentSvc.Agent(agent.ManagerUserID); !ok || manager.Avatar != created.Avatar {
 		t.Fatalf("manager agent = %+v, ok=%v; want avatar %q", manager, ok, created.Avatar)
@@ -439,7 +439,7 @@ func TestEnsureBootstrapManagerDeletesMisspelledManagerParticipant(t *testing.T)
 		t.Fatalf("EnsureBootstrapManager() error = %v", err)
 	}
 
-	if created.ID != agent.ManagerParticipantID || created.ChannelUserRef != agent.ManagerParticipantID || created.AgentID != agent.ManagerUserID {
+	if created.ID != agent.ManagerParticipantID || created.ChannelUserRef != im.ManagerUserID || created.AgentID != agent.ManagerUserID {
 		t.Fatalf("manager participant = %+v, want manager participant bound to %q", created, agent.ManagerUserID)
 	}
 	if !created.CreatedAt.Equal(createdAt) || created.Avatar != "avatar.png" || created.Metadata["legacy"] != "kept" {

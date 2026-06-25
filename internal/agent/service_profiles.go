@@ -60,7 +60,7 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	}
 
 	s.mu.Lock()
-	current, ok := s.agents[id]
+	current, key, ok := s.agentByIDLocked(id)
 	if !ok {
 		s.mu.Unlock()
 		return AgentProfileView{}, fmt.Errorf("agent %q not found", id)
@@ -88,7 +88,7 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	}
 
 	s.mu.Lock()
-	current, ok = s.agents[id]
+	current, key, ok = s.agentByIDLocked(id)
 	if !ok {
 		s.mu.Unlock()
 		return AgentProfileView{}, fmt.Errorf("agent %q not found", id)
@@ -101,7 +101,7 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	if current.ProfileComplete && strings.EqualFold(strings.TrimSpace(current.Status), "profile_incomplete") {
 		current.Status = string(sandbox.StateStopped)
 	}
-	s.agents[id] = current
+	s.agents[key] = current
 	if normalized.ProfileComplete {
 		s.profileDefaults = cloneProfile(normalized)
 		s.detectionResults = nil
@@ -181,11 +181,11 @@ func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
 	switch strings.TrimSpace(got.RuntimeKind) {
 	case RuntimeKindPicoClawSandbox:
 		feishuProvider := s.currentFeishuProviderForRuntime(RuntimeKindPicoClawSandbox)
-		if _, err := ensureAgentPicoClawConfigForParticipantWithResolver(got.Name, participantID, got.ID, s.server, modelCfg, resolveManagerBaseURL, feishuProvider); err != nil {
+		if _, err := s.ensureAgentPicoClawConfigForParticipantWithResolver(got.Name, participantID, got.ID, s.server, modelCfg, resolveManagerBaseURL, feishuProvider); err != nil {
 			return fmt.Errorf("sync gateway picoclaw config: %w", err)
 		}
 	case RuntimeKindOpenClawSandbox:
-		agentHome, err := agentHomeDir(got.Name)
+		agentHome, err := s.agentHomeDir(got.ID)
 		if err != nil {
 			return err
 		}
@@ -235,7 +235,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 	}
 
 	s.mu.Lock()
-	current, ok := s.agents[id]
+	current, key, ok := s.agentByIDLocked(id)
 	if !ok {
 		s.mu.Unlock()
 		return Agent{}, fmt.Errorf("agent %q not found", id)
@@ -379,7 +379,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 				return Agent{}, err
 			}
 			s.mu.Lock()
-			if _, ok := s.agents[id]; !ok {
+			if _, key, ok = s.agentByIDLocked(id); !ok {
 				s.mu.Unlock()
 				return Agent{}, fmt.Errorf("agent %q not found", id)
 			}
@@ -389,7 +389,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		s.profileDefaults = cloneProfile(current.AgentProfile)
 		s.detectionResults = nil
 	}
-	s.agents[id] = current
+	s.agents[key] = current
 	s.syncRuntimeRecordLocked(current)
 	if err := s.saveLocked(); err != nil {
 		s.mu.Unlock()
@@ -638,6 +638,8 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
+	got.ID = canonicalAgentID(got.ID)
+	got.RuntimeID = normalizeRuntimeID(got.RuntimeID, got.ID)
 	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil)
 	profile = s.hydrateProfileFromCatalog(profile)
 	if !profile.ProfileComplete {
@@ -663,11 +665,11 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 	}
 
 	if testCreateGatewayBoxHook != nil {
-		rt, err := s.ensureRuntime(got.Name)
+		rt, err := s.ensureRuntime(got.ID)
 		if err != nil {
 			return Agent{}, err
 		}
-		runtimeHome, err := s.sandboxRuntimeHome(got.Name)
+		runtimeHome, err := s.sandboxRuntimeHome(got.ID)
 		if err != nil {
 			return Agent{}, err
 		}
@@ -713,7 +715,7 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 		Image:     image,
 		Profile:   runtimeProfile,
 	}
-	if err := s.refreshGatewayTemplateSkills(got.Name, runtimeKind, recreateTemplateRole(got)); err != nil {
+	if err := s.refreshGatewayTemplateSkills(got.ID, runtimeKind, recreateTemplateRole(got)); err != nil {
 		return Agent{}, fmt.Errorf("refresh gateway template skills: %w", err)
 	}
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
@@ -744,11 +746,12 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 
 func (s *Service) persistRecreatedAgent(ctx context.Context, id, image string, info agentruntime.Info) (Agent, error) {
 	s.mu.Lock()
-	current, ok := s.agents[id]
+	current, key, ok := s.agentByIDLocked(id)
 	if !ok {
 		s.mu.Unlock()
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
+	current.ID = canonicalAgentID(current.ID)
 	current.RuntimeID = normalizeRuntimeID(current.RuntimeID, current.ID)
 	if image = strings.TrimSpace(image); image != "" {
 		current.Image = image
@@ -763,14 +766,15 @@ func (s *Service) persistRecreatedAgent(ctx context.Context, id, image string, i
 	current.AgentProfile.EnvRestartRequired = false
 	current.AgentProfile.ImageUpgradeRequired = false
 	current.ProfileComplete = true
-	s.agents[id] = current
+	delete(s.agents, key)
+	s.agents[current.ID] = current
 	s.syncRuntimeRecordLocked(current)
 	err := s.saveLocked()
 	s.mu.Unlock()
 	if err != nil {
 		return Agent{}, err
 	}
-	recreated, ok := s.Agent(id)
+	recreated, ok := s.Agent(current.ID)
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}

@@ -35,7 +35,7 @@ func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRoom() error = %v", err)
 	}
-	assertMembers(t, room.Members, "manager", "u-alice")
+	assertMembers(t, room.Members, "pt-manager", "pt-alice")
 
 	room, err = svc.AddRoomMembers(apitypes.AddRoomMembersRequest{
 		RoomID:    room.ID,
@@ -47,7 +47,7 @@ func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddRoomMembers() error = %v", err)
 	}
-	assertMembers(t, room.Members, "manager", "u-alice", "u-bob")
+	assertMembers(t, room.Members, "pt-manager", "pt-alice", "pt-bob")
 
 	message, err := svc.SendMessage(apitypes.CreateMessageRequest{
 		RoomID:    room.ID,
@@ -58,11 +58,11 @@ func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SendMessage() error = %v", err)
 	}
-	if message.SenderID != "manager" {
-		t.Fatalf("SenderID = %q, want %q", message.SenderID, "manager")
+	if message.SenderID != "pt-manager" {
+		t.Fatalf("SenderID = %q, want %q", message.SenderID, "pt-manager")
 	}
-	if !strings.Contains(message.Content, "u-alice") {
-		t.Fatalf("Content = %q, want mention tag for u-alice", message.Content)
+	if !strings.Contains(message.Content, "pt-alice") {
+		t.Fatalf("Content = %q, want mention tag for pt-alice", message.Content)
 	}
 
 	messages, err := svc.ListMessages(room.ID)

@@ -26,6 +26,7 @@ import {
   formatMessageTimestampParts,
   formatThreadReplyCount,
   isToolCallMessage,
+  resolveUserByLocalIdentity,
   type IMMessage,
   type IMUser,
   type LocaleCode,
@@ -418,7 +419,7 @@ type ThreadMessageProps = {
 };
 
 function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, compact = false }: ThreadMessageProps) {
-  const user = usersById.get(message.sender_id || "");
+  const user = resolveUserByLocalIdentity(message.sender_id, usersById);
   const fallbackName = message.sender_id || "";
   const avatar = user?.avatar || fallbackName.slice(0, 1).toUpperCase();
   const name = user?.name || user?.handle || fallbackName;

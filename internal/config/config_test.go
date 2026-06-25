@@ -18,7 +18,7 @@ func TestDefaultDirUsesSharedAppDirName(t *testing.T) {
 	}
 }
 
-func TestDefaultAgentsPathUsesDomainSubdirectory(t *testing.T) {
+func TestDefaultAgentsPathUsesRootStateFile(t *testing.T) {
 	path, err := DefaultAgentsPath()
 	if err != nil {
 		t.Fatalf("DefaultAgentsPath() error = %v", err)
@@ -27,7 +27,7 @@ func TestDefaultAgentsPathUsesDomainSubdirectory(t *testing.T) {
 	if got, want := filepath.Base(path), StateFileName; got != want {
 		t.Fatalf("filepath.Base(DefaultAgentsPath()) = %q, want %q", got, want)
 	}
-	if got, want := filepath.Base(filepath.Dir(path)), AgentsDirName; got != want {
+	if got, want := filepath.Base(filepath.Dir(path)), AppDirName; got != want {
 		t.Fatalf("filepath.Base(filepath.Dir(DefaultAgentsPath())) = %q, want %q", got, want)
 	}
 }

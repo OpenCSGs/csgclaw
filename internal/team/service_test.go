@@ -139,20 +139,20 @@ func TestProvisionedWorkerClaimStoresTeamCanonicalID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTask() error = %v", err)
 	}
-	if task.AssignedTo != "p-w-0604" {
-		t.Fatalf("CreateTask().AssignedTo = %q, want p-w-0604", task.AssignedTo)
+	if task.AssignedTo != "pt-p-w-0604" {
+		t.Fatalf("CreateTask().AssignedTo = %q, want pt-p-w-0604", task.AssignedTo)
 	}
 
 	claimed, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: task.ID, ParticipantID: "p-w-0604"})
 	if err != nil {
 		t.Fatalf("ClaimTask() error = %v", err)
 	}
-	if claimed.ClaimedBy != "p-w-0604" {
-		t.Fatalf("ClaimTask().ClaimedBy = %q, want p-w-0604", claimed.ClaimedBy)
+	if claimed.ClaimedBy != "pt-p-w-0604" {
+		t.Fatalf("ClaimTask().ClaimedBy = %q, want pt-p-w-0604", claimed.ClaimedBy)
 	}
 	presence, ok := svc.GetPresence(teamID, "p-w-0604")
-	if !ok || presence.ParticipantID != "p-w-0604" || presence.State != PresenceStateBusy {
-		t.Fatalf("GetPresence(p-w-0604) = %+v, %v; want busy p-w-0604", presence, ok)
+	if !ok || presence.ParticipantID != "pt-p-w-0604" || presence.State != PresenceStateBusy {
+		t.Fatalf("GetPresence(p-w-0604) = %+v, %v; want busy pt-p-w-0604", presence, ok)
 	}
 
 	if _, err := svc.CreateTask(CreateTaskInput{
@@ -546,7 +546,7 @@ func TestPlanTaskAppliesManagerPlan(t *testing.T) {
 	if len(planned.Tasks) != 2 {
 		t.Fatalf("planned tasks len = %d, want 2", len(planned.Tasks))
 	}
-	if planned.Tasks[0].Status != TaskStatusPending || planned.Tasks[0].AssignedTo != "alice" || planned.Tasks[0].DispatchedAt != nil {
+	if planned.Tasks[0].Status != TaskStatusPending || planned.Tasks[0].AssignedTo != "pt-alice" || planned.Tasks[0].DispatchedAt != nil {
 		t.Fatalf("first planned task = %+v, want pending assigned-but-not-dispatched", planned.Tasks[0])
 	}
 	if planned.Tasks[1].DependsOn[0] != planned.Tasks[0].ID {

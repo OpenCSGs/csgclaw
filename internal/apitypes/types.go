@@ -147,6 +147,7 @@ type Room struct {
 	Description string        `json:"description,omitempty"`
 	IsDirect    bool          `json:"is_direct,omitempty"`
 	Members     []string      `json:"members"`
+	MemberNames []string      `json:"member_names,omitempty"`
 	Messages    []Message     `json:"messages"`
 	Threads     []ThreadState `json:"threads,omitempty"`
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"csgclaw/internal/config"
+	"csgclaw/internal/localstore"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/utils"
@@ -19,6 +21,12 @@ type persistedState struct {
 	Agents           []persistedAgent         `json:"agents"`
 	Runtimes         []RuntimeRecord          `json:"runtimes,omitempty"`
 	Workers          []legacyWorker           `json:"workers,omitempty"`
+}
+
+type rootAgentsState struct {
+	ProfileDefaults  AgentProfile             `json:"profile_defaults,omitempty"`
+	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
+	Items            []persistedAgent         `json:"items"`
 }
 
 func (s persistedState) isObject() bool {
@@ -44,6 +52,7 @@ type persistedAgent struct {
 	Image            string                   `json:"image,omitempty"`
 	Avatar           string                   `json:"avatar,omitempty"`
 	BoxID            string                   `json:"box_id,omitempty"`
+	Runtime          *RuntimeRecord           `json:"runtime,omitempty"`
 	RuntimeOptions   map[string]any           `json:"runtime_options,omitempty"`
 	Role             string                   `json:"role"`
 	Status           string                   `json:"status,omitempty"`
@@ -113,16 +122,31 @@ func (a persistedAgent) toAgent() Agent {
 	if strings.TrimSpace(ap.ReasoningEffort) == "" {
 		ap.ReasoningEffort = strings.TrimSpace(a.ReasoningEffort)
 	}
+	runtimeID := a.RuntimeID
+	runtimeKind := a.RuntimeKind
+	boxID := a.BoxID
+	if a.Runtime != nil {
+		rt := normalizeRuntimeRecord(*a.Runtime)
+		if rt.ID != "" {
+			runtimeID = rt.ID
+		}
+		if rt.Kind != "" {
+			runtimeKind = rt.Kind
+		}
+		if rt.SandboxID != "" {
+			boxID = rt.SandboxID
+		}
+	}
 	ag := Agent{
 		ID:               a.ID,
 		Name:             a.Name,
 		Description:      a.Description,
 		Instructions:     a.Instructions,
-		RuntimeID:        a.RuntimeID,
-		RuntimeKind:      a.RuntimeKind,
+		RuntimeID:        runtimeID,
+		RuntimeKind:      runtimeKind,
 		Image:            a.Image,
 		Avatar:           a.Avatar,
-		BoxID:            a.BoxID,
+		BoxID:            boxID,
 		RuntimeOptions:   rx,
 		Role:             a.Role,
 		Status:           a.Status,
@@ -181,6 +205,12 @@ func (s *Service) readState() (map[string]Agent, error) {
 		return agents, nil
 	}
 
+	if root, ok, err := s.readRootAgentsState(); err != nil {
+		return nil, err
+	} else if ok {
+		return s.agentsFromRootState(root)
+	}
+
 	data, err := os.ReadFile(s.state)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -235,6 +265,10 @@ func (s *Service) readState() (map[string]Agent, error) {
 		s.runtimeRecords = runtimes
 		return agents, nil
 	}
+	if looksLikeJSONObject(data) {
+		s.runtimeRecords = map[string]RuntimeRecord{}
+		return agents, nil
+	}
 
 	var decoded []Agent
 	if err := json.Unmarshal(data, &decoded); err != nil {
@@ -255,9 +289,63 @@ func (s *Service) readState() (map[string]Agent, error) {
 	return agents, nil
 }
 
+func looksLikeJSONObject(data []byte) bool {
+	var raw map[string]json.RawMessage
+	return json.Unmarshal(data, &raw) == nil && raw != nil
+}
+
+func (s *Service) readRootAgentsState() (rootAgentsState, bool, error) {
+	if !s.stateLooksLikeRootState() {
+		return rootAgentsState{}, false, nil
+	}
+	var root rootAgentsState
+	ok, err := localstore.ReadSection(s.state, "agents", &root)
+	if err != nil {
+		return rootAgentsState{}, false, err
+	}
+	return root, ok, nil
+}
+
+func (s *Service) agentsFromRootState(root rootAgentsState) (map[string]Agent, error) {
+	agents := make(map[string]Agent)
+	if strings.TrimSpace(root.ProfileDefaults.Provider) != "" ||
+		strings.TrimSpace(root.ProfileDefaults.ModelProviderID) != "" ||
+		strings.TrimSpace(root.ProfileDefaults.ModelID) != "" ||
+		strings.TrimSpace(root.ProfileDefaults.BaseURL) != "" {
+		s.profileDefaults = s.catalogReferenceForLoadedProfile(normalizeProfile(root.ProfileDefaults, "", ""))
+	}
+	s.detectionResults = append([]ProfileDetectionResult(nil), root.DetectionResults...)
+	runtimes := make(map[string]RuntimeRecord, len(root.Items))
+	for _, a := range root.Items {
+		if a.Runtime != nil {
+			rt := normalizeRuntimeRecord(*a.Runtime)
+			if rt.ID != "" {
+				runtimes[rt.ID] = rt
+			}
+		}
+		normalized, err := s.normalizeLoadedAgent(a.toAgent())
+		if err != nil {
+			return nil, fmt.Errorf("normalize persisted agent %q: %w", strings.TrimSpace(a.ID), err)
+		}
+		if rt, ok := runtimes[normalized.RuntimeID]; ok && rt.Kind != "" {
+			normalized.RuntimeKind = rt.Kind
+		}
+		agents[normalized.ID] = normalized
+		if _, ok := runtimes[normalized.RuntimeID]; !ok {
+			runtimes[normalized.RuntimeID] = runtimeRecordForAgent(normalized)
+		}
+	}
+	s.runtimeRecords = runtimes
+	return agents, nil
+}
+
 func (s *Service) saveLocked() error {
 	if s.state == "" {
 		return nil
+	}
+
+	if s.shouldWriteRootAgentsState() {
+		return localstore.WriteSection(s.state, "agents", s.rootAgentsStateLocked())
 	}
 
 	data, err := json.MarshalIndent(persistedState{
@@ -278,9 +366,71 @@ func (s *Service) saveLocked() error {
 	return nil
 }
 
+func (s *Service) rootAgentsStateLocked() rootAgentsState {
+	items := persistedAgentsFromMap(s.agents)
+	for i := range items {
+		runtimeID := strings.TrimSpace(items[i].RuntimeID)
+		if runtimeID == "" {
+			runtimeID = runtimeIDForAgentID(items[i].ID)
+			items[i].RuntimeID = runtimeID
+		}
+		if rt, ok := s.runtimeRecords[runtimeID]; ok {
+			normalized := normalizeRuntimeRecord(rt)
+			items[i].Runtime = &normalized
+		} else {
+			normalized := runtimeRecordForAgent(items[i].toAgent())
+			items[i].Runtime = &normalized
+		}
+	}
+	return rootAgentsState{
+		ProfileDefaults:  cloneProfile(s.profileDefaults),
+		DetectionResults: append([]ProfileDetectionResult(nil), s.detectionResults...),
+		Items:            items,
+	}
+}
+
+func (s *Service) shouldWriteRootAgentsState() bool {
+	if strings.TrimSpace(s.state) == "" {
+		return false
+	}
+	if s.stateIsDefaultRootStatePath() {
+		return true
+	}
+	return rootSectionExists(s.state, "agents")
+}
+
+func (s *Service) stateLooksLikeRootState() bool {
+	if strings.TrimSpace(s.state) == "" {
+		return false
+	}
+	return rootSectionExists(s.state, "agents")
+}
+
+func (s *Service) stateIsDefaultRootStatePath() bool {
+	path := strings.TrimSpace(s.state)
+	return filepath.Base(path) == config.StateFileName && filepath.Base(filepath.Dir(path)) == config.AppDirName
+}
+
+func rootSectionExists(path, section string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return false
+	}
+	value, ok := raw[section]
+	if !ok || len(value) == 0 {
+		return false
+	}
+	var probe map[string]any
+	return json.Unmarshal(value, &probe) == nil
+}
+
 func (s *Service) normalizeLoadedAgent(a Agent) (Agent, error) {
 	a = *cloneAgent(&a)
-	a.ID = strings.TrimSpace(a.ID)
+	a.ID = canonicalAgentID(a.ID)
 	if a.ID == "" {
 		return Agent{}, fmt.Errorf("id is required")
 	}
@@ -289,6 +439,12 @@ func (s *Service) normalizeLoadedAgent(a Agent) (Agent, error) {
 		return Agent{}, fmt.Errorf("name is required")
 	}
 	a.Role = normalizeRole(a.Role)
+	if isManagerAgent(a) {
+		a.ID = ManagerUserID
+		if strings.TrimSpace(a.RuntimeID) == "" || strings.TrimSpace(a.RuntimeID) == "rt-u-manager" || strings.TrimSpace(a.RuntimeID) == "rt-manager" {
+			a.RuntimeID = runtimeIDForAgentID(ManagerUserID)
+		}
+	}
 	a.RuntimeID = normalizeRuntimeID(a.RuntimeID, a.ID)
 	if a.RuntimeKind == "" {
 		return Agent{}, fmt.Errorf("runtime_kind is required")

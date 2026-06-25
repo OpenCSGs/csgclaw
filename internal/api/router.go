@@ -153,6 +153,11 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 }
 
 func (h *Handler) registerChannelRoutes(router chi.Router) {
+	router.Patch("/api/v1/channels/csgclaw/users/{id}", h.updateCsgclawUser)
+	router.Patch("/api/v1/channels/csgclaw/users/{id}/", h.updateCsgclawUser)
+	router.Delete("/api/v1/channels/csgclaw/users/{id}", h.deleteCsgclawUser)
+	router.Delete("/api/v1/channels/csgclaw/users/{id}/", h.deleteCsgclawUser)
+
 	router.Route("/api/v1/channels", func(r chi.Router) {
 		r.Route("/{channel}/participants", func(r chi.Router) {
 			r.Get("/", h.listParticipants)
@@ -173,7 +178,9 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Get("/", h.listUsers)
 			r.Post("/", h.createUser)
 			r.Patch("/{id}", h.updateCsgclawUser)
+			r.Patch("/{id}/", h.updateCsgclawUser)
 			r.Delete("/{id}", h.deleteCsgclawUser)
+			r.Delete("/{id}/", h.deleteCsgclawUser)
 		})
 		r.Route("/csgclaw/rooms", func(r chi.Router) {
 			r.Get("/", h.listRooms)

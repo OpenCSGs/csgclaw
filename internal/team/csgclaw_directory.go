@@ -167,8 +167,11 @@ func (d *CSGClawTeamDirectory) channelUserIDForParticipant(participantID string)
 			}
 		}
 	}
-	if participantID == agent.ManagerParticipantID || participantID == im.AdminUserID {
-		return participantID
+	if participantID == agent.ManagerParticipantID {
+		return im.ManagerUserID
+	}
+	if participantID == "pt-admin" || participantID == im.AdminUserID {
+		return im.AdminUserID
 	}
 	if d != nil && d.im != nil {
 		if user, ok := d.im.User(participantID); ok {
@@ -178,7 +181,7 @@ func (d *CSGClawTeamDirectory) channelUserIDForParticipant(participantID string)
 			return resolved
 		}
 	}
-	return "u-" + participantID
+	return "user-" + strings.TrimPrefix(cleanParticipantID(participantID), "pt-")
 }
 
 func (d *CSGClawTeamDirectory) participantIDForChannelUser(userID string) string {
@@ -193,18 +196,12 @@ func (d *CSGClawTeamDirectory) participantIDForChannelUser(userID string) string
 			}
 		}
 	}
-	if userID == agent.ManagerParticipantID || userID == im.AdminUserID {
-		return userID
-	}
-	if strings.HasPrefix(userID, "u-") && len(userID) > len("u-") {
-		return strings.TrimPrefix(userID, "u-")
-	}
-	return userID
+	return cleanParticipantID(userID)
 }
 
 func memberProfileFromUser(user im.User) MemberProfile {
 	return MemberProfile{
-		ID:   strings.TrimSpace(user.ID),
+		ID:   cleanParticipantID(user.ID),
 		Name: strings.TrimSpace(user.Name),
 		Role: strings.TrimSpace(user.Role),
 	}

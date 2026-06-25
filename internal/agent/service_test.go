@@ -32,6 +32,27 @@ func init() {
 	testDefaultServiceOption = withTestPicoClawSandboxRuntime()
 }
 
+func TestMain(m *testing.M) {
+	testHome, err := os.MkdirTemp("", "csgclaw-agent-test-home-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create test home: %v\n", err)
+		os.Exit(1)
+	}
+	oldHome, hadHome := os.LookupEnv("HOME")
+	if err := os.Setenv("HOME", testHome); err != nil {
+		fmt.Fprintf(os.Stderr, "set test HOME: %v\n", err)
+		os.Exit(1)
+	}
+	code := m.Run()
+	if hadHome {
+		_ = os.Setenv("HOME", oldHome)
+	} else {
+		_ = os.Unsetenv("HOME")
+	}
+	_ = os.RemoveAll(testHome)
+	os.Exit(code)
+}
+
 type fakeRuntime struct{}
 
 type fakeProvider struct {
@@ -596,8 +617,8 @@ func TestCreateRejectsDuplicateAgentIDWithoutReplace(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	svc.agents["u-alice"] = Agent{
-		ID:        "u-alice",
+	svc.agents["agent-alice"] = Agent{
+		ID:        "agent-alice",
 		Name:      "alice",
 		Status:    "active",
 		CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC),
@@ -614,7 +635,7 @@ func TestCreateRejectsDuplicateAgentIDWithoutReplace(t *testing.T) {
 	if err == nil {
 		t.Fatal("Create() duplicate error = nil, want duplicate-id error")
 	}
-	if !strings.Contains(err.Error(), `agent id "u-alice" already exists`) {
+	if !strings.Contains(err.Error(), `agent id "agent-alice" already exists`) {
 		t.Fatalf("Create() duplicate error = %q, want duplicate-id error", err)
 	}
 }
@@ -663,13 +684,13 @@ func TestCreateWorkerUsesCodexRuntimeWhenRequested(t *testing.T) {
 		WithRuntime(fakeAgentRuntime{
 			kind: RuntimeKindCodex,
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-				if spec.AgentID != "u-alice" {
-					t.Fatalf("Create() agent id = %q, want %q", spec.AgentID, "u-alice")
+				if spec.AgentID != "agent-alice" {
+					t.Fatalf("Create() agent id = %q, want %q", spec.AgentID, "agent-alice")
 				}
 				if spec.AgentName != "alice" {
 					t.Fatalf("Create() agent name = %q, want %q", spec.AgentName, "alice")
 				}
-				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
+				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
 					t.Fatalf("Create() profile base url = %q, want %q", got, want)
 				}
 				if got, want := spec.Profile.APIKey, "shared-token"; got != want {
@@ -1254,7 +1275,7 @@ func TestUpdateInstructionsRefreshesCodexWorkspaceAgentsFile(t *testing.T) {
 	if len(reconcileCalls) != 1 {
 		t.Fatalf("ReconcileConfig() calls = %d, want 1", len(reconcileCalls))
 	}
-	if got, want := reconcileCalls[0].handle.RuntimeID, "rt-u-dev"; got != want {
+	if got, want := reconcileCalls[0].handle.RuntimeID, "rt-agent-dev"; got != want {
 		t.Fatalf("ReconcileConfig() runtime id = %q, want %q", got, want)
 	}
 }
@@ -1339,7 +1360,7 @@ func TestUpdateRuntimeOptionsSyncsCodexWorkspaceAgentsFile(t *testing.T) {
 	if len(reconcileCalls) != 1 {
 		t.Fatalf("ReconcileConfig() calls = %d, want 1", len(reconcileCalls))
 	}
-	if got, want := reconcileCalls[0].handle.RuntimeID, "rt-u-dev"; got != want {
+	if got, want := reconcileCalls[0].handle.RuntimeID, "rt-agent-dev"; got != want {
 		t.Fatalf("ReconcileConfig() runtime id = %q, want %q", got, want)
 	}
 	if got := reconcileCalls[0].change.Previous.Options["local_workspace_dir"]; got != "/tmp/old" {
@@ -1506,16 +1527,16 @@ func TestCreateWorkerProvisionsRuntimeBeforeNew(t *testing.T) {
 			kind: RuntimeKindCodex,
 			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
 				callOrder = append(callOrder, "provision")
-				if req.RuntimeID != "rt-u-alice" {
-					t.Fatalf("Provision() runtime id = %q, want %q", req.RuntimeID, "rt-u-alice")
+				if req.RuntimeID != "rt-agent-alice" {
+					t.Fatalf("Provision() runtime id = %q, want %q", req.RuntimeID, "rt-agent-alice")
 				}
-				if req.AgentID != "u-alice" {
-					t.Fatalf("Provision() agent id = %q, want %q", req.AgentID, "u-alice")
+				if req.AgentID != "agent-alice" {
+					t.Fatalf("Provision() agent id = %q, want %q", req.AgentID, "agent-alice")
 				}
 				if req.AgentName != "alice" {
 					t.Fatalf("Provision() agent name = %q, want %q", req.AgentName, "alice")
 				}
-				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
+				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
 					t.Fatalf("Provision() profile base url = %q, want %q", got, want)
 				}
 				if got, want := req.Profile.APIKey, "shared-token"; got != want {
@@ -1593,7 +1614,7 @@ func TestCreateWorkerProvisionsParticipantIDSeparateFromAgentID(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateWorker() error = %v", err)
 	}
-	if got, want := gotParticipantID, "agent-hhtz4b"; got != want {
+	if got, want := gotParticipantID, "pt-hhtz4b"; got != want {
 		t.Fatalf("Provision() participant id = %q, want %q", got, want)
 	}
 }
@@ -1773,7 +1794,7 @@ func TestRecreateTriggersLifecycleObserver(t *testing.T) {
 			kind: RuntimeKindCodex,
 			del:  func(context.Context, agentruntime.Handle) error { return nil },
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
+				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
 					t.Fatalf("Create() profile base url = %q, want %q", got, want)
 				}
 				if got, want := spec.Profile.APIKey, "shared-token"; got != want {
@@ -1789,8 +1810,8 @@ func TestRecreateTriggersLifecycleObserver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	svc.agents["u-alice"] = Agent{
-		ID:          "u-alice",
+	svc.agents["agent-alice"] = Agent{
+		ID:          "agent-alice",
 		Name:        "alice",
 		Avatar:      "avatar/cartoon-7.png",
 		Role:        RoleWorker,
@@ -1819,8 +1840,8 @@ func TestRecreateTriggersLifecycleObserver(t *testing.T) {
 	if got.Avatar != "avatar/cartoon-7.png" {
 		t.Fatalf("Recreate().Avatar = %q, want %q", got.Avatar, "avatar/cartoon-7.png")
 	}
-	if len(observer.ensureCalls) != 1 || observer.ensureCalls[0].ID != "u-alice" {
-		t.Fatalf("EnsureAgent() calls = %+v, want one call for u-alice", observer.ensureCalls)
+	if len(observer.ensureCalls) != 1 || observer.ensureCalls[0].ID != "agent-alice" {
+		t.Fatalf("EnsureAgent() calls = %+v, want one call for agent-alice", observer.ensureCalls)
 	}
 }
 
@@ -1841,16 +1862,16 @@ func TestRecreateProvisionsRuntimeBeforeNew(t *testing.T) {
 			},
 			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
 				callOrder = append(callOrder, "provision")
-				if req.RuntimeID != "rt-u-alice" {
-					t.Fatalf("Provision() runtime id = %q, want %q", req.RuntimeID, "rt-u-alice")
+				if req.RuntimeID != "rt-agent-alice" {
+					t.Fatalf("Provision() runtime id = %q, want %q", req.RuntimeID, "rt-agent-alice")
 				}
-				if req.AgentID != "u-alice" {
-					t.Fatalf("Provision() agent id = %q, want %q", req.AgentID, "u-alice")
+				if req.AgentID != "agent-alice" {
+					t.Fatalf("Provision() agent id = %q, want %q", req.AgentID, "agent-alice")
 				}
 				if req.AgentName != "alice" {
 					t.Fatalf("Provision() agent name = %q, want %q", req.AgentName, "alice")
 				}
-				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
+				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
 					t.Fatalf("Provision() profile base url = %q, want %q", got, want)
 				}
 				if got, want := req.Profile.APIKey, "shared-token"; got != want {
@@ -1916,8 +1937,8 @@ func TestDeleteTriggersLifecycleObserver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	svc.agents["u-alice"] = Agent{
-		ID:              "u-alice",
+	svc.agents["agent-alice"] = Agent{
+		ID:              "agent-alice",
 		Name:            "alice",
 		Role:            RoleWorker,
 		RuntimeID:       "rt-u-alice",
@@ -1927,13 +1948,13 @@ func TestDeleteTriggersLifecycleObserver(t *testing.T) {
 		AgentProfile:    AgentProfile{Name: "alice", Provider: ProviderCodex, ModelID: "gpt-5.4", ProfileComplete: true},
 		ProfileComplete: true,
 	}
-	svc.syncRuntimeRecordLocked(svc.agents["u-alice"])
+	svc.syncRuntimeRecordLocked(svc.agents["agent-alice"])
 
 	if err := svc.Delete(context.Background(), "u-alice"); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
-	if len(observer.stopCalls) != 1 || observer.stopCalls[0] != "u-alice" {
-		t.Fatalf("StopAgent() calls = %v, want [u-alice]", observer.stopCalls)
+	if len(observer.stopCalls) != 1 || observer.stopCalls[0] != "agent-alice" {
+		t.Fatalf("StopAgent() calls = %v, want [agent-alice]", observer.stopCalls)
 	}
 }
 
@@ -2020,13 +2041,16 @@ func TestBoxLiteProviderGatewayLifecycle(t *testing.T) {
 		t.Fatalf("CreateWorker().RuntimeKind = %q, want %q", worker.RuntimeKind, RuntimeKindPicoClawSandbox)
 	}
 
-	layout, err := testBuiltinLayout("alice", RuntimeKindPicoClawSandbox)
+	layout, err := svc.agentLayout(worker.ID, RuntimeKindPicoClawSandbox)
 	if err != nil {
-		t.Fatalf("testBuiltinLayout() error = %v", err)
+		t.Fatalf("svc.agentLayout() error = %v", err)
 	}
 	logPath := layout.HostLogPaths[0]
 	if logPath == "" {
-		t.Fatal("testBuiltinLayout() returned empty host log path")
+		t.Fatal("svc.agentLayout() returned empty host log path")
+	}
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(gateway log dir) error = %v", err)
 	}
 	if err := os.WriteFile(logPath, []byte("old line\nnew line\ngateway line\n"), 0o600); err != nil {
 		t.Fatalf("write gateway log: %v", err)
@@ -2189,7 +2213,7 @@ func TestCreateReplaceWorkerRecreatesExistingAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() replace error = %v", err)
 	}
-	if replaced.ID != "u-alice" || replaced.Name != "alice-v2" || replaced.Role != RoleWorker {
+	if replaced.ID != "agent-alice" || replaced.Name != "alice-v2" || replaced.Role != RoleWorker {
 		t.Fatalf("Create() replaced = %+v, want replaced worker", replaced)
 	}
 	if !hasBoxliteCLICommandArgs(runner.requests, "rm", "-f", "box-alice") {
@@ -2216,7 +2240,7 @@ func TestCreateReplaceRequiresExistingAgent(t *testing.T) {
 	if err == nil {
 		t.Fatal("Create() error = nil, want missing agent error")
 	}
-	if !strings.Contains(err.Error(), `agent "u-missing" not found`) {
+	if !strings.Contains(err.Error(), `agent "agent-missing" not found`) {
 		t.Fatalf("Create() error = %q, want missing agent error", err)
 	}
 }
@@ -2266,8 +2290,8 @@ func TestCreateReplaceFieldMaskMergesExistingAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() replace error = %v", err)
 	}
-	if replaced.ID != "u-alice" || replaced.Name != "alice-v2" {
-		t.Fatalf("Create() replaced = %+v, want id u-alice name alice-v2", replaced)
+	if replaced.ID != "agent-alice" || replaced.Name != "alice-v2" {
+		t.Fatalf("Create() replaced = %+v, want id agent-alice name alice-v2", replaced)
 	}
 	if replaced.Description != "worker" {
 		t.Fatalf("Create() description = %q, want preserved description", replaced.Description)
@@ -3141,8 +3165,8 @@ func TestLoadLegacyAgentSynthesizesRuntimeRecord(t *testing.T) {
 	if !ok {
 		t.Fatal("agentSnapshot() ok = false, want true")
 	}
-	if got.RuntimeID != "rt-u-alice" {
-		t.Fatalf("agentSnapshot().RuntimeID = %q, want %q", got.RuntimeID, "rt-u-alice")
+	if got.RuntimeID != "rt-agent-alice" {
+		t.Fatalf("agentSnapshot().RuntimeID = %q, want %q", got.RuntimeID, "rt-agent-alice")
 	}
 	if got.RuntimeKind != RuntimeKindPicoClawSandbox {
 		t.Fatalf("agentSnapshot().RuntimeKind = %q, want %q", got.RuntimeKind, RuntimeKindPicoClawSandbox)
@@ -3176,8 +3200,8 @@ func TestLoadLegacyAgentSynthesizesRuntimeRecord(t *testing.T) {
 	if len(persisted.Runtimes) != 1 {
 		t.Fatalf("saved runtimes len = %d, want 1", len(persisted.Runtimes))
 	}
-	if persisted.Agents[0].RuntimeID != "rt-u-alice" {
-		t.Fatalf("saved agent runtime_id = %q, want %q", persisted.Agents[0].RuntimeID, "rt-u-alice")
+	if persisted.Agents[0].RuntimeID != "rt-agent-alice" {
+		t.Fatalf("saved agent runtime_id = %q, want %q", persisted.Agents[0].RuntimeID, "rt-agent-alice")
 	}
 	if persisted.Agents[0].RuntimeKind != RuntimeKindPicoClawSandbox {
 		t.Fatalf("saved agent runtime_kind = %q, want %q", persisted.Agents[0].RuntimeKind, RuntimeKindPicoClawSandbox)
@@ -3283,7 +3307,7 @@ func TestLoadRuntimeRecordRequiresRuntimeKind(t *testing.T) {
 	}
 }
 
-func TestLoadManagerRequiresCanonicalIdentity(t *testing.T) {
+func TestLoadManagerRepairsLegacyManagerIdentity(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "agents.json")
 	data, err := json.Marshal(persistedState{
@@ -3304,9 +3328,16 @@ func TestLoadManagerRequiresCanonicalIdentity(t *testing.T) {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
-	_, err = NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath)
-	if err == nil || !strings.Contains(err.Error(), "manager id must be") {
-		t.Fatalf("NewService() error = %v, want canonical manager validation error", err)
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatalf("Agent(%q) ok=false", ManagerUserID)
+	}
+	if got.ID != ManagerUserID {
+		t.Fatalf("Agent().ID = %q, want %q", got.ID, ManagerUserID)
 	}
 }
 
@@ -3632,6 +3663,9 @@ func TestDeleteRetriesAgentHomeRemovalOnDirectoryNotEmpty(t *testing.T) {
 		if path == agentHome && removeCalls == 1 {
 			return &os.PathError{Op: "unlinkat", Path: filepath.Join(agentHome, "boxlite", "images"), Err: syscall.ENOTEMPTY}
 		}
+		if path == agentHome && removeCalls == 2 {
+			return &os.PathError{Op: "unlinkat", Path: filepath.Join(agentHome, "boxlite", "images"), Err: syscall.EACCES}
+		}
 		return os.RemoveAll(path)
 	}
 	defer func() {
@@ -3641,8 +3675,8 @@ func TestDeleteRetriesAgentHomeRemovalOnDirectoryNotEmpty(t *testing.T) {
 	if err := svc.Delete(context.Background(), "u-alice"); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
-	if removeCalls < 2 {
-		t.Fatalf("osRemoveAll() calls = %d, want at least 2", removeCalls)
+	if removeCalls < 3 {
+		t.Fatalf("osRemoveAll() calls = %d, want at least 3", removeCalls)
 	}
 	if _, err := os.Stat(agentHome); !os.IsNotExist(err) {
 		t.Fatalf("agent home still exists after delete: err=%v", err)
@@ -3938,7 +3972,7 @@ func TestStreamLogsFallsBackToSandboxTailWhenHostLogIsMissing(t *testing.T) {
 	}
 }
 
-func TestStreamLogsFollowUsesHostGatewayLogWithoutSandboxRuntime(t *testing.T) {
+func TestStreamLogsUsesAgentIDForHostGatewayLogWithoutSandboxRuntime(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -3946,16 +3980,16 @@ func TestStreamLogsFollowUsesHostGatewayLogWithoutSandboxRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	svc.agents["u-alice"] = Agent{
-		ID:          "u-alice",
-		Name:        "alice",
+	svc.agents["agent-dahym7"] = Agent{
+		ID:          "agent-dahym7",
+		Name:        "qa",
 		BoxID:       "box-123",
 		Role:        RoleWorker,
 		RuntimeKind: RuntimeKindPicoClawSandbox,
 		Status:      "running",
 		CreatedAt:   time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
 	}
-	layout, err := testBuiltinLayout("alice", RuntimeKindPicoClawSandbox)
+	layout, err := testBuiltinLayout("agent-dahym7", RuntimeKindPicoClawSandbox)
 	if err != nil {
 		t.Fatalf("testBuiltinLayout() error = %v", err)
 	}
@@ -3979,7 +4013,7 @@ func TestStreamLogsFollowUsesHostGatewayLogWithoutSandboxRuntime(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var out strings.Builder
-	if err := svc.StreamLogs(ctx, "u-alice", true, 1, cancelOnWrite{writer: &out, cancel: cancel}); err != nil {
+	if err := svc.StreamLogs(ctx, "agent-dahym7", false, 1, cancelOnWrite{writer: &out, cancel: cancel}); err != nil {
 		t.Fatalf("StreamLogs() error = %v", err)
 	}
 	if out.String() != "ready\n" {
@@ -4143,8 +4177,8 @@ func TestStartTriggersLifecycleObserver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	svc.agents["u-alice"] = Agent{
-		ID:              "u-alice",
+	svc.agents["agent-alice"] = Agent{
+		ID:              "agent-alice",
 		Name:            "alice",
 		Role:            RoleWorker,
 		RuntimeID:       "rt-u-alice",
@@ -4155,11 +4189,11 @@ func TestStartTriggersLifecycleObserver(t *testing.T) {
 		ProfileComplete: true,
 	}
 
-	if _, err := svc.Start(context.Background(), "u-alice"); err != nil {
+	if _, err := svc.Start(context.Background(), "agent-alice"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	if len(observer.ensureCalls) != 1 || observer.ensureCalls[0].ID != "u-alice" {
-		t.Fatalf("EnsureAgent() calls = %+v, want one call for u-alice", observer.ensureCalls)
+	if len(observer.ensureCalls) != 1 || observer.ensureCalls[0].ID != "agent-alice" {
+		t.Fatalf("EnsureAgent() calls = %+v, want one call for agent-alice", observer.ensureCalls)
 	}
 }
 
@@ -4176,7 +4210,7 @@ func TestStartProvisionsRuntimeBeforeStart(t *testing.T) {
 			kind: RuntimeKindCodex,
 			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
 				callOrder = append(callOrder, "provision")
-				if req.RuntimeID != "rt-u-alice" || req.AgentID != "u-alice" || req.AgentName != "alice" {
+				if req.RuntimeID != "rt-agent-alice" || req.AgentID != "agent-alice" || req.AgentName != "alice" {
 					t.Fatalf("Provision() request = %+v, want alice runtime identity", req)
 				}
 				return nil
@@ -4193,8 +4227,8 @@ func TestStartProvisionsRuntimeBeforeStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	svc.agents["u-alice"] = Agent{
-		ID:              "u-alice",
+	svc.agents["agent-alice"] = Agent{
+		ID:              "agent-alice",
 		Name:            "alice",
 		Role:            RoleWorker,
 		RuntimeID:       "rt-u-alice",
@@ -4205,7 +4239,7 @@ func TestStartProvisionsRuntimeBeforeStart(t *testing.T) {
 		ProfileComplete: true,
 	}
 
-	if _, err := svc.Start(context.Background(), "u-alice"); err != nil {
+	if _, err := svc.Start(context.Background(), "agent-alice"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	if got, want := strings.Join(callOrder, ","), "provision,start"; got != want {
@@ -4369,8 +4403,8 @@ func TestStartRefreshesCompleteWorkerGatewayConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	svc.agents["u-alice"] = Agent{
-		ID:              "u-alice",
+	svc.agents["agent-alice"] = Agent{
+		ID:              "agent-alice",
 		Name:            "alice",
 		Role:            RoleWorker,
 		RuntimeKind:     RuntimeKindPicoClawSandbox,
@@ -4381,16 +4415,20 @@ func TestStartRefreshesCompleteWorkerGatewayConfig(t *testing.T) {
 		CreatedAt:       time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
 	}
 
-	if _, err := svc.Start(context.Background(), "u-alice"); err != nil {
+	if _, err := svc.Start(context.Background(), "agent-alice"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
+	agentHome, err := agentHomeDir("agent-alice")
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
+	configPath := filepath.Join(agentHome, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("ReadFile(worker config) error = %v", err)
 	}
 	text := string(data)
-	for _, want := range []string{`"participant_id": "alice"`, `"model_name": "gpt-5.5"`, `"api_base": "http://10.0.0.8:18080/api/v1/agents/u-alice/llm"`} {
+	for _, want := range []string{`"participant_id": "pt-alice"`, `"model_name": "gpt-5.5"`, `"api_base": "http://10.0.0.8:18080/api/v1/agents/agent-alice/llm"`} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("worker config missing %q in:\n%s", want, text)
 		}
@@ -4411,8 +4449,8 @@ func TestStartConfiguredAgentsRecreatesMissingCompleteWorkerBoxes(t *testing.T) 
 			if image != "worker-image:1" {
 				t.Fatalf("createGatewayBox() image = %q, want %q", image, "worker-image:1")
 			}
-			if botID != "u-alice" {
-				t.Fatalf("createGatewayBox() botID = %q, want %q", botID, "u-alice")
+			if botID != "agent-alice" {
+				t.Fatalf("createGatewayBox() botID = %q, want %q", botID, "agent-alice")
 			}
 			if !profile.ProfileComplete || profile.Provider != ProviderCodex || profile.ModelID != "gpt-5.5" {
 				t.Fatalf("createGatewayBox() profile = %+v, want complete codex gpt-5.5", profile)
@@ -4549,7 +4587,7 @@ func TestCreateWorkerFromTemplateAppliesDefaultsAndOverlaysWorkspace(t *testing.
 		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, RuntimeKindPicoClawSandbox)
 	}
 
-	workspaceRoot, err := testBuiltinWorkspaceRoot("alice", RuntimeKindPicoClawSandbox)
+	workspaceRoot, err := testBuiltinWorkspaceRoot(got.ID, RuntimeKindPicoClawSandbox)
 	if err != nil {
 		t.Fatalf("agentWorkspaceRoot() error = %v", err)
 	}
@@ -4683,7 +4721,10 @@ func TestCreateOpenClawWorkerFromTemplateOverlaysOpenClawWorkspace(t *testing.T)
 		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, RuntimeKindOpenClawSandbox)
 	}
 
-	agentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")
+	agentHome, err := agentHomeDir(got.ID)
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
 	openclawWorkspace := filepath.Join(openclawsandbox.Root(agentHome), openclawsandbox.HostWorkspaceDir)
 	if _, err := os.Stat(filepath.Join(openclawWorkspace, "skills", "custom", "SKILL.md")); err != nil {
 		t.Fatalf("template skill missing from OpenClaw workspace after overlay: %v", err)
@@ -4733,7 +4774,7 @@ func TestCreateWorkerUsesConfiguredDefaultTemplate(t *testing.T) {
 		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, RuntimeKindPicoClawSandbox)
 	}
 
-	workspaceRoot, err := testBuiltinWorkspaceRoot("alice", RuntimeKindPicoClawSandbox)
+	workspaceRoot, err := testBuiltinWorkspaceRoot(got.ID, RuntimeKindPicoClawSandbox)
 	if err != nil {
 		t.Fatalf("agentWorkspaceRoot() error = %v", err)
 	}
@@ -5483,7 +5524,7 @@ func TestCreateWorkerAppliesTemplateDefaultsWithoutWorkspace(t *testing.T) {
 		t.Fatalf("Image = %q, want %q", got.Image, "worker-image:1")
 	}
 
-	workspaceRoot, err := testBuiltinWorkspaceRoot("alice", RuntimeKindPicoClawSandbox)
+	workspaceRoot, err := testBuiltinWorkspaceRoot(got.ID, RuntimeKindPicoClawSandbox)
 	if err != nil {
 		t.Fatalf("agentWorkspaceRoot() error = %v", err)
 	}
@@ -5550,7 +5591,7 @@ func TestHubPublishSpecUsesAgentWorkspaceSnapshot(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	workspaceRoot, err := testBuiltinWorkspaceRoot(created.Name, created.RuntimeKind)
+	workspaceRoot, err := testBuiltinWorkspaceRoot(created.ID, created.RuntimeKind)
 	if err != nil {
 		t.Fatalf("agentWorkspaceRoot() error = %v", err)
 	}
@@ -5608,7 +5649,10 @@ func TestHubPublishSpecUsesOpenClawWorkspaceSnapshot(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	agentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, created.Name)
+	agentHome, err := agentHomeDir(created.ID)
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
 	workspaceRoot := filepath.Join(openclawsandbox.Root(agentHome), openclawsandbox.HostWorkspaceDir)
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "PLAYBOOK.md"), []byte("openclaw workspace snapshot\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(PLAYBOOK.md) error = %v", err)
@@ -6049,8 +6093,10 @@ func TestEnsureBootstrapStateForceRecreatePrefersStoredManagerBoxID(t *testing.T
 func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agents.json")
 
-	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "")
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -6059,9 +6105,9 @@ func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testi
 	if err != nil {
 		t.Fatalf("svc.sandboxRuntimeHome() error = %v", err)
 	}
-	managerHome, err := agentHomeDir(ManagerName)
+	managerHome, err := svc.agentHomeDir(ManagerUserID)
 	if err != nil {
-		t.Fatalf("agentHomeDir() error = %v", err)
+		t.Fatalf("svc.agentHomeDir() error = %v", err)
 	}
 	stalePath := filepath.Join(managerHome, "stale.txt")
 	if err := os.MkdirAll(managerHome, 0o755); err != nil {
@@ -6113,8 +6159,6 @@ func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testi
 	}
 	defer ResetTestHooks()
 
-	dir := t.TempDir()
-	statePath := filepath.Join(dir, "agents.json")
 	data, err := json.Marshal(persistedState{
 		Agents: []persistedAgent{
 			{
@@ -6273,6 +6317,11 @@ func TestEnsureBootstrapStateReusesStoredManagerBoxIDWithoutForce(t *testing.T) 
 func TestEnsureBootstrapStateRecreatesManagerWithLegacyPicoClawBridgeConfig(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	seedSvc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
 	SetTestHooks(nil, nil)
 	defer ResetTestHooks()
@@ -6316,7 +6365,10 @@ func TestEnsureBootstrapStateRecreatesManagerWithLegacyPicoClawBridgeConfig(t *t
 			}, nil
 	}
 
-	managerHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName)
+	managerHome, err := seedSvc.agentHomeDir(ManagerUserID)
+	if err != nil {
+		t.Fatalf("seedSvc.agentHomeDir() error = %v", err)
+	}
 	configPath := filepath.Join(managerHome, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(config dir) error = %v", err)
@@ -6326,7 +6378,6 @@ func TestEnsureBootstrapStateRecreatesManagerWithLegacyPicoClawBridgeConfig(t *t
 		t.Fatalf("WriteFile(legacy config) error = %v", err)
 	}
 
-	statePath := filepath.Join(t.TempDir(), "agents.json")
 	data, err := json.Marshal(persistedState{
 		Agents: []persistedAgent{
 			{
@@ -6408,7 +6459,10 @@ func TestEnsureBootstrapManagerDoesNotRemoveExistingBoxWhenMigrationProvisionFai
 		return nil, sandbox.Info{}, nil
 	}
 
-	managerHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName)
+	managerHome, err := agentHomeDir(ManagerUserID)
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
 	configPath := filepath.Join(managerHome, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(config dir) error = %v", err)
@@ -6589,7 +6643,29 @@ func TestBoxRuntimeHomeUsesPerAgentDirectory(t *testing.T) {
 		t.Fatalf("svc.sandboxRuntimeHome() error = %v", err)
 	}
 
-	want := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice", config.RuntimeHomeDirName)
+	want := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "agent-alice", config.RuntimeHomeDirName)
+	if got != want {
+		t.Fatalf("sandboxRuntimeHome() = %q, want %q", got, want)
+	}
+}
+
+func TestBoxRuntimeHomeUsesServiceStateRoot(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	stateRoot := t.TempDir()
+	statePath := filepath.Join(stateRoot, "agents.json")
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.sandboxRuntimeHome("alice")
+	if err != nil {
+		t.Fatalf("svc.sandboxRuntimeHome() error = %v", err)
+	}
+
+	want := filepath.Join(stateRoot, managerAgentsDirName, "agent-alice", config.RuntimeHomeDirName)
 	if got != want {
 		t.Fatalf("sandboxRuntimeHome() = %q, want %q", got, want)
 	}
@@ -6895,7 +6971,7 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 		t.Fatalf("gatewayCreateSpec() RunUser = %q, want %q", spec.RunUser, runUser)
 	}
 
-	wantAgentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")
+	wantAgentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "agent-worker-1")
 	wantPicoClawRoot := picoclawsandbox.Root(wantAgentHome)
 	wantWorkspaceRoot := filepath.Join(picoclawsandbox.Root(wantAgentHome), picoclawsandbox.HostWorkspaceDir)
 	wantConfigRoot := wantPicoClawRoot
@@ -6941,7 +7017,7 @@ func TestGatewayProvisionRequestBuildsOpenClawWorkerAssets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gatewayProvisionRequest() error = %v", err)
 	}
-	wantAgentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")
+	wantAgentHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "agent-worker-1")
 	wantOpenClawRoot := openclawsandbox.Root(wantAgentHome)
 	if gateway.AgentHome != wantAgentHome {
 		t.Fatalf("Gateway.AgentHome = %q, want %q", gateway.AgentHome, wantAgentHome)
@@ -7732,7 +7808,11 @@ func TestUpdateAgentProfileSyncsGatewayHostConfigWithoutRecreate(t *testing.T) {
 		t.Fatal("UpdateAgentProfile() recreated gateway box, want host config sync only")
 	}
 
-	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
+	managerHome, err := agentHomeDir(ManagerUserID)
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
+	configPath := filepath.Join(managerHome, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("ReadFile(manager config) error = %v", err)

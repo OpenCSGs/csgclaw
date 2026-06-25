@@ -65,12 +65,12 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if created.ID != "qa" || created.Channel != "csgclaw" || created.Type != "agent" || created.AgentID != "u-qa" {
-		t.Fatalf("created participant = %+v, want csgclaw agent qa bound to u-qa", created)
+	if created.ID != "pt-qa" || created.Channel != "csgclaw" || created.Type != "agent" || created.AgentID != "agent-qa" {
+		t.Fatalf("created participant = %+v, want csgclaw agent qa bound to agent-qa", created)
 	}
-	createdAgent, ok := agentSvc.Agent("u-qa")
+	createdAgent, ok := agentSvc.Agent("agent-qa")
 	if !ok {
-		t.Fatal("agent u-qa was not created")
+		t.Fatal("agent agent-qa was not created")
 	}
 	if createdAgent.Avatar != "avatar/3D-5.png" {
 		t.Fatalf("agent avatar = %q, want %q", createdAgent.Avatar, "avatar/3D-5.png")
@@ -128,8 +128,8 @@ func TestCreateFeishuAgentParticipantViaAPIReusesExistingAgent(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if created.ID != "test" || created.Channel != "feishu" || created.AgentID != "u-qa" {
-		t.Fatalf("created participant = %+v, want feishu:test bound to u-qa", created)
+	if created.ID != "pt-test" || created.Channel != "feishu" || created.AgentID != "agent-qa" {
+		t.Fatalf("created participant = %+v, want feishu:pt-test bound to agent-qa", created)
 	}
 	if created.ChannelUserRef != "ou_xxx" || created.ChannelUserKind != "open_id" || created.ChannelAppRef != "cli_xxx" {
 		t.Fatalf("created channel identity = %+v, want Feishu app/open_id identity", created)
@@ -192,17 +192,17 @@ func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
 	}{
 		{
 			name:          "worker",
-			agentID:       "u-dev",
+			agentID:       "agent-dev",
 			agentName:     "dev",
 			role:          agent.RoleWorker,
-			participantID: "dev",
+			participantID: "pt-dev",
 		},
 		{
 			name:          "manager",
 			agentID:       agent.ManagerUserID,
 			agentName:     "manager",
 			role:          agent.RoleManager,
-			participantID: "manager",
+			participantID: "pt-manager",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -326,8 +326,8 @@ func TestDeleteFeishuAgentParticipantRemovesSameAgentFeishuBotsBeforeRecreate(t 
 			t.Fatalf("participant feishu:%s still exists after disconnect", id)
 		}
 	}
-	if len(recreated) != 1 || recreated[0] != "u-dev" {
-		t.Fatalf("recreated = %#v, want only %q", recreated, "u-dev")
+	if len(recreated) != 1 || recreated[0] != "agent-dev" {
+		t.Fatalf("recreated = %#v, want only %q", recreated, "agent-dev")
 	}
 }
 
@@ -357,8 +357,8 @@ func TestCreateFeishuHumanParticipantViaAPI(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if created.ID != "alice" || created.Type != "human" || created.AgentID != "" {
-		t.Fatalf("created participant = %+v, want unbound human alice", created)
+	if created.ID != "pt-alice" || created.Type != "human" || created.AgentID != "" {
+		t.Fatalf("created participant = %+v, want unbound human pt-alice", created)
 	}
 	if created.ChannelUserRef != "ou_alice" || created.ChannelUserKind != "open_id" || created.ChannelAppRef != "cli_xxx" {
 		t.Fatalf("created channel identity = %+v, want Feishu human open_id identity", created)
@@ -459,8 +459,8 @@ func TestParticipantMessageRouteSendsAsParticipantChannelUser(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("messages = %+v, want one delivered message", messages)
 	}
-	if messages[0].SenderID != "u-bob" || messages[0].Content != "hello from participant route" {
-		t.Fatalf("delivered message = %+v, want sender u-bob with posted content", messages[0])
+	if messages[0].SenderID != "pt-bob" || messages[0].Content != "hello from participant route" {
+		t.Fatalf("delivered message = %+v, want sender pt-bob with posted content", messages[0])
 	}
 }
 
@@ -565,7 +565,7 @@ func TestParticipantDeleteWithAgentCleanupRemovesCSGClawUser(t *testing.T) {
 	if _, ok := participantSvc.Get(participant.ChannelCSGClaw, "qa"); ok {
 		t.Fatal("participant csgclaw:qa still exists after delete")
 	}
-	if _, ok := agentSvc.Agent("u-qa"); ok {
+	if _, ok := agentSvc.Agent("agent-qa"); ok {
 		t.Fatal("agent u-qa still exists after delete")
 	}
 	if _, ok := imSvc.User("u-qa"); ok {
@@ -665,8 +665,8 @@ func TestParticipantEventsRouteCanonicalizesAgentIDAlias(t *testing.T) {
 
 	srv.Routes().ServeHTTP(writer, req)
 
-	if got := writer.String(); !strings.Contains(got, `"message_id":"msg-qa"`) || !strings.Contains(got, `"account":"agent-hhtz4b"`) {
-		t.Fatalf("event stream = %q, want replay delivered on canonical participant id agent-hhtz4b", got)
+	if got := writer.String(); !strings.Contains(got, `"message_id":"msg-qa"`) || !strings.Contains(got, `"account":"pt-hhtz4b"`) {
+		t.Fatalf("event stream = %q, want replay delivered on canonical participant id pt-hhtz4b", got)
 	}
 }
 
@@ -823,8 +823,8 @@ func TestPublishParticipantEventDeliversToParticipantIDWhenRoomUsesChannelUserRe
 
 	select {
 	case evt := <-events:
-		if evt.MessageID != "msg-1" || evt.Context.Account != "agent-hhtz4b" {
-			t.Fatalf("event = %+v, want participant-keyed delivery for agent-hhtz4b", evt)
+		if evt.MessageID != "msg-1" || evt.Context.Account != "pt-hhtz4b" {
+			t.Fatalf("event = %+v, want participant-keyed delivery for pt-hhtz4b", evt)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for participant-keyed bridge event")
@@ -894,7 +894,7 @@ func TestCSGClawMessageRouteDeliversToCanonicalParticipantWhenRoomUsesAgentID(t 
 	}
 	select {
 	case evt := <-events:
-		if evt.MessageID == "" || evt.RoomID != "room-1" || evt.Context.Account != "agent-hhtz4b" || evt.Text != "hello qa" {
+		if evt.MessageID == "" || evt.RoomID != "room-1" || evt.Context.Account != "pt-hhtz4b" || evt.Text != "hello qa" {
 			t.Fatalf("event = %+v, want route-created message delivered to canonical participant", evt)
 		}
 	case <-time.After(time.Second):
@@ -947,8 +947,8 @@ func TestParticipantEventsRouteReceivesParticipantIDQueue(t *testing.T) {
 	waitForCondition(t, time.Second, 10*time.Millisecond, func() bool {
 		return bridge.SubscriberCount(agent.ManagerParticipantID) > 0
 	})
-	if got := bridge.SubscriberCount(agent.ManagerUserID); got != 0 {
-		t.Fatalf("u-manager subscriber count = %d, want 0 because only participant ID should be used for CSGClaw delivery", got)
+	if got := bridge.SubscriberCount(agent.ManagerUserID); got == 0 {
+		t.Fatalf("u-manager subscriber count = %d, want alias to resolve to participant ID subscription", got)
 	}
 
 	room := im.Room{ID: "room-1", IsDirect: true, Members: []string{"u-admin", agent.ManagerParticipantID}}

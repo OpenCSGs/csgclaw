@@ -23,7 +23,7 @@ func TestPicoClawRuntimeHostAgentHomeUsesAgentRoot(t *testing.T) {
 		t.Fatalf("host.AgentHome() error = %v", err)
 	}
 
-	want := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "alice")
+	want := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "agent-alice")
 	if got != want {
 		t.Fatalf("host.AgentHome() = %q, want %q", got, want)
 	}

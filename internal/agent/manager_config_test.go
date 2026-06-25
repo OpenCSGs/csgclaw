@@ -175,7 +175,11 @@ func TestAgentPicoClawConfigNeedsParticipantRecreateRejectsLegacyBotID(t *testin
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
+	managerHome, err := agentHomeDir(ManagerUserID)
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
+	configPath := filepath.Join(managerHome, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(config dir) error = %v", err)
 	}
@@ -188,7 +192,7 @@ func TestAgentPicoClawConfigNeedsParticipantRecreateRejectsLegacyBotID(t *testin
 		t.Fatal("agentPicoClawConfigNeedsParticipantRecreate() = false, want true for legacy bot_id field")
 	}
 
-	currentConfig := `{"channels":{"csgclaw":{"enabled":true,"participant_id":"manager"}}}`
+	currentConfig := `{"channels":{"csgclaw":{"enabled":true,"participant_id":"pt-manager"}}}`
 	if err := os.WriteFile(configPath, []byte(currentConfig), 0o600); err != nil {
 		t.Fatalf("WriteFile(current config) error = %v", err)
 	}
@@ -201,7 +205,11 @@ func TestAgentPicoClawConfigNeedsFeishuRecreateWhenConfiguredChannelIsStale(t *t
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	configPath := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
+	managerHome, err := agentHomeDir(ManagerUserID)
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
+	configPath := filepath.Join(managerHome, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(config dir) error = %v", err)
 	}
@@ -284,7 +292,7 @@ func TestEnsureAgentPicoClawConfigUsesRuntimeRoot(t *testing.T) {
 		t.Fatalf("ensureAgentPicoClawConfig() error = %v", err)
 	}
 
-	wantRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "ux", picoclawsandbox.HostDir)
+	wantRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "agent-ux", picoclawsandbox.HostDir)
 	if root != wantRoot {
 		t.Fatalf("ensureAgentPicoClawConfig() = %q, want %q", root, wantRoot)
 	}

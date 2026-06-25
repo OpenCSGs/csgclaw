@@ -378,6 +378,14 @@ func DefaultPath() (string, error) {
 	return filepath.Join(dir, ConfigFileName), nil
 }
 
+func DefaultStatePath() (string, error) {
+	dir, err := DefaultDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, StateFileName), nil
+}
+
 func DefaultDomainDir(name string) (string, error) {
 	dir, err := DefaultDir()
 	if err != nil {
@@ -407,11 +415,7 @@ func DefaultHubRegistryPath() string {
 }
 
 func DefaultAgentsPath() (string, error) {
-	dir, err := DefaultAgentsDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, StateFileName), nil
+	return DefaultStatePath()
 }
 
 func DefaultIMStatePath() (string, error) {

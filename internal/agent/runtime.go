@@ -12,15 +12,15 @@ import (
 	"csgclaw/internal/sandbox"
 )
 
-func (s *Service) ensureRuntime(agentName string) (sandbox.Runtime, error) {
+func (s *Service) ensureRuntime(agentID string) (sandbox.Runtime, error) {
 	if testEnsureRuntimeHook != nil {
-		return testEnsureRuntimeHook(s, agentName)
+		return testEnsureRuntimeHook(s, agentID)
 	}
-	agentName = strings.TrimSpace(agentName)
-	if agentName == "" {
-		return nil, fmt.Errorf("agent name is required")
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return nil, fmt.Errorf("agent id is required")
 	}
-	homeDir, err := s.sandboxRuntimeHome(agentName)
+	homeDir, err := s.sandboxRuntimeHome(agentID)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (s *Service) ensureRuntimeAtHome(homeDir string) (sandbox.Runtime, error) {
 }
 
 func (s *Service) lookupBootstrapManager(ctx context.Context) (sandbox.Runtime, sandbox.Instance, error) {
-	rt, err := s.ensureRuntime(ManagerName)
+	rt, err := s.ensureRuntime(ManagerUserID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -171,22 +171,68 @@ func (s *Service) closeRuntime(homeDir string, rt sandbox.Runtime) error {
 	return rt.Close()
 }
 
-func (s *Service) sandboxRuntimeHome(agentName string) (string, error) {
-	return SandboxRuntimeHome(agentName)
-}
-
-func SandboxRuntimeHome(agentName string) (string, error) {
-	agentHome, err := agentHomeDir(agentName)
+func (s *Service) sandboxRuntimeHome(agentID string) (string, error) {
+	agentHome, err := s.agentHomeDir(agentID)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(agentHome, config.RuntimeHomeDirName), nil
 }
 
-func agentHomeDir(agentName string) (string, error) {
-	homeDir, err := os.UserHomeDir()
+func SandboxRuntimeHome(agentID string) (string, error) {
+	agentHome, err := agentHomeDir(agentID)
 	if err != nil {
-		return "", fmt.Errorf("resolve host home dir: %w", err)
+		return "", err
 	}
-	return filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, agentName), nil
+	return filepath.Join(agentHome, config.RuntimeHomeDirName), nil
+}
+
+func agentHomeDir(agentID string) (string, error) {
+	root, err := config.DefaultAgentsDir()
+	if err != nil {
+		return "", err
+	}
+	return agentHomeDirInRoot(root, agentID)
+}
+
+func (s *Service) agentHomeDir(agentID string) (string, error) {
+	root := ""
+	if s != nil {
+		root = strings.TrimSpace(s.agentsRoot)
+	}
+	if root == "" {
+		var err error
+		root, err = config.DefaultAgentsDir()
+		if err != nil {
+			return "", err
+		}
+	}
+	return agentHomeDirInRoot(root, agentID)
+}
+
+func serviceAgentsRoot(statePath string) string {
+	statePath = strings.TrimSpace(statePath)
+	if statePath == "" {
+		return ""
+	}
+	dir := filepath.Dir(statePath)
+	if filepath.Base(dir) == managerAgentsDirName {
+		return dir
+	}
+	return filepath.Join(dir, managerAgentsDirName)
+}
+
+func agentHomeDirInRoot(root, agentID string) (string, error) {
+	agentID = canonicalAgentID(agentID)
+	if agentID == "" {
+		return "", fmt.Errorf("agent id is required")
+	}
+	if strings.ContainsAny(agentID, " \t\r\n/\\") {
+		return "", fmt.Errorf("agent id must be path-safe: %s", agentID)
+	}
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return "", fmt.Errorf("agents root is required")
+	}
+	return filepath.Join(root, agentID), nil
 }

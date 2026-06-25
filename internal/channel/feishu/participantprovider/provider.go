@@ -77,7 +77,7 @@ func (p *ParticipantConfigProvider) BotConfigForAgent(agentID string) (string, f
 	if !ok {
 		return "", feishu.AppConfig{}, false
 	}
-	slog.Warn("using noncanonical feishu participant for agent",
+	slog.Debug("using feishu participant for agent",
 		"agent_id", agentID,
 		"participant_id", fallback.ID,
 		"canonical_participant_id", canonicalID)
@@ -85,16 +85,12 @@ func (p *ParticipantConfigProvider) BotConfigForAgent(agentID string) (string, f
 }
 
 func (p *ParticipantConfigProvider) DefaultAdminOpenID() (string, bool) {
-	item, ok := p.getParticipant(feishuAdminParticipantID)
-	if !ok {
+	store, err := p.openStore()
+	if err != nil {
+		slog.Warn("read feishu admin participant config failed", "error", err)
 		return "", false
 	}
-	if strings.TrimSpace(item.Type) != participant.TypeHuman ||
-		strings.TrimSpace(item.ChannelUserKind) != participant.ChannelUserKindOpenID {
-		return "", false
-	}
-	openID := strings.TrimSpace(item.ChannelUserRef)
-	return openID, openID != ""
+	return p.defaultAdminOpenIDFromStore(store)
 }
 
 func (p *ParticipantConfigProvider) MentionOpenID(participantID string) (string, bool) {
@@ -102,12 +98,7 @@ func (p *ParticipantConfigProvider) MentionOpenID(participantID string) (string,
 	if !ok {
 		return "", false
 	}
-	if strings.TrimSpace(item.Type) != participant.TypeHuman ||
-		strings.TrimSpace(item.ChannelUserKind) != participant.ChannelUserKindOpenID {
-		return "", false
-	}
-	openID := strings.TrimSpace(item.ChannelUserRef)
-	return openID, openID != ""
+	return openIDFromHumanParticipant(item)
 }
 
 func (p *ParticipantConfigProvider) Snapshot() feishu.Snapshot {
@@ -117,10 +108,8 @@ func (p *ParticipantConfigProvider) Snapshot() feishu.Snapshot {
 		return feishu.Snapshot{}
 	}
 	snapshot := feishu.Snapshot{Bots: make(map[string]feishu.AppConfig)}
-	if item, ok := store.Get(participant.ChannelFeishu, feishuAdminParticipantID); ok &&
-		strings.TrimSpace(item.Type) == participant.TypeHuman &&
-		strings.TrimSpace(item.ChannelUserKind) == participant.ChannelUserKindOpenID {
-		snapshot.AdminOpenID = strings.TrimSpace(item.ChannelUserRef)
+	if adminOpenID, ok := p.defaultAdminOpenIDFromStore(store); ok {
+		snapshot.AdminOpenID = adminOpenID
 	}
 	for _, item := range store.List(participant.ListOptions{Channel: participant.ChannelFeishu, Type: participant.TypeAgent}) {
 		app, ok := appConfigFromParticipant(item)
@@ -133,6 +122,30 @@ func (p *ParticipantConfigProvider) Snapshot() feishu.Snapshot {
 		snapshot.Bots = nil
 	}
 	return snapshot
+}
+
+func (p *ParticipantConfigProvider) defaultAdminOpenIDFromStore(store *participant.Store) (string, bool) {
+	if store == nil {
+		return "", false
+	}
+	for _, id := range []string{feishuAdminParticipantID, "pt-admin"} {
+		if item, ok := store.Get(participant.ChannelFeishu, id); ok {
+			if openID, ok := openIDFromHumanParticipant(item); ok {
+				return openID, true
+			}
+		}
+	}
+	for _, item := range store.List(participant.ListOptions{Channel: participant.ChannelFeishu, Type: participant.TypeHuman}) {
+		name := strings.ToLower(strings.TrimSpace(item.Name))
+		id := strings.ToLower(strings.TrimSpace(item.ID))
+		if name != "admin" && !strings.HasPrefix(id, "pt-admin") {
+			continue
+		}
+		if openID, ok := openIDFromHumanParticipant(item); ok {
+			return openID, true
+		}
+	}
+	return "", false
 }
 
 func (p *ParticipantConfigProvider) getParticipant(participantID string) (apitypes.Participant, bool) {
@@ -166,6 +179,15 @@ func appConfigFromParticipant(item apitypes.Participant) (feishu.AppConfig, bool
 		return feishu.AppConfig{}, false
 	}
 	return feishu.AppConfig{AppID: appID, AppSecret: appSecret}, true
+}
+
+func openIDFromHumanParticipant(item apitypes.Participant) (string, bool) {
+	if strings.TrimSpace(item.Type) != participant.TypeHuman ||
+		strings.TrimSpace(item.ChannelUserKind) != participant.ChannelUserKindOpenID {
+		return "", false
+	}
+	openID := strings.TrimSpace(item.ChannelUserRef)
+	return openID, openID != ""
 }
 
 func channelAppConfigString(values map[string]any, key string) string {
