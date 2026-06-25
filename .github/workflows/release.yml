@@ -126,9 +126,9 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          manifests=(internal/hub/templates/*/*/agent.toml)
+          manifests=(internal/template/embed/*/*/agent.toml)
           if [ ${#manifests[@]} -eq 0 ]; then
-            echo "no builtin agent manifests found under internal/hub/templates" >&2
+            echo "no builtin agent manifests found under internal/template/embed" >&2
             exit 1
           fi
           for manifest in "${manifests[@]}"; do
