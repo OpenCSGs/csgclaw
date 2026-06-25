@@ -1299,6 +1299,65 @@ models = ["gpt-test"]
 	}
 }
 
+func TestSavePreservesWindowsHubRegistryPathEscaping(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+access_token = "secret"
+
+[hub]
+default_registry = "builtin"
+default_publish_registry = "local"
+
+[[hub.registries]]
+name = "builtin"
+kind = "builtin"
+enabled = true
+
+[[hub.registries]]
+name = "local"
+kind = "local"
+path = "C:\\Users\\dangw\\.csgclaw\\hub"
+enabled = true
+
+[models]
+default = "default.gpt-test"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["gpt-test"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := cfg.Hub.Resolved().Registries[1].Path, `C:\Users\dangw\.csgclaw\hub`; got != want {
+		t.Fatalf("loaded hub path = %q, want %q", got, want)
+	}
+
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	saved := string(data)
+	if !strings.Contains(saved, `path = "C:\\Users\\dangw\\.csgclaw\\hub"`) {
+		t.Fatalf("saved config missing canonical Windows path:\n%s", saved)
+	}
+	if strings.Contains(saved, `path = "C:\\\\Users\\\\dangw\\\\.csgclaw\\\\hub"`) {
+		t.Fatalf("saved config double-escaped Windows path:\n%s", saved)
+	}
+}
+
 func TestSaveKeepsSandboxProviderUnsetWhenItUsesDynamicDefault(t *testing.T) {
 	restore := stubSandboxProviderExecutablePath(t, filepath.Join(t.TempDir(), "bin", "csgclaw"))
 	defer restore()

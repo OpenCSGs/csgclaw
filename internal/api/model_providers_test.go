@@ -185,6 +185,61 @@ func TestModelProviderCatalogCreateCheckAndSaveCustomProvider(t *testing.T) {
 	}
 }
 
+func TestModelProviderCreateKeepsWindowsHubRegistryPathStable(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+access_token = "secret"
+
+[hub]
+default_registry = "builtin"
+default_publish_registry = "local"
+
+[[hub.registries]]
+name = "builtin"
+kind = "builtin"
+enabled = true
+
+[[hub.registries]]
+name = "local"
+kind = "local"
+path = "C:\\Users\\dangw\\.csgclaw\\hub"
+enabled = true
+
+[models]
+default = "openai.gpt-test"
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+	srv := newModelProviderTestHandler(t, configPath, nil)
+
+	body := strings.NewReader(`{
+		"id":"openai",
+		"display_name":"Team OpenAI",
+		"base_url":"https://api.openai.example/v1",
+		"api_key":"sk-team",
+		"models":["gpt-test"]
+	}`)
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/model-providers", body))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(config) error = %v", err)
+	}
+	saved := string(data)
+	if !strings.Contains(saved, `path = "C:\\Users\\dangw\\.csgclaw\\hub"`) {
+		t.Fatalf("saved config missing canonical Windows path:\n%s", saved)
+	}
+	if strings.Contains(saved, `path = "C:\\\\Users\\\\dangw\\\\.csgclaw\\\\hub"`) {
+		t.Fatalf("saved config double-escaped Windows path:\n%s", saved)
+	}
+}
+
 func TestModelProviderCreateRejectsDuplicateDisplayName(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	content := `[server]

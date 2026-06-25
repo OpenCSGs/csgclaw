@@ -924,7 +924,11 @@ func parseBoolValue(raw string) (bool, error) {
 }
 
 func parseRawStringValue(raw string) string {
-	return strings.Trim(strings.TrimSpace(raw), `"`)
+	raw = strings.TrimSpace(raw)
+	if value, err := strconv.Unquote(raw); err == nil {
+		return value
+	}
+	return strings.Trim(raw, `"`)
 }
 
 func parseQuotedStringValue(raw string) string {
