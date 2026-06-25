@@ -34,7 +34,7 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 		"Available Commands:",
 		"participant  Manage channel participants.",
 		"pt           Manage channel participants.",
-		"hub          Discover agent templates.",
+		"template     Discover agent templates.",
 		"room         Manage IM rooms",
 		"member       Manage IM room members",
 		"message      Manage IM messages.",
@@ -71,7 +71,7 @@ func TestExecuteCompletionFish(t *testing.T) {
 	}
 }
 
-func TestExecuteHubListAcceptsOutputShorthand(t *testing.T) {
+func TestExecuteTemplateListAcceptsOutputShorthand(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{
 		stdout: &stdout,
@@ -87,11 +87,11 @@ func TestExecuteHubListAcceptsOutputShorthand(t *testing.T) {
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "-o", "json", "hub", "list"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "-o", "json", "template", "list"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), `"id": "builtin.gitlab-worker"`) {
-		t.Fatalf("stdout = %q, want JSON hub template payload", stdout.String())
+		t.Fatalf("stdout = %q, want JSON template payload", stdout.String())
 	}
 }
 
@@ -107,7 +107,7 @@ func TestExecuteHiddenCompleteUsesLiteCommandSet(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"participant\n", "pt\n", "hub\n", "room\n", "member\n", "message\n", "team\n", "completion\n"} {
+	for _, want := range []string{"participant\n", "pt\n", "template\n", "room\n", "member\n", "message\n", "team\n", "completion\n"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stdout = %q, want substring %q", got, want)
 		}

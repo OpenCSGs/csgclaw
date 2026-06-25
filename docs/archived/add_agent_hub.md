@@ -245,7 +245,7 @@ This is the better v1 choice because it reuses the existing agent creation path.
 Example:
 
 ```bash
-csgclaw hub create builtin/frontend-alice --name alice
+csgclaw template create builtin/frontend-alice --name alice
 ```
 
 This is clearer conceptually, but it duplicates part of agent creation UX.
@@ -253,7 +253,7 @@ This is clearer conceptually, but it duplicates part of agent creation UX.
 Recommendation:
 
 - v1: use Option A
-- optionally add `csgclaw hub list` and `csgclaw hub publish`
+- optionally add `csgclaw template list` and `csgclaw template publish`
 
 ## Workspace Materialization
 
@@ -279,7 +279,7 @@ This likely belongs in `internal/agent/workspace.go` as a reusable copy helper, 
 Example CLI:
 
 ```bash
-csgclaw hub publish --agent u-alice --registry local --name frontend-alice
+csgclaw template publish --agent u-alice --registry local --name frontend-alice
 ```
 
 Behavior:
@@ -326,9 +326,9 @@ For local CSGClaw support, these endpoints can live in `internal/api/` and be ba
 Recommended minimal commands:
 
 ```text
-csgclaw hub list
-csgclaw hub get <template>
-csgclaw hub publish --agent <id> [--registry <name>] [--name <template-name>]
+csgclaw template list
+csgclaw template get <template>
+csgclaw template publish --agent <id> [--registry <name>] [--name <template-name>]
 ```
 
 And extend:
@@ -370,7 +370,7 @@ At minimum:
 3. Implement local folder store.
 4. Implement built-in embedded store.
 5. Add `agent create --from-template` and workspace overlay support.
-6. Add `hub publish`.
+6. Add `template publish`.
 7. Add HTTP endpoints for local API.
 8. Add remote HTTP store using the same API shape.
 
@@ -537,7 +537,7 @@ Why server-side resolution:
 - avoids duplicating registry access logic in the CLI
 - keeps the CLI as a thin API client
 
-### Step 7: Add hub list/get API and CLI
+### Step 7: Add template list/get API and CLI
 
 Goal:
 
@@ -552,8 +552,8 @@ Code areas:
 
 Changes:
 
-- add `csgclaw hub list`
-- add `csgclaw hub get <template>`
+- add `csgclaw template list`
+- add `csgclaw template get <template>`
 - add `GET /api/v1/hub/templates`
 - add `GET /api/v1/hub/templates/{id}`
 
@@ -580,7 +580,7 @@ Code areas:
 
 Changes:
 
-- add `csgclaw hub publish --agent <id> --registry <name>`
+- add `csgclaw template publish --agent <id> --registry <name>`
 - add `POST /api/v1/hub/templates`
 - snapshot agent workspace and publish into selected writable registry
 
@@ -627,8 +627,8 @@ To keep each change set reviewable, prefer these PR boundaries:
 3. workspace overlay helper + tests
 4. builtin store
 5. API support for template-based `agent create`
-6. `hub list/get` CLI + API
-7. `hub publish` CLI + API
+6. `template list/get` CLI + API
+7. `template publish` CLI + API
 8. remote store + contract tests
 
 Each boundary leaves the repo in a usable state and reduces rollback risk.
@@ -660,7 +660,7 @@ The simplest solid v1 is:
 - add `internal/hub` with `builtin`, `local`, and later `remote` stores
 - store each template as `agent.toml + workspace/`
 - extend `agent create` with `--from-template`
-- add `csgclaw hub list/get/publish`
+- add `csgclaw template list/get/publish`
 - overlay hub workspace onto the normal runtime base workspace
 
 That gives users a practical template registry without forcing a large redesign of current agent lifecycle code.

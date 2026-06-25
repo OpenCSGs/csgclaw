@@ -9,9 +9,9 @@ import (
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub/templates"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox/hostuser"
+	templateembed "csgclaw/internal/template/embed"
 )
 
 func TestProvisionPreparesGatewayAssets(t *testing.T) {
@@ -36,7 +36,7 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 			ManagerBaseURL:    "http://127.0.0.1:18080",
 			AgentHome:         agentHome,
 			ProjectsRoot:      projectsRoot,
-			WorkspaceTemplate: templates.PicoClawWorkerRoot,
+			WorkspaceTemplate: templateembed.PicoClawWorkerRoot,
 		},
 	}); err != nil {
 		t.Fatalf("Provision() error = %v", err)
@@ -88,7 +88,7 @@ func TestGatewayCreateSpecMountsPicoClawRuntimeRoot(t *testing.T) {
 			ManagerBaseURL:    "http://127.0.0.1:18080",
 			AgentHome:         agentHome,
 			ProjectsRoot:      projectsRoot,
-			WorkspaceTemplate: templates.PicoClawWorkerRoot,
+			WorkspaceTemplate: templateembed.PicoClawWorkerRoot,
 		},
 	}); err != nil {
 		t.Fatalf("Provision() error = %v", err)

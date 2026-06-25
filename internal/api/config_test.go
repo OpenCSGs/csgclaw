@@ -12,7 +12,7 @@ import (
 
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub"
+	hub "csgclaw/internal/template"
 	"csgclaw/internal/upgrade"
 )
 

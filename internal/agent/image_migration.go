@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"csgclaw/internal/hub"
+	hub "csgclaw/internal/template"
 )
 
 func (s *Service) withRuntimeImageMigrationStatus(ctx context.Context, a Agent) Agent {

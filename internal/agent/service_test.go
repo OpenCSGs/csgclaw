@@ -16,8 +16,6 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub"
-	"csgclaw/internal/hub/templates"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
@@ -26,6 +24,8 @@ import (
 	"csgclaw/internal/sandbox/boxlitecli"
 	"csgclaw/internal/sandbox/hostuser"
 	"csgclaw/internal/sandbox/sandboxtest"
+	hub "csgclaw/internal/template"
+	templateembed "csgclaw/internal/template/embed"
 )
 
 func init() {
@@ -5121,7 +5121,7 @@ func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
 		t.Fatal("Recreate().AgentProfile.EnvRestartRequired = true, want false")
 	}
 
-	wantBuiltIn, err := templates.FS().Open(templates.WorkspacePath(templates.PicoClawManagerRoot) + "/skills/agent-teams/SKILL.md")
+	wantBuiltIn, err := templateembed.FS().Open(templateembed.WorkspacePath(templateembed.PicoClawManagerRoot) + "/skills/agent-teams/SKILL.md")
 	if err != nil {
 		t.Fatalf("open embedded agent-teams skill: %v", err)
 	}
@@ -6755,15 +6755,15 @@ func TestGatewayProvisionRequestBuildsOpenClawWorkerAssets(t *testing.T) {
 	if gateway.AgentHome != wantAgentHome {
 		t.Fatalf("Gateway.AgentHome = %q, want %q", gateway.AgentHome, wantAgentHome)
 	}
-	if gateway.WorkspaceTemplate != templates.OpenClawWorkerRoot {
-		t.Fatalf("Gateway.WorkspaceTemplate(worker) = %q, want %q", gateway.WorkspaceTemplate, templates.OpenClawWorkerRoot)
+	if gateway.WorkspaceTemplate != templateembed.OpenClawWorkerRoot {
+		t.Fatalf("Gateway.WorkspaceTemplate(worker) = %q, want %q", gateway.WorkspaceTemplate, templateembed.OpenClawWorkerRoot)
 	}
 	managerGateway, err := svc.gatewayProvisionRequest(RuntimeKindOpenClawSandbox, ManagerName, ManagerUserID)
 	if err != nil {
 		t.Fatalf("gatewayProvisionRequest(manager) error = %v", err)
 	}
-	if managerGateway.WorkspaceTemplate != templates.OpenClawManagerRoot {
-		t.Fatalf("Gateway.WorkspaceTemplate(manager) = %q, want %q", managerGateway.WorkspaceTemplate, templates.OpenClawManagerRoot)
+	if managerGateway.WorkspaceTemplate != templateembed.OpenClawManagerRoot {
+		t.Fatalf("Gateway.WorkspaceTemplate(manager) = %q, want %q", managerGateway.WorkspaceTemplate, templateembed.OpenClawManagerRoot)
 	}
 	rt := openclawsandbox.New(sandboxgateway.Dependencies{})
 	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{

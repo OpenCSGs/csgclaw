@@ -960,24 +960,6 @@
   box-shadow: 0 1px 2px 0 rgba(10, 13, 18, 0.05);
 }
 
-.template-role-badge {
-  width: fit-content;
-  padding: 2px 8px;
-  border: 1px solid #abefc6;
-  border-radius: 6px;
-  background: #ecfdf3;
-  color: #027a48;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 400;
-}
-
-:root[data-theme="dark"] .template-role-badge {
-  border-color: #067647;
-  background: #053321;
-  color: #75e0a7;
-}
-
 .workspace-row-icon-clickable {
   cursor: pointer;
 }

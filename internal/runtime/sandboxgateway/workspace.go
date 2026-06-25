@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"csgclaw/internal/hub/templates"
+	templateembed "csgclaw/internal/template/embed"
 )
 
 var (
@@ -41,10 +41,10 @@ func EnsureEmbeddedWorkspace(templateRoot, dstRoot string) error {
 	if templateRoot == "" {
 		return fmt.Errorf("runtime template root is required")
 	}
-	if _, err := fs.Stat(templates.FS(), templates.ManifestPath(templateRoot)); err != nil {
+	if _, err := fs.Stat(templateembed.FS(), templateembed.ManifestPath(templateRoot)); err != nil {
 		return fmt.Errorf("stat embedded runtime template manifest %q: %w", templateRoot, err)
 	}
-	return copyWorkspaceFS(templates.FS(), templates.WorkspacePath(templateRoot), dstRoot, "embedded workspace", false)
+	return copyWorkspaceFS(templateembed.FS(), templateembed.WorkspacePath(templateRoot), dstRoot, "embedded workspace", false)
 }
 
 func EnsureWorkspaceProjectsMountpoint(workspaceRoot string) error {

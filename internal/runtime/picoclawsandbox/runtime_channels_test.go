@@ -6,8 +6,8 @@ import (
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub/templates"
 	agentruntime "csgclaw/internal/runtime"
+	templateembed "csgclaw/internal/template/embed"
 )
 
 func TestRuntimeSetFeishuProviderUpdatesGatewayCreateSpecEnv(t *testing.T) {
@@ -38,7 +38,7 @@ func TestRuntimeSetFeishuProviderUpdatesGatewayCreateSpecEnv(t *testing.T) {
 			ManagerBaseURL:    "http://127.0.0.1:18080",
 			AgentHome:         t.TempDir(),
 			ProjectsRoot:      t.TempDir(),
-			WorkspaceTemplate: templates.PicoClawWorkerRoot,
+			WorkspaceTemplate: templateembed.PicoClawWorkerRoot,
 		},
 	}); err != nil {
 		t.Fatalf("Provision() error = %v", err)

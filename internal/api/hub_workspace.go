@@ -9,7 +9,7 @@ import (
 
 	"csgclaw/internal/agentworkspace"
 	"csgclaw/internal/apitypes"
-	"csgclaw/internal/hub"
+	hub "csgclaw/internal/template"
 )
 
 func (h *Handler) presentHubTemplateDetail(ctx context.Context, item hub.Template) (apitypes.HubTemplate, error) {

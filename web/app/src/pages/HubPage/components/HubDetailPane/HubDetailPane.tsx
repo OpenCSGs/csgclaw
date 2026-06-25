@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FileCode2 } from "lucide-react";
 import { formatHubDateTime, isDeletableHubTemplate } from "@/models/hubWorkspace";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
-import { localizeRole, localizeTemplateSourceTag } from "@/shared/i18n";
+import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { HubIcon } from "@/components/ui/Icons";
 import {
   Button,
@@ -224,9 +224,6 @@ export function HubDetailPane({
                       <h2>{selectedTemplate.name || selectedTemplate.id}</h2>
                       <p>{selectedTemplate.description || selectedTemplate.id}</p>
                       <div className="hub-inspector-badge-row">
-                        <span className="mini-badge template-role-badge">
-                          {localizeRole(selectedTemplate.role || "worker", t)}
-                        </span>
                         <span className="mini-badge template-runtime-badge">
                           {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind || "-"}
                         </span>
@@ -257,10 +254,6 @@ export function HubDetailPane({
               </div>
 
               <div className="hub-inspector-grid">
-                <div className="hub-inspector-field">
-                  <span>{t("roleLabel")}</span>
-                  <strong>{localizeRole(selectedTemplate.role || "worker", t)}</strong>
-                </div>
                 <div className="hub-inspector-field">
                   <span>{t("hubSourceLabel")}</span>
                   <strong>{localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}</strong>

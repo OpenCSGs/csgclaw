@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub/templates"
 	agentruntime "csgclaw/internal/runtime"
+	templateembed "csgclaw/internal/template/embed"
 )
 
 func TestProvisionPreparesGatewayAssets(t *testing.T) {
@@ -34,7 +34,7 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 			ManagerBaseURL:    "http://127.0.0.1:18080",
 			AgentHome:         agentHome,
 			ProjectsRoot:      projectsRoot,
-			WorkspaceTemplate: templates.OpenClawWorkerRoot,
+			WorkspaceTemplate: templateembed.OpenClawWorkerRoot,
 		},
 	}); err != nil {
 		t.Fatalf("Provision() error = %v", err)

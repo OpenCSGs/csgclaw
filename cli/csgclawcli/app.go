@@ -11,13 +11,13 @@ import (
 
 	"csgclaw/cli/command"
 	completioncmd "csgclaw/cli/completion"
-	hubcmd "csgclaw/cli/hub"
 	"csgclaw/cli/member"
 	"csgclaw/cli/message"
 	participantcmd "csgclaw/cli/participant"
 	"csgclaw/cli/room"
 	skillcmd "csgclaw/cli/skill"
 	teamcmd "csgclaw/cli/team"
+	templatecmd "csgclaw/cli/template"
 	"csgclaw/internal/apiclient"
 	appversion "csgclaw/internal/version"
 )
@@ -70,7 +70,7 @@ func (a *App) registerDefaultCommands() {
 	a.AddCommand(
 		participantcmd.NewCmd(),
 		participantcmd.NewAliasCmd("pt"),
-		hubcmd.NewCmd(),
+		templatecmd.NewCmd(),
 		room.NewCmd(),
 		member.NewCmd(),
 		message.NewCmd(),

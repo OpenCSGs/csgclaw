@@ -84,7 +84,7 @@ func FullSpec() CommandSpec {
 				},
 			},
 			agentSpec(),
-			hubSpec(),
+			templateSpec(),
 			skillSpec(),
 			modelSpec(),
 			participantSpec("participant"),
@@ -106,7 +106,7 @@ func LiteSpec() CommandSpec {
 		Children: []CommandSpec{
 			participantSpec("participant"),
 			participantSpec("pt"),
-			hubSpec(),
+			templateSpec(),
 			roomSpec(),
 			memberSpec(),
 			messageSpec(),
@@ -269,16 +269,16 @@ func agentSpec() CommandSpec {
 	}
 }
 
-func hubSpec() CommandSpec {
+func templateSpec() CommandSpec {
 	return CommandSpec{
-		Name:    "hub",
+		Name:    "template",
 		Summary: "Discover agent templates.",
 		Children: []CommandSpec{
-			{Name: "list", Summary: "List hub templates"},
-			{Name: "get", Summary: "Show a hub template"},
+			{Name: "list", Summary: "List templates"},
+			{Name: "get", Summary: "Show a template"},
 			{
 				Name:    "publish",
-				Summary: "Publish an existing agent as a hub template",
+				Summary: "Publish an existing agent as a template",
 				Flags: []FlagSpec{
 					{Name: "agent", TakesValue: true},
 					{Name: "registry", TakesValue: true},

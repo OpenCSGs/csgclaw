@@ -22,7 +22,6 @@ import (
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/participant"
@@ -32,6 +31,7 @@ import (
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/sandboxtest"
+	hub "csgclaw/internal/template"
 )
 
 type fakeCompatRuntime struct {

@@ -12,11 +12,11 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/api"
 	"csgclaw/internal/channel/feishu"
-	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/participant"
 	"csgclaw/internal/team"
+	hub "csgclaw/internal/template"
 	"csgclaw/internal/upgrade"
 )
 
