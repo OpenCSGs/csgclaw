@@ -12,6 +12,8 @@ export type ConfigSettings = {
   show_upgrade: boolean;
   sandbox_provider: string;
   supported_sandbox_providers?: string[];
+  hub_local_path: string;
+  hub_official_url: string;
   default_manager_template: string;
   default_worker_template: string;
 };
@@ -26,6 +28,8 @@ export type ConfigSettingsDraft = {
   access_token_preview: string;
   show_upgrade: boolean;
   sandbox_provider: string;
+  hub_local_path: string;
+  hub_official_url: string;
   default_manager_template: string;
   default_worker_template: string;
 };
@@ -36,6 +40,8 @@ export type ConfigSettingsUpdatePayload = {
   access_token?: string;
   show_upgrade: boolean;
   sandbox_provider: string;
+  hub_local_path: string;
+  hub_official_url: string;
   default_manager_template: string;
   default_worker_template: string;
 };
@@ -80,6 +86,8 @@ export function normalizeConfigSettings(source: unknown): ConfigSettings | null 
     supported_sandbox_providers: Array.isArray(value.supported_sandbox_providers)
       ? value.supported_sandbox_providers.map((item) => String(item || "").trim()).filter(Boolean)
       : [],
+    hub_local_path: String(value.hub_local_path || "").trim(),
+    hub_official_url: normalizeURLField(String(value.hub_official_url || "")),
     default_manager_template: String(value.default_manager_template || "").trim(),
     default_worker_template: String(value.default_worker_template || "").trim(),
   };
@@ -119,6 +127,10 @@ export function formatListenAddress(host: string, port: string): string {
 }
 
 export function normalizeAdvertiseBaseURL(value: string): string {
+  return normalizeURLField(value);
+}
+
+function normalizeURLField(value: string): string {
   return String(value || "")
     .trim()
     .replace(/\/+$/, "");
@@ -136,6 +148,8 @@ export function configSettingsToDraft(settings: ConfigSettings): ConfigSettingsD
     access_token_preview: settings.access_token_preview || "",
     show_upgrade: settings.show_upgrade,
     sandbox_provider: settings.sandbox_provider,
+    hub_local_path: settings.hub_local_path,
+    hub_official_url: normalizeURLField(settings.hub_official_url),
     default_manager_template: settings.default_manager_template,
     default_worker_template: settings.default_worker_template,
   };
@@ -147,6 +161,8 @@ export function configDraftToUpdatePayload(draft: ConfigSettingsDraft): ConfigSe
     advertise_base_url: normalizeAdvertiseBaseURL(draft.advertise_base_url),
     show_upgrade: draft.show_upgrade,
     sandbox_provider: draft.sandbox_provider,
+    hub_local_path: draft.hub_local_path.trim(),
+    hub_official_url: normalizeURLField(draft.hub_official_url),
     default_manager_template: draft.default_manager_template,
     default_worker_template: draft.default_worker_template,
   };

@@ -132,7 +132,7 @@ func normalizeHubRegistry(registry HubRegistryConfig) HubRegistryConfig {
 	registry.Kind = strings.TrimSpace(registry.Kind)
 	registry.Path = strings.TrimSpace(registry.Path)
 	registry.URL = strings.TrimSpace(strings.TrimRight(registry.URL, "/"))
-	if registry.Kind == HubRegistryKindRemote {
+	if registry.Kind == HubRegistryKindRemote && registry.URL == LegacyOfficialHubRegistryURL {
 		registry.URL = DefaultOfficialHubRegistryURL
 	}
 	registry.Token = strings.TrimSpace(registry.Token)
@@ -141,7 +141,7 @@ func normalizeHubRegistry(registry HubRegistryConfig) HubRegistryConfig {
 
 func needsRemoteHubRegistryURLRewrite(registry HubRegistryConfig) bool {
 	return strings.TrimSpace(registry.Kind) == HubRegistryKindRemote &&
-		strings.TrimSpace(strings.TrimRight(registry.URL, "/")) != DefaultOfficialHubRegistryURL
+		strings.TrimSpace(strings.TrimRight(registry.URL, "/")) == LegacyOfficialHubRegistryURL
 }
 
 func mergeHubRegistries(defaults, configured []HubRegistryConfig) []HubRegistryConfig {

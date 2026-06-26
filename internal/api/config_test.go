@@ -103,12 +103,17 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 	if got.AdvertiseBaseURLEffective == "" {
 		t.Fatalf("AdvertiseBaseURLEffective = empty, want resolved manager base URL")
 	}
+	if got.HubLocalPath == "" || got.HubOfficialURL != config.DefaultOfficialHubRegistryURL {
+		t.Fatalf("GET hub settings local=%q official=%q, want populated defaults", got.HubLocalPath, got.HubOfficialURL)
+	}
 
 	body, err := json.Marshal(apitypes.UpdateConfigSettingsRequest{
 		ListenAddr:             "127.0.0.1:19080",
 		AdvertiseBaseURL:       "http://192.168.1.10:19080/",
 		ShowUpgrade:            false,
 		SandboxProvider:        "docker",
+		HubLocalPath:           "/tmp/team-hub",
+		HubOfficialURL:         "https://hub.example.com/",
 		DefaultManagerTemplate: "builtin.picoclaw-manager",
 		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
 	})
@@ -138,6 +143,9 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 	if saved.AdvertiseBaseURLEffective != "http://192.168.1.10:19080" {
 		t.Fatalf("AdvertiseBaseURLEffective = %q, want configured manager base URL", saved.AdvertiseBaseURLEffective)
 	}
+	if saved.HubLocalPath != "/tmp/team-hub" || saved.HubOfficialURL != "https://hub.example.com" {
+		t.Fatalf("saved hub settings local=%q official=%q, want updated values", saved.HubLocalPath, saved.HubOfficialURL)
+	}
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -149,6 +157,10 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 	}
 	if !strings.Contains(content, `advertise_base_url = "http://192.168.1.10:19080"`) {
 		t.Fatalf("config content = %q, want updated advertise_base_url", content)
+	}
+	if !strings.Contains(content, `path = "/tmp/team-hub"`) ||
+		!strings.Contains(content, `url = "https://hub.example.com"`) {
+		t.Fatalf("config content = %q, want updated hub local path and official URL", content)
 	}
 }
 

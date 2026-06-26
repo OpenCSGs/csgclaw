@@ -18,6 +18,14 @@ func TestApplyUserSettingsUpdatesExposedFields(t *testing.T) {
 			DefaultWorkerTemplate:  DefaultBootstrapWorkerTemplate,
 		},
 		Sandbox: SandboxConfig{Provider: BoxLiteProvider},
+		Hub: HubConfig{
+			Registries: []HubRegistryConfig{
+				{Name: DefaultHubRegistry, Kind: HubRegistryKindBuiltin, Enabled: true},
+				{Name: DefaultHubPublishRegistry, Kind: HubRegistryKindLocal, Path: "/old/hub", Enabled: true},
+				{Name: DefaultOfficialHubRegistryName, Kind: HubRegistryKindRemote, URL: DefaultOfficialHubRegistryURL, Enabled: true},
+				{Name: "team", Kind: HubRegistryKindRemote, URL: "https://team.example.com", Enabled: true},
+			},
+		},
 		Models: LLMConfig{
 			Default: "default.model",
 			Providers: map[string]ProviderConfig{
@@ -36,6 +44,8 @@ func TestApplyUserSettingsUpdatesExposedFields(t *testing.T) {
 		AccessToken:            "new-secret",
 		ShowUpgrade:            false,
 		SandboxProvider:        DockerProvider,
+		HubLocalPath:           "/new/hub",
+		HubOfficialURL:         "https://hub.example.com/",
 		DefaultManagerTemplate: "builtin.picoclaw-manager",
 		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
 	})
@@ -53,6 +63,16 @@ func TestApplyUserSettingsUpdatesExposedFields(t *testing.T) {
 	}
 	if updated.Sandbox.Provider != DockerProvider {
 		t.Fatalf("Sandbox.Provider = %q, want %q", updated.Sandbox.Provider, DockerProvider)
+	}
+	resolvedHub := updated.Hub.Resolved()
+	if got, want := resolvedHub.Registries[1].Path, "/new/hub"; got != want {
+		t.Fatalf("local hub path = %q, want %q", got, want)
+	}
+	if got, want := resolvedHub.Registries[2].URL, "https://hub.example.com"; got != want {
+		t.Fatalf("official hub URL = %q, want %q", got, want)
+	}
+	if got, want := resolvedHub.Registries[3].URL, "https://team.example.com"; got != want {
+		t.Fatalf("custom hub URL = %q, want preserved %q", got, want)
 	}
 	if updated.Models.Default != "default.model" {
 		t.Fatalf("Models.Default = %q, want preserved", updated.Models.Default)

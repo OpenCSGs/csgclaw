@@ -108,6 +108,32 @@ export function ConfigSettingsModal({
             </label>
           </section>
           <section className="config-settings-section">
+            <h3 className="config-settings-section-title">{t("configSettingsHubSection")}</h3>
+            <div className="config-settings-grid">
+              <label className="field">
+                <span>{t("configSettingsHubLocalPath")}</span>
+                <input
+                  value={configDraft.hub_local_path}
+                  disabled={disabled}
+                  autoComplete="off"
+                  spellCheck={false}
+                  onInput={(event) => onDraftChange({ hub_local_path: event.currentTarget.value })}
+                />
+              </label>
+              <label className="field">
+                <span>{t("configSettingsHubOfficialURL")}</span>
+                <input
+                  type="url"
+                  value={configDraft.hub_official_url}
+                  disabled={disabled}
+                  autoComplete="off"
+                  spellCheck={false}
+                  onInput={(event) => onDraftChange({ hub_official_url: event.currentTarget.value.trim() })}
+                />
+              </label>
+            </div>
+          </section>
+          <section className="config-settings-section">
             <h3 className="config-settings-section-title">{t("configSettingsBootstrapSection")}</h3>
             <div className="config-settings-grid">
               <label className="field">

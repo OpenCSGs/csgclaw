@@ -59,6 +59,8 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 			AccessToken:            accessToken,
 			ShowUpgrade:            req.ShowUpgrade,
 			SandboxProvider:        req.SandboxProvider,
+			HubLocalPath:           req.HubLocalPath,
+			HubOfficialURL:         req.HubOfficialURL,
 			DefaultManagerTemplate: req.DefaultManagerTemplate,
 			DefaultWorkerTemplate:  req.DefaultWorkerTemplate,
 		})
@@ -112,6 +114,8 @@ func serverConfigView(path string, cfg config.Config) apitypes.ConfigSettingsRes
 		ShowUpgrade:               settings.ShowUpgrade,
 		SandboxProvider:           settings.SandboxProvider,
 		SupportedSandboxProviders: settings.SupportedSandboxProvider,
+		HubLocalPath:              settings.HubLocalPath,
+		HubOfficialURL:            settings.HubOfficialURL,
 		DefaultManagerTemplate:    settings.DefaultManagerTemplate,
 		DefaultWorkerTemplate:     settings.DefaultWorkerTemplate,
 	}

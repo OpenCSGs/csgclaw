@@ -20,12 +20,16 @@ describe("configSettings model", () => {
       show_upgrade: false,
       sandbox_provider: "docker",
       supported_sandbox_providers: ["boxlite", "docker", "csghub"],
+      hub_local_path: "/tmp/hub",
+      hub_official_url: "https://hub.example.com/",
       default_manager_template: "builtin.picoclaw-manager",
       default_worker_template: "builtin.picoclaw-worker",
     });
     expect(got?.access_token_set).toBe(true);
     expect(got?.access_token_preview).toBe("your...");
     expect(got?.access_token).toBe("");
+    expect(got?.hub_local_path).toBe("/tmp/hub");
+    expect(got?.hub_official_url).toBe("https://hub.example.com");
   });
 
   it("parses and formats listen addresses", () => {
@@ -41,6 +45,8 @@ describe("configSettings model", () => {
         access_token_set: true,
         access_token_preview: "secr...",
         sandbox_provider: "boxlite",
+        hub_local_path: "/tmp/hub",
+        hub_official_url: "https://hub.opencsg.com",
         default_manager_template: "builtin.picoclaw-manager",
         default_worker_template: "builtin.picoclaw-worker",
       })!,
@@ -51,6 +57,8 @@ describe("configSettings model", () => {
       advertise_base_url: "",
       show_upgrade: true,
       sandbox_provider: "boxlite",
+      hub_local_path: "/tmp/hub",
+      hub_official_url: "https://hub.opencsg.com",
       default_manager_template: "builtin.picoclaw-manager",
       default_worker_template: "builtin.picoclaw-worker",
     });
@@ -63,12 +71,16 @@ describe("configSettings model", () => {
         listen_addr: "0.0.0.0:18080",
         advertise_base_url: "http://192.168.1.10:18080/",
         sandbox_provider: "boxlite",
+        hub_local_path: "/tmp/hub",
+        hub_official_url: "https://hub.opencsg.com/",
         default_manager_template: "builtin.picoclaw-manager",
         default_worker_template: "builtin.picoclaw-worker",
       })!,
     );
     draft.advertise_base_url = "http://example.test/base/";
+    draft.hub_official_url = "https://hub.example.com/base/";
     expect(configDraftToUpdatePayload(draft).advertise_base_url).toBe("http://example.test/base");
+    expect(configDraftToUpdatePayload(draft).hub_official_url).toBe("https://hub.example.com/base");
   });
 
   it("uses effective service url as placeholder when config value is empty", () => {
@@ -78,6 +90,8 @@ describe("configSettings model", () => {
         listen_addr: "0.0.0.0:18080",
         advertise_base_url_effective: "http://192.168.1.10:18080",
         sandbox_provider: "boxlite",
+        hub_local_path: "/tmp/hub",
+        hub_official_url: "https://hub.opencsg.com",
         default_manager_template: "builtin.picoclaw-manager",
         default_worker_template: "builtin.picoclaw-worker",
       })!,

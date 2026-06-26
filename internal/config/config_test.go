@@ -451,7 +451,7 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Hub.Registries[2].Enabled, true; got != want {
 		t.Fatalf("cfg.Hub.Registries[2].Enabled = %t, want %t", got, want)
 	}
-	if got, want := cfg.Hub.Registries[3].URL, DefaultOfficialHubRegistryURL; got != want {
+	if got, want := cfg.Hub.Registries[3].URL, "https://hub.example.com"; got != want {
 		t.Fatalf("cfg.Hub.Registries[3].URL = %q, want %q", got, want)
 	}
 	if got, want := cfg.Hub.Registries[3].Token, "hub-secret"; got != want {
@@ -511,7 +511,7 @@ enabled = true
 	}
 }
 
-func TestLoadCustomRemoteHubRegistryURLAndSaveMigratesIt(t *testing.T) {
+func TestLoadCustomRemoteHubRegistryURLAndSavePreservesIt(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `[server]
@@ -522,9 +522,9 @@ default_manager_template = "builtin.picoclaw-manager"
 default_worker_template = "builtin.picoclaw-worker"
 
 [[hub.registries]]
-name = "legacy-mirror"
+name = "team"
 kind = "remote"
-url = "https://csgclaw.opencsg.com"
+url = "https://hub.example.com/"
 enabled = true
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -536,11 +536,11 @@ enabled = true
 		t.Fatalf("Load() error = %v", err)
 	}
 	registry := cfg.Hub.Registries[3]
-	if got, want := registry.URL, DefaultOfficialHubRegistryURL; got != want {
+	if got, want := registry.URL, "https://hub.example.com"; got != want {
 		t.Fatalf("custom remote registry URL = %q, want %q", got, want)
 	}
-	if !cfg.NeedsMigrationRewrite() {
-		t.Fatal("NeedsMigrationRewrite() = false, want true")
+	if cfg.NeedsMigrationRewrite() {
+		t.Fatal("NeedsMigrationRewrite() = true, want false")
 	}
 	if err := cfg.Save(path); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -550,11 +550,8 @@ enabled = true
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	saved := string(data)
-	if strings.Contains(saved, LegacyOfficialHubRegistryURL) {
-		t.Fatalf("saved config still contains non-official URL:\n%s", saved)
-	}
-	if !strings.Contains(saved, `url = "https://hub.opencsg.com"`) {
-		t.Fatalf("saved config missing official URL:\n%s", saved)
+	if !strings.Contains(saved, `name = "team"`+"\n"+`kind = "remote"`+"\n"+`url = "https://hub.example.com/"`) {
+		t.Fatalf("saved config missing custom remote URL in team registry:\n%s", saved)
 	}
 }
 
@@ -1313,7 +1310,7 @@ func TestSaveWritesHubConfig(t *testing.T) {
 		"[[hub.registries]]",
 		`name = "builtin"`,
 		`kind = "builtin"`,
-		`url = "https://hub.opencsg.com"`,
+		`url = "https://hub.example.com"`,
 		`token = "secret"`,
 		`enabled = true`,
 	} {
@@ -1698,7 +1695,7 @@ reasoning_effort = "${REASONING_EFFORT}"
 		`provider = "${SANDBOX_PROVIDER}"`,
 		`default_registry = "${HUB_DEFAULT_REGISTRY}"`,
 		`default_publish_registry = "${HUB_PUBLISH_REGISTRY}"`,
-		`url = "https://hub.opencsg.com"`,
+		`url = "https://${HUB_URL}"`,
 		`token = "${HUB_TOKEN}"`,
 	} {
 		if !strings.Contains(saved, want) {

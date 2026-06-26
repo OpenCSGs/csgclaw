@@ -1349,7 +1349,7 @@ enabled = true
 [[hub.registries]]
 name = "team"
 kind = "remote"
-url = "https://hub.opencsg.com"
+url = "https://hub.example.com"
 token = "hu******et"
 enabled = true
 `
