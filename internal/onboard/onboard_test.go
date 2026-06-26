@@ -701,7 +701,7 @@ models = ["gpt-test"]
 		`name = "official"`,
 		`kind = "local"`,
 		`kind = "remote"`,
-		`url = "https://csgclaw.opencsg.com"`,
+		`url = "https://hub.opencsg.com"`,
 		`enabled = true`,
 	} {
 		if !strings.Contains(content, want) {

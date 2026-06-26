@@ -78,6 +78,9 @@ func (h *Handler) deleteHubTemplateByID(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) getHubTemplateWorkspaceFileByID(w http.ResponseWriter, r *http.Request) {
 	h.handleHubTemplateWorkspaceFileByID(w, r)
 }
+func (h *Handler) getHubTemplateWorkspaceByID(w http.ResponseWriter, r *http.Request) {
+	h.handleHubTemplateWorkspaceByID(w, r)
+}
 func (h *Handler) getBootstrapConfig(w http.ResponseWriter, r *http.Request) {
 	h.handleBootstrapConfig(w, r)
 }

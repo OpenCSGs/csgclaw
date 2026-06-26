@@ -294,7 +294,7 @@ const (
 	DefaultHubRegistry              = "builtin"
 	DefaultHubPublishRegistry       = "local"
 	DefaultOfficialHubRegistryName  = "official"
-	DefaultOfficialHubRegistryURL   = "https://csgclaw.opencsg.com"
+	DefaultOfficialHubRegistryURL   = "https://hub.opencsg.com"
 	DefaultBootstrapManagerTemplate = "builtin.picoclaw-manager"
 	DefaultBootstrapWorkerTemplate  = "builtin.picoclaw-worker"
 	HubRegistryKindBuiltin          = "builtin"

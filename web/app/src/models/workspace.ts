@@ -27,6 +27,21 @@ export type WorkspaceTreeDepthStyle = CSSProperties & {
 };
 
 export type CollapsedWorkspaceDirs = Record<string, boolean>;
+export type WorkspaceDirectoryListings = Record<string, readonly WorkspaceEntry[]>;
+
+export function flattenWorkspaceDirectoryListings(listings: WorkspaceDirectoryListings): WorkspaceEntry[] {
+  const output: WorkspaceEntry[] = [];
+  const appendDirectory = (directoryPath: string) => {
+    for (const entry of listings[directoryPath] ?? []) {
+      output.push(entry);
+      if (entry.type === "dir" && Object.hasOwn(listings, entry.path)) {
+        appendDirectory(entry.path);
+      }
+    }
+  };
+  appendDirectory("");
+  return output;
+}
 
 export function workspaceAncestorDirs(path: unknown): string[] {
   const normalized = typeof path === "string" ? path.trim() : "";

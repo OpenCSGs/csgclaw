@@ -56,6 +56,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Post("/", h.createHubTemplate)
 			r.Get("/{id}", h.getHubTemplateByID)
 			r.Delete("/{id}", h.deleteHubTemplateByID)
+			r.Get("/{id}/workspace", h.getHubTemplateWorkspaceByID)
 			r.Get("/{id}/workspace/file", h.getHubTemplateWorkspaceFileByID)
 		})
 		r.Get("/skills", h.listSkills)

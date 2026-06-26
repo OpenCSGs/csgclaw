@@ -24,7 +24,7 @@ const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
 type HubDetailPaneHub = {
   detailPaneProps: {
     deleteBusy?: boolean;
-    detailLoading: boolean;
+    detailLoading?: boolean;
     error: string;
     loaded: boolean;
     onDeleteSkill?: (item: SkillSummary | null | undefined) => Promise<boolean> | boolean;
@@ -34,6 +34,7 @@ type HubDetailPaneHub = {
     onSelectSkillFile?: (path: string) => void;
     onSelectTemplate?: (item: HubTemplate | null | undefined) => void;
     onSelectWorkspaceFile: (workspacePath: string) => void;
+    onToggleWorkspaceDir?: (workspacePath: string) => void | Promise<void>;
     selectedResourceType?: "skill" | "template";
     selectedSkill: SkillSummary | null;
     selectedSkillPath: string;
@@ -52,17 +53,20 @@ type HubDetailPaneHub = {
     workspaceFile: WorkspaceFile | null;
     workspaceFileError: string;
     workspaceFileLoading: boolean;
+    workspaceEntries?: readonly WorkspaceEntry[];
+    workspaceTreeLoading?: boolean;
+    loadingWorkspaceDirs?: ReadonlySet<string>;
   };
 };
 
 const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   deleteBusy: false,
-  detailLoading: false,
   error: "",
   loaded: false,
   onRetry: () => {},
   onSelectSkillFile: () => {},
   onSelectWorkspaceFile: () => {},
+  onToggleWorkspaceDir: () => {},
   selectedResourceType: "template",
   selectedSkill: null,
   selectedSkillPath: "",
@@ -81,6 +85,9 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   workspaceFile: null,
   workspaceFileError: "",
   workspaceFileLoading: false,
+  workspaceEntries: [],
+  workspaceTreeLoading: false,
+  loadingWorkspaceDirs: new Set(),
 };
 
 function HubPreviewEmptyIcon() {
@@ -127,12 +134,12 @@ export function HubDetailPane({
     templates,
     skills,
     selectedTemplate,
+    selectedTemplateId,
     selectedSkill,
     selectedSkillPath,
     selectedResourceType = "template",
     loaded,
     error,
-    detailLoading,
     selectedWorkspacePath,
     workspaceFile,
     workspaceFileLoading,
@@ -144,6 +151,10 @@ export function HubDetailPane({
     skillFileLoading,
     skillFileError,
     onSelectWorkspaceFile,
+    onToggleWorkspaceDir,
+    workspaceEntries = EMPTY_WORKSPACE_ENTRIES,
+    workspaceTreeLoading = false,
+    loadingWorkspaceDirs,
     onSelectSkillFile,
     onDeleteSkill,
     onDeleteTemplate,
@@ -152,7 +163,6 @@ export function HubDetailPane({
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
   const canDeleteSkill = Boolean(selectedSkill && !selectedSkill.readonly && selectedSkill.source !== "system");
-  const workspaceEntries = selectedTemplate?.workspace?.entries ?? EMPTY_WORKSPACE_ENTRIES;
   const skillEntries = skillTree?.entries ?? EMPTY_WORKSPACE_ENTRIES;
   const activeResourceType = useMemo(() => {
     if (selectedResourceType === "skill" && skills.length) {
@@ -277,13 +287,16 @@ export function HubDetailPane({
                 <span className="hub-section-label">{t("hubWorkspaceTemplateLabel")}</span>
                 <div className="hub-workspace-panels">
                   <WorkspaceFileTree
+                    key={selectedTemplateId}
                     className="hub-workspace-tree"
                     entries={workspaceEntries}
-                    loading={detailLoading}
+                    loading={workspaceTreeLoading}
                     loadingText={t("hubWorkspaceLoading")}
                     emptyText={t("hubWorkspacePreviewHint")}
                     selectedPath={selectedWorkspacePath}
+                    loadingPaths={loadingWorkspaceDirs}
                     onSelectFile={onSelectWorkspaceFile}
+                    onToggleDir={onToggleWorkspaceDir}
                   />
                   <WorkspaceFilePreview
                     className="hub-workspace-preview"

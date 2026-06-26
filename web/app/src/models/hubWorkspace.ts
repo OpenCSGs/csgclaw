@@ -1,9 +1,10 @@
 import type { AgentTemplateLike } from "@/models/agents";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
-import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
+import type { WorkspaceEntry, WorkspaceFile, WorkspaceListing } from "@/models/workspace";
 
 export type HubWorkspaceEntry = WorkspaceEntry;
 export type HubWorkspaceFile = WorkspaceFile;
+export type HubWorkspaceListing = WorkspaceListing;
 
 export const HUB_REGISTRY_KIND_LOCAL = "local";
 export const HUB_REGISTRY_KIND_REMOTE = "remote";

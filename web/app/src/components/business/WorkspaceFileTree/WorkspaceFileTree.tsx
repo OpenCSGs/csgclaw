@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, FileText, Folder } from "lucide-react";
+import { ChevronRight, FileText, Folder, LoaderCircle } from "lucide-react";
 import {
   buildInitialCollapsedWorkspaceDirs,
   buildVisibleWorkspaceEntries,
@@ -15,7 +15,9 @@ type WorkspaceFileTreeProps = {
   loading?: boolean;
   loadingText: string;
   selectedPath?: string;
+  loadingPaths?: ReadonlySet<string>;
   onSelectFile?: (path: string) => void;
+  onToggleDir?: (path: string) => void | Promise<void>;
 };
 
 export function WorkspaceFileTree({
@@ -25,13 +27,20 @@ export function WorkspaceFileTree({
   loading = false,
   loadingText,
   selectedPath = "",
+  loadingPaths,
   onSelectFile,
+  onToggleDir,
 }: WorkspaceFileTreeProps) {
   const [collapsedDirs, setCollapsedDirs] = useState<CollapsedWorkspaceDirs>({});
   const visibleEntries = useMemo(() => buildVisibleWorkspaceEntries(entries, collapsedDirs), [entries, collapsedDirs]);
 
   useEffect(() => {
-    setCollapsedDirs(buildInitialCollapsedWorkspaceDirs(entries));
+    const initial = buildInitialCollapsedWorkspaceDirs(entries);
+    setCollapsedDirs((current) =>
+      Object.fromEntries(
+        Object.keys(initial).map((path) => [path, Object.hasOwn(current, path) ? current[path] : true]),
+      ),
+    );
   }, [entries]);
 
   useEffect(() => {
@@ -56,6 +65,9 @@ export function WorkspaceFileTree({
   }, [selectedPath]);
 
   function toggleDir(path: string) {
+    if (collapsedDirs[path]) {
+      void onToggleDir?.(path);
+    }
     setCollapsedDirs((current) => ({
       ...current,
       [path]: !current[path],
@@ -72,6 +84,7 @@ export function WorkspaceFileTree({
         visibleEntries.map((entry) => {
           const isDir = entry.type === "dir";
           const collapsed = isDir && Boolean(collapsedDirs[entry.path]);
+          const dirLoading = isDir && loadingPaths?.has(entry.path);
           return (
             <button
               key={entry.path}
@@ -84,7 +97,11 @@ export function WorkspaceFileTree({
               aria-expanded={isDir ? !collapsed : undefined}
             >
               <span className={`workspace-tree-toggle ${!isDir ? "spacer" : ""}`.trim()} aria-hidden="true">
-                {isDir ? <ChevronRight className={collapsed ? "collapsed" : ""} size={14} strokeWidth={2} /> : null}
+                {dirLoading ? (
+                  <LoaderCircle className="animate-spin" size={14} strokeWidth={2} />
+                ) : isDir ? (
+                  <ChevronRight className={collapsed ? "collapsed" : ""} size={14} strokeWidth={2} />
+                ) : null}
               </span>
               <span className="workspace-tree-glyph" aria-hidden="true">
                 {isDir ? <Folder size={16} strokeWidth={2} /> : <FileText size={16} strokeWidth={2} />}

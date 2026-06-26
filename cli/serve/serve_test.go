@@ -1343,7 +1343,7 @@ enabled = false
 [[hub.registries]]
 name = "official"
 kind = "remote"
-url = "https://csgclaw.opencsg.com"
+url = "https://hub.opencsg.com"
 enabled = true
 
 [[hub.registries]]

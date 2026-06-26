@@ -2038,24 +2038,47 @@ func TestHandleHubTemplateByIDReturnsTemplate(t *testing.T) {
 	if got.Source.Name != "local" || got.Source.Kind != "local" {
 		t.Fatalf("template source = %+v, want local/local", got.Source)
 	}
-	if len(got.Workspace.Entries) == 0 {
-		t.Fatalf("workspace entries = %#v, want non-empty result", got.Workspace.Entries)
+	if len(got.Workspace.Entries) != 0 {
+		t.Fatalf("workspace entries = %#v, want lazy-loaded empty result", got.Workspace.Entries)
 	}
-	paths := make([]string, 0, len(got.Workspace.Entries))
-	for _, entry := range got.Workspace.Entries {
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot/workspace", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workspace status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var listing apitypes.WorkspaceListing
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode workspace response: %v", err)
+	}
+	paths := make([]string, 0, len(listing.Entries))
+	for _, entry := range listing.Entries {
 		paths = append(paths, entry.Path)
 	}
-	if !slices.Contains(paths, "USER.md") || !slices.Contains(paths, "skills/custom/SKILL.md") {
-		t.Fatalf("workspace paths = %#v, want USER.md and skills/custom/SKILL.md", paths)
+	if !slices.Contains(paths, "USER.md") || !slices.Contains(paths, "skills") {
+		t.Fatalf("workspace paths = %#v, want USER.md and skills", paths)
 	}
-	if got, want := slices.Index(paths, "skills"), 1; got != want {
-		t.Fatalf("workspace entry index for %q = %d, want %d; paths=%#v", "skills", got, want, paths)
+	if slices.Contains(paths, "skills/custom") || slices.Contains(paths, "skills/custom/SKILL.md") {
+		t.Fatalf("workspace paths = %#v, want top-level entries only", paths)
 	}
-	if got, want := slices.Index(paths, "skills/custom"), 2; got != want {
-		t.Fatalf("workspace entry index for %q = %d, want %d; paths=%#v", "skills/custom", got, want, paths)
+
+	req = httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/hub/templates/local.review-bot/workspace?path=skills",
+		nil,
+	)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("nested workspace status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if got, want := slices.Index(paths, "skills/custom/SKILL.md"), 3; got != want {
-		t.Fatalf("workspace entry index for %q = %d, want %d; paths=%#v", "skills/custom/SKILL.md", got, want, paths)
+	listing = apitypes.WorkspaceListing{}
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode nested workspace response: %v", err)
+	}
+	if len(listing.Entries) != 1 || listing.Entries[0].Path != "skills/custom" {
+		t.Fatalf("nested workspace entries = %#v, want skills/custom only", listing.Entries)
 	}
 }
 
@@ -2870,14 +2893,28 @@ func TestHandleHubTemplateWithoutWorkspaceOmitsEntriesAndFilePreview(t *testing.
 		t.Fatalf("workspace entries = %#v, want empty", detail.Workspace.Entries)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot/workspace", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workspace status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var listing apitypes.WorkspaceListing
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode workspace response: %v", err)
+	}
+	if len(listing.Entries) != 0 {
+		t.Fatalf("workspace entries = %#v, want empty", listing.Entries)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot/workspace/file?path=USER.md", nil)
 	rec = httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("file status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "hub workspace is not available") {
-		t.Fatalf("file response body = %q, want unavailable workspace error", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "workspace") {
+		t.Fatalf("file response body = %q, want workspace error", rec.Body.String())
 	}
 }
 

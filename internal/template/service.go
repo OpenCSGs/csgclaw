@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
+	"csgclaw/internal/agentworkspace"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
 )
 
@@ -26,6 +29,11 @@ type Store interface {
 	FetchWorkspace(ctx context.Context, id string) (WorkspaceRef, error)
 	Publish(ctx context.Context, spec PublishSpec) (Template, error)
 	Delete(ctx context.Context, id string) error
+}
+
+type WorkspaceBrowser interface {
+	ListWorkspace(ctx context.Context, id, workspacePath string) (apitypes.WorkspaceListing, error)
+	ReadWorkspaceFile(ctx context.Context, id, workspacePath string) (apitypes.WorkspaceFile, error)
 }
 
 type StoreFactory func(cfg config.HubRegistryConfig) (Store, error)
@@ -127,6 +135,51 @@ func (s *Service) FetchWorkspace(ctx context.Context, id string) (WorkspaceRef, 
 		return WorkspaceRef{}, fmt.Errorf("fetch hub workspace %q from %q: %w", templateID, cfgStore.ref.Name, err)
 	}
 	return workspace, nil
+}
+
+func (s *Service) ListWorkspace(ctx context.Context, id, workspacePath string) (apitypes.WorkspaceListing, error) {
+	cfgStore, templateID, err := s.resolveRead(id)
+	if err != nil {
+		return apitypes.WorkspaceListing{}, err
+	}
+	if browser, ok := cfgStore.store.(WorkspaceBrowser); ok {
+		return browser.ListWorkspace(ctx, templateID, workspacePath)
+	}
+	workspace, err := cfgStore.store.FetchWorkspace(ctx, templateID)
+	if err != nil {
+		return apitypes.WorkspaceListing{}, err
+	}
+	if normalizeRegistryKind(cfgStore.ref.Kind) != RegistryKindLocal {
+		defer os.RemoveAll(workspace.Path)
+	}
+	if strings.TrimSpace(workspace.Path) == "" {
+		if strings.TrimSpace(workspacePath) == "" {
+			return apitypes.WorkspaceListing{Kind: WorkspaceKindDir}, nil
+		}
+		return apitypes.WorkspaceListing{}, ErrWorkspaceDirRequired
+	}
+	return agentworkspace.ListDirectory(workspace.Path, workspacePath)
+}
+
+func (s *Service) ReadWorkspaceFile(ctx context.Context, id, workspacePath string) (apitypes.WorkspaceFile, error) {
+	cfgStore, templateID, err := s.resolveRead(id)
+	if err != nil {
+		return apitypes.WorkspaceFile{}, err
+	}
+	if browser, ok := cfgStore.store.(WorkspaceBrowser); ok {
+		return browser.ReadWorkspaceFile(ctx, templateID, workspacePath)
+	}
+	workspace, err := cfgStore.store.FetchWorkspace(ctx, templateID)
+	if err != nil {
+		return apitypes.WorkspaceFile{}, err
+	}
+	if normalizeRegistryKind(cfgStore.ref.Kind) != RegistryKindLocal {
+		defer os.RemoveAll(workspace.Path)
+	}
+	if strings.TrimSpace(workspace.Path) == "" {
+		return apitypes.WorkspaceFile{}, ErrWorkspaceDirRequired
+	}
+	return agentworkspace.ReadFile(workspace.Path, workspacePath)
 }
 
 func (s *Service) Publish(ctx context.Context, spec PublishSpec) (Template, error) {

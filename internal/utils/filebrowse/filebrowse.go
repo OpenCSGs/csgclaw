@@ -86,6 +86,67 @@ func List(root, relativePath string) (apitypes.WorkspaceListing, error) {
 	}, nil
 }
 
+func ListDirectory(root, relativePath string) (apitypes.WorkspaceListing, error) {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return apitypes.WorkspaceListing{}, fmt.Errorf("workspace root is required")
+	}
+	cleanPath, err := cleanRelativePath(relativePath)
+	if err != nil {
+		return apitypes.WorkspaceListing{}, err
+	}
+	base := root
+	if cleanPath != "" {
+		base = filepath.Join(root, filepath.FromSlash(cleanPath))
+	}
+	info, err := os.Lstat(base)
+	if err != nil {
+		return apitypes.WorkspaceListing{}, fmt.Errorf("stat workspace %q: %w", cleanPath, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return apitypes.WorkspaceListing{}, fmt.Errorf("workspace path %q is a symlink", cleanPath)
+	}
+	if !info.IsDir() {
+		return apitypes.WorkspaceListing{}, fmt.Errorf("workspace path %q is not a directory", cleanPath)
+	}
+
+	children, err := os.ReadDir(base)
+	if err != nil {
+		return apitypes.WorkspaceListing{}, fmt.Errorf("read workspace directory %q: %w", cleanPath, err)
+	}
+	entries := make([]apitypes.WorkspaceEntry, 0, len(children))
+	for _, child := range children {
+		if child.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		childInfo, err := child.Info()
+		if err != nil {
+			return apitypes.WorkspaceListing{}, fmt.Errorf("read workspace entry %q: %w", child.Name(), err)
+		}
+		entryPath := child.Name()
+		if cleanPath != "" {
+			entryPath = cleanPath + "/" + child.Name()
+		}
+		entry := apitypes.WorkspaceEntry{
+			Path:  entryPath,
+			Name:  child.Name(),
+			Type:  "file",
+			Depth: strings.Count(entryPath, "/"),
+			Size:  childInfo.Size(),
+		}
+		if child.IsDir() {
+			entry.Type = "dir"
+			entry.Size = 0
+		}
+		entries = append(entries, entry)
+	}
+	return apitypes.WorkspaceListing{
+		Kind:    "dir",
+		Path:    cleanPath,
+		Entries: entries,
+	}, nil
+}
+
 func ReadFile(root, relativePath string) (apitypes.WorkspaceFile, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
