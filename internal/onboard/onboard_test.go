@@ -173,7 +173,7 @@ func TestEnsureStateNoAuthDetectCreatesManagerWithoutDetectionResults(t *testing
 		Agents struct {
 			Items []struct {
 				ID               string                         `json:"id"`
-				Profile          agent.AgentProfile             `json:"profile"`
+				ModelConfig      agent.AgentProfile             `json:"model_config"`
 				DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
 			} `json:"items"`
 		} `json:"agents"`
@@ -183,7 +183,7 @@ func TestEnsureStateNoAuthDetectCreatesManagerWithoutDetectionResults(t *testing
 	}
 	var manager *struct {
 		ID               string                         `json:"id"`
-		Profile          agent.AgentProfile             `json:"profile"`
+		ModelConfig      agent.AgentProfile             `json:"model_config"`
 		DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
 	}
 	for i := range state.Agents.Items {
@@ -195,11 +195,11 @@ func TestEnsureStateNoAuthDetectCreatesManagerWithoutDetectionResults(t *testing
 	if manager == nil {
 		t.Fatalf("manager agent %q not found in state: %s", agent.ManagerUserID, string(data))
 	}
-	if manager.Profile.ProfileComplete {
-		t.Fatalf("manager profile = %+v; want incomplete", manager.Profile)
+	if manager.ModelConfig.ProfileComplete {
+		t.Fatalf("manager model_config = %+v; want incomplete", manager.ModelConfig)
 	}
-	if manager.Profile.ModelProviderID != agent.ModelProviderIDCSGHubLite {
-		t.Fatalf("manager model_provider_id = %q, want %q", manager.Profile.ModelProviderID, agent.ModelProviderIDCSGHubLite)
+	if manager.ModelConfig.ModelProviderID != agent.ModelProviderIDCSGHubLite {
+		t.Fatalf("manager model_provider_id = %q, want %q", manager.ModelConfig.ModelProviderID, agent.ModelProviderIDCSGHubLite)
 	}
 	if len(manager.DetectionResults) != 0 {
 		t.Fatalf("manager detection_results = %+v, want empty", manager.DetectionResults)
@@ -371,7 +371,7 @@ models = ["gpt-test"]
 		t.Fatal("LoadModels() ok = false, want true")
 	}
 	if got := models.Default; got != "" {
-		t.Fatalf("models default = %q, want empty because agents.profile_defaults owns defaults", got)
+		t.Fatalf("models default = %q, want empty because agents.model_defaults owns defaults", got)
 	}
 }
 

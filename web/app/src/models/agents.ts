@@ -15,7 +15,7 @@ import {
   RUNTIME_KIND_OPTIONS,
   WORKER_AGENT_ROLE,
 } from "@/shared/constants/agents";
-import { avatarFallbackText } from "@/shared/avatar";
+import { avatarFallbackText, normalizeAvatarPath } from "@/shared/avatar";
 import type { LocaleCode } from "@/models/conversations";
 import { providerIDForProvider, providerNameForProviderID, selectorForProviderModel } from "@/models/modelProviders";
 
@@ -88,6 +88,7 @@ export type AgentRuntimeLike = {
 
 export type AgentLike = AgentProfileLike & {
   agent_profile?: AgentProfileLike | null;
+  model_config?: AgentProfileLike | null;
   profile?: AgentProfileLike | string | null;
   runtime?: AgentRuntimeLike | null;
   bot_type?: BotType | null;
@@ -173,6 +174,9 @@ export function agentRuntimeOptions(item: AgentLike | AgentProfileLike | null | 
 }
 
 export function agentProfileConfig(item: AgentLike | null | undefined): AgentProfileLike | null {
+  if (item?.model_config && typeof item.model_config === "object" && !Array.isArray(item.model_config)) {
+    return item.model_config;
+  }
   const profile = item?.profile;
   if (profile && typeof profile === "object" && !Array.isArray(profile)) {
     return profile as AgentProfileLike;
@@ -555,6 +559,16 @@ export function mergeAgentIntoList(
     }
     found = true;
     const merged: AgentLike = { ...item, ...updated };
+    if (
+      item?.model_config &&
+      updated.model_config &&
+      typeof item.model_config === "object" &&
+      typeof updated.model_config === "object" &&
+      !Array.isArray(item.model_config) &&
+      !Array.isArray(updated.model_config)
+    ) {
+      merged.model_config = { ...(item.model_config ?? {}), ...(updated.model_config ?? {}) };
+    }
     if (
       item?.profile &&
       updated.profile &&
@@ -999,7 +1013,7 @@ export function agentToDraft(agent: AgentDraftSource | null | undefined): AgentD
     bot_type: botType,
     description: agent?.description || profile.description || "",
     instructions: agent?.instructions || "",
-    avatar: "",
+    avatar: normalizeAvatarPath(agent?.avatar),
     default_image: agent?.image || "",
     image: agent?.image || "",
     from_template: agent?.from_template || "",

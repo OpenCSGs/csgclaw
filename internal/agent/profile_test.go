@@ -263,6 +263,64 @@ func TestServiceReadsRootAgentsSection(t *testing.T) {
 	}
 }
 
+func TestRootAgentsSectionWritesModelConfigNames(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".csgclaw")
+	statePath := filepath.Join(root, "state.json")
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	createdAt := time.Date(2026, 6, 24, 1, 2, 3, 0, time.UTC)
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		Role:        RoleManager,
+		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Status:      "running",
+		CreatedAt:   createdAt,
+		AgentProfile: AgentProfile{
+			ModelProviderID: "codex",
+			ModelID:         "gpt-5.5",
+			ReasoningEffort: "medium",
+		},
+	}
+	svc.profileDefaults = AgentProfile{
+		ModelProviderID: "codex",
+		ModelID:         "gpt-5.5",
+		ReasoningEffort: "medium",
+	}
+	if err := svc.saveLocked(); err != nil {
+		t.Fatalf("saveLocked() error = %v", err)
+	}
+
+	var rootState map[string]any
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if err := json.Unmarshal(data, &rootState); err != nil {
+		t.Fatalf("Unmarshal() error = %v\n%s", err, data)
+	}
+	agents := rootState["agents"].(map[string]any)
+	if _, ok := agents["profile_defaults"]; ok {
+		t.Fatalf("legacy profile_defaults persisted: %#v", agents)
+	}
+	modelDefaults := agents["model_defaults"].(map[string]any)
+	if modelDefaults["model_provider_id"] != "codex" || modelDefaults["model_id"] != "gpt-5.5" {
+		t.Fatalf("model_defaults = %#v, want codex/gpt-5.5", modelDefaults)
+	}
+	items := agents["items"].([]any)
+	manager := items[0].(map[string]any)
+	if _, ok := manager["profile"]; ok {
+		t.Fatalf("legacy profile persisted: %#v", manager)
+	}
+	modelConfig := manager["model_config"].(map[string]any)
+	if modelConfig["model_provider_id"] != "codex" || modelConfig["model_id"] != "gpt-5.5" {
+		t.Fatalf("model_config = %#v, want codex/gpt-5.5", modelConfig)
+	}
+}
+
 func TestRedactedProfileViewIncludesSafeAPIKeyPreview(t *testing.T) {
 	view := RedactedProfileView(AgentProfile{
 		Name:   "alice",

@@ -9,6 +9,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -497,12 +498,19 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		return Agent{}, fmt.Errorf("agent service is required")
 	}
 	managerAvatar := ""
+	managerDisplayName := ManagerName
 	s.mu.RLock()
 	if existing, ok := s.agents[ManagerUserID]; ok {
+		if name := strings.TrimSpace(existing.Name); name != "" {
+			managerDisplayName = name
+		}
 		managerAvatar = strings.TrimSpace(existing.Avatar)
 	} else {
 		for _, existing := range s.agents {
 			if isManagerAgent(existing) {
+				if name := strings.TrimSpace(existing.Name); name != "" {
+					managerDisplayName = name
+				}
 				managerAvatar = strings.TrimSpace(existing.Avatar)
 				break
 			}
@@ -561,8 +569,8 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 			RuntimeID:     runtimeIDForAgentID(ManagerUserID),
 			AgentID:       ManagerUserID,
 			ParticipantID: ManagerParticipantID,
-			AgentName:     ManagerName,
-			Profile:       s.runtimeProfileForKind(runtimeKind, ManagerUserID, ManagerName, "", startProfile),
+			AgentName:     managerDisplayName,
+			Profile:       s.runtimeProfileForKind(runtimeKind, ManagerUserID, managerDisplayName, "", startProfile),
 		}); err != nil {
 			return fmt.Errorf("provision bootstrap manager runtime: %w", err)
 		}
@@ -600,7 +608,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		if manager.ID == "" || forceRecreate {
 			manager = Agent{
 				ID:          ManagerUserID,
-				Name:        ManagerName,
+				Name:        managerDisplayName,
 				RuntimeID:   runtimeIDForAgentID(ManagerUserID),
 				RuntimeKind: runtimeKind,
 				Image:       managerImage,
@@ -630,7 +638,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 	var info sandbox.Info
 	createdBootstrapManagerBox := false
 	if box == nil {
-		log.Printf("bootstrap manager box %q not found, creating it with image %q", ManagerName, managerImage)
+		log.Printf("bootstrap manager box %q not found, creating it with image %q", managerDisplayName, managerImage)
 		log.Printf("if the image is not present locally, the first pull may take a while")
 		progressDone := make(chan struct{})
 		waitStarted := time.Now()
@@ -646,13 +654,13 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 				}
 			}
 		}()
-		box, info, err = s.createGatewayBox(ctx, rt, managerImage, ManagerName, ManagerUserID, startProfile)
+		box, info, err = s.createGatewayBox(ctx, rt, managerImage, managerDisplayName, ManagerUserID, startProfile)
 		close(progressDone)
 		if err != nil {
 			return Agent{}, fmt.Errorf("create bootstrap manager box: %w", err)
 		}
 		createdBootstrapManagerBox = true
-		log.Printf("bootstrap manager box %q created", ManagerName)
+		log.Printf("bootstrap manager box %q created", managerDisplayName)
 	} else {
 		info, err = s.boxInfo(ctx, box)
 		if err != nil {
@@ -680,7 +688,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 	}
 	manager := Agent{
 		ID:               ManagerUserID,
-		Name:             ManagerName,
+		Name:             managerDisplayName,
 		RuntimeID:        runtimeIDForAgentID(ManagerUserID),
 		RuntimeKind:      s.gatewayRuntimeKind(),
 		Image:            managerImage,
@@ -781,17 +789,25 @@ func (s *Service) managerSkillPreservationSourceRuntimeKind(targetRuntimeKind st
 func (s *Service) managerStartupProfile(ctx context.Context) (AgentProfile, []ProfileDetectionResult) {
 	s.mu.RLock()
 	if existing, ok := s.agents[ManagerUserID]; ok && existing.AgentProfile.ProfileComplete {
+		name := strings.TrimSpace(existing.Name)
+		if name == "" {
+			name = ManagerName
+		}
 		profile := cloneProfile(existing.AgentProfile)
 		results := append([]ProfileDetectionResult(nil), existing.DetectionResults...)
 		s.mu.RUnlock()
-		return normalizeProfile(profile, ManagerName, existing.Description), results
+		return normalizeProfile(profile, name, existing.Description), results
 	}
 	if s != nil && s.startupProfileDetectOff {
 		if existing, ok := s.agents[ManagerUserID]; ok {
+			name := strings.TrimSpace(existing.Name)
+			if name == "" {
+				name = ManagerName
+			}
 			profile := cloneProfile(existing.AgentProfile)
 			results := append([]ProfileDetectionResult(nil), existing.DetectionResults...)
 			s.mu.RUnlock()
-			return normalizeProfile(profile, ManagerName, existing.Description), results
+			return normalizeProfile(profile, name, existing.Description), results
 		}
 		s.mu.RUnlock()
 		return normalizeProfile(AgentProfile{Name: ManagerName, Provider: ProviderCSGHubLite}, ManagerName, ""), nil
@@ -849,11 +865,22 @@ func (s *Service) deleteRuntimeRecordLocked(runtimeID string) {
 
 func (s *Service) bootstrapManagerLookupKeys() []string {
 	primary := s.bootstrapManagerBoxIDOrName()
-	keys := []string{primary}
+	keys := make([]string, 0, 3)
 	if primary != ManagerName {
-		keys = append(keys, ManagerName)
+		keys = appendLookupKey(keys, primary)
+	}
+	for _, key := range []string{sandboxNameForAgentID(ManagerUserID), ManagerName} {
+		keys = appendLookupKey(keys, key)
 	}
 	return keys
+}
+
+func appendLookupKey(keys []string, key string) []string {
+	key = strings.TrimSpace(key)
+	if key == "" || slices.Contains(keys, key) {
+		return keys
+	}
+	return append(keys, key)
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Agent, error) {
@@ -1154,7 +1181,7 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 			if strings.TrimSpace(next.Profile) != "" {
 				merged.AgentProfile = AgentProfile{}
 			}
-		case "agent_profile":
+		case "agent_profile", "model_config":
 			merged.AgentProfile = cloneProfile(next.AgentProfile)
 		case "runtime_options":
 			merged.RuntimeOptions = utils.CloneAnyMap(next.RuntimeOptions)
@@ -1246,14 +1273,15 @@ func (s *Service) agentSnapshotByName(name string) (Agent, bool) {
 }
 
 func (s *Service) resolveAgentBox(ctx context.Context, rt sandbox.Runtime, got Agent) (sandbox.Instance, string, error) {
-	keys := make([]string, 0, 2)
+	keys := make([]string, 0, 3)
 	if boxID := strings.TrimSpace(got.BoxID); boxID != "" {
-		keys = append(keys, boxID)
+		keys = appendLookupKey(keys, boxID)
+	}
+	if name := sandboxNameForAgentID(got.ID); name != "" {
+		keys = appendLookupKey(keys, name)
 	}
 	if name := strings.TrimSpace(got.Name); name != "" {
-		if len(keys) == 0 || keys[0] != name {
-			keys = append(keys, name)
-		}
+		keys = appendLookupKey(keys, name)
 	}
 	if len(keys) == 0 {
 		return nil, "", fmt.Errorf("agent box identifier is required")
@@ -1467,6 +1495,9 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 func (s *Service) stopAndForceRemoveBox(ctx context.Context, rt sandbox.Runtime, got Agent) error {
 	boxIDOrName := strings.TrimSpace(got.BoxID)
 	if boxIDOrName == "" {
+		boxIDOrName = sandboxNameForAgentID(got.ID)
+	}
+	if boxIDOrName == "" {
 		boxIDOrName = strings.TrimSpace(got.Name)
 	}
 	box, resolvedKey, err := s.resolveAgentBox(ctx, rt, got)
@@ -1486,6 +1517,10 @@ func (s *Service) stopAndForceRemoveBox(ctx context.Context, rt sandbox.Runtime,
 		return fmt.Errorf("remove agent box: %w", err)
 	}
 	return nil
+}
+
+func sandboxNameForAgentID(agentID string) string {
+	return agentruntime.SandboxNameForAgentID(canonicalAgentID(agentID))
 }
 
 func removeAllWithRetry(path string) error {

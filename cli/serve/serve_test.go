@@ -1458,6 +1458,7 @@ func TestNewAgentServiceExplainsMissingConfiguredBoxLite(t *testing.T) {
 func TestNewAgentServiceRegistersCodexRuntime(t *testing.T) {
 	restoreBoxLite := stubBoxLiteAvailable(t)
 	defer restoreBoxLite()
+	t.Setenv("HOME", t.TempDir())
 
 	svc, err := newAgentService(config.Config{
 		Sandbox: config.SandboxConfig{

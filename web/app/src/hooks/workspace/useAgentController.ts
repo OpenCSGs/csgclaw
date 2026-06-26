@@ -1053,6 +1053,21 @@ export function useAgentController({
     });
   }
 
+  function agentPageBaseUpdatePayload(draftToSave: AgentDraft): AgentUpdatePayload {
+    const payload: AgentUpdatePayload = {
+      description: draftToSave.description,
+      instructions: draftToSave.instructions,
+    };
+    const managerDraft =
+      isManagerAgent(selectedAgentForPage) ||
+      draftToSave.agent_id === MANAGER_AGENT_ID ||
+      draftToSave.role === MANAGER_AGENT_ROLE;
+    if (!managerDraft) {
+      payload.name = draftToSave.name;
+    }
+    return payload;
+  }
+
   function canApplyAgentPageProfileSaveImmediately(
     saved: AgentLike | null | undefined,
     profileChanged: boolean,
@@ -1105,11 +1120,7 @@ export function useAgentController({
         runtimeOptionsPayloadForCompare(draftToSave) !== runtimeOptionsPayloadForCompare(agentPageSavedDraft);
       const hasProfileOrRuntimeChange = profileChanged || (runtimeOptionsChanged && hasObjectValues(runtimeOptions));
 
-      const payload: AgentUpdatePayload = {
-        name: draftToSave.name,
-        description: draftToSave.description,
-        instructions: draftToSave.instructions,
-      };
+      const payload = agentPageBaseUpdatePayload(draftToSave);
       if (profileChanged) {
         payload.agent_profile = profile;
         payload.profile = profileSelectorFromDraft(draft);
@@ -1232,6 +1243,8 @@ export function useAgentController({
         const saved = await (isCreate
           ? createNotificationBotRequest(payload)
           : patchNotificationBotRequest(editingAgentID, payload));
+        const avatarOwner = saved?.user_id || saved?.participants?.length ? saved : editingAgent || saved;
+        await saveLinkedAgentUserAvatar(avatarOwner, agentDraft.avatar);
         await refreshAgents();
         await refreshWorkspaceBootstrap();
         if (!isCreate) {

@@ -24,9 +24,32 @@ type persistedState struct {
 }
 
 type rootAgentsState struct {
-	ProfileDefaults  AgentProfile             `json:"profile_defaults,omitempty"`
+	ProfileDefaults  AgentProfile             `json:"model_defaults,omitempty"`
 	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
 	Items            []persistedAgent         `json:"items"`
+}
+
+func (s *rootAgentsState) UnmarshalJSON(data []byte) error {
+	type rootAgentsStateJSON struct {
+		ModelDefaults    AgentProfile             `json:"model_defaults,omitempty"`
+		ProfileDefaults  AgentProfile             `json:"profile_defaults,omitempty"`
+		DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
+		Items            []persistedAgent         `json:"items"`
+	}
+	var decoded rootAgentsStateJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	defaults := decoded.ModelDefaults
+	if profileEmpty(defaults) {
+		defaults = decoded.ProfileDefaults
+	}
+	*s = rootAgentsState{
+		ProfileDefaults:  cloneProfile(defaults),
+		DetectionResults: append([]ProfileDetectionResult(nil), decoded.DetectionResults...),
+		Items:            decoded.Items,
+	}
+	return nil
 }
 
 func (s persistedState) isObject() bool {
@@ -58,7 +81,7 @@ type persistedAgent struct {
 	Status           string                   `json:"status,omitempty"`
 	CreatedAt        time.Time                `json:"created_at"`
 	UpdatedAt        time.Time                `json:"updated_at,omitempty"`
-	Profile          AgentProfile             `json:"profile,omitempty"`
+	Profile          AgentProfile             `json:"model_config,omitempty"`
 	ProfileSelector  string                   `json:"-"`
 	Provider         string                   `json:"provider,omitempty"`
 	ModelID          string                   `json:"model_id,omitempty"`
@@ -107,7 +130,7 @@ func (a persistedAgent) MarshalJSON() ([]byte, error) {
 		out["runtime"] = runtime
 	}
 	if !profileEmpty(profile) {
-		out["profile"] = profile
+		out["model_config"] = profile
 	}
 	if len(a.DetectionResults) > 0 {
 		out["detection_results"] = a.DetectionResults
@@ -119,6 +142,7 @@ func (a *persistedAgent) UnmarshalJSON(data []byte) error {
 	type persistedAgentAlias persistedAgent
 	type persistedAgentJSON struct {
 		persistedAgentAlias
+		ModelConfig    json.RawMessage `json:"model_config"`
 		Profile        json.RawMessage `json:"profile"`
 		RuntimeOptions map[string]any  `json:"runtime_options"`
 	}
@@ -128,13 +152,17 @@ func (a *persistedAgent) UnmarshalJSON(data []byte) error {
 	}
 	*a = persistedAgent(decoded.persistedAgentAlias)
 	a.RuntimeOptions = utils.CloneAnyMap(decoded.RuntimeOptions)
-	if len(decoded.Profile) > 0 && string(decoded.Profile) != "null" {
+	profilePayload := decoded.ModelConfig
+	if len(profilePayload) == 0 || string(profilePayload) == "null" {
+		profilePayload = decoded.Profile
+	}
+	if len(profilePayload) > 0 && string(profilePayload) != "null" {
 		var profile AgentProfile
-		if err := json.Unmarshal(decoded.Profile, &profile); err == nil {
+		if err := json.Unmarshal(profilePayload, &profile); err == nil {
 			a.Profile = profile
 		} else {
 			var selector string
-			if err := json.Unmarshal(decoded.Profile, &selector); err == nil {
+			if err := json.Unmarshal(profilePayload, &selector); err == nil {
 				a.ProfileSelector = strings.TrimSpace(selector)
 			} else {
 				return fmt.Errorf("decode agent profile: %w", err)
@@ -634,6 +662,7 @@ func (s *Service) normalizeLoadedAgent(a Agent) (Agent, error) {
 	a.Role = normalizeRole(a.Role)
 	if isManagerAgent(a) {
 		a.ID = ManagerUserID
+		a.Role = RoleManager
 		if strings.TrimSpace(a.RuntimeID) == "" || strings.TrimSpace(a.RuntimeID) == "rt-u-manager" || strings.TrimSpace(a.RuntimeID) == "rt-manager" {
 			a.RuntimeID = runtimeIDForAgentID(ManagerUserID)
 		}
@@ -649,8 +678,6 @@ func (s *Service) normalizeLoadedAgent(a Agent) (Agent, error) {
 		switch {
 		case a.ID != ManagerUserID:
 			return Agent{}, fmt.Errorf("manager id must be %q", ManagerUserID)
-		case a.Name != ManagerName:
-			return Agent{}, fmt.Errorf("manager name must be %q", ManagerName)
 		case a.Role != RoleManager:
 			return Agent{}, fmt.Errorf("manager role must be %q", RoleManager)
 		}

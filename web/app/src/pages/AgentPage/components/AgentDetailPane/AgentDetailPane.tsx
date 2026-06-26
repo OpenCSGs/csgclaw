@@ -37,6 +37,7 @@ import {
   isAgentRestartNeeded,
   isAgentUpgradeNeeded,
   isAgentRunning,
+  isManagerAgent,
   isNotifierRuntimeDraftOnAgentPage,
   runtimeOptionSchemasForAgent,
 } from "@/models/agents";
@@ -189,6 +190,7 @@ export function AgentDetailPane({
   onDeleteSkill,
 }: AgentDetailPaneProps) {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
   const [activeProfileSection, setActiveProfileSection] = useState<AgentProfileSectionID>("channels");
   const [addSkillsDialogOpen, setAddSkillsDialogOpen] = useState(false);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
@@ -196,6 +198,7 @@ export function AgentDetailPane({
   const [skillPendingDelete, setSkillPendingDelete] = useState<SlashSkillOption | null>(null);
   const [profileTabScrollPadding, setProfileTabScrollPadding] = useState(0);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const profileScrollRegionRef = useRef<HTMLDivElement | null>(null);
   const channelsSectionRef = useRef<HTMLElement | null>(null);
   const runtimeSectionRef = useRef<HTMLElement | null>(null);
@@ -203,7 +206,8 @@ export function AgentDetailPane({
   const instructionsSectionRef = useRef<HTMLElement | null>(null);
   const skillsSectionRef = useRef<HTMLElement | null>(null);
   const advancedSectionRef = useRef<HTMLElement | null>(null);
-  const isManager = item.role === "manager" || item.id === "u-manager";
+  const isManager = isManagerAgent(item);
+  const canEditAgentName = Boolean(draft && !isManager);
   const running = isAgentRunning(item);
   const draftBelongsToItem = Boolean(draft) && String(draft?.agent_id ?? "").trim() === String(item?.id ?? "").trim();
   const incomplete = isAgentIncomplete(item, draftBelongsToItem ? draft : undefined);
@@ -297,8 +301,23 @@ export function AgentDetailPane({
   useEffect(() => {
     if (!draft) {
       setIsEditingDescription(false);
+      setIsEditingName(false);
     }
   }, [draft]);
+
+  useEffect(() => {
+    if (!canEditAgentName) {
+      setIsEditingName(false);
+    }
+  }, [canEditAgentName]);
+
+  useEffect(() => {
+    if (!isEditingName) {
+      return;
+    }
+    nameInputRef.current?.focus();
+    nameInputRef.current?.select();
+  }, [isEditingName]);
 
   useEffect(() => {
     if (!isEditingDescription) {
@@ -354,7 +373,45 @@ export function AgentDetailPane({
           )}
           <div className="entity-heading">
             <div className="entity-title-row">
-              <h1>{item.name}</h1>
+              {draft ? (
+                canEditAgentName && isEditingName ? (
+                  <label className="agent-title-edit-field">
+                    <span className="sr-only">{t("agentName")}</span>
+                    <input
+                      ref={nameInputRef}
+                      className="agent-title-input"
+                      value={draft.name}
+                      required
+                      aria-required="true"
+                      onBlur={() => setIsEditingName(false)}
+                      onInput={(event) => updateDraft({ name: event.currentTarget.value })}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape" || event.key === "Enter") {
+                          event.preventDefault();
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      placeholder={t("agentName")}
+                    />
+                  </label>
+                ) : canEditAgentName ? (
+                  <button
+                    type="button"
+                    className={`agent-title-display ${draft.name ? "" : "is-empty"}`.trim()}
+                    aria-label={t("editAgentName")}
+                    onClick={() => setIsEditingName(true)}
+                  >
+                    <span className="agent-title-display-copy">{draft.name || t("agentName")}</span>
+                    <span className="agent-title-display-icon" aria-hidden="true">
+                      <Edit3 size={16} strokeWidth={1.8} />
+                    </span>
+                  </button>
+                ) : (
+                  <h1>{draft.name || item.name || t("agentName")}</h1>
+                )
+              ) : (
+                <h1>{item.name}</h1>
+              )}
               <span className={`agent-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
               <span className={`status-pill ${running ? "online" : ""}`}>
                 {agentStatusLabel(agentRuntimeState(item), t)}

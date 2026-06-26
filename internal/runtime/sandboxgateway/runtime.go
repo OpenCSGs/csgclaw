@@ -245,6 +245,9 @@ func (r *Runtime) Delete(ctx context.Context, h agentruntime.Handle) error {
 		boxIDOrName = strings.TrimSpace(got.BoxID)
 	}
 	if boxIDOrName == "" {
+		boxIDOrName = agentruntime.SandboxNameForAgentID(got.ID)
+	}
+	if boxIDOrName == "" {
 		boxIDOrName = strings.TrimSpace(got.Name)
 	}
 	if err := r.deps.ForceRemoveBox(ctx, rt, boxIDOrName); err != nil && !sandbox.IsNotFound(err) {
@@ -351,6 +354,10 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 	if participantID == "" {
 		participantID = agentID
 	}
+	sandboxName := agentruntime.SandboxNameForAgentID(agentID)
+	if sandboxName == "" {
+		return sandbox.CreateSpec{}, fmt.Errorf("runtime sandbox name is required")
+	}
 	modelID := prepared.ModelID
 	managerBaseURL := strings.TrimRight(strings.TrimSpace(prepared.ManagerBaseURL), "/")
 	llmBaseURL := llmBridgeBaseURL(managerBaseURL, agentID)
@@ -393,7 +400,7 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 	envVars["HOME"] = homeEnv
 	spec := sandbox.CreateSpec{
 		Image:      image,
-		Name:       name,
+		Name:       sandboxName,
 		Detach:     true,
 		AutoRemove: false,
 		Env:        envVars,

@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { AgentProfileModal } from "@/pages/WorkspacePage/components";
-import { agentToDraft } from "@/models/agents";
+import { agentToDraft, type AgentDraft } from "@/models/agents";
 import * as directoryPicker from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
 
 const labels: Record<string, string> = {
@@ -73,38 +74,52 @@ describe("AgentProfileModal", () => {
     expect(container.querySelectorAll(".agent-avatar-option.selected")).toHaveLength(0);
   });
 
-  it("keeps the agent name read-only in edit mode", () => {
-    render(
-      <AgentProfileModal
-        t={t}
-        agentModalMode="edit"
-        editingAgent={worker}
-        agentDraft={agentToDraft(worker)}
-        onAgentDraftChange={vi.fn()}
-        onAgentModelsReset={vi.fn()}
-        hubTemplates={[]}
-        bootstrapConfig={{}}
-        managerAgent={null}
-        agentModels={[]}
-        agentModelBusy={false}
-        locale="en"
-        authStatuses={{}}
-        authBusyProvider=""
-        agentCreateBotKind="worker"
-        onAgentCreateBotKindChange={vi.fn()}
-        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
-        onProviderLogin={vi.fn()}
-        agentError=""
-        agentProgress={null}
-        agentBusy={false}
-        onClose={vi.fn()}
-        onSave={vi.fn()}
-      />,
-    );
+  it("allows the agent name to be edited in edit mode", async () => {
+    const user = userEvent.setup();
+    const onAgentDraftChange = vi.fn();
+    function TestModal() {
+      const [draft, setDraft] = useState<AgentDraft>(agentToDraft(worker));
+      return (
+        <AgentProfileModal
+          t={t}
+          agentModalMode="edit"
+          editingAgent={worker}
+          agentDraft={draft}
+          onAgentDraftChange={(update) => {
+            onAgentDraftChange(update);
+            setDraft((current) => {
+              const next = typeof update === "function" ? update(current) : update;
+              return next ?? current;
+            });
+          }}
+          onAgentModelsReset={vi.fn()}
+          hubTemplates={[]}
+          bootstrapConfig={{}}
+          managerAgent={null}
+          agentModels={[]}
+          agentModelBusy={false}
+          locale="en"
+          authStatuses={{}}
+          authBusyProvider=""
+          agentCreateBotKind="worker"
+          onAgentCreateBotKindChange={vi.fn()}
+          notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+          onProviderLogin={vi.fn()}
+          agentError=""
+          agentProgress={null}
+          agentBusy={false}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      );
+    }
+    render(<TestModal />);
 
     const nameInput = screen.getByDisplayValue("Worker");
-    expect(nameInput).toBeDisabled();
-    expect(nameInput).toHaveAttribute("readonly");
+    expect(nameInput).not.toBeDisabled();
+    expect(nameInput).not.toHaveAttribute("readonly");
+    await user.type(nameInput, " QA");
+    expect(onAgentDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({ name: "Worker QA" }));
   });
 
   it("shows the instructions field for worker agents after the model section", () => {

@@ -125,7 +125,7 @@ type agentResponse struct {
 	CreatedAt            time.Time                          `json:"created_at"`
 	UpdatedAt            time.Time                          `json:"updated_at,omitempty"`
 	Profile              string                             `json:"-"`
-	ProfileConfig        apitypes.AgentProfile              `json:"profile,omitempty"`
+	ProfileConfig        apitypes.AgentProfile              `json:"model_config,omitempty"`
 	RuntimeOptions       map[string]any                     `json:"-"`
 	RuntimeOptionSchemas []agentruntime.RuntimeOptionSchema `json:"-"`
 	AgentProfile         agent.AgentProfileView             `json:"-"`
@@ -2143,23 +2143,6 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 	_ = json.NewEncoder(w).Encode(data)
 }
 
-func deriveAgentHandle(a agent.Agent) string {
-	if handle, ok := sanitizeHandle(strings.ToLower(strings.ReplaceAll(strings.TrimSpace(a.Name), " ", "-"))); ok {
-		return handle
-	}
-	if handle, ok := sanitizeHandle(strings.ToLower(strings.TrimPrefix(strings.TrimSpace(a.ID), "u-"))); ok {
-		return handle
-	}
-	switch strings.ToLower(strings.TrimSpace(a.Role)) {
-	case agent.RoleManager:
-		return "manager"
-	case agent.RoleWorker:
-		return "worker"
-	default:
-		return "agent"
-	}
-}
-
 func displayRole(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case agent.RoleManager:
@@ -2169,25 +2152,6 @@ func displayRole(role string) string {
 	default:
 		return "Agent"
 	}
-}
-
-func sanitizeHandle(input string) (string, bool) {
-	var b strings.Builder
-	hasAlphaNum := false
-	for _, r := range input {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			hasAlphaNum = true
-			b.WriteRune(r)
-			continue
-		}
-		if r == '.' || r == '_' || r == '-' {
-			b.WriteRune(r)
-		}
-	}
-	if b.Len() == 0 || !hasAlphaNum {
-		return "", false
-	}
-	return b.String(), true
 }
 
 func roomIDFromQuery(r *http.Request) (string, error) {

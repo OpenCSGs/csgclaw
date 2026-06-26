@@ -390,6 +390,89 @@
   line-height: var(--text-xl-line-height);
 }
 
+.agent-detail-pane .agent-title-display {
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(100%, 430px);
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-detail-pane .agent-title-display:hover,
+.agent-detail-pane .agent-title-display:focus-visible {
+  color: var(--text);
+  outline: none;
+}
+
+.agent-detail-pane .agent-title-display-copy {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: var(--text-xl-line-height);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-detail-pane .agent-title-display.is-empty .agent-title-display-copy {
+  color: var(--muted);
+}
+
+.agent-detail-pane .agent-title-display-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  opacity: 0;
+  transition:
+    opacity 160ms ease,
+    color 160ms ease;
+}
+
+.agent-detail-pane .agent-title-display:hover .agent-title-display-icon,
+.agent-detail-pane .agent-title-display:focus-visible .agent-title-display-icon {
+  color: var(--text);
+  opacity: 1;
+}
+
+.agent-detail-pane .agent-title-edit-field {
+  display: inline-flex;
+  flex: 1 1 180px;
+  min-width: min(100%, 120px);
+  max-width: min(100%, 430px);
+  align-items: center;
+}
+
+.agent-detail-pane .agent-title-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 3px 10px;
+  border: 1px solid var(--input-border-focus);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: var(--text-xl-line-height);
+  outline: none;
+  box-shadow: var(--input-shadow-focus);
+}
+
+.agent-detail-pane .agent-title-input::placeholder {
+  color: var(--muted);
+}
+
 .agent-detail-pane .entity-title-row {
   flex-wrap: wrap;
   row-gap: 6px;

@@ -37,6 +37,7 @@ export type AgentUpdatePayload = {
   field_mask?: string[];
   instructions?: string;
   image?: string;
+  model_config?: JSONRecord;
   name?: string;
   profile?: JSONRecord | string;
   runtime?: { kind?: RuntimeKind; options?: JSONRecord };
@@ -223,7 +224,7 @@ export function updateAgentRequest(agentID: string, payload: AgentUpdatePayload)
 function normalizeAgentPayload(payload: AgentUpdatePayload): AgentUpdatePayload {
   const normalized: AgentUpdatePayload = { ...payload };
   if (payload.agent_profile && typeof payload.agent_profile === "object") {
-    normalized.profile = payload.agent_profile;
+    normalized.model_config = payload.agent_profile;
     delete normalized.agent_profile;
   }
   if (payload.runtime_options && typeof payload.runtime_options === "object") {
@@ -264,7 +265,7 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
           options: payload.runtime_options,
         },
         from_template: payload.from_template,
-        profile: payload.agent_profile,
+        model_config: payload.agent_profile,
       },
     },
   });

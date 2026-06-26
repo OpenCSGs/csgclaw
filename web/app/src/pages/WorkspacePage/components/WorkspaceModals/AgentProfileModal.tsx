@@ -248,8 +248,6 @@ export function AgentProfileModal({
                     {requiredFieldLabel(t("agentName"))}
                     <input
                       value={agentDraft.name}
-                      readOnly={agentModalMode === "edit"}
-                      disabled={agentModalMode === "edit"}
                       required
                       aria-required="true"
                       onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}

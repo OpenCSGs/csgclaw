@@ -2021,8 +2021,8 @@ func TestBoxLiteProviderGatewayLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureManager() error = %v", err)
 	}
-	if manager.BoxID != "box-manager" || manager.Status != string(sandbox.StateRunning) {
-		t.Fatalf("EnsureManager() = %+v, want running box-manager", manager)
+	if manager.BoxID != "box-csgclaw-agent-manager" || manager.Status != string(sandbox.StateRunning) {
+		t.Fatalf("EnsureManager() = %+v, want running box-csgclaw-agent-manager", manager)
 	}
 
 	worker, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
@@ -2034,8 +2034,8 @@ func TestBoxLiteProviderGatewayLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWorker() error = %v", err)
 	}
-	if worker.BoxID != "box-alice" || worker.Status != string(sandbox.StateRunning) {
-		t.Fatalf("CreateWorker() = %+v, want running box-alice", worker)
+	if worker.BoxID != "box-csgclaw-agent-alice" || worker.Status != string(sandbox.StateRunning) {
+		t.Fatalf("CreateWorker() = %+v, want running box-csgclaw-agent-alice", worker)
 	}
 	if worker.RuntimeKind != RuntimeKindPicoClawSandbox {
 		t.Fatalf("CreateWorker().RuntimeKind = %q, want %q", worker.RuntimeKind, RuntimeKindPicoClawSandbox)
@@ -2082,13 +2082,56 @@ func TestBoxLiteProviderGatewayLifecycle(t *testing.T) {
 	if hasBoxliteCLIExec(runner.requests, "tail", "-n", "1", "-f", picoclawsandbox.BoxGatewayLogPath) {
 		t.Fatalf("boxlite-cli tail exec should not be used for mounted gateway logs: %#v", requestArgs(runner.requests))
 	}
-	if !hasBoxliteCLICommandArgs(runner.requests, "rm", "-f", "box-alice") {
+	if !hasBoxliteCLICommandArgs(runner.requests, "rm", "-f", "box-csgclaw-agent-alice") {
 		t.Fatalf("boxlite-cli remove command not found in requests: %#v", requestArgs(runner.requests))
 	}
 	for _, req := range runner.requests {
 		if len(req.Args) > 2 && req.Args[2] == "run" && !containsAny(req.Args, "/bin/sh", "/usr/local/bin/picoclaw") {
 			t.Fatalf("boxlite-cli run args missing gateway command: %q", req.Args)
 		}
+	}
+}
+
+func TestCreateWorkerWithUTF8NameUsesAgentIDSandboxName(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	orig := localIPv4Resolver
+	localIPv4Resolver = func() string { return "10.0.0.8" }
+	defer func() { localIPv4Resolver = orig }()
+
+	runner := newAgentBoxliteCLIRunner()
+	provider := boxlitecli.NewProvider(boxlitecli.WithRunner(runner))
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "shared-token"},
+		"picoclaw:latest",
+		filepath.Join(homeDir, "agents.json"),
+		WithSandboxProvider(provider),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	worker, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID:          "u-qa",
+		Name:        "测试工程师",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "picoclaw:latest",
+	})
+	if err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
+	}
+	if worker.ID != "agent-qa" || worker.Name != "测试工程师" {
+		t.Fatalf("CreateWorker() identity = %q/%q, want agent-qa/测试工程师", worker.ID, worker.Name)
+	}
+	if worker.BoxID != "box-csgclaw-agent-qa" {
+		t.Fatalf("CreateWorker().BoxID = %q, want %q", worker.BoxID, "box-csgclaw-agent-qa")
+	}
+	if !hasBoxliteCLICommandArgs(runner.requests, "run", "--name", "csgclaw-agent-qa") {
+		t.Fatalf("boxlite-cli run command for csgclaw-agent-qa not found in requests: %#v", requestArgs(runner.requests))
+	}
+	if hasBoxliteCLICommandArgs(runner.requests, "run", "--name", "测试工程师") {
+		t.Fatalf("boxlite-cli run command used display name: %#v", requestArgs(runner.requests))
 	}
 }
 
@@ -2216,11 +2259,11 @@ func TestCreateReplaceWorkerRecreatesExistingAgent(t *testing.T) {
 	if replaced.ID != "agent-alice" || replaced.Name != "alice-v2" || replaced.Role != RoleWorker {
 		t.Fatalf("Create() replaced = %+v, want replaced worker", replaced)
 	}
-	if !hasBoxliteCLICommandArgs(runner.requests, "rm", "-f", "box-alice") {
+	if !hasBoxliteCLICommandArgs(runner.requests, "rm", "-f", "box-csgclaw-agent-alice") {
 		t.Fatalf("boxlite-cli remove command not found in requests: %#v", requestArgs(runner.requests))
 	}
-	if !hasBoxliteCLICommandArgs(runner.requests, "run", "--name", "alice-v2") {
-		t.Fatalf("boxlite-cli run command for alice-v2 not found in requests: %#v", requestArgs(runner.requests))
+	if !hasBoxliteCLICommandArgs(runner.requests, "run", "--name", "csgclaw-agent-alice") {
+		t.Fatalf("boxlite-cli run command for csgclaw-agent-alice not found in requests: %#v", requestArgs(runner.requests))
 	}
 }
 
@@ -2345,7 +2388,13 @@ func TestUpdateInstructionsPersistsToState(t *testing.T) {
 		t.Fatalf("Update().Instructions = %q, want %q", updated.Instructions, nextInstructions)
 	}
 
-	reloaded, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", statePath)
+	reloaded, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:test",
+		statePath,
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex}),
+	)
 	if err != nil {
 		t.Fatalf("NewService() reload error = %v", err)
 	}
@@ -2355,6 +2404,68 @@ func TestUpdateInstructionsPersistsToState(t *testing.T) {
 	}
 	if got.Instructions != nextInstructions {
 		t.Fatalf("reloaded Agent().Instructions = %q, want %q", got.Instructions, nextInstructions)
+	}
+}
+
+func TestUpdateManagerNamePersistsToRootState(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), config.AppDirName, config.StateFileName)
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:test",
+		statePath,
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		Description: "manager",
+		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind: RuntimeKindCodex,
+		Role:        RoleManager,
+		Status:      string(agentruntime.StateStopped),
+		CreatedAt:   time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC),
+	}
+	svc.mu.Lock()
+	svc.syncRuntimeRecordLocked(svc.agents[ManagerUserID])
+	if err := svc.saveLocked(); err != nil {
+		svc.mu.Unlock()
+		t.Fatalf("saveLocked() seed error = %v", err)
+	}
+	svc.mu.Unlock()
+
+	nextName := "管理员"
+	updated, err := svc.Update(context.Background(), ManagerUserID, UpdateRequest{Name: &nextName})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated.Name != nextName {
+		t.Fatalf("Update().Name = %q, want %q", updated.Name, nextName)
+	}
+
+	reloaded, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:test",
+		statePath,
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() reload error = %v", err)
+	}
+	got, ok := reloaded.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent() ok = false, want true")
+	}
+	if got.ID != ManagerUserID || got.Role != RoleManager {
+		t.Fatalf("reloaded manager identity = id %q role %q, want %q %q", got.ID, got.Role, ManagerUserID, RoleManager)
+	}
+	if got.Name != nextName {
+		t.Fatalf("reloaded Agent().Name = %q, want %q", got.Name, nextName)
 	}
 }
 
@@ -2415,6 +2526,66 @@ func TestCreateReplaceManagerIgnoresRequestedImageAndUsesDefault(t *testing.T) {
 	}
 	if replaced.Image != "manager-image:1" {
 		t.Fatalf("Create() image = %q, want default manager image", replaced.Image)
+	}
+}
+
+func TestCreateReplaceManagerPreservesRenamedManager(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	var gotNames []string
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			gotNames = append(gotNames, name)
+			return &fakeInstance{}, sandbox.Info{
+				ID:        "box-" + name,
+				Name:      name,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	)
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) error {
+		return nil
+	}
+	defer ResetTestHooks()
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:1", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if _, err := svc.Create(context.Background(), CreateRequest{
+		Spec: CreateAgentSpec{
+			ID:   ManagerUserID,
+			Name: ManagerName,
+		},
+	}); err != nil {
+		t.Fatalf("seed Create() error = %v", err)
+	}
+
+	nextName := "管理员"
+	if _, err := svc.Update(context.Background(), ManagerUserID, UpdateRequest{Name: &nextName}); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	replaced, err := svc.Create(context.Background(), CreateRequest{
+		Spec: CreateAgentSpec{
+			ID: ManagerUserID,
+		},
+		Replace:   true,
+		FieldMask: []string{"id"},
+	})
+	if err != nil {
+		t.Fatalf("Create() replace error = %v", err)
+	}
+	if replaced.Name != nextName {
+		t.Fatalf("Create() replaced manager name = %q, want %q", replaced.Name, nextName)
+	}
+	if len(gotNames) != 2 || gotNames[1] != nextName {
+		t.Fatalf("createGatewayBox() names = %#v, want recreated manager name %q", gotNames, nextName)
 	}
 }
 
@@ -3341,6 +3512,41 @@ func TestLoadManagerRepairsLegacyManagerIdentity(t *testing.T) {
 	}
 }
 
+func TestLoadManagerPreservesDisplayName(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agents.json")
+	managerName := "管理员"
+	data, err := json.Marshal(persistedState{
+		Agents: []persistedAgent{
+			{
+				ID:          ManagerUserID,
+				Name:        managerName,
+				RuntimeKind: RuntimeKindPicoClawSandbox,
+				Role:        RoleManager,
+				CreatedAt:   time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(statePath, data, 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatalf("Agent(%q) ok=false", ManagerUserID)
+	}
+	if got.ID != ManagerUserID || got.Name != managerName || got.Role != RoleManager {
+		t.Fatalf("manager identity = %q/%q/%q, want %q/%q/%q", got.ID, got.Name, got.Role, ManagerUserID, managerName, RoleManager)
+	}
+}
+
 func TestDeleteRemovesAgentHomeDirectory(t *testing.T) {
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) { return nil, nil },
@@ -3557,8 +3763,8 @@ func TestDeleteFallsBackToNameWhenStoredBoxIDIsStale(t *testing.T) {
 	if err := svc.Delete(context.Background(), "u-alice"); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
-	if strings.Join(lookedUp, ",") != "box-stale,alice" {
-		t.Fatalf("getBox() keys = %q, want stale box id then name fallback", lookedUp)
+	if strings.Join(lookedUp, ",") != "box-stale,csgclaw-agent-alice,alice" {
+		t.Fatalf("getBox() keys = %q, want stale box id, stable sandbox name, then display name fallback", lookedUp)
 	}
 	if removed != "alice" {
 		t.Fatalf("ForceRemove() target = %q, want %q", removed, "alice")
@@ -4067,8 +4273,8 @@ func TestStreamLogsFallsBackToNameAndRefreshesStoredBoxID(t *testing.T) {
 	if err := svc.StreamLogs(context.Background(), "u-alice", false, 20, &out); err != nil {
 		t.Fatalf("StreamLogs() error = %v", err)
 	}
-	if len(gotKeys) < 2 || gotKeys[0] != "box-stale" || gotKeys[1] != "alice" {
-		t.Fatalf("getBox() leading keys = %q, want stale box id then name fallback", gotKeys)
+	if len(gotKeys) < 3 || gotKeys[0] != "box-stale" || gotKeys[1] != "csgclaw-agent-alice" || gotKeys[2] != "alice" {
+		t.Fatalf("getBox() leading keys = %q, want stale box id, stable sandbox name, then display name fallback", gotKeys)
 	}
 	got, ok := svc.Agent("u-alice")
 	if !ok {
@@ -4132,8 +4338,8 @@ func TestStartFallsBackToNameAndRefreshesStoredAgentState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	if len(gotKeys) < 2 || gotKeys[0] != "box-stale" || gotKeys[1] != "alice" {
-		t.Fatalf("getBox() leading keys = %q, want stale box id then name fallback", gotKeys)
+	if len(gotKeys) < 3 || gotKeys[0] != "box-stale" || gotKeys[1] != "csgclaw-agent-alice" || gotKeys[2] != "alice" {
+		t.Fatalf("getBox() leading keys = %q, want stale box id, stable sandbox name, then display name fallback", gotKeys)
 	}
 	if startCalls != 1 {
 		t.Fatalf("startBox() calls = %d, want 1", startCalls)
@@ -4516,8 +4722,8 @@ func TestStartConfiguredAgentsRecreatesMissingCompleteWorkerBoxes(t *testing.T) 
 	if strings.Join(removed, ",") != "box-alice-stale" {
 		t.Fatalf("removed boxes = %q, want stale box id", removed)
 	}
-	if len(gotKeys) < 2 || gotKeys[0] != "box-alice-stale" || gotKeys[1] != "alice" {
-		t.Fatalf("getBox() leading keys = %q, want stale box id then name", gotKeys)
+	if len(gotKeys) < 3 || gotKeys[0] != "box-alice-stale" || gotKeys[1] != "csgclaw-agent-alice" || gotKeys[2] != "alice" {
+		t.Fatalf("getBox() leading keys = %q, want stale box id, stable sandbox name, then display name fallback", gotKeys)
 	}
 	got, ok := svc.Agent("u-alice")
 	if !ok {
@@ -5848,8 +6054,8 @@ func TestStopFallsBackToNameAndRefreshesStoredAgentState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stop() error = %v", err)
 	}
-	if len(gotKeys) < 2 || gotKeys[0] != "box-stale" || gotKeys[1] != "alice" {
-		t.Fatalf("getBox() leading keys = %q, want stale box id then name fallback", gotKeys)
+	if len(gotKeys) < 3 || gotKeys[0] != "box-stale" || gotKeys[1] != "csgclaw-agent-alice" || gotKeys[2] != "alice" {
+		t.Fatalf("getBox() leading keys = %q, want stale box id, stable sandbox name, then display name fallback", gotKeys)
 	}
 	if stopCalls != 1 {
 		t.Fatalf("stopBox() calls = %d, want 1", stopCalls)
@@ -6722,8 +6928,8 @@ func TestLookupBootstrapManagerUsesPerAgentHome(t *testing.T) {
 	if got, want := gotHome, wantHome; got != want {
 		t.Fatalf("resolved manager runtime home = %q, want %q", got, want)
 	}
-	if len(removed) != 1 || removed[0] != ManagerName {
-		t.Fatalf("removed stale manager boxes = %#v, want [%q]", removed, ManagerName)
+	if len(removed) != 2 || removed[0] != "csgclaw-agent-manager" || removed[1] != ManagerName {
+		t.Fatalf("removed stale manager boxes = %#v, want [csgclaw-agent-manager %q]", removed, ManagerName)
 	}
 }
 
@@ -6767,8 +6973,8 @@ func TestLookupBootstrapManagerRemovesOrphanManagerWhenNoRecord(t *testing.T) {
 	if box != nil {
 		t.Fatalf("lookupBootstrapManager() box = %#v, want nil", box)
 	}
-	if len(removed) != 1 || removed[0] != ManagerName {
-		t.Fatalf("removed stale manager boxes = %#v, want [%q]", removed, ManagerName)
+	if len(removed) != 1 || removed[0] != "csgclaw-agent-manager" {
+		t.Fatalf("removed stale manager boxes = %#v, want [csgclaw-agent-manager]", removed)
 	}
 }
 
@@ -6808,14 +7014,17 @@ func TestLookupBootstrapManagerUsesStoredIDWhenConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lookupBootstrapManager() error = %v", err)
 	}
-	if len(lookedUp) != 2 {
-		t.Fatalf("lookupBootstrapManager() called times = %d, want %d", len(lookedUp), 2)
+	if len(lookedUp) != 3 {
+		t.Fatalf("lookupBootstrapManager() called times = %d, want %d", len(lookedUp), 3)
 	}
 	if lookedUp[0] != "box-stale" {
 		t.Fatalf("lookupBootstrapManager() first lookup = %q, want %q", lookedUp[0], "box-stale")
 	}
-	if lookedUp[1] != ManagerName {
-		t.Fatalf("lookupBootstrapManager() second lookup = %q, want %q", lookedUp[1], ManagerName)
+	if lookedUp[1] != "csgclaw-agent-manager" {
+		t.Fatalf("lookupBootstrapManager() second lookup = %q, want %q", lookedUp[1], "csgclaw-agent-manager")
+	}
+	if lookedUp[2] != ManagerName {
+		t.Fatalf("lookupBootstrapManager() third lookup = %q, want %q", lookedUp[2], ManagerName)
 	}
 }
 
@@ -6855,11 +7064,14 @@ func TestLookupBootstrapManagerUsesManagerNameWhenNoStoredID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lookupBootstrapManager() error = %v", err)
 	}
-	if len(lookedUp) != 1 {
-		t.Fatalf("lookupBootstrapManager() called times = %d, want %d", len(lookedUp), 1)
+	if len(lookedUp) != 2 {
+		t.Fatalf("lookupBootstrapManager() called times = %d, want %d", len(lookedUp), 2)
 	}
-	if lookedUp[0] != ManagerName {
-		t.Fatalf("lookupBootstrapManager() first lookup = %q, want %q", lookedUp[0], ManagerName)
+	if lookedUp[0] != "csgclaw-agent-manager" {
+		t.Fatalf("lookupBootstrapManager() first lookup = %q, want %q", lookedUp[0], "csgclaw-agent-manager")
+	}
+	if lookedUp[1] != ManagerName {
+		t.Fatalf("lookupBootstrapManager() second lookup = %q, want %q", lookedUp[1], ManagerName)
 	}
 }
 
@@ -6935,8 +7147,8 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	if spec.Image != "picoclaw:latest" {
 		t.Fatalf("gatewayCreateSpec() image = %q, want %q", spec.Image, "picoclaw:latest")
 	}
-	if spec.Name != "alice" {
-		t.Fatalf("gatewayCreateSpec() name = %q, want %q", spec.Name, "alice")
+	if spec.Name != "csgclaw-u-worker-1" {
+		t.Fatalf("gatewayCreateSpec() name = %q, want %q", spec.Name, "csgclaw-u-worker-1")
 	}
 	if !spec.Detach {
 		t.Fatal("gatewayCreateSpec() detach = false, want true")

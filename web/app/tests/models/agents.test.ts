@@ -49,7 +49,7 @@ import { AGENT_AVATAR_OPTIONS, selectUnusedAgentAvatar } from "@/shared/avatarOp
 describe("agent model helpers", () => {
   it("normalizes agent profiles into editable drafts", () => {
     const draft = agentToDraft({
-      agent_profile: {
+      model_config: {
         api_key_preview: "sk-...",
         api_key_set: true,
         env: { ZED: 1, alpha: "two" },
@@ -85,6 +85,17 @@ describe("agent model helpers", () => {
     ]);
     expect(JSON.parse(draft.headersText)).toEqual({ "X-Trace": "1" });
     expect(JSON.parse(draft.requestOptionsText)).toEqual({ temperature: 0.2 });
+  });
+
+  it("preserves an already-resolved avatar as a draft-only value", () => {
+    expect(
+      agentToDraft({
+        avatar: "avatar/cartoon-1.png",
+        id: "worker-1",
+        name: "Worker",
+        role: "worker",
+      }).avatar,
+    ).toBe("avatar/cartoon-1.png");
   });
 
   it("converts env rows to maps while rejecting missing and duplicate keys", () => {

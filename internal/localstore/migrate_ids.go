@@ -143,6 +143,9 @@ func needsCompactStateMigration(root string) bool {
 		if _, ok := item["profile"].(string); ok {
 			return true
 		}
+		if _, ok := item["profile"]; ok {
+			return true
+		}
 		if runtime := stringAnyMap(item["runtime"]); len(runtime) > 0 {
 			for _, key := range []string{"id", "agent_ids", "created_at"} {
 				if _, ok := runtime[key]; ok {
@@ -150,11 +153,17 @@ func needsCompactStateMigration(root string) bool {
 				}
 			}
 		}
-		if profile := stringAnyMap(item["profile"]); len(profile) > 0 && profileNeedsCompactMigration(profile) {
+		if profile := stringAnyMap(item["model_config"]); len(profile) > 0 && profileNeedsCompactMigration(profile) {
+			return true
+		}
+		if profile := stringAnyMap(item["profile"]); len(profile) > 0 {
 			return true
 		}
 	}
-	if defaults := stringAnyMap(agents["profile_defaults"]); len(defaults) > 0 && profileDefaultsNeedCompactMigration(defaults) {
+	if _, ok := agents["profile_defaults"]; ok {
+		return true
+	}
+	if defaults := stringAnyMap(agents["model_defaults"]); len(defaults) > 0 && profileDefaultsNeedCompactMigration(defaults) {
 		return true
 	}
 	participants := stringAnyMap(state["participants"])
@@ -211,26 +220,27 @@ func needsTypedIDMigration(root string) bool {
 			return true
 		}
 	}
-	data, err := os.ReadFile(filepath.Join(root, "im", "state.json"))
-	if err != nil {
+	state, err := readJSONMapIfExists(filepath.Join(root, "im", "state.json"))
+	if err != nil || len(state) == 0 {
 		return false
 	}
-	var state struct {
-		Rooms []struct {
-			Members  []string          `json:"members"`
-			Threads  []json.RawMessage `json:"threads"`
-			Messages json.RawMessage   `json:"messages"`
-		} `json:"rooms"`
+	if imStateNeedsUserIDMigration(root, state) {
+		return true
 	}
-	if json.Unmarshal(data, &state) != nil {
-		return false
+	return needsThreadContextMigration(root)
+}
+
+func imStateNeedsUserIDMigration(root string, state map[string]any) bool {
+	if needsUserIDMigration(stringField(state, "current_user_id")) {
+		return true
 	}
-	for _, room := range state.Rooms {
-		for _, rawThread := range room.Threads {
-			var thread map[string]any
-			if json.Unmarshal(rawThread, &thread) != nil {
-				continue
-			}
+	for _, user := range arrayOfMaps(state["users"]) {
+		if needsUserIDMigration(stringField(user, "id")) {
+			return true
+		}
+	}
+	for _, room := range arrayOfMaps(state["rooms"]) {
+		for _, thread := range arrayOfMaps(room["threads"]) {
 			if rootID := strings.TrimSpace(stringField(thread, "root_message_id")); rootID != "" && !strings.HasPrefix(rootID, "msg-") {
 				return true
 			}
@@ -238,23 +248,46 @@ func needsTypedIDMigration(root string) bool {
 				return true
 			}
 		}
-		for _, member := range room.Members {
-			if !strings.HasPrefix(strings.TrimSpace(member), "user-") {
+		for _, member := range stringArray(room["members"]) {
+			if needsUserIDMigration(member) {
 				return true
 			}
 		}
-		var inlineMessages []struct {
-			SenderID string `json:"sender_id"`
-		}
-		if len(room.Messages) > 0 && json.Unmarshal(room.Messages, &inlineMessages) == nil {
-			for _, message := range inlineMessages {
-				if senderID := strings.TrimSpace(message.SenderID); senderID != "" && !strings.HasPrefix(senderID, "user-") {
-					return true
-				}
+		for _, message := range arrayOfMaps(room["messages"]) {
+			if messageNeedsUserIDMigration(message) {
+				return true
 			}
 		}
+		if rel := externalSessionPathForRoom(room, stringField(room, "id")); rel != "" && sessionMessagesNeedUserIDMigration(root, rel) {
+			return true
+		}
 	}
-	return needsThreadContextMigration(root)
+	return false
+}
+
+func externalSessionPathForRoom(room map[string]any, oldRoomID string) string {
+	if _, ok := room["messages"].([]any); ok {
+		return ""
+	}
+	return sessionPathForRoom(room, oldRoomID)
+}
+
+func needsUserIDMigration(id string) bool {
+	id = strings.TrimSpace(id)
+	return id != "" && !strings.HasPrefix(id, "user-")
+}
+
+func sessionMessagesNeedUserIDMigration(root, rel string) bool {
+	lines, err := readJSONLinesIfExists(filepath.Join(root, "im", filepath.FromSlash(rel)))
+	if err != nil {
+		return false
+	}
+	for _, line := range lines {
+		if messageNeedsUserIDMigration(line) {
+			return true
+		}
+	}
+	return false
 }
 
 func needsThreadContextMigration(root string) bool {
@@ -936,10 +969,12 @@ func (m *typedIDMigrator) migrateAgents(agentsState map[string]any, defaultModel
 	state := map[string]any{
 		"items": items,
 	}
-	if profileDefaults, ok := agentsState["profile_defaults"].(map[string]any); ok {
-		state["profile_defaults"] = compactProfileDefaults(profileDefaults, defaultModel)
+	if modelDefaults, ok := agentsState["model_defaults"].(map[string]any); ok {
+		state["model_defaults"] = compactProfileDefaults(modelDefaults, defaultModel)
+	} else if profileDefaults, ok := agentsState["profile_defaults"].(map[string]any); ok {
+		state["model_defaults"] = compactProfileDefaults(profileDefaults, defaultModel)
 	} else if !modelRefEmpty(defaultModel) {
-		state["profile_defaults"] = mapFromModelRef(defaultModel)
+		state["model_defaults"] = mapFromModelRef(defaultModel)
 	}
 	if detection := agentsState["detection_results"]; detection != nil {
 		state["detection_results"] = detection
@@ -953,8 +988,8 @@ func (m *typedIDMigrator) compactAgentsState(agentsState map[string]any, default
 			return agentsState
 		}
 		return map[string]any{
-			"items":            []any{},
-			"profile_defaults": mapFromModelRef(defaultModel),
+			"items":          []any{},
+			"model_defaults": mapFromModelRef(defaultModel),
 		}
 	}
 	items := arrayOfMaps(agentsState["items"])
@@ -972,11 +1007,14 @@ func (m *typedIDMigrator) compactAgentsState(agentsState map[string]any, default
 	}
 	delete(agentsState, "agents")
 	delete(agentsState, "runtimes")
-	if defaults := stringAnyMap(agentsState["profile_defaults"]); len(defaults) > 0 {
-		agentsState["profile_defaults"] = compactProfileDefaults(defaults, defaultModel)
+	if defaults := stringAnyMap(agentsState["model_defaults"]); len(defaults) > 0 {
+		agentsState["model_defaults"] = compactProfileDefaults(defaults, defaultModel)
+	} else if defaults := stringAnyMap(agentsState["profile_defaults"]); len(defaults) > 0 {
+		agentsState["model_defaults"] = compactProfileDefaults(defaults, defaultModel)
 	} else if !modelRefEmpty(defaultModel) {
-		agentsState["profile_defaults"] = mapFromModelRef(defaultModel)
+		agentsState["model_defaults"] = mapFromModelRef(defaultModel)
 	}
+	delete(agentsState, "profile_defaults")
 	return agentsState
 }
 
@@ -1009,15 +1047,17 @@ func compactAgentRecord(agent map[string]any) map[string]any {
 	}
 
 	var profile map[string]any
-	if p := stringAnyMap(agent["agent_profile"]); len(p) > 0 {
+	if p := stringAnyMap(agent["model_config"]); len(p) > 0 {
+		profile = p
+	} else if p := stringAnyMap(agent["agent_profile"]); len(p) > 0 {
 		profile = p
 	} else if p := stringAnyMap(agent["profile"]); len(p) > 0 {
 		profile = p
 	}
 	if len(profile) > 0 {
-		agent["profile"] = compactProfile(profile, name, description)
+		agent["model_config"] = compactProfile(profile, name, description)
 	} else {
-		delete(agent, "profile")
+		delete(agent, "model_config")
 	}
 	if stringField(agent, "updated_at") == "" {
 		if createdAt := stringField(agent, "created_at"); createdAt != "" {
@@ -1026,7 +1066,7 @@ func compactAgentRecord(agent map[string]any) map[string]any {
 	}
 	for _, key := range []string{
 		"runtime_id", "runtime_kind", "box_id", "runtime_options", "status", "avatar",
-		"agent_profile", "profile_complete", "provider", "model_id", "reasoning_effort",
+		"agent_profile", "profile", "profile_complete", "provider", "model_id", "reasoning_effort",
 	} {
 		delete(agent, key)
 	}

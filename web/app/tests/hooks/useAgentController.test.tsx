@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
   batchAddAgentSkillsRequest,
+  createBotRequest,
+  createNotificationBotRequest,
   deleteAgentSkillRequest,
   fetchAgent,
   fetchAgentProfile,
@@ -19,6 +21,7 @@ import {
   updateAgentRequest,
 } from "@/api/agents";
 import { createUserRequest } from "@/api/im";
+import { patchCsgclawUserRequest } from "@/api/participants";
 import { fetchSkills } from "@/api/skills";
 import { createTeamRequest, fetchTeams } from "@/api/tasks";
 import { useAgentController } from "@/hooks/workspace/useAgentController";
@@ -56,6 +59,8 @@ vi.mock("@/api/agents", async () => {
   return {
     ...actual,
     batchAddAgentSkillsRequest: vi.fn(),
+    createBotRequest: vi.fn(),
+    createNotificationBotRequest: vi.fn(),
     deleteAgentSkillRequest: vi.fn(),
     fetchAgent: vi.fn(),
     fetchAgentProfile: vi.fn(),
@@ -69,6 +74,14 @@ vi.mock("@/api/agents", async () => {
     runAgentActionRequest: vi.fn(),
     startFeishuRegistrationRequest: vi.fn(),
     updateAgentRequest: vi.fn(),
+  };
+});
+
+vi.mock("@/api/participants", async () => {
+  const actual = await vi.importActual<typeof import("@/api/participants")>("@/api/participants");
+  return {
+    ...actual,
+    patchCsgclawUserRequest: vi.fn(),
   };
 });
 
@@ -245,6 +258,8 @@ describe("useAgentController", () => {
     vi.mocked(fetchAgentProfileDefaults).mockReset();
     vi.mocked(fetchAgentProfileModels).mockReset();
     vi.mocked(batchAddAgentSkillsRequest).mockReset();
+    vi.mocked(createBotRequest).mockReset();
+    vi.mocked(createNotificationBotRequest).mockReset();
     vi.mocked(deleteAgentSkillRequest).mockReset();
     vi.mocked(fetchAgentWorkspace).mockReset();
     vi.mocked(createUserRequest).mockReset();
@@ -258,12 +273,35 @@ describe("useAgentController", () => {
     vi.mocked(runAgentActionRequest).mockReset();
     vi.mocked(startFeishuRegistrationRequest).mockReset();
     vi.mocked(updateAgentRequest).mockReset();
+    vi.mocked(patchCsgclawUserRequest).mockReset();
     window.localStorage.removeItem(feishuRegistrationStorageKey);
     vi.mocked(fetchAgent).mockResolvedValueOnce(oldAgent).mockResolvedValueOnce(latestAgent);
     vi.mocked(fetchAgentProfile).mockResolvedValue(profile);
     vi.mocked(fetchAgentProfileDefaults).mockResolvedValue(profile);
     vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: [] });
     vi.mocked(batchAddAgentSkillsRequest).mockResolvedValue(undefined);
+    vi.mocked(createBotRequest).mockResolvedValue({
+      ...oldAgent,
+      id: "u-worker",
+      name: "worker",
+      participants: [
+        {
+          agent_id: "u-worker",
+          channel: "csgclaw",
+          channel_user_ref: "user-worker",
+          id: "pt-worker",
+          type: "agent",
+        },
+      ],
+      role: "worker",
+    });
+    vi.mocked(createNotificationBotRequest).mockResolvedValue({
+      bot_type: "notification",
+      id: "pt-notifier",
+      name: "notifier",
+      type: "notification",
+      user_id: "user-notifier",
+    });
     vi.mocked(deleteAgentSkillRequest).mockResolvedValue(undefined);
     vi.mocked(fetchAgentWorkspace).mockResolvedValue({ entries: [] });
     vi.mocked(createUserRequest).mockResolvedValue({ id: "u-worker", name: "worker" });
@@ -305,6 +343,11 @@ describe("useAgentController", () => {
       status: "configured",
     });
     vi.mocked(updateAgentRequest).mockResolvedValue(latestAgent);
+    vi.mocked(patchCsgclawUserRequest).mockImplementation(async (userID, payload) => ({
+      avatar: payload.avatar || "",
+      id: userID,
+      name: userID,
+    }));
   });
 
   afterEach(() => {
@@ -329,11 +372,19 @@ describe("useAgentController", () => {
     expect(fetchAgent).toHaveBeenLastCalledWith("u-manager", { cacheBust: true });
   });
 
-  it("refreshes the selected agent workspace after saving manager profile changes", async () => {
+  it("refreshes the selected agent workspace after saving manager profile changes without renaming manager", async () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.agentViewProps.draft?.image).toBe(oldImage));
     await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(1));
+    act(() => {
+      const draft = result.current.agentViewProps.draft;
+      result.current.agentViewProps.onDraftChange?.({
+        ...draft!,
+        description: "updated manager profile",
+        name: "管理员",
+      });
+    });
 
     await act(async () => {
       await result.current.agentViewProps.onSave?.();
@@ -342,11 +393,10 @@ describe("useAgentController", () => {
     await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(2));
     expect(updateAgentRequest).toHaveBeenCalledWith(
       "u-manager",
-      expect.objectContaining({
-        instructions: "reply briefly",
-        name: "manager",
-      }),
+      expect.objectContaining({ instructions: "reply briefly" }),
     );
+    const payload = vi.mocked(updateAgentRequest).mock.calls[0]?.[1];
+    expect(payload).not.toHaveProperty("name");
   });
 
   it("does not wait for bootstrap or skill refresh after saving only the selected agent model", async () => {
@@ -417,6 +467,61 @@ describe("useAgentController", () => {
     );
     expect(result.current.refreshWorkspaceBootstrap).not.toHaveBeenCalled();
     expect(fetchAgentSkills).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves an edited UTF-8 agent display name from the profile modal", async () => {
+    const workerAgent: AgentLike = {
+      id: "u-worker",
+      image: oldImage,
+      instructions: "reply briefly",
+      model_id: "gpt-test",
+      name: "worker",
+      profile_complete: true,
+      provider: "codex",
+      role: "worker",
+      runtime_kind: "picoclaw_sandbox",
+      status: "running",
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValueOnce(workerAgent);
+    vi.mocked(updateAgentRequest).mockResolvedValue({
+      ...workerAgent,
+      name: "测试工程师",
+    });
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
+          agents: [workerAgent],
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.controller.openEditAgentModal(workerAgent);
+    });
+
+    await waitFor(() => expect(result.current.controller.agentProfileModalProps?.agentDraft.name).toBe("worker"));
+
+    act(() => {
+      const draft = result.current.controller.agentProfileModalProps?.agentDraft;
+      result.current.controller.agentProfileModalProps?.onAgentDraftChange({
+        ...draft!,
+        name: "测试工程师",
+      });
+    });
+
+    await act(async () => {
+      await result.current.controller.agentProfileModalProps?.onSave();
+    });
+
+    expect(updateAgentRequest).toHaveBeenCalledWith(
+      "u-worker",
+      expect.objectContaining({
+        name: "测试工程师",
+      }),
+    );
   });
 
   it("reloads the selected agent draft when the same routed agent gains profile fields and there are no unsaved edits", async () => {
@@ -998,20 +1103,26 @@ describe("useAgentController", () => {
     }
   });
 
-  it("initializes create agent drafts without an agent-owned avatar", async () => {
-    const humanAvatar = AGENT_AVATAR_OPTIONS.at(-2)?.value || "";
-    const agents = AGENT_AVATAR_OPTIONS.slice(0, -2).map((option, index): AgentLike => {
+  it("initializes create agent drafts with an unused user-owned avatar", async () => {
+    const availableAvatar = AGENT_AVATAR_OPTIONS.at(-1)?.value || "";
+    const usedAvatarOptions = AGENT_AVATAR_OPTIONS.slice(0, -1);
+    const agents = usedAvatarOptions.map((_, index): AgentLike => {
       const manager = index === 0;
       return {
         id: manager ? "u-manager" : `u-worker-${index}`,
-        avatar: option.value,
         image: oldImage,
         name: manager ? "manager" : `worker-${index}`,
         role: manager ? "manager" : "worker",
         runtime_kind: "picoclaw_sandbox",
         status: "running",
+        user_id: `user-${index}`,
       };
     });
+    const users = usedAvatarOptions.map((option, index) => ({
+      id: `user-${index}`,
+      avatar: option.value,
+      name: `user-${index}`,
+    }));
 
     const { result } = renderHook(
       () =>
@@ -1020,7 +1131,7 @@ describe("useAgentController", () => {
           data: {
             current_user_id: "u-admin",
             rooms: [],
-            users: [{ id: "u-admin", avatar: humanAvatar, name: "admin" }],
+            users,
           },
         }).controller,
       { wrapper: createWrapper() },
@@ -1031,7 +1142,55 @@ describe("useAgentController", () => {
     });
 
     await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
-    expect(result.current.agentProfileModalProps?.agentDraft.avatar).toBe("");
+    expect(result.current.agentProfileModalProps?.agentDraft.avatar).toBe(availableAvatar);
+  });
+
+  it("saves a created worker avatar through the linked CSGClaw user", async () => {
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ data: { current_user_id: "u-admin", rooms: [], users: [] } }).controller,
+      {
+        wrapper: createWrapper(),
+      },
+    );
+
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+
+    await waitFor(() => expect(result.current.agentProfileModalProps?.agentDraft.avatar).toBeTruthy());
+    const selectedAvatar = result.current.agentProfileModalProps?.agentDraft.avatar || "";
+
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+
+    const createPayload = vi.mocked(createBotRequest).mock.calls[0]?.[0];
+    expect(createPayload).not.toHaveProperty("avatar");
+    expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-worker", { avatar: selectedAvatar });
+  });
+
+  it("saves a created notification avatar through the linked CSGClaw user", async () => {
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ data: { current_user_id: "u-admin", rooms: [], users: [] } }).controller,
+      {
+        wrapper: createWrapper(),
+      },
+    );
+
+    await act(async () => {
+      await result.current.openCreateNotificationParticipantModal();
+    });
+
+    await waitFor(() => expect(result.current.agentProfileModalProps?.agentDraft.avatar).toBeTruthy());
+    const selectedAvatar = result.current.agentProfileModalProps?.agentDraft.avatar || "";
+
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+
+    const createPayload = vi.mocked(createNotificationBotRequest).mock.calls[0]?.[0];
+    expect(createPayload).not.toHaveProperty("avatar");
+    expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-notifier", { avatar: selectedAvatar });
   });
 
   it("initializes create agent drafts from the first available model provider when defaults are empty", async () => {

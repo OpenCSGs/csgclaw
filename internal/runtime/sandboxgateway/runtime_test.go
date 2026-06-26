@@ -98,6 +98,23 @@ func TestCreateGatewayBoxSkipsReadinessForBoxlite(t *testing.T) {
 	}
 }
 
+func TestGatewayCreateSpecUsesAgentIDSandboxName(t *testing.T) {
+	rt := New(testGatewayDeps(func() string { return "docker" }, func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error) {
+		return 0, nil
+	}))
+	prepared := testPreparedGatewayProvision()
+	prepared.AgentID = "agent-qa"
+	rt.RememberPreparedGatewayProvision("agent-qa", prepared)
+
+	spec, err := rt.GatewayCreateSpec("image:1", "测试工程师", "agent-qa", agentruntime.Profile{})
+	if err != nil {
+		t.Fatalf("GatewayCreateSpec() error = %v", err)
+	}
+	if spec.Name != "csgclaw-agent-qa" {
+		t.Fatalf("GatewayCreateSpec() name = %q, want %q", spec.Name, "csgclaw-agent-qa")
+	}
+}
+
 func TestStartWaitsForDockerReadiness(t *testing.T) {
 	var attempts int
 	rt := New(testGatewayDeps(func() string { return "docker" }, func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error) {

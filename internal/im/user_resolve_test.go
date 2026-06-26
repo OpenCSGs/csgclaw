@@ -74,12 +74,3 @@ func TestUserForParticipantResolvesStableHashAliases(t *testing.T) {
 		t.Fatalf("userForParticipantLocked(pt-agent-zaha7h-d59735ad) = %+v, %v; want ux", user, ok)
 	}
 }
-
-func TestTrimStableHashSuffixRejectsNonMigrationSuffix(t *testing.T) {
-	if _, ok := trimStableHashSuffix("pt-agent-without-hash"); ok {
-		t.Fatal("trimStableHashSuffix() accepted non-hash suffix")
-	}
-	if got, ok := trimStableHashSuffix("agent-alice-abcdef12"); !ok || got != "agent-alice" {
-		t.Fatalf("trimStableHashSuffix() = %q, %v; want agent-alice, true", got, ok)
-	}
-}

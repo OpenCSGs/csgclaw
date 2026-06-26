@@ -54,7 +54,7 @@ type Agent struct {
 	CreatedAt        time.Time     `json:"created_at"`
 	UpdatedAt        time.Time     `json:"updated_at,omitempty"`
 	Profile          string        `json:"-"`
-	ProfileConfig    AgentProfile  `json:"profile,omitempty"`
+	ProfileConfig    AgentProfile  `json:"model_config,omitempty"`
 	UserID           string        `json:"user_id,omitempty"`
 	UserName         string        `json:"user_name,omitempty"`
 	ParticipantIDs   []string      `json:"participant_ids,omitempty"`
@@ -66,21 +66,26 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 	type agentAlias Agent
 	type agentJSON struct {
 		agentAlias
-		Profile json.RawMessage `json:"profile"`
+		ModelConfig json.RawMessage `json:"model_config"`
+		Profile     json.RawMessage `json:"profile"`
 	}
 	var decoded agentJSON
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
 	}
 	*a = Agent(decoded.agentAlias)
-	if len(decoded.Profile) > 0 && string(decoded.Profile) != "null" {
+	profilePayload := decoded.ModelConfig
+	if len(profilePayload) == 0 || string(profilePayload) == "null" {
+		profilePayload = decoded.Profile
+	}
+	if len(profilePayload) > 0 && string(profilePayload) != "null" {
 		var profile AgentProfile
-		if err := json.Unmarshal(decoded.Profile, &profile); err == nil {
+		if err := json.Unmarshal(profilePayload, &profile); err == nil {
 			a.ProfileConfig = profile
 			a.Profile = profileSelector(profile)
 		} else {
 			var selector string
-			if err := json.Unmarshal(decoded.Profile, &selector); err != nil {
+			if err := json.Unmarshal(profilePayload, &selector); err != nil {
 				return err
 			}
 			a.Profile = strings.TrimSpace(selector)
@@ -152,7 +157,7 @@ type CreateAgentRequest struct {
 	Runtime        AgentRuntime        `json:"runtime,omitempty"`
 	RuntimeOptions map[string]any      `json:"runtime_options,omitempty"`
 	Profile        string              `json:"-"`
-	ProfileConfig  *CreateAgentProfile `json:"profile,omitempty"`
+	ProfileConfig  *CreateAgentProfile `json:"model_config,omitempty"`
 	AgentProfile   *CreateAgentProfile `json:"agent_profile,omitempty"`
 }
 
@@ -172,15 +177,11 @@ func (r CreateAgentRequest) MarshalJSON() ([]byte, error) {
 		CreatedAt      time.Time           `json:"created_at,omitempty"`
 		Runtime        AgentRuntime        `json:"runtime,omitempty"`
 		RuntimeOptions map[string]any      `json:"runtime_options,omitempty"`
-		Profile        any                 `json:"profile,omitempty"`
+		ModelConfig    *CreateAgentProfile `json:"model_config,omitempty"`
+		Profile        string              `json:"profile,omitempty"`
 		AgentProfile   *CreateAgentProfile `json:"agent_profile,omitempty"`
 	}
-	var profile any
-	if r.ProfileConfig != nil {
-		profile = r.ProfileConfig
-	} else if strings.TrimSpace(r.Profile) != "" {
-		profile = strings.TrimSpace(r.Profile)
-	}
+	profile := strings.TrimSpace(r.Profile)
 	return json.Marshal(createAgentRequestJSON{
 		ID:             r.ID,
 		Name:           r.Name,
@@ -196,6 +197,7 @@ func (r CreateAgentRequest) MarshalJSON() ([]byte, error) {
 		CreatedAt:      r.CreatedAt,
 		Runtime:        r.Runtime,
 		RuntimeOptions: r.RuntimeOptions,
+		ModelConfig:    r.ProfileConfig,
 		Profile:        profile,
 		AgentProfile:   r.AgentProfile,
 	})

@@ -1,13 +1,15 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { AgentDetailPane, AgentRow, NotificationParticipantDetailPane } from "@/pages/AgentPage/components";
-import { agentToDraft } from "@/models/agents";
+import { agentToDraft, type AgentDraft } from "@/models/agents";
 
 const labels: Record<string, string> = {
   agentDelete: "Delete",
   agentInstructions: "Instructions",
   agentModel: "Model",
   editDescription: "Edit description",
+  editAgentName: "Edit name",
   agentRecreate: "Recreate",
   agentStart: "Start",
   agentStop: "Stop",
@@ -178,6 +180,116 @@ describe("agent action visibility", () => {
     expect(screen.getByRole("menuitem", { name: "Recreate" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Upgrade" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the agent name compact until entering edit mode", async () => {
+    const user = userEvent.setup();
+    const savedDraft = agentToDraft(worker);
+    const onDraftChange = vi.fn();
+
+    function TestPane() {
+      const [draft, setDraft] = useState<AgentDraft>(savedDraft);
+      return (
+        <AgentDetailPane
+          item={worker}
+          t={t}
+          activeRoom={null}
+          busyKey=""
+          error=""
+          draft={draft}
+          savedDraft={savedDraft}
+          models={[]}
+          modelBusy={false}
+          saving={false}
+          publishBusy={false}
+          saveError=""
+          authStatuses={{}}
+          authBusyProvider=""
+          notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+          onDraftChange={(nextDraft) => {
+            onDraftChange(nextDraft);
+            setDraft(nextDraft);
+          }}
+          onSave={vi.fn()}
+          onPublish={vi.fn()}
+          onProviderLogin={vi.fn()}
+          onStart={vi.fn()}
+          onStop={vi.fn()}
+          onRecreate={vi.fn()}
+          onUpgrade={vi.fn()}
+          onDelete={vi.fn()}
+          onInvite={vi.fn()}
+          onOpenDM={vi.fn()}
+        />
+      );
+    }
+
+    render(<TestPane />);
+
+    expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
+    const nameTrigger = screen.getByRole("button", { name: "Edit name" });
+    expect(nameTrigger).toHaveTextContent("Worker");
+
+    await user.click(nameTrigger);
+
+    const nameInput = screen.getByRole("textbox", { name: "Name" });
+    expect(nameInput).toHaveFocus();
+    expect(nameInput).toHaveValue("Worker");
+
+    await user.clear(nameInput);
+    await user.type(nameInput, "测试工程师");
+
+    expect(onDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({ name: "测试工程师" }));
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Edit name" })).toHaveTextContent("测试工程师");
+  });
+
+  it("renders the builtin manager name as fixed text in edit mode", () => {
+    const manager = {
+      ...worker,
+      id: "agent-manager",
+      name: "manager",
+      role: "manager",
+    };
+    const draft = agentToDraft(manager);
+
+    render(
+      <AgentDetailPane
+        item={manager}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={draft}
+        savedDraft={draft}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "manager" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit name" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit description" })).toBeInTheDocument();
   });
 
   it("shows Feishu connect and reconnect controls in the agent detail channels section", async () => {
@@ -486,7 +598,7 @@ describe("agent action visibility", () => {
 
   it("keeps header description compact until entering edit mode and removes duplicate basics fields", async () => {
     const user = userEvent.setup();
-    const { container } = render(
+    render(
       <AgentDetailPane
         item={worker}
         t={t}
@@ -515,11 +627,10 @@ describe("agent action visibility", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Worker" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit name" })).toHaveTextContent("Worker");
     expect(screen.queryByDisplayValue("Agent description")).not.toBeInTheDocument();
     const descriptionTrigger = screen.getByRole("button", { name: "Edit description" });
     expect(descriptionTrigger).toHaveTextContent("Agent description");
-    expect(container.querySelector('input[value="Worker"]')).not.toBeInTheDocument();
     expect(screen.queryByText("Description")).not.toBeInTheDocument();
 
     await user.click(descriptionTrigger);

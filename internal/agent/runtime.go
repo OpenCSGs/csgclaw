@@ -60,11 +60,14 @@ func (s *Service) lookupBootstrapManager(ctx context.Context) (sandbox.Runtime, 
 		return nil, nil, err
 	}
 	if !s.hasBootstrapManagerRecord() {
-		if err := s.forceRemoveBox(ctx, rt, ManagerName); err != nil {
-			if sandbox.IsNotFound(err) {
-				return rt, nil, nil
+		for _, key := range s.bootstrapManagerLookupKeys() {
+			if err := s.forceRemoveBox(ctx, rt, key); err != nil {
+				if sandbox.IsNotFound(err) {
+					continue
+				}
+				return nil, nil, fmt.Errorf("remove stale bootstrap manager box %q: %w", key, err)
 			}
-			return nil, nil, fmt.Errorf("remove stale bootstrap manager box %q: %w", ManagerName, err)
+			return rt, nil, nil
 		}
 		return rt, nil, nil
 	}

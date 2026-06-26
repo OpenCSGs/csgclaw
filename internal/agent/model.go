@@ -53,6 +53,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		Status           string                   `json:"status"`
 		CreatedAt        time.Time                `json:"created_at"`
 		UpdatedAt        time.Time                `json:"updated_at,omitempty"`
+		ModelConfig      json.RawMessage          `json:"model_config"`
 		Profile          json.RawMessage          `json:"profile"`
 		AgentProfile     AgentProfile             `json:"agent_profile,omitempty"`
 		ProfileComplete  bool                     `json:"profile_complete"`
@@ -99,14 +100,18 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 			out.RuntimeOptions = utils.CloneAnyMap(rt.Options)
 		}
 	}
-	if len(decoded.Profile) > 0 && string(decoded.Profile) != "null" {
+	profilePayload := decoded.ModelConfig
+	if len(profilePayload) == 0 || string(profilePayload) == "null" {
+		profilePayload = decoded.Profile
+	}
+	if len(profilePayload) > 0 && string(profilePayload) != "null" {
 		var profile AgentProfile
-		if err := json.Unmarshal(decoded.Profile, &profile); err == nil {
+		if err := json.Unmarshal(profilePayload, &profile); err == nil {
 			out.AgentProfile = profile
 			out.Profile = profileSelector(profile)
 		} else {
 			var selector string
-			if err := json.Unmarshal(decoded.Profile, &selector); err != nil {
+			if err := json.Unmarshal(profilePayload, &selector); err != nil {
 				return err
 			}
 			out.Profile = strings.TrimSpace(selector)
@@ -149,6 +154,7 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 		Status         string          `json:"status,omitempty"`
 		CreatedAt      time.Time       `json:"created_at,omitempty"`
 		UpdatedAt      time.Time       `json:"updated_at,omitempty"`
+		ModelConfig    json.RawMessage `json:"model_config,omitempty"`
 		Profile        json.RawMessage `json:"profile,omitempty"`
 		RuntimeOptions map[string]any  `json:"runtime_options,omitempty"`
 		AgentProfile   AgentProfile    `json:"agent_profile,omitempty"`
@@ -184,14 +190,18 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 			out.RuntimeOptions = utils.CloneAnyMap(rt.Options)
 		}
 	}
-	if len(decoded.Profile) > 0 && string(decoded.Profile) != "null" {
+	profilePayload := decoded.ModelConfig
+	if len(profilePayload) == 0 || string(profilePayload) == "null" {
+		profilePayload = decoded.Profile
+	}
+	if len(profilePayload) > 0 && string(profilePayload) != "null" {
 		var profile AgentProfile
-		if err := json.Unmarshal(decoded.Profile, &profile); err == nil {
+		if err := json.Unmarshal(profilePayload, &profile); err == nil {
 			out.AgentProfile = profile
 			out.Profile = profileSelector(profile)
 		} else {
 			var selector string
-			if err := json.Unmarshal(decoded.Profile, &selector); err != nil {
+			if err := json.Unmarshal(profilePayload, &selector); err != nil {
 				return err
 			}
 			out.Profile = strings.TrimSpace(selector)
@@ -220,6 +230,7 @@ func (r *UpdateRequest) UnmarshalJSON(data []byte) error {
 		Instructions   *string         `json:"instructions,omitempty"`
 		Image          *string         `json:"image,omitempty"`
 		Avatar         *string         `json:"-"`
+		ModelConfig    json.RawMessage `json:"model_config,omitempty"`
 		Profile        json.RawMessage `json:"profile,omitempty"`
 		Runtime        *RuntimeRecord  `json:"runtime,omitempty"`
 		RuntimeOptions *map[string]any `json:"runtime_options,omitempty"`
@@ -240,14 +251,18 @@ func (r *UpdateRequest) UnmarshalJSON(data []byte) error {
 		FieldMask:      append([]string(nil), decoded.FieldMask...),
 	}
 	profileField := ""
-	if len(decoded.Profile) > 0 && string(decoded.Profile) != "null" {
+	profilePayload := decoded.ModelConfig
+	if len(profilePayload) == 0 || string(profilePayload) == "null" {
+		profilePayload = decoded.Profile
+	}
+	if len(profilePayload) > 0 && string(profilePayload) != "null" {
 		var profile AgentProfile
-		if err := json.Unmarshal(decoded.Profile, &profile); err == nil {
+		if err := json.Unmarshal(profilePayload, &profile); err == nil {
 			out.AgentProfile = &profile
 			profileField = "agent_profile"
 		} else {
 			var selector string
-			if err := json.Unmarshal(decoded.Profile, &selector); err != nil {
+			if err := json.Unmarshal(profilePayload, &selector); err != nil {
 				return err
 			}
 			selector = strings.TrimSpace(selector)
@@ -286,7 +301,7 @@ func normalizeCompactUpdateFieldMask(fieldMask []string, profileField string, ha
 	for _, field := range fieldMask {
 		normalized := strings.ToLower(strings.TrimSpace(field))
 		switch normalized {
-		case "profile":
+		case "profile", "model_config":
 			if profileField != "" {
 				add(profileField)
 			} else {

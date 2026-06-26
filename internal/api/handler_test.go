@@ -184,33 +184,6 @@ func (f *fakeCodexBridgeController) StopAgent(agentID string) {
 	f.stopCalls = append(f.stopCalls, agentID)
 }
 
-func TestDeriveAgentHandle(t *testing.T) {
-	tests := []struct {
-		name  string
-		agent agent.Agent
-		want  string
-	}{
-		{
-			name:  "plain name",
-			agent: agent.Agent{Name: "Alice Smith", ID: "u-alice", Role: agent.RoleWorker},
-			want:  "alice-smith",
-		},
-		{
-			name:  "fallback to id",
-			agent: agent.Agent{Name: "!!!", ID: "u-worker_01", Role: agent.RoleWorker},
-			want:  "worker_01",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := deriveAgentHandle(tt.agent); got != tt.want {
-				t.Fatalf("deriveAgentHandle() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestHandleFeishuUsersCreateAndList(t *testing.T) {
 	srv := &Handler{feishu: feishu.NewService()}
 
@@ -1292,15 +1265,15 @@ func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	profile, ok := got[0]["profile"].(map[string]any)
+	profile, ok := got[0]["model_config"].(map[string]any)
 	if !ok || profile["api_key_set"] != true {
-		t.Fatalf("profile = %#v, want api_key_set true", got[0]["profile"])
+		t.Fatalf("model_config = %#v, want api_key_set true", got[0]["model_config"])
 	}
 	if got, want := profile["api_key_preview"], "secr..."; got != want {
-		t.Fatalf("profile api_key_preview = %#v, want %q", got, want)
+		t.Fatalf("model_config api_key_preview = %#v, want %q", got, want)
 	}
 	if _, ok := profile["api_key"]; ok {
-		t.Fatalf("profile includes api_key: %#v", profile)
+		t.Fatalf("model_config includes api_key: %#v", profile)
 	}
 }
 
@@ -1340,10 +1313,10 @@ func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 	if got["description"] != "new role" {
 		t.Fatalf("agent = %#v, want updated description", got)
 	}
-	profile, ok := got["profile"].(map[string]any)
+	profile, ok := got["model_config"].(map[string]any)
 	env, envOK := profile["env"].(map[string]any)
 	if !ok || profile["model_id"] != "new-model" || !envOK || env["A"] != "B" {
-		t.Fatalf("profile = %#v, want updated model and env", got["profile"])
+		t.Fatalf("model_config = %#v, want updated model and env", got["model_config"])
 	}
 }
 
@@ -3769,26 +3742,6 @@ func TestHandleCreateRoomResolvesManagerAgentIDToParticipantUser(t *testing.T) {
 	}
 	if !containsMember(got.Members, im.ManagerUserID) || containsMember(got.Members, agent.ManagerUserID) {
 		t.Fatalf("room members = %+v, want manager IM user only", got.Members)
-	}
-}
-
-func TestHandleUsersCreateDefaultsHandleFromName(t *testing.T) {
-	srv := &Handler{im: im.NewService()}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-alice","name":"Alice"}`))
-	rec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-
-	var got im.User
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if got.Name != "Alice" {
-		t.Fatalf("user.Name = %q, want %q", got.Name, "Alice")
 	}
 }
 
