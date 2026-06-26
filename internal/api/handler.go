@@ -114,23 +114,161 @@ type agentResponse struct {
 	Name                 string                             `json:"name"`
 	Description          string                             `json:"description,omitempty"`
 	Instructions         string                             `json:"instructions,omitempty"`
-	RuntimeID            string                             `json:"runtime_id,omitempty"`
-	RuntimeKind          string                             `json:"runtime_kind,omitempty"`
+	Runtime              apitypes.AgentRuntime              `json:"runtime,omitempty"`
+	RuntimeID            string                             `json:"-"`
+	RuntimeKind          string                             `json:"-"`
 	Image                string                             `json:"image,omitempty"`
-	Avatar               string                             `json:"avatar,omitempty"`
-	BoxID                string                             `json:"box_id,omitempty"`
+	Avatar               string                             `json:"-"`
+	BoxID                string                             `json:"-"`
 	Role                 string                             `json:"role"`
-	Status               string                             `json:"status"`
+	Status               string                             `json:"-"`
 	CreatedAt            time.Time                          `json:"created_at"`
-	Profile              string                             `json:"profile,omitempty"`
-	RuntimeOptions       map[string]any                     `json:"runtime_options"`
-	RuntimeOptionSchemas []agentruntime.RuntimeOptionSchema `json:"runtime_option_schemas,omitempty"`
-	AgentProfile         agent.AgentProfileView             `json:"agent_profile,omitempty"`
-	ProfileComplete      bool                               `json:"profile_complete"`
-	DetectionResults     []agent.ProfileDetectionResult     `json:"detection_results,omitempty"`
+	UpdatedAt            time.Time                          `json:"updated_at,omitempty"`
+	Profile              string                             `json:"-"`
+	ProfileConfig        apitypes.AgentProfile              `json:"profile,omitempty"`
+	RuntimeOptions       map[string]any                     `json:"-"`
+	RuntimeOptionSchemas []agentruntime.RuntimeOptionSchema `json:"-"`
+	AgentProfile         agent.AgentProfileView             `json:"-"`
+	ProfileComplete      bool                               `json:"-"`
+	DetectionResults     []agent.ProfileDetectionResult     `json:"-"`
+	UserID               string                             `json:"user_id,omitempty"`
+	UserName             string                             `json:"user_name,omitempty"`
 	ParticipantIDs       []string                           `json:"participant_ids,omitempty"`
 	ParticipantNames     []string                           `json:"participant_names,omitempty"`
 	Participants         []apitypes.Participant             `json:"participants,omitempty"`
+}
+
+func (r *agentResponse) UnmarshalJSON(data []byte) error {
+	var apiAgent apitypes.Agent
+	if err := json.Unmarshal(data, &apiAgent); err != nil {
+		return err
+	}
+	*r = agentResponse{
+		ID:               apiAgent.ID,
+		Name:             apiAgent.Name,
+		Description:      apiAgent.Description,
+		Instructions:     apiAgent.Instructions,
+		Runtime:          apiAgent.Runtime,
+		RuntimeKind:      apiAgent.RuntimeKind,
+		Image:            apiAgent.Image,
+		BoxID:            apiAgent.BoxID,
+		Role:             apiAgent.Role,
+		Status:           apiAgent.Status,
+		CreatedAt:        apiAgent.CreatedAt,
+		UpdatedAt:        apiAgent.UpdatedAt,
+		Profile:          apiAgent.Profile,
+		ProfileConfig:    apiAgent.ProfileConfig,
+		RuntimeOptions:   apiAgent.Runtime.Options,
+		AgentProfile:     agentProfileViewFromAPI(apiAgent.ProfileConfig),
+		UserID:           apiAgent.UserID,
+		UserName:         apiAgent.UserName,
+		ParticipantIDs:   apiAgent.ParticipantIDs,
+		ParticipantNames: apiAgent.ParticipantNames,
+		Participants:     apiAgent.Participants,
+	}
+	if len(apiAgent.Runtime.OptionSchemas) > 0 {
+		data, err := json.Marshal(apiAgent.Runtime.OptionSchemas)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(data, &r.RuntimeOptionSchemas); err != nil {
+			return err
+		}
+	}
+	var legacy struct {
+		RuntimeID            string                             `json:"runtime_id"`
+		RuntimeKind          string                             `json:"runtime_kind"`
+		Avatar               string                             `json:"avatar"`
+		BoxID                string                             `json:"box_id"`
+		Status               string                             `json:"status"`
+		RuntimeOptions       map[string]any                     `json:"runtime_options"`
+		RuntimeOptionSchemas []agentruntime.RuntimeOptionSchema `json:"runtime_option_schemas"`
+		AgentProfile         agent.AgentProfileView             `json:"agent_profile"`
+		ProfileComplete      bool                               `json:"profile_complete"`
+		DetectionResults     []agent.ProfileDetectionResult     `json:"detection_results"`
+	}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return err
+	}
+	if strings.TrimSpace(legacy.RuntimeID) != "" {
+		r.RuntimeID = legacy.RuntimeID
+	}
+	if strings.TrimSpace(legacy.RuntimeKind) != "" {
+		r.RuntimeKind = legacy.RuntimeKind
+	}
+	if strings.TrimSpace(legacy.Avatar) != "" {
+		r.Avatar = legacy.Avatar
+	}
+	if strings.TrimSpace(legacy.BoxID) != "" {
+		r.BoxID = legacy.BoxID
+	}
+	if strings.TrimSpace(legacy.Status) != "" {
+		r.Status = legacy.Status
+	}
+	if len(legacy.RuntimeOptions) > 0 {
+		r.RuntimeOptions = legacy.RuntimeOptions
+	}
+	if len(legacy.RuntimeOptionSchemas) > 0 {
+		r.RuntimeOptionSchemas = legacy.RuntimeOptionSchemas
+	}
+	if !agentProfileViewEmpty(legacy.AgentProfile) {
+		r.AgentProfile = legacy.AgentProfile
+	}
+	r.ProfileComplete = legacy.ProfileComplete
+	if len(legacy.DetectionResults) > 0 {
+		r.DetectionResults = legacy.DetectionResults
+	}
+	return nil
+}
+
+func agentProfileViewFromAPI(profile apitypes.AgentProfile) agent.AgentProfileView {
+	return agent.AgentProfileView{
+		ModelProviderID:      profile.ModelProviderID,
+		BaseURL:              profile.BaseURL,
+		APIKeySet:            profile.APIKeySet,
+		APIKeyPreview:        profile.APIKeyPreview,
+		Headers:              profile.Headers,
+		ModelID:              profile.ModelID,
+		ReasoningEffort:      profile.ReasoningEffort,
+		EnableFastMode:       profile.EnableFastMode,
+		RequestOptions:       profile.RequestOptions,
+		Env:                  profile.Env,
+		EnvRestartRequired:   profile.EnvRestartRequired,
+		ImageUpgradeRequired: profile.ImageUpgradeRequired,
+		DetectionResults:     agentDetectionResultsFromAPI(profile.DetectionResults),
+	}
+}
+
+func agentProfileViewEmpty(profile agent.AgentProfileView) bool {
+	return strings.TrimSpace(profile.ModelProviderID) == "" &&
+		strings.TrimSpace(profile.BaseURL) == "" &&
+		!profile.APIKeySet &&
+		strings.TrimSpace(profile.APIKeyPreview) == "" &&
+		len(profile.Headers) == 0 &&
+		strings.TrimSpace(profile.ModelID) == "" &&
+		strings.TrimSpace(profile.ReasoningEffort) == "" &&
+		!profile.EnableFastMode &&
+		len(profile.RequestOptions) == 0 &&
+		len(profile.Env) == 0 &&
+		!profile.EnvRestartRequired &&
+		!profile.ImageUpgradeRequired &&
+		len(profile.DetectionResults) == 0
+}
+
+func agentDetectionResultsFromAPI(items []apitypes.ProfileDetectionResult) []agent.ProfileDetectionResult {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]agent.ProfileDetectionResult, 0, len(items))
+	for _, item := range items {
+		out = append(out, agent.ProfileDetectionResult{
+			Provider: item.Provider,
+			Status:   item.Status,
+			ModelID:  item.ModelID,
+			Error:    item.Error,
+		})
+	}
+	return out
 }
 
 type directoryPickerResponse struct {
@@ -635,10 +773,20 @@ func (h *Handler) publishUpdatedAgentUser(updated agent.Agent) {
 		Name:        updated.Name,
 		Description: updated.Description,
 		Role:        updated.Role,
-		Avatar:      updated.Avatar,
 	})
 	if err != nil || !ok {
 		return
+	}
+	if h.participant != nil {
+		name := updated.Name
+		for _, item := range h.participant.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, AgentID: updated.ID}) {
+			if strings.TrimSpace(item.ID) == "" {
+				continue
+			}
+			_, _, _ = h.participant.Update(context.Background(), participant.ChannelCSGClaw, item.ID, participant.UpdateRequest{
+				Name: &name,
+			})
+		}
 	}
 	if h.imBus != nil {
 		userCopy := user
@@ -692,7 +840,7 @@ func (h *Handler) handleAgentProfile(w http.ResponseWriter, r *http.Request, id 
 			http.Error(w, "agent not found", http.StatusNotFound)
 			return
 		}
-		writeJSON(w, http.StatusOK, profile)
+		writeJSON(w, http.StatusOK, profileResponseFromAgentView(profile))
 	case http.MethodPut:
 		var req agent.AgentProfile
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -708,7 +856,7 @@ func (h *Handler) handleAgentProfile(w http.ResponseWriter, r *http.Request, id 
 			http.Error(w, err.Error(), status)
 			return
 		}
-		writeJSON(w, http.StatusOK, profile)
+		writeJSON(w, http.StatusOK, profileResponseFromAgentView(profile))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -790,7 +938,7 @@ func (h *Handler) handleAgentProfileDefaults(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	writeJSON(w, http.StatusOK, h.svc.ProfileDefaultsView())
+	writeJSON(w, http.StatusOK, profileResponseFromAgentView(h.svc.ProfileDefaultsView()))
 }
 
 func (h *Handler) handleAgentStart(w http.ResponseWriter, r *http.Request, id string) {
@@ -946,7 +1094,19 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 }
 
 func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequest {
-	prof := agentProfileFromAPI(req.AgentProfile)
+	profileReq := req.ProfileConfig
+	if profileReq == nil {
+		profileReq = req.AgentProfile
+	}
+	prof := agentProfileFromAPI(profileReq)
+	runtimeKind := strings.TrimSpace(req.Runtime.Kind)
+	if runtimeKind == "" {
+		runtimeKind = req.RuntimeKind
+	}
+	runtimeOptions := utils.CloneAnyMapShallowNestedStringMaps(req.Runtime.Options)
+	if len(runtimeOptions) == 0 {
+		runtimeOptions = utils.CloneAnyMapShallowNestedStringMaps(req.RuntimeOptions)
+	}
 	return agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:             req.ID,
@@ -954,14 +1114,14 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 			Description:    req.Description,
 			Instructions:   req.Instructions,
 			Image:          req.Image,
-			Avatar:         req.Avatar,
-			RuntimeKind:    req.RuntimeKind,
+			RuntimeKind:    runtimeKind,
 			FromTemplate:   req.FromTemplate,
 			Role:           req.Role,
 			Status:         req.Status,
 			CreatedAt:      req.CreatedAt,
+			UpdatedAt:      req.CreatedAt,
 			Profile:        req.Profile,
-			RuntimeOptions: utils.CloneAnyMapShallowNestedStringMaps(req.RuntimeOptions),
+			RuntimeOptions: runtimeOptions,
 			AgentProfile:   prof,
 		},
 		Replace:   req.Replace,
@@ -1103,9 +1263,6 @@ func agentProfileFromAPI(req *apitypes.CreateAgentProfile) agent.AgentProfile {
 		return agent.AgentProfile{}
 	}
 	return agent.AgentProfile{
-		Name:            req.Name,
-		Description:     req.Description,
-		Provider:        req.Provider,
 		ModelProviderID: req.ModelProviderID,
 		BaseURL:         req.BaseURL,
 		APIKey:          req.APIKey,
@@ -1115,7 +1272,6 @@ func agentProfileFromAPI(req *apitypes.CreateAgentProfile) agent.AgentProfile {
 		EnableFastMode:  req.EnableFastMode,
 		RequestOptions:  req.RequestOptions,
 		Env:             req.Env,
-		ProfileComplete: req.ProfileComplete,
 	}
 }
 
@@ -1527,7 +1683,6 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(req.ID)
 	name := strings.TrimSpace(req.Name)
 	description := strings.TrimSpace(req.Description)
-	handle := strings.TrimSpace(req.Handle)
 	role := strings.TrimSpace(req.Role)
 	id = h.resolveCSGClawLocalUserID(id)
 
@@ -1538,9 +1693,6 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		http.Error(w, "name is required", http.StatusBadRequest)
 		return
-	}
-	if handle == "" {
-		handle = name
 	}
 	if id == im.ManagerUserID {
 		if user, ok := h.im.User(id); ok {
@@ -1560,9 +1712,7 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 				ID:          userID,
 				Name:        firstNonEmptyString(existing.Name, name),
 				Description: description,
-				Handle:      firstNonEmptyString(handle, existing.Name, existing.ID),
 				Role:        firstNonEmptyString(role, agent.RoleWorker),
-				Avatar:      existing.Avatar,
 			})
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1617,7 +1767,6 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		ID:          id,
 		Name:        name,
 		Description: description,
-		Handle:      handle,
 		Role:        role,
 	})
 	if err != nil {
@@ -1637,9 +1786,6 @@ func (h *Handler) ensureUserForExistingCSGClawAgentParticipant(item apitypes.Par
 	}
 	if strings.TrimSpace(req.Name) == "" {
 		req.Name = firstNonEmptyString(item.Name, item.ID)
-	}
-	if strings.TrimSpace(req.Handle) == "" {
-		req.Handle = firstNonEmptyString(item.Name, item.ID)
 	}
 	if strings.TrimSpace(req.Role) == "" {
 		req.Role = agent.RoleWorker
@@ -1666,7 +1812,6 @@ func (h *Handler) updateCsgclawUser(w http.ResponseWriter, r *http.Request) {
 		ID:          id,
 		Name:        req.Name,
 		Description: req.Description,
-		Handle:      req.Handle,
 		Role:        req.Role,
 		Avatar:      req.Avatar,
 	})
@@ -1781,15 +1926,34 @@ func (h *Handler) directRoomWithMembers(left, right string) (im.Room, bool) {
 	}
 	left = strings.TrimSpace(left)
 	right = strings.TrimSpace(right)
+	leftUserID := h.im.ResolveUserID(left)
+	rightUserID := h.im.ResolveUserID(right)
 	for _, room := range h.im.ListRooms() {
 		if !room.IsDirect {
 			continue
 		}
-		if roomHasMember(room.Members, left) && roomHasMember(room.Members, right) {
+		if roomHasMemberAlias(h.im, room.Members, leftUserID) && roomHasMemberAlias(h.im, room.Members, rightUserID) {
 			return room, true
 		}
 	}
 	return im.Room{}, false
+}
+
+func roomHasMemberAlias(svc *im.Service, members []string, id string) bool {
+	id = strings.TrimSpace(id)
+	if svc != nil {
+		id = svc.ResolveUserID(id)
+	}
+	for _, member := range members {
+		member = strings.TrimSpace(member)
+		if svc != nil {
+			member = svc.ResolveUserID(member)
+		}
+		if member == id {
+			return true
+		}
+	}
+	return false
 }
 
 func roomHasMember(members []string, id string) bool {
@@ -2131,6 +2295,7 @@ func (h *Handler) presentAgentsForRequest(r *http.Request, items []agent.Agent) 
 	for i := range out {
 		items := byAgent[out[i].ID]
 		out[i].ParticipantIDs, out[i].ParticipantNames = participantSummaries(items)
+		out[i].UserID, out[i].UserName = agentLocalUserSummary(items)
 		if includeParticipants(r) {
 			out[i].Participants = items
 		}
@@ -2140,18 +2305,41 @@ func (h *Handler) presentAgentsForRequest(r *http.Request, items []agent.Agent) 
 
 func (h *Handler) presentAgentForRequest(r *http.Request, item agent.Agent) agentResponse {
 	resp := h.presentAgentResponse(item)
-	if !includeParticipants(r) || h == nil || h.participant == nil {
+	if h == nil || h.participant == nil {
 		return resp
 	}
-	resp.Participants = h.presentParticipants(h.participant.List(participant.ListOptions{AgentID: item.ID}))
-	resp.ParticipantIDs, resp.ParticipantNames = participantSummaries(resp.Participants)
+	items := h.presentParticipants(h.participant.List(participant.ListOptions{AgentID: item.ID}))
+	resp.ParticipantIDs, resp.ParticipantNames = participantSummaries(items)
+	resp.UserID, resp.UserName = agentLocalUserSummary(items)
+	if includeParticipants(r) {
+		resp.Participants = items
+	}
 	return resp
 }
 
 func (h *Handler) presentAgentResponse(item agent.Agent) agentResponse {
 	resp := presentAgent(item)
 	resp.RuntimeOptionSchemas = h.runtimeOptionSchemasForKind(item.RuntimeKind)
+	resp.Runtime.OptionSchemas = runtimeOptionSchemasForAPI(resp.RuntimeOptionSchemas)
 	return resp
+}
+
+func runtimeOptionSchemasForAPI(items []agentruntime.RuntimeOptionSchema) []map[string]any {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		record := map[string]any{}
+		data, err := json.Marshal(item)
+		if err == nil {
+			_ = json.Unmarshal(data, &record)
+		}
+		if len(record) > 0 {
+			out = append(out, record)
+		}
+	}
+	return out
 }
 
 func (h *Handler) runtimeOptionSchemasByKind(kinds []string) map[string][]agentruntime.RuntimeOptionSchema {
@@ -2261,6 +2449,31 @@ func participantSummaries(items []apitypes.Participant) ([]string, []string) {
 	return ids, names
 }
 
+func agentLocalUserSummary(items []apitypes.Participant) (string, string) {
+	for _, item := range items {
+		if !strings.EqualFold(strings.TrimSpace(item.Channel), participant.ChannelCSGClaw) {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(item.Type), participant.TypeAgent) {
+			continue
+		}
+		userID := strings.TrimSpace(item.UserID)
+		if userID == "" {
+			userID = strings.TrimSpace(item.ChannelUserRef)
+		}
+		userID = localUserIDFromAny(userID)
+		if userID == "" {
+			continue
+		}
+		userName := strings.TrimSpace(item.UserName)
+		if userName == "" {
+			userName = strings.TrimSpace(item.Name)
+		}
+		return userID, userName
+	}
+	return "", ""
+}
+
 func (h *Handler) resolveCSGClawParticipantMessageRequest(req im.CreateMessageRequest) im.CreateMessageRequest {
 	req.SenderID = h.resolveCSGClawParticipantUserID(req.SenderID)
 	req.MentionID = h.resolveCSGClawParticipantUserID(req.MentionID)
@@ -2361,11 +2574,18 @@ func presentAgent(item agent.Agent) agentResponse {
 	if runtimeOptions == nil {
 		runtimeOptions = map[string]any{}
 	}
+	profile := profileResponseFromAgentView(av)
 	return agentResponse{
-		ID:               item.ID,
-		Name:             item.Name,
-		Description:      item.Description,
-		Instructions:     item.Instructions,
+		ID:           item.ID,
+		Name:         item.Name,
+		Description:  item.Description,
+		Instructions: item.Instructions,
+		Runtime: apitypes.AgentRuntime{
+			Kind:      item.RuntimeKind,
+			State:     item.Status,
+			SandboxID: item.BoxID,
+			Options:   runtimeOptions,
+		},
 		RuntimeID:        item.RuntimeID,
 		RuntimeKind:      item.RuntimeKind,
 		Image:            item.Image,
@@ -2374,12 +2594,48 @@ func presentAgent(item agent.Agent) agentResponse {
 		Role:             item.Role,
 		Status:           item.Status,
 		CreatedAt:        item.CreatedAt,
+		UpdatedAt:        item.UpdatedAt,
 		Profile:          item.Profile,
 		RuntimeOptions:   runtimeOptions,
+		ProfileConfig:    profile,
 		AgentProfile:     av,
 		ProfileComplete:  item.ProfileComplete,
 		DetectionResults: append([]agent.ProfileDetectionResult(nil), item.DetectionResults...),
 	}
+}
+
+func profileResponseFromAgentView(view agent.AgentProfileView) apitypes.AgentProfile {
+	return apitypes.AgentProfile{
+		ModelProviderID:      view.ModelProviderID,
+		BaseURL:              view.BaseURL,
+		APIKeySet:            view.APIKeySet,
+		APIKeyPreview:        view.APIKeyPreview,
+		Headers:              view.Headers,
+		ModelID:              view.ModelID,
+		ReasoningEffort:      view.ReasoningEffort,
+		EnableFastMode:       view.EnableFastMode,
+		RequestOptions:       view.RequestOptions,
+		Env:                  view.Env,
+		EnvRestartRequired:   view.EnvRestartRequired,
+		ImageUpgradeRequired: view.ImageUpgradeRequired,
+		DetectionResults:     profileDetectionResultsFromAgent(view.DetectionResults),
+	}
+}
+
+func profileDetectionResultsFromAgent(items []agent.ProfileDetectionResult) []apitypes.ProfileDetectionResult {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]apitypes.ProfileDetectionResult, 0, len(items))
+	for _, item := range items {
+		out = append(out, apitypes.ProfileDetectionResult{
+			Provider: item.Provider,
+			Status:   item.Status,
+			ModelID:  item.ModelID,
+			Error:    item.Error,
+		})
+	}
+	return out
 }
 
 func presentEvent(evt im.Event) imEventResponse {

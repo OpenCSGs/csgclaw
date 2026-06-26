@@ -23,8 +23,7 @@
   justify-items: center;
   overflow: hidden;
   padding: var(--space-6) var(--space-8) 28px;
-  background:
-    linear-gradient(180deg, var(--white) 0, var(--white) 138px, transparent 138px), var(--gray-25);
+  background: linear-gradient(180deg, var(--white) 0, var(--white) 138px, transparent 138px), var(--gray-25);
 }
 
 .agent-profile-fixed-header {
@@ -558,7 +557,6 @@
 }
 
 .agent-skill-icon-button {
-
   position: absolute;
   top: 12px;
   right: 14px;

@@ -78,7 +78,7 @@ describe("composer model helpers", () => {
   });
 
   it("splits plain text mentions using the mentionable user map", () => {
-    const users = new Map([["alice", { handle: "alice", id: "u-1", name: "Alice" }]]);
+    const users = new Map([["alice", { id: "u-1", name: "Alice" }]]);
 
     expect(splitTextSegmentByMentions("Hi @alice and @missing", users)).toEqual([
       { type: "text", text: "Hi " },
@@ -93,12 +93,12 @@ describe("composer model helpers", () => {
 
   it("keeps all room mention candidates visible for an empty mention query", () => {
     const users = [
-      { handle: "admin", id: "u-admin", name: "Admin" },
-      { handle: "manager", id: "u-manager", name: "manager" },
-      { handle: "dev", id: "u-dev", name: "dev" },
-      { handle: "ux", id: "u-ux", name: "ux" },
-      { handle: "qa", id: "u-qa", name: "qa" },
-      { handle: "sales", id: "u-sales", name: "sales" },
+      { id: "u-admin", name: "Admin" },
+      { id: "u-manager", name: "manager" },
+      { id: "u-dev", name: "dev" },
+      { id: "u-ux", name: "ux" },
+      { id: "u-qa", name: "qa" },
+      { id: "u-sales", name: "sales" },
     ];
 
     expect(getMentionCandidates(users, "")).toEqual(users);
@@ -132,7 +132,7 @@ describe("composer model helpers", () => {
 
     const state = getComposerMentionState(root);
     expect(state).toMatchObject({ query: "ali", startOffset: 6, endOffset: 10 });
-    expect(replaceMentionQueryWithToken(root, state, { handle: "alice", id: "u-1", name: "Alice" })).toBe(true);
+    expect(replaceMentionQueryWithToken(root, state, { id: "u-1", name: "Alice" })).toBe(true);
 
     expect(parseComposerSegments(root)).toEqual([
       { type: "text", text: "Hello " },

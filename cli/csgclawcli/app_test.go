@@ -991,7 +991,7 @@ func TestExecuteMemberListUsesCSGClawDefault(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/channels/csgclaw/rooms/oc_alpha/members" {
 				t.Fatalf("url = %q, want csgclaw room members route", req.URL.String())
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"u_alice","name":"Alice","handle":"alice","role":"worker","is_online":true}]`), nil
+			return jsonResponse(http.StatusOK, `[{"id":"u_alice","name":"Alice","role":"worker","is_online":true}]`), nil
 		}),
 	}
 
@@ -999,7 +999,7 @@ func TestExecuteMemberListUsesCSGClawDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	assertTableHasRow(t, stdout.String(), "u_alice", "Alice", "alice", "worker", "true")
+	assertTableHasRow(t, stdout.String(), "u_alice", "Alice", "worker", "true")
 }
 
 func TestExecuteVersionFlagPrintsCsgclawCLIVersion(t *testing.T) {

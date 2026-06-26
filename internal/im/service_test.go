@@ -1,6 +1,7 @@
 package im
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -14,16 +15,15 @@ func TestEnsureWorkerUserCreatesUserAndBootstrapRoom(t *testing.T) {
 	svc := NewService()
 
 	user, room, err := svc.EnsureAgentUser(EnsureAgentUserRequest{
-		ID:     "u-alice",
-		Name:   "Alice",
-		Handle: "alice",
-		Role:   "Worker",
+		ID:   "u-alice",
+		Name: "Alice",
+		Role: "Worker",
 	})
 	if err != nil {
 		t.Fatalf("EnsureWorkerUser() error = %v", err)
 	}
-	if user.ID != "user-alice" || user.Handle != "alice" {
-		t.Fatalf("EnsureWorkerUser() user = %+v, want id/handle set", user)
+	if user.ID != "user-alice" || user.Name != "Alice" {
+		t.Fatalf("EnsureWorkerUser() user = %+v, want id/name set", user)
 	}
 	if room == nil {
 		t.Fatal("EnsureWorkerUser() room = nil, want bootstrap room")
@@ -36,13 +36,129 @@ func TestEnsureWorkerUserCreatesUserAndBootstrapRoom(t *testing.T) {
 	}
 }
 
+func TestCreateMessagePersistsUserIDsAndMentionNames(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "im", "state.json")
+	svc, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatalf("NewServiceFromPath() error = %v", err)
+	}
+	if _, _, err := svc.EnsureAgentUser(EnsureAgentUserRequest{ID: "agent-worker", Name: "worker", Role: "worker"}); err != nil {
+		t.Fatalf("EnsureAgentUser(worker) error = %v", err)
+	}
+
+	room, err := svc.CreateRoom(CreateRoomRequest{
+		Title:     "Ops",
+		CreatorID: "user-admin",
+		MemberIDs: []string{"user-worker"},
+	})
+	if err != nil {
+		t.Fatalf("CreateRoom() error = %v", err)
+	}
+	if !slices.Contains(room.Members, "user-admin") || !slices.Contains(room.Members, "user-worker") {
+		t.Fatalf("room members = %+v, want user ids", room.Members)
+	}
+	msg, err := svc.CreateMessage(CreateMessageRequest{
+		RoomID:    room.ID,
+		SenderID:  "user-admin",
+		MentionID: "user-worker",
+		Content:   "please check",
+	})
+	if err != nil {
+		t.Fatalf("CreateMessage() error = %v", err)
+	}
+	if msg.SenderID != "user-admin" {
+		t.Fatalf("message sender = %q, want user-admin", msg.SenderID)
+	}
+	if len(msg.Mentions) != 1 || msg.Mentions[0].ID != "user-worker" || msg.Mentions[0].Name != "worker" {
+		t.Fatalf("message mentions = %+v, want worker user mention", msg.Mentions)
+	}
+	if want := `<at user_id="user-worker">worker</at> please check`; msg.Content != want {
+		t.Fatalf("message content = %q, want %q", msg.Content, want)
+	}
+
+	var persisted persistedBootstrap
+	readJSONFileForTest(t, path, &persisted)
+	var persistedRoom persistedRoom
+	for _, candidate := range persisted.Rooms {
+		if candidate.ID == room.ID {
+			persistedRoom = candidate
+			break
+		}
+	}
+	if persistedRoom.ID == "" {
+		t.Fatalf("persisted rooms = %+v, want room %s", persisted.Rooms, room.ID)
+	}
+	if got := persistedRoom.Members; !slices.Contains(got, "user-admin") || !slices.Contains(got, "user-worker") {
+		t.Fatalf("persisted members = %+v, want user ids", got)
+	}
+	lines := readJSONLinesForTest(t, filepath.Join(filepath.Dir(path), "sessions", room.ID+".jsonl"))
+	if len(lines) == 0 {
+		t.Fatalf("session lines empty")
+	}
+	if got := stringField(lines[len(lines)-1], "sender_id"); got != "user-admin" {
+		t.Fatalf("persisted sender_id = %q, want user-admin", got)
+	}
+	mentions := arrayOfMaps(lines[len(lines)-1]["mentions"])
+	if len(mentions) != 1 || stringField(mentions[0], "id") != "user-worker" {
+		t.Fatalf("persisted mentions = %+v, want user-worker", mentions)
+	}
+}
+
+func readJSONFileForTest(t *testing.T, path string, out any) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		t.Fatalf("decode %s: %v", path, err)
+	}
+}
+
+func readJSONLinesForTest(t *testing.T, path string) []map[string]any {
+	t.Helper()
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer file.Close()
+	var out []map[string]any
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		var item map[string]any
+		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
+			t.Fatalf("decode line in %s: %v", path, err)
+		}
+		out = append(out, item)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan %s: %v", path, err)
+	}
+	return out
+}
+
+func stringField(item map[string]any, key string) string {
+	value, _ := item[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func arrayOfMaps(value any) []map[string]any {
+	items, _ := value.([]any)
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if mapped, ok := item.(map[string]any); ok {
+			out = append(out, mapped)
+		}
+	}
+	return out
+}
+
 func TestParticipantEventIncludesSenderDescription(t *testing.T) {
 	evt := messageEventForParticipant(
 		Room{ID: "room-1", Members: []string{"admin", "u-dev"}},
 		User{
 			ID:          "admin",
 			Name:        "Admin",
-			Handle:      "admin",
 			Description: "Agents can @admin to ask clarifying questions.",
 		},
 		Message{
@@ -58,24 +174,22 @@ func TestParticipantEventIncludesSenderDescription(t *testing.T) {
 	}
 }
 
-func TestEnsureWorkerUserRejectsDuplicateHandle(t *testing.T) {
+func TestEnsureWorkerUserRejectsDuplicateName(t *testing.T) {
 	svc := NewService()
 	_, _, err := svc.EnsureAgentUser(EnsureAgentUserRequest{
-		ID:     "u-alice",
-		Name:   "Alice",
-		Handle: "alice",
+		ID:   "u-alice",
+		Name: "Alice",
 	})
 	if err != nil {
 		t.Fatalf("EnsureWorkerUser() first call error = %v", err)
 	}
 
 	_, _, err = svc.EnsureAgentUser(EnsureAgentUserRequest{
-		ID:     "u-bob",
-		Name:   "Bob",
-		Handle: "alice",
+		ID:   "u-bob",
+		Name: "alice",
 	})
 	if err == nil {
-		t.Fatal("EnsureWorkerUser() duplicate handle error = nil, want error")
+		t.Fatal("EnsureWorkerUser() duplicate name error = nil, want error")
 	}
 }
 
@@ -83,8 +197,8 @@ func TestListMembersReturnsRoomMembers(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "Admin", Handle: "admin", Role: "admin"},
-			{ID: "u-alice", Name: "Alice", Handle: "alice", Role: "worker"},
+			{ID: "u-admin", Name: "Admin", Role: "admin"},
+			{ID: "u-alice", Name: "Alice", Role: "worker"},
 		},
 		Rooms: []Room{
 			{ID: "room-1", Title: "Ops", Members: []string{"u-admin", "u-alice"}},
@@ -104,10 +218,9 @@ func TestAddAgentToRoomSupportsRoomID(t *testing.T) {
 	svc := NewService()
 
 	_, _, err := svc.EnsureAgentUser(EnsureAgentUserRequest{
-		ID:     "u-alice",
-		Name:   "Alice",
-		Handle: "alice",
-		Role:   "Worker",
+		ID:   "u-alice",
+		Name: "Alice",
+		Role: "Worker",
 	})
 	if err != nil {
 		t.Fatalf("EnsureAgentUser() error = %v", err)
@@ -134,13 +247,13 @@ func TestAddAgentToRoomSupportsRoomID(t *testing.T) {
 		t.Fatalf("AddAgentToRoom() members = %+v, want agent joined", updated.Members)
 	}
 	last := updated.Messages[len(updated.Messages)-1]
-	if last.Event == nil || last.Event.Key != "room_members_added" || last.Event.ActorID != "pt-admin" {
+	if last.Event == nil || last.Event.Key != "room_members_added" || last.Event.ActorID != "user-admin" {
 		t.Fatalf("AddAgentToRoom() event = %+v, want structured room_members_added by admin", last)
 	}
-	if len(last.Event.TargetIDs) != 1 || last.Event.TargetIDs[0] != "pt-alice" {
-		t.Fatalf("AddAgentToRoom() target_ids = %+v, want [pt-alice]", last.Event.TargetIDs)
+	if len(last.Event.TargetIDs) != 1 || last.Event.TargetIDs[0] != "user-alice" {
+		t.Fatalf("AddAgentToRoom() target_ids = %+v, want [user-alice]", last.Event.TargetIDs)
 	}
-	if last.Content != "admin invited alice to join the room" {
+	if last.Content != "admin invited Alice to join the room" {
 		t.Fatalf("AddAgentToRoom() content = %q, want localized room_members_added content", last.Content)
 	}
 }
@@ -164,7 +277,7 @@ func TestCreateRoomStoresStructuredEvent(t *testing.T) {
 		t.Fatalf("CreateRoom() room.IsDirect = %v, want false", room.IsDirect)
 	}
 	got := room.Messages[0]
-	if got.Kind != MessageKindEvent || got.Event == nil || got.Event.Key != "room_created" || got.Event.ActorID != "pt-admin" || got.Event.Title != "Ops" {
+	if got.Kind != MessageKindEvent || got.Event == nil || got.Event.Key != "room_created" || got.Event.ActorID != "user-admin" || got.Event.Title != "Ops" {
 		t.Fatalf("CreateRoom() event = %+v, want structured room_created event", got)
 	}
 	if got.Content != "admin created the room" {
@@ -176,9 +289,9 @@ func TestCreateMessagePrefixesMentionTag(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-dev", Name: "dev", Handle: "dev"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-dev", Name: "dev"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []Room{
 			{ID: "room-1", Title: "Ops", Members: []string{"u-admin", "u-dev", "manager"}},
@@ -194,11 +307,11 @@ func TestCreateMessagePrefixesMentionTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateMessage() error = %v", err)
 	}
-	if message.Content != `<at user_id="pt-dev">dev</at> hi` {
-		t.Fatalf(`CreateMessage() content = %q, want <at user_id="pt-dev">dev</at> hi`, message.Content)
+	if message.Content != `<at user_id="user-dev">dev</at> hi` {
+		t.Fatalf(`CreateMessage() content = %q, want <at user_id="user-dev">dev</at> hi`, message.Content)
 	}
-	if len(message.Mentions) != 1 || message.Mentions[0].ID != "pt-dev" || message.Mentions[0].Name != "dev" {
-		t.Fatalf("CreateMessage() mentions = %+v, want [pt-dev]", message.Mentions)
+	if len(message.Mentions) != 1 || message.Mentions[0].ID != "user-dev" || message.Mentions[0].Name != "dev" {
+		t.Fatalf("CreateMessage() mentions = %+v, want [user-dev]", message.Mentions)
 	}
 }
 
@@ -206,8 +319,8 @@ func TestCreateMessageKeepsMentionAfterSlashCommandPrefix(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-dev", Name: "dev", Handle: "dev"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-dev", Name: "dev"},
 		},
 		Rooms: []Room{
 			{ID: "room-1", Title: "Ops", Members: []string{"u-admin", "u-dev"}},
@@ -223,19 +336,19 @@ func TestCreateMessageKeepsMentionAfterSlashCommandPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateMessage() error = %v", err)
 	}
-	want := `<slash-command name="use-skill" arg="skill-creator"></slash-command> <at user_id="pt-dev">dev</at> build it`
+	want := `<slash-command name="use-skill" arg="skill-creator"></slash-command> <at user_id="user-dev">dev</at> build it`
 	if message.Content != want {
 		t.Fatalf("CreateMessage() content = %q, want %q", message.Content, want)
 	}
-	if len(message.Mentions) != 1 || message.Mentions[0].ID != "pt-dev" || message.Mentions[0].Name != "dev" {
-		t.Fatalf("CreateMessage() mentions = %+v, want [pt-dev]", message.Mentions)
+	if len(message.Mentions) != 1 || message.Mentions[0].ID != "user-dev" || message.Mentions[0].Name != "dev" {
+		t.Fatalf("CreateMessage() mentions = %+v, want [user-dev]", message.Mentions)
 	}
 }
 
 func TestCreateMessageWithMissingMentionIDFails(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
-		Users:         []User{{ID: "u-admin", Name: "admin", Handle: "admin"}},
+		Users:         []User{{ID: "u-admin", Name: "admin"}},
 		Rooms:         []Room{{ID: "room-1", Title: "Ops", Members: []string{"u-admin"}}},
 	})
 
@@ -256,7 +369,7 @@ func TestCreateMessageWithMissingMentionIDFails(t *testing.T) {
 func TestDeliverMessageReplacesExistingMessageWithSameIDAndSender(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
-		Users:         []User{{ID: "manager", Name: "manager", Handle: "manager"}},
+		Users:         []User{{ID: "manager", Name: "manager"}},
 		Rooms: []Room{{
 			ID:      "room-1",
 			Title:   "Ops",
@@ -301,8 +414,8 @@ func TestListRoomsUsersAndMessages(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-zed", Name: "Zed", Handle: "zed", Role: "Worker"},
-			{ID: "u-alice", Name: "Alice", Handle: "alice", Role: "Worker"},
+			{ID: "u-zed", Name: "Zed", Role: "Worker"},
+			{ID: "u-alice", Name: "Alice", Role: "Worker"},
 		},
 		Rooms: []Room{
 			{
@@ -332,8 +445,8 @@ func TestListRoomsUsersAndMessages(t *testing.T) {
 	if len(users) != 4 {
 		t.Fatalf("len(ListUsers()) = %d, want 4 including ensured admin/manager", len(users))
 	}
-	if users[0].Name != "admin" || users[1].Name != "alice" || users[2].Name != "manager" || users[3].Name != "zed" {
-		t.Fatalf("ListUsers() order = [%s, %s, %s, %s], want admin, alice, manager, zed", users[0].Name, users[1].Name, users[2].Name, users[3].Name)
+	if users[0].Name != "admin" || users[1].Name != "Alice" || users[2].Name != "manager" || users[3].Name != "Zed" {
+		t.Fatalf("ListUsers() order = [%s, %s, %s, %s], want admin, Alice, manager, Zed", users[0].Name, users[1].Name, users[2].Name, users[3].Name)
 	}
 
 	gotMessages, err := svc.ListMessages("room-1")
@@ -423,8 +536,8 @@ func TestClearRoomMessagesPersistsOnlyTargetRoomAndPublishesEvent(t *testing.T) 
 	state := Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-bot", Name: "bot", Handle: "bot"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-bot", Name: "bot"},
 		},
 		Rooms: []Room{
 			{
@@ -524,9 +637,9 @@ func TestDeleteUserRemovesUserFromStateConversationsAndMessages(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-alice", Name: "Alice", Handle: "alice"},
-			{ID: "u-bob", Name: "Bob", Handle: "bob"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-alice", Name: "Alice"},
+			{ID: "u-bob", Name: "Bob"},
 		},
 		Rooms: []Room{
 			{
@@ -562,8 +675,8 @@ func TestDeleteUserRemovesUserFromStateConversationsAndMessages(t *testing.T) {
 	if containsUserIDInRoom(group, "u-alice") {
 		t.Fatalf("group members = %+v, want u-alice removed", group.Members)
 	}
-	if len(group.Messages) != 1 || group.Messages[0].SenderID != "pt-bob" {
-		t.Fatalf("group messages = %+v, want only pt-bob message", group.Messages)
+	if len(group.Messages) != 1 || group.Messages[0].SenderID != "user-bob" {
+		t.Fatalf("group messages = %+v, want only user-bob message", group.Messages)
 	}
 
 	if _, ok := svc.Room("room-dm"); ok {
@@ -575,8 +688,8 @@ func TestPresentRoomKeepsTwoMemberGroupTitle(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-alice", Name: "alice", Handle: "alice"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-alice", Name: "alice"},
 		},
 		Rooms: []Room{
 			{
@@ -601,9 +714,9 @@ func TestPresentDirectRoomKeepsTitleWhenCurrentUserIsNotMember(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "user-manager",
 		Users: []User{
-			{ID: "user-manager", Name: "manager", Handle: "manager"},
-			{ID: "user-admin", Name: "admin", Handle: "admin"},
-			{ID: "user-agent-zaha7h", Name: "ux", Handle: "ux"},
+			{ID: "user-manager", Name: "manager"},
+			{ID: "user-admin", Name: "admin"},
+			{ID: "user-agent-zaha7h", Name: "ux"},
 		},
 		Rooms: []Room{
 			{
@@ -631,9 +744,9 @@ func TestAddRoomMembersRejectsDirectRoom(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-alice", Name: "alice", Handle: "alice"},
-			{ID: "u-bob", Name: "bob", Handle: "bob"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-alice", Name: "alice"},
+			{ID: "u-bob", Name: "bob"},
 		},
 		Rooms: []Room{
 			{
@@ -671,8 +784,8 @@ func TestDeleteUserPublishesUserDeletedEvent(t *testing.T) {
 	svc := NewServiceFromBootstrapWithBus(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-alice", Name: "Alice", Handle: "alice"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-alice", Name: "Alice"},
 		},
 	}, bus)
 
@@ -694,8 +807,8 @@ func TestSaveBootstrapSplitsRoomMessagesIntoSessionFiles(t *testing.T) {
 	state := Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []Room{
 			{
@@ -770,8 +883,8 @@ func TestLoadBootstrapSupportsExternalSessionFiles(t *testing.T) {
 	stateJSON := `{
   "current_user_id": "u-admin",
   "users": [
-    {"id": "u-admin", "name": "admin", "handle": "admin"},
-    {"id": "manager", "name": "manager", "handle": "manager"}
+    {"id": "u-admin", "name": "admin"},
+    {"id": "manager", "name": "manager"}
   ],
   "rooms": [
     {
@@ -814,8 +927,8 @@ func TestLoadBootstrapRejectsLegacyInlineMessages(t *testing.T) {
 	stateJSON := `{
   "current_user_id": "u-admin",
   "users": [
-    {"id": "u-admin", "name": "admin", "handle": "admin"},
-    {"id": "manager", "name": "manager", "handle": "manager"}
+    {"id": "u-admin", "name": "admin"},
+    {"id": "manager", "name": "manager"}
   ],
   "rooms": [
     {
@@ -849,9 +962,9 @@ func TestEnsureBootstrapStateCreatesAdminManagerDMWhenOnlyGroupExists(t *testing
 	state := Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
-			{ID: "u-alice", Name: "alice", Handle: "alice"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
+			{ID: "u-alice", Name: "alice"},
 		},
 		Rooms: []Room{
 			{
@@ -904,8 +1017,8 @@ func TestEnsureBootstrapStateMigratesMisspelledManagerReferences(t *testing.T) {
 	state := Bootstrap{
 		CurrentUserID: legacyID,
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: legacyID, Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: legacyID, Name: "manager", Role: "manager"},
 		},
 		Rooms: []Room{{
 			ID:       "room-dm",
@@ -940,14 +1053,14 @@ func TestEnsureBootstrapStateMigratesMisspelledManagerReferences(t *testing.T) {
 		t.Fatalf("legacy manager user %q still exists", legacyID)
 	}
 	room := loaded.Rooms[0]
-	if !containsUserIDInRoom(room, "pt-manager") || containsUserIDInRoom(room, legacyID) {
+	if !containsUserIDInRoom(room, "user-manager") || containsUserIDInRoom(room, legacyID) {
 		t.Fatalf("room.Members = %+v, want manager only", room.Members)
 	}
 	got := room.Messages[0]
-	if got.SenderID != "pt-manager" || len(got.Mentions) != 1 || got.Mentions[0].ID != "pt-manager" {
+	if got.SenderID != "user-manager" || len(got.Mentions) != 1 || got.Mentions[0].ID != "user-manager" {
 		t.Fatalf("message = %+v, want manager sender and mention", got)
 	}
-	if !strings.Contains(got.Content, `user_id="pt-manager"`) || strings.Contains(got.Content, legacyID) {
+	if !strings.Contains(got.Content, `user_id="user-manager"`) || strings.Contains(got.Content, legacyID) {
 		t.Fatalf("message.Content = %q, want manager mention tag", got.Content)
 	}
 }
@@ -959,9 +1072,9 @@ func TestEnsureBootstrapStateMigratesLegacyAdminReferences(t *testing.T) {
 	state := Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin", Role: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"},
-			{ID: "u-alice", Name: "Alice", Handle: "alice", Role: "worker"},
+			{ID: "u-admin", Name: "admin", Role: "admin"},
+			{ID: "manager", Name: "manager", Role: "manager"},
+			{ID: "u-alice", Name: "Alice", Role: "worker"},
 		},
 		Rooms: []Room{{
 			ID:      "room-1",
@@ -996,14 +1109,14 @@ func TestEnsureBootstrapStateMigratesLegacyAdminReferences(t *testing.T) {
 		t.Fatal("legacy admin user u-admin still exists")
 	}
 	room := loaded.Rooms[0]
-	if !containsUserIDInRoom(room, "pt-admin") || slices.Contains(room.Members, "u-admin") {
+	if !containsUserIDInRoom(room, "user-admin") || slices.Contains(room.Members, "u-admin") {
 		t.Fatalf("room.Members = %+v, want admin only", room.Members)
 	}
 	got := room.Messages[0]
-	if got.SenderID != "pt-admin" || got.Event == nil || got.Event.ActorID != "pt-admin" || len(got.Event.TargetIDs) != 1 || got.Event.TargetIDs[0] != "pt-admin" || len(got.Mentions) != 1 || got.Mentions[0].ID != "pt-admin" {
+	if got.SenderID != "user-admin" || got.Event == nil || got.Event.ActorID != "user-admin" || len(got.Event.TargetIDs) != 1 || got.Event.TargetIDs[0] != "user-admin" || len(got.Mentions) != 1 || got.Mentions[0].ID != "user-admin" {
 		t.Fatalf("message = %+v, want admin sender and mention", got)
 	}
-	if !strings.Contains(got.Content, `user_id="pt-admin"`) || strings.Contains(got.Content, "u-admin") {
+	if !strings.Contains(got.Content, `user_id="user-admin"`) || strings.Contains(got.Content, "u-admin") {
 		t.Fatalf("message.Content = %q, want admin mention tag", got.Content)
 	}
 }
@@ -1014,8 +1127,8 @@ func TestReloadRefreshesRoomsFromStateFile(t *testing.T) {
 	initial := Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin", Role: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: "u-admin", Name: "admin", Role: "admin"},
+			{ID: "manager", Name: "manager", Role: "manager"},
 		},
 	}
 	if err := SaveBootstrap(statePath, initial); err != nil {
@@ -1060,7 +1173,7 @@ func TestRoomIDsForMember(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-bot", Name: "Bot", Handle: "bot", Role: "Worker"},
+			{ID: "u-bot", Name: "Bot", Role: "Worker"},
 		},
 		Rooms: []Room{
 			{ID: "room-a", Title: "A", Members: []string{"u-admin", "u-bot"}},

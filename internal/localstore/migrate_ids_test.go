@@ -219,11 +219,14 @@ func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 		t.Fatalf("root state missing model_providers: %#v", rootState)
 	}
 	modelProviders := rootState["model_providers"].(map[string]any)
-	defaultModel := modelProviders["default_model"].(map[string]any)
-	if defaultModel["model_provider_id"] != "openai" || defaultModel["model_id"] != "gpt-4.1" {
-		t.Fatalf("default_model = %#v, want structured openai/gpt-4.1", defaultModel)
+	if _, ok := modelProviders["default_model"]; ok {
+		t.Fatalf("model_providers.default_model persisted: %#v", modelProviders)
 	}
 	agents := rootState["agents"].(map[string]any)
+	profileDefaults := agents["profile_defaults"].(map[string]any)
+	if profileDefaults["model_provider_id"] != "openai" || profileDefaults["model_id"] != "gpt-4.1" {
+		t.Fatalf("profile_defaults = %#v, want openai/gpt-4.1", profileDefaults)
+	}
 	agentItems := agents["items"].([]any)
 	assertJSONContainsID(t, agentItems, "agent-manager")
 	assertJSONContainsIDPrefix(t, agentItems, "agent-")
@@ -247,11 +250,20 @@ func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 	if imState["current_user_id"] != "user-admin" {
 		t.Fatalf("current_user_id = %v, want user-admin", imState["current_user_id"])
 	}
+	for _, item := range imState["users"].([]any) {
+		user := item.(map[string]any)
+		if _, ok := user["handle"]; ok {
+			t.Fatalf("migrated user still has handle: %#v", user)
+		}
+		if user["name"] == "" {
+			t.Fatalf("migrated user missing name: %#v", user)
+		}
+	}
 	room := imState["rooms"].([]any)[0].(map[string]any)
 	if room["id"] != "room-ops" {
 		t.Fatalf("room id = %v, want room-ops", room["id"])
 	}
-	assertStringArray(t, room["members"], []string{"pt-admin", "pt-manager"})
+	assertStringArray(t, room["members"], []string{"user-admin", "user-manager"})
 	threads := room["threads"].([]any)
 	if len(threads) != 2 {
 		t.Fatalf("room threads = %#v, want two lightweight refs", room["threads"])
@@ -268,11 +280,21 @@ func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 	if threadState["root_message_id"] != "msg-root" {
 		t.Fatalf("thread root = %v, want msg-root", threadState["root_message_id"])
 	}
+	threadContext := threadState["context"].([]any)
+	threadMessage := threadContext[0].(map[string]any)
+	if threadMessage["sender_id"] != "user-admin" {
+		t.Fatalf("thread context sender = %v, want user-admin", threadMessage["sender_id"])
+	}
 	existingThreadPath := filepath.Join(root, "im", "threads", "room-ops", "msg-existing-root.json")
 	var existingThreadState map[string]any
 	readJSON(t, existingThreadPath, &existingThreadState)
 	if existingThreadState["root_message_id"] != "msg-existing-root" {
 		t.Fatalf("existing thread root = %v, want msg-existing-root", existingThreadState["root_message_id"])
+	}
+	existingContext := existingThreadState["context"].([]any)
+	existingMessage := existingContext[0].(map[string]any)
+	if existingMessage["sender_id"] != "user-manager" {
+		t.Fatalf("existing thread context sender = %v, want user-manager", existingMessage["sender_id"])
 	}
 	assertMissing(t, filepath.Join(root, "im", "threads", "ops"))
 
@@ -281,7 +303,7 @@ func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 		t.Fatalf("read migrated session: %v", err)
 	}
 	sessionText := string(sessionRaw)
-	for _, want := range []string{`"id":"msg-root"`, `"sender_id":"pt-admin"`, `"id":"pt-manager"`, `"event_id":"msg-root"`} {
+	for _, want := range []string{`"id":"msg-root"`, `"sender_id":"user-admin"`, `"id":"user-manager"`, `"event_id":"msg-root"`} {
 		if !strings.Contains(sessionText, want) {
 			t.Fatalf("migrated session missing %s in %s", want, sessionText)
 		}
@@ -360,7 +382,7 @@ func TestMigrateTypedIDsNoopsAfterMigration(t *testing.T) {
 		"users":           []map[string]any{{"id": "user-admin", "name": "admin"}},
 		"rooms": []map[string]any{{
 			"id":       "room-main",
-			"members":  []string{"pt-admin"},
+			"members":  []string{"user-admin"},
 			"messages": "sessions/room-main.jsonl",
 		}},
 	})
@@ -383,6 +405,137 @@ func TestMigrateTypedIDsNoopsAfterMigration(t *testing.T) {
 	readJSON(t, filepath.Join(root, "state.json"), &rootState)
 	if rootState["version"].(float64) != 1 {
 		t.Fatalf("root state changed after no-op migration: %#v", rootState)
+	}
+}
+
+func TestMigrateTypedIDsMovesLegacyDefaultModelToAgentProfileDefaults(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, ".csgclaw")
+	mustMkdir(t, root)
+	writeJSON(t, filepath.Join(root, "state.json"), map[string]any{
+		"version": 1,
+		"model_providers": map[string]any{
+			"default_model": map[string]any{"model_provider_id": "openai", "model_id": "gpt-4.1"},
+			"items":         map[string]any{"openai": map[string]any{"display_name": "OpenAI"}},
+		},
+		"agents":       map[string]any{"items": []any{}},
+		"participants": map[string]any{"items": []any{}},
+	})
+
+	result, err := MigrateTypedIDs(MigrateOptions{
+		Root: root,
+		Now:  func() time.Time { return time.Date(2026, 6, 24, 12, 0, 0, 0, time.Local) },
+	})
+	if err != nil {
+		t.Fatalf("MigrateTypedIDs() error = %v", err)
+	}
+	if result.BackupPath == "" {
+		t.Fatal("BackupPath is empty, want cleanup migration backup")
+	}
+
+	var rootState map[string]any
+	readJSON(t, filepath.Join(root, "state.json"), &rootState)
+	modelProviders := rootState["model_providers"].(map[string]any)
+	if _, ok := modelProviders["default_model"]; ok {
+		t.Fatalf("model_providers.default_model persisted: %#v", modelProviders)
+	}
+	agents := rootState["agents"].(map[string]any)
+	profileDefaults := agents["profile_defaults"].(map[string]any)
+	if profileDefaults["model_provider_id"] != "openai" || profileDefaults["model_id"] != "gpt-4.1" {
+		t.Fatalf("profile_defaults = %#v, want openai/gpt-4.1", profileDefaults)
+	}
+}
+
+func TestMigrateTypedIDsRepairsAlreadyMigratedThreadContext(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, ".csgclaw")
+	mustMkdir(t, filepath.Join(root, "im", "sessions"))
+	mustMkdir(t, filepath.Join(root, "im", "threads", "room-main"))
+	writeJSON(t, filepath.Join(root, "state.json"), map[string]any{
+		"version":         1,
+		"model_providers": map[string]any{"items": map[string]any{"openai": map[string]any{"display_name": "OpenAI"}}},
+		"agents":          map[string]any{"items": []map[string]any{{"id": "agent-manager", "name": "manager"}}},
+		"participants":    map[string]any{"items": []map[string]any{{"id": "pt-manager", "name": "manager"}}},
+	})
+	writeJSON(t, filepath.Join(root, "im", "state.json"), map[string]any{
+		"current_user_id": "user-admin",
+		"users": []map[string]any{
+			{"id": "user-admin", "name": "admin"},
+			{"id": "user-manager", "name": "manager"},
+		},
+		"rooms": []map[string]any{{
+			"id":       "room-main",
+			"members":  []string{"user-admin", "user-manager"},
+			"messages": "sessions/room-main.jsonl",
+			"threads": []map[string]any{{
+				"root_message_id": "msg-root",
+				"created_at":      "2026-06-24T01:06:03Z",
+				"summary":         map[string]any{"root_excerpt": "root", "message_count": 1},
+			}},
+		}},
+	})
+	writeFile(t, filepath.Join(root, "im", "sessions", "room-main.jsonl"), `{"id":"msg-root","sender_id":"user-manager","content":"hi","created_at":"2026-06-24T01:06:03Z"}`+"\n")
+	writeJSON(t, filepath.Join(root, "im", "threads", "room-main", "msg-root.json"), map[string]any{
+		"root_message_id": "msg-root",
+		"created_at":      "2026-06-24T01:06:03Z",
+		"context": []map[string]any{{
+			"id":         "msg-root",
+			"sender_id":  "pt-manager",
+			"content":    `<at user_id="pt-admin">admin</at> hi`,
+			"created_at": "2026-06-24T01:06:03Z",
+			"mentions":   []map[string]any{{"id": "pt-admin", "name": "admin"}},
+			"event":      map[string]any{"actor_id": "pt-manager", "target_ids": []string{"pt-admin"}},
+		}},
+		"summary": map[string]any{"root_excerpt": "root", "message_count": 1},
+	})
+
+	result, err := MigrateTypedIDs(MigrateOptions{
+		Root: root,
+		Now:  func() time.Time { return time.Date(2026, 6, 24, 12, 0, 0, 0, time.Local) },
+	})
+	if err != nil {
+		t.Fatalf("MigrateTypedIDs() error = %v", err)
+	}
+	if result.BackupPath != filepath.Join(parent, ".csgclaw_backup_20260624_001") {
+		t.Fatalf("BackupPath = %q, want backup for stale thread context", result.BackupPath)
+	}
+
+	var rootState map[string]any
+	readJSON(t, filepath.Join(root, "state.json"), &rootState)
+	agents := rootState["agents"].(map[string]any)["items"].([]any)
+	if agents[0].(map[string]any)["id"] != "agent-manager" {
+		t.Fatalf("root state agents changed unexpectedly: %#v", agents)
+	}
+
+	var threadState map[string]any
+	readJSON(t, filepath.Join(root, "im", "threads", "room-main", "msg-root.json"), &threadState)
+	context := threadState["context"].([]any)
+	message := context[0].(map[string]any)
+	if message["sender_id"] != "user-manager" {
+		t.Fatalf("thread sender = %v, want user-manager", message["sender_id"])
+	}
+	if !strings.Contains(message["content"].(string), `user_id="user-admin"`) {
+		t.Fatalf("thread content = %q, want user-admin mention", message["content"])
+	}
+	mentions := message["mentions"].([]any)
+	if mentions[0].(map[string]any)["id"] != "user-admin" {
+		t.Fatalf("thread mention = %#v, want user-admin", mentions[0])
+	}
+	event := message["event"].(map[string]any)
+	if event["actor_id"] != "user-manager" {
+		t.Fatalf("thread event actor = %v, want user-manager", event["actor_id"])
+	}
+	assertStringArray(t, event["target_ids"], []string{"user-admin"})
+
+	second, err := MigrateTypedIDs(MigrateOptions{
+		Root: root,
+		Now:  func() time.Time { return time.Date(2026, 6, 24, 12, 1, 0, 0, time.Local) },
+	})
+	if err != nil {
+		t.Fatalf("second MigrateTypedIDs() error = %v", err)
+	}
+	if second.BackupPath != "" {
+		t.Fatalf("second BackupPath = %q, want no-op after repair", second.BackupPath)
 	}
 }
 

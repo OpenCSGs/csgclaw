@@ -33,13 +33,13 @@ export type DeleteBotOptions = {
 
 export type AgentUpdatePayload = {
   agent_profile?: JSONRecord;
-  avatar?: string;
   description?: string;
   field_mask?: string[];
   instructions?: string;
   image?: string;
   name?: string;
-  profile?: string;
+  profile?: JSONRecord | string;
+  runtime?: { kind?: RuntimeKind; options?: JSONRecord };
   role?: string;
   runtime_kind?: RuntimeKind;
   runtime_options?: JSONRecord;
@@ -48,7 +48,6 @@ export type AgentUpdatePayload = {
 
 export type ParticipantLike = {
   agent_id?: string | null;
-  avatar?: string | null;
   channel?: string | null;
   channel_app_ref?: string | null;
   channel_user_kind?: string | null;
@@ -59,6 +58,8 @@ export type ParticipantLike = {
   metadata?: JSONRecord | null;
   name?: string | null;
   type?: string | null;
+  user_id?: string | null;
+  user_name?: string | null;
 };
 
 export type HostDirectoryPickResult =
@@ -209,13 +210,37 @@ export async function pickHostDirectoryRequest(): Promise<HostDirectoryPickResul
 }
 
 export function updateAgentRequest(agentID: string, payload: AgentUpdatePayload): Promise<AgentLike> {
-  const fieldMask = Object.keys(payload).filter(
-    (key) => key !== "field_mask" && payload[key as keyof AgentUpdatePayload] !== undefined,
+  const normalizedPayload = normalizeAgentPayload(payload);
+  const fieldMask = Object.keys(normalizedPayload).filter(
+    (key) => key !== "field_mask" && normalizedPayload[key as keyof AgentUpdatePayload] !== undefined,
   );
   return patch(`api/v1/agents/${encodeURIComponent(agentID)}`, {
-    ...payload,
+    ...normalizedPayload,
     field_mask: fieldMask,
   });
+}
+
+function normalizeAgentPayload(payload: AgentUpdatePayload): AgentUpdatePayload {
+  const normalized: AgentUpdatePayload = { ...payload };
+  if (payload.agent_profile && typeof payload.agent_profile === "object") {
+    normalized.profile = payload.agent_profile;
+    delete normalized.agent_profile;
+  }
+  if (payload.runtime_options && typeof payload.runtime_options === "object") {
+    normalized.runtime = {
+      ...(normalized.runtime ?? {}),
+      options: payload.runtime_options,
+    };
+    delete normalized.runtime_options;
+  }
+  if (payload.runtime_kind) {
+    normalized.runtime = {
+      ...(normalized.runtime ?? {}),
+      kind: payload.runtime_kind,
+    };
+    delete normalized.runtime_kind;
+  }
+  return normalized;
 }
 
 export type CreateBotPayload = AgentUpdatePayload & {
@@ -225,7 +250,6 @@ export type CreateBotPayload = AgentUpdatePayload & {
 export async function createBotRequest(payload: CreateBotPayload): Promise<AgentLike> {
   const participant = await post<ParticipantLike>("api/v1/channels/csgclaw/participants", {
     name: payload.name,
-    avatar: payload.avatar,
     type: "agent",
     agent_binding: {
       mode: "create",
@@ -235,12 +259,12 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
         description: payload.description,
         instructions: payload.instructions,
         image: payload.image,
-        avatar: payload.avatar,
-        runtime_kind: payload.runtime_kind,
+        runtime: {
+          kind: payload.runtime_kind,
+          options: payload.runtime_options,
+        },
         from_template: payload.from_template,
-        profile: payload.profile,
-        runtime_options: payload.runtime_options,
-        agent_profile: payload.agent_profile,
+        profile: payload.agent_profile,
       },
     },
   });
@@ -250,7 +274,6 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
 export async function createNotificationBotRequest(payload: CreateBotPayload): Promise<AgentLike> {
   const participant = await post<ParticipantLike>("api/v1/channels/csgclaw/participants", {
     name: payload.name,
-    avatar: payload.avatar,
     type: "notification",
     metadata: payload.runtime_options ?? {},
   });
@@ -260,7 +283,6 @@ export async function createNotificationBotRequest(payload: CreateBotPayload): P
 export function patchNotificationBotRequest(botID: string, payload: CreateBotPayload): Promise<AgentLike> {
   return patch<ParticipantLike>(`api/v1/channels/csgclaw/participants/${encodeURIComponent(botID)}`, {
     name: payload.name,
-    avatar: payload.avatar,
     metadata: payload.runtime_options ?? {},
   }).then(participantToAgentLike);
 }
@@ -328,14 +350,14 @@ function participantToAgentLike(participant: ParticipantLike): AgentLike {
   return {
     id: participant.id,
     name: participant.name,
-    avatar: participant.avatar,
     type: participant.type === "notification" ? BOT_TYPE_NOTIFICATION : participant.type,
     bot_type: participant.type === "notification" ? BOT_TYPE_NOTIFICATION : participant.type,
     available: participant.lifecycle_status === "active",
-    handle: participant.channel_user_ref,
     runtime_options: metadata,
     notification_profile: metadata,
     notifier_profile: metadata,
     status: participant.lifecycle_status,
+    user_id: participant.user_id,
+    user_name: participant.user_name,
   };
 }

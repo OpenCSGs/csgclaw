@@ -47,9 +47,6 @@ func (a *CSGClawAdapter) ParticipantDisplayName(participantID string) string {
 	if name := strings.TrimSpace(user.Name); name != "" {
 		return name
 	}
-	if handle := strings.TrimSpace(user.Handle); handle != "" {
-		return handle
-	}
 	return strings.TrimSpace(user.ID)
 }
 
@@ -238,10 +235,9 @@ func (a *CSGClawAdapter) ensureParticipantUser(participantID string, role string
 		return user, nil
 	}
 	user, _, err := a.im.EnsureAgentUser(im.EnsureAgentUserRequest{
-		ID:     userID,
-		Name:   participantDisplayName(participantID),
-		Handle: participantHandle(participantID),
-		Role:   role,
+		ID:   userID,
+		Name: participantDisplayName(participantID),
+		Role: role,
 	})
 	if err != nil {
 		return im.User{}, err

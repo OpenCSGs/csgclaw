@@ -15,7 +15,6 @@ const users: IMUser[] = [
   {
     accent_hex: "#8b1d2c",
     avatar: "AD",
-    handle: "ylong",
     id: "u-admin",
     name: "本地用户",
     role: "admin",
@@ -23,7 +22,6 @@ const users: IMUser[] = [
   {
     accent_hex: "#0f5b66",
     avatar: "MG",
-    handle: "manager",
     id: "u-manager",
     name: "manager",
     role: "worker",
@@ -35,7 +33,6 @@ const roomUsers: IMUser[] = [
   {
     accent_hex: "#4f2ec7",
     avatar: "D",
-    handle: "dev",
     id: "u-dev",
     name: "dev",
     role: "worker",
@@ -44,7 +41,6 @@ const roomUsers: IMUser[] = [
   {
     accent_hex: "#1f57c8",
     avatar: "Q",
-    handle: "qa",
     id: "u-qa",
     name: "qa",
     role: "worker",
@@ -52,7 +48,6 @@ const roomUsers: IMUser[] = [
   {
     accent_hex: "#047857",
     avatar: "U",
-    handle: "ux",
     id: "u-ux",
     name: "ux",
     role: "worker",
@@ -60,7 +55,6 @@ const roomUsers: IMUser[] = [
   {
     accent_hex: "#0f5b66",
     avatar: "S",
-    handle: "sales",
     id: "u-sales",
     name: "sales",
     role: "worker",
@@ -191,7 +185,7 @@ function renderThreadPane({
         memberMenuRef={createRef<HTMLDivElement>()}
         mentionCandidates={mentionCandidates}
         mentionIndex={mentionIndex}
-        mentionableUsersByHandle={new Map([["manager", users[1]]])}
+        mentionableUsersByName={new Map([["manager", users[1]]])}
         messageActionBusy=""
         messageActionError={{}}
         messageListRef={createRef<HTMLElement>()}
@@ -275,7 +269,7 @@ describe("ConversationPane", () => {
           memberMenuRef={createRef<HTMLDivElement>()}
           mentionCandidates={[]}
           mentionIndex={0}
-          mentionableUsersByHandle={new Map()}
+          mentionableUsersByName={new Map()}
           messageActionBusy=""
           messageActionError={{}}
           messageListRef={createRef<HTMLElement>()}

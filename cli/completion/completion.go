@@ -347,7 +347,6 @@ func userSpec() CommandSpec {
 				Flags: append(channelFlags(),
 					FlagSpec{Name: "id", TakesValue: true},
 					FlagSpec{Name: "name", TakesValue: true},
-					FlagSpec{Name: "handle", TakesValue: true},
 					FlagSpec{Name: "role", TakesValue: true},
 					FlagSpec{Name: "avatar", TakesValue: true},
 				),

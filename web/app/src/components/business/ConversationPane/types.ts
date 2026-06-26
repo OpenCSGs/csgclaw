@@ -41,7 +41,7 @@ export type ConversationPaneProps = {
   memberMenuRef: RefObject<HTMLDivElement | null>;
   mentionCandidates: MentionPickerUser[];
   mentionIndex: number;
-  mentionableUsersByHandle: Map<string, ComposerMentionUser>;
+  mentionableUsersByName: Map<string, ComposerMentionUser>;
   messageActionBusy: string;
   messageActionError: MessageActionError;
   messageListRef: RefObject<HTMLElement | null>;

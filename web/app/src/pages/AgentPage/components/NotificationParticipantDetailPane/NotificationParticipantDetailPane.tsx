@@ -1,6 +1,6 @@
 import { Check, Edit3 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { NotifierControls } from "@/components/business/ProfileControls";
 import { Button } from "@/components/ui";
 import {
@@ -69,23 +69,9 @@ export function NotificationParticipantDetailPane({
   return (
     <section className="entity-pane agent-detail-pane notification-participant-detail-pane">
       <header className="entity-header">
-        {draft ? (
-          <div className="entity-avatar agent-header-avatar-picker">
-            <AgentAvatarPicker
-              value={draft.avatar || item.avatar}
-              t={t}
-              mode="edit"
-              onChange={(avatar) => updateDraft({ avatar })}
-            />
-          </div>
-        ) : (
-          <div className="entity-avatar">
-            <AgentAvatarContent
-              avatar={item.avatar}
-              fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)}
-            />
-          </div>
-        )}
+        <div className="entity-avatar">
+          <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.id)} />
+        </div>
         <div className="entity-heading">
           <div className="entity-title-row">
             <h1>{item.name}</h1>

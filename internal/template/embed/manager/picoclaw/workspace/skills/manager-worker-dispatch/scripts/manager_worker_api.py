@@ -166,7 +166,7 @@ class TrackingError(RuntimeError):
     """Raised when task tracking cannot make a safe sequencing decision."""
 
 
-def normalize_handle(value: Any) -> str:
+def normalize_name(value: Any) -> str:
     return str(value or "").strip().lower().removeprefix("@")
 
 
@@ -266,22 +266,22 @@ def get_room_member_index(bootstrap: dict[str, Any], room_id: str) -> dict[str, 
         if not isinstance(user, dict):
             continue
         user_id = str(user.get("id") or "").strip()
-        handle = normalize_handle(user.get("handle"))
-        if user_id in member_ids and handle:
-            index[handle] = user
+        name = normalize_name(user.get("name"))
+        if user_id in member_ids and name:
+            index[name] = user
     return index
 
 
 def resolve_room_assignee(bootstrap: dict[str, Any], room_id: str, assignee: Any) -> dict[str, Any]:
-    handle = normalize_handle(assignee)
-    if not handle:
-        raise TrackingError(f'Room "{room_id}" contains a task with an empty assignee handle')
+    name = normalize_name(assignee)
+    if not name:
+        raise TrackingError(f'Room "{room_id}" contains a task with an empty assignee name')
 
-    members_by_handle = get_room_member_index(bootstrap, room_id)
-    user = members_by_handle.get(handle)
+    members_by_name = get_room_member_index(bootstrap, room_id)
+    user = members_by_name.get(name)
     if user is None:
         raise TrackingError(
-            f'Task assignee "{assignee}" is not a known member handle in room "{room_id}"'
+            f'Task assignee "{assignee}" is not a known member name in room "{room_id}"'
         )
     return user
 
@@ -296,7 +296,7 @@ def resolve_simple_dispatch_mention_id(task: dict[str, Any]) -> str:
         raise SystemExit("Selected task is missing 'assignee'")
     if assignee.startswith("u-") or assignee.startswith("ou_"):
         return assignee
-    return f"u-{normalize_handle(assignee)}"
+    return f"u-{normalize_name(assignee)}"
 
 
 def build_wait_event(

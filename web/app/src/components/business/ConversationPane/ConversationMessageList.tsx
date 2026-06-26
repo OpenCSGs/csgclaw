@@ -103,10 +103,10 @@ export const ConversationMessageList = memo(function ConversationMessageList({
         const isAdmin = user?.role === "admin";
         const messageAgent = agents.find((item) => agentMatchesUser(item, user));
         const messageAgentRunning = isAgentRunning(messageAgent);
-        const messageAvatar = messageAgent?.avatar || user.avatar;
+        const messageAvatar = user.avatar || messageAgent?.avatar;
         const messageAvatarFallback = messageAgent
           ? resolveAgentAvatarFallback(messageAgent, usersById)
-          : avatarFallbackText(user.avatar, user.name, user.handle, user.id);
+          : avatarFallbackText(user.avatar, user.name, user.id);
         const threadSummary = message.thread;
         const latestThreadReply = threadSummary?.latest_reply;
         return (

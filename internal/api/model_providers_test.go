@@ -61,6 +61,13 @@ models = ["gpt-test"]
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	var raw map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode raw response: %v", err)
+	}
+	if _, ok := raw["default_selector"]; ok {
+		t.Fatalf("catalog leaked default_selector: %s", rec.Body.String())
+	}
 	if len(got.Providers) < 5 {
 		t.Fatalf("providers len = %d, want at least 5: %+v", len(got.Providers), got.Providers)
 	}
@@ -391,9 +398,6 @@ models = ["gpt-test"]
 	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-alice", body))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PATCH status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), `"profile":"openai.gpt-test"`) {
-		t.Fatalf("PATCH response = %s, want canonical profile selector", rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), `"model_provider_id":"openai"`) {
 		t.Fatalf("PATCH response = %s, want model_provider_id", rec.Body.String())

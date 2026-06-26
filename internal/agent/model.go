@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"time"
@@ -28,10 +29,91 @@ type Agent struct {
 	Role             string                   `json:"role"`
 	Status           string                   `json:"status"`
 	CreatedAt        time.Time                `json:"created_at"`
+	UpdatedAt        time.Time                `json:"updated_at,omitempty"`
 	Profile          string                   `json:"profile,omitempty"`
 	AgentProfile     AgentProfile             `json:"agent_profile,omitempty"`
 	ProfileComplete  bool                     `json:"profile_complete"`
 	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
+}
+
+func (a *Agent) UnmarshalJSON(data []byte) error {
+	type agentJSON struct {
+		ID               string                   `json:"id"`
+		Name             string                   `json:"name"`
+		Description      string                   `json:"description,omitempty"`
+		Instructions     string                   `json:"instructions,omitempty"`
+		RuntimeID        string                   `json:"runtime_id,omitempty"`
+		RuntimeKind      string                   `json:"runtime_kind,omitempty"`
+		Runtime          *RuntimeRecord           `json:"runtime,omitempty"`
+		Image            string                   `json:"image,omitempty"`
+		Avatar           string                   `json:"avatar,omitempty"`
+		BoxID            string                   `json:"box_id,omitempty"`
+		RuntimeOptions   map[string]any           `json:"runtime_options,omitempty"`
+		Role             string                   `json:"role"`
+		Status           string                   `json:"status"`
+		CreatedAt        time.Time                `json:"created_at"`
+		UpdatedAt        time.Time                `json:"updated_at,omitempty"`
+		Profile          json.RawMessage          `json:"profile"`
+		AgentProfile     AgentProfile             `json:"agent_profile,omitempty"`
+		ProfileComplete  bool                     `json:"profile_complete"`
+		DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
+	}
+	var decoded agentJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	out := Agent{
+		ID:               decoded.ID,
+		Name:             decoded.Name,
+		Description:      decoded.Description,
+		Instructions:     decoded.Instructions,
+		RuntimeID:        decoded.RuntimeID,
+		RuntimeKind:      decoded.RuntimeKind,
+		Image:            decoded.Image,
+		Avatar:           decoded.Avatar,
+		BoxID:            decoded.BoxID,
+		RuntimeOptions:   utils.CloneAnyMap(decoded.RuntimeOptions),
+		Role:             decoded.Role,
+		Status:           decoded.Status,
+		CreatedAt:        decoded.CreatedAt,
+		UpdatedAt:        decoded.UpdatedAt,
+		AgentProfile:     cloneProfile(decoded.AgentProfile),
+		ProfileComplete:  decoded.ProfileComplete,
+		DetectionResults: append([]ProfileDetectionResult(nil), decoded.DetectionResults...),
+	}
+	if decoded.Runtime != nil {
+		rt := normalizeRuntimeRecord(*decoded.Runtime)
+		if strings.TrimSpace(out.RuntimeID) == "" && strings.TrimSpace(rt.ID) != "" {
+			out.RuntimeID = rt.ID
+		}
+		if strings.TrimSpace(out.RuntimeKind) == "" {
+			out.RuntimeKind = rt.Kind
+		}
+		if strings.TrimSpace(out.BoxID) == "" {
+			out.BoxID = rt.SandboxID
+		}
+		if strings.TrimSpace(out.Status) == "" && rt.State != "" {
+			out.Status = string(rt.State)
+		}
+		if len(out.RuntimeOptions) == 0 && len(rt.Options) > 0 {
+			out.RuntimeOptions = utils.CloneAnyMap(rt.Options)
+		}
+	}
+	if len(decoded.Profile) > 0 && string(decoded.Profile) != "null" {
+		var profile AgentProfile
+		if err := json.Unmarshal(decoded.Profile, &profile); err == nil {
+			out.AgentProfile = profile
+			out.Profile = profileSelector(profile)
+		} else {
+			var selector string
+			if err := json.Unmarshal(decoded.Profile, &selector); err != nil {
+				return err
+			}
+			out.Profile = strings.TrimSpace(selector)
+		}
+	}
+	*a = out
+	return nil
 }
 
 type CreateAgentSpec struct {
@@ -40,15 +122,83 @@ type CreateAgentSpec struct {
 	Description    string         `json:"description,omitempty"`
 	Instructions   string         `json:"instructions,omitempty"`
 	Image          string         `json:"image,omitempty"`
-	Avatar         string         `json:"avatar,omitempty"`
+	Avatar         string         `json:"-"`
 	RuntimeKind    string         `json:"runtime_kind,omitempty"`
 	FromTemplate   string         `json:"from_template,omitempty"`
 	Role           string         `json:"role,omitempty"`
 	Status         string         `json:"status,omitempty"`
 	CreatedAt      time.Time      `json:"created_at,omitempty"`
+	UpdatedAt      time.Time      `json:"updated_at,omitempty"`
 	Profile        string         `json:"profile,omitempty"`
 	RuntimeOptions map[string]any `json:"runtime_options,omitempty"`
 	AgentProfile   AgentProfile   `json:"agent_profile,omitempty"`
+}
+
+func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
+	type createAgentSpecJSON struct {
+		ID             string          `json:"id,omitempty"`
+		Name           string          `json:"name"`
+		Description    string          `json:"description,omitempty"`
+		Instructions   string          `json:"instructions,omitempty"`
+		Image          string          `json:"image,omitempty"`
+		Avatar         string          `json:"-"`
+		RuntimeKind    string          `json:"runtime_kind,omitempty"`
+		Runtime        *RuntimeRecord  `json:"runtime,omitempty"`
+		FromTemplate   string          `json:"from_template,omitempty"`
+		Role           string          `json:"role,omitempty"`
+		Status         string          `json:"status,omitempty"`
+		CreatedAt      time.Time       `json:"created_at,omitempty"`
+		UpdatedAt      time.Time       `json:"updated_at,omitempty"`
+		Profile        json.RawMessage `json:"profile,omitempty"`
+		RuntimeOptions map[string]any  `json:"runtime_options,omitempty"`
+		AgentProfile   AgentProfile    `json:"agent_profile,omitempty"`
+	}
+	var decoded createAgentSpecJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	out := CreateAgentSpec{
+		ID:             decoded.ID,
+		Name:           decoded.Name,
+		Description:    decoded.Description,
+		Instructions:   decoded.Instructions,
+		Image:          decoded.Image,
+		RuntimeKind:    decoded.RuntimeKind,
+		FromTemplate:   decoded.FromTemplate,
+		Role:           decoded.Role,
+		Status:         decoded.Status,
+		CreatedAt:      decoded.CreatedAt,
+		UpdatedAt:      decoded.UpdatedAt,
+		RuntimeOptions: utils.CloneAnyMap(decoded.RuntimeOptions),
+		AgentProfile:   cloneProfile(decoded.AgentProfile),
+	}
+	if decoded.Runtime != nil {
+		rt := normalizeRuntimeRecord(*decoded.Runtime)
+		if strings.TrimSpace(out.RuntimeKind) == "" {
+			out.RuntimeKind = rt.Kind
+		}
+		if strings.TrimSpace(out.Status) == "" && rt.State != "" {
+			out.Status = string(rt.State)
+		}
+		if len(out.RuntimeOptions) == 0 && len(rt.Options) > 0 {
+			out.RuntimeOptions = utils.CloneAnyMap(rt.Options)
+		}
+	}
+	if len(decoded.Profile) > 0 && string(decoded.Profile) != "null" {
+		var profile AgentProfile
+		if err := json.Unmarshal(decoded.Profile, &profile); err == nil {
+			out.AgentProfile = profile
+			out.Profile = profileSelector(profile)
+		} else {
+			var selector string
+			if err := json.Unmarshal(decoded.Profile, &selector); err != nil {
+				return err
+			}
+			out.Profile = strings.TrimSpace(selector)
+		}
+	}
+	*s = out
+	return nil
 }
 
 type UpdateRequest struct {
@@ -56,11 +206,103 @@ type UpdateRequest struct {
 	Description    *string         `json:"description,omitempty"`
 	Instructions   *string         `json:"instructions,omitempty"`
 	Image          *string         `json:"image,omitempty"`
-	Avatar         *string         `json:"avatar,omitempty"`
+	Avatar         *string         `json:"-"`
 	Profile        *string         `json:"profile,omitempty"`
 	RuntimeOptions *map[string]any `json:"runtime_options,omitempty"`
 	AgentProfile   *AgentProfile   `json:"agent_profile,omitempty"`
 	FieldMask      []string        `json:"field_mask,omitempty"`
+}
+
+func (r *UpdateRequest) UnmarshalJSON(data []byte) error {
+	type updateRequestJSON struct {
+		Name           *string         `json:"name,omitempty"`
+		Description    *string         `json:"description,omitempty"`
+		Instructions   *string         `json:"instructions,omitempty"`
+		Image          *string         `json:"image,omitempty"`
+		Avatar         *string         `json:"-"`
+		Profile        json.RawMessage `json:"profile,omitempty"`
+		Runtime        *RuntimeRecord  `json:"runtime,omitempty"`
+		RuntimeOptions *map[string]any `json:"runtime_options,omitempty"`
+		AgentProfile   *AgentProfile   `json:"agent_profile,omitempty"`
+		FieldMask      []string        `json:"field_mask,omitempty"`
+	}
+	var decoded updateRequestJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	out := UpdateRequest{
+		Name:           decoded.Name,
+		Description:    decoded.Description,
+		Instructions:   decoded.Instructions,
+		Image:          decoded.Image,
+		RuntimeOptions: decoded.RuntimeOptions,
+		AgentProfile:   decoded.AgentProfile,
+		FieldMask:      append([]string(nil), decoded.FieldMask...),
+	}
+	profileField := ""
+	if len(decoded.Profile) > 0 && string(decoded.Profile) != "null" {
+		var profile AgentProfile
+		if err := json.Unmarshal(decoded.Profile, &profile); err == nil {
+			out.AgentProfile = &profile
+			profileField = "agent_profile"
+		} else {
+			var selector string
+			if err := json.Unmarshal(decoded.Profile, &selector); err != nil {
+				return err
+			}
+			selector = strings.TrimSpace(selector)
+			out.Profile = &selector
+			profileField = "profile"
+		}
+	}
+	if decoded.Runtime != nil && len(decoded.Runtime.Options) > 0 {
+		options := utils.CloneAnyMap(decoded.Runtime.Options)
+		out.RuntimeOptions = &options
+	}
+	if len(out.FieldMask) > 0 {
+		out.FieldMask = normalizeCompactUpdateFieldMask(out.FieldMask, profileField, decoded.Runtime != nil)
+	}
+	*r = out
+	return nil
+}
+
+func normalizeCompactUpdateFieldMask(fieldMask []string, profileField string, hasRuntime bool) []string {
+	if len(fieldMask) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(fieldMask))
+	seen := map[string]struct{}{}
+	add := func(field string) {
+		field = strings.ToLower(strings.TrimSpace(field))
+		if field == "" {
+			return
+		}
+		if _, ok := seen[field]; ok {
+			return
+		}
+		seen[field] = struct{}{}
+		out = append(out, field)
+	}
+	for _, field := range fieldMask {
+		normalized := strings.ToLower(strings.TrimSpace(field))
+		switch normalized {
+		case "profile":
+			if profileField != "" {
+				add(profileField)
+			} else {
+				add(normalized)
+			}
+		case "runtime":
+			if hasRuntime {
+				add("runtime_options")
+			} else {
+				add(normalized)
+			}
+		default:
+			add(normalized)
+		}
+	}
+	return out
 }
 
 type CreateRequest struct {

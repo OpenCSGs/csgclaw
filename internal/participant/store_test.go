@@ -209,7 +209,7 @@ func TestNewStoreRepairsLegacyAdminParticipant(t *testing.T) {
 	if !admin.Mentionable || admin.LifecycleStatus != LifecycleStatusActive {
 		t.Fatalf("admin lifecycle fields = %+v, want active mentionable participant", admin)
 	}
-	if !admin.CreatedAt.Equal(createdAt) || !admin.UpdatedAt.Equal(createdAt.Add(time.Minute)) || admin.Avatar != "avatar.png" || admin.Metadata["legacy"] != "kept" {
+	if !admin.CreatedAt.Equal(createdAt) || !admin.UpdatedAt.Equal(createdAt.Add(time.Minute)) || admin.Avatar != "" || admin.Metadata["legacy"] != "kept" {
 		t.Fatalf("admin preserved fields = %+v, want legacy fields preserved", admin)
 	}
 	if _, ok := store.Get(ChannelCSGClaw, "u-admin"); ok {

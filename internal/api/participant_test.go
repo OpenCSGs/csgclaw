@@ -36,7 +36,7 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	body := `{
 		"id": "qa",
 		"type": "agent",
-		"name": "QA Display Name",
+		"name": "QA-Display-Name",
 		"avatar": "avatar/3D-5.png",
 		"channel_user": {
 			"ref": "u-qa",
@@ -45,7 +45,7 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 		"agent_binding": {
 			"mode": "create",
 			"agent": {
-				"name": "QA Display Name",
+				"name": "QA-Display-Name",
 				"role": "worker",
 				"runtime_kind": "picoclaw_sandbox",
 				"image": "agent-image:test",
@@ -68,27 +68,30 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	if created.ID != "pt-qa" || created.Channel != "csgclaw" || created.Type != "agent" || created.AgentID != "agent-qa" {
 		t.Fatalf("created participant = %+v, want csgclaw agent qa bound to agent-qa", created)
 	}
+	if created.Avatar != "" {
+		t.Fatalf("participant avatar = %q, want empty", created.Avatar)
+	}
 	createdAgent, ok := agentSvc.Agent("agent-qa")
 	if !ok {
 		t.Fatal("agent agent-qa was not created")
 	}
-	if createdAgent.Avatar != "avatar/3D-5.png" {
-		t.Fatalf("agent avatar = %q, want %q", createdAgent.Avatar, "avatar/3D-5.png")
+	if createdAgent.Avatar != "" {
+		t.Fatalf("agent avatar = %q, want empty", createdAgent.Avatar)
 	}
 	if _, ok := agentSvc.Agent("u-qa-display-name"); ok {
 		t.Fatal("agent ID was derived from display name")
 	}
-	if user, ok := imSvc.User("u-qa"); !ok || !strings.EqualFold(user.Name, "QA Display Name") {
+	if user, ok := imSvc.User("u-qa"); !ok || !strings.EqualFold(user.Name, "QA-Display-Name") {
 		t.Fatalf("channel user = %+v, ok=%v; want u-qa display user", user, ok)
-	} else if user.Avatar != "avatar/3D-5.png" {
-		t.Fatalf("channel user avatar = %q, want %q", user.Avatar, "avatar/3D-5.png")
+	} else if user.Avatar == "" {
+		t.Fatalf("channel user avatar is empty, want user-owned default")
 	}
 }
 
 func TestCreateFeishuAgentParticipantViaAPIReusesExistingAgent(t *testing.T) {
 	agentSvc, _ := mustNewSeededServiceWithPath(t, []agent.Agent{{
 		ID:          "u-qa",
-		Name:        "QA Runtime",
+		Name:        "QA-Runtime",
 		Role:        agent.RoleWorker,
 		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
 		Image:       "agent-image:test",
@@ -368,7 +371,7 @@ func TestCreateFeishuHumanParticipantViaAPI(t *testing.T) {
 func TestListAgentsIncludesParticipantsWhenRequested(t *testing.T) {
 	agentSvc, _ := mustNewSeededServiceWithPath(t, []agent.Agent{{
 		ID:   "u-qa",
-		Name: "QA Runtime",
+		Name: "QA-Runtime",
 		Role: agent.RoleWorker,
 	}})
 	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
@@ -414,8 +417,8 @@ func TestParticipantMessageRouteSendsAsParticipantChannelUser(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-bob", Name: "bob", Handle: "bob"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-bob", Name: "bob"},
 		},
 		Rooms: []im.Room{{
 			ID:       "room-1",
@@ -459,8 +462,8 @@ func TestParticipantMessageRouteSendsAsParticipantChannelUser(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("messages = %+v, want one delivered message", messages)
 	}
-	if messages[0].SenderID != "pt-bob" || messages[0].Content != "hello from participant route" {
-		t.Fatalf("delivered message = %+v, want sender pt-bob with posted content", messages[0])
+	if messages[0].SenderID != "user-bob" || messages[0].Content != "hello from participant route" {
+		t.Fatalf("delivered message = %+v, want sender user-bob with posted content", messages[0])
 	}
 }
 
@@ -468,8 +471,8 @@ func TestParticipantMessageRouteCanonicalizesAgentIDAlias(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: agent.ManagerParticipantID, Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: agent.ManagerParticipantID, Name: "manager"},
 		},
 		Rooms: []im.Room{{
 			ID:       "room-1",
@@ -513,8 +516,8 @@ func TestParticipantMessageRouteCanonicalizesAgentIDAlias(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("messages = %+v, want one delivered message", messages)
 	}
-	if messages[0].SenderID != agent.ManagerParticipantID || messages[0].Content != "hello from manager alias" {
-		t.Fatalf("delivered message = %+v, want canonical manager participant sender", messages[0])
+	if messages[0].SenderID != im.ManagerUserID || messages[0].Content != "hello from manager alias" {
+		t.Fatalf("delivered message = %+v, want canonical manager user sender", messages[0])
 	}
 }
 
@@ -534,8 +537,8 @@ func TestParticipantDeleteWithAgentCleanupRemovesCSGClawUser(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-qa", Name: "qa", Handle: "qa"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-qa", Name: "qa"},
 		},
 	})
 	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
@@ -625,8 +628,8 @@ func TestParticipantEventsRouteCanonicalizesAgentIDAlias(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-agent-hhtz4b", Name: "qa", Handle: "qa"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-agent-hhtz4b", Name: "qa"},
 		},
 		Rooms: []im.Room{{
 			ID:       "room-qa",
@@ -699,8 +702,8 @@ func TestCreateMessageResolvesCSGClawParticipantMentionToBridgeID(t *testing.T) 
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: agent.ManagerParticipantID, Name: "manager", Handle: "manager", Role: agent.RoleManager},
+			{ID: "u-admin", Name: "admin"},
+			{ID: agent.ManagerParticipantID, Name: "manager", Role: agent.RoleManager},
 		},
 		Rooms: []im.Room{{
 			ID:       "room-1",
@@ -759,7 +762,7 @@ func TestCreateMessageResolvesCSGClawParticipantMentionToBridgeID(t *testing.T) 
 	}
 	select {
 	case evt := <-events:
-		if evt.Context.Account != agent.ManagerParticipantID || len(evt.Mentions) != 1 || evt.Mentions[0] != agent.ManagerParticipantID {
+		if evt.Context.Account != agent.ManagerParticipantID || len(evt.Mentions) != 1 || evt.Mentions[0] != im.ManagerUserID {
 			t.Fatalf("event = %+v, want bridge delivery for participant %q", evt, agent.ManagerParticipantID)
 		}
 	case <-time.After(time.Second):
@@ -771,8 +774,8 @@ func TestPublishParticipantEventDeliversToParticipantIDWhenRoomUsesChannelUserRe
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-agent-hhtz4b", Name: "qa", Handle: "qa"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-agent-hhtz4b", Name: "qa"},
 		},
 		Rooms: []im.Room{{
 			ID:       "room-1",
@@ -835,8 +838,8 @@ func TestCSGClawMessageRouteDeliversToCanonicalParticipantWhenRoomUsesAgentID(t 
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-agent-hhtz4b", Name: "qa", Handle: "qa"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-agent-hhtz4b", Name: "qa"},
 		},
 		Rooms: []im.Room{{
 			ID:       "room-1",
@@ -906,9 +909,9 @@ func TestParticipantEventsRouteReceivesParticipantIDQueue(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: agent.ManagerParticipantID, Name: "manager", Handle: "manager", Role: agent.RoleManager},
-			{ID: agent.ManagerUserID, Name: "manager", Handle: "manager", Role: agent.RoleManager},
+			{ID: "u-admin", Name: "admin"},
+			{ID: agent.ManagerParticipantID, Name: "manager", Role: agent.RoleManager},
+			{ID: agent.ManagerUserID, Name: "manager", Role: agent.RoleManager},
 		},
 		Rooms: []im.Room{{
 			ID:       "room-1",
@@ -952,7 +955,7 @@ func TestParticipantEventsRouteReceivesParticipantIDQueue(t *testing.T) {
 	}
 
 	room := im.Room{ID: "room-1", IsDirect: true, Members: []string{"u-admin", agent.ManagerParticipantID}}
-	sender := im.User{ID: "u-admin", Name: "admin", Handle: "admin"}
+	sender := im.User{ID: "u-admin", Name: "admin"}
 	message := im.Message{
 		ID:        "msg-1",
 		SenderID:  "u-admin",

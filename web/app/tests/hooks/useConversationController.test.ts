@@ -36,7 +36,6 @@ const testData: IMData = {
     {
       accent_hex: "#8b1d2c",
       avatar: "AD",
-      handle: "admin",
       id: "u-admin",
       name: "Admin",
       role: "admin",
@@ -44,7 +43,6 @@ const testData: IMData = {
     {
       accent_hex: "#0f5b66",
       avatar: "MG",
-      handle: "manager",
       id: "u-manager",
       name: "manager",
       role: "worker",

@@ -11,7 +11,6 @@ type AgentIdentity struct {
 	ID          string
 	Name        string
 	Description string
-	Handle      string
 	Role        string
 	Avatar      string
 }
@@ -44,7 +43,6 @@ func (p *Provisioner) EnsureAgentUser(_ context.Context, identity AgentIdentity)
 		ID:          identity.ID,
 		Name:        identity.Name,
 		Description: identity.Description,
-		Handle:      identity.Handle,
 		Role:        identity.Role,
 		Avatar:      identity.Avatar,
 	})

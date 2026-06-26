@@ -1,11 +1,14 @@
 package im
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestEnsureAgentUserCanonicalizesBareID(t *testing.T) {
 	svc := NewService()
 	user, room, err := svc.EnsureAgentUser(EnsureAgentUserRequest{
-		ID: "p-w-0604", Name: "worker", Handle: "p-w-0604", Role: "worker",
+		ID: "p-w-0604", Name: "worker", Role: "worker",
 	})
 	if err != nil {
 		t.Fatalf("EnsureAgentUser() error = %v", err)
@@ -16,21 +19,21 @@ func TestEnsureAgentUserCanonicalizesBareID(t *testing.T) {
 	if got := svc.ResolveUserID("p-w-0604"); got != "user-p-w-0604" {
 		t.Fatalf("ResolveUserID(p-w-0604) = %q, want stored id user-p-w-0604", got)
 	}
-	if room == nil || !containsUserIDInRoom(*room, "pt-p-w-0604") {
-		t.Fatalf("EnsureAgentUser() room = %+v, want typed participant member", room)
+	if room == nil || !slices.Contains(room.Members, "user-p-w-0604") {
+		t.Fatalf("EnsureAgentUser() room = %+v, want typed user member", room)
 	}
 }
 
-func TestResolveUserIDUsesStoredIDOrHandle(t *testing.T) {
+func TestResolveUserIDUsesStoredIDOrName(t *testing.T) {
 	svc := NewService()
 	user, room, err := svc.EnsureAgentUser(EnsureAgentUserRequest{
-		ID: "u-p-w-0604", Name: "worker", Handle: "p-w-0604", Role: "worker",
+		ID: "u-p-w-0604", Name: "worker", Role: "worker",
 	})
 	if err != nil {
 		t.Fatalf("EnsureAgentUser() error = %v", err)
 	}
 	if got := svc.ResolveUserID("p-w-0604"); got != "user-p-w-0604" {
-		t.Fatalf("ResolveUserID(handle) = %q, want user-p-w-0604", got)
+		t.Fatalf("ResolveUserID(name) = %q, want user-p-w-0604", got)
 	}
 	if got := svc.ResolveUserID("u-p-w-0604"); got != "user-p-w-0604" {
 		t.Fatalf("ResolveUserID(id) = %q, want user-p-w-0604", got)
@@ -38,7 +41,7 @@ func TestResolveUserIDUsesStoredIDOrHandle(t *testing.T) {
 	if user.ID != "user-p-w-0604" {
 		t.Fatalf("EnsureAgentUser() ID = %q, want user-p-w-0604", user.ID)
 	}
-	if room == nil || !containsUserIDInRoom(*room, "pt-p-w-0604") {
+	if room == nil || !slices.Contains(room.Members, "user-p-w-0604") {
 		t.Fatalf("EnsureAgentUser() room = %+v, want stored canonical worker member", room)
 	}
 }
@@ -46,7 +49,7 @@ func TestResolveUserIDUsesStoredIDOrHandle(t *testing.T) {
 func TestEnsureAgentUserPreservesExplicitWorkerID(t *testing.T) {
 	svc := NewService()
 	user, _, err := svc.EnsureAgentUser(EnsureAgentUserRequest{
-		ID: "u-frontend-dev", Name: "frontend-dev", Handle: "frontend-dev", Role: "worker",
+		ID: "u-frontend-dev", Name: "frontend-dev", Role: "worker",
 	})
 	if err != nil {
 		t.Fatalf("EnsureAgentUser() error = %v", err)

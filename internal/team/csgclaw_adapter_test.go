@@ -11,7 +11,7 @@ import (
 func TestCSGClawAdapterEnsureParticipantUserReusesManagerParticipantIdentity(t *testing.T) {
 	imSvc := im.NewService()
 	if _, _, err := imSvc.EnsureAgentUser(im.EnsureAgentUserRequest{
-		ID: agent.ManagerParticipantID, Name: "manager", Handle: "manager", Role: agent.RoleManager,
+		ID: agent.ManagerParticipantID, Name: "manager", Role: agent.RoleManager,
 	}); err != nil {
 		t.Fatalf("EnsureAgentUser(manager participant) error = %v", err)
 	}
@@ -33,15 +33,15 @@ func TestCSGClawAdapterEnsureParticipantUserCreatesDefaultChannelUser(t *testing
 	if err != nil {
 		t.Fatalf("ensureParticipantUser(worker) error = %v", err)
 	}
-	if user.ID != "user-p-w-0604" || user.Handle != "p-w-0604" {
-		t.Fatalf("ensureParticipantUser() = %+v, want CSGClaw user user-p-w-0604 with participant handle", user)
+	if user.ID != "user-p-w-0604" || user.Name != "p-w-0604" {
+		t.Fatalf("ensureParticipantUser() = %+v, want CSGClaw user user-p-w-0604 with participant name", user)
 	}
 }
 
 func TestCSGClawAdapterAcceptsLegacyUserIDAsParticipantAlias(t *testing.T) {
 	imSvc := im.NewService()
 	if _, _, err := imSvc.EnsureAgentUser(im.EnsureAgentUserRequest{
-		ID: "u-p-w-0604", Name: "worker", Handle: "p-w-0604", Role: "worker",
+		ID: "u-p-w-0604", Name: "worker", Role: "worker",
 	}); err != nil {
 		t.Fatalf("EnsureAgentUser() error = %v", err)
 	}

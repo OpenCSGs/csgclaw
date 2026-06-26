@@ -663,7 +663,6 @@ Request body:
 {
   "id": "alice",
   "name": "Alice",
-  "handle": "alice",
   "role": "worker"
 }
 ```
@@ -672,7 +671,6 @@ Notes:
 
 - `id` is required
 - `name` is required
-- `handle` defaults to `name` when omitted
 - For `worker` or `agent` roles, if participant and agent services are both enabled, prefer the participant API for agent-backed identities
 
 ### `DELETE /api/v1/users/{id}`
@@ -936,7 +934,6 @@ Example `POST` body:
 {
   "id": "ou_xxx",
   "name": "Alice",
-  "handle": "alice",
   "role": "member",
   "avatar": "AL"
 }

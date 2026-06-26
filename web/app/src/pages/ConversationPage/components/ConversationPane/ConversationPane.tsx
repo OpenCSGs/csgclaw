@@ -55,7 +55,7 @@ export function ConversationPane({
   onProviderLogin,
   draftSegments,
   draftText,
-  mentionableUsersByHandle,
+  mentionableUsersByName,
   onSyncComposer,
   onComposerKeyDown,
   onComposerCompositionStart,
@@ -210,7 +210,7 @@ export function ConversationPane({
         managerProvider={managerProvider}
         mentionCandidates={mentionCandidates}
         mentionIndex={mentionIndex}
-        mentionableUsersByHandle={mentionableUsersByHandle}
+        mentionableUsersByName={mentionableUsersByName}
         slashCandidates={slashCandidates}
         slashIndex={slashIndex}
         slashPickerLoading={slashPickerLoading}

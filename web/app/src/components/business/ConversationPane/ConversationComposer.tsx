@@ -31,7 +31,7 @@ export type ConversationComposerProps = {
   managerProvider: string;
   mentionCandidates: MentionPickerUser[];
   mentionIndex: number;
-  mentionableUsersByHandle: Map<string, ComposerMentionUser>;
+  mentionableUsersByName: Map<string, ComposerMentionUser>;
   onApplyMention: (user: MentionPickerUser) => void;
   onApplySlashCandidate: (name: string) => void;
   onComposerCompositionEnd: () => void;
@@ -59,7 +59,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   managerProvider,
   mentionCandidates,
   mentionIndex,
-  mentionableUsersByHandle,
+  mentionableUsersByName,
   slashCandidates,
   slashIndex,
   slashPickerLoading,
@@ -121,7 +121,7 @@ export const ConversationComposer = memo(function ConversationComposer({
             onPaste={(event) => {
               event.preventDefault();
               const pasted = event.clipboardData?.getData("text/plain") ?? "";
-              const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByHandle);
+              const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByName);
               if (segments.some((segment) => segment.type === "mention")) {
                 insertComposerSegmentsAtSelection(segments);
               } else {

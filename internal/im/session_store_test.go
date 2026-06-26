@@ -17,7 +17,7 @@ func TestSaveLargeMessageSpillsToBlob(t *testing.T) {
 
 	state := Bootstrap{
 		CurrentUserID: "u-admin",
-		Users:         []User{{ID: "u-admin", Name: "admin", Handle: "admin"}},
+		Users:         []User{{ID: "u-admin", Name: "admin"}},
 		Rooms: []Room{{
 			ID:      roomID,
 			Title:   "large",
@@ -91,7 +91,7 @@ func TestSaveMessageKeepsSlashInvocationAsContentOnly(t *testing.T) {
 
 	state := Bootstrap{
 		CurrentUserID: "u-admin",
-		Users:         []User{{ID: "u-admin", Name: "admin", Handle: "admin"}},
+		Users:         []User{{ID: "u-admin", Name: "admin"}},
 		Rooms: []Room{{
 			ID:      roomID,
 			Title:   "skill",
@@ -197,7 +197,7 @@ func TestLoadLegacyOversizedInlineLine(t *testing.T) {
 
 	stateJSON := `{
   "current_user_id": "u-admin",
-  "users": [{"id": "u-admin", "name": "admin", "handle": "admin"}],
+  "users": [{"id": "u-admin", "name": "admin"}],
   "rooms": [{
     "id": "` + roomID + `",
     "title": "legacy",

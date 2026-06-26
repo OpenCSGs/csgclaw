@@ -1,5 +1,7 @@
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
+  agentProfileConfig,
+  agentRuntimeState,
   agentStatusLabel,
   agentModelID,
   formatProviderLabel,
@@ -13,6 +15,7 @@ import { AgentIcon, PlayIcon, StopIcon, TrashIcon, WrenchIcon } from "@/componen
 import { Button } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
+import { providerNameForProviderID } from "@/models/modelProviders";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 
@@ -129,22 +132,23 @@ export function AgentRow({
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
   const upgradeNeeded = isAgentUpgradeNeeded(item);
+  const profile = agentProfileConfig(item);
+  const provider = item.provider || profile?.provider || providerNameForProviderID(profile?.model_provider_id || "");
   const busyPrefix = `${item.id}:`;
   return (
     <div className={`agent-row ${isManager ? "manager" : ""} ${incomplete ? "incomplete" : ""}`.trim()}>
       <div className="agent-avatar" aria-hidden="true">
-        <AgentAvatarContent
-          avatar={item.avatar}
-          fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)}
-        />
+        <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.id)} />
       </div>
       <div className="agent-row-main">
         <div className="agent-row-top">
           <span className="agent-name truncate">{item.name}</span>
-          <span className={`agent-status ${running ? "running" : ""}`}>{agentStatusLabel(item.status, t)}</span>
+          <span className={`agent-status ${running ? "running" : ""}`}>
+            {agentStatusLabel(agentRuntimeState(item), t)}
+          </span>
         </div>
         <div className="agent-meta truncate">
-          {formatProviderLabel(item.provider || item.agent_profile?.provider)} · {agentModelID(item)}
+          {formatProviderLabel(provider)} · {agentModelID(item)}
         </div>
         <div className="agent-badges">
           <span className={`agent-badge ${incomplete ? "warn" : "ready"}`}>

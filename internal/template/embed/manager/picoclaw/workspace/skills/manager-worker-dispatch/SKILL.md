@@ -191,8 +191,8 @@ csgclaw-cli --output json message list --room-id <target_room_id> --channel <cur
 
 Success criteria:
 
-- There is a new tracker dispatch message from the manager participant in the target room.
-- The dispatch message includes mention to the selected assignee (`mention_id` equals the worker participant ID). Do **not** rely on plain-text `@name`; CSGClaw renders mentions as `<at user_id="...">Name</at>`.
+- There is a new tracker dispatch message from the manager user in the target room.
+- The dispatch message includes mention to the selected assignee (`mention_id` equals the worker user ID). Do **not** rely on plain-text `@name`; CSGClaw renders mentions as `<at user_id="...">Name</at>`.
 - Message content matches the task dispatch text pattern (task id/todo path context).
 
 If verification does not pass:
@@ -200,7 +200,7 @@ If verification does not pass:
 1. Wait briefly and re-check message list up to 3 times.
 2. If still missing, report dispatch failure with evidence.
 3. Do **not** send a manual fallback assignment message while tracking is active.
-4. Stop tracking if needed, fix root cause (assignee handle mismatch, room membership mismatch, participant ID mismatch), then restart tracking.
+4. Stop tracking if needed, fix root cause (assignee name mismatch, room membership mismatch, user ID mismatch), then restart tracking.
 
 Stop the tracking:
 

@@ -173,8 +173,7 @@ func TestEnsureStateNoAuthDetectCreatesManagerWithoutDetectionResults(t *testing
 		Agents struct {
 			Items []struct {
 				ID               string                         `json:"id"`
-				ProfileComplete  bool                           `json:"profile_complete"`
-				AgentProfile     agent.AgentProfile             `json:"agent_profile"`
+				Profile          agent.AgentProfile             `json:"profile"`
 				DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
 			} `json:"items"`
 		} `json:"agents"`
@@ -184,8 +183,7 @@ func TestEnsureStateNoAuthDetectCreatesManagerWithoutDetectionResults(t *testing
 	}
 	var manager *struct {
 		ID               string                         `json:"id"`
-		ProfileComplete  bool                           `json:"profile_complete"`
-		AgentProfile     agent.AgentProfile             `json:"agent_profile"`
+		Profile          agent.AgentProfile             `json:"profile"`
 		DetectionResults []agent.ProfileDetectionResult `json:"detection_results,omitempty"`
 	}
 	for i := range state.Agents.Items {
@@ -197,11 +195,11 @@ func TestEnsureStateNoAuthDetectCreatesManagerWithoutDetectionResults(t *testing
 	if manager == nil {
 		t.Fatalf("manager agent %q not found in state: %s", agent.ManagerUserID, string(data))
 	}
-	if manager.ProfileComplete || manager.AgentProfile.ProfileComplete {
-		t.Fatalf("manager profile = %+v, top-level complete=%t; want incomplete", manager.AgentProfile, manager.ProfileComplete)
+	if manager.Profile.ProfileComplete {
+		t.Fatalf("manager profile = %+v; want incomplete", manager.Profile)
 	}
-	if manager.AgentProfile.Provider != agent.ProviderCSGHubLite {
-		t.Fatalf("manager provider = %q, want %q", manager.AgentProfile.Provider, agent.ProviderCSGHubLite)
+	if manager.Profile.ModelProviderID != agent.ModelProviderIDCSGHubLite {
+		t.Fatalf("manager model_provider_id = %q, want %q", manager.Profile.ModelProviderID, agent.ModelProviderIDCSGHubLite)
 	}
 	if len(manager.DetectionResults) != 0 {
 		t.Fatalf("manager detection_results = %+v, want empty", manager.DetectionResults)
@@ -372,8 +370,8 @@ models = ["gpt-test"]
 	if !ok {
 		t.Fatal("LoadModels() ok = false, want true")
 	}
-	if got, want := models.Default, "default.gpt-test"; got != want {
-		t.Fatalf("models default = %q, want %q", got, want)
+	if got := models.Default; got != "" {
+		t.Fatalf("models default = %q, want empty because agents.profile_defaults owns defaults", got)
 	}
 }
 

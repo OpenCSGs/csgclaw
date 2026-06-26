@@ -14,11 +14,10 @@ vi.mock("@/shared/realtime/imEvents", () => ({
 const t: TranslateFn = (key) => key;
 
 const users: IMUser[] = [
-  { id: "u-admin", name: "admin", handle: "admin", role: "admin", avatar: "AD", accent_hex: "#dc2626" },
+  { id: "u-admin", name: "admin", role: "admin", avatar: "AD", accent_hex: "#dc2626" },
   {
     id: "u-demo",
     name: "demo",
-    handle: "demo",
     role: "worker",
     avatar: "avatar/cartoon-3.png",
     accent_hex: "#4f46e5",
@@ -70,7 +69,6 @@ function renderConversationController(
     {
       id: "u-demo",
       name: "demo",
-      handle: "demo",
       role: "worker",
       avatar: "GI",
       runtime_kind: "picoclaw_sandbox",
@@ -193,7 +191,6 @@ describe("useConversationController", () => {
         {
           id: "u-demo",
           name: "demo",
-          handle: "demo",
           role: "worker",
           runtime_kind: "picoclaw_sandbox",
           status: "unknown",

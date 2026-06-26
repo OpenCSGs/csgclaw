@@ -1,4 +1,5 @@
 import {
+  agentProfileConfig,
   agentModelID,
   formatProviderLabel,
   hasConnectedAgentChannel,
@@ -8,6 +9,7 @@ import {
   isAgentRunning,
   notificationBotMetaLabel,
 } from "@/models/agents";
+import { providerNameForProviderID } from "@/models/modelProviders";
 import {
   agentMatchesUser,
   formatConversationPreview,
@@ -165,8 +167,7 @@ export type WorkspaceHumanRowProps = {
 };
 
 export function WorkspaceHumanRow({ user, active, t, onPreview, onSelect }: WorkspaceHumanRowProps) {
-  const displayName = user.name || user.handle || user.id;
-  const handle = user.handle ? `@${user.handle}` : user.id;
+  const displayName = user.name || user.id;
   const role = localizeRole(user.role || "admin", t);
   const feishuConnected = hasConnectedHumanChannel(user, "feishu");
 
@@ -189,12 +190,12 @@ export function WorkspaceHumanRow({ user, active, t, onPreview, onSelect }: Work
           }
         }}
       >
-        <AgentAvatarContent avatar={user.avatar} fallback={avatarFallbackText(user.avatar, displayName, handle)} />
+        <AgentAvatarContent avatar={user.avatar} fallback={avatarFallbackText(user.avatar, displayName, user.id)} />
       </span>
       <span className="workspace-row-main">
         <span className="workspace-row-title truncate">{displayName}</span>
         <span className="workspace-row-meta truncate">
-          {handle} · {role}
+          {user.id} · {role}
         </span>
       </span>
       <span className="workspace-row-badges">
@@ -234,9 +235,11 @@ export function WorkspaceAgentRow({
   const upgradeNeeded = isAgentUpgradeNeeded(item);
   const running = isAgentRunning(item);
   const feishuConnected = hasConnectedAgentChannel(item, "feishu");
+  const profile = agentProfileConfig(item);
+  const provider = item.provider || profile?.provider || providerNameForProviderID(profile?.model_provider_id || "");
   const meta = notification
     ? notificationBotMetaLabel(item, t)
-    : `${formatProviderLabel(item.provider || item.agent_profile?.provider)} · ${agentModelID(item)}`;
+    : `${formatProviderLabel(provider)} · ${agentModelID(item)}`;
   return (
     <button
       className={`workspace-row agent-nav-row ${active ? "active" : ""} ${incomplete ? "warn" : ""}`.trim()}
@@ -259,10 +262,7 @@ export function WorkspaceAgentRow({
           }
         }}
       >
-        <AgentAvatarContent
-          avatar={item.avatar}
-          fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)}
-        />
+        <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.id)} />
       </span>
       <span className="workspace-row-main">
         <span className="workspace-row-title-line">
@@ -315,10 +315,10 @@ export function WorkspaceConversationRow({
   const displayUser = isDirect ? resolveConversationUser(conversation, currentUserID, usersById) : null;
   const directAgent = isDirect && displayUser ? agents.find((item) => agentMatchesUser(item, displayUser)) : null;
   const directAgentRunning = isAgentRunning(directAgent);
-  const directAvatar = directAgent?.avatar || displayUser?.avatar || "";
+  const directAvatar = displayUser?.avatar || directAgent?.avatar || "";
   const directAvatarFallback = directAgent
-    ? avatarFallbackText(directAgent.avatar, directAgent.name, directAgent.handle, directAgent.id)
-    : avatarFallbackText(displayUser?.avatar, displayUser?.name, displayUser?.handle, displayUser?.id);
+    ? avatarFallbackText(displayUser?.avatar || directAgent.avatar, directAgent.name, directAgent.id)
+    : avatarFallbackText(displayUser?.avatar, displayUser?.name, displayUser?.id);
   const title = isDirect && displayUser ? displayUser.name : conversation.title;
   const roomAvatarMembers = resolveRoomAvatarMembers(conversation, usersById, currentUserID);
   const preview = formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t);

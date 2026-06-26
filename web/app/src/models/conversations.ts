@@ -23,7 +23,6 @@ export type IMUser = {
   accent_hex?: string | null;
   avatar?: string | null;
   description?: string | null;
-  handle?: string | null;
   id: string;
   is_online?: boolean | null;
   name?: string | null;
@@ -470,7 +469,7 @@ export function userDisplayName(userID: string | null | undefined, usersById: Us
   if (!user) {
     return userID;
   }
-  return user.name || (user.handle ? `@${user.handle}` : userID);
+  return user.name || userID;
 }
 
 export function resolveConversationUser(
@@ -483,22 +482,15 @@ export function resolveConversationUser(
 }
 
 export function agentMatchesUser(
-  agent: { handle?: string | null; id?: string | null; name?: string | null; user_id?: string | null } | null,
-  user: { handle?: string | null; id?: string | null; name?: string | null } | null | undefined,
+  agent: { id?: string | null; name?: string | null; user_id?: string | null } | null,
+  user: { id?: string | null; name?: string | null } | null | undefined,
 ): boolean {
   if (!agent || !user) {
     return false;
   }
-  const agentHandle = normalizeComparable(agent.handle);
-  const userHandle = normalizeComparable(user.handle);
   const agentName = normalizeComparable(agent.name);
   const userName = normalizeComparable(user.name);
-  return (
-    agent.id === user.id ||
-    agent.user_id === user.id ||
-    Boolean(agentHandle && userHandle && agentHandle === userHandle) ||
-    Boolean(agentName && userName && agentName === userName)
-  );
+  return agent.id === user.id || agent.user_id === user.id || Boolean(agentName && userName && agentName === userName);
 }
 
 export function feishuHumanParticipant(user: IMUser | null | undefined): IMParticipantLike | null {

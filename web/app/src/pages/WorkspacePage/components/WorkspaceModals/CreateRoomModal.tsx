@@ -8,7 +8,7 @@ import { toggleSelection } from "@/shared/lib/collections";
 import { ModalCloseButton } from "./ModalCloseButton";
 
 function getAvatarInitial(user: IMUser): string {
-  const label = user.name || user.handle || user.id || "?";
+  const label = user.name || user.id || "?";
   return label.trim().charAt(0).toUpperCase() || "?";
 }
 
@@ -155,7 +155,7 @@ export function CreateRoomModal({
                   <MemberAvatar user={user} index={index} />
                   <span className="create-room-member-copy">
                     <strong>{user.name}</strong>
-                    <small>@{user.handle}</small>
+                    <small>{user.id}</small>
                   </span>
                 </label>
               ))}

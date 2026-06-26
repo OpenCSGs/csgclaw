@@ -28,7 +28,6 @@ const (
 type CreateUserRequest struct {
 	ID     string `json:"id,omitempty"`
 	Name   string `json:"name"`
-	Handle string `json:"handle,omitempty"`
 	Role   string `json:"role,omitempty"`
 	Avatar string `json:"avatar,omitempty"`
 }
@@ -123,7 +122,7 @@ type DeleteMessageReactionFunc func(context.Context, AppConfig, DeleteMessageRea
 type Service struct {
 	mu                    sync.RWMutex
 	users                 map[string]im.User
-	byHandle              map[string]string
+	byName                map[string]string
 	rooms                 map[string]*im.Room
 	apps                  map[string]AppConfig
 	resolveBotInfo        func(context.Context, AppConfig) (BotInfo, error)
@@ -150,7 +149,7 @@ func NewService(apps ...map[string]AppConfig) *Service {
 	}
 	return &Service{
 		users:                 make(map[string]im.User),
-		byHandle:              make(map[string]string),
+		byName:                make(map[string]string),
 		rooms:                 make(map[string]*im.Room),
 		apps:                  configuredApps,
 		resolveBotInfo:        fetchBotInfo,
@@ -312,10 +311,6 @@ func (s *Service) CreateUser(req CreateUserRequest) (im.User, error) {
 	if id == "" {
 		id = fmt.Sprintf("fsu-%d", time.Now().UnixNano())
 	}
-	handle := strings.ToLower(strings.TrimSpace(req.Handle))
-	if handle == "" {
-		handle = deriveHandle(name, id)
-	}
 	role := strings.ToLower(strings.TrimSpace(req.Role))
 	if role == "" {
 		role = "member"
@@ -331,14 +326,13 @@ func (s *Service) CreateUser(req CreateUserRequest) (im.User, error) {
 	if _, ok := s.users[id]; ok {
 		return im.User{}, fmt.Errorf("user already exists")
 	}
-	if existingID, ok := s.byHandle[handle]; ok && existingID != id {
-		return im.User{}, fmt.Errorf("handle %q already exists", handle)
+	if existingID, ok := s.byName[strings.ToLower(name)]; ok && existingID != id {
+		return im.User{}, fmt.Errorf("name %q already exists", name)
 	}
 
 	user := im.User{
 		ID:        id,
 		Name:      name,
-		Handle:    handle,
 		Role:      role,
 		Avatar:    avatar,
 		IsOnline:  true,
@@ -346,7 +340,7 @@ func (s *Service) CreateUser(req CreateUserRequest) (im.User, error) {
 		CreatedAt: time.Now().UTC(),
 	}
 	s.users[id] = user
-	s.byHandle[handle] = id
+	s.byName[strings.ToLower(name)] = id
 	return user, nil
 }
 
@@ -384,11 +378,17 @@ func (s *Service) ListUsers() []im.User {
 
 		user, ok := localUsers[botID]
 		if !ok {
+			name := strings.TrimSpace(botInfo.AppName)
+			if name == "" {
+				name = strings.TrimSpace(botID)
+			}
+			if name == "" {
+				name = openID
+			}
 			user = im.User{
-				Name:      botID,
-				Handle:    deriveHandle(botID, openID),
+				Name:      name,
 				Role:      "member",
-				Avatar:    initials(botID),
+				Avatar:    initials(name),
 				IsOnline:  true,
 				CreatedAt: time.Now().UTC(),
 			}
@@ -426,7 +426,7 @@ func (s *Service) DeleteUser(userID string) error {
 	}
 
 	delete(s.users, userID)
-	delete(s.byHandle, strings.ToLower(user.Handle))
+	delete(s.byName, strings.ToLower(strings.TrimSpace(user.Name)))
 
 	for id, room := range s.rooms {
 		members := make([]string, 0, len(room.Members))
@@ -471,12 +471,15 @@ func (s *Service) ResolveBotUser(ctx context.Context, botID string) (im.User, bo
 	if user, ok := findUserByID(s.ListUsers(), openID); ok {
 		return user, true, nil
 	}
+	name := strings.TrimSpace(botID)
+	if name == "" {
+		name = openID
+	}
 	return im.User{
 		ID:        openID,
-		Name:      strings.TrimSpace(botID),
-		Handle:    deriveHandle(botID, openID),
+		Name:      name,
 		Role:      "member",
-		Avatar:    initials(botID),
+		Avatar:    initials(name),
 		IsOnline:  true,
 		AccentHex: accentHexForID(openID),
 		CreatedAt: time.Now().UTC(),
@@ -746,7 +749,6 @@ func defaultListChatMembers(ctx context.Context, app AppConfig, apps map[string]
 			members = append(members, im.User{
 				ID:        memberID,
 				Name:      name,
-				Handle:    deriveHandle(name, memberID),
 				Role:      "member",
 				Avatar:    initials(name),
 				IsOnline:  true,
@@ -826,7 +828,6 @@ func feishuBotMembersInChatWithResolvers(
 		members = append(members, im.User{
 			ID:        botID,
 			Name:      name,
-			Handle:    deriveHandle(name, botID),
 			Role:      "member",
 			Avatar:    initials(name),
 			IsOnline:  true,
@@ -1825,9 +1826,6 @@ func (m botIdentityMap) usersToBotUsers(members []im.User) []im.User {
 			if strings.TrimSpace(member.Name) == "" {
 				member.Name = botID
 			}
-			if strings.TrimSpace(member.Handle) == "" {
-				member.Handle = deriveHandle(member.Name, botID)
-			}
 			if strings.TrimSpace(member.Avatar) == "" {
 				member.Avatar = initials(member.Name)
 			}
@@ -2071,10 +2069,9 @@ func feishuRequestUUID() string {
 func normalizeUser(user im.User) im.User {
 	user.ID = strings.TrimSpace(user.ID)
 	user.Name = strings.TrimSpace(user.Name)
-	user.Handle = strings.ToLower(strings.TrimSpace(user.Handle))
 	user.Role = strings.ToLower(strings.TrimSpace(user.Role))
-	if user.Handle == "" {
-		user.Handle = deriveHandle(user.Name, user.ID)
+	if user.Name == "" {
+		user.Name = user.ID
 	}
 	if user.Role == "" {
 		user.Role = "member"

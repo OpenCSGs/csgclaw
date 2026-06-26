@@ -214,7 +214,7 @@ func TestDeriveAgentHandle(t *testing.T) {
 func TestHandleFeishuUsersCreateAndList(t *testing.T) {
 	srv := &Handler{feishu: feishu.NewService()}
 
-	createReq := strings.NewReader(`{"id":"fsu-alice","name":"Alice","handle":"alice","role":"worker"}`)
+	createReq := strings.NewReader(`{"id":"fsu-alice","name":"Alice","role":"worker"}`)
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/channels/feishu/users", createReq))
 	if rec.Code != http.StatusCreated {
@@ -230,7 +230,7 @@ func TestHandleFeishuUsersCreateAndList(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(got) != 1 || got[0].ID != "fsu-alice" || got[0].Handle != "alice" {
+	if len(got) != 1 || got[0].ID != "fsu-alice" || got[0].Name != "Alice" {
 		t.Fatalf("users = %+v, want fsu-alice", got)
 	}
 }
@@ -533,8 +533,8 @@ func TestHandleRoomsMembersListsCsgclawMembers(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "Admin", Handle: "admin", Role: "admin"},
-			{ID: "u-alice", Name: "Alice", Handle: "alice", Role: "worker"},
+			{ID: "u-admin", Name: "Admin", Role: "admin"},
+			{ID: "u-alice", Name: "Alice", Role: "worker"},
 		},
 		Rooms: []im.Room{
 			{ID: "room-1", Title: "Ops", Members: []string{"u-admin", "u-alice"}},
@@ -561,8 +561,8 @@ func TestHandleRoomsMembersAddsCsgclawMember(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "Admin", Handle: "admin", Role: "admin"},
-			{ID: "u-alice", Name: "Alice", Handle: "alice", Role: "worker"},
+			{ID: "u-admin", Name: "Admin", Role: "admin"},
+			{ID: "u-alice", Name: "Alice", Role: "worker"},
 		},
 		Rooms: []im.Room{
 			{ID: "room-1", Title: "Ops", Members: []string{"u-admin"}},
@@ -581,8 +581,8 @@ func TestHandleRoomsMembersAddsCsgclawMember(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&room); err != nil {
 		t.Fatalf("decode room: %v", err)
 	}
-	if len(room.Members) != 2 || room.Members[1] != "pt-alice" {
-		t.Fatalf("members = %+v, want pt-admin and pt-alice", room.Members)
+	if len(room.Members) != 2 || room.Members[1] != "user-alice" {
+		t.Fatalf("members = %+v, want user-admin and user-alice", room.Members)
 	}
 }
 
@@ -590,8 +590,8 @@ func TestHandleRoomsMembersDeletesCsgclawMember(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "Admin", Handle: "admin", Role: "admin"},
-			{ID: "u-alice", Name: "Alice", Handle: "alice", Role: "worker"},
+			{ID: "u-admin", Name: "Admin", Role: "admin"},
+			{ID: "u-alice", Name: "Alice", Role: "worker"},
 		},
 		Rooms: []im.Room{
 			{ID: "room-1", Title: "Ops", Members: []string{"u-admin", "u-alice"}},
@@ -610,7 +610,7 @@ func TestHandleRoomsMembersDeletesCsgclawMember(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&room); err != nil {
 		t.Fatalf("decode room: %v", err)
 	}
-	if len(room.Members) != 1 || room.Members[0] != "pt-admin" {
+	if len(room.Members) != 1 || room.Members[0] != "user-admin" {
 		t.Fatalf("members = %+v, want only admin", room.Members)
 	}
 }
@@ -640,6 +640,53 @@ func TestHandleAgentsListReturnsUnifiedAgents(t *testing.T) {
 	}
 	if got[0].ID != "agent-manager" || got[1].ID != "agent-alice" || got[2].ID != "agent-1" {
 		t.Fatalf("agents = %+v, want manager/worker/agent in CreatedAt order", got)
+	}
+}
+
+func TestHandleAgentsListExposesLinkedLocalUser(t *testing.T) {
+	svc := mustNewSeededService(t, []agent.Agent{
+		{ID: "agent-dahym7", Name: "qa", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
+	})
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: im.AdminUserID,
+		Users: []im.User{
+			{ID: im.AdminUserID, Name: "admin", Role: "admin"},
+			{ID: "user-dahym7", Name: "qa", Role: agent.RoleWorker, Avatar: "avatar/3D-5.png"},
+		},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              "pt-dahym7",
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeAgent,
+		Name:            "qa",
+		AgentID:         "agent-dahym7",
+		ChannelUserRef:  "user-dahym7",
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}))
+
+	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents?include_participants=true", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got []apitypes.Agent
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len(agents) = %d, want 1; body=%s", len(got), rec.Body.String())
+	}
+	if got[0].UserID != "user-dahym7" || got[0].UserName != "qa" {
+		t.Fatalf("agent user = %q/%q, want user-dahym7/qa; body=%s", got[0].UserID, got[0].UserName, rec.Body.String())
+	}
+	if len(got[0].Participants) != 1 || got[0].Participants[0].UserID != "user-dahym7" {
+		t.Fatalf("participants = %+v, want linked local user", got[0].Participants)
 	}
 }
 
@@ -1245,15 +1292,15 @@ func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	profile, ok := got[0]["agent_profile"].(map[string]any)
+	profile, ok := got[0]["profile"].(map[string]any)
 	if !ok || profile["api_key_set"] != true {
-		t.Fatalf("agent_profile = %#v, want api_key_set true", got[0]["agent_profile"])
+		t.Fatalf("profile = %#v, want api_key_set true", got[0]["profile"])
 	}
 	if got, want := profile["api_key_preview"], "secr..."; got != want {
-		t.Fatalf("agent_profile api_key_preview = %#v, want %q", got, want)
+		t.Fatalf("profile api_key_preview = %#v, want %q", got, want)
 	}
 	if _, ok := profile["api_key"]; ok {
-		t.Fatalf("agent_profile includes api_key: %#v", profile)
+		t.Fatalf("profile includes api_key: %#v", profile)
 	}
 }
 
@@ -1293,10 +1340,10 @@ func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 	if got["description"] != "new role" {
 		t.Fatalf("agent = %#v, want updated description", got)
 	}
-	profile, ok := got["agent_profile"].(map[string]any)
+	profile, ok := got["profile"].(map[string]any)
 	env, envOK := profile["env"].(map[string]any)
 	if !ok || profile["model_id"] != "new-model" || !envOK || env["A"] != "B" {
-		t.Fatalf("agent_profile = %#v, want updated model and env", got["agent_profile"])
+		t.Fatalf("profile = %#v, want updated model and env", got["profile"])
 	}
 }
 
@@ -1335,12 +1382,12 @@ func TestHandleAgentsPatchFieldMaskClearsRuntimeOptions(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	runtimeOptions, ok := got["runtime_options"].(map[string]any)
-	if !ok {
-		t.Fatalf("runtime_options = %#v, want empty object", got["runtime_options"])
+	runtime, runtimeOK := got["runtime"].(map[string]any)
+	if !runtimeOK {
+		t.Fatalf("runtime = %#v, want runtime object", got["runtime"])
 	}
-	if len(runtimeOptions) != 0 {
-		t.Fatalf("runtime_options = %#v, want cleared map", runtimeOptions)
+	if runtimeOptions, ok := runtime["options"].(map[string]any); ok && len(runtimeOptions) != 0 {
+		t.Fatalf("runtime.options = %#v, want cleared map", runtimeOptions)
 	}
 }
 
@@ -2501,8 +2548,8 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
 		t.Fatalf("decode skills response: %v", err)
 	}
-	if len(skills) != 3 {
-		t.Fatalf("len(skills) = %d, want 3", len(skills))
+	if len(skills) != 4 {
+		t.Fatalf("len(skills) = %d, want 4", len(skills))
 	}
 	skillsByName := map[string]skillsystem.SkillSummary{}
 	for _, item := range skills {
@@ -2516,6 +2563,9 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	}
 	if got := skillsByName["skill-installer"]; got.Name != "skill-installer" || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
 		t.Fatalf("skill-installer = %+v, want read-only system skill", got)
+	}
+	if got := skillsByName["skill-creator"]; got.Name != "skill-creator" || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
+		t.Fatalf("skill-creator = %+v, want read-only system skill", got)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree", nil)
@@ -2637,8 +2687,14 @@ func TestHandleSkillsMissingRootUsesEmptyOrNotFound(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
 		t.Fatalf("decode skills response: %v", err)
 	}
-	if len(skills) != 1 || skills[0].Name != "skill-installer" || !skills[0].Readonly {
-		t.Fatalf("skills = %+v, want read-only system skill-installer", skills)
+	skillsByName := map[string]skillsystem.SkillSummary{}
+	for _, item := range skills {
+		skillsByName[item.Name] = item
+	}
+	for _, name := range []string{"skill-installer", "skill-creator"} {
+		if got := skillsByName[name]; got.Name != name || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
+			t.Fatalf("skills = %+v, want read-only system skill %s", skills, name)
+		}
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree", nil)
@@ -2693,8 +2749,14 @@ func TestHandleSkillsBrowsesSystemSkillWhenLocalSystemSkillIsMalformed(t *testin
 	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
 		t.Fatalf("decode skills response: %v", err)
 	}
-	if len(skills) != 1 || skills[0].Name != "skill-installer" || skills[0].Source != skillsystem.SkillSourceSystem || !skills[0].Readonly {
-		t.Fatalf("skills = %+v, want read-only system skill-installer", skills)
+	skillsByName := map[string]skillsystem.SkillSummary{}
+	for _, item := range skills {
+		skillsByName[item.Name] = item
+	}
+	for _, name := range []string{"skill-installer", "skill-creator"} {
+		if got := skillsByName[name]; got.Name != name || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
+			t.Fatalf("skills = %+v, want read-only system skill %s", skills, name)
+		}
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree?path=skill-installer", nil)
@@ -3266,8 +3328,8 @@ func TestHandleBootstrapReloadsIMStateBeforeResponse(t *testing.T) {
 	initial := im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin", Role: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: "u-admin", Name: "admin", Role: "admin"},
+			{ID: "u-manager", Name: "manager", Role: "manager"},
 		},
 	}
 	if err := im.SaveBootstrap(statePath, initial); err != nil {
@@ -3315,8 +3377,8 @@ func TestHandleRoomsInviteAliasAddsConversationMembers(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "manager", Name: "manager", Handle: "manager"},
+				{ID: "u-admin", Name: "admin"},
+				{ID: "manager", Name: "manager"},
 			},
 			Rooms: []im.Room{
 				{
@@ -3343,7 +3405,7 @@ func TestHandleRoomsInviteAliasAddsConversationMembers(t *testing.T) {
 	if got.ID != "room-1" {
 		t.Fatalf("conversation id = %q, want %q", got.ID, "room-1")
 	}
-	if !containsMember(got.Members, "pt-manager") {
+	if !containsMember(got.Members, "user-manager") {
 		t.Fatalf("members = %+v, want manager to be invited", got.Members)
 	}
 }
@@ -3365,7 +3427,7 @@ func TestHandleRoomsReturnsConversationList(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-alice", Name: "Alice", Handle: "alice"},
+				{ID: "u-alice", Name: "Alice"},
 			},
 			Rooms: []im.Room{
 				{
@@ -3405,8 +3467,8 @@ func TestHandleRoomsReloadsIMStateBeforeList(t *testing.T) {
 	initial := im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin", Role: "admin"},
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: "u-admin", Name: "admin", Role: "admin"},
+			{ID: "u-manager", Name: "manager", Role: "manager"},
 		},
 	}
 	if err := im.SaveBootstrap(statePath, initial); err != nil {
@@ -3452,8 +3514,8 @@ func TestHandleUsersReturnsUserList(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-zed", Name: "Zed", Handle: "zed"},
-				{ID: "u-alice", Name: "Alice", Handle: "alice"},
+				{ID: "u-zed", Name: "Zed"},
+				{ID: "u-alice", Name: "Alice"},
 			},
 		}),
 	}
@@ -3469,8 +3531,8 @@ func TestHandleUsersReturnsUserList(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(got) != 4 || got[0].Name != "admin" || got[1].Name != "alice" || got[2].Name != "manager" || got[3].Name != "zed" {
-		t.Fatalf("users = %+v, want admin/alice/manager/zed", got)
+	if len(got) != 4 || got[0].Name != "admin" || got[1].Name != "Alice" || got[2].Name != "manager" || got[3].Name != "Zed" {
+		t.Fatalf("users = %+v, want admin/Alice/manager/Zed", got)
 	}
 }
 
@@ -3485,7 +3547,7 @@ func TestHandleUsersCreateProvisionsIMUser(t *testing.T) {
 		imBus: bus,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-alice","name":"Alice","handle":"alice","role":"worker"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-alice","name":"Alice","role":"worker"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3497,7 +3559,7 @@ func TestHandleUsersCreateProvisionsIMUser(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "user-alice" || got.Name != "alice" || got.Handle != "alice" || got.Role != "worker" {
+	if got.ID != "user-alice" || got.Name != "Alice" || got.Role != "worker" {
 		t.Fatalf("user = %+v, want normalized provisioned user", got)
 	}
 
@@ -3505,7 +3567,7 @@ func TestHandleUsersCreateProvisionsIMUser(t *testing.T) {
 		t.Fatal("User(u-alice) ok = false, want true after create")
 	}
 	rooms := srv.im.ListRooms()
-	if len(rooms) != 1 || !containsMember(rooms[0].Members, "pt-admin") || !containsMember(rooms[0].Members, "pt-alice") {
+	if len(rooms) != 1 || !containsMember(rooms[0].Members, "user-admin") || !containsMember(rooms[0].Members, "user-alice") {
 		t.Fatalf("rooms = %+v, want one bootstrap room with admin and u-alice", rooms)
 	}
 
@@ -3541,7 +3603,7 @@ func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T)
 		imBus:       bus,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-qa","name":"qa","handle":"qa","role":"qa"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-qa","name":"qa","role":"qa"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3552,7 +3614,7 @@ func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T)
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "user-qa" || got.Name != "qa" || got.Handle != "qa" || got.Role != "worker" {
+	if got.ID != "user-qa" || got.Name != "qa" || got.Role != "worker" {
 		t.Fatalf("user = %+v, want qa worker user", got)
 	}
 
@@ -3574,7 +3636,7 @@ func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T)
 		t.Fatalf("first event = %+v, want user_created for user-qa", first)
 	}
 	second := mustReceiveIMEvent(t, events)
-	if second.Type != im.EventTypeRoomCreated || second.Room == nil || !containsMember(second.Room.Members, "pt-qa") {
+	if second.Type != im.EventTypeRoomCreated || second.Room == nil || !containsMember(second.Room.Members, "user-qa") {
 		t.Fatalf("second event = %+v, want qa direct room", second)
 	}
 }
@@ -3583,20 +3645,18 @@ func TestHandleUsersCreateReusesExistingWorkerParticipant(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: im.AdminUserID,
 		Users: []im.User{{
-			ID:     im.AdminUserID,
-			Name:   "admin",
-			Handle: "admin",
-			Role:   "admin",
+			ID:   im.AdminUserID,
+			Name: "admin",
+			Role: "admin",
 		}, {
-			ID:     "user-dahym7",
-			Name:   "qa",
-			Handle: "agent-dahym7",
-			Role:   "worker",
+			ID:   "user-dahym7",
+			Name: "qa",
+			Role: "worker",
 		}},
 		Rooms: []im.Room{{
 			ID:       "room-qa",
 			Title:    "qa",
-			Members:  []string{"pt-admin", "pt-dahym7"},
+			Members:  []string{"user-admin", "user-dahym7"},
 			IsDirect: true,
 		}},
 	})
@@ -3617,7 +3677,7 @@ func TestHandleUsersCreateReusesExistingWorkerParticipant(t *testing.T) {
 		participant: participantSvc,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"user-dahym7","name":"qa","handle":"qa","role":"worker"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"user-dahym7","name":"qa","role":"worker"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3632,7 +3692,7 @@ func TestHandleUsersCreateReusesExistingWorkerParticipant(t *testing.T) {
 		t.Fatalf("user = %+v, want existing qa user", got)
 	}
 	rooms := imSvc.ListRooms()
-	if len(rooms) != 1 || rooms[0].ID != "room-qa" || !containsMember(rooms[0].Members, "pt-dahym7") {
+	if len(rooms) != 1 || rooms[0].ID != "room-qa" || !containsMember(rooms[0].Members, "user-dahym7") {
 		t.Fatalf("rooms = %+v, want existing qa DM preserved", rooms)
 	}
 	participants := participantSvc.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent})
@@ -3659,7 +3719,7 @@ func TestHandleUsersCreateManagerAgentIDReturnsParticipantUser(t *testing.T) {
 		participant: participantSvc,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-manager","name":"manager","handle":"manager","role":"manager"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-manager","name":"manager","role":"manager"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3670,7 +3730,7 @@ func TestHandleUsersCreateManagerAgentIDReturnsParticipantUser(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != im.ManagerUserID || got.Handle != agent.ManagerName {
+	if got.ID != im.ManagerUserID || got.Name != agent.ManagerName {
 		t.Fatalf("user = %+v, want existing manager participant user", got)
 	}
 	if _, ok := imSvc.User(im.ManagerUserID); !ok {
@@ -3707,8 +3767,8 @@ func TestHandleCreateRoomResolvesManagerAgentIDToParticipantUser(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsMember(got.Members, agent.ManagerParticipantID) || containsMember(got.Members, agent.ManagerUserID) {
-		t.Fatalf("room members = %+v, want manager participant user only", got.Members)
+	if !containsMember(got.Members, im.ManagerUserID) || containsMember(got.Members, agent.ManagerUserID) {
+		t.Fatalf("room members = %+v, want manager IM user only", got.Members)
 	}
 }
 
@@ -3727,15 +3787,15 @@ func TestHandleUsersCreateDefaultsHandleFromName(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.Handle != "alice" {
-		t.Fatalf("user.Handle = %q, want %q", got.Handle, "alice")
+	if got.Name != "Alice" {
+		t.Fatalf("user.Name = %q, want %q", got.Name, "Alice")
 	}
 }
 
 func TestHandleUsersCreateRejectsMissingID(t *testing.T) {
 	srv := &Handler{im: im.NewService()}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"name":"Alice","handle":"alice"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"name":"Alice"}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
@@ -3827,8 +3887,8 @@ func TestHandleMessagesPostCreatesMessage(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "manager", Name: "manager", Handle: "manager"},
+				{ID: "u-admin", Name: "admin"},
+				{ID: "manager", Name: "manager"},
 			},
 			Rooms: []im.Room{
 				{
@@ -3852,10 +3912,10 @@ func TestHandleMessagesPostCreatesMessage(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.SenderID != "pt-admin" || got.Content != "hello @manager" {
+	if got.SenderID != "user-admin" || got.Content != "hello @manager" {
 		t.Fatalf("message = %+v, want sender/content populated", got)
 	}
-	if len(got.Mentions) != 1 || got.Mentions[0].ID != "pt-manager" || got.Mentions[0].Name != "manager" {
+	if len(got.Mentions) != 1 || got.Mentions[0].ID != "user-manager" || got.Mentions[0].Name != "manager" {
 		t.Fatalf("mentions = %+v, want manager", got.Mentions)
 	}
 }
@@ -3865,8 +3925,8 @@ func TestHandleMessagesPostNormalizesCanonicalSlashCommand(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "u-manager", Name: "manager", Handle: "manager"},
+				{ID: "u-admin", Name: "admin"},
+				{ID: "u-manager", Name: "manager"},
 			},
 			Rooms: []im.Room{{ID: "room-1", Title: "Room One", Members: []string{"u-admin", "u-manager"}}},
 		}),
@@ -3894,7 +3954,7 @@ func TestHandleMessagesPostRejectsMalformedSlashCommand(t *testing.T) {
 	srv := &Handler{
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
-			Users:         []im.User{{ID: "u-admin", Name: "admin", Handle: "admin"}},
+			Users:         []im.User{{ID: "u-admin", Name: "admin"}},
 			Rooms:         []im.Room{{ID: "room-1", Title: "Room One", Members: []string{"u-admin"}}},
 		}),
 	}
@@ -3913,7 +3973,7 @@ func TestHandleMessagesPostKeepsLegacySlashTextAsPlainContent(t *testing.T) {
 	srv := &Handler{
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
-			Users:         []im.User{{ID: "u-admin", Name: "admin", Handle: "admin"}},
+			Users:         []im.User{{ID: "u-admin", Name: "admin"}},
 			Rooms:         []im.Room{{ID: "room-1", Title: "Room One", Members: []string{"u-admin"}}},
 		}),
 	}
@@ -3940,8 +4000,8 @@ func TestHandleThreadRoutesAndMessageFiltering(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "manager", Name: "manager", Handle: "manager"},
+				{ID: "u-admin", Name: "admin"},
+				{ID: "manager", Name: "manager"},
 			},
 			Rooms: []im.Room{
 				{
@@ -4081,8 +4141,8 @@ func TestHandleThreadEventsPublishCreatedAndUpdated(t *testing.T) {
 		im: im.NewServiceFromBootstrapWithBus(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "manager", Name: "manager", Handle: "manager"},
+				{ID: "u-admin", Name: "admin"},
+				{ID: "manager", Name: "manager"},
 			},
 			Rooms: []im.Room{
 				{
@@ -4128,9 +4188,9 @@ func TestHandleMessagesPostPrefixesMentionID(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "u-dev", Name: "dev", Handle: "dev"},
-				{ID: "u-manager", Name: "manager", Handle: "manager"},
+				{ID: "u-admin", Name: "admin"},
+				{ID: "u-dev", Name: "dev"},
+				{ID: "u-manager", Name: "manager"},
 			},
 			Rooms: []im.Room{
 				{
@@ -4154,10 +4214,10 @@ func TestHandleMessagesPostPrefixesMentionID(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.Content != `<at user_id="pt-dev">dev</at> hi` {
-		t.Fatalf(`content = %q, want <at user_id="pt-dev">dev</at> hi`, got.Content)
+	if got.Content != `<at user_id="user-dev">dev</at> hi` {
+		t.Fatalf(`content = %q, want <at user_id="user-dev">dev</at> hi`, got.Content)
 	}
-	if len(got.Mentions) != 1 || got.Mentions[0].ID != "pt-dev" || got.Mentions[0].Name != "dev" {
+	if len(got.Mentions) != 1 || got.Mentions[0].ID != "user-dev" || got.Mentions[0].Name != "dev" {
 		t.Fatalf("mentions = %+v, want u-dev", got.Mentions)
 	}
 }
@@ -4461,7 +4521,7 @@ func TestHandleIMEventsExposeRoomIDOnly(t *testing.T) {
 			SenderID: "u-admin",
 			Content:  "hello",
 		},
-		Sender: &im.User{ID: "u-admin", Name: "admin", Handle: "admin"},
+		Sender: &im.User{ID: "u-admin", Name: "admin"},
 	})
 	time.Sleep(20 * time.Millisecond)
 	cancel()
@@ -4481,9 +4541,9 @@ func TestHandleRoomsPostCreatesRoom(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "u-alice", Name: "Alice", Handle: "alice"},
-				{ID: "manager", Name: "manager", Handle: "manager"},
+				{ID: "u-admin", Name: "admin"},
+				{ID: "u-alice", Name: "Alice"},
+				{ID: "manager", Name: "manager"},
 			},
 		}),
 	}
@@ -4503,7 +4563,7 @@ func TestHandleRoomsPostCreatesRoom(t *testing.T) {
 	if got.Title != "Launch" {
 		t.Fatalf("conversation.Title = %q, want Launch", got.Title)
 	}
-	if !containsMember(got.Members, "pt-admin") || !containsMember(got.Members, "pt-alice") || !containsMember(got.Members, "pt-manager") {
+	if !containsMember(got.Members, "user-admin") || !containsMember(got.Members, "user-alice") || !containsMember(got.Members, "user-manager") {
 		t.Fatalf("members = %+v, want admin, alice, and manager", got.Members)
 	}
 }
@@ -4513,8 +4573,8 @@ func TestHandleRoomsPostUsesCsgclawChannelAdapter(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-admin", Name: "admin", Handle: "admin"},
-				{ID: "u-alice", Name: "Alice", Handle: "alice"},
+				{ID: "u-admin", Name: "admin"},
+				{ID: "u-alice", Name: "Alice"},
 			},
 		}),
 	}
@@ -4531,7 +4591,7 @@ func TestHandleRoomsPostUsesCsgclawChannelAdapter(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !containsMember(got.Members, "pt-admin") || !containsMember(got.Members, "pt-alice") {
+	if !containsMember(got.Members, "user-admin") || !containsMember(got.Members, "user-alice") {
 		t.Fatalf("members = %+v, want trimmed bot IDs", got.Members)
 	}
 }
@@ -4541,8 +4601,8 @@ func TestHandleUsersDeleteRemovesUser(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-admin", Name: "admin", Handle: "admin", IsOnline: true},
-				{ID: "u-alice", Name: "Alice", Handle: "alice", IsOnline: true},
+				{ID: "u-admin", Name: "admin", IsOnline: true},
+				{ID: "u-alice", Name: "Alice", IsOnline: true},
 			},
 			Rooms: []im.Room{
 				{
@@ -4713,8 +4773,8 @@ func TestHandleBotSendMessageDoesNotInferRecentThreadScope(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{
@@ -4802,8 +4862,8 @@ func TestHandleBotSendMessageAcceptsPicoClawThreadContext(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{
@@ -4870,8 +4930,8 @@ func TestHandleParticipantSendMessageReplacementRefreshesThreadRootSummary(t *te
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{
@@ -4941,8 +5001,8 @@ func TestHandleParticipantSendMessageThreadsTopLevelToolCallsUnderFinalResponse(
 			imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 				CurrentUserID: "u-admin",
 				Users: []im.User{
-					{ID: "u-admin", Name: "admin", Handle: "admin"},
-					{ID: "manager", Name: "manager", Handle: "manager"},
+					{ID: "u-admin", Name: "admin"},
+					{ID: "manager", Name: "manager"},
 				},
 				Rooms: []im.Room{
 					{
@@ -5028,8 +5088,8 @@ func TestPublishParticipantEventQueuesUntilParticipantSubscribes(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{
@@ -5126,8 +5186,8 @@ func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-worker", Name: "worker", Handle: "worker"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-worker", Name: "worker"},
 		},
 		Rooms: []im.Room{
 			{
@@ -5208,8 +5268,8 @@ func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-worker", Name: "worker", Handle: "worker"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-worker", Name: "worker"},
 		},
 		Rooms: []im.Room{
 			{
@@ -5251,8 +5311,8 @@ func TestHandleBotEventsRequeuesWhenSSEWriteFails(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{
@@ -5322,8 +5382,8 @@ func TestReplayRecentBotMessagesReplaysUnansweredHumanMessage(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{
@@ -5363,9 +5423,9 @@ func TestReplayRecentBotMessagesSkipsRoomWithoutBridgeTarget(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-agent-hhtz4b", Name: "qa", Handle: "qa"},
-			{ID: agent.ManagerParticipantID, Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-agent-hhtz4b", Name: "qa"},
+			{ID: agent.ManagerParticipantID, Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{
@@ -5413,8 +5473,8 @@ func TestReplayRecentBotMessagesReplaysParticipantRoomUsingChannelUserRef(t *tes
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-agent-hhtz4b", Name: "qa", Handle: "qa"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-agent-hhtz4b", Name: "qa"},
 		},
 		Rooms: []im.Room{
 			{
@@ -5504,8 +5564,8 @@ func TestReplayRecentBotMessagesUsesNewConversationFlow(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{
@@ -5545,8 +5605,8 @@ func TestReplayRecentBotMessagesSkipsAnsweredMessage(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{
@@ -5589,8 +5649,8 @@ func TestReplayRecentBotMessagesDoesNotDuplicateDeliveredMessage(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{
@@ -5647,8 +5707,8 @@ func TestReplayRecentBotMessagesHonorsLastEventID(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []im.Room{
 			{

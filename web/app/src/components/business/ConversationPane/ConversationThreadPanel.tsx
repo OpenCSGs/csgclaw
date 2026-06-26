@@ -109,18 +109,22 @@ export function ConversationThreadPanel({
   const visibleRoot = showToolCalls || !isToolCallMessage(root) ? root : null;
   const visibleReplies = showToolCalls ? replies : replies.filter((message) => !isToolCallMessage(message));
   const latestReplyID = visibleReplies[visibleReplies.length - 1]?.id || "";
-  const mentionableUsersByHandle = useMemo(() => {
+  const mentionableUsersByName = useMemo(() => {
     const result = new Map<string, (typeof mentionableUsers)[number]>();
+    const duplicateNames = new Set<string>();
     mentionableUsers.forEach((user) => {
-      const handle = String(user.handle || user.name || user.id || "")
+      const name = String(user.name || "")
         .trim()
         .toLowerCase();
-      if (!handle) {
+      if (!name || duplicateNames.has(name)) {
         return;
       }
-      if (!result.has(handle)) {
-        result.set(handle, user);
+      if (result.has(name)) {
+        result.delete(name);
+        duplicateNames.add(name);
+        return;
       }
+      result.set(name, user);
     });
     return result;
   }, [mentionableUsers]);
@@ -382,7 +386,7 @@ export function ConversationThreadPanel({
           onPaste={(event) => {
             event.preventDefault();
             const pasted = event.clipboardData?.getData("text/plain") ?? "";
-            const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByHandle);
+            const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByName);
             if (segments.some((segment) => segment.type === "mention")) {
               insertComposerSegmentsAtSelection(segments);
             } else {
@@ -422,7 +426,7 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
   const user = resolveUserByLocalIdentity(message.sender_id, usersById);
   const fallbackName = message.sender_id || "";
   const avatar = user?.avatar || fallbackName.slice(0, 1).toUpperCase();
-  const name = user?.name || user?.handle || fallbackName;
+  const name = user?.name || fallbackName;
   const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
 
   return (

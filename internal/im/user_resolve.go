@@ -32,8 +32,8 @@ func (s *Service) resolveUserIDLocked(userID string) string {
 			return canonical
 		}
 	}
-	handle := strings.ToLower(strings.TrimPrefix(userID, "@"))
-	if resolved, ok := s.byHandle[handle]; ok {
+	name := strings.ToLower(strings.TrimPrefix(userID, "@"))
+	if resolved, ok := s.byName[name]; ok {
 		return resolved
 	}
 	return userID
@@ -130,10 +130,18 @@ func (s *Service) userForParticipantLocked(participantID string) (User, bool) {
 		return User{}, false
 	}
 	userID := userIDForParticipantID(participantID)
+	return s.userForLocalIDLocked(userID)
+}
+
+func (s *Service) userForLocalIDLocked(id string) (User, bool) {
+	if s == nil {
+		return User{}, false
+	}
+	userID := canonicalIMUserID(id)
 	if user, ok := s.users[userID]; ok {
 		return user, true
 	}
-	for _, alias := range participantUserLookupAliases(participantID) {
+	for _, alias := range participantUserLookupAliases(id) {
 		if user, ok := s.users[alias]; ok {
 			return user, true
 		}
@@ -143,9 +151,37 @@ func (s *Service) userForParticipantLocked(participantID string) (User, bool) {
 
 func participantUserLookupAliases(participantID string) []string {
 	participantID = strings.TrimSpace(participantID)
-	suffix := strings.TrimPrefix(participantID, "pt-")
-	aliases := []string{participantID, suffix, "u-" + suffix}
+	rawSuffix := strings.TrimPrefix(participantID, "pt-")
+	rawSuffix = strings.TrimPrefix(rawSuffix, "user-")
+	rawSuffix = strings.TrimPrefix(rawSuffix, "u-")
+	suffix := trimLocalIdentityPrefixes(participantID)
+	aliases := []string{
+		participantID,
+		rawSuffix,
+		suffix,
+		"u-" + suffix,
+		canonicalIMUserID(suffix),
+		canonicalIMParticipantID(suffix),
+	}
+	if rawSuffix != suffix {
+		aliases = append(aliases,
+			"u-"+rawSuffix,
+			"user-"+rawSuffix,
+			canonicalIMUserID(rawSuffix),
+			canonicalIMParticipantID(rawSuffix),
+		)
+	}
 	if base, ok := trimStableHashSuffix(suffix); ok {
+		aliases = append(aliases,
+			"pt-"+base,
+			base,
+			"u-"+base,
+			"user-"+base,
+			"user-agent-"+base,
+			userIDForParticipantID("pt-"+base),
+		)
+	}
+	if base, ok := trimStableHashSuffix(rawSuffix); ok {
 		aliases = append(aliases,
 			"pt-"+base,
 			base,

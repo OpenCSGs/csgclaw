@@ -17,7 +17,6 @@ func TestProvisionerEnsureAgentUserPublishesBootstrapRoom(t *testing.T) {
 		ID:          "u-alice",
 		Name:        "Alice",
 		Description: "test lead",
-		Handle:      "alice",
 		Role:        "Worker",
 	})
 	if err != nil {
@@ -39,8 +38,8 @@ func TestProvisionerEnsureAgentUserPublishesBootstrapRoom(t *testing.T) {
 	if second.Room == nil {
 		t.Fatal("second event.Room = nil, want bootstrap room")
 	}
-	if second.Room.Title != "alice" {
-		t.Fatalf("second event.Room.Title = %q, want %q", second.Room.Title, "alice")
+	if second.Room.Title != "Alice" {
+		t.Fatalf("second event.Room.Title = %q, want %q", second.Room.Title, "Alice")
 	}
 	if !containsUserIDInRoom(*second.Room, "admin") || !containsUserIDInRoom(*second.Room, "u-alice") {
 		t.Fatalf("second event.Room.Members = %+v, want admin and worker", second.Room.Members)
@@ -59,8 +58,8 @@ func TestProvisionerEnsureAgentUserPublishesBootstrapRoom(t *testing.T) {
 	if third.Message == nil {
 		t.Fatal("third event.Message = nil, want bootstrap message")
 	}
-	if third.Message.SenderID != "pt-admin" {
-		t.Fatalf("third event.Message.SenderID = %q, want %q", third.Message.SenderID, "pt-admin")
+	if third.Message.SenderID != "user-admin" {
+		t.Fatalf("third event.Message.SenderID = %q, want %q", third.Message.SenderID, "user-admin")
 	}
 	wantContent := "Write this down in your memory: your name is Alice. Your responsibility is test lead"
 	if third.Message.Content != wantContent {

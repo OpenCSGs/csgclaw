@@ -25,7 +25,7 @@ func TestCreateAgentParticipantUsesStableParticipantIDForDefaultAgentID(t *testi
 		ID:      "qa",
 		Channel: ChannelCSGClaw,
 		Type:    TypeAgent,
-		Name:    "QA Display Name",
+		Name:    "QA-Display-Name",
 		ChannelUser: ChannelUserSpec{
 			Ref:  "u-qa",
 			Kind: ChannelUserKindLocalUserID,
@@ -33,7 +33,7 @@ func TestCreateAgentParticipantUsesStableParticipantIDForDefaultAgentID(t *testi
 		AgentBinding: AgentBindingSpec{
 			Mode: BindingModeCreate,
 			Agent: &agent.CreateAgentSpec{
-				Name:        "QA Display Name",
+				Name:        "QA-Display-Name",
 				Role:        agent.RoleWorker,
 				RuntimeKind: agent.RuntimeKindPicoClawSandbox,
 				Image:       "agent-image:test",
@@ -56,31 +56,15 @@ func TestCreateAgentParticipantUsesStableParticipantIDForDefaultAgentID(t *testi
 	if _, ok := agentSvc.Agent("u-qa-display-name"); ok {
 		t.Fatal("agent ID was derived from editable display name")
 	}
-	if user, ok := imSvc.User("user-qa"); !ok || !strings.EqualFold(user.Name, "QA Display Name") {
+	if user, ok := imSvc.User("user-qa"); !ok || !strings.EqualFold(user.Name, "QA-Display-Name") {
 		t.Fatalf("channel user = %+v, ok=%v; want user-qa display user", user, ok)
 	}
 }
 
-func TestCreateParticipantAssignsUnusedBuiltInAvatar(t *testing.T) {
+func TestCreateParticipantKeepsAvatarOnIMUserOnly(t *testing.T) {
 	agentSvc := mustNewAgentService(t)
 	imSvc := im.NewService()
-	availableAvatar := builtInAvatarOptions[len(builtInAvatarOptions)-1]
-	seed := make([]Participant, 0, len(builtInAvatarOptions)-1)
-	replacer := strings.NewReplacer("/", "-", ".", "-")
-	for _, avatar := range builtInAvatarOptions[:len(builtInAvatarOptions)-1] {
-		seed = append(seed, Participant{
-			ID:              "seed-avatar-" + replacer.Replace(avatar),
-			Channel:         ChannelCSGClaw,
-			Type:            TypeHuman,
-			Name:            "seed",
-			Avatar:          avatar,
-			ChannelUserRef:  "seed",
-			ChannelUserKind: ChannelUserKindLocalUserID,
-			LifecycleStatus: LifecycleStatusActive,
-			Mentionable:     true,
-		})
-	}
-	store := NewMemoryStore(seed)
+	store := NewMemoryStore(nil)
 	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
 
 	created, err := svc.Create(context.Background(), CreateRequest{
@@ -106,14 +90,14 @@ func TestCreateParticipantAssignsUnusedBuiltInAvatar(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if created.Avatar != availableAvatar {
-		t.Fatalf("participant avatar = %q, want unused %q", created.Avatar, availableAvatar)
+	if created.Avatar != "" {
+		t.Fatalf("participant avatar = %q, want empty", created.Avatar)
 	}
-	if user, ok := imSvc.User("user-qa"); !ok || user.Avatar != availableAvatar {
-		t.Fatalf("channel user = %+v, ok=%v; want avatar %q", user, ok, availableAvatar)
+	if user, ok := imSvc.User("user-qa"); !ok || user.Avatar == "" {
+		t.Fatalf("channel user = %+v, ok=%v; want user-owned avatar", user, ok)
 	}
-	if runtimeAgent, ok := agentSvc.Agent("u-qa"); !ok || runtimeAgent.Avatar != availableAvatar {
-		t.Fatalf("agent = %+v, ok=%v; want avatar %q", runtimeAgent, ok, availableAvatar)
+	if runtimeAgent, ok := agentSvc.Agent("u-qa"); !ok || runtimeAgent.Avatar != "" {
+		t.Fatalf("agent = %+v, ok=%v; want empty avatar", runtimeAgent, ok)
 	}
 }
 
@@ -126,7 +110,7 @@ func TestCreateAgentParticipantCanReuseExistingAgentWithDifferentParticipantID(t
 	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-qa",
-			Name:        "QA Runtime",
+			Name:        "QA-Runtime",
 			Role:        agent.RoleWorker,
 			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
 			Image:       "agent-image:test",
@@ -259,13 +243,13 @@ func TestEnsureBootstrapAdminCreatesHumanParticipantWithoutAgent(t *testing.T) {
 	if !created.Mentionable {
 		t.Fatal("admin participant Mentionable = false, want true")
 	}
-	if created.Avatar == "" {
-		t.Fatal("admin participant avatar is empty, want initialized built-in avatar")
+	if created.Avatar != "" {
+		t.Fatalf("admin participant avatar = %q, want empty", created.Avatar)
 	}
 	if _, ok := store.Get(ChannelCSGClaw, bootstrapAdminParticipantID); !ok {
 		t.Fatal("store missing admin participant")
 	}
-	if user, ok := imSvc.User(im.AdminUserID); !ok || user.ID != im.AdminUserID || user.Handle != "admin" || user.Role != "admin" || user.Avatar != created.Avatar {
+	if user, ok := imSvc.User(im.AdminUserID); !ok || user.ID != im.AdminUserID || user.Name != "admin" || user.Role != "admin" || user.Avatar == "" {
 		t.Fatalf("admin channel user = %+v, ok=%v; want local admin user", user, ok)
 	}
 }
@@ -277,7 +261,7 @@ func TestEnsureBootstrapAdminRenamesLegacyAdminParticipant(t *testing.T) {
 		ID:              "u-admin",
 		Channel:         ChannelCSGClaw,
 		Type:            TypeHuman,
-		Name:            "Local Admin",
+		Name:            "Local-Admin",
 		Avatar:          "avatar.png",
 		ChannelUserRef:  "u-admin",
 		ChannelUserKind: ChannelUserKindLocalUserID,
@@ -304,7 +288,7 @@ func TestEnsureBootstrapAdminRenamesLegacyAdminParticipant(t *testing.T) {
 	if created.ChannelUserRef != im.AdminUserID {
 		t.Fatalf("channel user ref = %q, want %q", created.ChannelUserRef, im.AdminUserID)
 	}
-	if !created.CreatedAt.Equal(createdAt) || created.Avatar != "avatar.png" || created.Metadata["legacy"] != "kept" {
+	if !created.CreatedAt.Equal(createdAt) || created.Avatar != "" || created.Metadata["legacy"] != "kept" {
 		t.Fatalf("admin participant did not preserve legacy fields: %+v", created)
 	}
 	if _, ok := store.Get(ChannelCSGClaw, "u-admin"); ok {
@@ -312,7 +296,7 @@ func TestEnsureBootstrapAdminRenamesLegacyAdminParticipant(t *testing.T) {
 	}
 }
 
-func TestUpdateHumanParticipantAvatarSyncsChannelUser(t *testing.T) {
+func TestUpdateHumanParticipantAvatarIgnored(t *testing.T) {
 	imSvc := im.NewService()
 	store := NewMemoryStore(nil)
 	svc := NewService(store, WithIMService(imSvc))
@@ -330,11 +314,11 @@ func TestUpdateHumanParticipantAvatarSyncsChannelUser(t *testing.T) {
 	if !ok {
 		t.Fatal("Update() ok = false, want true")
 	}
-	if updated.Avatar != avatar {
-		t.Fatalf("participant avatar = %q, want %q", updated.Avatar, avatar)
+	if updated.Avatar != "" {
+		t.Fatalf("participant avatar = %q, want empty", updated.Avatar)
 	}
-	if user, ok := imSvc.User(im.AdminUserID); !ok || user.Avatar != avatar {
-		t.Fatalf("admin channel user = %+v, ok=%v; want avatar %q", user, ok, avatar)
+	if user, ok := imSvc.User(im.AdminUserID); !ok || user.Avatar == avatar {
+		t.Fatalf("admin channel user = %+v, ok=%v; want participant avatar update ignored", user, ok)
 	}
 }
 
@@ -358,14 +342,14 @@ func TestEnsureBootstrapManagerUsesDefaultParticipantIDSeparateFromAgentID(t *te
 	if created.ChannelUserRef != im.ManagerUserID {
 		t.Fatalf("channel user ref = %q, want %q", created.ChannelUserRef, im.ManagerUserID)
 	}
-	if created.Avatar == "" {
-		t.Fatal("manager participant avatar is empty, want initialized built-in avatar")
+	if created.Avatar != "" {
+		t.Fatalf("manager participant avatar = %q, want empty", created.Avatar)
 	}
-	if user, ok := imSvc.User(im.ManagerUserID); !ok || user.ID != im.ManagerUserID || user.Avatar != created.Avatar {
+	if user, ok := imSvc.User(im.ManagerUserID); !ok || user.ID != im.ManagerUserID || user.Avatar == "" {
 		t.Fatalf("manager channel user = %+v, ok=%v; want local user %q", user, ok, im.ManagerUserID)
 	}
-	if manager, ok := agentSvc.Agent(agent.ManagerUserID); !ok || manager.Avatar != created.Avatar {
-		t.Fatalf("manager agent = %+v, ok=%v; want avatar %q", manager, ok, created.Avatar)
+	if manager, ok := agentSvc.Agent(agent.ManagerUserID); !ok || manager.Avatar != "" {
+		t.Fatalf("manager agent = %+v, ok=%v; want empty avatar", manager, ok)
 	}
 	if _, ok := store.Get(ChannelCSGClaw, agent.ManagerParticipantID); !ok {
 		t.Fatalf("store missing manager participant %q", agent.ManagerParticipantID)
@@ -404,7 +388,7 @@ func TestEnsureBootstrapManagerRenamesLegacyManagerParticipant(t *testing.T) {
 	if created.ID != agent.ManagerParticipantID || created.AgentID != agent.ManagerUserID {
 		t.Fatalf("manager participant = %+v, want id %q bound to agent %q", created, agent.ManagerParticipantID, agent.ManagerUserID)
 	}
-	if !created.CreatedAt.Equal(createdAt) || created.Avatar != "avatar.png" || created.Metadata["legacy"] != "kept" {
+	if !created.CreatedAt.Equal(createdAt) || created.Avatar != "" || created.Metadata["legacy"] != "kept" {
 		t.Fatalf("manager participant did not preserve legacy fields: %+v", created)
 	}
 	if _, ok := store.Get(ChannelCSGClaw, agent.ManagerUserID); ok {
@@ -442,7 +426,7 @@ func TestEnsureBootstrapManagerDeletesMisspelledManagerParticipant(t *testing.T)
 	if created.ID != agent.ManagerParticipantID || created.ChannelUserRef != im.ManagerUserID || created.AgentID != agent.ManagerUserID {
 		t.Fatalf("manager participant = %+v, want manager participant bound to %q", created, agent.ManagerUserID)
 	}
-	if !created.CreatedAt.Equal(createdAt) || created.Avatar != "avatar.png" || created.Metadata["legacy"] != "kept" {
+	if !created.CreatedAt.Equal(createdAt) || created.Avatar != "" || created.Metadata["legacy"] != "kept" {
 		t.Fatalf("manager participant did not preserve legacy fields: %+v", created)
 	}
 	if _, ok := store.Get(ChannelCSGClaw, legacyID); ok {
@@ -456,7 +440,7 @@ func TestDeleteParticipantDoesNotDeleteAgentByDefault(t *testing.T) {
 	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-qa",
-			Name:        "QA Runtime",
+			Name:        "QA-Runtime",
 			Role:        agent.RoleWorker,
 			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
 			Image:       "agent-image:test",
@@ -498,7 +482,7 @@ func TestDeleteParticipantRejectsAgentCleanupWhenStillReferenced(t *testing.T) {
 	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-qa",
-			Name:        "QA Runtime",
+			Name:        "QA-Runtime",
 			Role:        agent.RoleWorker,
 			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
 			Image:       "agent-image:test",
@@ -562,15 +546,15 @@ func TestDeleteParticipantAgentCleanupKeepsSharedCSGClawUser(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-qa", Name: "QA", Handle: "qa"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-qa", Name: "QA"},
 		},
 	})
 	svc := NewService(NewMemoryStore(nil), WithAgentService(agentSvc), WithIMService(imSvc))
 	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-qa",
-			Name:        "QA Runtime",
+			Name:        "QA-Runtime",
 			Role:        agent.RoleWorker,
 			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
 			Image:       "agent-image:test",
@@ -597,7 +581,7 @@ func TestDeleteParticipantAgentCleanupKeepsSharedCSGClawUser(t *testing.T) {
 			ID:      "qa-human-ref",
 			Channel: ChannelCSGClaw,
 			Type:    TypeHuman,
-			Name:    "QA Human Ref",
+			Name:    "QA-Human-Ref",
 			ChannelUser: ChannelUserSpec{
 				Ref:  "u-qa",
 				Kind: ChannelUserKindLocalUserID,

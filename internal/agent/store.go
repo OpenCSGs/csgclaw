@@ -53,17 +53,108 @@ type persistedAgent struct {
 	Avatar           string                   `json:"avatar,omitempty"`
 	BoxID            string                   `json:"box_id,omitempty"`
 	Runtime          *RuntimeRecord           `json:"runtime,omitempty"`
-	RuntimeOptions   map[string]any           `json:"runtime_options,omitempty"`
+	RuntimeOptions   map[string]any           `json:"-"`
 	Role             string                   `json:"role"`
 	Status           string                   `json:"status,omitempty"`
 	CreatedAt        time.Time                `json:"created_at"`
-	Profile          string                   `json:"profile,omitempty"`
+	UpdatedAt        time.Time                `json:"updated_at,omitempty"`
+	Profile          AgentProfile             `json:"profile,omitempty"`
+	ProfileSelector  string                   `json:"-"`
 	Provider         string                   `json:"provider,omitempty"`
 	ModelID          string                   `json:"model_id,omitempty"`
 	ReasoningEffort  string                   `json:"reasoning_effort,omitempty"`
 	AgentProfile     AgentProfile             `json:"agent_profile,omitempty"`
 	ProfileComplete  bool                     `json:"profile_complete"`
 	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
+}
+
+func (a persistedAgent) MarshalJSON() ([]byte, error) {
+	runtime := a.Runtime
+	if runtime == nil {
+		legacyRuntime := RuntimeRecord{
+			ID:        normalizeRuntimeID(a.RuntimeID, a.ID),
+			Kind:      strings.TrimSpace(a.RuntimeKind),
+			State:     agentruntime.State(strings.TrimSpace(a.Status)),
+			SandboxID: strings.TrimSpace(a.BoxID),
+			Options:   utils.CloneAnyMap(a.RuntimeOptions),
+			CreatedAt: a.CreatedAt,
+		}
+		runtime = compactPersistedRuntime(legacyRuntime, a.RuntimeOptions)
+	}
+	profile := a.Profile
+	if profileEmpty(profile) {
+		profile = compactPersistedProfile(a.AgentProfile)
+	}
+	out := map[string]any{
+		"id":         a.ID,
+		"name":       a.Name,
+		"role":       a.Role,
+		"created_at": a.CreatedAt,
+	}
+	if strings.TrimSpace(a.Description) != "" {
+		out["description"] = a.Description
+	}
+	if strings.TrimSpace(a.Instructions) != "" {
+		out["instructions"] = a.Instructions
+	}
+	if strings.TrimSpace(a.Image) != "" {
+		out["image"] = a.Image
+	}
+	if !a.UpdatedAt.IsZero() {
+		out["updated_at"] = a.UpdatedAt
+	}
+	if runtime != nil && !runtimeRecordEmpty(*runtime) {
+		out["runtime"] = runtime
+	}
+	if !profileEmpty(profile) {
+		out["profile"] = profile
+	}
+	if len(a.DetectionResults) > 0 {
+		out["detection_results"] = a.DetectionResults
+	}
+	return json.Marshal(out)
+}
+
+func (a *persistedAgent) UnmarshalJSON(data []byte) error {
+	type persistedAgentAlias persistedAgent
+	type persistedAgentJSON struct {
+		persistedAgentAlias
+		Profile        json.RawMessage `json:"profile"`
+		RuntimeOptions map[string]any  `json:"runtime_options"`
+	}
+	var decoded persistedAgentJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*a = persistedAgent(decoded.persistedAgentAlias)
+	a.RuntimeOptions = utils.CloneAnyMap(decoded.RuntimeOptions)
+	if len(decoded.Profile) > 0 && string(decoded.Profile) != "null" {
+		var profile AgentProfile
+		if err := json.Unmarshal(decoded.Profile, &profile); err == nil {
+			a.Profile = profile
+		} else {
+			var selector string
+			if err := json.Unmarshal(decoded.Profile, &selector); err == nil {
+				a.ProfileSelector = strings.TrimSpace(selector)
+			} else {
+				return fmt.Errorf("decode agent profile: %w", err)
+			}
+		}
+	}
+	if a.Runtime != nil && len(a.Runtime.Options) > 0 && len(a.RuntimeOptions) == 0 {
+		a.RuntimeOptions = utils.CloneAnyMap(a.Runtime.Options)
+	}
+	return nil
+}
+
+func runtimeRecordEmpty(rt RuntimeRecord) bool {
+	return strings.TrimSpace(rt.ID) == "" &&
+		strings.TrimSpace(rt.Kind) == "" &&
+		strings.TrimSpace(string(rt.State)) == "" &&
+		len(rt.AgentIDs) == 0 &&
+		strings.TrimSpace(rt.SandboxID) == "" &&
+		len(rt.Options) == 0 &&
+		rt.CreatedAt.IsZero()
 }
 
 func newPersistedAgent(a Agent) persistedAgent {
@@ -80,29 +171,32 @@ func newPersistedAgent(a Agent) persistedAgent {
 		topRX = utils.CloneAnyMap(a.RuntimeOptions)
 	}
 	ap.BaseURL, ap.ModelID = pol.StripProfileLLMFields(a.RuntimeKind, ap.BaseURL, ap.ModelID)
+	ap = compactPersistedProfile(ap)
+	updatedAt := a.UpdatedAt.UTC()
+	if updatedAt.IsZero() {
+		updatedAt = a.CreatedAt.UTC()
+	}
 	return persistedAgent{
 		ID:               a.ID,
 		Name:             a.Name,
 		Description:      a.Description,
 		Instructions:     a.Instructions,
-		RuntimeID:        a.RuntimeID,
-		RuntimeKind:      a.RuntimeKind,
 		Image:            a.Image,
-		Avatar:           a.Avatar,
-		BoxID:            a.BoxID,
+		Runtime:          compactPersistedRuntime(runtimeRecordForAgent(a), topRX),
 		RuntimeOptions:   topRX,
 		Role:             a.Role,
-		Status:           a.Status,
 		CreatedAt:        a.CreatedAt,
-		Profile:          a.Profile,
-		AgentProfile:     ap,
-		ProfileComplete:  a.ProfileComplete,
+		UpdatedAt:        updatedAt,
+		Profile:          ap,
 		DetectionResults: append([]ProfileDetectionResult(nil), a.DetectionResults...),
 	}
 }
 
 func (a persistedAgent) toAgent() Agent {
-	ap := cloneProfile(a.AgentProfile)
+	ap := cloneProfile(a.Profile)
+	if profileEmpty(ap) {
+		ap = cloneProfile(a.AgentProfile)
+	}
 	rx := utils.CloneAnyMap(a.RuntimeOptions)
 	if strings.TrimSpace(ap.Name) == "" {
 		ap.Name = a.Name
@@ -125,16 +219,26 @@ func (a persistedAgent) toAgent() Agent {
 	runtimeID := a.RuntimeID
 	runtimeKind := a.RuntimeKind
 	boxID := a.BoxID
+	status := a.Status
 	if a.Runtime != nil {
 		rt := normalizeRuntimeRecord(*a.Runtime)
 		if rt.ID != "" {
 			runtimeID = rt.ID
+		}
+		if runtimeID == "" {
+			runtimeID = runtimeIDForAgentID(a.ID)
 		}
 		if rt.Kind != "" {
 			runtimeKind = rt.Kind
 		}
 		if rt.SandboxID != "" {
 			boxID = rt.SandboxID
+		}
+		if strings.TrimSpace(status) == "" && rt.State != "" {
+			status = string(rt.State)
+		}
+		if len(rx) == 0 && len(rt.Options) > 0 {
+			rx = utils.CloneAnyMap(rt.Options)
 		}
 	}
 	ag := Agent{
@@ -149,14 +253,58 @@ func (a persistedAgent) toAgent() Agent {
 		BoxID:            boxID,
 		RuntimeOptions:   rx,
 		Role:             a.Role,
-		Status:           a.Status,
+		Status:           status,
 		CreatedAt:        a.CreatedAt,
-		Profile:          a.Profile,
+		UpdatedAt:        a.UpdatedAt,
+		Profile:          a.ProfileSelector,
 		AgentProfile:     ap,
 		ProfileComplete:  a.ProfileComplete,
 		DetectionResults: append([]ProfileDetectionResult(nil), a.DetectionResults...),
 	}
 	return ag
+}
+
+func profileEmpty(profile AgentProfile) bool {
+	return strings.TrimSpace(profile.Name) == "" &&
+		strings.TrimSpace(profile.Description) == "" &&
+		strings.TrimSpace(profile.Provider) == "" &&
+		strings.TrimSpace(profile.ModelProviderID) == "" &&
+		strings.TrimSpace(profile.BaseURL) == "" &&
+		strings.TrimSpace(profile.APIKey) == "" &&
+		len(profile.Headers) == 0 &&
+		strings.TrimSpace(profile.ModelID) == "" &&
+		strings.TrimSpace(profile.ReasoningEffort) == "" &&
+		!profile.EnableFastMode &&
+		len(profile.RequestOptions) == 0 &&
+		len(profile.Env) == 0 &&
+		!profile.EnvRestartRequired &&
+		!profile.ImageUpgradeRequired
+}
+
+func compactPersistedProfile(profile AgentProfile) AgentProfile {
+	out := cloneProfile(profile)
+	if strings.TrimSpace(out.ModelProviderID) == "" {
+		switch normalizeProfileProvider(out.Provider) {
+		case ProviderCSGHubLite:
+			out.ModelProviderID = ModelProviderIDCSGHubLite
+		case ProviderCSGHub, ProviderOpenCSG:
+			out.ModelProviderID = ModelProviderIDOpenCSG
+		case ProviderCodex:
+			out.ModelProviderID = ModelProviderIDCodex
+		case ProviderClaudeCode:
+			out.ModelProviderID = ModelProviderIDClaude
+		}
+	}
+	out.Provider = ""
+	out.ProfileComplete = false
+	return out
+}
+
+func compactPersistedProfileDefaults(profile AgentProfile) AgentProfile {
+	out := compactPersistedProfile(profile)
+	out.Name = ""
+	out.Description = ""
+	return out
 }
 
 func (w legacyWorker) toAgent() Agent {
@@ -237,12 +385,16 @@ func (s *Service) readState() (map[string]Agent, error) {
 			runtimes[normalized.ID] = normalized
 		}
 		for _, a := range state.Agents {
-			normalized, err := s.normalizeLoadedAgent(a.toAgent())
+			raw := a.toAgent()
+			if strings.TrimSpace(raw.RuntimeID) == "" {
+				raw.RuntimeID = runtimeIDForAgentID(raw.ID)
+			}
+			if rt, ok := runtimes[raw.RuntimeID]; ok {
+				raw = applyRuntimeRecordToAgent(raw, rt)
+			}
+			normalized, err := s.normalizeLoadedAgent(raw)
 			if err != nil {
 				return nil, fmt.Errorf("normalize persisted agent %q: %w", strings.TrimSpace(a.ID), err)
-			}
-			if rt, ok := runtimes[normalized.RuntimeID]; ok && rt.Kind != "" {
-				normalized.RuntimeKind = rt.Kind
 			}
 			agents[normalized.ID] = normalized
 			if _, ok := runtimes[normalized.RuntimeID]; !ok {
@@ -250,12 +402,16 @@ func (s *Service) readState() (map[string]Agent, error) {
 			}
 		}
 		for _, w := range state.Workers {
-			normalized, err := s.normalizeLoadedAgent(w.toAgent())
+			raw := w.toAgent()
+			if strings.TrimSpace(raw.RuntimeID) == "" {
+				raw.RuntimeID = runtimeIDForAgentID(raw.ID)
+			}
+			if rt, ok := runtimes[raw.RuntimeID]; ok {
+				raw = applyRuntimeRecordToAgent(raw, rt)
+			}
+			normalized, err := s.normalizeLoadedAgent(raw)
 			if err != nil {
 				return nil, fmt.Errorf("normalize legacy worker %q: %w", strings.TrimSpace(w.ID), err)
-			}
-			if rt, ok := runtimes[normalized.RuntimeID]; ok && rt.Kind != "" {
-				normalized.RuntimeKind = rt.Kind
 			}
 			agents[normalized.ID] = normalized
 			if _, ok := runtimes[normalized.RuntimeID]; !ok {
@@ -323,12 +479,16 @@ func (s *Service) agentsFromRootState(root rootAgentsState) (map[string]Agent, e
 				runtimes[rt.ID] = rt
 			}
 		}
-		normalized, err := s.normalizeLoadedAgent(a.toAgent())
+		raw := a.toAgent()
+		if strings.TrimSpace(raw.RuntimeID) == "" {
+			raw.RuntimeID = runtimeIDForAgentID(raw.ID)
+		}
+		if rt, ok := runtimes[raw.RuntimeID]; ok {
+			raw = applyRuntimeRecordToAgent(raw, rt)
+		}
+		normalized, err := s.normalizeLoadedAgent(raw)
 		if err != nil {
 			return nil, fmt.Errorf("normalize persisted agent %q: %w", strings.TrimSpace(a.ID), err)
-		}
-		if rt, ok := runtimes[normalized.RuntimeID]; ok && rt.Kind != "" {
-			normalized.RuntimeKind = rt.Kind
 		}
 		agents[normalized.ID] = normalized
 		if _, ok := runtimes[normalized.RuntimeID]; !ok {
@@ -369,24 +529,34 @@ func (s *Service) saveLocked() error {
 func (s *Service) rootAgentsStateLocked() rootAgentsState {
 	items := persistedAgentsFromMap(s.agents)
 	for i := range items {
-		runtimeID := strings.TrimSpace(items[i].RuntimeID)
+		runtimeID := runtimeIDForAgentID(items[i].ID)
 		if runtimeID == "" {
-			runtimeID = runtimeIDForAgentID(items[i].ID)
-			items[i].RuntimeID = runtimeID
+			runtimeID = strings.TrimSpace(items[i].RuntimeID)
 		}
 		if rt, ok := s.runtimeRecords[runtimeID]; ok {
 			normalized := normalizeRuntimeRecord(rt)
-			items[i].Runtime = &normalized
+			items[i].Runtime = compactPersistedRuntime(normalized, items[i].RuntimeOptions)
 		} else {
 			normalized := runtimeRecordForAgent(items[i].toAgent())
-			items[i].Runtime = &normalized
+			items[i].Runtime = compactPersistedRuntime(normalized, items[i].RuntimeOptions)
 		}
 	}
 	return rootAgentsState{
-		ProfileDefaults:  cloneProfile(s.profileDefaults),
+		ProfileDefaults:  compactPersistedProfileDefaults(s.profileDefaults),
 		DetectionResults: append([]ProfileDetectionResult(nil), s.detectionResults...),
 		Items:            items,
 	}
+}
+
+func compactPersistedRuntime(rt RuntimeRecord, options map[string]any) *RuntimeRecord {
+	rt = normalizeRuntimeRecord(rt)
+	if len(options) > 0 {
+		rt.Options = utils.CloneAnyMap(options)
+	}
+	rt.ID = ""
+	rt.AgentIDs = nil
+	rt.CreatedAt = time.Time{}
+	return &rt
 }
 
 func (s *Service) shouldWriteRootAgentsState() bool {
@@ -409,6 +579,29 @@ func (s *Service) stateLooksLikeRootState() bool {
 func (s *Service) stateIsDefaultRootStatePath() bool {
 	path := strings.TrimSpace(s.state)
 	return filepath.Base(path) == config.StateFileName && filepath.Base(filepath.Dir(path)) == config.AppDirName
+}
+
+func applyRuntimeRecordToAgent(a Agent, rt RuntimeRecord) Agent {
+	rt = normalizeRuntimeRecord(rt)
+	if strings.TrimSpace(rt.ID) != "" {
+		a.RuntimeID = rt.ID
+	}
+	if strings.TrimSpace(a.RuntimeID) == "" {
+		a.RuntimeID = runtimeIDForAgentID(a.ID)
+	}
+	if strings.TrimSpace(rt.Kind) != "" {
+		a.RuntimeKind = rt.Kind
+	}
+	if strings.TrimSpace(rt.SandboxID) != "" {
+		a.BoxID = rt.SandboxID
+	}
+	if strings.TrimSpace(a.Status) == "" && rt.State != "" {
+		a.Status = string(rt.State)
+	}
+	if len(a.RuntimeOptions) == 0 && len(rt.Options) > 0 {
+		a.RuntimeOptions = utils.CloneAnyMap(rt.Options)
+	}
+	return a
 }
 
 func rootSectionExists(path, section string) bool {
@@ -446,6 +639,9 @@ func (s *Service) normalizeLoadedAgent(a Agent) (Agent, error) {
 		}
 	}
 	a.RuntimeID = normalizeRuntimeID(a.RuntimeID, a.ID)
+	if strings.TrimSpace(a.RuntimeID) == "" {
+		a.RuntimeID = runtimeIDForAgentID(a.ID)
+	}
 	if a.RuntimeKind == "" {
 		return Agent{}, fmt.Errorf("runtime_kind is required")
 	}
@@ -464,6 +660,9 @@ func (s *Service) normalizeLoadedAgent(a Agent) (Agent, error) {
 	a.AgentProfile = normalizeProfileForAgentRuntime(a.AgentProfile, a.RuntimeOptions, a.Name, a.Description, a.RuntimeKind, nil)
 	a.ProfileComplete = a.AgentProfile.ProfileComplete
 	a.Profile = profileSelector(a.AgentProfile)
+	if a.UpdatedAt.IsZero() {
+		a.UpdatedAt = a.CreatedAt
+	}
 	if strings.TrimSpace(a.Status) == "" && strings.TrimSpace(a.BoxID) != "" {
 		a.Status = string(sandbox.StateRunning)
 	}

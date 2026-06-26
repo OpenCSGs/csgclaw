@@ -57,7 +57,7 @@ type AgentProfile struct {
 	EnableFastMode       bool              `json:"enable_fast_mode,omitempty"`
 	RequestOptions       map[string]any    `json:"request_options,omitempty"`
 	Env                  map[string]string `json:"env,omitempty"`
-	ProfileComplete      bool              `json:"profile_complete"`
+	ProfileComplete      bool              `json:"profile_complete,omitempty"`
 	EnvRestartRequired   bool              `json:"env_restart_required,omitempty"`
 	ImageUpgradeRequired bool              `json:"image_upgrade_required,omitempty"`
 }

@@ -11,7 +11,7 @@ function getAvatarInitial(user: IMUser): string {
   if (user?.avatar && typeof user.avatar === "string" && user.avatar.length <= 2) {
     return user.avatar;
   }
-  return (user?.name || user?.handle || "?").charAt(0).toUpperCase();
+  return (user?.name || user?.id || "?").charAt(0).toUpperCase();
 }
 
 function MemberAvatar({ user, index = 0, compact = false }: { compact?: boolean; index?: number; user: IMUser }) {
@@ -141,7 +141,7 @@ export function InviteMembersModal({
                     )}
                     <span className="create-room-member-copy">
                       <strong>{user.name}</strong>
-                      <small>@{user.handle}</small>
+                      <small>{user.id}</small>
                     </span>
                     {removable ? (
                       <CSGButton
@@ -209,7 +209,7 @@ export function InviteMembersModal({
                       <MemberAvatar user={user} index={index} />
                       <span className="create-room-member-copy">
                         <strong>{user.name}</strong>
-                        <small>@{user.handle}</small>
+                        <small>{user.id}</small>
                       </span>
                     </label>
                   ))}

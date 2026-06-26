@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -229,6 +230,43 @@ reasoning_effort = "high"
 	}
 	if got := reloaded.Models.Providers["openai"].ReasoningEffort; got != "" {
 		t.Fatalf("reloaded ReasoningEffort = %q, want empty from models.json", got)
+	}
+}
+
+func TestSaveModelsRootStateOmitsDefaultModel(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, StateFileName)
+	llm := LLMConfig{
+		Default:        "openai.gpt-4.1",
+		DefaultProfile: "openai.gpt-4.1",
+		Providers: map[string]ProviderConfig{
+			"openai": {
+				DisplayName: "Team OpenAI",
+				BaseURL:     "https://api.openai.example/v1",
+				APIKey:      "sk-team",
+				Models:      []string{"gpt-4.1"},
+			},
+		},
+	}
+
+	if err := SaveModels(statePath, llm); err != nil {
+		t.Fatalf("SaveModels() error = %v", err)
+	}
+
+	var state map[string]any
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("ReadFile(state) error = %v", err)
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatalf("decode state: %v", err)
+	}
+	modelProviders := state["model_providers"].(map[string]any)
+	if _, ok := modelProviders["default_model"]; ok {
+		t.Fatalf("model_providers.default_model persisted: %#v", modelProviders)
+	}
+	if _, ok := modelProviders["items"].(map[string]any)["openai"]; !ok {
+		t.Fatalf("model_providers.items.openai missing: %#v", modelProviders)
 	}
 }
 
@@ -1076,8 +1114,8 @@ func TestSaveWritesModelsSection(t *testing.T) {
 	if !ok {
 		t.Fatal("LoadModels() ok = false, want true")
 	}
-	if got, want := savedModels.Default, "default.minimax-m2.7"; got != want {
-		t.Fatalf("saved models default = %q, want %q", got, want)
+	if got := savedModels.Default; got != "" {
+		t.Fatalf("saved models default = %q, want empty because agents.profile_defaults owns defaults", got)
 	}
 	if got, want := strings.Join(savedModels.Providers["default"].Models, ","), "minimax-m2.7"; got != want {
 		t.Fatalf("saved models provider models = %q, want %q", got, want)
@@ -1151,8 +1189,8 @@ func TestSaveWritesCSGHubLiteProvider(t *testing.T) {
 		t.Fatal("LoadModels() ok = false, want true")
 	}
 	provider := savedModels.Providers["csghub-lite"]
-	if got, want := savedModels.Default, "csghub-lite.Qwen/Qwen3-0.6B-GGUF"; got != want {
-		t.Fatalf("saved models default = %q, want %q", got, want)
+	if got := savedModels.Default; got != "" {
+		t.Fatalf("saved models default = %q, want empty because agents.profile_defaults owns defaults", got)
 	}
 	if got, want := provider.BaseURL, "http://127.0.0.1:11435/v1"; got != want {
 		t.Fatalf("saved BaseURL = %q, want %q", got, want)
@@ -1254,8 +1292,8 @@ enabled = true
 	if !ok {
 		t.Fatal("LoadModels() ok = false, want true")
 	}
-	if got, want := savedModels.Default, "default.local.minimax-m2.5"; got != want {
-		t.Fatalf("saved models default = %q, want %q", got, want)
+	if got := savedModels.Default; got != "" {
+		t.Fatalf("saved models default = %q, want empty because agents.profile_defaults owns defaults", got)
 	}
 	if got, want := savedModels.Providers["default"].BaseURL, "http://127.0.0.1:4000"; got != want {
 		t.Fatalf("saved model BaseURL = %q, want %q", got, want)
@@ -1716,8 +1754,8 @@ reasoning_effort = "${REASONING_EFFORT}"
 	if !ok {
 		t.Fatal("LoadModels() ok = false, want true")
 	}
-	if got, want := savedModels.Default, "remote.gpt-env"; got != want {
-		t.Fatalf("saved models default = %q, want %q", got, want)
+	if got := savedModels.Default; got != "" {
+		t.Fatalf("saved models default = %q, want empty because agents.profile_defaults owns defaults", got)
 	}
 	savedProvider := savedModels.Providers["remote"]
 	if got, want := savedProvider.BaseURL, "https://models.example.test/v1"; got != want {
@@ -1817,8 +1855,8 @@ models = ["${MODEL_ID}", "gpt-static"]
 	if !ok {
 		t.Fatal("LoadModels() ok = false, want true")
 	}
-	if got, want := savedModels.Default, "remote.gpt-changed"; got != want {
-		t.Fatalf("saved models default = %q, want %q", got, want)
+	if got := savedModels.Default; got != "" {
+		t.Fatalf("saved models default = %q, want empty because agents.profile_defaults owns defaults", got)
 	}
 	if got, want := strings.Join(savedModels.Providers["remote"].Models, ","), "gpt-changed"; got != want {
 		t.Fatalf("saved model list = %q, want %q", got, want)

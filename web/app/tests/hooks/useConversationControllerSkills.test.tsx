@@ -22,11 +22,10 @@ vi.mock("@/shared/realtime/imEvents", () => ({
 const t: TranslateFn = (key) => key;
 
 const users: IMUser[] = [
-  { id: "u-admin", name: "admin", handle: "admin", role: "admin", avatar: "AD", accent_hex: "#dc2626" },
+  { id: "u-admin", name: "admin", role: "admin", avatar: "AD", accent_hex: "#dc2626" },
   {
     id: "u-skill-worker",
     name: "skill-worker",
-    handle: "skill-worker",
     role: "worker",
     avatar: "SW",
     accent_hex: "#2563eb",
@@ -51,7 +50,6 @@ function useConversationControllerHarness() {
     {
       id: "u-skill-worker",
       name: "skill-worker",
-      handle: "skill-worker",
       role: "worker",
       avatar: "SW",
       runtime_kind: "codex",

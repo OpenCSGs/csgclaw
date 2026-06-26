@@ -3,7 +3,6 @@ import { HumanDetailPane } from "@/pages/HumanPage/components";
 import type { IMUser, TranslateFn } from "@/models/conversations";
 
 const labels: Record<string, string> = {
-  handleLabel: "Handle",
   humanDetailTitle: "Human profile",
   humanIdentitySection: "Identity",
   humanChannelsSection: "Channels",
@@ -39,7 +38,6 @@ const t: TranslateFn = (key) => labels[key] ?? key;
 const admin: IMUser = {
   id: "u-admin",
   name: "Admin User",
-  handle: "admin",
   role: "admin",
   avatar: "avatar/cartoon-1.png",
   is_online: true,
@@ -61,7 +59,6 @@ describe("HumanDetailPane", () => {
     const { container } = render(<HumanDetailPane locale="en" t={t} user={admin} />);
 
     expect(screen.getByRole("heading", { name: "Admin User" })).toBeInTheDocument();
-    expect(screen.getAllByText("@admin")).toHaveLength(1);
     expect(screen.getAllByText("User ID")).toHaveLength(1);
     expect(screen.getAllByText("u-admin")).toHaveLength(1);
     expect(screen.queryByText("Direct messages")).not.toBeInTheDocument();
@@ -72,7 +69,7 @@ describe("HumanDetailPane", () => {
     const avatarSection = container.querySelector(".human-avatar-section");
     expect(container.querySelector(".human-identity-section")).toBeInTheDocument();
     expect(identityFields).toBeInTheDocument();
-    expect(identityFields?.children).toHaveLength(3);
+    expect(identityFields?.children).toHaveLength(2);
     expect(avatarSection).not.toBeInTheDocument();
   });
 

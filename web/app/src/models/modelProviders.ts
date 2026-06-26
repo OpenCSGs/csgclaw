@@ -30,7 +30,6 @@ export type ModelProvider = {
 };
 
 export type ModelProviderCatalog = {
-  default_selector?: string;
   providers: ModelProvider[];
   builtinProviders: ModelProvider[];
   customProviders: ModelProvider[];
@@ -56,7 +55,6 @@ export type ModelProviderSelectOption = {
 };
 
 type RawCatalog = {
-  default_selector?: unknown;
   providers?: unknown;
 };
 
@@ -66,7 +64,6 @@ export function normalizeModelProviderCatalog(raw: RawCatalog | null | undefined
     .filter((provider): provider is ModelProvider => Boolean(provider.id));
   providers.sort(compareModelProviders);
   return {
-    default_selector: String(raw?.default_selector ?? "").trim() || undefined,
     providers,
     builtinProviders: providers.filter((provider) => provider.builtin),
     customProviders: providers.filter((provider) => !provider.builtin),

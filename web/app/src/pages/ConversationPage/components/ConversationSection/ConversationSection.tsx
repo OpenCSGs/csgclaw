@@ -54,12 +54,7 @@ export function ConversationSection({
                 <div className="avatar" aria-hidden="true">
                   <AgentAvatarContent
                     avatar={displayUser.avatar}
-                    fallback={avatarFallbackText(
-                      displayUser.avatar,
-                      displayUser.name,
-                      displayUser.handle,
-                      displayUser.id,
-                    )}
+                    fallback={avatarFallbackText(displayUser.avatar, displayUser.name, displayUser.id)}
                   />
                 </div>
               ) : (

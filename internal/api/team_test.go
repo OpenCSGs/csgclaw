@@ -244,8 +244,8 @@ func TestTeamRoutesCreateResolvesAgentIDs(t *testing.T) {
 	if !ok {
 		t.Fatalf("room %q not found", created.RoomID)
 	}
-	if !containsMember(room.Members, agent.ManagerParticipantID) || !containsMember(room.Members, "pt-worker") {
-		t.Fatalf("room members = %v, want manager participant and worker channel user", room.Members)
+	if !containsMember(room.Members, im.ManagerUserID) || !containsMember(room.Members, "user-worker") {
+		t.Fatalf("room members = %v, want manager and worker IM users", room.Members)
 	}
 }
 
@@ -346,7 +346,7 @@ func TestTeamPlanAutoStartCreatesExecutionRoomAndDispatches(t *testing.T) {
 	if !ok {
 		t.Fatalf("Room(%s) ok = false, want true", planResp.Task.RoomID)
 	}
-	if !roomContainsMention(taskRoom, "dispatched "+childID, "pt-worker") {
+	if !roomContainsMention(taskRoom, "dispatched "+childID, "user-worker") {
 		t.Fatalf("task room messages missing dispatch mention: %+v", taskRoom.Messages)
 	}
 	if roomContains(taskRoom, "started assigning tasks") {
@@ -527,7 +527,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 	if roomContains(teamRoom, "created execution room") || roomContains(teamRoom, startResp.Task.RoomID) {
 		t.Fatalf("team room should not receive execution room notice: %+v", teamRoom.Messages)
 	}
-	if !roomContainsMention(taskRoom, "dispatched "+planResp.CreatedTasks[0].ID, "pt-writer") || !roomContains(taskRoom, "claim --team "+created.ID+" --task "+planResp.CreatedTasks[0].ID+" --participant-id pt-writer") {
+	if !roomContainsMention(taskRoom, "dispatched "+planResp.CreatedTasks[0].ID, "user-writer") || !roomContains(taskRoom, "claim --team "+created.ID+" --task "+planResp.CreatedTasks[0].ID+" --participant-id pt-writer") {
 		t.Fatalf("task room messages missing first dispatch: %+v", taskRoom.Messages)
 	}
 	if roomContains(taskRoom, "started assigning tasks") {
@@ -547,7 +547,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		t.Fatalf("complete writer status = %d, want %d: %s", completeRec.Code, http.StatusOK, completeRec.Body.String())
 	}
 	taskRoom, _ = imSvc.Room(startResp.Task.RoomID)
-	if !roomContainsMention(taskRoom, "dispatched "+planResp.CreatedTasks[1].ID, "pt-tester") {
+	if !roomContainsMention(taskRoom, "dispatched "+planResp.CreatedTasks[1].ID, "user-tester") {
 		t.Fatalf("task room messages missing successor dispatch: %+v", taskRoom.Messages)
 	}
 
@@ -937,15 +937,14 @@ func TestTeamRoutesPhase3bPOCScenario(t *testing.T) {
 		handle string
 		role   string
 	}{
-		{id: "u-manager", name: "bot manager", handle: "u-manager", role: "manager"},
-		{id: "u-worker-a", name: "bot worker a", handle: "u-worker-a", role: "worker"},
-		{id: "u-worker-b", name: "bot worker b", handle: "u-worker-b", role: "worker"},
+		{id: "u-manager", name: "bot-manager", handle: "u-manager", role: "manager"},
+		{id: "u-worker-a", name: "bot-worker-a", handle: "u-worker-a", role: "worker"},
+		{id: "u-worker-b", name: "bot-worker-b", handle: "u-worker-b", role: "worker"},
 	} {
 		if _, _, err := imSvc.EnsureAgentUser(im.EnsureAgentUserRequest{
-			ID:     member.id,
-			Name:   member.name,
-			Handle: member.handle,
-			Role:   member.role,
+			ID:   member.id,
+			Name: member.name,
+			Role: member.role,
 		}); err != nil {
 			t.Fatalf("EnsureAgentUser(%s) error = %v", member.id, err)
 		}

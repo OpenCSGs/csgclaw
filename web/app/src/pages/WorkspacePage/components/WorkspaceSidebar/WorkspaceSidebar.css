@@ -1784,8 +1784,7 @@
   padding: 18px 10px 16px;
   border-right: 1px solid var(--line);
   background:
-    linear-gradient(180deg, color-mix(in oklab, var(--brand-25) 72%, transparent), transparent 34%),
-    var(--surface);
+    linear-gradient(180deg, color-mix(in oklab, var(--brand-25) 72%, transparent), transparent 34%), var(--surface);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1793,8 +1792,7 @@
 
 .sidebar-rail {
   background:
-    linear-gradient(180deg, color-mix(in oklab, var(--brand-25) 72%, transparent), transparent 34%),
-    var(--surface);
+    linear-gradient(180deg, color-mix(in oklab, var(--brand-25) 72%, transparent), transparent 34%), var(--surface);
   box-shadow: none;
 }
 
@@ -1994,7 +1992,8 @@
 
 :root[data-theme="dark"] .workspace-side-rail,
 :root[data-theme="dark"] .sidebar-rail {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--brand-300) 12%, transparent), transparent 36%), var(--surface);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand-300) 12%, transparent), transparent 36%), var(--surface);
 }
 
 :root[data-theme="dark"] .workspace-tab.workspace-tab-rail {

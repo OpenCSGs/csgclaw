@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, createModelProvider, type ModelProviderPayload } from "@/api/modelProviders";
-import { patchCsgclawUserRequest, patchParticipantAvatarRequest } from "@/api/participants";
+import { patchCsgclawUserRequest } from "@/api/participants";
 import { createTranslator } from "@/shared/i18n";
 import {
   agentMatchesUser,
@@ -32,11 +32,7 @@ import type { IMConversation, IMData, IMUser } from "@/models/conversations";
 import type { SkillSummary } from "@/models/skillhub";
 
 function isBootstrapAdminUser(user: IMUser | null | undefined) {
-  return (
-    user?.id === "u-admin" ||
-    String(user?.handle ?? "").toLowerCase() === "admin" ||
-    String(user?.name ?? "").toLowerCase() === "admin"
-  );
+  return user?.id === "u-admin" || String(user?.name ?? "").toLowerCase() === "admin";
 }
 
 function initialsForIdentity(name: string) {
@@ -269,6 +265,7 @@ export function useWorkspaceController() {
     selectHub,
     selectModelProvider,
     setAgentsData,
+    setBootstrapData,
     setSelectedHubTemplateId,
     t,
   });
@@ -385,9 +382,9 @@ export function useWorkspaceController() {
       setHumanAvatarBusyID(selected.id);
       setHumanAvatarError("");
       try {
-        const updated = await patchParticipantAvatarRequest(selected.id, nextAvatar);
+        const updated = await patchCsgclawUserRequest(selected.id, { avatar: nextAvatar });
         const savedAvatar = String(updated.avatar || nextAvatar).trim() || nextAvatar;
-        const updatedUserID = String(updated.channel_user_ref || selected.id).trim() || selected.id;
+        const updatedUserID = String(updated.id || selected.id).trim() || selected.id;
         setBootstrapData((current) => {
           if (!current) {
             return current;
@@ -396,12 +393,11 @@ export function useWorkspaceController() {
             current.users.find((item) => item.id === updatedUserID) ??
             current.users.find((item) => item.id === selected.id) ??
             selected;
-          const savedName =
-            typeof updated.name === "string" && updated.name.trim() ? updated.name.trim() : existing.name;
           return upsertUserInData(current, {
             ...existing,
+            ...updated,
             avatar: savedAvatar,
-            name: savedName,
+            participants: updated.participants ?? existing.participants,
           });
         });
       } catch (error) {

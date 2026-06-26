@@ -2,6 +2,9 @@ import { useLayoutEffect, useState } from "react";
 import type { RefObject } from "react";
 import { X } from "lucide-react";
 import {
+  agentProfileConfig,
+  agentRuntimeKind,
+  agentRuntimeState,
   agentStatusLabel,
   agentModelID,
   formatProviderLabel,
@@ -11,6 +14,7 @@ import {
   isAgentUpgradeNeeded,
   isAgentRunning,
 } from "@/models/agents";
+import { providerNameForProviderID } from "@/models/modelProviders";
 import { localizeRole } from "@/shared/i18n";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
@@ -65,16 +69,13 @@ function previewFieldLabel(label: string): string {
 
 function agentModelWithReasoning(agent: AgentLike): string {
   const model = agentModelID(agent);
-  const reasoning = agent?.reasoning_effort || agent?.agent_profile?.reasoning_effort || "medium";
+  const profile = agentProfileConfig(agent);
+  const reasoning = agent?.reasoning_effort || profile?.reasoning_effort || "medium";
   return reasoning ? `${model}(${reasoning})` : model;
 }
 
 function isBootstrapAdminUser(user: IMUser | null | undefined): boolean {
-  return (
-    user?.id === "u-admin" ||
-    String(user?.handle ?? "").toLowerCase() === "admin" ||
-    String(user?.name ?? "").toLowerCase() === "admin"
-  );
+  return user?.id === "u-admin" || String(user?.name ?? "").toLowerCase() === "admin";
 }
 
 export function ProfilePreviewPopover({
@@ -93,10 +94,9 @@ export function ProfilePreviewPopover({
   const incomplete = agent ? isAgentIncomplete(agent) : false;
   const restartNeeded = agent ? isAgentRestartNeeded(agent) : false;
   const upgradeNeeded = agent ? isAgentUpgradeNeeded(agent) : false;
-  const provider = agent?.provider || agent?.agent_profile?.provider;
-  const previewRuntime = agent
-    ? formatRuntimeKindLabel(agent.runtime_kind || agent.agent_profile?.runtime_kind, t)
-    : t("profileLocalRuntime");
+  const profile = agentProfileConfig(agent);
+  const provider = agent?.provider || profile?.provider || providerNameForProviderID(profile?.model_provider_id || "");
+  const previewRuntime = agent ? formatRuntimeKindLabel(agentRuntimeKind(agent), t) : t("profileLocalRuntime");
   const previewProvider = agent ? formatProviderLabel(provider) : t("profileLocalProvider");
   const previewModel = agent ? agentModelWithReasoning(agent) : localizeRole(user?.role || "admin", t);
   const displayName = agent?.name || user?.name || "";
@@ -147,14 +147,14 @@ export function ProfilePreviewPopover({
           <div className="avatar preview-avatar">
             <AgentAvatarContent
               avatar={user?.avatar}
-              fallback={avatarFallbackText(user?.avatar, user?.name, user?.handle, user?.id)}
+              fallback={avatarFallbackText(user?.avatar, user?.name, user?.id)}
             />
           </div>
         )}
         <div className="preview-identity">
           <div className="preview-name">{displayName}</div>
           <div className="preview-meta">
-            @{user?.handle || agent?.id || ""} · {localizeRole(displayRole, t)}
+            {user?.id || agent?.id || ""} · {localizeRole(displayRole, t)}
           </div>
         </div>
       </div>
@@ -164,7 +164,7 @@ export function ProfilePreviewPopover({
           <div className="preview-fields">
             <div className="entity-field">
               <span>{previewFieldLabel(t("status"))}</span>
-              <strong>{agent ? agentStatusLabel(agent.status, t) : t("online")}</strong>
+              <strong>{agent ? agentStatusLabel(agentRuntimeState(agent), t) : t("online")}</strong>
             </div>
             <div className="entity-field">
               <span>{previewFieldLabel(t("profileRuntimeKind"))}</span>
@@ -209,10 +209,6 @@ export function ProfilePreviewPopover({
           <div className="entity-field">
             <span>{previewFieldLabel(t("roleLabel"))}</span>
             <strong>{localizeRole(user?.role || "", t)}</strong>
-          </div>
-          <div className="entity-field">
-            <span>{previewFieldLabel(t("handleLabel"))}</span>
-            <strong>{user?.handle ? `@${user.handle}` : "-"}</strong>
           </div>
           <div className="entity-field">
             <span>{previewFieldLabel(t("userIDLabel"))}</span>

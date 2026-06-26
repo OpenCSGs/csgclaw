@@ -7,7 +7,7 @@ type Participant struct {
 	Channel          string         `json:"channel"`
 	Type             string         `json:"type"`
 	Name             string         `json:"name"`
-	Avatar           string         `json:"avatar,omitempty"`
+	Avatar           string         `json:"-"`
 	ChannelUserRef   string         `json:"channel_user_ref,omitempty"`
 	ChannelUserKind  string         `json:"channel_user_kind,omitempty"`
 	ChannelAppRef    string         `json:"channel_app_ref,omitempty"`

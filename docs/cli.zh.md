@@ -414,7 +414,6 @@ csgclaw user create [flags]
 - `--channel string`：`csgclaw` 或 `feishu`，默认 `csgclaw`。
 - `--id string`：用户 ID。
 - `--name string`：用户名。
-- `--handle string`：用户 handle。
 - `--role string`：用户角色。
 - `--avatar string`：头像缩写，仅 `feishu` 使用。
 
@@ -440,8 +439,8 @@ csgclaw user delete <id> [flags]
 ```bash
 csgclaw user list
 csgclaw user list --channel feishu
-csgclaw user create --name Alice --handle alice --role worker
-csgclaw user create --channel feishu --name Alice --handle alice --role manager --avatar AL
+csgclaw user create --name Alice --role worker
+csgclaw user create --channel feishu --name Alice --role manager --avatar AL
 csgclaw user delete alice
 ```
 

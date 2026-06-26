@@ -507,147 +507,82 @@
   --text-7xl-line-height: 90px;
   --text-7xl-tracking: -0.02em;
 
-  --text-xs-light:
-    var(--font-weight-light) var(--text-xs-size) / var(--text-xs-line-height)
-    var(--font-family-text);
-  --text-xs-normal:
-    var(--font-weight-normal) var(--text-xs-size) / var(--text-xs-line-height)
-    var(--font-family-text);
-  --text-xs-medium:
-    var(--font-weight-medium) var(--text-xs-size) / var(--text-xs-line-height)
-    var(--font-family-text);
-  --text-xs-semibold:
-    var(--font-weight-semibold) var(--text-xs-size) / var(--text-xs-line-height)
+  --text-xs-light: var(--font-weight-light) var(--text-xs-size) / var(--text-xs-line-height) var(--font-family-text);
+  --text-xs-normal: var(--font-weight-normal) var(--text-xs-size) / var(--text-xs-line-height) var(--font-family-text);
+  --text-xs-medium: var(--font-weight-medium) var(--text-xs-size) / var(--text-xs-line-height) var(--font-family-text);
+  --text-xs-semibold: var(--font-weight-semibold) var(--text-xs-size) / var(--text-xs-line-height)
     var(--font-family-text);
 
-  --text-sm-light:
-    var(--font-weight-light) var(--text-sm-size) / var(--text-sm-line-height)
-    var(--font-family-text);
-  --text-sm-normal:
-    var(--font-weight-normal) var(--text-sm-size) / var(--text-sm-line-height)
-    var(--font-family-text);
-  --text-sm-medium:
-    var(--font-weight-medium) var(--text-sm-size) / var(--text-sm-line-height)
-    var(--font-family-text);
-  --text-sm-semibold:
-    var(--font-weight-semibold) var(--text-sm-size) / var(--text-sm-semibold-line-height)
+  --text-sm-light: var(--font-weight-light) var(--text-sm-size) / var(--text-sm-line-height) var(--font-family-text);
+  --text-sm-normal: var(--font-weight-normal) var(--text-sm-size) / var(--text-sm-line-height) var(--font-family-text);
+  --text-sm-medium: var(--font-weight-medium) var(--text-sm-size) / var(--text-sm-line-height) var(--font-family-text);
+  --text-sm-semibold: var(--font-weight-semibold) var(--text-sm-size) / var(--text-sm-semibold-line-height)
     var(--font-family-text);
 
-  --text-md-light:
-    var(--font-weight-light) var(--text-md-size) / var(--text-md-line-height)
-    var(--font-family-text);
-  --text-md-normal:
-    var(--font-weight-normal) var(--text-md-size) / var(--text-md-line-height)
-    var(--font-family-text);
-  --text-md-medium:
-    var(--font-weight-medium) var(--text-md-size) / var(--text-md-line-height)
-    var(--font-family-text);
-  --text-md-semibold:
-    var(--font-weight-semibold) var(--text-md-size) / var(--text-md-line-height)
+  --text-md-light: var(--font-weight-light) var(--text-md-size) / var(--text-md-line-height) var(--font-family-text);
+  --text-md-normal: var(--font-weight-normal) var(--text-md-size) / var(--text-md-line-height) var(--font-family-text);
+  --text-md-medium: var(--font-weight-medium) var(--text-md-size) / var(--text-md-line-height) var(--font-family-text);
+  --text-md-semibold: var(--font-weight-semibold) var(--text-md-size) / var(--text-md-line-height)
     var(--font-family-text);
 
-  --text-lg-light:
-    var(--font-weight-light) var(--text-lg-size) / var(--text-lg-line-height)
-    var(--font-family-text);
-  --text-lg-normal:
-    var(--font-weight-normal) var(--text-lg-size) / var(--text-lg-line-height)
-    var(--font-family-text);
-  --text-lg-medium:
-    var(--font-weight-medium) var(--text-lg-size) / var(--text-lg-line-height)
-    var(--font-family-text);
-  --text-lg-semibold:
-    var(--font-weight-semibold) var(--text-lg-size) / var(--text-lg-line-height)
+  --text-lg-light: var(--font-weight-light) var(--text-lg-size) / var(--text-lg-line-height) var(--font-family-text);
+  --text-lg-normal: var(--font-weight-normal) var(--text-lg-size) / var(--text-lg-line-height) var(--font-family-text);
+  --text-lg-medium: var(--font-weight-medium) var(--text-lg-size) / var(--text-lg-line-height) var(--font-family-text);
+  --text-lg-semibold: var(--font-weight-semibold) var(--text-lg-size) / var(--text-lg-line-height)
     var(--font-family-text);
 
-  --text-xl-light:
-    var(--font-weight-light) var(--text-xl-size) / var(--text-xl-line-height)
-    var(--font-family-text);
-  --text-xl-normal:
-    var(--font-weight-normal) var(--text-xl-size) / var(--text-xl-line-height)
-    var(--font-family-text);
-  --text-xl-medium:
-    var(--font-weight-medium) var(--text-xl-size) / var(--text-xl-line-height)
-    var(--font-family-text);
-  --text-xl-semibold:
-    var(--font-weight-semibold) var(--text-xl-size) / var(--text-xl-line-height)
+  --text-xl-light: var(--font-weight-light) var(--text-xl-size) / var(--text-xl-line-height) var(--font-family-text);
+  --text-xl-normal: var(--font-weight-normal) var(--text-xl-size) / var(--text-xl-line-height) var(--font-family-text);
+  --text-xl-medium: var(--font-weight-medium) var(--text-xl-size) / var(--text-xl-line-height) var(--font-family-text);
+  --text-xl-semibold: var(--font-weight-semibold) var(--text-xl-size) / var(--text-xl-line-height)
     var(--font-family-text);
 
-  --text-2xl-light:
-    var(--font-weight-light) var(--text-2xl-size) / var(--text-2xl-line-height)
+  --text-2xl-light: var(--font-weight-light) var(--text-2xl-size) / var(--text-2xl-line-height) var(--font-family-text);
+  --text-2xl-normal: var(--font-weight-normal) var(--text-2xl-size) / var(--text-2xl-line-height)
     var(--font-family-text);
-  --text-2xl-normal:
-    var(--font-weight-normal) var(--text-2xl-size) / var(--text-2xl-line-height)
+  --text-2xl-medium: var(--font-weight-medium) var(--text-2xl-size) / var(--text-2xl-line-height)
     var(--font-family-text);
-  --text-2xl-medium:
-    var(--font-weight-medium) var(--text-2xl-size) / var(--text-2xl-line-height)
-    var(--font-family-text);
-  --text-2xl-semibold:
-    var(--font-weight-semibold) var(--text-2xl-size) / var(--text-2xl-line-height)
+  --text-2xl-semibold: var(--font-weight-semibold) var(--text-2xl-size) / var(--text-2xl-line-height)
     var(--font-family-text);
 
-  --text-3xl-light:
-    var(--font-weight-light) var(--text-3xl-size) / var(--text-3xl-line-height)
+  --text-3xl-light: var(--font-weight-light) var(--text-3xl-size) / var(--text-3xl-line-height) var(--font-family-text);
+  --text-3xl-normal: var(--font-weight-normal) var(--text-3xl-size) / var(--text-3xl-line-height)
     var(--font-family-text);
-  --text-3xl-normal:
-    var(--font-weight-normal) var(--text-3xl-size) / var(--text-3xl-line-height)
+  --text-3xl-medium: var(--font-weight-medium) var(--text-3xl-size) / var(--text-3xl-line-height)
     var(--font-family-text);
-  --text-3xl-medium:
-    var(--font-weight-medium) var(--text-3xl-size) / var(--text-3xl-line-height)
-    var(--font-family-text);
-  --text-3xl-semibold:
-    var(--font-weight-semibold) var(--text-3xl-size) / var(--text-3xl-line-height)
+  --text-3xl-semibold: var(--font-weight-semibold) var(--text-3xl-size) / var(--text-3xl-line-height)
     var(--font-family-text);
 
-  --text-4xl-light:
-    var(--font-weight-light) var(--text-4xl-size) / var(--text-4xl-line-height)
+  --text-4xl-light: var(--font-weight-light) var(--text-4xl-size) / var(--text-4xl-line-height) var(--font-family-text);
+  --text-4xl-normal: var(--font-weight-normal) var(--text-4xl-size) / var(--text-4xl-line-height)
     var(--font-family-text);
-  --text-4xl-normal:
-    var(--font-weight-normal) var(--text-4xl-size) / var(--text-4xl-line-height)
+  --text-4xl-medium: var(--font-weight-medium) var(--text-4xl-size) / var(--text-4xl-line-height)
     var(--font-family-text);
-  --text-4xl-medium:
-    var(--font-weight-medium) var(--text-4xl-size) / var(--text-4xl-line-height)
-    var(--font-family-text);
-  --text-4xl-semibold:
-    var(--font-weight-semibold) var(--text-4xl-size) / var(--text-4xl-line-height)
+  --text-4xl-semibold: var(--font-weight-semibold) var(--text-4xl-size) / var(--text-4xl-line-height)
     var(--font-family-text);
 
-  --text-5xl-light:
-    var(--font-weight-light) var(--text-5xl-size) / var(--text-5xl-line-height)
+  --text-5xl-light: var(--font-weight-light) var(--text-5xl-size) / var(--text-5xl-line-height) var(--font-family-text);
+  --text-5xl-normal: var(--font-weight-normal) var(--text-5xl-size) / var(--text-5xl-line-height)
     var(--font-family-text);
-  --text-5xl-normal:
-    var(--font-weight-normal) var(--text-5xl-size) / var(--text-5xl-line-height)
+  --text-5xl-medium: var(--font-weight-medium) var(--text-5xl-size) / var(--text-5xl-line-height)
     var(--font-family-text);
-  --text-5xl-medium:
-    var(--font-weight-medium) var(--text-5xl-size) / var(--text-5xl-line-height)
-    var(--font-family-text);
-  --text-5xl-semibold:
-    var(--font-weight-semibold) var(--text-5xl-size) / var(--text-5xl-line-height)
+  --text-5xl-semibold: var(--font-weight-semibold) var(--text-5xl-size) / var(--text-5xl-line-height)
     var(--font-family-text);
 
-  --text-6xl-light:
-    var(--font-weight-light) var(--text-6xl-size) / var(--text-6xl-line-height)
+  --text-6xl-light: var(--font-weight-light) var(--text-6xl-size) / var(--text-6xl-line-height) var(--font-family-text);
+  --text-6xl-normal: var(--font-weight-normal) var(--text-6xl-size) / var(--text-6xl-line-height)
     var(--font-family-text);
-  --text-6xl-normal:
-    var(--font-weight-normal) var(--text-6xl-size) / var(--text-6xl-line-height)
+  --text-6xl-medium: var(--font-weight-medium) var(--text-6xl-size) / var(--text-6xl-line-height)
     var(--font-family-text);
-  --text-6xl-medium:
-    var(--font-weight-medium) var(--text-6xl-size) / var(--text-6xl-line-height)
-    var(--font-family-text);
-  --text-6xl-semibold:
-    var(--font-weight-semibold) var(--text-6xl-size) / var(--text-6xl-line-height)
+  --text-6xl-semibold: var(--font-weight-semibold) var(--text-6xl-size) / var(--text-6xl-line-height)
     var(--font-family-text);
 
-  --text-7xl-light:
-    var(--font-weight-light) var(--text-7xl-size) / var(--text-7xl-line-height)
+  --text-7xl-light: var(--font-weight-light) var(--text-7xl-size) / var(--text-7xl-line-height) var(--font-family-text);
+  --text-7xl-normal: var(--font-weight-normal) var(--text-7xl-size) / var(--text-7xl-line-height)
     var(--font-family-text);
-  --text-7xl-normal:
-    var(--font-weight-normal) var(--text-7xl-size) / var(--text-7xl-line-height)
+  --text-7xl-medium: var(--font-weight-medium) var(--text-7xl-size) / var(--text-7xl-line-height)
     var(--font-family-text);
-  --text-7xl-medium:
-    var(--font-weight-medium) var(--text-7xl-size) / var(--text-7xl-line-height)
-    var(--font-family-text);
-  --text-7xl-semibold:
-    var(--font-weight-semibold) var(--text-7xl-size) / var(--text-7xl-line-height)
+  --text-7xl-semibold: var(--font-weight-semibold) var(--text-7xl-size) / var(--text-7xl-line-height)
     var(--font-family-text);
 
   --font-sans: var(--font-family-text);

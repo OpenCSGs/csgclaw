@@ -19,7 +19,7 @@ type modelProvidersFile struct {
 }
 
 type modelProvidersState struct {
-	DefaultModel modelProviderDefaultRef   `json:"default_model,omitempty"`
+	DefaultModel *modelProviderDefaultRef  `json:"default_model,omitempty"`
 	Items        map[string]ProviderConfig `json:"items"`
 	Providers    map[string]ProviderConfig `json:"providers,omitempty"`
 	Default      string                    `json:"default,omitempty"`
@@ -87,8 +87,7 @@ func SaveModels(path string, llm LLMConfig) error {
 		llm = llm.Normalized()
 		providers := providersForStorage(llm)
 		state := modelProvidersState{
-			DefaultModel: structuredDefaultModel(llm),
-			Items:        providers,
+			Items: providers,
 		}
 		if state.Items == nil {
 			state.Items = make(map[string]ProviderConfig)
@@ -133,18 +132,6 @@ func providersForStorage(llm LLMConfig) map[string]ProviderConfig {
 	return providers
 }
 
-func structuredDefaultModel(llm LLMConfig) modelProviderDefaultRef {
-	selector := llm.DefaultSelector()
-	if selector == "" {
-		selector = llm.Default
-	}
-	providerID, modelID, ok := splitModelSelector(selector)
-	if !ok {
-		return modelProviderDefaultRef{ModelProviderID: selector}
-	}
-	return modelProviderDefaultRef{ModelProviderID: providerID, ModelID: modelID}
-}
-
 func llmConfigFromModelProviderState(state modelProvidersState) LLMConfig {
 	providers := state.Items
 	if len(providers) == 0 {
@@ -153,7 +140,10 @@ func llmConfigFromModelProviderState(state modelProvidersState) LLMConfig {
 	if providers == nil {
 		providers = make(map[string]ProviderConfig)
 	}
-	defaultSelector := ModelSelector(state.DefaultModel.ModelProviderID, state.DefaultModel.ModelID)
+	defaultSelector := ""
+	if state.DefaultModel != nil {
+		defaultSelector = ModelSelector(state.DefaultModel.ModelProviderID, state.DefaultModel.ModelID)
+	}
 	if defaultSelector == "" {
 		defaultSelector = state.Default
 	}

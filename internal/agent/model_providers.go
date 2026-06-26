@@ -39,8 +39,7 @@ var builtinModelProviderIDs = []string{
 }
 
 type ModelProviderCatalog struct {
-	DefaultSelector string                 `json:"default_selector,omitempty"`
-	Providers       []ModelProviderSummary `json:"providers"`
+	Providers []ModelProviderSummary `json:"providers"`
 }
 
 type ModelProviderSummary struct {
@@ -199,8 +198,7 @@ func ModelProviderCatalogFromLLM(llm config.LLMConfig) ModelProviderCatalog {
 		providers = append(providers, customProviderSummary(id, cfg.Providers[id]))
 	}
 	return ModelProviderCatalog{
-		DefaultSelector: cfg.DefaultSelector(),
-		Providers:       providers,
+		Providers: providers,
 	}
 }
 

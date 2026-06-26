@@ -32,7 +32,6 @@ type User struct {
 	ID           string        `json:"id"`
 	Name         string        `json:"name"`
 	Description  string        `json:"description,omitempty"`
-	Handle       string        `json:"handle"`
 	Role         string        `json:"role"`
 	Avatar       string        `json:"avatar"`
 	IsOnline     bool          `json:"is_online"`
@@ -46,14 +45,12 @@ type CreateUserRequest struct {
 	ID          string `json:"id,omitempty"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	Handle      string `json:"handle,omitempty"`
 	Role        string `json:"role,omitempty"`
 }
 
 type UpdateUserRequest struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
-	Handle      *string `json:"handle,omitempty"`
 	Role        *string `json:"role,omitempty"`
 	Avatar      *string `json:"avatar,omitempty"`
 }

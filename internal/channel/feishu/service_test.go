@@ -212,10 +212,9 @@ func TestFeishuEnsureUserUsesConfiguredOpenID(t *testing.T) {
 	)
 
 	user, err := svc.EnsureUser(CreateUserRequest{
-		ID:     "u-alice",
-		Name:   "alice",
-		Handle: "alice",
-		Role:   "worker",
+		ID:   "u-alice",
+		Name: "alice",
+		Role: "worker",
 	})
 	if err != nil {
 		t.Fatalf("EnsureUser() error = %v", err)
@@ -1095,7 +1094,7 @@ func TestFeishuListRoomMembersCallsConfiguredApp(t *testing.T) {
 	if _, err := svc.CreateUser(CreateUserRequest{ID: "u-manager", Name: "Manager"}); err != nil {
 		t.Fatalf("CreateUser(manager) error = %v", err)
 	}
-	if _, err := svc.CreateUser(CreateUserRequest{ID: "u-alice", Name: "Alice Local", Handle: "alice-local", Role: "worker", Avatar: "AL"}); err != nil {
+	if _, err := svc.CreateUser(CreateUserRequest{ID: "u-alice", Name: "Alice Local", Role: "worker", Avatar: "AL"}); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 	if _, err := svc.CreateRoom(im.CreateRoomRequest{Title: "alpha", CreatorID: "u-manager"}); err != nil {
@@ -1120,9 +1119,6 @@ func TestFeishuListRoomMembersCallsConfiguredApp(t *testing.T) {
 	}
 	if got, want := members[0].Name, "Alice"; got != want {
 		t.Fatalf("member name = %q, want %q", got, want)
-	}
-	if got, want := members[0].Handle, "alice-local"; got != want {
-		t.Fatalf("member handle = %q, want %q", got, want)
 	}
 	if got, want := members[0].Role, "worker"; got != want {
 		t.Fatalf("member role = %q, want %q", got, want)

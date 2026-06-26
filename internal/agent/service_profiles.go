@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/identity"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/sandbox"
@@ -266,6 +267,10 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 			s.mu.Unlock()
 			return Agent{}, fmt.Errorf("name is required")
 		}
+		if err := identity.ValidateMentionName(name); err != nil {
+			s.mu.Unlock()
+			return Agent{}, err
+		}
 		if strings.EqualFold(name, ManagerName) && !isManagerAgent(current) {
 			s.mu.Unlock()
 			return Agent{}, fmt.Errorf("name %q is reserved", name)
@@ -389,6 +394,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		s.profileDefaults = cloneProfile(current.AgentProfile)
 		s.detectionResults = nil
 	}
+	current.UpdatedAt = time.Now().UTC()
 	s.agents[key] = current
 	s.syncRuntimeRecordLocked(current)
 	if err := s.saveLocked(); err != nil {
@@ -758,6 +764,7 @@ func (s *Service) persistRecreatedAgent(ctx context.Context, id, image string, i
 	}
 	current.BoxID = info.HandleID
 	current.Status = string(info.State)
+	current.UpdatedAt = time.Now().UTC()
 	if !info.CreatedAt.IsZero() {
 		current.CreatedAt = info.CreatedAt.UTC()
 	} else if current.CreatedAt.IsZero() {

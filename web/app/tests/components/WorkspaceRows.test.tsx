@@ -55,7 +55,6 @@ describe("WorkspaceRows", () => {
         user={{
           id: "admin",
           name: "Admin",
-          handle: "admin",
           participants: [
             {
               channel: "feishu",

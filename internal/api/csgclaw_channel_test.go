@@ -18,8 +18,8 @@ func TestHandleCsgclawChannelRoutesMirrorLocalCollections(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: "u-admin",
 			Users: []im.User{
-				{ID: "u-admin", Name: "admin", Handle: "admin", Role: "admin"},
-				{ID: "u-alice", Name: "Alice", Handle: "alice", Role: "worker"},
+				{ID: "u-admin", Name: "admin", Role: "admin"},
+				{ID: "u-alice", Name: "Alice", Role: "worker"},
 			},
 			Rooms: []im.Room{{
 				ID:      "room-1",
@@ -107,7 +107,6 @@ func TestHandleCsgclawUsersShowsHumanDescriptionAndBoundChannels(t *testing.T) {
 			Users: []im.User{{
 				ID:       "admin",
 				Name:     "admin",
-				Handle:   "admin",
 				Role:     "admin",
 				IsOnline: true,
 			}},
@@ -150,7 +149,6 @@ func TestHandleCsgclawUserPatchUpdatesDescription(t *testing.T) {
 			Users: []im.User{{
 				ID:          "admin",
 				Name:        "admin",
-				Handle:      "admin",
 				Role:        "admin",
 				Description: "old prompt",
 			}},
@@ -190,7 +188,7 @@ func TestHandleCsgclawChannelNestedRoutesMirrorLocalMutations(t *testing.T) {
 	srv := &Handler{im: im.NewService()}
 
 	rec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-alice","name":"Alice","handle":"alice","role":"worker"}`)))
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-alice","name":"Alice","role":"worker"}`)))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create user status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -209,7 +207,7 @@ func TestHandleCsgclawChannelNestedRoutesMirrorLocalMutations(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-bob","name":"Bob","handle":"bob","role":"worker"}`)))
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-bob","name":"Bob","role":"worker"}`)))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create bob status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
 	}

@@ -14,55 +14,55 @@ func TestNewServiceWithNilIMReturnsNil(t *testing.T) {
 	}
 }
 
-func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
+func TestServiceUsesUserIDsAsIMMemberIDs(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
-		CurrentUserID: "manager",
+		CurrentUserID: "user-manager",
 		Users: []im.User{
-			{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"},
-			{ID: "u-alice", Name: "alice", Handle: "alice", Role: "worker"},
-			{ID: "u-bob", Name: "bob", Handle: "bob", Role: "worker"},
+			{ID: "user-manager", Name: "manager", Role: "manager"},
+			{ID: "user-alice", Name: "alice", Role: "worker"},
+			{ID: "user-bob", Name: "bob", Role: "worker"},
 		},
 	})
 	svc := NewService(imSvc)
 
 	room, err := svc.CreateRoom(apitypes.CreateRoomRequest{
 		Title:     "Ops",
-		CreatorID: " manager ",
+		CreatorID: " user-manager ",
 		MemberIDs: []string{
-			" u-alice ",
+			" user-alice ",
 		},
 	})
 	if err != nil {
 		t.Fatalf("CreateRoom() error = %v", err)
 	}
-	assertMembers(t, room.Members, "pt-manager", "pt-alice")
+	assertMembers(t, room.Members, "user-manager", "user-alice")
 
 	room, err = svc.AddRoomMembers(apitypes.AddRoomMembersRequest{
 		RoomID:    room.ID,
-		InviterID: " manager ",
+		InviterID: " user-manager ",
 		UserIDs: []string{
-			" u-bob ",
+			" user-bob ",
 		},
 	})
 	if err != nil {
 		t.Fatalf("AddRoomMembers() error = %v", err)
 	}
-	assertMembers(t, room.Members, "pt-manager", "pt-alice", "pt-bob")
+	assertMembers(t, room.Members, "user-manager", "user-alice", "user-bob")
 
 	message, err := svc.SendMessage(apitypes.CreateMessageRequest{
 		RoomID:    room.ID,
-		SenderID:  " manager ",
-		MentionID: " u-alice ",
+		SenderID:  " user-manager ",
+		MentionID: " user-alice ",
 		Content:   "hello",
 	})
 	if err != nil {
 		t.Fatalf("SendMessage() error = %v", err)
 	}
-	if message.SenderID != "pt-manager" {
-		t.Fatalf("SenderID = %q, want %q", message.SenderID, "pt-manager")
+	if message.SenderID != "user-manager" {
+		t.Fatalf("SenderID = %q, want %q", message.SenderID, "user-manager")
 	}
-	if !strings.Contains(message.Content, "pt-alice") {
-		t.Fatalf("Content = %q, want mention tag for pt-alice", message.Content)
+	if !strings.Contains(message.Content, "user-alice") {
+		t.Fatalf("Content = %q, want mention tag for user-alice", message.Content)
 	}
 
 	messages, err := svc.ListMessages(room.ID)
@@ -91,18 +91,18 @@ func TestServiceUsesBotIDsAsIMUserIDs(t *testing.T) {
 
 func TestServiceNormalizesCanonicalSlashCommand(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
-		CurrentUserID: "manager",
+		CurrentUserID: "user-manager",
 		Users: []im.User{
-			{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"},
-			{ID: "u-alice", Name: "alice", Handle: "alice", Role: "worker"},
+			{ID: "user-manager", Name: "manager", Role: "manager"},
+			{ID: "user-alice", Name: "alice", Role: "worker"},
 		},
-		Rooms: []im.Room{{ID: "room-1", Title: "Direct", Members: []string{"manager", "u-alice"}}},
+		Rooms: []im.Room{{ID: "room-1", Title: "Direct", Members: []string{"user-manager", "user-alice"}}},
 	})
 	svc := NewService(imSvc)
 
 	message, err := svc.SendMessage(apitypes.CreateMessageRequest{
 		RoomID:   "room-1",
-		SenderID: "manager",
+		SenderID: "user-manager",
 		Content:  ` <slash-command arg="skill-creator" name="use-skill"/> create one `,
 	})
 	if err != nil {
@@ -116,15 +116,15 @@ func TestServiceNormalizesCanonicalSlashCommand(t *testing.T) {
 
 func TestServiceKeepsLegacySlashTextAsPlainContent(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
-		CurrentUserID: "manager",
-		Users:         []im.User{{ID: "manager", Name: "manager", Handle: "manager", Role: "manager"}},
-		Rooms:         []im.Room{{ID: "room-1", Title: "Direct", Members: []string{"manager"}}},
+		CurrentUserID: "user-manager",
+		Users:         []im.User{{ID: "user-manager", Name: "manager", Role: "manager"}},
+		Rooms:         []im.Room{{ID: "room-1", Title: "Direct", Members: []string{"user-manager"}}},
 	})
 	svc := NewService(imSvc)
 
 	message, err := svc.SendMessage(apitypes.CreateMessageRequest{
 		RoomID:   "room-1",
-		SenderID: "manager",
+		SenderID: "user-manager",
 		Content:  `/skill-creator create one`,
 	})
 	if err != nil {

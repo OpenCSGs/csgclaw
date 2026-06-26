@@ -10,6 +10,7 @@ import {
 describe("model provider catalog helpers", () => {
   it("normalizes builtins before custom OpenAI-compatible providers", () => {
     const catalog = normalizeModelProviderCatalog({
+      default_selector: "openai.gpt-4.1",
       providers: [
         {
           id: "opencsg",
@@ -50,7 +51,7 @@ describe("model provider catalog helpers", () => {
           models: ["claude-sonnet"],
         },
       ],
-    });
+    } as Record<string, unknown>);
 
     expect(catalog.providers.map((provider) => provider.id)).toEqual([
       "opencsg",
@@ -66,6 +67,7 @@ describe("model provider catalog helpers", () => {
       "claude_code",
     ]);
     expect(catalog.customProviders.map((provider) => provider.id)).toEqual(["openai"]);
+    expect("default_selector" in catalog).toBe(false);
   });
 
   it("creates grouped model options from catalog providers", () => {

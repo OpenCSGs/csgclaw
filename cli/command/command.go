@@ -247,11 +247,14 @@ func RenderAgentsTable(w io.Writer, agents []apitypes.Agent) error {
 		fmt.Fprintln(tw, "ID\tNAME\tROLE\tSTATUS\tRUNTIME\tPROFILE\tIMAGE")
 	}
 	for _, a := range agents {
+		status := displayAgentStatus(a)
+		runtimeKind := displayAgentRuntime(a)
+		profile := displayAgentProfile(a)
 		if showParticipants {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Name, a.Role, a.Status, displayAgentField(a.RuntimeKind), displayAgentProfile(a.Profile), displayParticipantList(a.ParticipantNames, a.ParticipantIDs), displayAgentField(a.Image))
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Name, a.Role, status, runtimeKind, profile, displayParticipantList(a.ParticipantNames, a.ParticipantIDs), displayAgentField(a.Image))
 			continue
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Name, a.Role, a.Status, displayAgentField(a.RuntimeKind), displayAgentProfile(a.Profile), displayAgentField(a.Image))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Name, a.Role, status, runtimeKind, profile, displayAgentField(a.Image))
 	}
 	return tw.Flush()
 }
@@ -273,8 +276,34 @@ func displayAgentField(value string) string {
 	return value
 }
 
-func displayAgentProfile(profile string) string {
-	return displayAgentField(profile)
+func displayAgentStatus(a apitypes.Agent) string {
+	if status := strings.TrimSpace(a.Status); status != "" {
+		return status
+	}
+	return displayAgentField(a.Runtime.State)
+}
+
+func displayAgentRuntime(a apitypes.Agent) string {
+	if runtimeKind := strings.TrimSpace(a.RuntimeKind); runtimeKind != "" {
+		return runtimeKind
+	}
+	return displayAgentField(a.Runtime.Kind)
+}
+
+func displayAgentProfile(a apitypes.Agent) string {
+	if profile := strings.TrimSpace(a.Profile); profile != "" {
+		return profile
+	}
+	providerID := strings.TrimSpace(a.ProfileConfig.ModelProviderID)
+	modelID := strings.TrimSpace(a.ProfileConfig.ModelID)
+	switch {
+	case providerID != "" && modelID != "":
+		return providerID + "." + modelID
+	case modelID != "":
+		return modelID
+	default:
+		return "-"
+	}
 }
 
 func RenderParticipantsTable(w io.Writer, participants []apitypes.Participant) error {
@@ -388,9 +417,9 @@ func roomsHaveMemberNames(rooms []apitypes.Room) bool {
 
 func RenderUsersTable(w io.Writer, users []apitypes.User) error {
 	tw := NewTableWriter(w)
-	fmt.Fprintln(tw, "ID\tNAME\tHANDLE\tROLE\tONLINE")
+	fmt.Fprintln(tw, "ID\tNAME\tROLE\tONLINE")
 	for _, user := range users {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%t\n", user.ID, user.Name, user.Handle, user.Role, user.IsOnline)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%t\n", user.ID, user.Name, user.Role, user.IsOnline)
 	}
 	return tw.Flush()
 }

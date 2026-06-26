@@ -78,7 +78,6 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	channelName := fs.String("channel", "csgclaw", "channel name: csgclaw or feishu")
 	id := fs.String("id", "", "user id")
 	name := fs.String("name", "", "user name")
-	handle := fs.String("handle", "", "user handle")
 	role := fs.String("role", "", "user role")
 	avatar := fs.String("avatar", "", "user avatar initials")
 	if err := fs.Parse(args); err != nil {
@@ -98,16 +97,14 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	switch *channelName {
 	case "csgclaw":
 		user, err = run.APIClient(globals).CreateUser(ctx, *channelName, apitypes.CreateUserRequest{
-			ID:     *id,
-			Name:   *name,
-			Handle: *handle,
-			Role:   *role,
+			ID:   *id,
+			Name: *name,
+			Role: *role,
 		})
 	case "feishu":
 		err = run.APIClient(globals).DoJSON(ctx, http.MethodPost, "/api/v1/channels/feishu/users", feishu.CreateUserRequest{
 			ID:     *id,
 			Name:   *name,
-			Handle: *handle,
 			Role:   *role,
 			Avatar: *avatar,
 		}, &user)

@@ -40,14 +40,12 @@ const labels: Record<string, string> = {
 const users: IMUser[] = [
   {
     avatar: "AD",
-    handle: "admin",
     id: "admin",
     name: "admin",
     role: "admin",
   },
   {
     avatar: "MG",
-    handle: "manager",
     id: "manager",
     name: "manager",
     role: "manager",
@@ -103,7 +101,7 @@ function managerChatProps(conversation: IMConversation): ConversationPaneProps {
     memberMenuRef: createRef<HTMLDivElement>(),
     mentionCandidates: [],
     mentionIndex: 0,
-    mentionableUsersByHandle: new Map(),
+    mentionableUsersByName: new Map(),
     messageActionBusy: "",
     messageActionError: {},
     messageListRef: createRef<HTMLElement>(),

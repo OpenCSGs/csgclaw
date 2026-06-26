@@ -1659,8 +1659,8 @@ func TestCreateWorkerInstallsDefaultSystemSkills(t *testing.T) {
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
 		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, botID string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
-			if name != "alice" || botID != "u-alice" {
-				t.Fatalf("createGatewayBox() name=%q botID=%q, want alice/u-alice", name, botID)
+			if name != "alice" || botID != "agent-alice" {
+				t.Fatalf("createGatewayBox() name=%q botID=%q, want alice/agent-alice", name, botID)
 			}
 			info := sandbox.Info{
 				ID:        "box-alice",
@@ -3017,8 +3017,8 @@ func TestSaveLockedPersistsLastKnownAgentStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if !strings.Contains(string(data), `"status": "running"`) {
-		t.Fatalf("saved state should contain last known status: %s", data)
+	if !strings.Contains(string(data), `"state": "running"`) {
+		t.Fatalf("saved state should contain last known runtime state: %s", data)
 	}
 }
 
@@ -3200,11 +3200,11 @@ func TestLoadLegacyAgentSynthesizesRuntimeRecord(t *testing.T) {
 	if len(persisted.Runtimes) != 1 {
 		t.Fatalf("saved runtimes len = %d, want 1", len(persisted.Runtimes))
 	}
-	if persisted.Agents[0].RuntimeID != "rt-agent-alice" {
-		t.Fatalf("saved agent runtime_id = %q, want %q", persisted.Agents[0].RuntimeID, "rt-agent-alice")
+	if persisted.Agents[0].Runtime.ID != "" {
+		t.Fatalf("saved agent runtime.id = %q, want compact empty runtime id", persisted.Agents[0].Runtime.ID)
 	}
-	if persisted.Agents[0].RuntimeKind != RuntimeKindPicoClawSandbox {
-		t.Fatalf("saved agent runtime_kind = %q, want %q", persisted.Agents[0].RuntimeKind, RuntimeKindPicoClawSandbox)
+	if persisted.Agents[0].Runtime.Kind != RuntimeKindPicoClawSandbox {
+		t.Fatalf("saved agent runtime.kind = %q, want %q", persisted.Agents[0].Runtime.Kind, RuntimeKindPicoClawSandbox)
 	}
 }
 
@@ -4261,7 +4261,7 @@ func TestStartInstallsDefaultSystemSkillsAfterProvision(t *testing.T) {
 			kind: RuntimeKindOpenClawSandbox,
 			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
 				callOrder = append(callOrder, "provision")
-				if req.RuntimeID != "rt-u-alice" || req.AgentID != "u-alice" || req.AgentName != "alice" {
+				if req.RuntimeID != "rt-agent-alice" || req.AgentID != "agent-alice" || req.AgentName != "alice" {
 					t.Fatalf("Provision() request = %+v, want alice runtime identity", req)
 				}
 				if req.Gateway == nil {
@@ -4281,11 +4281,11 @@ func TestStartInstallsDefaultSystemSkillsAfterProvision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	svc.agents["u-alice"] = Agent{
-		ID:              "u-alice",
+	svc.agents["agent-alice"] = Agent{
+		ID:              "agent-alice",
 		Name:            "alice",
 		Role:            RoleWorker,
-		RuntimeID:       "rt-u-alice",
+		RuntimeID:       "rt-agent-alice",
 		RuntimeKind:     RuntimeKindOpenClawSandbox,
 		BoxID:           "box-alice",
 		Status:          string(agentruntime.StateStopped),
@@ -4293,7 +4293,7 @@ func TestStartInstallsDefaultSystemSkillsAfterProvision(t *testing.T) {
 		ProfileComplete: true,
 	}
 
-	if _, err := svc.Start(context.Background(), "u-alice"); err != nil {
+	if _, err := svc.Start(context.Background(), "agent-alice"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	if got, want := strings.Join(callOrder, ","), "provision,start"; got != want {

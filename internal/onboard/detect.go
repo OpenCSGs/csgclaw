@@ -141,20 +141,20 @@ func imBootstrapComplete(state im.Bootstrap) bool {
 	for _, room := range state.Rooms {
 		if room.IsDirect &&
 			len(room.Members) == 2 &&
-			containsMember(room.Members, "pt-admin") &&
-			containsMember(room.Members, agent.ManagerParticipantID) {
+			containsMember(room.Members, im.AdminUserID) &&
+			containsMember(room.Members, im.ManagerUserID) {
 			return true
 		}
 	}
 	return false
 }
 
-func hasIMUser(users []im.User, id, handle, role string) bool {
+func hasIMUser(users []im.User, id, name, role string) bool {
 	for _, user := range users {
 		if strings.TrimSpace(user.ID) != id {
 			continue
 		}
-		if !strings.EqualFold(strings.TrimSpace(user.Handle), handle) {
+		if !strings.EqualFold(strings.TrimSpace(user.Name), name) {
 			return false
 		}
 		if !strings.EqualFold(strings.TrimSpace(user.Role), role) {

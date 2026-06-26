@@ -21,7 +21,6 @@ const labels: Record<string, string> = {
   roleLabel: "Role",
   runtimeOpenclaw: "OpenClaw",
   runtimePicoclaw: "PicoClaw",
-  handleLabel: "Handle",
   personProfile: "Person profile",
   status: "Status",
   userIDLabel: "User ID",
@@ -48,7 +47,7 @@ describe("ProfilePreviewPopover", () => {
           reasoning_effort: "medium",
           runtime_kind: "codex",
         }}
-        user={{ id: "u-builder", handle: "builder" }}
+        user={{ id: "u-builder" }}
         anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
         t={t}
         onClose={vi.fn()}
@@ -85,7 +84,7 @@ describe("ProfilePreviewPopover", () => {
           model_id: "gpt-5.5",
           runtime_kind: "picoclaw_sandbox",
         }}
-        user={{ id: "u-manager", handle: "manager" }}
+        user={{ id: "u-manager" }}
         anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
         t={t}
         onClose={vi.fn()}
@@ -107,7 +106,6 @@ describe("ProfilePreviewPopover", () => {
         user={{
           accent_hex: "#dc2626",
           avatar: "LU",
-          handle: "admin",
           id: "u-admin",
           name: "Local user",
           role: "admin",

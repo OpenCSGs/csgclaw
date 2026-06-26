@@ -26,6 +26,8 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { IMConversation, IMData, TranslateFn } from "@/models/conversations";
+import { normalizeModelProviderCatalog } from "@/models/modelProviders";
+import type { ModelProviderCatalog } from "@/models/modelProviders";
 import { AGENT_AVATAR_OPTIONS } from "@/shared/avatarOptions";
 
 vi.mock("react-router-dom", async () => {
@@ -136,6 +138,10 @@ const feishuRegistrationStorageKey = "csgclaw.im.feishuRegistrations";
 
 const t: TranslateFn = (key) => key;
 
+function sameAgentList(left: AgentLike[], right: AgentLike[]): boolean {
+  return left.length === right.length && left.every((agent, index) => agent === right[index]);
+}
+
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -155,9 +161,12 @@ function useAgentControllerHarness(
     agents?: AgentLike[];
     data?: IMData | null;
     managerProfile?: AgentProfileLike | null;
+    modelProviders?: ModelProviderCatalog | null;
+    modelProvidersLoaded?: boolean;
   } = {},
 ) {
   const [agents, setAgents] = useState<AgentLike[]>(options.agents ?? [oldAgent]);
+  const agentsPropRef = useRef<AgentLike[] | null>(options.agents ?? null);
   const refreshWorkspaceAgentsRef = useRef(vi.fn(async () => options.agents ?? [oldAgent]));
   const refreshWorkspaceBootstrapRef = useRef(vi.fn(async () => null));
   const refreshWorkspaceBootstrapConfigRef = useRef(vi.fn(async () => null));
@@ -174,6 +183,10 @@ function useAgentControllerHarness(
 
   useEffect(() => {
     if (options.agents) {
+      if (agentsPropRef.current && sameAgentList(agentsPropRef.current, options.agents)) {
+        return;
+      }
+      agentsPropRef.current = options.agents;
       setAgents(options.agents);
     }
   }, [options.agents]);
@@ -194,6 +207,8 @@ function useAgentControllerHarness(
     hubTemplates: [],
     locale: "en",
     managerProfile: options.managerProfile ?? null,
+    modelProviders: options.modelProviders ?? null,
+    modelProvidersLoaded: options.modelProvidersLoaded ?? false,
     refreshHubTemplates: vi.fn(async () => undefined),
     refreshWorkspaceAgents,
     refreshWorkspaceBootstrap,
@@ -207,6 +222,7 @@ function useAgentControllerHarness(
     setAgentsData: (value: AgentLike[] | ((current: AgentLike[]) => AgentLike[])) => {
       setAgents((current) => (typeof value === "function" ? value(current) : value));
     },
+    setBootstrapData: vi.fn(),
     setSelectedHubTemplateId: vi.fn(),
     t,
   });
@@ -982,8 +998,7 @@ describe("useAgentController", () => {
     }
   });
 
-  it("initializes create agent drafts with an unused built-in avatar", async () => {
-    const availableAvatar = AGENT_AVATAR_OPTIONS.at(-1)?.value || "";
+  it("initializes create agent drafts without an agent-owned avatar", async () => {
     const humanAvatar = AGENT_AVATAR_OPTIONS.at(-2)?.value || "";
     const agents = AGENT_AVATAR_OPTIONS.slice(0, -2).map((option, index): AgentLike => {
       const manager = index === 0;
@@ -1016,6 +1031,40 @@ describe("useAgentController", () => {
     });
 
     await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
-    expect(result.current.agentProfileModalProps?.agentDraft.avatar).toBe(availableAvatar);
+    expect(result.current.agentProfileModalProps?.agentDraft.avatar).toBe("");
+  });
+
+  it("initializes create agent drafts from the first available model provider when defaults are empty", async () => {
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValueOnce({});
+    const modelProviders = normalizeModelProviderCatalog({
+      providers: [
+        {
+          id: "codex",
+          kind: "codex",
+          builtin: true,
+          display_name: "Codex",
+          models: ["gpt-5.5"],
+        },
+      ],
+    });
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          modelProviders,
+          modelProvidersLoaded: true,
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+
+    await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      provider: "codex",
+      model_provider_id: "codex",
+      model_id: "gpt-5.5",
+    });
   });
 });

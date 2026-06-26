@@ -43,8 +43,18 @@
   align-items: center;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--white) 92%, transparent), transparent 0 12px, rgba(255, 255, 255, 0) 32px),
-    linear-gradient(135deg, color-mix(in srgb, var(--blue-dark-25) 98%, transparent) 0%, color-mix(in srgb, var(--brand-50) 98%, transparent) 58%, color-mix(in srgb, var(--teal-50) 98%, transparent) 100%);
+    radial-gradient(
+      circle at 18% 18%,
+      color-mix(in srgb, var(--white) 92%, transparent),
+      transparent 0 12px,
+      rgba(255, 255, 255, 0) 32px
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--blue-dark-25) 98%, transparent) 0%,
+      color-mix(in srgb, var(--brand-50) 98%, transparent) 58%,
+      color-mix(in srgb, var(--teal-50) 98%, transparent) 100%
+    );
   color: var(--gray-blue-800);
   font: inherit;
   font-size: 15px;
@@ -69,7 +79,12 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(110deg, transparent 0 31%, color-mix(in srgb, var(--white) 46%, transparent) 44%, transparent 58% 100%);
+  background: linear-gradient(
+    110deg,
+    transparent 0 31%,
+    color-mix(in srgb, var(--white) 46%, transparent) 44%,
+    transparent 58% 100%
+  );
   transform: translateX(-90%);
   animation: guide-shine 3400ms ease-in-out infinite;
 }

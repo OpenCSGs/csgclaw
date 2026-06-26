@@ -14,7 +14,6 @@ export type ComposerSegment =
     };
 
 export type ComposerMentionUser = {
-  handle?: string | null;
   id: string;
   name?: string | null;
 };
@@ -60,7 +59,7 @@ export function createMentionTokenElement(user: ComposerMentionUser): HTMLSpanEl
   const token = document.createElement("span");
   token.className = "composer-mention-token";
   token.dataset.userId = user.id;
-  token.dataset.userName = user.name || user.handle || user.id;
+  token.dataset.userName = user.name || user.id;
   token.contentEditable = "false";
   token.textContent = `@${token.dataset.userName}`;
   return token;
@@ -134,7 +133,6 @@ export function appendComposerSegments(
         createMentionTokenElement({
           id: segment.userId,
           name: segment.userName,
-          handle: segment.userName,
         }),
       );
       continue;
@@ -338,20 +336,20 @@ export function serializeComposerSegments(segments: readonly ComposerSegment[] |
 
 export function splitTextSegmentByMentions(
   text: unknown,
-  mentionableUsersByHandle: Map<string, ComposerMentionUser> | null | undefined,
+  mentionableUsersByName: Map<string, ComposerMentionUser> | null | undefined,
 ): ComposerSegment[] {
   const content = String(text ?? "");
-  if (!content || !mentionableUsersByHandle || mentionableUsersByHandle.size === 0) {
+  if (!content || !mentionableUsersByName || mentionableUsersByName.size === 0) {
     return content ? [{ type: "text", text: content }] : [];
   }
-  const mentionPattern = /(^|[^\w])@([a-zA-Z0-9._-]+)/g;
+  const mentionPattern = /(^|[^\p{L}\p{M}\p{N}._-])@([\p{L}\p{M}\p{N}._-]+)/gu;
   const segments: ComposerSegment[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = mentionPattern.exec(content)) !== null) {
     const prefix = match[1] ?? "";
-    const handle = match[2] ?? "";
-    const user = mentionableUsersByHandle.get(handle.toLowerCase());
+    const name = match[2] ?? "";
+    const user = mentionableUsersByName.get(name.toLowerCase());
     if (!user) {
       continue;
     }
@@ -362,9 +360,9 @@ export function splitTextSegmentByMentions(
     segments.push({
       type: "mention",
       userId: user.id,
-      userName: user.name || user.handle || user.id,
+      userName: user.name || user.id,
     });
-    lastIndex = mentionStart + handle.length + 1;
+    lastIndex = mentionStart + name.length + 1;
   }
   if (lastIndex < content.length) {
     segments.push({ type: "text", text: content.slice(lastIndex) });
@@ -374,7 +372,7 @@ export function splitTextSegmentByMentions(
 
 export function normalizeTextMentions(
   segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
-  mentionableUsersByHandle: Map<string, ComposerMentionUser> | null | undefined,
+  mentionableUsersByName: Map<string, ComposerMentionUser> | null | undefined,
 ): ComposerSegment[] {
   const normalized: ComposerSegment[] = [];
   for (const segment of segments ?? []) {
@@ -385,7 +383,7 @@ export function normalizeTextMentions(
       normalized.push(segment);
       continue;
     }
-    normalized.push(...splitTextSegmentByMentions(segment.text ?? "", mentionableUsersByHandle));
+    normalized.push(...splitTextSegmentByMentions(segment.text ?? "", mentionableUsersByName));
   }
   return normalizeComposerSegments(normalized);
 }
@@ -405,9 +403,8 @@ export function getMentionCandidates(
   const limit = Number.isFinite(options.limit) ? options.limit : 5;
   return validUsers
     .filter((user) => {
-      const handle = String(user.handle ?? "").toLowerCase();
       const name = String(user.name ?? "").toLowerCase();
-      return handle.includes(normalizedQuery) || name.includes(normalizedQuery);
+      return name.includes(normalizedQuery);
     })
     .slice(0, limit);
 }

@@ -15,8 +15,8 @@ func TestProjectorProjectsBuiltInChannelMessages(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-manager",
 		Users: []im.User{
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
-			{ID: "u-alice", Name: "alice", Handle: "alice", Role: "worker"},
+			{ID: "u-manager", Name: "manager", Role: "manager"},
+			{ID: "u-alice", Name: "alice", Role: "worker"},
 		},
 		Rooms: []im.Room{
 			{ID: "room-ops", Title: "ops", Members: []string{"u-manager", "u-alice"}},
@@ -169,8 +169,8 @@ func TestProjectorRenderTaskLifecycleMessages(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-manager",
 		Users: []im.User{
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
-			{ID: "u-backend-dev", Name: "backend-dev", Handle: "backend-dev", Role: "worker"},
+			{ID: "u-manager", Name: "manager", Role: "manager"},
+			{ID: "u-backend-dev", Name: "backend-dev", Role: "worker"},
 		},
 		Rooms: []im.Room{
 			{ID: "room-team", Title: "team", Members: []string{"u-manager", "u-backend-dev"}},
@@ -220,8 +220,8 @@ func TestProjectorRenderTaskLifecycleMessages(t *testing.T) {
 	if execMessages[1].Kind != im.MessageKindMessage || !strings.Contains(execMessages[1].Content, "dispatched task-15") || strings.Contains(execMessages[1].Content, "dispatched task-15 to") || !strings.Contains(execMessages[1].Content, "claim --team team-5 --task task-15 --participant-id backend-dev") {
 		t.Fatalf("dispatch projection = %q, want @mention task dispatch with claim command", execMessages[1].Content)
 	}
-	if len(execMessages[1].Mentions) != 1 || execMessages[1].Mentions[0].ID != "pt-backend-dev" {
-		t.Fatalf("dispatch mentions = %+v, want pt-backend-dev mention", execMessages[1].Mentions)
+	if len(execMessages[1].Mentions) != 1 || execMessages[1].Mentions[0].ID != "user-backend-dev" {
+		t.Fatalf("dispatch mentions = %+v, want user-backend-dev mention", execMessages[1].Mentions)
 	}
 	if strings.Contains(execMessages[1].Content, "HTTP fallback") || strings.Contains(execMessages[1].Content, "Dispatched by") {
 		t.Fatalf("dispatch projection = %q, should not include HTTP fallback or dispatched-by line", execMessages[1].Content)
@@ -232,8 +232,8 @@ func TestProjectorSuccessorDispatchSkipsPreamble(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-manager",
 		Users: []im.User{
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
-			{ID: "u-backend-dev", Name: "backend-dev", Handle: "backend-dev", Role: "worker"},
+			{ID: "u-manager", Name: "manager", Role: "manager"},
+			{ID: "u-backend-dev", Name: "backend-dev", Role: "worker"},
 		},
 		Rooms: []im.Room{
 			{ID: "room-team", Title: "team", Members: []string{"u-manager", "u-backend-dev"}},
@@ -265,8 +265,8 @@ func TestProjectorResolvesWorkerAliasSender(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-manager",
 		Users: []im.User{
-			{ID: "u-manager", Name: "manager", Handle: "manager", Role: "manager"},
-			{ID: "u-p-w-1512", Name: "p-w-1512", Handle: "p-w-1512", Role: "worker"},
+			{ID: "u-manager", Name: "manager", Role: "manager"},
+			{ID: "u-p-w-1512", Name: "p-w-1512", Role: "worker"},
 		},
 		Rooms: []im.Room{
 			{ID: "room-team", Title: "team", Members: []string{"u-manager", "u-p-w-1512"}},
@@ -303,8 +303,8 @@ func TestProjectorResolvesWorkerAliasSender(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("ListMessages() len = %d, want 1", len(messages))
 	}
-	if messages[0].SenderID != "pt-p-w-1512" {
-		t.Fatalf("projected sender = %q, want pt-p-w-1512", messages[0].SenderID)
+	if messages[0].SenderID != "user-p-w-1512" {
+		t.Fatalf("projected sender = %q, want user-p-w-1512", messages[0].SenderID)
 	}
 	if !strings.Contains(messages[0].Content, "p-w-1512 claimed task-22") {
 		t.Fatalf("projected content = %q, want claim message", messages[0].Content)

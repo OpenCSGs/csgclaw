@@ -414,7 +414,6 @@ Flags:
 - `--channel string`: `csgclaw` or `feishu`. Default `csgclaw`.
 - `--id string`: user ID.
 - `--name string`: user name.
-- `--handle string`: user handle.
 - `--role string`: user role.
 - `--avatar string`: avatar initials. Used only for `feishu`.
 
@@ -440,8 +439,8 @@ Examples:
 ```bash
 csgclaw user list
 csgclaw user list --channel feishu
-csgclaw user create --name Alice --handle alice --role worker
-csgclaw user create --channel feishu --name Alice --handle alice --role manager --avatar AL
+csgclaw user create --name Alice --role worker
+csgclaw user create --channel feishu --name Alice --role manager --avatar AL
 csgclaw user delete alice
 ```
 

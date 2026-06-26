@@ -64,8 +64,8 @@ func TestDetectStateCompleteBootstrapReportsComplete(t *testing.T) {
 	if err := im.SaveBootstrap(imStatePath, im.Bootstrap{
 		CurrentUserID: im.AdminUserID,
 		Users: []im.User{
-			{ID: im.AdminUserID, Name: "admin", Handle: "admin", Role: "admin"},
-			{ID: im.ManagerUserID, Name: "manager", Handle: "manager", Role: "manager"},
+			{ID: im.AdminUserID, Name: "admin", Role: "admin"},
+			{ID: im.ManagerUserID, Name: "manager", Role: "manager"},
 		},
 		Rooms: []im.Room{
 			{

@@ -1,6 +1,5 @@
 import {
   CLIPROXY_AUTH_PROVIDERS,
-  DEFAULT_MANAGER_DESCRIPTION,
   DEFAULT_PROVIDER,
   DEFAULT_REASONING_EFFORT,
   BOT_CREATE_KIND_NOTIFICATION,
@@ -10,7 +9,6 @@ import {
   DEFAULT_NOTIFIER_POLL_INTERVAL,
   DEFAULT_RUNTIME_KIND,
   MANAGER_AGENT_ID,
-  MANAGER_AGENT_NAME,
   MANAGER_PARTICIPANT_ID,
   MANAGER_AGENT_ROLE,
   PROVIDER_OPTIONS,
@@ -80,13 +78,22 @@ export type AgentProfileLike = {
   notification_profile?: JSONRecord | null;
 };
 
+export type AgentRuntimeLike = {
+  kind?: RuntimeKind | null;
+  state?: string | null;
+  sandbox_id?: string | null;
+  options?: JSONRecord | null;
+  option_schemas?: RuntimeOptionSchema[] | null;
+};
+
 export type AgentLike = AgentProfileLike & {
   agent_profile?: AgentProfileLike | null;
+  profile?: AgentProfileLike | string | null;
+  runtime?: AgentRuntimeLike | null;
   bot_type?: BotType | null;
   box_id?: string | null;
   default_image?: string | null;
   from_template?: string | null;
-  handle?: string | null;
   id?: string | null;
   instructions?: string | null;
   type?: BotType | null;
@@ -100,6 +107,7 @@ export type AgentLike = AgentProfileLike & {
   status?: string | null;
   template_name?: string | null;
   user_id?: string | null;
+  user_name?: string | null;
   participants?:
     | {
         agent_id?: string | null;
@@ -113,6 +121,8 @@ export type AgentLike = AgentProfileLike & {
         metadata?: JSONRecord | null;
         name?: string | null;
         type?: string | null;
+        user_id?: string | null;
+        user_name?: string | null;
       }[]
     | null;
 };
@@ -134,10 +144,44 @@ export const AGENT_CHANNELS: Record<AgentChannelID, { id: AgentChannelID; name: 
 
 export type AvatarLikeUser = {
   avatar?: string | null;
-  handle?: string | null;
   id: string;
   name?: string | null;
 };
+
+export function agentRuntimeKind(item: AgentLike | AgentProfileLike | null | undefined): RuntimeKind {
+  const agent = item as AgentLike | null | undefined;
+  return normalizeRuntimeKind(agent?.runtime?.kind || agent?.runtime_kind || "");
+}
+
+export function agentRuntimeState(item: AgentLike | null | undefined): string {
+  return String(item?.runtime?.state || item?.status || "").trim();
+}
+
+export function agentRuntimeSandboxID(item: AgentLike | null | undefined): string {
+  return String(item?.runtime?.sandbox_id || item?.box_id || "").trim();
+}
+
+export function agentRuntimeOptions(item: AgentLike | AgentProfileLike | null | undefined): JSONRecord {
+  const agent = item as AgentLike | null | undefined;
+  if (agent?.runtime?.options && typeof agent.runtime.options === "object" && !Array.isArray(agent.runtime.options)) {
+    return agent.runtime.options;
+  }
+  if (agent?.runtime_options && typeof agent.runtime_options === "object" && !Array.isArray(agent.runtime_options)) {
+    return agent.runtime_options;
+  }
+  return {};
+}
+
+export function agentProfileConfig(item: AgentLike | null | undefined): AgentProfileLike | null {
+  const profile = item?.profile;
+  if (profile && typeof profile === "object" && !Array.isArray(profile)) {
+    return profile as AgentProfileLike;
+  }
+  if (item?.agent_profile && typeof item.agent_profile === "object" && !Array.isArray(item.agent_profile)) {
+    return item.agent_profile;
+  }
+  return item ?? null;
+}
 
 export type AgentDraft = {
   agent_id?: string;
@@ -351,6 +395,26 @@ export function resolveAgentChannelUserID(item: AgentLike | null | undefined): s
   return String(item.user_id || item.id || "").trim();
 }
 
+function agentAvatarUserIDs(item: AgentLike | null | undefined): string[] {
+  const out: string[] = [];
+  const push = (value: unknown) => {
+    const id = String(value ?? "").trim();
+    if (!id || out.includes(id)) {
+      return;
+    }
+    out.push(id);
+  };
+  push(item?.user_id);
+  const participant = item?.participants?.find(
+    (candidate) => String(candidate?.channel || "").trim() === "csgclaw" && String(candidate?.id || "").trim(),
+  );
+  push(participant?.user_id);
+  push(participant?.channel_user_ref);
+  push(resolveAgentChannelUserID(item));
+  push(item?.id);
+  return out;
+}
+
 export function feishuAgentParticipant(
   item: AgentLike | null | undefined,
 ): NonNullable<AgentLike["participants"]>[number] | null {
@@ -438,31 +502,27 @@ export function resolveAgentAvatarSource(
   agent: AgentLike | null | undefined,
   usersById?: Map<string, AvatarLikeUser> | null,
 ): string {
-  const candidateUserIDs = [agent?.user_id, agent?.id].map((value) => String(value ?? "").trim()).filter(Boolean);
-
-  for (const userID of candidateUserIDs) {
+  for (const userID of agentAvatarUserIDs(agent)) {
     const userAvatar = String(usersById?.get(userID)?.avatar ?? "").trim();
     if (userAvatar) {
       return userAvatar;
     }
   }
 
-  const agentAvatar = String(agent?.avatar ?? "").trim();
-  return agentAvatar;
+  return "";
 }
 
 export function resolveAgentAvatarFallback(
   agent: AgentLike | null | undefined,
   usersById?: Map<string, AvatarLikeUser> | null,
 ): string {
-  const candidateUserIDs = [agent?.user_id, agent?.id].map((value) => String(value ?? "").trim()).filter(Boolean);
-  for (const userID of candidateUserIDs) {
+  for (const userID of agentAvatarUserIDs(agent)) {
     const user = usersById?.get(userID);
     if (user) {
-      return avatarFallbackText(user.avatar, user.name, user.handle, user.id);
+      return avatarFallbackText(user.avatar, user.name, user.id);
     }
   }
-  return avatarFallbackText(agent?.avatar, agent?.name, agent?.handle, agent?.id);
+  return avatarFallbackText(agent?.name, agent?.id);
 }
 
 export function partitionWorkspaceAgentItems(
@@ -495,6 +555,16 @@ export function mergeAgentIntoList(
     }
     found = true;
     const merged: AgentLike = { ...item, ...updated };
+    if (
+      item?.profile &&
+      updated.profile &&
+      typeof item.profile === "object" &&
+      typeof updated.profile === "object" &&
+      !Array.isArray(item.profile) &&
+      !Array.isArray(updated.profile)
+    ) {
+      merged.profile = { ...(item.profile ?? {}), ...(updated.profile ?? {}) };
+    }
     if (item?.agent_profile || updated.agent_profile) {
       merged.agent_profile = { ...(item.agent_profile ?? {}), ...(updated.agent_profile ?? {}) };
     }
@@ -523,15 +593,13 @@ export function agentDraftWithRuntimeFieldsFromAgent(
     next.image = image;
     next.default_image = image;
   }
-  if (updated?.runtime_kind != null) {
-    next.runtime_kind = normalizeRuntimeKind(updated.runtime_kind || next.runtime_kind);
+  const updatedRuntimeKind = agentRuntimeKind(updated);
+  if (updatedRuntimeKind) {
+    next.runtime_kind = normalizeRuntimeKind(updatedRuntimeKind || next.runtime_kind);
   }
-  if (
-    updated?.runtime_options &&
-    typeof updated.runtime_options === "object" &&
-    !Array.isArray(updated.runtime_options)
-  ) {
-    next.runtime_options = normalizeRuntimeOptionsRecord(updated.runtime_options);
+  const updatedRuntimeOptions = agentRuntimeOptions(updated);
+  if (Object.keys(updatedRuntimeOptions).length > 0) {
+    next.runtime_options = normalizeRuntimeOptionsRecord(updatedRuntimeOptions);
   }
   return next;
 }
@@ -540,7 +608,7 @@ export function notificationBotStatusLabel(item: AgentLike | null | undefined, t
   if (isNotificationBotAgent(item)) {
     return item?.available === true ? t("notificationBotReady") : t("notificationBotNotReady");
   }
-  return agentStatusLabel(item?.status, t);
+  return agentStatusLabel(agentRuntimeState(item), t);
 }
 
 export function agentStatusLabel(status: unknown, t: TranslateFn): string {
@@ -744,10 +812,7 @@ function mergedRuntimeOptionsForView(
   profile: AgentProfileLike | null | undefined,
   agent: AgentLike | null | undefined,
 ): JSONRecord {
-  const agentOptions =
-    agent?.runtime_options && typeof agent.runtime_options === "object" && !Array.isArray(agent.runtime_options)
-      ? agent.runtime_options
-      : {};
+  const agentOptions = agentRuntimeOptions(agent);
   const profileOptions =
     profile?.runtime_options && typeof profile.runtime_options === "object" && !Array.isArray(profile.runtime_options)
       ? profile.runtime_options
@@ -819,7 +884,7 @@ function notifierProfileSummaryFlags(
 }
 
 function notifierFlatFromSources(profile: AgentProfileLike | null | undefined, agent?: AgentLike | null): JSONRecord {
-  const fromAgentTop = notifierKeysFromFlatRoot(agent?.runtime_options);
+  const fromAgentTop = notifierKeysFromFlatRoot(agentRuntimeOptions(agent));
   if (fromAgentTop) {
     return fromAgentTop;
   }
@@ -924,7 +989,7 @@ export function notifierDeliveryConfiguredInProfile(
 }
 
 export function agentToDraft(agent: AgentDraftSource | null | undefined): AgentDraft {
-  const profile = agent?.agent_profile || agent || {};
+  const profile = agentProfileConfig(agent as AgentLike | null | undefined) || {};
   const botType = normalizeBotType(agent?.bot_type ?? agent?.type);
   const base = profileToDraft(profile, agent);
   return {
@@ -934,15 +999,15 @@ export function agentToDraft(agent: AgentDraftSource | null | undefined): AgentD
     bot_type: botType,
     description: agent?.description || profile.description || "",
     instructions: agent?.instructions || "",
-    avatar: agent?.avatar || "",
+    avatar: "",
     default_image: agent?.image || "",
     image: agent?.image || "",
     from_template: agent?.from_template || "",
     template_name: agent?.template_name || "",
-    runtime_options: normalizeRuntimeOptionsRecord(agent?.runtime_options),
+    runtime_options: normalizeRuntimeOptionsRecord(agentRuntimeOptions(agent as AgentLike | null | undefined)),
     ...base,
     notifier_delivery_mode: normalizeNotifierDeliveryMode(agent?.notifier_delivery_mode || base.notifier_delivery_mode),
-    runtime_kind: normalizeRuntimeKind(agent?.runtime_kind || profile.runtime_kind),
+    runtime_kind: normalizeRuntimeKind(agentRuntimeKind(agent as AgentLike | null | undefined) || profile.runtime_kind),
   };
 }
 
@@ -1048,12 +1113,10 @@ export function applyTemplateToDraft(
 }
 
 export function draftToProfile(draft: AgentDraft, options: DraftProfileOptions = {}): JSONRecord {
+  void options;
   const requestOptions = parseJSONMap(draft.requestOptionsText);
   const modelProviderID = String(draft.model_provider_id || "").trim();
   return {
-    name: options.name || draft.name || MANAGER_AGENT_NAME,
-    description: options.description || draft.description || DEFAULT_MANAGER_DESCRIPTION,
-    provider: modelProviderID ? providerNameForProviderID(modelProviderID) : draft.provider,
     model_provider_id: modelProviderID,
     base_url: "",
     api_key: "",
@@ -1127,6 +1190,10 @@ export function runtimeOptionSchemasForAgent(
   item?: AgentLike | null,
   bootstrapConfig?: RuntimeBootstrapConfig | null,
 ): RuntimeOptionSchema[] {
+  const fromRuntime = normalizeRuntimeOptionSchemas(item?.runtime?.option_schemas);
+  if (fromRuntime.length > 0) {
+    return fromRuntime;
+  }
   const fromAgent = normalizeRuntimeOptionSchemas(item?.runtime_option_schemas);
   if (fromAgent.length > 0) {
     return fromAgent;
@@ -1196,6 +1263,8 @@ export function notifierFormIsComplete(
   if (draft.notifier_delivery_complete || draft.notifier_webhook_token_set || draft.notifier_remote_token_set) {
     return true;
   }
+  const profile = agentProfileConfig(item);
+  const runtimeOptions = agentRuntimeOptions(item);
   const draftProfile = {
     request_options: {
       notifier: {
@@ -1209,11 +1278,13 @@ export function notifierFormIsComplete(
   if (notifierDeliveryConfiguredInProfile(draftProfile as AgentProfileLike)) {
     return true;
   }
-  if (hasItem && notifierDeliveryConfiguredInProfile(item?.agent_profile, item)) {
+  if (hasItem && notifierDeliveryConfiguredInProfile(profile, item)) {
     return true;
   }
-  const runtimeOptions = item?.runtime_options;
-  const profileRuntimeOptions = item?.agent_profile?.runtime_options;
+  const profileRuntimeOptions =
+    profile?.runtime_options && typeof profile.runtime_options === "object" && !Array.isArray(profile.runtime_options)
+      ? profile.runtime_options
+      : {};
   const runtimeSummary =
     runtimeOptions?.notification_profile &&
     typeof runtimeOptions.notification_profile === "object" &&
@@ -1233,10 +1304,10 @@ export function notifierFormIsComplete(
             ? (profileRuntimeOptions.notifier_profile as JSONRecord)
             : null;
   const legacySummary =
-    item?.agent_profile?.notifier_profile &&
-    typeof item.agent_profile.notifier_profile === "object" &&
-    !Array.isArray(item.agent_profile.notifier_profile)
-      ? item.agent_profile.notifier_profile
+    profile?.notifier_profile &&
+    typeof profile.notifier_profile === "object" &&
+    !Array.isArray(profile.notifier_profile)
+      ? profile.notifier_profile
       : null;
   const summary = runtimeSummary || legacySummary;
   if (hasItem && Boolean(summary?.webhook_token_set)) {
@@ -1296,12 +1367,13 @@ export function isAgentRunning(item: AgentLike | null | undefined): boolean {
   if (isNotificationBotAgent(item)) {
     return item?.available === true;
   }
-  const status = String(item?.status || "").toLowerCase();
+  const status = agentRuntimeState(item).toLowerCase();
   return status === "running" || status === "online";
 }
 
 export function isAgentProfileMarkedComplete(item: AgentLike | null | undefined): boolean {
-  return item?.profile_complete === true || item?.agent_profile?.profile_complete === true;
+  const profile = agentProfileConfig(item);
+  return item?.profile_complete === true || profile?.profile_complete === true;
 }
 
 export function isAgentProfileDraftComplete(draft: Partial<AgentDraft> | null | undefined): boolean {
@@ -1387,11 +1459,13 @@ export function isAgentIncomplete(
   if (isAgentProfileDraftComplete(draft)) {
     return false;
   }
-  return item?.profile_complete === false || item?.agent_profile?.profile_complete === false;
+  const profile = agentProfileConfig(item);
+  return item?.profile_complete === false || profile?.profile_complete === false;
 }
 
 export function isAgentRestartNeeded(item: AgentLike | null | undefined): boolean {
-  return Boolean(item?.env_restart_required || item?.agent_profile?.env_restart_required);
+  const profile = agentProfileConfig(item);
+  return Boolean(item?.env_restart_required || profile?.env_restart_required);
 }
 
 export function shouldWaitForManagerRuntimeAfterProfileSave(
@@ -1404,10 +1478,10 @@ export function shouldWaitForManagerRuntimeAfterProfileSave(
   if (!isAgentProfileMarkedComplete(agent)) {
     return true;
   }
-  if (!String(agent?.box_id ?? "").trim()) {
+  if (!agentRuntimeSandboxID(agent)) {
     return true;
   }
-  if (String(agent?.status ?? "").toLowerCase() === "profile_incomplete") {
+  if (agentRuntimeState(agent).toLowerCase() === "profile_incomplete") {
     return true;
   }
   return false;
@@ -1417,7 +1491,7 @@ export function agentRuntimePollSettled(item: AgentLike | null | undefined): boo
   if (isAgentRunning(item)) {
     return true;
   }
-  const status = String(item?.status ?? "").toLowerCase();
+  const status = agentRuntimeState(item).toLowerCase();
   if (status === "stopped" || status === "offline" || status === "failed" || status === "error") {
     return true;
   }
@@ -1433,11 +1507,13 @@ export function agentRuntimePollSettled(item: AgentLike | null | undefined): boo
 }
 
 export function isAgentUpgradeNeeded(item: AgentLike | null | undefined): boolean {
-  return Boolean(item?.image_upgrade_required || item?.agent_profile?.image_upgrade_required);
+  const profile = agentProfileConfig(item);
+  return Boolean(item?.image_upgrade_required || profile?.image_upgrade_required);
 }
 
 export function agentModelID(item: AgentLike | null | undefined): string {
-  return item?.model_id || item?.agent_profile?.model_id || "no model";
+  const profile = agentProfileConfig(item);
+  return item?.model_id || profile?.model_id || "no model";
 }
 
 export function stringifyJSON(value: unknown): string {
@@ -1502,7 +1578,7 @@ export function effectiveAgentRuntimeKind(
   draft: Partial<AgentDraft> | null | undefined,
   item: AgentLike | null | undefined,
 ): RuntimeKind {
-  return normalizeRuntimeKind(draft?.runtime_kind || item?.runtime_kind || "");
+  return normalizeRuntimeKind(draft?.runtime_kind || agentRuntimeKind(item) || "");
 }
 
 export function isNotifierRuntimeDraftOnAgentPage(

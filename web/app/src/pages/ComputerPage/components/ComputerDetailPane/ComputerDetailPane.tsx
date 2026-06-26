@@ -1,5 +1,12 @@
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
-import { agentModelID, formatProviderLabel, isAgentIncomplete, isAgentRunning } from "@/models/agents";
+import {
+  agentModelID,
+  agentProfileConfig,
+  formatProviderLabel,
+  isAgentIncomplete,
+  isAgentRunning,
+} from "@/models/agents";
+import { providerNameForProviderID } from "@/models/modelProviders";
 import { ComputerIcon, PlayIcon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
@@ -80,13 +87,18 @@ export function ComputerDetailPane({
                   <span className="entity-list-icon">
                     <AgentAvatarContent
                       avatar={item.avatar}
-                      fallback={avatarFallbackText(item.avatar, item.name, item.handle, item.id)}
+                      fallback={avatarFallbackText(item.avatar, item.name, item.id)}
                     />
                   </span>
                   <span className="entity-list-main">
                     <strong>{item.name}</strong>
                     <small>
-                      {formatProviderLabel(item.provider || item.agent_profile?.provider)} · {agentModelID(item)}
+                      {formatProviderLabel(
+                        item.provider ||
+                          agentProfileConfig(item)?.provider ||
+                          providerNameForProviderID(agentProfileConfig(item)?.model_provider_id || ""),
+                      )}{" "}
+                      · {agentModelID(item)}
                     </small>
                   </span>
                   <span className={`workspace-status-dot ${isAgentRunning(item) ? "online" : ""}`}></span>

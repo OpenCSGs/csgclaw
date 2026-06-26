@@ -50,7 +50,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     memberMenuRef,
     mentionCandidates,
     mentionIndex,
-    mentionableUsersByHandle,
+    mentionableUsersByName,
     messageActionBusy,
     messageActionError,
     messageListRef,
@@ -244,7 +244,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         managerProvider={managerProvider}
         mentionCandidates={mentionCandidates}
         mentionIndex={mentionIndex}
-        mentionableUsersByHandle={mentionableUsersByHandle}
+        mentionableUsersByName={mentionableUsersByName}
         slashCandidates={slashCandidates}
         slashIndex={slashIndex}
         slashPickerLoading={slashPickerLoading}

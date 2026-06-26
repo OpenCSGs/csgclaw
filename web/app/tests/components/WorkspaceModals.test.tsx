@@ -6,7 +6,6 @@ const t: TranslateFn = (key) => key;
 
 const avatarUser = {
   avatar: "avatar/3D-2.png",
-  handle: "avatar-user",
   id: "u-avatar",
   name: "Avatar User",
 };

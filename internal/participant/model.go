@@ -42,7 +42,7 @@ type CreateRequest struct {
 	Channel          string           `json:"channel,omitempty"`
 	Type             string           `json:"type"`
 	Name             string           `json:"name"`
-	Avatar           string           `json:"avatar,omitempty"`
+	Avatar           string           `json:"-"`
 	ChannelAppRef    string           `json:"channel_app_ref,omitempty"`
 	ChannelAppConfig map[string]any   `json:"channel_app_config,omitempty"`
 	ChannelUser      ChannelUserSpec  `json:"channel_user,omitempty"`
@@ -52,7 +52,7 @@ type CreateRequest struct {
 
 type UpdateRequest struct {
 	Name             *string        `json:"name,omitempty"`
-	Avatar           *string        `json:"avatar,omitempty"`
+	Avatar           *string        `json:"-"`
 	ChannelUserRef   *string        `json:"channel_user_ref,omitempty"`
 	ChannelUserKind  *string        `json:"channel_user_kind,omitempty"`
 	ChannelAppConfig map[string]any `json:"channel_app_config,omitempty"`

@@ -10,8 +10,7 @@ import (
 
 // Service adapts the local CSGClaw IM service to the channel-facing
 // room/member/message boundary. The channel accepts common legacy bot and user
-// IDs, while internal/im persists canonical participant IDs for collaboration
-// state.
+// IDs, while internal/im persists canonical user IDs for collaboration state.
 type Service struct {
 	im *im.Service
 }

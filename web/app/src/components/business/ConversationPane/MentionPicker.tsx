@@ -31,33 +31,36 @@ export function MentionPicker({
 
   return (
     <div className={`mention-picker ${className}`.trim()} role="listbox">
-      {users.map((user, index) => (
-        <button
-          key={user.id}
-          ref={index === activeIndex ? activeOptionRef : null}
-          role="option"
-          aria-selected={index === activeIndex}
-          className={`mention-option ${index === activeIndex ? "active" : ""}`}
-          onMouseDown={(event) => {
-            event.preventDefault();
-            onSelect(user);
-          }}
-        >
-          <span className="avatar">
-            <AgentAvatarContent
-              avatar={user.avatar}
-              fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)}
-            />
-          </span>
-          <div>
-            <div className="message-author">{user.name}</div>
-            <div className="conversation-preview">
-              @{user.handle}
-              {showRole ? ` · ${localizeRole(user.role || "", t)}` : ""}
+      {users.map((user, index) => {
+        const mentionLabel = user.name || user.id;
+        return (
+          <button
+            key={user.id}
+            ref={index === activeIndex ? activeOptionRef : null}
+            role="option"
+            aria-selected={index === activeIndex}
+            className={`mention-option ${index === activeIndex ? "active" : ""}`}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              onSelect(user);
+            }}
+          >
+            <span className="avatar">
+              <AgentAvatarContent
+                avatar={user.avatar}
+                fallback={avatarFallbackText(user.avatar, mentionLabel, user.id)}
+              />
+            </span>
+            <div>
+              <div className="message-author">@{mentionLabel}</div>
+              <div className="conversation-preview">
+                {user.id}
+                {showRole ? ` · ${localizeRole(user.role || "", t)}` : ""}
+              </div>
             </div>
-          </div>
-        </button>
-      ))}
+          </button>
+        );
+      })}
     </div>
   );
 }

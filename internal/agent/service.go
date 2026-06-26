@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/identity"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
 	hub "csgclaw/internal/template"
@@ -606,6 +607,7 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 				Avatar:      managerAvatar,
 				Status:      "profile_incomplete",
 				CreatedAt:   now,
+				UpdatedAt:   now,
 				Role:        RoleManager,
 			}
 		}
@@ -686,11 +688,17 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		BoxID:            info.ID,
 		Status:           string(info.State),
 		CreatedAt:        info.CreatedAt.UTC(),
+		UpdatedAt:        info.CreatedAt.UTC(),
 		Profile:          profileSelector(startProfile),
 		AgentProfile:     startProfile,
 		ProfileComplete:  true,
 		DetectionResults: detectionResults,
 		Role:             RoleManager,
+	}
+	if manager.CreatedAt.IsZero() {
+		now := time.Now().UTC()
+		manager.CreatedAt = now
+		manager.UpdatedAt = now
 	}
 	for id, a := range s.agents {
 		if isManagerAgent(a) && id != manager.ID {
@@ -1109,6 +1117,7 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 		Role:           existing.Role,
 		Status:         existing.Status,
 		CreatedAt:      existing.CreatedAt,
+		UpdatedAt:      existing.UpdatedAt,
 		Profile:        existing.Profile,
 		RuntimeOptions: utils.CloneAnyMap(existing.RuntimeOptions),
 		AgentProfile:   cloneProfile(existing.AgentProfile),
@@ -1138,6 +1147,8 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 			merged.Status = next.Status
 		case "created_at":
 			merged.CreatedAt = next.CreatedAt
+		case "updated_at":
+			merged.UpdatedAt = next.UpdatedAt
 		case "profile":
 			merged.Profile = next.Profile
 			if strings.TrimSpace(next.Profile) != "" {
@@ -1594,6 +1605,9 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	case strings.EqualFold(name, ManagerName):
 		return Agent{}, fmt.Errorf("name %q is reserved", name)
 	}
+	if err := identity.ValidateMentionName(name); err != nil {
+		return Agent{}, err
+	}
 	if id == "" {
 		var err error
 		id, err = newAgentID()
@@ -1802,6 +1816,7 @@ func newWorkerAgent(id, name, description, instructions, image, avatar, runtimeK
 		Instructions:    strings.TrimSpace(instructions),
 		Status:          string(state),
 		CreatedAt:       createdAt,
+		UpdatedAt:       createdAt,
 		RuntimeOptions:  agentRX,
 		Profile:         profileSelector(prof),
 		AgentProfile:    prof,

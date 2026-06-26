@@ -328,9 +328,9 @@ func TestDeleteUserRebuildsThreadStateFromSurvivingMessages(t *testing.T) {
 	svc := NewServiceFromBootstrap(Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "u-alice", Name: "Alice", Handle: "alice"},
-			{ID: "u-bob", Name: "Bob", Handle: "bob"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-alice", Name: "Alice"},
+			{ID: "u-bob", Name: "Bob"},
 		},
 		Rooms: []Room{{
 			ID:      "room-1",
@@ -402,8 +402,8 @@ func threadTestBootstrap() Bootstrap {
 	return Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []User{
-			{ID: "u-admin", Name: "admin", Handle: "admin"},
-			{ID: "manager", Name: "manager", Handle: "manager"},
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
 		},
 		Rooms: []Room{
 			{ID: "room-1", Title: "Room One", Members: []string{"u-admin", "manager"}, Messages: messages},

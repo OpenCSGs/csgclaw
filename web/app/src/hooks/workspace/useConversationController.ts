@@ -277,8 +277,9 @@ export function useConversationController({
       composerMentionState.query,
     );
   }, [data, activeConversation, composerMentionState]);
-  const mentionableUsersByHandle = useMemo(() => {
+  const mentionableUsersByName = useMemo(() => {
     const result = new Map<string, IMUser>();
+    const duplicateNames = new Set<string>();
     if (!data) {
       return result;
     }
@@ -286,12 +287,18 @@ export function useConversationController({
     data.users
       .filter((user) => allowed.has(participantIDForLocalIdentity(user.id)))
       .forEach((user) => {
-        const handle = String(user.handle ?? "")
+        const name = String(user.name ?? "")
           .trim()
           .toLowerCase();
-        if (handle && !result.has(handle)) {
-          result.set(handle, user);
+        if (!name || duplicateNames.has(name)) {
+          return;
         }
+        if (result.has(name)) {
+          result.delete(name);
+          duplicateNames.add(name);
+          return;
+        }
+        result.set(name, user);
       });
     return result;
   }, [data, activeConversation]);
@@ -1177,7 +1184,7 @@ export function useConversationController({
       onProviderLogin,
       draftSegments,
       draftText,
-      mentionableUsersByHandle,
+      mentionableUsersByName,
       onSyncComposer: syncComposerFromEditor,
       onComposerKeyDown,
       onComposerCompositionStart,

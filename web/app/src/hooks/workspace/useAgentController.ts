@@ -23,6 +23,7 @@ import {
   updateAgentRequest,
 } from "@/api/agents";
 import type { AgentUpdatePayload, FeishuRegistration, FetchAgentsOptions } from "@/api/agents";
+import { patchCsgclawUserRequest } from "@/api/participants";
 import { publishAgentTemplateRequest } from "@/api/hub";
 import { createUserRequest, inviteRoomUsersRequest, joinAgentToRoomRequest } from "@/api/im";
 import { fetchSkills } from "@/api/skills";
@@ -87,14 +88,20 @@ import type {
   AgentTemplateLike,
   RuntimeKind,
 } from "@/models/agents";
-import { isDirectConversation, localIdentitiesMatch, resolveRoomInviterID } from "@/models/conversations";
-import { modelProviderOptionsFromCatalog } from "@/models/modelProviders";
+import {
+  isDirectConversation,
+  localIdentitiesMatch,
+  resolveRoomInviterID,
+  upsertUserInData,
+} from "@/models/conversations";
+import { modelProviderOptionsFromCatalog, providerNameForProviderID } from "@/models/modelProviders";
+import type { ModelProviderOption } from "@/models/modelProviders";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace } from "@/models/slashCommands";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
-import type { IMConversation } from "@/models/conversations";
+import type { IMConversation, IMUser } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
 
 type ManagerRebuildOptions = {
@@ -203,6 +210,36 @@ function saveFeishuPendingRegistrations(registrations: Record<string, FeishuPend
   }
 }
 
+function draftWithModelProviderFallback(draft: AgentDraft, options: readonly ModelProviderOption[]): AgentDraft {
+  const providerID = String(draft.model_provider_id || "").trim();
+  const modelID = String(draft.model_id || "").trim();
+  if (providerID && modelID) {
+    return draft;
+  }
+  const option = options.find((item) => {
+    if (!item.providerID || !item.modelID) {
+      return false;
+    }
+    if (providerID) {
+      return item.providerID === providerID;
+    }
+    if (modelID) {
+      return item.modelID === modelID;
+    }
+    return true;
+  });
+  if (!option) {
+    return draft;
+  }
+  const nextProviderID = providerID || option.providerID;
+  return {
+    ...draft,
+    provider: providerNameForProviderID(nextProviderID),
+    model_provider_id: nextProviderID,
+    model_id: modelID || option.modelID,
+  };
+}
+
 export function shouldReturnToAgentOverviewAfterAgentMissing(
   activePane: { type?: string; id?: string | undefined } | null | undefined,
 ) {
@@ -235,6 +272,7 @@ export function useAgentController({
   selectHub,
   selectModelProvider = () => {},
   setAgentsData,
+  setBootstrapData,
   setSelectedHubTemplateId,
   t,
 }: UseAgentControllerArgs) {
@@ -286,10 +324,7 @@ export function useAgentController({
   );
   const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
   const usersById = useMemo(() => {
-    const result = new Map<
-      string,
-      { avatar?: string | null; handle?: string | null; id: string; name?: string | null }
-    >();
+    const result = new Map<string, IMUser>();
     data?.users.forEach((user) => result.set(user.id, user));
     return result;
   }, [data?.users]);
@@ -301,6 +336,32 @@ export function useAgentController({
       })),
     [agents, usersById],
   );
+
+  async function saveLinkedAgentUserAvatar(
+    item: AgentLike | null | undefined,
+    avatar: string | null | undefined,
+  ): Promise<void> {
+    const userID = resolveAgentChannelUserID(item);
+    const nextAvatar = String(avatar || "").trim();
+    if (!userID || !nextAvatar) {
+      return;
+    }
+    const existing = usersById.get(userID);
+    if (String(existing?.avatar || "").trim() === nextAvatar) {
+      return;
+    }
+    const updated = await patchCsgclawUserRequest(userID, { avatar: nextAvatar });
+    setBootstrapData((current) => {
+      const currentUser = current?.users.find((candidate) => candidate.id === updated.id) ?? existing ?? null;
+      return upsertUserInData(current, {
+        ...(currentUser ?? { id: updated.id || userID, name: updated.name || item?.name || userID }),
+        ...updated,
+        avatar: String(updated.avatar || nextAvatar).trim() || nextAvatar,
+        participants: updated.participants ?? currentUser?.participants,
+      });
+    });
+  }
+
   const managerAgent = agentItems.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
   const { workerAgentItems, notificationAgentItems } = partitionWorkspaceAgentItems(agentItems, MANAGER_AGENT_ID);
   const createTeamCandidates = useMemo(
@@ -882,6 +943,7 @@ export function useAgentController({
         agent_profile: defaults,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, bootstrapConfig, managerAgent?.image || "");
+      draft = draftWithModelProviderFallback(draft, agentModelOptions);
       setAgentDraft(draft);
       setShowAgentModal(true);
     } catch (_) {
@@ -897,6 +959,7 @@ export function useAgentController({
         agent_profile: managerProfile,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, bootstrapConfig, managerAgent?.image || "");
+      draft = draftWithModelProviderFallback(draft, agentModelOptions);
       setAgentDraft(draft);
       setShowAgentModal(true);
     }
@@ -1015,7 +1078,6 @@ export function useAgentController({
         const runtimeOptions = draftRuntimeOptionsForSave(draft, { mergeNotifier: true });
         const payload: AgentUpdatePayload = {
           name: draftToSave.name,
-          avatar: draftToSave.avatar,
           description: draftToSave.description,
           instructions: draftToSave.instructions,
         };
@@ -1045,7 +1107,6 @@ export function useAgentController({
 
       const payload: AgentUpdatePayload = {
         name: draftToSave.name,
-        avatar: draftToSave.avatar,
         description: draftToSave.description,
         instructions: draftToSave.instructions,
       };
@@ -1059,6 +1120,7 @@ export function useAgentController({
       if (!hasProfileOrRuntimeChange) {
         debugAgentPageSavePayload("meta-only", payload);
         const savedMetaOnly = await updateAgentRequest(selectedAgentForPage.id, payload);
+        await saveLinkedAgentUserAvatar(selectedAgentForPage, draft.avatar);
         await refreshAgents();
         await refreshWorkspaceBootstrap();
         if (savedMetaOnly.id === MANAGER_AGENT_ID) {
@@ -1079,6 +1141,7 @@ export function useAgentController({
       const managerBeforeSave = selectedAgentForPage;
       const profileIncompleteBeforeSave = !isAgentProfileMarkedComplete(agentPageSavedDraft);
       const saved = await updateAgentRequest(selectedAgentForPage.id, payload);
+      await saveLinkedAgentUserAvatar(selectedAgentForPage, draft.avatar);
       if (canApplyAgentPageProfileSaveImmediately(saved, profileChanged, runtimeOptionsChanged)) {
         applyAgentListUpdate(saved);
         const savedDraft = agentToDraft(saved);
@@ -1160,7 +1223,6 @@ export function useAgentController({
         const runtimeOptions = draftRuntimeOptionsForSave(draft, { mergeNotifier: true });
         const payload: AgentUpdatePayload = {
           name: agentDraft.name,
-          avatar: agentDraft.avatar,
           description: agentDraft.description,
           instructions: agentDraft.instructions,
         };
@@ -1197,7 +1259,6 @@ export function useAgentController({
       });
       const payload: AgentUpdatePayload = {
         name: agentDraft.name,
-        avatar: agentDraft.avatar,
         role: WORKER_AGENT_ROLE,
         description: agentDraft.description,
         instructions: agentDraft.instructions,
@@ -1222,13 +1283,13 @@ export function useAgentController({
         ? await createBotRequest(payload)
         : await updateAgentRequest(editingAgentID, {
             name: payload.name,
-            avatar: payload.avatar,
             description: payload.description,
             instructions: payload.instructions,
             agent_profile: payload.agent_profile,
             profile: payload.profile,
             ...(payload.runtime_options !== undefined ? { runtime_options: payload.runtime_options } : {}),
           });
+      await saveLinkedAgentUserAvatar(saved?.participants?.length ? saved : editingAgent || saved, agentDraft.avatar);
       await refreshAgents();
       await refreshWorkspaceBootstrap();
       if (saved.id === MANAGER_AGENT_ID) {
@@ -1637,8 +1698,7 @@ export function useAgentController({
       if (!direct) {
         await createUserRequest({
           id: channelUserID,
-          name: String(item?.name || item?.handle || channelUserID),
-          handle: String(item?.handle || channelUserID.replace(/^u-/, "") || item?.name || channelUserID),
+          name: String(item?.name || channelUserID),
           role: item?.role || WORKER_AGENT_ROLE,
         });
         nextData = await refreshWorkspaceBootstrap();

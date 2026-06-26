@@ -1295,18 +1295,21 @@ func TestExecuteUserCreateFeishuUsesChannelRoute(t *testing.T) {
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			if payload["name"] != "Alice" || payload["handle"] != "alice" {
-				t.Fatalf("payload = %#v, want Alice/alice", payload)
+			if payload["name"] != "Alice" {
+				t.Fatalf("payload = %#v, want Alice", payload)
 			}
-			return jsonResponse(http.StatusCreated, `{"id":"fsu-alice","name":"Alice","handle":"alice","role":"worker","is_online":true}`), nil
+			if _, ok := payload["handle"]; ok {
+				t.Fatalf("payload = %#v, want no handle", payload)
+			}
+			return jsonResponse(http.StatusCreated, `{"id":"fsu-alice","name":"Alice","role":"worker","is_online":true}`), nil
 		}),
 	}
 
-	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "user", "create", "--channel", "feishu", "--name", "Alice", "--handle", "alice", "--role", "worker"})
+	err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "user", "create", "--channel", "feishu", "--name", "Alice", "--role", "worker"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	assertTableHasRow(t, stdout.String(), "fsu-alice", "Alice", "alice", "worker", "true")
+	assertTableHasRow(t, stdout.String(), "fsu-alice", "Alice", "worker", "true")
 }
 
 func TestExecuteMemberCreateFeishuUsesChannelRoomMembersRoute(t *testing.T) {
@@ -1356,7 +1359,7 @@ func TestExecuteMemberListFeishuUsesChannelRoomMembersRoute(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/channels/feishu/rooms/oc_alpha/members" {
 				t.Fatalf("url = %q, want feishu room members route", req.URL.String())
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"ou_alice","name":"Alice","handle":"alice","role":"worker","is_online":true}]`), nil
+			return jsonResponse(http.StatusOK, `[{"id":"ou_alice","name":"Alice","role":"worker","is_online":true}]`), nil
 		}),
 	}
 
@@ -1364,7 +1367,7 @@ func TestExecuteMemberListFeishuUsesChannelRoomMembersRoute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	assertTableHasRow(t, stdout.String(), "ou_alice", "Alice", "alice", "worker", "true")
+	assertTableHasRow(t, stdout.String(), "ou_alice", "Alice", "worker", "true")
 }
 
 func TestExecuteMemberListCsgclawUsesRoomMembersRoute(t *testing.T) {
@@ -1379,7 +1382,7 @@ func TestExecuteMemberListCsgclawUsesRoomMembersRoute(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/channels/csgclaw/rooms/room-1/members" {
 				t.Fatalf("url = %q, want csgclaw room members route", req.URL.String())
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"Alice","handle":"alice","role":"worker","is_online":true}]`), nil
+			return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"Alice","role":"worker","is_online":true}]`), nil
 		}),
 	}
 
@@ -1387,7 +1390,7 @@ func TestExecuteMemberListCsgclawUsesRoomMembersRoute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	assertTableHasRow(t, stdout.String(), "u-alice", "Alice", "alice", "worker", "true")
+	assertTableHasRow(t, stdout.String(), "u-alice", "Alice", "worker", "true")
 }
 
 func TestExecuteMemberCreateCsgclawUsesRoomMembersRoute(t *testing.T) {
@@ -1566,14 +1569,14 @@ func TestExecuteUserListUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/channels/csgclaw/users" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/channels/csgclaw/users")
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"Alice","handle":"alice","role":"Worker","is_online":true}]`), nil
+			return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"Alice","role":"Worker","is_online":true}]`), nil
 		}),
 	}
 
 	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "user", "list"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	assertTableHasRow(t, stdout.String(), "u-alice", "Alice", "alice", "Worker", "true")
+	assertTableHasRow(t, stdout.String(), "u-alice", "Alice", "Worker", "true")
 }
 
 func TestExecuteUserCreateUsesHTTPClient(t *testing.T) {
@@ -1592,17 +1595,17 @@ func TestExecuteUserCreateUsesHTTPClient(t *testing.T) {
 			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			if body.ID != "u-alice" || body.Name != "Alice" || body.Handle != "alice" || body.Role != "worker" {
+			if body.ID != "u-alice" || body.Name != "Alice" || body.Role != "worker" {
 				t.Fatalf("body = %+v, want csgclaw create user payload", body)
 			}
-			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","handle":"alice","role":"worker","is_online":true}`), nil
+			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","is_online":true}`), nil
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "user", "create", "--id", "u-alice", "--name", "Alice", "--handle", "alice", "--role", "worker"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "user", "create", "--id", "u-alice", "--name", "Alice", "--role", "worker"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "alice", "worker", "true")
+	assertTableHasRow(t, stdout.String(), "u-alice", "alice", "worker", "true")
 }
 
 func TestExecuteUserCreateUsesFeishuChannelRoute(t *testing.T) {
@@ -1620,14 +1623,14 @@ func TestExecuteUserCreateUsesFeishuChannelRoute(t *testing.T) {
 			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			if body.ID != "ou-alice" || body.Name != "Alice" || body.Handle != "alice" || body.Role != "worker" || body.Avatar != "AL" {
+			if body.ID != "ou-alice" || body.Name != "Alice" || body.Role != "worker" || body.Avatar != "AL" {
 				t.Fatalf("body = %+v, want feishu create user payload", body)
 			}
-			return jsonResponse(http.StatusCreated, `{"id":"ou-alice","name":"Alice","handle":"alice","role":"worker","avatar":"AL","is_online":true}`), nil
+			return jsonResponse(http.StatusCreated, `{"id":"ou-alice","name":"Alice","role":"worker","avatar":"AL","is_online":true}`), nil
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "user", "create", "--channel", "feishu", "--id", "ou-alice", "--name", "Alice", "--handle", "alice", "--role", "worker", "--avatar", "AL"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "user", "create", "--channel", "feishu", "--id", "ou-alice", "--name", "Alice", "--role", "worker", "--avatar", "AL"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 }

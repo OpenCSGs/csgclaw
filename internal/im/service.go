@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/identity"
 	"csgclaw/internal/slashcommand"
 )
 
@@ -105,7 +106,6 @@ type EnsureAgentUserRequest struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	Handle      string `json:"handle"`
 	Role        string `json:"role"`
 	Avatar      string `json:"avatar,omitempty"`
 }
@@ -124,7 +124,6 @@ type UpdateUserRequest struct {
 	ID          string
 	Name        *string
 	Description *string
-	Handle      *string
 	Role        *string
 	Avatar      *string
 }
@@ -142,11 +141,11 @@ type Service struct {
 	statePath     string
 	currentUserID string
 	users         map[string]User
-	byHandle      map[string]string
+	byName        map[string]string
 	rooms         map[string]*Room
 }
 
-var mentionPattern = regexp.MustCompile(`(^|[^\w])@([a-zA-Z0-9._-]+)`)
+var mentionPattern = regexp.MustCompile(`(^|[^\pL\pM\pN._-])@([\pL\pM\pN._-]+)`)
 var mentionTagPattern = regexp.MustCompile(`<at\s+user_id="([^"]+)">[^<]*</at>`)
 
 func MentionTagUserIDs(content string) []string {
@@ -167,12 +166,12 @@ func MentionTagUserIDs(content string) []string {
 }
 
 func HasMentionTagForUser(content, userID string) bool {
-	userID = canonicalIMParticipantID(userID)
+	userID = canonicalIMUserID(userID)
 	if userID == "" {
 		return false
 	}
 	for _, id := range MentionTagUserIDs(content) {
-		if canonicalIMParticipantID(id) == userID {
+		if canonicalIMUserID(id) == userID {
 			return true
 		}
 	}
@@ -744,7 +743,7 @@ func normalizeBootstrap(state Bootstrap) Bootstrap {
 	state.Users = ensureUsers(state.Users)
 	state.Rooms = migrateLegacyAdminRoomRefs(cloneRooms(state.Rooms), adminAliases)
 	state.Rooms = migrateLegacyManagerRoomRefs(state.Rooms, managerAliases)
-	state.Rooms = migrateRoomRefsToParticipantIDs(state.Rooms)
+	state.Rooms = migrateRoomRefsToUserIDs(state.Rooms)
 	if !containsUserID(state.Users, state.CurrentUserID) {
 		state.CurrentUserID = migrateLegacyAdminID(state.CurrentUserID, adminAliases)
 		state.CurrentUserID = migrateLegacyManagerID(state.CurrentUserID, managerAliases)
@@ -761,12 +760,11 @@ func ensureUsers(users []User) []User {
 	for i := range result {
 		result[i] = normalizeUser(result[i])
 	}
-	if !hasUserHandle(result, "admin") {
+	if !hasUserName(result, "admin") {
 		result = append(result, User{
 			ID:          adminUserID,
 			Name:        "admin",
 			Description: DefaultAdminDescription,
-			Handle:      "admin",
 			Role:        "admin",
 			Avatar:      "AD",
 			IsOnline:    true,
@@ -774,7 +772,7 @@ func ensureUsers(users []User) []User {
 		})
 	} else {
 		for i := range result {
-			if strings.EqualFold(strings.TrimSpace(result[i].Handle), "admin") {
+			if strings.EqualFold(strings.TrimSpace(result[i].Name), "admin") {
 				result[i].ID = adminUserID
 				result[i].Name = "admin"
 				result[i].Role = "admin"
@@ -784,11 +782,10 @@ func ensureUsers(users []User) []User {
 			}
 		}
 	}
-	if !hasUserHandle(result, "manager") {
+	if !hasUserName(result, "manager") {
 		result = append(result, User{
 			ID:        managerParticipantUserID,
 			Name:      "manager",
-			Handle:    "manager",
 			Role:      "manager",
 			Avatar:    "MG",
 			IsOnline:  true,
@@ -796,7 +793,7 @@ func ensureUsers(users []User) []User {
 		})
 	} else {
 		for i := range result {
-			if strings.EqualFold(strings.TrimSpace(result[i].Handle), "manager") {
+			if strings.EqualFold(strings.TrimSpace(result[i].Name), "manager") {
 				result[i].ID = managerParticipantUserID
 				result[i].Name = "manager"
 				result[i].Role = "manager"
@@ -814,8 +811,7 @@ func dropLegacyAdminUserDuplicates(users []User) []User {
 	for _, user := range users {
 		id := strings.TrimSpace(user.ID)
 		if id == "" || id == legacyAdminUserID {
-			if strings.EqualFold(strings.TrimSpace(user.Handle), "admin") ||
-				strings.EqualFold(strings.TrimSpace(user.Name), "admin") ||
+			if strings.EqualFold(strings.TrimSpace(user.Name), "admin") ||
 				strings.EqualFold(strings.TrimSpace(user.Role), "admin") {
 				id = adminUserID
 				user.ID = adminUserID
@@ -836,8 +832,7 @@ func dropLegacyManagerUserDuplicates(users []User) []User {
 	for _, user := range users {
 		id := strings.TrimSpace(user.ID)
 		if id == "" || id == legacyManagerUserID {
-			if strings.EqualFold(strings.TrimSpace(user.Handle), "manager") ||
-				strings.EqualFold(strings.TrimSpace(user.Name), "manager") ||
+			if strings.EqualFold(strings.TrimSpace(user.Name), "manager") ||
 				strings.EqualFold(strings.TrimSpace(user.Role), "manager") {
 				id = managerParticipantUserID
 				user.ID = managerParticipantUserID
@@ -854,17 +849,16 @@ func dropLegacyManagerUserDuplicates(users []User) []User {
 
 func normalizeUser(user User) User {
 	user.ID = canonicalIMUserID(user.ID)
-	user.Name = strings.ToLower(strings.TrimSpace(user.Name))
+	user.Name = strings.TrimSpace(user.Name)
 	user.Description = strings.TrimSpace(user.Description)
-	user.Handle = strings.ToLower(strings.TrimSpace(user.Handle))
 	user.Role = strings.ToLower(strings.TrimSpace(user.Role))
 	user.Participants = nil
 	return user
 }
 
-func hasUserHandle(users []User, handle string) bool {
+func hasUserName(users []User, name string) bool {
 	for _, user := range users {
-		if strings.EqualFold(strings.TrimSpace(user.Handle), handle) {
+		if strings.EqualFold(strings.TrimSpace(user.Name), name) {
 			return true
 		}
 	}
@@ -903,8 +897,7 @@ func adminUserAliases(users []User) map[string]struct{} {
 		if id == "" {
 			continue
 		}
-		if strings.EqualFold(strings.TrimSpace(user.Handle), "admin") ||
-			strings.EqualFold(strings.TrimSpace(user.Name), "admin") ||
+		if strings.EqualFold(strings.TrimSpace(user.Name), "admin") ||
 			strings.EqualFold(strings.TrimSpace(user.Role), "admin") {
 			aliases[id] = struct{}{}
 		}
@@ -924,8 +917,7 @@ func managerUserAliases(users []User) map[string]struct{} {
 		if id == "" {
 			continue
 		}
-		if strings.EqualFold(strings.TrimSpace(user.Handle), "manager") ||
-			strings.EqualFold(strings.TrimSpace(user.Name), "manager") ||
+		if strings.EqualFold(strings.TrimSpace(user.Name), "manager") ||
 			strings.EqualFold(strings.TrimSpace(user.Role), "manager") {
 			aliases[id] = struct{}{}
 		}
@@ -977,32 +969,32 @@ func migrateLegacyManagerRoomRefs(rooms []Room, managerAliases map[string]struct
 	return rooms
 }
 
-func migrateRoomRefsToParticipantIDs(rooms []Room) []Room {
+func migrateRoomRefsToUserIDs(rooms []Room) []Room {
 	for i := range rooms {
-		rooms[i].Members = canonicalParticipantIDs(rooms[i].Members)
+		rooms[i].Members = canonicalUserIDs(rooms[i].Members)
 		for j := range rooms[i].Messages {
-			rooms[i].Messages[j].SenderID = canonicalIMParticipantID(rooms[i].Messages[j].SenderID)
-			rooms[i].Messages[j].Content = migrateMentionTagsToParticipantIDs(rooms[i].Messages[j].Content)
+			rooms[i].Messages[j].SenderID = canonicalIMUserID(rooms[i].Messages[j].SenderID)
+			rooms[i].Messages[j].Content = migrateMentionTagsToUserIDs(rooms[i].Messages[j].Content)
 			if rooms[i].Messages[j].Event != nil {
-				rooms[i].Messages[j].Event.ActorID = canonicalIMParticipantID(rooms[i].Messages[j].Event.ActorID)
-				rooms[i].Messages[j].Event.TargetIDs = canonicalParticipantIDs(rooms[i].Messages[j].Event.TargetIDs)
+				rooms[i].Messages[j].Event.ActorID = canonicalIMUserID(rooms[i].Messages[j].Event.ActorID)
+				rooms[i].Messages[j].Event.TargetIDs = canonicalUserIDs(rooms[i].Messages[j].Event.TargetIDs)
 			}
 			for k := range rooms[i].Messages[j].Mentions {
-				rooms[i].Messages[j].Mentions[k].ID = canonicalIMParticipantID(rooms[i].Messages[j].Mentions[k].ID)
+				rooms[i].Messages[j].Mentions[k].ID = canonicalIMUserID(rooms[i].Messages[j].Mentions[k].ID)
 			}
 		}
 	}
 	return rooms
 }
 
-func canonicalParticipantIDs(ids []string) []string {
+func canonicalUserIDs(ids []string) []string {
 	if len(ids) == 0 {
 		return nil
 	}
 	out := make([]string, 0, len(ids))
 	seen := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
-		id = canonicalIMParticipantID(id)
+		id = canonicalIMUserID(id)
 		if id == "" {
 			continue
 		}
@@ -1015,14 +1007,14 @@ func canonicalParticipantIDs(ids []string) []string {
 	return out
 }
 
-func migrateMentionTagsToParticipantIDs(content string) string {
+func migrateMentionTagsToUserIDs(content string) string {
 	return mentionTagPattern.ReplaceAllStringFunc(content, func(tag string) string {
 		matches := mentionTagPattern.FindStringSubmatch(tag)
 		if len(matches) <= 1 {
 			return tag
 		}
 		oldID := strings.TrimSpace(matches[1])
-		newID := canonicalIMParticipantID(oldID)
+		newID := canonicalIMUserID(oldID)
 		if newID == "" || newID == oldID {
 			return tag
 		}
@@ -1108,7 +1100,7 @@ func migrateLegacyManagerMentionTags(content string, managerAliases map[string]s
 
 func ensureAdminManagerRoom(rooms []Room) []Room {
 	for _, room := range rooms {
-		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(room, adminParticipantID) && containsUserIDInRoom(room, managerParticipantID) {
+		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(room, adminUserID) && containsUserIDInRoom(room, managerParticipantUserID) {
 			normalized := room
 			if normalized.Title == "Admin & Manager" {
 				normalized.Title = "admin & manager"
@@ -1138,11 +1130,11 @@ func ensureAdminManagerRoom(rooms []Room) []Room {
 		Subtitle:    formatConversationSubtitle(2),
 		Description: "Bootstrap room for admin and manager.",
 		IsDirect:    true,
-		Members:     []string{adminParticipantID, managerParticipantID},
+		Members:     []string{adminUserID, managerParticipantUserID},
 		Messages: []Message{
 			{
 				ID:        fmt.Sprintf("msg-%d", now.UnixNano()+1),
-				SenderID:  managerParticipantID,
+				SenderID:  managerParticipantUserID,
 				Content:   "Bootstrap room created for admin and manager.",
 				CreatedAt: now,
 			},
@@ -1152,9 +1144,9 @@ func ensureAdminManagerRoom(rooms []Room) []Room {
 }
 
 func containsUserIDInRoom(room Room, userID string) bool {
-	want := canonicalIMParticipantID(userID)
+	want := canonicalIMUserID(userID)
 	for _, memberID := range room.Members {
-		if canonicalIMParticipantID(memberID) == want {
+		if canonicalIMUserID(memberID) == want {
 			return true
 		}
 	}
@@ -1182,7 +1174,7 @@ func (s *Service) Bootstrap() Bootstrap {
 	for _, user := range s.users {
 		users = append(users, user)
 	}
-	slices.SortFunc(users, func(a, b User) int { return strings.Compare(a.Name, b.Name) })
+	sortUsersByDisplayName(users)
 
 	rooms := make([]Room, 0, len(s.rooms))
 	for _, room := range s.rooms {
@@ -1230,7 +1222,7 @@ func (s *Service) ListUsers() []User {
 	for _, user := range s.users {
 		users = append(users, user)
 	}
-	slices.SortFunc(users, func(a, b User) int { return strings.Compare(a.Name, b.Name) })
+	sortUsersByDisplayName(users)
 	return users
 }
 
@@ -1249,10 +1241,10 @@ func (s *Service) ListMembers(roomID string) ([]User, error) {
 	}
 
 	users := make([]User, 0, len(room.Members))
-	for _, participantID := range room.Members {
-		user, ok := s.userForParticipantLocked(participantID)
+	for _, memberID := range room.Members {
+		user, ok := s.userForLocalIDLocked(memberID)
 		if !ok {
-			return nil, fmt.Errorf("member user not found: %s", participantID)
+			return nil, fmt.Errorf("member user not found: %s", memberID)
 		}
 		users = append(users, user)
 	}
@@ -1261,15 +1253,15 @@ func (s *Service) ListMembers(roomID string) ([]User, error) {
 
 // RoomIDsForMember returns sorted room IDs where the given user is a member (including direct rooms).
 func (s *Service) RoomIDsForMember(userID string) []string {
-	participantID := canonicalIMParticipantID(userID)
-	if participantID == "" {
+	userID = canonicalIMUserID(userID)
+	if userID == "" {
 		return nil
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var ids []string
 	for id, room := range s.rooms {
-		if slices.Contains(room.Members, participantID) {
+		if slices.Contains(room.Members, userID) {
 			ids = append(ids, id)
 		}
 	}
@@ -1498,20 +1490,19 @@ func (s *Service) DeleteUser(userID string) error {
 	}
 
 	delete(s.users, userID)
-	delete(s.byHandle, strings.ToLower(user.Handle))
-	participantID := participantIDForUserID(userID)
+	delete(s.byName, strings.ToLower(user.Name))
 
 	for id, room := range s.rooms {
 		members := make([]string, 0, len(room.Members))
 		for _, memberID := range room.Members {
-			if memberID != participantID {
+			if canonicalIMUserID(memberID) != userID {
 				members = append(members, memberID)
 			}
 		}
 
 		messages := make([]Message, 0, len(room.Messages))
 		for _, message := range room.Messages {
-			if message.SenderID != participantID {
+			if canonicalIMUserID(message.SenderID) != userID {
 				messages = append(messages, message)
 			}
 		}
@@ -1546,18 +1537,15 @@ func (s *Service) DeleteUser(userID string) error {
 
 func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, error) {
 	id := canonicalIMUserID(req.ID)
-	name := strings.ToLower(strings.TrimSpace(req.Name))
+	name := strings.TrimSpace(req.Name)
 	description := strings.TrimSpace(req.Description)
-	handle := strings.ToLower(strings.TrimSpace(req.Handle))
 	role := strings.ToLower(strings.TrimSpace(req.Role))
 	avatar := strings.TrimSpace(req.Avatar)
 	switch {
 	case id == "":
 		return User{}, nil, fmt.Errorf("id is required")
-	case name == "":
-		return User{}, nil, fmt.Errorf("name is required")
-	case handle == "":
-		return User{}, nil, fmt.Errorf("handle is required")
+	case identity.ValidateMentionName(name) != nil:
+		return User{}, nil, identity.ValidateMentionName(name)
 	}
 	if role == "" {
 		role = "worker"
@@ -1576,15 +1564,14 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 		}
 		return existing, room, nil
 	}
-	if existingID, ok := s.byHandle[strings.ToLower(handle)]; ok && existingID != id {
-		return User{}, nil, fmt.Errorf("handle %q already exists", handle)
+	if existingID, ok := s.byName[strings.ToLower(name)]; ok && existingID != id {
+		return User{}, nil, fmt.Errorf("name %q already exists", name)
 	}
 
 	user := User{
 		ID:          id,
 		Name:        name,
 		Description: description,
-		Handle:      handle,
 		Role:        role,
 		Avatar:      avatar,
 		IsOnline:    true,
@@ -1592,11 +1579,11 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 		CreatedAt:   time.Now().UTC(),
 	}
 	s.users[id] = user
-	s.byHandle[strings.ToLower(handle)] = id
+	s.byName[strings.ToLower(name)] = id
 	room, roomCreated := s.ensureAdminAgentRoomLocked(id, name)
 	if err := s.saveLocked(); err != nil {
 		delete(s.users, id)
-		delete(s.byHandle, strings.ToLower(handle))
+		delete(s.byName, strings.ToLower(name))
 		if roomCreated && room != nil {
 			delete(s.rooms, room.ID)
 		}
@@ -1623,13 +1610,14 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 	if !ok {
 		name := strings.TrimSpace(req.Name)
 		if name == "" {
-			name = strings.TrimSpace(strings.TrimPrefix(id, "u-"))
+			name = strings.TrimSpace(strings.TrimPrefix(id, "user-"))
 			if name == "" {
 				name = id
 			}
 		}
-		handle := strings.ToLower(strings.TrimSpace(name))
-		handle = strings.ReplaceAll(handle, " ", "-")
+		if err := identity.ValidateMentionName(name); err != nil {
+			return User{}, false, err
+		}
 		role := strings.ToLower(strings.TrimSpace(req.Role))
 		if role == "" {
 			role = "worker"
@@ -1638,7 +1626,6 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 			ID:          id,
 			Name:        name,
 			Description: strings.TrimSpace(req.Description),
-			Handle:      handle,
 			Role:        role,
 			Avatar:      strings.TrimSpace(req.Avatar),
 			IsOnline:    true,
@@ -1648,7 +1635,15 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 		ok = true
 	}
 	if name := strings.TrimSpace(req.Name); name != "" {
+		if err := identity.ValidateMentionName(name); err != nil {
+			return User{}, false, err
+		}
+		if existingID, ok := s.byName[strings.ToLower(name)]; ok && s.resolveUserIDLocked(existingID) != id {
+			return User{}, false, fmt.Errorf("name %q already exists", name)
+		}
+		delete(s.byName, strings.ToLower(strings.TrimSpace(user.Name)))
 		user.Name = name
+		s.byName[strings.ToLower(name)] = id
 	}
 	if description := strings.TrimSpace(req.Description); description != "" {
 		user.Description = description
@@ -1686,28 +1681,21 @@ func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
 	}
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
-		if name == "" {
-			return User{}, false, fmt.Errorf("name is required")
+		if err := identity.ValidateMentionName(name); err != nil {
+			return User{}, false, err
 		}
+		if existingID, ok := s.byName[strings.ToLower(name)]; ok && s.resolveUserIDLocked(existingID) != id {
+			return User{}, false, fmt.Errorf("name %q already exists", name)
+		}
+		delete(s.byName, strings.ToLower(strings.TrimSpace(user.Name)))
 		user.Name = name
+		s.byName[strings.ToLower(name)] = id
 	}
 	if req.Description != nil {
 		user.Description = strings.TrimSpace(*req.Description)
 		if user.ID == adminUserID && user.Description == "" {
 			user.Description = DefaultAdminDescription
 		}
-	}
-	if req.Handle != nil {
-		handle := strings.ToLower(strings.TrimSpace(*req.Handle))
-		if handle == "" {
-			return User{}, false, fmt.Errorf("handle is required")
-		}
-		if existingID, ok := s.byHandle[handle]; ok && s.resolveUserIDLocked(existingID) != id {
-			return User{}, false, fmt.Errorf("handle %q already exists", handle)
-		}
-		delete(s.byHandle, strings.ToLower(strings.TrimSpace(user.Handle)))
-		user.Handle = handle
-		s.byHandle[handle] = id
 	}
 	if req.Role != nil {
 		role := strings.ToLower(strings.TrimSpace(*req.Role))
@@ -1753,7 +1741,7 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	if _, ok := s.users[senderUserID]; !ok {
 		return Message{}, fmt.Errorf("sender not found")
 	}
-	senderID = participantIDForUserID(senderUserID)
+	senderID = senderUserID
 	content, err := s.contentWithMentionPrefixLocked(content, req.MentionID)
 	if err != nil {
 		return Message{}, err
@@ -1802,7 +1790,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	if _, ok := s.users[senderUserID]; !ok {
 		return Message{}, fmt.Errorf("sender not found")
 	}
-	senderID = participantIDForUserID(senderUserID)
+	senderID = senderUserID
 	content, err := s.contentWithMentionPrefixLocked(content, mentionID)
 	if err != nil {
 		return Message{}, err
@@ -1875,7 +1863,7 @@ func (s *Service) DeliverEvent(req DeliverEventRequest) (Message, error) {
 	if _, ok := s.users[senderUserID]; !ok {
 		return Message{}, fmt.Errorf("sender not found")
 	}
-	senderID = participantIDForUserID(senderUserID)
+	senderID = senderUserID
 	room, ok := s.rooms[roomID]
 	if !ok {
 		return Message{}, fmt.Errorf("room not found")
@@ -1923,7 +1911,7 @@ func (s *Service) publishMessageCreatedLocked(roomID, senderID string, message M
 	if s.bus == nil {
 		return
 	}
-	sender, ok := s.userForParticipantLocked(senderID)
+	sender, ok := s.userForLocalIDLocked(senderID)
 	if !ok {
 		return
 	}
@@ -1955,7 +1943,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 	if _, ok := s.users[creatorUserID]; !ok {
 		return Room{}, fmt.Errorf("creator not found")
 	}
-	creatorID = participantIDForUserID(creatorUserID)
+	creatorID = creatorUserID
 
 	members, err := s.normalizeMembers(creatorUserID, req.MemberIDs)
 	if err != nil {
@@ -2019,7 +2007,7 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	if _, ok := s.users[inviterUserID]; !ok {
 		return Room{}, fmt.Errorf("inviter not found")
 	}
-	inviterID = participantIDForUserID(inviterUserID)
+	inviterID = inviterUserID
 	if !slices.Contains(room.Members, inviterID) {
 		return Room{}, fmt.Errorf("inviter is not a room member")
 	}
@@ -2041,13 +2029,12 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		if _, ok := s.users[userID]; !ok {
 			return Room{}, fmt.Errorf("user not found: %s", userID)
 		}
-		participantID := participantIDForUserID(userID)
-		if _, ok := existing[participantID]; ok {
+		if _, ok := existing[userID]; ok {
 			continue
 		}
-		existing[participantID] = struct{}{}
-		room.Members = append(room.Members, participantID)
-		addedIDs = append(addedIDs, participantID)
+		existing[userID] = struct{}{}
+		room.Members = append(room.Members, userID)
+		addedIDs = append(addedIDs, userID)
 	}
 	if len(addedIDs) == 0 {
 		return Room{}, fmt.Errorf("no new users to invite")
@@ -2097,7 +2084,7 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	if _, ok := s.users[inviterUserID]; !ok {
 		return Room{}, fmt.Errorf("inviter not found")
 	}
-	inviterID = participantIDForUserID(inviterUserID)
+	inviterID = inviterUserID
 	if !slices.Contains(room.Members, inviterID) {
 		return Room{}, fmt.Errorf("inviter is not a room member")
 	}
@@ -2114,11 +2101,10 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		if _, ok := s.users[userID]; !ok {
 			return Room{}, fmt.Errorf("user not found: %s", userID)
 		}
-		participantID := participantIDForUserID(userID)
-		if participantID == inviterID {
+		if userID == inviterID {
 			continue
 		}
-		removing[participantID] = struct{}{}
+		removing[userID] = struct{}{}
 	}
 	if len(removing) == 0 {
 		return Room{}, fmt.Errorf("no removable users")
@@ -2219,26 +2205,24 @@ func (s *Service) extractMentions(content string) []Mention {
 		if !ok {
 			continue
 		}
-		participantID := participantIDForUserID(userID)
-		if _, exists := seen[participantID]; exists {
+		if _, exists := seen[userID]; exists {
 			continue
 		}
-		seen[participantID] = struct{}{}
+		seen[userID] = struct{}{}
 		mentions = append(mentions, Mention{
-			ID:   participantID,
+			ID:   userID,
 			Name: s.userMentionName(user),
 		})
 	}
 	for _, match := range handleMatches {
-		handle := strings.ToLower(match[2])
-		if userID, ok := s.byHandle[handle]; ok {
-			participantID := participantIDForUserID(userID)
-			if _, exists := seen[participantID]; exists {
+		name := strings.ToLower(match[2])
+		if userID, ok := s.byName[name]; ok {
+			if _, exists := seen[userID]; exists {
 				continue
 			}
-			seen[participantID] = struct{}{}
+			seen[userID] = struct{}{}
 			mentions = append(mentions, Mention{
-				ID:   participantID,
+				ID:   userID,
 				Name: s.userMentionName(s.users[userID]),
 			})
 		}
@@ -2247,9 +2231,9 @@ func (s *Service) extractMentions(content string) []Mention {
 }
 
 func (s *Service) normalizeMembers(creatorID string, memberIDs []string) ([]string, error) {
-	creatorParticipantID := participantIDForUserID(creatorID)
-	seen := map[string]struct{}{creatorParticipantID: {}}
-	members := []string{creatorParticipantID}
+	creatorID = s.resolveRoomUserIDLocked(creatorID)
+	seen := map[string]struct{}{creatorID: {}}
+	members := []string{creatorID}
 	for _, userID := range memberIDs {
 		userID = s.resolveRoomUserIDLocked(userID)
 		if userID == "" {
@@ -2258,12 +2242,11 @@ func (s *Service) normalizeMembers(creatorID string, memberIDs []string) ([]stri
 		if _, ok := s.users[userID]; !ok {
 			return nil, fmt.Errorf("user not found: %s", userID)
 		}
-		participantID := participantIDForUserID(userID)
-		if _, ok := seen[participantID]; ok {
+		if _, ok := seen[userID]; ok {
 			continue
 		}
-		seen[participantID] = struct{}{}
-		members = append(members, participantID)
+		seen[userID] = struct{}{}
+		members = append(members, userID)
 	}
 	return members, nil
 }
@@ -2326,12 +2309,9 @@ func (s *Service) localizeSystemText(locale, key, actorID, title string, userIDs
 }
 
 func (s *Service) userDisplayName(userID string) string {
-	if user, ok := s.userForParticipantLocked(userID); ok {
+	if user, ok := s.userForLocalIDLocked(userID); ok {
 		if strings.TrimSpace(user.Name) != "" {
 			return user.Name
-		}
-		if strings.TrimSpace(user.Handle) != "" {
-			return "@" + user.Handle
 		}
 	}
 	return userID
@@ -2340,9 +2320,6 @@ func (s *Service) userDisplayName(userID string) string {
 func (s *Service) userMentionName(user User) string {
 	if strings.TrimSpace(user.Name) != "" {
 		return user.Name
-	}
-	if strings.TrimSpace(user.Handle) != "" {
-		return user.Handle
 	}
 	return user.ID
 }
@@ -2371,6 +2348,17 @@ func formatConversationSubtitle(count int) string {
 	return formatRoomSubtitle(count)
 }
 
+func sortUsersByDisplayName(users []User) {
+	slices.SortFunc(users, func(a, b User) int {
+		an := strings.ToLower(strings.TrimSpace(a.Name))
+		bn := strings.ToLower(strings.TrimSpace(b.Name))
+		if cmp := strings.Compare(an, bn); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+}
+
 func (s *Service) presentRoomLocked(room Room, locale string) Room {
 	cloned := cloneRoom(room)
 	cloned.Messages = s.presentMessagesLocked(room, false, locale)
@@ -2379,15 +2367,15 @@ func (s *Service) presentRoomLocked(room Room, locale string) Room {
 		return cloned
 	}
 
-	currentParticipantID := participantIDForUserID(s.currentUserID)
-	if cloned.Members[0] != currentParticipantID && cloned.Members[1] != currentParticipantID {
+	currentUserID := s.resolveRoomUserIDLocked(s.currentUserID)
+	if cloned.Members[0] != currentUserID && cloned.Members[1] != currentUserID {
 		return cloned
 	}
 	otherID := cloned.Members[0]
-	if otherID == currentParticipantID {
+	if otherID == currentUserID {
 		otherID = cloned.Members[1]
 	}
-	if user, ok := s.userForParticipantLocked(otherID); ok && strings.TrimSpace(user.Name) != "" {
+	if user, ok := s.userForLocalIDLocked(otherID); ok && strings.TrimSpace(user.Name) != "" {
 		cloned.Title = user.Name
 	}
 	return cloned
@@ -2400,7 +2388,7 @@ func (s *Service) roomMemberNamesLocked(memberIDs []string) []string {
 	names := make([]string, 0, len(memberIDs))
 	for _, id := range memberIDs {
 		name := ""
-		if user, ok := s.userForParticipantLocked(id); ok {
+		if user, ok := s.userForLocalIDLocked(id); ok {
 			name = strings.TrimSpace(user.Name)
 		}
 		if name == "" {
@@ -2677,7 +2665,7 @@ func (s *Service) threadParticipantsLocked(room Room, rootMessageID string, repl
 			return
 		}
 		seen[userID] = struct{}{}
-		if user, ok := s.userForParticipantLocked(userID); ok {
+		if user, ok := s.userForLocalIDLocked(userID); ok {
 			participants = append(participants, Mention{ID: userID, Name: s.userMentionName(user)})
 			return
 		}
@@ -2693,7 +2681,7 @@ func (s *Service) threadParticipantsLocked(room Room, rootMessageID string, repl
 }
 
 func (s *Service) threadUserParticipatedLocked(room Room, rootMessageID string, replies []Message, userID string) bool {
-	userID = canonicalIMParticipantID(userID)
+	userID = s.resolveRoomUserIDLocked(userID)
 	if userID == "" {
 		return false
 	}
@@ -2902,14 +2890,10 @@ func (s *Service) contentWithMentionPrefixLocked(content, mentionID string) (str
 	}
 	displayName := strings.TrimSpace(user.Name)
 	if displayName == "" {
-		displayName = strings.TrimSpace(user.Handle)
-	}
-	if displayName == "" {
 		displayName = mentionID
 	}
 
-	participantID := participantIDForUserID(mentionID)
-	prefix := fmt.Sprintf("<at user_id=\"%s\">%s</at>", participantID, displayName)
+	prefix := fmt.Sprintf("<at user_id=\"%s\">%s</at>", mentionID, displayName)
 	if content == prefix || strings.HasPrefix(content, prefix+" ") {
 		return content, nil
 	}
@@ -2939,7 +2923,7 @@ func (s *Service) mentionsForUserIDs(userIDs []string) []Mention {
 			continue
 		}
 		mentions = append(mentions, Mention{
-			ID:   participantIDForUserID(userID),
+			ID:   userID,
 			Name: s.userMentionName(user),
 		})
 	}
@@ -3007,12 +2991,14 @@ func (s *Service) replaceStateLocked(state Bootstrap) {
 
 	s.currentUserID = state.CurrentUserID
 	s.users = make(map[string]User, len(users))
-	s.byHandle = make(map[string]string, len(users))
+	s.byName = make(map[string]string, len(users))
 	s.rooms = make(map[string]*Room, len(rooms))
 
 	for _, user := range users {
 		s.users[user.ID] = user
-		s.byHandle[strings.ToLower(user.Handle)] = user.ID
+		if name := strings.TrimSpace(user.Name); name != "" {
+			s.byName[strings.ToLower(name)] = user.ID
+		}
 	}
 	for i := range rooms {
 		room := rooms[i]
@@ -3025,7 +3011,7 @@ func (s *Service) bootstrapLocked() Bootstrap {
 	for _, user := range s.users {
 		users = append(users, user)
 	}
-	slices.SortFunc(users, func(a, b User) int { return strings.Compare(a.Name, b.Name) })
+	sortUsersByDisplayName(users)
 
 	rooms := make([]Room, 0, len(s.rooms))
 	for _, room := range s.rooms {
@@ -3043,12 +3029,12 @@ func (s *Service) bootstrapLocked() Bootstrap {
 }
 
 func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, bool) {
-	agentParticipantID := participantIDForUserID(agentID)
+	agentUserID := s.resolveRoomUserIDLocked(agentID)
 	for _, room := range s.rooms {
 		if len(room.Members) != 2 {
 			continue
 		}
-		if containsUserIDInRoom(*room, adminParticipantID) && containsUserIDInRoom(*room, agentParticipantID) {
+		if containsUserIDInRoom(*room, adminUserID) && containsUserIDInRoom(*room, agentUserID) {
 			presented := s.presentRoomLocked(*room, "")
 			return &presented, false
 		}
@@ -3061,11 +3047,11 @@ func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, 
 		Subtitle:    formatRoomSubtitle(2),
 		Description: fmt.Sprintf("Bootstrap room for admin and %s.", agentName),
 		IsDirect:    true,
-		Members:     []string{adminParticipantID, agentParticipantID},
+		Members:     []string{adminUserID, agentUserID},
 		Messages: []Message{
 			{
 				ID:        fmt.Sprintf("msg-%d", now.UnixNano()+1),
-				SenderID:  agentParticipantID,
+				SenderID:  agentUserID,
 				Content:   fmt.Sprintf("Bootstrap room created for admin and %s.", agentName),
 				CreatedAt: now,
 			},

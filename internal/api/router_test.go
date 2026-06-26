@@ -14,10 +14,9 @@ func TestCsgclawUserPatchRouteRegistered(t *testing.T) {
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
 			CurrentUserID: im.AdminUserID,
 			Users: []im.User{{
-				ID:     im.AdminUserID,
-				Name:   "admin",
-				Handle: "admin",
-				Role:   "admin",
+				ID:   im.AdminUserID,
+				Name: "admin",
+				Role: "admin",
 			}},
 		}),
 	}

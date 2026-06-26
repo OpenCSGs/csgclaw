@@ -106,13 +106,13 @@ export const ConversationHeader = memo(function ConversationHeader({
                             >
                               <AgentAvatarContent
                                 avatar={user.avatar}
-                                fallback={avatarFallbackText(user.avatar, user.name, user.handle, user.id)}
+                                fallback={avatarFallbackText(user.avatar, user.name, user.id)}
                               />
                             </button>
                             <div className="member-row-main">
                               <div className="member-row-name">{user.name}</div>
                               <div className="member-row-meta">
-                                @{user.handle} · {localizeRole(user.role || "", t)}
+                                {user.id} · {localizeRole(user.role || "", t)}
                               </div>
                             </div>
                           </div>

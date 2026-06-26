@@ -95,8 +95,8 @@ describe("WorkspaceTabPanels", () => {
         threadGroups={[]}
         usersById={
           new Map([
-            ["u-admin", { id: "u-admin", name: "admin", handle: "admin", role: "admin", avatar: "A" }],
-            ["manager", { id: "manager", name: "manager", handle: "manager", role: "agent" }],
+            ["u-admin", { id: "u-admin", name: "admin", role: "admin", avatar: "A" }],
+            ["manager", { id: "manager", name: "manager", role: "agent" }],
           ])
         }
         workerAgentItems={[managerAgent]}
@@ -124,11 +124,7 @@ describe("WorkspaceTabPanels", () => {
       throw new Error("Expected Agents, Human, and Computers group headers to render");
     }
 
-    expect(
-      within(panel)
-        .getByText(/@admin/)
-        .closest("button"),
-    ).toHaveTextContent("@admin · admin");
+    expect(within(panel).getByText("admin").closest("button")).toHaveTextContent("u-admin · admin");
     expect(agentsGroup).toHaveTextContent("Agents");
     expect(agentsGroup).toHaveTextContent("1");
     expect(humanGroup).toHaveTextContent("Human");
@@ -141,28 +137,20 @@ describe("WorkspaceTabPanels", () => {
   it("opens the Human detail page from the human row", () => {
     const { onSelectHuman, panel } = renderAgentsPanel();
 
-    const humanRow = within(panel)
-      .getByText(/@admin/)
-      .closest("button");
+    const humanRow = within(panel).getByText("admin").closest("button");
     if (!humanRow) {
       throw new Error("Expected the human row to render");
     }
 
     fireEvent.click(humanRow);
 
-    expect(onSelectHuman).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "u-admin", handle: "admin", role: "admin" }),
-    );
+    expect(onSelectHuman).toHaveBeenCalledWith(expect.objectContaining({ id: "u-admin", role: "admin" }));
   });
 
   it("marks the current human row active when the human pane is selected", () => {
     const { panel } = renderAgentsPanel({ activePane: { type: WorkspacePaneTypes.human, id: "u-admin" } });
 
-    expect(
-      within(panel)
-        .getByText(/@admin/)
-        .closest("button"),
-    ).toHaveClass("active");
+    expect(within(panel).getByText("admin").closest("button")).toHaveClass("active");
   });
 
   it("moves older default agent section order to the current Models and Human placement", () => {

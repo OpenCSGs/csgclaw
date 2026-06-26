@@ -56,8 +56,7 @@ export function HumanDetailPane({
     );
   }
 
-  const displayName = user.name || user.handle || user.id;
-  const handle = user.handle ? `@${user.handle}` : "-";
+  const displayName = user.name || user.id;
   const role = localizeRole(user.role || "admin", t);
   const online = user.is_online !== false;
   const currentDescription = String(user.description || "");
@@ -172,7 +171,6 @@ export function HumanDetailPane({
           </div>
           <div className="human-identity-fields">
             <HumanField label={t("roleLabel")} value={role} />
-            <HumanField label={t("handleLabel")} value={handle} />
             <HumanField label={t("userIDLabel")} value={user.user_id || user.id} />
           </div>
         </section>

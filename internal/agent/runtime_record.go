@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"time"
@@ -15,12 +16,39 @@ const (
 )
 
 type RuntimeRecord struct {
-	ID        string             `json:"id"`
+	ID        string             `json:"id,omitempty"`
 	Kind      string             `json:"kind"`
 	State     agentruntime.State `json:"state,omitempty"`
 	AgentIDs  []string           `json:"agent_ids,omitempty"`
 	SandboxID string             `json:"sandbox_id,omitempty"`
-	CreatedAt time.Time          `json:"created_at"`
+	Options   map[string]any     `json:"options,omitempty"`
+	CreatedAt time.Time          `json:"created_at,omitempty"`
+}
+
+func (rt RuntimeRecord) MarshalJSON() ([]byte, error) {
+	out := map[string]any{}
+	if strings.TrimSpace(rt.ID) != "" {
+		out["id"] = rt.ID
+	}
+	if strings.TrimSpace(rt.Kind) != "" {
+		out["kind"] = rt.Kind
+	}
+	if rt.State != "" {
+		out["state"] = rt.State
+	}
+	if len(rt.AgentIDs) > 0 {
+		out["agent_ids"] = rt.AgentIDs
+	}
+	if strings.TrimSpace(rt.SandboxID) != "" {
+		out["sandbox_id"] = rt.SandboxID
+	}
+	if len(rt.Options) > 0 {
+		out["options"] = rt.Options
+	}
+	if !rt.CreatedAt.IsZero() {
+		out["created_at"] = rt.CreatedAt
+	}
+	return json.Marshal(out)
 }
 
 func normalizeRuntimeID(runtimeID, agentID string) string {
@@ -136,6 +164,7 @@ func runtimeRecordForAgent(a Agent) RuntimeRecord {
 		State:     agentruntime.State(strings.TrimSpace(a.Status)),
 		AgentIDs:  []string{strings.TrimSpace(a.ID)},
 		SandboxID: strings.TrimSpace(a.BoxID),
+		Options:   a.RuntimeOptions,
 		CreatedAt: createdAt,
 	})
 }

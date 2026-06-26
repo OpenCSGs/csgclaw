@@ -7,8 +7,7 @@
   justify-items: center;
   gap: 14px;
   padding: 24px 32px 28px;
-  background:
-    linear-gradient(180deg, var(--white) 0, var(--white) 138px, transparent 138px), var(--gray-25);
+  background: linear-gradient(180deg, var(--white) 0, var(--white) 138px, transparent 138px), var(--gray-25);
 }
 
 .model-provider-page.empty {
