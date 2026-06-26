@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/config"
@@ -22,8 +25,8 @@ func TestRefreshModelProviderCatalogUpdatesBuiltinAndPreservesDefaults(t *testin
 	if !changed {
 		t.Fatal("RefreshModelProviderCatalog() changed = false, want true")
 	}
-	if len(results) != 3 {
-		t.Fatalf("results len = %d, want 3 builtin checks", len(results))
+	if len(results) != 4 {
+		t.Fatalf("results len = %d, want 4 builtin checks", len(results))
 	}
 	provider := got.Providers[ModelProviderIDCSGHubLite]
 	if provider.BaseURL != defaultCSGHubLiteBaseURL {
@@ -34,6 +37,54 @@ func TestRefreshModelProviderCatalogUpdatesBuiltinAndPreservesDefaults(t *testin
 	}
 	if len(provider.Models) != 1 || provider.Models[0] != "qwen3" {
 		t.Fatalf("CSGHub Lite models = %+v, want [qwen3]", provider.Models)
+	}
+}
+
+func TestCheckModelProviderUsesOpenCSGAIGatewayCredentials(t *testing.T) {
+	var authHeader string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			t.Fatalf("path = %q, want /v1/models", r.URL.Path)
+		}
+		authHeader = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"data":[{"id":"opencsg/deepseek-v4"},{"id":"opencsg/deepseek-v4"}]}`))
+	}))
+	defer upstream.Close()
+
+	oldCredentials := defaultCSGHubCredentials
+	t.Cleanup(func() { defaultCSGHubCredentials = oldCredentials })
+	defaultCSGHubCredentials = func(context.Context, *http.Client) (string, string, bool, error) {
+		return upstream.URL + "/v1", "gk_builtin-test", true, nil
+	}
+
+	got := CheckModelProvider(context.Background(), ModelProviderCheckInput{ID: ModelProviderIDOpenCSG})
+
+	if got.Status != ModelProviderStatusConnected {
+		t.Fatalf("Status = %q, want connected; message=%q", got.Status, got.Message)
+	}
+	if authHeader != "Bearer gk_builtin-test" {
+		t.Fatalf("Authorization = %q, want OpenCSG AI Gateway token", authHeader)
+	}
+	if strings.Join(got.Models, ",") != "opencsg/deepseek-v4" {
+		t.Fatalf("Models = %+v, want deduplicated OpenCSG models", got.Models)
+	}
+}
+
+func TestModelProviderCatalogExposesOpenCSGKind(t *testing.T) {
+	catalog := ModelProviderCatalogFromLLM(config.LLMConfig{})
+
+	var provider ModelProviderSummary
+	for _, item := range catalog.Providers {
+		if item.ID == ModelProviderIDOpenCSG {
+			provider = item
+			break
+		}
+	}
+	if provider.ID == "" {
+		t.Fatalf("OpenCSG provider missing from catalog: %+v", catalog.Providers)
+	}
+	if provider.Kind != ModelProviderIDOpenCSG {
+		t.Fatalf("OpenCSG provider kind = %q, want %q", provider.Kind, ModelProviderIDOpenCSG)
 	}
 }
 

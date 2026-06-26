@@ -19,7 +19,7 @@ export const BOT_CREATE_KIND_NOTIFICATION = "notification";
 
 export const PROVIDER_OPTIONS = [
   { value: "csghub_lite", label: "CSGHub Lite" },
-  { value: "csghub", label: "CSGHub" },
+  { value: "csghub", label: "OpenCSG" },
   { value: "codex", label: "Codex" },
   { value: "claude_code", label: "Claude Code" },
   { value: "api", label: "OpenAI API" },

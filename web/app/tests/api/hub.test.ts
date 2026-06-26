@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { deleteHubTemplateRequest, fetchHubTemplate, fetchHubWorkspaceFile } from "@/api/hub";
+import { deleteHubTemplateRequest, fetchHubTemplate, fetchHubWorkspace, fetchHubWorkspaceFile } from "@/api/hub";
 
 function mockFetch(): Mock<typeof fetch> {
   const fetchMock = vi.fn<typeof fetch>(async (_input, _init) => new Response("{}", { status: 200 }));
@@ -39,6 +39,17 @@ describe("hub API", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "api/v1/hub/templates/builtin.openclaw-manager/workspace/file?path=skills%2Fcustom%2FSKILL.md",
+      expect.any(Object),
+    );
+  });
+
+  it("loads workspace directories by path", async () => {
+    const fetchMock = mockFetch();
+
+    await fetchHubWorkspace("official.gitlab-assistant", "skills/custom");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates/official.gitlab-assistant/workspace?path=skills%2Fcustom",
       expect.any(Object),
     );
   });

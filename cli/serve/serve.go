@@ -35,7 +35,6 @@ import (
 	"csgclaw/internal/channelbridge/codexmanager"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/modelprovider"
@@ -45,6 +44,7 @@ import (
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/server"
 	"csgclaw/internal/team"
+	hub "csgclaw/internal/template"
 	"csgclaw/internal/upgrade"
 	appversion "csgclaw/internal/version"
 )

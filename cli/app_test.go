@@ -864,7 +864,7 @@ func TestExecuteHubListUsesHTTPClient(t *testing.T) {
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "hub", "list"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "template", "list"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), `"id": "builtin.frontend-alice"`) {
@@ -916,7 +916,7 @@ func TestExecuteHubGetUsesHTTPClient(t *testing.T) {
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "hub", "get", "local.review-bot"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "template", "get", "local.review-bot"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), `"id": "local.review-bot"`) {
@@ -950,7 +950,7 @@ func TestExecuteHubPublishUsesHTTPClient(t *testing.T) {
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "hub", "publish", "--agent", "u-alice", "--registry", "local"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "template", "publish", "--agent", "u-alice", "--registry", "local"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), `"id": "local.alice"`) {

@@ -16,7 +16,6 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
@@ -25,7 +24,8 @@ import (
 	"csgclaw/internal/sandbox/boxlitecli"
 	"csgclaw/internal/sandbox/hostuser"
 	"csgclaw/internal/sandbox/sandboxtest"
-	"csgclaw/internal/templates"
+	hub "csgclaw/internal/template"
+	templateembed "csgclaw/internal/template/embed"
 )
 
 func init() {
@@ -1630,6 +1630,132 @@ func TestCreateWorkerPassesWorkspaceOverlayToProvision(t *testing.T) {
 	}
 	if gotOverlay != overlayRoot {
 		t.Fatalf("Provision() workspace overlay = %q, want %q", gotOverlay, overlayRoot)
+	}
+}
+
+func TestCreateWorkerInstallsDefaultSystemSkills(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, botID string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			if name != "alice" || botID != "u-alice" {
+				t.Fatalf("createGatewayBox() name=%q botID=%q, want alice/u-alice", name, botID)
+			}
+			info := sandbox.Info{
+				ID:        "box-alice",
+				Name:      name,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			}
+			return &fakeInfoInstance{info: info}, info, nil
+		},
+	)
+	t.Cleanup(ResetTestHooks)
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "shared-token"},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindOpenClawSandbox}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	_, err = svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeKind: RuntimeKindOpenClawSandbox,
+		Image:       "worker-image:test",
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "gpt-4.1",
+			ProfileComplete: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
+	}
+	skillsRoot, err := svc.agentSkillsRoot("alice", RuntimeKindOpenClawSandbox)
+	if err != nil {
+		t.Fatalf("agentSkillsRoot() error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(skillsRoot, "skill-installer", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("ReadFile(skill-installer) error = %v", err)
+	}
+	if !strings.Contains(string(data), "registry skill search") {
+		t.Fatalf("skill-installer content = %q, want system skill instructions", string(data))
+	}
+}
+
+func TestPreserveWorkspaceSkillsDropsDefaultSystemSkills(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "shared-token"},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindOpenClawSandbox}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	skillsRoot, err := svc.agentSkillsRoot("alice", RuntimeKindOpenClawSandbox)
+	if err != nil {
+		t.Fatalf("agentSkillsRoot() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(skillsRoot, "skill-installer"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(skill-installer) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillsRoot, "skill-installer", "SKILL.md"), []byte("# Old installer\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(old installer) error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(skillsRoot, "custom"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(custom) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillsRoot, "custom", "SKILL.md"), []byte("# Custom\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(custom) error = %v", err)
+	}
+
+	restore, cleanup, err := svc.prepareWorkspaceSkillsPreservation("alice", RuntimeKindOpenClawSandbox, RuntimeKindOpenClawSandbox, RoleWorker)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceSkillsPreservation() error = %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	agentHome, err := agentHomeDir("alice")
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
+	if err := os.RemoveAll(agentHome); err != nil {
+		t.Fatalf("RemoveAll(agent home) error = %v", err)
+	}
+	if restore == nil {
+		t.Fatal("restore = nil, want preservation restore")
+	}
+	if err := restore(); err != nil {
+		t.Fatalf("restore() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(skillsRoot, "custom", "SKILL.md")); err != nil {
+		t.Fatalf("custom skill was not restored: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(skillsRoot, "skill-installer", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("old skill-installer restored unexpectedly, err=%v", err)
+	}
+	if err := svc.installDefaultSystemSkills("alice", RuntimeKindOpenClawSandbox); err != nil {
+		t.Fatalf("installDefaultSystemSkills() error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(skillsRoot, "skill-installer", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("ReadFile(new installer) error = %v", err)
+	}
+	if !strings.Contains(string(data), "registry skill search") {
+		t.Fatalf("new skill-installer content = %q, want system skill instructions", string(data))
 	}
 }
 
@@ -4087,6 +4213,71 @@ func TestStartProvisionsRuntimeBeforeStart(t *testing.T) {
 	}
 }
 
+func TestStartInstallsDefaultSystemSkillsAfterProvision(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	var callOrder []string
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		}, "manager-image:test", "",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindOpenClawSandbox,
+			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
+				callOrder = append(callOrder, "provision")
+				if req.RuntimeID != "rt-u-alice" || req.AgentID != "u-alice" || req.AgentName != "alice" {
+					t.Fatalf("Provision() request = %+v, want alice runtime identity", req)
+				}
+				if req.Gateway == nil {
+					t.Fatalf("Provision() gateway = nil, want gateway request")
+				}
+				return nil
+			},
+			start: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+				callOrder = append(callOrder, "start")
+				return agentruntime.StateRunning, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:              "u-alice",
+		Name:            "alice",
+		Role:            RoleWorker,
+		RuntimeID:       "rt-u-alice",
+		RuntimeKind:     RuntimeKindOpenClawSandbox,
+		BoxID:           "box-alice",
+		Status:          string(agentruntime.StateStopped),
+		AgentProfile:    AgentProfile{Name: "alice", Provider: ProviderAPI, BaseURL: "https://api.example/v1", APIKey: "api-key", ModelID: "gpt-4.1", ProfileComplete: true},
+		ProfileComplete: true,
+	}
+
+	if _, err := svc.Start(context.Background(), "u-alice"); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if got, want := strings.Join(callOrder, ","), "provision,start"; got != want {
+		t.Fatalf("call order = %q, want %q", got, want)
+	}
+	skillsRoot, err := svc.agentSkillsRoot("alice", RuntimeKindOpenClawSandbox)
+	if err != nil {
+		t.Fatalf("agentSkillsRoot() error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(skillsRoot, "skill-installer", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("ReadFile(skill-installer) error = %v", err)
+	}
+	if !strings.Contains(string(data), "registry skill search") {
+		t.Fatalf("skill-installer content = %q, want system skill instructions", string(data))
+	}
+}
+
 func TestStartSkipsStartBoxWhenAlreadyRunning(t *testing.T) {
 	rt := &fakeRuntime{}
 	SetTestHooks(func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil }, nil)
@@ -5121,7 +5312,7 @@ func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
 		t.Fatal("Recreate().AgentProfile.EnvRestartRequired = true, want false")
 	}
 
-	wantBuiltIn, err := templates.FS().Open(templates.WorkspacePath(templates.PicoClawManagerRoot) + "/skills/agent-teams/SKILL.md")
+	wantBuiltIn, err := templateembed.FS().Open(templateembed.WorkspacePath(templateembed.PicoClawManagerRoot) + "/skills/agent-teams/SKILL.md")
 	if err != nil {
 		t.Fatalf("open embedded agent-teams skill: %v", err)
 	}
@@ -6185,6 +6376,205 @@ func TestEnsureBootstrapStateRecreatesManagerWithLegacyPicoClawBridgeConfig(t *t
 	}
 }
 
+func TestEnsureBootstrapManagerDoesNotRemoveExistingBoxWhenMigrationProvisionFails(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	SetTestHooks(nil, nil)
+	defer ResetTestHooks()
+
+	primaryRT := &fakeRuntime{}
+	testEnsureRuntimeAtHomeHook = func(_ *Service, home string) (sandbox.Runtime, error) {
+		return primaryRT, nil
+	}
+	testGetBoxHook = func(_ *Service, _ context.Context, rt sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		if rt == primaryRT && idOrName == "box-old" {
+			return &fakeInfoInstance{info: sandbox.Info{
+				ID:        "box-old",
+				Name:      ManagerName,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
+			}}, nil
+		}
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	var removed []string
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		removed = append(removed, idOrName)
+		return nil
+	}
+	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _, _, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+		t.Fatal("createGatewayBox() called after provisioning failed")
+		return nil, sandbox.Info{}, nil
+	}
+
+	managerHome := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, ManagerName)
+	configPath := filepath.Join(managerHome, picoclawsandbox.HostDir, picoclawsandbox.HostConfig)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(config dir) error = %v", err)
+	}
+	legacyConfig := `{"channels":{"csgclaw":{"enabled":true,"bot_id":"u-manager"}}}`
+	if err := os.WriteFile(configPath, []byte(legacyConfig), 0o600); err != nil {
+		t.Fatalf("WriteFile(legacy config) error = %v", err)
+	}
+
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	data, err := json.Marshal(persistedState{
+		Agents: []persistedAgent{
+			{
+				ID:          ManagerUserID,
+				Name:        ManagerName,
+				RuntimeKind: RuntimeKindPicoClawSandbox,
+				Role:        RoleManager,
+				BoxID:       "box-old",
+				CreatedAt:   time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+				AgentProfile: AgentProfile{
+					Name:            ManagerName,
+					Provider:        ProviderAPI,
+					BaseURL:         "https://api.example/v1",
+					APIKey:          "api-key",
+					ModelID:         "gpt-4.1",
+					ProfileComplete: true,
+				},
+				ProfileComplete: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(statePath, data, 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "token"},
+		"manager-image:test",
+		statePath,
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			provision: func(context.Context, agentruntime.ProvisionRequest) error {
+				return fmt.Errorf("provision failed")
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	err = svc.EnsureBootstrapManager(context.Background(), false)
+	if err == nil || !strings.Contains(err.Error(), "provision failed") {
+		t.Fatalf("EnsureBootstrapManager() error = %v, want provision failure", err)
+	}
+	if len(removed) != 0 {
+		t.Fatalf("removed boxes = %#v, want none when migration provisioning fails", removed)
+	}
+}
+
+func TestEnsureBootstrapManagerUsesStoredManagerProfileWhenDefaultModelIsInvalid(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	SetTestHooks(nil, nil)
+	defer ResetTestHooks()
+
+	primaryRT := &fakeRuntime{}
+	testEnsureRuntimeAtHomeHook = func(_ *Service, home string) (sandbox.Runtime, error) {
+		return primaryRT, nil
+	}
+	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, botID string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+		if image != "manager-image:test" || name != ManagerName || botID != ManagerUserID {
+			t.Fatalf("createGatewayBox() got image=%q name=%q botID=%q", image, name, botID)
+		}
+		return &fakeInfoInstance{info: sandbox.Info{
+				ID:        "box-new",
+				Name:      ManagerName,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
+			}}, sandbox.Info{
+				ID:        "box-new",
+				Name:      ManagerName,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
+			}, nil
+	}
+
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	data, err := json.Marshal(persistedState{
+		Agents: []persistedAgent{
+			{
+				ID:          ManagerUserID,
+				Name:        ManagerName,
+				RuntimeKind: RuntimeKindPicoClawSandbox,
+				Role:        RoleManager,
+				BoxID:       "box-old",
+				CreatedAt:   time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+				AgentProfile: AgentProfile{
+					Name:            ManagerName,
+					Provider:        ProviderAPI,
+					BaseURL:         "https://api.manager.example/v1",
+					APIKey:          "manager-key",
+					ModelID:         "manager-model",
+					ProfileComplete: true,
+				},
+				ProfileComplete: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(statePath, data, 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	invalidDefault := config.LLMConfig{
+		Default: "openai.gpt-4.1",
+		Providers: map[string]config.ProviderConfig{
+			"openai": {
+				BaseURL: "https://api.default.example/v1",
+				APIKey:  "default-key",
+				Models:  []string{"other-model"},
+			},
+		},
+	}
+	var provisionedModel string
+	svc, err := NewServiceWithLLM(
+		invalidDefault,
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "token"},
+		"manager-image:test",
+		statePath,
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
+				provisionedModel = req.Profile.ModelID
+				return nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewServiceWithLLM() error = %v", err)
+	}
+
+	if err := svc.EnsureBootstrapManager(context.Background(), false); err != nil {
+		t.Fatalf("EnsureBootstrapManager() error = %v", err)
+	}
+	if provisionedModel != "manager-model" {
+		t.Fatalf("provisioned model = %q, want stored manager profile model", provisionedModel)
+	}
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent(manager) ok = false, want true")
+	}
+	if got.BoxID != "box-new" {
+		t.Fatalf("manager BoxID = %q, want recreated box", got.BoxID)
+	}
+}
+
 func TestBoxRuntimeHomeUsesPerAgentDirectory(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -6556,15 +6946,15 @@ func TestGatewayProvisionRequestBuildsOpenClawWorkerAssets(t *testing.T) {
 	if gateway.AgentHome != wantAgentHome {
 		t.Fatalf("Gateway.AgentHome = %q, want %q", gateway.AgentHome, wantAgentHome)
 	}
-	if gateway.WorkspaceTemplate != templates.OpenClawWorkerRoot {
-		t.Fatalf("Gateway.WorkspaceTemplate(worker) = %q, want %q", gateway.WorkspaceTemplate, templates.OpenClawWorkerRoot)
+	if gateway.WorkspaceTemplate != templateembed.OpenClawWorkerRoot {
+		t.Fatalf("Gateway.WorkspaceTemplate(worker) = %q, want %q", gateway.WorkspaceTemplate, templateembed.OpenClawWorkerRoot)
 	}
 	managerGateway, err := svc.gatewayProvisionRequest(RuntimeKindOpenClawSandbox, ManagerName, ManagerUserID)
 	if err != nil {
 		t.Fatalf("gatewayProvisionRequest(manager) error = %v", err)
 	}
-	if managerGateway.WorkspaceTemplate != templates.OpenClawManagerRoot {
-		t.Fatalf("Gateway.WorkspaceTemplate(manager) = %q, want %q", managerGateway.WorkspaceTemplate, templates.OpenClawManagerRoot)
+	if managerGateway.WorkspaceTemplate != templateembed.OpenClawManagerRoot {
+		t.Fatalf("Gateway.WorkspaceTemplate(manager) = %q, want %q", managerGateway.WorkspaceTemplate, templateembed.OpenClawManagerRoot)
 	}
 	rt := openclawsandbox.New(sandboxgateway.Dependencies{})
 	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{

@@ -589,7 +589,7 @@ describe("agent model helpers", () => {
     expect(providerNeedsAuth("claude")).toBe(true);
     expect(providerNeedsAuth("api")).toBe(false);
     expect(formatProviderLabel("csghub_lite")).toBe("CSGHub Lite");
-    expect(formatProviderLabel("csghub")).toBe("CSGHub");
+    expect(formatProviderLabel("csghub")).toBe("OpenCSG");
   });
 
   it("advances agent creation progress toward each step target", () => {

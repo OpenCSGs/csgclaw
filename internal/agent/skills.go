@@ -6,17 +6,17 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
-	"csgclaw/internal/skillhub"
+	skilllocal "csgclaw/internal/skill/local"
+	skillsystem "csgclaw/internal/skill/system"
 )
 
 var (
 	ErrAgentSkillAlreadyExists = errors.New("skill already exists")
 	ErrAgentSkillInvalid       = errors.New("skill directory must contain SKILL.md")
 )
-
-const agentSkillFileName = "SKILL.md"
 
 func (s *Service) AddSkill(agentID, skillName string) error {
 	return s.BatchAddSkills(agentID, []string{skillName})
@@ -35,7 +35,7 @@ func (s *Service) BatchAddSkills(agentID string, skillNames []string) error {
 	if !ok {
 		return fmt.Errorf("agent %q not found", agentID)
 	}
-	globalRoot, err := skillhub.SkillsRoot()
+	globalRoot, err := skilllocal.SkillsRoot()
 	if err != nil {
 		return err
 	}
@@ -45,14 +45,15 @@ func (s *Service) BatchAddSkills(agentID string, skillNames []string) error {
 	}
 
 	type copyPlan struct {
-		name string
-		src  string
-		dst  string
+		name    string
+		srcFS   fs.FS
+		srcRoot string
+		dst     string
 	}
 	plans := make([]copyPlan, 0, len(skillNames))
 	seen := make(map[string]struct{}, len(skillNames))
 	for _, rawName := range skillNames {
-		name, err := normalizeAgentSkillName(rawName)
+		name, err := skilllocal.NormalizeName(rawName)
 		if err != nil {
 			return err
 		}
@@ -61,8 +62,11 @@ func (s *Service) BatchAddSkills(agentID string, skillNames []string) error {
 		}
 		seen[name] = struct{}{}
 
-		srcDir, err := resolveValidSkillDir(globalRoot, name)
+		srcFS, srcRoot, err := resolveAgentSkillSource(globalRoot, name)
 		if err != nil {
+			if errors.Is(err, skilllocal.ErrSkillInvalid) {
+				return fmt.Errorf("%w: %s", ErrAgentSkillInvalid, name)
+			}
 			return err
 		}
 		dstDir := filepath.Join(targetRoot, name)
@@ -74,14 +78,14 @@ func (s *Service) BatchAddSkills(agentID string, skillNames []string) error {
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("stat agent skill destination %q: %w", dstDir, err)
 		}
-		plans = append(plans, copyPlan{name: name, src: srcDir, dst: dstDir})
+		plans = append(plans, copyPlan{name: name, srcFS: srcFS, srcRoot: srcRoot, dst: dstDir})
 	}
 
 	if err := os.MkdirAll(targetRoot, 0o755); err != nil {
 		return fmt.Errorf("create agent skills root %q: %w", targetRoot, err)
 	}
 	for _, plan := range plans {
-		if err := copyWorkspaceFS(os.DirFS(plan.src), ".", plan.dst, "skill", true); err != nil {
+		if err := copyWorkspaceFS(plan.srcFS, plan.srcRoot, plan.dst, "skill", true); err != nil {
 			_ = os.RemoveAll(plan.dst)
 			return fmt.Errorf("copy skill %q: %w", plan.name, err)
 		}
@@ -102,44 +106,64 @@ func (s *Service) DeleteSkill(agentID, skillName string) error {
 	if err != nil {
 		return err
 	}
-	return skillhub.Delete(targetRoot, skillName)
+	return skilllocal.Delete(targetRoot, skillName)
 }
 
-func normalizeAgentSkillName(name string) (string, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "", fmt.Errorf("skill name is required")
+func resolveAgentSkillSource(root, name string) (fs.FS, string, error) {
+	if skillDir, err := skilllocal.ResolveDir(root, name); err == nil {
+		return os.DirFS(skillDir), ".", nil
+	} else if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, skilllocal.ErrSkillInvalid) {
+		return nil, "", err
+	} else if !skillsystem.IsName(name) {
+		return nil, "", err
 	}
-	cleanName := filepath.Clean(name)
-	if cleanName == "." || cleanName == ".." || cleanName != filepath.Base(cleanName) {
-		return "", fmt.Errorf("invalid skill name %q", name)
+	source, err := skillsystem.ResolveSource(name)
+	if err != nil {
+		return nil, "", err
 	}
-	return cleanName, nil
+	return source.FS, source.RootPath, nil
 }
 
-func resolveValidSkillDir(root, name string) (string, error) {
-	name, err := normalizeAgentSkillName(name)
-	if err != nil {
-		return "", err
+func (s *Service) installDefaultSystemSkills(agentName, runtimeKind string) error {
+	if !isGatewayRuntimeKind(strings.TrimSpace(runtimeKind)) {
+		return nil
 	}
-	skillDir := filepath.Join(strings.TrimSpace(root), name)
-	info, err := os.Stat(skillDir)
+	names, err := defaultSystemSkillNames()
 	if err != nil {
-		return "", err
+		return err
 	}
-	if !info.IsDir() {
-		return "", ErrAgentSkillInvalid
+	if len(names) == 0 {
+		return nil
 	}
-	skillFile := filepath.Join(skillDir, agentSkillFileName)
-	fileInfo, err := os.Stat(skillFile)
+	targetRoot, err := s.agentSkillsRoot(agentName, runtimeKind)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", ErrAgentSkillInvalid
+		return err
+	}
+	if err := os.MkdirAll(targetRoot, 0o755); err != nil {
+		return fmt.Errorf("create agent skills root %q: %w", targetRoot, err)
+	}
+	for _, name := range names {
+		src, err := skillsystem.ResolveSource(name)
+		if err != nil {
+			return err
 		}
-		return "", err
+		dst := filepath.Join(targetRoot, name)
+		if err := os.RemoveAll(dst); err != nil {
+			return fmt.Errorf("remove default system skill %q: %w", name, err)
+		}
+		if err := copyWorkspaceFS(src.FS, src.RootPath, dst, "system skill", true); err != nil {
+			_ = os.RemoveAll(dst)
+			return fmt.Errorf("copy default system skill %q: %w", name, err)
+		}
 	}
-	if !fileInfo.Mode().IsRegular() || fileInfo.IsDir() || fileInfo.Mode()&fs.ModeSymlink != 0 {
-		return "", ErrAgentSkillInvalid
+	return nil
+}
+
+func defaultSystemSkillNames() ([]string, error) {
+	names, err := skillsystem.Names()
+	if err != nil {
+		return nil, err
 	}
-	return skillDir, nil
+	slices.Sort(names)
+	return names, nil
 }

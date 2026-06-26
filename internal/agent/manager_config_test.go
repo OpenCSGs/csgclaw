@@ -13,7 +13,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/runtime/picoclawsandbox"
-	"csgclaw/internal/templates"
+	templateembed "csgclaw/internal/template/embed"
 )
 
 func TestRenderManagerSecurityConfig(t *testing.T) {
@@ -313,7 +313,7 @@ func TestEnsureAgentWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("testBuiltinWorkspaceRoot(worker) error = %v", err)
 	}
-	root, err = ensureWorkspaceAtRoot(root, templates.PicoClawWorkerRoot)
+	root, err = ensureWorkspaceAtRoot(root, templateembed.PicoClawWorkerRoot)
 	if err != nil {
 		t.Fatalf("ensureAgentWorkspace(worker) error = %v", err)
 	}
@@ -323,7 +323,7 @@ func TestEnsureAgentWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 		filepath.Join(root, "AGENT.md"),
 		filepath.Join(root, "SOUL.md"),
 		filepath.Join(root, "memory", "MEMORY.md"),
-		filepath.Join(root, "skills", "skill-creator", "SKILL.md"),
+		filepath.Join(root, "skills", "agent-teams", "SKILL.md"),
 	} {
 		if info, err := os.Stat(path); err != nil {
 			t.Fatalf("os.Stat(%q) error = %v", path, err)

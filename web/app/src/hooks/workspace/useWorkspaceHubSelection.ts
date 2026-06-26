@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
+import { fetchHubWorkspace } from "@/api/hub";
 import { hasSkillName } from "@/models/skillhub";
+import { flattenWorkspaceDirectoryListings } from "@/models/workspace";
+import type { WorkspaceDirectoryListings } from "@/models/workspace";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
 import {
+  workspaceQueryKeys,
   useWorkspaceHubTemplateQuery,
+  useWorkspaceHubWorkspaceQuery,
   useWorkspaceHubWorkspaceFileQuery,
   useWorkspaceSkillFileQuery,
   useWorkspaceSkillsQuery,
@@ -20,6 +26,7 @@ export function useWorkspaceHubSelection({
   refreshTemplates,
   t,
 }: UseWorkspaceHubSelectionArgs) {
+  const queryClient = useQueryClient();
   const hubTemplates = useMemo(() => templates ?? [], [templates]);
   const selectedHubTemplateId = useWorkspaceUiStore((state) => state.selectedHubTemplateId);
   const setSelectedHubTemplateId = useWorkspaceUiStore((state) => state.setSelectedHubTemplateId);
@@ -33,6 +40,12 @@ export function useWorkspaceHubSelection({
   const setSelectedHubResourceType = useWorkspaceUiStore((state) => state.setSelectedHubResourceType);
   const skillsQuery = useWorkspaceSkillsQuery();
   const skills = useMemo(() => skillsQuery.data ?? [], [skillsQuery.data]);
+  const [workspaceListingsState, setWorkspaceListingsState] = useState<{
+    templateID: string;
+    listings: WorkspaceDirectoryListings;
+  }>({ templateID: "", listings: {} });
+  const [loadingWorkspaceDirs, setLoadingWorkspaceDirs] = useState<ReadonlySet<string>>(new Set());
+  const [workspaceDirectoryError, setWorkspaceDirectoryError] = useState("");
 
   useEffect(() => {
     if (!hubTemplates.length) {
@@ -77,10 +90,12 @@ export function useWorkspaceHubSelection({
   }, [hubTemplates.length, selectedHubResourceType, setSelectedHubResourceType, skills.length]);
 
   const hubTemplateDetailQuery = useWorkspaceHubTemplateQuery(selectedHubTemplateId);
+  const hubWorkspaceQuery = useWorkspaceHubWorkspaceQuery(selectedHubTemplateId);
   const hubWorkspaceFileQuery = useWorkspaceHubWorkspaceFileQuery(selectedHubTemplateId, selectedHubWorkspacePath);
   const skillTreeQuery = useWorkspaceSkillTreeQuery(selectedHubSkillName);
   const skillFileQuery = useWorkspaceSkillFileQuery(selectedHubSkillPath);
   const refetchHubTemplateDetail = hubTemplateDetailQuery.refetch;
+  const refetchHubWorkspace = hubWorkspaceQuery.refetch;
   const refetchSkills = skillsQuery.refetch;
   const refetchSkillTree = skillTreeQuery.refetch;
 
@@ -95,6 +110,64 @@ export function useWorkspaceHubSelection({
 
   const selectedHubTemplateView =
     hubTemplateDetailQuery.data?.id === selectedHubTemplateId ? hubTemplateDetailQuery.data : selectedHubTemplate;
+  const workspaceListings = useMemo(
+    () => (workspaceListingsState.templateID === selectedHubTemplateId ? workspaceListingsState.listings : {}),
+    [selectedHubTemplateId, workspaceListingsState],
+  );
+  const workspaceEntries = useMemo(() => flattenWorkspaceDirectoryListings(workspaceListings), [workspaceListings]);
+
+  useEffect(() => {
+    setWorkspaceListingsState({ templateID: selectedHubTemplateId, listings: {} });
+    setLoadingWorkspaceDirs(new Set());
+    setWorkspaceDirectoryError("");
+  }, [selectedHubTemplateId]);
+
+  useEffect(() => {
+    if (!selectedHubTemplateId || !hubWorkspaceQuery.data) {
+      return;
+    }
+    setWorkspaceListingsState({
+      templateID: selectedHubTemplateId,
+      listings: { "": hubWorkspaceQuery.data.entries ?? [] },
+    });
+  }, [hubWorkspaceQuery.data, selectedHubTemplateId]);
+
+  const loadWorkspaceDirectory = useCallback(
+    async (workspacePath: string) => {
+      if (!selectedHubTemplateId || Object.hasOwn(workspaceListings, workspacePath)) {
+        return;
+      }
+      setLoadingWorkspaceDirs((current) => new Set(current).add(workspacePath));
+      setWorkspaceDirectoryError("");
+      try {
+        const listing = await queryClient.fetchQuery({
+          queryKey: workspaceQueryKeys.hubWorkspace(selectedHubTemplateId, workspacePath),
+          queryFn: () => fetchHubWorkspace(selectedHubTemplateId, workspacePath),
+        });
+        setWorkspaceListingsState((current) => {
+          if (current.templateID !== selectedHubTemplateId) {
+            return current;
+          }
+          return {
+            ...current,
+            listings: {
+              ...current.listings,
+              [workspacePath]: listing.entries ?? [],
+            },
+          };
+        });
+      } catch (error) {
+        setWorkspaceDirectoryError(errorMessage(error, t("hubWorkspaceLoadFailed")));
+      } finally {
+        setLoadingWorkspaceDirs((current) => {
+          const next = new Set(current);
+          next.delete(workspacePath);
+          return next;
+        });
+      }
+    },
+    [queryClient, selectedHubTemplateId, t, workspaceListings],
+  );
 
   const selectWorkspaceFile = useCallback(
     (workspacePath: string) => {
@@ -113,6 +186,9 @@ export function useWorkspaceHubSelection({
   const detailError = hubTemplateDetailQuery.error
     ? errorMessage(hubTemplateDetailQuery.error, t("hubWorkspaceLoadFailed"))
     : "";
+  const workspaceTreeError = hubWorkspaceQuery.error
+    ? errorMessage(hubWorkspaceQuery.error, t("hubWorkspaceLoadFailed"))
+    : workspaceDirectoryError;
   const workspaceFileError = hubWorkspaceFileQuery.error
     ? errorMessage(hubWorkspaceFileQuery.error, t("hubWorkspaceFileLoadFailed"))
     : "";
@@ -126,6 +202,7 @@ export function useWorkspaceHubSelection({
     }
     if (selectedHubTemplateId) {
       await refetchHubTemplateDetail();
+      await refetchHubWorkspace();
     }
     await refetchSkills();
     if (selectedHubSkillName) {
@@ -133,6 +210,7 @@ export function useWorkspaceHubSelection({
     }
   }, [
     refetchHubTemplateDetail,
+    refetchHubWorkspace,
     refetchSkillTree,
     refetchSkills,
     refreshTemplates,
@@ -146,7 +224,7 @@ export function useWorkspaceHubSelection({
     loaded,
     listError,
     skillsError,
-    error: listError || detailError || skillsError || skillTreeError,
+    error: listError || detailError || workspaceTreeError || skillsError || skillTreeError,
     selectedHubTemplateId,
     setSelectedHubTemplateId,
     selectedHubTemplate,
@@ -164,6 +242,11 @@ export function useWorkspaceHubSelection({
     hubTemplateDetailError: detailError,
     refetchHubTemplateDetail,
     selectedHubWorkspacePath,
+    workspaceEntries,
+    workspaceTreeLoading: hubWorkspaceQuery.isFetching,
+    workspaceTreeError,
+    loadingWorkspaceDirs,
+    loadWorkspaceDirectory,
     setSelectedHubWorkspacePath,
     selectWorkspaceFile,
     hubWorkspaceFile: hubWorkspaceFileQuery.data ?? null,
@@ -190,8 +273,10 @@ export function useWorkspaceHubSelection({
       selectedSkillPath: selectedHubSkillPath,
       selectedResourceType: selectedHubResourceType,
       loaded,
-      error: listError || detailError || skillsError || skillTreeError,
-      detailLoading: hubTemplateDetailQuery.isFetching,
+      error: listError || detailError || workspaceTreeError || skillsError || skillTreeError,
+      workspaceEntries,
+      workspaceTreeLoading: hubWorkspaceQuery.isFetching,
+      loadingWorkspaceDirs,
       selectedWorkspacePath: selectedHubWorkspacePath,
       workspaceFile: hubWorkspaceFileQuery.data ?? null,
       workspaceFileLoading: hubWorkspaceFileQuery.isFetching,
@@ -217,6 +302,7 @@ export function useWorkspaceHubSelection({
         }
       },
       onSelectWorkspaceFile: selectWorkspaceFile,
+      onToggleWorkspaceDir: loadWorkspaceDirectory,
       onSelectSkillFile: selectSkillFile,
     },
   };

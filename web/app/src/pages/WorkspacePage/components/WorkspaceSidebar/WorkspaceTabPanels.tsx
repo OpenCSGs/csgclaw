@@ -873,23 +873,32 @@ export function WorkspaceTabPanels({
             addIcon={<Plus size={15} strokeWidth={2.2} aria-hidden="true" />}
           >
             {hubSkills.length ? (
-              hubSkills.map((item) => (
-                <button
-                  key={item.name}
-                  className={`workspace-row hub-template-row hub-skill-row ${
-                    selectedHubSkillName === item.name && selectedHubResourceType === "skill" ? "active" : ""
-                  }`}
-                  onClick={() => onSelectHubSkill(item)}
-                >
-                  <span className="workspace-row-icon">
-                    <FileCode2 size={16} strokeWidth={2} aria-hidden="true" />
-                  </span>
-                  <span className="workspace-row-main">
-                    <span className="workspace-row-title truncate">{item.name}</span>
-                    <span className="workspace-row-meta truncate">{item.description || item.name}</span>
-                  </span>
-                </button>
-              ))
+              hubSkills.map((item) => {
+                const isSystemSkill = Boolean(item.readonly || item.source === "system");
+                return (
+                  <button
+                    key={item.name}
+                    className={`workspace-row hub-template-row hub-skill-row ${
+                      selectedHubSkillName === item.name && selectedHubResourceType === "skill" ? "active" : ""
+                    }`}
+                    onClick={() => onSelectHubSkill(item)}
+                  >
+                    <span className="workspace-row-icon">
+                      <FileCode2 size={16} strokeWidth={2} aria-hidden="true" />
+                    </span>
+                    <span className="workspace-row-main">
+                      <span className="workspace-row-title truncate">{item.name}</span>
+                      <span className="workspace-row-meta truncate">{item.description || item.name}</span>
+                    </span>
+                    {isSystemSkill ? (
+                      <span className="mini-badge template-source-badge">
+                        <span className="template-source-badge-dot" aria-hidden="true"></span>
+                        {t("hubSkillSystemBadge")}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })
             ) : hubSkillsError ? (
               <div className="workspace-empty">{hubSkillsError}</div>
             ) : hubLoaded && hubTemplates.length === 0 ? (

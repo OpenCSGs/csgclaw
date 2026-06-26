@@ -4,7 +4,7 @@ import { fetchAgentProfileModels, fetchAgentWorkspace, fetchAgentWorkspaceFile, 
 import type { AgentProfileModelRequest } from "@/api/agents";
 import { fetchBootstrap, fetchBootstrapConfig, fetchRuntimeImages, fetchVersion } from "@/api/app";
 import type { FetchVersionOptions } from "@/api/app";
-import { fetchHubTemplate, fetchHubTemplates, fetchHubWorkspaceFile } from "@/api/hub";
+import { fetchHubTemplate, fetchHubTemplates, fetchHubWorkspace, fetchHubWorkspaceFile } from "@/api/hub";
 import { fetchModelProviders } from "@/api/modelProviders";
 import { fetchSkillFile, fetchSkills, fetchSkillTree } from "@/api/skills";
 import { fetchManagerProfile } from "@/api/agents";
@@ -19,7 +19,7 @@ import {
 import type { AgentLike, AgentProfileLike, AgentProfileModelsResponse, RuntimeBootstrapConfig } from "@/models/agents";
 import { normalizeIMData } from "@/models/conversations";
 import type { IMData } from "@/models/conversations";
-import type { HubTemplate, HubWorkspaceFile } from "@/models/hubWorkspace";
+import type { HubTemplate, HubWorkspaceFile, HubWorkspaceListing } from "@/models/hubWorkspace";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceFile, WorkspaceListing } from "@/models/workspace";
@@ -38,6 +38,8 @@ export const workspaceQueryKeys = {
   hubTemplates: () => [WORKSPACE_QUERY_SCOPE, "hub-templates"] as const,
   hubTemplate: (templateID: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-template", templateID || ""] as const,
+  hubWorkspace: (templateID: string | null | undefined, workspacePath: string | null | undefined) =>
+    [WORKSPACE_QUERY_SCOPE, "hub-workspace", templateID || "", workspacePath || ""] as const,
   hubWorkspaceFile: (templateID: string | null | undefined, workspacePath: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-workspace-file", templateID || "", workspacePath || ""] as const,
   skills: () => [WORKSPACE_QUERY_SCOPE, "skills"] as const,
@@ -178,6 +180,17 @@ export function useWorkspaceHubTemplateQuery(templateID: string): UseQueryResult
   return useQuery<HubTemplate>({
     queryKey: workspaceQueryKeys.hubTemplate(templateID),
     queryFn: () => fetchHubTemplate(templateID),
+    enabled: Boolean(templateID),
+  });
+}
+
+export function useWorkspaceHubWorkspaceQuery(
+  templateID: string,
+  workspacePath = "",
+): UseQueryResult<HubWorkspaceListing> {
+  return useQuery<HubWorkspaceListing>({
+    queryKey: workspaceQueryKeys.hubWorkspace(templateID, workspacePath),
+    queryFn: () => fetchHubWorkspace(templateID, workspacePath),
     enabled: Boolean(templateID),
   });
 }

@@ -9,15 +9,18 @@ import (
 	"time"
 	"unicode"
 
+	"csgclaw/internal/auth"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelprovider"
 )
 
 const (
+	ModelProviderIDOpenCSG    = "opencsg"
 	ModelProviderIDCSGHubLite = "csghub-lite"
 	ModelProviderIDCodex      = ProviderCodex
 	ModelProviderIDClaude     = ProviderClaudeCode
 
+	ModelProviderKindOpenCSG          = ProviderOpenCSG
 	ModelProviderKindCSGHubLite       = ProviderCSGHubLite
 	ModelProviderKindCodex            = ProviderCodex
 	ModelProviderKindClaudeCode       = ProviderClaudeCode
@@ -29,6 +32,7 @@ const (
 )
 
 var builtinModelProviderIDs = []string{
+	ModelProviderIDOpenCSG,
 	ModelProviderIDCSGHubLite,
 	ModelProviderIDCodex,
 	ModelProviderIDClaude,
@@ -76,7 +80,7 @@ type ModelProviderCheckFunc func(context.Context, ModelProviderCheckInput) Model
 
 func IsBuiltinModelProviderID(id string) bool {
 	switch NormalizeModelProviderID(id) {
-	case ModelProviderIDCSGHubLite, ModelProviderIDCodex, ModelProviderIDClaude:
+	case ModelProviderIDOpenCSG, ModelProviderIDCSGHubLite, ModelProviderIDCodex, ModelProviderIDClaude:
 		return true
 	default:
 		return false
@@ -88,6 +92,8 @@ func NormalizeModelProviderID(id string) string {
 	switch id {
 	case "", "legacy-inline":
 		return ""
+	case ProviderOpenCSG, "open-csg", ProviderCSGHub:
+		return ModelProviderIDOpenCSG
 	case "csghub_lite", "csghublite", modelprovider.CSGHubLiteProviderName:
 		return ModelProviderIDCSGHubLite
 	case "claude-code", "claude":
@@ -124,6 +130,8 @@ func NormalizeModelProviderID(id string) string {
 	}
 	out := strings.Trim(b.String(), "-_")
 	switch out {
+	case "opencsg", "open-csg", "csghub":
+		return ModelProviderIDOpenCSG
 	case "csghub-lite":
 		return ModelProviderIDCSGHubLite
 	case "claude-code", "claude_code":
@@ -135,6 +143,8 @@ func NormalizeModelProviderID(id string) string {
 
 func ProfileProviderForModelProviderID(id string) string {
 	switch NormalizeModelProviderID(id) {
+	case ModelProviderIDOpenCSG:
+		return ProviderCSGHub
 	case ModelProviderIDCSGHubLite:
 		return ProviderCSGHubLite
 	case ModelProviderIDCodex:
@@ -205,6 +215,12 @@ func builtinModelProviderSummary(id string, provider config.ProviderConfig) Mode
 		APIKeyPreview: apiKeyPreview(defaultCSGHubLiteAPIKey),
 	}
 	switch id {
+	case ModelProviderIDOpenCSG:
+		summary.Kind = ModelProviderKindOpenCSG
+		summary.DisplayName = "OpenCSG"
+		summary.BaseURL = auth.AIGatewayBaseURL("")
+		summary.APIKeySet = false
+		summary.APIKeyPreview = ""
 	case ModelProviderIDCSGHubLite:
 		summary.Kind = ModelProviderKindCSGHubLite
 		summary.DisplayName = "CSGHub Lite"
@@ -276,6 +292,18 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		err    error
 	)
 	switch id {
+	case ModelProviderIDOpenCSG:
+		client := &http.Client{Timeout: 3 * time.Second}
+		baseURL, apiKey, ok, credentialErr := defaultCSGHubCredentials(ctx, client)
+		if credentialErr != nil {
+			result.Message = conciseProviderError(credentialErr)
+			return result
+		}
+		if !ok {
+			result.Message = "OpenCSG sign-in is required"
+			return result
+		}
+		models, err = modelprovider.ListOpenAIModelsWithClient(ctx, client, baseURL, apiKey, input.Headers)
 	case ModelProviderIDCodex:
 		models, err = listCLIProxyModelChoices(ctx, ProviderCodex)
 	case ModelProviderIDClaude:
@@ -476,6 +504,10 @@ func ModelProviderConfigForProfile(llm config.LLMConfig, profile AgentProfile) (
 		return provider.Resolved(), true
 	}
 	switch id {
+	case ModelProviderIDOpenCSG:
+		return config.ProviderConfig{
+			BaseURL: auth.AIGatewayBaseURL(""),
+		}.Resolved(), true
 	case ModelProviderIDCSGHubLite:
 		return config.ProviderConfig{
 			BaseURL: defaultCSGHubLiteBaseURL,
@@ -522,6 +554,8 @@ func CatalogReferenceProfile(llm config.LLMConfig, profile AgentProfile) (AgentP
 
 func catalogProviderIDForProfile(llm config.LLMConfig, profile AgentProfile) (string, bool) {
 	switch normalizeProfileProvider(profile.Provider) {
+	case ProviderCSGHub:
+		return catalogBuiltinProviderIDForProfile(llm, ModelProviderIDOpenCSG, profile)
 	case ProviderCSGHubLite:
 		return catalogBuiltinProviderIDForProfile(llm, ModelProviderIDCSGHubLite, profile)
 	case ProviderCodex:

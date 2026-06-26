@@ -810,6 +810,11 @@
   border-bottom: 1px solid var(--gray-200);
 }
 
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-header {
+  background: transparent;
+  border-bottom-color: var(--line);
+}
+
 .profile-modal.agent-modal .modal-header > div:first-child {
   display: grid;
   gap: var(--space-1);
@@ -822,9 +827,17 @@
   font: var(--text-lg-medium);
 }
 
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-title {
+  color: var(--gray-200);
+}
+
 .profile-modal.agent-modal .modal-subtitle {
   color: var(--gray-600);
   font: var(--text-sm-light);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-subtitle {
+  color: var(--gray-300);
 }
 
 .modal-card .modal-header .modal-close {
@@ -906,10 +919,23 @@
   text-transform: none;
 }
 
+.profile-modal.agent-modal .profile-section-heading .profile-section-title {
+  font-size: 16px;
+  line-height: 24px;
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .profile-section-heading .profile-section-title {
+  color: var(--gray-200);
+}
+
 .profile-section-description {
   margin: 0;
   color: var(--gray-600);
   font: var(--text-sm-light);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .profile-section-description {
+  color: var(--gray-300);
 }
 
 .agent-section-form {
@@ -1671,6 +1697,25 @@
   box-shadow: none;
 }
 
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab {
+  border-color: var(--gray-300);
+  background: var(--panel);
+  color: var(--gray-400);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:hover,
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:focus-visible {
+  border-color: var(--gray-400);
+  background: var(--surface);
+  color: var(--gray-200);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab.active {
+  border-color: var(--brand-300);
+  background: var(--surface);
+  color: var(--gray-200);
+}
+
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab .btn-content,
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy {
   width: 100%;
@@ -1698,6 +1743,10 @@
 
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab.active .workspace-tab-copy strong {
   color: var(--brand-600);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy strong {
+  color: var(--gray-200);
 }
 
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy small {
@@ -1996,6 +2045,44 @@
 :root[data-theme="dark"] .profile-section .field select:hover,
 :root[data-theme="dark"] .env-row input:hover {
   border-color: var(--gray-600);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row,
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row:has(input:checked) {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row:hover,
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row:focus-within {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-help {
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"] {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:hover,
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:focus-visible {
+  border-color: var(--input-border);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:checked {
+  border-color: var(--gray-300);
+  background: var(--gray-300);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"]:checked::after {
+  border-color: var(--panel);
 }
 
 :root[data-theme="dark"] .upgrade-summary {

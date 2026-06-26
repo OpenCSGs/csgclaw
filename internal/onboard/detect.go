@@ -10,9 +10,9 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
+	hub "csgclaw/internal/template"
 )
 
 var (

@@ -12,7 +12,6 @@ import (
 	agentcmd "csgclaw/cli/agent"
 	"csgclaw/cli/command"
 	completioncmd "csgclaw/cli/completion"
-	hubcmd "csgclaw/cli/hub"
 	"csgclaw/cli/member"
 	"csgclaw/cli/message"
 	modelcmd "csgclaw/cli/model"
@@ -21,6 +20,7 @@ import (
 	servecmd "csgclaw/cli/serve"
 	skillcmd "csgclaw/cli/skill"
 	teamcmd "csgclaw/cli/team"
+	templatecmd "csgclaw/cli/template"
 	upgradecmd "csgclaw/cli/upgrade"
 	usercmd "csgclaw/cli/user"
 	appversion "csgclaw/internal/version"
@@ -76,7 +76,7 @@ func (a *App) registerDefaultCommands() {
 		servecmd.NewServeCmd(),
 		servecmd.NewStopCmd(),
 		agentcmd.NewCmd(),
-		hubcmd.NewCmd(),
+		templatecmd.NewCmd(),
 		skillcmd.NewCmd(),
 		modelcmd.NewCmd(),
 		participantcmd.NewCmd(),
@@ -218,7 +218,7 @@ func (a *App) usage() {
 	fmt.Fprintln(a.stderr, "  csgclaw --version")
 	fmt.Fprintln(a.stderr, "  csgclaw serve -h")
 	fmt.Fprintln(a.stderr, "  csgclaw agent -h")
-	fmt.Fprintln(a.stderr, "  csgclaw hub -h")
+	fmt.Fprintln(a.stderr, "  csgclaw template -h")
 	fmt.Fprintln(a.stderr, "  csgclaw skill -h")
 	fmt.Fprintln(a.stderr, "  csgclaw agent create -h")
 	fmt.Fprintln(a.stderr, "  csgclaw message create --channel csgclaw --room-id room-1 --sender-id admin --content hello")

@@ -3,6 +3,8 @@ import type { WorkspaceFile, WorkspaceListing } from "@/models/workspace";
 export type SkillSummary = {
   description?: string;
   name: string;
+  readonly?: boolean;
+  source?: string;
 };
 
 export type SkillTree = WorkspaceListing;

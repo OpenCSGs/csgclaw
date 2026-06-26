@@ -1,7 +1,7 @@
 .agent-page-editor {
   margin-top: 0;
   display: grid;
-  gap: var(--agent-detail-section-gap);
+  gap: 20px;
 }
 
 .entity-toolbar {
@@ -17,31 +17,50 @@
   --agent-detail-section-gap: 14px;
   --agent-detail-content-width: min(100%, 1520px);
 
+  grid-template-rows: auto minmax(0, 1fr);
   gap: var(--agent-detail-section-gap);
+  align-content: stretch;
   justify-items: center;
+  overflow: hidden;
   padding: var(--space-6) var(--space-8) 28px;
   background:
     linear-gradient(180deg, var(--white) 0, var(--white) 138px, transparent 138px), var(--gray-25);
 }
 
-.agent-detail-pane .profile-editor-shell.agent-page-editor {
+.agent-profile-fixed-header {
+  display: grid;
+  gap: var(--agent-detail-section-gap);
+  width: var(--agent-detail-content-width);
+  min-width: 0;
+}
+
+.agent-profile-scroll-region {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: var(--agent-detail-section-gap);
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.agent-profile-scroll-region .profile-editor-shell.agent-page-editor {
   width: var(--agent-detail-content-width);
   margin-top: 0;
-  gap: var(--agent-detail-section-gap);
+  gap: 20px;
   padding: 0;
   overflow: visible;
 }
 
-.agent-detail-pane > .entity-header,
-.agent-detail-pane > .entity-grid,
-.agent-detail-pane > .agent-channels-section,
-.agent-detail-pane > .agent-instructions-section,
-.agent-detail-pane > .form-error,
-.agent-detail-pane > .form-warning {
+.agent-profile-scroll-region > .entity-grid,
+.agent-profile-scroll-region > .agent-channels-section,
+.agent-profile-scroll-region > .agent-instructions-section {
   width: var(--agent-detail-content-width);
 }
 
-.agent-detail-pane > .form-warning {
+.agent-profile-fixed-header > .form-warning {
   border: 1px solid color-mix(in oklab, var(--warning-700) 30%, var(--line));
   border-radius: var(--radius-xl);
   background: var(--warning-50);
@@ -51,13 +70,13 @@
   line-height: 1.5;
 }
 
-.agent-detail-pane > .form-warning.success {
+.agent-profile-fixed-header > .form-warning.success {
   border-color: color-mix(in oklab, var(--success-700) 30%, var(--line));
   background: var(--success-50);
   color: var(--success-700);
 }
 
-.agent-detail-pane > .form-warning.info {
+.agent-profile-fixed-header > .form-warning.info {
   border-color: color-mix(in oklab, var(--primary) 28%, var(--line));
   background: color-mix(in oklab, var(--primary) 8%, var(--surface));
   color: color-mix(in oklab, var(--primary-strong) 60%, var(--text));
@@ -72,6 +91,67 @@
   border-radius: var(--radius-2xl);
   background: var(--surface);
   box-shadow: var(--shadow-xs);
+}
+
+.agent-profile-section-nav {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  height: 32px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--gray-200);
+  scrollbar-width: none;
+}
+
+.agent-profile-section-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.agent-profile-section-tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 4px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--gray-500);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.agent-profile-section-tab:hover {
+  background: transparent;
+  color: var(--brand-700);
+}
+
+.agent-profile-section-tab:focus-visible {
+  outline: 2px solid var(--brand-300);
+  outline-offset: -2px;
+}
+
+.agent-profile-section-tab.active {
+  border-bottom-color: var(--brand-600);
+  background: transparent;
+  color: var(--brand-700);
+}
+
+.agent-profile-scroll-target {
+  scroll-margin-top: var(--agent-detail-section-gap);
+}
+
+.agent-profile-scroll-spacer {
+  width: var(--agent-detail-content-width);
+  pointer-events: none;
 }
 
 .agent-detail-pane .entity-toolbar .btn {
@@ -164,12 +244,15 @@
   border: 1px solid color-mix(in oklab, var(--line) 75%, transparent);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  overflow: hidden;
 }
 
 .agent-channel-icon img {
-  width: 22px;
-  height: 22px;
+  width: 100%;
+  height: 100%;
   display: block;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .agent-channel-main {
@@ -304,7 +387,7 @@
 }
 
 .agent-detail-pane .entity-title-row h1 {
-  font-size: 23px;
+  font-size: 20px;
   line-height: var(--text-xl-line-height);
 }
 
@@ -331,7 +414,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 0;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -425,16 +508,25 @@
 
 .agent-skills-list {
   display: grid;
-  gap: 10px;
+  gap: 16px;
 }
 
 .agent-skill-card {
+  position: relative;
   display: grid;
-  gap: 6px;
+  align-content: start;
+  min-height: 74px;
+  gap: 0;
   padding: var(--space-3) 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--gray-300);
   border-radius: var(--radius-xl);
-  background: var(--surface);
+  background: var(--white);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-skill-card:hover,
+.agent-skill-card:focus-within {
+  background: var(--gray-50);
 }
 
 .agent-skill-card-header {
@@ -448,30 +540,63 @@
   flex: 0 0 auto;
 }
 
+.agent-skill-add-button,
 .agent-skill-icon-button {
-  --btn-height: 32px;
-  --btn-min-width: 32px;
+  --btn-height: 28px;
+  --btn-min-width: 28px;
   --btn-padding-x: 0;
 
-  width: 32px;
-  min-width: 32px;
-  padding-inline: 0;
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.agent-skill-add-button {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.agent-skill-icon-button {
+
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.agent-skill-card:hover .agent-skill-icon-button,
+.agent-skill-card:focus-within .agent-skill-icon-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.agent-skill-add-button svg,
+.agent-skill-icon-button svg {
+  width: 12px;
+  height: 12px;
 }
 
 .agent-skill-name {
-  color: var(--text);
+  overflow: hidden;
+  color: var(--gray-700);
   font-size: var(--text-sm-size);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.4;
+  font-weight: 500;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-skill-description {
   margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
+  overflow: hidden;
+  color: var(--gray-600);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-skills-empty {
@@ -557,6 +682,107 @@
   line-height: 1.5;
 }
 
+.csg-dialog-overlay.agent-skill-delete-backdrop {
+  background: color-mix(in srgb, var(--gray-950) 70%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.csg-dialog-content.agent-skill-delete-dialog {
+  width: min(400px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--gray-900);
+  box-shadow:
+    0 20px 24px -4px rgba(16, 24, 40, 0.08),
+    0 8px 8px -4px rgba(16, 24, 40, 0.03);
+}
+
+.agent-skill-delete-dialog .agent-skills-dialog-header {
+  position: relative;
+  display: block;
+  padding: 24px 72px 0 24px;
+  border: 0;
+  background: transparent;
+}
+
+.agent-skill-delete-dialog .agent-skills-dialog-copy {
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-skill-delete-dialog .csg-dialog-title {
+  color: var(--gray-900);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.agent-skill-delete-dialog .csg-dialog-description {
+  max-width: none;
+  margin-top: 0;
+  color: var(--gray-600);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+  text-wrap: pretty;
+}
+
+.agent-skill-delete-dialog .csg-dialog-close {
+  --btn-height: 44px;
+  --btn-min-width: 44px;
+
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  color: var(--gray-400);
+  box-shadow: none;
+}
+
+.agent-skill-delete-dialog .csg-dialog-close .icon-button-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  line-height: 0;
+}
+
+.agent-skill-delete-dialog .csg-dialog-close svg {
+  display: block;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+}
+
+.agent-skill-delete-dialog .agent-skill-delete-dialog-body {
+  padding: 16px 24px 0;
+}
+
+.agent-skill-delete-dialog .agent-skills-dialog-actions {
+  display: flex;
+  gap: 12px;
+  padding: 32px 24px 24px;
+  border: 0;
+}
+
+.agent-skill-delete-dialog .agent-skills-dialog-actions .btn {
+  --btn-height: 44px;
+  --btn-min-width: 0;
+  --btn-padding-x: 16px;
+  --btn-font-size: 16px;
+  --btn-line-height: 24px;
+
+  flex: 1 1 0;
+  border-radius: 8px;
+}
+
 .agent-detail-pane .agent-status-dot {
   width: 8px;
   height: 8px;
@@ -592,9 +818,25 @@
 }
 
 .agent-detail-pane .profile-section {
-  padding: 14px 16px 16px;
-  border-radius: var(--radius-2xl);
-  background: var(--surface);
+  min-width: 0;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.agent-detail-pane .profile-editor-shell.agent-page-editor .profile-section {
+  background: transparent;
+}
+
+.agent-profile-scroll-region > .profile-section {
+  background: transparent;
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-profile-scroll-region > .profile-section {
+  background: transparent;
 }
 
 .agent-detail-pane .agent-instructions-body {
@@ -606,6 +848,54 @@
 
 .agent-detail-pane .profile-section-title {
   margin-bottom: 0;
+  color: var(--gray-700);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 28px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+:root[data-theme="dark"] .agent-detail-pane .profile-section-title {
+  color: var(--gray-200);
+}
+
+.agent-detail-pane .profile-section-description {
+  margin: 0;
+  color: var(--gray-600);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+  text-wrap: pretty;
+}
+
+:root[data-theme="dark"] .agent-detail-pane .profile-section-description {
+  color: var(--gray-300);
+}
+
+.agent-detail-pane .agent-section-form {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  background: var(--white);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-detail-pane .agent-page-form-content {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  padding: 16px;
+}
+
+.agent-detail-pane .agent-skills-form-content {
+  gap: 12px;
 }
 
 .agent-detail-pane .field {
@@ -827,6 +1117,91 @@
   background: linear-gradient(180deg, var(--panel) 0, var(--panel) 138px, transparent 138px), var(--bg);
 }
 
+:root[data-theme="dark"] .agent-detail-pane .agent-section-form {
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .agent-skill-card {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .agent-skill-card:hover,
+:root[data-theme="dark"] .agent-skill-card:focus-within {
+  background: var(--panel);
+}
+
+:root[data-theme="dark"] .agent-skill-name {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .agent-skill-description {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .agent-profile-section-nav {
+  border-bottom-color: #373a41;
+}
+
+:root[data-theme="dark"] .agent-profile-section-tab {
+  color: #85888e;
+}
+
+:root[data-theme="dark"] .agent-profile-section-tab:hover,
+:root[data-theme="dark"] .agent-profile-section-tab.active {
+  background: transparent;
+  color: var(--gray-300);
+}
+
+:root[data-theme="dark"] .agent-profile-section-tab.active {
+  border-bottom-color: var(--gray-300);
+}
+
+:root[data-theme="dark"] .agent-profile-section-tab:focus-visible {
+  outline-color: #0e9384;
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field .compact-toggle-row,
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field .compact-toggle-row:has(input:checked) {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field .compact-toggle-row:hover,
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field .compact-toggle-row:focus-within {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-help {
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field input[type="checkbox"] {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field input[type="checkbox"]:hover,
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field input[type="checkbox"]:focus-visible {
+  border-color: var(--input-border);
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field input[type="checkbox"]:checked {
+  border-color: var(--gray-300);
+  background: var(--gray-300);
+}
+
+:root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-field input[type="checkbox"]:checked::after {
+  border-color: var(--panel);
+}
+
 @media (max-width: 1100px) {
   .agent-detail-pane .entity-header {
     grid-template-columns: 48px minmax(0, 1fr);
@@ -838,7 +1213,10 @@
   }
 
   .agent-detail-pane .profile-runtime-grid,
+  .agent-detail-pane .profile-grid-compact,
+  .agent-detail-pane .profile-api-grid,
   .agent-detail-pane .profile-advanced-grid,
+  .agent-detail-pane .agent-runtime-image-row,
   .agent-detail-pane .agent-workspace-panels {
     grid-template-columns: 1fr;
   }

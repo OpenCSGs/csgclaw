@@ -10,7 +10,7 @@ import (
 	"csgclaw/internal/config"
 )
 
-func TestRenderAgentOpenClawConfigUsesOpenAICompatForMinimaxBaseURL(t *testing.T) {
+func TestRenderAgentOpenClawConfigUsesBridgeForMinimaxBaseURL(t *testing.T) {
 	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
 		ListenAddr:       "127.0.0.1:18080",
 		AdvertiseBaseURL: "http://127.0.0.1:18080",
@@ -33,13 +33,13 @@ func TestRenderAgentOpenClawConfigUsesOpenAICompatForMinimaxBaseURL(t *testing.T
 		t.Fatalf("csgclaw-minimax provider should not be used for OpenAI-compatible MiniMax config")
 	}
 	llm := providers["csgclaw-llm"].(map[string]any)
-	if got, want := llm["baseUrl"], "https://api.minimaxi.com/v1"; got != want {
+	if got, want := llm["baseUrl"], "http://127.0.0.1:18080/api/v1/agents/u-manager/llm"; got != want {
 		t.Fatalf("csgclaw-llm baseUrl = %v, want %v", got, want)
 	}
 	if got, want := llm["api"], "openai-completions"; got != want {
 		t.Fatalf("csgclaw-llm api = %v, want %v", got, want)
 	}
-	if got, want := llm["apiKey"], "sk-minimax-test"; got != want {
+	if got, want := llm["apiKey"], "gateway-shared-token"; got != want {
 		t.Fatalf("csgclaw-llm apiKey = %v, want %v", got, want)
 	}
 	if got, want := llm["authHeader"], true; got != want {
@@ -86,9 +86,13 @@ func TestRenderAgentOpenClawConfigUsesOpenAICompatForMinimaxBaseURL(t *testing.T
 	if got, want := tools["deny"], []any{"image"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("tools.deny = %#v, want %#v", got, want)
 	}
+	text := string(data)
+	if strings.Contains(text, "https://api.minimaxi.com/v1") || strings.Contains(text, "sk-minimax-test") {
+		t.Fatalf("rendered OpenClaw config should use CSGClaw bridge, not upstream credentials:\n%s", text)
+	}
 }
 
-func TestRenderAgentOpenClawConfigUsesOpenAICompatForInfiniMaaS(t *testing.T) {
+func TestRenderAgentOpenClawConfigUsesBridgeForInfiniMaaS(t *testing.T) {
 	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
 		ListenAddr:       "127.0.0.1:18080",
 		AdvertiseBaseURL: "http://127.0.0.1:18080",
@@ -111,10 +115,10 @@ func TestRenderAgentOpenClawConfigUsesOpenAICompatForInfiniMaaS(t *testing.T) {
 		t.Fatalf("OpenClaw MiniMax provider should not be used for Infini MaaS (OpenAI-compatible; model may contain 'minimax')")
 	}
 	llm := providers["csgclaw-llm"].(map[string]any)
-	if got, want := llm["baseUrl"], "https://cloud.infini-ai.com/maas/v1"; got != want {
+	if got, want := llm["baseUrl"], "http://127.0.0.1:18080/api/v1/agents/u-manager/llm"; got != want {
 		t.Fatalf("csgclaw-llm baseUrl = %v, want %v", got, want)
 	}
-	if got, want := llm["apiKey"], "sk-infini-test"; got != want {
+	if got, want := llm["apiKey"], "gateway-shared-token"; got != want {
 		t.Fatalf("csgclaw-llm apiKey = %v, want %v", got, want)
 	}
 	if got, want := llm["api"], "openai-completions"; got != want {
@@ -134,6 +138,10 @@ func TestRenderAgentOpenClawConfigUsesOpenAICompatForInfiniMaaS(t *testing.T) {
 	}
 	if got, want := defaults["verboseDefault"], "on"; got != want {
 		t.Fatalf("verboseDefault = %v, want %v", got, want)
+	}
+	text := string(data)
+	if strings.Contains(text, "https://cloud.infini-ai.com/maas/v1") || strings.Contains(text, "sk-infini-test") {
+		t.Fatalf("rendered OpenClaw config should use CSGClaw bridge, not upstream credentials:\n%s", text)
 	}
 }
 

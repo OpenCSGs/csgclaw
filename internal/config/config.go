@@ -294,7 +294,7 @@ const (
 	DefaultHubRegistry              = "builtin"
 	DefaultHubPublishRegistry       = "local"
 	DefaultOfficialHubRegistryName  = "official"
-	DefaultOfficialHubRegistryURL   = "https://csgclaw.opencsg.com"
+	DefaultOfficialHubRegistryURL   = "https://hub.opencsg.com"
 	DefaultBootstrapManagerTemplate = "builtin.picoclaw-manager"
 	DefaultBootstrapWorkerTemplate  = "builtin.picoclaw-worker"
 	HubRegistryKindBuiltin          = "builtin"
@@ -924,7 +924,13 @@ func parseBoolValue(raw string) (bool, error) {
 }
 
 func parseRawStringValue(raw string) string {
-	return strings.Trim(strings.TrimSpace(raw), `"`)
+	raw = strings.TrimSpace(raw)
+	// Preserve escaped TOML string content such as Windows paths so later
+	// save cycles do not introduce double-escaping.
+	if value, err := strconv.Unquote(raw); err == nil {
+		return value
+	}
+	return strings.Trim(raw, `"`)
 }
 
 func parseQuotedStringValue(raw string) string {

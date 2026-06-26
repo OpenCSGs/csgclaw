@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
+	hub "csgclaw/internal/template"
 	"csgclaw/internal/utils"
 )
 
@@ -428,20 +428,25 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	if svc == nil {
 		return nil
 	}
-	_, defaultModel, err := svc.llm.Resolve("")
-	if err != nil {
-		return err
-	}
-	modelCfg := defaultModel
+	var modelCfg config.ModelConfig
+	hasManagerProfile := false
 	svc.mu.RLock()
 	if manager, ok := svc.agents[ManagerUserID]; ok {
 		profile := normalizeProfileForAgentRuntime(manager.AgentProfile, manager.RuntimeOptions, manager.Name, manager.Description, manager.RuntimeKind, nil)
 		profile = svc.hydrateProfileFromCatalogLocked(profile)
 		if profile.ProfileComplete {
 			modelCfg = modelConfigFromProfile(profile)
+			hasManagerProfile = true
 		}
 	}
 	svc.mu.RUnlock()
+	if !hasManagerProfile {
+		_, defaultModel, err := svc.llm.Resolve("")
+		if err != nil {
+			return err
+		}
+		modelCfg = defaultModel
+	}
 	feishuProvider := svc.currentFeishuProviderForRuntime(RuntimeKindPicoClawSandbox)
 	recreateForParticipantBridgeConfig := !forceRecreate && agentPicoClawConfigNeedsParticipantRecreate(ManagerName, ManagerParticipantID)
 	recreateForFeishuConfig := !forceRecreate && agentPicoClawConfigNeedsFeishuRecreate(ManagerName, ManagerUserID, feishuProvider)
@@ -454,7 +459,7 @@ func (svc *Service) EnsureBootstrapManager(ctx context.Context, forceRecreate bo
 	if recreateForFeishuConfig {
 		log.Printf("bootstrap manager PicoClaw config is missing current Feishu channel credentials; recreating manager to load Feishu channel config")
 	}
-	_, err = svc.EnsureManager(ctx, forceRecreate || recreateForParticipantBridgeConfig || recreateForFeishuConfig)
+	_, err := svc.EnsureManager(ctx, forceRecreate || recreateForParticipantBridgeConfig || recreateForFeishuConfig)
 	return err
 }
 
@@ -572,6 +577,9 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		_ = s.closeRuntime(runtimeHome, rt)
 	}()
 	if forceRecreate {
+		if err := provisionBootstrapManagerRuntime(); err != nil {
+			return Agent{}, err
+		}
 		rt, err = s.cleanupBootstrapManagerForRecreate(ctx, rt, runtimeHome, runtimeKind)
 		if err != nil {
 			return Agent{}, err
@@ -1798,7 +1806,7 @@ func isResolvedWorkspacePath(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-func (s *Service) provisionRuntime(ctx context.Context, rt agentruntime.Runtime, runtimeKind string, req agentruntime.ProvisionRequest) error {
+func (s *Service) provisionRuntimeRequest(ctx context.Context, rt agentruntime.Runtime, runtimeKind string, req agentruntime.ProvisionRequest) error {
 	if rt == nil {
 		return fmt.Errorf("runtime is required")
 	}
@@ -1814,6 +1822,16 @@ func (s *Service) provisionRuntime(ctx context.Context, rt agentruntime.Runtime,
 		return nil
 	}
 	return provisioner.Provision(ctx, req)
+}
+
+func (s *Service) provisionRuntime(ctx context.Context, rt agentruntime.Runtime, runtimeKind string, req agentruntime.ProvisionRequest) error {
+	if err := s.provisionRuntimeRequest(ctx, rt, runtimeKind, req); err != nil {
+		return err
+	}
+	if err := s.installDefaultSystemSkills(req.AgentName, runtimeKind); err != nil {
+		return fmt.Errorf("install default system skills: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) provisionRuntimeForAgent(ctx context.Context, rt agentruntime.Runtime, got Agent, workspaceOverlay string) error {

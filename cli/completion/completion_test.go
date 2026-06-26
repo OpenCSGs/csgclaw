@@ -9,7 +9,7 @@ import (
 func TestCompleteFullTopLevel(t *testing.T) {
 	got := Complete(FullSpec(), "csgclaw", []string{"csgclaw", ""})
 
-	assertContainsAll(t, got, "serve", "upgrade", "agent", "hub", "skill", "model", "participant", "pt", "completion", "--endpoint", "--config", "-V")
+	assertContainsAll(t, got, "serve", "upgrade", "agent", "template", "skill", "model", "participant", "pt", "completion", "--endpoint", "--config", "-V")
 	assertContainsNone(t, got, "bot", "channel", "_serve", "__complete")
 }
 
@@ -33,10 +33,10 @@ func TestCompleteSubcommandsAndFlags(t *testing.T) {
 	got = Complete(FullSpec(), "csgclaw", []string{"csgclaw", "agent", "create", "--"})
 	assertContainsAll(t, got, "--replace", "--force", "--id", "--name", "--description", "--image", "--profile")
 
-	got = Complete(FullSpec(), "csgclaw", []string{"csgclaw", "hub", ""})
+	got = Complete(FullSpec(), "csgclaw", []string{"csgclaw", "template", ""})
 	assertContainsAll(t, got, "list", "get", "publish", "--help")
 
-	got = Complete(FullSpec(), "csgclaw", []string{"csgclaw", "hub", "publish", "--"})
+	got = Complete(FullSpec(), "csgclaw", []string{"csgclaw", "template", "publish", "--"})
 	assertContainsAll(t, got, "--agent", "--registry")
 
 	got = Complete(FullSpec(), "csgclaw", []string{"csgclaw", "team", "task", ""})

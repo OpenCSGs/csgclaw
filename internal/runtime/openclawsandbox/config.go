@@ -166,19 +166,13 @@ func updateOpenClawModelProvider(cfg map[string]any, botID string, server config
 	if modelID == "" {
 		return fmt.Errorf("openclaw config: model id is required")
 	}
-	if base := strings.TrimSpace(modelCfg.BaseURL); base != "" {
-		llm["baseUrl"] = strings.TrimRight(base, "/")
-	} else {
-		llm["baseUrl"] = llmBridgeBaseURL(managerBaseURL, botID)
+	if managerBaseURL == "" {
+		return fmt.Errorf("openclaw config: csgclaw manager base url is required")
 	}
-	apiKey := strings.TrimSpace(modelCfg.APIKey)
-	if apiKey == "" {
-		apiKey = server.AccessToken
-	}
-	if apiKey != "" {
-		llm["apiKey"] = apiKey
-	}
-	// OpenClaw: auth "token" + authHeader for upstreams that require Authorization: Bearer <sk-...> (e.g. Infini MaaS).
+	llm["baseUrl"] = llmBridgeBaseURL(managerBaseURL, botID)
+	llm["apiKey"] = strings.TrimSpace(server.AccessToken)
+	// OpenClaw sends a bearer token to the CSGClaw LLM bridge; the bridge owns
+	// the current upstream provider URL, API key, and model rewrite.
 	llm["auth"] = "token"
 	llm["authHeader"] = true
 	modelList, ok := llm["models"].([]any)

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/templates"
+	templateembed "csgclaw/internal/template/embed"
 )
 
 var (
@@ -30,19 +30,19 @@ func workspaceTemplateForAgent(name, botID string) (string, error) {
 	if managerGatewayMatch(name, botID) {
 		role = RoleManager
 	}
-	return templates.Resolve(RuntimeKindPicoClawSandbox, role)
+	return templateembed.Resolve(RuntimeKindPicoClawSandbox, role)
 }
 
 func resolveRuntimeTemplateRoot(runtimeKind, role string) (string, error) {
-	return templates.Resolve(runtimeKind, role)
+	return templateembed.Resolve(runtimeKind, role)
 }
 
 func runtimeTemplateManifestPath(templateRoot string) string {
-	return templates.ManifestPath(templateRoot)
+	return templateembed.ManifestPath(templateRoot)
 }
 
 func runtimeTemplateWorkspacePath(templateRoot string) string {
-	return templates.WorkspacePath(templateRoot)
+	return templateembed.WorkspacePath(templateRoot)
 }
 
 func ensureWorkspaceAtRoot(hostRoot, template string) (string, error) {
@@ -98,10 +98,10 @@ func copyEmbeddedTree(templateRoot, dstRoot string) error {
 	if templateRoot == "" {
 		return fmt.Errorf("runtime template root is required")
 	}
-	if _, err := fs.Stat(templates.FS(), runtimeTemplateManifestPath(templateRoot)); err != nil {
+	if _, err := fs.Stat(templateembed.FS(), runtimeTemplateManifestPath(templateRoot)); err != nil {
 		return fmt.Errorf("stat embedded runtime template manifest %q: %w", templateRoot, err)
 	}
-	return copyWorkspaceFS(templates.FS(), runtimeTemplateWorkspacePath(templateRoot), dstRoot, "embedded workspace", false)
+	return copyWorkspaceFS(templateembed.FS(), runtimeTemplateWorkspacePath(templateRoot), dstRoot, "embedded workspace", false)
 }
 
 func overlayWorkspaceTree(srcRoot, dstRoot string) error {
@@ -163,7 +163,7 @@ func (s *Service) prepareWorkspaceSkillsPreservation(agentName, sourceRuntimeKin
 		return nil, nil, err
 	}
 
-	templateNames, err := templateWorkspaceSkillNames(targetRuntimeKind, role)
+	templateNames, err := managedWorkspaceSkillNames(targetRuntimeKind, role)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -200,7 +200,7 @@ func (s *Service) refreshGatewayTemplateSkills(agentName, runtimeKind, role stri
 	if err != nil {
 		return err
 	}
-	templateNames, err := templateWorkspaceSkillNames(runtimeKind, role)
+	templateNames, err := managedWorkspaceSkillNames(runtimeKind, role)
 	if err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func templateWorkspaceSkillNames(runtimeKind, role string) (map[string]struct{},
 		return names, err
 	}
 	skillsRoot := pathpkg.Join(runtimeTemplateWorkspacePath(templateRoot), "skills")
-	entries, err := fs.ReadDir(templates.FS(), skillsRoot)
+	entries, err := fs.ReadDir(templateembed.FS(), skillsRoot)
 	if errors.Is(err, fs.ErrNotExist) {
 		return names, nil
 	}
@@ -241,6 +241,21 @@ func templateWorkspaceSkillNames(runtimeKind, role string) (map[string]struct{},
 		if name != "" {
 			names[name] = struct{}{}
 		}
+	}
+	return names, nil
+}
+
+func managedWorkspaceSkillNames(runtimeKind, role string) (map[string]struct{}, error) {
+	names, err := templateWorkspaceSkillNames(runtimeKind, role)
+	if err != nil {
+		return nil, err
+	}
+	systemNames, err := defaultSystemSkillNames()
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range systemNames {
+		names[name] = struct{}{}
 	}
 	return names, nil
 }

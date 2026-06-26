@@ -12,6 +12,14 @@ describe("model provider catalog helpers", () => {
     const catalog = normalizeModelProviderCatalog({
       providers: [
         {
+          id: "opencsg",
+          kind: "opencsg",
+          builtin: true,
+          display_name: "OpenCSG",
+          base_url: "https://ai.space.opencsg.com/v1",
+          models: ["opencsg/deepseek-v4"],
+        },
+        {
           id: "openai",
           kind: "openai_compatible",
           display_name: "Team OpenAI",
@@ -44,8 +52,19 @@ describe("model provider catalog helpers", () => {
       ],
     });
 
-    expect(catalog.providers.map((provider) => provider.id)).toEqual(["csghub-lite", "codex", "claude_code", "openai"]);
-    expect(catalog.builtinProviders.map((provider) => provider.id)).toEqual(["csghub-lite", "codex", "claude_code"]);
+    expect(catalog.providers.map((provider) => provider.id)).toEqual([
+      "opencsg",
+      "csghub-lite",
+      "codex",
+      "claude_code",
+      "openai",
+    ]);
+    expect(catalog.builtinProviders.map((provider) => provider.id)).toEqual([
+      "opencsg",
+      "csghub-lite",
+      "codex",
+      "claude_code",
+    ]);
     expect(catalog.customProviders.map((provider) => provider.id)).toEqual(["openai"]);
   });
 
@@ -73,6 +92,23 @@ describe("model provider catalog helpers", () => {
         builtin: true,
       },
     ]);
+  });
+
+  it("maps OpenCSG aliases and avatar as a built-in provider", () => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [{ id: "open-csg", display_name: "OpenCSG", builtin: true, models: ["deepseek-v4"] }],
+    });
+
+    expect(catalog.providers[0]).toMatchObject({
+      id: "opencsg",
+      builtin: true,
+      display_name: "OpenCSG",
+    });
+    expect(modelProviderOptionsFromCatalog(catalog)[0]).toMatchObject({
+      providerAvatar: "model-providers/opencsg.png",
+      providerID: "opencsg",
+      value: "opencsg.deepseek-v4",
+    });
   });
 
   it("maps provider statuses to sidebar dot tones", () => {

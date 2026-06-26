@@ -1,7 +1,8 @@
 import type { ProviderName } from "@/models/agents";
 
-export const BUILTIN_MODEL_PROVIDER_IDS = ["csghub-lite", "codex", "claude_code"] as const;
+export const BUILTIN_MODEL_PROVIDER_IDS = ["opencsg", "csghub-lite", "codex", "claude_code"] as const;
 const MODEL_PROVIDER_AVATARS: Record<string, string> = {
+  opencsg: "model-providers/opencsg.png",
   "csghub-lite": "model-providers/csghub-lite.png",
   codex: "model-providers/codex.png",
   claude_code: "model-providers/claude-code.png",
@@ -105,6 +106,9 @@ export function normalizeModelProviderID(value: unknown): string {
   if (!raw) {
     return "";
   }
+  if (raw === "opencsg" || raw === "open-csg" || raw === "csghub") {
+    return "opencsg";
+  }
   if (raw === "csghub_lite" || raw === "csghublite") {
     return "csghub-lite";
   }
@@ -120,6 +124,8 @@ export function normalizeModelProviderID(value: unknown): string {
 
 export function providerIDForProvider(provider: ProviderName | null | undefined): string {
   switch (String(provider ?? "").trim()) {
+    case "csghub":
+      return "opencsg";
     case "csghub_lite":
       return "csghub-lite";
     case "codex":
@@ -135,6 +141,8 @@ export function providerIDForProvider(provider: ProviderName | null | undefined)
 
 export function providerNameForProviderID(providerID: string): ProviderName {
   switch (normalizeModelProviderID(providerID)) {
+    case "opencsg":
+      return "csghub";
     case "csghub-lite":
       return "csghub_lite";
     case "codex":
@@ -286,7 +294,7 @@ export function modelProviderAvatarPath(provider: Pick<ModelProvider, "id" | "bu
 
 export function providerStatusTone(
   status: ModelProviderStatus | null | undefined,
-  provider?: Pick<ModelProvider, "builtin"> | null,
+  provider?: Partial<Pick<ModelProvider, "builtin" | "id">> | null,
 ): "online" | "warning" | "neutral" {
   switch (String(status ?? "").trim()) {
     case "connected":
@@ -294,6 +302,9 @@ export function providerStatusTone(
     case "failed":
       return "warning";
     default:
+      if (normalizeModelProviderID(provider?.id) === "opencsg") {
+        return "warning";
+      }
       return provider?.builtin ? "online" : "neutral";
   }
 }

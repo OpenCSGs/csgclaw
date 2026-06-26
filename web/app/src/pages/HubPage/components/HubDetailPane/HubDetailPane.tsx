@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FileCode2 } from "lucide-react";
 import { formatHubDateTime, isDeletableHubTemplate } from "@/models/hubWorkspace";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
-import { localizeRole, localizeTemplateSourceTag } from "@/shared/i18n";
+import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { HubIcon } from "@/components/ui/Icons";
 import {
   Button,
@@ -24,7 +24,7 @@ const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
 type HubDetailPaneHub = {
   detailPaneProps: {
     deleteBusy?: boolean;
-    detailLoading: boolean;
+    detailLoading?: boolean;
     error: string;
     loaded: boolean;
     onDeleteSkill?: (item: SkillSummary | null | undefined) => Promise<boolean> | boolean;
@@ -34,6 +34,7 @@ type HubDetailPaneHub = {
     onSelectSkillFile?: (path: string) => void;
     onSelectTemplate?: (item: HubTemplate | null | undefined) => void;
     onSelectWorkspaceFile: (workspacePath: string) => void;
+    onToggleWorkspaceDir?: (workspacePath: string) => void | Promise<void>;
     selectedResourceType?: "skill" | "template";
     selectedSkill: SkillSummary | null;
     selectedSkillPath: string;
@@ -52,17 +53,20 @@ type HubDetailPaneHub = {
     workspaceFile: WorkspaceFile | null;
     workspaceFileError: string;
     workspaceFileLoading: boolean;
+    workspaceEntries?: readonly WorkspaceEntry[];
+    workspaceTreeLoading?: boolean;
+    loadingWorkspaceDirs?: ReadonlySet<string>;
   };
 };
 
 const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   deleteBusy: false,
-  detailLoading: false,
   error: "",
   loaded: false,
   onRetry: () => {},
   onSelectSkillFile: () => {},
   onSelectWorkspaceFile: () => {},
+  onToggleWorkspaceDir: () => {},
   selectedResourceType: "template",
   selectedSkill: null,
   selectedSkillPath: "",
@@ -81,6 +85,9 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   workspaceFile: null,
   workspaceFileError: "",
   workspaceFileLoading: false,
+  workspaceEntries: [],
+  workspaceTreeLoading: false,
+  loadingWorkspaceDirs: new Set(),
 };
 
 function HubPreviewEmptyIcon() {
@@ -127,12 +134,12 @@ export function HubDetailPane({
     templates,
     skills,
     selectedTemplate,
+    selectedTemplateId,
     selectedSkill,
     selectedSkillPath,
     selectedResourceType = "template",
     loaded,
     error,
-    detailLoading,
     selectedWorkspacePath,
     workspaceFile,
     workspaceFileLoading,
@@ -144,6 +151,10 @@ export function HubDetailPane({
     skillFileLoading,
     skillFileError,
     onSelectWorkspaceFile,
+    onToggleWorkspaceDir,
+    workspaceEntries = EMPTY_WORKSPACE_ENTRIES,
+    workspaceTreeLoading = false,
+    loadingWorkspaceDirs,
     onSelectSkillFile,
     onDeleteSkill,
     onDeleteTemplate,
@@ -151,7 +162,7 @@ export function HubDetailPane({
     skillDeleteBusy = false,
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
-  const workspaceEntries = selectedTemplate?.workspace?.entries ?? EMPTY_WORKSPACE_ENTRIES;
+  const canDeleteSkill = Boolean(selectedSkill && !selectedSkill.readonly && selectedSkill.source !== "system");
   const skillEntries = skillTree?.entries ?? EMPTY_WORKSPACE_ENTRIES;
   const activeResourceType = useMemo(() => {
     if (selectedResourceType === "skill" && skills.length) {
@@ -224,9 +235,6 @@ export function HubDetailPane({
                       <h2>{selectedTemplate.name || selectedTemplate.id}</h2>
                       <p>{selectedTemplate.description || selectedTemplate.id}</p>
                       <div className="hub-inspector-badge-row">
-                        <span className="mini-badge template-role-badge">
-                          {localizeRole(selectedTemplate.role || "worker", t)}
-                        </span>
                         <span className="mini-badge template-runtime-badge">
                           {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind || "-"}
                         </span>
@@ -258,10 +266,6 @@ export function HubDetailPane({
 
               <div className="hub-inspector-grid">
                 <div className="hub-inspector-field">
-                  <span>{t("roleLabel")}</span>
-                  <strong>{localizeRole(selectedTemplate.role || "worker", t)}</strong>
-                </div>
-                <div className="hub-inspector-field">
                   <span>{t("hubSourceLabel")}</span>
                   <strong>{localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}</strong>
                 </div>
@@ -283,13 +287,16 @@ export function HubDetailPane({
                 <span className="hub-section-label">{t("hubWorkspaceTemplateLabel")}</span>
                 <div className="hub-workspace-panels">
                   <WorkspaceFileTree
+                    key={selectedTemplateId}
                     className="hub-workspace-tree"
                     entries={workspaceEntries}
-                    loading={detailLoading}
+                    loading={workspaceTreeLoading}
                     loadingText={t("hubWorkspaceLoading")}
                     emptyText={t("hubWorkspacePreviewHint")}
                     selectedPath={selectedWorkspacePath}
+                    loadingPaths={loadingWorkspaceDirs}
                     onSelectFile={onSelectWorkspaceFile}
+                    onToggleDir={onToggleWorkspaceDir}
                   />
                   <WorkspaceFilePreview
                     className="hub-workspace-preview"
@@ -322,19 +329,29 @@ export function HubDetailPane({
                     <div className="hub-inspector-copy">
                       <h2>{selectedSkill.name}</h2>
                       <p>{selectedSkill.description || selectedSkill.name}</p>
+                      {selectedSkill.readonly || selectedSkill.source === "system" ? (
+                        <div className="hub-inspector-badge-row">
+                          <span className="mini-badge template-source-badge">
+                            <span className="template-source-badge-dot" aria-hidden="true"></span>
+                            {t("hubSkillSystemBadge")}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
-                  <div className="hub-template-actions">
-                    <Button
-                      className="hub-skill-delete-button"
-                      variant="outlineDanger"
-                      size="md"
-                      disabled={skillDeleteBusy}
-                      onClick={() => setDeleteSkillDialogOpen(true)}
-                    >
-                      {t("hubDeleteSkill")}
-                    </Button>
-                  </div>
+                  {canDeleteSkill ? (
+                    <div className="hub-template-actions">
+                      <Button
+                        className="hub-skill-delete-button"
+                        variant="outlineDanger"
+                        size="md"
+                        disabled={skillDeleteBusy}
+                        onClick={() => setDeleteSkillDialogOpen(true)}
+                      >
+                        {t("hubDeleteSkill")}
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 

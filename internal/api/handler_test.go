@@ -22,7 +22,6 @@ import (
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
-	"csgclaw/internal/hub"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/participant"
@@ -32,6 +31,8 @@ import (
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/sandboxtest"
+	skillsystem "csgclaw/internal/skill/system"
+	hub "csgclaw/internal/template"
 )
 
 type fakeCompatRuntime struct {
@@ -2037,24 +2038,47 @@ func TestHandleHubTemplateByIDReturnsTemplate(t *testing.T) {
 	if got.Source.Name != "local" || got.Source.Kind != "local" {
 		t.Fatalf("template source = %+v, want local/local", got.Source)
 	}
-	if len(got.Workspace.Entries) == 0 {
-		t.Fatalf("workspace entries = %#v, want non-empty result", got.Workspace.Entries)
+	if len(got.Workspace.Entries) != 0 {
+		t.Fatalf("workspace entries = %#v, want lazy-loaded empty result", got.Workspace.Entries)
 	}
-	paths := make([]string, 0, len(got.Workspace.Entries))
-	for _, entry := range got.Workspace.Entries {
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot/workspace", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workspace status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var listing apitypes.WorkspaceListing
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode workspace response: %v", err)
+	}
+	paths := make([]string, 0, len(listing.Entries))
+	for _, entry := range listing.Entries {
 		paths = append(paths, entry.Path)
 	}
-	if !slices.Contains(paths, "USER.md") || !slices.Contains(paths, "skills/custom/SKILL.md") {
-		t.Fatalf("workspace paths = %#v, want USER.md and skills/custom/SKILL.md", paths)
+	if !slices.Contains(paths, "USER.md") || !slices.Contains(paths, "skills") {
+		t.Fatalf("workspace paths = %#v, want USER.md and skills", paths)
 	}
-	if got, want := slices.Index(paths, "skills"), 1; got != want {
-		t.Fatalf("workspace entry index for %q = %d, want %d; paths=%#v", "skills", got, want, paths)
+	if slices.Contains(paths, "skills/custom") || slices.Contains(paths, "skills/custom/SKILL.md") {
+		t.Fatalf("workspace paths = %#v, want top-level entries only", paths)
 	}
-	if got, want := slices.Index(paths, "skills/custom"), 2; got != want {
-		t.Fatalf("workspace entry index for %q = %d, want %d; paths=%#v", "skills/custom", got, want, paths)
+
+	req = httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/hub/templates/local.review-bot/workspace?path=skills",
+		nil,
+	)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("nested workspace status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if got, want := slices.Index(paths, "skills/custom/SKILL.md"), 3; got != want {
-		t.Fatalf("workspace entry index for %q = %d, want %d; paths=%#v", "skills/custom/SKILL.md", got, want, paths)
+	listing = apitypes.WorkspaceListing{}
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode nested workspace response: %v", err)
+	}
+	if len(listing.Entries) != 1 || listing.Entries[0].Path != "skills/custom" {
+		t.Fatalf("nested workspace entries = %#v, want skills/custom only", listing.Entries)
 	}
 }
 
@@ -2291,6 +2315,26 @@ func TestHandleAgentSkillsBatchAddReturnsNotFoundWhenGlobalSkillMissing(t *testi
 	}
 }
 
+func TestHandleAgentSkillsBatchAddReturnsBadRequestWhenGlobalSkillInvalid(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	globalRoot := filepath.Join(home, ".csgclaw", "skills")
+	if err := os.MkdirAll(filepath.Join(globalRoot, "alpha"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(global alpha) error = %v", err)
+	}
+
+	srv, _, created := newAgentSkillManagementTestServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+created.ID+"/skills:batchAdd", strings.NewReader(`{"names":["alpha"]}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
 func TestHandleAgentSkillsBatchAddReturnsConflictWhenSkillAlreadyExists(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -2456,21 +2500,61 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var skills []struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}
+	var skills []skillsystem.SkillSummary
 	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
 		t.Fatalf("decode skills response: %v", err)
 	}
-	if len(skills) != 2 {
-		t.Fatalf("len(skills) = %d, want 2", len(skills))
+	if len(skills) != 3 {
+		t.Fatalf("len(skills) = %d, want 3", len(skills))
 	}
-	if skills[0].Name != "alpha" || skills[0].Description != "Alpha skill" {
-		t.Fatalf("skills[0] = %+v, want alpha with description", skills[0])
+	skillsByName := map[string]skillsystem.SkillSummary{}
+	for _, item := range skills {
+		skillsByName[item.Name] = item
 	}
-	if skills[1].Name != "beta" || skills[1].Description != "" {
-		t.Fatalf("skills[1] = %+v, want beta without description", skills[1])
+	if got := skillsByName["alpha"]; got.Description != "Alpha skill" || got.Source != skillsystem.SkillSourceLocal || got.Readonly {
+		t.Fatalf("alpha skill = %+v, want local alpha with description", got)
+	}
+	if got := skillsByName["beta"]; got.Name != "beta" || got.Description != "" || got.Source != skillsystem.SkillSourceLocal || got.Readonly {
+		t.Fatalf("beta skill = %+v, want local beta without description", got)
+	}
+	if got := skillsByName["skill-installer"]; got.Name != "skill-installer" || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
+		t.Fatalf("skill-installer = %+v, want read-only system skill", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("root tree status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var listing apitypes.WorkspaceListing
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode root tree response: %v", err)
+	}
+	paths := make([]string, 0, len(listing.Entries))
+	for _, entry := range listing.Entries {
+		paths = append(paths, entry.Path)
+	}
+	if !slices.Contains(paths, "alpha/SKILL.md") || !slices.Contains(paths, "skill-installer/SKILL.md") {
+		t.Fatalf("root tree paths = %#v, want local and system skill files", paths)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree?path=.", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dot root tree status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode dot root tree response: %v", err)
+	}
+	paths = paths[:0]
+	for _, entry := range listing.Entries {
+		paths = append(paths, entry.Path)
+	}
+	if !slices.Contains(paths, "alpha/SKILL.md") || !slices.Contains(paths, "skill-installer/SKILL.md") {
+		t.Fatalf("dot root tree paths = %#v, want local and system skill files", paths)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree?path=alpha", nil)
@@ -2480,11 +2564,10 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("tree status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var listing apitypes.WorkspaceListing
 	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
 		t.Fatalf("decode tree response: %v", err)
 	}
-	paths := make([]string, 0, len(listing.Entries))
+	paths = paths[:0]
 	for _, entry := range listing.Entries {
 		paths = append(paths, entry.Path)
 	}
@@ -2509,6 +2592,36 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	if !strings.Contains(file.Content, "# Alpha") {
 		t.Fatalf("content = %q, want preview with # Alpha", file.Content)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree?path=skill-installer", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("system tree status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode system tree response: %v", err)
+	}
+	paths = paths[:0]
+	for _, entry := range listing.Entries {
+		paths = append(paths, entry.Path)
+	}
+	if !slices.Contains(paths, "skill-installer/SKILL.md") {
+		t.Fatalf("system tree paths = %#v, want skill-installer/SKILL.md", paths)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/file?path=skill-installer/SKILL.md", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("system file status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&file); err != nil {
+		t.Fatalf("decode system file response: %v", err)
+	}
+	if !strings.Contains(file.Content, "registry skill search") {
+		t.Fatalf("system skill content = %q, want skill-installer instructions", file.Content)
+	}
 }
 
 func TestHandleSkillsMissingRootUsesEmptyOrNotFound(t *testing.T) {
@@ -2523,12 +2636,30 @@ func TestHandleSkillsMissingRootUsesEmptyOrNotFound(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var skills []any
+	var skills []skillsystem.SkillSummary
 	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
 		t.Fatalf("decode skills response: %v", err)
 	}
-	if len(skills) != 0 {
-		t.Fatalf("len(skills) = %d, want 0", len(skills))
+	if len(skills) != 1 || skills[0].Name != "skill-installer" || !skills[0].Readonly {
+		t.Fatalf("skills = %+v, want read-only system skill-installer", skills)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("root tree status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var listing apitypes.WorkspaceListing
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode root tree response: %v", err)
+	}
+	paths := make([]string, 0, len(listing.Entries))
+	for _, entry := range listing.Entries {
+		paths = append(paths, entry.Path)
+	}
+	if !slices.Contains(paths, "skill-installer/SKILL.md") {
+		t.Fatalf("root tree paths = %#v, want system skill file", paths)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree?path=alpha", nil)
@@ -2543,6 +2674,100 @@ func TestHandleSkillsMissingRootUsesEmptyOrNotFound(t *testing.T) {
 	srv.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("file status = %d, want %d; body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
+func TestHandleSkillsBrowsesSystemSkillWhenLocalSystemSkillIsMalformed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	skillsRoot := filepath.Join(home, ".csgclaw", "skills")
+	if err := os.MkdirAll(filepath.Join(skillsRoot, "skill-installer"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(malformed skill-installer) error = %v", err)
+	}
+
+	srv := &Handler{}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/skills", nil)
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var skills []skillsystem.SkillSummary
+	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
+		t.Fatalf("decode skills response: %v", err)
+	}
+	if len(skills) != 1 || skills[0].Name != "skill-installer" || skills[0].Source != skillsystem.SkillSourceSystem || !skills[0].Readonly {
+		t.Fatalf("skills = %+v, want read-only system skill-installer", skills)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree?path=skill-installer", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("tree status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var listing apitypes.WorkspaceListing
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode tree response: %v", err)
+	}
+	paths := make([]string, 0, len(listing.Entries))
+	for _, entry := range listing.Entries {
+		paths = append(paths, entry.Path)
+	}
+	if !slices.Contains(paths, "skill-installer/SKILL.md") {
+		t.Fatalf("tree paths = %#v, want system skill file", paths)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/file?path=skill-installer/SKILL.md", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("file status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var file apitypes.WorkspaceFile
+	if err := json.NewDecoder(rec.Body).Decode(&file); err != nil {
+		t.Fatalf("decode file response: %v", err)
+	}
+	if !strings.Contains(file.Content, "registry skill search") {
+		t.Fatalf("system skill content = %q, want skill-installer instructions", file.Content)
+	}
+}
+
+func TestHandleSkillDeleteRejectsSystemSkill(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	srv := &Handler{}
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/skills/skill-installer", nil)
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("delete status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
+func TestHandleSkillDeleteAllowsLocalSkillWithSystemName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	skillsRoot := filepath.Join(home, ".csgclaw", "skills")
+	if err := os.MkdirAll(filepath.Join(skillsRoot, "skill-installer"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(skill-installer) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillsRoot, "skill-installer", "SKILL.md"), []byte("# Local installer\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(local installer) error = %v", err)
+	}
+
+	srv := &Handler{}
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/skills/skill-installer", nil)
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(skillsRoot, "skill-installer")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("local skill-installer still exists, err=%v", err)
 	}
 }
 
@@ -2668,14 +2893,28 @@ func TestHandleHubTemplateWithoutWorkspaceOmitsEntriesAndFilePreview(t *testing.
 		t.Fatalf("workspace entries = %#v, want empty", detail.Workspace.Entries)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot/workspace", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workspace status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var listing apitypes.WorkspaceListing
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode workspace response: %v", err)
+	}
+	if len(listing.Entries) != 0 {
+		t.Fatalf("workspace entries = %#v, want empty", listing.Entries)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot/workspace/file?path=USER.md", nil)
 	rec = httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("file status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "hub workspace is not available") {
-		t.Fatalf("file response body = %q, want unavailable workspace error", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "workspace") {
+		t.Fatalf("file response body = %q, want workspace error", rec.Body.String())
 	}
 }
 

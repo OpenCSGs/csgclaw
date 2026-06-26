@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { LogIn, LogOut, Settings } from "lucide-react";
+import { ExternalLink, LogIn, LogOut, Settings } from "lucide-react";
 import { Button } from "@/components/ui";
 import { MoonIcon, SunIcon } from "@/components/ui/Icons";
 import { isAuthenticated } from "@/models/auth";
 import type { AuthStatus } from "@/models/auth";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
+import { githubFeedbackIssueURL } from "@/models/feedback";
 import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import { formatSidebarVersionLabel, hasUpgradeAttention, isLocalBuildUpgradeStatus } from "@/models/upgradeStatus";
 import { classNames } from "@/shared/lib/classNames";
@@ -56,6 +57,7 @@ export function SidebarUserButton({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const currentVersion = upgradeStatus?.current_version || appVersion;
+  const feedbackURL = githubFeedbackIssueURL(appVersion, upgradeStatus);
   const localBuild = isLocalBuildUpgradeStatus(upgradeStatus, currentVersion);
   const upgradeControlsAvailable =
     showUpgradeControls && !localBuild && upgradeStatus?.auto_upgrade_supported !== false;
@@ -183,7 +185,7 @@ export function SidebarUserButton({
           <div className="sidebar-menu-divider"></div>
           <div className="sidebar-csghub-panel">
             <div className="sidebar-csghub-heading">
-              <span className="sidebar-csghub-kicker">CSGHub</span>
+              <span className="sidebar-csghub-kicker">{t("csghubAccount")}</span>
               <span className={classNames("sidebar-csghub-state", accountAuthenticated && "is-authenticated")}>
                 {accountAuthenticated ? t("csghubSignedIn") : t("csghubNotSignedIn")}
               </span>
@@ -264,6 +266,17 @@ export function SidebarUserButton({
               </strong>
             )}
             {upgradeView?.issue ? <div className="sidebar-version-error">{upgradeView.issue}</div> : null}
+            <a
+              className="sidebar-feedback-link"
+              href={feedbackURL}
+              target="_blank"
+              rel="noreferrer"
+              role="menuitem"
+              title={t("configSettingsGithubIssueAction")}
+            >
+              <span>{t("configSettingsFeedbackSection")}</span>
+              <ExternalLink size={14} strokeWidth={2.1} aria-hidden="true" />
+            </a>
           </div>
         </div>
       ) : null}

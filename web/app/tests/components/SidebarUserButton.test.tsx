@@ -15,10 +15,12 @@ const labels: Record<string, string> = {
   versionInfo: "Version",
   versionSettings: "Version and updates",
   configSettingsMenu: "Settings",
-  csghubAccount: "CSGHub account",
+  configSettingsFeedbackSection: "Feedback",
+  configSettingsGithubIssueAction: "Open GitHub",
+  csghubAccount: "OpenCSG",
   csghubLoginPending: "Waiting for auth",
   csghubLoginPendingDetail: "Finish authorization",
-  csghubLoginRequired: "Sign in with CSGHub",
+  csghubLoginRequired: "Sign in with OpenCSG",
   csghubNotSignedIn: "Not signed in",
   csghubSignIn: "Sign in",
   csghubSigningIn: "Signing in...",
@@ -216,7 +218,37 @@ describe("SidebarUserButton", () => {
     expect(onOpenConfigSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("shows CSGHub sign-in when no account is connected", async () => {
+  it("shows feedback below the version summary with user feedback prefilled", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        showUpgradeControls={false}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        t={t}
+        theme="light"
+        upgradeStatus={updateAvailableStatus}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    const link = screen.getByRole("menuitem", { name: "Feedback" });
+    const href = link.getAttribute("href") || "";
+    const url = new URL(href);
+    expect(`${url.origin}${url.pathname}`).toBe("https://github.com/OpenCSGs/csgclaw/issues/new");
+    expect(url.searchParams.has("title")).toBe(false);
+    expect(url.searchParams.get("labels")).toBe("user-feedback");
+    expect(url.searchParams.get("body")).toBe("## Version information\n- CSGClaw version: v0.3.0\n");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("shows OpenCSG sign-in when no account is connected", async () => {
     const user = userEvent.setup();
     const onLogin = vi.fn();
 
@@ -238,14 +270,14 @@ describe("SidebarUserButton", () => {
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(screen.getByText("CSGHub")).toBeInTheDocument();
+    expect(screen.getByText("OpenCSG")).toBeInTheDocument();
     expect(screen.getAllByText("Not signed in")).toHaveLength(2);
-    expect(screen.queryByText("Sign in with CSGHub")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign in with OpenCSG")).not.toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Sign in" }));
     expect(onLogin).toHaveBeenCalledTimes(1);
   });
 
-  it("shows CSGHub account metadata and signs out", async () => {
+  it("shows OpenCSG account metadata and signs out", async () => {
     const user = userEvent.setup();
     const onLogout = vi.fn();
 

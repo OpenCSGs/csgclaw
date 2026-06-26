@@ -1,4 +1,0 @@
-interface:
-  display_name: "Skill Installer"
-  short_description: "Search and install registry skills via csgclaw-cli skill"
-  default_prompt: "Use $skill-installer to search, inspect, or install ClawHub-compatible skills with csgclaw-cli skill."

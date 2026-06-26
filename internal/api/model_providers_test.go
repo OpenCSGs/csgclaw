@@ -61,19 +61,22 @@ models = ["gpt-test"]
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(got.Providers) < 4 {
-		t.Fatalf("providers len = %d, want at least 4: %+v", len(got.Providers), got.Providers)
+	if len(got.Providers) < 5 {
+		t.Fatalf("providers len = %d, want at least 5: %+v", len(got.Providers), got.Providers)
 	}
-	wantOrder := []string{"csghub-lite", "codex", "claude_code", "openai"}
+	wantOrder := []string{"opencsg", "csghub-lite", "codex", "claude_code", "openai"}
 	for i, want := range wantOrder {
 		if got.Providers[i].ID != want {
 			t.Fatalf("providers[%d].id = %q, want %q; providers=%+v", i, got.Providers[i].ID, want, got.Providers)
 		}
 	}
-	if got.Providers[3].APIKey != "" {
-		t.Fatalf("custom provider leaked api_key = %q", got.Providers[3].APIKey)
+	if got.Providers[0].Kind != "opencsg" {
+		t.Fatalf("opencsg kind = %q, want opencsg", got.Providers[0].Kind)
 	}
-	if !got.Providers[3].APIKeySet {
+	if got.Providers[4].APIKey != "" {
+		t.Fatalf("custom provider leaked api_key = %q", got.Providers[4].APIKey)
+	}
+	if !got.Providers[4].APIKeySet {
 		t.Fatalf("custom provider api_key_set = false, want true")
 	}
 }
@@ -179,6 +182,61 @@ func TestModelProviderCatalogCreateCheckAndSaveCustomProvider(t *testing.T) {
 	}
 	if got, want := provider.Headers["X-CSG-Trace"], "dev"; got != want {
 		t.Fatalf("Headers[X-CSG-Trace] = %q, want %q", got, want)
+	}
+}
+
+func TestModelProviderCreateKeepsWindowsHubRegistryPathStable(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+access_token = "secret"
+
+[hub]
+default_registry = "builtin"
+default_publish_registry = "local"
+
+[[hub.registries]]
+name = "builtin"
+kind = "builtin"
+enabled = true
+
+[[hub.registries]]
+name = "local"
+kind = "local"
+path = "C:\\Users\\dangw\\.csgclaw\\hub"
+enabled = true
+
+[models]
+default = "openai.gpt-test"
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+	srv := newModelProviderTestHandler(t, configPath, nil)
+
+	body := strings.NewReader(`{
+		"id":"openai",
+		"display_name":"Team OpenAI",
+		"base_url":"https://api.openai.example/v1",
+		"api_key":"sk-team",
+		"models":["gpt-test"]
+	}`)
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/model-providers", body))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(config) error = %v", err)
+	}
+	saved := string(data)
+	if !strings.Contains(saved, `path = "C:\\Users\\dangw\\.csgclaw\\hub"`) {
+		t.Fatalf("saved config missing canonical Windows path:\n%s", saved)
+	}
+	if strings.Contains(saved, `path = "C:\\\\Users\\\\dangw\\\\.csgclaw\\\\hub"`) {
+		t.Fatalf("saved config double-escaped Windows path:\n%s", saved)
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 const (
 	ProviderAPI        = "api"
 	ProviderCSGHubLite = "csghub_lite"
+	ProviderOpenCSG    = "opencsg"
 	ProviderCSGHub     = "csghub"
 	ProviderCodex      = "codex"
 	ProviderClaudeCode = "claude_code"
@@ -144,7 +145,7 @@ func normalizeProfileProvider(provider string) string {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case "", ProviderCSGHubLite, "csghub-lite":
 		return ProviderCSGHubLite
-	case ProviderCSGHub:
+	case ProviderOpenCSG, "open-csg", ProviderCSGHub:
 		return ProviderCSGHub
 	case ProviderAPI, "llm-api", "openai", "openai_compatible":
 		return ProviderAPI
