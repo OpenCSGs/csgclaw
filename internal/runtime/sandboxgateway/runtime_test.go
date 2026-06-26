@@ -161,7 +161,7 @@ func TestResolveSandboxToolsDirSupportsCSGHubProvider(t *testing.T) {
 	}
 }
 
-func TestGatewayCreateSpecPrependsSandboxToolsToProfilePATH(t *testing.T) {
+func TestGatewayCreateSpecPrependsSandboxToolsToRuntimePATH(t *testing.T) {
 	toolsDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(toolsDir, "csgclaw-cli"), []byte("cli"), 0o755); err != nil {
 		t.Fatalf("WriteFile(csgclaw-cli) error = %v", err)
@@ -184,11 +184,12 @@ func TestGatewayCreateSpecPrependsSandboxToolsToProfilePATH(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GatewayCreateSpec() error = %v", err)
 	}
-	if got, want := spec.Env["PATH"], "/opt/csgclaw/bin:/custom/bin:/usr/bin"; got != want {
+	if got, want := spec.Env["PATH"], "/custom/bin:/usr/bin"; got != want {
 		t.Fatalf("GatewayCreateSpec() PATH = %q, want %q", got, want)
 	}
-	if strings.Contains(strings.Join(spec.Cmd, " "), "export PATH=") {
-		t.Fatalf("GatewayCreateSpec() cmd = %q, want PATH in container env", spec.Cmd)
+	cmd := strings.Join(spec.Cmd, " ")
+	if !strings.Contains(cmd, `export PATH="/opt/csgclaw/bin${PATH:+:$PATH}";`) {
+		t.Fatalf("GatewayCreateSpec() cmd = %q, want runtime PATH prepend", spec.Cmd)
 	}
 }
 

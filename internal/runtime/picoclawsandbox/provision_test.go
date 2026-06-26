@@ -126,8 +126,11 @@ func TestGatewayCreateSpecMountsPicoClawRuntimeRoot(t *testing.T) {
 	if strings.Contains(cmd, "/csgclaw-projects") || strings.Contains(cmd, "ln -sfn") {
 		t.Fatalf("GatewayCreateSpec() cmd = %q, want direct projects mount without symlink setup", spec.Cmd)
 	}
-	if got, want := spec.Env["PATH"], "/opt/csgclaw/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"; got != want {
-		t.Fatalf("GatewayCreateSpec() PATH = %q, want %q", got, want)
+	if _, ok := spec.Env["PATH"]; ok {
+		t.Fatalf("GatewayCreateSpec() PATH env is set, want runtime PATH preserved")
+	}
+	if !strings.Contains(cmd, `export PATH="/opt/csgclaw/bin${PATH:+:$PATH}";`) {
+		t.Fatalf("GatewayCreateSpec() cmd = %q, want runtime PATH prepend", spec.Cmd)
 	}
 	runUser, err := hostuser.RunUser()
 	if err != nil {
