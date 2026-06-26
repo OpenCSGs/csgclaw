@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -157,9 +157,8 @@ function useAgentControllerHarness(
     managerProfile?: AgentProfileLike | null;
   } = {},
 ) {
-  const initialAgents = options.agents ?? [oldAgent];
-  const [agents, setAgents] = useState<AgentLike[]>(initialAgents);
-  const refreshWorkspaceAgentsRef = useRef(vi.fn(async () => initialAgents));
+  const [agents, setAgents] = useState<AgentLike[]>(options.agents ?? [oldAgent]);
+  const refreshWorkspaceAgentsRef = useRef(vi.fn(async () => options.agents ?? [oldAgent]));
   const refreshWorkspaceBootstrapRef = useRef(vi.fn(async () => null));
   const refreshWorkspaceBootstrapConfigRef = useRef(vi.fn(async () => null));
   const refreshWorkspaceManagerProfileRef = useRef(vi.fn(async () => null));
@@ -172,6 +171,12 @@ function useAgentControllerHarness(
   const selectConversationRef = useRef(vi.fn());
   const selectConversation = selectConversationRef.current;
   const data = options.data ?? null;
+
+  useEffect(() => {
+    if (options.agents) {
+      setAgents(options.agents);
+    }
+  }, [options.agents]);
 
   const controller = useAgentController({
     activeConversationId: "",
@@ -396,6 +401,68 @@ describe("useAgentController", () => {
     );
     expect(result.current.refreshWorkspaceBootstrap).not.toHaveBeenCalled();
     expect(fetchAgentSkills).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads the selected agent draft when the same routed agent gains profile fields and there are no unsaved edits", async () => {
+    const partialAgent: AgentLike = {
+      id: "u-worker",
+      name: "worker",
+      role: "worker",
+      runtime_kind: "picoclaw_sandbox",
+      status: "running",
+      image: "worker:latest",
+      instructions: "reply briefly",
+      profile_complete: false,
+    };
+    const fullAgent: AgentLike = {
+      ...partialAgent,
+      agent_profile: {
+        provider: "csghub_lite",
+        model_provider_id: "csghub-lite",
+        model_id: "MiniMax-M2.5",
+        reasoning_effort: "medium",
+        enable_fast_mode: false,
+        profile_complete: true,
+      },
+      profile: "csghub-lite.MiniMax-M2.5",
+      profile_complete: true,
+      provider: "csghub_lite",
+      model_provider_id: "csghub-lite",
+      model_id: "MiniMax-M2.5",
+    };
+
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgentProfile).mockReset();
+    vi.mocked(fetchAgent)
+      .mockRejectedValueOnce(new Error("not ready"))
+      .mockResolvedValueOnce(fullAgent)
+      .mockResolvedValue(fullAgent);
+    vi.mocked(fetchAgentProfile)
+      .mockRejectedValueOnce(new Error("not ready"))
+      .mockResolvedValue(fullAgent.agent_profile ?? {});
+
+    const { result, rerender } = renderHook(
+      ({ agents }) =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
+          agents,
+        }).controller,
+      {
+        initialProps: {
+          agents: [partialAgent],
+        },
+        wrapper: createWrapper(),
+      },
+    );
+
+    await waitFor(() => expect(result.current.agentViewProps.draft?.model_id).toBe(""));
+
+    rerender({
+      agents: [fullAgent],
+    });
+
+    await waitFor(() => expect(result.current.agentViewProps.draft?.model_id).toBe("MiniMax-M2.5"));
+    await waitFor(() => expect(result.current.agentViewProps.savedDraft?.model_id).toBe("MiniMax-M2.5"));
   });
 
   it("loads global skill candidates and filters already-installed agent skills", async () => {

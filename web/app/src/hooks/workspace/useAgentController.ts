@@ -323,6 +323,28 @@ export function useAgentController({
     }
     return agentItems.find((item) => item.id === activePane.id) ?? null;
   }, [agentItems, activePane]);
+  const selectedAgentForPageDraftSignature = useMemo(() => {
+    if (!selectedAgentForPage) {
+      return "";
+    }
+    return JSON.stringify({
+      id: selectedAgentForPage.id || "",
+      name: selectedAgentForPage.name || "",
+      description: selectedAgentForPage.description || "",
+      instructions: selectedAgentForPage.instructions || "",
+      profile: selectedAgentForPage.profile || "",
+      profile_complete:
+        selectedAgentForPage.profile_complete ?? selectedAgentForPage.agent_profile?.profile_complete ?? null,
+      provider: selectedAgentForPage.provider || selectedAgentForPage.agent_profile?.provider || "",
+      model_provider_id:
+        selectedAgentForPage.model_provider_id || selectedAgentForPage.agent_profile?.model_provider_id || "",
+      model_id: selectedAgentForPage.model_id || selectedAgentForPage.agent_profile?.model_id || "",
+      reasoning_effort:
+        selectedAgentForPage.reasoning_effort || selectedAgentForPage.agent_profile?.reasoning_effort || "",
+      enable_fast_mode:
+        selectedAgentForPage.enable_fast_mode ?? selectedAgentForPage.agent_profile?.enable_fast_mode ?? false,
+    });
+  }, [selectedAgentForPage]);
   const selectedFeishuPendingRegistration = useMemo(() => {
     const agentID = String(selectedAgentForPage?.id || "").trim();
     if (!agentID) {
@@ -519,10 +541,11 @@ export function useAgentController({
       setAgentPagePublishBusy(false);
       return;
     }
+    if (agentPageHasUnsavedChanges) {
+      return;
+    }
     loadAgentPageDraft(selectedAgentForPage);
-    // Reload only when the routed agent changes; form draft edits should not refetch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAgentForPage?.id]);
+  }, [agentPageHasUnsavedChanges, selectedAgentForPage?.id, selectedAgentForPageDraftSignature]);
 
   async function refreshManagerProfile(): Promise<void> {
     await refreshWorkspaceManagerProfile();
