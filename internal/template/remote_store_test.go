@@ -162,31 +162,12 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 	}
 }
 
-func TestRemoteContentBaseURL(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{input: "https://hub.opencsg.com", want: "https://hub.opencsg.com"},
-		{input: "https://hub.opencsg-stg.com", want: "https://opencsg-stg.com"},
-		{input: "https://hub.example.com/", want: "https://hub.example.com"},
-		{input: "http://127.0.0.1:18080", want: "http://127.0.0.1:18080"},
-	}
-	for _, tt := range tests {
-		if got := remoteContentBaseURL(tt.input); got != tt.want {
-			t.Errorf("remoteContentBaseURL(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
 func TestDefaultStoreFactoryCreatesRemoteStore(t *testing.T) {
 	t.Parallel()
 
 	store, err := DefaultStoreFactory(config.HubRegistryConfig{
 		Kind:  RegistryKindRemote,
-		URL:   "https://hub.opencsg-stg.com",
+		URL:   "https://hub.opencsg.com",
 		Token: "secret",
 	})
 	if err != nil {
@@ -196,7 +177,7 @@ func TestDefaultStoreFactoryCreatesRemoteStore(t *testing.T) {
 	if !ok {
 		t.Fatalf("store type = %T, want *RemoteStore", store)
 	}
-	if got, want := remote.contentBaseURL, "https://opencsg-stg.com"; got != want {
+	if got, want := remote.contentBaseURL, "https://hub.opencsg.com"; got != want {
 		t.Fatalf("content base URL = %q, want %q", got, want)
 	}
 }

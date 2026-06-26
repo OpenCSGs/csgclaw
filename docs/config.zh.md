@@ -255,8 +255,6 @@ token = "${CSGCLAW_HUB_TOKEN}"
 enabled = true
 ```
 
-正式环境的全部模板 API 均使用 `https://hub.opencsg.com`。在这些 API 尚未部署期间，可以在 `config.toml` 中将 `official` 的 `url` 覆盖为 `https://hub.opencsg-stg.com`；CSGClaw 会针对当前 stg 部署临时使用 `https://opencsg-stg.com` 读取仓库详情、文件树和文件内容。
-
 字段说明：
 
 - `default_registry`：当某个命令需要一个默认读取源 registry 时，使用这个值。

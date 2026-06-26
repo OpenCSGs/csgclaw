@@ -255,8 +255,6 @@ token = "${CSGCLAW_HUB_TOKEN}"
 enabled = true
 ```
 
-All production template APIs use `https://hub.opencsg.com`. Until those APIs are deployed, set the `official` registry `url` to `https://hub.opencsg-stg.com` in `config.toml`; for the current staging deployment, CSGClaw temporarily uses `https://opencsg-stg.com` for repository details, trees, and file contents.
-
 Field behavior:
 
 - `default_registry` selects the default source registry when a command needs one registry context.

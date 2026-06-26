@@ -27,8 +27,6 @@ const (
 	officialTemplateNamespace = "Agentic"
 	remoteManifestFileName    = "agent.toml"
 	remoteWorkspaceDirName    = "workspace"
-	stagingHubBaseURL         = "https://hub.opencsg-stg.com"
-	stagingContentBaseURL     = "https://opencsg-stg.com"
 	remoteFilePreviewMaxBytes = 256 * 1024
 )
 
@@ -88,7 +86,7 @@ func NewRemoteStore(baseURL, token string) *RemoteStore {
 	hubBaseURL := strings.TrimSpace(strings.TrimRight(baseURL, "/"))
 	return &RemoteStore{
 		hubBaseURL:     hubBaseURL,
-		contentBaseURL: remoteContentBaseURL(hubBaseURL),
+		contentBaseURL: hubBaseURL,
 		token:          strings.TrimSpace(token),
 		httpClient: &http.Client{
 			Timeout: defaultRemoteHTTPTimeout,
@@ -508,14 +506,6 @@ func (s *RemoteStore) request(ctx context.Context, method, endpoint string, maxB
 		return nil, resp.StatusCode, fmt.Errorf("read remote hub response: %w", err)
 	}
 	return body, resp.StatusCode, nil
-}
-
-func remoteContentBaseURL(hubBaseURL string) string {
-	hubBaseURL = strings.TrimRight(strings.TrimSpace(hubBaseURL), "/")
-	if hubBaseURL == stagingHubBaseURL {
-		return stagingContentBaseURL
-	}
-	return hubBaseURL
 }
 
 func normalizeRemoteTemplateID(id string) (string, error) {
