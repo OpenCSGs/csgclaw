@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
+	"csgclaw/internal/localstore"
 	"csgclaw/internal/participant"
 	"csgclaw/internal/sandboxproviders"
 	hub "csgclaw/internal/template"
@@ -76,7 +79,8 @@ func ensureConfigState(path string) (config.Config, error) {
 	if hasExistingConfig && configNeedsCompletion(existingContent) {
 		needsSave = true
 	}
-	if hasExistingConfig && cfg.NeedsMigrationRewrite() {
+	needsMigrationRewrite := hasExistingConfig && cfg.NeedsMigrationRewrite()
+	if needsMigrationRewrite {
 		needsSave = true
 	}
 	modelsPath, err := config.ModelsPathForConfigPath(path)
@@ -91,11 +95,27 @@ func ensureConfigState(path string) (config.Config, error) {
 		}
 	}
 	if needsSave {
+		if needsMigrationRewrite {
+			if err := backupConfigDir(path); err != nil {
+				return config.Config{}, err
+			}
+		}
 		if err := cfg.Save(path); err != nil {
 			return config.Config{}, err
 		}
 	}
 	return cfg, nil
+}
+
+func backupConfigDir(path string) error {
+	root := filepath.Dir(path)
+	if filepath.Base(root) != config.AppDirName {
+		return nil
+	}
+	if _, err := localstore.CreateSiblingBackup(root, time.Now()); err != nil {
+		return fmt.Errorf("backup config dir: %w", err)
+	}
+	return nil
 }
 
 func ensureBootstrapState(ctx context.Context, cfg config.Config) error {

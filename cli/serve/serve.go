@@ -910,6 +910,12 @@ func loadConfig(path string) (config.Config, error) {
 		return config.Config{}, err
 	}
 	if cfg.NeedsMigrationRewrite() {
+		root := filepath.Dir(path)
+		if filepath.Base(root) == config.AppDirName {
+			if _, err := localstore.CreateSiblingBackup(root, time.Now()); err != nil {
+				return config.Config{}, fmt.Errorf("backup config dir: %w", err)
+			}
+		}
 		if err := cfg.Save(path); err != nil {
 			return config.Config{}, err
 		}

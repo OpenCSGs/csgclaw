@@ -100,11 +100,8 @@ func MigrateTypedIDs(opts MigrateOptions) (MigrateResult, error) {
 	if opts.Now != nil {
 		now = opts.Now
 	}
-	backupPath, err := nextBackupPath(root, now())
+	backupPath, err := CreateSiblingBackup(root, now())
 	if err != nil {
-		return MigrateResult{}, err
-	}
-	if err := copyDir(root, backupPath); err != nil {
 		return MigrateResult{}, fmt.Errorf("backup store: %w", err)
 	}
 	m := newTypedIDMigrator(root)
@@ -2256,6 +2253,25 @@ func nextBackupPath(root string, now time.Time) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no backup index available for %s", date)
+}
+
+// CreateSiblingBackup copies root to the next timestamped sibling backup path.
+func CreateSiblingBackup(root string, now time.Time) (string, error) {
+	root = filepath.Clean(strings.TrimSpace(root))
+	if root == "" {
+		return "", fmt.Errorf("root is required")
+	}
+	if _, err := os.Stat(root); err != nil {
+		return "", fmt.Errorf("stat store root: %w", err)
+	}
+	backupPath, err := nextBackupPath(root, now)
+	if err != nil {
+		return "", err
+	}
+	if err := copyDir(root, backupPath); err != nil {
+		return "", err
+	}
+	return backupPath, nil
 }
 
 func copyDir(src, dst string) error {

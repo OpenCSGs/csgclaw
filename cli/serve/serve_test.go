@@ -1267,6 +1267,49 @@ models = ["gpt-test"]
 	}
 }
 
+func TestLoadConfigCreatesBackupBeforeMigrationRewrite(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(home, ".csgclaw")
+	path := filepath.Join(root, "config.toml")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	original := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[bootstrap]
+default_manager_template = "builtin/picoclaw-manager"
+default_worker_template = "builtin/picoclaw-worker"
+
+[models]
+default = "default.gpt-test"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["gpt-test"]
+`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if _, err := loadConfig(path); err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+
+	backups := findStoreBackups(t, home)
+	if len(backups) != 1 {
+		t.Fatalf("backup count = %d, want 1; entries = %#v", len(backups), backups)
+	}
+	backupConfig, err := os.ReadFile(filepath.Join(home, backups[0], "config.toml"))
+	if err != nil {
+		t.Fatalf("read backup config: %v", err)
+	}
+	if string(backupConfig) != original {
+		t.Fatalf("backup config was not the original config:\n%s", string(backupConfig))
+	}
+}
+
 func TestFormatEffectiveConfigFormatsSectionsWithoutExtraWhitespace(t *testing.T) {
 	cfg := config.Config{
 		Server: config.ServerConfig{
@@ -1356,6 +1399,21 @@ enabled = true
 	if got := formatEffectiveConfig(cfg); got != want {
 		t.Fatalf("formatEffectiveConfig() mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
+}
+
+func findStoreBackups(t *testing.T, parent string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	var backups []string
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), ".csgclaw_backup_") {
+			backups = append(backups, entry.Name())
+		}
+	}
+	return backups
 }
 
 func TestFormatEffectiveConfigIncludesDefaultHubRegistriesWhenOmitted(t *testing.T) {
