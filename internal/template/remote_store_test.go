@@ -162,6 +162,55 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 	}
 }
 
+func TestRemoteStoreListSkipsInvalidRepositories(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/organization/Agentic/codes":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{
+					{
+						"name":           "gitlab-assistant",
+						"path":           "Agentic/gitlab-assistant",
+						"default_branch": "main",
+					},
+					{
+						"name":           "broken-manifest",
+						"path":           "Agentic/broken-manifest",
+						"default_branch": "main",
+					},
+					{
+						"name":           "other-namespace",
+						"path":           "Other/other-namespace",
+						"default_branch": "main",
+					},
+				},
+				"total": 3,
+			})
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/blob/agent.toml":
+			writeRemoteBlob(t, w, "agent.toml", []byte(remoteTestManifest))
+		case r.URL.Path == "/api/v1/codes/Agentic/broken-manifest/blob/agent.toml":
+			writeRemoteBlob(t, w, "agent.toml", []byte("name = \"broken-manifest\"\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	store := NewRemoteStore(srv.URL, "")
+	items, err := store.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if got, want := len(items), 1; got != want {
+		t.Fatalf("len(List()) = %d, want %d; items=%#v", got, want, items)
+	}
+	if got, want := items[0].ID, "gitlab-assistant"; got != want {
+		t.Fatalf("List()[0].ID = %q, want %q", got, want)
+	}
+}
+
 func TestDefaultStoreFactoryCreatesRemoteStore(t *testing.T) {
 	t.Parallel()
 

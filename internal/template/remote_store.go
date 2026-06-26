@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -106,11 +107,13 @@ func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
 	for _, repository := range payload.Data {
 		id, err := normalizeRemoteTemplateID(repository.Path)
 		if err != nil {
-			return nil, fmt.Errorf("invalid remote hub template path %q: %w", repository.Path, err)
+			slog.Warn("skip invalid remote hub template path", "path", repository.Path, "error", err)
+			continue
 		}
 		item, err := s.getTemplate(ctx, id, repository)
 		if err != nil {
-			return nil, err
+			slog.Warn("skip invalid remote hub template", "id", id, "error", err)
+			continue
 		}
 		items = append(items, item)
 	}
