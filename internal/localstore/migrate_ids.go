@@ -2279,6 +2279,16 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
+		if info.Mode()&fs.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			return os.Symlink(linkTarget, target)
+		}
 		return copyFile(path, target, info.Mode().Perm())
 	})
 }

@@ -337,6 +337,37 @@ func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 	}
 }
 
+func TestMigrateTypedIDsBacksUpBrokenSymlinks(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, ".csgclaw")
+	mustMkdir(t, filepath.Join(root, "agents", "gitlab-assistant", ".openclaw", "plugin-skills"))
+	if err := os.Symlink("/app/dist/extensions/browser/skills/browser-automation", filepath.Join(root, "agents", "gitlab-assistant", ".openclaw", "plugin-skills", "browser-automation")); err != nil {
+		t.Skipf("Symlink() unsupported: %v", err)
+	}
+	writeJSON(t, filepath.Join(root, "state.json"), map[string]any{
+		"version":         1,
+		"model_providers": map[string]any{"default_model": map[string]any{"model_provider_id": "openai", "model_id": "gpt-4.1"}, "items": map[string]any{}},
+		"agents":          map[string]any{"items": []any{}},
+		"participants":    map[string]any{"items": []any{}},
+	})
+
+	result, err := MigrateTypedIDs(MigrateOptions{
+		Root: root,
+		Now:  func() time.Time { return time.Date(2026, 6, 24, 12, 0, 0, 0, time.Local) },
+	})
+	if err != nil {
+		t.Fatalf("MigrateTypedIDs() error = %v", err)
+	}
+	linkPath := filepath.Join(result.BackupPath, "agents", "gitlab-assistant", ".openclaw", "plugin-skills", "browser-automation")
+	got, err := os.Readlink(linkPath)
+	if err != nil {
+		t.Fatalf("Readlink(backup browser-automation) error = %v", err)
+	}
+	if got != "/app/dist/extensions/browser/skills/browser-automation" {
+		t.Fatalf("backup symlink target = %q, want container plugin target", got)
+	}
+}
+
 func TestMigrateTypedIDsCollapsesLegacyLocalIdentityAliases(t *testing.T) {
 	m := newTypedIDMigrator(t.TempDir())
 
