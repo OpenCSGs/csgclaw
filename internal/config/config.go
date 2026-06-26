@@ -132,8 +132,16 @@ func normalizeHubRegistry(registry HubRegistryConfig) HubRegistryConfig {
 	registry.Kind = strings.TrimSpace(registry.Kind)
 	registry.Path = strings.TrimSpace(registry.Path)
 	registry.URL = strings.TrimSpace(strings.TrimRight(registry.URL, "/"))
+	if registry.Kind == HubRegistryKindRemote {
+		registry.URL = DefaultOfficialHubRegistryURL
+	}
 	registry.Token = strings.TrimSpace(registry.Token)
 	return registry
+}
+
+func needsRemoteHubRegistryURLRewrite(registry HubRegistryConfig) bool {
+	return strings.TrimSpace(registry.Kind) == HubRegistryKindRemote &&
+		strings.TrimSpace(strings.TrimRight(registry.URL, "/")) != DefaultOfficialHubRegistryURL
 }
 
 func mergeHubRegistries(defaults, configured []HubRegistryConfig) []HubRegistryConfig {
@@ -200,6 +208,15 @@ func hasHubRegistry(registries []HubRegistryConfig, name string) bool {
 	name = strings.TrimSpace(name)
 	for _, registry := range registries {
 		if strings.TrimSpace(registry.Name) == name {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRemoteHubRegistryURLRewrite(registries []rawHubRegistryConfig) bool {
+	for _, registry := range registries {
+		if registry.RewriteURL {
 			return true
 		}
 	}
@@ -274,6 +291,7 @@ type rawHubRegistryConfig struct {
 	URL        string
 	Token      string
 	EnabledSet bool
+	RewriteURL bool
 }
 
 const (
@@ -294,6 +312,7 @@ const (
 	DefaultHubRegistry              = "builtin"
 	DefaultHubPublishRegistry       = "local"
 	DefaultOfficialHubRegistryName  = "official"
+	LegacyOfficialHubRegistryURL    = "https://csgclaw.opencsg.com"
 	DefaultOfficialHubRegistryURL   = "https://hub.opencsg.com"
 	DefaultBootstrapManagerTemplate = "builtin.picoclaw-manager"
 	DefaultBootstrapWorkerTemplate  = "builtin.picoclaw-worker"
@@ -608,6 +627,7 @@ func Load(path string) (Config, error) {
 				rawRegistry.EnabledSet = true
 				registry.Enabled = enabled
 			}
+			rawRegistry.RewriteURL = needsRemoteHubRegistryURLRewrite(registry)
 			cfg.Hub.Registries[hubRegistryIndex] = registry
 			cfg.raw.hub.Registries[hubRegistryIndex] = rawRegistry
 		default:
@@ -764,7 +784,11 @@ kind = %q
 			fmt.Fprintf(&b, "path = %q\n", cfg.rawOrResolvedString(rawRegistry.Path, loadedRegistry.Path, registry.Path))
 		}
 		if registry.URL != "" {
-			fmt.Fprintf(&b, "url = %q\n", cfg.rawOrResolvedString(rawRegistry.URL, loadedRegistry.URL, registry.URL))
+			registryURL := cfg.rawOrResolvedString(rawRegistry.URL, loadedRegistry.URL, registry.URL)
+			if rawRegistry.RewriteURL {
+				registryURL = registry.URL
+			}
+			fmt.Fprintf(&b, "url = %q\n", registryURL)
 		}
 		if registry.Token != "" {
 			fmt.Fprintf(&b, "token = %q\n", cfg.rawOrResolvedString(rawRegistry.Token, loadedRegistry.Token, registry.Token))
@@ -799,6 +823,7 @@ func (c Config) NeedsMigrationRewrite() bool {
 	// trigger together with the slash-to-dot normalization path.
 	return c.raw.bootstrapMeta.LegacyManagerTemplateSlash ||
 		c.raw.bootstrapMeta.LegacyWorkerTemplateSlash ||
+		hasRemoteHubRegistryURLRewrite(c.raw.hub.Registries) ||
 		strings.TrimSpace(c.raw.modelsDefault) != "" ||
 		len(c.raw.models) > 0
 }

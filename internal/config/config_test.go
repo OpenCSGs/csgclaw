@@ -451,7 +451,7 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Hub.Registries[2].Enabled, true; got != want {
 		t.Fatalf("cfg.Hub.Registries[2].Enabled = %t, want %t", got, want)
 	}
-	if got, want := cfg.Hub.Registries[3].URL, "https://hub.example.com"; got != want {
+	if got, want := cfg.Hub.Registries[3].URL, DefaultOfficialHubRegistryURL; got != want {
 		t.Fatalf("cfg.Hub.Registries[3].URL = %q, want %q", got, want)
 	}
 	if got, want := cfg.Hub.Registries[3].Token, "hub-secret"; got != want {
@@ -459,6 +459,102 @@ models = ["minimax-m2.7"]
 	}
 	if got, want := cfg.Hub.Registries[3].Enabled, false; got != want {
 		t.Fatalf("cfg.Hub.Registries[3].Enabled = %t, want %t", got, want)
+	}
+}
+
+func TestLoadLegacyOfficialHubRegistryURLAndSaveMigratesIt(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[bootstrap]
+default_manager_template = "builtin.picoclaw-manager"
+default_worker_template = "builtin.picoclaw-worker"
+
+[[hub.registries]]
+name = "official"
+kind = "remote"
+url = "https://csgclaw.opencsg.com"
+enabled = true
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	officialRegistry := cfg.Hub.Registries[2]
+	if got, want := officialRegistry.URL, DefaultOfficialHubRegistryURL; got != want {
+		t.Fatalf("official registry URL = %q, want %q", got, want)
+	}
+	if !cfg.NeedsMigrationRewrite() {
+		t.Fatal("NeedsMigrationRewrite() = false, want true")
+	}
+
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	saved := string(data)
+	if strings.Contains(saved, LegacyOfficialHubRegistryURL) {
+		t.Fatalf("saved config still contains legacy official URL:\n%s", saved)
+	}
+	if !strings.Contains(saved, `url = "https://hub.opencsg.com"`) {
+		t.Fatalf("saved config missing migrated official URL:\n%s", saved)
+	}
+}
+
+func TestLoadCustomRemoteHubRegistryURLAndSaveMigratesIt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[bootstrap]
+default_manager_template = "builtin.picoclaw-manager"
+default_worker_template = "builtin.picoclaw-worker"
+
+[[hub.registries]]
+name = "legacy-mirror"
+kind = "remote"
+url = "https://csgclaw.opencsg.com"
+enabled = true
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	registry := cfg.Hub.Registries[3]
+	if got, want := registry.URL, DefaultOfficialHubRegistryURL; got != want {
+		t.Fatalf("custom remote registry URL = %q, want %q", got, want)
+	}
+	if !cfg.NeedsMigrationRewrite() {
+		t.Fatal("NeedsMigrationRewrite() = false, want true")
+	}
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	saved := string(data)
+	if strings.Contains(saved, LegacyOfficialHubRegistryURL) {
+		t.Fatalf("saved config still contains non-official URL:\n%s", saved)
+	}
+	if !strings.Contains(saved, `url = "https://hub.opencsg.com"`) {
+		t.Fatalf("saved config missing official URL:\n%s", saved)
 	}
 }
 
@@ -1217,7 +1313,7 @@ func TestSaveWritesHubConfig(t *testing.T) {
 		"[[hub.registries]]",
 		`name = "builtin"`,
 		`kind = "builtin"`,
-		`url = "https://hub.example.com"`,
+		`url = "https://hub.opencsg.com"`,
 		`token = "secret"`,
 		`enabled = true`,
 	} {
@@ -1602,7 +1698,7 @@ reasoning_effort = "${REASONING_EFFORT}"
 		`provider = "${SANDBOX_PROVIDER}"`,
 		`default_registry = "${HUB_DEFAULT_REGISTRY}"`,
 		`default_publish_registry = "${HUB_PUBLISH_REGISTRY}"`,
-		`url = "https://${HUB_URL}"`,
+		`url = "https://hub.opencsg.com"`,
 		`token = "${HUB_TOKEN}"`,
 	} {
 		if !strings.Contains(saved, want) {
