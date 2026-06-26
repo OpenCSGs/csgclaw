@@ -448,6 +448,66 @@ describe("agent action visibility", () => {
     expect(screen.queryByRole("button", { name: "Complete connection" })).not.toBeInTheDocument();
   });
 
+  it("shows connected Feishu status while a reconnect authorization is pending", () => {
+    const connectedWorker = {
+      ...worker,
+      participants: [
+        {
+          agent_id: worker.id,
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "worker-feishu",
+          type: "agent",
+        },
+      ],
+    };
+    const draft = agentToDraft(connectedWorker);
+    render(
+      <AgentDetailPane
+        item={connectedWorker}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={draft}
+        savedDraft={draft}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        feishuPendingRegistration={{
+          connect_url: "https://feishu.example/connect",
+          registration_id: "reg-worker",
+          status: "pending",
+        }}
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onStartFeishuConnect={vi.fn()}
+        onFinalizeFeishuConnect={vi.fn()}
+        onDisconnectFeishu={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+    expect(
+      screen.getByText("Waiting for Feishu authorization. CSGClaw will finish automatically."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Feishu" })).toBeInTheDocument();
+  });
+
   it("keeps upgrade action visible in worker detail panes when backend marks an agent restart required", () => {
     render(
       <AgentDetailPane

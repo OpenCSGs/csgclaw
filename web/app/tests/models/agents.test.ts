@@ -7,6 +7,7 @@ import {
   availableManagerRuntimeOptions,
   collectManagerTemplateVariants,
   defaultManagerRebuildImageForRuntime,
+  defaultWorkerImageForRuntime,
   agentDraftWithRuntimeFieldsFromAgent,
   agentRuntimePollSettled,
   agentStatusLabel,
@@ -419,6 +420,9 @@ describe("agent model helpers", () => {
     );
     expect(pickDefaultAgentTemplate(templates, "notification", bootstrapConfig)).toBeNull();
     expect(runtimeImageForKind("openclaw_sandbox", bootstrapConfig, "fallback:worker")).toBe("openclaw:worker");
+    expect(defaultWorkerImageForRuntime(templates, "openclaw_sandbox", bootstrapConfig, "fallback:worker")).toBe(
+      "openclaw:worker",
+    );
     expect(runtimeImageForKind("codex", bootstrapConfig, "fallback:worker")).toBe("");
     expect(runtimeImageForKind("notification", bootstrapConfig, "fallback:worker")).toBe("");
 
@@ -447,6 +451,40 @@ describe("agent model helpers", () => {
       runtime_kind: "openclaw_sandbox",
       template_name: "openclaw-worker",
     });
+  });
+
+  it("falls back to matching worker template images when runtime bootstrap image defaults are stale", () => {
+    const templates = [
+      {
+        id: "builtin.picoclaw-worker",
+        name: "picoclaw-worker",
+        role: "worker",
+        runtime_kind: "picoclaw_sandbox",
+        image: "picoclaw:worker",
+      },
+      {
+        id: "builtin.openclaw-worker",
+        name: "openclaw-worker",
+        role: "worker",
+        runtime_kind: "openclaw_sandbox",
+        image: "openclaw:worker",
+      },
+    ];
+
+    expect(
+      defaultWorkerImageForRuntime(
+        templates,
+        "openclaw_sandbox",
+        {
+          default_worker_template: "builtin.picoclaw-worker",
+          runtime_default_images: {
+            picoclaw_sandbox: "picoclaw:worker",
+          },
+          runtime_kind: "picoclaw_sandbox",
+        },
+        "picoclaw:current",
+      ),
+    ).toBe("openclaw:worker");
   });
 
   it("excludes manager templates from worker template choices", () => {

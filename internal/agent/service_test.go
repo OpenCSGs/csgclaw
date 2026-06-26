@@ -5499,6 +5499,72 @@ func TestUpgradeUsesLatestDefaultTemplateImage(t *testing.T) {
 	}
 }
 
+func TestUpgradeUsesBuiltinWorkerImageForAgentRuntimeWhenDefaultWorkerTemplateDiffers(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+	openClawTemplate, err := hubSvc.Get(context.Background(), "builtin.openclaw-worker")
+	if err != nil {
+		t.Fatalf("Get(openclaw-worker) error = %v", err)
+	}
+
+	var newImage string
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+		WithHubService(hubSvc),
+		WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "builtin.picoclaw-worker"}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindOpenClawSandbox,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				newImage = spec.Image
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-alice-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning, CreatedAt: time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeID:   "rt-u-alice",
+		RuntimeKind: RuntimeKindOpenClawSandbox,
+		Image:       "custom.example/alice-openclaw:2026.05.27",
+		BoxID:       "box-alice-old",
+		Role:        RoleWorker,
+		Status:      string(agentruntime.StateRunning),
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderCodex,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	recreated, err := svc.Upgrade(context.Background(), "u-alice")
+	if err != nil {
+		t.Fatalf("Upgrade() error = %v", err)
+	}
+	if newImage != openClawTemplate.Image {
+		t.Fatalf("runtime New() image = %q, want builtin OpenClaw worker image %q", newImage, openClawTemplate.Image)
+	}
+	if recreated.Image != openClawTemplate.Image {
+		t.Fatalf("Upgrade().Image = %q, want builtin OpenClaw worker image %q", recreated.Image, openClawTemplate.Image)
+	}
+}
+
 func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)

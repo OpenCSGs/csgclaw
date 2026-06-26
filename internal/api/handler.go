@@ -458,7 +458,36 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 	if defaults.WorkerRuntimeKind != "" && defaults.WorkerImage != "" {
 		resp.RuntimeDefaultImages[defaults.WorkerRuntimeKind] = defaults.WorkerImage
 	}
+	fillBuiltinWorkerRuntimeDefaultImages(ctx, &resp, hubSvc)
 	return resp
+}
+
+func fillBuiltinWorkerRuntimeDefaultImages(ctx context.Context, resp *bootstrapConfigResponse, hubSvc *hub.Service) {
+	if resp == nil || hubSvc == nil {
+		return
+	}
+	if resp.RuntimeDefaultImages == nil {
+		resp.RuntimeDefaultImages = map[string]string{}
+	}
+	builtinWorkerTemplates := map[string]string{
+		agent.RuntimeKindPicoClawSandbox: "builtin.picoclaw-worker",
+		agent.RuntimeKindOpenClawSandbox: "builtin.openclaw-worker",
+	}
+	for runtimeKind, templateID := range builtinWorkerTemplates {
+		if strings.TrimSpace(resp.RuntimeDefaultImages[runtimeKind]) != "" {
+			continue
+		}
+		item, err := hubSvc.Get(ctx, templateID)
+		if err != nil {
+			continue
+		}
+		if strings.TrimSpace(item.RuntimeKind) != runtimeKind {
+			continue
+		}
+		if image := strings.TrimSpace(item.Image); image != "" {
+			resp.RuntimeDefaultImages[runtimeKind] = image
+		}
+	}
 }
 
 func (h *Handler) bootstrapConfigView(ctx context.Context, cfg config.Config) bootstrapConfigResponse {

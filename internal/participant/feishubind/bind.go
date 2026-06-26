@@ -267,11 +267,6 @@ func findParticipantByID(participantSvc *participant.Service, channel, id string
 	if participantSvc == nil {
 		return participant.Participant{}, false, fmt.Errorf("participant service is required")
 	}
-	items := participantSvc.List(participant.ListOptions{Channel: channel})
-	for _, item := range items {
-		if item.ID == id {
-			return item, true, nil
-		}
-	}
-	return participant.Participant{}, false, nil
+	item, ok := participantSvc.Get(channel, id)
+	return item, ok, nil
 }

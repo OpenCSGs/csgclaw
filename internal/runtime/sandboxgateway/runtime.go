@@ -332,13 +332,39 @@ func (r *Runtime) CreateGatewayBox(ctx context.Context, rt sandbox.Runtime, imag
 	info, err := r.deps.BoxInfo(ctx, box)
 	if err != nil {
 		_ = r.deps.CloseBox(box)
+		if removeErr := r.forceRemoveCreatedGatewayBox(ctx, rt, sandbox.Info{Name: spec.Name}, spec.Name); removeErr != nil {
+			return nil, sandbox.Info{}, fmt.Errorf("read gateway box info: %w; cleanup gateway box: %v", err, removeErr)
+		}
 		return nil, sandbox.Info{}, fmt.Errorf("read gateway box info: %w", err)
 	}
 	if err := r.waitForGatewayReady(ctx, box); err != nil {
 		_ = r.deps.CloseBox(box)
+		if removeErr := r.forceRemoveCreatedGatewayBox(ctx, rt, info, spec.Name); removeErr != nil {
+			return nil, sandbox.Info{}, fmt.Errorf("%w; cleanup gateway box: %v", err, removeErr)
+		}
 		return nil, sandbox.Info{}, err
 	}
 	return box, info, nil
+}
+
+func (r *Runtime) forceRemoveCreatedGatewayBox(ctx context.Context, rt sandbox.Runtime, info sandbox.Info, fallbackName string) error {
+	if r == nil || r.deps.ForceRemoveBox == nil || rt == nil {
+		return nil
+	}
+	target := strings.TrimSpace(info.ID)
+	if target == "" {
+		target = strings.TrimSpace(info.Name)
+	}
+	if target == "" {
+		target = strings.TrimSpace(fallbackName)
+	}
+	if target == "" {
+		return nil
+	}
+	if err := r.deps.ForceRemoveBox(ctx, rt, target); err != nil && !sandbox.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentruntime.Profile) (sandbox.CreateSpec, error) {

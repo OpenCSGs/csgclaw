@@ -364,6 +364,23 @@ func TestHandlerBootstrapConfigIncludesRuntimeOptionSchemas(t *testing.T) {
 	}
 }
 
+func TestBootstrapConfigIncludesBuiltinOpenClawRuntimeDefaultImage(t *testing.T) {
+	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+
+	got := bootstrapConfigView(context.Background(), config.Config{}, hubSvc, nil)
+
+	openclawImage := got.RuntimeDefaultImages[agent.RuntimeKindOpenClawSandbox]
+	if openclawImage == "" {
+		t.Fatalf("RuntimeDefaultImages[%q] = empty; defaults=%#v", agent.RuntimeKindOpenClawSandbox, got.RuntimeDefaultImages)
+	}
+	if !strings.Contains(openclawImage, "/opencsghq/openclaw:") {
+		t.Fatalf("RuntimeDefaultImages[%q] = %q, want builtin OpenClaw image", agent.RuntimeKindOpenClawSandbox, openclawImage)
+	}
+}
+
 func TestHandleAgentIncludesRuntimeOptionSchemas(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "agents.json")
 	if err := writeSeededAgents(statePath, []agent.Agent{

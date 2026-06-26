@@ -29,8 +29,8 @@ import {
   normalizeTemplateSelection,
   notifierFormIsComplete,
   pickDefaultAgentTemplate,
+  defaultWorkerImageForRuntime,
   runtimeOptionSchemasForAgent,
-  runtimeImageForKind,
   templateMatchesRuntime,
   workerSelectableTemplates,
 } from "@/models/agents";
@@ -191,7 +191,8 @@ export function AgentProfileModal({
           avatar: baseDraft.avatar || "",
           bot_type: BOT_TYPE_NORMAL,
           runtime_kind: runtimeKind,
-          image: runtimeImageForKind(
+          image: defaultWorkerImageForRuntime(
+            hubTemplates,
             runtimeKind,
             bootstrapConfig,
             managerAgent?.image || baseDraft.default_image || "",
@@ -367,7 +368,8 @@ export function AgentProfileModal({
                                 bot_type: BOT_TYPE_NORMAL,
                                 role: "worker",
                                 runtime_kind: runtimeKind,
-                                image: runtimeImageForKind(
+                                image: defaultWorkerImageForRuntime(
+                                  hubTemplates,
                                   runtimeKind,
                                   bootstrapConfig,
                                   agentDraft.default_image || managerAgent?.image || "",

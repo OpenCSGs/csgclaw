@@ -1681,6 +1681,25 @@ export function runtimeImageForKind(
   return String(fallbackImage ?? "").trim();
 }
 
+export function defaultWorkerImageForRuntime(
+  templates: readonly AgentTemplateLike[] | null | undefined,
+  runtimeKind: unknown,
+  bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
+  fallbackImage = "",
+): string {
+  const configuredImage = runtimeImageForKind(runtimeKind, bootstrapConfig, "");
+  if (configuredImage) {
+    return configuredImage;
+  }
+  const templateImage = String(
+    pickDefaultAgentTemplate(templates, normalizeRuntimeKind(runtimeKind), bootstrapConfig)?.image ?? "",
+  ).trim();
+  if (templateImage) {
+    return templateImage;
+  }
+  return String(fallbackImage ?? "").trim();
+}
+
 export function availableManagerRuntimeOptions(bootstrapConfig: RuntimeBootstrapConfig | null | undefined) {
   const configuredKinds = Array.isArray(bootstrapConfig?.supported_runtime_kinds)
     ? bootstrapConfig.supported_runtime_kinds

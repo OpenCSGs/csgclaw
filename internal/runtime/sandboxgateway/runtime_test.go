@@ -98,6 +98,37 @@ func TestCreateGatewayBoxSkipsReadinessForBoxlite(t *testing.T) {
 	}
 }
 
+func TestCreateGatewayBoxForceRemovesDockerBoxWhenReadinessFails(t *testing.T) {
+	deps := testGatewayDeps(func() string { return "docker" }, func(_ context.Context, _ sandbox.Instance, _ string, _ []string, _ io.Writer) (int, error) {
+		return 127, fmt.Errorf("exec failed")
+	})
+	deps.BoxInfo = func(context.Context, sandbox.Instance) (sandbox.Info, error) {
+		return sandbox.Info{
+			ID:    "box-1",
+			Name:  "csgclaw-agent-alice",
+			State: sandbox.StateExited,
+		}, nil
+	}
+	var removed []string
+	deps.ForceRemoveBox = func(_ context.Context, _ sandbox.Runtime, idOrName string) error {
+		removed = append(removed, idOrName)
+		return nil
+	}
+	rt := New(deps)
+	rt.RememberPreparedGatewayProvision("u-alice", testPreparedGatewayProvision())
+
+	_, _, err := rt.CreateGatewayBox(context.Background(), testSandboxRuntime{}, "image:1", "alice", "u-alice", agentruntime.Profile{})
+	if err == nil {
+		t.Fatal("CreateGatewayBox() error = nil, want readiness failure")
+	}
+	if !strings.Contains(err.Error(), "sandbox exited before ready") {
+		t.Fatalf("CreateGatewayBox() error = %v, want sandbox exited context", err)
+	}
+	if strings.Join(removed, ",") != "box-1" {
+		t.Fatalf("ForceRemoveBox() targets = %#v, want [box-1]", removed)
+	}
+}
+
 func TestGatewayCreateSpecUsesAgentIDSandboxName(t *testing.T) {
 	rt := New(testGatewayDeps(func() string { return "docker" }, func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error) {
 		return 0, nil

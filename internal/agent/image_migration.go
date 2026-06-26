@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	hub "csgclaw/internal/template"
+	hubtemplates "csgclaw/internal/template/embed"
 )
 
 func (s *Service) withRuntimeImageMigrationStatus(ctx context.Context, a Agent) Agent {
@@ -109,6 +110,17 @@ func (s *Service) currentDefaultImageForAgent(ctx context.Context, a Agent) (def
 			}
 		}
 	}
+	if hubSvc != nil {
+		if candidate, ok := workerTemplateImageFromList(ctx, hubSvc, a.RuntimeKind, true); ok {
+			return candidate, true
+		}
+		if candidate, ok := builtinWorkerTemplateImageForRuntime(ctx, hubSvc, a.RuntimeKind); ok {
+			return candidate, true
+		}
+		if candidate, ok := workerTemplateImageFromList(ctx, hubSvc, a.RuntimeKind, false); ok {
+			return candidate, true
+		}
+	}
 
 	return defaultAgentImage{}, false
 }
@@ -172,6 +184,61 @@ func managerTemplateImageFromList(ctx context.Context, hubSvc templateService, r
 
 func managerTemplateImageForRuntime(item hub.Template, runtimeKind string) (defaultAgentImage, bool) {
 	if normalizeRole(item.Role) != RoleManager {
+		return defaultAgentImage{}, false
+	}
+	templateRuntimeKind := strings.TrimSpace(item.RuntimeKind)
+	if runtimeKind != "" && templateRuntimeKind != runtimeKind {
+		return defaultAgentImage{}, false
+	}
+	image := strings.TrimSpace(item.Image)
+	if image == "" {
+		return defaultAgentImage{}, false
+	}
+	return defaultAgentImage{
+		image:   image,
+		version: strings.TrimSpace(item.Version),
+	}, true
+}
+
+func workerTemplateImageFromList(ctx context.Context, hubSvc templateService, runtimeKind string, builtinOnly bool) (defaultAgentImage, bool) {
+	if hubSvc == nil {
+		return defaultAgentImage{}, false
+	}
+	items, err := hubSvc.List(ctx)
+	if err != nil {
+		return defaultAgentImage{}, false
+	}
+	for _, item := range items {
+		if builtinOnly && strings.TrimSpace(item.Source.Kind) != hub.RegistryKindBuiltin {
+			continue
+		}
+		if candidate, ok := workerTemplateImageForRuntime(item, runtimeKind); ok {
+			return candidate, true
+		}
+	}
+	return defaultAgentImage{}, false
+}
+
+func builtinWorkerTemplateImageForRuntime(ctx context.Context, hubSvc templateService, runtimeKind string) (defaultAgentImage, bool) {
+	if hubSvc == nil {
+		return defaultAgentImage{}, false
+	}
+	runtimeKind = strings.TrimSpace(runtimeKind)
+	for _, item := range hubtemplates.Builtins() {
+		if item.Role != RoleWorker || strings.TrimSpace(item.RuntimeKind) != runtimeKind {
+			continue
+		}
+		templateItem, err := hubSvc.Get(ctx, hub.RegistryKindBuiltin+"."+item.ID)
+		if err != nil {
+			return defaultAgentImage{}, false
+		}
+		return workerTemplateImageForRuntime(templateItem, runtimeKind)
+	}
+	return defaultAgentImage{}, false
+}
+
+func workerTemplateImageForRuntime(item hub.Template, runtimeKind string) (defaultAgentImage, bool) {
+	if normalizeRole(item.Role) != RoleWorker {
 		return defaultAgentImage{}, false
 	}
 	templateRuntimeKind := strings.TrimSpace(item.RuntimeKind)

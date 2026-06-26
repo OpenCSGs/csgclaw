@@ -54,6 +54,7 @@ import {
   availableManagerRebuildRuntimeOptions,
   collectManagerTemplateVariants,
   defaultManagerRebuildImageForRuntime,
+  defaultWorkerImageForRuntime,
   draftRuntimeOptionsForSave,
   draftToProfile,
   ensureNotifierPullSubscriptionDraft,
@@ -76,7 +77,6 @@ import {
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
   resolveAgentChannelUserID,
-  runtimeImageForKind,
   shouldWaitForManagerRuntimeAfterProfileSave,
   startAgentCreateProgress,
 } from "@/models/agents";
@@ -140,6 +140,14 @@ function feishuRegistrationExpired(registration: FeishuRegistration | null | und
   return Number.isFinite(expiresAt) && expiresAt <= now;
 }
 
+function feishuRegistrationFinalizeClearsPending(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const status = Number((error as { status?: unknown }).status);
+  return status === 404 || status === 410;
+}
+
 function normalizeFeishuPendingRegistration(
   registration: FeishuRegistration | null | undefined,
   fallbackAgentID: string,
@@ -186,10 +194,14 @@ function loadFeishuPendingRegistrations(): Record<string, FeishuPendingRegistrat
     }
     const decoded = JSON.parse(raw);
     if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+      saveFeishuPendingRegistrations({});
       return {};
     }
-    return pruneFeishuPendingRegistrations(decoded as Record<string, FeishuPendingRegistration>);
+    const pruned = pruneFeishuPendingRegistrations(decoded as Record<string, FeishuPendingRegistration>);
+    saveFeishuPendingRegistrations(pruned);
+    return pruned;
   } catch {
+    saveFeishuPendingRegistrations({});
     return {};
   }
 }
@@ -937,7 +949,7 @@ export function useAgentController({
         ) || DEFAULT_RUNTIME_KIND;
       let draft = agentToDraft({
         avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
-        image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
+        image: defaultWorkerImageForRuntime(hubTemplates, runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
         bot_type: BOT_TYPE_NORMAL,
         agent_profile: defaults,
@@ -953,7 +965,7 @@ export function useAgentController({
         ) || DEFAULT_RUNTIME_KIND;
       let draft = agentToDraft({
         avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
-        image: runtimeImageForKind(runtimeKind, bootstrapConfig, managerAgent?.image || ""),
+        image: defaultWorkerImageForRuntime(hubTemplates, runtimeKind, bootstrapConfig, managerAgent?.image || ""),
         runtime_kind: runtimeKind,
         bot_type: BOT_TYPE_NORMAL,
         agent_profile: managerProfile,
@@ -1420,6 +1432,13 @@ export function useAgentController({
         await refreshAgentStateRef.current(agentID);
         showAgentPageNotice(t("feishuConnectConfigured"), "success");
       } catch (err) {
+        if (feishuRegistrationFinalizeClearsPending(err)) {
+          updateFeishuPendingRegistrations((current) => {
+            const next = { ...current };
+            delete next[agentID];
+            return next;
+          });
+        }
         if (!background) {
           setAgentPageError(errorMessage(err, t("feishuConnectFailed")));
         }
@@ -1449,6 +1468,26 @@ export function useAgentController({
       timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [agentActionBusy, completeFeishuPendingRegistration, feishuPendingRegistrations]);
+
+  const finalizeVisibleFeishuPendingRegistrations = useCallback(() => {
+    if (agentActionBusy) {
+      return;
+    }
+    Object.entries(feishuPendingRegistrations).forEach(([agentID, registration]) => {
+      const pending = normalizeFeishuPendingRegistration(registration, agentID);
+      if (!pending || feishuAutoFinalizeActiveRef.current.has(pending.registration_id)) {
+        return;
+      }
+      void completeFeishuPendingRegistration(pending, { background: true });
+    });
+  }, [agentActionBusy, completeFeishuPendingRegistration, feishuPendingRegistrations]);
+
+  useEffect(() => {
+    window.addEventListener("focus", finalizeVisibleFeishuPendingRegistrations);
+    return () => {
+      window.removeEventListener("focus", finalizeVisibleFeishuPendingRegistrations);
+    };
+  }, [finalizeVisibleFeishuPendingRegistrations]);
 
   async function startFeishuConnect(item: AgentLike | null | undefined): Promise<void> {
     const agentID = String(item?.id || "").trim();

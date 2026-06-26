@@ -22,6 +22,8 @@ const labels: Record<string, string> = {
   profileRuntimeOptions: "Runtime Options",
   profileProvider: "Provider",
   profileRuntimeKind: "Runtime",
+  runtimeOpenclaw: "OpenClaw",
+  runtimePicoclaw: "PicoClaw",
   templateLabel: "Template",
   templateNone: "No template",
 };
@@ -267,6 +269,84 @@ describe("AgentProfileModal", () => {
     expect(screen.getByText("Handles coding tasks.")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Manager" })).not.toBeInTheDocument();
     expect(screen.queryByText("Coordinates workers.")).not.toBeInTheDocument();
+  });
+
+  it("uses the matching worker template image when switching blank drafts to OpenClaw", async () => {
+    const user = userEvent.setup();
+    const onAgentDraftChange = vi.fn();
+    function TestModal() {
+      const [draft, setDraft] = useState<AgentDraft>({
+        ...agentToDraft(worker),
+        from_template: "",
+        image: "picoclaw:current",
+      });
+      return (
+        <AgentProfileModal
+          t={t}
+          agentModalMode="create"
+          editingAgent={null}
+          agentDraft={draft}
+          onAgentDraftChange={(update) => {
+            onAgentDraftChange(update);
+            setDraft((current) => {
+              const next = typeof update === "function" ? update(current) : update;
+              return next ?? current;
+            });
+          }}
+          onAgentModelsReset={vi.fn()}
+          hubTemplates={[
+            {
+              id: "builtin.picoclaw-worker",
+              name: "PicoClaw Worker",
+              role: "worker",
+              runtime_kind: "picoclaw_sandbox",
+              image: "picoclaw:worker",
+            },
+            {
+              id: "builtin.openclaw-worker",
+              name: "OpenClaw Worker",
+              role: "worker",
+              runtime_kind: "openclaw_sandbox",
+              image: "openclaw:worker",
+            },
+          ]}
+          bootstrapConfig={{
+            default_worker_template: "builtin.picoclaw-worker",
+            runtime_default_images: {
+              picoclaw_sandbox: "picoclaw:worker",
+            },
+            runtime_kind: "picoclaw_sandbox",
+          }}
+          managerAgent={{ ...worker, image: "picoclaw:manager" }}
+          agentModels={[]}
+          agentModelBusy={false}
+          locale="en"
+          authStatuses={{}}
+          authBusyProvider=""
+          agentCreateBotKind="worker"
+          onAgentCreateBotKindChange={vi.fn()}
+          notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+          onProviderLogin={vi.fn()}
+          agentError=""
+          agentProgress={null}
+          agentBusy={false}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      );
+    }
+    render(<TestModal />);
+
+    await user.click(screen.getByRole("combobox", { name: "Runtime" }));
+    await user.click(screen.getByRole("option", { name: "OpenClaw" }));
+
+    expect(onAgentDraftChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        from_template: "",
+        image: "openclaw:worker",
+        runtime_kind: "openclaw_sandbox",
+      }),
+    );
   });
 
   it("shows provider logos only in the provider field, not in the model field", () => {

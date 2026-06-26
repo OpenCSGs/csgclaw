@@ -136,6 +136,54 @@ func TestFinalizeFeishuRegistrationBindsWorkerParticipant(t *testing.T) {
 	}
 }
 
+func TestFinalizeFeishuRegistrationUpdatesCanonicalAdminParticipant(t *testing.T) {
+	accounts := newFakeFeishuAccountsServer(t, map[string]any{
+		"client_id":     "cli_dev",
+		"client_secret": "dev-secret",
+		"user_info": map[string]any{
+			"open_id": "ou_admin",
+		},
+	})
+	defer accounts.Close()
+	withFeishuRegistrationAccountsBaseURL(t, accounts.URL)
+
+	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{completeWorkerAgent("u-dev", "dev")},
+		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
+	)
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              participant.BootstrapAdminParticipantID,
+		Channel:         participant.ChannelFeishu,
+		Type:            participant.TypeHuman,
+		Name:            "admin",
+		ChannelUserRef:  "ou_old_admin",
+		ChannelUserKind: participant.ChannelUserKindOpenID,
+	}}), participant.WithAgentService(agentSvc))
+	srv := &Handler{
+		svc:                        agentSvc,
+		participant:                participantSvc,
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+	}
+	registrationID := startFeishuRegistrationForTest(t, srv, "u-dev")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/feishu/registrations/"+url.PathEscape(registrationID)+":finalize", nil)
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	admin, ok := participantSvc.Get(participant.ChannelFeishu, participant.BootstrapAdminParticipantID)
+	if !ok {
+		t.Fatal("canonical feishu admin participant was not stored")
+	}
+	if admin.ChannelUserRef != "ou_admin" {
+		t.Fatalf("admin channel_user_ref = %q, want registration open_id", admin.ChannelUserRef)
+	}
+	if _, ok := participantSvc.Get(participant.ChannelFeishu, "pt-dev"); !ok {
+		t.Fatal("feishu:dev participant was not stored")
+	}
+}
+
 func TestFinalizeFeishuRegistrationResolvesAdminNameFromFeishuOpenAPI(t *testing.T) {
 	accounts := newFakeFeishuAccountsServerWithOpenAPI(t, map[string]any{
 		"client_id":     "cli_dev",

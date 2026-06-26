@@ -891,6 +891,95 @@ describe("useAgentController", () => {
     }
   });
 
+  it("keeps connected Feishu pending registration until background finalize completes", async () => {
+    vi.useFakeTimers();
+    const connectedWorker: AgentLike = {
+      ...oldAgent,
+      id: "u-dev",
+      name: "dev",
+      role: "worker",
+      participants: [
+        {
+          agent_id: "u-dev",
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "dev",
+          type: "agent",
+        },
+      ],
+    };
+    window.localStorage.setItem(
+      feishuRegistrationStorageKey,
+      JSON.stringify({
+        "u-dev": {
+          agent_id: "u-dev",
+          connect_url: "https://feishu.example/connect",
+          expires_at: "2999-01-01T00:00:00Z",
+          next_poll_seconds: 1,
+          participant_id: "dev",
+          registration_id: "reg-dev",
+        },
+      }),
+    );
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(connectedWorker);
+
+    try {
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+            agents: [connectedWorker],
+          }).controller,
+        { wrapper: createWrapper() },
+      );
+
+      expect(result.current.agentViewProps.item?.participants?.[0]?.channel).toBe("feishu");
+      expect(result.current.agentViewProps.feishuPendingRegistration?.registration_id).toBe("reg-dev");
+      expect(window.localStorage.getItem(feishuRegistrationStorageKey)).toContain("reg-dev");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      vi.useRealTimers();
+
+      expect(finalizeFeishuRegistrationRequest).toHaveBeenCalledWith("reg-dev");
+      expect(result.current.agentViewProps.notice).toBe("feishuConnectConfigured");
+      expect(result.current.agentViewProps.noticeTone).toBe("success");
+      expect(window.localStorage.getItem(feishuRegistrationStorageKey)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears expired Feishu pending registration from localStorage on load", async () => {
+    window.localStorage.setItem(
+      feishuRegistrationStorageKey,
+      JSON.stringify({
+        "u-dev": {
+          agent_id: "u-dev",
+          connect_url: "https://feishu.example/connect",
+          expires_at: "2000-01-01T00:00:00Z",
+          participant_id: "dev",
+          registration_id: "reg-dev",
+        },
+      }),
+    );
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+          agents: [{ ...oldAgent, id: "u-dev", name: "dev", role: "worker" }],
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.agentViewProps.item?.id).toBe("u-dev"));
+    expect(result.current.agentViewProps.feishuPendingRegistration).toBeNull();
+    expect(window.localStorage.getItem(feishuRegistrationStorageKey)).toBeNull();
+  });
+
   it("finalizes Feishu connection and refreshes the selected agent participants", async () => {
     const workerAgent: AgentLike = {
       ...oldAgent,
@@ -1040,6 +1129,156 @@ describe("useAgentController", () => {
       await waitFor(() => expect(result.current.agentViewProps.item?.participants?.[0]?.channel).toBe("feishu"));
       expect(result.current.agentViewProps.notice).toBe("feishuConnectConfigured");
       expect(result.current.agentViewProps.noticeTone).toBe("success");
+      expect(window.localStorage.getItem(feishuRegistrationStorageKey)).toBeNull();
+    } finally {
+      openSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("automatically finalizes a Feishu reconnect for an already connected agent", async () => {
+    vi.useFakeTimers();
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const connectedWorker: AgentLike = {
+      ...oldAgent,
+      id: "u-dev",
+      name: "dev",
+      role: "worker",
+      participants: [
+        {
+          agent_id: "u-dev",
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "dev",
+          type: "agent",
+        },
+      ],
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(connectedWorker);
+
+    try {
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+            agents: [connectedWorker],
+          }).controller,
+        { wrapper: createWrapper() },
+      );
+
+      await act(async () => {
+        await result.current.agentViewProps.onStartFeishuConnect?.(connectedWorker);
+      });
+
+      expect(startFeishuRegistrationRequest).toHaveBeenCalledWith("u-dev");
+      expect(openSpy).toHaveBeenCalledWith("https://feishu.example/connect", "_blank", "noopener,noreferrer");
+      expect(result.current.agentViewProps.feishuPendingRegistration?.registration_id).toBe("reg-dev");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      vi.useRealTimers();
+
+      expect(finalizeFeishuRegistrationRequest).toHaveBeenCalledWith("reg-dev");
+      expect(result.current.agentViewProps.notice).toBe("feishuConnectConfigured");
+      expect(result.current.agentViewProps.noticeTone).toBe("success");
+      expect(window.localStorage.getItem(feishuRegistrationStorageKey)).toBeNull();
+    } finally {
+      openSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("finalizes a pending Feishu reconnect immediately when the page regains focus", async () => {
+    vi.useFakeTimers();
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const connectedWorker: AgentLike = {
+      ...oldAgent,
+      id: "u-dev",
+      name: "dev",
+      role: "worker",
+      participants: [
+        {
+          agent_id: "u-dev",
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "dev",
+          type: "agent",
+        },
+      ],
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(connectedWorker);
+
+    try {
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+            agents: [connectedWorker],
+          }).controller,
+        { wrapper: createWrapper() },
+      );
+
+      await act(async () => {
+        await result.current.agentViewProps.onStartFeishuConnect?.(connectedWorker);
+      });
+
+      expect(result.current.agentViewProps.feishuPendingRegistration?.registration_id).toBe("reg-dev");
+      expect(finalizeFeishuRegistrationRequest).not.toHaveBeenCalled();
+
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+        await Promise.resolve();
+      });
+      vi.useRealTimers();
+
+      expect(finalizeFeishuRegistrationRequest).toHaveBeenCalledWith("reg-dev");
+      expect(result.current.agentViewProps.notice).toBe("feishuConnectConfigured");
+      expect(result.current.agentViewProps.noticeTone).toBe("success");
+    } finally {
+      openSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears pending Feishu state when automatic finalize finds an expired registration", async () => {
+    vi.useFakeTimers();
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const workerAgent: AgentLike = {
+      ...oldAgent,
+      id: "u-dev",
+      name: "dev",
+      role: "worker",
+    };
+    vi.mocked(finalizeFeishuRegistrationRequest).mockRejectedValueOnce({
+      message: "registration expired",
+      status: 410,
+    });
+
+    try {
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+            agents: [workerAgent],
+          }).controller,
+        { wrapper: createWrapper() },
+      );
+
+      await act(async () => {
+        await result.current.agentViewProps.onStartFeishuConnect?.(workerAgent);
+      });
+
+      expect(result.current.agentViewProps.feishuPendingRegistration?.registration_id).toBe("reg-dev");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+
+      expect(finalizeFeishuRegistrationRequest).toHaveBeenCalledWith("reg-dev");
+      expect(result.current.agentViewProps.feishuPendingRegistration).toBeNull();
       expect(window.localStorage.getItem(feishuRegistrationStorageKey)).toBeNull();
     } finally {
       openSpy.mockRestore();
