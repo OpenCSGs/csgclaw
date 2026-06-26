@@ -368,6 +368,36 @@ func TestMigrateTypedIDsBacksUpBrokenSymlinks(t *testing.T) {
 	}
 }
 
+func TestMigrateTypedIDsSkipsUnreadableOpenClawPluginSkillBackupEntry(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, ".csgclaw")
+	pluginPath := filepath.Join(root, "agents", "feishu-assi", ".openclaw", "plugin-skills", "browser-automation")
+	mustMkdir(t, filepath.Dir(pluginPath))
+	writeFile(t, pluginPath, "container plugin placeholder")
+	if err := os.Chmod(pluginPath, 0); err != nil {
+		t.Fatalf("Chmod() error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(pluginPath, 0o600) })
+	writeJSON(t, filepath.Join(root, "state.json"), map[string]any{
+		"version":         1,
+		"model_providers": map[string]any{"default_model": map[string]any{"model_provider_id": "openai", "model_id": "gpt-4.1"}, "items": map[string]any{}},
+		"agents":          map[string]any{"items": []any{}},
+		"participants":    map[string]any{"items": []any{}},
+	})
+
+	result, err := MigrateTypedIDs(MigrateOptions{
+		Root: root,
+		Now:  func() time.Time { return time.Date(2026, 6, 24, 12, 0, 0, 0, time.Local) },
+	})
+	if err != nil {
+		t.Fatalf("MigrateTypedIDs() error = %v", err)
+	}
+	if result.BackupPath == "" {
+		t.Fatal("BackupPath is empty, want backup despite unreadable volatile plugin entry")
+	}
+	assertMissing(t, filepath.Join(result.BackupPath, "agents", "feishu-assi", ".openclaw", "plugin-skills", "browser-automation"))
+}
+
 func TestMigrateTypedIDsCollapsesLegacyLocalIdentityAliases(t *testing.T) {
 	m := newTypedIDMigrator(t.TempDir())
 

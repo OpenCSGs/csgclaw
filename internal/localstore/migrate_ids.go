@@ -2277,6 +2277,12 @@ func CreateSiblingBackup(root string, now time.Time) (string, error) {
 func copyDir(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			if rel, relErr := filepath.Rel(src, path); relErr == nil && isVolatileBackupEntry(rel) {
+				if d != nil && d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 			return err
 		}
 		rel, err := filepath.Rel(src, path)
@@ -2287,17 +2293,26 @@ func copyDir(src, dst string) error {
 		if d.IsDir() {
 			info, err := d.Info()
 			if err != nil {
+				if isVolatileBackupEntry(rel) {
+					return filepath.SkipDir
+				}
 				return err
 			}
 			return os.MkdirAll(target, info.Mode().Perm())
 		}
 		info, err := d.Info()
 		if err != nil {
+			if isVolatileBackupEntry(rel) {
+				return nil
+			}
 			return err
 		}
 		if info.Mode()&fs.ModeSymlink != 0 {
 			linkTarget, err := os.Readlink(path)
 			if err != nil {
+				if isVolatileBackupEntry(rel) {
+					return nil
+				}
 				return err
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
@@ -2305,8 +2320,22 @@ func copyDir(src, dst string) error {
 			}
 			return os.Symlink(linkTarget, target)
 		}
-		return copyFile(path, target, info.Mode().Perm())
+		if err := copyFile(path, target, info.Mode().Perm()); err != nil {
+			if isVolatileBackupEntry(rel) {
+				return nil
+			}
+			return err
+		}
+		return nil
 	})
+}
+
+func isVolatileBackupEntry(rel string) bool {
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	return len(parts) >= 4 &&
+		parts[0] == "agents" &&
+		parts[2] == ".openclaw" &&
+		parts[3] == "plugin-skills"
 }
 
 func copyFile(src, dst string, mode fs.FileMode) error {
