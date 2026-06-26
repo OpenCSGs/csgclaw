@@ -637,6 +637,29 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 
 	var info sandbox.Info
 	createdBootstrapManagerBox := false
+	if box != nil {
+		info, err = s.boxInfo(ctx, box)
+		if err != nil {
+			return Agent{}, fmt.Errorf("read bootstrap manager box info: %w", err)
+		}
+		if info.State != sandbox.StateRunning {
+			if err := s.startBox(ctx, box); err != nil {
+				return Agent{}, fmt.Errorf("start bootstrap manager box: %w", err)
+			}
+			info, err = s.boxInfo(ctx, box)
+			if err != nil {
+				return Agent{}, fmt.Errorf("read bootstrap manager box info after start: %w", err)
+			}
+		}
+		if !forceRecreate && sandboxInfoNeedsCanonicalAgentName(ManagerUserID, managerDisplayName, info, "") {
+			log.Printf("bootstrap manager box %q uses legacy sandbox name %q; recreating as %q", managerDisplayName, strings.TrimSpace(info.Name), sandboxNameForAgentID(ManagerUserID))
+			if err := s.removeResolvedGatewayBox(ctx, rt, box, info, ""); err != nil {
+				return Agent{}, fmt.Errorf("remove legacy-named bootstrap manager box: %w", err)
+			}
+			box = nil
+			info = sandbox.Info{}
+		}
+	}
 	if box == nil {
 		log.Printf("bootstrap manager box %q not found, creating it with image %q", managerDisplayName, managerImage)
 		log.Printf("if the image is not present locally, the first pull may take a while")
@@ -661,20 +684,6 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, imageOv
 		}
 		createdBootstrapManagerBox = true
 		log.Printf("bootstrap manager box %q created", managerDisplayName)
-	} else {
-		info, err = s.boxInfo(ctx, box)
-		if err != nil {
-			return Agent{}, fmt.Errorf("read bootstrap manager box info: %w", err)
-		}
-		if info.State != sandbox.StateRunning {
-			if err := s.startBox(ctx, box); err != nil {
-				return Agent{}, fmt.Errorf("start bootstrap manager box: %w", err)
-			}
-			info, err = s.boxInfo(ctx, box)
-			if err != nil {
-				return Agent{}, fmt.Errorf("read bootstrap manager box info after start: %w", err)
-			}
-		}
 	}
 	defer func() {
 		_ = s.closeBox(box)
@@ -1519,6 +1528,129 @@ func (s *Service) stopAndForceRemoveBox(ctx context.Context, rt sandbox.Runtime,
 	return nil
 }
 
+func (s *Service) removeResolvedGatewayBox(ctx context.Context, rt sandbox.Runtime, box sandbox.Instance, info sandbox.Info, resolvedKey string) error {
+	removeKey := gatewayBoxRemoveKey(info, resolvedKey)
+	if removeKey == "" {
+		return fmt.Errorf("agent box identifier is required")
+	}
+	if box != nil {
+		if err := s.stopBox(ctx, box, sandbox.StopOptions{}); err != nil && !sandbox.IsNotFound(err) {
+			_ = s.closeBox(box)
+			return fmt.Errorf("stop agent box: %w", err)
+		}
+		_ = s.closeBox(box)
+	}
+	if err := s.forceRemoveBox(ctx, rt, removeKey); err != nil && !sandbox.IsNotFound(err) {
+		return fmt.Errorf("remove agent box: %w", err)
+	}
+	return nil
+}
+
+func gatewayBoxRemoveKey(info sandbox.Info, resolvedKey string) string {
+	for _, key := range []string{resolvedKey, info.ID, info.Name} {
+		if key = strings.TrimSpace(key); key != "" {
+			return key
+		}
+	}
+	return ""
+}
+
+func sandboxInfoNeedsCanonicalAgentName(agentID, displayName string, info sandbox.Info, resolvedKey string) bool {
+	canonicalName := strings.TrimSpace(sandboxNameForAgentID(agentID))
+	if canonicalName == "" {
+		return false
+	}
+	if name := strings.TrimSpace(info.Name); name != "" {
+		return name != canonicalName
+	}
+	key := strings.TrimSpace(resolvedKey)
+	if key == "" || key == canonicalName || key == strings.TrimSpace(info.ID) {
+		return false
+	}
+	if display := strings.TrimSpace(displayName); display != "" && key == display {
+		return true
+	}
+	if suffix := strings.TrimPrefix(canonicalAgentID(agentID), AgentIDPrefix); suffix != "" && key == suffix {
+		return true
+	}
+	return false
+}
+
+func (s *Service) recreateLegacyNamedGatewayAgentBox(ctx context.Context, got Agent) (Agent, bool, error) {
+	if !isGatewayRuntimeKind(strings.TrimSpace(got.RuntimeKind)) {
+		return got, false, nil
+	}
+	rt, err := s.ensureRuntime(got.ID)
+	if err != nil {
+		return got, false, err
+	}
+	runtimeHome, err := s.sandboxRuntimeHome(got.ID)
+	if err != nil {
+		return got, false, err
+	}
+	defer func() {
+		_ = s.closeRuntime(runtimeHome, rt)
+	}()
+
+	box, resolvedKey, err := s.resolveAgentBox(ctx, rt, got)
+	if err != nil {
+		if sandbox.IsNotFound(err) {
+			return got, false, nil
+		}
+		return got, false, err
+	}
+	info, err := s.boxInfo(ctx, box)
+	if err != nil {
+		_ = s.closeBox(box)
+		return got, false, fmt.Errorf("read agent box info: %w", err)
+	}
+	if !sandboxInfoNeedsCanonicalAgentName(got.ID, got.Name, info, resolvedKey) {
+		_ = s.closeBox(box)
+		return got, false, nil
+	}
+
+	startProfile := s.hydrateProfileFromCatalog(normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil))
+	if err := s.validateRuntimeConfig(ctx, strings.TrimSpace(got.RuntimeKind), runtimeConfigSnapshotForAgent(startProfile, got.RuntimeOptions)); err != nil {
+		_ = s.closeBox(box)
+		return got, false, err
+	}
+	runtimeImpl, err := s.runtimeForKind(strings.TrimSpace(got.RuntimeKind))
+	if err != nil {
+		_ = s.closeBox(box)
+		return got, false, err
+	}
+	if err := s.provisionRuntimeForAgent(ctx, runtimeImpl, got, ""); err != nil {
+		_ = s.closeBox(box)
+		return got, false, fmt.Errorf("provision agent runtime: %w", err)
+	}
+
+	log.Printf("agent %s sandbox %q uses legacy sandbox name %q; recreating as %q", got.ID, gatewayBoxRemoveKey(info, resolvedKey), strings.TrimSpace(info.Name), sandboxNameForAgentID(got.ID))
+	if err := s.removeResolvedGatewayBox(ctx, rt, box, info, resolvedKey); err != nil {
+		return got, false, err
+	}
+	box = nil
+
+	newBox, newInfo, err := s.createGatewayBox(ctx, rt, got.Image, got.Name, got.ID, startProfile)
+	if err != nil {
+		return got, false, fmt.Errorf("create agent box with canonical name: %w", err)
+	}
+	defer func() {
+		_ = s.closeBox(newBox)
+	}()
+	updated, err := s.updateRuntimeState(got.ID, agentruntime.Info{
+		HandleID:  strings.TrimSpace(newInfo.ID),
+		State:     agentruntime.State(newInfo.State),
+		CreatedAt: newInfo.CreatedAt.UTC(),
+	})
+	if err != nil {
+		return got, false, err
+	}
+	if err := s.syncLifecycleForAgent(ctx, updated); err != nil {
+		return got, false, err
+	}
+	return updated, true, nil
+}
+
 func sandboxNameForAgentID(agentID string) string {
 	return agentruntime.SandboxNameForAgentID(canonicalAgentID(agentID))
 }
@@ -1578,6 +1710,14 @@ func (s *Service) StartConfiguredAgents(ctx context.Context) error {
 			return err
 		}
 		live := s.hydrateAgentStatus(ctx, a)
+		_, reconciled, err := s.recreateLegacyNamedGatewayAgentBox(ctx, live)
+		if err != nil {
+			startErr = errors.Join(startErr, fmt.Errorf("%s: %w", live.Name, err))
+			continue
+		}
+		if reconciled {
+			continue
+		}
 		if isRuntimeRunning(live) {
 			continue
 		}

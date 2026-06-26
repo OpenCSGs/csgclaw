@@ -5885,13 +5885,13 @@ func TestStartConfiguredAgentsStartsStoppedCompleteWorkersAndLeavesRunningWorker
 	infos := map[string]sandbox.Info{
 		"box-alice": {
 			ID:        "box-alice",
-			Name:      "alice",
+			Name:      "csgclaw-agent-alice",
 			State:     sandbox.StateStopped,
 			CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
 		},
 		"box-carol": {
 			ID:        "box-carol",
-			Name:      "carol",
+			Name:      "csgclaw-agent-carol",
 			State:     sandbox.StateRunning,
 			CreatedAt: time.Date(2026, 4, 1, 13, 0, 0, 0, time.UTC),
 		},
@@ -6001,6 +6001,137 @@ func TestStartConfiguredAgentsStartsStoppedCompleteWorkersAndLeavesRunningWorker
 	}
 	if carol.Status != string(sandbox.StateRunning) {
 		t.Fatalf("Agent(u-carol).Status = %q, want running", carol.Status)
+	}
+}
+
+func TestStartConfiguredAgentsRecreatesRunningLegacyNamedWorkerBox(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		runtimeKind string
+	}{
+		{name: "picoclaw", runtimeKind: RuntimeKindPicoClawSandbox},
+		{name: "openclaw", runtimeKind: RuntimeKindOpenClawSandbox},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			rt := &fakeRuntime{}
+			infos := map[string]sandbox.Info{
+				"box-alice": {
+					ID:        "box-alice",
+					Name:      "alice",
+					State:     sandbox.StateRunning,
+					CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+				},
+				"alice": {
+					ID:        "box-alice",
+					Name:      "alice",
+					State:     sandbox.StateRunning,
+					CreatedAt: time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+				},
+			}
+			var created []string
+			SetTestHooks(
+				func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil },
+				func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, botID string, profile AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+					if image != "worker-image:1" {
+						t.Fatalf("createGatewayBox() image = %q, want %q", image, "worker-image:1")
+					}
+					if name != "alice" {
+						t.Fatalf("createGatewayBox() name = %q, want %q", name, "alice")
+					}
+					if botID != "agent-alice" {
+						t.Fatalf("createGatewayBox() botID = %q, want %q", botID, "agent-alice")
+					}
+					if !profile.ProfileComplete || profile.Provider != ProviderCodex || profile.ModelID != "gpt-5.5" {
+						t.Fatalf("createGatewayBox() profile = %+v, want complete codex gpt-5.5", profile)
+					}
+					created = append(created, botID)
+					info := sandbox.Info{
+						ID:        "box-canonical-alice",
+						Name:      "csgclaw-agent-alice",
+						State:     sandbox.StateRunning,
+						CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+					}
+					infos[info.ID] = info
+					infos[info.Name] = info
+					return &fakeInfoInstance{info: info}, info, nil
+				},
+			)
+			defer ResetTestHooks()
+
+			var gotKeys []string
+			testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+				gotKeys = append(gotKeys, idOrName)
+				info, ok := infos[idOrName]
+				if !ok {
+					return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+				}
+				return &fakeInfoInstance{info: info}, nil
+			}
+			testBoxInfoHook = func(_ *Service, _ context.Context, box sandbox.Instance) (sandbox.Info, error) {
+				return box.Info(context.Background())
+			}
+			var started []string
+			testStartBoxHook = func(_ *Service, _ context.Context, box sandbox.Instance) error {
+				info, err := box.Info(context.Background())
+				if err != nil {
+					return err
+				}
+				started = append(started, info.ID)
+				return nil
+			}
+			var removed []string
+			testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+				removed = append(removed, idOrName)
+				delete(infos, idOrName)
+				delete(infos, "alice")
+				return nil
+			}
+
+			svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
+			if err != nil {
+				t.Fatalf("NewService() error = %v", err)
+			}
+			completeAlice := AgentProfile{Name: "alice", Provider: ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true}
+			svc.agents["agent-alice"] = Agent{
+				ID:              "agent-alice",
+				Name:            "alice",
+				Role:            RoleWorker,
+				RuntimeKind:     tt.runtimeKind,
+				Image:           "worker-image:1",
+				BoxID:           "box-alice",
+				Status:          string(sandbox.StateRunning),
+				AgentProfile:    completeAlice,
+				ProfileComplete: true,
+				CreatedAt:       time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+			}
+
+			if err := svc.StartConfiguredAgents(context.Background()); err != nil {
+				t.Fatalf("StartConfiguredAgents() error = %v", err)
+			}
+			if strings.Join(created, ",") != "agent-alice" {
+				t.Fatalf("created boxes = %q, want agent-alice", created)
+			}
+			if strings.Join(removed, ",") != "box-alice" {
+				t.Fatalf("removed boxes = %q, want box-alice", removed)
+			}
+			if len(started) != 0 {
+				t.Fatalf("startBox() calls = %q, want none because old running box is recreated", started)
+			}
+			if len(gotKeys) < 1 || gotKeys[0] != "box-alice" {
+				t.Fatalf("getBox() leading keys = %q, want box-alice first", gotKeys)
+			}
+			got, ok := svc.Agent("agent-alice")
+			if !ok {
+				t.Fatal("Agent() missing agent-alice")
+			}
+			if got.BoxID != "box-canonical-alice" {
+				t.Fatalf("Agent().BoxID = %q, want %q", got.BoxID, "box-canonical-alice")
+			}
+			if got.Status != string(sandbox.StateRunning) {
+				t.Fatalf("Agent().Status = %q, want running", got.Status)
+			}
+		})
 	}
 }
 
@@ -6485,7 +6616,7 @@ func TestEnsureBootstrapStateReusesStoredManagerBoxIDWithoutForce(t *testing.T) 
 	testBoxInfoHook = func(_ *Service, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
 		return sandbox.Info{
 			ID:        "box-old",
-			Name:      ManagerName,
+			Name:      "csgclaw-agent-manager",
 			State:     sandbox.StateRunning,
 			CreatedAt: time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
 		}, nil
@@ -6517,6 +6648,106 @@ func TestEnsureBootstrapStateReusesStoredManagerBoxIDWithoutForce(t *testing.T) 
 	}
 	if created {
 		t.Fatal("createGatewayBox() called, want existing manager box to be reused")
+	}
+}
+
+func TestEnsureBootstrapStateRecreatesLegacyNamedManagerBoxWithoutForce(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	SetTestHooks(nil, nil)
+	defer ResetTestHooks()
+
+	primaryRT := &fakeRuntime{}
+	testEnsureRuntimeAtHomeHook = func(_ *Service, home string) (sandbox.Runtime, error) {
+		return primaryRT, nil
+	}
+
+	var created bool
+	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, botID string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+		created = true
+		if name != ManagerName {
+			t.Fatalf("createGatewayBox() name = %q, want %q", name, ManagerName)
+		}
+		if botID != ManagerUserID {
+			t.Fatalf("createGatewayBox() botID = %q, want %q", botID, ManagerUserID)
+		}
+		info := sandbox.Info{
+			ID:        "box-canonical-manager",
+			Name:      "csgclaw-agent-manager",
+			State:     sandbox.StateRunning,
+			CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
+		}
+		return &fakeInfoInstance{info: info}, info, nil
+	}
+	testGetBoxHook = func(_ *Service, _ context.Context, rt sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+		if rt == primaryRT && idOrName == "box-old" {
+			return &fakeInfoInstance{info: sandbox.Info{
+				ID:        "box-old",
+				Name:      ManagerName,
+				State:     sandbox.StateRunning,
+				CreatedAt: time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
+			}}, nil
+		}
+		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+	var removed []string
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		removed = append(removed, idOrName)
+		return nil
+	}
+	testStartBoxHook = func(_ *Service, _ context.Context, _ sandbox.Instance) error { return nil }
+	testBoxInfoHook = func(_ *Service, _ context.Context, box sandbox.Instance) (sandbox.Info, error) {
+		return box.Info(context.Background())
+	}
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "agents.json")
+	data, err := json.Marshal(persistedState{
+		Agents: []persistedAgent{
+			{
+				ID:          ManagerUserID,
+				Name:        ManagerName,
+				RuntimeKind: RuntimeKindPicoClawSandbox,
+				Role:        RoleManager,
+				BoxID:       "box-old",
+				CreatedAt:   time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+				AgentProfile: AgentProfile{
+					Name:            ManagerName,
+					Provider:        ProviderCodex,
+					ModelID:         "gpt-5.5",
+					ProfileComplete: true,
+				},
+				ProfileComplete: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(statePath, data, 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	if err := EnsureBootstrapState(context.Background(), statePath, config.ServerConfig{}, config.ModelConfig{}, "manager-image:test", false); err != nil {
+		t.Fatalf("EnsureBootstrapState() error = %v", err)
+	}
+	if !created {
+		t.Fatal("createGatewayBox() was not called for legacy-named manager box")
+	}
+	if strings.Join(removed, ",") != "box-old" {
+		t.Fatalf("removed boxes = %q, want box-old", removed)
+	}
+
+	reloaded, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", statePath)
+	if err != nil {
+		t.Fatalf("NewService() reload error = %v", err)
+	}
+	got, ok := reloaded.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent() missing manager")
+	}
+	if got.BoxID != "box-canonical-manager" {
+		t.Fatalf("Agent().BoxID = %q, want box-canonical-manager", got.BoxID)
 	}
 }
 
