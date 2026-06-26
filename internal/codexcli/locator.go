@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -35,6 +36,11 @@ type Locator struct {
 func (l Locator) Locate() (string, error) {
 	explicit := strings.TrimSpace(l.resolvedExplicitPath())
 	if explicit != "" {
+		if path, ok, err := l.windowsPowerShellShimTarget(explicit); err != nil {
+			return "", err
+		} else if ok {
+			return path, nil
+		}
 		path, ok, err := l.executablePath(explicit)
 		if err != nil {
 			return "", err
@@ -45,8 +51,11 @@ func (l Locator) Locate() (string, error) {
 		return "", fmt.Errorf("codex binary %s: %w", explicit, os.ErrNotExist)
 	}
 	if lookPath := l.lookPath(); lookPath != nil {
-		name := l.binaryName()
-		if path, err := lookPath(name); err == nil {
+		for _, name := range l.binaryNames() {
+			path, err := lookPath(name)
+			if err != nil {
+				continue
+			}
 			resolved, ok, statErr := l.executablePath(path)
 			if statErr != nil {
 				return "", statErr
@@ -80,10 +89,33 @@ func (l Locator) executablePath(path string) (string, bool, error) {
 	if info.IsDir() {
 		return "", false, nil
 	}
+	if l.isWindows() {
+		if strings.EqualFold(filepath.Ext(path), ".ps1") {
+			return "", false, fmt.Errorf("codex binary %s is a PowerShell shim; set %s to the matching codex.cmd or codex.exe file", path, EnvBinaryPath)
+		}
+		return path, true, nil
+	}
 	if info.Mode()&0o111 == 0 {
 		return "", false, nil
 	}
 	return path, true, nil
+}
+
+func (l Locator) windowsPowerShellShimTarget(path string) (string, bool, error) {
+	if !l.isWindows() || !strings.EqualFold(filepath.Ext(path), ".ps1") {
+		return "", false, nil
+	}
+	base := strings.TrimSuffix(path, filepath.Ext(path))
+	for _, candidate := range []string{base + ".cmd", base + ".exe", base + ".bat"} {
+		resolved, ok, err := l.executablePath(candidate)
+		if err != nil {
+			return "", false, err
+		}
+		if ok {
+			return resolved, true, nil
+		}
+	}
+	return "", false, nil
 }
 
 func (l Locator) lookPath() func(string) (string, error) {
@@ -100,11 +132,19 @@ func (l Locator) stat(path string) (os.FileInfo, error) {
 	return os.Stat(path)
 }
 
-func (l Locator) binaryName() string {
-	if strings.TrimSpace(l.GOOS) == "windows" || (strings.TrimSpace(l.GOOS) == "" && runtime.GOOS == "windows") {
-		return BinaryName + ".exe"
+func (l Locator) binaryNames() []string {
+	if l.isWindows() {
+		return []string{BinaryName + ".cmd", BinaryName + ".exe", BinaryName + ".bat", BinaryName}
 	}
-	return BinaryName
+	return []string{BinaryName}
+}
+
+func (l Locator) isWindows() bool {
+	goos := strings.TrimSpace(l.GOOS)
+	if goos == "" {
+		goos = runtime.GOOS
+	}
+	return goos == "windows"
 }
 
 func AppServerArgs() []string {

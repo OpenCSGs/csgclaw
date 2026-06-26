@@ -127,7 +127,7 @@ bootstrap manager 当前固定使用 `picoclaw_sandbox`；`openclaw_sandbox` 支
 
 当 worker 使用 Codex runtime 时，CSGClaw 会通过 `codex app-server --listen stdio://` 启动本地 `codex` CLI。你可以通过下面的环境变量覆盖二进制查找行为：
 
-- `CSGCLAW_CODEX_PATH`：指定本地 `codex` 可执行文件路径
+- `CSGCLAW_CODEX_PATH`：指定本地 `codex` 可执行文件路径。Windows 下优先指向 npm 的 `codex.cmd` shim 或原生 `codex.exe`，不要指向 `codex.ps1`。
 - `CSGCLAW_CODEX_ACP_PATH`：迁移期间的兼容回退项，也指向同一个 `codex` 可执行文件路径
 
 ## OpenClaw Runtime

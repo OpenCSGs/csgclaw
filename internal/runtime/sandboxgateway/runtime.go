@@ -67,6 +67,7 @@ type Dependencies struct {
 }
 
 const sandboxToolsGuestDir = "/opt/csgclaw/bin"
+const defaultSandboxPATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 type GatewayReadinessProbe struct {
 	Name     string
@@ -388,7 +389,7 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 		return sandbox.CreateSpec{}, err
 	}
 	if mountTools {
-		gatewayCommand = "export PATH=" + sandboxToolsGuestDir + ":$PATH; " + gatewayCommand
+		addSandboxToolsToPATH(envVars)
 	}
 	envVars["HOME"] = homeEnv
 	spec := sandbox.CreateSpec{
@@ -414,6 +415,17 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 		})
 	}
 	return spec, nil
+}
+
+func addSandboxToolsToPATH(envVars map[string]string) {
+	if envVars == nil {
+		return
+	}
+	current := strings.TrimSpace(envVars["PATH"])
+	if current == "" {
+		current = defaultSandboxPATH
+	}
+	envVars["PATH"] = sandboxToolsGuestDir + ":" + current
 }
 
 func (r *Runtime) resolveSandboxToolsDir() (string, bool, error) {

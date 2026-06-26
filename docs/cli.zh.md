@@ -371,7 +371,7 @@ csgclaw agent delete --all --force
 说明：
 
 - `--runtime codex` 依赖本地已安装且支持 `app-server --listen stdio://` 的 `codex` CLI。
-- 默认从 `PATH` 查找二进制，也可以用 `CSGCLAW_CODEX_PATH` 显式覆盖。
+- 默认从 `PATH` 查找二进制，也可以用 `CSGCLAW_CODEX_PATH` 显式覆盖。Windows 下请使用 `codex.cmd` 或 `codex.exe`，不要使用 PowerShell 的 `codex.ps1` shim。
 
 ### `csgclaw user`
 

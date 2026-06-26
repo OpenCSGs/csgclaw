@@ -371,7 +371,7 @@ csgclaw agent delete --all --force
 Notes:
 
 - `--runtime codex` requires a local `codex` CLI that supports `app-server --listen stdio://`.
-- Binary lookup uses `PATH` by default and can be overridden with `CSGCLAW_CODEX_PATH`.
+- Binary lookup uses `PATH` by default and can be overridden with `CSGCLAW_CODEX_PATH`. On Windows, use `codex.cmd` or `codex.exe` rather than the PowerShell `codex.ps1` shim.
 
 ### `csgclaw user`
 
