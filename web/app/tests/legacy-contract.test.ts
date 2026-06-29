@@ -16,6 +16,11 @@ function readTree(dir: string, pattern: RegExp): string {
 const source: string = readTree(resolve(process.cwd(), "src"), /\.(js|jsx|ts|tsx)$/);
 const styles: string = readTree(resolve(process.cwd(), "src"), /\.css$/);
 
+function styleRule(selector: string): string {
+  const pattern = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`);
+  return styles.match(pattern)?.[1] ?? "";
+}
+
 describe("legacy UI contract", () => {
   it("keeps the manager rebuild action card contract", () => {
     expect(source).toContain('const CSGCLAW_ACTION_CARD_TYPE = "csgclaw.action_card";');
@@ -140,6 +145,19 @@ describe("legacy UI contract", () => {
     expect(styles).not.toContain("top: -24px;");
     expect(styles).toMatch(/\.profile-editor-shell\s*\{[\s\S]*overflow-y:\s*auto;/);
     expect(styles).toMatch(/\.agent-modal > \.modal-actions\s*\{[\s\S]*flex:\s*0 0 auto;/);
+  });
+
+  it("keeps the model provider page scrollable inside the fixed workspace panel", () => {
+    const pageRule = styleRule(".model-provider-page");
+    const modelListRule = styleRule(".model-provider-model-list");
+
+    expect(pageRule).toMatch(/(?:^|[;\s])height:\s*100%;/);
+    expect(pageRule).toContain("min-height: 0;");
+    expect(pageRule).toContain("overflow-x: hidden;");
+    expect(pageRule).toContain("overflow-y: auto;");
+    expect(modelListRule).toContain("scrollbar-width: thin;");
+    expect(styles).toContain(".model-provider-page::-webkit-scrollbar");
+    expect(styles).toContain(".model-provider-model-list::-webkit-scrollbar");
   });
 
   it("shows agent running status dots in direct message rows", () => {

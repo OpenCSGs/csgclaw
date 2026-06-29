@@ -423,6 +423,22 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--field);
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-400) transparent;
+}
+
+.model-provider-model-list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.model-provider-model-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.model-provider-model-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .model-provider-model-row {
