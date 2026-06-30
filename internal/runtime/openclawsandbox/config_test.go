@@ -3,6 +3,7 @@ package openclawsandbox
 import (
 	"encoding/json"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -81,6 +82,11 @@ func TestRenderAgentOpenClawConfigUsesBridgeForMinimaxBaseURL(t *testing.T) {
 	}
 	if got, want := defaults["verboseDefault"], "on"; got != want {
 		t.Fatalf("verboseDefault = %v, want %v", got, want)
+	}
+	if runtime.GOOS == "windows" {
+		if got, want := defaults["workspace"], BoxWindowsWorkspaceDir; got != want {
+			t.Fatalf("workspace = %v, want %v", got, want)
+		}
 	}
 	tools := cfg["tools"].(map[string]any)
 	if got, want := tools["deny"], []any{"image"}; !reflect.DeepEqual(got, want) {

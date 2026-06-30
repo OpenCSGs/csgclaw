@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/sandboxgateway"
+	"csgclaw/internal/sandbox"
 )
 
 type AgentRef = sandboxgateway.AgentRef
@@ -26,8 +28,8 @@ func New(deps Dependencies) *Runtime {
 	deps.RuntimeKind = agentruntime.KindOpenClawSandbox
 	deps.HomeEnv = BoxUserHome
 	deps.MountGuestPath = BoxDir
-	deps.WorkspaceGuestPath = BoxWorkspaceDir
-	deps.ProjectsGuestPath = BoxProjectsDir
+	deps.WorkspaceGuestPath = workspaceGuestPathForGOOS(goruntime.GOOS)
+	deps.ProjectsGuestPath = projectsGuestPathForGOOS(goruntime.GOOS)
 	deps.GatewayLogPath = BoxGatewayLogPath
 	if deps.GatewayCommand == nil {
 		deps.GatewayCommand = GatewayRunCommand
@@ -91,12 +93,7 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 	if err := sandboxgateway.EnsureWorkspaceProjectsMountpoint(workspaceRoot); err != nil {
 		return err
 	}
-	prepared, err := sandboxgateway.FinalizePreparedGatewayProvision(req, WorkspaceLayout{
-		MountHostPath:      Root(agentHome),
-		MountGuestPath:     BoxDir,
-		WorkspaceHostPath:  workspaceRoot,
-		WorkspaceGuestPath: BoxWorkspaceDir,
-	})
+	prepared, err := sandboxgateway.FinalizePreparedGatewayProvision(req, workspaceLayoutForGOOS(agentHome, goruntime.GOOS))
 	if err != nil {
 		return err
 	}
@@ -105,9 +102,60 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 }
 
 func GatewayRunCommand() string {
-	return "exec node /app/openclaw.mjs gateway --allow-unconfigured --bind lan --port 18789 1>" + BoxGatewayLogPath + " 2>&1"
+	return gatewayRunCommandForGOOS(goruntime.GOOS)
 }
 
+func gatewayRunCommandForGOOS(goos string) string {
+	prefix := ""
+	if goos == "windows" {
+		prefix = "mkdir -p " + BoxDir + " && rm -rf " + BoxWorkspaceDir + " && ln -sfn " + BoxWindowsWorkspaceDir + " " + BoxWorkspaceDir + " && "
+	}
+	return prefix + "exec node /app/openclaw.mjs gateway --allow-unconfigured --bind lan --port 18789 1>" + BoxGatewayLogPath + " 2>&1"
+}
+
+func workspaceLayoutForGOOS(agentHome, goos string) WorkspaceLayout {
+	root := Root(agentHome)
+	workspace := workspaceRoot(agentHome)
+	layout := WorkspaceLayout{
+		MountHostPath:      root,
+		MountGuestPath:     BoxDir,
+		WorkspaceHostPath:  workspace,
+		WorkspaceGuestPath: BoxWorkspaceDir,
+	}
+	if goos == "windows" {
+		layout.MountHostPath = workspace
+		layout.MountGuestPath = BoxWindowsWorkspaceDir
+		layout.WorkspaceGuestPath = BoxWindowsWorkspaceDir
+		layout.ExtraMounts = []sandbox.Mount{
+			{
+				HostPath:  filepath.Join(root, HostConfig),
+				GuestPath: BoxConfigPath,
+				ReadOnly:  true,
+			},
+			{
+				HostPath:  filepath.Join(root, HostExecApproval),
+				GuestPath: BoxExecApprovalPath,
+				ReadOnly:  true,
+			},
+			{
+				HostPath:  filepath.Join(root, HostGatewayLog),
+				GuestPath: BoxGatewayLogPath,
+			},
+		}
+	}
+	return layout
+}
+
+func workspaceGuestPathForGOOS(goos string) string {
+	if goos == "windows" {
+		return BoxWindowsWorkspaceDir
+	}
+	return BoxWorkspaceDir
+}
+
+func projectsGuestPathForGOOS(goos string) string {
+	return workspaceGuestPathForGOOS(goos) + "/projects"
+}
 func fixedBaseURL(baseURL string) BaseURLResolver {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	return func(config.ServerConfig) string {

@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/sandbox"
 	templateembed "csgclaw/internal/template/embed"
 )
 
@@ -45,6 +47,9 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(agentHome, HostDir, HostExecApproval)); err != nil {
 		t.Fatalf("stat openclaw approvals: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(agentHome, HostDir, HostGatewayLog)); err != nil {
+		t.Fatalf("stat openclaw gateway log: %v", err)
 	}
 	approvalsRaw, err := os.ReadFile(filepath.Join(agentHome, HostDir, HostExecApproval))
 	if err != nil {
@@ -83,5 +88,52 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 		t.Fatalf("stat workspace projects mountpoint: %v", err)
 	} else if !info.IsDir() {
 		t.Fatalf("workspace projects mountpoint is not a directory")
+	}
+}
+
+func TestWorkspaceLayoutForWindowsAvoidsMountingOpenClawHome(t *testing.T) {
+	agentHome := filepath.Join("tmp", "agent-home")
+
+	layout := workspaceLayoutForGOOS(agentHome, "windows")
+
+	if got, want := layout.MountHostPath, workspaceRoot(agentHome); got != want {
+		t.Fatalf("windows MountHostPath = %q, want workspace root %q", got, want)
+	}
+	if got, want := layout.MountGuestPath, BoxWindowsWorkspaceDir; got != want {
+		t.Fatalf("windows MountGuestPath = %q, want isolated workspace guest path %q", got, want)
+	}
+	if got, want := layout.WorkspaceHostPath, workspaceRoot(agentHome); got != want {
+		t.Fatalf("windows WorkspaceHostPath = %q, want %q", got, want)
+	}
+	wantMounts := []sandbox.Mount{{
+		HostPath:  filepath.Join(Root(agentHome), HostConfig),
+		GuestPath: BoxConfigPath,
+		ReadOnly:  true,
+	}, {
+		HostPath:  filepath.Join(Root(agentHome), HostExecApproval),
+		GuestPath: BoxExecApprovalPath,
+		ReadOnly:  true,
+	}, {
+		HostPath:  filepath.Join(Root(agentHome), HostGatewayLog),
+		GuestPath: BoxGatewayLogPath,
+	}}
+	if !reflect.DeepEqual(layout.ExtraMounts, wantMounts) {
+		t.Fatalf("windows ExtraMounts = %+v, want readonly config and approvals plus writable log mount %+v", layout.ExtraMounts, wantMounts)
+	}
+}
+
+func TestWorkspaceLayoutForNonWindowsMountsOpenClawHome(t *testing.T) {
+	agentHome := filepath.Join("tmp", "agent-home")
+
+	layout := workspaceLayoutForGOOS(agentHome, "linux")
+
+	if got, want := layout.MountHostPath, Root(agentHome); got != want {
+		t.Fatalf("linux MountHostPath = %q, want openclaw root %q", got, want)
+	}
+	if got, want := layout.MountGuestPath, BoxDir; got != want {
+		t.Fatalf("linux MountGuestPath = %q, want openclaw home %q", got, want)
+	}
+	if len(layout.ExtraMounts) != 0 {
+		t.Fatalf("linux ExtraMounts = %+v, want none", layout.ExtraMounts)
 	}
 }

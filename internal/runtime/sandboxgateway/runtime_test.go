@@ -382,3 +382,40 @@ func TestWaitForGatewayReadyFailsWhenDockerBoxExits(t *testing.T) {
 		t.Fatalf("waitForGatewayReady() error = %v, want sandbox exited context", err)
 	}
 }
+
+func TestGatewayCreateSpecIncludesExtraWorkspaceMounts(t *testing.T) {
+	rt := New(testGatewayDeps(func() string { return config.BoxLiteProvider }, func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error) {
+		return 0, nil
+	}))
+	prepared := testPreparedGatewayProvision()
+	prepared.WorkspaceLayout.ExtraMounts = []sandbox.Mount{{
+		HostPath:  "/tmp/agent/.openclaw/openclaw.json",
+		GuestPath: "/home/node/.openclaw/openclaw.json",
+		ReadOnly:  true,
+	}, {
+		HostPath:  "/tmp/agent/.openclaw/exec-approvals.json",
+		GuestPath: "/home/node/.openclaw/exec-approvals.json",
+		ReadOnly:  true,
+	}, {
+		HostPath:  "/tmp/agent/.openclaw/gateway.log",
+		GuestPath: "/home/node/.openclaw/gateway.log",
+	}}
+	rt.RememberPreparedGatewayProvision("u-manager", prepared)
+
+	spec, err := rt.GatewayCreateSpec("image:1", "manager", "u-manager", agentruntime.Profile{})
+	if err != nil {
+		t.Fatalf("GatewayCreateSpec() error = %v", err)
+	}
+	if len(spec.Mounts) != 5 {
+		t.Fatalf("GatewayCreateSpec() mounts = %+v, want base, projects, and three extra mounts", spec.Mounts)
+	}
+	if extra := spec.Mounts[2]; extra.HostPath != "/tmp/agent/.openclaw/openclaw.json" || extra.GuestPath != "/home/node/.openclaw/openclaw.json" || !extra.ReadOnly {
+		t.Fatalf("GatewayCreateSpec() config mount = %+v", extra)
+	}
+	if extra := spec.Mounts[3]; extra.HostPath != "/tmp/agent/.openclaw/exec-approvals.json" || extra.GuestPath != "/home/node/.openclaw/exec-approvals.json" || !extra.ReadOnly {
+		t.Fatalf("GatewayCreateSpec() approvals mount = %+v", extra)
+	}
+	if extra := spec.Mounts[4]; extra.HostPath != "/tmp/agent/.openclaw/gateway.log" || extra.GuestPath != "/home/node/.openclaw/gateway.log" || extra.ReadOnly {
+		t.Fatalf("GatewayCreateSpec() log mount = %+v", extra)
+	}
+}

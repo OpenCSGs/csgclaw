@@ -31,6 +31,7 @@ type WorkspaceLayout struct {
 	MountGuestPath     string
 	WorkspaceHostPath  string
 	WorkspaceGuestPath string
+	ExtraMounts        []sandbox.Mount
 }
 
 type Dependencies struct {
@@ -439,6 +440,7 @@ func (r *Runtime) GatewayCreateSpec(image, name, botID string, profile agentrunt
 		sandbox.Mount{HostPath: workspaceLayout.MountHostPath, GuestPath: workspaceLayout.MountGuestPath},
 		sandbox.Mount{HostPath: projectsRoot, GuestPath: projectsGuestPath},
 	)
+	spec.Mounts = append(spec.Mounts, workspaceLayout.ExtraMounts...)
 	if mountTools {
 		spec.Mounts = append(spec.Mounts, sandbox.Mount{
 			HostPath:  toolsDir,
@@ -609,6 +611,15 @@ func normalizeWorkspaceLayout(deps Dependencies, layout WorkspaceLayout) Workspa
 	layout.MountGuestPath = strings.TrimSpace(layout.MountGuestPath)
 	layout.WorkspaceHostPath = strings.TrimSpace(layout.WorkspaceHostPath)
 	layout.WorkspaceGuestPath = strings.TrimSpace(layout.WorkspaceGuestPath)
+	normalizedMounts := make([]sandbox.Mount, 0, len(layout.ExtraMounts))
+	for _, mount := range layout.ExtraMounts {
+		mount.HostPath = strings.TrimSpace(mount.HostPath)
+		mount.GuestPath = strings.TrimSpace(mount.GuestPath)
+		if mount.HostPath != "" || mount.GuestPath != "" {
+			normalizedMounts = append(normalizedMounts, mount)
+		}
+	}
+	layout.ExtraMounts = normalizedMounts
 	if layout.WorkspaceHostPath == "" {
 		layout.WorkspaceHostPath = layout.MountHostPath
 	}

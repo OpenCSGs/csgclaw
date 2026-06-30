@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 
 	"csgclaw/internal/channel/feishu"
@@ -16,15 +17,19 @@ import (
 var defaultOpenClawGatewayConfig []byte
 
 const (
-	HostDir           = ".openclaw"
-	HostConfig        = "openclaw.json"
-	HostExecApproval  = "exec-approvals.json"
-	HostWorkspaceDir  = "workspace"
-	BoxUserHome       = "/home/node"
-	BoxDir            = "/home/node/.openclaw"
-	BoxWorkspaceDir   = BoxDir + "/workspace"
-	BoxProjectsDir    = BoxDir + "/workspace/projects"
-	BoxGatewayLogPath = BoxDir + "/gateway.log"
+	HostDir                = ".openclaw"
+	HostConfig             = "openclaw.json"
+	HostExecApproval       = "exec-approvals.json"
+	HostGatewayLog         = "gateway.log"
+	HostWorkspaceDir       = "workspace"
+	BoxUserHome            = "/home/node"
+	BoxDir                 = "/home/node/.openclaw"
+	BoxConfigPath          = BoxDir + "/" + HostConfig
+	BoxExecApprovalPath    = BoxDir + "/" + HostExecApproval
+	BoxWorkspaceDir        = BoxDir + "/workspace"
+	BoxProjectsDir         = BoxDir + "/workspace/projects"
+	BoxGatewayLogPath      = BoxDir + "/" + HostGatewayLog
+	BoxWindowsWorkspaceDir = "/workspace"
 
 	openClawBridgeProviderID  = "csgclaw-llm"
 	openClawCodexResponsesAPI = "openai-codex-responses"
@@ -41,7 +46,7 @@ func workspaceRoot(agentHome string) string {
 }
 
 func HostGatewayLogPath(agentHome string) string {
-	return filepath.Join(Root(agentHome), "gateway.log")
+	return filepath.Join(Root(agentHome), HostGatewayLog)
 }
 
 func EnsureConfig(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.AgentCredentialProvider) (string, error) {
@@ -68,6 +73,9 @@ func EnsureConfig(agentHome, participantID, agentID string, server config.Server
 		}
 	}
 	if err := writeExecApprovalsAllowAll(hostRoot); err != nil {
+		return "", err
+	}
+	if err := ensureGatewayLogFile(hostRoot); err != nil {
 		return "", err
 	}
 	return hostRoot, nil
@@ -115,6 +123,26 @@ func writeExecApprovalsAllowAll(hostRoot string) error {
 	return nil
 }
 
+func ensureGatewayLogFile(hostRoot string) error {
+	target := filepath.Join(hostRoot, HostGatewayLog)
+	file, err := os.OpenFile(target, os.O_CREATE, 0o600)
+	if err != nil {
+		return fmt.Errorf("create openclaw gateway log: %w", err)
+	}
+	return file.Close()
+}
+
+func updateOpenClawWorkspaceDefault(cfg map[string]any, workspace string) {
+	if goruntime.GOOS != "windows" {
+		return
+	}
+	agents, _ := cfg["agents"].(map[string]any)
+	defaults, _ := agents["defaults"].(map[string]any)
+	if defaults == nil {
+		return
+	}
+	defaults["workspace"] = workspace
+}
 func renderConfig(participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.AgentCredentialProvider) ([]byte, error) {
 	participantID = strings.TrimSpace(participantID)
 	agentID = strings.TrimSpace(agentID)
@@ -140,6 +168,7 @@ func renderConfig(participantID, agentID string, server config.ServerConfig, mod
 	if err := updateOpenClawGatewayAuth(cfg, server); err != nil {
 		return nil, err
 	}
+	updateOpenClawWorkspaceDefault(cfg, workspaceGuestPathForGOOS(goruntime.GOOS))
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode openclaw config: %w", err)
