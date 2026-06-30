@@ -6,12 +6,7 @@ import { fetchBootstrap, fetchBootstrapConfig, fetchRuntimeImages, fetchVersion 
 import type { FetchVersionOptions } from "@/api/app";
 import { fetchHubTemplate, fetchHubTemplates, fetchHubWorkspace, fetchHubWorkspaceFile } from "@/api/hub";
 import { fetchModelProviders } from "@/api/modelProviders";
-import {
-  fetchAgenticHubOfficialSkillsPage,
-  fetchSkillFile,
-  fetchSkills,
-  fetchSkillTree,
-} from "@/api/skills";
+import { fetchAgenticHubOfficialSkillsPage, fetchSkillFile, fetchSkills, fetchSkillTree } from "@/api/skills";
 import type { AgenticHubSkillsPage } from "@/api/skills";
 import { fetchManagerProfile } from "@/api/agents";
 import { fetchUpgradeStatus } from "@/api/upgrade";

@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import {
-  fetchAgenticHubOfficialSkillsPage,
-  fetchSkills,
-  installRemoteSkillRequest,
-} from "@/api/skills";
+import { fetchAgenticHubOfficialSkillsPage, fetchSkills, installRemoteSkillRequest } from "@/api/skills";
 
 const AGENTICHUB_SKILLS_URL =
   "https://opencsg-stg.example.test/api/v1/skills?page=1&per=16&search=&sort=trending&source=";

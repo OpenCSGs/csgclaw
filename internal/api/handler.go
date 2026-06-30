@@ -787,7 +787,13 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		h.publishUpdatedAgentUser(updated)
 		writeJSON(w, http.StatusOK, h.presentAgentResponse(updated))
 	case http.MethodDelete:
-		if err := h.svc.Delete(r.Context(), id); err != nil {
+		var err error
+		if h.participant != nil {
+			_, err = h.participant.DeleteAgent(r.Context(), id)
+		} else {
+			err = h.svc.Delete(r.Context(), id)
+		}
+		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				http.Error(w, "agent not found", http.StatusNotFound)
 				return

@@ -6,7 +6,9 @@ import {
   batchAddAgentSkillsRequest,
   createBotRequest,
   createNotificationBotRequest,
+  deleteAgentRequest,
   deleteAgentSkillRequest,
+  deleteBotRequest,
   fetchAgent,
   fetchAgentProfile,
   fetchAgentProfileDefaults,
@@ -61,7 +63,9 @@ vi.mock("@/api/agents", async () => {
     batchAddAgentSkillsRequest: vi.fn(),
     createBotRequest: vi.fn(),
     createNotificationBotRequest: vi.fn(),
+    deleteAgentRequest: vi.fn(),
     deleteAgentSkillRequest: vi.fn(),
+    deleteBotRequest: vi.fn(),
     fetchAgent: vi.fn(),
     fetchAgentProfile: vi.fn(),
     fetchAgentProfileDefaults: vi.fn(),
@@ -176,6 +180,7 @@ function useAgentControllerHarness(
     managerProfile?: AgentProfileLike | null;
     modelProviders?: ModelProviderCatalog | null;
     modelProvidersLoaded?: boolean;
+    t?: TranslateFn;
   } = {},
 ) {
   const [agents, setAgents] = useState<AgentLike[]>(options.agents ?? [oldAgent]);
@@ -237,7 +242,7 @@ function useAgentControllerHarness(
     },
     setBootstrapData: vi.fn(),
     setSelectedHubTemplateId: vi.fn(),
-    t,
+    t: options.t ?? t,
   });
 
   return {
@@ -260,7 +265,9 @@ describe("useAgentController", () => {
     vi.mocked(batchAddAgentSkillsRequest).mockReset();
     vi.mocked(createBotRequest).mockReset();
     vi.mocked(createNotificationBotRequest).mockReset();
+    vi.mocked(deleteAgentRequest).mockReset();
     vi.mocked(deleteAgentSkillRequest).mockReset();
+    vi.mocked(deleteBotRequest).mockReset();
     vi.mocked(fetchAgentWorkspace).mockReset();
     vi.mocked(createUserRequest).mockReset();
     vi.mocked(fetchAgentSkills).mockReset();
@@ -302,7 +309,9 @@ describe("useAgentController", () => {
       type: "notification",
       user_id: "user-notifier",
     });
+    vi.mocked(deleteAgentRequest).mockResolvedValue(undefined);
     vi.mocked(deleteAgentSkillRequest).mockResolvedValue(undefined);
+    vi.mocked(deleteBotRequest).mockResolvedValue(undefined);
     vi.mocked(fetchAgentWorkspace).mockResolvedValue({ entries: [] });
     vi.mocked(createUserRequest).mockResolvedValue({ id: "u-worker", name: "worker" });
     vi.mocked(fetchAgentSkills).mockResolvedValue({ entries: [] });
@@ -369,6 +378,68 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.savedDraft?.image).toBe(latestImage);
     expect(runAgentActionRequest).toHaveBeenCalledWith("u-manager", "upgrade");
     expect(fetchAgent).toHaveBeenLastCalledWith("u-manager", { cacheBust: true });
+  });
+
+  it("shows channel-bound cleanup warning before deleting an agent", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const confirmationT: TranslateFn = (key, params = {}) => {
+      const values: Record<string, string> = {
+        agentDeleteBoundChannels: "This agent is bound to {channels}.",
+        agentDeleteCascadeNote: "Deleting the agent will also disconnect it from those channels.",
+        agentDeleteConfirmMessage: 'Delete agent "{name}"?',
+      };
+      return (values[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => `${params[name] ?? ""}`);
+    };
+    const channelBoundAgent: AgentLike = {
+      ...oldAgent,
+      participants: [
+        {
+          agent_id: oldAgent.id,
+          channel: "csgclaw",
+          channel_user_ref: "user-manager",
+          id: "pt-manager",
+          type: "agent",
+        },
+        {
+          agent_id: oldAgent.id,
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "pt-manager-feishu",
+          type: "agent",
+        },
+      ],
+    };
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ agents: [channelBoundAgent], t: confirmationT }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.agentViewProps.onDelete?.(channelBoundAgent);
+    });
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    const message = String(confirmSpy.mock.calls[0]?.[0] || "");
+    expect(message).toContain("bound to Feishu");
+    expect(message).toContain("disconnect it from those channels");
+    expect(message).not.toContain("participant");
+    expect(message).not.toContain("pt-manager");
+    expect(message).not.toContain("user-manager");
+    expect(message).not.toContain("csgclaw");
+    confirmSpy.mockRestore();
+  });
+
+  it("deletes a normal agent through the agent delete endpoint after confirmation", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+
+    await act(async () => {
+      await result.current.agentViewProps.onDelete?.(oldAgent);
+    });
+
+    expect(deleteAgentRequest).toHaveBeenCalledWith("u-manager");
+    expect(deleteBotRequest).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 
   it("refreshes the selected agent workspace after saving manager profile changes without renaming manager", async () => {

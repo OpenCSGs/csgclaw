@@ -48,28 +48,28 @@ func TestRenderAgentOpenClawConfigUsesBridgeForMinimaxBaseURL(t *testing.T) {
 	}
 	modelList := llm["models"].([]any)
 	entry := modelList[0].(map[string]any)
-	if got, want := entry["reasoning"], true; got != want {
+	if _, ok := entry["api"]; ok {
+		t.Fatalf("model api should not be set for OpenAI-compatible bridge model: %#v", entry["api"])
+	}
+	if got, want := entry["reasoning"], false; got != want {
 		t.Fatalf("model reasoning = %v, want %v", got, want)
 	}
-	if got, want := entry["input"], []any{"text", "image"}; !reflect.DeepEqual(got, want) {
+	if got, want := entry["input"], []any{"text"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("model input = %#v, want %#v", got, want)
 	}
 	compat := entry["compat"].(map[string]any)
-	if got, want := compat["supportsReasoningEffort"], true; got != want {
+	if got, want := compat["supportsReasoningEffort"], false; got != want {
 		t.Fatalf("model compat.supportsReasoningEffort = %v, want %v", got, want)
 	}
-	if got, want := compat["supportedReasoningEfforts"], []any{"low", "medium", "high", "xhigh"}; !reflect.DeepEqual(got, want) {
+	if got, want := compat["supportedReasoningEfforts"], []any{}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("model compat.supportedReasoningEfforts = %#v, want %#v", got, want)
 	}
-	wantReasoningMap := map[string]any{
-		"minimal": "low",
-		"low":     "low",
-		"medium":  "medium",
-		"high":    "high",
-		"xhigh":   "xhigh",
-	}
+	wantReasoningMap := map[string]any{}
 	if got := compat["reasoningEffortMap"]; !reflect.DeepEqual(got, wantReasoningMap) {
 		t.Fatalf("model compat.reasoningEffortMap = %#v, want %#v", got, wantReasoningMap)
+	}
+	if got, want := compat["supportsUsageInStreaming"], false; got != want {
+		t.Fatalf("model compat.supportsUsageInStreaming = %v, want %v", got, want)
 	}
 	agents := cfg["agents"].(map[string]any)
 	defaults := agents["defaults"].(map[string]any)
@@ -77,8 +77,8 @@ func TestRenderAgentOpenClawConfigUsesBridgeForMinimaxBaseURL(t *testing.T) {
 	if got, want := model["primary"], "csgclaw-llm/MiniMax-M2.7"; got != want {
 		t.Fatalf("primary model = %v, want %v", got, want)
 	}
-	if got, want := defaults["thinkingDefault"], "medium"; got != want {
-		t.Fatalf("thinkingDefault = %v, want %v", got, want)
+	if _, ok := defaults["thinkingDefault"]; ok {
+		t.Fatalf("thinkingDefault should be omitted for non-reasoning OpenAI-compatible bridge model: %#v", defaults["thinkingDefault"])
 	}
 	if got, want := defaults["verboseDefault"], "on"; got != want {
 		t.Fatalf("verboseDefault = %v, want %v", got, want)

@@ -230,9 +230,10 @@ export function useWorkspaceHubSelection({
     ? errorMessage(hubWorkspaceFileQuery.error, t("hubWorkspaceFileLoadFailed"))
     : "";
   const skillsError = skillsQuery.error ? errorMessage(skillsQuery.error, t("hubSkillsLoadFailed")) : "";
-  const remoteSkillsError = remoteSkillsEnabled && officialSkillsQuery.error
-    ? errorMessage(officialSkillsQuery.error, t("hubSkillRemoteSkillsLoadFailed"))
-    : "";
+  const remoteSkillsError =
+    remoteSkillsEnabled && officialSkillsQuery.error
+      ? errorMessage(officialSkillsQuery.error, t("hubSkillRemoteSkillsLoadFailed"))
+      : "";
   const skillTreeError = skillTreeQuery.error ? errorMessage(skillTreeQuery.error, t("hubSkillFilesLoadFailed")) : "";
   const skillFileError = skillFileQuery.error ? errorMessage(skillFileQuery.error, t("hubSkillFileLoadFailed")) : "";
 
@@ -263,7 +264,8 @@ export function useWorkspaceHubSelection({
     skills,
     remoteSkills,
     remoteSkillsHasMore: Boolean(officialSkillsQuery.hasNextPage),
-    remoteSkillsLoading: remoteSkillsEnabled && officialSkillsQuery.isFetching && !officialSkillsQuery.isFetchingNextPage,
+    remoteSkillsLoading:
+      remoteSkillsEnabled && officialSkillsQuery.isFetching && !officialSkillsQuery.isFetchingNextPage,
     remoteSkillsLoadingMore: officialSkillsQuery.isFetchingNextPage,
     remoteSkillsEnabled,
     remoteSkillsSearch,

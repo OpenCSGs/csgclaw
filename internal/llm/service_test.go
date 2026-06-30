@@ -506,6 +506,170 @@ func TestResponsesLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 	}
 }
 
+func TestResponsesLLMAPICodexOmitsUnsupportedReasoningInput(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	previousProviderBaseURL := embeddedCLIProxyProviderBaseURL
+	previousAuthStatus := embeddedCLIProxyAuthStatus
+	defer func() {
+		embeddedCLIProxyProviderBaseURL = previousProviderBaseURL
+		embeddedCLIProxyAuthStatus = previousAuthStatus
+	}()
+
+	var gotInput []any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/provider/codex/v1/responses" {
+			t.Fatalf("path = %q, want embedded codex responses route", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		gotInput, _ = payload["input"].([]any)
+		for _, item := range gotInput {
+			obj, _ := item.(map[string]any)
+			if strings.EqualFold(strings.TrimSpace(stringValue(obj["type"])), "reasoning") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"message":"unsupported_feature:input.reasoning","type":"invalid_request_error","code":"unsupported_feature"}}`))
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp-1","object":"response","status":"completed","output":[],"output_text":"ok"}`))
+	}))
+	defer upstream.Close()
+
+	embeddedCLIProxyProviderBaseURL = func(_ context.Context, provider string) (string, error) {
+		if provider != agent.ProviderCodex {
+			t.Fatalf("provider = %q, want codex", provider)
+		}
+		return upstream.URL + "/api/provider/codex/v1", nil
+	}
+	embeddedCLIProxyAuthStatus = func(_ context.Context, provider string) (cliproxy.AuthStatus, error) {
+		if provider != agent.ProviderCodex {
+			t.Fatalf("auth provider = %q, want codex", provider)
+		}
+		return cliproxy.AuthStatus{Provider: "codex", Authenticated: true}, nil
+	}
+
+	agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
+		{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+			Role: agent.RoleManager,
+			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
+				Provider:        agent.ProviderCodex,
+				ModelID:         "gpt-5.5",
+				ProfileComplete: true,
+			},
+			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	})
+
+	svc := NewService(config.ModelConfig{}, agentSvc)
+	resp, err := svc.Responses(context.Background(), agent.ManagerUserID, []byte(`{"model":"client-model","input":[{"type":"reasoning","id":"rs_1","summary":[]},{"role":"user","content":"hello"}],"stream":false}`))
+	if err != nil {
+		t.Fatalf("Responses() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body = %q, want 200 after omitting reasoning input", resp.StatusCode, string(body))
+	}
+	if len(gotInput) != 1 {
+		t.Fatalf("input items = %#v, want only user input after dropping reasoning item", gotInput)
+	}
+	item, _ := gotInput[0].(map[string]any)
+	if item["role"] != "user" || item["content"] != "hello" {
+		t.Fatalf("remaining input = %#v, want original user message", gotInput)
+	}
+}
+
+func TestResponsesLLMAPIRetriesWithoutReasoningInputAfterUnsupportedFeature(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var responsesCalls int
+	var seenInputs [][]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("path = %q, want /v1/responses", r.URL.Path)
+		}
+		responsesCalls++
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		input, _ := payload["input"].([]any)
+		seenInputs = append(seenInputs, input)
+		for _, item := range input {
+			if responseInputItemIsReasoning(item) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"message":"unsupported_feature:input.reasoning","type":"invalid_request_error","code":"unsupported_feature"}}`))
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp-1","object":"response","status":"completed","output":[],"output_text":"ok"}`))
+	}))
+	defer upstream.Close()
+
+	agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
+		{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+			Role: agent.RoleManager,
+			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
+				Provider:        agent.ProviderAPI,
+				BaseURL:         upstream.URL + "/v1",
+				APIKey:          "sk-test",
+				ModelID:         "qwen3.6-plus",
+				ProfileComplete: true,
+			},
+			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	})
+
+	svc := NewService(config.ModelConfig{}, agentSvc)
+	body := []byte(`{"model":"client-model","input":[{"type":"reasoning","id":"rs_1","summary":[]},{"role":"user","content":"hello"}],"stream":false}`)
+	resp, err := svc.Responses(context.Background(), agent.ManagerUserID, body)
+	if err != nil {
+		t.Fatalf("Responses() error = %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if responsesCalls != 2 {
+		t.Fatalf("/responses calls = %d, want initial failure plus retry", responsesCalls)
+	}
+	if len(seenInputs) != 2 {
+		t.Fatalf("seen inputs = %#v, want two requests", seenInputs)
+	}
+	if !inputContainsReasoning(seenInputs[0]) {
+		t.Fatalf("first input = %#v, want original reasoning item", seenInputs[0])
+	}
+	if inputContainsReasoning(seenInputs[1]) {
+		t.Fatalf("retry input = %#v, want reasoning item removed", seenInputs[1])
+	}
+
+	resp, err = svc.Responses(context.Background(), agent.ManagerUserID, body)
+	if err != nil {
+		t.Fatalf("second Responses() error = %v", err)
+	}
+	_ = resp.Body.Close()
+	if responsesCalls != 3 {
+		t.Fatalf("/responses calls after cached retry = %d, want one additional stripped request", responsesCalls)
+	}
+	if inputContainsReasoning(seenInputs[2]) {
+		t.Fatalf("cached input = %#v, want reasoning item removed before send", seenInputs[2])
+	}
+}
+
 func TestResponsesLLMAPIFallsBackToChatCompletionsWhenUnsupported(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -988,8 +1152,8 @@ func TestResponsesLLMAPIFallbackRejectsActiveToolSemantics(t *testing.T) {
 			if httpErr.Status != http.StatusBadRequest {
 				t.Fatalf("HTTP status = %d, want %d", httpErr.Status, http.StatusBadRequest)
 			}
-			if !strings.Contains(httpErr.Message, "active tool-use") {
-				t.Fatalf("error message = %q, want active tool-use rejection", httpErr.Message)
+			if !strings.Contains(httpErr.Message, "Responses tool-use history") || !strings.Contains(httpErr.Message, "start a new session") {
+				t.Fatalf("error message = %q, want actionable tool-use fallback rejection", httpErr.Message)
 			}
 			if chatCalls != 0 {
 				t.Fatalf("/chat/completions calls = %d, want 0", chatCalls)
@@ -998,7 +1162,7 @@ func TestResponsesLLMAPIFallbackRejectsActiveToolSemantics(t *testing.T) {
 	}
 }
 
-func TestModelsReturnsResolvedAgentModel(t *testing.T) {
+func TestModelsReturnsConservativeMetadataForOpenAICompatibleProvider(t *testing.T) {
 	agentSvc := mustSeededAgentService(t, config.SingleProfileLLM(config.ModelConfig{
 		Provider:        config.ProviderLLMAPI,
 		BaseURL:         "https://example.test/v1",
@@ -1043,7 +1207,7 @@ func TestModelsReturnsResolvedAgentModel(t *testing.T) {
 	}
 	models, ok := payload["models"].([]any)
 	if !ok || len(models) != 1 {
-		t.Fatalf("models = %#v, want one Codex model metadata entry", payload["models"])
+		t.Fatalf("models = %#v, want one model metadata entry", payload["models"])
 	}
 	model, ok := models[0].(map[string]any)
 	if !ok {
@@ -1052,9 +1216,86 @@ func TestModelsReturnsResolvedAgentModel(t *testing.T) {
 	if model["slug"] != "gpt-5.4-mini" {
 		t.Fatalf("models[0].slug = %#v, want gpt-5.4-mini", model["slug"])
 	}
-	if _, ok := model["model_messages"]; !ok {
-		t.Fatalf("models[0] missing model_messages: %#v", model)
+	if _, ok := model["model_messages"]; ok {
+		t.Fatalf("models[0] should not expose Codex model_messages for OpenAI-compatible provider: %#v", model)
 	}
+	if got, want := model["default_reasoning_level"], "none"; got != want {
+		t.Fatalf("default_reasoning_level = %#v, want %#v", got, want)
+	}
+	if levels, ok := model["supported_reasoning_levels"].([]any); !ok || len(levels) != 0 {
+		t.Fatalf("supported_reasoning_levels = %#v, want empty list", model["supported_reasoning_levels"])
+	}
+	modalities, ok := model["input_modalities"].([]any)
+	if !ok || len(modalities) != 1 || modalities[0] != "text" {
+		t.Fatalf("input_modalities = %#v, want text-only", model["input_modalities"])
+	}
+	if got, want := model["supports_reasoning_summaries"], false; got != want {
+		t.Fatalf("supports_reasoning_summaries = %#v, want %#v", got, want)
+	}
+}
+
+func TestModelsReturnsCodexMetadataForCodexProvider(t *testing.T) {
+	agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
+		{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+			Role: agent.RoleManager,
+			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
+				Provider:        agent.ProviderCodex,
+				ModelID:         "gpt-5.5",
+				ReasoningEffort: "high",
+				ProfileComplete: true,
+			},
+			CreatedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	})
+
+	svc := NewService(config.ModelConfig{}, agentSvc)
+	body, status, _, err := svc.Models(context.Background(), agent.ManagerUserID)
+	if err != nil {
+		t.Fatalf("Models() error = %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", status, http.StatusOK)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode models body: %v", err)
+	}
+	models, ok := payload["models"].([]any)
+	if !ok || len(models) != 1 {
+		t.Fatalf("models = %#v, want one model metadata entry", payload["models"])
+	}
+	model, ok := models[0].(map[string]any)
+	if !ok {
+		t.Fatalf("models[0] = %#v, want object", models[0])
+	}
+	if model["slug"] != "gpt-5.5" {
+		t.Fatalf("models[0].slug = %#v, want gpt-5.5", model["slug"])
+	}
+	if _, ok := model["model_messages"]; !ok {
+		t.Fatalf("models[0] missing Codex model_messages: %#v", model)
+	}
+	if got, want := model["default_reasoning_level"], "high"; got != want {
+		t.Fatalf("default_reasoning_level = %#v, want %#v", got, want)
+	}
+	if levels, ok := model["supported_reasoning_levels"].([]any); !ok || len(levels) == 0 {
+		t.Fatalf("supported_reasoning_levels = %#v, want Codex reasoning levels", model["supported_reasoning_levels"])
+	}
+	modalities, ok := model["input_modalities"].([]any)
+	if !ok || len(modalities) != 2 || modalities[0] != "text" || modalities[1] != "image" {
+		t.Fatalf("input_modalities = %#v, want text and image", model["input_modalities"])
+	}
+}
+
+func inputContainsReasoning(input []any) bool {
+	for _, item := range input {
+		if responseInputItemIsReasoning(item) {
+			return true
+		}
+	}
+	return false
 }
 
 func mustSeededAgentService(t *testing.T, llmCfg config.LLMConfig, agents []agent.Agent) *agent.Service {

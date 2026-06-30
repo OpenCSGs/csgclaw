@@ -200,5 +200,4 @@ describe("HubDetailPane", () => {
     expect(screen.getByText('Delete skill "demo-skill"? This action cannot be undone.')).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Delete" }).length).toBeGreaterThan(0);
   });
-
 });

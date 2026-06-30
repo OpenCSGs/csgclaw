@@ -634,6 +634,70 @@ func TestHandleAgentsListReturnsUnifiedAgents(t *testing.T) {
 	}
 }
 
+func TestHandleAgentDeleteRemovesBoundParticipants(t *testing.T) {
+	svc := mustNewSeededService(t, []agent.Agent{
+		{ID: "agent-qa", Name: "qa", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindPicoClawSandbox},
+	})
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: im.AdminUserID,
+		Users: []im.User{
+			{ID: im.AdminUserID, Name: "admin", Role: "admin"},
+			{ID: "user-qa", Name: "qa", Role: agent.RoleWorker},
+		},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{
+		{
+			ID:              "pt-qa",
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			Name:            "qa",
+			AgentID:         "agent-qa",
+			ChannelUserRef:  "user-qa",
+			ChannelUserKind: participant.ChannelUserKindLocalUserID,
+			LifecycleStatus: participant.LifecycleStatusActive,
+			Mentionable:     true,
+		},
+		{
+			ID:              "pt-qa-feishu",
+			Channel:         participant.ChannelFeishu,
+			Type:            participant.TypeAgent,
+			Name:            "qa Feishu",
+			AgentID:         "agent-qa",
+			ChannelAppRef:   "cli_xxx",
+			ChannelUserRef:  "ou_xxx",
+			ChannelUserKind: participant.ChannelUserKindOpenID,
+			LifecycleStatus: participant.LifecycleStatusActive,
+			Mentionable:     true,
+		},
+	}), participant.WithAgentService(svc), participant.WithIMService(imSvc))
+	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-qa", nil)
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if _, ok := svc.Agent("agent-qa"); ok {
+		t.Fatal("agent agent-qa still exists after delete")
+	}
+	for _, ref := range []struct {
+		channel string
+		id      string
+	}{
+		{participant.ChannelCSGClaw, "pt-qa"},
+		{participant.ChannelFeishu, "pt-qa-feishu"},
+	} {
+		if _, ok := participantSvc.Get(ref.channel, ref.id); ok {
+			t.Fatalf("participant %s:%s still exists after agent delete", ref.channel, ref.id)
+		}
+	}
+	if _, ok := imSvc.User("user-qa"); ok {
+		t.Fatal("local agent user user-qa still exists after deleting its CSGClaw participant")
+	}
+}
+
 func TestHandleAgentsListExposesLinkedLocalUser(t *testing.T) {
 	svc := mustNewSeededService(t, []agent.Agent{
 		{ID: "agent-dahym7", Name: "qa", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},

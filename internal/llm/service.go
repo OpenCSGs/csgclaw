@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -19,16 +20,18 @@ import (
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/codexmodel"
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelcap"
 
 	"github.com/gorilla/websocket"
 )
 
 type Service struct {
-	defaults              config.ModelConfig
-	agents                *agent.Service
-	client                *http.Client
-	responsesCapabilityMu sync.Mutex
-	responsesUnsupported  map[string]struct{}
+	defaults                      config.ModelConfig
+	agents                        *agent.Service
+	client                        *http.Client
+	responsesCapabilityMu         sync.Mutex
+	responsesUnsupported          map[string]struct{}
+	responsesReasoningUnsupported map[string]struct{}
 }
 
 type HTTPError struct {
@@ -73,10 +76,11 @@ func (e *HTTPError) Error() string {
 
 func NewService(defaults config.ModelConfig, agents *agent.Service) *Service {
 	return &Service{
-		defaults:             defaults.Resolved(),
-		agents:               agents,
-		client:               &http.Client{},
-		responsesUnsupported: make(map[string]struct{}),
+		defaults:                      defaults.Resolved(),
+		agents:                        agents,
+		client:                        &http.Client{},
+		responsesUnsupported:          make(map[string]struct{}),
+		responsesReasoningUnsupported: make(map[string]struct{}),
 	}
 }
 
@@ -96,16 +100,55 @@ func (s *Service) Models(_ context.Context, botID string) ([]byte, int, string, 
 				"owned_by": "csgclaw",
 			},
 		},
-		"models": []map[string]any{codexmodel.Metadata(codexmodel.Profile{
-			ModelID:         profile.ModelID,
-			ReasoningEffort: profile.ReasoningEffort,
-		})},
+		"models": []map[string]any{bridgeModelMetadata(profile)},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, 0, "", &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("encode models response: %v", err)}
 	}
 	return body, http.StatusOK, "application/json", nil
+}
+
+func bridgeModelMetadata(profile agent.AgentProfile) map[string]any {
+	caps := modelcap.ForProviderModel(profile.Provider, profile.ModelID)
+	if caps.UseCodexMetadata {
+		return codexmodel.Metadata(codexmodel.Profile{
+			ModelID:         profile.ModelID,
+			ReasoningEffort: profile.ReasoningEffort,
+		})
+	}
+	modelID := strings.TrimSpace(profile.ModelID)
+	if modelID == "" {
+		modelID = "unknown"
+	}
+	return map[string]any{
+		"slug":                         modelID,
+		"display_name":                 modelID,
+		"description":                  "CSGClaw OpenAI-compatible provider model",
+		"default_reasoning_level":      "none",
+		"supported_reasoning_levels":   []map[string]any{},
+		"shell_type":                   "default",
+		"visibility":                   "list",
+		"supported_in_api":             true,
+		"priority":                     1,
+		"availability_nux":             nil,
+		"upgrade":                      nil,
+		"supports_search_tool":         false,
+		"supports_reasoning_summaries": false,
+		"default_reasoning_summary":    nil,
+		"support_verbosity":            false,
+		"default_verbosity":            nil,
+		"apply_patch_tool_type":        nil,
+		"web_search_tool_type":         nil,
+		"truncation_policy": map[string]any{
+			"mode":  "bytes",
+			"limit": 10000,
+		},
+		"supports_parallel_tool_calls":   false,
+		"supports_image_detail_original": false,
+		"experimental_supported_tools":   []any{},
+		"input_modalities":               append([]string(nil), caps.InputModalities...),
+	}
 }
 
 func (s *Service) ChatCompletions(ctx context.Context, botID string, body []byte) ([]byte, int, string, error) {
@@ -239,10 +282,6 @@ func (s *Service) forwardRemoteResponses(ctx context.Context, profile agent.Agen
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
 	}
 	mergeResponsesPayload(payload, profile)
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
-	}
 
 	baseURL, apiKey, err := s.agentProfileTarget(ctx, profile)
 	if err != nil {
@@ -251,18 +290,38 @@ func (s *Service) forwardRemoteResponses(ctx context.Context, profile agent.Agen
 	if baseURL == "" {
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: "profile base_url is required"}
 	}
+	if s.responsesReasoningInputUnsupportedCached(profile, baseURL) {
+		logResponsesReasoningInputRemoved(profile, stripResponsesInputReasoning(payload), "cached_unsupported")
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
+	}
 	if s.responsesAPIUnsupportedCached(profile, baseURL) {
 		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey)
 	}
 	upstreamURL := strings.TrimRight(baseURL, "/") + "/responses"
-	req, err := newProfileJSONRequest(ctx, upstreamURL, encoded, apiKey, profile.Headers)
-	if err != nil {
-		return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build upstream request: %v", err)}
+	sendResponses := func(encoded []byte) (*http.Response, error) {
+		req, err := newProfileJSONRequest(ctx, upstreamURL, encoded, apiKey, profile.Headers)
+		if err != nil {
+			return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build upstream request: %v", err)}
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send upstream request: %v", err)}
+		}
+		return resp, nil
 	}
-	resp, err := s.client.Do(req)
+	resp, err := sendResponses(encoded)
 	if err != nil {
-		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send upstream request: %v", err)}
+		return nil, err
 	}
+	return s.handleRemoteResponsesResult(ctx, profile, payload, baseURL, apiKey, resp, true, sendResponses)
+}
+
+type responsesRequestSender func([]byte) (*http.Response, error)
+
+func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent.AgentProfile, payload map[string]any, baseURL, apiKey string, resp *http.Response, allowReasoningRetry bool, sendResponses responsesRequestSender) (*UpstreamResponse, error) {
 	if responsesAPIUnsupportedStatus(resp.StatusCode) {
 		_ = resp.Body.Close()
 		s.markResponsesAPIUnsupported(profile, baseURL)
@@ -273,7 +332,27 @@ func (s *Service) forwardRemoteResponses(ctx context.Context, profile agent.Agen
 		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return compactUpstreamErrorStream(resp)
+		body, err := readAndCloseUpstreamBody(resp)
+		if err != nil {
+			return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("read upstream error response: %v", err)}
+		}
+		if allowReasoningRetry && responsesReasoningInputUnsupportedError(resp.StatusCode, body) {
+			removed := stripResponsesInputReasoning(payload)
+			if removed > 0 {
+				s.markResponsesReasoningInputUnsupported(profile, baseURL)
+				logResponsesReasoningInputRemoved(profile, removed, "retry_after_unsupported")
+				encoded, err := json.Marshal(payload)
+				if err != nil {
+					return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
+				}
+				retryResp, err := sendResponses(encoded)
+				if err != nil {
+					return nil, err
+				}
+				return s.handleRemoteResponsesResult(ctx, profile, payload, baseURL, apiKey, retryResp, false, sendResponses)
+			}
+		}
+		return compactUpstreamErrorStreamFromBody(resp, body)
 	}
 	return &UpstreamResponse{
 		StatusCode: resp.StatusCode,
@@ -350,11 +429,19 @@ func compactUpstreamErrorStream(resp *http.Response) (*UpstreamResponse, error) 
 	if resp == nil {
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: "upstream response is nil"}
 	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	body, err := readAndCloseUpstreamBody(resp)
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("read upstream error response: %v", err)}
 	}
+	return compactUpstreamErrorStreamFromBody(resp, body)
+}
+
+func readAndCloseUpstreamBody(resp *http.Response) ([]byte, error) {
+	defer resp.Body.Close()
+	return io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+}
+
+func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte) (*UpstreamResponse, error) {
 	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
 	body, contentType = compactUpstreamErrorResponse(resp.Header, body, contentType)
 	header := resp.Header.Clone()
@@ -427,6 +514,15 @@ func responsesAPITransientFallbackStatus(profile agent.AgentProfile, status int)
 	}
 }
 
+func responsesReasoningInputUnsupportedError(status int, body []byte) bool {
+	if status != http.StatusBadRequest && status != http.StatusUnprocessableEntity {
+		return false
+	}
+	text := strings.ToLower(string(body))
+	return strings.Contains(text, "input.reasoning") &&
+		(strings.Contains(text, "unsupported_feature") || strings.Contains(text, "unsupported feature") || strings.Contains(text, "unsupported"))
+}
+
 func (s *Service) responsesAPIUnsupportedCached(profile agent.AgentProfile, baseURL string) bool {
 	key := responsesCapabilityKey(profile, baseURL)
 	s.responsesCapabilityMu.Lock()
@@ -445,13 +541,31 @@ func (s *Service) markResponsesAPIUnsupported(profile agent.AgentProfile, baseUR
 	s.responsesUnsupported[key] = struct{}{}
 }
 
+func (s *Service) responsesReasoningInputUnsupportedCached(profile agent.AgentProfile, baseURL string) bool {
+	key := responsesCapabilityKey(profile, baseURL)
+	s.responsesCapabilityMu.Lock()
+	defer s.responsesCapabilityMu.Unlock()
+	_, ok := s.responsesReasoningUnsupported[key]
+	return ok
+}
+
+func (s *Service) markResponsesReasoningInputUnsupported(profile agent.AgentProfile, baseURL string) {
+	key := responsesCapabilityKey(profile, baseURL)
+	s.responsesCapabilityMu.Lock()
+	defer s.responsesCapabilityMu.Unlock()
+	if s.responsesReasoningUnsupported == nil {
+		s.responsesReasoningUnsupported = make(map[string]struct{})
+	}
+	s.responsesReasoningUnsupported[key] = struct{}{}
+}
+
 func responsesCapabilityKey(profile agent.AgentProfile, baseURL string) string {
 	return strings.TrimSpace(profile.Provider) + "\x00" + strings.TrimRight(strings.TrimSpace(baseURL), "/") + "\x00" + strings.TrimSpace(profile.ModelID)
 }
 
 func responsesPayloadToChatPayload(payload map[string]any) (map[string]any, error) {
 	if responsesPayloadHasToolSemantics(payload) {
-		return nil, fmt.Errorf("active tool-use Responses requests are not supported by chat-completions fallback")
+		return nil, fmt.Errorf("this session contains Responses tool-use history that cannot be converted to chat completions; start a new session after changing model/provider")
 	}
 
 	messages := make([]map[string]any, 0, 4)
@@ -1033,7 +1147,7 @@ func mergeResponsesPayload(payload map[string]any, profile agent.AgentProfile) {
 		}
 		payload[key] = value
 	}
-	applyProviderPayloadConstraints(payload, profile)
+	applyResponsesProviderPayloadConstraints(payload, profile)
 	if !profile.EnableFastMode {
 		return
 	}
@@ -1047,6 +1161,85 @@ func applyProviderPayloadConstraints(payload map[string]any, profile agent.Agent
 	case agent.ProviderCodex:
 		payload["store"] = false
 	}
+}
+
+func applyResponsesProviderPayloadConstraints(payload map[string]any, profile agent.AgentProfile) {
+	applyProviderPayloadConstraints(payload, profile)
+	caps := modelcap.ForProviderModel(profile.Provider, profile.ModelID)
+	if caps.ResponsesReasoningInputKnown && !caps.SupportsResponsesReasoningInput {
+		logResponsesReasoningInputRemoved(profile, stripResponsesInputReasoning(payload), "known_unsupported")
+	}
+}
+
+func stripResponsesInputReasoning(payload map[string]any) int {
+	if payload == nil {
+		return 0
+	}
+	input, ok := payload["input"]
+	if !ok {
+		return 0
+	}
+	filtered, removed := stripResponsesReasoningItems(input)
+	if removed == 0 {
+		return 0
+	}
+	payload["input"] = filtered
+	return removed
+}
+
+func stripResponsesReasoningItems(input any) (any, int) {
+	switch items := input.(type) {
+	case []any:
+		filtered := make([]any, 0, len(items))
+		removed := 0
+		for _, item := range items {
+			if responseInputItemIsReasoning(item) {
+				removed++
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		if removed == 0 {
+			return input, 0
+		}
+		return filtered, removed
+	case []map[string]any:
+		filtered := make([]map[string]any, 0, len(items))
+		removed := 0
+		for _, item := range items {
+			if responseInputItemIsReasoning(item) {
+				removed++
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		if removed == 0 {
+			return input, 0
+		}
+		return filtered, removed
+	default:
+		return input, 0
+	}
+}
+
+func logResponsesReasoningInputRemoved(profile agent.AgentProfile, removed int, reason string) {
+	if removed == 0 {
+		return
+	}
+	slog.Debug("llm bridge removed unsupported responses reasoning input",
+		"provider", strings.TrimSpace(profile.Provider),
+		"model", strings.TrimSpace(profile.ModelID),
+		"removed_items", removed,
+		"reason", reason,
+	)
+}
+
+func responseInputItemIsReasoning(item any) bool {
+	obj, ok := item.(map[string]any)
+	if !ok {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(stringValue(obj["type"])), "reasoning")
 }
 
 const (

@@ -288,6 +288,10 @@ export function patchNotificationBotRequest(botID: string, payload: CreateBotPay
   }).then(participantToAgentLike);
 }
 
+export function deleteAgentRequest(agentID: string): Promise<void> {
+  return del(`api/v1/agents/${encodeURIComponent(agentID)}`);
+}
+
 export function deleteBotRequest(botID: string, options: DeleteBotOptions = {}): Promise<void> {
   const params = new URLSearchParams();
   if (options.deleteAgent) {
