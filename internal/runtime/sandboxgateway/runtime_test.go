@@ -393,10 +393,6 @@ func TestGatewayCreateSpecIncludesExtraWorkspaceMounts(t *testing.T) {
 		GuestPath: "/home/node/.openclaw/openclaw.json",
 		ReadOnly:  true,
 	}, {
-		HostPath:  "/tmp/agent/.openclaw/exec-approvals.json",
-		GuestPath: "/home/node/.openclaw/exec-approvals.json",
-		ReadOnly:  true,
-	}, {
 		HostPath:  "/tmp/agent/.openclaw/gateway.log",
 		GuestPath: "/home/node/.openclaw/gateway.log",
 	}}
@@ -406,16 +402,13 @@ func TestGatewayCreateSpecIncludesExtraWorkspaceMounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GatewayCreateSpec() error = %v", err)
 	}
-	if len(spec.Mounts) != 5 {
-		t.Fatalf("GatewayCreateSpec() mounts = %+v, want base, projects, and three extra mounts", spec.Mounts)
+	if len(spec.Mounts) != 4 {
+		t.Fatalf("GatewayCreateSpec() mounts = %+v, want base, projects, and two extra mounts", spec.Mounts)
 	}
 	if extra := spec.Mounts[2]; extra.HostPath != "/tmp/agent/.openclaw/openclaw.json" || extra.GuestPath != "/home/node/.openclaw/openclaw.json" || !extra.ReadOnly {
 		t.Fatalf("GatewayCreateSpec() config mount = %+v", extra)
 	}
-	if extra := spec.Mounts[3]; extra.HostPath != "/tmp/agent/.openclaw/exec-approvals.json" || extra.GuestPath != "/home/node/.openclaw/exec-approvals.json" || !extra.ReadOnly {
-		t.Fatalf("GatewayCreateSpec() approvals mount = %+v", extra)
-	}
-	if extra := spec.Mounts[4]; extra.HostPath != "/tmp/agent/.openclaw/gateway.log" || extra.GuestPath != "/home/node/.openclaw/gateway.log" || extra.ReadOnly {
+	if extra := spec.Mounts[3]; extra.HostPath != "/tmp/agent/.openclaw/gateway.log" || extra.GuestPath != "/home/node/.openclaw/gateway.log" || extra.ReadOnly {
 		t.Fatalf("GatewayCreateSpec() log mount = %+v", extra)
 	}
 }

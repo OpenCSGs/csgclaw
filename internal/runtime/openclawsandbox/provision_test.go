@@ -110,15 +110,11 @@ func TestWorkspaceLayoutForWindowsAvoidsMountingOpenClawHome(t *testing.T) {
 		GuestPath: BoxConfigPath,
 		ReadOnly:  true,
 	}, {
-		HostPath:  filepath.Join(Root(agentHome), HostExecApproval),
-		GuestPath: BoxExecApprovalPath,
-		ReadOnly:  true,
-	}, {
 		HostPath:  filepath.Join(Root(agentHome), HostGatewayLog),
 		GuestPath: BoxGatewayLogPath,
 	}}
 	if !reflect.DeepEqual(layout.ExtraMounts, wantMounts) {
-		t.Fatalf("windows ExtraMounts = %+v, want readonly config and approvals plus writable log mount %+v", layout.ExtraMounts, wantMounts)
+		t.Fatalf("windows ExtraMounts = %+v, want readonly config plus writable log mount %+v", layout.ExtraMounts, wantMounts)
 	}
 }
 

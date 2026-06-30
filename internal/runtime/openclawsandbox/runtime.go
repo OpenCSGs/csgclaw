@@ -133,11 +133,6 @@ func workspaceLayoutForGOOS(agentHome, goos string) WorkspaceLayout {
 				ReadOnly:  true,
 			},
 			{
-				HostPath:  filepath.Join(root, HostExecApproval),
-				GuestPath: BoxExecApprovalPath,
-				ReadOnly:  true,
-			},
-			{
 				HostPath:  filepath.Join(root, HostGatewayLog),
 				GuestPath: BoxGatewayLogPath,
 			},
