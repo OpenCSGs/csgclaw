@@ -104,30 +104,6 @@
   min-width: 0;
 }
 
-.task-toolbar-button.btn-sm {
-  --btn-min-width: 44px;
-  --btn-padding-x: 11px;
-
-  width: auto;
-  min-width: 44px;
-  height: 32px;
-  min-height: 32px;
-  border-radius: 8px;
-  color: var(--text-subtle);
-  font-weight: 650;
-}
-
-.task-toolbar-button.btn-secondary-gray:not(:disabled) {
-  border-color: color-mix(in srgb, var(--border-subtle) 90%, transparent);
-  background: var(--surface);
-}
-
-.task-toolbar-button.btn-secondary-gray:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--gray-300) 80%, var(--border-subtle));
-  background: color-mix(in srgb, var(--gray-50) 70%, var(--surface));
-  color: var(--text);
-}
-
 .task-dialog-close-btn {
   display: inline-flex;
   align-items: center;

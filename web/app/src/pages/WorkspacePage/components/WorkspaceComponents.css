@@ -3120,6 +3120,10 @@ select,
   color: var(--muted);
 }
 
+:root[data-theme="dark"] .message-row.own .message-card .message-meta .message-author {
+  color: var(--gray-300);
+}
+
 :root[data-theme="dark"] .theme-switch-track,
 :root[data-theme="dark"] .language-switch-track,
 :root[data-theme="dark"] .composer-box,

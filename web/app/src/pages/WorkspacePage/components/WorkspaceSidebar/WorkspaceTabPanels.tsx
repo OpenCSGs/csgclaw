@@ -11,7 +11,7 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@/components/ui";
-import { HubIcon, UsersIcon } from "@/components/ui/Icons";
+import { ModelsIcon, UsersIcon } from "@/components/ui/Icons";
 import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
 import { modelProviderAvatarPath, providerStatusTone, type ModelProvider } from "@/models/modelProviders";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
@@ -845,7 +845,7 @@ export function WorkspaceTabPanels({
                     onClick={() => onSelectHubTemplate(item)}
                   >
                     <span className="workspace-row-icon">
-                      <HubIcon />
+                      <ModelsIcon />
                     </span>
                     <span className="workspace-row-main">
                       <span className="workspace-row-title truncate">{item.name || item.id}</span>

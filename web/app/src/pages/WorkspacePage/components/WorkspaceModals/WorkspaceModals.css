@@ -668,6 +668,18 @@
   --invite-subtitle-color: var(--muted);
 }
 
+:root[data-theme="dark"] .invite-members-modal .create-room-member-copy strong {
+  color: var(--gray-100);
+}
+
+:root[data-theme="dark"] .invite-members-modal .create-room-member-copy small {
+  color: var(--gray-300);
+}
+
+:root[data-theme="dark"] .invite-members-modal .member-role-badge {
+  color: var(--gray-200);
+}
+
 .agent-create-progress {
   display: grid;
   gap: var(--space-2);

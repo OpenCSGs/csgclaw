@@ -1001,7 +1001,7 @@
 .message-meta .message-author,
 .message-row .message-card .message-meta .message-author,
 .message-row.own .message-card .message-meta .message-author {
-  color: var(--gray-700);
+  color: var(--text);
   font-size: 14px;
   font-weight: 400;
   line-height: 22px;
@@ -1010,7 +1010,7 @@
 :root[data-theme="dark"] .message-meta .message-author,
 :root[data-theme="dark"] .message-row .message-card .message-meta .message-author,
 :root[data-theme="dark"] .message-row.own .message-card .message-meta .message-author {
-  color: var(--gray-700);
+  color: var(--text);
 }
 
 .chat-title-bar .chat-title-row .chat-title-group .chat-title,
@@ -1714,7 +1714,7 @@
 
 :root[data-theme="dark"] .message-row:not(.own) .message-meta .message-author,
 :root[data-theme="dark"] .message-row.own .message-meta .message-author {
-  color: var(--gray-300);
+  color: var(--text);
 }
 
 :root[data-theme="dark"] .message-row.own .message-bubble {

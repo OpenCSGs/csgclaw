@@ -119,14 +119,6 @@
   gap: 8px;
 }
 
-.model-provider-actions .btn {
-  --btn-height: 40px;
-  --btn-min-width: 80px;
-  --btn-padding-x: 14px;
-
-  border-radius: 10px;
-}
-
 .model-provider-notice,
 .model-provider-save-status {
   display: inline-flex;

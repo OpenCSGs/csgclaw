@@ -267,7 +267,7 @@ export function ModelProviderPage() {
           ) : null}
           {showOpenCSGSignIn ? (
             <Button
-              variant="secondaryColor"
+              variant="primary"
               onClick={() => void controller.sidebarProps?.onLogin?.()}
               disabled={authBusy || authPending}
             >
