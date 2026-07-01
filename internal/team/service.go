@@ -44,31 +44,41 @@ type Service struct {
 }
 
 type CreateTeamInput struct {
-	ID          string
-	RoomID      string
-	Channel     string
-	Title       string
-	LeadAgentID string
-	Status      string
+	ID             string
+	Title          string
+	LeadAgentID    string
+	MemberAgentIDs []string
+	Status         string
+}
+
+type UpdateTeamInput struct {
+	TeamID            string
+	Title             string
+	LeadAgentID       string
+	MemberAgentIDs    []string
+	SetMemberAgentIDs bool
+	Status            string
 }
 
 type CreateTaskInput struct {
-	TeamID     string
-	ParentID   string
-	Title      string
-	Body       string
-	CreatedBy  string
-	AssignTo   string
-	DependsOn  []string
-	Priority   int
-	DeadlineAt *time.Time
-	TimeoutAt  *time.Time
+	TeamID           string
+	ExecutionChannel string
+	ParentID         string
+	Title            string
+	Body             string
+	CreatedBy        string
+	AssignTo         string
+	DependsOn        []string
+	Priority         int
+	DeadlineAt       *time.Time
+	TimeoutAt        *time.Time
 }
 
 type CreateTaskBatchInput struct {
-	TeamID    string
-	CreatedBy string
-	Tasks     []CreateTaskBatchItem
+	TeamID           string
+	CreatedBy        string
+	ExecutionChannel string
+	Tasks            []CreateTaskBatchItem
 }
 
 type CreateTaskBatchItem struct {
@@ -268,12 +278,6 @@ func (s *Service) CreateTeam(input CreateTeamInput) (TeamMeta, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if strings.TrimSpace(input.RoomID) == "" {
-		return TeamMeta{}, fmt.Errorf("room_id is required")
-	}
-	if strings.TrimSpace(input.Channel) == "" {
-		return TeamMeta{}, fmt.Errorf("channel is required")
-	}
 	if strings.TrimSpace(input.LeadAgentID) == "" {
 		return TeamMeta{}, fmt.Errorf("lead_agent_id is required")
 	}
@@ -281,6 +285,11 @@ func (s *Service) CreateTeam(input CreateTeamInput) (TeamMeta, error) {
 	if err != nil {
 		return TeamMeta{}, err
 	}
+	memberAgentIDs, err := uniqueAgentIDs(input.MemberAgentIDs)
+	if err != nil {
+		return TeamMeta{}, err
+	}
+	memberAgentIDs = withoutAgentID(memberAgentIDs, leadAgentID)
 
 	now := s.now()
 	id := strings.TrimSpace(input.ID)
@@ -296,18 +305,16 @@ func (s *Service) CreateTeam(input CreateTeamInput) (TeamMeta, error) {
 	}
 	eventStart := len(s.events[id])
 	meta := TeamMeta{
-		ID:          id,
-		RoomID:      strings.TrimSpace(input.RoomID),
-		Channel:     strings.TrimSpace(input.Channel),
-		Title:       strings.TrimSpace(input.Title),
-		LeadAgentID: leadAgentID,
-		Status:      status,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:             id,
+		Title:          strings.TrimSpace(input.Title),
+		LeadAgentID:    leadAgentID,
+		MemberAgentIDs: memberAgentIDs,
+		Status:         status,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	s.teams[id] = meta
 	s.appendEventLocked(id, TeamEvent{
-		RoomID:    meta.RoomID,
 		Type:      EventTeamCreated,
 		ActorID:   defaultParticipantIDForAgentID(meta.LeadAgentID),
 		Summary:   meta.Title,
@@ -339,18 +346,102 @@ func (s *Service) ListTeams() []TeamMeta {
 	return out
 }
 
-func (s *Service) FindTeamByRoom(roomID string) (TeamMeta, bool) {
+func (s *Service) UpdateTeam(input UpdateTeamInput) (TeamMeta, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	meta, err := s.requireTeamLocked(input.TeamID)
+	if err != nil {
+		return TeamMeta{}, err
+	}
+	before := s.captureTeamStateLocked(meta.ID)
+	eventStart := len(s.events[meta.ID])
+	changed := false
+
+	if title := strings.TrimSpace(input.Title); title != "" && title != meta.Title {
+		meta.Title = title
+		changed = true
+	}
+	if status := strings.TrimSpace(input.Status); status != "" && status != meta.Status {
+		meta.Status = status
+		changed = true
+	}
+	if leadAgentID := strings.TrimSpace(input.LeadAgentID); leadAgentID != "" {
+		normalizedLeadAgentID, err := requireAgentID("lead_agent_id", leadAgentID)
+		if err != nil {
+			return TeamMeta{}, err
+		}
+		if normalizedLeadAgentID != meta.LeadAgentID {
+			meta.LeadAgentID = normalizedLeadAgentID
+			nextMembers := withoutAgentID(cloneStrings(meta.MemberAgentIDs), meta.LeadAgentID)
+			if !slices.Equal(nextMembers, meta.MemberAgentIDs) {
+				meta.MemberAgentIDs = nextMembers
+			}
+			changed = true
+		}
+	}
+	if input.SetMemberAgentIDs {
+		memberAgentIDs, err := uniqueAgentIDs(input.MemberAgentIDs)
+		if err != nil {
+			return TeamMeta{}, err
+		}
+		memberAgentIDs = withoutAgentID(memberAgentIDs, meta.LeadAgentID)
+		if !slices.Equal(memberAgentIDs, meta.MemberAgentIDs) {
+			meta.MemberAgentIDs = memberAgentIDs
+			changed = true
+		}
+	}
+	if !changed {
+		return cloneTeamMeta(meta), nil
+	}
+
+	now := s.now()
+	meta.UpdatedAt = now
+	s.teams[meta.ID] = meta
+	s.appendEventLocked(meta.ID, TeamEvent{
+		Type:      EventTeamUpdated,
+		ActorID:   defaultParticipantIDForAgentID(meta.LeadAgentID),
+		Summary:   meta.Title,
+		CreatedAt: now,
+	})
+	if err := s.persistMutationLocked(meta.ID, before, eventStart); err != nil {
+		return TeamMeta{}, err
+	}
+	return cloneTeamMeta(meta), nil
+}
+
+func (s *Service) DeleteTeam(teamID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	teamID = strings.TrimSpace(teamID)
+	if _, err := s.requireTeamLocked(teamID); err != nil {
+		return err
+	}
+	before := s.captureTeamStateLocked(teamID)
+	delete(s.teams, teamID)
+	delete(s.tasks, teamID)
+	delete(s.approvals, teamID)
+	delete(s.presence, teamID)
+	delete(s.events, teamID)
+	delete(s.dirtyPresence, teamID)
+	if s.store != nil {
+		if err := s.store.Delete(teamID); err != nil {
+			s.restoreTeamStateLocked(teamID, before)
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) FindTeamByRoom(channel, roomID string) (TeamMeta, TeamTask, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	channel = NormalizeExecutionChannel(channel)
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return TeamMeta{}, false
-	}
-	for _, meta := range s.teams {
-		if meta.RoomID == roomID {
-			return cloneTeamMeta(meta), true
-		}
+		return TeamMeta{}, TeamTask{}, false
 	}
 	for teamID, tasks := range s.tasks {
 		meta, ok := s.teams[teamID]
@@ -358,12 +449,15 @@ func (s *Service) FindTeamByRoom(roomID string) (TeamMeta, bool) {
 			continue
 		}
 		for _, task := range tasks {
-			if task != nil && strings.TrimSpace(task.RoomID) == roomID {
-				return cloneTeamMeta(meta), true
+			if task == nil || strings.TrimSpace(task.ParentID) != "" {
+				continue
+			}
+			if strings.TrimSpace(task.RoomID) == roomID && NormalizeExecutionChannel(task.ExecutionChannel) == channel {
+				return cloneTeamMeta(meta), cloneTask(*task), true
 			}
 		}
 	}
-	return TeamMeta{}, false
+	return TeamMeta{}, TeamTask{}, false
 }
 
 func (s *Service) CreateTask(input CreateTaskInput) (TeamTask, error) {
@@ -489,16 +583,17 @@ func (s *Service) CreateTasks(input CreateTaskBatchInput) (CreateTasksResult, er
 			return CreateTasksResult{}, fmt.Errorf("tasks[%d].parent: %w", i, err)
 		}
 		task := s.newTaskLocked(meta, CreateTaskInput{
-			TeamID:     input.TeamID,
-			ParentID:   parentID,
-			Title:      item.Title,
-			Body:       item.Body,
-			CreatedBy:  input.CreatedBy,
-			AssignTo:   item.AssignTo,
-			DependsOn:  dependsOn,
-			Priority:   item.Priority,
-			DeadlineAt: item.DeadlineAt,
-			TimeoutAt:  item.TimeoutAt,
+			TeamID:           input.TeamID,
+			ExecutionChannel: input.ExecutionChannel,
+			ParentID:         parentID,
+			Title:            item.Title,
+			Body:             item.Body,
+			CreatedBy:        input.CreatedBy,
+			AssignTo:         item.AssignTo,
+			DependsOn:        dependsOn,
+			Priority:         item.Priority,
+			DeadlineAt:       item.DeadlineAt,
+			TimeoutAt:        item.TimeoutAt,
 		})
 		pending = append(pending, task)
 		if idRef := strings.TrimSpace(item.IDRef); idRef != "" {
@@ -536,9 +631,6 @@ func (s *Service) PlanTask(input PlanTaskInput) (PlanTaskResult, error) {
 	if strings.TrimSpace(task.ParentID) != "" {
 		return PlanTaskResult{}, fmt.Errorf("%w: only parent tasks can be planned", ErrTaskTransitionInvalid)
 	}
-	if !taskIsPlannable(task, meta) {
-		return PlanTaskResult{}, fmt.Errorf("%w: cannot plan task in status %s", ErrTaskTransitionInvalid, task.Status)
-	}
 	existingChildren := s.taskChildrenLocked(meta.ID, task.ID)
 	if len(existingChildren) > 0 {
 		out := PlanTaskResult{
@@ -549,6 +641,9 @@ func (s *Service) PlanTask(input PlanTaskInput) (PlanTaskResult, error) {
 			out.Tasks = append(out.Tasks, cloneTask(*child))
 		}
 		return out, nil
+	}
+	if !taskIsPlannable(task, meta) {
+		return PlanTaskResult{}, fmt.Errorf("%w: cannot plan task in status %s", ErrTaskTransitionInvalid, task.Status)
 	}
 
 	actorID, err := requireCanonicalParticipantID("actor_id", normalizeTeamActorID(meta, input.ActorID))
@@ -681,7 +776,6 @@ func (s *Service) BindTaskExecutionRoom(input BindTaskExecutionRoomInput) (TeamT
 	now := s.now()
 	s.bindTaskExecutionRoomLocked(meta, task, roomID, now)
 	s.appendEventLocked(meta.ID, TeamEvent{
-		RoomID:    meta.RoomID,
 		Type:      EventTaskExecutionRoom,
 		ActorID:   actorID,
 		TaskID:    task.ID,
@@ -706,8 +800,11 @@ func (s *Service) StartTask(input StartTaskInput) (StartTaskResult, error) {
 	if strings.TrimSpace(task.ParentID) != "" {
 		return StartTaskResult{}, fmt.Errorf("%w: only parent tasks can be started", ErrTaskTransitionInvalid)
 	}
-	if !taskStatusIsUnstarted(task.Status) {
+	if !taskIsStartable(task, meta) {
 		return StartTaskResult{}, fmt.Errorf("%w: cannot start task in status %s", ErrTaskTransitionInvalid, task.Status)
+	}
+	if !s.dependenciesCompletedLocked(meta.ID, task.DependsOn) {
+		return StartTaskResult{}, fmt.Errorf("%w: task %s", ErrTaskDependenciesOpen, task.ID)
 	}
 
 	children := s.taskChildrenLocked(meta.ID, task.ID)
@@ -733,7 +830,6 @@ func (s *Service) StartTask(input StartTaskInput) (StartTaskResult, error) {
 	if taskRoomID != "" && !ExecutionRoomBound(*task, meta) {
 		s.bindTaskExecutionRoomLocked(meta, task, taskRoomID, now)
 		s.appendEventLocked(meta.ID, TeamEvent{
-			RoomID:    meta.RoomID,
 			Type:      EventTaskExecutionRoom,
 			ActorID:   actorID,
 			TaskID:    task.ID,
@@ -745,7 +841,7 @@ func (s *Service) StartTask(input StartTaskInput) (StartTaskResult, error) {
 
 	scheduledCount = s.dispatchReadyChildrenLocked(meta, task.ID, defaultParticipantIDForAgentID(meta.LeadAgentID), now)
 
-	task.Status = TaskStatusAssigned
+	task.Status = TaskStatusInProgress
 	task.Result = ""
 	task.Error = ""
 	task.UpdatedAt = now
@@ -769,6 +865,16 @@ func (s *Service) StartTask(input StartTaskInput) (StartTaskResult, error) {
 
 func taskStatusIsUnstarted(status string) bool {
 	return strings.TrimSpace(status) == "" || strings.TrimSpace(status) == TaskStatusPending
+}
+
+func taskIsStartable(task *TeamTask, meta TeamMeta) bool {
+	if task == nil {
+		return false
+	}
+	if taskStatusIsUnstarted(task.Status) {
+		return true
+	}
+	return strings.TrimSpace(task.Status) == TaskStatusAssigned && taskAssignedToManager(task.AssignedTo, meta)
 }
 
 func taskAssignedToManager(assignedTo string, teamMeta TeamMeta) bool {
@@ -798,13 +904,7 @@ func defaultPlanSummary(taskCount int) string {
 }
 
 func taskIsPlannable(task *TeamTask, meta TeamMeta) bool {
-	if task == nil {
-		return false
-	}
-	if taskStatusIsUnstarted(task.Status) {
-		return true
-	}
-	return strings.TrimSpace(task.Status) == TaskStatusAssigned && taskAssignedToManager(task.AssignedTo, meta)
+	return taskIsStartable(task, meta)
 }
 
 func (s *Service) AssignTask(input AssignTaskInput) (TeamTask, error) {
@@ -1050,6 +1150,9 @@ func (s *Service) CompleteTask(input CompleteTaskInput) (TeamTask, error) {
 	if task.Status != TaskStatusInProgress {
 		return TeamTask{}, fmt.Errorf("%w: cannot complete task in status %s", ErrTaskTransitionInvalid, task.Status)
 	}
+	if strings.TrimSpace(task.ParentID) == "" && len(s.taskChildrenLocked(meta.ID, task.ID)) > 0 {
+		return TeamTask{}, fmt.Errorf("%w: parent tasks complete when all child tasks complete", ErrTaskTransitionInvalid)
+	}
 	if strings.TrimSpace(input.Result) == "" {
 		return TeamTask{}, fmt.Errorf("result is required")
 	}
@@ -1203,7 +1306,7 @@ func (s *Service) RequestApproval(input RequestApprovalInput) (TeamApproval, err
 	}
 
 	now := s.now()
-	approvalRoomID := meta.RoomID
+	approvalRoomID := ""
 	if task != nil {
 		approvalRoomID = EventRoomID(meta, task)
 	}
@@ -1292,7 +1395,7 @@ func (s *Service) ResolveApproval(input ResolveApprovalInput) (TeamApproval, err
 			}
 		}
 	}
-	approvalRoomID := meta.RoomID
+	approvalRoomID := ""
 	if relatedTask != nil {
 		approvalRoomID = EventRoomID(meta, relatedTask)
 	} else if strings.TrimSpace(approval.RoomID) != "" {
@@ -1482,7 +1585,6 @@ func (s *Service) UpsertPresence(input UpsertPresenceInput) (MemberPresence, err
 	}
 
 	s.appendEventLocked(meta.ID, TeamEvent{
-		RoomID:    meta.RoomID,
 		Type:      EventPresenceUpdated,
 		ActorID:   participantID,
 		TaskID:    p.CurrentTaskID,
@@ -1630,12 +1732,14 @@ func (s *Service) bindTaskExecutionRoomLocked(meta TeamMeta, parent *TeamTask, r
 	if roomID == "" {
 		return
 	}
+	parent.ExecutionChannel = NormalizeExecutionChannel(parent.ExecutionChannel)
 	parent.RoomID = roomID
 	parent.UpdatedAt = now
 	for _, child := range s.taskChildrenLocked(meta.ID, parent.ID) {
 		if child == nil {
 			continue
 		}
+		child.ExecutionChannel = parent.ExecutionChannel
 		child.RoomID = roomID
 		child.UpdatedAt = now
 	}
@@ -1743,6 +1847,7 @@ func (s *Service) claimLocked(meta TeamMeta, task *TeamTask, participantID strin
 	task.Status = TaskStatusInProgress
 	task.ClaimedBy = participantID
 	task.UpdatedAt = now
+	s.markParentInProgressLocked(meta, task.ParentID, now)
 	s.updatePresenceLocked(meta, participantID, PresenceStateBusy, task.ID, "")
 	s.appendEventLocked(meta.ID, TeamEvent{
 		RoomID:    EventRoomID(meta, task),
@@ -1752,6 +1857,27 @@ func (s *Service) claimLocked(meta TeamMeta, task *TeamTask, participantID strin
 		Summary:   task.Title,
 		CreatedAt: now,
 	})
+}
+
+func (s *Service) markParentInProgressLocked(meta TeamMeta, parentID string, now time.Time) {
+	parentID = strings.TrimSpace(parentID)
+	if parentID == "" {
+		return
+	}
+	parent, ok := s.tasksForTeamLocked(meta.ID)[parentID]
+	if !ok || parent == nil {
+		return
+	}
+	switch strings.TrimSpace(parent.Status) {
+	case "", TaskStatusPending, TaskStatusAssigned:
+	default:
+		return
+	}
+	parent.Status = TaskStatusInProgress
+	parent.Result = ""
+	parent.Error = ""
+	parent.CompletedAt = nil
+	parent.UpdatedAt = now
 }
 
 func (s *Service) requireTeamLocked(teamID string) (TeamMeta, error) {
@@ -1877,32 +2003,59 @@ func (s *Service) newTaskLocked(meta TeamMeta, input CreateTaskInput) *TeamTask 
 		status = TaskStatusAssigned
 	}
 	parentID := strings.TrimSpace(input.ParentID)
-	roomID := meta.RoomID
+	executionChannel := NormalizeExecutionChannel(input.ExecutionChannel)
+	roomID := ""
 	if parentID != "" {
 		if parent, ok := s.tasksForTeamLocked(meta.ID)[parentID]; ok && parent != nil {
-			roomID = firstNonEmpty(strings.TrimSpace(parent.RoomID), roomID)
+			executionChannel = NormalizeExecutionChannel(parent.ExecutionChannel)
+			roomID = strings.TrimSpace(parent.RoomID)
 		}
 	}
 	return &TeamTask{
-		ID:         s.nextTaskIdentifier(),
-		TeamID:     meta.ID,
-		RoomID:     roomID,
-		ParentID:   parentID,
-		Title:      strings.TrimSpace(input.Title),
-		Body:       strings.TrimSpace(input.Body),
-		Status:     status,
-		CreatedBy:  strings.TrimSpace(input.CreatedBy),
-		AssignedTo: cleanParticipantID(input.AssignTo),
-		DependsOn:  cloneStrings(input.DependsOn),
-		Priority:   input.Priority,
-		DeadlineAt: cloneTimePtr(input.DeadlineAt),
-		TimeoutAt:  cloneTimePtr(input.TimeoutAt),
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:               s.nextTaskIdentifier(),
+		TeamID:           meta.ID,
+		ExecutionChannel: executionChannel,
+		RoomID:           roomID,
+		ParentID:         parentID,
+		Title:            strings.TrimSpace(input.Title),
+		Body:             strings.TrimSpace(input.Body),
+		Status:           status,
+		CreatedBy:        strings.TrimSpace(input.CreatedBy),
+		AssignedTo:       cleanParticipantID(input.AssignTo),
+		DependsOn:        cloneStrings(input.DependsOn),
+		Priority:         input.Priority,
+		DeadlineAt:       cloneTimePtr(input.DeadlineAt),
+		TimeoutAt:        cloneTimePtr(input.TimeoutAt),
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 }
 
 func (s *Service) appendEventLocked(teamID string, event TeamEvent) {
+	if strings.TrimSpace(event.TaskID) != "" {
+		if task, ok := s.tasksForTeamLocked(teamID)[event.TaskID]; ok && task != nil {
+			if strings.TrimSpace(event.Channel) == "" {
+				event.Channel = strings.TrimSpace(task.ExecutionChannel)
+			}
+			if strings.TrimSpace(event.RoomID) == "" {
+				event.RoomID = strings.TrimSpace(task.RoomID)
+			}
+		}
+	}
+	if strings.TrimSpace(event.Channel) == "" && strings.TrimSpace(event.RoomID) != "" {
+		for _, task := range s.tasksForTeamLocked(teamID) {
+			if task == nil || strings.TrimSpace(task.ParentID) != "" {
+				continue
+			}
+			if strings.TrimSpace(task.RoomID) == strings.TrimSpace(event.RoomID) {
+				event.Channel = strings.TrimSpace(task.ExecutionChannel)
+				break
+			}
+		}
+	}
+	if strings.TrimSpace(event.Channel) != "" {
+		event.Channel = NormalizeExecutionChannel(event.Channel)
+	}
 	s.nextSeq++
 	event.Seq = s.nextSeq
 	event.TeamID = teamID
@@ -1993,11 +2146,12 @@ func (s *Service) recordProjectionFailureLocked(meta TeamMeta, events []TeamEven
 	if len(events) == 0 {
 		return
 	}
-	log.Printf("team projector failed for team=%s room=%s event_seq=%d: %v", meta.ID, meta.RoomID, events[0].Seq, cause)
+	log.Printf("team projector failed for team=%s channel=%s room=%s event_seq=%d: %v", meta.ID, events[0].Channel, events[0].RoomID, events[0].Seq, cause)
 	before := s.captureTeamStateLocked(meta.ID)
 	eventStart := len(s.events[meta.ID])
 	s.appendEventLocked(meta.ID, TeamEvent{
-		RoomID:    meta.RoomID,
+		Channel:   events[0].Channel,
+		RoomID:    events[0].RoomID,
 		Type:      EventProjectionFailed,
 		ActorID:   defaultParticipantIDForAgentID(meta.LeadAgentID),
 		TaskID:    firstProjectedTaskID(events),
@@ -2081,6 +2235,7 @@ func (s *Service) loadStoreState() error {
 		taskMap := make(map[string]*TeamTask, len(snapshot.Tasks))
 		for _, task := range snapshot.Tasks {
 			taskCopy := cloneTask(task)
+			taskCopy.ExecutionChannel = NormalizeExecutionChannel(taskCopy.ExecutionChannel)
 			taskCopy.AssignedTo = cleanParticipantID(taskCopy.AssignedTo)
 			taskCopy.ClaimedBy = cleanParticipantID(taskCopy.ClaimedBy)
 			taskMap[task.ID] = &taskCopy
@@ -2109,7 +2264,40 @@ func (s *Service) loadStoreState() error {
 			}
 		}
 	}
+	s.recoverStartedParentTasksLocked()
 	return s.recoverStaleTasksLocked()
+}
+
+func (s *Service) recoverStartedParentTasksLocked() {
+	var now time.Time
+	for _, meta := range s.teams {
+		for _, task := range s.tasksForTeamLocked(meta.ID) {
+			if task == nil || strings.TrimSpace(task.ParentID) == "" {
+				continue
+			}
+			if childTaskIndicatesParentStarted(task) {
+				if now.IsZero() {
+					now = s.now()
+				}
+				s.markParentInProgressLocked(meta, task.ParentID, now)
+			}
+		}
+	}
+}
+
+func childTaskIndicatesParentStarted(task *TeamTask) bool {
+	if task == nil {
+		return false
+	}
+	if task.DispatchedAt != nil {
+		return true
+	}
+	switch strings.TrimSpace(task.Status) {
+	case TaskStatusInProgress, TaskStatusBlocked, TaskStatusCompleted:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) recoverStaleTasksLocked() error {
@@ -2136,7 +2324,7 @@ func (s *Service) recoverStaleTasksLocked() error {
 			task.UpdatedAt = now
 			s.updatePresenceForTaskLocked(s.teams[teamID], task, PresenceStateBlocked, task.Error)
 			s.appendEventLocked(teamID, TeamEvent{
-				RoomID:    s.teams[teamID].RoomID,
+				RoomID:    EventRoomID(s.teams[teamID], task),
 				Type:      EventTaskBlocked,
 				ActorID:   task.ClaimedBy,
 				TaskID:    task.ID,
@@ -2247,6 +2435,7 @@ func (s *Service) bumpApprovalIdentifierLocked(id string) {
 }
 
 func cloneTeamMeta(meta TeamMeta) TeamMeta {
+	meta.MemberAgentIDs = cloneStrings(meta.MemberAgentIDs)
 	return meta
 }
 

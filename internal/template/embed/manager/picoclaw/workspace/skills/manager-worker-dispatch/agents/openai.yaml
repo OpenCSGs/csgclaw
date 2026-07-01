@@ -1,4 +1,0 @@
-interface:
-  display_name: "Manager Worker Dispatch"
-  short_description: "Multi-worker dispatch with tracker sequencing"
-  default_prompt: "Use $manager-worker-dispatch to split work across multiple workers, prepare todo.json, ensure room membership, and let start-tracking own sequential handoff."

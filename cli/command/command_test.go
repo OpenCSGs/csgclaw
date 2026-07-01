@@ -147,17 +147,18 @@ func TestRenderRoomsAndTeamsTablesShowDisplayNamesWhenAvailable(t *testing.T) {
 	var teams bytes.Buffer
 	if err := RenderTeamsTable(&teams, []apitypes.Team{{
 		ID:            "team-dev",
-		RoomID:        "room-dev",
-		Channel:       "csgclaw",
 		LeadAgentID:   "agent-manager",
 		LeadAgentName: "manager",
-		Status:        "active",
-		Title:         "dev",
+		MemberAgentIDs: []string{
+			"agent-dev",
+		},
+		Status: "active",
+		Title:  "dev",
 	}}); err != nil {
 		t.Fatalf("RenderTeamsTable() error = %v", err)
 	}
-	if out := teams.String(); !strings.Contains(out, "manager(agent-manager)") {
-		t.Fatalf("RenderTeamsTable() = %q, want lead display name", out)
+	if out := teams.String(); !strings.Contains(out, "manager(agent-manager)") || !strings.Contains(out, "agent-dev") {
+		t.Fatalf("RenderTeamsTable() = %q, want lead and member display values", out)
 	}
 }
 

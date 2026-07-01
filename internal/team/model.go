@@ -31,6 +31,7 @@ const (
 	ProjectionStatusFailed  = "failed"
 
 	EventTeamCreated       = "team.created"
+	EventTeamUpdated       = "team.updated"
 	EventTaskCreated       = "task.created"
 	EventTaskPlanned       = "task.planned"
 	EventTaskExecutionRoom = "task.execution_room"
@@ -48,16 +49,15 @@ const (
 	EventProjectionFailed  = "projection.failed"
 )
 
-// TeamMeta marks that a room has team orchestration enabled.
+// TeamMeta is a reusable pool of agents that can execute tasks in any supported channel.
 type TeamMeta struct {
-	ID          string    `json:"id"`
-	RoomID      string    `json:"room_id"`
-	Channel     string    `json:"channel"`
-	Title       string    `json:"title"`
-	LeadAgentID string    `json:"lead_agent_id"`
-	Status      string    `json:"status"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID             string    `json:"id"`
+	Title          string    `json:"title"`
+	LeadAgentID    string    `json:"lead_agent_id"`
+	MemberAgentIDs []string  `json:"member_agent_ids,omitempty"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // MemberPresence captures runtime state derived from room members plus participant identity.
@@ -76,27 +76,28 @@ type MemberPresence struct {
 
 // TeamTask is the authoritative task state, independent of room message projection.
 type TeamTask struct {
-	ID           string     `json:"id"`
-	TeamID       string     `json:"team_id"`
-	RoomID       string     `json:"room_id"`
-	ParentID     string     `json:"parent_id,omitempty"`
-	Title        string     `json:"title"`
-	Body         string     `json:"body"`
-	Status       string     `json:"status"`
-	CreatedBy    string     `json:"created_by"`
-	AssignedTo   string     `json:"assigned_to,omitempty"`
-	ClaimedBy    string     `json:"claimed_by,omitempty"`
-	DependsOn    []string   `json:"depends_on,omitempty"`
-	Priority     int        `json:"priority,omitempty"`
-	PlanSummary  string     `json:"plan_summary,omitempty"`
-	DispatchedAt *time.Time `json:"dispatched_at,omitempty"`
-	DeadlineAt   *time.Time `json:"deadline_at,omitempty"`
-	TimeoutAt    *time.Time `json:"timeout_at,omitempty"`
-	Result       string     `json:"result,omitempty"`
-	Error        string     `json:"error,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	CompletedAt  *time.Time `json:"completed_at,omitempty"`
+	ID               string     `json:"id"`
+	TeamID           string     `json:"team_id"`
+	ExecutionChannel string     `json:"execution_channel"`
+	RoomID           string     `json:"room_id"`
+	ParentID         string     `json:"parent_id,omitempty"`
+	Title            string     `json:"title"`
+	Body             string     `json:"body"`
+	Status           string     `json:"status"`
+	CreatedBy        string     `json:"created_by"`
+	AssignedTo       string     `json:"assigned_to,omitempty"`
+	ClaimedBy        string     `json:"claimed_by,omitempty"`
+	DependsOn        []string   `json:"depends_on,omitempty"`
+	Priority         int        `json:"priority,omitempty"`
+	PlanSummary      string     `json:"plan_summary,omitempty"`
+	DispatchedAt     *time.Time `json:"dispatched_at,omitempty"`
+	DeadlineAt       *time.Time `json:"deadline_at,omitempty"`
+	TimeoutAt        *time.Time `json:"timeout_at,omitempty"`
+	Result           string     `json:"result,omitempty"`
+	Error            string     `json:"error,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	CompletedAt      *time.Time `json:"completed_at,omitempty"`
 }
 
 type TeamApproval struct {
@@ -118,6 +119,7 @@ type TeamApproval struct {
 type TeamEvent struct {
 	Seq       int64     `json:"seq"`
 	TeamID    string    `json:"team_id"`
+	Channel   string    `json:"channel,omitempty"`
 	RoomID    string    `json:"room_id"`
 	Type      string    `json:"type"`
 	ActorID   string    `json:"actor_id,omitempty"`

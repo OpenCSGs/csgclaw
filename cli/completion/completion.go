@@ -525,6 +525,23 @@ func teamSpec() CommandSpec {
 						},
 					},
 					{
+						Name:    "plan",
+						Summary: "Plan child tasks for a parent task",
+						Flags: []FlagSpec{
+							{Name: "team", TakesValue: true},
+							{Name: "task", TakesValue: true},
+							{Name: "start"},
+						},
+					},
+					{
+						Name:    "start",
+						Summary: "Start a parent task and dispatch ready subtasks",
+						Flags: []FlagSpec{
+							{Name: "team", TakesValue: true},
+							{Name: "task", TakesValue: true},
+						},
+					},
+					{
 						Name:    "assign",
 						Summary: "Reassign a task to a worker",
 						Flags: []FlagSpec{

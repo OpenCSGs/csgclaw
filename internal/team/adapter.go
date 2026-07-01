@@ -1,6 +1,14 @@
 package team
 
-import "context"
+import (
+	"context"
+	"strings"
+)
+
+const (
+	DefaultExecutionChannel = "csgclaw"
+	FeishuExecutionChannel  = "feishu"
+)
 
 // TeamChannelAdapter is the narrow projection boundary between team
 // orchestration and a concrete channel implementation.
@@ -13,6 +21,52 @@ type TeamChannelAdapter interface {
 
 // ChannelAdapter remains as a compatibility alias during the MVP rollout.
 type ChannelAdapter = TeamChannelAdapter
+
+type AdapterRegistry struct {
+	adapters map[string]TeamChannelAdapter
+}
+
+func NewAdapterRegistry(adapters ...TeamChannelAdapter) *AdapterRegistry {
+	registry := &AdapterRegistry{adapters: make(map[string]TeamChannelAdapter)}
+	for _, adapter := range adapters {
+		registry.Register(adapter)
+	}
+	return registry
+}
+
+func (r *AdapterRegistry) Register(adapter TeamChannelAdapter) {
+	if r == nil || adapter == nil {
+		return
+	}
+	channel := NormalizeExecutionChannel(adapter.Channel())
+	if channel == "" {
+		return
+	}
+	r.adapters[channel] = adapter
+}
+
+func (r *AdapterRegistry) Adapter(channel string) (TeamChannelAdapter, bool) {
+	channel = NormalizeExecutionChannel(channel)
+	if channel == "" {
+		channel = DefaultExecutionChannel
+	}
+	if r == nil || r.adapters == nil {
+		return nil, false
+	}
+	adapter, ok := r.adapters[channel]
+	return adapter, ok
+}
+
+func NormalizeExecutionChannel(channel string) string {
+	switch strings.ToLower(strings.TrimSpace(channel)) {
+	case "", DefaultExecutionChannel:
+		return DefaultExecutionChannel
+	case FeishuExecutionChannel:
+		return FeishuExecutionChannel
+	default:
+		return strings.ToLower(strings.TrimSpace(channel))
+	}
+}
 
 type RoomRef struct {
 	Channel string `json:"channel"`

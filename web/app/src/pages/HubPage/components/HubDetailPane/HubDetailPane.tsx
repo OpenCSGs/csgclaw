@@ -16,6 +16,7 @@ import {
 } from "@/components/ui";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
+import { isReadonlySkill, skillSourceBadgeName } from "@/models/skillhub";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
 
@@ -162,7 +163,8 @@ export function HubDetailPane({
     skillDeleteBusy = false,
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
-  const canDeleteSkill = Boolean(selectedSkill && !selectedSkill.readonly && selectedSkill.source !== "system");
+  const canDeleteSkill = Boolean(selectedSkill && !isReadonlySkill(selectedSkill));
+  const selectedSkillSourceBadge = skillSourceBadgeName(selectedSkill);
   const skillEntries = skillTree?.entries ?? EMPTY_WORKSPACE_ENTRIES;
   const activeResourceType = useMemo(() => {
     if (selectedResourceType === "skill" && skills.length) {
@@ -329,11 +331,11 @@ export function HubDetailPane({
                     <div className="hub-inspector-copy">
                       <h2>{selectedSkill.name}</h2>
                       <p>{selectedSkill.description || selectedSkill.name}</p>
-                      {selectedSkill.readonly || selectedSkill.source === "system" ? (
+                      {selectedSkillSourceBadge ? (
                         <div className="hub-inspector-badge-row">
                           <span className="mini-badge template-source-badge">
                             <span className="template-source-badge-dot" aria-hidden="true"></span>
-                            {t("hubSkillSystemBadge")}
+                            {localizeTemplateSourceTag(selectedSkillSourceBadge, locale)}
                           </span>
                         </div>
                       ) : null}

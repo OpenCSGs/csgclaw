@@ -149,8 +149,25 @@ func TestClientUsesExpectedRoutes(t *testing.T) {
 			body: `{}`,
 			want: "POST /api/v1/teams",
 			call: func(c *Client) error {
-				_, err := c.CreateTeam(ctx, apitypes.CreateTeamRequest{Channel: "csgclaw", LeadAgentID: "u-manager"})
+				_, err := c.CreateTeam(ctx, apitypes.CreateTeamRequest{LeadAgentID: "u-manager"})
 				return err
+			},
+		},
+		{
+			name: "update team",
+			body: `{}`,
+			want: "PATCH /api/v1/teams/team-1",
+			call: func(c *Client) error {
+				_, err := c.UpdateTeam(ctx, "team-1", apitypes.PatchTeamRequest{MemberAgentIDs: []string{"u-worker"}})
+				return err
+			},
+		},
+		{
+			name:   "delete team",
+			status: http.StatusNoContent,
+			want:   "DELETE /api/v1/teams/team-1",
+			call: func(c *Client) error {
+				return c.DeleteTeam(ctx, "team-1")
 			},
 		},
 		{
@@ -177,6 +194,15 @@ func TestClientUsesExpectedRoutes(t *testing.T) {
 			want: "POST /api/v1/teams/team-1/tasks/batch",
 			call: func(c *Client) error {
 				_, err := c.CreateTeamTasksBatch(ctx, "team-1", apitypes.CreateTeamTasksBatchRequest{CreatedBy: "bot-manager"})
+				return err
+			},
+		},
+		{
+			name: "plan team task",
+			body: `{"task":{},"created_tasks":[]}`,
+			want: "POST /api/v1/teams/team-1/tasks/task-1/plan",
+			call: func(c *Client) error {
+				_, err := c.PlanTeamTask(ctx, "team-1", "task-1", "", true)
 				return err
 			},
 		},
@@ -213,6 +239,15 @@ func TestClientUsesExpectedRoutes(t *testing.T) {
 			want: "POST /api/v1/teams/team-1/tasks/task-1/assign",
 			call: func(c *Client) error {
 				_, err := c.AssignTeamTask(ctx, "team-1", "task-1", "bot-manager", "bot-worker")
+				return err
+			},
+		},
+		{
+			name: "start team task",
+			body: `{"task":{},"scheduled_tasks":1}`,
+			want: "POST /api/v1/teams/team-1/tasks/task-1/start",
+			call: func(c *Client) error {
+				_, err := c.StartTeamTask(ctx, "team-1", "task-1", "")
 				return err
 			},
 		},

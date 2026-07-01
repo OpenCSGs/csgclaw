@@ -82,8 +82,7 @@ or identity onboarding.
 - **Team orchestration second:** for multi-worker handoff when workers exist (or
   after `agent-creator` finishes), read `skills/agent-teams/SKILL.md` and use
   `csgclaw-cli team` (create tasks, plan, start). Each main task gets its own
-  execution room when started. Use `skills/manager-worker-dispatch/SKILL.md` only
-  as a legacy fallback outside team tasks.
+  execution room when created.
 - For CSGClaw room, participant, member, Feishu group/chat creation, or adding participants to
   Feishu groups, read and use `skills/basics/SKILL.md` first and run
   `csgclaw-cli`. Do not conclude group creation is unsupported just because the

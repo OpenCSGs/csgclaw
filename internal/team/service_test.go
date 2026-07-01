@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -90,6 +91,50 @@ func TestCreateTasksBatchResolvesParentRefs(t *testing.T) {
 	}
 	if result.Tasks[2].ParentID != parentID {
 		t.Fatalf("task[2].ParentID = %q, want %q", result.Tasks[2].ParentID, parentID)
+	}
+}
+
+func TestUpdateAndDeleteTeamPersistWithStore(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	svc := NewService(WithStore(store))
+	meta, err := svc.CreateTeam(CreateTeamInput{
+		Title:          "release",
+		LeadAgentID:    "u-manager",
+		MemberAgentIDs: []string{"u-worker"},
+	})
+	if err != nil {
+		t.Fatalf("CreateTeam() error = %v", err)
+	}
+	updated, err := svc.UpdateTeam(UpdateTeamInput{
+		TeamID:            meta.ID,
+		MemberAgentIDs:    []string{"u-worker", "u-qa", "u-manager"},
+		SetMemberAgentIDs: true,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTeam() error = %v", err)
+	}
+	if !slices.Equal(updated.MemberAgentIDs, []string{"u-worker", "u-qa"}) {
+		t.Fatalf("updated members = %+v, want worker and qa without lead", updated.MemberAgentIDs)
+	}
+
+	reloaded := NewService(WithStore(store))
+	persisted, ok := reloaded.GetTeam(meta.ID)
+	if !ok {
+		t.Fatalf("GetTeam(%s) found = false, want true", meta.ID)
+	}
+	if !slices.Equal(persisted.MemberAgentIDs, []string{"u-worker", "u-qa"}) {
+		t.Fatalf("persisted members = %+v, want worker and qa", persisted.MemberAgentIDs)
+	}
+	if err := reloaded.DeleteTeam(meta.ID); err != nil {
+		t.Fatalf("DeleteTeam() error = %v", err)
+	}
+
+	reloaded = NewService(WithStore(store))
+	if teams := reloaded.ListTeams(); len(teams) != 0 {
+		t.Fatalf("ListTeams() after delete = %+v, want empty", teams)
 	}
 }
 
@@ -427,8 +472,6 @@ func TestClaimNextAcrossTeamsUsesUniqueHighestPriority(t *testing.T) {
 	firstTeamID := createTestTeam(t, svc)
 	secondTeam, err := svc.CreateTeam(CreateTeamInput{
 		ID:          "team-qa",
-		RoomID:      "room-qa",
-		Channel:     "csgclaw",
 		Title:       "QA",
 		LeadAgentID: agent.ManagerUserID,
 	})
@@ -467,8 +510,6 @@ func TestClaimNextAcrossTeamsRequiresExplicitTeamOnPriorityTie(t *testing.T) {
 	firstTeamID := createTestTeam(t, svc)
 	secondTeam, err := svc.CreateTeam(CreateTeamInput{
 		ID:          "team-qa",
-		RoomID:      "room-qa",
-		Channel:     "csgclaw",
 		Title:       "QA",
 		LeadAgentID: agent.ManagerUserID,
 	})
@@ -592,8 +633,8 @@ func TestStartTaskDispatchesReadyChildrenAndCompletionDispatchesSuccessor(t *tes
 	if err != nil {
 		t.Fatalf("StartTask() error = %v", err)
 	}
-	if started.Parent.Status != TaskStatusAssigned || started.ScheduledCount != 1 {
-		t.Fatalf("StartTask() = %+v, want parent assigned and one scheduled child", started)
+	if started.Parent.Status != TaskStatusInProgress || started.ScheduledCount != 1 {
+		t.Fatalf("StartTask() = %+v, want parent in progress and one scheduled child", started)
 	}
 	if started.Parent.RoomID != "room-task-exec" {
 		t.Fatalf("parent.RoomID = %q, want dedicated execution room", started.Parent.RoomID)
@@ -608,6 +649,9 @@ func TestStartTaskDispatchesReadyChildrenAndCompletionDispatchesSuccessor(t *tes
 	}
 	if verify.Status != TaskStatusPending || verify.DispatchedAt != nil {
 		t.Fatalf("verify after start = %+v, want pending and not dispatched", verify)
+	}
+	if _, err := svc.CompleteTask(CompleteTaskInput{TeamID: teamID, TaskID: parent.ID, ActorID: "manager", Result: "premature"}); !errors.Is(err, ErrTaskTransitionInvalid) {
+		t.Fatalf("CompleteTask(parent with open children) error = %v, want ErrTaskTransitionInvalid", err)
 	}
 
 	if _, err := svc.ClaimTask(ClaimTaskInput{TeamID: teamID, TaskID: draft.ID, ParticipantID: "alice"}); err != nil {
@@ -932,8 +976,6 @@ func createTestTeam(t *testing.T, svc *Service) string {
 
 	team, err := svc.CreateTeam(CreateTeamInput{
 		ID:          "team-ops",
-		RoomID:      "room-ops",
-		Channel:     "csgclaw",
 		Title:       "Ops",
 		LeadAgentID: agent.ManagerUserID,
 	})

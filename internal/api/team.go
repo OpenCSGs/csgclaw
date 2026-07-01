@@ -22,7 +22,7 @@ func (h *Handler) handleListTeams(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleCreateTeam(w http.ResponseWriter, r *http.Request) {
-	svc, adapter, ok := h.requireTeamComponents(w)
+	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return
 	}
@@ -37,9 +37,7 @@ func (h *Handler) handleCreateTeam(w http.ResponseWriter, r *http.Request) {
 		writeTeamError(w, err)
 		return
 	}
-	created, err := svc.CreateTeamWithRoom(r.Context(), adapter, team.CreateTeamWithRoomInput{
-		RoomID:         strings.TrimSpace(req.RoomID),
-		Channel:        strings.TrimSpace(req.Channel),
+	created, err := svc.CreateTeamWithMembers(team.CreateTeamWithMembersInput{
 		Title:          strings.TrimSpace(req.Title),
 		LeadAgentID:    leadAgentID,
 		MemberAgentIDs: memberAgentIDs,
@@ -132,6 +130,67 @@ func (h *Handler) handleGetTeam(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiTeamWithPresenter(item, h.newTeamIdentityPresenter()))
 }
 
+func (h *Handler) handleUpdateTeam(w http.ResponseWriter, r *http.Request) {
+	svc, ok := h.requireTeamService(w)
+	if !ok {
+		return
+	}
+
+	var req apitypes.PatchTeamRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	leadAgentID := strings.TrimSpace(req.LeadAgentID)
+	if leadAgentID != "" {
+		leadAgentID = agent.CanonicalID(leadAgentID)
+	}
+	memberAgentIDs := req.MemberAgentIDs
+	if memberAgentIDs != nil {
+		memberAgentIDs = canonicalAgentIDs(memberAgentIDs)
+	}
+	updated, err := svc.UpdateTeam(team.UpdateTeamInput{
+		TeamID:            pathValue(r, "team_id"),
+		Title:             strings.TrimSpace(req.Title),
+		LeadAgentID:       leadAgentID,
+		MemberAgentIDs:    memberAgentIDs,
+		SetMemberAgentIDs: req.MemberAgentIDs != nil,
+		Status:            strings.TrimSpace(req.Status),
+	})
+	if err != nil {
+		writeTeamError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, apiTeamWithPresenter(updated, h.newTeamIdentityPresenter()))
+}
+
+func (h *Handler) handleDeleteTeam(w http.ResponseWriter, r *http.Request) {
+	svc, ok := h.requireTeamService(w)
+	if !ok {
+		return
+	}
+	if err := svc.DeleteTeam(pathValue(r, "team_id")); err != nil {
+		writeTeamError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) teamTaskForRequest(teamID, taskID string) (team.TeamMeta, team.TeamTask, error) {
+	if h == nil || h.teamSvc == nil {
+		return team.TeamMeta{}, team.TeamTask{}, fmt.Errorf("team service is not configured")
+	}
+	meta, found := h.teamSvc.GetTeam(teamID)
+	if !found {
+		return team.TeamMeta{}, team.TeamTask{}, team.ErrTeamNotFound
+	}
+	task, found := h.teamSvc.GetTask(teamID, taskID)
+	if !found {
+		return team.TeamMeta{}, team.TeamTask{}, team.ErrTaskNotFound
+	}
+	return meta, task, nil
+}
+
 func (h *Handler) handleListTeamTasks(w http.ResponseWriter, r *http.Request) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
@@ -152,17 +211,18 @@ func (h *Handler) handleListGlobalTasks(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) handleCreateTeamTasksBatch(w http.ResponseWriter, r *http.Request) {
-	svc, adapter, ok := h.requireTeamComponents(w)
-	if !ok {
-		return
-	}
 	var req apitypes.CreateTeamTasksBatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
+	channel := team.NormalizeExecutionChannel(req.ExecutionChannel)
+	svc, adapter, ok := h.requireTeamComponentsForChannel(w, channel)
+	if !ok {
+		return
+	}
 	teamID := pathValue(r, "team_id")
-	result, err := svc.CreateTasksWithExecutionRoom(r.Context(), teamCreateTaskBatchInput(teamID, req), adapter, h.teamDirectory())
+	result, err := svc.CreateTasksWithExecutionRoom(r.Context(), teamCreateTaskBatchInput(teamID, req), adapter, h.teamDirectory(channel))
 	if err != nil {
 		writeTeamError(w, err)
 		return
@@ -256,14 +316,20 @@ func (h *Handler) handlePlanTeamTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var adapter team.TeamChannelAdapter
+	_, parent, err := h.teamTaskForRequest(pathValue(r, "team_id"), pathValue(r, "task_id"))
+	if err != nil {
+		writeTeamError(w, err)
+		return
+	}
+	directory := h.teamDirectory(parent.ExecutionChannel)
 	if req.AutoStart {
-		var ok bool
-		_, adapter, ok = h.requireTeamComponents(w)
-		if !ok {
+		var adapterOK bool
+		_, adapter, adapterOK = h.requireTeamComponentsForChannel(w, parent.ExecutionChannel)
+		if !adapterOK {
 			return
 		}
+		directory = h.teamDirectory(parent.ExecutionChannel)
 	}
-	directory := h.teamDirectory()
 	result, err := svc.PlanTaskWithOptionalStart(r.Context(), team.PlanTaskWorkflowInput{
 		TeamID:    pathValue(r, "team_id"),
 		TaskID:    pathValue(r, "task_id"),
@@ -278,10 +344,6 @@ func (h *Handler) handlePlanTeamTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleStartTeamTask(w http.ResponseWriter, r *http.Request) {
-	svc, adapter, ok := h.requireTeamComponents(w)
-	if !ok {
-		return
-	}
 	var req struct {
 		apitypes.StartTeamTaskRequest
 	}
@@ -289,11 +351,21 @@ func (h *Handler) handleStartTeamTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
+	meta, parent, err := h.teamTaskForRequest(pathValue(r, "team_id"), pathValue(r, "task_id"))
+	if err != nil {
+		writeTeamError(w, err)
+		return
+	}
+	_ = meta
+	svc, adapter, ok := h.requireTeamComponentsForChannel(w, parent.ExecutionChannel)
+	if !ok {
+		return
+	}
 	item, err := svc.StartTaskWithExecutionRoom(r.Context(), team.StartTaskWithExecutionRoomInput{
 		TeamID:  pathValue(r, "team_id"),
 		TaskID:  pathValue(r, "task_id"),
 		ActorID: strings.TrimSpace(req.ActorID),
-	}, adapter, h.teamDirectory())
+	}, adapter, h.teamDirectory(parent.ExecutionChannel))
 	if err != nil {
 		writeTeamError(w, err)
 		return

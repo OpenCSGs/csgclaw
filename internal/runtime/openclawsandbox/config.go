@@ -6,28 +6,32 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelcap"
 )
 
 //go:embed defaults/openclaw-gateway.json
 var defaultOpenClawGatewayConfig []byte
 
 const (
-	HostDir           = ".openclaw"
-	HostConfig        = "openclaw.json"
-	HostExecApproval  = "exec-approvals.json"
-	HostWorkspaceDir  = "workspace"
-	BoxUserHome       = "/home/node"
-	BoxDir            = "/home/node/.openclaw"
-	BoxWorkspaceDir   = BoxDir + "/workspace"
-	BoxProjectsDir    = BoxDir + "/workspace/projects"
-	BoxGatewayLogPath = BoxDir + "/gateway.log"
+	HostDir                = ".openclaw"
+	HostConfig             = "openclaw.json"
+	HostExecApproval       = "exec-approvals.json"
+	HostGatewayLog         = "gateway.log"
+	HostWorkspaceDir       = "workspace"
+	BoxUserHome            = "/home/node"
+	BoxDir                 = "/home/node/.openclaw"
+	BoxConfigPath          = BoxDir + "/" + HostConfig
+	BoxWorkspaceDir        = BoxDir + "/workspace"
+	BoxProjectsDir         = BoxDir + "/workspace/projects"
+	BoxGatewayLogPath      = BoxDir + "/" + HostGatewayLog
+	BoxWindowsWorkspaceDir = "/workspace"
 
-	openClawBridgeProviderID  = "csgclaw-llm"
-	openClawCodexResponsesAPI = "openai-codex-responses"
+	openClawBridgeProviderID = "csgclaw-llm"
 )
 
 type BaseURLResolver func(config.ServerConfig) string
@@ -41,7 +45,7 @@ func workspaceRoot(agentHome string) string {
 }
 
 func HostGatewayLogPath(agentHome string) string {
-	return filepath.Join(Root(agentHome), "gateway.log")
+	return filepath.Join(Root(agentHome), HostGatewayLog)
 }
 
 func EnsureConfig(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.AgentCredentialProvider) (string, error) {
@@ -68,6 +72,9 @@ func EnsureConfig(agentHome, participantID, agentID string, server config.Server
 		}
 	}
 	if err := writeExecApprovalsAllowAll(hostRoot); err != nil {
+		return "", err
+	}
+	if err := ensureGatewayLogFile(hostRoot); err != nil {
 		return "", err
 	}
 	return hostRoot, nil
@@ -115,6 +122,26 @@ func writeExecApprovalsAllowAll(hostRoot string) error {
 	return nil
 }
 
+func ensureGatewayLogFile(hostRoot string) error {
+	target := filepath.Join(hostRoot, HostGatewayLog)
+	file, err := os.OpenFile(target, os.O_CREATE, 0o600)
+	if err != nil {
+		return fmt.Errorf("create openclaw gateway log: %w", err)
+	}
+	return file.Close()
+}
+
+func updateOpenClawWorkspaceDefault(cfg map[string]any, workspace string) {
+	if goruntime.GOOS != "windows" {
+		return
+	}
+	agents, _ := cfg["agents"].(map[string]any)
+	defaults, _ := agents["defaults"].(map[string]any)
+	if defaults == nil {
+		return
+	}
+	defaults["workspace"] = workspace
+}
 func renderConfig(participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.AgentCredentialProvider) ([]byte, error) {
 	participantID = strings.TrimSpace(participantID)
 	agentID = strings.TrimSpace(agentID)
@@ -140,6 +167,7 @@ func renderConfig(participantID, agentID string, server config.ServerConfig, mod
 	if err := updateOpenClawGatewayAuth(cfg, server); err != nil {
 		return nil, err
 	}
+	updateOpenClawWorkspaceDefault(cfg, workspaceGuestPathForGOOS(goruntime.GOOS))
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode openclaw config: %w", err)
@@ -185,37 +213,45 @@ func updateOpenClawModelProvider(cfg map[string]any, botID string, server config
 	}
 	entry["id"] = modelID
 	entry["name"] = modelID
-	applyOpenClawCodexModelProfile(llm, entry, modelCfg)
+	applyOpenClawModelCapabilities(llm, entry, modelCfg)
 	return updateOpenClawAgentDefaults(cfg, openClawBridgeProviderID, modelCfg)
 }
 
-func applyOpenClawCodexModelProfile(providerCfg, entry map[string]any, modelCfg config.ModelConfig) {
-	if !isCodexProfileProvider(modelCfg.Provider) {
-		return
+func applyOpenClawModelCapabilities(providerCfg, entry map[string]any, modelCfg config.ModelConfig) {
+	caps := modelcap.ForProviderModel(modelCfg.Provider, modelCfg.ModelID)
+	providerCfg["api"] = caps.OpenClawAPI
+	if caps.OpenClawAPI == modelcap.OpenClawAPICodexResponses {
+		entry["api"] = caps.OpenClawAPI
+	} else {
+		delete(entry, "api")
 	}
-	providerCfg["api"] = openClawCodexResponsesAPI
-	entry["api"] = openClawCodexResponsesAPI
-	entry["reasoning"] = true
-	entry["input"] = []any{"text", "image"}
+	entry["reasoning"] = caps.SupportsReasoningEffort
+	entry["input"] = stringSliceToAny(caps.InputModalities)
 	compat, _ := entry["compat"].(map[string]any)
 	if compat == nil {
 		compat = map[string]any{}
 	}
-	compat["supportsReasoningEffort"] = true
-	compat["supportedReasoningEfforts"] = []any{"low", "medium", "high", "xhigh"}
-	compat["reasoningEffortMap"] = map[string]any{
-		"minimal": "low",
-		"low":     "low",
-		"medium":  "medium",
-		"high":    "high",
-		"xhigh":   "xhigh",
-	}
-	compat["supportsUsageInStreaming"] = true
+	compat["supportsReasoningEffort"] = caps.SupportsReasoningEffort
+	compat["supportedReasoningEfforts"] = stringSliceToAny(caps.SupportedReasoningEfforts)
+	compat["reasoningEffortMap"] = stringMapToAny(caps.ReasoningEffortMap)
+	compat["supportsUsageInStreaming"] = caps.SupportsStreamingUsage
 	entry["compat"] = compat
 }
 
-func isCodexProfileProvider(provider string) bool {
-	return strings.EqualFold(strings.TrimSpace(provider), "codex")
+func stringSliceToAny(values []string) []any {
+	out := make([]any, 0, len(values))
+	for _, value := range values {
+		out = append(out, value)
+	}
+	return out
+}
+
+func stringMapToAny(values map[string]string) map[string]any {
+	out := make(map[string]any, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
 }
 
 func updateOpenClawAgentDefaults(cfg map[string]any, providerID string, modelCfg config.ModelConfig) error {
@@ -232,6 +268,11 @@ func updateOpenClawAgentDefaults(cfg map[string]any, providerID string, modelCfg
 		return fmt.Errorf("embedded openclaw config is missing agents.defaults.model")
 	}
 	modelBlock["primary"] = providerID + "/" + strings.TrimSpace(modelCfg.ModelID)
+	caps := modelcap.ForProviderModel(modelCfg.Provider, modelCfg.ModelID)
+	if !caps.SupportsReasoningEffort {
+		delete(defaults, "thinkingDefault")
+		return nil
+	}
 	if thinkingDefault := strings.TrimSpace(modelCfg.ReasoningEffort); thinkingDefault != "" {
 		defaults["thinkingDefault"] = thinkingDefault
 	}

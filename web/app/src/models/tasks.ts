@@ -2,6 +2,7 @@ export type WorkspaceTask = {
   id: string;
   team_id: string;
   team_title: string;
+  execution_channel: string;
   room_id: string;
   room_title: string;
   parent_id: string;
@@ -27,6 +28,7 @@ export type WorkspaceTask = {
 export type WorkspaceTeamEvent = {
   seq: number;
   team_id: string;
+  channel: string;
   room_id: string;
   type: string;
   actor_id: string;
@@ -40,10 +42,9 @@ export type WorkspaceTeamEvent = {
 
 export type WorkspaceTeam = {
   id: string;
-  room_id: string;
-  channel: string;
   title: string;
   lead_agent_id: string;
+  member_agent_ids: string[];
   status: string;
   created_at: string;
   updated_at: string;
@@ -97,16 +98,14 @@ export function normalizeTeam(input: unknown): WorkspaceTeam | null {
   }
   const item = input as Record<string, unknown>;
   const id = text(item.id);
-  const roomID = text(item.room_id);
-  if (!id || !roomID) {
+  if (!id) {
     return null;
   }
   return {
     id,
-    room_id: roomID,
-    channel: text(item.channel) || "csgclaw",
     title: text(item.title),
-    lead_agent_id: text(item.lead_agent_id) || text(item.lead_participant_id),
+    lead_agent_id: text(item.lead_agent_id),
+    member_agent_ids: stringArray(item.member_agent_ids),
     status: text(item.status) || "active",
     created_at: text(item.created_at),
     updated_at: text(item.updated_at),
@@ -126,6 +125,7 @@ export function normalizeTeamEvent(input: unknown): WorkspaceTeamEvent | null {
   return {
     seq: numberValue(item.seq),
     team_id: teamID,
+    channel: text(item.channel) || "csgclaw",
     room_id: text(item.room_id),
     type,
     actor_id: text(item.actor_id),
@@ -146,13 +146,14 @@ export function normalizeTask(input: unknown): WorkspaceTask | null {
   const id = text(item.id);
   const teamID = text(item.team_id);
   const roomID = text(item.room_id);
-  if (!id || !teamID || !roomID) {
+  if (!id || !teamID) {
     return null;
   }
   return {
     id,
     team_id: teamID,
     team_title: text(item.team_title),
+    execution_channel: text(item.execution_channel) || "csgclaw",
     room_id: roomID,
     room_title: text(item.room_title),
     parent_id: text(item.parent_id),
@@ -194,6 +195,46 @@ export function formatTaskUpdatedAt(value: string, _locale?: string): string {
   return `${year}.${month}.${day} ${hours}:${minutes}`;
 }
 
+export function formatTaskUpdatedRelative(value: string, locale?: string, now = new Date()): string {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime()) || Number.isNaN(now.getTime())) {
+    return "-";
+  }
+
+  const diffMs = date.getTime() - now.getTime();
+  const absMs = Math.abs(diffMs);
+  const second = 1000;
+  const minute = 60 * second;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const month = 30 * day;
+  const year = 365 * day;
+
+  let amount: number;
+  let unit: Intl.RelativeTimeFormatUnit;
+  if (absMs < minute) {
+    amount = Math.round(diffMs / second);
+    unit = "second";
+  } else if (absMs < hour) {
+    amount = Math.round(diffMs / minute);
+    unit = "minute";
+  } else if (absMs < day) {
+    amount = Math.round(diffMs / hour);
+    unit = "hour";
+  } else if (absMs < month) {
+    amount = Math.round(diffMs / day);
+    unit = "day";
+  } else if (absMs < year) {
+    amount = Math.round(diffMs / month);
+    unit = "month";
+  } else {
+    amount = Math.round(diffMs / year);
+    unit = "year";
+  }
+
+  return new Intl.RelativeTimeFormat(locale || undefined, { numeric: "auto" }).format(amount, unit);
+}
+
 export function displayTaskTeam(task: WorkspaceTask): string {
   return task.team_title || task.team_id;
 }
@@ -205,28 +246,22 @@ export function displayTaskRoom(task: WorkspaceTask): string {
 export function taskExecutionRoomID(
   task: WorkspaceTask,
   children: readonly WorkspaceTask[],
-  teams: readonly WorkspaceTeam[],
+  _teams: readonly WorkspaceTeam[] = [],
 ): string {
-  const team = teams.find((item) => item.id === task.team_id);
-  const teamRoomID = team?.room_id || "";
-  if (task.room_id && task.room_id !== teamRoomID) {
+  if (task.room_id) {
     return task.room_id;
   }
-  const child = children.find((item) => item.room_id && item.room_id !== teamRoomID);
+  const child = children.find((item) => item.room_id);
   return child?.room_id || task.room_id;
 }
 
 export function taskUsesExecutionRoom(
   task: WorkspaceTask,
-  teams: readonly WorkspaceTeam[],
+  teams: readonly WorkspaceTeam[] = [],
   children: readonly WorkspaceTask[] = [],
 ): boolean {
-  const team = teams.find((item) => item.id === task.team_id);
-  if (!team) {
-    return false;
-  }
   const roomID = taskExecutionRoomID(task, children, teams);
-  return Boolean(roomID) && roomID !== team.room_id;
+  return Boolean(roomID);
 }
 
 export function displayTeam(team: WorkspaceTeam): string {

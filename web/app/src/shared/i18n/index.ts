@@ -52,6 +52,9 @@ export function localizeTemplateSourceTag(source: unknown, locale: LocaleCode): 
     if (value === "official") {
       return "官方";
     }
+    if (value === "personal") {
+      return "个人";
+    }
   }
   return value;
 }

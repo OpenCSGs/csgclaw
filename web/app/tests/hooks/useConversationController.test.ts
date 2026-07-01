@@ -194,7 +194,7 @@ describe("useConversationController slash skill helpers", () => {
 
   it("renders skill input as /slug command text", () => {
     expect(slashCommandInputText("skill-creator")).toBe("/skill-creator ");
-    expect(slashCommandInputText(" manager-worker-dispatch ")).toBe("/manager-worker-dispatch ");
+    expect(slashCommandInputText(" agent-teams ")).toBe("/agent-teams ");
   });
 
   it("normalizes slash-command shorthand into canonical XML before send", () => {

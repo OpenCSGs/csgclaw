@@ -70,8 +70,9 @@ describe("legacy UI contract", () => {
     expect(source).toContain('"api/v1/channels/csgclaw/participants?type=notification"');
     expect(source).toContain("patchNotificationBotRequest");
     expect(source).toContain("createNotificationBotRequest");
+    expect(source).toContain("deleteAgentRequest(item.id)");
+    expect(source).toContain("del(`api/v1/agents/${encodeURIComponent(agentID)}`)");
     expect(source).toContain('params.set("delete_agent", "if_unreferenced");');
-    expect(source).toContain("deleteBotRequest(csgclawParticipantIDForAgent(item), { deleteAgent: true })");
     expect(source).toContain("const SHOW_AGENT_LIFECYCLE_ACTIONS = false;");
     expect(source).toContain('export const BOT_TYPE_NOTIFICATION = "notification"');
     expect(source).toContain("function NotifierControls");

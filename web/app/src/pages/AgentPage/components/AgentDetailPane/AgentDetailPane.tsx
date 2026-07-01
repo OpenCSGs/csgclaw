@@ -52,10 +52,12 @@ import {
 } from "@/models/modelProviders";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import type { LocaleCode } from "@/models/conversations";
+import { skillSourceBadgeName } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
 import type { SlashSkillOption } from "@/models/slashCommands";
 import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
+import { localizeTemplateSourceTag } from "@/shared/i18n";
 import {
   Button,
   DialogCloseButton,
@@ -922,6 +924,7 @@ export function AgentDetailPane({
               <div className="agent-skill-candidates-list" role="list">
                 {skillCandidates.map((skill) => {
                   const checked = selectedSkillNames.includes(skill.name);
+                  const sourceBadgeName = skillSourceBadgeName(skill);
                   return (
                     <label key={skill.name} className={`agent-skill-candidate ${checked ? "selected" : ""}`.trim()}>
                       <input
@@ -937,7 +940,7 @@ export function AgentDetailPane({
                       <span className="agent-skill-candidate-copy">
                         <span className="agent-skill-name">
                           {skill.name}
-                          {skill.readonly || skill.source === "system" ? ` · ${t("hubSkillSystemBadge")}` : ""}
+                          {sourceBadgeName ? ` · ${localizeTemplateSourceTag(sourceBadgeName, locale)}` : ""}
                         </span>
                         <span className="agent-skill-description">{skill.description || "-"}</span>
                       </span>

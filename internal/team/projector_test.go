@@ -180,16 +180,14 @@ func TestProjectorRenderTaskLifecycleMessages(t *testing.T) {
 	projector := NewProjector(NewCSGClawAdapter(imSvc), nil)
 	meta := TeamMeta{
 		ID:          "team-5",
-		RoomID:      "room-team",
-		Channel:     "csgclaw",
 		LeadAgentID: agent.ManagerUserID,
 	}
 	events := []TeamEvent{
-		{Seq: 1, TeamID: meta.ID, RoomID: "room-team", Type: EventTaskCreated, ActorID: "manager", TaskID: "task-15", TargetID: "backend-dev", Summary: "Implement API", CreatedAt: time.Now()},
-		{Seq: 2, TeamID: meta.ID, RoomID: "room-exec", Type: EventTaskPlanned, ActorID: "manager", TaskID: "task-14", Summary: "Split backend and frontend work.", CreatedAt: time.Now()},
-		{Seq: 3, TeamID: meta.ID, RoomID: "room-team", Type: EventTaskExecutionRoom, ActorID: "web", TaskID: "task-14", TargetID: "room-exec", Summary: "[task-14] blog", CreatedAt: time.Now()},
-		{Seq: 4, TeamID: meta.ID, RoomID: "room-exec", Type: EventTaskDispatched, ActorID: "manager", TaskID: "task-15", TargetID: "backend-dev", Summary: "Implement API", CreatedAt: time.Now()},
-		{Seq: 5, TeamID: meta.ID, RoomID: "room-exec", Type: EventTaskStarted, ActorID: "web", TaskID: "task-14", Summary: "Blog dev", CreatedAt: time.Now()},
+		{Seq: 1, TeamID: meta.ID, Channel: DefaultExecutionChannel, RoomID: "room-team", Type: EventTaskCreated, ActorID: "manager", TaskID: "task-15", TargetID: "backend-dev", Summary: "Implement API", CreatedAt: time.Now()},
+		{Seq: 2, TeamID: meta.ID, Channel: DefaultExecutionChannel, RoomID: "room-exec", Type: EventTaskPlanned, ActorID: "manager", TaskID: "task-14", Summary: "Split backend and frontend work.", CreatedAt: time.Now()},
+		{Seq: 3, TeamID: meta.ID, Channel: DefaultExecutionChannel, RoomID: "room-team", Type: EventTaskExecutionRoom, ActorID: "web", TaskID: "task-14", TargetID: "room-exec", Summary: "[task-14] blog", CreatedAt: time.Now()},
+		{Seq: 4, TeamID: meta.ID, Channel: DefaultExecutionChannel, RoomID: "room-exec", Type: EventTaskDispatched, ActorID: "manager", TaskID: "task-15", TargetID: "backend-dev", Summary: "Implement API", CreatedAt: time.Now()},
+		{Seq: 5, TeamID: meta.ID, Channel: DefaultExecutionChannel, RoomID: "room-exec", Type: EventTaskStarted, ActorID: "web", TaskID: "task-14", Summary: "Blog dev", CreatedAt: time.Now()},
 	}
 
 	if err := projector.Project(context.Background(), meta, events); err != nil {
@@ -241,10 +239,10 @@ func TestProjectorSuccessorDispatchSkipsPreamble(t *testing.T) {
 		},
 	})
 	projector := NewProjector(NewCSGClawAdapter(imSvc), nil)
-	meta := TeamMeta{ID: "team-5", RoomID: "room-team", Channel: "csgclaw", LeadAgentID: agent.ManagerUserID}
+	meta := TeamMeta{ID: "team-5", LeadAgentID: agent.ManagerUserID}
 	events := []TeamEvent{
-		{Seq: 1, TeamID: meta.ID, RoomID: "room-exec", Type: EventTaskCompleted, ActorID: "backend-dev", TaskID: "task-15", Summary: "done", CreatedAt: time.Now()},
-		{Seq: 2, TeamID: meta.ID, RoomID: "room-exec", Type: EventTaskDispatched, ActorID: "manager", TaskID: "task-16", TargetID: "backend-dev", Summary: "Verify API", CreatedAt: time.Now()},
+		{Seq: 1, TeamID: meta.ID, Channel: DefaultExecutionChannel, RoomID: "room-exec", Type: EventTaskCompleted, ActorID: "backend-dev", TaskID: "task-15", Summary: "done", CreatedAt: time.Now()},
+		{Seq: 2, TeamID: meta.ID, Channel: DefaultExecutionChannel, RoomID: "room-exec", Type: EventTaskDispatched, ActorID: "manager", TaskID: "task-16", TargetID: "backend-dev", Summary: "Verify API", CreatedAt: time.Now()},
 	}
 	if err := projector.Project(context.Background(), meta, events); err != nil {
 		t.Fatalf("Project() error = %v", err)
@@ -276,14 +274,13 @@ func TestProjectorResolvesWorkerAliasSender(t *testing.T) {
 	projector := NewProjector(NewCSGClawAdapter(imSvc), nil)
 	meta := TeamMeta{
 		ID:          "team-5",
-		RoomID:      "room-team",
-		Channel:     "csgclaw",
 		LeadAgentID: agent.ManagerUserID,
 	}
 	events := []TeamEvent{
 		{
 			Seq:       1,
 			TeamID:    meta.ID,
+			Channel:   DefaultExecutionChannel,
 			RoomID:    "room-task",
 			Type:      EventTaskClaimed,
 			ActorID:   "p-w-1512",

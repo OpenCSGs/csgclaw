@@ -1,24 +1,12 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { ExternalLink, ListChecks, Plus, Users } from "lucide-react";
+import { ListChecks, Trash2, UserPlus, Users } from "lucide-react";
 import { TaskSubtaskIndicator } from "@/components/business";
+import { Button } from "@/components/ui";
 import { AgentIcon, UsersIcon } from "@/components/ui/Icons";
-import {
-  Button,
-  DialogBody,
-  DialogClose,
-  DialogCloseButton,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogRoot,
-  DialogTitle,
-} from "@/components/ui";
-import { toggleSelection } from "@/shared/lib/collections";
 import { isAgentRunning } from "@/models/agents";
 import type { AgentLike } from "@/models/agents";
-import type { IMConversation, IMUser, TranslateFn, UsersById } from "@/models/conversations";
+import type { IMUser, TranslateFn, UsersById } from "@/models/conversations";
 import {
   displayTeam,
   formatTaskUpdatedAt,
@@ -28,21 +16,21 @@ import {
   teamStatusLabel,
 } from "@/models/tasks";
 import type { WorkspaceTask, WorkspaceTeam } from "@/models/tasks";
+import { classNames } from "@/shared/lib/classNames";
+import styles from "./TeamDetailPane.module.css";
 
 type UsersLookup = UsersById | Record<string, IMUser | undefined>;
-type VoidOrPromise = void | Promise<void>;
 
 export type TeamDetailPaneProps = {
   agents?: AgentLike[];
-  onAddAgentsToTeam?: (teamID: string, agentIDs: string[]) => VoidOrPromise;
-  onOpenRoom?: (roomID: string) => VoidOrPromise;
+  onDeleteTeam?: (team: WorkspaceTeam) => void | Promise<boolean>;
+  onManageMembers?: (team: WorkspaceTeam) => void;
   onSelectAgent?: (agent: AgentLike) => void;
   onSelectTask?: (taskID: string) => void;
-  room?: IMConversation | null;
-  tasks?: WorkspaceTask[];
-  team?: WorkspaceTeam | null;
   teamActionBusy?: boolean;
   teamActionError?: string;
+  tasks?: WorkspaceTask[];
+  team?: WorkspaceTeam | null;
   teamsLoading?: boolean;
   t?: TranslateFn;
   usersById?: UsersLookup;
@@ -54,24 +42,21 @@ export function TeamDetailPane({
   t = (key) => key,
   team = null,
   teamsLoading = false,
-  room = null,
   agents = [],
   usersById = new Map<string, IMUser>(),
   tasks = [],
-  onOpenRoom = () => {},
-  onSelectAgent = () => {},
-  onSelectTask = () => {},
   teamActionBusy = false,
   teamActionError = "",
-  onAddAgentsToTeam,
+  onDeleteTeam = () => {},
+  onManageMembers = () => {},
+  onSelectAgent = () => {},
+  onSelectTask = () => {},
 }: TeamDetailPaneProps) {
   const [activeTab, setActiveTab] = useState<ActiveTeamTab>("members");
-  const [memberDialogOpen, setMemberDialogOpen] = useState(false);
-  const [selectedMemberIDs, setSelectedMemberIDs] = useState<string[]>([]);
 
   if (!team) {
     return (
-      <section className="entity-pane team-detail-pane">
+      <section className={classNames("entity-pane", "team-detail-pane", styles.teamDetailPane)}>
         <div className="empty-state shell-empty-state">
           <strong>{teamsLoading ? t("teamsLoading") : t("teamDetailMissing")}</strong>
           <span>{t("teamDetailMissingHint")}</span>
@@ -80,147 +65,62 @@ export function TeamDetailPane({
     );
   }
 
-  const memberIDs = teamMemberIDs(team, room);
+  const memberIDs = teamMemberIDs(team);
   const members = memberIDs.map((memberID) => memberDisplay(memberID, agents, usersById, team.lead_agent_id));
   const parentTasks = rootTasks(tasks);
   const locale = document.documentElement.lang || "en";
-  const teamAgents = agents.filter((agent): agent is AgentLike & { id: string } => Boolean(agent?.id));
-  const teamAgentIDs = teamAgents.map((agent) => String(agent.id));
-  const roomMemberIDs = new Set(room?.members ?? []);
-  const existingTeamAgentIDs = teamAgentIDs.filter(
-    (agentID) => roomMemberIDs.has(agentID) || agentID === team.lead_agent_id,
-  );
-  const allAgentsSelected = teamAgentIDs.length > 0 && teamAgentIDs.every((id) => selectedMemberIDs.includes(id));
-  const selectedAgentCount = selectedMemberIDs.filter((id) => teamAgentIDs.includes(id)).length;
-  const hasNewMembersToAdd = selectedMemberIDs.some((id) => teamAgentIDs.includes(id) && !roomMemberIDs.has(id));
-
-  function openAddMembersDialog() {
-    setSelectedMemberIDs(existingTeamAgentIDs);
-    setMemberDialogOpen(true);
-  }
-
-  async function addMembersToTeam() {
-    if (!team?.id || !team.room_id || !hasNewMembersToAdd || teamActionBusy) {
-      return;
-    }
-    await onAddAgentsToTeam?.(team.id, selectedMemberIDs);
-    setMemberDialogOpen(false);
-  }
 
   return (
-    <section className="entity-pane team-detail-pane">
-      <header className="entity-header team-detail-header">
-        <div className="entity-avatar team-detail-avatar">
+    <section className={classNames("entity-pane", "team-detail-pane", styles.teamDetailPane)}>
+      <header className={classNames("entity-header", styles.contentWidth, styles.teamDetailHeader)}>
+        <div className={classNames("entity-avatar", styles.teamDetailAvatar)}>
           <UsersIcon />
         </div>
-        <div className="entity-heading">
-          <div className="entity-title-row">
-            <h1>{displayTeam(team)}</h1>
-            <span className="status-pill online">{teamStatusLabel(team.status, t)}</span>
+        <div className={classNames("entity-heading", styles.teamDetailHeading)}>
+          <div className={classNames("entity-title-row", styles.teamDetailTitleRow)}>
+            <h1 className={styles.teamDetailTitle}>{displayTeam(team)}</h1>
+            <span
+              className={classNames("status-pill", "online", styles.teamDetailStatus, styles.teamDetailStatusOnline)}
+            >
+              {teamStatusLabel(team.status, t)}
+            </span>
           </div>
-          <p>{t("teamDetailSubtitle")}</p>
+          <p className={styles.teamDetailSubtitle}>{t("teamDetailSubtitle")}</p>
         </div>
-        <div className="entity-toolbar">
+        <div className={classNames("entity-toolbar", styles.teamDetailToolbar)} aria-label={t("teamPanelManage")}>
           <Button
+            className={styles.teamDetailToolbarButton}
             variant="secondaryGray"
             size="md"
-            disabled={!team.room_id}
-            onClick={() => (team.room_id ? onOpenRoom?.(team.room_id) : undefined)}
+            disabled={teamActionBusy}
+            onClick={() => onManageMembers(team)}
           >
-            <ExternalLink size={16} aria-hidden="true" />
-            {t("teamOpenRecordRoom")}
+            <UserPlus size={16} aria-hidden="true" />
+            {t("teamManageMembers")}
           </Button>
           <Button
-            variant="secondaryGray"
+            className={styles.teamDetailToolbarButton}
+            variant="outlineDanger"
             size="md"
-            disabled={!team.room_id || teamActionBusy}
-            onClick={openAddMembersDialog}
+            disabled={teamActionBusy}
+            onClick={() => void onDeleteTeam(team)}
           >
-            <Plus size={16} aria-hidden="true" />
-            {t("teamAddMembers")}
+            <Trash2 size={16} aria-hidden="true" />
+            {t("teamDelete")}
           </Button>
         </div>
       </header>
 
-      <DialogRoot open={memberDialogOpen} onOpenChange={setMemberDialogOpen}>
-        <DialogContent className="team-members-dialog">
-          <DialogHeader>
-            <div>
-              <DialogTitle>{t("teamAddMembers")}</DialogTitle>
-              <DialogDescription>{t("teamManageMembersSubtitle")}</DialogDescription>
-            </div>
-            <DialogCloseButton label={t("close")} />
-          </DialogHeader>
-          <DialogBody>
-            <div className="field team-members-dialog-field">
-              <span>{t("teamMembersLabel")}</span>
-              <div className="selection-list team-members-dialog-list">
-                {teamAgents.length ? (
-                  <>
-                    <label className="selection-item selection-all-item">
-                      <input
-                        type="checkbox"
-                        checked={allAgentsSelected}
-                        onChange={() => {
-                          setSelectedMemberIDs((current) =>
-                            allAgentsSelected
-                              ? current.filter((id) => !teamAgentIDs.includes(id))
-                              : Array.from(new Set([...current, ...teamAgentIDs])),
-                          );
-                        }}
-                      />
-                      <span>{t("allMembers")}</span>
-                      <small>
-                        {selectedAgentCount}/{teamAgentIDs.length}
-                      </small>
-                    </label>
-                    {teamAgents.map((agent) => {
-                      const agentID = String(agent.id);
-                      const inTeam = roomMemberIDs.has(agentID) || agentID === team.lead_agent_id;
-                      return (
-                        <label key={agentID} className="selection-item">
-                          <input
-                            type="checkbox"
-                            checked={selectedMemberIDs.includes(agentID)}
-                            onChange={() => setSelectedMemberIDs((current) => toggleSelection(current, agentID))}
-                          />
-                          <span>{agent.name || agentID}</span>
-                          <small>{inTeam ? t("teamMemberInRoom") : agent.role || "-"}</small>
-                        </label>
-                      );
-                    })}
-                  </>
-                ) : (
-                  <div className="selection-empty">{t("teamNoMembersHint")}</div>
-                )}
-              </div>
-            </div>
-            {teamActionError ? <div className="form-error team-members-dialog-error">{teamActionError}</div> : null}
-          </DialogBody>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="secondaryGray" size="md">
-                {t("cancel")}
-              </Button>
-            </DialogClose>
-            <Button
-              variant="primary"
-              size="md"
-              loading={teamActionBusy}
-              loadingLabel={t("teamSaving")}
-              disabled={teamActionBusy || !hasNewMembersToAdd}
-              onClick={addMembersToTeam}
-            >
-              {t("teamSaveMembers")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </DialogRoot>
+      {teamActionError ? (
+        <div className={classNames("form-error", styles.contentWidth, styles.teamDetailActionError)} role="alert">
+          {teamActionError}
+        </div>
+      ) : null}
 
-      <div className="team-detail-layout">
-        <aside className="team-detail-summary">
-          <div className="team-profile-block">
-            <div className="team-profile-icon">
+      <div className={classNames(styles.contentWidth, styles.teamDetailLayout)}>
+        <aside className={classNames(styles.panelSurface, styles.teamDetailSummary)}>
+          <div className={styles.teamProfileBlock}>
+            <div className={styles.teamProfileIcon}>
               <Users size={34} aria-hidden="true" />
             </div>
             <div>
@@ -228,21 +128,19 @@ export function TeamDetailPane({
               <p>{team.id}</p>
             </div>
           </div>
-          <div className="team-detail-fields">
+          <div className={styles.teamDetailFields}>
             <DetailField label={t("teamLeadLabel")} value={memberName(team.lead_agent_id, agents, usersById)} />
             <DetailField label={t("teamMembersLabel")} value={String(members.length)} />
-            <DetailField label={t("teamChannelLabel")} value={team.channel || "csgclaw"} />
-            <DetailField label={t("teamRecordRoomLabel")} value={room?.title || team.room_id || "-"} />
             <DetailField label={t("teamCreatedLabel")} value={formatTaskUpdatedAt(team.created_at, locale)} />
             <DetailField label={t("teamUpdatedLabel")} value={formatTaskUpdatedAt(team.updated_at, locale)} />
           </div>
         </aside>
 
-        <div className="team-detail-main">
-          <div className="team-detail-tabs" role="tablist" aria-label={t("teamDetailTabsLabel")}>
+        <div className={classNames(styles.panelSurface, styles.teamDetailMain)}>
+          <div className={styles.teamDetailTabs} role="tablist" aria-label={t("teamDetailTabsLabel")}>
             <button
               type="button"
-              className={activeTab === "members" ? "active" : ""}
+              className={activeTab === "members" ? styles.active : ""}
               role="tab"
               id="team-detail-tab-members"
               aria-controls="team-detail-panel-members"
@@ -254,7 +152,7 @@ export function TeamDetailPane({
             </button>
             <button
               type="button"
-              className={activeTab === "records" ? "active" : ""}
+              className={activeTab === "records" ? styles.active : ""}
               role="tab"
               id="team-detail-tab-records"
               aria-controls="team-detail-panel-records"
@@ -265,21 +163,21 @@ export function TeamDetailPane({
               {t("teamRecordsTab")}
             </button>
           </div>
-          <div className="team-detail-panels">
+          <div className={styles.teamDetailPanels}>
             {activeTab === "members" ? (
               <section
-                className="team-detail-panel"
+                className={classNames(styles.panelSurface, styles.teamDetailPanel)}
                 role="tabpanel"
                 id="team-detail-panel-members"
                 aria-labelledby="team-detail-tab-members"
               >
-                <div className="team-detail-panel-head">
+                <div className={styles.teamDetailPanelHead}>
                   <div>
                     <h2>{t("teamMembersTab")}</h2>
                     <p>{t("teamMembersCount", { count: members.length })}</p>
                   </div>
                 </div>
-                <div className="team-member-list">
+                <div className={classNames(styles.itemList, styles.teamMemberList)}>
                   {members.length ? (
                     members.map((member) => {
                       const memberAgent = member.agent;
@@ -287,13 +185,16 @@ export function TeamDetailPane({
                         <button
                           key={member.id}
                           type="button"
-                          className="team-member-row"
+                          className={classNames(styles.listRow, styles.teamMemberRow)}
                           onClick={() => onSelectAgent(memberAgent)}
                         >
                           <MemberRowContent member={member} t={t} />
                         </button>
                       ) : (
-                        <div key={member.id} className="team-member-row team-member-static">
+                        <div
+                          key={member.id}
+                          className={classNames(styles.listRow, styles.teamMemberRow, styles.teamMemberStatic)}
+                        >
                           <MemberRowContent member={member} t={t} />
                         </div>
                       );
@@ -307,18 +208,18 @@ export function TeamDetailPane({
 
             {activeTab === "records" ? (
               <section
-                className="team-detail-panel"
+                className={classNames(styles.panelSurface, styles.teamDetailPanel)}
                 role="tabpanel"
                 id="team-detail-panel-records"
                 aria-labelledby="team-detail-tab-records"
               >
-                <div className="team-detail-panel-head">
+                <div className={styles.teamDetailPanelHead}>
                   <div>
                     <h2>{t("teamRecordsTab")}</h2>
                     <p>{t("teamTaskRecordsCount", { count: parentTasks.length })}</p>
                   </div>
                 </div>
-                <div className="team-task-list">
+                <div className={classNames(styles.itemList, styles.teamTaskList)}>
                   {parentTasks.length ? (
                     parentTasks.map((task) => {
                       const children = taskChildren(tasks, task.id);
@@ -327,15 +228,19 @@ export function TeamDetailPane({
                         <button
                           key={task.id}
                           type="button"
-                          className="team-task-row"
+                          className={classNames(styles.listRow, styles.teamTaskRow)}
                           onClick={() => onSelectTask?.(task.id)}
                         >
                           <span
-                            className={`task-sidebar-status task-sidebar-status-${task.status}`}
+                            className={classNames(
+                              "task-sidebar-status",
+                              `task-sidebar-status-${task.status}`,
+                              styles.teamTaskStatus,
+                            )}
                             aria-hidden="true"
                           />
-                          <span className="team-task-main">
-                            <span className="team-task-title-line">
+                          <span className={classNames(styles.rowMain, styles.teamTaskMain)}>
+                            <span className={styles.teamTaskTitleLine}>
                               <strong>{task.title}</strong>
                               <TaskSubtaskIndicator subtasks={children} phase={phase} t={t} compact />
                             </span>
@@ -364,9 +269,9 @@ type DetailFieldProps = {
 
 function DetailField({ label, value }: DetailFieldProps) {
   return (
-    <div className="entity-field team-detail-field">
-      <span className="team-detail-label">{label}</span>
-      <span className="team-detail-value">{value}</span>
+    <div className={classNames("entity-field", styles.teamDetailField)}>
+      <span className={classNames(styles.fieldText, styles.teamDetailLabel)}>{label}</span>
+      <span className={classNames(styles.fieldText, styles.teamDetailValue)}>{value}</span>
     </div>
   );
 }
@@ -383,11 +288,11 @@ type TeamMemberDisplay = {
 function MemberRowContent({ member, t }: { member: TeamMemberDisplay; t: TranslateFn }) {
   return (
     <>
-      <span className={`team-member-avatar ${member.agent ? "agent" : ""}`}>
+      <span className={classNames(styles.teamMemberAvatar, member.agent && styles.agent)}>
         {member.agent ? <AgentIcon /> : member.initials}
       </span>
-      <span className="team-member-main">
-        <span className="team-member-title-line">
+      <span className={classNames(styles.rowMain, styles.teamMemberMain)}>
+        <span className={styles.teamMemberTitleLine}>
           <strong>{member.name}</strong>
           {member.leader ? <span className="mini-badge warn">{t("teamLeadBadge")}</span> : null}
           {member.agent ? (
@@ -400,9 +305,13 @@ function MemberRowContent({ member, t }: { member: TeamMemberDisplay; t: Transla
   );
 }
 
-function teamMemberIDs(team: WorkspaceTeam, room: IMConversation | null | undefined): string[] {
-  const ids = new Set(room?.members ?? []);
+function teamMemberIDs(team: WorkspaceTeam): string[] {
+  const ids = new Set(team.member_agent_ids ?? []);
   if (team.lead_agent_id) {
+    // The lead agent ID (e.g., "u-manager") may differ from the room participant ID
+    // (e.g., "manager"). Remove the participant ID form to avoid double-counting.
+    const altID = team.lead_agent_id.startsWith("u-") ? team.lead_agent_id.slice(2) : "u-" + team.lead_agent_id;
+    ids.delete(altID);
     ids.add(team.lead_agent_id);
   }
   return Array.from(ids);

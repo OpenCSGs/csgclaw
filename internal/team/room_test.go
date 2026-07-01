@@ -21,8 +21,6 @@ func TestFindTeamByRoomMatchesExecutionRoom(t *testing.T) {
 	svc := newTestService()
 	meta, err := svc.CreateTeam(CreateTeamInput{
 		ID:          "team-ops",
-		RoomID:      "room-team-home",
-		Channel:     "csgclaw",
 		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {
@@ -55,15 +53,18 @@ func TestFindTeamByRoomMatchesExecutionRoom(t *testing.T) {
 		t.Fatalf("StartTask() error = %v", err)
 	}
 
-	if _, ok := svc.FindTeamByRoom("room-team-home"); !ok {
-		t.Fatal("FindTeamByRoom(team home) = false, want true")
+	if _, _, ok := svc.FindTeamByRoom(DefaultExecutionChannel, "room-team-home"); ok {
+		t.Fatal("FindTeamByRoom(team home) = true, want false")
 	}
-	found, ok := svc.FindTeamByRoom("room-task-exec")
+	found, task, ok := svc.FindTeamByRoom(DefaultExecutionChannel, "room-task-exec")
 	if !ok {
 		t.Fatal("FindTeamByRoom(task room) = false, want true")
 	}
 	if found.ID != meta.ID {
 		t.Fatalf("FindTeamByRoom(task room).ID = %q, want %q", found.ID, meta.ID)
+	}
+	if task.ID != parent.ID {
+		t.Fatalf("FindTeamByRoom task.ID = %q, want %q", task.ID, parent.ID)
 	}
 }
 
@@ -71,8 +72,6 @@ func TestPlanTaskProjectsPlanningCompleteToBoundExecutionRoom(t *testing.T) {
 	svc := newTestService()
 	meta, err := svc.CreateTeam(CreateTeamInput{
 		ID:          "team-ops",
-		RoomID:      "room-team-home",
-		Channel:     "csgclaw",
 		LeadAgentID: agent.ManagerUserID,
 	})
 	if err != nil {

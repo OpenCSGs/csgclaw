@@ -46,6 +46,7 @@ type Handler struct {
 	hub                        *hub.Service
 	teamSvc                    *team.Service
 	teamAdapter                team.TeamChannelAdapter
+	teamAdapters               *team.AdapterRegistry
 	configPath                 string
 	serverAccessToken          string
 	serverNoAuth               bool
@@ -610,6 +611,13 @@ func (h *Handler) SetTeamService(svc *team.Service) {
 func (h *Handler) SetTeamAdapter(adapter team.TeamChannelAdapter) {
 	if h != nil {
 		h.teamAdapter = adapter
+		h.teamAdapters = team.NewAdapterRegistry(adapter)
+	}
+}
+
+func (h *Handler) SetTeamAdapterRegistry(registry *team.AdapterRegistry) {
+	if h != nil {
+		h.teamAdapters = registry
 	}
 }
 
@@ -779,7 +787,13 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		h.publishUpdatedAgentUser(updated)
 		writeJSON(w, http.StatusOK, h.presentAgentResponse(updated))
 	case http.MethodDelete:
-		if err := h.svc.Delete(r.Context(), id); err != nil {
+		var err error
+		if h.participant != nil {
+			_, err = h.participant.DeleteAgent(r.Context(), id)
+		} else {
+			err = h.svc.Delete(r.Context(), id)
+		}
+		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				http.Error(w, "agent not found", http.StatusNotFound)
 				return
@@ -2712,7 +2726,7 @@ func (h *Handler) handleTeamRoomCommand(ctx context.Context, roomID string, send
 		}
 		return !h.isAgentSender(id)
 	})
-	parser.HandleMessage(ctx, roomID, senderID, content)
+	parser.HandleMessage(ctx, team.DefaultExecutionChannel, roomID, senderID, content)
 }
 
 func (h *Handler) publishThreadUpdated(roomID string, message im.Message) {

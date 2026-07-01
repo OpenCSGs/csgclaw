@@ -57,6 +57,7 @@ export type UseWorkspaceShellControllerArgs = {
   selectHub: WorkspaceNavigationController["selectHub"];
   selectTasks: WorkspaceNavigationController["selectTasks"];
   setCollapsedWorkspaceGroups: WorkspaceUiState["setCollapsedWorkspaceGroups"];
+  setIsSidebarCollapsed: WorkspaceUiState["setIsSidebarCollapsed"];
   setWorkspaceTab: WorkspaceUiState["setWorkspaceTab"];
   t: TranslateFn;
   theme: ThemeMode;

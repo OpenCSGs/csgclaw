@@ -103,16 +103,13 @@ export function WorkspaceGroup({
             <small>{count}</small>
           </span>
         </button>
-        <div className="workspace-group-actions">
+        <div className="workspace-group-actions" data-tooltip={onAdd ? addLabel || title : undefined}>
           {onAdd ? (
             <Button
               variant="ghost"
               className="workspace-add-button"
               draggable={false}
               aria-label={addLabel || title}
-              data-tooltip={addLabel || title}
-              data-tooltip-side="bottom"
-              data-tooltip-align="end"
               onDragStart={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.preventDefault();

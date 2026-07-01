@@ -1,4 +1,4 @@
-.team-detail-pane {
+.teamDetailPane {
   --team-detail-content-width: min(100%, 1480px);
 
   gap: 14px;
@@ -7,12 +7,11 @@
   background: linear-gradient(180deg, var(--white) 0, var(--white) 138px, transparent 138px), var(--gray-25);
 }
 
-.team-detail-pane > .entity-header,
-.team-detail-layout {
+.contentWidth {
   width: var(--team-detail-content-width);
 }
 
-.team-detail-pane .entity-header.team-detail-header {
+.teamDetailHeader {
   grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
   gap: 20px;
@@ -23,7 +22,7 @@
   box-shadow: var(--shadow-xs);
 }
 
-.team-detail-pane .entity-toolbar {
+.teamDetailToolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -32,47 +31,39 @@
   min-width: 0;
 }
 
-.team-detail-pane .entity-toolbar .btn {
+.teamDetailToolbarButton {
   --btn-height: 40px;
   --btn-min-width: 80px;
   --btn-padding-x: 16px;
 
   border-radius: 10px;
-}
-
-.team-detail-pane .entity-toolbar .btn-content {
-  display: inline-flex;
-  align-items: center;
   gap: 8px;
 }
 
-.team-detail-pane .entity-title-row h1 {
+.teamDetailTitle {
+  margin: 0;
   font-family: var(--font-sans);
   font-size: 20px;
   font-weight: 600;
   line-height: 26px;
 }
 
-.team-detail-pane .entity-heading {
+.teamDetailHeading {
   gap: 10px;
   min-width: 0;
 }
 
-.team-detail-pane .entity-title-row {
+.teamDetailTitleRow {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
 }
 
-.team-detail-pane .entity-title-row h1 {
-  margin: 0;
-}
-
-.team-detail-pane .entity-title-row .status-pill {
+.teamDetailStatus {
   flex-shrink: 0;
   min-height: 24px;
   padding: 2px 10px;
-  border: 1px solid color-mix(in srgb, var(--success-500, #17b26a) 24%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--success-500) 24%, var(--line));
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 500;
@@ -80,12 +71,12 @@
   text-transform: none;
 }
 
-.team-detail-pane .entity-title-row .status-pill.online {
+.teamDetailStatusOnline {
   background: var(--success-50);
   color: var(--success-700);
 }
 
-.team-detail-pane .entity-heading p {
+.teamDetailSubtitle {
   margin: 0;
   max-width: 56rem;
   color: var(--gray-600);
@@ -93,30 +84,28 @@
   line-height: 1.55;
 }
 
-.team-detail-avatar {
+.teamDetailAvatar {
   flex-shrink: 0;
   width: 48px;
   height: 48px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--brand-600) 10%, transparent);
-  color: var(--brand-600);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--blue-600) 10%, transparent);
+  color: var(--blue-600);
 }
 
-.team-detail-avatar svg {
+.teamDetailAvatar svg {
   width: 24px;
   height: 24px;
 }
 
-.team-detail-layout {
+.teamDetailLayout {
   display: grid;
   grid-template-columns: minmax(280px, 0.38fr) minmax(0, 1fr);
   gap: 14px;
   min-height: 0;
 }
 
-.team-detail-summary,
-.team-detail-main,
-.team-detail-panel {
+.panelSurface {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -124,12 +113,12 @@
   box-shadow: var(--shadow-xs);
 }
 
-.team-detail-summary {
+.teamDetailSummary {
   align-self: start;
   overflow: hidden;
 }
 
-.team-profile-block {
+.teamProfileBlock {
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr);
   gap: 16px;
@@ -137,7 +126,7 @@
   border-bottom: 1px solid var(--line);
 }
 
-.team-profile-icon {
+.teamProfileIcon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -148,22 +137,22 @@
   color: var(--muted);
 }
 
-.team-profile-block h2,
-.team-detail-panel-head h2,
-.team-member-main strong,
-.team-task-main strong {
+.teamProfileBlock h2,
+.teamDetailPanelHead h2,
+.teamMemberMain strong,
+.teamTaskMain strong {
   margin: 0;
   color: var(--text);
 }
 
-.team-profile-block h2 {
+.teamProfileBlock h2 {
   font-family: var(--font-sans);
   font-size: 15px;
   font-weight: 600;
   line-height: 22px;
 }
 
-.team-profile-block p {
+.teamProfileBlock p {
   margin: 2px 0 0;
   color: var(--gray-500);
   font-size: 12px;
@@ -171,34 +160,34 @@
   line-height: 18px;
 }
 
-.team-detail-panel-head h2 {
+.teamDetailPanelHead h2 {
   font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 600;
   line-height: 1.35;
 }
 
-.team-detail-panel-head p {
+.teamDetailPanelHead p {
   margin: 4px 0 0;
   color: var(--gray-600);
   font-size: 13px;
   line-height: 1.45;
 }
 
-.team-member-main > span:last-child {
+.teamMemberMain > span:last-child {
   margin: 2px 0 0;
   color: var(--gray-500);
   font-size: 12px;
   line-height: 18px;
 }
 
-.team-detail-fields {
+.teamDetailFields {
   display: grid;
   gap: 0;
   padding: 4px 0 8px;
 }
 
-.team-detail-fields .team-detail-field {
+.teamDetailFields .teamDetailField {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -211,19 +200,17 @@
   box-shadow: none;
 }
 
-.team-detail-fields .team-detail-field:last-child {
+.teamDetailFields .teamDetailField:last-child {
   border-bottom: 0;
 }
 
-/* Override global `.entity-field span { text-transform: uppercase }` */
-.team-detail-fields .team-detail-field .team-detail-label,
-.team-detail-fields .team-detail-field .team-detail-value {
+.fieldText {
   font-family: var(--font-sans);
   letter-spacing: normal;
   text-transform: none;
 }
 
-.team-detail-fields .team-detail-field .team-detail-label {
+.teamDetailFields .teamDetailField .teamDetailLabel {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--gray-500);
@@ -232,7 +219,7 @@
   line-height: 20px;
 }
 
-.team-detail-fields .team-detail-field .team-detail-value {
+.teamDetailFields .teamDetailField .teamDetailValue {
   flex: 0 1 58%;
   min-width: 0;
   color: var(--gray-800);
@@ -243,13 +230,13 @@
   overflow-wrap: anywhere;
 }
 
-.team-detail-main {
+.teamDetailMain {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
 
-.team-detail-tabs {
+.teamDetailTabs {
   display: flex;
   gap: 0;
   padding: 0 18px;
@@ -257,7 +244,7 @@
   overflow-x: auto;
 }
 
-.team-detail-tabs button {
+.teamDetailTabs button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -272,23 +259,23 @@
   cursor: pointer;
 }
 
-.team-detail-tabs button:hover,
-.team-detail-tabs button.active {
+.teamDetailTabs button:hover,
+.teamDetailTabs button.active {
   color: var(--text);
 }
 
-.team-detail-tabs button.active {
+.teamDetailTabs button.active {
   border-bottom-color: var(--text);
   font-weight: 600;
 }
 
-.team-detail-panels {
+.teamDetailPanels {
   min-height: 0;
   padding: 18px 20px 20px;
   overflow-y: auto;
 }
 
-.team-detail-panel {
+.teamDetailPanel {
   display: grid;
   gap: 12px;
   padding: 0;
@@ -296,27 +283,25 @@
   box-shadow: none;
 }
 
-.team-detail-panel-head {
+.teamDetailPanelHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.team-member-list,
-.team-task-list {
+.itemList {
   display: grid;
   gap: 10px;
 }
 
-.team-member-row,
-.team-task-row {
+.listRow {
   display: grid;
   align-items: center;
   width: 100%;
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--surface);
   text-align: left;
   transition:
@@ -325,62 +310,61 @@
     transform 140ms ease;
 }
 
-.team-member-row {
+.teamMemberRow {
   grid-template-columns: 40px minmax(0, 1fr);
   gap: 12px;
   padding: 14px 16px;
 }
 
-.team-member-row:not(.team-member-static) {
+.teamMemberRow:not(.teamMemberStatic) {
   cursor: pointer;
 }
 
-.team-member-row:not(.team-member-static):hover,
-.team-task-row:hover {
-  border-color: color-mix(in srgb, var(--brand-600) 32%, var(--line));
-  background: color-mix(in srgb, var(--brand-600) 5%, var(--surface));
+.teamMemberRow:not(.teamMemberStatic):hover,
+.teamTaskRow:hover {
+  border-color: color-mix(in srgb, var(--blue-600) 32%, var(--line));
+  background: color-mix(in srgb, var(--blue-600) 5%, var(--surface));
   transform: translateY(-1px);
 }
 
-.team-member-static {
+.teamMemberStatic {
   cursor: default;
 }
 
-.team-member-avatar {
+.teamMemberAvatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--panel-soft);
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
 }
 
-.team-member-avatar.agent {
+.teamMemberAvatar.agent {
   background: var(--panel);
 }
 
-.team-member-avatar svg {
+.teamMemberAvatar svg {
   width: 21px;
   height: 21px;
 }
 
-.team-member-main,
-.team-task-main {
+.rowMain {
   min-width: 0;
 }
 
-.team-member-title-line {
+.teamMemberTitleLine {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
-.team-member-main strong {
+.teamMemberMain strong {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -390,12 +374,12 @@
   line-height: 20px;
 }
 
-.team-task-main {
+.teamTaskMain {
   display: grid;
   gap: 2px;
 }
 
-.team-task-title-line {
+.teamTaskTitleLine {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -405,12 +389,7 @@
   max-width: 100%;
 }
 
-.team-task-title-line .task-status-pill {
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.team-task-main strong {
+.teamTaskMain strong {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -421,7 +400,7 @@
   line-height: 20px;
 }
 
-.team-task-main > span {
+.teamTaskMain > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -430,121 +409,44 @@
   line-height: 18px;
 }
 
-.team-task-row {
+.teamTaskRow {
   grid-template-columns: 10px minmax(0, 1fr);
   gap: 12px;
   padding: 14px 16px;
   cursor: pointer;
 }
 
-.team-task-row .task-sidebar-status {
+.teamTaskStatus {
   margin-top: 0;
 }
 
-.team-task-status {
-  flex-shrink: 0;
-  justify-self: end;
-  border-radius: 999px;
-  background: var(--panel-soft);
-  color: var(--gray-600);
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
-  white-space: nowrap;
-}
-
-.team-task-status-pending,
-.team-task-status-assigned {
-  background: var(--gray-100);
-  color: var(--gray-700);
-}
-
-.team-task-status-in_progress {
-  background: color-mix(in srgb, var(--brand-600) 12%, transparent);
-  color: var(--brand-700);
-}
-
-.team-task-status-completed {
-  background: color-mix(in srgb, #2e90fa 14%, transparent);
-  color: #1570ef;
-}
-
-.team-task-status-blocked {
-  background: var(--warning-50);
-  color: var(--warning-700);
-}
-
-.team-task-status-failed,
-.team-task-status-cancelled {
-  background: color-mix(in srgb, var(--error-600) 12%, transparent);
-  color: var(--error-600);
-}
-
-.team-members-dialog {
-  width: min(560px, calc(100vw - 40px));
-}
-
-.team-members-dialog-field {
-  margin: 0;
-}
-
-.team-members-dialog-list {
-  max-height: 330px;
-  overflow: auto;
-  padding-right: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) transparent;
-}
-
-.team-members-dialog-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.team-members-dialog-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.team-members-dialog-list::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
-}
-
-.team-members-dialog-error {
-  margin-top: 12px;
-}
-
-:root[data-theme="dark"] .team-detail-pane {
+:root[data-theme="dark"] .teamDetailPane {
   background: linear-gradient(180deg, var(--panel) 0, var(--panel) 138px, transparent 138px), var(--bg);
 }
 
 @media (max-width: 1100px) {
-  .team-detail-pane .entity-header.team-detail-header {
+  .teamDetailHeader {
     grid-template-columns: 48px minmax(0, 1fr);
   }
 
-  .team-detail-pane .entity-toolbar {
+  .teamDetailToolbar {
     grid-column: 1 / -1;
     justify-content: flex-start;
   }
 
-  .team-detail-layout {
+  .teamDetailLayout {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 720px) {
-  .team-detail-pane {
+  .teamDetailPane {
     padding: 16px;
   }
 
-  .team-profile-block,
-  .team-member-row,
-  .team-task-row {
+  .teamProfileBlock,
+  .teamMemberRow,
+  .teamTaskRow {
     grid-template-columns: 1fr;
-  }
-
-  .team-task-status {
-    justify-self: start;
   }
 }

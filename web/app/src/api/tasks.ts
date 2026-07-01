@@ -1,4 +1,4 @@
-import { get, post } from "@/api/client";
+import { del, get, patch, post } from "@/api/client";
 import {
   normalizeTask,
   normalizeTaskList,
@@ -9,12 +9,15 @@ import {
 import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
 
 export type CreateTeamPayload = {
-  channel?: string;
   lead_agent_id?: string;
-  lead_participant_id?: string;
   member_agent_ids?: string[];
-  member_participant_ids?: string[];
-  room_id?: string;
+  title?: string;
+};
+
+export type UpdateTeamPayload = {
+  lead_agent_id?: string;
+  member_agent_ids?: string[];
+  status?: string;
   title?: string;
 };
 
@@ -22,6 +25,7 @@ export type CreateWorkspaceTaskPayload = {
   assign_to?: string;
   body?: string;
   created_by?: string;
+  execution_channel?: string;
   priority?: number;
   team_id: string;
   title: string;
@@ -71,21 +75,13 @@ export type StartWorkspaceTaskResponse = {
 
 export async function createTeamRequest(payload: CreateTeamPayload): Promise<WorkspaceTeam> {
   const request: Record<string, unknown> = {
-    channel: payload.channel || "csgclaw",
-    room_id: payload.room_id,
     title: payload.title,
   };
   if (payload.lead_agent_id !== undefined) {
     request.lead_agent_id = payload.lead_agent_id;
   }
-  if (payload.lead_participant_id !== undefined) {
-    request.lead_participant_id = payload.lead_participant_id;
-  }
   if (payload.member_agent_ids !== undefined) {
     request.member_agent_ids = payload.member_agent_ids;
-  }
-  if (payload.member_participant_ids !== undefined) {
-    request.member_participant_ids = payload.member_participant_ids;
   }
 
   const team = normalizeTeam(await post<unknown>("/api/v1/teams", request));
@@ -95,9 +91,44 @@ export async function createTeamRequest(payload: CreateTeamPayload): Promise<Wor
   return team;
 }
 
+export async function updateTeamRequest(teamID: string, payload: UpdateTeamPayload): Promise<WorkspaceTeam> {
+  const normalizedTeamID = String(teamID || "").trim();
+  if (!normalizedTeamID) {
+    throw new Error("Team ID is required");
+  }
+  const request: Record<string, unknown> = {};
+  if (payload.title !== undefined) {
+    request.title = payload.title;
+  }
+  if (payload.lead_agent_id !== undefined) {
+    request.lead_agent_id = payload.lead_agent_id;
+  }
+  if (payload.member_agent_ids !== undefined) {
+    request.member_agent_ids = payload.member_agent_ids;
+  }
+  if (payload.status !== undefined) {
+    request.status = payload.status;
+  }
+
+  const team = normalizeTeam(await patch<unknown>(`/api/v1/teams/${encodeURIComponent(normalizedTeamID)}`, request));
+  if (!team) {
+    throw new Error("Invalid team response");
+  }
+  return team;
+}
+
+export async function deleteTeamRequest(teamID: string): Promise<void> {
+  const normalizedTeamID = String(teamID || "").trim();
+  if (!normalizedTeamID) {
+    throw new Error("Team ID is required");
+  }
+  await del<void>(`/api/v1/teams/${encodeURIComponent(normalizedTeamID)}`);
+}
+
 export async function createWorkspaceTask(payload: CreateWorkspaceTaskPayload): Promise<WorkspaceTask> {
   const response = await post<unknown>(`/api/v1/teams/${encodeURIComponent(payload.team_id)}/tasks/batch`, {
     created_by: payload.created_by || undefined,
+    execution_channel: payload.execution_channel || "csgclaw",
     tasks: [
       {
         assign_to: payload.assign_to || undefined,

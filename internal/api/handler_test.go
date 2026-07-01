@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -630,6 +631,70 @@ func TestHandleAgentsListReturnsUnifiedAgents(t *testing.T) {
 	}
 	if got[0].ID != "agent-manager" || got[1].ID != "agent-alice" || got[2].ID != "agent-1" {
 		t.Fatalf("agents = %+v, want manager/worker/agent in CreatedAt order", got)
+	}
+}
+
+func TestHandleAgentDeleteRemovesBoundParticipants(t *testing.T) {
+	svc := mustNewSeededService(t, []agent.Agent{
+		{ID: "agent-qa", Name: "qa", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindPicoClawSandbox},
+	})
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: im.AdminUserID,
+		Users: []im.User{
+			{ID: im.AdminUserID, Name: "admin", Role: "admin"},
+			{ID: "user-qa", Name: "qa", Role: agent.RoleWorker},
+		},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{
+		{
+			ID:              "pt-qa",
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			Name:            "qa",
+			AgentID:         "agent-qa",
+			ChannelUserRef:  "user-qa",
+			ChannelUserKind: participant.ChannelUserKindLocalUserID,
+			LifecycleStatus: participant.LifecycleStatusActive,
+			Mentionable:     true,
+		},
+		{
+			ID:              "pt-qa-feishu",
+			Channel:         participant.ChannelFeishu,
+			Type:            participant.TypeAgent,
+			Name:            "qa Feishu",
+			AgentID:         "agent-qa",
+			ChannelAppRef:   "cli_xxx",
+			ChannelUserRef:  "ou_xxx",
+			ChannelUserKind: participant.ChannelUserKindOpenID,
+			LifecycleStatus: participant.LifecycleStatusActive,
+			Mentionable:     true,
+		},
+	}), participant.WithAgentService(svc), participant.WithIMService(imSvc))
+	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-qa", nil)
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if _, ok := svc.Agent("agent-qa"); ok {
+		t.Fatal("agent agent-qa still exists after delete")
+	}
+	for _, ref := range []struct {
+		channel string
+		id      string
+	}{
+		{participant.ChannelCSGClaw, "pt-qa"},
+		{participant.ChannelFeishu, "pt-qa-feishu"},
+	} {
+		if _, ok := participantSvc.Get(ref.channel, ref.id); ok {
+			t.Fatalf("participant %s:%s still exists after agent delete", ref.channel, ref.id)
+		}
+	}
+	if _, ok := imSvc.User("user-qa"); ok {
+		t.Fatal("local agent user user-qa still exists after deleting its CSGClaw participant")
 	}
 }
 
@@ -2847,6 +2912,140 @@ func TestHandleSkillUpload(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, ".csgclaw", "skills", "alpha", "SKILL.md")); err != nil {
 		t.Fatalf("installed SKILL.md missing: %v", err)
+	}
+}
+
+func TestHandleSkillInstallFromOfficialHub(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	rootTreePages := 0
+	officialHub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/skills/AIWizards/agent-builder/refs/dev/tree/":
+			rootTreePages++
+			cursor := r.URL.Query().Get("cursor")
+			if r.URL.Query().Get("limit") != "500" {
+				t.Errorf("root tree query = %s, want limit=500", r.URL.RawQuery)
+				http.Error(w, "bad query", http.StatusBadRequest)
+				return
+			}
+			if cursor == "" {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"data": map[string]any{
+						"Cursor": "next-root-page",
+						"Files":  []map[string]any{},
+					},
+				})
+				return
+			}
+			if cursor != "next-root-page" {
+				t.Errorf("root tree cursor = %q, want next-root-page", cursor)
+				http.Error(w, "bad cursor", http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"Files": []map[string]any{
+						{"name": "SKILL.md", "path": "SKILL.md", "type": "file"},
+						{"name": "scripts", "path": "scripts", "type": "dir"},
+					},
+				},
+			})
+		case "/api/v1/skills/AIWizards/agent-builder/refs/dev/tree/scripts":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"Files": []map[string]any{
+						{"name": "run.sh", "path": "scripts/run.sh", "type": "file"},
+					},
+				},
+			})
+		case "/api/v1/skills/AIWizards/agent-builder/blob/SKILL.md":
+			if r.URL.Query().Get("ref") != "dev" {
+				t.Errorf("blob ref = %q, want dev", r.URL.Query().Get("ref"))
+				http.Error(w, "bad ref", http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"content": base64.StdEncoding.EncodeToString([]byte("---\ndescription: Build agents\n---\n# Agent Builder\n")),
+					"path":    "SKILL.md",
+					"type":    "file",
+				},
+			})
+		case "/api/v1/skills/AIWizards/agent-builder/blob/scripts/run.sh":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"content": base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\necho ready\n")),
+					"path":    "scripts/run.sh",
+					"type":    "file",
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer officialHub.Close()
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+access_token = "secret"
+
+[models]
+default = "default.model"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["model"]
+
+[[hub.registries]]
+name = "official"
+kind = "remote"
+url = "` + officialHub.URL + `/"
+enabled = true
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+
+	srv := &Handler{}
+	srv.SetConfigPath(configPath)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/skills:install", strings.NewReader(`{
+		"remote_path": "AIWizards/agent-builder",
+		"ref": "dev"
+	}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("install status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var skill struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&skill); err != nil {
+		t.Fatalf("decode install response: %v", err)
+	}
+	if skill.Name != "agent-builder" || skill.Description != "Build agents" {
+		t.Fatalf("installed skill = %+v, want agent-builder summary", skill)
+	}
+	skillRoot := filepath.Join(home, ".csgclaw", "skills", "agent-builder")
+	if _, err := os.Stat(filepath.Join(skillRoot, "SKILL.md")); err != nil {
+		t.Fatalf("installed SKILL.md missing: %v", err)
+	}
+	script, err := os.ReadFile(filepath.Join(skillRoot, "scripts", "run.sh"))
+	if err != nil {
+		t.Fatalf("read installed script: %v", err)
+	}
+	if !strings.Contains(string(script), "echo ready") {
+		t.Fatalf("script = %q, want remote script content", script)
+	}
+	if rootTreePages != 2 {
+		t.Fatalf("root tree pages = %d, want 2", rootTreePages)
 	}
 }
 

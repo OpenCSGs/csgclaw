@@ -21,7 +21,6 @@ type ManagerPlannerLLM interface {
 }
 
 type PlannerDirectory interface {
-	TeamRoomMemberIDs(roomID string) []string
 	UserProfile(id string) (MemberProfile, bool)
 	AgentProfile(id string) (MemberProfile, bool)
 }
@@ -235,10 +234,8 @@ func (p *ManagerPlanner) teamPlanMembers(meta TeamMeta) []teamPlanMember {
 	}
 
 	add(leadParticipantID)
-	if p != nil && p.directory != nil {
-		for _, memberID := range p.directory.TeamRoomMemberIDs(meta.RoomID) {
-			add(memberID)
-		}
+	for _, agentID := range meta.MemberAgentIDs {
+		add(participantIDForAgentID(p.directory, agentID))
 	}
 	return out
 }
@@ -294,6 +291,8 @@ func marshalManagerPlanPrompt(planCtx managerPlanContext) ([]byte, error) {
 					"priority must be an integer from 1 to 10; do not use labels such as high, medium, or low.",
 					"Use assign_to only from assignable_member_ids.",
 					"Create one child task unless different roles, capabilities, parallel work, or real dependencies justify multiple tasks.",
+					"Use depends_on_refs whenever a child task must wait for another child task.",
+					"QA, testing, validation, review, and quality-check tasks that verify implementation must depend on the relevant implementation task id_ref.",
 					"Every child task must explain the goal, why that assignee owns it, and the expected deliverable.",
 				}, "\n"),
 			},
@@ -394,6 +393,7 @@ func normalizeManagerPlan(planCtx managerPlanContext, plan managerPlanLLMRespons
 	if len(items) > 0 && len(items[0].DependsOnRefs) > 0 {
 		items[0].DependsOnRefs = nil
 	}
+	inferValidationDependencies(items)
 
 	return PlanTaskInput{
 		TeamID:      planCtx.TeamID,
@@ -429,6 +429,51 @@ func collapseSingleExecutorPlan(planCtx managerPlanContext, plan managerPlanLLMR
 		AssignTo:       assignee,
 		Priority:       flexiblePriority(max(1, planCtx.Task.Priority)),
 	}
+}
+
+func inferValidationDependencies(items []PlanTaskItem) {
+	previousRefs := make([]string, 0, len(items))
+	for i := range items {
+		if len(items[i].DependsOnRefs) == 0 && len(previousRefs) > 0 && looksLikeValidationPlanTask(items[i]) {
+			items[i].DependsOnRefs = cloneStrings(previousRefs)
+		}
+		if idRef := strings.TrimSpace(items[i].IDRef); idRef != "" {
+			previousRefs = append(previousRefs, idRef)
+		}
+	}
+}
+
+func looksLikeValidationPlanTask(item PlanTaskItem) bool {
+	text := strings.ToLower(strings.Join([]string{
+		item.IDRef,
+		item.Title,
+		item.Body,
+		item.AssignTo,
+	}, "\n"))
+	for _, token := range []string{
+		"qa",
+		"test",
+		"testing",
+		"verify",
+		"verification",
+		"validate",
+		"validation",
+		"quality",
+		"smoke",
+		"acceptance",
+		"测试",
+		"验证",
+		"验收",
+		"质量",
+		"质检",
+		"检查",
+		"审查",
+	} {
+		if strings.Contains(text, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func renderPlanTaskBody(item managerPlanLLMTask) string {

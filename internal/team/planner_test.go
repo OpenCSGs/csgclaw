@@ -32,9 +32,9 @@ func TestNormalizeManagerPlanRejectsNonParticipantWorkerID(t *testing.T) {
 func TestManagerPlanContextResolvesLocalManagerParticipantToLead(t *testing.T) {
 	planner := &ManagerPlanner{directory: plannerAliasDirectory{}}
 	planCtx := planner.managerPlanContext(TeamMeta{
-		ID:          "team-1",
-		RoomID:      "room-1",
-		LeadAgentID: agent.ManagerUserID,
+		ID:             "team-1",
+		LeadAgentID:    agent.ManagerUserID,
+		MemberAgentIDs: []string{"u-worker"},
 	}, TeamTask{
 		ID:    "task-1",
 		Title: "Research",
@@ -54,11 +54,43 @@ func TestManagerPlanContextResolvesLocalManagerParticipantToLead(t *testing.T) {
 	}
 }
 
-type plannerAliasDirectory struct{}
-
-func (plannerAliasDirectory) TeamRoomMemberIDs(string) []string {
-	return []string{"pt-manager", "pt-worker"}
+func TestNormalizeManagerPlanInfersValidationDependency(t *testing.T) {
+	got, err := normalizeManagerPlan(managerPlanContext{
+		TeamID:              "team-1",
+		LeadAgentID:         agent.ManagerUserID,
+		LeadParticipantID:   "manager",
+		AssignableMemberIDs: []string{"frontend-dev", "qa-eng"},
+		Task: managerPlanTaskContext{
+			ID:    "task-1",
+			Title: "Build tank game",
+		},
+	}, managerPlanLLMResponse{
+		PlanSummary: "plan",
+		Tasks: []managerPlanLLMTask{
+			{
+				IDRef:    "frontend",
+				Title:    "开发坦克大战游戏前端界面和核心逻辑",
+				AssignTo: "frontend-dev",
+			},
+			{
+				IDRef:    "qa",
+				Title:    "测试坦克大战游戏功能和质量",
+				AssignTo: "qa-eng",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("normalizeManagerPlan() error = %v", err)
+	}
+	if len(got.Tasks) != 2 {
+		t.Fatalf("tasks len = %d, want 2", len(got.Tasks))
+	}
+	if len(got.Tasks[1].DependsOnRefs) != 1 || got.Tasks[1].DependsOnRefs[0] != "frontend" {
+		t.Fatalf("qa depends_on_refs = %+v, want [frontend]", got.Tasks[1].DependsOnRefs)
+	}
 }
+
+type plannerAliasDirectory struct{}
 
 func (plannerAliasDirectory) UserProfile(id string) (MemberProfile, bool) {
 	switch id {
@@ -83,4 +115,15 @@ func (plannerAliasDirectory) ResolveAgentID(id string) string {
 		return "agent-manager"
 	}
 	return "agent-" + strings.TrimPrefix(cleanParticipantID(id), "pt-")
+}
+
+func (plannerAliasDirectory) ParticipantIDForAgentID(id string) string {
+	switch id {
+	case "u-manager":
+		return "manager"
+	case "u-worker":
+		return "worker"
+	default:
+		return ""
+	}
 }

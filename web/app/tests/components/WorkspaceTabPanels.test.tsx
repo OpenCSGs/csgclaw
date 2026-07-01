@@ -5,6 +5,7 @@ import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { WORKSPACE_SECTION_ORDER_STORAGE_KEY } from "@/shared/storage/keys";
 import type { AgentLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
+import type { WorkspaceTask } from "@/models/tasks";
 import type { WorkspaceSidebarProps } from "@/pages/WorkspacePage/components/WorkspaceSidebar/types";
 
 const labels: Record<string, string> = {
@@ -13,14 +14,30 @@ const labels: Record<string, string> = {
   computersSection: "Computers",
   hubSkillsEmpty: "No skills",
   hubSkillsLabel: "Skills",
+  hubSkillRemoteInstallFailed: "Install failed",
+  hubSkillRemoteInstallAction: "Install",
+  hubSkillRemoteInstallTab: "Remote install",
+  hubSkillRemoteInstalling: "Installing",
+  hubSkillRemoteSearchPlaceholder: "Search remote skills",
+  hubSkillRemoteSkillsEmpty: "No remote skills",
+  hubSkillRemoteSkillsLoading: "Loading remote skills",
+  hubSkillUpload: "Upload skill",
+  hubSkillUploadDropHint: "Only zip",
+  hubSkillUploadDropTitle: "Choose zip",
+  hubSkillUploadSubmit: "Upload",
+  hubSkillUploadSubtitle: "Upload or remote",
+  hubSkillUploadZipTab: "Upload zip",
   hubTab: "Hub",
   hubTemplatesSection: "Templates",
+  close: "Close",
   humanSection: "Human",
   localComputer: "Local computer",
   noAgents: "No workers yet.",
   noTeams: "No teams yet.",
   notificationsSection: "Notifications",
   profilePreview: "Profile preview",
+  taskCreate: "New task",
+  tasksTab: "Tasks",
   teamsSection: "Teams",
 };
 
@@ -46,6 +63,9 @@ const hub: WorkspaceSidebarProps["hub"] = {
   selectedHubTemplateId: "",
   selectedHubResourceType: "skill",
   selectedHubSkillName: "demo-skill",
+  remoteSkills: [{ name: "agent-builder", description: "Build agents", remotePath: "AIWizards/agent-builder" }],
+  remoteSkillsError: "",
+  remoteSkillsLoading: false,
   skills: [{ name: "demo-skill", description: "Demo skill" }],
   templates: [{ id: "builtin/demo", name: "demo-template", description: "Demo template" }],
 } as unknown as WorkspaceSidebarProps["hub"];
@@ -214,5 +234,169 @@ describe("WorkspaceTabPanels", () => {
     expect(screen.getByRole("button", { name: /Skills1/ })).toBeInTheDocument();
     expect(screen.getByText("demo-template")).toBeInTheDocument();
     expect(screen.getByText("demo-skill")).toBeInTheDocument();
+  });
+
+  it("keeps the Tasks sidebar group empty while preserving the task count", () => {
+    const taskItem = {
+      id: "task-1",
+      team_id: "team-1",
+      team_title: "te-team",
+      execution_channel: "csgclaw",
+      room_id: "room-1",
+      room_title: "Room 1",
+      parent_id: "",
+      title: "Build blog",
+      body: "Create the blog site",
+      status: "pending",
+      created_by: "manager",
+      created_by_agent_name: "manager",
+      assigned_to: "",
+      assigned_to_agent_name: "",
+      claimed_by: "",
+      claimed_by_agent_name: "",
+      priority: 0,
+      depends_on: [],
+      plan_summary: "",
+      dispatched_at: "",
+      result: "",
+      error: "",
+      created_at: "2026-06-01T00:00:00Z",
+      updated_at: "2026-06-01T00:00:00Z",
+    } satisfies WorkspaceTask;
+
+    render(
+      <WorkspaceTabPanels
+        activePane={{ type: WorkspacePaneTypes.task, id: "" }}
+        activeThreadRootID=""
+        agentItems={[managerAgent]}
+        agentsError=""
+        channels={[]}
+        collapsedWorkspaceGroups={{}}
+        currentUserID="u-admin"
+        directMessages={[]}
+        hub={hub}
+        locale="en"
+        notificationAgentItems={[]}
+        onCreateAgent={() => {}}
+        onCreateNotificationParticipant={() => {}}
+        onCreateRoom={() => {}}
+        onOpenCreateTask={() => {}}
+        onOpenCreateTeam={() => {}}
+        onPreviewAgent={() => {}}
+        onPreviewUser={() => {}}
+        onSelectAgent={() => {}}
+        onSelectComputer={() => {}}
+        onSelectConversation={() => {}}
+        onSelectHuman={() => {}}
+        onSelectHubSkill={() => {}}
+        onSelectHubTemplate={() => {}}
+        onSelectTask={() => {}}
+        onSelectTeam={() => {}}
+        onSelectThread={() => {}}
+        onToggleWorkspaceGroup={() => {}}
+        onViewTaskDetails={() => {}}
+        t={t}
+        taskCount={1}
+        taskItems={[taskItem]}
+        teams={[]}
+        threadGroups={[]}
+        usersById={new Map()}
+        workerAgentItems={[managerAgent]}
+        workspaceTab={WorkspaceTabs.tasks}
+      />,
+    );
+
+    const panel = screen.getByRole("tabpanel", { name: "Tasks" });
+    expect(screen.getByRole("button", { name: /Tasks1/ })).toBeInTheDocument();
+    expect(within(panel).queryByText("Build blog")).not.toBeInTheDocument();
+    expect(panel.querySelector(".workspace-group-items")).toBeEmptyDOMElement();
+  });
+
+  it("shows remote skills in the upload dialog remote mode", () => {
+    const installRemoteSkill = vi.fn(async () => ({ name: "agent-builder" }));
+    const loadMoreRemoteSkills = vi.fn(async () => undefined);
+    const setRemoteSkillsEnabled = vi.fn();
+    const setRemoteSkillsSearch = vi.fn();
+    const remoteHub = {
+      ...hub,
+      installRemoteSkill,
+      loadMoreRemoteSkills,
+      remoteInstallBusy: "",
+      remoteInstallError: "",
+      remoteSkillsHasMore: true,
+      remoteSkillsLoadingMore: false,
+      remoteSkillsSearch: "",
+      setRemoteSkillsEnabled,
+      setRemoteSkillsSearch,
+    } as unknown as WorkspaceSidebarProps["hub"];
+
+    render(
+      <WorkspaceTabPanels
+        activePane={{ type: WorkspacePaneTypes.hub, id: "hub" }}
+        activeThreadRootID=""
+        agentItems={[managerAgent]}
+        agentsError=""
+        channels={[]}
+        collapsedWorkspaceGroups={{}}
+        currentUserID="u-admin"
+        directMessages={[]}
+        hub={remoteHub}
+        locale="en"
+        notificationAgentItems={[]}
+        onCreateAgent={() => {}}
+        onCreateNotificationParticipant={() => {}}
+        onCreateRoom={() => {}}
+        onOpenCreateTask={() => {}}
+        onOpenCreateTeam={() => {}}
+        onPreviewAgent={() => {}}
+        onPreviewUser={() => {}}
+        onSelectAgent={() => {}}
+        onSelectComputer={() => {}}
+        onSelectConversation={() => {}}
+        onSelectHuman={() => {}}
+        onSelectHubSkill={() => {}}
+        onSelectHubTemplate={() => {}}
+        onSelectTask={() => {}}
+        onSelectTeam={() => {}}
+        onSelectThread={() => {}}
+        onToggleWorkspaceGroup={() => {}}
+        onViewTaskDetails={() => {}}
+        t={t}
+        taskCount={0}
+        taskItems={[]}
+        teams={[]}
+        threadGroups={[]}
+        usersById={new Map()}
+        workerAgentItems={[managerAgent]}
+        workspaceTab={WorkspaceTabs.hub}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Upload skill" }));
+    expect(screen.getByRole("tab", { name: /Upload zip/ })).toHaveAttribute("aria-selected", "true");
+    expect(setRemoteSkillsEnabled).not.toHaveBeenCalledWith(true);
+
+    fireEvent.click(screen.getByRole("tab", { name: /Remote install/ }));
+
+    expect(setRemoteSkillsEnabled).toHaveBeenCalledWith(true);
+    expect(screen.getByText("agent-builder")).toBeInTheDocument();
+    expect(screen.getByText("Build agents")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search remote skills" }), {
+      target: { value: "sa" },
+    });
+    expect(setRemoteSkillsSearch).toHaveBeenCalledWith("sa");
+
+    const remoteList = document.querySelector<HTMLDivElement>(".hub-skill-remote-list");
+    if (!remoteList) {
+      throw new Error("Expected the remote skill list to render");
+    }
+    Object.defineProperty(remoteList, "scrollHeight", { configurable: true, value: 1000 });
+    Object.defineProperty(remoteList, "clientHeight", { configurable: true, value: 300 });
+    Object.defineProperty(remoteList, "scrollTop", { configurable: true, value: 650 });
+    fireEvent.scroll(remoteList);
+    expect(loadMoreRemoteSkills).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Install" }));
+    expect(installRemoteSkill).toHaveBeenCalledWith(expect.objectContaining({ remotePath: "AIWizards/agent-builder" }));
   });
 });

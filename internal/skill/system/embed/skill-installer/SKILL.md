@@ -48,7 +48,7 @@ Use `--skills-dir` only when the workspace layout is non-standard.
 ## Manager vs worker
 
 - **Manager** may use this skill for `search`, `get`, and `versions` only.
-- To install a skill for **another** agent, dispatch that worker (see `basics` / `manager-worker-dispatch`) and ask it to run `csgclaw-cli skill install` in **its** container using this same skill.
+- To install a skill for **another** agent, dispatch that worker through `agent-teams` or a direct structured mention from `basics`, then ask it to run `csgclaw-cli skill install` in **its** container using this same skill.
 - Never install into another agent's filesystem from the manager sandbox.
 
 ## Operating rules

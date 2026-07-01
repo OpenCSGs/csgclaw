@@ -2035,7 +2035,7 @@ func (s *Service) provisionRuntime(ctx context.Context, rt agentruntime.Runtime,
 	if err := s.provisionRuntimeRequest(ctx, rt, runtimeKind, req); err != nil {
 		return err
 	}
-	if err := s.installDefaultSystemSkills(req.AgentName, runtimeKind); err != nil {
+	if err := s.installDefaultSystemSkills(req.AgentID, runtimeKind); err != nil {
 		return fmt.Errorf("install default system skills: %w", err)
 	}
 	return nil

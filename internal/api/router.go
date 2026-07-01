@@ -61,6 +61,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		})
 		r.Get("/skills", h.listSkills)
 		r.Post("/skills:upload", h.handleSkillUpload)
+		r.Post("/skills:install", h.handleSkillInstall)
 		r.Delete("/skills/{name}", h.deleteSkill)
 		r.Get("/skills/tree", h.getSkillTree)
 		r.Get("/skills/file", h.getSkillFile)
@@ -128,6 +129,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Post("/tasks/claim-next", h.claimNextTask)
 			r.Route("/{team_id}", func(r chi.Router) {
 				r.Get("/", h.getTeam)
+				r.Patch("/", h.updateTeam)
+				r.Delete("/", h.deleteTeam)
 				r.Route("/tasks", func(r chi.Router) {
 					r.Get("/", h.listTeamTasks)
 					r.Post("/batch", h.createTeamTasksBatch)

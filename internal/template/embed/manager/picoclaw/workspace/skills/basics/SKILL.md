@@ -123,7 +123,7 @@ Minimal handoff flow:
 3. `csgclaw-cli message create` with `--mention-id` and the task body.
 4. `csgclaw-cli message list` — confirm the stored message contains `<at user_id="...">`.
 
-For multi-worker team tasks, use `agent-teams` (`csgclaw-cli team` plan/start) instead of manual room messages. Use `manager-worker-dispatch` only when team tasks are not in use.
+For multi-worker team tasks, use `agent-teams` (`csgclaw-cli team` plan/start) instead of manual room messages.
 
 Example worker handoff (replace room ID, participant ID, and channel):
 
@@ -151,4 +151,4 @@ Do **not** post `@alex` plain text in the room instead of `--mention-id`.
 - Use participant IDs at the CLI boundary. For the local CSGClaw manager use `manager`; use `u-manager` only when calling an agent route or the Feishu credential config API field that still names its key `bot_id`.
 - Never notify a worker with plain-text `@name`; always use `message create --mention-id` and verify `<at user_id="...">` in `message list`.
 - Keep the response focused on the concrete CLI result instead of introducing external planning artifacts.
-- Hand off to `agent-teams` for multi-worker team orchestration; use `manager-worker-dispatch` only if the user explicitly needs tracker handoff outside team tasks.
+- Hand off to `agent-teams` for multi-worker team orchestration.

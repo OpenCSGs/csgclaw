@@ -588,7 +588,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
-	teamSvc, teamAdapter, err := NewTeamService(imSvc, participantSvc)
+	teamSvc, teamAdapter, teamAdapters, err := NewTeamService(imSvc, feishuSvc, participantSvc)
 	if err != nil {
 		return err
 	}
@@ -606,6 +606,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		LLM:               llmSvc,
 		Team:              teamSvc,
 		TeamAdapter:       teamAdapter,
+		TeamAdapters:      teamAdapters,
 		Upgrade:           upgradeManager,
 		ActivityDecider:   channelActivityDecider(codexBridgeMgr),
 		ConfigPath:        configPath,
@@ -1077,18 +1078,19 @@ func newParticipantService(agentSvc *agent.Service, imSvc *im.Service) (*partici
 	), nil
 }
 
-func newTeamService(imSvc *im.Service, participantSvc *participant.Service) (*team.Service, team.TeamChannelAdapter, error) {
+func newTeamService(imSvc *im.Service, feishuSvc *feishu.Service, participantSvc *participant.Service) (*team.Service, team.TeamChannelAdapter, *team.AdapterRegistry, error) {
 	teamsDir, err := config.DefaultTeamsDir()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	store, err := team.NewStore(teamsDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	adapter := team.NewCSGClawAdapter(imSvc, participantSvc)
-	projector := team.NewProjector(adapter, nil)
-	return team.NewService(team.WithStore(store), team.WithProjector(projector)), adapter, nil
+	registry := team.NewAdapterRegistry(adapter, team.NewFeishuAdapter(feishuSvc, participantSvc))
+	projector := team.NewProjectorWithRegistry(registry, nil)
+	return team.NewService(team.WithStore(store), team.WithProjector(projector)), adapter, registry, nil
 }
 
 func buildFeishuComponents() (feishu.AgentCredentialProvider, *feishu.Service, error) {

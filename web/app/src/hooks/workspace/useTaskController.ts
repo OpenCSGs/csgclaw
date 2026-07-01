@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createWorkspaceTask,
@@ -19,6 +19,7 @@ import type { NavigatePaneOptions } from "./types";
 const TASKS_QUERY_KEY = ["workspace", "tasks"] as const;
 const TASK_BOARD_POLL_DELAY_MS = 3000;
 const TASK_BOARD_POLL_STATUSES = new Set(["pending", "assigned", "in_progress"]);
+const TASK_TAB_REVALIDATE_STALE_MS = 5000;
 const teamEventsQueryKey = (teamID: string) => ["workspace", "team-events", teamID] as const;
 
 type UseTaskControllerArgs = {
@@ -46,10 +47,12 @@ export function useTaskController({
   const [startingTaskID, setStartingTaskID] = useState("");
   const [taskActionError, setTaskActionError] = useState("");
   const [parentDetailTaskID, setParentDetailTaskID] = useState("");
+  const lastTaskTabRevalidateAttemptAt = useRef(0);
   const tasksQuery = useQuery({
     queryKey: TASKS_QUERY_KEY,
     queryFn: fetchGlobalTasks,
   });
+  const { dataUpdatedAt: tasksDataUpdatedAt, isFetching: tasksFetching, refetch: refetchTasks } = tasksQuery;
   const teamsQuery = useQuery({
     queryKey: ["workspace", "teams"],
     queryFn: fetchTeams,
@@ -75,6 +78,20 @@ export function useTaskController({
     refetchInterval: shouldPollActiveTaskBoard ? TASK_BOARD_POLL_DELAY_MS : false,
   });
   const taskEvents = useMemo(() => taskEventsQuery.data ?? [], [taskEventsQuery.data]);
+
+  useEffect(() => {
+    if (activePane.type !== WorkspacePaneTypes.task || tasksFetching) {
+      return;
+    }
+    const now = Date.now();
+    const refreshedRecently = tasksDataUpdatedAt > 0 && now - tasksDataUpdatedAt < TASK_TAB_REVALIDATE_STALE_MS;
+    const attemptedRecently = now - lastTaskTabRevalidateAttemptAt.current < TASK_TAB_REVALIDATE_STALE_MS;
+    if (refreshedRecently || attemptedRecently) {
+      return;
+    }
+    lastTaskTabRevalidateAttemptAt.current = now;
+    void refetchTasks();
+  }, [activePane.id, activePane.type, refetchTasks, tasksDataUpdatedAt, tasksFetching]);
 
   useEffect(() => {
     if (!selectedTask?.parent_id) {
@@ -293,7 +310,9 @@ export function useTaskController({
       createTaskBusy,
       createTaskError,
       planTaskBusy,
+      planningTaskID,
       startTaskBusy,
+      startingTaskID,
       taskActionError,
       showCreateTaskModal,
       parentDetailTaskID,
@@ -353,6 +372,7 @@ function workspaceTasksEqual(left: WorkspaceTask, right: WorkspaceTask): boolean
     left.id === right.id &&
     left.team_id === right.team_id &&
     left.team_title === right.team_title &&
+    left.execution_channel === right.execution_channel &&
     left.room_id === right.room_id &&
     left.room_title === right.room_title &&
     left.parent_id === right.parent_id &&

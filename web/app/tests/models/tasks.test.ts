@@ -1,6 +1,7 @@
 import {
   boardColumnsForTask,
   formatTaskUpdatedAt,
+  formatTaskUpdatedRelative,
   groupTasksByParent,
   normalizeTaskList,
   normalizeTeamEventList,
@@ -20,6 +21,14 @@ describe("tasks model", () => {
     expect(formatTaskUpdatedAt(value, "zh")).toBe(formatted);
     expect(formatTaskUpdatedAt("", "en")).toBe("-");
     expect(formatTaskUpdatedAt("invalid", "en")).toBe("-");
+  });
+
+  it("formats task timestamps as relative time for cards", () => {
+    const now = new Date("2026-06-04T13:43:00Z");
+
+    expect(formatTaskUpdatedRelative("2026-06-04T13:13:00Z", "en", now)).toBe("30 minutes ago");
+    expect(formatTaskUpdatedRelative("", "en", now)).toBe("-");
+    expect(formatTaskUpdatedRelative("invalid", "en", now)).toBe("-");
   });
 
   it("normalizes participant display names returned by task APIs", () => {
@@ -69,17 +78,18 @@ describe("tasks model", () => {
     const teams = normalizeTeamList([
       {
         id: "team-1",
-        room_id: "room-1",
         lead_agent_id: "u-manager",
+        member_agent_ids: ["u-worker"],
       },
       {
         id: "team-2",
-        room_id: "room-2",
         lead_agent_id: "u-other-manager",
       },
     ]);
 
     expect(teams.map((team) => team.lead_agent_id)).toEqual(["u-manager", "u-other-manager"]);
+    expect(teams[0]?.member_agent_ids).toEqual(["u-worker"]);
+    expect(teams[1]?.member_agent_ids).toEqual([]);
   });
 
   it("normalizes parent ids and groups child tasks under their parent", () => {
@@ -172,11 +182,10 @@ describe("tasks model", () => {
     expect(columns.find((column) => column.status === "completed")?.tasks).toEqual([]);
   });
 
-  it("resolves execution room from child tasks when parent still points at the team room", () => {
+  it("resolves execution room directly from the parent task", () => {
     const teams = normalizeTeamList([
       {
         id: "team-1",
-        room_id: "room-team",
         title: "Team",
       },
     ]);
@@ -184,7 +193,8 @@ describe("tasks model", () => {
       {
         id: "task-1",
         team_id: "team-1",
-        room_id: "room-team",
+        execution_channel: "csgclaw",
+        room_id: "room-exec",
         title: "Parent",
         updated_at: "2026-05-30T10:00:00Z",
       },

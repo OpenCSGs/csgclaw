@@ -22,13 +22,27 @@
 }
 
 .hub-skill-upload-dialog {
-  width: min(520px, calc(100vw - 32px));
+  width: min(620px, calc(100vw - 32px));
   border-radius: 16px;
 }
 
 .hub-skill-upload-body {
   display: grid;
   gap: 16px;
+}
+
+.hub-skill-upload-mode {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hub-skill-upload-mode .btn-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .hub-skill-upload-dropzone {
@@ -97,6 +111,117 @@
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.hub-skill-remote-panel {
+  display: grid;
+  min-height: 212px;
+  gap: 10px;
+}
+
+.hub-skill-remote-search {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.hub-skill-remote-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--gray-900);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.hub-skill-remote-search input::placeholder {
+  color: var(--gray-500);
+}
+
+.hub-skill-remote-list {
+  display: grid;
+  max-height: 300px;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.hub-skill-remote-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 9px 10px;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  background: var(--white);
+}
+
+.hub-skill-remote-list-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  color: var(--gray-500);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.hub-skill-remote-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--brand-600) 9%, transparent);
+  color: var(--brand-600);
+}
+
+.hub-skill-remote-main {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.hub-skill-remote-title {
+  color: var(--gray-900);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.hub-skill-remote-meta {
+  color: var(--gray-600);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.hub-skill-remote-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 212px;
+  padding: 16px;
+  border: 1px dashed var(--gray-300);
+  border-radius: 8px;
+  color: var(--gray-600);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 560px) {
+  .hub-skill-remote-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .hub-skill-remote-row .mini-badge {
+    display: none;
+  }
 }
 
 .task-sidebar-status {
@@ -3111,6 +3236,31 @@
 .workspace-group-actions {
   opacity: 1;
   transition: opacity 120ms ease;
+}
+
+.workspace-group-actions[data-tooltip] {
+  position: relative;
+  display: inline-flex;
+}
+
+.workspace-group-actions[data-tooltip]::after {
+  top: 50%;
+  right: calc(100% + 8px);
+  left: auto;
+  width: max-content;
+  min-width: max-content;
+  max-width: 180px;
+  padding: 5px 8px;
+  border-color: transparent;
+  border-radius: 6px;
+  background: var(--portal-gray-900);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-50%);
+}
+
+.workspace-group-actions[data-tooltip]:focus-within::after {
+  opacity: 1;
 }
 
 .workspace-group:hover .workspace-group-actions,

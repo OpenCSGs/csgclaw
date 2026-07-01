@@ -5,7 +5,7 @@ description: Use this skill when you are a worker operating inside a CSGClaw tas
 
 # Agent Teams Worker
 
-Use this skill when the manager is coordinating work through CSGClaw team tasks instead of `manager-worker-dispatch`.
+Use this skill when the manager is coordinating work through CSGClaw team tasks.
 
 Only begin work after an explicit dispatch message in the task execution room:
 
@@ -52,6 +52,7 @@ csgclaw-cli team task update --team <team_id> --task <task_id> --actor-id <worke
 ```
 
 The task is not complete until this CLI status update succeeds. Sending a normal room message with the result is useful, but it does not update task state.
+Do not update tracker files or rely on manual handoff; task completion is recorded only through the team CLI.
 
 Report a blocked task:
 

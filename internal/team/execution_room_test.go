@@ -20,21 +20,12 @@ func TestTaskExecutionRoomMemberParticipantIDsIncludesWorkerAgents(t *testing.T)
 	}); err != nil {
 		t.Fatalf("EnsureAgentUser(worker) error = %v", err)
 	}
-	room, err := imSvc.CreateRoom(im.CreateRoomRequest{
-		Title:     "team room",
-		CreatorID: leadParticipantID,
-		MemberIDs: []string{leadParticipantID, "u-p-w-1315"},
-	})
-	if err != nil {
-		t.Fatalf("CreateRoom() error = %v", err)
-	}
 
 	teamSvc := NewService()
 	meta, err := teamSvc.CreateTeam(CreateTeamInput{
-		RoomID:      room.ID,
-		Channel:     "csgclaw",
-		Title:       "team",
-		LeadAgentID: agent.ManagerUserID,
+		Title:          "team",
+		LeadAgentID:    agent.ManagerUserID,
+		MemberAgentIDs: []string{"u-p-w-1315"},
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)
@@ -61,7 +52,10 @@ func TestTaskExecutionRoomMemberParticipantIDsIncludesWorkerAgents(t *testing.T)
 	}
 
 	directory := NewCSGClawTeamDirectory(imSvc, nil)
-	got := teamSvc.taskExecutionRoomMemberParticipantIDs(directory, meta, parent)
+	got, err := teamSvc.taskExecutionRoomMemberParticipantIDs(NewCSGClawAdapter(imSvc), directory, meta, parent)
+	if err != nil {
+		t.Fatalf("taskExecutionRoomMemberParticipantIDs() error = %v", err)
+	}
 	if len(got) != 1 || got[0] != "pt-p-w-1315" {
 		t.Fatalf("taskExecutionRoomMemberParticipantIDs() = %v, want [pt-p-w-1315]", got)
 	}
@@ -79,21 +73,12 @@ func TestTaskExecutionRoomMemberParticipantIDsMapsLocalManagerParticipantToLead(
 	}); err != nil {
 		t.Fatalf("EnsureAgentUser(worker) error = %v", err)
 	}
-	room, err := imSvc.CreateRoom(im.CreateRoomRequest{
-		Title:     "team room",
-		CreatorID: agent.ManagerParticipantID,
-		MemberIDs: []string{agent.ManagerParticipantID, "u-worker"},
-	})
-	if err != nil {
-		t.Fatalf("CreateRoom() error = %v", err)
-	}
 
 	teamSvc := NewService()
 	meta, err := teamSvc.CreateTeam(CreateTeamInput{
-		RoomID:      room.ID,
-		Channel:     "csgclaw",
-		Title:       "team",
-		LeadAgentID: agent.ManagerUserID,
+		Title:          "team",
+		LeadAgentID:    agent.ManagerUserID,
+		MemberAgentIDs: []string{"u-worker"},
 	})
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)
@@ -108,7 +93,10 @@ func TestTaskExecutionRoomMemberParticipantIDsMapsLocalManagerParticipantToLead(
 	}
 
 	directory := NewCSGClawTeamDirectory(imSvc, nil)
-	got := teamSvc.taskExecutionRoomMemberParticipantIDs(directory, meta, parent)
+	got, err := teamSvc.taskExecutionRoomMemberParticipantIDs(NewCSGClawAdapter(imSvc), directory, meta, parent)
+	if err != nil {
+		t.Fatalf("taskExecutionRoomMemberParticipantIDs() error = %v", err)
+	}
 	if len(got) != 1 || got[0] != "pt-worker" {
 		t.Fatalf("taskExecutionRoomMemberParticipantIDs() = %v, want [pt-worker]", got)
 	}

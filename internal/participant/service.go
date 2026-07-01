@@ -484,6 +484,42 @@ func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOpt
 	return deleted, true, nil
 }
 
+func (s *Service) DeleteAgent(ctx context.Context, agentID string) ([]apitypes.Participant, error) {
+	if s == nil || s.store == nil {
+		return nil, fmt.Errorf("participant store is required")
+	}
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return nil, fmt.Errorf("agent id is required")
+	}
+	if s.agents == nil {
+		return nil, fmt.Errorf("agent service is required")
+	}
+
+	refs := s.store.List(ListOptions{AgentID: agentID})
+	if err := s.agents.Delete(ctx, agentID); err != nil {
+		return nil, err
+	}
+
+	deleted := make([]apitypes.Participant, 0, len(refs))
+	for _, ref := range refs {
+		item, ok, err := s.store.Delete(ref.Channel, ref.ID)
+		if err != nil {
+			return deleted, err
+		}
+		if !ok {
+			continue
+		}
+		deleted = append(deleted, item)
+	}
+	for _, item := range deleted {
+		if err := s.deleteUnreferencedCSGClawAgentUser(item); err != nil {
+			return deleted, err
+		}
+	}
+	return deleted, nil
+}
+
 func (s *Service) getByID(channel, id string) (apitypes.Participant, string, bool) {
 	if s == nil || s.store == nil {
 		return apitypes.Participant{}, "", false

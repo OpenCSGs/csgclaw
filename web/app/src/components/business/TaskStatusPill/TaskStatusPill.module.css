@@ -1,0 +1,81 @@
+.pill {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  background: var(--gray-100);
+  color: var(--gray-700);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--text-xs-line-height);
+  white-space: nowrap;
+}
+
+.compact {
+  min-height: 20px;
+  padding: 1px var(--space-2);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.pending,
+.assigned {
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+.inProgress {
+  background: var(--warning-50);
+  color: var(--warning-700);
+}
+
+.inReview,
+.blocked {
+  background: var(--success-50);
+  color: var(--success-700);
+}
+
+.completed {
+  background: color-mix(in srgb, var(--blue-500) 14%, transparent);
+  color: var(--blue-600);
+}
+
+.failed,
+.cancelled,
+.canceled {
+  background: color-mix(in srgb, var(--error-600) 12%, transparent);
+  color: var(--error-600);
+}
+
+:root[data-theme="dark"] .pending,
+:root[data-theme="dark"] .assigned {
+  background: color-mix(in srgb, var(--gray-700) 40%, transparent);
+  color: var(--gray-200);
+}
+
+:root[data-theme="dark"] .inProgress {
+  background: color-mix(in srgb, var(--warning-700) 22%, transparent);
+  color: var(--warning-50);
+}
+
+:root[data-theme="dark"] .inReview,
+:root[data-theme="dark"] .blocked {
+  background: color-mix(in srgb, var(--success-700) 22%, transparent);
+  color: var(--success-50);
+}
+
+:root[data-theme="dark"] .completed {
+  background: color-mix(in srgb, var(--blue-500) 24%, transparent);
+  color: var(--blue-300);
+}
+
+:root[data-theme="dark"] .failed,
+:root[data-theme="dark"] .cancelled,
+:root[data-theme="dark"] .canceled {
+  background: color-mix(in srgb, var(--error-600) 22%, transparent);
+  color: var(--error-300);
+}

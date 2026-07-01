@@ -24,6 +24,7 @@ export function useWorkspaceShellController({
   selectHub,
   selectTasks,
   setCollapsedWorkspaceGroups,
+  setIsSidebarCollapsed,
   setWorkspaceTab,
   t,
   theme,
@@ -84,6 +85,7 @@ export function useWorkspaceShellController({
   }, [collapsedWorkspaceGroups]);
 
   function selectWorkspaceTab(tab: WorkspaceTab) {
+    setIsSidebarCollapsed(false);
     if (tab === resolvedWorkspaceTab) {
       return;
     }

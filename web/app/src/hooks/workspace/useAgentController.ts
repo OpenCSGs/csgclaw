@@ -8,6 +8,7 @@ import {
   createBotRequest,
   createManagerAgentRequest,
   createNotificationBotRequest,
+  deleteAgentRequest,
   deleteAgentSkillRequest,
   deleteBotRequest,
   deleteFeishuParticipantRequest,
@@ -25,9 +26,9 @@ import {
 import type { AgentUpdatePayload, FeishuRegistration, FetchAgentsOptions } from "@/api/agents";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { publishAgentTemplateRequest } from "@/api/hub";
-import { createUserRequest, inviteRoomUsersRequest, joinAgentToRoomRequest } from "@/api/im";
+import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
 import { fetchSkills } from "@/api/skills";
-import { createTeamRequest, fetchTeams } from "@/api/tasks";
+import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
 import type { CreateTeamPayload } from "@/api/tasks";
 import {
   BOT_CREATE_KIND_NOTIFICATION,
@@ -88,12 +89,9 @@ import type {
   AgentTemplateLike,
   RuntimeKind,
 } from "@/models/agents";
-import {
-  isDirectConversation,
-  localIdentitiesMatch,
-  resolveRoomInviterID,
-  upsertUserInData,
-} from "@/models/conversations";
+import { isDirectConversation, localIdentitiesMatch, upsertUserInData } from "@/models/conversations";
+import { displayTeam } from "@/models/tasks";
+import type { WorkspaceTeam } from "@/models/tasks";
 import { modelProviderOptionsFromCatalog, providerNameForProviderID } from "@/models/modelProviders";
 import type { ModelProviderOption } from "@/models/modelProviders";
 import { WorkspacePaneTypes } from "@/models/routing";
@@ -101,7 +99,7 @@ import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace } from "@/model
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
-import type { IMConversation, IMUser } from "@/models/conversations";
+import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
 
 type ManagerRebuildOptions = {
@@ -325,6 +323,7 @@ export function useAgentController({
   const [teamActionBusy, setTeamActionBusy] = useState(false);
   const [teamActionError, setTeamActionError] = useState("");
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<WorkspaceTeam | null>(null);
   const [createTeamTitle, setCreateTeamTitle] = useState("");
   const [createTeamMemberIDs, setCreateTeamMemberIDs] = useState<string[]>([]);
   const agentPageHasUnsavedChanges = Boolean(
@@ -979,8 +978,27 @@ export function useAgentController({
 
   function openCreateTeamModal(): void {
     const firstAgentID = createTeamCandidateIDs[0] || "";
+    setEditingTeam(null);
     setCreateTeamTitle("");
     setCreateTeamMemberIDs(firstAgentID ? [firstAgentID] : []);
+    setTeamActionError("");
+    setShowCreateTeamModal(true);
+  }
+
+  function closeCreateTeamModal(): void {
+    setShowCreateTeamModal(false);
+    setEditingTeam(null);
+    setTeamActionError("");
+  }
+
+  function openManageTeamMembers(item: WorkspaceTeam | null | undefined): void {
+    if (!item?.id) {
+      return;
+    }
+    setEditingTeam(item);
+    setCreateTeamTitle(displayTeam(item));
+    setCreateTeamMemberIDs([...(item.member_agent_ids ?? [])]);
+    setTeamActionError("");
     setShowCreateTeamModal(true);
   }
 
@@ -1354,7 +1372,7 @@ export function useAgentController({
       openManagerRebuildModal(item);
       return;
     }
-    if (action === "delete" && !window.confirm(`${t("agentDelete")} ${item.name}?`)) {
+    if (action === "delete" && !window.confirm(agentDeleteConfirmationMessage(item, t))) {
       return;
     }
     setAgentActionBusy(`${item.id}:${action}`);
@@ -1362,7 +1380,7 @@ export function useAgentController({
     try {
       let updatedAgent: AgentLike | null = null;
       if (action === "delete") {
-        await deleteBotRequest(csgclawParticipantIDForAgent(item), { deleteAgent: true });
+        await deleteAgentRequest(item.id);
       } else {
         updatedAgent = await runAgentActionRequest(item.id, action);
       }
@@ -1619,50 +1637,56 @@ export function useAgentController({
 
   async function createTeam(): Promise<void> {
     await createAgentTeam({
-      channel: "csgclaw",
       title: createTeamTitle.trim() || t("teamNewFallbackTitle"),
       lead_agent_id: MANAGER_AGENT_ID,
       member_agent_ids: createTeamMemberIDs,
     });
-    setShowCreateTeamModal(false);
+    closeCreateTeamModal();
   }
 
-  async function addAgentsToTeamRoom(teamID: string, agentIDs: string[]): Promise<void> {
-    if (teamActionBusy || !data?.current_user_id) {
+  async function saveTeamMembers(): Promise<void> {
+    if (!editingTeam?.id || teamActionBusy) {
       return;
     }
-    const team = teamsQuery.data?.find((item) => item.id === teamID);
-    if (!team?.room_id) {
-      setTeamActionError(t("teamActionFailed"));
-      return;
-    }
-    const room = rooms.find((item) => item.id === team.room_id);
-    const roomMembers = new Set(room?.members ?? []);
-    const nextAgentIDs = agentIDs.filter((id) => id && !roomMembers.has(id));
-    if (!nextAgentIDs.length) {
-      return;
-    }
-    const inviterID = resolveRoomInviterID(room, {
-      preferredInviterIDs: [team.lead_agent_id, data.current_user_id, MANAGER_AGENT_ID],
-    });
-    if (!inviterID) {
-      setTeamActionError(t("teamActionFailed"));
-      return;
-    }
-
     setTeamActionBusy(true);
     setTeamActionError("");
     try {
-      await inviteRoomUsersRequest({
-        room_id: team.room_id,
-        inviter_id: inviterID,
-        user_ids: nextAgentIDs,
-        locale,
+      await updateTeamRequest(editingTeam.id, {
+        member_agent_ids: createTeamMemberIDs,
       });
+      await teamsQuery.refetch();
       await refreshWorkspaceBootstrap();
+      closeCreateTeamModal();
     } catch (err) {
       setTeamActionError(errorMessage(err, t("teamActionFailed")));
       throw err;
+    } finally {
+      setTeamActionBusy(false);
+    }
+  }
+
+  async function deleteTeam(item: WorkspaceTeam | null | undefined): Promise<boolean> {
+    const teamID = String(item?.id || "").trim();
+    if (!teamID || teamActionBusy) {
+      return false;
+    }
+    const teamTitle = item ? displayTeam(item) : teamID;
+    if (!window.confirm(t("teamDeleteConfirm", { title: teamTitle }))) {
+      return false;
+    }
+    setTeamActionBusy(true);
+    setTeamActionError("");
+    try {
+      await deleteTeamRequest(teamID);
+      await teamsQuery.refetch();
+      await refreshWorkspaceBootstrap();
+      if (activePane.type === WorkspacePaneTypes.team && activePane.id === teamID) {
+        selectComputer({ replace: true });
+      }
+      return true;
+    } catch (err) {
+      setTeamActionError(errorMessage(err, t("teamActionFailed")));
+      return false;
     } finally {
       setTeamActionBusy(false);
     }
@@ -1789,6 +1813,7 @@ export function useAgentController({
     notificationAgentItems,
     openCreateAgentModal,
     openCreateTeamModal,
+    openManageTeamMembers,
     openCreateNotificationParticipantModal,
     openEditAgentModal,
     runningAgentCount,
@@ -1798,6 +1823,7 @@ export function useAgentController({
     selectedAgentForPage,
     teams: teamsQuery.data ?? [],
     teamsLoading: teamsQuery.isLoading,
+    deleteTeam,
     workerAgentItems,
     notifierWebhookPublicOrigin,
     agentViewProps: {
@@ -1854,7 +1880,6 @@ export function useAgentController({
       teamActionBusy,
       teamActionError,
       onCreateTeam: createAgentTeam,
-      onAddAgentsToTeam: addAgentsToTeamRoom,
     },
     computerViewProps: {
       t,
@@ -1914,6 +1939,7 @@ export function useAgentController({
     createTeamModalProps: showCreateTeamModal
       ? {
           t,
+          mode: editingTeam ? ("edit" as const) : ("create" as const),
           candidates: createTeamCandidates,
           teamTitle: createTeamTitle,
           onTeamTitleChange: setCreateTeamTitle,
@@ -1921,8 +1947,8 @@ export function useAgentController({
           onTeamMemberIDsChange: setCreateTeamMemberIDs,
           submitError: teamActionError,
           teamActionBusy,
-          onClose: () => setShowCreateTeamModal(false),
-          onCreate: createTeam,
+          onClose: closeCreateTeamModal,
+          onCreate: editingTeam ? saveTeamMembers : createTeam,
         }
       : null,
   };
@@ -1933,4 +1959,52 @@ function csgclawParticipantIDForAgent(item: AgentLike): string {
     (candidate) => String(candidate?.channel || "").trim() === "csgclaw" && String(candidate?.id || "").trim(),
   );
   return String(participant?.id || item.id || "").trim();
+}
+
+function agentDeleteConfirmationMessage(item: AgentLike, t: TranslateFn): string {
+  const name = String(item.name || item.id || "").trim();
+  const message = t("agentDeleteConfirmMessage", { name });
+  const channels = agentDeleteBoundChannels(item);
+  if (channels.length === 0) {
+    return message;
+  }
+  return [
+    message,
+    "",
+    t("agentDeleteBoundChannels", { channels: channels.join(", ") }),
+    "",
+    t("agentDeleteCascadeNote"),
+  ].join("\n");
+}
+
+function agentDeleteBoundChannels(item: AgentLike): string[] {
+  const agentID = String(item.id || "").trim();
+  const channels = new Set<string>();
+  for (const participant of item.participants || []) {
+    const participantID = String(participant?.id || "").trim();
+    if (!participantID) {
+      continue;
+    }
+    const participantAgentID = String(participant?.agent_id || "").trim();
+    if (participantAgentID && agentID && participantAgentID !== agentID) {
+      continue;
+    }
+    const channel = String(participant?.channel || "")
+      .trim()
+      .toLowerCase();
+    if (!channel || channel === "csgclaw") {
+      continue;
+    }
+    channels.add(agentDeleteChannelLabel(channel));
+  }
+  return Array.from(channels).sort((left, right) => left.localeCompare(right));
+}
+
+function agentDeleteChannelLabel(channel: string): string {
+  if (channel === "feishu") {
+    return "Feishu";
+  }
+  return channel.replace(/(^|[-_\s]+)(\w)/g, (_, separator: string, value: string) => {
+    return `${separator ? " " : ""}${value.toUpperCase()}`;
+  });
 }

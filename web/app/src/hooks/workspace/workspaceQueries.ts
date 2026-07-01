@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { fetchAgentProfileModels, fetchAgentWorkspace, fetchAgentWorkspaceFile, fetchAgents } from "@/api/agents";
 import type { AgentProfileModelRequest } from "@/api/agents";
@@ -6,7 +6,8 @@ import { fetchBootstrap, fetchBootstrapConfig, fetchRuntimeImages, fetchVersion 
 import type { FetchVersionOptions } from "@/api/app";
 import { fetchHubTemplate, fetchHubTemplates, fetchHubWorkspace, fetchHubWorkspaceFile } from "@/api/hub";
 import { fetchModelProviders } from "@/api/modelProviders";
-import { fetchSkillFile, fetchSkills, fetchSkillTree } from "@/api/skills";
+import { fetchAgenticHubOfficialSkillsPage, fetchSkillFile, fetchSkills, fetchSkillTree } from "@/api/skills";
+import type { AgenticHubSkillsPage } from "@/api/skills";
 import { fetchManagerProfile } from "@/api/agents";
 import { fetchUpgradeStatus } from "@/api/upgrade";
 import {
@@ -42,6 +43,8 @@ export const workspaceQueryKeys = {
     [WORKSPACE_QUERY_SCOPE, "hub-workspace", templateID || "", workspacePath || ""] as const,
   hubWorkspaceFile: (templateID: string | null | undefined, workspacePath: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-workspace-file", templateID || "", workspacePath || ""] as const,
+  officialSkills: (search: string | null | undefined = "") =>
+    [WORKSPACE_QUERY_SCOPE, "official-skills", String(search || "").trim()] as const,
   skills: () => [WORKSPACE_QUERY_SCOPE, "skills"] as const,
   skillTree: (path: string | null | undefined) => [WORKSPACE_QUERY_SCOPE, "skill-tree", path || ""] as const,
   skillFile: (path: string | null | undefined) => [WORKSPACE_QUERY_SCOPE, "skill-file", path || ""] as const,
@@ -213,6 +216,22 @@ export function useWorkspaceSkillsQuery(): UseQueryResult<SkillSummary[]> {
       const payload = await fetchSkills();
       return Array.isArray(payload) ? payload : [];
     },
+  });
+}
+
+export function useWorkspaceOfficialSkillsQuery(search = "", options: { enabled?: boolean } = {}) {
+  const normalizedSearch = String(search || "").trim();
+  return useInfiniteQuery<AgenticHubSkillsPage>({
+    queryKey: workspaceQueryKeys.officialSkills(normalizedSearch),
+    queryFn: ({ pageParam }) =>
+      fetchAgenticHubOfficialSkillsPage(
+        typeof pageParam === "number" ? pageParam : Number(pageParam) || 1,
+        normalizedSearch,
+      ),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.nextPage ?? undefined,
+    enabled: Boolean(options.enabled),
+    retry: 0,
   });
 }
 

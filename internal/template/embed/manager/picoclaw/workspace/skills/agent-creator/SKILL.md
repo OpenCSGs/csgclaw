@@ -1,13 +1,13 @@
 ---
 name: agent-creator
-description: Mandatory skill for provisioning any new CSGClaw agent-backed participant or worker. Use immediately when the user asks to create, add, set up, or provision an agent, robot, worker, or user-facing "bot" (including GitLab, frontend, backend, QA, or other specialized workers), when dispatch needs a missing worker, or when asking which hub template fits. Always template list + match + template get + participant create --type agent --bind create --from-template with --env for secrets. Never run participant create --bind create without --from-template for a new worker. Do NOT use for task dispatch to existing workers or todo.json tracking only.
+description: Mandatory skill for provisioning any new CSGClaw agent-backed participant or worker. Use immediately when the user asks to create, add, set up, or provision an agent, robot, worker, or user-facing "bot" (including GitLab, frontend, backend, QA, or other specialized workers), when dispatch needs a missing worker, or when asking which hub template fits. Always template list + match + template get + participant create --type agent --bind create --from-template with --env for secrets. Never run participant create --bind create without --from-template for a new worker. Do NOT use for task dispatch to existing workers.
 ---
 
 # Agent Creator
 
 Guide users through hub template selection and agent creation. This skill owns **all new worker provisioning**.
 
-Use `basics` only after create for room membership or IM mentions. Use `manager-worker-dispatch` only after the worker exists and the user wants task handoff.
+Use `basics` only after create for room membership or IM mentions. Use `agent-teams` after the worker exists and the user wants task handoff.
 
 ## Routing Gate (mandatory)
 
@@ -94,5 +94,5 @@ Template env vars with `default` are injected by the server; pass `--env` only f
 - For normal workers, pass `--id`, `--agent-id`, `--channel-user-ref`, and `--channel-user-kind`; do not rely on generated IDs.
 - Prefer `csgclaw-cli` over ad hoc HTTP.
 - Put global flags (`--output json`, `--endpoint`, `--token`) **before** the subcommand, e.g. `csgclaw-cli --output json template list` (not after `template list`).
-- Do not use `manager-worker-dispatch` until provisioning finishes.
+- Do not start team orchestration until provisioning finishes.
 - Creation success is not dispatch success.

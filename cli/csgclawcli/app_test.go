@@ -163,7 +163,7 @@ func TestExecuteCollaborationIdentityHelpUsesParticipantSemantics(t *testing.T) 
 		{
 			name: "team create",
 			args: []string{"team", "create", "--help"},
-			want: []string{"lead participant id", "worker participant ids"},
+			want: []string{"lead agent id", "worker agent ids"},
 		},
 	}
 

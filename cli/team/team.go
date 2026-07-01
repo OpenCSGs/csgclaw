@@ -9,6 +9,7 @@ import (
 
 	"csgclaw/cli/command"
 	"csgclaw/internal/apitypes"
+	teampkg "csgclaw/internal/team"
 )
 
 type cmd struct{}
@@ -53,9 +54,11 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 func (c cmd) usage(run *command.Context) {
 	run.UsageCommandGroup(c, run.Program+" team <subcommand> [flags]", []string{
 		"list                        List teams",
-		"create                      Create a team or enable team mode on a room",
+		"create                      Create a reusable agent team",
 		"task list                   List tasks for a team",
 		"task create-batch           Create tasks from a JSON file",
+		"task plan                   Plan child tasks for a parent task",
+		"task start                  Start a parent task and dispatch ready subtasks",
 		"task claim-next             Claim the next available task",
 		"task update                 Update a task status",
 		"approval list               List approvals for a team",
@@ -80,35 +83,23 @@ func (c cmd) runList(ctx context.Context, run *command.Context, args []string, g
 }
 
 func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("team create", run.Program+" team create [flags]", "Create a team or enable team mode on an existing room.")
-	channel := fs.String("channel", "csgclaw", "channel name")
-	roomID := fs.String("room-id", "", "existing room id")
+	fs := run.NewFlagSet("team create", run.Program+" team create [flags]", "Create a reusable agent team.")
 	title := fs.String("title", "", "team title")
 	leadAgentID := fs.String("lead-agent-id", "", "lead agent id")
 	memberAgentIDs := fs.String("member-agent-ids", "", "comma-separated worker agent ids")
-	leadParticipantID := fs.String("lead-participant-id", "", "legacy lead participant id")
-	memberParticipantIDs := fs.String("member-participant-ids", "", "legacy comma-separated worker participant ids")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("team create does not accept positional arguments")
 	}
-	if *leadAgentID == "" && *leadParticipantID == "" {
+	if *leadAgentID == "" {
 		return fmt.Errorf("lead_agent_id is required")
 	}
 	req := apitypes.CreateTeamRequest{
-		Channel:        *channel,
-		RoomID:         *roomID,
 		Title:          *title,
 		LeadAgentID:    *leadAgentID,
 		MemberAgentIDs: command.ParseCSV(*memberAgentIDs),
-	}
-	if req.LeadAgentID == "" {
-		req.LeadParticipantID = *leadParticipantID
-	}
-	if len(req.MemberAgentIDs) == 0 {
-		req.MemberParticipantIDs = command.ParseCSV(*memberParticipantIDs)
 	}
 	item, err := run.APIClient(globals).CreateTeam(ctx, req)
 	if err != nil {
@@ -122,6 +113,8 @@ func (c cmd) runTask(ctx context.Context, run *command.Context, args []string, g
 		run.UsageCommandGroup(subcommandGroup("team task", "Manage team tasks."), run.Program+" team task <subcommand> [flags]", []string{
 			"list                        List tasks for a team",
 			"create-batch                Create tasks from a JSON file",
+			"plan                        Plan child tasks for a parent task",
+			"start                       Start a parent task and dispatch ready subtasks",
 			"assign                      Reassign a task to a worker",
 			"claim                       Claim a specific task",
 			"claim-next                  Claim the next available task",
@@ -134,6 +127,10 @@ func (c cmd) runTask(ctx context.Context, run *command.Context, args []string, g
 		return c.runTaskList(ctx, run, args[1:], globals)
 	case "create-batch":
 		return c.runTaskCreateBatch(ctx, run, args[1:], globals)
+	case "plan":
+		return c.runTaskPlan(ctx, run, args[1:], globals)
+	case "start":
+		return c.runTaskStart(ctx, run, args[1:], globals)
 	case "assign":
 		return c.runTaskAssign(ctx, run, args[1:], globals)
 	case "claim":
@@ -170,6 +167,7 @@ func (c cmd) runTaskCreateBatch(ctx context.Context, run *command.Context, args 
 	fs := run.NewFlagSet("team task create-batch", run.Program+" team task create-batch --team <id> --created-by <participant> --file <tasks.json>", "Create a batch of tasks from a JSON file.")
 	teamID := fs.String("team", "", "team id")
 	createdBy := fs.String("created-by", "", "creator participant id")
+	executionChannel := fs.String("execution-channel", teampkg.DefaultExecutionChannel, "execution channel: csgclaw or feishu")
 	filePath := fs.String("file", "", "path to tasks JSON file")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -195,11 +193,56 @@ func (c cmd) runTaskCreateBatch(ctx context.Context, run *command.Context, args 
 		return fmt.Errorf("decode batch file: %w", err)
 	}
 	req.CreatedBy = *createdBy
+	req.ExecutionChannel = *executionChannel
 	resp, err := run.APIClient(globals).CreateTeamTasksBatch(ctx, *teamID, req)
 	if err != nil {
 		return err
 	}
 	return command.RenderTeamTasks(globals.Output, run.Stdout, resp.Tasks)
+}
+
+func (c cmd) runTaskPlan(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
+	fs := run.NewFlagSet("team task plan", run.Program+" team task plan --team <id> --task <id> [--start]", "Plan child tasks for a parent task.")
+	teamID := fs.String("team", "", "team id")
+	taskID := fs.String("task", "", "parent task id")
+	autoStart := fs.Bool("start", false, "start the parent task after planning")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(fs.Args()) != 0 {
+		return fmt.Errorf("team task plan does not accept positional arguments")
+	}
+	if *teamID == "" || *taskID == "" {
+		return fmt.Errorf("team and task are required")
+	}
+	resp, err := run.APIClient(globals).PlanTeamTask(ctx, *teamID, *taskID, "", *autoStart)
+	if err != nil {
+		return err
+	}
+	tasks := make([]apitypes.TeamTask, 0, 1+len(resp.CreatedTasks))
+	tasks = append(tasks, resp.Task)
+	tasks = append(tasks, resp.CreatedTasks...)
+	return command.RenderTeamTasks(globals.Output, run.Stdout, tasks)
+}
+
+func (c cmd) runTaskStart(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
+	fs := run.NewFlagSet("team task start", run.Program+" team task start --team <id> --task <id>", "Start a parent task and dispatch ready subtasks.")
+	teamID := fs.String("team", "", "team id")
+	taskID := fs.String("task", "", "parent task id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(fs.Args()) != 0 {
+		return fmt.Errorf("team task start does not accept positional arguments")
+	}
+	if *teamID == "" || *taskID == "" {
+		return fmt.Errorf("team and task are required")
+	}
+	resp, err := run.APIClient(globals).StartTeamTask(ctx, *teamID, *taskID, "")
+	if err != nil {
+		return err
+	}
+	return command.RenderTeamTasks(globals.Output, run.Stdout, []apitypes.TeamTask{resp.Task})
 }
 
 func (c cmd) runTaskClaim(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {

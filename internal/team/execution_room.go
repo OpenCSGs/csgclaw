@@ -2,6 +2,7 @@ package team
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"csgclaw/internal/agent"
@@ -20,8 +21,14 @@ func (s *Service) EnsureTaskExecutionRoom(ctx context.Context, adapter TeamChann
 		return roomID, nil
 	}
 
-	memberParticipantIDs := s.taskExecutionRoomMemberParticipantIDs(directory, meta, parent)
 	leadParticipantID := participantIDForAgentID(adapter, meta.LeadAgentID)
+	if leadParticipantID == "" {
+		return "", fmt.Errorf("channel %q participant not found for lead agent %q", adapterChannel(adapter), meta.LeadAgentID)
+	}
+	memberParticipantIDs, err := s.taskExecutionRoomMemberParticipantIDs(adapter, directory, meta, parent)
+	if err != nil {
+		return "", err
+	}
 	roomRef, err := adapter.EnsureRoom(ctx, EnsureRoomRequest{
 		Title:                TaskExecutionRoomTitle(parent),
 		LeadParticipantID:    leadParticipantID,
@@ -39,7 +46,10 @@ func (s *Service) syncTaskExecutionRoomMembers(ctx context.Context, adapter Team
 	if roomID == "" || adapter == nil {
 		return nil
 	}
-	memberParticipantIDs := s.taskExecutionRoomMemberParticipantIDs(directory, meta, parent)
+	memberParticipantIDs, err := s.taskExecutionRoomMemberParticipantIDs(adapter, directory, meta, parent)
+	if err != nil {
+		return err
+	}
 	if directory != nil {
 		if members, err := directory.ListMembers(roomID); err == nil {
 			existing := make(map[string]struct{}, len(members))
@@ -60,9 +70,12 @@ func (s *Service) syncTaskExecutionRoomMembers(ctx context.Context, adapter Team
 		return nil
 	}
 	leadParticipantID := participantIDForAgentID(adapter, meta.LeadAgentID)
+	if leadParticipantID == "" {
+		return fmt.Errorf("channel %q participant not found for lead agent %q", adapterChannel(adapter), meta.LeadAgentID)
+	}
 	return adapter.AddMembers(ctx, AddMembersRequest{
 		Room: RoomRef{
-			Channel: firstNonEmpty(meta.Channel, adapter.Channel()),
+			Channel: adapter.Channel(),
 			RoomID:  roomID,
 		},
 		InviterParticipantID: leadParticipantID,
@@ -70,10 +83,10 @@ func (s *Service) syncTaskExecutionRoomMembers(ctx context.Context, adapter Team
 	})
 }
 
-func (s *Service) taskExecutionRoomMemberParticipantIDs(directory ExecutionRoomDirectory, meta TeamMeta, parent TeamTask) []string {
+func (s *Service) taskExecutionRoomMemberParticipantIDs(adapter TeamChannelAdapter, directory ExecutionRoomDirectory, meta TeamMeta, parent TeamTask) ([]string, error) {
 	seen := make(map[string]struct{})
 	out := make([]string, 0)
-	leadParticipantID := participantIDForAgentID(directory, meta.LeadAgentID)
+	leadParticipantID := participantIDForAgentID(adapter, meta.LeadAgentID)
 	add := func(id string) {
 		id, err := requireCanonicalParticipantID("participant_id", id)
 		if err != nil || id == "" || ParticipantIDsMatch(id, leadParticipantID) {
@@ -85,13 +98,17 @@ func (s *Service) taskExecutionRoomMemberParticipantIDs(directory ExecutionRoomD
 		seen[id] = struct{}{}
 		out = append(out, id)
 	}
-	for _, id := range teamRoomMemberParticipantIDs(directory, meta.RoomID, leadParticipantID) {
-		add(id)
+	for _, agentID := range meta.MemberAgentIDs {
+		participantID := participantIDForAgentID(adapter, agentID)
+		if participantID == "" {
+			return nil, fmt.Errorf("channel %q participant not found for team member agent %q", adapterChannel(adapter), agentID)
+		}
+		add(participantID)
 	}
 	for _, id := range s.parentTaskAssigneeParticipantIDs(directory, meta.ID, parent.ID) {
 		add(id)
 	}
-	return out
+	return out, nil
 }
 
 func (s *Service) parentTaskAssigneeParticipantIDs(directory ExecutionRoomDirectory, teamID, parentID string) []string {
@@ -118,30 +135,11 @@ func (s *Service) parentTaskAssigneeParticipantIDs(directory ExecutionRoomDirect
 	return out
 }
 
-func teamRoomMemberParticipantIDs(directory ExecutionRoomDirectory, teamRoomID, leadParticipantID string) []string {
-	teamRoomID = strings.TrimSpace(teamRoomID)
-	if teamRoomID == "" || directory == nil {
-		return nil
+func adapterChannel(adapter TeamChannelAdapter) string {
+	if adapter == nil {
+		return ""
 	}
-	members, err := directory.ListMembers(teamRoomID)
-	if err != nil {
-		return nil
-	}
-	seen := make(map[string]struct{})
-	out := make([]string, 0, len(members))
-	for _, member := range members {
-		member.ID = cleanParticipantID(member.ID)
-		if member.ID == "" || !isExecutionRoomAgentMember(member, leadParticipantID) {
-			continue
-		}
-		participantID := strings.TrimSpace(member.ID)
-		if _, dup := seen[participantID]; dup {
-			continue
-		}
-		seen[participantID] = struct{}{}
-		out = append(out, participantID)
-	}
-	return out
+	return strings.TrimSpace(adapter.Channel())
 }
 
 func isExecutionRoomAgentMember(member MemberProfile, leadParticipantID string) bool {

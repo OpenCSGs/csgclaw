@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { fetchHubWorkspace } from "@/api/hub";
-import { hasSkillName } from "@/models/skillhub";
+import { hasSkillName, isOfficialSkill, isPersonalSkill } from "@/models/skillhub";
 import { flattenWorkspaceDirectoryListings } from "@/models/workspace";
 import type { WorkspaceDirectoryListings } from "@/models/workspace";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
@@ -11,6 +11,7 @@ import {
   useWorkspaceHubTemplateQuery,
   useWorkspaceHubWorkspaceQuery,
   useWorkspaceHubWorkspaceFileQuery,
+  useWorkspaceOfficialSkillsQuery,
   useWorkspaceSkillFileQuery,
   useWorkspaceSkillsQuery,
   useWorkspaceSkillTreeQuery,
@@ -38,14 +39,52 @@ export function useWorkspaceHubSelection({
   const setSelectedHubSkillPath = useWorkspaceUiStore((state) => state.setSelectedHubSkillPath);
   const selectedHubResourceType = useWorkspaceUiStore((state) => state.selectedHubResourceType);
   const setSelectedHubResourceType = useWorkspaceUiStore((state) => state.setSelectedHubResourceType);
+  const [remoteSkillsEnabled, setRemoteSkillsEnabled] = useState(false);
+  const [remoteSkillsSearch, setRemoteSkillsSearch] = useState("");
+  const [remoteSkillsSearchQuery, setRemoteSkillsSearchQuery] = useState("");
   const skillsQuery = useWorkspaceSkillsQuery();
-  const skills = useMemo(() => skillsQuery.data ?? [], [skillsQuery.data]);
+  const officialSkillsQuery = useWorkspaceOfficialSkillsQuery(remoteSkillsSearchQuery, {
+    enabled: remoteSkillsEnabled,
+  });
+  const skills = useMemo(
+    () => (skillsQuery.data ?? []).filter((item) => !isOfficialSkill(item) && !isPersonalSkill(item)),
+    [skillsQuery.data],
+  );
+  const remoteSkills = useMemo(() => {
+    const pages = officialSkillsQuery.data?.pages ?? [];
+    const seen = new Set<string>();
+    return pages.flatMap((page) =>
+      page.items.filter((item) => {
+        const key = item.remotePath || item.name;
+        if (!key || seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      }),
+    );
+  }, [officialSkillsQuery.data]);
+  const selectedHubTemplate = useMemo(
+    () => hubTemplates.find((item) => item.id === selectedHubTemplateId) || hubTemplates[0] || null,
+    [hubTemplates, selectedHubTemplateId],
+  );
+  const selectedHubSkill = useMemo(
+    () => skills.find((item) => item.name === selectedHubSkillName) || skills[0] || null,
+    [selectedHubSkillName, skills],
+  );
   const [workspaceListingsState, setWorkspaceListingsState] = useState<{
     templateID: string;
     listings: WorkspaceDirectoryListings;
   }>({ templateID: "", listings: {} });
   const [loadingWorkspaceDirs, setLoadingWorkspaceDirs] = useState<ReadonlySet<string>>(new Set());
   const [workspaceDirectoryError, setWorkspaceDirectoryError] = useState("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setRemoteSkillsSearchQuery(remoteSkillsSearch.trim());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [remoteSkillsSearch]);
 
   useEffect(() => {
     if (!hubTemplates.length) {
@@ -97,16 +136,14 @@ export function useWorkspaceHubSelection({
   const refetchHubTemplateDetail = hubTemplateDetailQuery.refetch;
   const refetchHubWorkspace = hubWorkspaceQuery.refetch;
   const refetchSkills = skillsQuery.refetch;
+  const refetchRemoteSkills = officialSkillsQuery.refetch;
   const refetchSkillTree = skillTreeQuery.refetch;
-
-  const selectedHubTemplate = useMemo(
-    () => hubTemplates.find((item) => item.id === selectedHubTemplateId) || hubTemplates[0] || null,
-    [hubTemplates, selectedHubTemplateId],
-  );
-  const selectedHubSkill = useMemo(
-    () => skills.find((item) => item.name === selectedHubSkillName) || skills[0] || null,
-    [selectedHubSkillName, skills],
-  );
+  const loadMoreRemoteSkills = useCallback(async () => {
+    if (!remoteSkillsEnabled || !officialSkillsQuery.hasNextPage || officialSkillsQuery.isFetchingNextPage) {
+      return;
+    }
+    await officialSkillsQuery.fetchNextPage();
+  }, [officialSkillsQuery, remoteSkillsEnabled]);
 
   const selectedHubTemplateView =
     hubTemplateDetailQuery.data?.id === selectedHubTemplateId ? hubTemplateDetailQuery.data : selectedHubTemplate;
@@ -193,6 +230,10 @@ export function useWorkspaceHubSelection({
     ? errorMessage(hubWorkspaceFileQuery.error, t("hubWorkspaceFileLoadFailed"))
     : "";
   const skillsError = skillsQuery.error ? errorMessage(skillsQuery.error, t("hubSkillsLoadFailed")) : "";
+  const remoteSkillsError =
+    remoteSkillsEnabled && officialSkillsQuery.error
+      ? errorMessage(officialSkillsQuery.error, t("hubSkillRemoteSkillsLoadFailed"))
+      : "";
   const skillTreeError = skillTreeQuery.error ? errorMessage(skillTreeQuery.error, t("hubSkillFilesLoadFailed")) : "";
   const skillFileError = skillFileQuery.error ? errorMessage(skillFileQuery.error, t("hubSkillFileLoadFailed")) : "";
 
@@ -221,6 +262,18 @@ export function useWorkspaceHubSelection({
   return {
     templates: hubTemplates,
     skills,
+    remoteSkills,
+    remoteSkillsHasMore: Boolean(officialSkillsQuery.hasNextPage),
+    remoteSkillsLoading:
+      remoteSkillsEnabled && officialSkillsQuery.isFetching && !officialSkillsQuery.isFetchingNextPage,
+    remoteSkillsLoadingMore: officialSkillsQuery.isFetchingNextPage,
+    remoteSkillsEnabled,
+    remoteSkillsSearch,
+    remoteSkillsError,
+    loadMoreRemoteSkills,
+    refetchRemoteSkills,
+    setRemoteSkillsEnabled,
+    setRemoteSkillsSearch,
     loaded,
     listError,
     skillsError,

@@ -1659,8 +1659,8 @@ func TestCreateWorkerInstallsDefaultSystemSkills(t *testing.T) {
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) { return &fakeRuntime{}, nil },
 		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, name, botID string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
-			if name != "alice" || botID != "agent-alice" {
-				t.Fatalf("createGatewayBox() name=%q botID=%q, want alice/agent-alice", name, botID)
+			if name != "alice" || botID != "agent-worker-123" {
+				t.Fatalf("createGatewayBox() name=%q botID=%q, want alice/agent-worker-123", name, botID)
 			}
 			info := sandbox.Info{
 				ID:        "box-alice",
@@ -1683,8 +1683,8 @@ func TestCreateWorkerInstallsDefaultSystemSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	_, err = svc.CreateWorker(context.Background(), CreateAgentSpec{
-		ID:          "u-alice",
+	created, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID:          "agent-worker-123",
 		Name:        "alice",
 		RuntimeKind: RuntimeKindOpenClawSandbox,
 		Image:       "worker-image:test",
@@ -1700,7 +1700,7 @@ func TestCreateWorkerInstallsDefaultSystemSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWorker() error = %v", err)
 	}
-	skillsRoot, err := svc.agentSkillsRoot("alice", RuntimeKindOpenClawSandbox)
+	skillsRoot, err := svc.agentSkillsRoot(created.ID, RuntimeKindOpenClawSandbox)
 	if err != nil {
 		t.Fatalf("agentSkillsRoot() error = %v", err)
 	}
@@ -1768,7 +1768,7 @@ func TestPreserveWorkspaceSkillsDropsDefaultSystemSkills(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(skillsRoot, "skill-installer", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("old skill-installer restored unexpectedly, err=%v", err)
 	}
-	if err := svc.installDefaultSystemSkills("alice", RuntimeKindOpenClawSandbox); err != nil {
+	if err := svc.installDefaultSystemSkills("agent-alice", RuntimeKindOpenClawSandbox); err != nil {
 		t.Fatalf("installDefaultSystemSkills() error = %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(skillsRoot, "skill-installer", "SKILL.md"))
@@ -4467,8 +4467,8 @@ func TestStartInstallsDefaultSystemSkillsAfterProvision(t *testing.T) {
 			kind: RuntimeKindOpenClawSandbox,
 			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
 				callOrder = append(callOrder, "provision")
-				if req.RuntimeID != "rt-agent-alice" || req.AgentID != "agent-alice" || req.AgentName != "alice" {
-					t.Fatalf("Provision() request = %+v, want alice runtime identity", req)
+				if req.RuntimeID != "rt-agent-worker-123" || req.AgentID != "agent-worker-123" || req.AgentName != "alice" {
+					t.Fatalf("Provision() request = %+v, want worker runtime identity", req)
 				}
 				if req.Gateway == nil {
 					t.Fatalf("Provision() gateway = nil, want gateway request")
@@ -4487,11 +4487,11 @@ func TestStartInstallsDefaultSystemSkillsAfterProvision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	svc.agents["agent-alice"] = Agent{
-		ID:              "agent-alice",
+	svc.agents["agent-worker-123"] = Agent{
+		ID:              "agent-worker-123",
 		Name:            "alice",
 		Role:            RoleWorker,
-		RuntimeID:       "rt-agent-alice",
+		RuntimeID:       "rt-agent-worker-123",
 		RuntimeKind:     RuntimeKindOpenClawSandbox,
 		BoxID:           "box-alice",
 		Status:          string(agentruntime.StateStopped),
@@ -4499,13 +4499,13 @@ func TestStartInstallsDefaultSystemSkillsAfterProvision(t *testing.T) {
 		ProfileComplete: true,
 	}
 
-	if _, err := svc.Start(context.Background(), "agent-alice"); err != nil {
+	if _, err := svc.Start(context.Background(), "agent-worker-123"); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	if got, want := strings.Join(callOrder, ","), "provision,start"; got != want {
 		t.Fatalf("call order = %q, want %q", got, want)
 	}
-	skillsRoot, err := svc.agentSkillsRoot("alice", RuntimeKindOpenClawSandbox)
+	skillsRoot, err := svc.agentSkillsRoot("agent-worker-123", RuntimeKindOpenClawSandbox)
 	if err != nil {
 		t.Fatalf("agentSkillsRoot() error = %v", err)
 	}

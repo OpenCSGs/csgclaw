@@ -131,6 +131,8 @@ func (h *Handler) createMessage(w http.ResponseWriter, r *http.Request) { h.hand
 func (h *Handler) listTeams(w http.ResponseWriter, r *http.Request)     { h.handleListTeams(w, r) }
 func (h *Handler) createTeam(w http.ResponseWriter, r *http.Request)    { h.handleCreateTeam(w, r) }
 func (h *Handler) getTeam(w http.ResponseWriter, r *http.Request)       { h.handleGetTeam(w, r) }
+func (h *Handler) updateTeam(w http.ResponseWriter, r *http.Request)    { h.handleUpdateTeam(w, r) }
+func (h *Handler) deleteTeam(w http.ResponseWriter, r *http.Request)    { h.handleDeleteTeam(w, r) }
 func (h *Handler) listTeamTasks(w http.ResponseWriter, r *http.Request) { h.handleListTeamTasks(w, r) }
 func (h *Handler) createTeamTasksBatch(w http.ResponseWriter, r *http.Request) {
 	h.handleCreateTeamTasksBatch(w, r)

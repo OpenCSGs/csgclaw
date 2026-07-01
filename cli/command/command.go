@@ -481,14 +481,13 @@ func RenderMessagesTable(w io.Writer, messages []apitypes.Message) error {
 func RenderTeamsTable(w io.Writer, teams []apitypes.Team) error {
 	rows := make([][]string, 0, len(teams))
 	for _, item := range teams {
-		rows = append(rows, []string{displayValueField(item.ID), displayValueField(item.RoomID), displayValueField(item.Channel), displayNameWithID(item.LeadAgentName, item.LeadAgentID), displayValueField(item.Status), displayValueField(item.Title)})
+		rows = append(rows, []string{displayValueField(item.ID), displayNameWithID(item.LeadAgentName, item.LeadAgentID), displayValueField(strings.Join(item.MemberAgentIDs, ",")), displayValueField(item.Status), displayValueField(item.Title)})
 	}
 	return renderTable(w,
 		[]tableColumn{
 			{Header: "ID"},
-			{Header: "ROOM"},
-			{Header: "CHANNEL"},
 			{Header: "LEAD_AGENT"},
+			{Header: "MEMBERS"},
 			{Header: "STATUS"},
 			{Header: "TITLE"},
 		},
@@ -499,12 +498,14 @@ func RenderTeamsTable(w io.Writer, teams []apitypes.Team) error {
 func RenderTeamTasksTable(w io.Writer, tasks []apitypes.TeamTask) error {
 	rows := make([][]string, 0, len(tasks))
 	for _, item := range tasks {
-		rows = append(rows, []string{displayValueField(item.ID), displayValueField(item.TeamID), displayValueField(item.Status), displayNameWithID(item.AssignedToAgentName, item.AssignedTo), displayNameWithID(item.ClaimedByAgentName, item.ClaimedBy), fmt.Sprintf("%d", item.Priority), displayValueField(item.Title)})
+		rows = append(rows, []string{displayValueField(item.ID), displayValueField(item.TeamID), displayValueField(item.ExecutionChannel), displayValueField(item.RoomID), displayValueField(item.Status), displayNameWithID(item.AssignedToAgentName, item.AssignedTo), displayNameWithID(item.ClaimedByAgentName, item.ClaimedBy), fmt.Sprintf("%d", item.Priority), displayValueField(item.Title)})
 	}
 	return renderTable(w,
 		[]tableColumn{
 			{Header: "ID"},
 			{Header: "TEAM"},
+			{Header: "CHANNEL"},
+			{Header: "ROOM"},
 			{Header: "STATUS"},
 			{Header: "ASSIGNED"},
 			{Header: "CLAIMED"},

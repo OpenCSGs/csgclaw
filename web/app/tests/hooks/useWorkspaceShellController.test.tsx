@@ -17,6 +17,7 @@ const rooms: IMConversation[] = [
 
 const t: TranslateFn = (key) => key;
 const selectTasks = vi.fn();
+const setIsSidebarCollapsed = vi.fn();
 
 function ShellHarness() {
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(WorkspaceTabs.messages);
@@ -34,6 +35,7 @@ function ShellHarness() {
     selectHub: vi.fn(),
     selectTasks,
     setCollapsedWorkspaceGroups: vi.fn(),
+    setIsSidebarCollapsed,
     setWorkspaceTab,
     t,
     theme: "dark",
@@ -60,6 +62,7 @@ describe("useWorkspaceShellController", () => {
   afterEach(() => {
     window.localStorage.clear();
     selectTasks.mockReset();
+    setIsSidebarCollapsed.mockReset();
   });
 
   it("keeps the explicit Threads tab active on room routes", async () => {
@@ -85,6 +88,16 @@ describe("useWorkspaceShellController", () => {
 
     await waitFor(() => {
       expect(selectTasks).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("expands the sidebar before selecting a workspace tab", async () => {
+    render(<ShellHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Messages" }));
+
+    await waitFor(() => {
+      expect(setIsSidebarCollapsed).toHaveBeenCalledWith(false);
     });
   });
 });

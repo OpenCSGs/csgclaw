@@ -9,54 +9,61 @@ import (
 )
 
 type Projector struct {
-	adapter TeamChannelAdapter
-	logger  *log.Logger
+	registry *AdapterRegistry
+	logger   *log.Logger
 }
 
 func NewProjector(adapter TeamChannelAdapter, logger *log.Logger) *Projector {
+	return NewProjectorWithRegistry(NewAdapterRegistry(adapter), logger)
+}
+
+func NewProjectorWithRegistry(registry *AdapterRegistry, logger *log.Logger) *Projector {
 	if logger == nil {
 		logger = log.Default()
 	}
 	return &Projector{
-		adapter: adapter,
-		logger:  logger,
+		registry: registry,
+		logger:   logger,
 	}
 }
 
 func (p *Projector) Project(ctx context.Context, meta TeamMeta, events []TeamEvent) error {
-	if p == nil || p.adapter == nil || len(events) == 0 {
+	if p == nil || p.registry == nil || len(events) == 0 {
 		return nil
 	}
-	if meta.Channel != "" && p.adapter.Channel() != meta.Channel {
-		return fmt.Errorf("channel adapter mismatch: team=%s adapter=%s", meta.Channel, p.adapter.Channel())
-	}
-
-	leadParticipantID := participantIDForAgentID(p.adapter, meta.LeadAgentID)
-	renderer := newProjectionRenderer(p.adapter, leadParticipantID)
-	plans := buildProjectionPlans(events, renderer, meta)
-	for _, plan := range plans {
-		if strings.TrimSpace(plan.content) == "" {
-			continue
+	for _, event := range events {
+		channel := NormalizeExecutionChannel(event.Channel)
+		adapter, ok := p.registry.Adapter(channel)
+		if !ok {
+			return fmt.Errorf("team channel adapter is not configured for %q", channel)
 		}
-		roomID := strings.TrimSpace(plan.roomID)
-		if roomID == "" {
-			roomID = strings.TrimSpace(meta.RoomID)
-		}
-		if shouldSkipTeamRoomProjection(meta.RoomID, roomID, plan) {
-			continue
-		}
-		if _, err := p.adapter.SendMessage(ctx, SendMessageRequest{
-			Room: RoomRef{
-				Channel: firstNonEmpty(meta.Channel, p.adapter.Channel()),
-				RoomID:  roomID,
-			},
-			SenderParticipantID: projectionSenderParticipantID(firstNonEmpty(plan.senderID, leadParticipantID), leadParticipantID),
-			MentionID:           strings.TrimSpace(plan.mentionID),
-			Kind:                firstNonEmpty(plan.kind, "team_event"),
-			Content:             plan.content,
-			IdempotencyKey:      projectionIdempotencyKey(meta.ID, plan),
-		}); err != nil {
-			return err
+		leadParticipantID := participantIDForAgentID(adapter, meta.LeadAgentID)
+		renderer := newProjectionRenderer(adapter, leadParticipantID)
+		plans := buildProjectionPlans([]TeamEvent{event}, renderer, meta)
+		for _, plan := range plans {
+			if strings.TrimSpace(plan.content) == "" {
+				continue
+			}
+			if strings.TrimSpace(plan.channel) == "" {
+				plan.channel = channel
+			}
+			roomID := strings.TrimSpace(plan.roomID)
+			if roomID == "" {
+				continue
+			}
+			if _, err := adapter.SendMessage(ctx, SendMessageRequest{
+				Room: RoomRef{
+					Channel: plan.channel,
+					RoomID:  roomID,
+				},
+				SenderParticipantID: projectionSenderParticipantID(firstNonEmpty(plan.senderID, leadParticipantID), leadParticipantID),
+				MentionID:           strings.TrimSpace(plan.mentionID),
+				Kind:                firstNonEmpty(plan.kind, "team_event"),
+				Content:             plan.content,
+				IdempotencyKey:      projectionIdempotencyKey(meta.ID, plan),
+			}); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -64,6 +71,7 @@ func (p *Projector) Project(ctx context.Context, meta TeamMeta, events []TeamEve
 
 type projectionPlan struct {
 	anchorSeq int64
+	channel   string
 	senderID  string
 	mentionID string
 	roomID    string
@@ -89,6 +97,7 @@ func buildProjectionPlans(events []TeamEvent, renderer projectionRenderer, meta 
 			for _, event := range batch {
 				plans = append(plans, projectionPlan{
 					anchorSeq: event.Seq,
+					channel:   NormalizeExecutionChannel(event.Channel),
 					senderID:  event.ActorID,
 					mentionID: projectionMentionID(event),
 					roomID:    strings.TrimSpace(event.RoomID),
@@ -103,6 +112,7 @@ func buildProjectionPlans(events []TeamEvent, renderer projectionRenderer, meta 
 		if content := renderSingleEvent(events[i], renderer, meta); strings.TrimSpace(content) != "" {
 			plans = append(plans, projectionPlan{
 				anchorSeq: events[i].Seq,
+				channel:   NormalizeExecutionChannel(events[i].Channel),
 				senderID:  events[i].ActorID,
 				mentionID: projectionMentionID(events[i]),
 				roomID:    strings.TrimSpace(events[i].RoomID),
@@ -125,15 +135,6 @@ func dispatchBatchProjectionSize(events []TeamEvent) int {
 
 func projectionIdempotencyKey(teamID string, plan projectionPlan) string {
 	return fmt.Sprintf("team:%s:event:%d", teamID, plan.anchorSeq)
-}
-
-func shouldSkipTeamRoomProjection(teamRoomID, roomID string, plan projectionPlan) bool {
-	teamRoomID = strings.TrimSpace(teamRoomID)
-	roomID = strings.TrimSpace(roomID)
-	if teamRoomID == "" || roomID == "" || teamRoomID != roomID {
-		return false
-	}
-	return strings.TrimSpace(plan.eventType) != ""
 }
 
 func projectionMentionID(event TeamEvent) string {
@@ -174,15 +175,16 @@ func renderTaskBatchCreated(events []TeamEvent, renderer projectionRenderer) str
 }
 
 func isExecutionRoom(meta TeamMeta, roomID string) bool {
-	teamRoomID := strings.TrimSpace(meta.RoomID)
 	roomID = strings.TrimSpace(roomID)
-	return roomID != "" && teamRoomID != "" && roomID != teamRoomID
+	return roomID != ""
 }
 
 func renderSingleEvent(event TeamEvent, renderer projectionRenderer, meta TeamMeta) string {
 	inExecRoom := isExecutionRoom(meta, event.RoomID)
 	switch event.Type {
 	case EventTeamCreated:
+		return ""
+	case EventTeamUpdated:
 		return ""
 	case EventTaskCreated:
 		return ""

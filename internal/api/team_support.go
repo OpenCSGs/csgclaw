@@ -21,22 +21,58 @@ func (h *Handler) requireTeamService(w http.ResponseWriter) (*team.Service, bool
 }
 
 func (h *Handler) requireTeamComponents(w http.ResponseWriter) (*team.Service, team.TeamChannelAdapter, bool) {
+	return h.requireTeamComponentsForChannel(w, team.DefaultExecutionChannel)
+}
+
+func (h *Handler) requireTeamComponentsForChannel(w http.ResponseWriter, channel string) (*team.Service, team.TeamChannelAdapter, bool) {
 	svc, ok := h.requireTeamService(w)
 	if !ok {
 		return nil, nil, false
 	}
-	if h.teamAdapter == nil {
-		http.Error(w, "team adapter is not configured", http.StatusServiceUnavailable)
+	adapter, ok := h.teamAdapterForChannel(channel)
+	if !ok {
+		http.Error(w, "team adapter is not configured for "+team.NormalizeExecutionChannel(channel), http.StatusServiceUnavailable)
 		return nil, nil, false
 	}
-	return svc, h.teamAdapter, true
+	return svc, adapter, true
 }
 
-func (h *Handler) teamDirectory() *team.CSGClawTeamDirectory {
+func (h *Handler) teamAdapterForChannel(channel string) (team.TeamChannelAdapter, bool) {
+	if h == nil {
+		return nil, false
+	}
+	channel = team.NormalizeExecutionChannel(channel)
+	if h.teamAdapters != nil {
+		if adapter, ok := h.teamAdapters.Adapter(channel); ok {
+			return adapter, true
+		}
+	}
+	if h.teamAdapter != nil && strings.EqualFold(h.teamAdapter.Channel(), channel) {
+		return h.teamAdapter, true
+	}
+	return nil, false
+}
+
+type teamDirectory interface {
+	team.ExecutionRoomDirectory
+	team.PlannerDirectory
+	team.GlobalTaskDirectory
+}
+
+func (h *Handler) teamDirectory(channel ...string) teamDirectory {
 	if h == nil {
 		return nil
 	}
-	return team.NewCSGClawTeamDirectory(h.im, h.svc, h.participant)
+	selected := team.DefaultExecutionChannel
+	if len(channel) > 0 {
+		selected = team.NormalizeExecutionChannel(channel[0])
+	}
+	switch selected {
+	case team.FeishuExecutionChannel:
+		return team.NewFeishuTeamDirectory(h.feishu, h.svc, h.participant)
+	default:
+		return team.NewCSGClawTeamDirectory(h.im, h.svc, h.participant)
+	}
 }
 
 func (h *Handler) ensureTeamExists(w http.ResponseWriter, svc *team.Service, teamID string) bool {
@@ -95,14 +131,13 @@ func writeTeamPlannerError(w http.ResponseWriter, err error) {
 
 func apiTeam(item team.TeamMeta) apitypes.Team {
 	return apitypes.Team{
-		ID:          item.ID,
-		RoomID:      item.RoomID,
-		Channel:     item.Channel,
-		Title:       item.Title,
-		LeadAgentID: item.LeadAgentID,
-		Status:      item.Status,
-		CreatedAt:   item.CreatedAt,
-		UpdatedAt:   item.UpdatedAt,
+		ID:             item.ID,
+		Title:          item.Title,
+		LeadAgentID:    item.LeadAgentID,
+		MemberAgentIDs: append([]string(nil), item.MemberAgentIDs...),
+		Status:         item.Status,
+		CreatedAt:      item.CreatedAt,
+		UpdatedAt:      item.UpdatedAt,
 	}
 }
 
@@ -141,7 +176,7 @@ func (h *Handler) newTeamIdentityPresenter() teamIdentityPresenter {
 	if h == nil || h.participant == nil {
 		return p
 	}
-	for _, item := range h.participant.List(participant.ListOptions{Channel: participant.ChannelCSGClaw}) {
+	for _, item := range h.participant.List(participant.ListOptions{}) {
 		name := p.agentDisplayName(item.AgentID)
 		if name == "" {
 			name = strings.TrimSpace(item.Name)
@@ -243,6 +278,7 @@ func apiTask(item team.TeamTask, presenter teamIdentityPresenter) apitypes.TeamT
 	return apitypes.TeamTask{
 		ID:                  item.ID,
 		TeamID:              item.TeamID,
+		ExecutionChannel:    item.ExecutionChannel,
 		RoomID:              item.RoomID,
 		ParentID:            item.ParentID,
 		Title:               item.Title,
@@ -304,9 +340,10 @@ func apiPlanTaskWorkflowResponse(result team.PlanTaskWorkflowResult, presenter t
 
 func teamCreateTaskBatchInput(teamID string, req apitypes.CreateTeamTasksBatchRequest) team.CreateTaskBatchInput {
 	input := team.CreateTaskBatchInput{
-		TeamID:    teamID,
-		CreatedBy: strings.TrimSpace(req.CreatedBy),
-		Tasks:     make([]team.CreateTaskBatchItem, 0, len(req.Tasks)),
+		TeamID:           teamID,
+		CreatedBy:        strings.TrimSpace(req.CreatedBy),
+		ExecutionChannel: team.NormalizeExecutionChannel(req.ExecutionChannel),
+		Tasks:            make([]team.CreateTaskBatchItem, 0, len(req.Tasks)),
 	}
 	for _, item := range req.Tasks {
 		input.Tasks = append(input.Tasks, team.CreateTaskBatchItem{
@@ -369,6 +406,7 @@ func apiEvent(item team.TeamEvent, presenter teamIdentityPresenter) apitypes.Tea
 	return apitypes.TeamEvent{
 		Seq:             item.Seq,
 		TeamID:          item.TeamID,
+		Channel:         item.Channel,
 		RoomID:          item.RoomID,
 		Type:            item.Type,
 		ActorID:         item.ActorID,

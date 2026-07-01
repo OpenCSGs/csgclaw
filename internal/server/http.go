@@ -32,6 +32,7 @@ type Options struct {
 	LLM               *llm.Service
 	Team              *team.Service
 	TeamAdapter       team.TeamChannelAdapter
+	TeamAdapters      *team.AdapterRegistry
 	Upgrade           *upgrade.Manager
 	ActivityDecider   api.ActivityDecider
 	ConfigPath        string
@@ -47,6 +48,9 @@ func newHandler(opts Options) *api.Handler {
 	handler.SetHubService(opts.Hub)
 	handler.SetTeamService(opts.Team)
 	handler.SetTeamAdapter(opts.TeamAdapter)
+	if opts.TeamAdapters != nil {
+		handler.SetTeamAdapterRegistry(opts.TeamAdapters)
+	}
 	handler.SetUpgradeManager(opts.Upgrade)
 	handler.SetActivityDecider(opts.ActivityDecider)
 	handler.SetUpgradeConfigPath(opts.ConfigPath)

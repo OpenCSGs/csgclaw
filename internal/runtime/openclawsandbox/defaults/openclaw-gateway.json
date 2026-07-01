@@ -12,18 +12,13 @@
           {
             "id": "REPLACE_WITH_MODEL_ID",
             "name": "REPLACE_WITH_MODEL_ID",
-            "reasoning": true,
-            "input": ["text", "image"],
+            "reasoning": false,
+            "input": ["text"],
             "compat": {
-              "supportsReasoningEffort": true,
-              "supportedReasoningEfforts": ["low", "medium", "high", "xhigh"],
-              "reasoningEffortMap": {
-                "minimal": "low",
-                "low": "low",
-                "medium": "medium",
-                "high": "high",
-                "xhigh": "xhigh"
-              }
+              "supportsReasoningEffort": false,
+              "supportedReasoningEfforts": [],
+              "reasoningEffortMap": {},
+              "supportsUsageInStreaming": false
             },
             "cost": {
               "input": 0,

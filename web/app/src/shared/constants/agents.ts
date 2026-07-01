@@ -3,7 +3,7 @@ export const MANAGER_PARTICIPANT_ID = "manager";
 export const MANAGER_AGENT_NAME = "manager";
 export const MANAGER_AGENT_ROLE = "manager";
 export const WORKER_AGENT_ROLE = "worker";
-export const DEFAULT_MANAGER_DESCRIPTION = "Manager Worker Dispatch";
+export const DEFAULT_MANAGER_DESCRIPTION = "Agent Teams Manager";
 
 export const DEFAULT_PROVIDER = "csghub_lite";
 export const DEFAULT_REASONING_EFFORT = "medium";

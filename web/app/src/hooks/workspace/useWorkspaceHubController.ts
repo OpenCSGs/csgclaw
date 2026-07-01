@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { deleteHubTemplateRequest } from "@/api/hub";
-import { deleteSkillRequest, uploadSkillArchive } from "@/api/skills";
+import { deleteSkillRequest, installRemoteSkillRequest, uploadSkillArchive } from "@/api/skills";
 import { isDeletableHubTemplate, isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import type { HubTemplate } from "@/models/hubWorkspace";
+import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
@@ -20,6 +21,9 @@ export type WorkspaceHubController = {
     deleteHubTemplate: DeleteHubTemplate;
     deleteSkill: DeleteSkill;
     skillDeleteBusy: boolean;
+    remoteInstallBusy: string;
+    remoteInstallError: string;
+    installRemoteSkill: (skill: SkillSummary | null | undefined) => Promise<SkillSummary | null>;
     uploadBusy: boolean;
     uploadError: string;
     uploadSkill: (file: File) => Promise<SkillSummary | null>;
@@ -48,6 +52,8 @@ export function useWorkspaceHubController({
   const [skillDeleteError, setSkillDeleteError] = useState("");
   const [hubUploadBusy, setHubUploadBusy] = useState(false);
   const [hubUploadError, setHubUploadError] = useState("");
+  const [hubRemoteInstallBusy, setHubRemoteInstallBusy] = useState("");
+  const [hubRemoteInstallError, setHubRemoteInstallError] = useState("");
 
   const refreshHubTemplates = useCallback(async (): Promise<void> => {
     try {
@@ -109,7 +115,7 @@ export function useWorkspaceHubController({
   const deleteSkill = useCallback(
     async (skill: SkillSummary | null | undefined): Promise<boolean> => {
       const name = String(skill?.name || "").trim();
-      if (!name || skill?.readonly || skill?.source === "system") {
+      if (!name || isReadonlySkill(skill)) {
         return false;
       }
       setSkillDeleteBusy(true);
@@ -141,11 +147,7 @@ export function useWorkspaceHubController({
       try {
         const uploaded = await uploadSkillArchive(file);
         queryClient.setQueryData<SkillSummary[]>(workspaceQueryKeys.skills(), (current) => {
-          const items = Array.isArray(current) ? current : [];
-          if (items.some((item) => item.name === uploaded.name)) {
-            return items;
-          }
-          return [...items, uploaded].sort((left, right) => left.name.localeCompare(right.name));
+          return upsertSkillSummary(current, uploaded);
         });
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.skills() });
         setSelectedHubResourceType("skill");
@@ -162,12 +164,44 @@ export function useWorkspaceHubController({
     [queryClient, setSelectedHubResourceType, setSelectedHubSkillName, setSelectedHubSkillPath, t],
   );
 
+  const installRemoteSkill = useCallback(
+    async (skill: SkillSummary | null | undefined): Promise<SkillSummary | null> => {
+      const remotePath = String(skill?.remotePath || "").trim();
+      if (!remotePath) {
+        setHubRemoteInstallError(t("hubSkillRemoteInstallFailed"));
+        return null;
+      }
+      setHubRemoteInstallBusy(remotePath);
+      setHubRemoteInstallError("");
+      try {
+        const installed = await installRemoteSkillRequest(remotePath, skill?.remoteRef);
+        queryClient.setQueryData<SkillSummary[]>(workspaceQueryKeys.skills(), (current) => {
+          return upsertSkillSummary(current, installed);
+        });
+        await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.skills() });
+        setSelectedHubResourceType("skill");
+        setSelectedHubSkillName(installed.name);
+        setSelectedHubSkillPath("");
+        return installed;
+      } catch (err) {
+        setHubRemoteInstallError(errorMessage(err, t("hubSkillRemoteInstallFailed")));
+        return null;
+      } finally {
+        setHubRemoteInstallBusy("");
+      }
+    },
+    [queryClient, setSelectedHubResourceType, setSelectedHubSkillName, setSelectedHubSkillPath, t],
+  );
+
   return {
     hub: {
       ...hub,
       deleteBusy: hubDeleteBusy,
       deleteHubTemplate,
       deleteSkill,
+      installRemoteSkill,
+      remoteInstallBusy: hubRemoteInstallBusy,
+      remoteInstallError: hubRemoteInstallError,
       skillDeleteBusy,
       uploadBusy: hubUploadBusy,
       uploadError: hubUploadError,
@@ -182,4 +216,11 @@ export function useWorkspaceHubController({
     },
     refreshHubTemplates,
   };
+}
+
+function upsertSkillSummary(current: readonly SkillSummary[] | null | undefined, skill: SkillSummary): SkillSummary[] {
+  const items = Array.isArray(current) ? current : [];
+  return [...items.filter((item) => item.name !== skill.name), skill].sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
 }

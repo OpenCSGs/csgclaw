@@ -124,7 +124,7 @@ func resolveAgentSkillSource(root, name string) (fs.FS, string, error) {
 	return source.FS, source.RootPath, nil
 }
 
-func (s *Service) installDefaultSystemSkills(agentName, runtimeKind string) error {
+func (s *Service) installDefaultSystemSkills(agentID, runtimeKind string) error {
 	if !isGatewayRuntimeKind(strings.TrimSpace(runtimeKind)) {
 		return nil
 	}
@@ -135,7 +135,7 @@ func (s *Service) installDefaultSystemSkills(agentName, runtimeKind string) erro
 	if len(names) == 0 {
 		return nil
 	}
-	targetRoot, err := s.agentSkillsRoot(agentName, runtimeKind)
+	targetRoot, err := s.agentSkillsRoot(agentID, runtimeKind)
 	if err != nil {
 		return err
 	}

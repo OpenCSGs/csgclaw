@@ -35,12 +35,11 @@ type teamSnapshot struct {
 }
 
 type storeIndexEntry struct {
-	ID          string `json:"id"`
-	Channel     string `json:"channel"`
-	RoomID      string `json:"room_id"`
-	Title       string `json:"title"`
-	LeadAgentID string `json:"lead_agent_id"`
-	Status      string `json:"status"`
+	ID             string   `json:"id"`
+	Title          string   `json:"title"`
+	LeadAgentID    string   `json:"lead_agent_id"`
+	MemberAgentIDs []string `json:"member_agent_ids,omitempty"`
+	Status         string   `json:"status"`
 }
 
 func NewStore(root string) (*Store, error) {
@@ -102,6 +101,20 @@ func (s *Store) Save(snapshot teamSnapshot, newEvents []TeamEvent) error {
 		return err
 	}
 	if err := writeJSONAtomic(filepath.Join(teamDir, presenceFileName), snapshot.Presence); err != nil {
+		return err
+	}
+	return s.writeIndex()
+}
+
+func (s *Store) Delete(teamID string) error {
+	if s == nil {
+		return fmt.Errorf("store is required")
+	}
+	teamID = strings.TrimSpace(teamID)
+	if teamID == "" {
+		return fmt.Errorf("team id is required")
+	}
+	if err := os.RemoveAll(s.teamDir(teamID)); err != nil {
 		return err
 	}
 	return s.writeIndex()
@@ -250,12 +263,11 @@ func (s *Store) buildIndex() ([]storeIndexEntry, error) {
 			return nil, err
 		}
 		index = append(index, storeIndexEntry{
-			ID:          meta.ID,
-			Channel:     meta.Channel,
-			RoomID:      meta.RoomID,
-			Title:       meta.Title,
-			LeadAgentID: meta.LeadAgentID,
-			Status:      meta.Status,
+			ID:             meta.ID,
+			Title:          meta.Title,
+			LeadAgentID:    meta.LeadAgentID,
+			MemberAgentIDs: cloneStrings(meta.MemberAgentIDs),
+			Status:         meta.Status,
 		})
 	}
 	sort.Slice(index, func(i, j int) bool { return index[i].ID < index[j].ID })

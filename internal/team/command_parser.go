@@ -20,11 +20,11 @@ func NewCommandParser(svc *Service, adapter TeamChannelAdapter, allowSender func
 	}
 }
 
-func (p *CommandParser) HandleMessage(ctx context.Context, roomID string, senderID string, content string) bool {
+func (p *CommandParser) HandleMessage(ctx context.Context, channel string, roomID string, senderID string, content string) bool {
 	if p == nil || p.svc == nil || p.adapter == nil {
 		return false
 	}
-	meta, ok := p.svc.FindTeamByRoom(roomID)
+	meta, _, ok := p.svc.FindTeamByRoom(channel, roomID)
 	if !ok {
 		return false
 	}
@@ -141,11 +141,11 @@ func (p *CommandParser) sendFeedback(ctx context.Context, meta TeamMeta, roomID 
 	}
 	targetRoomID := strings.TrimSpace(roomID)
 	if targetRoomID == "" {
-		targetRoomID = strings.TrimSpace(meta.RoomID)
+		return
 	}
 	_, _ = p.adapter.SendMessage(ctx, SendMessageRequest{
 		Room: RoomRef{
-			Channel: firstNonEmpty(meta.Channel, p.adapter.Channel()),
+			Channel: p.adapter.Channel(),
 			RoomID:  targetRoomID,
 		},
 		SenderParticipantID: participantIDForAgentID(p.adapter, meta.LeadAgentID),

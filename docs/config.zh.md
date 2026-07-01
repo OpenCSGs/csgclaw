@@ -140,7 +140,11 @@ csgclaw agent create --name alice --runtime openclaw_sandbox
 
 推荐镜像形态是基于 OpenClaw slim 二次封装，并把 CSGClaw 管理的插件烘焙到 `/home/node/openclaw-plugins`（例如 `csgclaw-extension` 和外部 channel 插件）。运行时状态仍由 `~/.csgclaw/agents/<agent>/.openclaw/openclaw.json` 提供；不要把空的宿主机目录挂载到 `/home/node/openclaw-plugins`，否则会遮住镜像内已经烘焙好的插件。
 
-CSGClaw 生成的 OpenClaw bridge 模型默认声明 `input: ["text", "image"]`，并声明 `low`、`medium`、`high`、`xhigh` reasoning 档位，让 OpenClaw 优先按支持图片输入和可调思考深度的模型处理消息。生成配置还会写入 `reasoningEffortMap`，其中 `minimal` 映射到 `low`，其他档位按同名值透传。实际默认思考深度通过 `agents.defaults.thinkingDefault` 写入；默认是 `medium`，如果 CSGClaw profile 配了 `reasoning_effort` 则使用该值。普通 OpenAI-compatible profile 仍使用 `openai-completions`；如果上游实际不支持图片或某个 reasoning 档位，只有在发送对应内容或参数时会由上游返回错误。使用 Codex profile 时，CSGClaw 还会把桥接模型声明为 `openai-codex-responses`，并写入 streaming usage 兼容元数据。
+CSGClaw 为普通 OpenAI-compatible profile 生成保守的 OpenClaw bridge 模型元数据。
+默认使用 `openai-completions`、`input: ["text"]`，不声明 reasoning effort 支持，也不写入 `agents.defaults.thinkingDefault`。
+这样可以避免 OpenClaw 向未通过 CSGClaw 声明能力的 provider 发送图片或 reasoning payload。
+使用 Codex profile 时，CSGClaw 会把 bridge 模型声明为 `openai-codex-responses`，启用 `input: ["text", "image"]`，写入 `low`、`medium`、`high`、`xhigh` reasoning 档位，并写入 streaming usage 兼容元数据。
+Codex 的 `reasoningEffortMap` 会把 `minimal` 映射到 `low`，其他档位按同名值透传。
 
 ## Sandbox Provider
 

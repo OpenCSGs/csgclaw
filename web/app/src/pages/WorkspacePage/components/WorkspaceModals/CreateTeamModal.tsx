@@ -9,6 +9,7 @@ import type { Dispatch, SetStateAction } from "react";
 type CreateTeamModalProps = {
   t: TranslateFn;
   candidates: AgentLike[];
+  mode?: "create" | "edit";
   teamTitle: string;
   onTeamTitleChange: (value: string) => void;
   teamMemberIDs: string[];
@@ -22,6 +23,7 @@ type CreateTeamModalProps = {
 export function CreateTeamModal({
   t,
   candidates,
+  mode = "create",
   teamTitle,
   onTeamTitleChange,
   teamMemberIDs,
@@ -31,6 +33,7 @@ export function CreateTeamModal({
   onClose,
   onCreate,
 }: CreateTeamModalProps) {
+  const editing = mode === "edit";
   const candidateIDs = candidates.map((item) => item.id).filter((id): id is string => Boolean(id));
   const allCandidatesSelected = candidateIDs.length > 0 && candidateIDs.every((id) => teamMemberIDs.includes(id));
   const selectedMemberCount = candidateIDs.filter((id) => teamMemberIDs.includes(id)).length;
@@ -40,24 +43,26 @@ export function CreateTeamModal({
       <div className="modal-card" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <div className="modal-title">{t("teamCreate")}</div>
-            <div className="modal-subtitle">{t("teamMembersSubtitle")}</div>
+            <div className="modal-title">{editing ? t("teamManageMembers") : t("teamCreate")}</div>
+            <div className="modal-subtitle">{editing ? t("teamManageMembersSubtitle") : t("teamMembersSubtitle")}</div>
           </div>
           <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
 
-        <label className="field">
-          <span>{requiredFieldLabel(t("teamNameLabel"))}</span>
-          <input
-            value={teamTitle}
-            onInput={(event) => onTeamTitleChange(event.currentTarget.value)}
-            placeholder={t("teamNamePlaceholder")}
-          />
-        </label>
+        {editing ? null : (
+          <label className="field">
+            <span>{requiredFieldLabel(t("teamNameLabel"))}</span>
+            <input
+              value={teamTitle}
+              onInput={(event) => onTeamTitleChange(event.currentTarget.value)}
+              placeholder={t("teamNamePlaceholder")}
+            />
+          </label>
+        )}
 
         <div className="field">
           <span>{t("teamMembersLabel")}</span>
-          <div className="selection-list">
+          <div className={`selection-list${editing ? " team-members-dialog-list" : ""}`}>
             {candidates.length ? (
               <>
                 <label className="selection-item selection-all-item">
@@ -112,10 +117,10 @@ export function CreateTeamModal({
             size="md"
             loading={teamActionBusy}
             loadingLabel={t("teamSaving")}
-            disabled={teamActionBusy || teamMemberIDs.length === 0}
+            disabled={teamActionBusy || (!editing && teamMemberIDs.length === 0)}
             onClick={onCreate}
           >
-            {t("teamCreate")}
+            {editing ? t("teamSaveMembers") : t("teamCreate")}
           </Button>
         </div>
       </div>

@@ -3,20 +3,20 @@ package apitypes
 import "time"
 
 type Team struct {
-	ID            string    `json:"id"`
-	RoomID        string    `json:"room_id"`
-	Channel       string    `json:"channel"`
-	Title         string    `json:"title"`
-	LeadAgentID   string    `json:"lead_agent_id"`
-	LeadAgentName string    `json:"lead_agent_name,omitempty"`
-	Status        string    `json:"status"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID             string    `json:"id"`
+	Title          string    `json:"title"`
+	LeadAgentID    string    `json:"lead_agent_id"`
+	LeadAgentName  string    `json:"lead_agent_name,omitempty"`
+	MemberAgentIDs []string  `json:"member_agent_ids,omitempty"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type TeamTask struct {
 	ID                  string     `json:"id"`
 	TeamID              string     `json:"team_id"`
+	ExecutionChannel    string     `json:"execution_channel"`
 	RoomID              string     `json:"room_id"`
 	ParentID            string     `json:"parent_id,omitempty"`
 	Title               string     `json:"title"`
@@ -79,6 +79,7 @@ type TeamPresence struct {
 type TeamEvent struct {
 	Seq             int64     `json:"seq"`
 	TeamID          string    `json:"team_id"`
+	Channel         string    `json:"channel,omitempty"`
 	RoomID          string    `json:"room_id"`
 	Type            string    `json:"type"`
 	ActorID         string    `json:"actor_id,omitempty"`
@@ -91,8 +92,6 @@ type TeamEvent struct {
 }
 
 type CreateTeamRequest struct {
-	Channel              string   `json:"channel"`
-	RoomID               string   `json:"room_id,omitempty"`
 	Title                string   `json:"title,omitempty"`
 	LeadAgentID          string   `json:"lead_agent_id,omitempty"`
 	LeadParticipantID    string   `json:"lead_participant_id,omitempty"`
@@ -101,8 +100,10 @@ type CreateTeamRequest struct {
 }
 
 type PatchTeamRequest struct {
-	Title  string `json:"title,omitempty"`
-	Status string `json:"status,omitempty"`
+	Title          string   `json:"title,omitempty"`
+	LeadAgentID    string   `json:"lead_agent_id,omitempty"`
+	MemberAgentIDs []string `json:"member_agent_ids,omitempty"`
+	Status         string   `json:"status,omitempty"`
 }
 
 type CreateTeamTaskRequest struct {
@@ -117,8 +118,9 @@ type CreateTeamTaskRequest struct {
 }
 
 type CreateTeamTasksBatchRequest struct {
-	CreatedBy string                       `json:"created_by"`
-	Tasks     []CreateTeamBatchTaskRequest `json:"tasks"`
+	CreatedBy        string                       `json:"created_by"`
+	ExecutionChannel string                       `json:"execution_channel,omitempty"`
+	Tasks            []CreateTeamBatchTaskRequest `json:"tasks"`
 }
 
 type CreateTeamBatchTaskRequest struct {

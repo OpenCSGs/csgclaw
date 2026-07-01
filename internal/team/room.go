@@ -13,7 +13,7 @@ func EventRoomID(meta TeamMeta, task *TeamTask) string {
 			return roomID
 		}
 	}
-	return strings.TrimSpace(meta.RoomID)
+	return ""
 }
 
 // TaskExecutionRoomTitle formats a human-readable execution room title with task id.
@@ -34,9 +34,7 @@ func TaskExecutionRoomTitle(task TeamTask) string {
 
 // ExecutionRoomBound reports whether the task already has a dedicated execution room.
 func ExecutionRoomBound(task TeamTask, meta TeamMeta) bool {
-	roomID := strings.TrimSpace(task.RoomID)
-	teamRoom := strings.TrimSpace(meta.RoomID)
-	return roomID != "" && roomID != teamRoom
+	return strings.TrimSpace(task.RoomID) != ""
 }
 
 func normalizeTeamActorID(meta TeamMeta, actorID string) string {
