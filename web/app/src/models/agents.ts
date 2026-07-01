@@ -1158,6 +1158,23 @@ export function draftToProfile(draft: AgentDraft, options: DraftProfileOptions =
   };
 }
 
+export function draftToProfileComparePayload(draft: AgentDraft, options: DraftProfileOptions = {}): JSONRecord {
+  void options;
+  const requestOptions = parseJSONMapForCompare(draft.requestOptionsText);
+  const modelProviderID = String(draft.model_provider_id || "").trim();
+  return {
+    model_provider_id: modelProviderID,
+    base_url: "",
+    api_key: "",
+    model_id: draft.model_id,
+    reasoning_effort: draft.reasoning_effort || DEFAULT_REASONING_EFFORT,
+    enable_fast_mode: Boolean(draft.enable_fast_mode),
+    headers: {},
+    request_options: requestOptions,
+    env: envRowsToMapForCompare(draft.envRows),
+  };
+}
+
 export function draftNotifierDetailsFromDraft(draft: Partial<AgentDraft> | null | undefined): JSONRecord | null {
   if (!draft) {
     return null;
@@ -1392,6 +1409,40 @@ export function envRowsToMap(rows: readonly EnvKeyValueRow[] | null | undefined)
   return result;
 }
 
+function envRowsToMapForCompare(rows: readonly EnvKeyValueRow[] | null | undefined): JSONRecord {
+  const result: Record<string, string> = {};
+  const invalidRows: EnvKeyValueRow[] = [];
+  const seen = new Set<string>();
+  for (const row of rows ?? []) {
+    const key = String(row?.key ?? "").trim();
+    const value = String(row?.value ?? "");
+    if (!key && !value.trim()) {
+      continue;
+    }
+    if (!key) {
+      invalidRows.push({ key, value });
+      continue;
+    }
+    if (!value.trim()) {
+      continue;
+    }
+    const normalized = key.toUpperCase();
+    if (seen.has(normalized)) {
+      invalidRows.push({ key, value });
+      continue;
+    }
+    seen.add(normalized);
+    result[key] = value;
+  }
+  if (invalidRows.length === 0) {
+    return result;
+  }
+  return {
+    ...result,
+    __invalid_env_rows: invalidRows,
+  };
+}
+
 export function isAgentRunning(item: AgentLike | null | undefined): boolean {
   if (isNotificationBotAgent(item)) {
     return item?.available === true;
@@ -1426,7 +1477,7 @@ export function llmProfilePayloadForCompare(draft: AgentDraft | null | undefined
     return "";
   }
   const normalized = ensureNotifierPullSubscriptionDraft(draft);
-  const profile = draftToProfile(normalized, {
+  const profile = draftToProfileComparePayload(normalized, {
     name: normalized.name,
     description: normalized.description,
   });
@@ -1560,6 +1611,16 @@ export function parseJSONMap(text: unknown): JSONRecord {
     throw new Error("Expected a JSON object");
   }
   return parsed as JSONRecord;
+}
+
+function parseJSONMapForCompare(text: unknown): JSONRecord {
+  try {
+    return parseJSONMap(text);
+  } catch {
+    return {
+      __invalid_json_text: String(text ?? ""),
+    };
+  }
 }
 
 export function normalizeAuthProviderName(provider: unknown): string {

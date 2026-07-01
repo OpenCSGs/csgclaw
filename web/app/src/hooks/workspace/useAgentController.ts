@@ -57,6 +57,7 @@ import {
   defaultManagerRebuildImageForRuntime,
   defaultWorkerImageForRuntime,
   draftRuntimeOptionsForSave,
+  draftToProfileComparePayload,
   draftToProfile,
   ensureNotifierPullSubscriptionDraft,
   feishuAgentParticipant,
@@ -1072,7 +1073,7 @@ export function useAgentController({
       return "";
     }
     return JSON.stringify(
-      draftToProfile(normalized, {
+      draftToProfileComparePayload(normalized, {
         name: normalized.name,
         description: normalized.description,
       }),

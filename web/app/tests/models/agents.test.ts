@@ -15,6 +15,7 @@ import {
   draftNotifierRuntimeOptionsForSave,
   draftRuntimeOptionsForSave,
   draftToProfile,
+  draftToProfileComparePayload,
   ensureNotifierPullSubscriptionDraft,
   envRowsToMap,
   formatProviderLabel,
@@ -116,6 +117,28 @@ describe("agent model helpers", () => {
         { key: "PATH", value: "two" },
       ]),
     ).toThrow("Duplicate environment variable: PATH");
+  });
+
+  it("keeps draft comparison tolerant while env rows are still being edited", () => {
+    const savedDraft = agentToDraft({
+      agent_profile: {
+        env: { GITLAB_BASE_URL: "https://git-devops.opencsg.com" },
+        model_id: "gpt-test",
+        model_provider_id: "openai",
+      },
+      id: "worker-1",
+      name: "Worker",
+      role: "worker",
+    });
+    const editingDraft = {
+      ...savedDraft,
+      envRows: [...savedDraft.envRows, { key: "", value: "pending" }],
+    };
+
+    expect(() => draftToProfileComparePayload(editingDraft)).not.toThrow();
+    expect(agentPageLLMProfileChanged(editingDraft, savedDraft)).toBe(true);
+    expect(agentProfilePageSaveDisabled(editingDraft, { id: "worker-1" }, { savedDraft })).toBe(false);
+    expect(() => envRowsToMap(editingDraft.envRows)).toThrow("Environment variable key is required");
   });
 
   it("merges a fresh action response into the existing agent list", () => {
