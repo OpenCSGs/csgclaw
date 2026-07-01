@@ -60,6 +60,7 @@ export function WorkspaceSidebar({
   upgradeBusy,
   upgradePhase,
   upgradeError,
+  suppressUpgradeIssue,
   onOpenUpgrade,
   onOpenConfigSettings,
   onLogin,
@@ -97,6 +98,7 @@ export function WorkspaceSidebar({
             upgradeBusy={upgradeBusy}
             upgradePhase={upgradePhase}
             upgradeError={upgradeError}
+            suppressUpgradeIssue={suppressUpgradeIssue}
             showUpgradeControls={showUpgradeControls}
             onOpenUpgrade={onOpenUpgrade}
             onOpenConfigSettings={onOpenConfigSettings}

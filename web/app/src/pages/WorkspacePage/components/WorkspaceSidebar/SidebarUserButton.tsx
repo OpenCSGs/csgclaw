@@ -21,6 +21,7 @@ type SidebarUserButtonProps = {
   upgradeBusy?: boolean;
   upgradePhase?: UpgradePhase;
   upgradeError?: string;
+  suppressUpgradeIssue?: boolean;
   showUpgradeControls?: boolean;
   onOpenUpgrade?: () => void;
   onOpenConfigSettings?: () => void;
@@ -43,6 +44,7 @@ export function SidebarUserButton({
   upgradeBusy = false,
   upgradePhase = "idle",
   upgradeError = "",
+  suppressUpgradeIssue = false,
   showUpgradeControls = true,
   onOpenUpgrade,
   onOpenConfigSettings,
@@ -63,7 +65,8 @@ export function SidebarUserButton({
     showUpgradeControls && !localBuild && upgradeStatus?.auto_upgrade_supported !== false;
   const upgradeAttention = upgradeControlsAvailable && hasUpgradeAttention(upgradeStatus, upgradePhase, upgradeBusy);
   const upgradeRunning = upgradeControlsAvailable ? upgradeBusy || Boolean(upgradeStatus?.upgrading) : false;
-  const upgradeIssue = upgradeControlsAvailable ? upgradeError || upgradeStatus?.last_error || "" : "";
+  const upgradeIssue =
+    upgradeControlsAvailable && !suppressUpgradeIssue ? upgradeError || upgradeStatus?.last_error || "" : "";
   const upgradeView = upgradeControlsAvailable
     ? {
         actionLabel: upgradeMenuActionText({

@@ -291,6 +291,7 @@ export function useAgentController({
   const [agentsError, setAgentsError] = useState("");
   const [showAgentModal, setShowAgentModal] = useState(false);
   const [showManagerRebuildModal, setShowManagerRebuildModal] = useState(false);
+  const [managerRebuildError, setManagerRebuildError] = useState("");
   const [managerRebuildRuntimeKind, setManagerRebuildRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
   const [managerRebuildImage, setManagerRebuildImage] = useState("");
   const [agentModalMode, setAgentModalMode] = useState<AgentModalMode>("create");
@@ -537,6 +538,26 @@ export function useAgentController({
     [],
   );
 
+  function agentOperationUsesPageError(item: AgentLike | null | undefined): boolean {
+    return Boolean(item?.id && activePane.type === WorkspacePaneTypes.agent && activePane.id === item.id);
+  }
+
+  function clearAgentOperationError(item: AgentLike | null | undefined): void {
+    if (agentOperationUsesPageError(item)) {
+      setAgentPageError("");
+      return;
+    }
+    setAgentsError("");
+  }
+
+  function setAgentOperationError(item: AgentLike | null | undefined, message: string): void {
+    if (agentOperationUsesPageError(item)) {
+      setAgentPageError(message);
+      return;
+    }
+    setAgentsError(message);
+  }
+
   useEffect(() => {
     if (!progressBusy || !agentProgress?.steps?.length) {
       return undefined;
@@ -666,12 +687,14 @@ export function useAgentController({
     );
     setManagerRebuildRuntimeKind(resolvedRuntimeKind);
     setManagerRebuildImage(resolvedImage);
+    setManagerRebuildError("");
     setShowManagerRebuildModal(true);
   }
 
   function updateManagerRebuildRuntimeKind(runtimeKind: string): void {
     const nextRuntimeKind = normalizeRuntimeKind(runtimeKind);
     setManagerRebuildRuntimeKind(nextRuntimeKind);
+    setManagerRebuildError("");
     setManagerRebuildImage(
       defaultManagerRebuildImageForRuntime(
         managerTemplateVariants,
@@ -700,7 +723,7 @@ export function useAgentController({
 
   async function rebuildManagerFromBrowser(options: ManagerRebuildOptions = {}): Promise<boolean> {
     setAgentActionBusy(`${MANAGER_AGENT_ID}:recreate`);
-    setAgentsError("");
+    setManagerRebuildError("");
     const runtimeKind = normalizeRuntimeKind(
       options.runtimeKind ||
         managerAgent?.runtime_kind ||
@@ -718,7 +741,7 @@ export function useAgentController({
       return true;
     } catch (err) {
       setAgentProgress((current) => (current ? { ...current, status: "failed" } : current));
-      setAgentsError(errorMessage(err, t("agentActionFailed")));
+      setManagerRebuildError(errorMessage(err, t("agentActionFailed")));
       return false;
     } finally {
       setAgentActionBusy("");
@@ -1376,7 +1399,7 @@ export function useAgentController({
       return;
     }
     setAgentActionBusy(`${item.id}:${action}`);
-    setAgentsError("");
+    clearAgentOperationError(item);
     try {
       let updatedAgent: AgentLike | null = null;
       if (action === "delete") {
@@ -1395,7 +1418,7 @@ export function useAgentController({
         }
       }
     } catch (err) {
-      setAgentsError(errorMessage(err, t("agentActionFailed")));
+      setAgentOperationError(item, errorMessage(err, t("agentActionFailed")));
     } finally {
       setAgentActionBusy("");
     }
@@ -1578,7 +1601,7 @@ export function useAgentController({
       return false;
     }
     setAgentActionBusy(`${item.id}:delete-bot`);
-    setAgentsError("");
+    clearAgentOperationError(item);
     try {
       await deleteBotRequest(csgclawParticipantIDForAgent(item));
       await refreshAgents();
@@ -1588,7 +1611,7 @@ export function useAgentController({
       }
       return true;
     } catch (err) {
-      setAgentsError(errorMessage(err, t("agentActionFailed")));
+      setAgentOperationError(item, errorMessage(err, t("agentActionFailed")));
       return false;
     } finally {
       setAgentActionBusy("");
@@ -1600,7 +1623,7 @@ export function useAgentController({
       return;
     }
     if (!options.silent) {
-      setAgentsError("");
+      clearAgentOperationError(item);
     }
     try {
       await joinAgentToRoomRequest({
@@ -1612,7 +1635,7 @@ export function useAgentController({
       await refreshWorkspaceBootstrap();
     } catch (err) {
       if (!options.silent) {
-        setAgentsError(errorMessage(err, t("agentActionFailed")));
+        setAgentOperationError(item, errorMessage(err, t("agentActionFailed")));
       }
     }
   }
@@ -1767,7 +1790,7 @@ export function useAgentController({
       return;
     }
 
-    setAgentsError("");
+    clearAgentOperationError(item);
     try {
       let nextData = null;
       let direct = directConversationForUser(channelUserID);
@@ -1786,13 +1809,13 @@ export function useAgentController({
       }
 
       if (!direct) {
-        setAgentsError(t("agentActionFailed"));
+        setAgentOperationError(item, t("agentActionFailed"));
         return;
       }
       const nextRooms = nextData?.rooms ?? rooms;
       selectConversation(direct.id, { rooms: nextRooms });
     } catch (err) {
-      setAgentsError(errorMessage(err, t("agentActionFailed")));
+      setAgentOperationError(item, errorMessage(err, t("agentActionFailed")));
     }
   }
 
@@ -1831,7 +1854,7 @@ export function useAgentController({
       t,
       locale,
       busyKey: agentActionBusy,
-      error: agentsDisplayError,
+      error: "",
       draft: agentPageDraft,
       savedDraft: agentPageSavedDraft,
       hasUnsavedChanges: agentPageHasUnsavedChanges,
@@ -1926,11 +1949,12 @@ export function useAgentController({
           runtimeKind: managerRebuildRuntimeKind,
           image: managerRebuildImage,
           busy: agentActionBusy === `${MANAGER_AGENT_ID}:recreate`,
-          error: agentsError,
+          error: managerRebuildError,
           progress: agentProgress,
           onRuntimeKindChange: updateManagerRebuildRuntimeKind,
           onClose: () => {
             setShowManagerRebuildModal(false);
+            setManagerRebuildError("");
             setAgentProgress(null);
           },
           onConfirm: confirmManagerRebuild,

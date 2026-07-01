@@ -87,6 +87,7 @@ export type WorkspaceSidebarProps = {
   upgradeError: string;
   upgradePhase: UpgradePhase;
   upgradeStatus: UpgradeStatus | null;
+  suppressUpgradeIssue?: boolean;
   teamActionBusy: boolean;
   teamActionError: string;
   usersById: UsersById;

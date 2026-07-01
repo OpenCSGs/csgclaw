@@ -654,6 +654,7 @@ export function useWorkspaceController() {
       upgradeBusy: upgrade.upgradeBusy,
       upgradePhase: upgrade.upgradePhase,
       upgradeError: upgrade.upgradeError,
+      suppressUpgradeIssue: upgrade.showUpgradeModal,
       onOpenUpgrade: upgrade.openUpgradeModal,
       onOpenConfigSettings: configSettings.openConfigModal,
       authStatus: auth.status,
