@@ -19,6 +19,7 @@ const labels: Record<string, string> = {
   profileRestartRequired: "Restart required",
   profileRuntimeKind: "Runtime",
   roleLabel: "Role",
+  runtimeCodexCLI: "Codex CLI",
   runtimeOpenclaw: "OpenClaw",
   runtimePicoclaw: "PicoClaw",
   personProfile: "Person profile",
@@ -62,7 +63,7 @@ describe("ProfilePreviewPopover", () => {
     expect(within(fields as HTMLElement).getByText("RUNTIME")).toBeInTheDocument();
     expect(within(fields as HTMLElement).getByText("PROVIDER")).toBeInTheDocument();
     expect(within(fields as HTMLElement).getByText("MODEL")).toBeInTheDocument();
-    expect(within(fields as HTMLElement).getByText("Codex")).toBeInTheDocument();
+    expect(within(fields as HTMLElement).getByText("Codex CLI")).toBeInTheDocument();
     expect(within(fields as HTMLElement).getByText("OpenAI API")).toBeInTheDocument();
     expect(within(fields as HTMLElement).getByText("gpt-5.5(medium)")).toBeInTheDocument();
     expect(within(fields as HTMLElement).queryByText("Reasoning")).not.toBeInTheDocument();

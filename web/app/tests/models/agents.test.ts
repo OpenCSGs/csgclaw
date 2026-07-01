@@ -11,6 +11,8 @@ import {
   agentDraftWithRuntimeFieldsFromAgent,
   agentRuntimePollSettled,
   agentStatusLabel,
+  agentSandboxEnabled,
+  agentRuntimeName,
   agentConnectedChannels,
   draftNotifierRuntimeOptionsForSave,
   draftRuntimeOptionsForSave,
@@ -38,6 +40,7 @@ import {
   pickDefaultAgentTemplate,
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
+  resolveRuntimeSelection,
   resolveAgentChannelUserID,
   resolveAgentAvatarSource,
   runtimeImageForKind,
@@ -203,6 +206,43 @@ describe("agent model helpers", () => {
       model_id: "gpt-5.5",
       provider: "codex",
       runtime_kind: "picoclaw_sandbox",
+    });
+  });
+
+  it("resolves split runtime fields from legacy runtime kind", () => {
+    expect(resolveRuntimeSelection({ runtime_kind: "openclaw_sandbox" })).toEqual({
+      runtime_kind: "openclaw_sandbox",
+      runtime_name: "openclaw",
+      sandbox_enabled: true,
+    });
+    expect(agentRuntimeName({ runtime_kind: "codex" })).toBe("codex");
+    expect(agentSandboxEnabled({ runtime_kind: "codex" })).toBe(false);
+  });
+
+  it("keeps runtime fields in sync when applying a worker template", () => {
+    const draft = applyTemplateToDraft(
+      {
+        ...agentToDraft({
+          runtime_kind: "picoclaw_sandbox",
+          runtime_name: "picoclaw",
+          sandbox_enabled: true,
+          role: "worker",
+        }),
+        default_image: "worker:default",
+      },
+      {
+        id: "builtin.openclaw-worker",
+        runtime_kind: "openclaw_sandbox",
+        role: "worker",
+      },
+      null,
+      "worker:default",
+    );
+
+    expect(draft).toMatchObject({
+      runtime_kind: "openclaw_sandbox",
+      runtime_name: "openclaw",
+      sandbox_enabled: true,
     });
   });
 

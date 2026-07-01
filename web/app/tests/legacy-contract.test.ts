@@ -33,7 +33,8 @@ describe("legacy UI contract", () => {
     expect(source).toContain('post("api/v1/agents", payload)');
     expect(source).toContain('id: "u-manager",');
     expect(source).toContain("replace: true,");
-    expect(source).toContain("payload.runtime_kind = options.runtime_kind;");
+    expect(source).toContain("const runtimeSelection = resolveRuntimeSelection({ runtime_kind: options.runtime_kind });");
+    expect(source).toContain("payload.runtime = {");
     expect(source).not.toContain("payload.image = options.image;");
     expect(source).toContain("const rebuiltAgent = await createManagerAgentRequest");
     expect(source).toContain("await refreshAgentsWithUpdatedAgent(rebuiltAgent);");

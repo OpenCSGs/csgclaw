@@ -1618,6 +1618,39 @@
   white-space: normal;
 }
 
+.profile-modal.agent-modal .agent-sandbox-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.profile-modal.agent-modal .agent-sandbox-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-modal.agent-modal .agent-sandbox-copy strong {
+  color: var(--text);
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--text-sm-line-height);
+}
+
+.profile-modal.agent-modal .agent-sandbox-copy small {
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--text-xs-line-height);
+  white-space: normal;
+}
+
+.profile-modal.agent-modal .agent-sandbox-field input[type="checkbox"] {
+  margin: 1px 0 0;
+}
+
 .selection-item:hover {
   border-color: color-mix(in srgb, var(--success-400) 38%, transparent);
 }

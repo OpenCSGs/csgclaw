@@ -54,6 +54,7 @@ import {
   isAgentProfileMarkedComplete,
   availableManagerRebuildRuntimeOptions,
   collectManagerTemplateVariants,
+  composeLegacyRuntimeKind,
   defaultManagerRebuildImageForRuntime,
   defaultWorkerImageForRuntime,
   draftRuntimeOptionsForSave,
@@ -70,14 +71,16 @@ import {
   notifierFormIsComplete,
   mergeAgentIntoList,
   normalizeAuthProviderName,
+  normalizeRuntimeName,
+  normalizeTemplateSelection,
   partitionWorkspaceAgentItems,
+  pickDefaultAgentTemplate,
   resolveAgentAvatarSource,
   normalizeRuntimeKind,
-  normalizeTemplateSelection,
-  pickDefaultAgentTemplate,
   profileSelectorFromDraft,
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
+  resolveRuntimeSelection,
   resolveAgentChannelUserID,
   shouldWaitForManagerRuntimeAfterProfileSave,
   startAgentCreateProgress,
@@ -958,22 +961,43 @@ export function useAgentController({
     setAgentError("");
     setAgentProgress(null);
     resetAgentModels();
-    const preferredRuntimeKind =
+    const runtimeChoices = Array.isArray(bootstrapConfig?.worker_runtime_choices)
+      ? bootstrapConfig.worker_runtime_choices
+      : [];
+    const codexAvailable = runtimeChoices.some(
+      (item) => !item?.sandbox_enabled && normalizeRuntimeName(item?.name) === "codex" && item?.installed !== false,
+    );
+    let preferredRuntimeKind =
       normalizeRuntimeKind(bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "") || DEFAULT_RUNTIME_KIND;
+    if (preferredRuntimeKind === "codex" && !codexAvailable) {
+      preferredRuntimeKind =
+        normalizeRuntimeKind(
+          composeLegacyRuntimeKind(
+            normalizeRuntimeName(runtimeChoices.find((item) => item?.sandbox_enabled)?.name || "picoclaw"),
+            true,
+          ),
+        ) || DEFAULT_RUNTIME_KIND;
+    }
     const selectedTemplate =
       template === undefined
         ? pickDefaultAgentTemplate(hubTemplates, preferredRuntimeKind, bootstrapConfig)
         : normalizeTemplateSelection(template);
     try {
       const defaults = await fetchAgentProfileDefaults();
-      const runtimeKind =
-        normalizeRuntimeKind(
-          selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
-        ) || DEFAULT_RUNTIME_KIND;
+      const initialRuntime = resolveRuntimeSelection({
+        runtime_kind: selectedTemplate?.runtime_kind || preferredRuntimeKind,
+      });
       let draft = agentToDraft({
         avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
-        image: defaultWorkerImageForRuntime(hubTemplates, runtimeKind, bootstrapConfig, managerAgent?.image || ""),
-        runtime_kind: runtimeKind,
+        image: defaultWorkerImageForRuntime(
+          hubTemplates,
+          initialRuntime.runtime_kind,
+          bootstrapConfig,
+          managerAgent?.image || "",
+        ),
+        runtime_name: initialRuntime.runtime_name,
+        sandbox_enabled: initialRuntime.sandbox_enabled,
+        runtime_kind: initialRuntime.runtime_kind,
         bot_type: BOT_TYPE_NORMAL,
         agent_profile: defaults,
       });
@@ -982,14 +1006,20 @@ export function useAgentController({
       setAgentDraft(draft);
       setShowAgentModal(true);
     } catch (_) {
-      const runtimeKind =
-        normalizeRuntimeKind(
-          selectedTemplate?.runtime_kind || bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "",
-        ) || DEFAULT_RUNTIME_KIND;
+      const initialRuntime = resolveRuntimeSelection({
+        runtime_kind: selectedTemplate?.runtime_kind || preferredRuntimeKind,
+      });
       let draft = agentToDraft({
         avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
-        image: defaultWorkerImageForRuntime(hubTemplates, runtimeKind, bootstrapConfig, managerAgent?.image || ""),
-        runtime_kind: runtimeKind,
+        image: defaultWorkerImageForRuntime(
+          hubTemplates,
+          initialRuntime.runtime_kind,
+          bootstrapConfig,
+          managerAgent?.image || "",
+        ),
+        runtime_name: initialRuntime.runtime_name,
+        sandbox_enabled: initialRuntime.sandbox_enabled,
+        runtime_kind: initialRuntime.runtime_kind,
         bot_type: BOT_TYPE_NORMAL,
         agent_profile: managerProfile,
       });
@@ -1280,7 +1310,12 @@ export function useAgentController({
       editingAgent,
       isCreate ? agentCreateBotKind : undefined,
     );
-    const runtimeKind = normalizeRuntimeKind(agentDraft.runtime_kind) || DEFAULT_RUNTIME_KIND;
+    const runtimeSelection = resolveRuntimeSelection({
+      runtime_kind: agentDraft.runtime_kind,
+      runtime_name: agentDraft.runtime_name,
+      sandbox_enabled: agentDraft.sandbox_enabled,
+    });
+    const runtimeKind = normalizeRuntimeKind(runtimeSelection.runtime_kind) || DEFAULT_RUNTIME_KIND;
     setAgentProgress(isCreate ? startAgentCreateProgress(isNotification ? BOT_TYPE_NOTIFICATION : runtimeKind) : null);
     try {
       const draft = ensureNotifierPullSubscriptionDraft(agentDraft);
@@ -1329,7 +1364,9 @@ export function useAgentController({
         role: WORKER_AGENT_ROLE,
         description: agentDraft.description,
         instructions: agentDraft.instructions,
-        image: agentDraft.image,
+        image: runtimeSelection.sandbox_enabled ? agentDraft.image : "",
+        runtime_name: runtimeSelection.runtime_name,
+        sandbox_enabled: runtimeSelection.sandbox_enabled,
         runtime_kind: runtimeKind,
         from_template: agentDraft.from_template || "",
         agent_profile: profile,

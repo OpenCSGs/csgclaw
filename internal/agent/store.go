@@ -276,6 +276,8 @@ func (a persistedAgent) toAgent() Agent {
 		Instructions:     a.Instructions,
 		RuntimeID:        runtimeID,
 		RuntimeKind:      runtimeKind,
+		RuntimeName:      runtimeNameForKind(runtimeKind),
+		SandboxEnabled:   sandboxEnabledForKind(runtimeKind),
 		Image:            a.Image,
 		Avatar:           a.Avatar,
 		BoxID:            boxID,

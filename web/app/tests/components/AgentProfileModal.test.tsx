@@ -12,6 +12,10 @@ const labels: Record<string, string> = {
   agentName: "Name",
   agentNamePlaceholder: "For example: dev",
   close: "Close",
+  createAgentKindNotification: "Notification bot",
+  createAgentKindNotificationDescription: "Send events to an external webhook endpoint.",
+  createAgentKindWorker: "Worker",
+  createAgentKindWorkerDescription: "Run on your local runtime using built-in connectors.",
   editAgentSubtitle: "Change runtime settings.",
   editAgentTitle: "Edit Agent",
   profileBasics: "Basics",
@@ -22,8 +26,14 @@ const labels: Record<string, string> = {
   profileRuntimeOptions: "Runtime Options",
   profileProvider: "Provider",
   profileRuntimeKind: "Runtime",
+  profileSandboxEnabled: "Sandbox",
+  profileSandboxEnabledHelp:
+    "When enabled, the agent runs tasks in an isolated environment. When disabled, it uses the local runtime.",
   runtimeOpenclaw: "OpenClaw",
   runtimePicoclaw: "PicoClaw",
+  runtimeCodexCLI: "Codex CLI",
+  statusEnabled: "Enabled",
+  statusDisabled: "Disabled",
   templateLabel: "Template",
   templateNone: "No template",
 };
@@ -217,6 +227,101 @@ describe("AgentProfileModal", () => {
     expect(screen.getByText("留空时使用默认 Agent 工作目录。")).toBeInTheDocument();
   });
 
+  it("shows sandbox help text in worker create mode", () => {
+    render(
+      <AgentProfileModal
+        t={t}
+        agentModalMode="create"
+        editingAgent={null}
+        agentDraft={agentToDraft(worker)}
+        onAgentDraftChange={vi.fn()}
+        onAgentModelsReset={vi.fn()}
+        hubTemplates={[]}
+        bootstrapConfig={{}}
+        managerAgent={null}
+        agentModels={[]}
+        agentModelBusy={false}
+        locale="en"
+        authStatuses={{}}
+        authBusyProvider=""
+        agentCreateBotKind="worker"
+        onAgentCreateBotKindChange={vi.fn()}
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onProviderLogin={vi.fn()}
+        agentError=""
+        agentProgress={null}
+        agentBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "When enabled, the agent runs tasks in an isolated environment. When disabled, it uses the local runtime.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Enabled")).toBeInTheDocument();
+  });
+
+  it("falls back to sandbox worker runtime when switching back from notification and Codex is unavailable", async () => {
+    const user = userEvent.setup();
+    function TestModal() {
+      const [draft, setDraft] = useState<AgentDraft>({
+        ...agentToDraft(worker),
+        runtime_name: "picoclaw",
+        sandbox_enabled: true,
+        runtime_kind: "picoclaw_sandbox",
+      });
+      const [kind, setKind] = useState("worker");
+      return (
+        <AgentProfileModal
+          t={t}
+          agentModalMode="create"
+          editingAgent={null}
+          agentDraft={draft}
+          onAgentDraftChange={(update) =>
+            setDraft((current) => {
+              const next = typeof update === "function" ? update(current) : update;
+              return next ?? current;
+            })
+          }
+          onAgentModelsReset={vi.fn()}
+          hubTemplates={[]}
+          bootstrapConfig={{
+            worker_runtime_choices: [
+              { name: "codex", sandbox_enabled: false, installed: false, label: "Codex CLI" },
+              { name: "picoclaw", sandbox_enabled: true, installed: true, label: "PicoClaw" },
+            ],
+          }}
+          managerAgent={null}
+          agentModels={[]}
+          agentModelBusy={false}
+          locale="en"
+          authStatuses={{}}
+          authBusyProvider=""
+          agentCreateBotKind={kind}
+          onAgentCreateBotKindChange={setKind}
+          notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+          onProviderLogin={vi.fn()}
+          agentError=""
+          agentProgress={null}
+          agentBusy={false}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      );
+    }
+
+    render(<TestModal />);
+
+    await user.click(screen.getByRole("tab", { name: /Notification bot/i }));
+    await user.click(screen.getByRole("tab", { name: /Worker/i }));
+
+    expect(screen.getByText("Enabled")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Runtime" })).toHaveTextContent("PicoClaw");
+  });
+
   it("hides manager templates from the worker template dropdown in create mode", async () => {
     const user = userEvent.setup();
 
@@ -316,6 +421,11 @@ describe("AgentProfileModal", () => {
               picoclaw_sandbox: "picoclaw:worker",
             },
             runtime_kind: "picoclaw_sandbox",
+            worker_runtime_choices: [
+              { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
+              { name: "openclaw", sandbox_enabled: true, installed: true, label: "OpenClaw" },
+              { name: "picoclaw", sandbox_enabled: true, installed: true, label: "PicoClaw" },
+            ],
           }}
           managerAgent={{ ...worker, image: "picoclaw:manager" }}
           agentModels={[]}
@@ -345,6 +455,8 @@ describe("AgentProfileModal", () => {
         from_template: "",
         image: "openclaw:worker",
         runtime_kind: "openclaw_sandbox",
+        runtime_name: "openclaw",
+        sandbox_enabled: true,
       }),
     );
   });

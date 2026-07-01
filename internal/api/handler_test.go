@@ -1895,7 +1895,7 @@ func TestHandleAgentsCreateWorkerUsesRequestedRuntimeKind(t *testing.T) {
 		svc: svc,
 		im:  im.NewService(),
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_kind":"codex"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_name":"codex"}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -1912,6 +1912,50 @@ func TestHandleAgentsCreateWorkerUsesRequestedRuntimeKind(t *testing.T) {
 	}
 	if got.BoxID != "codex-alice" {
 		t.Fatalf("agent BoxID = %q, want %q", got.BoxID, "codex-alice")
+	}
+}
+
+func TestHandleAgentsCreateWorkerSupportsLegacyRuntimeKindRequest(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	svc, err := agent.NewService(
+		config.ModelConfig{
+			Provider: config.ProviderLLMAPI,
+			BaseURL:  "http://127.0.0.1:4000",
+			APIKey:   "sk-test",
+			ModelID:  "model-1",
+		},
+		config.ServerConfig{}, "manager-image:test", "",
+		agent.WithRuntime(fakeCompatRuntime{
+			kind: agent.RuntimeKindCodex,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-" + spec.AgentName}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	srv := &Handler{
+		svc: svc,
+		im:  im.NewService(),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_kind":"codex"}`))
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var got agent.Agent
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.RuntimeKind != agent.RuntimeKindCodex {
+		t.Fatalf("agent runtime kind = %q, want %q", got.RuntimeKind, agent.RuntimeKindCodex)
 	}
 }
 
@@ -1944,7 +1988,7 @@ func TestHandleAgentsCreateCodexWorkerEnsuresCodexBridge(t *testing.T) {
 		svc: svc,
 		im:  im.NewService(),
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_kind":"codex","agent_profile":{"profile_complete":true}}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_name":"codex","agent_profile":{"profile_complete":true}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -2058,7 +2102,7 @@ func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 	got := agentCreateRequestFromAPI(apitypes.CreateAgentRequest{
 		Name:         "alice",
 		Instructions: "follow AGENTS",
-		RuntimeKind:  agent.RuntimeKindCodex,
+		RuntimeName:  agent.RuntimeNameCodex,
 		FromTemplate: "builtin.frontend-alice",
 		Profile:      "codex-fast",
 	})
@@ -2066,8 +2110,8 @@ func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 	if got.Spec.Name != "alice" {
 		t.Fatalf("Spec.Name = %q, want %q", got.Spec.Name, "alice")
 	}
-	if got.Spec.RuntimeKind != agent.RuntimeKindCodex {
-		t.Fatalf("Spec.RuntimeKind = %q, want %q", got.Spec.RuntimeKind, agent.RuntimeKindCodex)
+	if got.Spec.RuntimeName != agent.RuntimeNameCodex || got.Spec.SandboxEnabled {
+		t.Fatalf("Spec runtime = %q/%t, want %q/%t", got.Spec.RuntimeName, got.Spec.SandboxEnabled, agent.RuntimeNameCodex, false)
 	}
 	if got.Spec.FromTemplate != "builtin.frontend-alice" {
 		t.Fatalf("Spec.FromTemplate = %q, want %q", got.Spec.FromTemplate, "builtin.frontend-alice")
@@ -3460,7 +3504,7 @@ func TestHandleAgentsCreateReplaceManagerIgnoresImageAndUsesRuntimeTemplate(t *t
 	resp, err := http.Post(
 		srv.URL+"/api/v1/agents",
 		"application/json",
-		strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"runtime_kind":"openclaw_sandbox","image":"client:must-not-win"}`),
+		strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"runtime_name":"openclaw","sandbox_enabled":true,"image":"client:must-not-win"}`),
 	)
 	if err != nil {
 		t.Fatalf("POST /api/v1/agents error = %v", err)
@@ -3813,6 +3857,12 @@ func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T)
 	}
 	if created.Name != "qa" || created.Role != agent.RoleWorker {
 		t.Fatalf("agent = %+v, want qa worker", created)
+	}
+	if created.RuntimeKind != agent.RuntimeKindPicoClawSandbox {
+		t.Fatalf("agent runtime kind = %q, want %q", created.RuntimeKind, agent.RuntimeKindPicoClawSandbox)
+	}
+	if strings.TrimSpace(created.Image) == "" {
+		t.Fatal("agent Image = empty, want default sandbox image")
 	}
 
 	participants := participantSvc.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent})

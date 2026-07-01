@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"csgclaw/internal/codexcli"
 	"csgclaw/internal/config"
 	"csgclaw/internal/identity"
 	agentruntime "csgclaw/internal/runtime"
@@ -45,6 +46,9 @@ const (
 var localIPv4Resolver = localIPv4
 
 var osRemoveAll = os.RemoveAll
+var locateCodexCLI = func() (string, error) {
+	return codexcli.Locator{}.Locate()
+}
 
 var defaultSandboxProvider sandbox.Provider = unconfiguredSandboxProvider{}
 var testDefaultServiceOption ServiceOption
@@ -1104,13 +1108,22 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 		if strings.TrimSpace(spec.Avatar) == "" {
 			spec.Avatar = existing.Avatar
 		}
-		if strings.TrimSpace(spec.RuntimeKind) == "" {
+		if strings.TrimSpace(spec.RuntimeKind) == "" && strings.TrimSpace(spec.RuntimeName) == "" {
 			spec.RuntimeKind = existing.RuntimeKind
+			spec.RuntimeName = existing.RuntimeName
+			spec.SandboxEnabled = existing.SandboxEnabled
 		}
 		if strings.TrimSpace(spec.Role) == "" {
 			spec.Role = existing.Role
 		}
 	}
+	runtimeKind, runtimeName, sandboxEnabled, err := resolveRuntimeSelection(spec.RuntimeKind, spec.RuntimeName, spec.SandboxEnabled)
+	if err != nil {
+		return Agent{}, err
+	}
+	spec.RuntimeKind = runtimeKind
+	spec.RuntimeName = runtimeName
+	spec.SandboxEnabled = sandboxEnabled
 
 	if isManagerAgent(existing) || isManagerCreateSpec(spec) {
 		managerImageOverride := s.managerImageOverrideForReplace(ctx, existing, spec.RuntimeKind)
@@ -1150,6 +1163,8 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 		Image:          existing.Image,
 		Avatar:         existing.Avatar,
 		RuntimeKind:    existing.RuntimeKind,
+		RuntimeName:    existing.RuntimeName,
+		SandboxEnabled: existing.SandboxEnabled,
 		Role:           existing.Role,
 		Status:         existing.Status,
 		CreatedAt:      existing.CreatedAt,
@@ -1177,6 +1192,19 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 			merged.Avatar = next.Avatar
 		case "runtime_kind":
 			merged.RuntimeKind = next.RuntimeKind
+			merged.RuntimeName = next.RuntimeName
+			merged.SandboxEnabled = next.SandboxEnabled
+		case "runtime_name":
+			merged.RuntimeKind = next.RuntimeKind
+			merged.RuntimeName = next.RuntimeName
+		case "sandbox_enabled":
+			merged.RuntimeKind = next.RuntimeKind
+			merged.SandboxEnabled = next.SandboxEnabled
+		case "runtime":
+			merged.RuntimeKind = next.RuntimeKind
+			merged.RuntimeName = next.RuntimeName
+			merged.SandboxEnabled = next.SandboxEnabled
+			merged.RuntimeOptions = utils.CloneAnyMap(next.RuntimeOptions)
 		case "role":
 			merged.Role = next.Role
 		case "status":
@@ -1198,6 +1226,17 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 			return CreateAgentSpec{}, fmt.Errorf("unsupported agent field mask path %q", field)
 		}
 	}
+	runtimeKind, runtimeName, sandboxEnabled, err := resolveRuntimeSelection(
+		merged.RuntimeKind,
+		merged.RuntimeName,
+		merged.SandboxEnabled,
+	)
+	if err != nil {
+		return CreateAgentSpec{}, err
+	}
+	merged.RuntimeKind = runtimeKind
+	merged.RuntimeName = runtimeName
+	merged.SandboxEnabled = sandboxEnabled
 	return merged, nil
 }
 
@@ -1773,7 +1812,15 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	instructions := strings.TrimSpace(spec.Instructions)
 	image := strings.TrimSpace(spec.Image)
 	avatar := strings.TrimSpace(spec.Avatar)
-	runtimeKind := strings.TrimSpace(spec.RuntimeKind)
+	runtimeKindProvided := strings.TrimSpace(spec.RuntimeKind) != ""
+	runtimeNameProvided := strings.TrimSpace(spec.RuntimeName) != ""
+	runtimeKind, runtimeName, sandboxEnabled, err := resolveRuntimeSelection(spec.RuntimeKind, spec.RuntimeName, spec.SandboxEnabled)
+	if err != nil {
+		return Agent{}, err
+	}
+	spec.RuntimeName = runtimeName
+	spec.SandboxEnabled = sandboxEnabled
+	spec.RuntimeKind = runtimeKind
 	switch {
 	case name == "":
 		return Agent{}, fmt.Errorf("name is required")
@@ -1811,10 +1858,28 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		return Agent{}, fmt.Errorf("agent name %q already exists", name)
 	}
 	switch {
-	case runtimeKind == "":
+	case runtimeName == "":
 		return Agent{}, fmt.Errorf("runtime_kind is required")
-	case isGatewayRuntimeKind(runtimeKind) && image == "":
-		return Agent{}, fmt.Errorf("image is required for runtime_kind %q", runtimeKind)
+	case !sandboxEnabled && runtimeName != RuntimeNameCodex:
+		return Agent{}, fmt.Errorf("runtime_name %q requires sandbox_enabled=true", runtimeName)
+	case sandboxEnabled && runtimeName != RuntimeNameOpenClaw && runtimeName != RuntimeNamePicoClaw:
+		return Agent{}, fmt.Errorf("runtime_name %q is not supported with sandbox_enabled=true", runtimeName)
+	}
+	if !sandboxEnabled {
+		if _, err := locateCodexCLI(); err != nil {
+			return Agent{}, fmt.Errorf("codex cli not installed: %w", err)
+		}
+		image = ""
+	} else if image == "" {
+		if latest, ok := s.currentDefaultImageForAgent(ctx, Agent{Role: RoleWorker, RuntimeKind: runtimeKind}); ok {
+			image = strings.TrimSpace(latest.image)
+		}
+		if image == "" {
+			if runtimeNameProvided && !runtimeKindProvided {
+				return Agent{}, fmt.Errorf("default image is not configured for sandbox runtime %q", runtimeName)
+			}
+			return Agent{}, fmt.Errorf("image is required for runtime_kind %q", runtimeKind)
+		}
 	}
 
 	runtimeImpl, err := s.runtimeForKind(runtimeKind)
@@ -1859,14 +1924,14 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		defer func() {
 			_ = s.closeBox(box)
 		}()
-		return s.persistCreatedWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, resolvedProfile, spec.RuntimeOptions, agentruntime.Info{
+		return s.persistCreatedWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, resolvedProfile, spec.RuntimeOptions, agentruntime.Info{
 			HandleID:  strings.TrimSpace(info.ID),
 			State:     agentruntime.State(info.State),
 			CreatedAt: info.CreatedAt.UTC(),
 		})
 	}
 	if runtimeKind == RuntimeKindCodex {
-		if err := s.persistStartingWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, resolvedProfile, spec.RuntimeOptions); err != nil {
+		if err := s.persistStartingWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, resolvedProfile, spec.RuntimeOptions); err != nil {
 			return Agent{}, err
 		}
 		defer func() {
@@ -1891,10 +1956,10 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		CreatedAt: time.Now().UTC(),
 	}
 
-	return s.persistCreatedWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, resolvedProfile, spec.RuntimeOptions, info)
+	return s.persistCreatedWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, resolvedProfile, spec.RuntimeOptions, info)
 }
 
-func (s *Service) persistStartingWorker(ctx context.Context, id, name, description, instructions, image, avatar, runtimeKind string, profile AgentProfile, runtimeOptions map[string]any) error {
+func (s *Service) persistStartingWorker(ctx context.Context, id, name, description, instructions, image, avatar, runtimeKind, runtimeName string, sandboxEnabled bool, profile AgentProfile, runtimeOptions map[string]any) error {
 	s.mu.Lock()
 
 	if _, _, ok := s.agentByIDLocked(id); ok {
@@ -1906,7 +1971,7 @@ func (s *Service) persistStartingWorker(ctx context.Context, id, name, descripti
 		return fmt.Errorf("agent name %q already exists", name)
 	}
 
-	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, profile, runtimeOptions, agentruntime.Info{
+	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, runtimeOptions, agentruntime.Info{
 		State:     agentruntime.StateCreated,
 		CreatedAt: time.Now().UTC(),
 	})
@@ -1933,7 +1998,7 @@ func (s *Service) removeStartingWorker(ctx context.Context, id string) error {
 	return err
 }
 
-func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, instructions, image, avatar, runtimeKind string, profile AgentProfile, createRuntimeExt map[string]any, info agentruntime.Info) (Agent, error) {
+func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, instructions, image, avatar, runtimeKind, runtimeName string, sandboxEnabled bool, profile AgentProfile, createRuntimeExt map[string]any, info agentruntime.Info) (Agent, error) {
 	s.mu.Lock()
 
 	if existing, _, ok := s.agentByIDLocked(id); ok && !isStartingWorker(existing) {
@@ -1945,7 +2010,7 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 		return Agent{}, fmt.Errorf("agent name %q already exists", name)
 	}
 
-	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, profile, createRuntimeExt, info)
+	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, createRuntimeExt, info)
 	s.agents[worker.ID] = worker
 	s.syncRuntimeRecordLocked(worker)
 	if worker.AgentProfile.ProfileComplete {
@@ -1965,7 +2030,7 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 	return created, nil
 }
 
-func newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind string, profile AgentProfile, runtimeOptions map[string]any, info agentruntime.Info) Agent {
+func newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName string, sandboxEnabled bool, profile AgentProfile, runtimeOptions map[string]any, info agentruntime.Info) Agent {
 	createdAt := info.CreatedAt.UTC()
 	if info.CreatedAt.IsZero() {
 		createdAt = time.Now().UTC()
@@ -1979,11 +2044,21 @@ func newWorkerAgent(id, name, description, instructions, image, avatar, runtimeK
 	if len(runtimeOptions) > 0 {
 		agentRX = utils.CloneAnyMap(runtimeOptions)
 	}
+	resolvedRuntimeKind := strings.TrimSpace(runtimeKind)
+	if resolvedRuntimeKind == "" {
+		resolvedRuntimeKind = runtimeKindFromNameAndSandbox(runtimeName, sandboxEnabled)
+	}
+	resolvedRuntimeName := normalizeRuntimeName(runtimeName)
+	if resolvedRuntimeName == "" {
+		resolvedRuntimeName = runtimeNameForKind(resolvedRuntimeKind)
+	}
 	return Agent{
 		ID:              id,
 		Name:            name,
 		RuntimeID:       runtimeIDForAgentID(id),
-		RuntimeKind:     runtimeKind,
+		RuntimeKind:     resolvedRuntimeKind,
+		RuntimeName:     resolvedRuntimeName,
+		SandboxEnabled:  sandboxEnabled || sandboxEnabledForKind(resolvedRuntimeKind),
 		Image:           image,
 		Avatar:          strings.TrimSpace(avatar),
 		BoxID:           strings.TrimSpace(info.HandleID),

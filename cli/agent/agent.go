@@ -410,15 +410,12 @@ func visitedFlags(fs interface{ Visit(func(*flag.Flag)) }) map[string]bool {
 }
 
 func createAgentFieldMask(visited map[string]bool) []string {
-	fields := []string{"id", "name", "description", "image", "profile", "runtime_kind"}
+	fields := []string{"id", "name", "description", "image", "profile", "runtime"}
 	mask := make([]string, 0, len(fields))
 	for _, field := range fields {
 		if visited[field] {
 			mask = append(mask, field)
 		}
-	}
-	if visited["runtime"] && !visited["runtime_kind"] {
-		mask = append(mask, "runtime_kind")
 	}
 	return mask
 }

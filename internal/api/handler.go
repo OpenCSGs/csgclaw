@@ -20,6 +20,7 @@ import (
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/csgclaw/notification"
 	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/codexcli"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
@@ -107,8 +108,17 @@ type bootstrapConfigResponse struct {
 	EffectiveManagerImage  string                                        `json:"effective_manager_image"`
 	AdvertiseBaseURL       string                                        `json:"advertise_base_url,omitempty"`
 	SupportedRuntimeKinds  []string                                      `json:"supported_runtime_kinds"`
+	WorkerRuntimeChoices   []workerRuntimeChoiceResponse                 `json:"worker_runtime_choices,omitempty"`
 	RuntimeDefaultImages   map[string]string                             `json:"runtime_default_images,omitempty"`
 	RuntimeOptionSchemas   map[string][]agentruntime.RuntimeOptionSchema `json:"runtime_option_schemas,omitempty"`
+}
+
+type workerRuntimeChoiceResponse struct {
+	Name           string `json:"name"`
+	Label          string `json:"label"`
+	SandboxEnabled bool   `json:"sandbox_enabled"`
+	Installed      bool   `json:"installed"`
+	Message        string `json:"message,omitempty"`
 }
 
 type updateBootstrapConfigRequest struct {
@@ -124,6 +134,8 @@ type agentResponse struct {
 	Runtime              apitypes.AgentRuntime              `json:"runtime,omitempty"`
 	RuntimeID            string                             `json:"-"`
 	RuntimeKind          string                             `json:"-"`
+	RuntimeName          string                             `json:"runtime_name,omitempty"`
+	SandboxEnabled       bool                               `json:"sandbox_enabled,omitempty"`
 	Image                string                             `json:"image,omitempty"`
 	Avatar               string                             `json:"-"`
 	BoxID                string                             `json:"-"`
@@ -157,6 +169,8 @@ func (r *agentResponse) UnmarshalJSON(data []byte) error {
 		Instructions:     apiAgent.Instructions,
 		Runtime:          apiAgent.Runtime,
 		RuntimeKind:      apiAgent.RuntimeKind,
+		RuntimeName:      apiAgent.RuntimeName,
+		SandboxEnabled:   apiAgent.SandboxEnabled,
 		Image:            apiAgent.Image,
 		BoxID:            apiAgent.BoxID,
 		Role:             apiAgent.Role,
@@ -185,6 +199,8 @@ func (r *agentResponse) UnmarshalJSON(data []byte) error {
 	var legacy struct {
 		RuntimeID            string                             `json:"runtime_id"`
 		RuntimeKind          string                             `json:"runtime_kind"`
+		RuntimeName          string                             `json:"runtime_name"`
+		SandboxEnabled       *bool                              `json:"sandbox_enabled"`
 		Avatar               string                             `json:"avatar"`
 		BoxID                string                             `json:"box_id"`
 		Status               string                             `json:"status"`
@@ -202,6 +218,12 @@ func (r *agentResponse) UnmarshalJSON(data []byte) error {
 	}
 	if strings.TrimSpace(legacy.RuntimeKind) != "" {
 		r.RuntimeKind = legacy.RuntimeKind
+	}
+	if strings.TrimSpace(legacy.RuntimeName) != "" {
+		r.RuntimeName = legacy.RuntimeName
+	}
+	if legacy.SandboxEnabled != nil {
+		r.SandboxEnabled = *legacy.SandboxEnabled
 	}
 	if strings.TrimSpace(legacy.Avatar) != "" {
 		r.Avatar = legacy.Avatar
@@ -451,6 +473,7 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 		},
 		RuntimeDefaultImages: map[string]string{},
 		RuntimeOptionSchemas: runtimeOptionSchemas,
+		WorkerRuntimeChoices: workerRuntimeChoices(),
 	}
 	defaults, err := hub.ResolveBootstrapDefaults(ctx, cfg.Bootstrap, hubSvc)
 	if err != nil {
@@ -467,6 +490,62 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 	}
 	fillBuiltinWorkerRuntimeDefaultImages(ctx, &resp, hubSvc)
 	return resp
+}
+
+func workerRuntimeChoices() []workerRuntimeChoiceResponse {
+	choices := []workerRuntimeChoiceResponse{
+		{
+			Name:           agent.RuntimeNameCodex,
+			Label:          "Codex CLI",
+			SandboxEnabled: false,
+			Installed:      true,
+		},
+		{
+			Name:           agent.RuntimeNameOpenClaw,
+			Label:          "OpenClaw",
+			SandboxEnabled: true,
+			Installed:      true,
+		},
+		{
+			Name:           agent.RuntimeNamePicoClaw,
+			Label:          "PicoClaw",
+			SandboxEnabled: true,
+			Installed:      true,
+		},
+	}
+	if _, err := (codexcli.Locator{}).Locate(); err != nil {
+		choices[0].Installed = false
+		choices[0].Message = "Codex CLI not installed"
+	}
+	return choices
+}
+
+func (h *Handler) defaultWorkerCreateSpec(agentID, name string) agent.CreateAgentSpec {
+	spec := agent.CreateAgentSpec{
+		ID:             agentID,
+		Name:           name,
+		Role:           agent.RoleWorker,
+		RuntimeName:    agent.RuntimeNameCodex,
+		SandboxEnabled: false,
+		RuntimeKind:    agent.RuntimeKindCodex,
+	}
+	if h == nil || h.svc == nil {
+		return spec
+	}
+	if _, err := h.svc.Runtime(agent.RuntimeKindCodex); err == nil {
+		return spec
+	}
+	runtimeKind := h.svc.GatewayRuntime()
+	spec.RuntimeKind = runtimeKind
+	spec.RuntimeName = agent.RuntimeNamePicoClaw
+	spec.SandboxEnabled = true
+	switch runtimeKind {
+	case agent.RuntimeKindOpenClawSandbox:
+		spec.RuntimeName = agent.RuntimeNameOpenClaw
+	case agent.RuntimeKindPicoClawSandbox:
+		spec.RuntimeName = agent.RuntimeNamePicoClaw
+	}
+	return spec
 }
 
 func fillBuiltinWorkerRuntimeDefaultImages(ctx context.Context, resp *bootstrapConfigResponse, hubSvc *hub.Service) {
@@ -1147,9 +1226,11 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 		profileReq = req.AgentProfile
 	}
 	prof := agentProfileFromAPI(profileReq)
-	runtimeKind := strings.TrimSpace(req.Runtime.Kind)
-	if runtimeKind == "" {
-		runtimeKind = req.RuntimeKind
+	runtimeName := strings.TrimSpace(req.Runtime.Name)
+	sandboxEnabled := req.Runtime.SandboxEnabled
+	if runtimeName == "" {
+		runtimeName = req.RuntimeName
+		sandboxEnabled = req.SandboxEnabled
 	}
 	runtimeOptions := utils.CloneAnyMapShallowNestedStringMaps(req.Runtime.Options)
 	if len(runtimeOptions) == 0 {
@@ -1162,7 +1243,8 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 			Description:    req.Description,
 			Instructions:   req.Instructions,
 			Image:          req.Image,
-			RuntimeKind:    runtimeKind,
+			RuntimeName:    runtimeName,
+			SandboxEnabled: sandboxEnabled,
 			FromTemplate:   req.FromTemplate,
 			Role:           req.Role,
 			Status:         req.Status,
@@ -1797,11 +1879,10 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			AgentBinding: participant.AgentBindingSpec{
 				Mode:    participant.BindingModeCreate,
 				AgentID: workerAgentID,
-				Agent: &agent.CreateAgentSpec{
-					ID:   workerAgentID,
-					Name: name,
-					Role: agent.RoleWorker,
-				},
+				Agent: func() *agent.CreateAgentSpec {
+					spec := h.defaultWorkerCreateSpec(workerAgentID, name)
+					return &spec
+				}(),
 			},
 		})
 		if err != nil {
@@ -2594,19 +2675,33 @@ func presentAgent(item agent.Agent) agentResponse {
 		runtimeOptions = map[string]any{}
 	}
 	profile := profileResponseFromAgentView(av)
+	runtimeName := strings.TrimSpace(item.RuntimeName)
+	if runtimeName == "" {
+		runtimeName = agent.RuntimeNameCodex
+		switch strings.TrimSpace(item.RuntimeKind) {
+		case agent.RuntimeKindOpenClawSandbox:
+			runtimeName = agent.RuntimeNameOpenClaw
+		case agent.RuntimeKindPicoClawSandbox:
+			runtimeName = agent.RuntimeNamePicoClaw
+		}
+	}
+	sandboxEnabled := item.SandboxEnabled || item.RuntimeKind == agent.RuntimeKindOpenClawSandbox || item.RuntimeKind == agent.RuntimeKindPicoClawSandbox
 	return agentResponse{
 		ID:           item.ID,
 		Name:         item.Name,
 		Description:  item.Description,
 		Instructions: item.Instructions,
 		Runtime: apitypes.AgentRuntime{
-			Kind:      item.RuntimeKind,
-			State:     item.Status,
-			SandboxID: item.BoxID,
-			Options:   runtimeOptions,
+			Name:           runtimeName,
+			SandboxEnabled: sandboxEnabled,
+			State:          item.Status,
+			SandboxID:      item.BoxID,
+			Options:        runtimeOptions,
 		},
 		RuntimeID:        item.RuntimeID,
 		RuntimeKind:      item.RuntimeKind,
+		RuntimeName:      runtimeName,
+		SandboxEnabled:   sandboxEnabled,
 		Image:            item.Image,
 		Avatar:           item.Avatar,
 		BoxID:            item.BoxID,

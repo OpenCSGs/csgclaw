@@ -1,6 +1,14 @@
 import { del, get, patch, post, put, requestText, type ApiError } from "@/api/client";
 import { BOT_TYPE_NOTIFICATION, MANAGER_AGENT_ID } from "@/shared/constants/agents";
-import type { AgentLike, AgentProfileLike, AgentProfileModelsResponse, JSONRecord, RuntimeKind } from "@/models/agents";
+import {
+  resolveRuntimeSelection,
+  type AgentLike,
+  type AgentProfileLike,
+  type AgentProfileModelsResponse,
+  type JSONRecord,
+  type RuntimeKind,
+  type RuntimeName,
+} from "@/models/agents";
 import type { WorkspaceFile, WorkspaceListing } from "@/models/workspace";
 
 export type AgentProfileModelRequest = {
@@ -40,8 +48,10 @@ export type AgentUpdatePayload = {
   model_config?: JSONRecord;
   name?: string;
   profile?: JSONRecord | string;
-  runtime?: { kind?: RuntimeKind; options?: JSONRecord };
+  runtime?: { name?: RuntimeName; sandbox_enabled?: boolean; options?: JSONRecord };
   role?: string;
+  runtime_name?: RuntimeName;
+  sandbox_enabled?: boolean;
   runtime_kind?: RuntimeKind;
   runtime_options?: JSONRecord;
   from_template?: string;
@@ -174,12 +184,16 @@ export function deleteAgentSkillRequest(agentID: string, skillName: string): Pro
 }
 
 export function createManagerAgentRequest(options: CreateManagerAgentOptions = {}): Promise<AgentLike> {
-  const payload: { id: string; replace: boolean; runtime_kind?: RuntimeKind } = {
+  const payload: { id: string; replace: boolean; runtime?: { name: RuntimeName; sandbox_enabled: boolean } } = {
     id: MANAGER_AGENT_ID, // Legacy contract: id: "u-manager",
     replace: true,
   };
   if (options.runtime_kind) {
-    payload.runtime_kind = options.runtime_kind;
+    const runtimeSelection = resolveRuntimeSelection({ runtime_kind: options.runtime_kind });
+    payload.runtime = {
+      name: runtimeSelection.runtime_name,
+      sandbox_enabled: runtimeSelection.sandbox_enabled,
+    };
   }
   return post("api/v1/agents", payload);
 }
@@ -227,18 +241,19 @@ function normalizeAgentPayload(payload: AgentUpdatePayload): AgentUpdatePayload 
     normalized.model_config = payload.agent_profile;
     delete normalized.agent_profile;
   }
-  if (payload.runtime_options && typeof payload.runtime_options === "object") {
+  if (payload.runtime_name || payload.sandbox_enabled !== undefined) {
+    const runtimeSelection = resolveRuntimeSelection({
+      runtime_kind: payload.runtime_kind,
+      runtime_name: payload.runtime_name,
+      sandbox_enabled: payload.sandbox_enabled ?? normalized.runtime?.sandbox_enabled,
+    });
     normalized.runtime = {
       ...(normalized.runtime ?? {}),
-      options: payload.runtime_options,
+      name: runtimeSelection.runtime_name,
+      sandbox_enabled: runtimeSelection.sandbox_enabled,
     };
-    delete normalized.runtime_options;
-  }
-  if (payload.runtime_kind) {
-    normalized.runtime = {
-      ...(normalized.runtime ?? {}),
-      kind: payload.runtime_kind,
-    };
+    delete normalized.runtime_name;
+    delete normalized.sandbox_enabled;
     delete normalized.runtime_kind;
   }
   return normalized;
@@ -249,6 +264,11 @@ export type CreateBotPayload = AgentUpdatePayload & {
 };
 
 export async function createBotRequest(payload: CreateBotPayload): Promise<AgentLike> {
+  const runtimeSelection = resolveRuntimeSelection({
+    runtime_kind: payload.runtime_kind,
+    runtime_name: payload.runtime_name,
+    sandbox_enabled: payload.sandbox_enabled,
+  });
   const participant = await post<ParticipantLike>("api/v1/channels/csgclaw/participants", {
     name: payload.name,
     type: "agent",
@@ -261,9 +281,12 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
         instructions: payload.instructions,
         image: payload.image,
         runtime: {
-          kind: payload.runtime_kind,
+          name: runtimeSelection.runtime_name,
+          sandbox_enabled: runtimeSelection.sandbox_enabled,
           options: payload.runtime_options,
         },
+        runtime_name: runtimeSelection.runtime_name,
+        sandbox_enabled: runtimeSelection.sandbox_enabled,
         from_template: payload.from_template,
         model_config: payload.agent_profile,
       },

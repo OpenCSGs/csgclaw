@@ -20,6 +20,7 @@ import type { LocaleCode } from "@/models/conversations";
 import { providerIDForProvider, providerNameForProviderID, selectorForProviderModel } from "@/models/modelProviders";
 
 export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | string;
+export type RuntimeName = "picoclaw" | "openclaw" | "codex" | string;
 export type BotType = typeof BOT_TYPE_NORMAL | typeof BOT_TYPE_NOTIFICATION | string;
 export type ProviderName = "csghub_lite" | "csghub" | "codex" | "claude_code" | "api" | string;
 export type JSONRecord = Record<string, unknown>;
@@ -74,12 +75,16 @@ export type AgentProfileLike = {
   request_options?: JSONRecord | null;
   runtime_options?: JSONRecord | null;
   runtime_kind?: string | null;
+  runtime_name?: RuntimeName | null;
+  sandbox_enabled?: boolean | null;
   notifier_profile?: JSONRecord | null;
   notification_profile?: JSONRecord | null;
 };
 
 export type AgentRuntimeLike = {
   kind?: RuntimeKind | null;
+  name?: RuntimeName | null;
+  sandbox_enabled?: boolean | null;
   state?: string | null;
   sandbox_id?: string | null;
   options?: JSONRecord | null;
@@ -103,6 +108,8 @@ export type AgentLike = AgentProfileLike & {
   image?: string | null;
   name?: string | null;
   role?: string | null;
+  runtime_name?: RuntimeName | null;
+  sandbox_enabled?: boolean | null;
   runtime_option_schemas?: RuntimeOptionSchema[] | null;
   runtime_options?: JSONRecord | null;
   status?: string | null;
@@ -143,6 +150,88 @@ export const AGENT_CHANNELS: Record<AgentChannelID, { id: AgentChannelID; name: 
   },
 };
 
+export function normalizeRuntimeName(name: unknown): RuntimeName {
+  const value = String(name ?? "")
+    .trim()
+    .toLowerCase();
+  switch (value) {
+    case "picoclaw":
+    case "picoclaw_sandbox":
+      return "picoclaw";
+    case "openclaw":
+    case "openclaw_sandbox":
+      return "openclaw";
+    case "codex":
+      return "codex";
+    default:
+      return value;
+  }
+}
+
+export function composeLegacyRuntimeKind(runtimeName: unknown, sandboxEnabled: unknown): RuntimeKind {
+  const name = normalizeRuntimeName(runtimeName);
+  const sandbox = Boolean(sandboxEnabled);
+  if (!sandbox) {
+    return name === "codex" || !name ? "codex" : "";
+  }
+  switch (name) {
+    case "openclaw":
+      return "openclaw_sandbox";
+    case "picoclaw":
+      return "picoclaw_sandbox";
+    default:
+      return "";
+  }
+}
+
+function runtimeNameForKind(kind: unknown): RuntimeName {
+  const value = normalizeRuntimeKind(kind);
+  switch (value) {
+    case "openclaw_sandbox":
+      return "openclaw";
+    case "picoclaw_sandbox":
+      return "picoclaw";
+    case "codex":
+      return "codex";
+    default:
+      return normalizeRuntimeName(value);
+  }
+}
+
+function sandboxEnabledForKind(kind: unknown): boolean {
+  const value = normalizeRuntimeKind(kind);
+  return value === "openclaw_sandbox" || value === "picoclaw_sandbox";
+}
+
+export type RuntimeSelectionLike = {
+  runtime_kind?: RuntimeKind | null;
+  runtime_name?: RuntimeName | null;
+  sandbox_enabled?: boolean | null;
+};
+
+export function resolveRuntimeSelection(selection: RuntimeSelectionLike | null | undefined): {
+  runtime_kind: RuntimeKind;
+  runtime_name: RuntimeName;
+  sandbox_enabled: boolean;
+} {
+  const runtimeKind = normalizeRuntimeKind(selection?.runtime_kind);
+  if (runtimeKind) {
+    return {
+      runtime_kind: runtimeKind,
+      runtime_name: runtimeNameForKind(runtimeKind) || "codex",
+      sandbox_enabled: sandboxEnabledForKind(runtimeKind),
+    };
+  }
+  const sandboxEnabled = Boolean(selection?.sandbox_enabled);
+  const runtimeName = normalizeRuntimeName(selection?.runtime_name || (sandboxEnabled ? "picoclaw" : "codex"));
+  return {
+    runtime_kind:
+      composeLegacyRuntimeKind(runtimeName, sandboxEnabled) || (sandboxEnabled ? DEFAULT_RUNTIME_KIND : "codex"),
+    runtime_name: runtimeName || (sandboxEnabled ? "picoclaw" : "codex"),
+    sandbox_enabled: sandboxEnabled,
+  };
+}
+
 export type AvatarLikeUser = {
   avatar?: string | null;
   id: string;
@@ -151,7 +240,29 @@ export type AvatarLikeUser = {
 
 export function agentRuntimeKind(item: AgentLike | AgentProfileLike | null | undefined): RuntimeKind {
   const agent = item as AgentLike | null | undefined;
-  return normalizeRuntimeKind(agent?.runtime?.kind || agent?.runtime_kind || "");
+  return resolveRuntimeSelection({
+    runtime_kind: agent?.runtime?.kind || agent?.runtime_kind,
+    runtime_name: agent?.runtime?.name || agent?.runtime_name,
+    sandbox_enabled: agent?.runtime?.sandbox_enabled ?? agent?.sandbox_enabled,
+  }).runtime_kind;
+}
+
+export function agentRuntimeName(item: AgentLike | AgentProfileLike | null | undefined): RuntimeName {
+  const agent = item as AgentLike | null | undefined;
+  return resolveRuntimeSelection({
+    runtime_kind: agent?.runtime?.kind || agent?.runtime_kind,
+    runtime_name: agent?.runtime?.name || agent?.runtime_name,
+    sandbox_enabled: agent?.runtime?.sandbox_enabled ?? agent?.sandbox_enabled,
+  }).runtime_name;
+}
+
+export function agentSandboxEnabled(item: AgentLike | AgentProfileLike | null | undefined): boolean {
+  const agent = item as AgentLike | null | undefined;
+  return resolveRuntimeSelection({
+    runtime_kind: agent?.runtime?.kind || agent?.runtime_kind,
+    runtime_name: agent?.runtime?.name || agent?.runtime_name,
+    sandbox_enabled: agent?.runtime?.sandbox_enabled ?? agent?.sandbox_enabled,
+  }).sandbox_enabled;
 }
 
 export function agentRuntimeState(item: AgentLike | null | undefined): string {
@@ -222,6 +333,8 @@ export type AgentDraft = {
   role?: string;
   bot_type?: BotType;
   runtime_options?: JSONRecord;
+  runtime_name?: RuntimeName;
+  sandbox_enabled?: boolean;
   runtime_kind: RuntimeKind;
   template_name?: string;
 };
@@ -257,9 +370,18 @@ export type RuntimeBootstrapConfig = {
   effective_manager_image?: string | null;
   runtime_default_images?: unknown;
   runtime_kind?: string | null;
+  worker_runtime_choices?: RuntimeChoiceLike[] | null;
   runtime_option_schemas?: Record<string, RuntimeOptionSchema[]> | null;
   show_upgrade?: boolean | null;
   supported_runtime_kinds?: unknown;
+};
+
+export type RuntimeChoiceLike = {
+  name?: RuntimeName | null;
+  label?: string | null;
+  sandbox_enabled?: boolean | null;
+  installed?: boolean | null;
+  message?: string | null;
 };
 
 export type DraftProfileOptions = {
@@ -611,6 +733,8 @@ export function agentDraftWithRuntimeFieldsFromAgent(
   if (updatedRuntimeKind) {
     next.runtime_kind = normalizeRuntimeKind(updatedRuntimeKind || next.runtime_kind);
   }
+  next.runtime_name = agentRuntimeName(updated);
+  next.sandbox_enabled = agentSandboxEnabled(updated);
   const updatedRuntimeOptions = agentRuntimeOptions(updated);
   if (Object.keys(updatedRuntimeOptions).length > 0) {
     next.runtime_options = normalizeRuntimeOptionsRecord(updatedRuntimeOptions);
@@ -941,6 +1065,8 @@ export function profileToDraft(profile: AgentProfileLike | null | undefined, age
   const modelProviderID = String(profile?.model_provider_id || "").trim() || providerIDForProvider(profile?.provider);
   return {
     runtime_kind: normalizeRuntimeKind(profile?.runtime_kind),
+    runtime_name: normalizeRuntimeName(profile?.runtime_name),
+    sandbox_enabled: Boolean(profile?.sandbox_enabled),
     provider: profile?.provider || providerNameForProviderID(modelProviderID) || DEFAULT_PROVIDER,
     model_provider_id: modelProviderID,
     base_url: profile?.base_url || "",
@@ -1021,6 +1147,8 @@ export function agentToDraft(agent: AgentDraftSource | null | undefined): AgentD
     runtime_options: normalizeRuntimeOptionsRecord(agentRuntimeOptions(agent as AgentLike | null | undefined)),
     ...base,
     notifier_delivery_mode: normalizeNotifierDeliveryMode(agent?.notifier_delivery_mode || base.notifier_delivery_mode),
+    runtime_name: agentRuntimeName(agent as AgentLike | null | undefined),
+    sandbox_enabled: agentSandboxEnabled(agent as AgentLike | null | undefined),
     runtime_kind: normalizeRuntimeKind(agentRuntimeKind(agent as AgentLike | null | undefined) || profile.runtime_kind),
   };
 }
@@ -1129,11 +1257,14 @@ export function applyTemplateToDraft(
   const runtimeKind = normalizeRuntimeKind(
     template.runtime_kind || draft.runtime_kind || bootstrapConfig?.runtime_kind,
   );
+  const runtimeSelection = resolveRuntimeSelection({ runtime_kind: runtimeKind });
   return {
     ...draft,
     from_template: template.id || "",
     template_name: template.name || template.id || "",
-    runtime_kind: runtimeKind,
+    runtime_kind: runtimeSelection.runtime_kind,
+    runtime_name: runtimeSelection.runtime_name,
+    sandbox_enabled: runtimeSelection.sandbox_enabled,
     image:
       template.image || runtimeImageForKind(runtimeKind, bootstrapConfig, fallbackImage || draft.default_image || ""),
     description: template.description || draft.description || "",
@@ -1922,7 +2053,7 @@ export function formatRuntimeKindLabel(kind: unknown, t: TranslateFn): string {
     case "openclaw_sandbox":
       return t("runtimeOpenclaw");
     case "codex":
-      return "Codex";
+      return t("runtimeCodexCLI");
     case "picoclaw_sandbox":
       return t("runtimePicoclaw");
     default:

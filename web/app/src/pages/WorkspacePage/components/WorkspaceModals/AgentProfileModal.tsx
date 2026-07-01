@@ -4,7 +4,6 @@ import {
   BOT_TYPE_NORMAL,
   BOT_TYPE_NOTIFICATION,
   DEFAULT_RUNTIME_KIND,
-  WORKER_RUNTIME_KIND_OPTIONS,
 } from "@/shared/constants/agents";
 import { useEffect, useRef, useState, type SetStateAction } from "react";
 import {
@@ -20,12 +19,16 @@ import {
 import { Button, Select } from "@/components/ui";
 import { AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import {
+  agentRuntimeName,
+  agentSandboxEnabled,
   agentCreateTemplateLocked,
   applyTemplateToDraft,
+  composeLegacyRuntimeKind,
   ensureNotifierPullSubscriptionDraft,
   formatRuntimeKindLabel,
   isNotificationBotDraftContext,
   normalizeRuntimeKind,
+  normalizeRuntimeName,
   normalizeTemplateSelection,
   notifierFormIsComplete,
   pickDefaultAgentTemplate,
@@ -140,6 +143,45 @@ export function AgentProfileModal({
   const selectedProviderModels = selectedProvider?.models ?? [];
   const selectedModelValue = agentDraft.model_id || "";
   const workerTemplates = workerSelectableTemplates(hubTemplates);
+  const sandboxEnabled = Boolean(agentDraft.sandbox_enabled);
+  const runtimeChoices = Array.isArray(bootstrapConfig?.worker_runtime_choices)
+    ? bootstrapConfig.worker_runtime_choices
+    : [];
+  const codexChoice = runtimeChoices.find(
+    (item) => !item?.sandbox_enabled && normalizeRuntimeName(item?.name) === "codex",
+  );
+  const sandboxRuntimeChoices = runtimeChoices.filter((item) => item?.sandbox_enabled);
+  const selectedRuntimeName = normalizeRuntimeName(agentDraft.runtime_name || (sandboxEnabled ? "picoclaw" : "codex"));
+
+  function defaultWorkerRuntimeDraft(baseDraft: AgentDraft): AgentDraft {
+    const codexAvailable = codexChoice?.installed !== false;
+    const runtimeName = codexAvailable ? "codex" : normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "picoclaw");
+    const nextSandboxEnabled = !codexAvailable;
+    const runtimeKind = composeLegacyRuntimeKind(runtimeName, nextSandboxEnabled) || DEFAULT_RUNTIME_KIND;
+    const nextTemplate = nextSandboxEnabled ? pickDefaultAgentTemplate(hubTemplates, runtimeKind, bootstrapConfig) : null;
+    let nextDraft: AgentDraft = {
+      ...baseDraft,
+      avatar: baseDraft.avatar || "",
+      bot_type: BOT_TYPE_NORMAL,
+      runtime_name: runtimeName,
+      sandbox_enabled: nextSandboxEnabled,
+      runtime_kind: runtimeKind,
+      image: nextSandboxEnabled
+        ? defaultWorkerImageForRuntime(
+            hubTemplates,
+            runtimeKind,
+            bootstrapConfig,
+            baseDraft.default_image || managerAgent?.image || "",
+          )
+        : "",
+      from_template: "",
+      template_name: "",
+    };
+    if (nextSandboxEnabled) {
+      nextDraft = applyTemplateToDraft(nextDraft, nextTemplate, bootstrapConfig, managerAgent?.image || "");
+    }
+    return nextDraft;
+  }
 
   useEffect(
     () => () => {
@@ -182,26 +224,7 @@ export function AgentProfileModal({
     }
     onAgentDraftChange((current) => {
       const baseDraft = current ?? agentDraft;
-      const runtimeKindRaw = normalizeRuntimeKind(baseDraft.runtime_kind) || DEFAULT_RUNTIME_KIND;
-      const runtimeKind = runtimeKindRaw === "notifier" ? DEFAULT_RUNTIME_KIND : runtimeKindRaw;
-      const template = pickDefaultAgentTemplate(hubTemplates, runtimeKind, bootstrapConfig);
-      return applyTemplateToDraft(
-        {
-          ...baseDraft,
-          avatar: baseDraft.avatar || "",
-          bot_type: BOT_TYPE_NORMAL,
-          runtime_kind: runtimeKind,
-          image: defaultWorkerImageForRuntime(
-            hubTemplates,
-            runtimeKind,
-            bootstrapConfig,
-            managerAgent?.image || baseDraft.default_image || "",
-          ),
-        },
-        template,
-        bootstrapConfig,
-        managerAgent?.image || "",
-      );
+      return defaultWorkerRuntimeDraft(baseDraft);
     });
     onAgentModelsReset();
   }
@@ -310,6 +333,68 @@ export function AgentProfileModal({
               <div className="agent-section-form">
                 <div className="profile-grid profile-grid-compact agent-basics-grid">
                   {isWorkerCreate ? (
+                    <div className="field span-2 agent-fast-mode-field agent-sandbox-field">
+                      <span>{t("profileSandboxEnabled")}</span>
+                      <label className="selection-item compact-toggle-row agent-fast-mode-toggle agent-sandbox-toggle">
+                        <input
+                          type="checkbox"
+                          checked={sandboxEnabled}
+                          aria-label={t("profileSandboxEnabled")}
+                          onChange={(event) => {
+                            const checked = event.currentTarget.checked;
+                            if (!checked) {
+                              onAgentDraftChange((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      sandbox_enabled: false,
+                                      runtime_name: "codex",
+                                      runtime_kind: "codex",
+                                      image: "",
+                                      from_template: "",
+                                      template_name: "",
+                                    }
+                                  : current,
+                              );
+                              return;
+                            }
+                            const nextRuntimeName = normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "picoclaw");
+                            const nextRuntimeKind =
+                              composeLegacyRuntimeKind(nextRuntimeName, true) || DEFAULT_RUNTIME_KIND;
+                            const nextTemplate = pickDefaultAgentTemplate(
+                              hubTemplates,
+                              nextRuntimeKind,
+                              bootstrapConfig,
+                            );
+                            let nextDraft: AgentDraft = {
+                              ...agentDraft,
+                              sandbox_enabled: true,
+                              runtime_name: nextRuntimeName,
+                              runtime_kind: nextRuntimeKind,
+                              image: defaultWorkerImageForRuntime(
+                                hubTemplates,
+                                nextRuntimeKind,
+                                bootstrapConfig,
+                                agentDraft.default_image || managerAgent?.image || "",
+                              ),
+                            };
+                            nextDraft = applyTemplateToDraft(
+                              nextDraft,
+                              nextTemplate,
+                              bootstrapConfig,
+                              managerAgent?.image || "",
+                            );
+                            onAgentDraftChange(nextDraft);
+                          }}
+                        />
+                        <span className="agent-sandbox-copy">
+                          <strong>{sandboxEnabled ? t("statusEnabled") : t("statusDisabled")}</strong>
+                          <small>{t("profileSandboxEnabledHelp")}</small>
+                        </span>
+                      </label>
+                    </div>
+                  ) : null}
+                  {isWorkerCreate && sandboxEnabled ? (
                     <label className="field span-2">
                       <span>{t("templateLabel")}</span>
                       <Select
@@ -343,20 +428,37 @@ export function AgentProfileModal({
                     <div className="agent-runtime-image-row">
                       <label className="field">
                         <span>{t("profileRuntimeKind")}</span>
-                        {templateLocked ? (
+                        {!sandboxEnabled ? (
+                          <Select
+                            value="codex"
+                            onValueChange={() => {}}
+                            triggerProps={{ "aria-label": t("profileRuntimeKind") }}
+                            options={[
+                              {
+                                value: "codex",
+                                label:
+                                  codexChoice?.installed === false
+                                    ? t("runtimeCodexCLIUnavailable")
+                                    : t("runtimeCodexCLI"),
+                                disabled: codexChoice?.installed === false,
+                                description: codexChoice?.message || undefined,
+                              },
+                            ]}
+                          />
+                        ) : templateLocked ? (
                           <input
-                            value={formatRuntimeKindLabel(
-                              normalizeRuntimeKind(agentDraft.runtime_kind) || DEFAULT_RUNTIME_KIND,
-                              t,
-                            )}
+                            value={formatRuntimeKindLabel(normalizeRuntimeKind(agentDraft.runtime_kind), t)}
                             readOnly
                             disabled
                           />
                         ) : (
                           <Select
-                            value={normalizeRuntimeKind(agentDraft.runtime_kind) || DEFAULT_RUNTIME_KIND}
+                            value={
+                              selectedRuntimeName || normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "picoclaw")
+                            }
                             onValueChange={(value) => {
-                              const runtimeKind = normalizeRuntimeKind(value);
+                              const runtimeName = normalizeRuntimeName(value);
+                              const runtimeKind = composeLegacyRuntimeKind(runtimeName, true) || DEFAULT_RUNTIME_KIND;
                               const currentTemplate = normalizeTemplateSelection(
                                 hubTemplates.find((item) => item.id === agentDraft.from_template) || null,
                               );
@@ -367,6 +469,8 @@ export function AgentProfileModal({
                                 ...agentDraft,
                                 bot_type: BOT_TYPE_NORMAL,
                                 role: "worker",
+                                sandbox_enabled: true,
+                                runtime_name: runtimeName,
                                 runtime_kind: runtimeKind,
                                 image: defaultWorkerImageForRuntime(
                                   hubTemplates,
@@ -385,25 +489,36 @@ export function AgentProfileModal({
                               onAgentModelsReset();
                             }}
                             triggerProps={{ "aria-label": t("profileRuntimeKind") }}
-                            options={WORKER_RUNTIME_KIND_OPTIONS.map((option) => ({
-                              value: option.value,
-                              label: formatRuntimeKindLabel(option.value, t),
+                            options={sandboxRuntimeChoices.map((option) => ({
+                              value: normalizeRuntimeName(option.name) || "",
+                              label: option.label || normalizeRuntimeName(option.name) || "",
                             }))}
                           />
                         )}
                       </label>
-                      <label className="field">
-                        <span>{t("agentImage")}</span>
-                        <input
-                          value={agentDraft.image}
-                          readOnly={templateLocked}
-                          disabled={templateLocked}
-                          onInput={(event) => onAgentDraftChange({ ...agentDraft, image: event.currentTarget.value })}
-                          placeholder={t("agentImagePlaceholder")}
-                        />
-                        <small className="field-hint">{t("agentImageTemplateHint")}</small>
-                      </label>
+                      {!sandboxEnabled && codexChoice?.installed === false ? (
+                        <small className="field-hint form-error">
+                          {codexChoice.message || t("runtimeCodexNotInstalled")}
+                        </small>
+                      ) : null}
                     </div>
+                  ) : agentModalMode === "edit" ? (
+                    <label className="field span-2">
+                      <span>{t("profileRuntimeKind")}</span>
+                      <input
+                        value={
+                          agentSandboxEnabled(editingAgent)
+                            ? agentRuntimeName(editingAgent) === "openclaw"
+                              ? t("runtimeOpenclaw")
+                              : agentRuntimeName(editingAgent) === "picoclaw"
+                                ? t("runtimePicoclaw")
+                                : "Codex"
+                            : t("runtimeCodexCLI")
+                        }
+                        readOnly
+                        disabled
+                      />
+                    </label>
                   ) : null}
                   {runtimeOptionSchemas.length > 0 ? (
                     <RuntimeOptionsFields
