@@ -598,6 +598,7 @@ export function useWorkspaceController() {
       t,
       currentWorkspaceLabel: shell.currentWorkspaceLabel,
       runningAgentCount: agent.runningAgentCount,
+      showHubNewBadge: shell.showHubNewBadge,
       agentItems: agent.agentItems,
       modelProviders,
       modelProvidersLoaded,

@@ -7,6 +7,7 @@ const labels: Record<string, string> = {
   agentsTab: "Agents",
   hubTab: "Hub",
   messagesTab: "Messages",
+  newBadge: "NEW",
   tasksTab: "Tasks",
 };
 
@@ -23,6 +24,7 @@ describe("WorkspaceTabBar", () => {
         agentCount={1}
         taskCount={0}
         onSelectHub={() => {}}
+        showHubNewBadge
         t={t}
       />,
     );
@@ -33,5 +35,22 @@ describe("WorkspaceTabBar", () => {
     expect(within(tablist).getByRole("tab", { name: "Agents" })).toBeInTheDocument();
     expect(within(tablist).getByRole("tab", { name: "Tasks" })).toBeInTheDocument();
     expect(within(tablist).getByRole("tab", { name: "Hub" })).toBeInTheDocument();
+  });
+
+  it("hides the hub new badge after it is dismissed", () => {
+    render(
+      <WorkspaceTabBar
+        workspaceTab={WorkspaceTabs.messages}
+        onWorkspaceTabChange={() => {}}
+        roomCount={2}
+        agentCount={1}
+        taskCount={0}
+        onSelectHub={() => {}}
+        showHubNewBadge={false}
+        t={t}
+      />,
+    );
+
+    expect(screen.queryByText("NEW")).not.toBeInTheDocument();
   });
 });

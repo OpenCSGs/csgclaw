@@ -5,3 +5,4 @@ export const SIDEBAR_WIDTH_STORAGE_KEY = "csgclaw.im.sidebarWidth" as const;
 export const WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY = "csgclaw.im.workspaceGroupsCollapsed" as const;
 export const WORKSPACE_SECTION_ORDER_STORAGE_KEY = "csgclaw.im.workspaceSectionOrder" as const;
 export const FEISHU_REGISTRATIONS_STORAGE_KEY = "csgclaw.im.feishuRegistrations" as const;
+export const HUB_NEW_BADGE_SEEN_STORAGE_KEY = "csgclaw.im.hubNewBadgeSeen" as const;

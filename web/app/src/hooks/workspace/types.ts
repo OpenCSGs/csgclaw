@@ -66,6 +66,7 @@ export type UseWorkspaceShellControllerArgs = {
 
 export type WorkspaceShellController = {
   currentWorkspaceLabel: string;
+  showHubNewBadge: boolean;
   selectWorkspaceTab: (tab: WorkspaceTab) => void;
   shellClassName: string;
   toggleWorkspaceGroup: (id: string) => void;

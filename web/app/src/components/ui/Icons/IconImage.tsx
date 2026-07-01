@@ -69,6 +69,10 @@ export function HubIcon(): ReactElement {
   return IconImage("hub");
 }
 
+export function TaskIcon(): ReactElement {
+  return IconImage("task");
+}
+
 export function ModelsIcon(): ReactElement {
   return IconImage("models");
 }

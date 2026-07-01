@@ -17,6 +17,7 @@ export function WorkspaceSidebar({
   notificationAgentItems,
   workspaceTab,
   onWorkspaceTabChange,
+  showHubNewBadge,
   taskCount,
   roomCount,
   channels,
@@ -83,6 +84,7 @@ export function WorkspaceSidebar({
             roomCount={roomCount}
             agentCount={agentCount}
             onSelectHub={onSelectHub}
+            showHubNewBadge={showHubNewBadge}
             t={t}
           />
         </div>

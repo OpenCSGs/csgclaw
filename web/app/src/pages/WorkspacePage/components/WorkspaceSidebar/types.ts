@@ -79,6 +79,7 @@ export type WorkspaceSidebarProps = {
   teams: WorkspaceTeam[];
   roomCount: number;
   runningAgentCount: number;
+  showHubNewBadge: boolean;
   t: TranslateFn;
   theme: ThemeMode;
   threadCount: number;

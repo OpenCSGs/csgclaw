@@ -1,12 +1,11 @@
 import { Button } from "@/components/ui";
-import { HubIcon, RoomsIcon, UsersIcon } from "@/components/ui/Icons";
+import { HubIcon, RoomsIcon, TaskIcon, UsersIcon } from "@/components/ui/Icons";
 import { WorkspaceTabs } from "@/models/routing";
-import { ListTodo } from "lucide-react";
 import type { WorkspaceSidebarProps } from "./types";
 
 type WorkspaceTabBarProps = Pick<
   WorkspaceSidebarProps,
-  "onSelectHub" | "onWorkspaceTabChange" | "roomCount" | "t" | "taskCount" | "workspaceTab"
+  "onSelectHub" | "onWorkspaceTabChange" | "roomCount" | "showHubNewBadge" | "t" | "taskCount" | "workspaceTab"
 > & {
   agentCount: number;
   variant?: "default" | "rail";
@@ -19,6 +18,7 @@ export function WorkspaceTabBar({
   roomCount,
   agentCount,
   onSelectHub,
+  showHubNewBadge,
   t,
   variant = "default",
 }: WorkspaceTabBarProps) {
@@ -78,7 +78,7 @@ export function WorkspaceTabBar({
         onClick={() => onWorkspaceTabChange(WorkspaceTabs.tasks)}
       >
         <span className="workspace-tab-icon" aria-hidden="true">
-          <ListTodo strokeWidth={2.1} />
+          <TaskIcon />
         </span>
         {!rail ? (
           <span className="workspace-tab-copy">
@@ -99,14 +99,14 @@ export function WorkspaceTabBar({
         <span className="workspace-tab-icon" aria-hidden="true">
           <HubIcon />
         </span>
-        {rail ? (
+        {rail && showHubNewBadge ? (
           <span className="workspace-tab-rail-new" aria-hidden="true"></span>
-        ) : (
+        ) : !rail ? (
           <span className="workspace-tab-copy">
             <strong>{t("hubTab")}</strong>
-            <span className="workspace-tab-badge">{t("newBadge")}</span>
+            {showHubNewBadge ? <span className="workspace-tab-badge">{t("newBadge")}</span> : null}
           </span>
-        )}
+        ) : null}
       </Button>
     </div>
   );

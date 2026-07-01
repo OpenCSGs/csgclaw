@@ -4,6 +4,7 @@ import { useWorkspaceShellController } from "@/hooks/workspace/useWorkspaceShell
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import type { WorkspaceTab } from "@/models/routing";
+import { HUB_NEW_BADGE_SEEN_STORAGE_KEY } from "@/shared/storage/keys";
 
 const rooms: IMConversation[] = [
   {
@@ -45,6 +46,7 @@ function ShellHarness() {
   return (
     <>
       <div data-testid="workspace-tab">{shell.workspaceTab}</div>
+      <div data-testid="hub-new-badge">{String(shell.showHubNewBadge)}</div>
       <button type="button" onClick={() => shell.selectWorkspaceTab(WorkspaceTabs.threads)}>
         Threads
       </button>
@@ -99,5 +101,50 @@ describe("useWorkspaceShellController", () => {
     await waitFor(() => {
       expect(setIsSidebarCollapsed).toHaveBeenCalledWith(false);
     });
+  });
+
+  it("marks the hub badge as seen after selecting the hub tab", async () => {
+    function HubShellHarness() {
+      const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(WorkspaceTabs.messages);
+      const shell = useWorkspaceShellController({
+        activeConversationId: "room-1",
+        activePane: { type: WorkspacePaneTypes.conversation, id: "room-1" },
+        collapsedWorkspaceGroups: {},
+        isSidebarCollapsed: false,
+        locale: "en",
+        navigatePane: vi.fn(),
+        rooms,
+        selectComputer: vi.fn(),
+        selectConversation: vi.fn(),
+        selectHub: vi.fn(),
+        selectTasks: vi.fn(),
+        setCollapsedWorkspaceGroups: vi.fn(),
+        setIsSidebarCollapsed: vi.fn(),
+        setWorkspaceTab,
+        t,
+        theme: "dark",
+        workspaceTab,
+      });
+
+      return (
+        <>
+          <div data-testid="hub-new-badge">{String(shell.showHubNewBadge)}</div>
+          <button type="button" onClick={() => shell.selectWorkspaceTab(WorkspaceTabs.hub)}>
+            Hub
+          </button>
+        </>
+      );
+    }
+
+    render(<HubShellHarness />);
+
+    expect(screen.getByTestId("hub-new-badge")).toHaveTextContent("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Hub" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("hub-new-badge")).toHaveTextContent("false");
+    });
+    expect(window.localStorage.getItem(HUB_NEW_BADGE_SEEN_STORAGE_KEY)).toBe("seen");
   });
 });

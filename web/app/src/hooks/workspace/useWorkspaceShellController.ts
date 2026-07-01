@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { initializeMermaidTheme } from "@/components/business/MessageContent";
 import { messages } from "@/shared/i18n/messages";
 import {
+  HUB_NEW_BADGE_SEEN_STORAGE_KEY,
   LOCALE_STORAGE_KEY,
   SIDEBAR_COLLAPSED_STORAGE_KEY,
   THEME_STORAGE_KEY,
@@ -10,6 +11,28 @@ import {
 import { WorkspacePaneTypes, WorkspaceTabs, workspaceTabForPane } from "@/models/routing";
 import type { WorkspaceTab } from "@/models/routing";
 import type { UseWorkspaceShellControllerArgs, WorkspaceShellController } from "./types";
+
+function readHubNewBadgeSeen(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    return window.localStorage.getItem(HUB_NEW_BADGE_SEEN_STORAGE_KEY) === "seen";
+  } catch {
+    return false;
+  }
+}
+
+function writeHubNewBadgeSeen() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(HUB_NEW_BADGE_SEEN_STORAGE_KEY, "seen");
+  } catch {
+    // Local storage can be unavailable in restricted browser contexts.
+  }
+}
 
 export function useWorkspaceShellController({
   activeConversationId,
@@ -30,6 +53,7 @@ export function useWorkspaceShellController({
   theme,
   workspaceTab,
 }: UseWorkspaceShellControllerArgs): WorkspaceShellController {
+  const [showHubNewBadge, setShowHubNewBadge] = useState(() => !readHubNewBadgeSeen());
   const currentWorkspaceLabel =
     activePane.type === WorkspacePaneTypes.agent
       ? t("agentOverview")
@@ -84,6 +108,18 @@ export function useWorkspaceShellController({
     window.localStorage.setItem(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY, JSON.stringify(collapsedWorkspaceGroups));
   }, [collapsedWorkspaceGroups]);
 
+  const dismissHubNewBadge = useCallback(() => {
+    setShowHubNewBadge(false);
+    writeHubNewBadgeSeen();
+  }, []);
+
+  useEffect(() => {
+    if (activePane.type !== WorkspacePaneTypes.hub || !showHubNewBadge) {
+      return;
+    }
+    dismissHubNewBadge();
+  }, [activePane.type, dismissHubNewBadge, showHubNewBadge]);
+
   function selectWorkspaceTab(tab: WorkspaceTab) {
     setIsSidebarCollapsed(false);
     if (tab === resolvedWorkspaceTab) {
@@ -91,6 +127,7 @@ export function useWorkspaceShellController({
     }
     setWorkspaceTab(tab);
     if (tab === WorkspaceTabs.hub) {
+      dismissHubNewBadge();
       selectHub();
       return;
     }
@@ -119,6 +156,7 @@ export function useWorkspaceShellController({
 
   return {
     currentWorkspaceLabel,
+    showHubNewBadge,
     shellClassName: `app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`,
     workspaceTab: resolvedWorkspaceTab,
     selectWorkspaceTab,
