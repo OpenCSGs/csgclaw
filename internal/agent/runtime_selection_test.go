@@ -3,16 +3,18 @@ package agent
 import (
 	"strings"
 	"testing"
+
+	agentruntime "csgclaw/internal/runtime"
 )
 
 func TestResolveRuntimeSelection(t *testing.T) {
 	t.Run("normalizes runtime config from legacy kind", func(t *testing.T) {
-		cfg, err := runtimeConfigFromSelection(RuntimeKindOpenClawSandbox, "", false)
+		cfg, err := agentruntime.RuntimeConfigFromSelection(RuntimeKindOpenClawSandbox, "", false)
 		if err != nil {
-			t.Fatalf("runtimeConfigFromSelection() error = %v", err)
+			t.Fatalf("RuntimeConfigFromSelection() error = %v", err)
 		}
-		if cfg != (RuntimeConfig{Name: RuntimeNameOpenClaw, Sandboxed: true}) {
-			t.Fatalf("runtimeConfigFromSelection() = %#v, want %#v", cfg, RuntimeConfig{Name: RuntimeNameOpenClaw, Sandboxed: true})
+		if cfg != (agentruntime.RuntimeConfig{Name: RuntimeNameOpenClaw, Sandboxed: true}) {
+			t.Fatalf("RuntimeConfigFromSelection() = %#v, want %#v", cfg, agentruntime.RuntimeConfig{Name: RuntimeNameOpenClaw, Sandboxed: true})
 		}
 		if cfg.LegacyKind() != RuntimeKindOpenClawSandbox {
 			t.Fatalf("LegacyKind() = %q, want %q", cfg.LegacyKind(), RuntimeKindOpenClawSandbox)
@@ -49,11 +51,11 @@ func TestResolveRuntimeSelection(t *testing.T) {
 
 func TestAgentRuntimeConfigRoundTrip(t *testing.T) {
 	item := Agent{RuntimeKind: RuntimeKindCodex}
-	if got := item.RuntimeConfig(); got != (RuntimeConfig{Name: RuntimeNameCodex, Sandboxed: false}) {
-		t.Fatalf("RuntimeConfig() = %#v, want %#v", got, RuntimeConfig{Name: RuntimeNameCodex, Sandboxed: false})
+	if got := item.RuntimeConfig(); got != (agentruntime.RuntimeConfig{Name: RuntimeNameCodex, Sandboxed: false}) {
+		t.Fatalf("RuntimeConfig() = %#v, want %#v", got, agentruntime.RuntimeConfig{Name: RuntimeNameCodex, Sandboxed: false})
 	}
 
-	item.SetRuntimeConfig(RuntimeConfig{Name: RuntimeNamePicoClaw, Sandboxed: true})
+	item.SetRuntimeConfig(agentruntime.RuntimeConfig{Name: RuntimeNamePicoClaw, Sandboxed: true})
 	if item.RuntimeKind != RuntimeKindPicoClawSandbox || item.RuntimeName != RuntimeNamePicoClaw || !item.SandboxEnabled {
 		t.Fatalf("SetRuntimeConfig() runtime = %q/%q/%t, want %q/%q/%t", item.RuntimeKind, item.RuntimeName, item.SandboxEnabled, RuntimeKindPicoClawSandbox, RuntimeNamePicoClaw, true)
 	}

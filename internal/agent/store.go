@@ -269,7 +269,7 @@ func (a persistedAgent) toAgent() Agent {
 			rx = utils.CloneAnyMap(rt.Options)
 		}
 	}
-	runtimeCfg := runtimeConfigForKind(runtimeKind)
+	runtimeCfg := agentruntime.RuntimeConfigForKind(runtimeKind)
 	ag := Agent{
 		ID:               a.ID,
 		Name:             a.Name,

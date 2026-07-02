@@ -13,9 +13,9 @@ const (
 	RuntimeKindPicoClawSandbox = agentruntime.KindPicoClawSandbox
 	RuntimeKindOpenClawSandbox = agentruntime.KindOpenClawSandbox
 	RuntimeKindCodex           = agentruntime.KindCodex
-	RuntimeNamePicoClaw        = "picoclaw"
-	RuntimeNameOpenClaw        = "openclaw"
-	RuntimeNameCodex           = "codex"
+	RuntimeNamePicoClaw        = agentruntime.NamePicoClaw
+	RuntimeNameOpenClaw        = agentruntime.NameOpenClaw
+	RuntimeNameCodex           = agentruntime.NameCodex
 )
 
 type RuntimeRecord struct {
@@ -118,57 +118,19 @@ func isGatewayRuntimeKind(kind string) bool {
 }
 
 func normalizeRuntimeName(name string) string {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case RuntimeNamePicoClaw, RuntimeKindPicoClawSandbox:
-		return RuntimeNamePicoClaw
-	case RuntimeNameOpenClaw, RuntimeKindOpenClawSandbox:
-		return RuntimeNameOpenClaw
-	case RuntimeNameCodex:
-		return RuntimeNameCodex
-	case "":
-		return ""
-	default:
-		return strings.ToLower(strings.TrimSpace(name))
-	}
+	return agentruntime.NormalizeRuntimeName(name)
 }
 
 func runtimeNameForKind(kind string) string {
-	switch strings.TrimSpace(kind) {
-	case RuntimeKindPicoClawSandbox:
-		return RuntimeNamePicoClaw
-	case RuntimeKindOpenClawSandbox:
-		return RuntimeNameOpenClaw
-	case RuntimeKindCodex:
-		return RuntimeNameCodex
-	default:
-		return normalizeRuntimeName(kind)
-	}
+	return agentruntime.RuntimeConfigForKind(kind).Name
 }
 
 func sandboxEnabledForKind(kind string) bool {
-	return isGatewayRuntimeKind(strings.TrimSpace(kind))
-}
-
-func runtimeKindFromNameAndSandbox(name string, sandboxEnabled bool) string {
-	switch (RuntimeConfig{Name: name, Sandboxed: sandboxEnabled}).Normalized().Name {
-	case RuntimeNamePicoClaw:
-		if sandboxEnabled {
-			return RuntimeKindPicoClawSandbox
-		}
-	case RuntimeNameOpenClaw:
-		if sandboxEnabled {
-			return RuntimeKindOpenClawSandbox
-		}
-	case RuntimeNameCodex:
-		if !sandboxEnabled {
-			return RuntimeKindCodex
-		}
-	}
-	return ""
+	return agentruntime.SandboxEnabledForKind(kind)
 }
 
 func resolveRuntimeSelection(kind, name string, sandboxEnabled bool) (string, string, bool, error) {
-	cfg, err := runtimeConfigFromSelection(kind, name, sandboxEnabled)
+	cfg, err := agentruntime.RuntimeConfigFromSelection(kind, name, sandboxEnabled)
 	if err != nil {
 		return "", "", false, err
 	}

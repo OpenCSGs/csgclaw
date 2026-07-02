@@ -39,17 +39,14 @@ type Agent struct {
 	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
-func (a Agent) RuntimeConfig() RuntimeConfig {
-	if cfg, err := runtimeConfigFromSelection(a.RuntimeKind, a.RuntimeName, a.SandboxEnabled); err == nil {
+func (a Agent) RuntimeConfig() agentruntime.RuntimeConfig {
+	if cfg, err := agentruntime.RuntimeConfigFromSelection(a.RuntimeKind, a.RuntimeName, a.SandboxEnabled); err == nil {
 		return cfg
 	}
-	return RuntimeConfig{
-		Name:      normalizeRuntimeName(a.RuntimeName),
-		Sandboxed: a.SandboxEnabled,
-	}
+	return agentruntime.RuntimeConfig{Name: a.RuntimeName, Sandboxed: a.SandboxEnabled}.Normalized()
 }
 
-func (a *Agent) SetRuntimeConfig(cfg RuntimeConfig) {
+func (a *Agent) SetRuntimeConfig(cfg agentruntime.RuntimeConfig) {
 	if a == nil {
 		return
 	}
@@ -193,17 +190,14 @@ type CreateAgentSpec struct {
 	AgentProfile   AgentProfile   `json:"agent_profile,omitempty"`
 }
 
-func (s CreateAgentSpec) RuntimeConfig() RuntimeConfig {
-	if cfg, err := runtimeConfigFromSelection(s.RuntimeKind, s.RuntimeName, s.SandboxEnabled); err == nil {
+func (s CreateAgentSpec) RuntimeConfig() agentruntime.RuntimeConfig {
+	if cfg, err := agentruntime.RuntimeConfigFromSelection(s.RuntimeKind, s.RuntimeName, s.SandboxEnabled); err == nil {
 		return cfg
 	}
-	return RuntimeConfig{
-		Name:      normalizeRuntimeName(s.RuntimeName),
-		Sandboxed: s.SandboxEnabled,
-	}
+	return agentruntime.RuntimeConfig{Name: s.RuntimeName, Sandboxed: s.SandboxEnabled}.Normalized()
 }
 
-func (s *CreateAgentSpec) SetRuntimeConfig(cfg RuntimeConfig) {
+func (s *CreateAgentSpec) SetRuntimeConfig(cfg agentruntime.RuntimeConfig) {
 	if s == nil {
 		return
 	}
@@ -239,10 +233,10 @@ func (s CreateAgentSpec) MarshalJSON() ([]byte, error) {
 	runtimeName := strings.TrimSpace(s.RuntimeName)
 	sandboxEnabled := s.SandboxEnabled
 	if runtimeName == "" {
-		runtimeName = runtimeNameForKind(s.RuntimeKind)
+		runtimeName = agentruntime.RuntimeConfigForKind(s.RuntimeKind).Name
 	}
 	if !sandboxEnabled {
-		sandboxEnabled = sandboxEnabledForKind(s.RuntimeKind)
+		sandboxEnabled = agentruntime.SandboxEnabledForKind(s.RuntimeKind)
 	}
 	var runtime *struct {
 		Name           string         `json:"name,omitempty"`

@@ -1115,7 +1115,7 @@ func (s *Service) replace(ctx context.Context, req CreateRequest) (Agent, error)
 			spec.Role = existing.Role
 		}
 	}
-	runtimeCfg, err := runtimeConfigFromSelection(spec.RuntimeKind, spec.RuntimeName, spec.SandboxEnabled)
+	runtimeCfg, err := agentruntime.RuntimeConfigFromSelection(spec.RuntimeKind, spec.RuntimeName, spec.SandboxEnabled)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -1222,7 +1222,7 @@ func mergeReplaceSpec(existing Agent, next CreateAgentSpec, fieldMask []string) 
 			return CreateAgentSpec{}, fmt.Errorf("unsupported agent field mask path %q", field)
 		}
 	}
-	runtimeCfg, err := runtimeConfigFromSelection(merged.RuntimeKind, merged.RuntimeName, merged.SandboxEnabled)
+	runtimeCfg, err := agentruntime.RuntimeConfigFromSelection(merged.RuntimeKind, merged.RuntimeName, merged.SandboxEnabled)
 	if err != nil {
 		return CreateAgentSpec{}, err
 	}
@@ -1804,7 +1804,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	avatar := strings.TrimSpace(spec.Avatar)
 	runtimeKindProvided := strings.TrimSpace(spec.RuntimeKind) != ""
 	runtimeNameProvided := strings.TrimSpace(spec.RuntimeName) != ""
-	runtimeCfg, err := runtimeConfigFromSelection(spec.RuntimeKind, spec.RuntimeName, spec.SandboxEnabled)
+	runtimeCfg, err := agentruntime.RuntimeConfigFromSelection(spec.RuntimeKind, spec.RuntimeName, spec.SandboxEnabled)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -2035,7 +2035,7 @@ func newWorkerAgent(id, name, description, instructions, image, avatar, runtimeK
 	if len(runtimeOptions) > 0 {
 		agentRX = utils.CloneAnyMap(runtimeOptions)
 	}
-	runtimeCfg, _ := runtimeConfigFromSelection(runtimeKind, runtimeName, sandboxEnabled)
+	runtimeCfg, _ := agentruntime.RuntimeConfigFromSelection(runtimeKind, runtimeName, sandboxEnabled)
 	resolvedRuntimeKind := runtimeCfg.LegacyKind()
 	resolvedRuntimeName := runtimeCfg.Name
 	return Agent{
