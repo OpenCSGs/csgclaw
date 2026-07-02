@@ -735,16 +735,21 @@ describe("agent action visibility", () => {
     expect(modelSectionTitle.compareDocumentPosition(instructionSectionTitle)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
-  it("shows long agent image values with full hover text and full-row alignment", () => {
-    const image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8";
+  it("does not show the image field in the agent profile runtime section", () => {
     render(
       <AgentDetailPane
-        item={{ ...worker, image }}
+        item={{
+          ...worker,
+          image: "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
+        }}
         t={t}
         activeRoom={null}
         busyKey=""
         error=""
-        draft={agentToDraft({ ...worker, image })}
+        draft={agentToDraft({
+          ...worker,
+          image: "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
+        })}
         models={[]}
         modelBusy={false}
         saving={false}
@@ -766,12 +771,7 @@ describe("agent action visibility", () => {
       />,
     );
 
-    const imageInput = screen.getByLabelText("Image");
-    expect(imageInput).toHaveValue(image);
-    expect(imageInput).toHaveAttribute("title", image);
-    expect(imageInput).toHaveClass("long-image-input");
-    expect(imageInput.closest("label")).toHaveClass("agent-image-field");
-    expect(imageInput.closest(".agent-runtime-image-row")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Image")).not.toBeInTheDocument();
   });
 
   it("shows a saved status instead of a save button when the draft is unchanged", () => {

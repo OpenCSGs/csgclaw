@@ -614,24 +614,10 @@ export function AgentDetailPane({
               <div className="agent-section-form">
                 <div className="profile-grid-compact agent-page-form-content">
                   {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-                    <div className="agent-runtime-image-row span-2">
-                      <label className="field">
-                        <span>{t("profileRuntimeKind")}</span>
-                        <input value={draft.runtime_kind || runtimeKind || ""} readOnly disabled />
-                      </label>
-                      <label className="field agent-image-field">
-                        <span>{t("agentImage")}</span>
-                        <input
-                          className="long-image-input"
-                          value={draft.image}
-                          title={draft.image}
-                          readOnly
-                          disabled
-                          onInput={(event) => updateDraft({ image: event.currentTarget.value })}
-                          placeholder={t("agentImagePlaceholder")}
-                        />
-                      </label>
-                    </div>
+                    <label className="field">
+                      <span>{t("profileRuntimeKind")}</span>
+                      <input value={draft.runtime_kind || runtimeKind || ""} readOnly disabled />
+                    </label>
                   ) : (
                     <label className="field">
                       <span>{t("profileRuntimeKind")}</span>

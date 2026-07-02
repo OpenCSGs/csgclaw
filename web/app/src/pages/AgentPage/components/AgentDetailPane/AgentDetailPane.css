@@ -1088,25 +1088,6 @@
   line-height: 20px;
 }
 
-.agent-detail-pane .agent-image-field {
-  min-width: 0;
-}
-
-.agent-detail-pane .agent-runtime-image-row {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-  align-items: start;
-}
-
-.agent-detail-pane .long-image-input {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .agent-detail-pane .profile-section .field textarea.compact-textarea {
   min-height: 78px;
 }
@@ -1297,7 +1278,6 @@
   .agent-detail-pane .profile-grid-compact,
   .agent-detail-pane .profile-api-grid,
   .agent-detail-pane .profile-advanced-grid,
-  .agent-detail-pane .agent-runtime-image-row,
   .agent-detail-pane .agent-workspace-panels {
     grid-template-columns: 1fr;
   }
