@@ -66,7 +66,7 @@ export function ComputerIcon(): ReactElement {
 }
 
 export function HubIcon(): ReactElement {
-  return IconImage("hub");
+  return IconImage("resources");
 }
 
 export function TaskIcon(): ReactElement {
