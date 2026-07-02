@@ -2,11 +2,11 @@ import type { ProviderName } from "@/models/agents";
 
 export const BUILTIN_MODEL_PROVIDER_IDS = ["opencsg", "csghub-lite", "codex", "claude_code"] as const;
 const MODEL_PROVIDER_AVATARS: Record<string, string> = {
-  opencsg: "model-providers/opencsg.png",
+  opencsg: "model-providers/opencsg.svg",
   "csghub-lite": "model-providers/csghub-lite.png",
-  codex: "model-providers/codex.png",
-  claude_code: "model-providers/claude-code.png",
-  openai: "model-providers/openai-api.png",
+  codex: "model-providers/codex.svg",
+  claude_code: "model-providers/claude-code.svg",
+  openai: "model-providers/openai-api.svg",
 };
 
 const builtinRank = new Map<string, number>(BUILTIN_MODEL_PROVIDER_IDS.map((id, index) => [id, index]));

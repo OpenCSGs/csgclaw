@@ -201,7 +201,7 @@ export function decodePathSegment(value: string): string {
 }
 
 export function workspaceTabForPane(pane: WorkspacePane | null | undefined): WorkspaceTab {
-  if (pane?.type === WorkspacePaneTypes.hub) {
+  if (pane?.type === WorkspacePaneTypes.hub || pane?.type === WorkspacePaneTypes.modelProvider) {
     return WorkspaceTabs.hub;
   }
   if (pane?.type === WorkspacePaneTypes.task) {
@@ -211,7 +211,6 @@ export function workspaceTabForPane(pane: WorkspacePane | null | undefined): Wor
     pane?.type === WorkspacePaneTypes.agent ||
     pane?.type === WorkspacePaneTypes.human ||
     pane?.type === WorkspacePaneTypes.team ||
-    pane?.type === WorkspacePaneTypes.modelProvider ||
     pane?.type === WorkspacePaneTypes.computer
   ) {
     return WorkspaceTabs.agents;

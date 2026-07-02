@@ -84,7 +84,7 @@ export const messages = {
     threadsTab: "话题",
     agentsTab: "智能体",
     tasksTab: "任务",
-    hubTab: "Hub",
+    hubTab: "资源",
     newBadge: "NEW",
     computersSection: "电脑",
     localComputer: "本机",

@@ -118,7 +118,6 @@ const DEFAULT_SECTION_ORDERS = {
   [SectionPanels.messages]: [MessageSectionIds.directMessages, MessageSectionIds.rooms, MessageSectionIds.threads],
   [SectionPanels.agents]: [
     AgentSectionIds.agents,
-    AgentSectionIds.models,
     AgentSectionIds.humans,
     AgentSectionIds.computers,
     AgentSectionIds.notifications,
@@ -243,6 +242,7 @@ export function WorkspaceTabPanels({
   const selectedHubResourceType = hub?.selectedHubResourceType ?? "template";
   const selectedHubSkillName = hub?.selectedHubSkillName ?? "";
   const selectedHubTemplateId = hub?.selectedHubTemplateId ?? "";
+  const hubResourceActive = activePane.type === WorkspacePaneTypes.hub;
   const threadCount = useMemo(
     () => threadGroups.reduce((count, group) => count + group.threads.length, 0),
     [threadGroups],
@@ -307,7 +307,6 @@ export function WorkspaceTabPanels({
       value === MessageSectionIds.rooms ||
       value === MessageSectionIds.directMessages ||
       value === MessageSectionIds.threads ||
-      value === AgentSectionIds.models ||
       value === AgentSectionIds.agents ||
       value === AgentSectionIds.humans ||
       value === AgentSectionIds.teams ||
@@ -452,30 +451,32 @@ export function WorkspaceTabPanels({
     );
   }
 
+  function renderModelProviderSection() {
+    const providers = modelProviders?.providers ?? [];
+    const builtins = modelProviders?.builtinProviders ?? [];
+    const custom = modelProviders?.customProviders ?? [];
+    return (
+      <WorkspaceGroup
+        id="models"
+        title={t("modelsSection")}
+        count={providers.length}
+        collapsed={Boolean(collapsedWorkspaceGroups.models)}
+        onToggle={() => onToggleWorkspaceGroup("models")}
+        onAdd={onCreateModelProvider}
+        addLabel={t("modelProviderAdd")}
+        addIcon={<Plus aria-hidden="true" size={16} />}
+      >
+        {!modelProvidersLoaded ? <div className="workspace-empty">{t("profileLoadingModels")}</div> : null}
+        {modelProvidersLoaded && builtins.map(renderModelProviderRow)}
+        {modelProvidersLoaded && custom.length ? <div className="workspace-provider-divider" /> : null}
+        {modelProvidersLoaded && custom.map(renderModelProviderRow)}
+      </WorkspaceGroup>
+    );
+  }
+
   function renderAgentSection(id: SectionId) {
     if (id === AgentSectionIds.models) {
-      const providers = modelProviders?.providers ?? [];
-      const builtins = modelProviders?.builtinProviders ?? [];
-      const custom = modelProviders?.customProviders ?? [];
-      return (
-        <WorkspaceGroup
-          key={id}
-          id="models"
-          title={t("modelsSection")}
-          count={providers.length}
-          collapsed={Boolean(collapsedWorkspaceGroups.models)}
-          onToggle={() => onToggleWorkspaceGroup("models")}
-          onAdd={onCreateModelProvider}
-          addLabel={t("modelProviderAdd")}
-          addIcon={<Plus aria-hidden="true" size={16} />}
-          {...sectionDragProps(SectionPanels.agents, id)}
-        >
-          {!modelProvidersLoaded ? <div className="workspace-empty">{t("profileLoadingModels")}</div> : null}
-          {modelProvidersLoaded && builtins.map(renderModelProviderRow)}
-          {modelProvidersLoaded && custom.length ? <div className="workspace-provider-divider" /> : null}
-          {modelProvidersLoaded && custom.map(renderModelProviderRow)}
-        </WorkspaceGroup>
-      );
+      return null;
     }
     if (id === AgentSectionIds.agents) {
       return (
@@ -691,7 +692,9 @@ export function WorkspaceTabPanels({
                   <button
                     key={item.id}
                     className={`workspace-row hub-template-row ${
-                      selectedHubTemplateId === item.id && selectedHubResourceType === "template" ? "active" : ""
+                      hubResourceActive && selectedHubTemplateId === item.id && selectedHubResourceType === "template"
+                        ? "active"
+                        : ""
                     }`}
                     onClick={() => onSelectHubTemplate(item)}
                   >
@@ -730,7 +733,9 @@ export function WorkspaceTabPanels({
                   <button
                     key={item.name}
                     className={`workspace-row hub-template-row hub-skill-row ${
-                      selectedHubSkillName === item.name && selectedHubResourceType === "skill" ? "active" : ""
+                      hubResourceActive && selectedHubSkillName === item.name && selectedHubResourceType === "skill"
+                        ? "active"
+                        : ""
                     }`}
                     onClick={() => onSelectHubSkill(item)}
                   >
@@ -756,6 +761,7 @@ export function WorkspaceTabPanels({
               <div className="workspace-empty">{t("hubSkillsEmpty")}</div>
             ) : null}
           </WorkspaceGroup>
+          {renderModelProviderSection()}
           <SkillUploadDialog
             open={skillUploadOpen}
             onOpenChange={setSkillUploadOpen}

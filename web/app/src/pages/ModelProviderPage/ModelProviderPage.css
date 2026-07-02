@@ -1,8 +1,13 @@
+.chat-panel:has(> .model-provider-page) {
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--bg);
+}
+
 .model-provider-page {
   --model-provider-content-width: min(100%, 1520px);
 
-  height: 100%;
-  min-height: 0;
+  height: auto;
+  min-height: 100%;
   display: grid;
   align-content: start;
   justify-items: center;
@@ -10,7 +15,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   padding: 24px 32px 28px;
-  background: linear-gradient(180deg, var(--white) 0, var(--white) 138px, transparent 138px), var(--gray-25);
+  background: var(--bg);
   scrollbar-width: thin;
   scrollbar-color: var(--gray-400) transparent;
 }
@@ -42,9 +47,9 @@
 
 .model-provider-header {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -53,28 +58,35 @@
 }
 
 .model-provider-header-avatar {
-  width: 56px;
-  height: 56px;
+  width: 36px;
+  height: 36px;
   display: block;
-  border: 1px solid color-mix(in oklab, var(--line) 72%, transparent);
-  border-radius: 14px;
-  background: var(--panel);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
   object-fit: cover;
 }
 
 .model-provider-header-main {
   min-width: 0;
   display: grid;
-  gap: 3px;
+  gap: 4px;
+}
+
+.model-provider-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .model-provider-header-main h1 {
   margin: 0;
   color: var(--text);
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 760;
   letter-spacing: 0;
-  line-height: 1.15;
+  line-height: 1.25;
 }
 
 .model-provider-header-main p {
@@ -319,7 +331,7 @@
 
 @media (max-width: 980px) {
   .model-provider-header {
-    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-columns: 36px minmax(0, 1fr);
   }
 
   .model-provider-status-pill,
@@ -339,7 +351,7 @@
 }
 
 :root[data-theme="dark"] .model-provider-page {
-  background: linear-gradient(180deg, var(--bg) 0, var(--bg) 138px, transparent 138px), var(--bg);
+  background: var(--bg);
 }
 
 :root[data-theme="dark"] .model-provider-header,

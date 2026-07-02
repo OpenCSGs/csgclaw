@@ -246,8 +246,9 @@ export function ModelProviderPage() {
           aria-hidden="true"
         />
         <div className="model-provider-header-main">
-          <p className="eyebrow">{t("modelsSection")}</p>
-          <h1>{provider.display_name || provider.id}</h1>
+          <div className="model-provider-title-row">
+            <h1>{provider.display_name || provider.id}</h1>
+          </div>
           <p>{providerSubtitle}</p>
         </div>
         <div className={`model-provider-status-pill ${effectiveTone}`}>

@@ -3,7 +3,7 @@ import { FileCode2 } from "lucide-react";
 import { formatHubDateTime, isDeletableHubTemplate } from "@/models/hubWorkspace";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
-import { HubIcon } from "@/components/ui/Icons";
+import { ModelsIcon } from "@/components/ui/Icons";
 import {
   Button,
   DialogCloseButton,
@@ -230,21 +230,23 @@ export function HubDetailPane({
               <div className="hub-inspector-hero">
                 <div className="hub-inspector-hero-row">
                   <div className="hub-inspector-brand">
-                    <div className="hub-inspector-icon">
-                      <HubIcon />
-                    </div>
                     <div className="hub-inspector-copy">
-                      <h2>{selectedTemplate.name || selectedTemplate.id}</h2>
-                      <p>{selectedTemplate.description || selectedTemplate.id}</p>
-                      <div className="hub-inspector-badge-row">
-                        <span className="mini-badge template-runtime-badge">
-                          {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind || "-"}
+                      <div className="hub-inspector-title-row">
+                        <span className="hub-inspector-title-icon" aria-hidden="true">
+                          <ModelsIcon />
                         </span>
-                        <span className="mini-badge template-source-badge">
-                          <span className="template-source-badge-dot" aria-hidden="true"></span>
-                          {localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}
-                        </span>
+                        <h2>{selectedTemplate.name || selectedTemplate.id}</h2>
+                        <div className="hub-inspector-badge-row">
+                          <span className="mini-badge template-runtime-badge">
+                            {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind || "-"}
+                          </span>
+                          <span className="mini-badge template-source-badge">
+                            <span className="template-source-badge-dot" aria-hidden="true"></span>
+                            {localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}
+                          </span>
+                        </div>
                       </div>
+                      <p>{selectedTemplate.description || selectedTemplate.id}</p>
                     </div>
                   </div>
                   <div className="hub-template-actions">
@@ -325,20 +327,22 @@ export function HubDetailPane({
               <div className="hub-inspector-hero">
                 <div className="hub-inspector-hero-row">
                   <div className="hub-inspector-brand">
-                    <div className="hub-inspector-icon hub-skill-card-icon">
-                      <FileCode2 aria-hidden="true" />
-                    </div>
                     <div className="hub-inspector-copy">
-                      <h2>{selectedSkill.name}</h2>
+                      <div className="hub-inspector-title-row">
+                        <span className="hub-inspector-title-icon" aria-hidden="true">
+                          <FileCode2 size={18} strokeWidth={2} />
+                        </span>
+                        <h2>{selectedSkill.name}</h2>
+                        {selectedSkillSourceBadge ? (
+                          <div className="hub-inspector-badge-row">
+                            <span className="mini-badge template-source-badge">
+                              <span className="template-source-badge-dot" aria-hidden="true"></span>
+                              {localizeTemplateSourceTag(selectedSkillSourceBadge, locale)}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
                       <p>{selectedSkill.description || selectedSkill.name}</p>
-                      {selectedSkillSourceBadge ? (
-                        <div className="hub-inspector-badge-row">
-                          <span className="mini-badge template-source-badge">
-                            <span className="template-source-badge-dot" aria-hidden="true"></span>
-                            {localizeTemplateSourceTag(selectedSkillSourceBadge, locale)}
-                          </span>
-                        </div>
-                      ) : null}
                     </div>
                   </div>
                   {canDeleteSkill ? (
