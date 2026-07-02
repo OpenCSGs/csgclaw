@@ -162,16 +162,16 @@ func (s *Store) SaveSnapshot(snapshot Snapshot, newEvents []TaskEvent) error {
 	if err := s.appendEvents(snapshot.Root.ID, newEvents); err != nil {
 		return err
 	}
-	if err := writeJSONAtomic(filepath.Join(dir, rootFileName), snapshot.Root); err != nil {
+	if err := writeJSONFile(filepath.Join(dir, rootFileName), snapshot.Root); err != nil {
 		return err
 	}
-	if err := writeJSONAtomic(filepath.Join(dir, childrenFileName), snapshot.Children); err != nil {
+	if err := writeJSONFile(filepath.Join(dir, childrenFileName), snapshot.Children); err != nil {
 		return err
 	}
-	if err := writeJSONAtomic(filepath.Join(dir, approvalsFileName), snapshot.Approvals); err != nil {
+	if err := writeJSONFile(filepath.Join(dir, approvalsFileName), snapshot.Approvals); err != nil {
 		return err
 	}
-	if err := writeJSONAtomic(filepath.Join(dir, presenceFileName), snapshot.Presence); err != nil {
+	if err := writeJSONFile(filepath.Join(dir, presenceFileName), snapshot.Presence); err != nil {
 		return err
 	}
 	return s.writeIndex()
@@ -368,7 +368,7 @@ func writeTaskIndex(path string, state taskIndexState) error {
 		return fmt.Errorf("task id counter is invalid: %d", state.Counters.Task)
 	}
 	state.Tasks = cloneIndexEntries(state.Tasks)
-	return writeJSONAtomic(path, state)
+	return writeJSONFile(path, state)
 }
 
 func cloneIndexEntries(in []IndexEntry) []IndexEntry {
@@ -400,43 +400,13 @@ func readJSONFile(path string, target any) error {
 	return json.Unmarshal(data, target)
 }
 
-func writeJSONAtomic(path string, value any) error {
+func writeJSONFile(path string, value any) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
-	data = append(data, '\n')
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-
-	temp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tempName := temp.Name()
-	defer os.Remove(tempName)
-
-	if _, err := temp.Write(data); err != nil {
-		temp.Close()
-		return err
-	}
-	if err := temp.Sync(); err != nil {
-		temp.Close()
-		return err
-	}
-	if err := temp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tempName, path); err != nil {
-		return err
-	}
-
-	dirHandle, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer dirHandle.Close()
-	return dirHandle.Sync()
+	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
