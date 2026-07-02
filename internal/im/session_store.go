@@ -28,6 +28,7 @@ type sessionMessageLine struct {
 	Kind      string           `json:"kind,omitempty"`
 	Content   string           `json:"content"`
 	Event     *EventPayload    `json:"event,omitempty"`
+	Metadata  map[string]any   `json:"metadata,omitempty"`
 	CreatedAt string           `json:"created_at"`
 	Mentions  []Mention        `json:"mentions"`
 	RelatesTo *MessageRelation `json:"relates_to,omitempty"`
@@ -48,6 +49,7 @@ func messageToSessionLine(message Message) sessionMessageLine {
 		Kind:      message.Kind,
 		Content:   message.Content,
 		Event:     message.Event,
+		Metadata:  message.Metadata,
 		CreatedAt: message.CreatedAt.UTC().Format(timeRFC3339Nano),
 		Mentions:  message.Mentions,
 		RelatesTo: message.RelatesTo,
@@ -66,6 +68,7 @@ func sessionLineToMessage(line sessionMessageLine) (Message, error) {
 		Kind:      line.Kind,
 		Content:   line.Content,
 		Event:     line.Event,
+		Metadata:  line.Metadata,
 		CreatedAt: createdAt,
 		Mentions:  line.Mentions,
 		RelatesTo: line.RelatesTo,

@@ -66,6 +66,7 @@ type Message struct {
 	Kind      string           `json:"kind,omitempty"`
 	Content   string           `json:"content"`
 	Event     *EventPayload    `json:"event,omitempty"`
+	Metadata  map[string]any   `json:"metadata,omitempty"`
 	CreatedAt time.Time        `json:"created_at"`
 	Mentions  []Mention        `json:"mentions"`
 	RelatesTo *MessageRelation `json:"relates_to,omitempty"`
@@ -77,6 +78,7 @@ type CreateMessageRequest struct {
 	SenderID  string           `json:"sender_id"`
 	Content   string           `json:"content"`
 	MentionID string           `json:"mention_id,omitempty"`
+	Metadata  map[string]any   `json:"metadata,omitempty"`
 	RelatesTo *MessageRelation `json:"relates_to,omitempty"`
 }
 

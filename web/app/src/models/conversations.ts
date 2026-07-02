@@ -1,5 +1,10 @@
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
-import { isToolActivityMessage } from "@/models/agentActivity";
+import {
+  isOpenClawToolDeliveryMessage,
+  openClawDeliveryKind,
+  parseAgentActivity,
+  parseLegacyToolActivityCommand,
+} from "@/models/agentActivity";
 import { renderSlashCommandPreviewText } from "@/models/slashCommands";
 import type { WorkspaceTeam } from "@/models/tasks";
 
@@ -95,6 +100,7 @@ export type IMMessage = {
   created_at?: string;
   event?: IMMessageEvent | null;
   kind?: string | null;
+  metadata?: Record<string, unknown> | null;
   mentions?: MessageMention[] | null;
   relates_to?: MessageRelation | null;
   sender_id?: string | null;
@@ -281,15 +287,26 @@ function uniqueStrings(values: string[]): string[] {
 
 export function isToolCallMessage(messageOrContent: IMMessage | unknown): boolean {
   if (isMessageLike(messageOrContent)) {
-    return isLegacyToolCallContent(messageOrContent.content) || isToolActivityMessage(messageOrContent);
+    if (parseAgentActivity(messageOrContent.content)) {
+      return true;
+    }
+    if (isOpenClawToolDeliveryMessage(messageOrContent)) {
+      return true;
+    }
+    if (openClawDeliveryKind(messageOrContent)) {
+      return false;
+    }
+    return isNonMessageActivityContent(messageOrContent.content);
   }
-  return isLegacyToolCallContent(messageOrContent);
+  return isNonMessageActivityContent(messageOrContent);
+}
+
+function isNonMessageActivityContent(content: unknown): boolean {
+  return Boolean(parseAgentActivity(content) || isLegacyToolCallContent(content));
 }
 
 function isLegacyToolCallContent(content: unknown): boolean {
-  return String(content ?? "")
-    .trimStart()
-    .startsWith("🔧 ");
+  return Boolean(parseLegacyToolActivityCommand(content));
 }
 
 function isMessageLike(value: unknown): value is IMMessage {
@@ -509,15 +526,48 @@ export function resolveConversationUser(
 }
 
 export function agentMatchesUser(
-  agent: { id?: string | null; name?: string | null; user_id?: string | null } | null,
-  user: { id?: string | null; name?: string | null } | null | undefined,
+  agent: {
+    id?: string | null;
+    name?: string | null;
+    participants?: IMParticipantLike[] | null;
+    user_id?: string | null;
+  } | null,
+  user:
+    | { id?: string | null; name?: string | null; participants?: IMParticipantLike[] | null; user_id?: string | null }
+    | null
+    | undefined,
 ): boolean {
   if (!agent || !user) {
     return false;
   }
   const agentName = normalizeComparable(agent.name);
   const userName = normalizeComparable(user.name);
-  return agent.id === user.id || agent.user_id === user.id || Boolean(agentName && userName && agentName === userName);
+  if (agentName && userName && agentName === userName) {
+    return true;
+  }
+  const agentAliases = localEntityAliasSet([
+    agent.id,
+    agent.user_id,
+    ...(agent.participants || []).flatMap(participantAliases),
+  ]);
+  const userAliases = localEntityAliasSet([
+    user.id,
+    user.user_id,
+    ...(user.participants || []).flatMap(participantAliases),
+  ]);
+  return [...agentAliases].some((alias) => userAliases.has(alias));
+}
+
+function localEntityAliasSet(values: Array<string | null | undefined>): Set<string> {
+  const aliases = new Set<string>();
+  values.forEach((value) => {
+    localIdentityAliases(value).forEach((alias) => aliases.add(alias));
+  });
+  return aliases;
+}
+
+function participantAliases(participant: IMParticipantLike | null | undefined): Array<string | null | undefined> {
+  return [participant?.id, participant?.user_id, participant?.agent_id, participant?.channel_user_ref];
 }
 
 export function feishuHumanParticipant(user: IMUser | null | undefined): IMParticipantLike | null {

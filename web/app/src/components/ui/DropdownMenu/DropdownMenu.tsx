@@ -55,6 +55,26 @@ export const DropdownMenuItem = forwardRef<ComponentRef<typeof RadixDropdownMenu
   },
 );
 
+export type DropdownMenuCheckboxItemProps = ComponentPropsWithoutRef<typeof RadixDropdownMenu.CheckboxItem>;
+
+export const DropdownMenuCheckboxItem = forwardRef<
+  ComponentRef<typeof RadixDropdownMenu.CheckboxItem>,
+  DropdownMenuCheckboxItemProps
+>(function DropdownMenuCheckboxItem({ children, className, ...props }, ref) {
+  return (
+    <RadixDropdownMenu.CheckboxItem
+      ref={ref}
+      className={classNames("csg-dropdown-menu-item csg-dropdown-menu-checkbox-item", className)}
+      {...props}
+    >
+      <span className="csg-dropdown-menu-item-indicator" aria-hidden="true">
+        <RadixDropdownMenu.ItemIndicator>✓</RadixDropdownMenu.ItemIndicator>
+      </span>
+      {children}
+    </RadixDropdownMenu.CheckboxItem>
+  );
+});
+
 export type DropdownMenuSeparatorProps = ComponentPropsWithoutRef<typeof RadixDropdownMenu.Separator>;
 
 export const DropdownMenuSeparator = forwardRef<

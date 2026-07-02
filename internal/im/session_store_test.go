@@ -101,6 +101,7 @@ func TestSaveMessageKeepsSlashInvocationAsContentOnly(t *testing.T) {
 				SenderID:  "u-admin",
 				Kind:      MessageKindMessage,
 				Content:   "/custom do it",
+				Metadata:  map[string]any{"openclaw": map[string]any{"delivery_kind": "final"}},
 				CreatedAt: time.Date(2026, 5, 25, 3, 30, 0, 0, time.UTC),
 			}},
 		}},
@@ -117,6 +118,9 @@ func TestSaveMessageKeepsSlashInvocationAsContentOnly(t *testing.T) {
 	if !strings.Contains(string(sessionData), `"content":"/custom do it"`) {
 		t.Fatalf("session = %q, want original slash invocation content", string(sessionData))
 	}
+	if !strings.Contains(string(sessionData), `"metadata":{"openclaw":{"delivery_kind":"final"}}`) {
+		t.Fatalf("session = %q, want message metadata persisted", string(sessionData))
+	}
 	if strings.Contains(string(sessionData), "agent_content") || strings.Contains(string(sessionData), "Follow custom rules") {
 		t.Fatalf("session = %q, want no hidden skill payload", string(sessionData))
 	}
@@ -130,6 +134,10 @@ func TestSaveMessageKeepsSlashInvocationAsContentOnly(t *testing.T) {
 	}
 	if loaded.Rooms[0].Messages[0].Content != "/custom do it" {
 		t.Fatalf("loaded content = %q, want original slash invocation", loaded.Rooms[0].Messages[0].Content)
+	}
+	openclaw, ok := loaded.Rooms[0].Messages[0].Metadata["openclaw"].(map[string]any)
+	if !ok || openclaw["delivery_kind"] != "final" {
+		t.Fatalf("loaded metadata = %#v, want openclaw final", loaded.Rooms[0].Messages[0].Metadata)
 	}
 }
 

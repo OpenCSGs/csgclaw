@@ -8,6 +8,10 @@ export type SendMessagePayload = {
   sender_id: string;
 };
 
+export type FetchMessagesOptions = {
+  includeThreadReplies?: boolean;
+};
+
 export type StartThreadPayload = {
   root_message_id: string;
 };
@@ -48,6 +52,14 @@ export type CreateUserPayload = Partial<IMUser> & {
 
 export function sendMessageRequest(payload: SendMessagePayload): Promise<IMMessage> {
   return post("api/v1/messages", payload);
+}
+
+export function fetchMessagesRequest(roomID: string, options: FetchMessagesOptions = {}): Promise<IMMessage[]> {
+  const params = new URLSearchParams({ room_id: roomID });
+  if (options.includeThreadReplies) {
+    params.set("include_thread_replies", "true");
+  }
+  return get(`api/v1/messages?${params.toString()}`);
 }
 
 export function startThreadRequest(roomID: string, payload: StartThreadPayload): Promise<ThreadView> {

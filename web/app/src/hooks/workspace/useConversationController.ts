@@ -53,12 +53,21 @@ import {
 } from "@/models/composer";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
+import {
+  agentActivityToolMergeKey,
+  isTerminalAgentActivityTool,
+  parseAgentActivity,
+  parseMessageActivityCommand,
+} from "@/models/agentActivity";
 import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace, type SlashSkillOption } from "@/models/slashCommands";
 import { localizeError } from "@/shared/i18n";
+import { AgentActivityKinds, AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
-import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView } from "@/models/conversations";
+import type { AgentLike } from "@/models/agents";
+import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView, UsersById } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import type { UseConversationControllerArgs } from "./types";
+import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 
 const slashSkillOptionsCache = new Map<string, SlashSkillOption[]>();
 const slashSkillOptionsRequests = new Map<string, Promise<SlashSkillOption[]>>();
@@ -81,6 +90,11 @@ type OpenCreateRoomOptions = {
   preselectedMemberIDs?: string[];
   title?: string;
 };
+
+type WorkingParticipantsByConversationId = Record<string, ConversationWorkingParticipant[]>;
+
+const MESSAGE_WORKING_TIMEOUT_MS = 120_000;
+const WORKING_PARTICIPANT_KEY_SEPARATOR = "\u0000";
 
 function clearThreadDraftsForConversation(current: DraftsByThreadKey, conversationID: string): DraftsByThreadKey {
   const prefix = `${conversationID}:`;
@@ -105,6 +119,275 @@ function conversationHasLocalIdentity(
   id: string | null | undefined,
 ): boolean {
   return (conversation?.members || []).some((memberID) => localIdentitiesMatch(memberID, id));
+}
+
+function workingParticipantKey(conversationID: string, participantID: string): string {
+  return `${conversationID}${WORKING_PARTICIPANT_KEY_SEPARATOR}${participantID}`;
+}
+
+function participantIDFromWorkingKey(conversationID: string, key: string): string {
+  const prefix = `${conversationID}${WORKING_PARTICIPANT_KEY_SEPARATOR}`;
+  return key.startsWith(prefix) ? key.slice(prefix.length) : "";
+}
+
+function agentTargetsForConversation(
+  conversation: IMConversation | null | undefined,
+  currentUserID: string | null | undefined,
+  agents: readonly AgentLike[],
+  usersById: UsersById,
+): ConversationWorkingParticipant[] {
+  if (!conversation || !currentUserID) {
+    return [];
+  }
+
+  const byID = new Map<string, ConversationWorkingParticipant>();
+  conversation.members.forEach((memberID) => {
+    if (!memberID || localIdentitiesMatch(memberID, currentUserID)) {
+      return;
+    }
+    const user = resolveUserByLocalIdentity(memberID, usersById);
+    const agent = agents.find(
+      (item) =>
+        localIdentitiesMatch(item.id, memberID) ||
+        localIdentitiesMatch(item.user_id, memberID) ||
+        (user ? agentMatchesUser(item, user) : false),
+    );
+    if (!agent) {
+      return;
+    }
+    const participantID = String(user?.id || agent.user_id || agent.id || memberID).trim();
+    const name = String(agent.name || user?.name || participantID).trim();
+    if (participantID && name) {
+      byID.set(participantID, { id: participantID, name });
+    }
+  });
+  return Array.from(byID.values()).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function messageWorkingTargets(
+  conversation: IMConversation | null | undefined,
+  currentUserID: string | null | undefined,
+  agents: readonly AgentLike[],
+  usersById: UsersById,
+  segments: readonly ComposerSegment[],
+): ConversationWorkingParticipant[] {
+  const targets = agentTargetsForConversation(conversation, currentUserID, agents, usersById);
+  if (!conversation || targets.length === 0) {
+    return [];
+  }
+  if (isDirectConversation(conversation)) {
+    return targets;
+  }
+
+  const mentionedIDs = segments
+    .filter((segment) => segment.type === "mention")
+    .map((segment) => segment.userId)
+    .filter(Boolean);
+  if (!mentionedIDs.length) {
+    return [];
+  }
+  return targets.filter((target) => mentionedIDs.some((mentionedID) => localIdentitiesMatch(mentionedID, target.id)));
+}
+
+function derivedMessageWorkingParticipants(
+  conversation: IMConversation | null | undefined,
+  currentUserID: string | null | undefined,
+  agents: readonly AgentLike[],
+  usersById: UsersById,
+): ConversationWorkingParticipant[] {
+  const roomID = String(conversation?.id || "").trim();
+  const currentID = String(currentUserID || "").trim();
+  if (!conversation || !roomID || !currentID) {
+    return [];
+  }
+  const targets = agentTargetsForConversation(conversation, currentID, agents, usersById);
+  if (!targets.length) {
+    return [];
+  }
+
+  const repliedTargetIDs = new Set<string>();
+  for (let index = conversation.messages.length - 1; index >= 0; index -= 1) {
+    const message = conversation.messages[index];
+    if (isThreadReply(message) || isToolCallMessage(message)) {
+      continue;
+    }
+
+    const senderID = String(message.sender_id || "").trim();
+    const replyTarget = targets.find((target) => localIdentitiesMatch(target.id, senderID));
+    if (replyTarget) {
+      repliedTargetIDs.add(replyTarget.id);
+      continue;
+    }
+
+    if (!localIdentitiesMatch(senderID, currentID)) {
+      continue;
+    }
+
+    const messageTargets = targetsForStoredMessage(conversation, message, targets);
+    const pendingTargets = messageTargets.filter(
+      (target) => !Array.from(repliedTargetIDs).some((id) => localIdentitiesMatch(id, target.id)),
+    );
+    if (!pendingTargets.length) {
+      continue;
+    }
+    return messageWorkingExpired(message) ? [] : pendingTargets;
+  }
+
+  return [];
+}
+
+export function activityWorkingParticipantsForConversation(
+  conversation: IMConversation | null | undefined,
+  currentUserID: string | null | undefined,
+  agents: readonly AgentLike[],
+  usersById: UsersById,
+): ConversationWorkingParticipant[] {
+  if (!conversation || !currentUserID) {
+    return [];
+  }
+  const targets = agentTargetsForConversation(conversation, currentUserID, agents, usersById);
+  if (!targets.length) {
+    return [];
+  }
+
+  const activeToolKeysByParticipantID = new Map<string, Set<string>>();
+  const activeLegacyCommandCountsByParticipantID = new Map<string, Map<string, number>>();
+  conversation.messages.forEach((message) => {
+    const activity = parseAgentActivity(message.content);
+    const tool = activity?.content.tool;
+    const target = activityWorkingTargetForMessage(message, activity?.sender, targets);
+
+    if (activity?.content.msgtype === AgentActivityMsgTypes.tool && tool) {
+      if (!target) {
+        return;
+      }
+      const toolKey = agentActivityToolMergeKey(tool);
+      if (!toolKey) {
+        return;
+      }
+
+      const activeKeys = activeToolKeysByParticipantID.get(target.id) ?? new Set<string>();
+      if (isTerminalAgentActivityTool(tool)) {
+        activeKeys.delete(toolKey);
+      } else {
+        activeKeys.add(toolKey);
+      }
+      if (activeKeys.size) {
+        activeToolKeysByParticipantID.set(target.id, activeKeys);
+      } else {
+        activeToolKeysByParticipantID.delete(target.id);
+      }
+      return;
+    }
+
+    const legacyCommand = parseMessageActivityCommand(message);
+    if (legacyCommand?.kind === AgentActivityKinds.execCommand && target) {
+      const activeCommands = activeLegacyCommandCountsByParticipantID.get(target.id) ?? new Map<string, number>();
+      const currentCount = activeCommands.get(legacyCommand.signature) ?? 0;
+      if (legacyCommand.output) {
+        const nextCount = currentCount - 1;
+        if (nextCount > 0) {
+          activeCommands.set(legacyCommand.signature, nextCount);
+        } else {
+          activeCommands.delete(legacyCommand.signature);
+        }
+      } else {
+        activeCommands.set(legacyCommand.signature, currentCount + 1);
+      }
+      if (activeCommands.size) {
+        activeLegacyCommandCountsByParticipantID.set(target.id, activeCommands);
+      } else {
+        activeLegacyCommandCountsByParticipantID.delete(target.id);
+      }
+      return;
+    }
+
+    if (target && !isToolCallMessage(message)) {
+      activeLegacyCommandCountsByParticipantID.delete(target.id);
+    }
+  });
+
+  return targets.filter(
+    (target) => activeToolKeysByParticipantID.has(target.id) || activeLegacyCommandCountsByParticipantID.has(target.id),
+  );
+}
+
+function activityWorkingTargetForMessage(
+  message: IMMessage,
+  activitySender: string | null | undefined,
+  targets: readonly ConversationWorkingParticipant[],
+): ConversationWorkingParticipant | undefined {
+  const senderIDs = [message.sender_id, activitySender];
+  return targets.find((candidate) => senderIDs.some((senderID) => localIdentitiesMatch(senderID, candidate.id)));
+}
+
+function targetsForStoredMessage(
+  conversation: IMConversation,
+  message: IMMessage,
+  targets: readonly ConversationWorkingParticipant[],
+): ConversationWorkingParticipant[] {
+  if (isDirectConversation(conversation)) {
+    return [...targets];
+  }
+  const mentionedIDs = mentionedIDsFromMessage(message);
+  if (!mentionedIDs.length) {
+    return [];
+  }
+  return targets.filter((target) => mentionedIDs.some((id) => localIdentitiesMatch(id, target.id)));
+}
+
+function mentionedIDsFromMessage(message: IMMessage): string[] {
+  const ids = new Set<string>();
+  (message.mentions || []).forEach((mention) => {
+    const id = typeof mention === "string" ? mention : mention?.id;
+    const normalized = String(id || "").trim();
+    if (normalized) {
+      ids.add(normalized);
+    }
+  });
+
+  const content = String(message.content || "");
+  const atPattern = /<at\s+[^>]*user_id=["']([^"']+)["'][^>]*>/g;
+  for (const match of content.matchAll(atPattern)) {
+    const id = String(match[1] || "").trim();
+    if (id) {
+      ids.add(id);
+    }
+  }
+  return Array.from(ids);
+}
+
+function messageWorkingExpired(message: IMMessage): boolean {
+  const createdAt = Date.parse(String(message.created_at || ""));
+  if (!Number.isFinite(createdAt)) {
+    return false;
+  }
+  return Date.now() - createdAt > MESSAGE_WORKING_TIMEOUT_MS;
+}
+
+function mergeWorkingParticipants(
+  ...groups: readonly (readonly ConversationWorkingParticipant[] | null | undefined)[]
+): ConversationWorkingParticipant[] {
+  const byID = new Map<string, ConversationWorkingParticipant>();
+  groups.forEach((group) => {
+    (group || []).forEach((participant) => {
+      const id = String(participant.id || "").trim();
+      const name = String(participant.name || id).trim();
+      if (id && name) {
+        byID.set(id, { id, name });
+      }
+    });
+  });
+  return Array.from(byID.values()).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function scrollMessageListToBottom(el: HTMLElement, behavior: "auto" | "smooth" = "auto"): void {
+  const top = el.scrollHeight;
+  if (behavior === "smooth" && typeof el.scrollTo === "function") {
+    el.scrollTo({ top, behavior: "smooth" });
+    return;
+  }
+  el.scrollTop = top;
 }
 
 export function useConversationController({
@@ -162,6 +445,8 @@ export function useConversationController({
   const [memberActionBusyID, setMemberActionBusyID] = useState("");
   const [memberActionError, setMemberActionError] = useState("");
   const [composerError, setComposerError] = useState("");
+  const [messageWorkingByConversationId, setMessageWorkingByConversationId] =
+    useState<WorkingParticipantsByConversationId>({});
   const editorRef = useRef<HTMLDivElement | null>(null);
   const composerIsComposingRef = useRef(false);
   const composerJustEndedCompositionRef = useRef(false);
@@ -171,6 +456,7 @@ export function useConversationController({
   const shouldAutoScrollRef = useRef(true);
   const autoScrollConversationRef = useRef(activeConversationId);
   const activeThreadKeyRef = useRef("");
+  const messageWorkingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   const usersById = useMemo(() => buildUsersById(data?.users), [data]);
   const activeConversation = useMemo(
@@ -205,7 +491,13 @@ export function useConversationController({
   const selectedConversation = activePane.type === WorkspacePaneTypes.conversation ? activeConversation : null;
   const activeChannel =
     selectedConversation && !isDirectConversation(selectedConversation) ? selectedConversation : null;
+  const selectedConversationID = selectedConversation?.id ?? "";
   const selectedMessageCount = selectedConversation?.messages?.length ?? 0;
+  const workingParticipants = mergeWorkingParticipants(
+    activityWorkingParticipantsForConversation(selectedConversation, data?.current_user_id, agents, usersById),
+    derivedMessageWorkingParticipants(selectedConversation, data?.current_user_id, agents, usersById),
+    selectedConversationID ? messageWorkingByConversationId[selectedConversationID] : [],
+  );
   const logAgent = useMemo(() => {
     if (!selectedConversation || !data?.current_user_id) {
       return null;
@@ -338,21 +630,124 @@ export function useConversationController({
   const threadSlashCandidates = threadSlashPickerState.candidates;
   const isAnySlashPickerNeeded = slashPickerActive || threadSlashPickerActive;
 
+  const clearMessageWorkingParticipants = useCallback(
+    (conversationID: string | null | undefined, participantID?: string | null) => {
+      const roomID = String(conversationID || "").trim();
+      if (!roomID) {
+        return;
+      }
+      const senderID = String(participantID || "").trim();
+      const keyPrefix = `${roomID}${WORKING_PARTICIPANT_KEY_SEPARATOR}`;
+      messageWorkingTimersRef.current.forEach((timer, key) => {
+        if (!key.startsWith(keyPrefix)) {
+          return;
+        }
+        const workingParticipantID = participantIDFromWorkingKey(roomID, key);
+        if (senderID && !localIdentitiesMatch(workingParticipantID, senderID)) {
+          return;
+        }
+        clearTimeout(timer);
+        messageWorkingTimersRef.current.delete(key);
+      });
+
+      setMessageWorkingByConversationId((current) => {
+        const currentParticipants = current[roomID] ?? [];
+        if (!currentParticipants.length) {
+          return current;
+        }
+        const nextParticipants = senderID
+          ? currentParticipants.filter((participant) => !localIdentitiesMatch(participant.id, senderID))
+          : [];
+        if (nextParticipants.length === currentParticipants.length) {
+          return current;
+        }
+        const next = { ...current };
+        if (nextParticipants.length) {
+          next[roomID] = nextParticipants;
+        } else {
+          delete next[roomID];
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const markMessageWorkingParticipants = useCallback(
+    (conversationID: string | null | undefined, participants: readonly ConversationWorkingParticipant[]) => {
+      const roomID = String(conversationID || "").trim();
+      if (!roomID || !participants.length) {
+        return;
+      }
+      const nextParticipants = Array.from(
+        participants.reduce((map, participant) => {
+          const id = String(participant.id || "").trim();
+          const name = String(participant.name || id).trim();
+          if (id && name) {
+            map.set(id, { id, name });
+          }
+          return map;
+        }, new Map<string, ConversationWorkingParticipant>()),
+      )
+        .map(([, participant]) => participant)
+        .sort((left, right) => left.name.localeCompare(right.name));
+      if (!nextParticipants.length) {
+        return;
+      }
+
+      setMessageWorkingByConversationId((current) => {
+        const merged = new Map((current[roomID] ?? []).map((participant) => [participant.id, participant]));
+        nextParticipants.forEach((participant) => merged.set(participant.id, participant));
+        return {
+          ...current,
+          [roomID]: Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name)),
+        };
+      });
+
+      nextParticipants.forEach((participant) => {
+        const key = workingParticipantKey(roomID, participant.id);
+        const currentTimer = messageWorkingTimersRef.current.get(key);
+        if (currentTimer) {
+          clearTimeout(currentTimer);
+        }
+        const timer = setTimeout(() => {
+          clearMessageWorkingParticipants(roomID, participant.id);
+        }, MESSAGE_WORKING_TIMEOUT_MS);
+        messageWorkingTimersRef.current.set(key, timer);
+      });
+    },
+    [clearMessageWorkingParticipants],
+  );
+
   useEffect(() => {
     activeThreadKeyRef.current = activeThreadRootID ? threadKey(activeConversationId, activeThreadRootID) : "";
   }, [activeConversationId, activeThreadRootID]);
 
-  const handleRealtimeEvent = useCallback((payload: IMServerEvent) => {
-    if ((payload?.type === "thread.created" || payload?.type === "thread.updated") && payload.thread) {
-      if (threadViewKey(payload.thread) === activeThreadKeyRef.current) {
-        setActiveThreadView(payload.thread);
+  const handleRealtimeEvent = useCallback(
+    (payload: IMServerEvent) => {
+      if ((payload?.type === "thread.created" || payload?.type === "thread.updated") && payload.thread) {
+        if (threadViewKey(payload.thread) === activeThreadKeyRef.current) {
+          setActiveThreadView(payload.thread);
+        }
       }
-    }
-    if (payload?.type === "message.created" && payload.message) {
-      if (threadMessageKey(payload.room_id, payload.message) === activeThreadKeyRef.current) {
-        setActiveThreadView((current) => appendReplyToThreadView(current, payload.message) ?? null);
+      if (payload?.type === "message.created" && payload.message) {
+        if (threadMessageKey(payload.room_id, payload.message) === activeThreadKeyRef.current) {
+          setActiveThreadView((current) => appendReplyToThreadView(current, payload.message) ?? null);
+        }
+        if (!isToolCallMessage(payload.message)) {
+          clearMessageWorkingParticipants(payload.room_id, payload.message.sender_id);
+        }
       }
-    }
+    },
+    [clearMessageWorkingParticipants],
+  );
+
+  useEffect(() => {
+    const timers = messageWorkingTimersRef.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
   }, []);
 
   useEffect(() => {
@@ -569,7 +964,7 @@ export function useConversationController({
     updateAutoScrollState();
     el.addEventListener("scroll", updateAutoScrollState);
     return () => el.removeEventListener("scroll", updateAutoScrollState);
-  }, [activeConversationId, messageListActive]);
+  }, [activeConversationId, messageListActive, selectedConversationID]);
 
   useLayoutEffect(() => {
     if (!messageListActive) {
@@ -578,14 +973,17 @@ export function useConversationController({
     if (activePane.type !== WorkspacePaneTypes.conversation) {
       return;
     }
+    if (!selectedConversationID) {
+      return;
+    }
     const el = messageListRef.current;
     if (!el) {
       return;
     }
     autoScrollConversationRef.current = activeConversationId;
-    el.scrollTop = el.scrollHeight;
+    scrollMessageListToBottom(el);
     shouldAutoScrollRef.current = true;
-  }, [activePane.type, activeConversationId, messageListActive]);
+  }, [activePane.type, activeConversationId, messageListActive, selectedConversationID]);
 
   useEffect(() => {
     if (!messageListActive) {
@@ -600,7 +998,7 @@ export function useConversationController({
     if (!el || !shouldAutoScrollRef.current) {
       return;
     }
-    el.scrollTop = el.scrollHeight;
+    scrollMessageListToBottom(el, "smooth");
   }, [visibleMessages.length, activeConversationId, messageListActive]);
 
   useEffect(() => {
@@ -648,6 +1046,13 @@ export function useConversationController({
     setComposerError("");
     const serializedDraft = serializeComposerSegments(draftSegments);
     const content = normalizeSlashShorthandForPayload(serializedDraft);
+    const workingTargets = messageWorkingTargets(
+      activeConversation,
+      data.current_user_id,
+      agents,
+      usersById,
+      draftSegments,
+    );
     try {
       const created = await sendMessageRequest({
         room_id: activeConversation.id,
@@ -655,6 +1060,7 @@ export function useConversationController({
         content,
       });
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
+      markMessageWorkingParticipants(activeConversation.id, workingTargets);
       clearComposer();
     } catch (err) {
       setComposerError(errorMessage(err, t("sendFailed")));
@@ -1122,6 +1528,7 @@ export function useConversationController({
       locale,
       t,
       theme,
+      workingParticipants,
       selectedMessageCount,
       logAgent,
       conversationMembers: activeConversationMembers,

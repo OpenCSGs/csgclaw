@@ -5123,6 +5123,72 @@ func TestHandleBotSendMessageDoesNotInferRecentThreadScope(t *testing.T) {
 	}
 }
 
+func TestHandleParticipantSendMessagePreservesMetadata(t *testing.T) {
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager"},
+		},
+		Rooms: []im.Room{{
+			ID:       "room-1",
+			IsDirect: true,
+			Members:  []string{"u-admin", "manager"},
+		}},
+	})
+
+	srv := &Handler{im: imSvc, participantBridge: im.NewParticipantBridge(""), serverNoAuth: true}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/manager/messages", strings.NewReader(`{
+		"room_id": "room-1",
+		"text": "Read: from README.md",
+		"metadata": {
+			"openclaw": {
+				"delivery_kind": "tool",
+				"request_id": "msg-user",
+				"source_message_id": "msg-user",
+				"payload_flags": {"reasoning": true}
+			}
+		}
+	}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var sent struct {
+		MessageID string `json:"message_id"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&sent); err != nil {
+		t.Fatalf("decode send response: %v", err)
+	}
+	messages, err := imSvc.ListMessagesWithOptions("room-1", im.ListMessagesOptions{IncludeThreadReplies: true})
+	if err != nil {
+		t.Fatalf("ListMessagesWithOptions() error = %v", err)
+	}
+	var reply im.Message
+	for _, message := range messages {
+		if message.ID == sent.MessageID {
+			reply = message
+			break
+		}
+	}
+	if reply.ID == "" {
+		t.Fatalf("sent message %q not found in room messages", sent.MessageID)
+	}
+	openclaw, ok := reply.Metadata["openclaw"].(map[string]any)
+	if !ok {
+		t.Fatalf("reply.Metadata = %#v, want openclaw object", reply.Metadata)
+	}
+	if openclaw["delivery_kind"] != "tool" || openclaw["request_id"] != "msg-user" {
+		t.Fatalf("openclaw metadata = %#v, want tool delivery for msg-user", openclaw)
+	}
+	flags, ok := openclaw["payload_flags"].(map[string]any)
+	if !ok || flags["reasoning"] != true {
+		t.Fatalf("payload_flags = %#v, want reasoning=true", openclaw["payload_flags"])
+	}
+}
+
 func TestHandleBotSendMessageAcceptsPicoClawThreadContext(t *testing.T) {
 	now := time.Now().UTC()
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
@@ -5254,7 +5320,7 @@ func TestHandleParticipantSendMessageReplacementRefreshesThreadRootSummary(t *te
 	}
 }
 
-func TestHandleParticipantSendMessageThreadsTopLevelToolCallsUnderFinalResponse(t *testing.T) {
+func TestHandleParticipantSendMessageKeepsTopLevelToolCallsSeparateFromFinalResponse(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		isDirect bool
@@ -5308,42 +5374,39 @@ func TestHandleParticipantSendMessageThreadsTopLevelToolCallsUnderFinalResponse(
 			if err != nil {
 				t.Fatalf("ListMessages() error = %v", err)
 			}
-			var root im.Message
+			var firstTool, secondTool, final im.Message
 			for _, message := range timeline {
-				if message.ID == firstToolID || message.ID == secondToolID {
-					t.Fatalf("timeline = %+v, want tool replies hidden from top-level messages", timeline)
+				switch message.ID {
+				case firstToolID:
+					firstTool = message
+				case secondToolID:
+					secondTool = message
+				case finalID:
+					final = message
 				}
-				if message.ID == finalID {
-					root = message
+			}
+			if firstTool.ID == "" || secondTool.ID == "" {
+				t.Fatalf("timeline = %+v, want tool records kept as top-level activity messages", timeline)
+			}
+			if final.ID == "" {
+				t.Fatalf("timeline = %+v, want final response %q", timeline, finalID)
+			}
+			if final.Content != "Used two tools." {
+				t.Fatalf("final.Content = %q, want final response", final.Content)
+			}
+			if final.Thread != nil {
+				t.Fatalf("final.Thread = %+v, want no synthetic activity thread", final.Thread)
+			}
+			if firstTool.RelatesTo != nil || secondTool.RelatesTo != nil {
+				t.Fatalf("tool relates_to = %+v / %+v, want top-level activity messages", firstTool.RelatesTo, secondTool.RelatesTo)
+			}
+			for _, tool := range []im.Message{firstTool, secondTool} {
+				if !strings.HasPrefix(strings.TrimSpace(tool.Content), "🔧 ") {
+					t.Fatalf("tool.Content = %q, want legacy tool call", tool.Content)
 				}
 			}
-			if root.ID == "" {
-				t.Fatalf("timeline = %+v, want final root %q", timeline, finalID)
-			}
-			if root.Content != "Used two tools." {
-				t.Fatalf("root.Content = %q, want final response", root.Content)
-			}
-			if root.Thread == nil || root.Thread.ReplyCount != 2 || root.Thread.Context.RootExcerpt != "Used two tools." {
-				t.Fatalf("root.Thread = %+v, want refreshed summary with two replies", root.Thread)
-			}
-
-			thread, err := imSvc.GetThread("room-1", root.ID)
-			if err != nil {
-				t.Fatalf("GetThread() error = %v", err)
-			}
-			if len(thread.Replies) != 2 {
-				t.Fatalf("thread replies = %+v, want two tool replies", thread.Replies)
-			}
-			if thread.Replies[0].ID != firstToolID || thread.Replies[1].ID != secondToolID {
-				t.Fatalf("reply ids = %q / %q, want %q / %q", thread.Replies[0].ID, thread.Replies[1].ID, firstToolID, secondToolID)
-			}
-			for _, reply := range thread.Replies {
-				if reply.RelatesTo == nil || reply.RelatesTo.RelType != im.RelationTypeThread || reply.RelatesTo.EventID != root.ID {
-					t.Fatalf("reply.RelatesTo = %+v, want m.thread -> %s", reply.RelatesTo, root.ID)
-				}
-				if !strings.HasPrefix(strings.TrimSpace(reply.Content), "🔧 ") {
-					t.Fatalf("reply.Content = %q, want legacy tool call", reply.Content)
-				}
+			if _, err := imSvc.GetThread("room-1", final.ID); err == nil {
+				t.Fatalf("GetThread(%q) unexpectedly succeeded; want no synthetic thread", final.ID)
 			}
 		})
 	}

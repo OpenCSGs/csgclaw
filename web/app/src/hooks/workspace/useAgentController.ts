@@ -273,6 +273,7 @@ export function useAgentController({
   managerProfile,
   modelProviders = null,
   modelProvidersLoaded = false,
+  profileDetailAgentID = "",
   refreshHubTemplates,
   refreshWorkspaceAgents,
   refreshWorkspaceBootstrap,
@@ -320,6 +321,7 @@ export function useAgentController({
   const [agentPageNotice, setAgentPageNotice] = useState("");
   const [agentPageNoticeTone, setAgentPageNoticeTone] = useState<AgentPageNoticeTone>("warning");
   const agentPageNoticeTimerRef = useRef<number | null>(null);
+  const agentPageDraftLoadSeqRef = useRef(0);
   const [feishuPendingRegistrations, setFeishuPendingRegistrations] = useState<
     Record<string, FeishuPendingRegistration>
   >(() => loadFeishuPendingRegistrations());
@@ -395,11 +397,13 @@ export function useAgentController({
     [agentItems, data?.users],
   );
   const selectedAgentForPage = useMemo(() => {
-    if (activePane.type !== WorkspacePaneTypes.agent) {
+    const selectedAgentID =
+      activePane.type === WorkspacePaneTypes.agent ? String(activePane.id || "").trim() : profileDetailAgentID.trim();
+    if (!selectedAgentID) {
       return null;
     }
-    return agentItems.find((item) => item.id === activePane.id) ?? null;
-  }, [agentItems, activePane]);
+    return agentItems.find((item) => item.id === selectedAgentID) ?? null;
+  }, [agentItems, activePane.id, activePane.type, profileDetailAgentID]);
   const selectedAgentForPageDraftSignature = useMemo(() => {
     if (!selectedAgentForPage) {
       return "";
@@ -492,7 +496,7 @@ export function useAgentController({
   const agentModelOptions = useMemo(() => modelProviderOptionsFromCatalog(modelProviders), [modelProviders]);
   const agentPageModelOptions = useMemo(() => modelProviderOptionsFromCatalog(modelProviders), [modelProviders]);
   const agentModelBusy = Boolean(showAgentModal && !modelProvidersLoaded);
-  const agentPageModelBusy = Boolean(activePane.type === WorkspacePaneTypes.agent && !modelProvidersLoaded);
+  const agentPageModelBusy = Boolean(selectedAgentForPage && !modelProvidersLoaded);
   const agentPageModelError = "";
   const resetAgentModels = useCallback(() => {
     void refreshWorkspaceModelProviders();
@@ -543,7 +547,7 @@ export function useAgentController({
   );
 
   function agentOperationUsesPageError(item: AgentLike | null | undefined): boolean {
-    return Boolean(item?.id && activePane.type === WorkspacePaneTypes.agent && activePane.id === item.id);
+    return Boolean(item?.id && selectedAgentForPage?.id === item.id);
   }
 
   function clearAgentOperationError(item: AgentLike | null | undefined): void {
@@ -632,6 +636,7 @@ export function useAgentController({
 
   useEffect(() => {
     if (!selectedAgentForPage) {
+      agentPageDraftLoadSeqRef.current += 1;
       setAgentPageDraft(null);
       setAgentPageSavedDraft(null);
       setAgentPageError("");
@@ -641,7 +646,12 @@ export function useAgentController({
     if (agentPageHasUnsavedChanges) {
       return;
     }
-    loadAgentPageDraft(selectedAgentForPage);
+    const loadSeq = agentPageDraftLoadSeqRef.current + 1;
+    agentPageDraftLoadSeqRef.current = loadSeq;
+    const draft = ensureNotifierPullSubscriptionDraft(agentToDraft(selectedAgentForPage));
+    setAgentPageDraft(draft);
+    setAgentPageSavedDraft(draft);
+    void loadAgentPageDraft(selectedAgentForPage, loadSeq);
   }, [agentPageHasUnsavedChanges, selectedAgentForPage?.id, selectedAgentForPageDraftSignature]);
 
   async function refreshManagerProfile(): Promise<void> {
@@ -808,7 +818,7 @@ export function useAgentController({
       return;
     }
     setAgentsData((current) => mergeAgentIntoList(current, agent));
-    if (activePane.type === WorkspacePaneTypes.agent && activePane.id === agentID) {
+    if (selectedAgentForPage?.id === agentID) {
       setAgentPageDraft((current) => agentDraftWithRuntimeFieldsFromAgent(current ?? agentToDraft(agent), agent));
       setAgentPageSavedDraft((current) => agentDraftWithRuntimeFieldsFromAgent(current ?? agentToDraft(agent), agent));
     }
@@ -907,17 +917,14 @@ export function useAgentController({
       return { agent: item || {}, profile: item?.agent_profile };
     }
     let agent: AgentLike = item || {};
-    try {
-      agent = { ...agent, ...(await fetchAgent(id)) };
-    } catch (_) {
-      // Keep the channel bot list item when the full agent endpoint is unavailable.
+    const [fetchedAgent, fetchedProfile] = await Promise.all([
+      Promise.resolve(fetchAgent(id)).catch(() => null),
+      Promise.resolve(fetchAgentProfile(id)).catch(() => null),
+    ]);
+    if (fetchedAgent) {
+      agent = { ...agent, ...fetchedAgent };
     }
-    let profile = agent?.agent_profile;
-    try {
-      profile = await fetchAgentProfile(id);
-    } catch (_) {
-      // Keep the profile embedded in the full agent record or list item.
-    }
+    const profile = fetchedProfile ?? agent?.agent_profile;
     return { agent, profile };
   }
 
@@ -1072,7 +1079,7 @@ export function useAgentController({
     }
   }
 
-  async function loadAgentPageDraft(item: AgentLike | null | undefined): Promise<void> {
+  async function loadAgentPageDraft(item: AgentLike | null | undefined, loadSeq: number): Promise<void> {
     if (!item?.id) {
       return;
     }
@@ -1080,9 +1087,15 @@ export function useAgentController({
     resetAgentPageModels();
     try {
       const draft = await agentDraftFromItem(item);
+      if (agentPageDraftLoadSeqRef.current !== loadSeq) {
+        return;
+      }
       setAgentPageDraft(draft);
       setAgentPageSavedDraft(draft);
     } catch (err) {
+      if (agentPageDraftLoadSeqRef.current !== loadSeq) {
+        return;
+      }
       setAgentPageError(errorMessage(err, t("agentActionFailed")));
       const draft = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
       setAgentPageDraft(draft);
@@ -1906,6 +1919,7 @@ export function useAgentController({
       saveError: agentPageError,
       notice: agentPageNotice,
       noticeTone: agentPageNoticeTone,
+      rooms,
       feishuConnectBusy: agentActionBusy.includes(`:${FEISHU_CHANNEL_ACTION}:`) ? agentActionBusy : "",
       feishuPendingRegistration: selectedFeishuPendingRegistration,
       authStatuses: cliproxyAuthStatuses,

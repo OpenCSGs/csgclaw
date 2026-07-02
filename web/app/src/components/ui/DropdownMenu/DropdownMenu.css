@@ -33,6 +33,23 @@
   color: var(--text);
 }
 
+.csg-dropdown-menu-checkbox-item {
+  position: relative;
+  padding-left: 32px;
+}
+
+.csg-dropdown-menu-item-indicator {
+  position: absolute;
+  left: 10px;
+  display: inline-flex;
+  width: 14px;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-600);
+  font-size: 12px;
+  line-height: 1;
+}
+
 .csg-dropdown-menu-item.danger {
   color: var(--danger);
 }

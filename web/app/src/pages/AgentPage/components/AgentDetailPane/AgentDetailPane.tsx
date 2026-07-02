@@ -11,9 +11,10 @@ import {
   Trash2,
   Unlink2,
 } from "lucide-react";
-import { useEffect, useRef, useState, type Ref } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import { REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
+import { AGENT_PROFILE_TAB_ORDER_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   EnvKeyValueEditor,
   ModelOptionLabel,
@@ -73,11 +74,25 @@ import {
   DropdownMenuTrigger,
   Select,
 } from "@/components/ui";
+import { AgentActivityPanel } from "./AgentActivityPanel";
 
 type VoidOrPromise = void | Promise<void>;
 type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
 type AgentNoticeTone = "info" | "warning" | "success";
-type AgentProfileSectionID = "channels" | "runtime" | "model" | "instructions" | "skills" | "advanced";
+type AgentProfileTabID = "activity" | "channels" | "runtime" | "model" | "instructions" | "skills" | "advanced";
+type UpdateAgentDraft = (patch: Partial<AgentDraft>) => void;
+type RuntimeOptionSchemaList = ReturnType<typeof runtimeOptionSchemasForAgent>;
+type ModelProviderSelectOption = ReturnType<typeof modelProviderSelectOptionsFromCatalog>[number];
+
+const DEFAULT_AGENT_PROFILE_TAB_ORDER: AgentProfileTabID[] = [
+  "activity",
+  "channels",
+  "runtime",
+  "model",
+  "instructions",
+  "skills",
+  "advanced",
+];
 
 type FeishuPendingRegistrationView = {
   connect_url?: string;
@@ -123,6 +138,7 @@ export type AgentDetailPaneProps = {
   onUpgrade?: AgentActionHandler;
   publishBusy?: boolean;
   locale?: LocaleCode;
+  rooms?: IMConversation[];
   saveError?: string;
   savedDraft?: AgentDraft | null;
   saving?: boolean;
@@ -164,6 +180,7 @@ export function AgentDetailPane({
   modelProviders = null,
   saveError = "",
   locale = "en",
+  rooms = [],
   notifierWebhookPublicOrigin = "",
   skills = [],
   skillsLoading = false,
@@ -193,21 +210,15 @@ export function AgentDetailPane({
 }: AgentDetailPaneProps) {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [activeProfileSection, setActiveProfileSection] = useState<AgentProfileSectionID>("channels");
+  const [activeProfileTab, setActiveProfileTab] = useState<AgentProfileTabID>("channels");
+  const [profileTabOrder, setProfileTabOrder] = useState<AgentProfileTabID[]>(() => readAgentProfileTabOrder());
+  const [draggingProfileTab, setDraggingProfileTab] = useState<AgentProfileTabID | null>(null);
   const [addSkillsDialogOpen, setAddSkillsDialogOpen] = useState(false);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
   const [skillPendingDelete, setSkillPendingDelete] = useState<SlashSkillOption | null>(null);
-  const [profileTabScrollPadding, setProfileTabScrollPadding] = useState(0);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
-  const profileScrollRegionRef = useRef<HTMLDivElement | null>(null);
-  const channelsSectionRef = useRef<HTMLElement | null>(null);
-  const runtimeSectionRef = useRef<HTMLElement | null>(null);
-  const modelSectionRef = useRef<HTMLElement | null>(null);
-  const instructionsSectionRef = useRef<HTMLElement | null>(null);
-  const skillsSectionRef = useRef<HTMLElement | null>(null);
-  const advancedSectionRef = useRef<HTMLElement | null>(null);
   const isManager = isManagerAgent(item);
   const canEditAgentName = Boolean(draft && !isManager);
   const running = isAgentRunning(item);
@@ -248,56 +259,44 @@ export function AgentDetailPane({
   const selectedProviderModels = selectedProvider?.models ?? [];
   const selectedModelValue = draft?.model_id || "";
   const isNotifierDraft = Boolean(draft && isNotifierRuntimeDraftOnAgentPage(draft, item));
-  const profileSections = draft
-    ? [
-        ...(!isNotificationBotAgent(item)
-          ? [{ id: "channels" as const, label: t("agentChannelsTitle"), ref: channelsSectionRef }]
-          : []),
-        { id: "runtime" as const, label: t("profileRuntimeSection"), ref: runtimeSectionRef },
-        {
-          id: "model" as const,
-          label: isNotifierDraft ? t("profileNotifierSection") : t("profileModelSection"),
-          ref: modelSectionRef,
-        },
-        ...(!isNotifierDraft
-          ? [{ id: "instructions" as const, label: t("agentInstructions"), ref: instructionsSectionRef }]
-          : []),
-        ...(workspaceSupported
-          ? [{ id: "skills" as const, label: t("agentProfileSkillsTab"), ref: skillsSectionRef }]
-          : []),
-        { id: "advanced" as const, label: t("profileAdvanced"), ref: advancedSectionRef },
-      ]
-    : [];
+  const profileTabs = useMemo(
+    () =>
+      draft
+        ? [
+            { id: "activity" as const, label: t("agentActivityTab") },
+            ...(!isNotificationBotAgent(item) ? [{ id: "channels" as const, label: t("agentChannelsTitle") }] : []),
+            { id: "runtime" as const, label: t("profileRuntimeSection") },
+            {
+              id: "model" as const,
+              label: isNotifierDraft ? t("profileNotifierSection") : t("profileModelSection"),
+            },
+            ...(!isNotifierDraft ? [{ id: "instructions" as const, label: t("agentInstructions") }] : []),
+            ...(workspaceSupported ? [{ id: "skills" as const, label: t("agentProfileSkillsTab") }] : []),
+            { id: "advanced" as const, label: t("profileAdvanced") },
+          ]
+        : [],
+    [draft, isNotifierDraft, item, t, workspaceSupported],
+  );
+  const orderedProfileTabs = useMemo(
+    () => orderProfileTabs(profileTabs, profileTabOrder),
+    [profileTabs, profileTabOrder],
+  );
+  const visibleActiveProfileTab = orderedProfileTabs.some((tab) => tab.id === activeProfileTab)
+    ? activeProfileTab
+    : orderedProfileTabs[0]?.id;
 
-  function scrollToProfileSection(section: (typeof profileSections)[number]): void {
-    setActiveProfileSection(section.id);
-    const target = section.ref.current;
-    const scroller = profileScrollRegionRef.current;
-    if (!target || !scroller) {
+  function moveProfileTab(targetID: AgentProfileTabID): void {
+    if (!draggingProfileTab || draggingProfileTab === targetID) {
       return;
     }
-    const targetRect = target.getBoundingClientRect();
-    const nextPadding = Math.max(0, Math.ceil(scroller.clientHeight - targetRect.height));
-    setProfileTabScrollPadding(nextPadding);
-    window.requestAnimationFrame(() => {
-      const nextTarget = section.ref.current;
-      const nextScroller = profileScrollRegionRef.current;
-      if (!nextTarget || !nextScroller) {
-        return;
-      }
-      const scrollerTop = nextScroller.getBoundingClientRect().top;
-      const targetTop = nextTarget.getBoundingClientRect().top;
-      const nextScrollTop = nextScroller.scrollTop + targetTop - scrollerTop;
-      if (typeof nextScroller.scrollTo === "function") {
-        nextScroller.scrollTo({ top: nextScrollTop });
-      } else {
-        nextScroller.scrollTop = nextScrollTop;
-      }
-    });
-  }
-
-  function clearProfileTabScrollPadding(): void {
-    setProfileTabScrollPadding((current) => (current ? 0 : current));
+    const nextOrder = moveProfileTabID(
+      profileTabOrder,
+      orderedProfileTabs.map((tab) => tab.id),
+      draggingProfileTab,
+      targetID,
+    );
+    setProfileTabOrder(nextOrder);
+    saveAgentProfileTabOrder(nextOrder);
   }
 
   useEffect(() => {
@@ -333,6 +332,12 @@ export function AgentDetailPane({
       setSelectedSkillNames([]);
     }
   }, [addSkillsDialogOpen]);
+
+  useEffect(() => {
+    if (visibleActiveProfileTab && activeProfileTab !== visibleActiveProfileTab) {
+      setActiveProfileTab(visibleActiveProfileTab);
+    }
+  }, [activeProfileTab, visibleActiveProfileTab]);
 
   async function handleAddSkillsConfirm(): Promise<void> {
     if (!selectedSkillNames.length) {
@@ -531,20 +536,34 @@ export function AgentDetailPane({
             {notice}
           </div>
         ) : null}
-        {profileSections.length ? (
+        {orderedProfileTabs.length ? (
           <nav className="agent-profile-section-nav" aria-label={t("agentProfileSectionNavLabel")}>
-            {profileSections.map((section, index) => {
-              const active =
-                section.id === activeProfileSection ||
-                (index === 0 && !profileSections.some((item) => item.id === activeProfileSection));
+            {orderedProfileTabs.map((section) => {
+              const active = section.id === visibleActiveProfileTab;
               return (
                 <button
                   key={section.id}
                   type="button"
                   className={`agent-profile-section-tab ${active ? "active" : ""}`.trim()}
+                  draggable
                   aria-current={active ? "location" : undefined}
                   aria-controls={`agent-profile-${section.id}`}
-                  onClick={() => scrollToProfileSection(section)}
+                  onClick={() => setActiveProfileTab(section.id)}
+                  onDragStart={(event) => {
+                    setDraggingProfileTab(section.id);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", section.id);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    moveProfileTab(section.id);
+                    setDraggingProfileTab(null);
+                  }}
+                  onDragEnd={() => setDraggingProfileTab(null)}
                 >
                   {section.label}
                 </button>
@@ -553,23 +572,7 @@ export function AgentDetailPane({
           </nav>
         ) : null}
       </div>
-      <div
-        ref={profileScrollRegionRef}
-        className="agent-profile-scroll-region"
-        onWheel={clearProfileTabScrollPadding}
-        onTouchStart={clearProfileTabScrollPadding}
-      >
-        {!isNotificationBotAgent(item) ? (
-          <AgentChannelsSection
-            sectionRef={channelsSectionRef}
-            item={item}
-            t={t}
-            busyKey={feishuConnectBusy.startsWith(`${item.id}:`) ? feishuConnectBusy : ""}
-            pendingRegistration={feishuPendingRegistration}
-            onStartFeishuConnect={onStartFeishuConnect}
-            onDisconnectFeishu={onDisconnectFeishu}
-          />
-        ) : null}
+      <div className="agent-profile-scroll-region">
         {!draft ? (
           <>
             <div className="entity-grid">
@@ -602,290 +605,79 @@ export function AgentDetailPane({
         ) : null}
         {draft ? (
           <div className="profile-editor-shell agent-page-editor">
-            <section
-              ref={runtimeSectionRef}
-              id="agent-profile-runtime"
-              className="profile-section agent-profile-scroll-target"
-            >
-              <div className="profile-section-heading">
-                <div className="profile-section-title">{t("profileRuntimeSection")}</div>
-                <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
-              </div>
-              <div className="agent-section-form">
-                <div className="profile-grid-compact agent-page-form-content">
-                  {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-                    <label className="field">
-                      <span>{t("profileRuntimeKind")}</span>
-                      <input value={draft.runtime_kind || runtimeKind || ""} readOnly disabled />
-                    </label>
-                  ) : (
-                    <label className="field">
-                      <span>{t("profileRuntimeKind")}</span>
-                      <input value={draft.runtime_kind || runtimeKind || ""} readOnly disabled />
-                    </label>
-                  )}
-                  {!isNotifierRuntimeDraftOnAgentPage(draft, item) && runtimeOptionSchemas.length > 0 ? (
-                    <RuntimeOptionsFields
-                      draft={draft}
-                      locale={locale}
-                      schemas={runtimeOptionSchemas}
-                      onDraftChange={onDraftChange || (() => {})}
-                      embedded
-                    />
-                  ) : null}
-                </div>
-              </div>
-            </section>
-
-            {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-              <section
-                ref={modelSectionRef}
-                id="agent-profile-model"
-                className="profile-section agent-profile-scroll-target"
-              >
-                <div className="profile-section-heading">
-                  <div className="profile-section-title">{t("profileModelSection")}</div>
-                  <p className="profile-section-description">{t("profileModelSectionDescription")}</p>
-                </div>
-                <div className="agent-section-form">
-                  <div className="agent-page-form-content agent-model-form-content">
-                    <div className="profile-runtime-grid agent-model-config-grid">
-                      <label className="field">
-                        {requiredFieldLabel(t("profileProvider"))}
-                        <Select
-                          value={selectedProviderID}
-                          required
-                          onValueChange={(value) => {
-                            const nextProvider = providerOptions.find((option) => option.id === value);
-                            if (!nextProvider) {
-                              updateDraft({ model_id: "", model_provider_id: "" });
-                              return;
-                            }
-                            updateDraft({
-                              provider: providerNameForProviderID(nextProvider.id),
-                              model_provider_id: nextProvider.id,
-                              model_id: nextProvider.models[0] || "",
-                            });
-                          }}
-                          triggerProps={{ "aria-label": t("profileProvider"), "aria-required": true }}
-                          options={[
-                            { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileProviderSelect") },
-                            ...providerOptions.map((option) => ({
-                              value: option.value,
-                              label: (
-                                <ModelOptionLabel
-                                  avatar={option.avatar}
-                                  model={option.displayName}
-                                  provider={
-                                    option.models.length
-                                      ? t("modelProviderModelCount", { count: option.models.length })
-                                      : t("modelProviderNoModels")
-                                  }
-                                />
-                              ),
-                              textValue: option.displayName,
-                            })),
-                          ]}
-                        />
-                      </label>
-                      <label className="field">
-                        {requiredFieldLabel(t("profileModel"))}
-                        <Select
-                          value={selectedModelValue}
-                          required
-                          disabled={!selectedProviderID || !selectedProviderModels.length}
-                          onValueChange={(value) => updateDraft({ model_id: value })}
-                          searchable
-                          searchPlaceholder={t("modelProviderModelSearch")}
-                          emptyLabel={t("modelProviderNoModels")}
-                          triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
-                          options={[
-                            {
-                              value: "",
-                              label: selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
-                            },
-                            ...selectedProviderModels.map((modelID) => ({
-                              value: modelID,
-                              label: <ModelOptionLabel model={modelID} showAvatar={false} />,
-                              textValue: modelID,
-                            })),
-                            ...(selectedModelValue && !selectedProviderModels.includes(selectedModelValue)
-                              ? [
-                                  {
-                                    value: selectedModelValue,
-                                    label: <ModelOptionLabel model={selectedModelValue} showAvatar={false} />,
-                                    textValue: selectedModelValue,
-                                  },
-                                ]
-                              : []),
-                          ]}
-                        />
-                        {modelError ? (
-                          <span className="field-hint error">{errorMessage(modelError, t("modelLoadFailed"))}</span>
-                        ) : null}
-                      </label>
-                      <label className="field">
-                        <span>{t("profileReasoning")}</span>
-                        <Select
-                          value={draft.reasoning_effort}
-                          onValueChange={(value) => updateDraft({ reasoning_effort: value })}
-                          triggerProps={{ "aria-label": t("profileReasoning") }}
-                          options={REASONING_EFFORTS.map((effort) => ({ value: effort, label: effort }))}
-                        />
-                      </label>
-                      <div className="field agent-fast-mode-field">
-                        <span>{t("profileFastMode")}</span>
-                        <label className="selection-item compact-toggle-row agent-fast-mode-toggle">
-                          <input
-                            type="checkbox"
-                            checked={draft.enable_fast_mode}
-                            aria-label={t("profileFastMode")}
-                            onChange={() => updateDraft({ enable_fast_mode: !draft.enable_fast_mode })}
-                          />
-                          <small className="agent-fast-mode-help">{t("profileFastModeHelp")}</small>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            ) : (
-              <div
-                ref={modelSectionRef as Ref<HTMLDivElement>}
-                id="agent-profile-model"
-                className="agent-profile-scroll-target"
-              >
-                <NotifierControls
-                  agentID={item.id || ""}
-                  draft={draft}
-                  t={t}
-                  webhookPublicOrigin={notifierWebhookPublicOrigin}
-                  onPatch={(patch) => updateDraft(patch)}
-                />
-              </div>
-            )}
-
-            {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-              <section
-                ref={instructionsSectionRef}
-                id="agent-profile-instructions"
-                className="profile-section agent-instructions-section agent-profile-scroll-target"
-              >
-                <div className="profile-grid-compact">
-                  <label className="field span-2">
-                    <span>{t("agentInstructions")}</span>
-                    <textarea
-                      className="compact-textarea"
-                      value={draft.instructions || ""}
-                      onInput={(event) => updateDraft({ instructions: event.currentTarget.value })}
-                      placeholder={t("agentInstructionsPlaceholder")}
-                    />
-                  </label>
-                </div>
-              </section>
+            {visibleActiveProfileTab === "activity" ? (
+              <AgentActivityPanel item={item} locale={locale} rooms={rooms} t={t} />
             ) : null}
-
-            {workspaceSupported ? (
-              <section
-                ref={skillsSectionRef}
-                id="agent-profile-skills"
-                className="profile-section agent-skills-section agent-profile-scroll-target"
-              >
-                <div className="profile-section-heading">
-                  <div className="profile-section-title">{t("agentSkillsTitle")}</div>
-                  <p className="profile-section-description">{t("agentSkillsDescription")}</p>
-                </div>
-                <div className="agent-section-form">
-                  <div className="agent-page-form-content agent-skills-form-content">
-                    <div className="agent-skills-title">
-                      <div className="agent-skills-title-copy">
-                        <span>{t("agentSkillsTitle")}</span>
-                        <small>{skills.length}</small>
-                      </div>
-                      <Button
-                        className="agent-skill-add-button"
-                        variant="secondaryGray"
-                        size="sm"
-                        aria-label={t("agentSkillAdd")}
-                        title={t("agentSkillAdd")}
-                        disabled={skillCandidatesLoading || skillAddBusy}
-                        onClick={() => setAddSkillsDialogOpen(true)}
-                      >
-                        <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
-                      </Button>
-                    </div>
-                    {skillsError ? <div className="form-error">{skillsError}</div> : null}
-                    {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
-                    {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
-                    {skillsLoading ? <div className="agent-skills-empty">{t("agentSkillsLoading")}</div> : null}
-                    {!skillsLoading && !skills.length ? (
-                      <div className="agent-skills-empty">{t("agentSkillsEmpty")}</div>
-                    ) : null}
-                    {!skillsLoading && skills.length ? (
-                      <div className="agent-skills-list">
-                        {skills.map((skill) => (
-                          <article key={skill.name} className="agent-skill-card">
-                            <div className="agent-skill-card-header">
-                              <div className="agent-skill-name">{skill.name}</div>
-                              <Button
-                                className="agent-skill-icon-button"
-                                variant="outlineDanger"
-                                size="sm"
-                                aria-label={t("agentDeleteSkill")}
-                                title={t("agentDeleteSkill")}
-                                disabled={skillDeleteBusy}
-                                onClick={() => {
-                                  setSkillPendingDelete(skill);
-                                  setDeleteSkillDialogOpen(true);
-                                }}
-                              >
-                                <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
-                              </Button>
-                            </div>
-                            <p className="agent-skill-description">{skill.description || "-"}</p>
-                          </article>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </section>
-            ) : null}
-
-            <section
-              ref={advancedSectionRef}
-              id="agent-profile-advanced"
-              className="profile-section agent-advanced-section agent-profile-scroll-target"
-            >
-              <div className="profile-section-heading">
-                <div className="profile-section-title">{t("profileAdvanced")}</div>
-                <p className="profile-section-description">{t("profileAdvancedDescription")}</p>
-              </div>
-              <div className="agent-section-form">
-                <div className="profile-advanced-grid agent-page-form-content">
-                  {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-                    <label className="field profile-json-field">
-                      <span>{t("profileRequestOptions")}</span>
-                      <textarea
-                        className="compact-json"
-                        value={draft.requestOptionsText}
-                        onInput={(event) => updateDraft({ requestOptionsText: event.currentTarget.value })}
-                      />
-                    </label>
-                  ) : null}
-                  <div className="field profile-env-field">
-                    <span>{t("profileEnv")}</span>
-                    <EnvKeyValueEditor rows={draft.envRows} t={t} onChange={(rows) => updateDraft({ envRows: rows })} />
-                  </div>
-                </div>
-              </div>
-            </section>
-            {profileTabScrollPadding ? (
-              <div
-                className="agent-profile-scroll-spacer"
-                style={{ height: profileTabScrollPadding }}
-                aria-hidden="true"
+            {visibleActiveProfileTab === "channels" && !isNotificationBotAgent(item) ? (
+              <AgentChannelsSection
+                item={item}
+                t={t}
+                busyKey={feishuConnectBusy.startsWith(`${item.id}:`) ? feishuConnectBusy : ""}
+                pendingRegistration={feishuPendingRegistration}
+                onStartFeishuConnect={onStartFeishuConnect}
+                onDisconnectFeishu={onDisconnectFeishu}
               />
+            ) : null}
+            {visibleActiveProfileTab === "runtime" ? (
+              <AgentRuntimePanel
+                draft={draft}
+                item={item}
+                locale={locale}
+                runtimeKind={runtimeKind}
+                runtimeOptionSchemas={runtimeOptionSchemas}
+                t={t}
+                onDraftChange={onDraftChange}
+              />
+            ) : null}
+
+            {visibleActiveProfileTab === "model" && !isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
+              <AgentModelPanel
+                draft={draft}
+                modelBusy={modelBusy}
+                modelError={modelError}
+                providerOptions={providerOptions}
+                selectedModelValue={selectedModelValue}
+                selectedProviderID={selectedProviderID}
+                selectedProviderModels={selectedProviderModels}
+                t={t}
+                updateDraft={updateDraft}
+              />
+            ) : null}
+            {visibleActiveProfileTab === "model" && isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
+              <AgentNotifierPanel
+                draft={draft}
+                item={item}
+                notifierWebhookPublicOrigin={notifierWebhookPublicOrigin}
+                t={t}
+                updateDraft={updateDraft}
+              />
+            ) : null}
+
+            {visibleActiveProfileTab === "instructions" && !isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
+              <AgentInstructionsPanel draft={draft} t={t} updateDraft={updateDraft} />
+            ) : null}
+
+            {visibleActiveProfileTab === "skills" && workspaceSupported ? (
+              <AgentSkillsPanel
+                skillAddBusy={skillAddBusy}
+                skillAddError={skillAddError}
+                skillCandidatesLoading={skillCandidatesLoading}
+                skillDeleteBusy={skillDeleteBusy}
+                skillDeleteError={skillDeleteError}
+                skills={skills}
+                skillsError={skillsError}
+                skillsLoading={skillsLoading}
+                t={t}
+                onOpenAddSkills={() => setAddSkillsDialogOpen(true)}
+                onRequestDeleteSkill={(skill) => {
+                  setSkillPendingDelete(skill);
+                  setDeleteSkillDialogOpen(true);
+                }}
+              />
+            ) : null}
+
+            {visibleActiveProfileTab === "advanced" ? (
+              <AgentAdvancedPanel draft={draft} item={item} t={t} updateDraft={updateDraft} />
             ) : null}
           </div>
         ) : null}
@@ -1007,18 +799,448 @@ export function AgentDetailPane({
   );
 }
 
+function readAgentProfileTabOrder(): AgentProfileTabID[] {
+  if (typeof window === "undefined") {
+    return DEFAULT_AGENT_PROFILE_TAB_ORDER;
+  }
+  try {
+    const raw = window.localStorage.getItem(AGENT_PROFILE_TAB_ORDER_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!Array.isArray(parsed)) {
+      return DEFAULT_AGENT_PROFILE_TAB_ORDER;
+    }
+    return normalizeAgentProfileTabOrder(parsed);
+  } catch {
+    return DEFAULT_AGENT_PROFILE_TAB_ORDER;
+  }
+}
+
+function saveAgentProfileTabOrder(order: readonly AgentProfileTabID[]): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      AGENT_PROFILE_TAB_ORDER_STORAGE_KEY,
+      JSON.stringify(normalizeAgentProfileTabOrder(order)),
+    );
+  } catch {
+    // Tab order persistence is best-effort.
+  }
+}
+
+function normalizeAgentProfileTabOrder(values: readonly unknown[]): AgentProfileTabID[] {
+  const out: AgentProfileTabID[] = [];
+  values.forEach((value) => {
+    if (isAgentProfileTabID(value) && !out.includes(value)) {
+      out.push(value);
+    }
+  });
+  DEFAULT_AGENT_PROFILE_TAB_ORDER.forEach((id) => {
+    if (!out.includes(id)) {
+      out.push(id);
+    }
+  });
+  return out;
+}
+
+function isAgentProfileTabID(value: unknown): value is AgentProfileTabID {
+  return DEFAULT_AGENT_PROFILE_TAB_ORDER.includes(value as AgentProfileTabID);
+}
+
+function orderProfileTabs<T extends { id: AgentProfileTabID }>(
+  tabs: readonly T[],
+  order: readonly AgentProfileTabID[],
+): T[] {
+  const normalizedOrder = normalizeAgentProfileTabOrder(order);
+  const orderIndex = new Map(normalizedOrder.map((id, index) => [id, index]));
+  return [...tabs].sort((left, right) => (orderIndex.get(left.id) ?? 0) - (orderIndex.get(right.id) ?? 0));
+}
+
+function moveProfileTabID(
+  currentOrder: readonly AgentProfileTabID[],
+  visibleIDs: readonly AgentProfileTabID[],
+  movingID: AgentProfileTabID,
+  targetID: AgentProfileTabID,
+): AgentProfileTabID[] {
+  const visibleOrder = normalizeAgentProfileTabOrder(currentOrder).filter((id) => visibleIDs.includes(id));
+  const fromIndex = visibleOrder.indexOf(movingID);
+  const toIndex = visibleOrder.indexOf(targetID);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+    return normalizeAgentProfileTabOrder(currentOrder);
+  }
+  const nextVisibleOrder = [...visibleOrder];
+  const [moved] = nextVisibleOrder.splice(fromIndex, 1);
+  nextVisibleOrder.splice(toIndex, 0, moved);
+  return normalizeAgentProfileTabOrder([
+    ...nextVisibleOrder,
+    ...normalizeAgentProfileTabOrder(currentOrder).filter((id) => !nextVisibleOrder.includes(id)),
+  ]);
+}
+
+type AgentRuntimePanelProps = {
+  draft: AgentDraft;
+  item: AgentLike;
+  locale: LocaleCode;
+  onDraftChange?: (draft: AgentDraft) => void;
+  runtimeKind: string;
+  runtimeOptionSchemas: RuntimeOptionSchemaList;
+  t: TranslateFn;
+};
+
+function AgentRuntimePanel({
+  draft,
+  item,
+  locale,
+  onDraftChange,
+  runtimeKind,
+  runtimeOptionSchemas,
+  t,
+}: AgentRuntimePanelProps) {
+  const isNotifierDraft = isNotifierRuntimeDraftOnAgentPage(draft, item);
+
+  return (
+    <section id="agent-profile-runtime" className="profile-section agent-profile-scroll-target">
+      <div className="profile-section-heading">
+        <div className="profile-section-title">{t("profileRuntimeSection")}</div>
+        <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
+      </div>
+      <div className="agent-section-form">
+        <div className="profile-grid-compact agent-page-form-content">
+          <label className="field">
+            <span>{t("profileRuntimeKind")}</span>
+            <input value={draft.runtime_kind || runtimeKind || ""} readOnly disabled />
+          </label>
+          {!isNotifierDraft && runtimeOptionSchemas.length > 0 ? (
+            <RuntimeOptionsFields
+              draft={draft}
+              locale={locale}
+              schemas={runtimeOptionSchemas}
+              onDraftChange={onDraftChange || (() => {})}
+              embedded
+            />
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type AgentModelPanelProps = {
+  draft: AgentDraft;
+  modelBusy: boolean;
+  modelError: unknown;
+  providerOptions: readonly ModelProviderSelectOption[];
+  selectedModelValue: string;
+  selectedProviderID: string;
+  selectedProviderModels: readonly string[];
+  t: TranslateFn;
+  updateDraft: UpdateAgentDraft;
+};
+
+function AgentModelPanel({
+  draft,
+  modelBusy,
+  modelError,
+  providerOptions,
+  selectedModelValue,
+  selectedProviderID,
+  selectedProviderModels,
+  t,
+  updateDraft,
+}: AgentModelPanelProps) {
+  return (
+    <section id="agent-profile-model" className="profile-section agent-profile-scroll-target">
+      <div className="profile-section-heading">
+        <div className="profile-section-title">{t("profileModelSection")}</div>
+        <p className="profile-section-description">{t("profileModelSectionDescription")}</p>
+      </div>
+      <div className="agent-section-form">
+        <div className="agent-page-form-content agent-model-form-content">
+          <div className="profile-runtime-grid agent-model-config-grid">
+            <label className="field">
+              {requiredFieldLabel(t("profileProvider"))}
+              <Select
+                value={selectedProviderID}
+                required
+                onValueChange={(value) => {
+                  const nextProvider = providerOptions.find((option) => option.id === value);
+                  if (!nextProvider) {
+                    updateDraft({ model_id: "", model_provider_id: "" });
+                    return;
+                  }
+                  updateDraft({
+                    provider: providerNameForProviderID(nextProvider.id),
+                    model_provider_id: nextProvider.id,
+                    model_id: nextProvider.models[0] || "",
+                  });
+                }}
+                triggerProps={{ "aria-label": t("profileProvider"), "aria-required": true }}
+                options={[
+                  { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileProviderSelect") },
+                  ...providerOptions.map((option) => ({
+                    value: option.value,
+                    label: (
+                      <ModelOptionLabel
+                        avatar={option.avatar}
+                        model={option.displayName}
+                        provider={
+                          option.models.length
+                            ? t("modelProviderModelCount", { count: option.models.length })
+                            : t("modelProviderNoModels")
+                        }
+                      />
+                    ),
+                    textValue: option.displayName,
+                  })),
+                ]}
+              />
+            </label>
+            <label className="field">
+              {requiredFieldLabel(t("profileModel"))}
+              <Select
+                value={selectedModelValue}
+                required
+                disabled={!selectedProviderID || !selectedProviderModels.length}
+                onValueChange={(value) => updateDraft({ model_id: value })}
+                searchable
+                searchPlaceholder={t("modelProviderModelSearch")}
+                emptyLabel={t("modelProviderNoModels")}
+                triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
+                options={[
+                  {
+                    value: "",
+                    label: selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
+                  },
+                  ...selectedProviderModels.map((modelID) => ({
+                    value: modelID,
+                    label: <ModelOptionLabel model={modelID} showAvatar={false} />,
+                    textValue: modelID,
+                  })),
+                  ...(selectedModelValue && !selectedProviderModels.includes(selectedModelValue)
+                    ? [
+                        {
+                          value: selectedModelValue,
+                          label: <ModelOptionLabel model={selectedModelValue} showAvatar={false} />,
+                          textValue: selectedModelValue,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+              {modelError ? (
+                <span className="field-hint error">{errorMessage(modelError, t("modelLoadFailed"))}</span>
+              ) : null}
+            </label>
+            <label className="field">
+              <span>{t("profileReasoning")}</span>
+              <Select
+                value={draft.reasoning_effort}
+                onValueChange={(value) => updateDraft({ reasoning_effort: value })}
+                triggerProps={{ "aria-label": t("profileReasoning") }}
+                options={REASONING_EFFORTS.map((effort) => ({ value: effort, label: effort }))}
+              />
+            </label>
+            <div className="field agent-fast-mode-field">
+              <span>{t("profileFastMode")}</span>
+              <label className="selection-item compact-toggle-row agent-fast-mode-toggle">
+                <input
+                  type="checkbox"
+                  checked={draft.enable_fast_mode}
+                  aria-label={t("profileFastMode")}
+                  onChange={() => updateDraft({ enable_fast_mode: !draft.enable_fast_mode })}
+                />
+                <small className="agent-fast-mode-help">{t("profileFastModeHelp")}</small>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type AgentNotifierPanelProps = {
+  draft: AgentDraft;
+  item: AgentLike;
+  notifierWebhookPublicOrigin: string;
+  t: TranslateFn;
+  updateDraft: UpdateAgentDraft;
+};
+
+function AgentNotifierPanel({ draft, item, notifierWebhookPublicOrigin, t, updateDraft }: AgentNotifierPanelProps) {
+  return (
+    <div id="agent-profile-model" className="agent-profile-scroll-target">
+      <NotifierControls
+        agentID={item.id || ""}
+        draft={draft}
+        t={t}
+        webhookPublicOrigin={notifierWebhookPublicOrigin}
+        onPatch={(patch) => updateDraft(patch)}
+      />
+    </div>
+  );
+}
+
+type AgentInstructionsPanelProps = {
+  draft: AgentDraft;
+  t: TranslateFn;
+  updateDraft: UpdateAgentDraft;
+};
+
+function AgentInstructionsPanel({ draft, t, updateDraft }: AgentInstructionsPanelProps) {
+  return (
+    <section
+      id="agent-profile-instructions"
+      className="profile-section agent-instructions-section agent-profile-scroll-target"
+    >
+      <div className="profile-grid-compact">
+        <label className="field span-2">
+          <span>{t("agentInstructions")}</span>
+          <textarea
+            className="compact-textarea"
+            value={draft.instructions || ""}
+            onInput={(event) => updateDraft({ instructions: event.currentTarget.value })}
+            placeholder={t("agentInstructionsPlaceholder")}
+          />
+        </label>
+      </div>
+    </section>
+  );
+}
+
+type AgentSkillsPanelProps = {
+  onOpenAddSkills: () => void;
+  onRequestDeleteSkill: (skill: SlashSkillOption) => void;
+  skillAddBusy: boolean;
+  skillAddError: string;
+  skillCandidatesLoading: boolean;
+  skillDeleteBusy: boolean;
+  skillDeleteError: string;
+  skills: readonly SlashSkillOption[];
+  skillsError: string;
+  skillsLoading: boolean;
+  t: TranslateFn;
+};
+
+function AgentSkillsPanel({
+  onOpenAddSkills,
+  onRequestDeleteSkill,
+  skillAddBusy,
+  skillAddError,
+  skillCandidatesLoading,
+  skillDeleteBusy,
+  skillDeleteError,
+  skills,
+  skillsError,
+  skillsLoading,
+  t,
+}: AgentSkillsPanelProps) {
+  return (
+    <section id="agent-profile-skills" className="profile-section agent-skills-section agent-profile-scroll-target">
+      <div className="profile-section-heading">
+        <div className="profile-section-title">{t("agentSkillsTitle")}</div>
+        <p className="profile-section-description">{t("agentSkillsDescription")}</p>
+      </div>
+      <div className="agent-section-form">
+        <div className="agent-page-form-content agent-skills-form-content">
+          <div className="agent-skills-title">
+            <div className="agent-skills-title-copy">
+              <span>{t("agentSkillsTitle")}</span>
+              <small>{skills.length}</small>
+            </div>
+            <Button
+              className="agent-skill-add-button"
+              variant="secondaryGray"
+              size="sm"
+              aria-label={t("agentSkillAdd")}
+              title={t("agentSkillAdd")}
+              disabled={skillCandidatesLoading || skillAddBusy}
+              onClick={onOpenAddSkills}
+            >
+              <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
+            </Button>
+          </div>
+          {skillsError ? <div className="form-error">{skillsError}</div> : null}
+          {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
+          {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
+          {skillsLoading ? <div className="agent-skills-empty">{t("agentSkillsLoading")}</div> : null}
+          {!skillsLoading && !skills.length ? <div className="agent-skills-empty">{t("agentSkillsEmpty")}</div> : null}
+          {!skillsLoading && skills.length ? (
+            <div className="agent-skills-list">
+              {skills.map((skill) => (
+                <article key={skill.name} className="agent-skill-card">
+                  <div className="agent-skill-card-header">
+                    <div className="agent-skill-name">{skill.name}</div>
+                    <Button
+                      className="agent-skill-icon-button"
+                      variant="outlineDanger"
+                      size="sm"
+                      aria-label={t("agentDeleteSkill")}
+                      title={t("agentDeleteSkill")}
+                      disabled={skillDeleteBusy}
+                      onClick={() => onRequestDeleteSkill(skill)}
+                    >
+                      <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                    </Button>
+                  </div>
+                  <p className="agent-skill-description">{skill.description || "-"}</p>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type AgentAdvancedPanelProps = {
+  draft: AgentDraft;
+  item: AgentLike;
+  t: TranslateFn;
+  updateDraft: UpdateAgentDraft;
+};
+
+function AgentAdvancedPanel({ draft, item, t, updateDraft }: AgentAdvancedPanelProps) {
+  return (
+    <section id="agent-profile-advanced" className="profile-section agent-advanced-section agent-profile-scroll-target">
+      <div className="profile-section-heading">
+        <div className="profile-section-title">{t("profileAdvanced")}</div>
+        <p className="profile-section-description">{t("profileAdvancedDescription")}</p>
+      </div>
+      <div className="agent-section-form">
+        <div className="profile-advanced-grid agent-page-form-content">
+          {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
+            <label className="field profile-json-field">
+              <span>{t("profileRequestOptions")}</span>
+              <textarea
+                className="compact-json"
+                value={draft.requestOptionsText}
+                onInput={(event) => updateDraft({ requestOptionsText: event.currentTarget.value })}
+              />
+            </label>
+          ) : null}
+          <div className="field profile-env-field">
+            <span>{t("profileEnv")}</span>
+            <EnvKeyValueEditor rows={draft.envRows} t={t} onChange={(rows) => updateDraft({ envRows: rows })} />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 type AgentChannelsSectionProps = {
   busyKey: string;
   item: AgentLike;
   onDisconnectFeishu?: AgentActionHandler;
   onStartFeishuConnect?: AgentActionHandler;
   pendingRegistration?: FeishuPendingRegistrationView;
-  sectionRef?: Ref<HTMLElement>;
   t: TranslateFn;
 };
 
 function AgentChannelsSection({
-  sectionRef,
   item,
   t,
   busyKey,
@@ -1046,7 +1268,6 @@ function AgentChannelsSection({
 
   return (
     <section
-      ref={sectionRef}
       id="agent-profile-channels"
       className="profile-section agent-channels-section agent-profile-scroll-target"
       aria-labelledby="agent-channels-title"

@@ -3,6 +3,7 @@ import type { RefObject } from "react";
 import type { Location, NavigateFunction } from "react-router-dom";
 import type { FetchAgentsOptions } from "@/api/agents";
 import type { FetchVersionOptions } from "@/api/app";
+import type { AgentDetailPaneProps } from "@/pages/AgentPage/components";
 import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
 import type { AgentLike, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
 import type { IMConversation, IMData, IMUser, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
@@ -158,6 +159,8 @@ export type ProfilePreviewControllerProps = {
   agent: AgentLike | null;
   anchorRect: ProfilePreviewAnchorRect;
   onClose: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   onOpenAgent: (item: AgentLike) => void;
   onOpenDM: (item: AgentLike) => Promise<void>;
   previewRef: RefObject<HTMLElement | null>;
@@ -175,10 +178,14 @@ export type UseProfilePreviewControllerArgs = {
 };
 
 export type ProfilePreviewController = {
+  cancelProfilePreviewClose: () => void;
   closeProfilePreview: () => void;
   openAgentPreview: (item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) => void;
   openParticipantPreview: (user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) => void;
   profilePreviewProps: ProfilePreviewControllerProps | null;
+  scheduleProfilePreviewClose: () => void;
+  showAgentPreview: (item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) => void;
+  showParticipantPreview: (user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) => void;
 };
 
 export type UseConversationControllerArgs = {
@@ -226,6 +233,7 @@ export type UseAgentControllerArgs = {
   managerProfile: AgentProfileLike | null;
   modelProviders?: ModelProviderCatalog | null;
   modelProvidersLoaded?: boolean;
+  profileDetailAgentID?: string;
   refreshHubTemplates: () => Promise<void>;
   refreshWorkspaceAgents: (options?: FetchAgentsOptions) => Promise<AgentLike[]>;
   refreshWorkspaceBootstrap: () => Promise<IMData | null>;
@@ -242,4 +250,10 @@ export type UseAgentControllerArgs = {
   setBootstrapData: WorkspaceQuerySetter<IMData | null>;
   setSelectedHubTemplateId: WorkspaceUiState["setSelectedHubTemplateId"];
   t: TranslateFn;
+};
+
+export type AgentDetailSidePanelProps = AgentDetailPaneProps & {
+  onClose: () => void;
+  onResize?: (width: number) => void;
+  width?: number;
 };

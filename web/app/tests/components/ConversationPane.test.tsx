@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConversationPane } from "@/pages/ConversationPage/components/ConversationPane";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
+import type { ConversationPaneProps } from "@/components/business/ConversationPane";
 import type { IMConversation, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import {
   getCollapsedSelectionTextOffset,
@@ -86,6 +87,7 @@ const t: TranslateFn = (key, params = {}) => {
     composerTip: "Enter to send",
     directMessagesSection: "Direct Messages",
     inputPlaceholder: "Message",
+    agentWorking: "{name} is working",
     latestThreadReply: "Latest reply",
     replyInThread: "Reply in thread",
     send: "Send",
@@ -98,15 +100,20 @@ const t: TranslateFn = (key, params = {}) => {
   if (key === "threadReplies") {
     return `${params.count ?? 0} replies`;
   }
-  return labels[key] ?? key;
+  const label = labels[key] ?? key;
+  return Object.entries(params).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), label);
 };
 
 function renderThreadPane({
+  agents = [],
   conversationMembers = users,
   isDirect = true,
   messages,
   onClearRoomMessages = vi.fn(),
   onDeleteRoom = vi.fn(),
+  onCancelProfilePreviewClose = vi.fn(),
+  onCloseProfilePreview = vi.fn(),
+  onOpenAgentDetail = vi.fn(),
   onPreviewUser = vi.fn(),
   onRemoveMember = vi.fn(),
   replies = [],
@@ -117,7 +124,11 @@ function renderThreadPane({
   memberActionError = "",
   onClearMemberActionError = vi.fn(),
   onApplyMention = vi.fn(),
+  agentDetailPanelProps = null,
+  usersByIdOverride = usersById,
 }: {
+  agents?: NonNullable<ConversationPaneProps["agents"]>;
+  agentDetailPanelProps?: ConversationPaneProps["agentDetailPanelProps"];
   conversationMembers?: IMUser[];
   isDirect?: boolean;
   messages?: IMConversation["messages"];
@@ -126,6 +137,9 @@ function renderThreadPane({
   onClearRoomMessages?: (id: string) => void;
   onDeleteRoom?: (id: string) => void;
   onApplyMention?: (user: IMUser) => void;
+  onCancelProfilePreviewClose?: () => void;
+  onCloseProfilePreview?: () => void;
+  onOpenAgentDetail?: NonNullable<ConversationPaneProps["onOpenAgentDetail"]>;
   onPreviewUser?: (user: IMUser) => void;
   onRemoveMember?: (memberID: string) => void;
   memberActionBusyID?: string;
@@ -133,6 +147,7 @@ function renderThreadPane({
   onClearMemberActionError?: () => void;
   replies?: ThreadView["replies"];
   showToolCalls?: boolean;
+  usersByIdOverride?: ConversationPaneProps["usersById"];
 } = {}) {
   const root = {
     content: "Hi! How can I help you today?",
@@ -167,6 +182,7 @@ function renderThreadPane({
       <ConversationPane
         activeThreadRootID="msg-root"
         activeThreadView={thread}
+        agents={agents}
         authBusyProvider=""
         authStatuses={{}}
         channelToolsRef={createRef<HTMLDivElement>()}
@@ -201,6 +217,9 @@ function renderThreadPane({
         onDeleteRoom={onDeleteRoom}
         onInviteAction={() => {}}
         onMessageAction={() => {}}
+        onCancelProfilePreviewClose={onCancelProfilePreviewClose}
+        onCloseProfilePreview={onCloseProfilePreview}
+        onOpenAgentDetail={onOpenAgentDetail}
         onOpenThread={() => {}}
         onRemoveMember={onRemoveMember}
         onProviderLogin={() => {}}
@@ -212,6 +231,7 @@ function renderThreadPane({
         onToggleMemberList={setShowMemberList}
         onToggleToolCalls={() => {}}
         selectedMessageCount={timelineMessages.length}
+        agentDetailPanelProps={agentDetailPanelProps}
         showChannelTools={showChannelTools}
         showMemberList={showMemberList}
         showToolCalls={showToolCalls}
@@ -221,7 +241,7 @@ function renderThreadPane({
         threadError=""
         threadLoading={false}
         onThreadDraftChange={setThreadDraftSegments}
-        usersById={usersById}
+        usersById={usersByIdOverride}
         visibleMessages={timelineMessages}
       />
     );
@@ -231,6 +251,130 @@ function renderThreadPane({
 }
 
 describe("ConversationPane", () => {
+  it("previews human message avatars on hover without opening details on click", async () => {
+    const user = userEvent.setup();
+    const onCancelProfilePreviewClose = vi.fn();
+    const onCloseProfilePreview = vi.fn();
+    const onOpenAgentDetail = vi.fn();
+    const onPreviewUser = vi.fn();
+
+    renderThreadPane({
+      onCancelProfilePreviewClose,
+      onCloseProfilePreview,
+      onOpenAgentDetail,
+      onPreviewUser,
+    });
+
+    const avatar = screen.getAllByRole("button", { name: "profilePreview manager" })[0] as HTMLElement;
+    await user.hover(avatar);
+
+    expect(onCancelProfilePreviewClose).toHaveBeenCalled();
+    expect(onPreviewUser).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+
+    await user.unhover(avatar);
+    expect(onCloseProfilePreview).toHaveBeenCalled();
+
+    await user.click(avatar);
+    expect(onOpenAgentDetail).not.toHaveBeenCalled();
+  });
+
+  it("opens agent details instead of profile details when clicking an agent avatar", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentDetail = vi.fn();
+    const onPreviewUser = vi.fn();
+
+    renderThreadPane({
+      agents: [{ id: "u-manager", name: "manager", role: "worker" }],
+      onOpenAgentDetail,
+      onPreviewUser,
+    });
+
+    const avatar = screen.getAllByRole("button", { name: "profilePreview manager" })[0] as HTMLElement;
+    await user.hover(avatar);
+    expect(onPreviewUser).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+
+    await user.click(avatar);
+    expect(onOpenAgentDetail).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+  });
+
+  it("opens agent details when the message sender id is a channel identity alias", async () => {
+    const user = userEvent.setup();
+    const weatherUser: IMUser = {
+      avatar: "O",
+      id: "user-openclaw-weather",
+      name: "openclaw-weather",
+      role: "worker",
+    };
+    const userAliases = new Map<string, IMUser>([
+      ...usersById,
+      [weatherUser.id, weatherUser],
+      ["openclaw-weather", weatherUser],
+    ]);
+    const onOpenAgentDetail = vi.fn();
+
+    renderThreadPane({
+      agents: [{ id: "openclaw-weather", name: "OpenClaw weather", role: "worker" }],
+      conversationMembers: [users[0], weatherUser],
+      messages: [
+        {
+          content: "Weather report",
+          created_at: "2026-05-25T08:13:00Z",
+          id: "msg-weather",
+          sender_id: "openclaw-weather",
+        },
+      ],
+      onOpenAgentDetail,
+      usersByIdOverride: userAliases,
+    });
+
+    await user.click(screen.getByRole("button", { name: "profilePreview openclaw-weather" }));
+
+    expect(onOpenAgentDetail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "openclaw-weather" }),
+      expect.any(HTMLElement),
+    );
+  });
+
+  it("resizes the agent detail side panel from the separator", async () => {
+    const user = userEvent.setup();
+    const onResize = vi.fn();
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1400 });
+
+    try {
+      renderThreadPane({
+        agentDetailPanelProps: {
+          item: {
+            id: "u-manager",
+            name: "manager",
+            role: "worker",
+          },
+          t,
+          width: 760,
+          onClose: vi.fn(),
+          onDelete: vi.fn(),
+          onInvite: vi.fn(),
+          onOpenDM: vi.fn(),
+          onRecreate: vi.fn(),
+          onResize,
+          onStart: vi.fn(),
+          onStop: vi.fn(),
+        },
+      });
+
+      const separator = screen.getByRole("separator", { name: "resizeAgentDetailPanel" });
+      separator.focus();
+
+      await user.keyboard("{ArrowLeft}");
+      expect(onResize).toHaveBeenCalledWith(784);
+
+      await user.keyboard("{ArrowRight}");
+      expect(onResize).toHaveBeenLastCalledWith(736);
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalInnerWidth });
+    }
+  });
+
   it("keeps the caret at the end after slash text is tokenized in the main composer", async () => {
     const user = userEvent.setup();
     const conversation: IMConversation = {
@@ -330,6 +474,90 @@ describe("ConversationPane", () => {
 
     expect(editor).toHaveTextContent("/abc");
     expect(getCollapsedSelectionTextOffset(editor)).toBe(4);
+  });
+
+  it("shows working participants above the composer", () => {
+    const conversation: IMConversation = {
+      id: "dm-1",
+      is_direct: true,
+      members: users.map((item) => item.id),
+      messages: [],
+      title: "manager",
+    };
+
+    function Harness() {
+      const [showChannelTools, setShowChannelTools] = useState(false);
+      const [showMemberList, setShowMemberList] = useState(false);
+
+      return (
+        <ConversationPane
+          activeThreadRootID=""
+          activeThreadView={null}
+          authBusyProvider=""
+          authStatuses={{}}
+          channelToolsRef={createRef<HTMLDivElement>()}
+          composerError=""
+          conversation={conversation}
+          conversationMembers={users}
+          currentUserID="u-admin"
+          draftSegments={[]}
+          draftText=""
+          editorRef={createRef<HTMLDivElement>()}
+          inviteActionLabel="Invite"
+          locale="en"
+          logAgent={{ id: "u-manager", name: "manager" }}
+          managerProfile={null}
+          managerProfileIncomplete={false}
+          memberMenuRef={createRef<HTMLDivElement>()}
+          mentionCandidates={[]}
+          mentionIndex={0}
+          mentionableUsersByName={new Map()}
+          messageActionBusy=""
+          messageActionError={{}}
+          messageListRef={createRef<HTMLElement>()}
+          onApplyMention={() => {}}
+          onClearRoomMessages={() => {}}
+          onClearMemberActionError={() => {}}
+          onCloseThread={() => {}}
+          onComposerCompositionEnd={() => {}}
+          onComposerCompositionStart={() => {}}
+          onComposerKeyDown={() => {}}
+          onDeleteRoom={() => {}}
+          onInviteAction={() => {}}
+          onMessageAction={() => {}}
+          onOpenThread={() => {}}
+          onProviderLogin={() => {}}
+          onPreviewUser={() => {}}
+          onSendMessage={() => {}}
+          onSendThreadReply={() => {}}
+          onSyncComposer={() => {}}
+          onThreadDraftChange={() => {}}
+          onToggleChannelTools={setShowChannelTools}
+          onToggleMemberList={setShowMemberList}
+          onToggleToolCalls={() => {}}
+          selectedMessageCount={0}
+          showChannelTools={showChannelTools}
+          showMemberList={showMemberList}
+          showToolCalls={false}
+          t={t}
+          theme="light"
+          threadDraftSegments={[]}
+          threadError=""
+          threadLoading={false}
+          usersById={usersById}
+          visibleMessages={[]}
+          workingParticipants={[
+            { id: "u-atlas", name: "Atlas" },
+            { id: "u-bram", name: "Bram" },
+          ]}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Atlas is working");
+    expect(screen.getByRole("status")).toHaveTextContent("Bram is working");
   });
 
   it("shows one date divider per day without times", () => {

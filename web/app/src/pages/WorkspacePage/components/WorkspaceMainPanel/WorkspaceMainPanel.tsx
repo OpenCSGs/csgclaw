@@ -6,7 +6,14 @@ export function WorkspaceMainPanel() {
   const controller = useWorkspaceControllerContext();
 
   return (
-    <main className={classNames("chat-panel", controller.mainPanelHasThread && "has-thread-panel")}>
+    <main
+      className={classNames(
+        "chat-panel",
+        controller.mainPanelHasThread && "has-thread-panel",
+        controller.mainPanelHasAgentDetail && "has-agent-detail-panel",
+      )}
+      style={controller.mainPanelStyle}
+    >
       <Outlet />
     </main>
   );

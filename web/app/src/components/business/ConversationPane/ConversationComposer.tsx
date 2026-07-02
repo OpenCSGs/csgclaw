@@ -17,7 +17,7 @@ import type { TranslateFn } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import { MentionPicker } from "./MentionPicker";
 import { SlashPicker } from "./SlashPicker";
-import type { MentionPickerUser, VoidOrPromise } from "./types";
+import type { ConversationWorkingParticipant, MentionPickerUser, VoidOrPromise } from "./types";
 
 export type ConversationComposerProps = {
   authBusyProvider: string;
@@ -45,6 +45,7 @@ export type ConversationComposerProps = {
   slashPickerLoading: boolean;
   slashPickerOpen: boolean;
   t: TranslateFn;
+  workingParticipants?: ConversationWorkingParticipant[];
 };
 
 export const ConversationComposer = memo(function ConversationComposer({
@@ -65,6 +66,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   slashPickerLoading,
   slashPickerOpen,
   t,
+  workingParticipants = [],
   onApplyMention,
   onApplySlashCandidate,
   onComposerCompositionEnd,
@@ -99,6 +101,7 @@ export const ConversationComposer = memo(function ConversationComposer({
           onLogin={onProviderLogin}
         />
       ) : null}
+      {workingParticipants.length > 0 ? <ComposerWorkingIndicator participants={workingParticipants} t={t} /> : null}
       <div className="composer-box">
         <div className="composer-input-wrap">
           {draftSegments.length === 0 ? (
@@ -149,3 +152,26 @@ export const ConversationComposer = memo(function ConversationComposer({
     </footer>
   );
 });
+
+function ComposerWorkingIndicator({
+  participants,
+  t,
+}: {
+  participants: readonly ConversationWorkingParticipant[];
+  t: TranslateFn;
+}) {
+  return (
+    <div className="composer-working" role="status" aria-live="polite">
+      {participants.map((participant) => (
+        <span key={participant.id || participant.name} className="composer-working-item">
+          <span className="composer-working-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+          <span>{t("agentWorking", { name: participant.name })}</span>
+        </span>
+      ))}
+    </div>
+  );
+}

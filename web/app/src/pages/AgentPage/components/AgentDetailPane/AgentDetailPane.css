@@ -126,11 +126,16 @@
   line-height: 22px;
   white-space: nowrap;
   cursor: pointer;
+  user-select: none;
 }
 
 .agent-profile-section-tab:hover {
   background: transparent;
   color: var(--brand-700);
+}
+
+.agent-profile-section-tab:active {
+  cursor: grabbing;
 }
 
 .agent-profile-section-tab:focus-visible {
@@ -212,6 +217,521 @@
 .agent-channels-section {
   display: grid;
   gap: var(--space-3);
+}
+
+.agent-activity-section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.agent-activity-content {
+  gap: 12px;
+}
+
+.agent-activity-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.agent-activity-meta-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-activity-meta-chip {
+  display: inline-flex;
+  max-width: 100%;
+  height: 28px;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--gray-50) 72%, var(--surface));
+  color: var(--gray-600);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.agent-activity-meta-chip svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.agent-activity-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.agent-activity-sort {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  overflow: hidden;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--gray-50) 76%, var(--surface));
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-activity-sort-button {
+  display: inline-flex;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.agent-activity-sort-button:hover {
+  color: var(--text);
+}
+
+.agent-activity-sort-button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-activity-filter-trigger {
+  --btn-min-width: 0;
+  --btn-padding-x: 10px;
+}
+
+.agent-activity-filter-trigger.active {
+  border-color: color-mix(in oklab, var(--brand-600) 30%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 9%, var(--surface));
+  color: var(--brand-700);
+}
+
+.agent-activity-toolbar-refresh {
+  --btn-height: 32px;
+  --btn-min-width: 32px;
+  --btn-padding-x: 0;
+
+  width: 32px;
+  min-width: 32px;
+  border-radius: 8px;
+}
+
+.agent-activity-filter-count {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--brand-600) 15%, transparent);
+  color: var(--brand-700);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 14px;
+}
+
+.agent-activity-filter-menu {
+  min-width: 220px;
+}
+
+.agent-activity-filter-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-activity-filter-option-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-activity-filter-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 999px;
+  background: var(--gray-300);
+}
+
+.agent-activity-filter-dot.message,
+.agent-activity-filter-chip.message {
+  --activity-filter-color: var(--success-600);
+}
+
+.agent-activity-filter-dot.exec_command,
+.agent-activity-filter-chip.exec_command {
+  --activity-filter-color: var(--brand-600);
+}
+
+.agent-activity-filter-dot.other,
+.agent-activity-filter-chip.other {
+  --activity-filter-color: var(--gray-500);
+}
+
+.agent-activity-filter-dot {
+  background: var(--activity-filter-color, var(--gray-300));
+}
+
+.agent-activity-selected-filters {
+  grid-column: 1 / -1;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-activity-filter-chip {
+  display: inline-flex;
+  max-width: 220px;
+  height: 26px;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  padding: 0 8px;
+  border: 1px solid color-mix(in oklab, var(--activity-filter-color, var(--brand-600)) 28%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--activity-filter-color, var(--brand-600)) 9%, var(--surface));
+  color: color-mix(in oklab, var(--activity-filter-color, var(--brand-600)) 78%, var(--text));
+  font: inherit;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.agent-activity-filter-chip span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-activity-timeline-wrap {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-activity-timeline {
+  display: flex;
+  width: 100%;
+  height: 22px;
+  align-items: stretch;
+  gap: 2px;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.agent-activity-timeline-segment {
+  flex: 1 1 0;
+  min-width: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--brand-500) 45%, var(--brand-50));
+  cursor: pointer;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    background-color 140ms ease;
+}
+
+.agent-activity-timeline-segment:hover,
+.agent-activity-timeline-segment:focus-visible {
+  opacity: 0.82;
+  transform: translateY(-1px);
+}
+
+.agent-activity-timeline-segment.selected {
+  background: var(--brand-600);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--brand-800) 36%, transparent);
+}
+
+.agent-activity-timeline-segment.message {
+  background: color-mix(in oklab, var(--success-500) 58%, var(--gray-50));
+}
+
+.agent-activity-timeline-segment.message.selected {
+  background: var(--success-600);
+}
+
+.agent-activity-timeline-segment.exec_command {
+  background: color-mix(in oklab, var(--brand-500) 55%, var(--brand-50));
+}
+
+.agent-activity-timeline-segment.exec_command.selected {
+  background: var(--brand-600);
+}
+
+.agent-activity-timeline-segment.other {
+  background: color-mix(in oklab, var(--gray-400) 52%, var(--gray-50));
+}
+
+.agent-activity-timeline-segment.other.selected {
+  background: var(--gray-600);
+}
+
+.agent-activity-empty {
+  min-height: 76px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+  font: var(--text-sm-medium);
+}
+
+.agent-activity-list {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-activity-row {
+  display: block;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.agent-activity-row:hover {
+  background: color-mix(in oklab, var(--gray-50) 72%, var(--surface));
+}
+
+.agent-activity-row.selected {
+  background: color-mix(in oklab, var(--brand-50) 72%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--brand-500);
+}
+
+.agent-activity-row:last-child {
+  border-bottom: 0;
+}
+
+.agent-activity-row-main {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) minmax(80px, 0.14fr) max-content max-content;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 8px 12px;
+}
+
+.agent-activity-type-badge {
+  display: inline-flex;
+  width: 104px;
+  max-width: 104px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-activity-type-badge.message {
+  background: var(--success-600);
+  color: var(--white);
+}
+
+.agent-activity-type-badge.exec_command {
+  background: color-mix(in oklab, var(--brand-600) 13%, var(--brand-50));
+  color: color-mix(in oklab, var(--brand-700) 84%, var(--text));
+}
+
+.agent-activity-type-badge.other {
+  background: var(--gray-100);
+  color: var(--gray-600);
+}
+
+.agent-activity-row-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--gray-700);
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-normal);
+  line-height: 20px;
+  text-align: left;
+}
+
+.agent-activity-row.exec_command .agent-activity-row-summary {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.agent-activity-row-summary.expandable {
+  cursor: pointer;
+}
+
+.agent-activity-row-summary.expandable:hover .agent-activity-row-text {
+  color: var(--text);
+}
+
+.agent-activity-row-summary:focus-visible {
+  outline: 2px solid var(--brand-300);
+  outline-offset: 3px;
+}
+
+.agent-activity-row-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 0.16s ease;
+}
+
+.agent-activity-row-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.agent-activity-row-text,
+.agent-activity-row-room {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-activity-row-room {
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--text-xs-line-height);
+}
+
+.agent-activity-row-seq,
+.agent-activity-row-time {
+  color: color-mix(in oklab, var(--muted) 72%, var(--surface));
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-activity-row-detail {
+  margin: 0 12px 12px 128px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--gray-50);
+}
+
+.agent-activity-row-detail .message-content {
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+.agent-activity-tool-detail {
+  display: grid;
+  gap: 0;
+}
+
+.agent-activity-tool-section + .agent-activity-tool-section {
+  border-top: 1px solid var(--line);
+}
+
+.agent-activity-tool-section-label {
+  padding: 8px 12px 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 16px;
+  text-transform: uppercase;
+}
+
+.agent-activity-tool-section pre,
+.agent-activity-plain-detail {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  padding: 8px 12px 12px;
+  color: var(--gray-700);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+:root[data-theme="dark"] .agent-activity-list {
+  border-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
+  background: var(--panel);
+}
+
+:root[data-theme="dark"] .agent-activity-meta-chip,
+:root[data-theme="dark"] .agent-activity-sort,
+:root[data-theme="dark"] .agent-activity-timeline-wrap {
+  border-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
+  background: color-mix(in srgb, var(--panel) 90%, var(--panel-strong));
+}
+
+:root[data-theme="dark"] .agent-activity-sort-button.active {
+  background: var(--panel-strong);
+}
+
+:root[data-theme="dark"] .agent-activity-row {
+  border-bottom-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
+}
+
+:root[data-theme="dark"] .agent-activity-row.selected {
+  background: color-mix(in oklab, var(--brand-600) 14%, var(--panel));
+}
+
+:root[data-theme="dark"] .agent-activity-row-detail {
+  border-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
+  background: color-mix(in srgb, var(--panel-strong) 84%, black);
+}
+
+:root[data-theme="dark"] .agent-activity-type-badge.exec_command {
+  background: color-mix(in oklab, var(--brand-600) 28%, transparent);
+  color: color-mix(in oklab, var(--brand-300) 92%, var(--text));
+}
+
+:root[data-theme="dark"] .agent-activity-type-badge.other {
+  background: color-mix(in srgb, var(--gray-300) 16%, transparent);
+  color: color-mix(in oklab, var(--muted) 70%, var(--text));
+}
+
+:root[data-theme="dark"] .agent-activity-tool-section + .agent-activity-tool-section {
+  border-top-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
+}
+
+:root[data-theme="dark"] .agent-activity-tool-section pre,
+:root[data-theme="dark"] .agent-activity-plain-detail {
+  color: color-mix(in oklab, var(--text) 84%, var(--muted));
 }
 
 .agent-channels-title {
@@ -1280,6 +1800,38 @@
   .agent-detail-pane .profile-advanced-grid,
   .agent-detail-pane .agent-workspace-panels {
     grid-template-columns: 1fr;
+  }
+
+  .agent-activity-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-activity-controls {
+    justify-content: flex-start;
+  }
+
+  .agent-activity-sort {
+    max-width: 100%;
+  }
+
+  .agent-activity-sort-button {
+    min-width: 0;
+  }
+
+  .agent-activity-row-main {
+    grid-template-columns: minmax(72px, max-content) minmax(0, 1fr) max-content;
+  }
+
+  .agent-activity-row-room {
+    display: none;
+  }
+
+  .agent-activity-row-time {
+    display: none;
+  }
+
+  .agent-activity-row-detail {
+    margin-left: 12px;
   }
 
   .agent-skill-card-header,

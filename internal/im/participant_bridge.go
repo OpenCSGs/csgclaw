@@ -71,6 +71,7 @@ type ParticipantSendMessageRequest struct {
 	MessageID    string                     `json:"message_id,omitempty"`
 	ThreadRootID string                     `json:"thread_root_id,omitempty"`
 	TopicID      string                     `json:"topic_id,omitempty"`
+	Metadata     map[string]any             `json:"metadata,omitempty"`
 	Context      *ParticipantMessageContext `json:"context,omitempty"`
 }
 

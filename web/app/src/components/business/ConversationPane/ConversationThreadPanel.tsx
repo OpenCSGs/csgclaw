@@ -4,6 +4,7 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
 import { Button } from "@/components/ui";
 import { IconImage } from "@/components/ui/Icons";
+import { resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
 import {
   areComposerSegmentsEqual,
   getCollapsedSelectionTextOffset,
@@ -23,6 +24,7 @@ import {
   type ComposerSegment,
 } from "@/models/composer";
 import {
+  agentMatchesUser,
   formatMessageTimestampParts,
   formatThreadReplyCount,
   isToolCallMessage,
@@ -52,6 +54,7 @@ type ThreadMentionState = {
 };
 
 export type ConversationThreadPanelProps = {
+  agents?: AgentLike[];
   disabled: boolean;
   draftSegments: ComposerSegment[];
   error: string;
@@ -59,9 +62,12 @@ export type ConversationThreadPanelProps = {
   locale: LocaleCode;
   mentionableUsers?: MentionPickerUser[];
   onApplyThreadSlashCandidate?: (name: string) => void;
+  onCancelProfilePreviewClose?: () => void;
   onClose: () => void;
+  onCloseProfilePreview?: () => void;
   onDismissThreadSlashPicker?: () => void;
   onDraftChange: (segments: ComposerSegment[]) => void;
+  onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onSend: () => VoidOrPromise;
   onSetThreadSlashIndex?: (index: number) => void;
@@ -78,6 +84,7 @@ export type ConversationThreadPanelProps = {
 
 export function ConversationThreadPanel({
   thread,
+  agents = [],
   loading,
   error,
   draftSegments,
@@ -96,6 +103,9 @@ export function ConversationThreadPanel({
   onApplyThreadSlashCandidate = (_name) => {},
   onDismissThreadSlashPicker = () => {},
   onSetThreadSlashIndex = (_index) => {},
+  onCancelProfilePreviewClose,
+  onCloseProfilePreview,
+  onOpenAgentDetail,
   onPreviewUser,
   mentionableUsers = [],
   onSend,
@@ -252,10 +262,14 @@ export function ConversationThreadPanel({
           <div className="thread-root">
             <ThreadMessage
               message={visibleRoot}
+              agents={agents}
               usersById={usersById}
               locale={locale}
               theme={theme}
               t={t}
+              onCancelProfilePreviewClose={onCancelProfilePreviewClose}
+              onCloseProfilePreview={onCloseProfilePreview}
+              onOpenAgentDetail={onOpenAgentDetail}
               onPreviewUser={onPreviewUser}
             />
           </div>
@@ -267,10 +281,14 @@ export function ConversationThreadPanel({
               <ThreadMessage
                 key={message.id}
                 message={message}
+                agents={agents}
                 usersById={usersById}
                 locale={locale}
                 theme={theme}
                 t={t}
+                onCancelProfilePreviewClose={onCancelProfilePreviewClose}
+                onCloseProfilePreview={onCloseProfilePreview}
+                onOpenAgentDetail={onOpenAgentDetail}
                 onPreviewUser={onPreviewUser}
               />
             ))
@@ -413,19 +431,38 @@ export function ConversationThreadPanel({
 }
 
 type ThreadMessageProps = {
+  agents?: AgentLike[];
   compact?: boolean;
   locale: LocaleCode;
   message: IMMessage;
+  onCancelProfilePreviewClose?: () => void;
+  onCloseProfilePreview?: () => void;
+  onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   t: TranslateFn;
   theme: ThemeMode;
   usersById: UsersById;
 };
 
-function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, compact = false }: ThreadMessageProps) {
+function ThreadMessage({
+  message,
+  agents = [],
+  usersById,
+  locale,
+  theme,
+  t,
+  onCancelProfilePreviewClose,
+  onCloseProfilePreview,
+  onOpenAgentDetail,
+  onPreviewUser,
+  compact = false,
+}: ThreadMessageProps) {
   const user = resolveUserByLocalIdentity(message.sender_id, usersById);
+  const messageAgent = user ? resolveThreadMessageAgent(agents, user, message.sender_id) : null;
   const fallbackName = message.sender_id || "";
-  const avatar = user?.avatar || fallbackName.slice(0, 1).toUpperCase();
+  const fallbackAvatar = fallbackName.slice(0, 1).toUpperCase();
+  const avatar = user?.avatar || messageAgent?.avatar || fallbackAvatar;
+  const fallback = messageAgent ? resolveAgentAvatarFallback(messageAgent, usersById) : avatar;
   const name = user?.name || fallbackName;
   const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
 
@@ -436,13 +473,24 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
           type="button"
           className="thread-message-avatar"
           aria-label={`${t("profilePreview")} ${name}`}
-          onClick={(event) => onPreviewUser(user, event.currentTarget)}
+          onBlur={onCloseProfilePreview}
+          onClick={(event) => {
+            if (messageAgent && onOpenAgentDetail) {
+              onOpenAgentDetail(messageAgent, event.currentTarget);
+            }
+          }}
+          onFocus={(event) => onPreviewUser(user, event.currentTarget)}
+          onPointerEnter={(event) => {
+            onCancelProfilePreviewClose?.();
+            onPreviewUser(user, event.currentTarget);
+          }}
+          onPointerLeave={onCloseProfilePreview}
         >
-          <AgentAvatarContent avatar={avatar} fallback={avatar} />
+          <AgentAvatarContent avatar={avatar} fallback={fallback} />
         </button>
       ) : (
         <div className="thread-message-avatar" aria-hidden="true">
-          <AgentAvatarContent avatar={avatar} fallback={avatar} />
+          <AgentAvatarContent avatar={avatar} fallback={fallback} />
         </div>
       )}
       <div className="thread-message-main">
@@ -455,5 +503,24 @@ function ThreadMessage({ message, usersById, locale, theme, t, onPreviewUser, co
         </div>
       </div>
     </div>
+  );
+}
+
+function resolveThreadMessageAgent(
+  agents: readonly AgentLike[],
+  user: IMUser,
+  senderID: string | null | undefined,
+): AgentLike | null {
+  const senderIdentity = String(senderID || "").trim();
+  return (
+    agents.find((item) => {
+      if (agentMatchesUser(item, user)) {
+        return true;
+      }
+      if (!senderIdentity || senderIdentity === user.id) {
+        return false;
+      }
+      return agentMatchesUser(item, { ...user, id: senderIdentity, user_id: user.id });
+    }) ?? null
   );
 }

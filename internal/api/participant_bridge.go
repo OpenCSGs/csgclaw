@@ -629,12 +629,7 @@ func (h *Handler) handleParticipantSendMessage(w http.ResponseWriter, r *http.Re
 
 	if strings.TrimSpace(threadRootID) == "" {
 		if isParticipantActivityThreadMessage(text) {
-			rootID, err := h.ensureParticipantActivityTurnRoot(roomID, participantID)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			threadRootID = rootID
+			clearActivityTurn = true
 		} else if rootID, ok := h.participantActivityTurnRoot(roomID, participantID); ok {
 			messageID = rootID
 			clearActivityTurn = true
@@ -647,6 +642,7 @@ func (h *Handler) handleParticipantSendMessage(w http.ResponseWriter, r *http.Re
 		Content:      text,
 		MessageID:    messageID,
 		ThreadRootID: threadRootID,
+		Metadata:     req.Metadata,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

@@ -15,6 +15,7 @@ import (
 
 	"csgclaw/internal/im"
 	"csgclaw/internal/slashcommand"
+	"csgclaw/internal/utils"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
@@ -1342,6 +1343,7 @@ func (s *Service) SendMessage(req im.CreateMessageRequest) (im.Message, error) {
 		SenderID:  senderOpenID,
 		Kind:      im.MessageKindMessage,
 		Content:   content,
+		Metadata:  utils.CloneAnyMap(req.Metadata),
 		CreatedAt: time.Now().UTC(),
 		Mentions:  nil,
 		RelatesTo: relatesTo,

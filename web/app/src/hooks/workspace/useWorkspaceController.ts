@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, createModelProvider, type ModelProviderPayload } from "@/api/modelProviders";
@@ -31,6 +32,17 @@ import type { AgentLike } from "@/models/agents";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { IMConversation, IMData, IMUser } from "@/models/conversations";
 import type { SkillSummary } from "@/models/skillhub";
+
+const DEFAULT_AGENT_DETAIL_PANEL_WIDTH = 760;
+const MIN_AGENT_DETAIL_PANEL_WIDTH = 520;
+const MAX_AGENT_DETAIL_PANEL_WIDTH = 1120;
+
+function clampAgentDetailPanelWidth(width: number): number {
+  if (!Number.isFinite(width)) {
+    return DEFAULT_AGENT_DETAIL_PANEL_WIDTH;
+  }
+  return Math.min(MAX_AGENT_DETAIL_PANEL_WIDTH, Math.max(MIN_AGENT_DETAIL_PANEL_WIDTH, Math.round(width)));
+}
 
 function isBootstrapAdminUser(user: IMUser | null | undefined) {
   return user?.id === "u-admin" || String(user?.name ?? "").toLowerCase() === "admin";
@@ -180,6 +192,10 @@ export function useWorkspaceController() {
   const displayData = useMemo(() => withLocalIdentity(data, t("localIdentityFallback")), [data, t]);
   const activePane = useMemo(() => paneFromLocation(location.pathname), [location.pathname]);
   const rooms = useMemo(() => displayData?.rooms ?? [], [displayData]);
+  const [conversationProfileDetailAgentID, setConversationProfileDetailAgentID] = useState("");
+  const [conversationAgentDetailPanelWidth, setConversationAgentDetailPanelWidth] = useState(
+    DEFAULT_AGENT_DETAIL_PANEL_WIDTH,
+  );
   const loadingError = bootstrapQuery.isError ? t("loadingFailed") : "";
   const {
     navigatePane,
@@ -254,6 +270,7 @@ export function useWorkspaceController() {
     managerProfile,
     modelProviders,
     modelProvidersLoaded,
+    profileDetailAgentID: conversationProfileDetailAgentID,
     refreshHubTemplates,
     refreshWorkspaceAgents,
     refreshWorkspaceModelProviders,
@@ -271,6 +288,16 @@ export function useWorkspaceController() {
     setSelectedHubTemplateId,
     t,
   });
+  const closeConversationAgentDetail = useCallback(() => {
+    if (!conversationProfileDetailAgentID) {
+      return true;
+    }
+    if (agent.agentViewProps.hasUnsavedChanges && !window.confirm(t("agentUnsavedChangesWarning"))) {
+      return false;
+    }
+    setConversationProfileDetailAgentID("");
+    return true;
+  }, [agent.agentViewProps.hasUnsavedChanges, conversationProfileDetailAgentID, t]);
   const managerDirectConversation = useMemo(
     () => resolveManagerDirectConversation(rooms, displayData?.current_user_id ?? "", agent.managerAgent),
     [agent.managerAgent, displayData?.current_user_id, rooms],
@@ -338,6 +365,25 @@ export function useWorkspaceController() {
     t,
     theme,
   });
+  const closeThreadPanel = conversation.conversationViewProps.onCloseThread;
+  const openConversationAgentDetail = useCallback(
+    (item: AgentLike | null | undefined) => {
+      const agentID = String(item?.id || "").trim();
+      if (!agentID) {
+        return false;
+      }
+      if (conversationProfileDetailAgentID && conversationProfileDetailAgentID !== agentID) {
+        const closed = closeConversationAgentDetail();
+        if (!closed) {
+          return false;
+        }
+      }
+      closeThreadPanel();
+      setConversationProfileDetailAgentID(agentID);
+      return true;
+    },
+    [closeConversationAgentDetail, closeThreadPanel, conversationProfileDetailAgentID],
+  );
   useWorkspaceRealtime({
     agents,
     onConversationEvent: conversation.handleRealtimeEvent,
@@ -360,6 +406,47 @@ export function useWorkspaceController() {
     t,
     usersById: conversation.usersById,
   });
+  const closeProfilePreview = profilePreview.closeProfilePreview;
+  const openConversationAgentDetailFromAvatar = useCallback(
+    (item: AgentLike | null | undefined) => {
+      const opened = openConversationAgentDetail(item);
+      if (!opened) {
+        return;
+      }
+      closeProfilePreview();
+    },
+    [closeProfilePreview, openConversationAgentDetail],
+  );
+  const openThreadPanel = conversation.conversationViewProps.onOpenThread;
+  const openConversationThreadPanel = conversation.openThreadInConversation;
+  const selectConversationAndCloseThreadPanel = conversation.selectConversationAndCloseThread;
+  const openConversationThread = useCallback(
+    async (message: Parameters<typeof openThreadPanel>[0]) => {
+      if (!closeConversationAgentDetail()) {
+        return;
+      }
+      await openThreadPanel(message);
+    },
+    [closeConversationAgentDetail, openThreadPanel],
+  );
+  const openThreadInConversation = useCallback(
+    async (...args: Parameters<typeof openConversationThreadPanel>) => {
+      if (!closeConversationAgentDetail()) {
+        return;
+      }
+      await openConversationThreadPanel(...args);
+    },
+    [closeConversationAgentDetail, openConversationThreadPanel],
+  );
+  const selectConversationAndCloseSidePanels = useCallback(
+    (id: string) => {
+      if (!closeConversationAgentDetail()) {
+        return;
+      }
+      selectConversationAndCloseThreadPanel(id);
+    },
+    [closeConversationAgentDetail, selectConversationAndCloseThreadPanel],
+  );
   const task = useTaskController({
     activePane,
     agents: agent.agentItems,
@@ -477,7 +564,9 @@ export function useWorkspaceController() {
         ...floatingConversation.conversationViewProps,
         agents: agent.agentItems,
         conversation: floatingChatConversation,
-        onPreviewUser: profilePreview.openParticipantPreview,
+        onCancelProfilePreviewClose: profilePreview.cancelProfilePreviewClose,
+        onCloseProfilePreview: profilePreview.scheduleProfilePreviewClose,
+        onPreviewUser: profilePreview.showParticipantPreview,
         showInviteAction: false,
         threadDisplay: "dialog" as const,
       }
@@ -567,6 +656,9 @@ export function useWorkspaceController() {
       ready: false,
       loadingText: loadingError || t("loading"),
       activePane,
+      mainPanelHasAgentDetail: false,
+      mainPanelHasThread: false,
+      mainPanelStyle: undefined,
       modelProviders,
       modelProvidersLoaded,
       refreshWorkspaceModelProviders,
@@ -574,12 +666,35 @@ export function useWorkspaceController() {
     };
   }
 
+  const conversationAgentDetailPanelProps =
+    conversationProfileDetailAgentID && agent.agentViewProps.item?.id === conversationProfileDetailAgentID
+      ? {
+          ...agent.agentViewProps,
+          activeRoom: conversation.activeChannel,
+          item: agent.agentViewProps.item,
+          onClose: closeConversationAgentDetail,
+          onResize: (width: number) => setConversationAgentDetailPanelWidth(clampAgentDetailPanelWidth(width)),
+          width: conversationAgentDetailPanelWidth,
+        }
+      : null;
+  const mainPanelHasAgentDetail = Boolean(conversationAgentDetailPanelProps && conversation.selectedConversation);
+  const mainPanelHasSidePanel = Boolean(
+    (conversation.activeThreadRootID || conversationAgentDetailPanelProps) && conversation.selectedConversation,
+  );
+  const mainPanelStyle: CSSProperties | undefined = mainPanelHasAgentDetail
+    ? ({
+        "--agent-detail-panel-width": `${conversationAgentDetailPanelWidth}px`,
+      } as CSSProperties)
+    : undefined;
+
   return {
     ready: true,
     loadingText: "",
     t,
     shellClassName: shell.shellClassName,
-    mainPanelHasThread: Boolean(conversation.activeThreadRootID && conversation.selectedConversation),
+    mainPanelHasThread: mainPanelHasSidePanel,
+    mainPanelHasAgentDetail,
+    mainPanelStyle,
     activePane,
     modelProviders,
     modelProvidersLoaded,
@@ -650,8 +765,8 @@ export function useWorkspaceController() {
       onViewTaskDetails: task.openParentTaskDetail,
       onSelectTeam: selectTeam,
       agentsError: agent.agentsDisplayError,
-      onSelectConversation: conversation.selectConversationAndCloseThread,
-      onSelectThread: conversation.openThreadInConversation,
+      onSelectConversation: selectConversationAndCloseSidePanels,
+      onSelectThread: openThreadInConversation,
       onPreviewUser: profilePreview.openParticipantPreview,
       onSelectAgent: selectAgent,
       onSelectModelProvider: selectModelProvider,
@@ -705,7 +820,12 @@ export function useWorkspaceController() {
     conversationViewProps: {
       ...conversation.conversationViewProps,
       agents: agent.agentItems,
-      onPreviewUser: profilePreview.openParticipantPreview,
+      onCancelProfilePreviewClose: profilePreview.cancelProfilePreviewClose,
+      onCloseProfilePreview: profilePreview.scheduleProfilePreviewClose,
+      onOpenAgentDetail: openConversationAgentDetailFromAvatar,
+      onOpenThread: openConversationThread,
+      onPreviewUser: profilePreview.showParticipantPreview,
+      agentDetailPanelProps: conversationAgentDetailPanelProps,
     },
     taskViewProps: task.taskViewProps,
     teamViewProps: {

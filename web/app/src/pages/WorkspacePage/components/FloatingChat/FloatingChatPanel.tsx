@@ -96,6 +96,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     threadSlashPickerOpen = false,
     usersById,
     visibleMessages,
+    workingParticipants = [],
   } = chatProps;
   const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
   const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
@@ -250,6 +251,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         slashPickerLoading={slashPickerLoading}
         slashPickerOpen={slashPickerOpen}
         t={floatingComposerT}
+        workingParticipants={workingParticipants}
         onApplyMention={onApplyMention}
         onApplySlashCandidate={onApplySlashCandidate}
         onComposerCompositionEnd={onComposerCompositionEnd}

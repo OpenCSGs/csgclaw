@@ -15,6 +15,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/identity"
 	"csgclaw/internal/slashcommand"
+	"csgclaw/internal/utils"
 )
 
 type User = apitypes.User
@@ -77,21 +78,23 @@ type ThreadListOptions struct {
 }
 
 type DeliverMessageRequest struct {
-	RoomID       string `json:"room_id"`
-	SenderID     string `json:"sender_id,omitempty"`
-	MentionID    string `json:"mention_id,omitempty"`
-	Content      string `json:"text"`
-	MessageID    string `json:"message_id,omitempty"`
-	ThreadRootID string `json:"thread_root_id,omitempty"`
+	RoomID       string         `json:"room_id"`
+	SenderID     string         `json:"sender_id,omitempty"`
+	MentionID    string         `json:"mention_id,omitempty"`
+	Content      string         `json:"text"`
+	MessageID    string         `json:"message_id,omitempty"`
+	ThreadRootID string         `json:"thread_root_id,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
 type DeliverEventRequest struct {
-	RoomID    string        `json:"room_id"`
-	SenderID  string        `json:"sender_id,omitempty"`
-	MentionID string        `json:"mention_id,omitempty"`
-	Content   string        `json:"text"`
-	MessageID string        `json:"message_id,omitempty"`
-	Event     *EventPayload `json:"event,omitempty"`
+	RoomID    string         `json:"room_id"`
+	SenderID  string         `json:"sender_id,omitempty"`
+	MentionID string         `json:"mention_id,omitempty"`
+	Content   string         `json:"text"`
+	MessageID string         `json:"message_id,omitempty"`
+	Event     *EventPayload  `json:"event,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 type CreateRoomRequest = apitypes.CreateRoomRequest
@@ -1753,6 +1756,7 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	}
 
 	message := s.newMessage("", senderID, MessageKindMessage, content)
+	message.Metadata = utils.CloneAnyMap(req.Metadata)
 	message.RelatesTo = relatesTo
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
@@ -1805,6 +1809,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	}
 
 	message := s.newMessage(req.MessageID, senderID, MessageKindMessage, content)
+	message.Metadata = utils.CloneAnyMap(req.Metadata)
 	message.RelatesTo = relatesTo
 	if strings.TrimSpace(req.MessageID) != "" {
 		for idx := range room.Messages {
@@ -1876,6 +1881,7 @@ func (s *Service) DeliverEvent(req DeliverEventRequest) (Message, error) {
 
 	message := s.newMessage(req.MessageID, senderID, MessageKindEvent, content)
 	message.Event = cloneEventPayload(req.Event)
+	message.Metadata = utils.CloneAnyMap(req.Metadata)
 	message.Mentions = mentions
 	if strings.TrimSpace(req.MessageID) != "" {
 		for idx := range room.Messages {

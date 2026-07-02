@@ -35,6 +35,9 @@ export type ConversationMessageListProps = {
   messageActionBusy: string;
   messageActionError: MessageActionError;
   messageListRef: RefObject<HTMLElement | null>;
+  onCancelProfilePreviewClose?: () => void;
+  onCloseProfilePreview?: () => void;
+  onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
@@ -57,6 +60,9 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   theme,
   usersById,
   visibleMessages,
+  onCancelProfilePreviewClose,
+  onCloseProfilePreview,
+  onOpenAgentDetail,
   onMessageAction,
   onOpenThread,
   onPreviewUser,
@@ -101,7 +107,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
         }
         const own = localIdentitiesMatch(message.sender_id, currentUserID);
         const isAdmin = user?.role === "admin";
-        const messageAgent = agents.find((item) => agentMatchesUser(item, user));
+        const messageAgent = resolveMessageAgent(agents, user, message.sender_id);
         const messageAgentRunning = isAgentRunning(messageAgent);
         const messageAvatar = user.avatar || messageAgent?.avatar;
         const messageAvatarFallback = messageAgent
@@ -117,7 +123,18 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                 type="button"
                 className="avatar avatar-button"
                 aria-label={`${t("profilePreview")} ${user.name}`}
-                onClick={(event) => onPreviewUser(user, event.currentTarget)}
+                onBlur={onCloseProfilePreview}
+                onClick={(event) => {
+                  if (messageAgent && onOpenAgentDetail) {
+                    onOpenAgentDetail(messageAgent, event.currentTarget);
+                  }
+                }}
+                onFocus={(event) => onPreviewUser(user, event.currentTarget)}
+                onPointerEnter={(event) => {
+                  onCancelProfilePreviewClose?.();
+                  onPreviewUser(user, event.currentTarget);
+                }}
+                onPointerLeave={onCloseProfilePreview}
               >
                 <AgentAvatarContent avatar={messageAvatar} fallback={messageAvatarFallback} />
                 {messageAgent ? (
@@ -182,3 +199,22 @@ export const ConversationMessageList = memo(function ConversationMessageList({
     </section>
   );
 });
+
+function resolveMessageAgent(
+  agents: readonly AgentLike[],
+  user: IMUser,
+  senderID: string | null | undefined,
+): AgentLike | null {
+  const senderIdentity = String(senderID || "").trim();
+  return (
+    agents.find((item) => {
+      if (agentMatchesUser(item, user)) {
+        return true;
+      }
+      if (!senderIdentity || senderIdentity === user.id) {
+        return false;
+      }
+      return agentMatchesUser(item, { ...user, id: senderIdentity, user_id: user.id });
+    }) ?? null
+  );
+}

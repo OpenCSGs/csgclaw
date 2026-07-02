@@ -1,5 +1,6 @@
 import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction } from "react";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
+import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { ComposerMentionUser, ComposerSegment } from "@/models/composer";
 import type {
@@ -18,6 +19,11 @@ import type { MessageAction, MessageActionError, MessageLike } from "@/component
 export type BooleanStateSetter = Dispatch<SetStateAction<boolean>>;
 export type MentionPickerUser = ComposerMentionUser & Pick<IMUser, "avatar" | "role">;
 export type VoidOrPromise = void | Promise<void>;
+
+export type ConversationWorkingParticipant = {
+  id: string;
+  name: string;
+};
 
 export type ConversationPaneProps = {
   activeThreadRootID?: string;
@@ -60,8 +66,11 @@ export type ConversationPaneProps = {
   onDismissThreadSlashPicker?: () => void;
   onInviteAction: () => void;
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
+  onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
   onRemoveMember?: (memberID: string) => VoidOrPromise;
+  onCancelProfilePreviewClose?: () => void;
+  onCloseProfilePreview?: () => void;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onProviderLogin: (provider: string) => VoidOrPromise;
   onSendMessage: () => VoidOrPromise;
@@ -91,4 +100,6 @@ export type ConversationPaneProps = {
   threadSlashPickerOpen?: boolean;
   usersById: UsersById;
   visibleMessages: IMMessage[];
+  workingParticipants?: ConversationWorkingParticipant[];
+  agentDetailPanelProps?: AgentDetailSidePanelProps | null;
 };

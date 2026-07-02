@@ -55,7 +55,7 @@ const initialPane = paneFromLocation();
 export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   locale: detectInitialLocale(),
   theme: detectInitialTheme(),
-  showToolCalls: true,
+  showToolCalls: false,
   isSidebarCollapsed: window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true",
   collapsedWorkspaceGroups: readCollapsedWorkspaceGroups(),
   activeConversationId: initialPane.type === WorkspacePaneTypes.conversation ? String(initialPane.id ?? "") : "",

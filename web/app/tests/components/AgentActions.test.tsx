@@ -1,10 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { AgentDetailPane, AgentRow, NotificationParticipantDetailPane } from "@/pages/AgentPage/components";
 import { agentToDraft, type AgentDraft } from "@/models/agents";
 
 const labels: Record<string, string> = {
+  agentActivityTab: "Activity",
   agentDelete: "Delete",
   agentInstructions: "Instructions",
   agentModel: "Model",
@@ -699,7 +700,8 @@ describe("agent action visibility", () => {
     expect(descriptionInput.tagName).toBe("TEXTAREA");
   });
 
-  it("places instructions below the model section in the profile editor", () => {
+  it("switches between the model and instructions profile tabs", async () => {
+    const user = userEvent.setup();
     render(
       <AgentDetailPane
         item={worker}
@@ -729,18 +731,24 @@ describe("agent action visibility", () => {
       />,
     );
 
-    const modelSectionTitle = screen.getAllByText("Model")[0];
-    const instructionSectionTitle = screen.getAllByText("Instructions")[0];
+    const navigation = screen.getByRole("navigation", { name: "Profile sections" });
+    await user.click(within(navigation).getByRole("button", { name: "Model" }));
+    expect(screen.getByText("Provider")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("reply in Chinese")).not.toBeInTheDocument();
+
+    await user.click(within(navigation).getByRole("button", { name: "Instructions" }));
     expect(screen.getByDisplayValue("reply in Chinese")).toBeInTheDocument();
-    expect(modelSectionTitle.compareDocumentPosition(instructionSectionTitle)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.queryByText("Provider")).not.toBeInTheDocument();
   });
 
-  it("does not show the image field in the agent profile runtime section", () => {
+  it("does not show the image field in the agent profile runtime section", async () => {
+    const user = userEvent.setup();
+    const image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8";
     render(
       <AgentDetailPane
         item={{
           ...worker,
-          image: "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
+          image,
         }}
         t={t}
         activeRoom={null}
@@ -748,7 +756,7 @@ describe("agent action visibility", () => {
         error=""
         draft={agentToDraft({
           ...worker,
-          image: "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8",
+          image,
         })}
         models={[]}
         modelBusy={false}
@@ -771,6 +779,7 @@ describe("agent action visibility", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Runtime environment" }));
     expect(screen.queryByLabelText("Image")).not.toBeInTheDocument();
   });
 
@@ -851,6 +860,7 @@ describe("agent action visibility", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "skills" }));
     await user.click(screen.getByRole("button", { name: "Add skill" }));
     expect(screen.getByText("Candidates come from global skills.")).toBeInTheDocument();
     expect(screen.getByText("Beta candidate")).toBeInTheDocument();
@@ -902,6 +912,7 @@ describe("agent action visibility", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "skills" }));
     await user.click(screen.getAllByRole("button", { name: "Delete" })[0]);
     expect(screen.getByText('Delete skill "alpha" from this agent?')).toBeInTheDocument();
 
@@ -991,7 +1002,8 @@ describe("agent action visibility", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("shows advanced profile options by default", () => {
+  it("shows advanced profile options from the advanced tab", async () => {
+    const user = userEvent.setup();
     const draft = agentToDraft(worker);
     const { container } = render(
       <AgentDetailPane
@@ -1012,6 +1024,7 @@ describe("agent action visibility", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     const advancedSection = container.querySelector("#agent-profile-advanced");
     expect(advancedSection).toBeInTheDocument();
     expect(within(advancedSection as HTMLElement).getByText("Advanced")).toBeInTheDocument();
@@ -1021,41 +1034,35 @@ describe("agent action visibility", () => {
   it("navigates to profile sections from the horizontal tabs", async () => {
     const user = userEvent.setup();
     const draft = agentToDraft(worker);
-    const scrollTo = vi.fn();
-    const originalScrollTo = HTMLElement.prototype.scrollTo;
-    HTMLElement.prototype.scrollTo = scrollTo;
+    render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        draft={draft}
+        savedDraft={draft}
+        models={[]}
+        authStatuses={{}}
+        workspaceSupported
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
 
-    try {
-      render(
-        <AgentDetailPane
-          item={worker}
-          t={t}
-          draft={draft}
-          savedDraft={draft}
-          models={[]}
-          authStatuses={{}}
-          workspaceSupported
-          onDraftChange={vi.fn()}
-          onSave={vi.fn()}
-          onStart={vi.fn()}
-          onStop={vi.fn()}
-          onRecreate={vi.fn()}
-          onDelete={vi.fn()}
-          onInvite={vi.fn()}
-          onOpenDM={vi.fn()}
-        />,
-      );
+    const navigation = screen.getByRole("navigation", { name: "Profile sections" });
+    const modelTab = within(navigation).getByRole("button", { name: "Model" });
+    expect(within(navigation).getAllByRole("button")).toHaveLength(7);
+    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
 
-      const navigation = screen.getByRole("navigation", { name: "Profile sections" });
-      const modelTab = within(navigation).getByRole("button", { name: "Model" });
-      expect(within(navigation).getAllByRole("button")).toHaveLength(6);
+    await user.click(modelTab);
 
-      await user.click(modelTab);
-
-      expect(modelTab).toHaveAttribute("aria-current", "location");
-      await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 0 }));
-    } finally {
-      HTMLElement.prototype.scrollTo = originalScrollTo;
-    }
+    expect(modelTab).toHaveAttribute("aria-current", "location");
+    expect(screen.getByText("Provider")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Channels" })).not.toBeInTheDocument();
   });
 });

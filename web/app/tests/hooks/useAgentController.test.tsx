@@ -362,6 +362,35 @@ describe("useAgentController", () => {
     window.localStorage.removeItem(feishuRegistrationStorageKey);
   });
 
+  it("prefills the selected agent page draft before full agent/profile requests finish", async () => {
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgentProfile).mockReset();
+    let resolveAgent!: (value: AgentLike) => void;
+    let resolveProfile!: (value: AgentProfileLike) => void;
+    const pendingAgent = new Promise<AgentLike>((resolve) => {
+      resolveAgent = resolve;
+    });
+    const pendingProfile = new Promise<AgentProfileLike>((resolve) => {
+      resolveProfile = resolve;
+    });
+    vi.mocked(fetchAgent).mockReturnValue(pendingAgent);
+    vi.mocked(fetchAgentProfile).mockReturnValue(pendingProfile);
+
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.agentViewProps.draft?.image).toBe(oldImage));
+    expect(result.current.agentViewProps.savedDraft?.image).toBe(oldImage);
+    expect(result.current.agentViewProps.hasUnsavedChanges).toBe(false);
+    expect(fetchAgent).toHaveBeenCalledWith("u-manager");
+    expect(fetchAgentProfile).toHaveBeenCalledWith("u-manager");
+
+    await act(async () => {
+      resolveAgent(oldAgent);
+      resolveProfile(profile);
+      await Promise.all([pendingAgent, pendingProfile]);
+    });
+  });
+
   it("refreshes the selected agent detail from a cache-busted agent fetch after upgrade", async () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 

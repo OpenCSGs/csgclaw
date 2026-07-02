@@ -605,6 +605,7 @@ type createMessageRequest struct {
 	SenderID  string              `json:"sender_id"`
 	Content   string              `json:"content"`
 	MentionID string              `json:"mention_id,omitempty"`
+	Metadata  map[string]any      `json:"metadata,omitempty"`
 	RelatesTo *im.MessageRelation `json:"relates_to,omitempty"`
 }
 
@@ -2772,6 +2773,7 @@ func (r createMessageRequest) toServiceRequest() (im.CreateMessageRequest, error
 		SenderID:  r.SenderID,
 		Content:   r.Content,
 		MentionID: r.MentionID,
+		Metadata:  r.Metadata,
 		RelatesTo: r.RelatesTo,
 	}, nil
 }

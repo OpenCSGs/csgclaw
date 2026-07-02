@@ -7,3 +7,9 @@ export const AgentActivityMsgTypes = {
   action: "com.opencsg.csgclaw.agent.action",
   tool: "com.opencsg.csgclaw.agent.tool",
 } as const;
+
+export const AgentActivityKinds = {
+  message: "message",
+  execCommand: "exec_command",
+  other: "other",
+} as const;

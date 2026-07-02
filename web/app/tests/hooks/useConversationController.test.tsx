@@ -6,10 +6,21 @@ import type { IMConversation, IMData, IMMessage, IMUser, TranslateFn } from "@/m
 import type { AgentLike } from "@/models/agents";
 
 const subscribeIMEventsMock = vi.fn();
+const apiMocks = vi.hoisted(() => ({
+  sendMessageRequest: vi.fn(),
+}));
 
 vi.mock("@/shared/realtime/imEvents", () => ({
   subscribeIMEvents: (handler: (payload: unknown) => void) => subscribeIMEventsMock(handler),
 }));
+
+vi.mock("@/api/im", async () => {
+  const actual = await vi.importActual<typeof import("@/api/im")>("@/api/im");
+  return {
+    ...actual,
+    sendMessageRequest: apiMocks.sendMessageRequest,
+  };
+});
 
 const t: TranslateFn = (key) => key;
 
@@ -112,6 +123,7 @@ describe("useConversationController", () => {
   beforeEach(() => {
     subscribeIMEventsMock.mockReset();
     subscribeIMEventsMock.mockReturnValue(() => {});
+    apiMocks.sendMessageRequest.mockReset();
   });
 
   it("opens create-room modal from a direct message", () => {
@@ -128,6 +140,101 @@ describe("useConversationController", () => {
       lockedRoomMemberIDs: ["u-admin", "u-demo"],
     });
     expect(result.current.inviteMembersModalProps).toBeNull();
+  });
+
+  it("shows a working participant after sending a direct message until the agent replies", async () => {
+    apiMocks.sendMessageRequest.mockResolvedValue({
+      id: "msg-user",
+      content: "hi",
+      created_at: "2026-06-16T10:00:00Z",
+      sender_id: "u-admin",
+    });
+    const { result } = renderConversationController();
+    const editor = document.createElement("div");
+    editor.textContent = "hi";
+
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(result.current.conversationViewProps.workingParticipants).toEqual([{ id: "u-demo", name: "demo" }]);
+
+    act(() => {
+      result.current.handleRealtimeEvent({
+        type: "message.created",
+        room_id: "room-1",
+        message: {
+          id: "msg-tool",
+          content: '📄 Web Fetch: from https://example.com {"url":"https://example.com"}',
+          created_at: "2026-06-16T10:00:10Z",
+          sender_id: "u-demo",
+        },
+      });
+    });
+
+    expect(result.current.conversationViewProps.workingParticipants).toEqual([{ id: "u-demo", name: "demo" }]);
+
+    act(() => {
+      result.current.handleRealtimeEvent({
+        type: "message.created",
+        room_id: "room-1",
+        message: {
+          id: "msg-reply",
+          content: "hello",
+          created_at: "2026-06-16T10:00:20Z",
+          sender_id: "u-demo",
+        },
+      });
+    });
+
+    expect(result.current.conversationViewProps.workingParticipants).toEqual([]);
+  });
+
+  it("derives working participants from recent pending direct-message history after refresh", () => {
+    const { result } = renderConversationController({
+      data: dataWithMessages([
+        {
+          id: "msg-user",
+          content: "hi",
+          created_at: new Date().toISOString(),
+          sender_id: "u-admin",
+        },
+        {
+          id: "msg-tool",
+          content: '📄 Web Fetch: from https://example.com {"url":"https://example.com"}',
+          created_at: new Date().toISOString(),
+          sender_id: "u-demo",
+        },
+      ]),
+    });
+
+    expect(result.current.conversationViewProps.workingParticipants).toEqual([{ id: "u-demo", name: "demo" }]);
+  });
+
+  it("does not derive working participants after the agent has replied", () => {
+    const { result } = renderConversationController({
+      data: dataWithMessages([
+        {
+          id: "msg-user",
+          content: "hi",
+          created_at: new Date().toISOString(),
+          sender_id: "u-admin",
+        },
+        {
+          id: "msg-agent",
+          content: "hello",
+          created_at: new Date().toISOString(),
+          sender_id: "u-demo",
+        },
+      ]),
+    });
+
+    expect(result.current.conversationViewProps.workingParticipants).toEqual([]);
   });
 
   it("scrolls the message list to the bottom when it becomes active", () => {
