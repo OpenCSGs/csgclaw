@@ -3817,6 +3817,9 @@ func TestHandleUsersCreateProvisionsIMUser(t *testing.T) {
 func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+	previousLocateCodexCLI := locateCodexCLI
+	locateCodexCLI = func() (string, error) { return "", errors.New("not installed") }
+	t.Cleanup(func() { locateCodexCLI = previousLocateCodexCLI })
 
 	agentSvc := mustNewService(t)
 	imSvc := im.NewService()

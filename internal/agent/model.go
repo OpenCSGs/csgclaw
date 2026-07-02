@@ -39,6 +39,26 @@ type Agent struct {
 	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
+func (a Agent) RuntimeConfig() RuntimeConfig {
+	if cfg, err := runtimeConfigFromSelection(a.RuntimeKind, a.RuntimeName, a.SandboxEnabled); err == nil {
+		return cfg
+	}
+	return RuntimeConfig{
+		Name:      normalizeRuntimeName(a.RuntimeName),
+		Sandboxed: a.SandboxEnabled,
+	}
+}
+
+func (a *Agent) SetRuntimeConfig(cfg RuntimeConfig) {
+	if a == nil {
+		return
+	}
+	cfg = cfg.Normalized()
+	a.RuntimeName = cfg.Name
+	a.SandboxEnabled = cfg.Sandboxed
+	a.RuntimeKind = cfg.LegacyKind()
+}
+
 type runtimeJSON struct {
 	ID             string             `json:"id,omitempty"`
 	Kind           string             `json:"kind,omitempty"`
@@ -131,15 +151,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 			out.SandboxEnabled = *decoded.Runtime.SandboxEnabled
 		}
 	}
-	if strings.TrimSpace(out.RuntimeKind) == "" {
-		out.RuntimeKind = runtimeKindFromNameAndSandbox(out.RuntimeName, out.SandboxEnabled)
-	}
-	if strings.TrimSpace(out.RuntimeName) == "" {
-		out.RuntimeName = runtimeNameForKind(out.RuntimeKind)
-	}
-	if !out.SandboxEnabled {
-		out.SandboxEnabled = sandboxEnabledForKind(out.RuntimeKind)
-	}
+	out.SetRuntimeConfig(out.RuntimeConfig())
 	profilePayload := decoded.ModelConfig
 	if len(profilePayload) == 0 || string(profilePayload) == "null" {
 		profilePayload = decoded.Profile
@@ -179,6 +191,26 @@ type CreateAgentSpec struct {
 	Profile        string         `json:"profile,omitempty"`
 	RuntimeOptions map[string]any `json:"runtime_options,omitempty"`
 	AgentProfile   AgentProfile   `json:"agent_profile,omitempty"`
+}
+
+func (s CreateAgentSpec) RuntimeConfig() RuntimeConfig {
+	if cfg, err := runtimeConfigFromSelection(s.RuntimeKind, s.RuntimeName, s.SandboxEnabled); err == nil {
+		return cfg
+	}
+	return RuntimeConfig{
+		Name:      normalizeRuntimeName(s.RuntimeName),
+		Sandboxed: s.SandboxEnabled,
+	}
+}
+
+func (s *CreateAgentSpec) SetRuntimeConfig(cfg RuntimeConfig) {
+	if s == nil {
+		return
+	}
+	cfg = cfg.Normalized()
+	s.RuntimeName = cfg.Name
+	s.SandboxEnabled = cfg.Sandboxed
+	s.RuntimeKind = cfg.LegacyKind()
 }
 
 func (s CreateAgentSpec) MarshalJSON() ([]byte, error) {
@@ -314,15 +346,7 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 			out.SandboxEnabled = *decoded.Runtime.SandboxEnabled
 		}
 	}
-	if strings.TrimSpace(out.RuntimeKind) == "" {
-		out.RuntimeKind = runtimeKindFromNameAndSandbox(out.RuntimeName, out.SandboxEnabled)
-	}
-	if strings.TrimSpace(out.RuntimeName) == "" {
-		out.RuntimeName = runtimeNameForKind(out.RuntimeKind)
-	}
-	if !out.SandboxEnabled {
-		out.SandboxEnabled = sandboxEnabledForKind(out.RuntimeKind)
-	}
+	out.SetRuntimeConfig(out.RuntimeConfig())
 	profilePayload := decoded.ModelConfig
 	if len(profilePayload) == 0 || string(profilePayload) == "null" {
 		profilePayload = decoded.Profile

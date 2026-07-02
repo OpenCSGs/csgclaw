@@ -209,26 +209,41 @@ export type RuntimeSelectionLike = {
   sandbox_enabled?: boolean | null;
 };
 
+export type RuntimeConfig = {
+  name: RuntimeName;
+  sandboxed: boolean;
+};
+
+export function runtimeConfigFromSelection(selection: RuntimeSelectionLike | null | undefined): RuntimeConfig {
+  const runtimeKind = normalizeRuntimeKind(selection?.runtime_kind);
+  if (runtimeKind) {
+    return {
+      name: runtimeNameForKind(runtimeKind) || "codex",
+      sandboxed: sandboxEnabledForKind(runtimeKind),
+    };
+  }
+  const sandboxed = Boolean(selection?.sandbox_enabled);
+  const name = normalizeRuntimeName(selection?.runtime_name || (sandboxed ? "picoclaw" : "codex"));
+  return {
+    name: name || (sandboxed ? "picoclaw" : "codex"),
+    sandboxed,
+  };
+}
+
 export function resolveRuntimeSelection(selection: RuntimeSelectionLike | null | undefined): {
   runtime_kind: RuntimeKind;
   runtime_name: RuntimeName;
   sandbox_enabled: boolean;
 } {
   const runtimeKind = normalizeRuntimeKind(selection?.runtime_kind);
-  if (runtimeKind) {
-    return {
-      runtime_kind: runtimeKind,
-      runtime_name: runtimeNameForKind(runtimeKind) || "codex",
-      sandbox_enabled: sandboxEnabledForKind(runtimeKind),
-    };
-  }
-  const sandboxEnabled = Boolean(selection?.sandbox_enabled);
-  const runtimeName = normalizeRuntimeName(selection?.runtime_name || (sandboxEnabled ? "picoclaw" : "codex"));
+  const runtimeConfig = runtimeConfigFromSelection(selection);
   return {
     runtime_kind:
-      composeLegacyRuntimeKind(runtimeName, sandboxEnabled) || (sandboxEnabled ? DEFAULT_RUNTIME_KIND : "codex"),
-    runtime_name: runtimeName || (sandboxEnabled ? "picoclaw" : "codex"),
-    sandbox_enabled: sandboxEnabled,
+      runtimeKind ||
+      composeLegacyRuntimeKind(runtimeConfig.name, runtimeConfig.sandboxed) ||
+      (runtimeConfig.sandboxed ? DEFAULT_RUNTIME_KIND : "codex"),
+    runtime_name: runtimeConfig.name,
+    sandbox_enabled: runtimeConfig.sandboxed,
   };
 }
 

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -151,7 +150,7 @@ func sandboxEnabledForKind(kind string) bool {
 }
 
 func runtimeKindFromNameAndSandbox(name string, sandboxEnabled bool) string {
-	switch normalizeRuntimeName(name) {
+	switch (RuntimeConfig{Name: name, Sandboxed: sandboxEnabled}).Normalized().Name {
 	case RuntimeNamePicoClaw:
 		if sandboxEnabled {
 			return RuntimeKindPicoClawSandbox
@@ -169,19 +168,11 @@ func runtimeKindFromNameAndSandbox(name string, sandboxEnabled bool) string {
 }
 
 func resolveRuntimeSelection(kind, name string, sandboxEnabled bool) (string, string, bool, error) {
-	kind = strings.TrimSpace(kind)
-	name = normalizeRuntimeName(name)
-	if kind != "" {
-		resolvedName := runtimeNameForKind(kind)
-		if name != "" && resolvedName != "" && name != resolvedName {
-			return "", "", false, fmt.Errorf("runtime_kind %q conflicts with runtime_name %q", kind, name)
-		}
-		return kind, resolvedName, sandboxEnabledForKind(kind), nil
+	cfg, err := runtimeConfigFromSelection(kind, name, sandboxEnabled)
+	if err != nil {
+		return "", "", false, err
 	}
-	if name != "" {
-		return runtimeKindFromNameAndSandbox(name, sandboxEnabled), name, sandboxEnabled, nil
-	}
-	return "", "", sandboxEnabled, nil
+	return cfg.LegacyKind(), cfg.Name, cfg.Sandboxed, nil
 }
 
 func runtimeKindForGatewayRuntime(runtime string) string {
@@ -230,7 +221,7 @@ func runtimeRecordForAgent(a Agent) RuntimeRecord {
 	}
 	return normalizeRuntimeRecord(RuntimeRecord{
 		ID:        normalizeRuntimeID(a.RuntimeID, a.ID),
-		Kind:      strings.TrimSpace(a.RuntimeKind),
+		Kind:      a.RuntimeConfig().LegacyKind(),
 		State:     agentruntime.State(strings.TrimSpace(a.Status)),
 		AgentIDs:  []string{strings.TrimSpace(a.ID)},
 		SandboxID: strings.TrimSpace(a.BoxID),

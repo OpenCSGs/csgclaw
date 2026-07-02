@@ -71,6 +71,9 @@ type Handler struct {
 const createOperationTimeout = 10 * time.Minute
 
 var sseHeartbeatInterval = 15 * time.Second
+var locateCodexCLI = func() (string, error) {
+	return (codexcli.Locator{}).Locate()
+}
 
 func detachedCreateContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if ctx == nil {
@@ -513,7 +516,7 @@ func workerRuntimeChoices() []workerRuntimeChoiceResponse {
 			Installed:      true,
 		},
 	}
-	if _, err := (codexcli.Locator{}).Locate(); err != nil {
+	if _, err := locateCodexCLI(); err != nil {
 		choices[0].Installed = false
 		choices[0].Message = "Codex CLI not installed"
 	}
@@ -529,10 +532,10 @@ func (h *Handler) defaultWorkerCreateSpec(agentID, name string) agent.CreateAgen
 		SandboxEnabled: false,
 		RuntimeKind:    agent.RuntimeKindCodex,
 	}
-	if h == nil || h.svc == nil {
+	if _, err := locateCodexCLI(); err == nil {
 		return spec
 	}
-	if _, err := h.svc.Runtime(agent.RuntimeKindCodex); err == nil {
+	if h == nil || h.svc == nil {
 		return spec
 	}
 	runtimeKind := h.svc.GatewayRuntime()
@@ -2675,33 +2678,23 @@ func presentAgent(item agent.Agent) agentResponse {
 		runtimeOptions = map[string]any{}
 	}
 	profile := profileResponseFromAgentView(av)
-	runtimeName := strings.TrimSpace(item.RuntimeName)
-	if runtimeName == "" {
-		runtimeName = agent.RuntimeNameCodex
-		switch strings.TrimSpace(item.RuntimeKind) {
-		case agent.RuntimeKindOpenClawSandbox:
-			runtimeName = agent.RuntimeNameOpenClaw
-		case agent.RuntimeKindPicoClawSandbox:
-			runtimeName = agent.RuntimeNamePicoClaw
-		}
-	}
-	sandboxEnabled := item.SandboxEnabled || item.RuntimeKind == agent.RuntimeKindOpenClawSandbox || item.RuntimeKind == agent.RuntimeKindPicoClawSandbox
+	runtimeCfg := item.RuntimeConfig()
 	return agentResponse{
 		ID:           item.ID,
 		Name:         item.Name,
 		Description:  item.Description,
 		Instructions: item.Instructions,
 		Runtime: apitypes.AgentRuntime{
-			Name:           runtimeName,
-			SandboxEnabled: sandboxEnabled,
+			Name:           runtimeCfg.Name,
+			SandboxEnabled: runtimeCfg.Sandboxed,
 			State:          item.Status,
 			SandboxID:      item.BoxID,
 			Options:        runtimeOptions,
 		},
 		RuntimeID:        item.RuntimeID,
-		RuntimeKind:      item.RuntimeKind,
-		RuntimeName:      runtimeName,
-		SandboxEnabled:   sandboxEnabled,
+		RuntimeKind:      runtimeCfg.LegacyKind(),
+		RuntimeName:      runtimeCfg.Name,
+		SandboxEnabled:   runtimeCfg.Sandboxed,
 		Image:            item.Image,
 		Avatar:           item.Avatar,
 		BoxID:            item.BoxID,

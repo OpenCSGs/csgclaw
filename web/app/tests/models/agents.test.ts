@@ -41,6 +41,7 @@ import {
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
   resolveRuntimeSelection,
+  runtimeConfigFromSelection,
   resolveAgentChannelUserID,
   resolveAgentAvatarSource,
   runtimeImageForKind,
@@ -210,6 +211,10 @@ describe("agent model helpers", () => {
   });
 
   it("resolves split runtime fields from legacy runtime kind", () => {
+    expect(runtimeConfigFromSelection({ runtime_kind: "openclaw_sandbox" })).toEqual({
+      name: "openclaw",
+      sandboxed: true,
+    });
     expect(resolveRuntimeSelection({ runtime_kind: "openclaw_sandbox" })).toEqual({
       runtime_kind: "openclaw_sandbox",
       runtime_name: "openclaw",
