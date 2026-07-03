@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -698,6 +699,79 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 		if got, ok := envMap[key]; ok {
 			t.Fatalf("%s = %q, want omitted from runtime env", key, got)
 		}
+	}
+}
+
+func TestDeleteRetriesRuntimeDirRemovalOnDirectoryNotEmpty(t *testing.T) {
+	root := t.TempDir()
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome: func(agentName string) (string, error) {
+			return filepath.Join(root, agentName), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        "u-alice",
+				Name:      "alice",
+				RuntimeID: h.RuntimeID,
+			}, nil
+		},
+		Manager: fakeManager{
+			start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+				return &Session{
+					RuntimeID:    spec.RuntimeID,
+					AgentID:      spec.AgentID,
+					AgentName:    spec.AgentName,
+					SessionID:    "sess-test",
+					BinaryPath:   spec.BinaryPath,
+					WorkspaceDir: spec.WorkspaceDir,
+					HomeDir:      spec.HomeDir,
+					CodexHomeDir: spec.CodexHomeDir,
+					StderrPath:   spec.StderrPath,
+					CreatedAt:    time.Now().UTC(),
+					StartedAt:    time.Now().UTC(),
+				}, nil
+			},
+		},
+	})
+
+	handle, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-u-alice",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	runtimeDir := filepath.Join(root, "agent-alice", ".codex")
+	if err := os.MkdirAll(filepath.Join(runtimeDir, "home", "tmp", "plugins-clone", "plugins"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(runtime tmp dir) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "home", "tmp", "plugins-clone", "plugins", "cache.txt"), []byte("cache"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile(cache.txt) error = %v", err)
+	}
+
+	var removeCalls int
+	rt.deps.RemoveAll = func(path string) error {
+		removeCalls++
+		if path == runtimeDir && removeCalls == 1 {
+			return &os.PathError{Op: "unlinkat", Path: filepath.Join(runtimeDir, "home", "tmp", "plugins-clone", "plugins"), Err: syscall.ENOTEMPTY}
+		}
+		if path == runtimeDir && removeCalls == 2 {
+			return &os.PathError{Op: "unlinkat", Path: filepath.Join(runtimeDir, "home", "tmp", "plugins-clone", "plugins"), Err: syscall.EACCES}
+		}
+		return os.RemoveAll(path)
+	}
+
+	if err := rt.Delete(context.Background(), handle); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if removeCalls < 3 {
+		t.Fatalf("RemoveAll() calls = %d, want at least 3", removeCalls)
+	}
+	if _, err := os.Stat(runtimeDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runtime dir still exists after delete: err=%v", err)
 	}
 }
 
