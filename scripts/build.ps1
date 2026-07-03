@@ -13,6 +13,7 @@ function Get-EnvOrDefault {
         [Parameter(Mandatory = $true)]
         [string]$Name,
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string]$Default
     )
 
@@ -73,11 +74,18 @@ function Get-CommandOutput {
         [string[]]$Arguments = @()
     )
 
-    $result = & $FilePath @Arguments 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        return $null
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $result = & $FilePath @Arguments 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            return $null
+        }
+        return (($result | Out-String).Trim())
     }
-    return (($result | Out-String).Trim())
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
 }
 
 function Test-VersionMajorRange {
@@ -259,6 +267,7 @@ function Ensure-WebDeps {
 
 function Invoke-TargetHelp {
     @(
+        "scripts\build.cmd build                         - Windows wrapper; same as build with execution-policy bypass"
         "powershell -File scripts/build.ps1 build        - build Web UI and binaries, install the Linux sandbox CLI under ~/.csgclaw/sandbox-tools"
         "powershell -File scripts/build.ps1 build-all    - same as build"
         "powershell -File scripts/build.ps1 fmt          - format Go files"
@@ -319,6 +328,7 @@ function Invoke-TargetWebDev {
 }
 
 function Invoke-TargetBuildWeb {
+    Write-Host "Building Web UI into $script:WebStaticDistDir."
     Ensure-WebDeps
     Ensure-Directory -Path $script:WebStaticDistDir
     Invoke-Pnpm -Arguments @("--dir", $script:WebAppDir, "build")
@@ -353,6 +363,7 @@ function Invoke-GoBuild {
         $baseEnv[$key] = $Env[$key]
     }
 
+    Write-Host "Building $OutputPath from $PackagePath."
     Invoke-Checked -FilePath $go -Arguments $args -Env $baseEnv
 }
 
@@ -593,9 +604,11 @@ function Invoke-PackageRelease {
 }
 
 function Invoke-TargetBuild {
+    Write-Host "Starting full build: Web UI, host binaries, and Linux sandbox CLI."
     Invoke-TargetBuildWeb
     Invoke-TargetBuildServerBin
     Invoke-TargetInstallSandboxCli
+    Write-Host "Build complete."
 }
 
 function Invoke-TargetRun {

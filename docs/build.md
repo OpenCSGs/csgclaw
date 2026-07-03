@@ -34,10 +34,18 @@ Override the sandbox CLI destination with `SANDBOX_TOOLS_DIR=/path make install-
 On Windows hosts that do not have `make`, use the PowerShell build script:
 
 ```powershell
-powershell -File scripts/build.ps1 build
-powershell -File scripts/build.ps1 build-server-bin
-powershell -File scripts/build.ps1 install-sandbox-cli
-powershell -File scripts/build.ps1 test
+.\scripts\build.cmd build
+.\scripts\build.cmd build-server-bin
+.\scripts\build.cmd install-sandbox-cli
+.\scripts\build.cmd test
+```
+
+The `build.cmd` wrapper runs `scripts/build.ps1` with `-ExecutionPolicy Bypass`
+for the current process only, avoiding machine-wide PowerShell policy changes.
+If you call the PowerShell script directly, use:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 build
 ```
 
 The default `build` target mirrors `make build`:

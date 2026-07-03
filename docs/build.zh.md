@@ -34,10 +34,18 @@ make
 如果 Windows 环境没有 `make`，可以直接使用 PowerShell 构建脚本：
 
 ```powershell
-powershell -File scripts/build.ps1 build
-powershell -File scripts/build.ps1 build-server-bin
-powershell -File scripts/build.ps1 install-sandbox-cli
-powershell -File scripts/build.ps1 test
+.\scripts\build.cmd build
+.\scripts\build.cmd build-server-bin
+.\scripts\build.cmd install-sandbox-cli
+.\scripts\build.cmd test
+```
+
+`build.cmd` 包装器会以当前进程级别的 `-ExecutionPolicy Bypass` 调用
+`scripts/build.ps1`，不需要修改整机 PowerShell 执行策略。如果直接调用
+PowerShell 脚本，请使用：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 build
 ```
 
 其中默认的 `build` 会对齐 `make build` 的行为：
