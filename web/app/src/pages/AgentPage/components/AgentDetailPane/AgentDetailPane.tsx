@@ -17,6 +17,7 @@ import { REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/consta
 import { AGENT_PROFILE_TAB_ORDER_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   EnvKeyValueEditor,
+  FieldHelpTooltip,
   ModelOptionLabel,
   NotifierControls,
   requiredFieldLabel,
@@ -25,6 +26,7 @@ import {
 import {
   agentProfilePageSaveDisabled,
   agentProfileConfig,
+  agentSandboxEnabled,
   agentRuntimeKind,
   agentRuntimeState,
   agentStatusLabel,
@@ -898,6 +900,7 @@ function AgentRuntimePanel({
   t,
 }: AgentRuntimePanelProps) {
   const isNotifierDraft = isNotifierRuntimeDraftOnAgentPage(draft, item);
+  const sandboxEnabled = draft.sandbox_enabled ?? agentSandboxEnabled(item);
 
   return (
     <section id="agent-profile-runtime" className="profile-section agent-profile-scroll-target">
@@ -909,8 +912,28 @@ function AgentRuntimePanel({
         <div className="profile-grid-compact agent-page-form-content">
           <label className="field">
             <span>{t("profileRuntimeKind")}</span>
-            <input value={draft.runtime_kind || runtimeKind || ""} readOnly disabled />
+            <input value={formatRuntimeKindLabel(draft.runtime_kind || runtimeKind, t)} readOnly disabled />
           </label>
+          {!isNotifierDraft ? (
+            <div className="field agent-fast-mode-field agent-sandbox-readonly-field">
+              <div className="field-label-with-help">
+                <span>{t("profileSandboxEnabled")}</span>
+                <FieldHelpTooltip detail={t("profileSandboxEnabledHelp")} />
+              </div>
+              <label className="selection-item compact-toggle-row agent-fast-mode-toggle agent-sandbox-toggle readonly">
+                <input
+                  type="checkbox"
+                  checked={sandboxEnabled}
+                  aria-label={t("profileSandboxEnabled")}
+                  readOnly
+                  disabled
+                />
+                <span className="agent-sandbox-copy">
+                  <strong>{sandboxEnabled ? t("statusEnabled") : t("statusDisabled")}</strong>
+                </span>
+              </label>
+            </div>
+          ) : null}
           {!isNotifierDraft && runtimeOptionSchemas.length > 0 ? (
             <RuntimeOptionsFields
               draft={draft}
