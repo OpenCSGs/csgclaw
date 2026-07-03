@@ -289,10 +289,10 @@ export function AgentProfileModal({
             {!isNotificationContext ? (
               <div className="profile-section-heading">
                 <div className="profile-section-title">
-                  {isTemplateCreate ? t("createAgentTemplateSectionTitle") : t("profileBasics")}
+                  {t("profileBasics")}
                 </div>
                 <p className="profile-section-description">
-                  {isTemplateCreate ? t("createAgentTemplateSectionDescription") : t("profileBasicsDescription")}
+                  {t("profileBasicsDescription")}
                 </p>
               </div>
             ) : null}
@@ -330,42 +330,44 @@ export function AgentProfileModal({
                     </Button>
                   </div>
                 ) : null}
-                {!isTemplateCreate ? (
-                  <div className="agent-identity-layout">
-                    <div className="field agent-avatar-field">
-                      <span className="field-label">{t("agentAvatar")}</span>
-                      <AgentAvatarPicker
-                        value={agentDraft.avatar}
-                        t={t}
-                        mode="edit"
-                        onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
-                      />
-                    </div>
-                    <label className="field agent-name-field">
-                      {requiredFieldLabel(t("agentName"))}
-                      <input
-                        value={agentDraft.name}
-                        required
-                        aria-required="true"
-                        onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}
-                        placeholder={t("agentNamePlaceholder")}
-                      />
-                    </label>
-                    <label className="field agent-description-field">
-                      <span>{t("agentDescription")}</span>
-                      <textarea
-                        className="compact-textarea"
-                        value={agentDraft.description}
-                        onInput={(event) => onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })}
-                      />
-                    </label>
+                <div className="agent-identity-layout">
+                  <div className="field agent-avatar-field">
+                    <span className="field-label">{t("agentAvatar")}</span>
+                    <AgentAvatarPicker
+                      value={agentDraft.avatar}
+                      t={t}
+                      mode="edit"
+                      onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
+                    />
                   </div>
-                ) : null}
+                  <label className="field agent-name-field">
+                    {requiredFieldLabel(t("agentName"))}
+                    <input
+                      value={agentDraft.name}
+                      required
+                      aria-required="true"
+                      onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}
+                      placeholder={t("agentNamePlaceholder")}
+                    />
+                  </label>
+                  <label className="field agent-description-field">
+                    <span>{t("agentDescription")}</span>
+                    <textarea
+                      className="compact-textarea"
+                      value={agentDraft.description}
+                      onInput={(event) => onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           </section>
           {isTemplateCreate ? (
             <section className="profile-section">
+              <div className="profile-section-heading">
+                <div className="profile-section-title">{t("createAgentTemplateSectionTitle")}</div>
+                <p className="profile-section-description">{t("createAgentTemplateSectionDescription")}</p>
+              </div>
               <div className="agent-section-form">
                 <div className="profile-grid profile-grid-compact agent-basics-grid">
                   <label className="field span-2">

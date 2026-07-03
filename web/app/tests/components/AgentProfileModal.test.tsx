@@ -15,8 +15,10 @@ const labels: Record<string, string> = {
   createAgentModeCustom: "Custom",
   createAgentModeCustomDescription: "Manually configure runtime, model, and instructions.",
   createAgentModeTemplate: "From template",
-  createAgentModeTemplateDescription: "Pick a template and fill env vars only; the rest is inherited.",
-  createAgentTemplateSectionDescription: "Selecting a template inherits the name, runtime, and default settings.",
+  createAgentModeTemplateDescription:
+    "Pick a template to inherit runtime and defaults; avatar, name, and description stay editable.",
+  createAgentTemplateSectionDescription:
+    "Selecting a template inherits runtime and default settings, while avatar, name, and description remain editable.",
   createAgentTemplateSectionTitle: "Template setup",
   createAgentKindNotification: "Notification bot",
   createAgentKindNotificationDescription: "Send events to an external webhook endpoint.",
@@ -338,13 +340,87 @@ describe("AgentProfileModal", () => {
     expect(screen.getByText("Template setup")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Template" })).toBeInTheDocument();
     expect(screen.getAllByText("Environment").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Name" })).toBeInTheDocument();
+    expect(screen.getByText("Basics")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Provider" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /Custom/i }));
 
     expect(screen.getByRole("textbox", { name: "Name" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Runtime" })).toHaveTextContent("Codex CLI");
+  });
+
+  it("keeps avatar, name, and description editable in template mode", async () => {
+    const user = userEvent.setup();
+    const onAgentDraftChange = vi.fn();
+
+    function TestModal() {
+      const [draft, setDraft] = useState<AgentDraft>({
+        ...agentToDraft(worker),
+        from_template: "builtin.picoclaw-worker",
+        template_name: "PicoClaw Worker",
+        name: "contract-assistant",
+        description: "Find and send contract templates.",
+        runtime_name: "picoclaw",
+        sandbox_enabled: true,
+        runtime_kind: "picoclaw_sandbox",
+      });
+      return (
+        <AgentProfileModal
+          t={t}
+          agentModalMode="create"
+          editingAgent={null}
+          agentDraft={draft}
+          onAgentDraftChange={(update) => {
+            onAgentDraftChange(update);
+            setDraft((current) => {
+              const next = typeof update === "function" ? update(current) : update;
+              return next ?? current;
+            });
+          }}
+          onAgentModelsReset={vi.fn()}
+          hubTemplates={[
+            {
+              id: "builtin.picoclaw-worker",
+              name: "PicoClaw Worker",
+              role: "worker",
+              runtime_kind: "picoclaw_sandbox",
+              description: "Handles coding tasks.",
+            },
+          ]}
+          bootstrapConfig={{}}
+          managerAgent={null}
+          agentModels={[]}
+          agentModelBusy={false}
+          locale="en"
+          authStatuses={{}}
+          authBusyProvider=""
+          agentCreateBotKind="worker"
+          agentCreateMode="template"
+          onAgentCreateBotKindChange={vi.fn()}
+          notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+          onProviderLogin={vi.fn()}
+          agentError=""
+          agentProgress={null}
+          agentBusy={false}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      );
+    }
+
+    render(<TestModal />);
+
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("contract-assistant");
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue("Find and send contract templates.");
+
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "-v2");
+    await user.type(screen.getByRole("textbox", { name: "Description" }), " Updated.");
+
+    expect(onAgentDraftChange).toHaveBeenCalledWith(expect.objectContaining({ name: "contract-assistant-v2" }));
+    expect(onAgentDraftChange).toHaveBeenCalledWith(
+      expect.objectContaining({ description: "Find and send contract templates. Updated." }),
+    );
   });
 
   it("hides manager templates from the worker template dropdown in create mode", async () => {
