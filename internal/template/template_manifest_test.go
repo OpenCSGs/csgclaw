@@ -18,7 +18,7 @@ func TestLoadManifestImageEnv(t *testing.T) {
 name = "gitlab-assistant"
 description = "GitLab assistant"
 role = "worker"
-runtime_kind = "picoclaw_sandbox"
+runtime_kind = "picoclaw"
 
 [image]
 ref = "picoclaw:test"
@@ -41,8 +41,8 @@ default = "https://gitlab.example.com"
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if got.RuntimeKind != runtime.KindPicoClawSandbox {
-		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, runtime.KindPicoClawSandbox)
+	if got.RuntimeKind != runtime.NamePicoClaw {
+		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, runtime.NamePicoClaw)
 	}
 	if got.Image != "picoclaw:test" {
 		t.Fatalf("Image = %q, want picoclaw:test", got.Image)

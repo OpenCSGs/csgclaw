@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileCode2 } from "lucide-react";
+import { formatRuntimeKindLabel } from "@/models/agents";
 import { formatHubDateTime, isDeletableHubTemplate } from "@/models/hubWorkspace";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
@@ -238,7 +239,12 @@ export function HubDetailPane({
                         <h2>{selectedTemplate.name || selectedTemplate.id}</h2>
                         <div className="hub-inspector-badge-row">
                           <span className="mini-badge template-runtime-badge">
-                            {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind || "-"}
+                            {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind
+                              ? formatRuntimeKindLabel(
+                                  selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind,
+                                  t,
+                                )
+                              : "-"}
                           </span>
                           <span className="mini-badge template-source-badge">
                             <span className="template-source-badge-dot" aria-hidden="true"></span>
@@ -275,7 +281,11 @@ export function HubDetailPane({
                 </div>
                 <div className="hub-inspector-field">
                   <span>{t("resourcesRuntimeLabel")}</span>
-                  <strong>{selectedTemplate.runtime_kind || "-"}</strong>
+                  <strong>
+                    {selectedTemplate.runtime_kind
+                      ? formatRuntimeKindLabel(selectedTemplate.runtime_kind, t)
+                      : "-"}
+                  </strong>
                 </div>
                 <div className="hub-inspector-field">
                   <span>{t("resourcesImageLabel")}</span>

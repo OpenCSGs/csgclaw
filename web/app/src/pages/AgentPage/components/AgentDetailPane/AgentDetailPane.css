@@ -1550,6 +1550,49 @@
   border-radius: var(--radius-lg);
 }
 
+.agent-detail-pane .agent-sandbox-readonly-field {
+  align-self: stretch;
+}
+
+.agent-detail-pane .agent-sandbox-readonly-field .compact-toggle-row {
+  align-self: stretch;
+  align-items: center;
+  min-height: 42px;
+  padding: 10px 14px;
+}
+
+.agent-detail-pane .agent-sandbox-toggle {
+  gap: 12px;
+}
+
+.agent-detail-pane .agent-sandbox-toggle.readonly {
+  cursor: default;
+}
+
+.agent-detail-pane .agent-sandbox-toggle.readonly:hover,
+.agent-detail-pane .agent-sandbox-toggle.readonly:focus-within,
+.agent-detail-pane .agent-sandbox-toggle.readonly:has(input:checked) {
+  border-color: var(--line);
+  background: var(--surface);
+  color: inherit;
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-detail-pane .agent-sandbox-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-detail-pane .agent-sandbox-copy strong {
+  color: var(--text);
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--text-sm-line-height);
+}
+
 .agent-detail-pane .agent-fast-mode-field .compact-toggle-row {
   align-self: stretch;
   align-items: center;

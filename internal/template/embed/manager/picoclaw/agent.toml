@@ -1,7 +1,7 @@
 name = "picoclaw-manager"
 description = "Builtin PicoClaw manager template"
 role = "manager"
-runtime_kind = "picoclaw_sandbox"
+runtime_kind = "picoclaw"
 updated_at = "2026-05-27T00:00:00Z"
 version = "0.1.5"
 

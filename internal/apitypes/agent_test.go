@@ -39,3 +39,19 @@ func TestCreateAgentRequestUnmarshalJSONSupportsLegacyRuntimeKind(t *testing.T) 
 		t.Fatalf("RuntimeOptions[cwd] = %#v, want %q", got.RuntimeOptions["cwd"], "/tmp")
 	}
 }
+
+func TestCreateAgentRequestUnmarshalJSONSupportsBareSandboxRuntimeKind(t *testing.T) {
+	var got CreateAgentRequest
+	if err := json.Unmarshal([]byte(`{"name":"alice","role":"worker","runtime_kind":"openclaw"}`), &got); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if got.RuntimeKind != "openclaw" {
+		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, "openclaw")
+	}
+	if got.RuntimeName != "openclaw" {
+		t.Fatalf("RuntimeName = %q, want %q", got.RuntimeName, "openclaw")
+	}
+	if !got.SandboxEnabled {
+		t.Fatal("SandboxEnabled = false, want true")
+	}
+}

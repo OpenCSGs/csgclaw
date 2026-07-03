@@ -106,7 +106,7 @@ func TestLocalStoreDeleteRemovesTemplate(t *testing.T) {
 		ID:          "frontend-alice",
 		Name:        "frontend-alice",
 		Role:        TemplateRoleWorker,
-		RuntimeKind: "picoclaw_sandbox",
+		RuntimeKind: "picoclaw",
 		Image:       "worker:latest",
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
@@ -203,10 +203,10 @@ func TestLocalStorePublishRequiresImageForGatewayRuntime(t *testing.T) {
 	_, err := store.Publish(context.Background(), PublishSpec{
 		Name:         "gateway-worker",
 		Role:         TemplateRoleWorker,
-		RuntimeKind:  runtime.KindPicoClawSandbox,
+		RuntimeKind:  runtime.NamePicoClaw,
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
 	})
-	if err == nil || err.Error() != `image.ref is required for runtime_kind "picoclaw_sandbox"` {
+	if err == nil || err.Error() != `image.ref is required for runtime_kind "picoclaw"` {
 		t.Fatalf("Publish() error = %v, want missing image error", err)
 	}
 }
@@ -217,14 +217,14 @@ func TestLocalStoreGetRejectsGatewayRuntimeWithoutImage(t *testing.T) {
 	if err := os.MkdirAll(templateDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	manifest := []byte("name = \"gateway-worker\"\nrole = \"worker\"\nruntime_kind = \"picoclaw_sandbox\"\n")
+	manifest := []byte("name = \"gateway-worker\"\nrole = \"worker\"\nruntime_kind = \"picoclaw\"\n")
 	if err := os.WriteFile(filepath.Join(templateDir, localManifestFileName), manifest, 0o644); err != nil {
 		t.Fatalf("WriteFile(agent.toml) error = %v", err)
 	}
 
 	store := NewLocalStore(registryRoot)
 	_, err := store.Get(context.Background(), "gateway-worker")
-	if err == nil || err.Error() != `validate local hub manifest "gateway-worker": image.ref is required for runtime_kind "picoclaw_sandbox"` {
+	if err == nil || err.Error() != `validate local hub manifest "gateway-worker": image.ref is required for runtime_kind "picoclaw"` {
 		t.Fatalf("Get() error = %v, want missing image validation error", err)
 	}
 }

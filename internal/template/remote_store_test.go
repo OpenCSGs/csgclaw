@@ -19,7 +19,7 @@ import (
 const remoteTestManifest = `name = "gitlab-assistant"
 role = "worker"
 description = "GitLab assistant"
-runtime_kind = "openclaw_sandbox"
+runtime_kind = "openclaw"
 version = "2026.6.16.0"
 updated_at = "2026-05-19T07:25:31Z"
 
@@ -102,7 +102,7 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 	if got, want := items[0].ID, "gitlab-assistant"; got != want {
 		t.Fatalf("List()[0].ID = %q, want %q", got, want)
 	}
-	if got, want := items[0].RuntimeKind, "openclaw_sandbox"; got != want {
+	if got, want := items[0].RuntimeKind, "openclaw"; got != want {
 		t.Fatalf("List()[0].RuntimeKind = %q, want %q", got, want)
 	}
 

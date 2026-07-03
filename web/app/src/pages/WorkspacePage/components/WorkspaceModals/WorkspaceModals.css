@@ -1624,6 +1624,19 @@
   gap: 12px;
 }
 
+.profile-modal.agent-modal .agent-sandbox-toggle.readonly {
+  cursor: default;
+}
+
+.profile-modal.agent-modal .agent-sandbox-toggle.readonly:hover,
+.profile-modal.agent-modal .agent-sandbox-toggle.readonly:focus-within,
+.profile-modal.agent-modal .agent-sandbox-toggle.readonly:has(input:checked) {
+  border-color: var(--line);
+  background: var(--surface);
+  color: inherit;
+  box-shadow: var(--shadow-xs);
+}
+
 .profile-modal.agent-modal .agent-sandbox-copy {
   display: flex;
   flex: 1 1 auto;
@@ -2101,6 +2114,15 @@
 
 :root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row:hover,
 :root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row:focus-within {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-sandbox-toggle.readonly,
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-sandbox-toggle.readonly:hover,
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-sandbox-toggle.readonly:focus-within,
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-sandbox-toggle.readonly:has(input:checked) {
   border-color: var(--input-border);
   background: var(--input-background);
   color: var(--input-text);

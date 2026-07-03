@@ -10,11 +10,11 @@ func runtimeKindFromSelection(name string, sandboxEnabled bool) string {
 	switch strings.TrimSpace(strings.ToLower(name)) {
 	case "picoclaw":
 		if sandboxEnabled {
-			return "picoclaw_sandbox"
+			return "picoclaw"
 		}
 	case "openclaw":
 		if sandboxEnabled {
-			return "openclaw_sandbox"
+			return "openclaw"
 		}
 	case "codex":
 		if !sandboxEnabled {
@@ -25,10 +25,10 @@ func runtimeKindFromSelection(name string, sandboxEnabled bool) string {
 }
 
 func runtimeSelectionForKind(kind string) (string, bool) {
-	switch strings.TrimSpace(kind) {
-	case "picoclaw_sandbox":
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "picoclaw", "picoclaw_sandbox":
 		return "picoclaw", true
-	case "openclaw_sandbox":
+	case "openclaw", "openclaw_sandbox":
 		return "openclaw", true
 	case "codex":
 		return "codex", false

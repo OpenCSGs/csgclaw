@@ -470,9 +470,9 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 		ShowUpgrade:            cfg.Server.ShowUpgrade,
 		AdvertiseBaseURL:       config.ResolveAdvertiseBaseURL(cfg.Server),
 		SupportedRuntimeKinds: []string{
-			agent.RuntimeKindPicoClawSandbox,
-			agent.RuntimeKindOpenClawSandbox,
-			agent.RuntimeKindCodex,
+			agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind(),
+			agentruntime.RuntimeConfigForKind(agent.RuntimeKindOpenClawSandbox).Kind(),
+			agentruntime.RuntimeConfigForKind(agent.RuntimeKindCodex).Kind(),
 		},
 		RuntimeDefaultImages: map[string]string{},
 		RuntimeOptionSchemas: runtimeOptionSchemas,
@@ -486,10 +486,10 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 	resp.RuntimeKind = bootstrapRuntimeKind(defaults.ManagerRuntimeKind)
 	resp.EffectiveManagerImage = defaults.ManagerImage
 	if defaults.ManagerRuntimeKind != "" && defaults.ManagerImage != "" {
-		resp.RuntimeDefaultImages[defaults.ManagerRuntimeKind] = defaults.ManagerImage
+		resp.RuntimeDefaultImages[bootstrapRuntimeKind(defaults.ManagerRuntimeKind)] = defaults.ManagerImage
 	}
 	if defaults.WorkerRuntimeKind != "" && defaults.WorkerImage != "" {
-		resp.RuntimeDefaultImages[defaults.WorkerRuntimeKind] = defaults.WorkerImage
+		resp.RuntimeDefaultImages[bootstrapRuntimeKind(defaults.WorkerRuntimeKind)] = defaults.WorkerImage
 	}
 	fillBuiltinWorkerRuntimeDefaultImages(ctx, &resp, hubSvc)
 	return resp
@@ -559,8 +559,8 @@ func fillBuiltinWorkerRuntimeDefaultImages(ctx context.Context, resp *bootstrapC
 		resp.RuntimeDefaultImages = map[string]string{}
 	}
 	builtinWorkerTemplates := map[string]string{
-		agent.RuntimeKindPicoClawSandbox: "builtin.picoclaw-worker",
-		agent.RuntimeKindOpenClawSandbox: "builtin.openclaw-worker",
+		agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind(): "builtin.picoclaw-worker",
+		agentruntime.RuntimeConfigForKind(agent.RuntimeKindOpenClawSandbox).Kind(): "builtin.openclaw-worker",
 	}
 	for runtimeKind, templateID := range builtinWorkerTemplates {
 		if strings.TrimSpace(resp.RuntimeDefaultImages[runtimeKind]) != "" {
@@ -570,7 +570,7 @@ func fillBuiltinWorkerRuntimeDefaultImages(ctx context.Context, resp *bootstrapC
 		if err != nil {
 			continue
 		}
-		if strings.TrimSpace(item.RuntimeKind) != runtimeKind {
+		if bootstrapRuntimeKind(item.RuntimeKind) != runtimeKind {
 			continue
 		}
 		if image := strings.TrimSpace(item.Image); image != "" {
@@ -592,12 +592,11 @@ func (h *Handler) bootstrapConfigView(ctx context.Context, cfg config.Config) bo
 }
 
 func bootstrapRuntimeKind(runtime string) string {
-	switch strings.TrimSpace(strings.ToLower(runtime)) {
-	case agent.RuntimeKindOpenClawSandbox:
-		return agent.RuntimeKindOpenClawSandbox
-	default:
-		return agent.RuntimeKindPicoClawSandbox
+	cfg := agentruntime.RuntimeConfigForKind(runtime)
+	if kind := cfg.Kind(); kind != "" {
+		return kind
 	}
+	return agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind()
 }
 
 type createMessageRequest struct {
@@ -1377,7 +1376,7 @@ func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 		Name:        item.Name,
 		Description: item.Description,
 		Role:        item.Role,
-		RuntimeKind: item.RuntimeKind,
+		RuntimeKind: bootstrapRuntimeKind(item.RuntimeKind),
 		Version:     item.Version,
 		Image:       item.Image,
 		ImageEnv:    append([]apitypes.ImageEnvContract(nil), item.ImageEnv...),
@@ -2456,7 +2455,7 @@ func (h *Handler) runtimeOptionSchemasByKind(kinds []string) map[string][]agentr
 		if len(schemas) == 0 {
 			continue
 		}
-		out[strings.TrimSpace(kind)] = schemas
+		out[bootstrapRuntimeKind(kind)] = schemas
 	}
 	if len(out) == 0 {
 		return nil
@@ -2693,7 +2692,7 @@ func presentAgent(item agent.Agent) agentResponse {
 			Options:        runtimeOptions,
 		},
 		RuntimeID:        item.RuntimeID,
-		RuntimeKind:      runtimeCfg.LegacyKind(),
+		RuntimeKind:      runtimeCfg.Kind(),
 		RuntimeName:      runtimeCfg.Name,
 		SandboxEnabled:   runtimeCfg.Sandboxed,
 		Image:            item.Image,

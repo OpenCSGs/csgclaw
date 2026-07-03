@@ -2967,7 +2967,7 @@ func TestCreateReplaceManagerWithStaleSubmittedImageUsesLatestDefaultTemplate(t 
 		Name:        "picoclaw-manager",
 		Description: "picoclaw manager",
 		Role:        hub.TemplateRoleManager,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Version:     "0.2.0",
 		Image:       "registry.example/picoclaw-manager:0.2.0",
 	})
@@ -4759,7 +4759,7 @@ func TestCreateWorkerFromTemplateAppliesDefaultsAndOverlaysWorkspace(t *testing.
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Image:       "worker-image:1",
 	})
 
@@ -4851,7 +4851,7 @@ func TestCreateWorkerFromTemplateAppliesImageEnvToSandbox(t *testing.T) {
 		Name:        "gitlab-assistant",
 		Description: "GitLab assistant",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Image:       "worker-image:1",
 		ImageEnv: []apitypes.ImageEnvContract{
 			{Name: "GITLAB_TOKEN", Required: true, Secret: true},
@@ -4900,7 +4900,7 @@ func TestCreateOpenClawWorkerFromTemplateOverlaysOpenClawWorkspace(t *testing.T)
 		Name:        "openclaw-manager",
 		Description: "openclaw manager",
 		Role:        hub.TemplateRoleManager,
-		RuntimeKind: RuntimeKindOpenClawSandbox,
+		RuntimeKind: RuntimeNameOpenClaw,
 		Image:       "openclaw-image:1",
 	})
 
@@ -4950,7 +4950,7 @@ func TestCreateWorkerUsesConfiguredDefaultTemplate(t *testing.T) {
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Image:       "worker-image:1",
 	})
 
@@ -5001,7 +5001,7 @@ func TestAgentMarksOutdatedDefaultTemplateImageUpgradeRequired(t *testing.T) {
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Version:     "0.2.0",
 		Image:       "registry.example/picoclaw-worker:0.2.0",
 	})
@@ -5155,7 +5155,7 @@ func TestAgentMarksOutdatedManagerImageUpgradeRequiredFromDefaultTemplateVersion
 		Name:        "picoclaw-manager",
 		Description: "manager",
 		Role:        hub.TemplateRoleManager,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Version:     "0.2.0",
 		Image:       newManagerImage,
 	})
@@ -5219,7 +5219,7 @@ func TestAgentIgnoresNewerLocalImageCandidateForUpgradeRequired(t *testing.T) {
 		Name:        "picoclaw-manager",
 		Description: "manager",
 		Role:        hub.TemplateRoleManager,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Version:     "0.1.0",
 		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.1.0",
 	})
@@ -5283,7 +5283,7 @@ func TestAgentDevImageDoesNotRequireUpgrade(t *testing.T) {
 		Name:        "picoclaw-manager",
 		Description: "manager",
 		Role:        hub.TemplateRoleManager,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Version:     "0.2.0",
 		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.2.0",
 	})
@@ -5344,7 +5344,7 @@ func TestRecreateUsesLatestDefaultTemplateImageAndPreservesUserSkills(t *testing
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Version:     "0.2.0",
 		Image:       "registry.example/picoclaw-worker:0.2.0",
 	})
@@ -5442,7 +5442,7 @@ func TestUpgradeUsesLatestDefaultTemplateImage(t *testing.T) {
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Version:     "0.2.0",
 		Image:       "registry.example/picoclaw-worker:0.2.0",
 	})
@@ -5657,7 +5657,7 @@ func TestCreateWorkerRejectsMissingDefaultTemplate(t *testing.T) {
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Image:       "worker-image:1",
 	})
 
@@ -5690,7 +5690,7 @@ func TestCreateWorkerRejectsDefaultTemplateRoleMismatch(t *testing.T) {
 		Name:        "review-manager",
 		Description: "manager template",
 		Role:        hub.TemplateRoleManager,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Image:       "manager-image:1",
 	})
 
@@ -5721,7 +5721,7 @@ func TestCreateWorkerSkipsDefaultTemplateRuntimeMismatch(t *testing.T) {
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Image:       "worker-image:1",
 	})
 
@@ -5769,7 +5769,7 @@ func TestCreateWorkerAppliesTemplateDefaultsWithoutWorkspace(t *testing.T) {
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Image:       "worker-image:1",
 	})
 
@@ -5813,7 +5813,7 @@ func TestCreateRejectsDefaultManagerTemplateRoleMismatch(t *testing.T) {
 		Name:        "review-worker",
 		Description: "worker template",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeNamePicoClaw,
 		Image:       "worker-image:1",
 	})
 
@@ -5884,8 +5884,8 @@ func TestHubPublishSpecUsesAgentWorkspaceSnapshot(t *testing.T) {
 	if spec.Role != hub.TemplateRoleWorker {
 		t.Fatalf("Role = %q, want %q", spec.Role, hub.TemplateRoleWorker)
 	}
-	if spec.RuntimeKind != RuntimeKindPicoClawSandbox {
-		t.Fatalf("RuntimeKind = %q, want %q", spec.RuntimeKind, RuntimeKindPicoClawSandbox)
+	if spec.RuntimeKind != RuntimeNamePicoClaw {
+		t.Fatalf("RuntimeKind = %q, want %q", spec.RuntimeKind, RuntimeNamePicoClaw)
 	}
 	if spec.Image != "worker-image:1" {
 		t.Fatalf("Image = %q, want %q", spec.Image, "worker-image:1")
@@ -5934,8 +5934,8 @@ func TestHubPublishSpecUsesOpenClawWorkspaceSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
 	}
-	if spec.RuntimeKind != RuntimeKindOpenClawSandbox {
-		t.Fatalf("RuntimeKind = %q, want %q", spec.RuntimeKind, RuntimeKindOpenClawSandbox)
+	if spec.RuntimeKind != RuntimeNameOpenClaw {
+		t.Fatalf("RuntimeKind = %q, want %q", spec.RuntimeKind, RuntimeNameOpenClaw)
 	}
 	if spec.WorkspaceRef.Path != workspaceRoot {
 		t.Fatalf("WorkspaceRef.Path = %q, want %q", spec.WorkspaceRef.Path, workspaceRoot)

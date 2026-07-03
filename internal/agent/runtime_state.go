@@ -105,6 +105,9 @@ func (s *Service) runtimeForKind(kind string) (agentruntime.Runtime, error) {
 	if kind == "" {
 		return nil, fmt.Errorf("runtime kind is required")
 	}
+	if resolved := agentruntime.RuntimeConfigForKind(kind).LegacyKind(); resolved != "" {
+		kind = resolved
+	}
 	rt := s.runtimeRegistry[kind]
 	if rt == nil {
 		return nil, fmt.Errorf("runtime kind %q is not registered", kind)

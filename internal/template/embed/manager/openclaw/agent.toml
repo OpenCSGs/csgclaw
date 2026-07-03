@@ -1,7 +1,7 @@
 name = "openclaw-manager"
 description = "Builtin OpenClaw manager template"
 role = "manager"
-runtime_kind = "openclaw_sandbox"
+runtime_kind = "openclaw"
 updated_at = "2026-07-02T10:07:25Z"
 version = "0.1.6"
 

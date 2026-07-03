@@ -32,7 +32,7 @@ func ResolveBootstrapDefaults(ctx context.Context, bootstrap config.BootstrapCon
 		return BootstrapDefaults{}, fmt.Errorf("resolve bootstrap manager template %q: %w", defaults.ManagerTemplateRef, err)
 	}
 	defaults.ManagerRuntimeKind = manager.RuntimeKind
-	if defaults.ManagerRuntimeKind != runtime.KindPicoClawSandbox {
+	if templateLegacyRuntimeKind(defaults.ManagerRuntimeKind) != runtime.KindPicoClawSandbox {
 		return BootstrapDefaults{}, fmt.Errorf("bootstrap manager template %q uses unsupported runtime_kind %q (use %q)", defaults.ManagerTemplateRef, manager.RuntimeKind, runtime.KindPicoClawSandbox)
 	}
 	defaults.ManagerImage = strings.TrimSpace(manager.Image)
@@ -42,7 +42,7 @@ func ResolveBootstrapDefaults(ctx context.Context, bootstrap config.BootstrapCon
 		return BootstrapDefaults{}, fmt.Errorf("resolve bootstrap worker template %q: %w", defaults.WorkerTemplateRef, err)
 	}
 	defaults.WorkerRuntimeKind = worker.RuntimeKind
-	if defaults.WorkerRuntimeKind == "" {
+	if templateLegacyRuntimeKind(defaults.WorkerRuntimeKind) == "" {
 		return BootstrapDefaults{}, fmt.Errorf("bootstrap worker template %q uses unsupported runtime_kind %q", defaults.WorkerTemplateRef, worker.RuntimeKind)
 	}
 	defaults.WorkerImage = strings.TrimSpace(worker.Image)

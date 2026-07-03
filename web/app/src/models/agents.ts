@@ -1277,6 +1277,7 @@ export function applyTemplateToDraft(
     ...draft,
     from_template: template.id || "",
     template_name: template.name || template.id || "",
+    name: template.name || draft.name || "",
     runtime_kind: runtimeSelection.runtime_kind,
     runtime_name: runtimeSelection.runtime_name,
     sandbox_enabled: runtimeSelection.sandbox_enabled,
@@ -1795,8 +1796,12 @@ export function normalizeRuntimeKind(kind: unknown): RuntimeKind {
     return "";
   }
   switch (value) {
+    case "openclaw":
+      return "openclaw_sandbox";
     case "openclaw_sandbox":
       return "openclaw_sandbox";
+    case "picoclaw":
+      return "picoclaw_sandbox";
     case "codex":
       return "codex";
     case "picoclaw_sandbox":

@@ -42,7 +42,7 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if got, want := item.RuntimeKind, runtime.KindPicoClawSandbox; got != want {
+	if got, want := item.RuntimeKind, runtime.NamePicoClaw; got != want {
 		t.Fatalf("Get().RuntimeKind = %q, want %q", got, want)
 	}
 	if got, want := item.Role, TemplateRoleWorker; got != want {

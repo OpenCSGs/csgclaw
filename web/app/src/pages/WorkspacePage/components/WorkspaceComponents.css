@@ -3204,6 +3204,17 @@ select,
   color: #d0d5dd;
 }
 
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly:hover,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly:focus-within,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly:has(
+    input:checked
+  ) {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
 :root[data-theme="dark"] .workspace-tab.active .workspace-tab-icon,
 :root[data-theme="dark"] .workspace-tab.active .workspace-tab-icon .svg-icon,
 :root[data-theme="dark"] .workspace-signal-copy strong,

@@ -138,9 +138,9 @@ func resolveRuntimeSelection(kind, name string, sandboxEnabled bool) (string, st
 }
 
 func runtimeKindForGatewayRuntime(runtime string) string {
-	switch runtime {
+	switch agentruntime.RuntimeConfigForKind(runtime).LegacyKind() {
 	case RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox:
-		return runtime
+		return agentruntime.RuntimeConfigForKind(runtime).LegacyKind()
 	default:
 		return ""
 	}

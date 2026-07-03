@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import { agentMatchesUser } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { AgentLike } from "@/models/agents";
@@ -223,8 +223,10 @@ export function useProfilePreviewController({
             onMouseEnter: cancelProfilePreviewClose,
             onMouseLeave: scheduleProfilePreviewClose,
             onOpenAgent: (item) => {
-              selectAgent(item);
-              closeProfilePreview();
+              startTransition(() => {
+                selectAgent(item);
+                closeProfilePreview();
+              });
             },
             onOpenDM: async (item) => {
               await openAgentDirectMessage(item);

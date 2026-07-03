@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	agentruntime "csgclaw/internal/runtime"
 	hub "csgclaw/internal/template"
 	hubtemplates "csgclaw/internal/template/embed"
 )
@@ -187,7 +188,7 @@ func managerTemplateImageForRuntime(item hub.Template, runtimeKind string) (defa
 		return defaultAgentImage{}, false
 	}
 	templateRuntimeKind := strings.TrimSpace(item.RuntimeKind)
-	if runtimeKind != "" && templateRuntimeKind != runtimeKind {
+	if runtimeKind != "" && !runtimeKindsMatch(templateRuntimeKind, runtimeKind) {
 		return defaultAgentImage{}, false
 	}
 	image := strings.TrimSpace(item.Image)
@@ -225,7 +226,7 @@ func builtinWorkerTemplateImageForRuntime(ctx context.Context, hubSvc templateSe
 	}
 	runtimeKind = strings.TrimSpace(runtimeKind)
 	for _, item := range hubtemplates.Builtins() {
-		if item.Role != RoleWorker || strings.TrimSpace(item.RuntimeKind) != runtimeKind {
+		if item.Role != RoleWorker || !runtimeKindsMatch(item.RuntimeKind, runtimeKind) {
 			continue
 		}
 		templateItem, err := hubSvc.Get(ctx, hub.RegistryKindBuiltin+"."+item.ID)
@@ -242,7 +243,7 @@ func workerTemplateImageForRuntime(item hub.Template, runtimeKind string) (defau
 		return defaultAgentImage{}, false
 	}
 	templateRuntimeKind := strings.TrimSpace(item.RuntimeKind)
-	if runtimeKind != "" && templateRuntimeKind != runtimeKind {
+	if runtimeKind != "" && !runtimeKindsMatch(templateRuntimeKind, runtimeKind) {
 		return defaultAgentImage{}, false
 	}
 	image := strings.TrimSpace(item.Image)
@@ -263,7 +264,11 @@ func defaultTemplateMatchesAgent(templateRole, templateRuntimeKind, agentRole, a
 	if templateRuntimeKind == "" {
 		return true
 	}
-	return templateRuntimeKind == strings.TrimSpace(agentRuntimeKind)
+	return runtimeKindsMatch(templateRuntimeKind, agentRuntimeKind)
+}
+
+func runtimeKindsMatch(left, right string) bool {
+	return agentruntime.RuntimeConfigForKind(left).LegacyKind() == agentruntime.RuntimeConfigForKind(right).LegacyKind()
 }
 
 func imageNeedsTemplateVersionUpgrade(current string, latest defaultAgentImage) bool {

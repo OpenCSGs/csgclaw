@@ -43,6 +43,24 @@ func (c RuntimeConfig) LegacyKind() string {
 	return ""
 }
 
+func (c RuntimeConfig) Kind() string {
+	switch c.Normalized().Name {
+	case NamePicoClaw:
+		if c.Sandboxed {
+			return NamePicoClaw
+		}
+	case NameOpenClaw:
+		if c.Sandboxed {
+			return NameOpenClaw
+		}
+	case NameCodex:
+		if !c.Sandboxed {
+			return KindCodex
+		}
+	}
+	return ""
+}
+
 func NormalizeRuntimeName(name string) string {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case NamePicoClaw, KindPicoClawSandbox:
@@ -59,12 +77,12 @@ func NormalizeRuntimeName(name string) string {
 }
 
 func RuntimeConfigForKind(kind string) RuntimeConfig {
-	switch strings.TrimSpace(kind) {
-	case KindPicoClawSandbox:
+	switch NormalizeRuntimeName(kind) {
+	case NamePicoClaw:
 		return RuntimeConfig{Name: NamePicoClaw, Sandboxed: true}
-	case KindOpenClawSandbox:
+	case NameOpenClaw:
 		return RuntimeConfig{Name: NameOpenClaw, Sandboxed: true}
-	case KindCodex:
+	case NameCodex:
 		return RuntimeConfig{Name: NameCodex, Sandboxed: false}
 	default:
 		return RuntimeConfig{
@@ -75,12 +93,7 @@ func RuntimeConfigForKind(kind string) RuntimeConfig {
 }
 
 func SandboxEnabledForKind(kind string) bool {
-	switch strings.TrimSpace(kind) {
-	case KindPicoClawSandbox, KindOpenClawSandbox:
-		return true
-	default:
-		return false
-	}
+	return RuntimeConfigForKind(kind).Sandboxed
 }
 
 func RuntimeConfigFromSelection(kind, name string, sandboxEnabled bool) (RuntimeConfig, error) {

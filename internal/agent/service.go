@@ -216,7 +216,7 @@ func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
 		Name:        got.Name,
 		Description: got.Description,
 		Role:        got.Role,
-		RuntimeKind: got.RuntimeKind,
+		RuntimeKind: got.RuntimeConfig().Kind(),
 		Image:       got.Image,
 		WorkspaceRef: hub.WorkspaceRef{
 			Kind: hub.WorkspaceKindDir,
@@ -1003,8 +1003,8 @@ func validateDefaultTemplateCompatibility(expectedRole string, spec CreateAgentS
 		}
 		return fmt.Errorf("default %s template %q points to a %s template", expectedRole, templateRef, actualRole)
 	}
-	requestedRuntime := spec.RuntimeKind
-	templateRuntime := item.RuntimeKind
+	requestedRuntime := agentruntime.RuntimeConfigForKind(spec.RuntimeKind).LegacyKind()
+	templateRuntime := agentruntime.RuntimeConfigForKind(item.RuntimeKind).LegacyKind()
 	if requestedRuntime != "" && templateRuntime != "" && requestedRuntime != templateRuntime {
 		return fmt.Errorf("%w: default %s template %q uses runtime_kind %q, incompatible with requested runtime_kind %q", errDefaultTemplateRuntimeMismatch, expectedRole, templateRef, item.RuntimeKind, spec.RuntimeKind)
 	}

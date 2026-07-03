@@ -174,7 +174,7 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 		Name:         name,
 		Description:  description,
 		Role:         normalizeTemplateRole(manifest.Role),
-		RuntimeKind:  strings.TrimSpace(manifest.RuntimeKind),
+		RuntimeKind:  normalizeTemplateRuntimeKind(manifest.RuntimeKind),
 		Version:      strings.TrimSpace(manifest.Version),
 		Image:        manifestImageRef(manifest.Image),
 		ImageEnv:     manifestImageEnv(manifest.Image),

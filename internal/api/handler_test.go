@@ -373,12 +373,12 @@ func TestBootstrapConfigIncludesBuiltinOpenClawRuntimeDefaultImage(t *testing.T)
 
 	got := bootstrapConfigView(context.Background(), config.Config{}, hubSvc, nil)
 
-	openclawImage := got.RuntimeDefaultImages[agent.RuntimeKindOpenClawSandbox]
+	openclawImage := got.RuntimeDefaultImages[agent.RuntimeNameOpenClaw]
 	if openclawImage == "" {
-		t.Fatalf("RuntimeDefaultImages[%q] = empty; defaults=%#v", agent.RuntimeKindOpenClawSandbox, got.RuntimeDefaultImages)
+		t.Fatalf("RuntimeDefaultImages[%q] = empty; defaults=%#v", agent.RuntimeNameOpenClaw, got.RuntimeDefaultImages)
 	}
 	if !strings.Contains(openclawImage, "/opencsghq/openclaw:") {
-		t.Fatalf("RuntimeDefaultImages[%q] = %q, want builtin OpenClaw image", agent.RuntimeKindOpenClawSandbox, openclawImage)
+		t.Fatalf("RuntimeDefaultImages[%q] = %q, want builtin OpenClaw image", agent.RuntimeNameOpenClaw, openclawImage)
 	}
 }
 
@@ -821,7 +821,7 @@ func TestHandleAgentUpgradeUsesLatestDefaultImage(t *testing.T) {
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		RuntimeKind: agent.RuntimeNamePicoClaw,
 		Version:     "0.2.0",
 		Image:       "registry.example/picoclaw-worker:0.2.0",
 	})
@@ -929,7 +929,7 @@ func TestHandleAgentsListReportsImageUpgradeRequiredByTemplateVersion(t *testing
 				Name:        "frontend-worker",
 				Description: "frontend worker",
 				Role:        hub.TemplateRoleWorker,
-				RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+				RuntimeKind: agent.RuntimeNamePicoClaw,
 				Version:     tt.version,
 				Image:       tt.latestImage,
 			})
@@ -1054,7 +1054,7 @@ func TestHandleManagerGetReportsImageUpgradeRequiredByTemplateVersion(t *testing
 				Name:        "picoclaw-manager",
 				Description: "manager",
 				Role:        hub.TemplateRoleManager,
-				RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+				RuntimeKind: agent.RuntimeNamePicoClaw,
 				Version:     tt.version,
 				Image:       tt.latestImage,
 			})
@@ -1104,7 +1104,7 @@ func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
 		Name:        "frontend-worker",
 		Description: "frontend worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		RuntimeKind: agent.RuntimeNamePicoClaw,
 		Version:     "0.2.0",
 		Image:       "registry.example/picoclaw-worker:0.2.0",
 	})
@@ -1209,7 +1209,7 @@ func TestHandleManagerUpgradeUsesDefaultTemplateVersionWhenLocalImageListIsStale
 		Name:        "picoclaw-manager",
 		Description: "manager",
 		Role:        hub.TemplateRoleManager,
-		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		RuntimeKind: agent.RuntimeNamePicoClaw,
 		Version:     "0.2.0",
 		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.2.0",
 	})

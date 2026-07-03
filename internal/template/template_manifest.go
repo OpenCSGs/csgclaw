@@ -135,8 +135,9 @@ func validateManifest(manifest templateManifest) error {
 	default:
 		return fmt.Errorf("role must be one of %q or %q", TemplateRoleManager, TemplateRoleWorker)
 	}
+	manifest.RuntimeKind = normalizeTemplateRuntimeKind(manifest.RuntimeKind)
 	switch manifest.RuntimeKind {
-	case runtime.KindPicoClawSandbox, runtime.KindOpenClawSandbox, runtime.KindCodex:
+	case runtime.NamePicoClaw, runtime.NameOpenClaw, runtime.KindCodex:
 	default:
 		return fmt.Errorf("%w: %s", ErrRuntimeKindRequired, manifest.RuntimeKind)
 	}
@@ -154,12 +155,7 @@ func validateManifest(manifest templateManifest) error {
 }
 
 func requiresTemplateImage(runtimeKind string) bool {
-	switch runtimeKind {
-	case runtime.KindPicoClawSandbox, runtime.KindOpenClawSandbox:
-		return true
-	default:
-		return false
-	}
+	return runtime.RuntimeConfigForKind(runtimeKind).Sandboxed
 }
 
 func parseManifestUpdatedAt(value string) (time.Time, error) {

@@ -43,6 +43,7 @@ import {
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 import { selectUnusedAgentAvatar } from "@/shared/avatarOptions";
 import { FEISHU_REGISTRATIONS_STORAGE_KEY } from "@/shared/storage/keys";
+import { LAST_CREATED_AGENT_MODEL_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   applyTemplateToDraft,
   advanceAgentProgress,
@@ -116,6 +117,13 @@ type AgentAction = "delete" | "recreate" | "start" | "stop" | "upgrade";
 type FeishuPendingRegistration = FeishuRegistration & {
   agent_id: string;
   registration_id: string;
+};
+
+type AgentCreateMode = "template" | "custom";
+
+type LastCreatedAgentModelPreference = {
+  modelID: string;
+  providerID: string;
 };
 
 type AgentWithProfile = {
@@ -224,7 +232,73 @@ function saveFeishuPendingRegistrations(registrations: Record<string, FeishuPend
   }
 }
 
+function loadLastCreatedAgentModelPreference(): LastCreatedAgentModelPreference | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(LAST_CREATED_AGENT_MODEL_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const decoded = JSON.parse(raw);
+    const providerID = String((decoded as { providerID?: unknown })?.providerID || "").trim();
+    const modelID = String((decoded as { modelID?: unknown })?.modelID || "").trim();
+    if (!providerID || !modelID) {
+      return null;
+    }
+    return { providerID, modelID };
+  } catch {
+    return null;
+  }
+}
+
+function saveLastCreatedAgentModelPreference(draft: Partial<AgentDraft> | null | undefined): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const providerID = String(draft?.model_provider_id || "").trim();
+  const modelID = String(draft?.model_id || "").trim();
+  if (!providerID || !modelID) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      LAST_CREATED_AGENT_MODEL_STORAGE_KEY,
+      JSON.stringify({
+        providerID,
+        modelID,
+      }),
+    );
+  } catch {
+    // Best-effort only; fallback defaults still work.
+  }
+}
+
 function draftWithModelProviderFallback(draft: AgentDraft, options: readonly ModelProviderOption[]): AgentDraft {
+  const preference = loadLastCreatedAgentModelPreference();
+  if (preference?.providerID && preference?.modelID) {
+    const exactMatch = options.find(
+      (item) => item.providerID === preference.providerID && item.modelID === preference.modelID,
+    );
+    if (exactMatch) {
+      return {
+        ...draft,
+        provider: providerNameForProviderID(preference.providerID),
+        model_provider_id: preference.providerID,
+        model_id: preference.modelID,
+      };
+    }
+    const providerMatch = options.find((item) => item.providerID === preference.providerID && item.modelID);
+    if (providerMatch) {
+      return {
+        ...draft,
+        provider: providerNameForProviderID(preference.providerID),
+        model_provider_id: preference.providerID,
+        model_id: providerMatch.modelID,
+      };
+    }
+  }
   const providerID = String(draft.model_provider_id || "").trim();
   const modelID = String(draft.model_id || "").trim();
   if (providerID && modelID) {
@@ -301,6 +375,7 @@ export function useAgentController({
   const [managerRebuildImage, setManagerRebuildImage] = useState("");
   const [agentModalMode, setAgentModalMode] = useState<AgentModalMode>("create");
   const [agentCreateBotKind, setAgentCreateBotKind] = useState(BOT_CREATE_KIND_WORKER);
+  const [agentCreateMode, setAgentCreateMode] = useState<AgentCreateMode>("template");
   const [editingAgent, setEditingAgent] = useState<AgentLike | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentDraft | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
@@ -322,6 +397,7 @@ export function useAgentController({
   const [agentPageNoticeTone, setAgentPageNoticeTone] = useState<AgentPageNoticeTone>("warning");
   const agentPageNoticeTimerRef = useRef<number | null>(null);
   const agentPageDraftLoadSeqRef = useRef(0);
+  const agentPageDraftRequestRef = useRef(0);
   const [feishuPendingRegistrations, setFeishuPendingRegistrations] = useState<
     Record<string, FeishuPendingRegistration>
   >(() => loadFeishuPendingRegistrations());
@@ -408,22 +484,25 @@ export function useAgentController({
     if (!selectedAgentForPage) {
       return "";
     }
+    const profile = selectedAgentForPage.agent_profile;
+    const modelProviderID =
+      selectedAgentForPage.model_provider_id || selectedAgentForPage.agent_profile?.model_provider_id || "";
+    const modelID = selectedAgentForPage.model_id || selectedAgentForPage.agent_profile?.model_id || "";
     return JSON.stringify({
       id: selectedAgentForPage.id || "",
       name: selectedAgentForPage.name || "",
       description: selectedAgentForPage.description || "",
       instructions: selectedAgentForPage.instructions || "",
-      profile: profileSelectorFromDraft(agentToDraft(selectedAgentForPage)),
+      profile: modelProviderID ? profileSelectorFromDraft({ model_provider_id: modelProviderID, model_id: modelID }) : "",
       profile_complete:
-        selectedAgentForPage.profile_complete ?? selectedAgentForPage.agent_profile?.profile_complete ?? null,
-      provider: selectedAgentForPage.provider || selectedAgentForPage.agent_profile?.provider || "",
-      model_provider_id:
-        selectedAgentForPage.model_provider_id || selectedAgentForPage.agent_profile?.model_provider_id || "",
-      model_id: selectedAgentForPage.model_id || selectedAgentForPage.agent_profile?.model_id || "",
+        selectedAgentForPage.profile_complete ?? profile?.profile_complete ?? null,
+      provider: selectedAgentForPage.provider || profile?.provider || "",
+      model_provider_id: modelProviderID,
+      model_id: modelID,
       reasoning_effort:
-        selectedAgentForPage.reasoning_effort || selectedAgentForPage.agent_profile?.reasoning_effort || "",
+        selectedAgentForPage.reasoning_effort || profile?.reasoning_effort || "",
       enable_fast_mode:
-        selectedAgentForPage.enable_fast_mode ?? selectedAgentForPage.agent_profile?.enable_fast_mode ?? false,
+        selectedAgentForPage.enable_fast_mode ?? profile?.enable_fast_mode ?? false,
     });
   }, [selectedAgentForPage]);
   const selectedFeishuPendingRegistration = useMemo(() => {
@@ -945,6 +1024,7 @@ export function useAgentController({
   async function openCreateNotificationParticipantModal(): Promise<void> {
     setAgentModalMode("create");
     setAgentCreateBotKind(BOT_CREATE_KIND_NOTIFICATION);
+    setAgentCreateMode("custom");
     setEditingAgent(null);
     setAgentError("");
     setAgentProgress(null);
@@ -964,6 +1044,7 @@ export function useAgentController({
   async function openCreateAgentModal(template: AgentTemplateLike | null | undefined = undefined): Promise<void> {
     setAgentModalMode("create");
     setAgentCreateBotKind(BOT_CREATE_KIND_WORKER);
+    setAgentCreateMode("template");
     setEditingAgent(null);
     setAgentError("");
     setAgentProgress(null);
@@ -1066,6 +1147,7 @@ export function useAgentController({
   async function openEditAgentModal(item: AgentLike): Promise<void> {
     setAgentModalMode("edit");
     setAgentCreateBotKind(isNotificationBotAgent(item) ? BOT_CREATE_KIND_NOTIFICATION : BOT_CREATE_KIND_WORKER);
+    setAgentCreateMode("custom");
     setEditingAgent(item);
     setAgentError("");
     setAgentProgress(null);
@@ -1083,23 +1165,25 @@ export function useAgentController({
     if (!item?.id) {
       return;
     }
+    const requestID = agentPageDraftRequestRef.current + 1;
+    agentPageDraftRequestRef.current = requestID;
     setAgentPageError("");
     resetAgentPageModels();
+    const fallbackDraft = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
+    setAgentPageDraft(fallbackDraft);
+    setAgentPageSavedDraft(fallbackDraft);
     try {
       const draft = await agentDraftFromItem(item);
-      if (agentPageDraftLoadSeqRef.current !== loadSeq) {
+      if (agentPageDraftLoadSeqRef.current !== loadSeq || agentPageDraftRequestRef.current !== requestID) {
         return;
       }
       setAgentPageDraft(draft);
       setAgentPageSavedDraft(draft);
     } catch (err) {
-      if (agentPageDraftLoadSeqRef.current !== loadSeq) {
+      if (agentPageDraftLoadSeqRef.current !== loadSeq || agentPageDraftRequestRef.current !== requestID) {
         return;
       }
       setAgentPageError(errorMessage(err, t("agentActionFailed")));
-      const draft = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
-      setAgentPageDraft(draft);
-      setAgentPageSavedDraft(draft);
     }
   }
 
@@ -1407,6 +1491,9 @@ export function useAgentController({
             ...(payload.runtime_options !== undefined ? { runtime_options: payload.runtime_options } : {}),
           });
       await saveLinkedAgentUserAvatar(saved?.participants?.length ? saved : editingAgent || saved, agentDraft.avatar);
+      if (isCreate) {
+        saveLastCreatedAgentModelPreference(agentDraft);
+      }
       await refreshAgents();
       await refreshWorkspaceBootstrap();
       if (saved.id === MANAGER_AGENT_ID) {
@@ -1971,6 +2058,8 @@ export function useAgentController({
             locale,
             agentModalMode,
             agentCreateBotKind,
+            agentCreateMode,
+            onAgentCreateModeChange: setAgentCreateMode,
             onAgentCreateBotKindChange: setAgentCreateBotKind,
             editingAgent,
             agentDraft,

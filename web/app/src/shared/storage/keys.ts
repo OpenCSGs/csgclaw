@@ -7,3 +7,4 @@ export const WORKSPACE_SECTION_ORDER_STORAGE_KEY = "csgclaw.im.workspaceSectionO
 export const FEISHU_REGISTRATIONS_STORAGE_KEY = "csgclaw.im.feishuRegistrations" as const;
 export const HUB_NEW_BADGE_SEEN_STORAGE_KEY = "csgclaw.im.hubNewBadgeSeen" as const;
 export const AGENT_PROFILE_TAB_ORDER_STORAGE_KEY = "csgclaw.im.agentProfileTabOrder" as const;
+export const LAST_CREATED_AGENT_MODEL_STORAGE_KEY = "csgclaw.im.lastCreatedAgentModel" as const;

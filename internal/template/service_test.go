@@ -226,7 +226,7 @@ func TestDeleteRemovesLocalTemplate(t *testing.T) {
 		ID:          "review-bot",
 		Name:        "review-bot",
 		Role:        TemplateRoleWorker,
-		RuntimeKind: "picoclaw_sandbox",
+		RuntimeKind: "picoclaw",
 		Image:       "agent-image:test",
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
