@@ -9,6 +9,7 @@ import {
   defaultManagerRebuildImageForRuntime,
   defaultWorkerImageForRuntime,
   agentDraftWithRuntimeFieldsFromAgent,
+  agentDeleteConfirmationMessage,
   agentRuntimePollSettled,
   agentStatusLabel,
   agentSandboxEnabled,
@@ -313,6 +314,46 @@ describe("agent model helpers", () => {
         "feishu",
       ),
     ).toBe(false);
+  });
+
+  it("describes agent delete confirmation with bound channels", () => {
+    const message = agentDeleteConfirmationMessage(
+      {
+        id: "u-dev",
+        name: "Demo Agent",
+        participants: [
+          {
+            channel: "csgclaw",
+            id: "dev",
+            type: "agent",
+          },
+          {
+            channel: "feishu",
+            channel_user_kind: "app_id",
+            id: "dev",
+            type: "agent",
+          },
+        ],
+      },
+      (key, params = {}) => {
+        const values: Record<string, string> = {
+          agentDeleteBoundChannels: "This agent is bound to {channels}.",
+          agentDeleteCascadeNote: "Deleting the agent will also disconnect it from those channels.",
+          agentDeleteConfirmMessage: 'Delete agent "{name}"?',
+        };
+        return (values[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => `${params[name] ?? ""}`);
+      },
+    );
+
+    expect(message).toBe(
+      [
+        'Delete agent "Demo Agent"?',
+        "",
+        "This agent is bound to Feishu.",
+        "",
+        "Deleting the agent will also disconnect it from those channels.",
+      ].join("\n"),
+    );
   });
 
   it("keeps JSON profile fields object-shaped", () => {

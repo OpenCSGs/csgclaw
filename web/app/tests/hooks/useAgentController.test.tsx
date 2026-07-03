@@ -409,57 +409,7 @@ describe("useAgentController", () => {
     expect(fetchAgent).toHaveBeenLastCalledWith("u-manager", { cacheBust: true });
   });
 
-  it("shows channel-bound cleanup warning before deleting an agent", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
-    const confirmationT: TranslateFn = (key, params = {}) => {
-      const values: Record<string, string> = {
-        agentDeleteBoundChannels: "This agent is bound to {channels}.",
-        agentDeleteCascadeNote: "Deleting the agent will also disconnect it from those channels.",
-        agentDeleteConfirmMessage: 'Delete agent "{name}"?',
-      };
-      return (values[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => `${params[name] ?? ""}`);
-    };
-    const channelBoundAgent: AgentLike = {
-      ...oldAgent,
-      participants: [
-        {
-          agent_id: oldAgent.id,
-          channel: "csgclaw",
-          channel_user_ref: "user-manager",
-          id: "pt-manager",
-          type: "agent",
-        },
-        {
-          agent_id: oldAgent.id,
-          channel: "feishu",
-          channel_user_kind: "app_id",
-          id: "pt-manager-feishu",
-          type: "agent",
-        },
-      ],
-    };
-    const { result } = renderHook(
-      () => useAgentControllerHarness({ agents: [channelBoundAgent], t: confirmationT }).controller,
-      { wrapper: createWrapper() },
-    );
-
-    await act(async () => {
-      await result.current.agentViewProps.onDelete?.(channelBoundAgent);
-    });
-
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
-    const message = String(confirmSpy.mock.calls[0]?.[0] || "");
-    expect(message).toContain("bound to Feishu");
-    expect(message).toContain("disconnect it from those channels");
-    expect(message).not.toContain("participant");
-    expect(message).not.toContain("pt-manager");
-    expect(message).not.toContain("user-manager");
-    expect(message).not.toContain("csgclaw");
-    confirmSpy.mockRestore();
-  });
-
-  it("deletes a normal agent through the agent delete endpoint after confirmation", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("deletes an agent through the agent delete endpoint", async () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
     await act(async () => {
@@ -468,7 +418,6 @@ describe("useAgentController", () => {
 
     expect(deleteAgentRequest).toHaveBeenCalledWith("u-manager");
     expect(deleteBotRequest).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   it("refreshes the selected agent workspace after saving manager profile changes without renaming manager", async () => {

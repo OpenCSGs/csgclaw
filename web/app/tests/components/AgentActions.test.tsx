@@ -1,14 +1,18 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { AgentDetailPane, AgentRow, NotificationParticipantDetailPane } from "@/pages/AgentPage/components";
+import { AgentDetailPane, AgentRow, AgentView, NotificationParticipantDetailPane } from "@/pages/AgentPage/components";
 import { agentToDraft, type AgentDraft } from "@/models/agents";
 
 const labels: Record<string, string> = {
   agentActivityTab: "Activity",
   agentDelete: "Delete",
+  agentDeleteBoundChannels: "This agent is bound to {channels}.",
+  agentDeleteCascadeNote: "Deleting the agent will also disconnect it from those channels.",
+  agentDeleteConfirmMessage: 'Delete agent "{name}"?',
   agentInstructions: "Instructions",
   agentModel: "Model",
+  cancel: "Cancel",
   editDescription: "Edit description",
   editAgentName: "Edit name",
   agentRecreate: "Recreate",
@@ -52,13 +56,14 @@ const labels: Record<string, string> = {
   profileUpgradeRequired: "Upgrade required",
   profileRuntimeKind: "Runtime",
   profileRuntimeSection: "Runtime environment",
+  close: "Close",
   agentName: "Name",
   agentDescription: "Description",
   agentImage: "Image",
 };
 
-function t(key: string): string {
-  return labels[key] ?? key;
+function t(key: string, params: Record<string, string | number> = {}): string {
+  return (labels[key] ?? key).replace(/\{(\w+)\}/g, (_, name: string) => `${params[name] ?? ""}`);
 }
 
 const worker = {
@@ -464,7 +469,7 @@ describe("agent action visibility", () => {
     };
     const draft = agentToDraft(connectedWorker);
     render(
-      <AgentDetailPane
+      <AgentView
         item={connectedWorker}
         t={t}
         activeRoom={null}
@@ -1000,6 +1005,69 @@ describe("agent action visibility", () => {
 
     expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("opens a styled delete confirmation dialog for a Feishu-connected agent", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    const connectedWorker = {
+      ...worker,
+      name: "Worker with Feishu",
+      bot_type: "notification",
+      type: "notification",
+      participants: [
+        {
+          channel: "csgclaw",
+          id: "worker-1",
+          type: "agent",
+        },
+        {
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "worker-1",
+          type: "agent",
+        },
+      ],
+    };
+
+    render(
+      <AgentView
+        item={connectedWorker}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={null}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
+        onDelete={onDelete}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent('Delete agent "Worker with Feishu"?');
+    expect(dialog).toHaveTextContent("This agent is bound to Feishu.");
+    expect(dialog).toHaveTextContent("Deleting the agent will also disconnect it from those channels.");
+
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: connectedWorker.id }));
   });
 
   it("shows advanced profile options from the advanced tab", async () => {

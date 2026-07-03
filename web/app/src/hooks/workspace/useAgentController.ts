@@ -103,7 +103,7 @@ import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace } from "@/model
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
-import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
+import type { IMConversation, IMUser } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
 
 type ManagerRebuildOptions = {
@@ -1446,9 +1446,6 @@ export function useAgentController({
       openManagerRebuildModal(item);
       return;
     }
-    if (action === "delete" && !window.confirm(agentDeleteConfirmationMessage(item, t))) {
-      return;
-    }
     setAgentActionBusy(`${item.id}:${action}`);
     clearAgentOperationError(item);
     try {
@@ -2035,52 +2032,4 @@ function csgclawParticipantIDForAgent(item: AgentLike): string {
     (candidate) => String(candidate?.channel || "").trim() === "csgclaw" && String(candidate?.id || "").trim(),
   );
   return String(participant?.id || item.id || "").trim();
-}
-
-function agentDeleteConfirmationMessage(item: AgentLike, t: TranslateFn): string {
-  const name = String(item.name || item.id || "").trim();
-  const message = t("agentDeleteConfirmMessage", { name });
-  const channels = agentDeleteBoundChannels(item);
-  if (channels.length === 0) {
-    return message;
-  }
-  return [
-    message,
-    "",
-    t("agentDeleteBoundChannels", { channels: channels.join(", ") }),
-    "",
-    t("agentDeleteCascadeNote"),
-  ].join("\n");
-}
-
-function agentDeleteBoundChannels(item: AgentLike): string[] {
-  const agentID = String(item.id || "").trim();
-  const channels = new Set<string>();
-  for (const participant of item.participants || []) {
-    const participantID = String(participant?.id || "").trim();
-    if (!participantID) {
-      continue;
-    }
-    const participantAgentID = String(participant?.agent_id || "").trim();
-    if (participantAgentID && agentID && participantAgentID !== agentID) {
-      continue;
-    }
-    const channel = String(participant?.channel || "")
-      .trim()
-      .toLowerCase();
-    if (!channel || channel === "csgclaw") {
-      continue;
-    }
-    channels.add(agentDeleteChannelLabel(channel));
-  }
-  return Array.from(channels).sort((left, right) => left.localeCompare(right));
-}
-
-function agentDeleteChannelLabel(channel: string): string {
-  if (channel === "feishu") {
-    return "Feishu";
-  }
-  return channel.replace(/(^|[-_\s]+)(\w)/g, (_, separator: string, value: string) => {
-    return `${separator ? " " : ""}${value.toUpperCase()}`;
-  });
 }

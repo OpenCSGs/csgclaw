@@ -1,0 +1,177 @@
+.csg-dialog-overlay.agent-delete-backdrop {
+  background: rgba(16, 24, 40, 0.72);
+}
+
+.csg-dialog-content.agent-delete-dialog {
+  width: min(400px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--gray-900);
+  box-shadow:
+    0 20px 24px -4px rgba(16, 24, 40, 0.08),
+    0 8px 8px -4px rgba(16, 24, 40, 0.03);
+}
+
+.agent-delete-header {
+  position: relative;
+  display: block;
+  padding: 24px 72px 0 24px;
+  border: 0;
+  background: transparent;
+}
+
+.agent-delete-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-delete-dialog .csg-dialog-title {
+  color: var(--gray-900);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.agent-delete-description.csg-dialog-description {
+  margin-top: 0;
+  color: var(--gray-600);
+  font-size: 14px;
+  line-height: 22px;
+  white-space: pre-line;
+}
+
+.agent-delete-dialog .csg-dialog-close {
+  --btn-height: 44px;
+  --btn-min-width: 44px;
+
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  color: var(--gray-400);
+  box-shadow: none;
+}
+
+.agent-delete-dialog .csg-dialog-close .icon-button-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  line-height: 0;
+}
+
+.agent-delete-dialog .csg-dialog-close svg {
+  display: block;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+}
+
+.agent-delete-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 32px 24px 24px;
+}
+
+.agent-delete-actions .agent-delete-button {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-secondary-gray {
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-secondary-gray:hover:not(:disabled),
+.csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-secondary-gray:focus-visible {
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
+}
+
+.csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-danger {
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+}
+
+.csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-danger:hover:not(:disabled),
+.csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-danger:focus-visible {
+  border-color: var(--error-700);
+  background: var(--error-700);
+  color: var(--white);
+}
+
+:root[data-theme="dark"] .csg-dialog-overlay.agent-delete-backdrop {
+  background: rgba(2, 6, 23, 0.72);
+}
+
+:root[data-theme="dark"] .csg-dialog-content.agent-delete-dialog {
+  border-color: color-mix(in oklab, var(--line) 75%, transparent);
+  background: color-mix(in oklab, var(--panel) 94%, #020617 6%);
+  color: var(--text);
+  box-shadow:
+    0 24px 36px -12px rgba(2, 6, 23, 0.6),
+    0 10px 18px -10px rgba(2, 6, 23, 0.38);
+}
+
+:root[data-theme="dark"] .agent-delete-dialog .csg-dialog-title {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .agent-delete-description.csg-dialog-description {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .agent-delete-dialog .csg-dialog-close {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .agent-delete-dialog .csg-dialog-close:hover:not(:disabled),
+:root[data-theme="dark"] .agent-delete-dialog .csg-dialog-close:focus-visible {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-secondary-gray {
+  border-color: color-mix(in oklab, var(--line) 80%, transparent);
+  background: color-mix(in oklab, var(--panel) 88%, #020617 12%);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-secondary-gray:hover:not(:disabled),
+:root[data-theme="dark"] .csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-secondary-gray:focus-visible {
+  border-color: color-mix(in oklab, var(--line) 80%, transparent);
+  background: color-mix(in oklab, var(--panel) 80%, #020617 20%);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-danger {
+  border-color: var(--error-600);
+  background: color-mix(in oklab, var(--error-600) 88%, #020617 12%);
+  color: var(--white);
+}
+
+:root[data-theme="dark"] .csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-danger:hover:not(:disabled),
+:root[data-theme="dark"] .csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-danger:focus-visible {
+  border-color: var(--error-700);
+  background: color-mix(in oklab, var(--error-600) 78%, #020617 22%);
+  color: var(--white);
+}

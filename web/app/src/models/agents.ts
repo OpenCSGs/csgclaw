@@ -597,6 +597,24 @@ export function hasConnectedAgentChannel(item: AgentLike | null | undefined, cha
   return agentConnectedChannels(item).some((channel) => channel.id === channelID);
 }
 
+type TranslateFnWithParams = (key: string, params?: Record<string, string | number>) => string;
+
+export function agentDeleteConfirmationMessage(item: AgentLike | null | undefined, t: TranslateFnWithParams): string {
+  const name = String(item?.name || item?.id || "").trim();
+  const message = t("agentDeleteConfirmMessage", { name });
+  const channels = agentConnectedChannels(item).map((channel) => channel.name);
+  if (channels.length === 0) {
+    return message;
+  }
+  return [
+    message,
+    "",
+    t("agentDeleteBoundChannels", { channels: channels.join(", ") }),
+    "",
+    t("agentDeleteCascadeNote"),
+  ].join("\n");
+}
+
 export function normalizeNotifierDeliveryMode(mode: unknown): string {
   const value = String(mode || "")
     .trim()
