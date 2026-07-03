@@ -88,6 +88,56 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	}
 }
 
+func TestCreateCSGClawAgentParticipantViaAPIReturnsConflictForDuplicateAgentName(t *testing.T) {
+	agentSvc, _ := mustNewSeededServiceWithPath(t, []agent.Agent{{
+		ID:          "u-existing",
+		Name:        "generic-assistant-lite",
+		Role:        agent.RoleWorker,
+		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		Image:       "agent-image:test",
+	}})
+	imSvc := im.NewService()
+	participantSvc := participant.NewService(
+		participant.NewMemoryStore(nil),
+		participant.WithAgentService(agentSvc),
+		participant.WithIMService(imSvc),
+	)
+	srv := &Handler{
+		svc:         agentSvc,
+		im:          imSvc,
+		participant: participantSvc,
+	}
+
+	body := `{
+		"type": "agent",
+		"name": "generic-assistant-lite",
+		"channel_user": {
+			"ref": "u-generic-assistant-lite",
+			"kind": "local_user_id"
+		},
+		"agent_binding": {
+			"mode": "create",
+			"agent": {
+				"name": "generic-assistant-lite",
+				"role": "worker",
+				"runtime_kind": "picoclaw_sandbox",
+				"image": "agent-image:test"
+			}
+		}
+	}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(body))
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusConflict, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `agent name "generic-assistant-lite" already exists`) {
+		t.Fatalf("body = %q, want duplicate agent name error", rec.Body.String())
+	}
+}
+
 func TestHandleParticipantsPublishesLifecycleEvents(t *testing.T) {
 	bus := im.NewBus()
 	events, cancel := bus.Subscribe()

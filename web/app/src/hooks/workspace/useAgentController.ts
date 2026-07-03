@@ -140,6 +140,7 @@ const FEISHU_CHANNEL_ACTION = "feishu";
 const FEISHU_REGISTRATION_DEFAULT_POLL_SECONDS = 3;
 const FEISHU_REGISTRATION_MIN_POLL_SECONDS = 1;
 const FEISHU_REGISTRATION_MAX_POLL_SECONDS = 30;
+const AGENT_CREATE_NAME_RETRY_LIMIT = 20;
 
 function feishuActionKey(agentID: string, action: FeishuActionKind): string {
   return `${agentID}:${FEISHU_CHANNEL_ACTION}:${action}`;
@@ -178,6 +179,54 @@ function feishuRegistrationPollDelayMs(registration: FeishuRegistration | null |
   const rawSeconds = Number(registration?.next_poll_seconds);
   const seconds = Number.isFinite(rawSeconds) && rawSeconds > 0 ? rawSeconds : FEISHU_REGISTRATION_DEFAULT_POLL_SECONDS;
   return Math.min(FEISHU_REGISTRATION_MAX_POLL_SECONDS, Math.max(FEISHU_REGISTRATION_MIN_POLL_SECONDS, seconds)) * 1000;
+}
+
+function isAgentNameConflictError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const status = Number((error as { status?: unknown }).status);
+  if (status === 409) {
+    return true;
+  }
+  const message = String((error as { message?: unknown }).message || "")
+    .trim()
+    .toLowerCase();
+  return message.includes("agent name") && message.includes("already exists");
+}
+
+function splitAgentNameSuffix(name: string): { baseName: string; nextIndex: number } {
+  const trimmed = String(name || "").trim();
+  const match = trimmed.match(/^(.*?)-(\d+)$/);
+  if (!match) {
+    return { baseName: trimmed, nextIndex: 2 };
+  }
+  return {
+    baseName: match[1] || trimmed,
+    nextIndex: Number.parseInt(match[2] || "1", 10) + 1,
+  };
+}
+
+function nextAvailableAgentName(name: string, existingNames: Iterable<string>): string {
+  const normalizedExisting = new Set(
+    Array.from(existingNames, (item) => String(item || "").trim().toLowerCase()).filter(Boolean),
+  );
+  const trimmed = String(name || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (!normalizedExisting.has(trimmed.toLowerCase())) {
+    return trimmed;
+  }
+  const { baseName, nextIndex } = splitAgentNameSuffix(trimmed);
+  const safeBaseName = baseName.trim() || trimmed;
+  for (let index = nextIndex; index < nextIndex + AGENT_CREATE_NAME_RETRY_LIMIT; index += 1) {
+    const candidate = `${safeBaseName}-${index}`;
+    if (!normalizedExisting.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+  }
+  return `${safeBaseName}-${Date.now()}`;
 }
 
 function pruneFeishuPendingRegistrations(
@@ -1481,7 +1530,26 @@ export function useAgentController({
         payload.runtime_options = runtimeOptions || {};
       }
       const saved = isCreate
-        ? await createBotRequest(payload)
+        ? await (async () => {
+            const existingNames = agentItems.map((item) => String(item.name || "").trim()).filter(Boolean);
+            let createPayload: AgentUpdatePayload = { ...payload };
+            for (let attempt = 0; attempt <= AGENT_CREATE_NAME_RETRY_LIMIT; attempt += 1) {
+              try {
+                return await createBotRequest(createPayload);
+              } catch (error) {
+                if (!createPayload.from_template || !isAgentNameConflictError(error)) {
+                  throw error;
+                }
+                const nextName = nextAvailableAgentName(String(createPayload.name || ""), existingNames);
+                if (!nextName || nextName === createPayload.name) {
+                  throw error;
+                }
+                existingNames.push(nextName);
+                createPayload = { ...createPayload, name: nextName };
+              }
+            }
+            return createBotRequest(createPayload);
+          })()
         : await updateAgentRequest(editingAgentID, {
             name: payload.name,
             description: payload.description,

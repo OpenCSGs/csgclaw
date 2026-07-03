@@ -1729,7 +1729,8 @@
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab {
   justify-content: flex-start;
   min-width: 0;
-  height: 74px;
+  min-height: 74px;
+  height: auto;
   padding: 12px 16px;
   border: 1px solid var(--gray-300);
   border-radius: 8px;
@@ -1808,11 +1809,14 @@
 }
 
 .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy small {
+  display: block;
   color: var(--gray-600);
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 300;
   line-height: 22px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 :root[data-theme="dark"] .profile-modal.agent-modal .modal-header {

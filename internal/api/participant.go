@@ -13,6 +13,17 @@ import (
 	"csgclaw/internal/participant"
 )
 
+func participantCreateStatus(err error) int {
+	if err == nil {
+		return http.StatusCreated
+	}
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	if strings.Contains(message, "already exists") {
+		return http.StatusConflict
+	}
+	return http.StatusBadRequest
+}
+
 func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 	if h.participant == nil {
 		http.Error(w, "participant service is not configured", http.StatusServiceUnavailable)
@@ -41,7 +52,7 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 		req.Channel = channelName
 		created, err := h.participant.Create(r.Context(), req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, err.Error(), participantCreateStatus(err))
 			return
 		}
 		presented := h.presentParticipant(created)

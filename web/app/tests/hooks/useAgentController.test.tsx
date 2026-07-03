@@ -33,6 +33,7 @@ import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { IMConversation, IMData, TranslateFn } from "@/models/conversations";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
+import type { ApiError } from "@/api/client";
 import { AGENT_AVATAR_OPTIONS } from "@/shared/avatarOptions";
 
 vi.mock("react-router-dom", async () => {
@@ -1453,6 +1454,134 @@ describe("useAgentController", () => {
     const createPayload = vi.mocked(createBotRequest).mock.calls[0]?.[0];
     expect(createPayload).not.toHaveProperty("avatar");
     expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-worker", { avatar: selectedAvatar });
+  });
+
+  it("retries template worker creation with a suffixed name when the template name already exists", async () => {
+    const duplicateError: ApiError = {
+      status: 409,
+      message: 'agent name "Worker" already exists',
+    };
+    vi.mocked(createBotRequest)
+      .mockRejectedValueOnce(duplicateError)
+      .mockResolvedValueOnce({
+        ...oldAgent,
+        id: "u-worker-2",
+        name: "Worker-2",
+        participants: [
+          {
+            agent_id: "u-worker-2",
+            channel: "csgclaw",
+            channel_user_ref: "user-worker",
+            id: "pt-worker-2",
+            type: "agent",
+          },
+        ],
+        role: "worker",
+      });
+
+    const existingWorker: AgentLike = {
+      ...oldAgent,
+      id: "u-worker-existing",
+      name: "Worker",
+      role: "worker",
+    };
+
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ agents: [oldAgent, existingWorker] }).controller,
+      {
+        wrapper: createWrapper(),
+      },
+    );
+
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+
+    await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
+
+    act(() => {
+      const draft = result.current.agentProfileModalProps?.agentDraft;
+      result.current.agentProfileModalProps?.onAgentDraftChange({
+        ...draft!,
+        from_template: "builtin.picoclaw-worker",
+        template_name: "Worker",
+        name: "Worker",
+        model_provider_id: "codex",
+        model_id: "gpt-5.5",
+      });
+    });
+
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+
+    expect(createBotRequest).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(createBotRequest).mock.calls[0]?.[0]).toEqual(expect.objectContaining({ name: "Worker" }));
+    expect(vi.mocked(createBotRequest).mock.calls[1]?.[0]).toEqual(expect.objectContaining({ name: "Worker-2" }));
+    expect(result.current.agentProfileModalProps).toBeNull();
+  });
+
+  it("keeps retrying template worker creation for legacy duplicate-name responses without 409", async () => {
+    const duplicateError: ApiError = {
+      status: 400,
+      message: 'agent name "Worker" already exists',
+    };
+    vi.mocked(createBotRequest)
+      .mockRejectedValueOnce(duplicateError)
+      .mockResolvedValueOnce({
+        ...oldAgent,
+        id: "u-worker-2",
+        name: "Worker-2",
+        participants: [
+          {
+            agent_id: "u-worker-2",
+            channel: "csgclaw",
+            channel_user_ref: "user-worker",
+            id: "pt-worker-2",
+            type: "agent",
+          },
+        ],
+        role: "worker",
+      });
+
+    const existingWorker: AgentLike = {
+      ...oldAgent,
+      id: "u-worker-existing",
+      name: "Worker",
+      role: "worker",
+    };
+
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ agents: [oldAgent, existingWorker] }).controller,
+      {
+        wrapper: createWrapper(),
+      },
+    );
+
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+
+    await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
+
+    act(() => {
+      const draft = result.current.agentProfileModalProps?.agentDraft;
+      result.current.agentProfileModalProps?.onAgentDraftChange({
+        ...draft!,
+        from_template: "builtin.picoclaw-worker",
+        template_name: "Worker",
+        name: "Worker",
+        model_provider_id: "codex",
+        model_id: "gpt-5.5",
+      });
+    });
+
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+
+    expect(createBotRequest).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(createBotRequest).mock.calls[1]?.[0]).toEqual(expect.objectContaining({ name: "Worker-2" }));
   });
 
   it("saves a created notification avatar through the linked CSGClaw user", async () => {

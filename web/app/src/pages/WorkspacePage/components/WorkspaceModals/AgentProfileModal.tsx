@@ -109,6 +109,7 @@ export function AgentProfileModal({
 }: AgentProfileModalProps) {
   const [isEditorScrolling, setIsEditorScrolling] = useState(false);
   const editorScrollTimerRef = useRef<number | null>(null);
+  const lastTemplateIDRef = useRef("");
   const createBotKind = agentModalMode === "create" ? agentCreateBotKind : undefined;
   const isNotificationContext = isNotificationBotDraftContext(agentDraft, editingAgent, createBotKind);
   const isWorkerCreate = agentModalMode === "create" && !isNotificationContext;
@@ -168,8 +169,10 @@ export function AgentProfileModal({
     const runtimeKind = composeLegacyRuntimeKind(runtimeName, nextSandboxEnabled) || DEFAULT_RUNTIME_KIND;
     return {
       ...baseDraft,
-      avatar: baseDraft.avatar || "",
       bot_type: BOT_TYPE_NORMAL,
+      description: "",
+      envRows: [],
+      name: "",
       sandbox_enabled: nextSandboxEnabled,
       runtime_name: runtimeName,
       runtime_kind: runtimeKind,
@@ -185,6 +188,15 @@ export function AgentProfileModal({
       template_name: "",
     };
   }
+
+  useEffect(() => {
+    if (isTemplateCreate) {
+      const nextTemplateID = String(agentDraft.from_template || "").trim();
+      if (nextTemplateID) {
+        lastTemplateIDRef.current = nextTemplateID;
+      }
+    }
+  }, [agentDraft.from_template, isTemplateCreate]);
 
   function setSandboxEnabled(nextSandboxEnabled: boolean) {
     if (!isWorkerCreate) {
@@ -251,7 +263,8 @@ export function AgentProfileModal({
     onAgentCreateModeChange(nextMode);
     if (nextMode === "template") {
       const nextTemplate = normalizeTemplateSelection(
-        hubTemplates.find((item) => item.id === agentDraft.from_template) ||
+        hubTemplates.find((item) => item.id === lastTemplateIDRef.current) ||
+          hubTemplates.find((item) => item.id === agentDraft.from_template) ||
           pickDefaultAgentTemplate(hubTemplates, agentDraft.runtime_kind, bootstrapConfig) ||
           null,
       );
@@ -330,35 +343,37 @@ export function AgentProfileModal({
                     </Button>
                   </div>
                 ) : null}
-                <div className="agent-identity-layout">
-                  <div className="field agent-avatar-field">
-                    <span className="field-label">{t("agentAvatar")}</span>
-                    <AgentAvatarPicker
-                      value={agentDraft.avatar}
-                      t={t}
-                      mode="edit"
-                      onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
-                    />
+                {!isTemplateCreate ? (
+                  <div className="agent-identity-layout">
+                    <div className="field agent-avatar-field">
+                      <span className="field-label">{t("agentAvatar")}</span>
+                      <AgentAvatarPicker
+                        value={agentDraft.avatar}
+                        t={t}
+                        mode="edit"
+                        onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
+                      />
+                    </div>
+                    <label className="field agent-name-field">
+                      {requiredFieldLabel(t("agentName"))}
+                      <input
+                        value={agentDraft.name}
+                        required
+                        aria-required="true"
+                        onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}
+                        placeholder={t("agentNamePlaceholder")}
+                      />
+                    </label>
+                    <label className="field agent-description-field">
+                      <span>{t("agentDescription")}</span>
+                      <textarea
+                        className="compact-textarea"
+                        value={agentDraft.description}
+                        onInput={(event) => onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })}
+                      />
+                    </label>
                   </div>
-                  <label className="field agent-name-field">
-                    {requiredFieldLabel(t("agentName"))}
-                    <input
-                      value={agentDraft.name}
-                      required
-                      aria-required="true"
-                      onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}
-                      placeholder={t("agentNamePlaceholder")}
-                    />
-                  </label>
-                  <label className="field agent-description-field">
-                    <span>{t("agentDescription")}</span>
-                    <textarea
-                      className="compact-textarea"
-                      value={agentDraft.description}
-                      onInput={(event) => onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })}
-                    />
-                  </label>
-                </div>
+                ) : null}
               </div>
             </div>
           </section>
