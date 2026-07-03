@@ -29,6 +29,23 @@ Useful targets:
 
 Override the sandbox CLI destination with `SANDBOX_TOOLS_DIR=/path make install-sandbox-cli`.
 
+## Windows without make
+
+On Windows hosts that do not have `make`, use the PowerShell build script:
+
+```powershell
+powershell -File scripts/build.ps1 build
+powershell -File scripts/build.ps1 build-server-bin
+powershell -File scripts/build.ps1 install-sandbox-cli
+powershell -File scripts/build.ps1 test
+```
+
+The default `build` target mirrors `make build`:
+
+1. Builds the Web UI into `web/static-dist/`.
+2. Builds `bin/csgclaw.exe` and the host-platform `bin/csgclaw-cli.exe`.
+3. Builds a Linux `csgclaw-cli` into `~/.csgclaw/sandbox-tools/csgclaw-cli`.
+
 ## Runtime images
 
 Manager and worker templates have different embedded workspaces but share one image per runtime:
