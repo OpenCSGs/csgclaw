@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { AgentDetailPane, AgentRow, AgentView, NotificationParticipantDetailPane } from "@/pages/AgentPage/components";
 import { agentToDraft, type AgentDraft } from "@/models/agents";
+import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 
 const labels: Record<string, string> = {
   agentActivityTab: "Activity",
@@ -21,6 +22,7 @@ const labels: Record<string, string> = {
   agentUpgrade: "Upgrade",
   agentMoreActions: "More",
   agentProfileSectionNavLabel: "Profile sections",
+  agentProfileTab: "Profile",
   agentProfileSkillsTab: "skills",
   agentSaved: "Saved",
   agentSaveChanges: "Save changes",
@@ -78,6 +80,10 @@ const worker = {
 };
 
 describe("agent action visibility", () => {
+  beforeEach(() => {
+    window.localStorage.removeItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY);
+  });
+
   it("shows a recreate warning when backend marks an agent restart required", () => {
     const onUpgrade = vi.fn();
     render(
@@ -337,6 +343,7 @@ describe("agent action visibility", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Channels" }));
     expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
     expect(screen.getByText("Manage external channels.")).toBeInTheDocument();
     expect(document.querySelector(".agent-channel-icon img")).toHaveAttribute("src", "icons/feishu.png");
@@ -406,7 +413,8 @@ describe("agent action visibility", () => {
     expect(onDisconnectFeishu).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
   });
 
-  it("shows pending Feishu authorization without requiring a manual completion action", () => {
+  it("shows pending Feishu authorization without requiring a manual completion action", async () => {
+    const user = userEvent.setup();
     const draft = agentToDraft(worker);
     render(
       <AgentDetailPane
@@ -446,6 +454,7 @@ describe("agent action visibility", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Channels" }));
     expect(screen.getByText("Waiting")).toBeInTheDocument();
     expect(
       screen.getByText("Waiting for Feishu authorization. CSGClaw will finish automatically."),
@@ -454,7 +463,8 @@ describe("agent action visibility", () => {
     expect(screen.queryByRole("button", { name: "Complete connection" })).not.toBeInTheDocument();
   });
 
-  it("shows connected Feishu status while a reconnect authorization is pending", () => {
+  it("shows connected Feishu status while a reconnect authorization is pending", async () => {
+    const user = userEvent.setup();
     const connectedWorker = {
       ...worker,
       participants: [
@@ -507,6 +517,7 @@ describe("agent action visibility", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Channels" }));
     expect(screen.getByText("Connected")).toBeInTheDocument();
     expect(
       screen.getByText("Waiting for Feishu authorization. CSGClaw will finish automatically."),
@@ -705,7 +716,7 @@ describe("agent action visibility", () => {
     expect(descriptionInput.tagName).toBe("TEXTAREA");
   });
 
-  it("switches between the model and instructions profile tabs", async () => {
+  it("shows model settings in Profile and instructions in their own tab", async () => {
     const user = userEvent.setup();
     render(
       <AgentDetailPane
@@ -737,19 +748,19 @@ describe("agent action visibility", () => {
     );
 
     const navigation = screen.getByRole("navigation", { name: "Profile sections" });
-    await user.click(within(navigation).getByRole("button", { name: "Model" }));
+    expect(within(navigation).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-current", "location");
     expect(screen.getByText("Provider")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("reply in Chinese")).not.toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("button", { name: "Instructions" }));
+
     expect(screen.getByDisplayValue("reply in Chinese")).toBeInTheDocument();
     expect(screen.queryByText("Provider")).not.toBeInTheDocument();
   });
 
-  it("does not show the image field in the agent profile runtime section", async () => {
-    const user = userEvent.setup();
+  it("does not show the image field in the merged agent profile runtime section", () => {
     const image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8";
-    render(
+    const { container } = render(
       <AgentDetailPane
         item={{
           ...worker,
@@ -784,7 +795,7 @@ describe("agent action visibility", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Runtime environment" }));
+    expect(container.querySelector("#agent-profile-runtime")).toBeInTheDocument();
     expect(screen.queryByLabelText("Image")).not.toBeInTheDocument();
   });
 
@@ -1070,8 +1081,7 @@ describe("agent action visibility", () => {
     expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: connectedWorker.id }));
   });
 
-  it("shows advanced profile options from the advanced tab", async () => {
-    const user = userEvent.setup();
+  it("shows merged profile sections in the requested order", () => {
     const draft = agentToDraft(worker);
     const { container } = render(
       <AgentDetailPane
@@ -1092,9 +1102,20 @@ describe("agent action visibility", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-current", "location");
+    const runtimeSection = container.querySelector("#agent-profile-runtime");
+    const modelSection = container.querySelector("#agent-profile-model");
     const advancedSection = container.querySelector("#agent-profile-advanced");
+    const instructionsSection = container.querySelector("#agent-profile-instructions");
+
+    expect(runtimeSection).toBeInTheDocument();
+    expect(modelSection).toBeInTheDocument();
     expect(advancedSection).toBeInTheDocument();
+    expect(instructionsSection).not.toBeInTheDocument();
+    expect(runtimeSection?.compareDocumentPosition(modelSection as HTMLElement)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(modelSection?.compareDocumentPosition(advancedSection as HTMLElement)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     expect(within(advancedSection as HTMLElement).getByText("Advanced")).toBeInTheDocument();
     expect(within(advancedSection as HTMLElement).getByText("Request options")).toBeInTheDocument();
   });
@@ -1123,14 +1144,48 @@ describe("agent action visibility", () => {
     );
 
     const navigation = screen.getByRole("navigation", { name: "Profile sections" });
-    const modelTab = within(navigation).getByRole("button", { name: "Model" });
-    expect(within(navigation).getAllByRole("button")).toHaveLength(7);
-    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
-
-    await user.click(modelTab);
-
-    expect(modelTab).toHaveAttribute("aria-current", "location");
-    expect(screen.getByText("Provider")).toBeInTheDocument();
+    const tabs = within(navigation).getAllByRole("button");
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Profile", "Activity", "Channels", "Instructions", "skills"]);
+    expect(tabs[0]).toHaveAttribute("aria-current", "location");
+    expect(screen.getByText("Request options")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Channels" })).not.toBeInTheDocument();
+
+    await user.click(within(navigation).getByRole("button", { name: "Channels" }));
+
+    expect(within(navigation).getByRole("button", { name: "Channels" })).toHaveAttribute("aria-current", "location");
+    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
+    expect(screen.queryByText("Request options")).not.toBeInTheDocument();
+  });
+
+  it("restores the last selected profile tab after remounting", async () => {
+    const user = userEvent.setup();
+    const draft = agentToDraft(worker);
+    const props = {
+      item: worker,
+      t,
+      draft,
+      savedDraft: draft,
+      models: [],
+      authStatuses: {},
+      workspaceSupported: true,
+      onDraftChange: vi.fn(),
+      onSave: vi.fn(),
+      onStart: vi.fn(),
+      onStop: vi.fn(),
+      onRecreate: vi.fn(),
+      onDelete: vi.fn(),
+      onInvite: vi.fn(),
+      onOpenDM: vi.fn(),
+    };
+    const { unmount } = render(<AgentDetailPane {...props} />);
+
+    await user.click(screen.getByRole("button", { name: "Channels" }));
+    expect(window.localStorage.getItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY)).toBe("channels");
+    unmount();
+
+    render(<AgentDetailPane {...props} />);
+
+    expect(screen.getByRole("button", { name: "Channels" })).toHaveAttribute("aria-current", "location");
+    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
   });
 });

@@ -135,7 +135,7 @@
 }
 
 .agent-profile-section-tab:active {
-  cursor: grabbing;
+  cursor: pointer;
 }
 
 .agent-profile-section-tab:focus-visible {
@@ -156,6 +156,12 @@
 .agent-profile-scroll-spacer {
   width: var(--agent-detail-content-width);
   pointer-events: none;
+}
+
+.agent-profile-tab-panel {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
 }
 
 .agent-detail-pane .entity-toolbar .btn {

@@ -14,7 +14,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import { REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
-import { AGENT_PROFILE_TAB_ORDER_STORAGE_KEY } from "@/shared/storage/keys";
+import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   EnvKeyValueEditor,
   FieldHelpTooltip,
@@ -81,20 +81,12 @@ import { AgentActivityPanel } from "./AgentActivityPanel";
 type VoidOrPromise = void | Promise<void>;
 type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
 type AgentNoticeTone = "info" | "warning" | "success";
-type AgentProfileTabID = "activity" | "channels" | "runtime" | "model" | "instructions" | "skills" | "advanced";
+const AGENT_PROFILE_TAB_IDS = ["profile", "activity", "channels", "instructions", "skills"] as const;
+type AgentProfileTabID = (typeof AGENT_PROFILE_TAB_IDS)[number];
 type UpdateAgentDraft = (patch: Partial<AgentDraft>) => void;
 type RuntimeOptionSchemaList = ReturnType<typeof runtimeOptionSchemasForAgent>;
 type ModelProviderSelectOption = ReturnType<typeof modelProviderSelectOptionsFromCatalog>[number];
-
-const DEFAULT_AGENT_PROFILE_TAB_ORDER: AgentProfileTabID[] = [
-  "activity",
-  "channels",
-  "runtime",
-  "model",
-  "instructions",
-  "skills",
-  "advanced",
-];
+const DEFAULT_AGENT_PROFILE_TAB_ID: AgentProfileTabID = "profile";
 
 type FeishuPendingRegistrationView = {
   connect_url?: string;
@@ -212,9 +204,7 @@ export function AgentDetailPane({
 }: AgentDetailPaneProps) {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [activeProfileTab, setActiveProfileTab] = useState<AgentProfileTabID>("channels");
-  const [profileTabOrder, setProfileTabOrder] = useState<AgentProfileTabID[]>(() => readAgentProfileTabOrder());
-  const [draggingProfileTab, setDraggingProfileTab] = useState<AgentProfileTabID | null>(null);
+  const [activeProfileTab, setActiveProfileTab] = useState<AgentProfileTabID>(() => readAgentProfileActiveTab());
   const [addSkillsDialogOpen, setAddSkillsDialogOpen] = useState(false);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
@@ -265,41 +255,18 @@ export function AgentDetailPane({
     () =>
       draft
         ? [
+            { id: "profile" as const, label: t("agentProfileTab") },
             { id: "activity" as const, label: t("agentActivityTab") },
             ...(!isNotificationBotAgent(item) ? [{ id: "channels" as const, label: t("agentChannelsTitle") }] : []),
-            { id: "runtime" as const, label: t("profileRuntimeSection") },
-            {
-              id: "model" as const,
-              label: isNotifierDraft ? t("profileNotifierSection") : t("profileModelSection"),
-            },
             ...(!isNotifierDraft ? [{ id: "instructions" as const, label: t("agentInstructions") }] : []),
             ...(workspaceSupported ? [{ id: "skills" as const, label: t("agentProfileSkillsTab") }] : []),
-            { id: "advanced" as const, label: t("profileAdvanced") },
           ]
         : [],
     [draft, isNotifierDraft, item, t, workspaceSupported],
   );
-  const orderedProfileTabs = useMemo(
-    () => orderProfileTabs(profileTabs, profileTabOrder),
-    [profileTabs, profileTabOrder],
-  );
-  const visibleActiveProfileTab = orderedProfileTabs.some((tab) => tab.id === activeProfileTab)
+  const visibleActiveProfileTab = profileTabs.some((tab) => tab.id === activeProfileTab)
     ? activeProfileTab
-    : orderedProfileTabs[0]?.id;
-
-  function moveProfileTab(targetID: AgentProfileTabID): void {
-    if (!draggingProfileTab || draggingProfileTab === targetID) {
-      return;
-    }
-    const nextOrder = moveProfileTabID(
-      profileTabOrder,
-      orderedProfileTabs.map((tab) => tab.id),
-      draggingProfileTab,
-      targetID,
-    );
-    setProfileTabOrder(nextOrder);
-    saveAgentProfileTabOrder(nextOrder);
-  }
+    : profileTabs[0]?.id;
 
   useEffect(() => {
     if (!draft) {
@@ -335,12 +302,6 @@ export function AgentDetailPane({
     }
   }, [addSkillsDialogOpen]);
 
-  useEffect(() => {
-    if (visibleActiveProfileTab && activeProfileTab !== visibleActiveProfileTab) {
-      setActiveProfileTab(visibleActiveProfileTab);
-    }
-  }, [activeProfileTab, visibleActiveProfileTab]);
-
   async function handleAddSkillsConfirm(): Promise<void> {
     if (!selectedSkillNames.length) {
       return;
@@ -360,6 +321,11 @@ export function AgentDetailPane({
       setDeleteSkillDialogOpen(false);
       setSkillPendingDelete(null);
     }
+  }
+
+  function selectProfileTab(tabID: AgentProfileTabID): void {
+    setActiveProfileTab(tabID);
+    saveAgentProfileActiveTab(tabID);
   }
 
   return (
@@ -538,34 +504,18 @@ export function AgentDetailPane({
             {notice}
           </div>
         ) : null}
-        {orderedProfileTabs.length ? (
+        {profileTabs.length ? (
           <nav className="agent-profile-section-nav" aria-label={t("agentProfileSectionNavLabel")}>
-            {orderedProfileTabs.map((section) => {
+            {profileTabs.map((section) => {
               const active = section.id === visibleActiveProfileTab;
               return (
                 <button
                   key={section.id}
                   type="button"
                   className={`agent-profile-section-tab ${active ? "active" : ""}`.trim()}
-                  draggable
                   aria-current={active ? "location" : undefined}
                   aria-controls={`agent-profile-${section.id}`}
-                  onClick={() => setActiveProfileTab(section.id)}
-                  onDragStart={(event) => {
-                    setDraggingProfileTab(section.id);
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData("text/plain", section.id);
-                  }}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    moveProfileTab(section.id);
-                    setDraggingProfileTab(null);
-                  }}
-                  onDragEnd={() => setDraggingProfileTab(null)}
+                  onClick={() => selectProfileTab(section.id)}
                 >
                   {section.label}
                 </button>
@@ -607,6 +557,41 @@ export function AgentDetailPane({
         ) : null}
         {draft ? (
           <div className="profile-editor-shell agent-page-editor">
+            {visibleActiveProfileTab === "profile" ? (
+              <div id="agent-profile-profile" className="agent-profile-tab-panel">
+                <AgentRuntimePanel
+                  draft={draft}
+                  item={item}
+                  locale={locale}
+                  runtimeKind={runtimeKind}
+                  runtimeOptionSchemas={runtimeOptionSchemas}
+                  t={t}
+                  onDraftChange={onDraftChange}
+                />
+                {!isNotifierDraft ? (
+                  <AgentModelPanel
+                    draft={draft}
+                    modelBusy={modelBusy}
+                    modelError={modelError}
+                    providerOptions={providerOptions}
+                    selectedModelValue={selectedModelValue}
+                    selectedProviderID={selectedProviderID}
+                    selectedProviderModels={selectedProviderModels}
+                    t={t}
+                    updateDraft={updateDraft}
+                  />
+                ) : (
+                  <AgentNotifierPanel
+                    draft={draft}
+                    item={item}
+                    notifierWebhookPublicOrigin={notifierWebhookPublicOrigin}
+                    t={t}
+                    updateDraft={updateDraft}
+                  />
+                )}
+                <AgentAdvancedPanel draft={draft} item={item} t={t} updateDraft={updateDraft} />
+              </div>
+            ) : null}
             {visibleActiveProfileTab === "activity" ? (
               <AgentActivityPanel item={item} locale={locale} rooms={rooms} t={t} />
             ) : null}
@@ -620,42 +605,8 @@ export function AgentDetailPane({
                 onDisconnectFeishu={onDisconnectFeishu}
               />
             ) : null}
-            {visibleActiveProfileTab === "runtime" ? (
-              <AgentRuntimePanel
-                draft={draft}
-                item={item}
-                locale={locale}
-                runtimeKind={runtimeKind}
-                runtimeOptionSchemas={runtimeOptionSchemas}
-                t={t}
-                onDraftChange={onDraftChange}
-              />
-            ) : null}
 
-            {visibleActiveProfileTab === "model" && !isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-              <AgentModelPanel
-                draft={draft}
-                modelBusy={modelBusy}
-                modelError={modelError}
-                providerOptions={providerOptions}
-                selectedModelValue={selectedModelValue}
-                selectedProviderID={selectedProviderID}
-                selectedProviderModels={selectedProviderModels}
-                t={t}
-                updateDraft={updateDraft}
-              />
-            ) : null}
-            {visibleActiveProfileTab === "model" && isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-              <AgentNotifierPanel
-                draft={draft}
-                item={item}
-                notifierWebhookPublicOrigin={notifierWebhookPublicOrigin}
-                t={t}
-                updateDraft={updateDraft}
-              />
-            ) : null}
-
-            {visibleActiveProfileTab === "instructions" && !isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
+            {visibleActiveProfileTab === "instructions" && !isNotifierDraft ? (
               <AgentInstructionsPanel draft={draft} t={t} updateDraft={updateDraft} />
             ) : null}
 
@@ -676,10 +627,6 @@ export function AgentDetailPane({
                   setDeleteSkillDialogOpen(true);
                 }}
               />
-            ) : null}
-
-            {visibleActiveProfileTab === "advanced" ? (
-              <AgentAdvancedPanel draft={draft} item={item} t={t} updateDraft={updateDraft} />
             ) : null}
           </div>
         ) : null}
@@ -801,83 +748,31 @@ export function AgentDetailPane({
   );
 }
 
-function readAgentProfileTabOrder(): AgentProfileTabID[] {
+function readAgentProfileActiveTab(): AgentProfileTabID {
   if (typeof window === "undefined") {
-    return DEFAULT_AGENT_PROFILE_TAB_ORDER;
+    return DEFAULT_AGENT_PROFILE_TAB_ID;
   }
   try {
-    const raw = window.localStorage.getItem(AGENT_PROFILE_TAB_ORDER_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    if (!Array.isArray(parsed)) {
-      return DEFAULT_AGENT_PROFILE_TAB_ORDER;
-    }
-    return normalizeAgentProfileTabOrder(parsed);
+    const raw = window.localStorage.getItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY);
+    return isAgentProfileTabID(raw) ? raw : DEFAULT_AGENT_PROFILE_TAB_ID;
   } catch {
-    return DEFAULT_AGENT_PROFILE_TAB_ORDER;
+    return DEFAULT_AGENT_PROFILE_TAB_ID;
   }
 }
 
-function saveAgentProfileTabOrder(order: readonly AgentProfileTabID[]): void {
+function saveAgentProfileActiveTab(tabID: AgentProfileTabID): void {
   if (typeof window === "undefined") {
     return;
   }
   try {
-    window.localStorage.setItem(
-      AGENT_PROFILE_TAB_ORDER_STORAGE_KEY,
-      JSON.stringify(normalizeAgentProfileTabOrder(order)),
-    );
+    window.localStorage.setItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY, tabID);
   } catch {
-    // Tab order persistence is best-effort.
+    // Active tab persistence is best-effort.
   }
-}
-
-function normalizeAgentProfileTabOrder(values: readonly unknown[]): AgentProfileTabID[] {
-  const out: AgentProfileTabID[] = [];
-  values.forEach((value) => {
-    if (isAgentProfileTabID(value) && !out.includes(value)) {
-      out.push(value);
-    }
-  });
-  DEFAULT_AGENT_PROFILE_TAB_ORDER.forEach((id) => {
-    if (!out.includes(id)) {
-      out.push(id);
-    }
-  });
-  return out;
 }
 
 function isAgentProfileTabID(value: unknown): value is AgentProfileTabID {
-  return DEFAULT_AGENT_PROFILE_TAB_ORDER.includes(value as AgentProfileTabID);
-}
-
-function orderProfileTabs<T extends { id: AgentProfileTabID }>(
-  tabs: readonly T[],
-  order: readonly AgentProfileTabID[],
-): T[] {
-  const normalizedOrder = normalizeAgentProfileTabOrder(order);
-  const orderIndex = new Map(normalizedOrder.map((id, index) => [id, index]));
-  return [...tabs].sort((left, right) => (orderIndex.get(left.id) ?? 0) - (orderIndex.get(right.id) ?? 0));
-}
-
-function moveProfileTabID(
-  currentOrder: readonly AgentProfileTabID[],
-  visibleIDs: readonly AgentProfileTabID[],
-  movingID: AgentProfileTabID,
-  targetID: AgentProfileTabID,
-): AgentProfileTabID[] {
-  const visibleOrder = normalizeAgentProfileTabOrder(currentOrder).filter((id) => visibleIDs.includes(id));
-  const fromIndex = visibleOrder.indexOf(movingID);
-  const toIndex = visibleOrder.indexOf(targetID);
-  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-    return normalizeAgentProfileTabOrder(currentOrder);
-  }
-  const nextVisibleOrder = [...visibleOrder];
-  const [moved] = nextVisibleOrder.splice(fromIndex, 1);
-  nextVisibleOrder.splice(toIndex, 0, moved);
-  return normalizeAgentProfileTabOrder([
-    ...nextVisibleOrder,
-    ...normalizeAgentProfileTabOrder(currentOrder).filter((id) => !nextVisibleOrder.includes(id)),
-  ]);
+  return AGENT_PROFILE_TAB_IDS.includes(value as AgentProfileTabID);
 }
 
 type AgentRuntimePanelProps = {
