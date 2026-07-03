@@ -7576,8 +7576,8 @@ func TestGatewayProvisionRequestBuildsOpenClawWorkerAssets(t *testing.T) {
 	if !strings.Contains(cfgText, `"security": "full"`) || !strings.Contains(cfgText, `"ask": "off"`) {
 		t.Fatalf("openclaw config should disable exec approval prompts (tools.exec security=full ask=off), got:\n%s", cfgText)
 	}
-	if !strings.Contains(cfgText, `"verboseDefault": "full"`) {
-		t.Fatalf("openclaw config should set agents.defaults.verboseDefault to full for tool stream visibility, got:\n%s", cfgText)
+	if !strings.Contains(cfgText, `"verboseDefault": "on"`) {
+		t.Fatalf("openclaw config should set agents.defaults.verboseDefault to on for compact default channel activity, got:\n%s", cfgText)
 	}
 	approvalsRaw, err := os.ReadFile(filepath.Join(wantOpenClawRoot, openclawsandbox.HostExecApproval))
 	if err != nil {

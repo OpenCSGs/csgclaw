@@ -80,7 +80,7 @@ func TestRenderAgentOpenClawConfigUsesBridgeForMinimaxBaseURL(t *testing.T) {
 	if _, ok := defaults["thinkingDefault"]; ok {
 		t.Fatalf("thinkingDefault should be omitted for non-reasoning OpenAI-compatible bridge model: %#v", defaults["thinkingDefault"])
 	}
-	if got, want := defaults["verboseDefault"], "full"; got != want {
+	if got, want := defaults["verboseDefault"], "on"; got != want {
 		t.Fatalf("verboseDefault = %v, want %v", got, want)
 	}
 	if runtime.GOOS == "windows" {
@@ -142,7 +142,7 @@ func TestRenderAgentOpenClawConfigUsesBridgeForInfiniMaaS(t *testing.T) {
 	if got, want := model["primary"], "csgclaw-llm/minimax-m2.5"; got != want {
 		t.Fatalf("primary model = %v, want %v", got, want)
 	}
-	if got, want := defaults["verboseDefault"], "full"; got != want {
+	if got, want := defaults["verboseDefault"], "on"; got != want {
 		t.Fatalf("verboseDefault = %v, want %v", got, want)
 	}
 	text := string(data)

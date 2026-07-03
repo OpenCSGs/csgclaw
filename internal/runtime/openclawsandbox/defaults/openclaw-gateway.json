@@ -50,7 +50,7 @@
       "subagents": {
         "maxConcurrent": 8
       },
-      "verboseDefault": "full"
+      "verboseDefault": "on"
     }
   },
   "tools": {
