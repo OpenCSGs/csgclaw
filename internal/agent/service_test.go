@@ -17,6 +17,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/codexsandbox"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/runtime/sandboxgateway"
@@ -177,6 +178,13 @@ func (f fakeAgentRuntime) Layout(agentHome string) agentruntime.Layout {
 			WorkspaceRoot: filepath.Join(agentHome, ".codex", "workspace"),
 			SkillsRoot:    filepath.Join(agentHome, ".codex", "home", "skills"),
 			HostLogPaths:  []string{filepath.Join(agentHome, ".codex", "home", "stderr.log")},
+		}
+	case RuntimeKindCodexSandbox:
+		workspace := filepath.Join(codexsandbox.Root(agentHome), codexsandbox.HostWorkspaceDir)
+		return agentruntime.Layout{
+			WorkspaceRoot: workspace,
+			SkillsRoot:    filepath.Join(workspace, "skills"),
+			HostLogPaths:  []string{codexsandbox.HostGatewayLogPath(agentHome)},
 		}
 	default:
 		return agentruntime.Layout{}
@@ -728,6 +736,63 @@ func TestCreateWorkerUsesCodexRuntimeWhenRequested(t *testing.T) {
 	}
 	if rt := svc.runtimeRecords[got.RuntimeID]; rt.Kind != RuntimeKindCodex {
 		t.Fatalf("runtime record kind = %q, want %q", rt.Kind, RuntimeKindCodex)
+	}
+}
+
+func TestCreateWorkerUsesCodexSandboxRuntimeFromSplitFields(t *testing.T) {
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		}, "manager-image:test", "",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodexSandbox,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				if spec.AgentID != "agent-alice" {
+					t.Fatalf("Create() agent id = %q, want %q", spec.AgentID, "agent-alice")
+				}
+				if spec.AgentName != "alice" {
+					t.Fatalf("Create() agent name = %q, want %q", spec.AgentName, "alice")
+				}
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-sandbox-alice"}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID:             "u-alice",
+		Name:           "alice",
+		RuntimeName:    RuntimeNameCodex,
+		SandboxEnabled: true,
+		Image:          "codex-sandbox:test",
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
+	}
+	if got.RuntimeKind != RuntimeKindCodexSandbox {
+		t.Fatalf("CreateWorker().RuntimeKind = %q, want %q", got.RuntimeKind, RuntimeKindCodexSandbox)
+	}
+	if got.RuntimeName != RuntimeNameCodex || !got.SandboxEnabled {
+		t.Fatalf("CreateWorker() runtime = %q/%t, want %q/true", got.RuntimeName, got.SandboxEnabled, RuntimeNameCodex)
+	}
+	if got.BoxID != "codex-sandbox-alice" {
+		t.Fatalf("CreateWorker().BoxID = %q, want %q", got.BoxID, "codex-sandbox-alice")
+	}
+	if rt := svc.runtimeRecords[got.RuntimeID]; rt.Kind != RuntimeKindCodexSandbox {
+		t.Fatalf("runtime record kind = %q, want %q", rt.Kind, RuntimeKindCodexSandbox)
 	}
 }
 
@@ -7674,6 +7739,29 @@ func TestGatewayProvisionRequestBuildsOpenClawWorkerAssets(t *testing.T) {
 	}
 }
 
+func TestGatewayProvisionRequestRejectsCodexSandboxManager(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "shared-token"},
+		"manager-image:test",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.gatewayProvisionRequest(RuntimeKindCodexSandbox, ManagerName, ManagerUserID)
+	if err == nil {
+		t.Fatal("gatewayProvisionRequest() error = nil, want codex_sandbox manager rejection")
+	}
+	if !strings.Contains(err.Error(), "supports worker templates only") {
+		t.Fatalf("gatewayProvisionRequest() error = %v, want worker-only message", err)
+	}
+}
+
 func TestGatewayProvisionRequestUsesDockerHostAliasForImplicitAdvertiseURL(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -7798,6 +7886,13 @@ func testBuiltinLayout(agentName, runtimeKind string) (agentruntime.Layout, erro
 			WorkspaceRoot: workspace,
 			SkillsRoot:    filepath.Join(workspace, "skills"),
 			HostLogPaths:  []string{openclawsandbox.HostGatewayLogPath(agentHome)},
+		}, nil
+	case RuntimeKindCodexSandbox:
+		workspace := filepath.Join(codexsandbox.Root(agentHome), codexsandbox.HostWorkspaceDir)
+		return agentruntime.Layout{
+			WorkspaceRoot: workspace,
+			SkillsRoot:    filepath.Join(workspace, "skills"),
+			HostLogPaths:  []string{codexsandbox.HostGatewayLogPath(agentHome)},
 		}, nil
 	case RuntimeKindCodex:
 		return agentruntime.Layout{
@@ -8336,6 +8431,128 @@ func TestGatewayProfileRuntimeRestartNotRequiredForCodex(t *testing.T) {
 	}, "alice", "")
 	if gatewayProfileRuntimeRestartRequired(current, next) {
 		t.Fatal("gatewayProfileRuntimeRestartRequired() = true, want false for codex runtime")
+	}
+}
+
+func TestGatewayProfileRuntimeRestartNotRequiredForCodexSandbox(t *testing.T) {
+	current := Agent{
+		RuntimeKind: RuntimeKindCodexSandbox,
+		Name:        "alice",
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "gpt-5.4",
+			ProfileComplete: true,
+		},
+	}
+	next := normalizeProfile(AgentProfile{
+		Name:            "alice",
+		Provider:        ProviderAPI,
+		BaseURL:         "https://api.example/v1",
+		APIKey:          "api-key",
+		ModelID:         "gpt-5.5",
+		ProfileComplete: true,
+	}, "alice", "")
+	if gatewayProfileRuntimeRestartRequired(current, next) {
+		t.Fatal("gatewayProfileRuntimeRestartRequired() = true, want false because codex_sandbox handles host config sync before recreate")
+	}
+}
+
+func TestUpdateAgentProfileCodexSandboxSyncsHostConfigBeforeRecreate(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	rt := &fakeRuntime{}
+	recreateCalled := false
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil },
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _, _, _ string, profile AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			recreateCalled = true
+			if profile.ModelProviderID != ModelProviderIDOpenCSG || profile.ModelID != "qwen3.6-plus" {
+				t.Fatalf("recreate profile = %+v, want opencsg qwen3.6-plus", profile)
+			}
+			return nil, sandbox.Info{}, fmt.Errorf("sandbox exited before ready")
+		},
+	)
+	defer ResetTestHooks()
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{
+		ListenAddr:       ":18080",
+		AdvertiseBaseURL: "http://127.0.0.1:18080",
+		AccessToken:      "token",
+	}, "manager-image:test", "", WithRuntime(fakeAgentRuntime{
+		kind: RuntimeKindCodexSandbox,
+		validate: func(_ context.Context, current agentruntime.RuntimeConfigSnapshot) error {
+			if current.Profile.ModelID != "qwen3.6-plus" {
+				t.Fatalf("ValidateConfig() model = %q, want qwen3.6-plus", current.Profile.ModelID)
+			}
+			return nil
+		},
+		restart: func(change agentruntime.RuntimeConfigChange) (bool, error) {
+			return change.Previous.Profile.ModelID != change.Current.Profile.ModelID, nil
+		},
+		info: func(context.Context, agentruntime.Handle) (agentruntime.Info, error) {
+			return agentruntime.Info{
+				HandleID: "box-alice",
+				State:    agentruntime.StateRunning,
+			}, nil
+		},
+	}))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	agentID := "agent-alice"
+	svc.agents[agentID] = Agent{
+		ID:          agentID,
+		Name:        "alice",
+		Role:        RoleWorker,
+		RuntimeID:   runtimeIDForAgentID(agentID),
+		RuntimeKind: RuntimeKindCodexSandbox,
+		BoxID:       "box-alice",
+		Status:      string(sandbox.StateRunning),
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderCSGHub,
+			ModelProviderID: ModelProviderIDOpenCSG,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	_, err = svc.UpdateAgentProfile(agentID, AgentProfile{
+		Name:            "alice",
+		ModelProviderID: ModelProviderIDOpenCSG,
+		ModelID:         "qwen3.6-plus",
+		ProfileComplete: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "sandbox exited before ready") {
+		t.Fatalf("UpdateAgentProfile() error = %v, want sandbox startup failure", err)
+	}
+	if !recreateCalled {
+		t.Fatal("UpdateAgentProfile() did not attempt codex_sandbox recreate")
+	}
+
+	agentHome, err := agentHomeDir(agentID)
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
+	configPath := filepath.Join(agentHome, codexsandbox.HostDir, codexsandbox.HostCodexHomeDir, "config.toml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(codex config) error = %v", err)
+	}
+	if !strings.Contains(string(data), `model = "qwen3.6-plus"`) {
+		t.Fatalf("codex config missing updated model:\n%s", data)
+	}
+	got, ok := svc.Agent(agentID)
+	if !ok {
+		t.Fatal("Agent() ok = false, want true")
+	}
+	if !got.AgentProfile.EnvRestartRequired {
+		t.Fatal("Agent().AgentProfile.EnvRestartRequired = false, want true after failed recreate")
 	}
 }
 

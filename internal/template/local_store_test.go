@@ -197,17 +197,26 @@ func TestLocalStorePublishAllowsMissingWorkspace(t *testing.T) {
 }
 
 func TestLocalStorePublishRequiresImageForGatewayRuntime(t *testing.T) {
-	store := NewLocalStore(t.TempDir())
-	workspaceRoot := writeWorkspaceFile(t, "workspace", "AGENTS.md", "agent")
+	tests := []string{
+		runtime.KindPicoClawSandbox,
+		runtime.KindCodexSandbox,
+	}
+	for _, runtimeKind := range tests {
+		t.Run(runtimeKind, func(t *testing.T) {
+			store := NewLocalStore(t.TempDir())
+			workspaceRoot := writeWorkspaceFile(t, "workspace", "AGENTS.md", "agent")
 
-	_, err := store.Publish(context.Background(), PublishSpec{
-		Name:         "gateway-worker",
-		Role:         TemplateRoleWorker,
-		RuntimeKind:  runtime.NamePicoClaw,
-		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
-	})
-	if err == nil || err.Error() != `image.ref is required for runtime_kind "picoclaw"` {
-		t.Fatalf("Publish() error = %v, want missing image error", err)
+			_, err := store.Publish(context.Background(), PublishSpec{
+				Name:         "gateway-worker",
+				Role:         TemplateRoleWorker,
+				RuntimeKind:  runtimeKind,
+				WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
+			})
+			wantErr := `image.ref is required for runtime_kind "` + normalizeTemplateRuntimeKind(runtimeKind) + `"`
+			if err == nil || err.Error() != wantErr {
+				t.Fatalf("Publish() error = %v, want missing image error %q", err, wantErr)
+			}
+		})
 	}
 }
 

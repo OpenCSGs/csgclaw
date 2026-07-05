@@ -71,6 +71,7 @@ func (c BootstrapConfig) ResolvedDefaultWorkerTemplate() string {
 const (
 	RuntimeKindPicoClawSandbox = "picoclaw_sandbox"
 	RuntimeKindOpenClawSandbox = "openclaw_sandbox"
+	RuntimeKindCodexSandbox    = "codex_sandbox"
 )
 
 func (b BootstrapConfig) Validate() error {

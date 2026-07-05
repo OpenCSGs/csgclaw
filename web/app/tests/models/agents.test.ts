@@ -221,8 +221,24 @@ describe("agent model helpers", () => {
       runtime_name: "openclaw",
       sandbox_enabled: true,
     });
+    expect(runtimeConfigFromSelection({ runtime_kind: "codex_sandbox" })).toEqual({
+      name: "codex",
+      sandboxed: true,
+    });
+    expect(resolveRuntimeSelection({ runtime_kind: "codex_sandbox" })).toEqual({
+      runtime_kind: "codex_sandbox",
+      runtime_name: "codex",
+      sandbox_enabled: true,
+    });
+    expect(resolveRuntimeSelection({ runtime_name: "codex", sandbox_enabled: true })).toEqual({
+      runtime_kind: "codex_sandbox",
+      runtime_name: "codex",
+      sandbox_enabled: true,
+    });
     expect(agentRuntimeName({ runtime_kind: "codex" })).toBe("codex");
     expect(agentSandboxEnabled({ runtime_kind: "codex" })).toBe(false);
+    expect(agentRuntimeName({ runtime_kind: "codex_sandbox" })).toBe("codex");
+    expect(agentSandboxEnabled({ runtime_kind: "codex_sandbox" })).toBe(true);
   });
 
   it("keeps runtime fields in sync when applying a worker template", () => {
@@ -248,6 +264,33 @@ describe("agent model helpers", () => {
     expect(draft).toMatchObject({
       runtime_kind: "openclaw_sandbox",
       runtime_name: "openclaw",
+      sandbox_enabled: true,
+    });
+
+    const codexSandboxDraft = applyTemplateToDraft(
+      {
+        ...agentToDraft({
+          runtime_kind: "picoclaw_sandbox",
+          runtime_name: "picoclaw",
+          sandbox_enabled: true,
+          role: "worker",
+        }),
+        default_image: "worker:default",
+      },
+      {
+        id: "builtin.codex-sandbox-worker",
+        runtime_kind: "codex_sandbox",
+        role: "worker",
+        image: "codex-sandbox:test",
+      },
+      null,
+      "worker:default",
+    );
+
+    expect(codexSandboxDraft).toMatchObject({
+      image: "codex-sandbox:test",
+      runtime_kind: "codex_sandbox",
+      runtime_name: "codex",
       sandbox_enabled: true,
     });
   });

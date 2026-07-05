@@ -282,6 +282,7 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 		Instructions   string          `json:"instructions,omitempty"`
 		Image          string          `json:"image,omitempty"`
 		Avatar         string          `json:"-"`
+		RuntimeKind    string          `json:"runtime_kind,omitempty"`
 		RuntimeName    string          `json:"runtime_name,omitempty"`
 		SandboxEnabled *bool           `json:"sandbox_enabled,omitempty"`
 		Runtime        *runtimeJSON    `json:"runtime,omitempty"`
@@ -305,6 +306,7 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 		Description:    decoded.Description,
 		Instructions:   decoded.Instructions,
 		Image:          decoded.Image,
+		RuntimeKind:    strings.TrimSpace(decoded.RuntimeKind),
 		RuntimeName:    decoded.RuntimeName,
 		FromTemplate:   decoded.FromTemplate,
 		Role:           decoded.Role,

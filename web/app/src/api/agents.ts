@@ -280,6 +280,7 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
         description: payload.description,
         instructions: payload.instructions,
         image: payload.image,
+        runtime_kind: runtimeSelection.runtime_kind,
         runtime: {
           name: runtimeSelection.runtime_name,
           sandbox_enabled: runtimeSelection.sandbox_enabled,

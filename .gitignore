@@ -29,6 +29,10 @@ web/static-dist/*
 # Local runtime data
 manager-data/
 docker/
+!docker/
+docker/*
+!docker/codex-sandbox/
+!docker/codex-sandbox/Dockerfile
 
 # Generated embedded runtime workspaces
 /internal/agent/embed/

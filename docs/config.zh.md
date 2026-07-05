@@ -105,10 +105,10 @@ provider = "boxlite"
 
 Codex 和 Claude Code Profile 通过 Web UI 写入 agent state。CSGClaw 在 `serve` 时会嵌入启动 CLIProxyAPI，并绑定到私有 localhost 端口，因此不再需要配置固定的 CLIProxy base URL。
 
-Worker 在创建时也可以显式选择 runtime kind。默认值是 `picoclaw_sandbox`。如果要创建 sandbox 里的 OpenClaw worker，可以使用 `csgclaw agent create --runtime openclaw_sandbox ...`；如果要创建 Codex worker，可以使用 `csgclaw agent create --runtime codex ...`。API 在 `POST /api/v1/agents` 的 `runtime_kind` 中接受同样的值。
+Worker 在创建时也可以显式选择 runtime kind。默认值是 `picoclaw_sandbox`。如果要创建 sandbox 里的 OpenClaw worker，可以使用 `csgclaw agent create --runtime openclaw_sandbox ...`；如果要创建 sandbox 里的 Codex worker，可以使用 `csgclaw agent create --runtime codex_sandbox ...`；如果要创建宿主机本地 Codex worker，可以使用 `csgclaw agent create --runtime codex ...`。API 在 `POST /api/v1/agents` 的 `runtime_kind` 中接受同样的值。
 
 `[bootstrap].manager_image_override` 留空时会使用代码内置的默认 manager image；只有在需要覆盖默认值时才设置它。
-bootstrap manager 当前固定使用 `picoclaw_sandbox`；`openclaw_sandbox` 支持用于 worker，不支持作为 manager runtime。
+bootstrap manager 当前固定使用 `picoclaw_sandbox`；`openclaw_sandbox` 和 `codex_sandbox` 支持用于 worker，不支持作为 manager runtime。
 
 本地鉴权由 CSGClaw 统一管理：
 

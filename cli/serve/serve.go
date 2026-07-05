@@ -697,6 +697,7 @@ func configureFeishuService(feishuSvc *feishu.Service, svc *agent.Service) {
 	}
 	runtimewiring.UpdatePicoClawFeishuProvider(svc, provider)
 	runtimewiring.UpdateOpenClawFeishuProvider(svc, provider)
+	runtimewiring.UpdateCodexSandboxFeishuProvider(svc, provider)
 }
 
 func preflightDefaultModelProvider(ctx context.Context, cfg config.Config) error {
@@ -988,6 +989,7 @@ func newAgentService(cfg config.Config, feishuProvider feishu.AgentCredentialPro
 	opts = append(opts,
 		runtimewiring.WithPicoClawSandboxRuntime(feishuProvider),
 		runtimewiring.WithOpenClawSandboxRuntime(feishuProvider),
+		runtimewiring.WithCodexSandboxRuntime(feishuProvider),
 		runtimewiring.WithCodexRuntime(),
 		agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),

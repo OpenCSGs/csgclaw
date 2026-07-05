@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { batchAddAgentSkillsRequest, deleteAgentSkillRequest, startFeishuRegistrationRequest } from "@/api/agents";
+import {
+  batchAddAgentSkillsRequest,
+  createBotRequest,
+  deleteAgentSkillRequest,
+  startFeishuRegistrationRequest,
+} from "@/api/agents";
 
 function mockFetch(): Mock<typeof fetch> {
   const fetchMock = vi.fn<typeof fetch>(async () => new Response("", { status: 200 }));
@@ -36,6 +41,48 @@ describe("agents API", () => {
       "api/v1/agents/u-manager/skills/alpha",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+
+  it("posts codex sandbox runtime kind when creating an agent participant", async () => {
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: "agent-codex-sandbox",
+            name: "Codex Sandbox",
+            lifecycle_status: "active",
+            type: "agent",
+          }),
+          { status: 201 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createBotRequest({
+      name: "Codex Sandbox",
+      role: "worker",
+      runtime_kind: "codex_sandbox",
+      runtime_name: "codex",
+      sandbox_enabled: true,
+      image: "codex-sandbox:test",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/channels/csgclaw/participants",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.agent_binding.agent).toMatchObject({
+      runtime_kind: "codex_sandbox",
+      runtime_name: "codex",
+      sandbox_enabled: true,
+      runtime: {
+        name: "codex",
+        sandbox_enabled: true,
+      },
+    });
   });
 
   it("returns the active pending Feishu registration when create reports a conflict", async () => {

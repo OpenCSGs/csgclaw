@@ -34,6 +34,11 @@ func workspaceTemplateForAgent(name, botID string) (string, error) {
 }
 
 func resolveRuntimeTemplateRoot(runtimeKind, role string) (string, error) {
+	runtimeKind = strings.TrimSpace(runtimeKind)
+	role = strings.TrimSpace(role)
+	if runtimeKind == RuntimeKindCodexSandbox && strings.EqualFold(role, RoleManager) {
+		return "", fmt.Errorf("runtime_kind %q supports worker templates only; use %q or %q for manager", runtimeKind, RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox)
+	}
 	return templateembed.Resolve(runtimeKind, role)
 }
 

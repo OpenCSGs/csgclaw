@@ -103,7 +103,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	description := fs.String("description", "", "agent description")
 	image := fs.String("image", "", "agent image")
 	profile := fs.String("profile", "", "agent llm profile")
-	runtimeKind := fs.String("runtime", "", "agent runtime kind (for example: picoclaw_sandbox, openclaw_sandbox, codex)")
+	runtimeKind := fs.String("runtime", "", "agent runtime kind (for example: picoclaw_sandbox, openclaw_sandbox, codex_sandbox, codex)")
 	fromTemplate := fs.String("from-template", "", "hub template to use as creation defaults and workspace overlay")
 	fs.Usage = func() {
 		fmt.Fprintln(run.Stderr, "Create an agent.")
@@ -120,7 +120,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		fmt.Fprintln(run.Stderr, "  --description string    agent description")
 		fmt.Fprintln(run.Stderr, "  --image string          agent image")
 		fmt.Fprintln(run.Stderr, "  --profile string        agent llm profile")
-		fmt.Fprintln(run.Stderr, "  --runtime string        agent runtime kind (for example: picoclaw_sandbox, openclaw_sandbox, codex)")
+		fmt.Fprintln(run.Stderr, "  --runtime string        agent runtime kind (for example: picoclaw_sandbox, openclaw_sandbox, codex_sandbox, codex)")
 		fmt.Fprintln(run.Stderr, "  --from-template string  hub template to use as creation defaults and workspace overlay")
 	}
 	if err := fs.Parse(args); err != nil {

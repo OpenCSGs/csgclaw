@@ -47,7 +47,7 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 			"agent": {
 				"name": "QA-Display-Name",
 				"role": "worker",
-				"runtime_kind": "picoclaw_sandbox",
+				"runtime_kind": "openclaw_sandbox",
 				"image": "agent-image:test",
 				"avatar": "avatar/3D-5.png"
 			}
@@ -78,6 +78,9 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	if createdAgent.Avatar != "" {
 		t.Fatalf("agent avatar = %q, want empty", createdAgent.Avatar)
 	}
+	if createdAgent.RuntimeKind != agent.RuntimeKindOpenClawSandbox || createdAgent.RuntimeName != agent.RuntimeNameOpenClaw || !createdAgent.SandboxEnabled {
+		t.Fatalf("agent runtime = %q/%q/%t, want %q/%q/true", createdAgent.RuntimeKind, createdAgent.RuntimeName, createdAgent.SandboxEnabled, agent.RuntimeKindOpenClawSandbox, agent.RuntimeNameOpenClaw)
+	}
 	if _, ok := agentSvc.Agent("u-qa-display-name"); ok {
 		t.Fatal("agent ID was derived from display name")
 	}
@@ -85,6 +88,60 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 		t.Fatalf("channel user = %+v, ok=%v; want u-qa display user", user, ok)
 	} else if user.Avatar == "" {
 		t.Fatalf("channel user avatar is empty, want user-owned default")
+	}
+}
+
+func TestCreateCSGClawAgentParticipantViaAPICreatesCodexSandbox(t *testing.T) {
+	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, nil,
+		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodexSandbox}),
+	)
+	imSvc := im.NewService()
+	participantSvc := participant.NewService(
+		participant.NewMemoryStore(nil),
+		participant.WithAgentService(agentSvc),
+		participant.WithIMService(imSvc),
+	)
+	srv := &Handler{
+		svc:         agentSvc,
+		im:          imSvc,
+		participant: participantSvc,
+	}
+
+	body := `{
+		"id": "codex-sandbox",
+		"type": "agent",
+		"name": "codex-sandbox",
+		"agent_binding": {
+			"mode": "create",
+			"agent": {
+				"name": "codex-sandbox-worker",
+				"role": "worker",
+				"runtime_kind": "codex_sandbox",
+				"runtime": {
+					"name": "codex",
+					"sandbox_enabled": true
+				},
+				"image": "codex-sandbox:test"
+			}
+		}
+	}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(body))
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	createdAgent, ok := agentSvc.Agent("agent-codex-sandbox")
+	if !ok {
+		t.Fatal("agent agent-codex-sandbox was not created")
+	}
+	if createdAgent.RuntimeKind != agent.RuntimeKindCodexSandbox || createdAgent.RuntimeName != agent.RuntimeNameCodex || !createdAgent.SandboxEnabled {
+		t.Fatalf("agent runtime = %q/%q/%t, want %q/%q/true", createdAgent.RuntimeKind, createdAgent.RuntimeName, createdAgent.SandboxEnabled, agent.RuntimeKindCodexSandbox, agent.RuntimeNameCodex)
+	}
+	if createdAgent.BoxID != "box-codex-sandbox-worker" {
+		t.Fatalf("agent BoxID = %q, want codex sandbox runtime handle", createdAgent.BoxID)
 	}
 }
 

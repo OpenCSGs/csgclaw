@@ -11,13 +11,18 @@ import (
 )
 
 type templateManifest struct {
-	Name        string               `toml:"name"`
-	Description string               `toml:"description,omitempty"`
-	Role        string               `toml:"role"`
-	RuntimeKind string               `toml:"runtime_kind"`
-	Version     string               `toml:"version,omitempty"`
-	Image       templateImageSection `toml:"image"`
-	UpdatedAt   string               `toml:"updated_at,omitempty"`
+	Name        string                 `toml:"name"`
+	Description string                 `toml:"description,omitempty"`
+	Role        string                 `toml:"role"`
+	RuntimeKind string                 `toml:"runtime_kind"`
+	Runtime     templateRuntimeSection `toml:"runtime,omitempty"`
+	Version     string                 `toml:"version,omitempty"`
+	Image       templateImageSection   `toml:"image"`
+	UpdatedAt   string                 `toml:"updated_at,omitempty"`
+}
+
+type templateRuntimeSection struct {
+	Kind string `toml:"kind"`
 }
 
 type templateImageSection struct {
@@ -125,6 +130,26 @@ func validateImageEnvContracts(items []templateImageEnvItem) error {
 	return nil
 }
 
+func normalizeTemplateManifest(manifest templateManifest) (templateManifest, error) {
+	topLevelRuntimeKind := strings.TrimSpace(manifest.RuntimeKind)
+	nestedRuntimeKind := strings.TrimSpace(manifest.Runtime.Kind)
+	if topLevelRuntimeKind != "" && nestedRuntimeKind != "" {
+		canonicalTopLevel := normalizeTemplateRuntimeKind(topLevelRuntimeKind)
+		canonicalNested := normalizeTemplateRuntimeKind(nestedRuntimeKind)
+		if canonicalTopLevel != canonicalNested {
+			return templateManifest{}, fmt.Errorf("runtime_kind %q conflicts with runtime.kind %q", topLevelRuntimeKind, nestedRuntimeKind)
+		}
+		manifest.RuntimeKind = canonicalTopLevel
+		return manifest, nil
+	}
+	if topLevelRuntimeKind != "" {
+		manifest.RuntimeKind = normalizeTemplateRuntimeKind(topLevelRuntimeKind)
+		return manifest, nil
+	}
+	manifest.RuntimeKind = normalizeTemplateRuntimeKind(nestedRuntimeKind)
+	return manifest, nil
+}
+
 func validateManifest(manifest templateManifest) error {
 	manifest.Name = strings.TrimSpace(manifest.Name)
 	if manifest.Name == "" {
@@ -137,7 +162,7 @@ func validateManifest(manifest templateManifest) error {
 	}
 	manifest.RuntimeKind = normalizeTemplateRuntimeKind(manifest.RuntimeKind)
 	switch manifest.RuntimeKind {
-	case runtime.NamePicoClaw, runtime.NameOpenClaw, runtime.KindCodex:
+	case runtime.NamePicoClaw, runtime.NameOpenClaw, runtime.KindCodexSandbox, runtime.KindCodex:
 	default:
 		return fmt.Errorf("%w: %s", ErrRuntimeKindRequired, manifest.RuntimeKind)
 	}

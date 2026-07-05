@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	templateembed "csgclaw/internal/template/embed"
@@ -98,11 +99,14 @@ func TestResolveRuntimeTemplateRoot(t *testing.T) {
 		role        string
 		want        string
 		wantErr     bool
+		wantErrText string
 	}{
 		{name: "openclaw manager", runtimeKind: RuntimeKindOpenClawSandbox, role: RoleManager, want: templateembed.OpenClawManagerRoot},
 		{name: "picoclaw manager", runtimeKind: RuntimeKindPicoClawSandbox, role: RoleManager, want: templateembed.PicoClawManagerRoot},
 		{name: "picoclaw worker", runtimeKind: RuntimeKindPicoClawSandbox, role: RoleWorker, want: templateembed.PicoClawWorkerRoot},
 		{name: "openclaw worker", runtimeKind: RuntimeKindOpenClawSandbox, role: RoleWorker, want: templateembed.OpenClawWorkerRoot},
+		{name: "codex sandbox worker", runtimeKind: RuntimeKindCodexSandbox, role: RoleWorker, want: templateembed.CodexSandboxWorkerRoot},
+		{name: "codex sandbox manager", runtimeKind: RuntimeKindCodexSandbox, role: RoleManager, wantErr: true, wantErrText: "supports worker templates only"},
 		{name: "unknown runtime", runtimeKind: "missing", role: RoleWorker, wantErr: true},
 	}
 
@@ -112,6 +116,9 @@ func TestResolveRuntimeTemplateRoot(t *testing.T) {
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("resolveRuntimeTemplateRoot(%q, %q) error = nil, want non-nil", tt.runtimeKind, tt.role)
+				}
+				if tt.wantErrText != "" && !strings.Contains(err.Error(), tt.wantErrText) {
+					t.Fatalf("resolveRuntimeTemplateRoot(%q, %q) error = %v, want text %q", tt.runtimeKind, tt.role, err, tt.wantErrText)
 				}
 				return
 			}

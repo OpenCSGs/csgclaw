@@ -24,6 +24,12 @@ type BuiltinTemplate struct {
 
 var builtinTemplates = []BuiltinTemplate{
 	{
+		ID:          "codex-sandbox-worker",
+		RuntimeKind: runtimepkg.KindCodexSandbox,
+		Role:        roleWorker,
+		Root:        CodexSandboxWorkerRoot,
+	},
+	{
 		ID:          "openclaw-manager",
 		RuntimeKind: runtimepkg.KindOpenClawSandbox,
 		Role:        roleManager,

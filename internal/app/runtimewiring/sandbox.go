@@ -125,8 +125,8 @@ func bridgeLLMEnvVars(llmBaseURL, accessToken, modelID string) map[string]string
 
 func isReservedSandboxEnvKey(key string) bool {
 	upper := strings.ToUpper(strings.TrimSpace(key))
-	if upper == "HOME" || upper == "OPENAI_BASE_URL" || upper == "OPENAI_API_KEY" || upper == "OPENAI_MODEL" {
+	if upper == "HOME" || upper == "APP_SECRET" || upper == "CODEX_HOME" || upper == "OPENAI_BASE_URL" || upper == "OPENAI_API_KEY" || upper == "OPENAI_MODEL" {
 		return true
 	}
-	return strings.HasPrefix(upper, "CSGCLAW_") || strings.HasPrefix(upper, "PICOCLAW_")
+	return strings.HasPrefix(upper, "CSGCLAW_") || strings.HasPrefix(upper, "PICOCLAW_") || strings.HasPrefix(upper, "LARK_CHANNEL_") || strings.HasPrefix(upper, "LARKSUITE_")
 }

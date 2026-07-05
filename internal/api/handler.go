@@ -472,6 +472,7 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 		SupportedRuntimeKinds: []string{
 			agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind(),
 			agentruntime.RuntimeConfigForKind(agent.RuntimeKindOpenClawSandbox).Kind(),
+			agentruntime.RuntimeConfigForKind(agent.RuntimeKindCodexSandbox).Kind(),
 			agentruntime.RuntimeConfigForKind(agent.RuntimeKindCodex).Kind(),
 		},
 		RuntimeDefaultImages: map[string]string{},
@@ -506,6 +507,12 @@ func workerRuntimeChoices() []workerRuntimeChoiceResponse {
 		{
 			Name:           agent.RuntimeNameOpenClaw,
 			Label:          "OpenClaw",
+			SandboxEnabled: true,
+			Installed:      true,
+		},
+		{
+			Name:           agent.RuntimeNameCodex,
+			Label:          "Codex Sandbox",
 			SandboxEnabled: true,
 			Installed:      true,
 		},
@@ -561,6 +568,7 @@ func fillBuiltinWorkerRuntimeDefaultImages(ctx context.Context, resp *bootstrapC
 	builtinWorkerTemplates := map[string]string{
 		agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind(): "builtin.picoclaw-worker",
 		agentruntime.RuntimeConfigForKind(agent.RuntimeKindOpenClawSandbox).Kind(): "builtin.openclaw-worker",
+		agentruntime.RuntimeConfigForKind(agent.RuntimeKindCodexSandbox).Kind():    "builtin.codex-sandbox-worker",
 	}
 	for runtimeKind, templateID := range builtinWorkerTemplates {
 		if strings.TrimSpace(resp.RuntimeDefaultImages[runtimeKind]) != "" {
@@ -585,6 +593,7 @@ func (h *Handler) bootstrapConfigView(ctx context.Context, cfg config.Config) bo
 		schemas = h.runtimeOptionSchemasByKind([]string{
 			agent.RuntimeKindPicoClawSandbox,
 			agent.RuntimeKindOpenClawSandbox,
+			agent.RuntimeKindCodexSandbox,
 			agent.RuntimeKindCodex,
 		})
 	}
@@ -1229,6 +1238,10 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 		profileReq = req.AgentProfile
 	}
 	prof := agentProfileFromAPI(profileReq)
+	runtimeKind := strings.TrimSpace(req.Runtime.Kind)
+	if runtimeKind == "" {
+		runtimeKind = strings.TrimSpace(req.RuntimeKind)
+	}
 	runtimeName := strings.TrimSpace(req.Runtime.Name)
 	sandboxEnabled := req.Runtime.SandboxEnabled
 	if runtimeName == "" {
@@ -1246,6 +1259,7 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 			Description:    req.Description,
 			Instructions:   req.Instructions,
 			Image:          req.Image,
+			RuntimeKind:    runtimeKind,
 			RuntimeName:    runtimeName,
 			SandboxEnabled: sandboxEnabled,
 			FromTemplate:   req.FromTemplate,

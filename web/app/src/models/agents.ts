@@ -19,7 +19,7 @@ import { avatarFallbackText, normalizeAvatarPath } from "@/shared/avatar";
 import type { LocaleCode } from "@/models/conversations";
 import { providerIDForProvider, providerNameForProviderID, selectorForProviderModel } from "@/models/modelProviders";
 
-export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | string;
+export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex_sandbox" | "codex" | string;
 export type RuntimeName = "picoclaw" | "openclaw" | "codex" | string;
 export type BotType = typeof BOT_TYPE_NORMAL | typeof BOT_TYPE_NOTIFICATION | string;
 export type ProviderName = "csghub_lite" | "csghub" | "codex" | "claude_code" | "api" | string;
@@ -162,6 +162,8 @@ export function normalizeRuntimeName(name: unknown): RuntimeName {
     case "openclaw_sandbox":
       return "openclaw";
     case "codex":
+    case "codex_sandbox":
+    case "codex-sandbox":
       return "codex";
     default:
       return value;
@@ -179,6 +181,8 @@ export function composeLegacyRuntimeKind(runtimeName: unknown, sandboxEnabled: u
       return "openclaw_sandbox";
     case "picoclaw":
       return "picoclaw_sandbox";
+    case "codex":
+      return "codex_sandbox";
     default:
       return "";
   }
@@ -191,6 +195,7 @@ function runtimeNameForKind(kind: unknown): RuntimeName {
       return "openclaw";
     case "picoclaw_sandbox":
       return "picoclaw";
+    case "codex_sandbox":
     case "codex":
       return "codex";
     default:
@@ -200,7 +205,7 @@ function runtimeNameForKind(kind: unknown): RuntimeName {
 
 function sandboxEnabledForKind(kind: unknown): boolean {
   const value = normalizeRuntimeKind(kind);
-  return value === "openclaw_sandbox" || value === "picoclaw_sandbox";
+  return value === "openclaw_sandbox" || value === "picoclaw_sandbox" || value === "codex_sandbox";
 }
 
 export type RuntimeSelectionLike = {
@@ -1248,6 +1253,14 @@ export function pickDefaultAgentTemplate(
       candidates[0]
     );
   }
+  if (requestedRuntime === "codex_sandbox") {
+    return (
+      candidates.find((item) => item.id === "builtin.codex-sandbox-worker") ||
+      candidates.find((item) => item.name === "generic-assistant-codex-sandbox") ||
+      candidates.find((item) => String(item.id || "").endsWith(".codex-sandbox-worker")) ||
+      candidates[0]
+    );
+  }
   if (requestedRuntime === DEFAULT_RUNTIME_KIND || !requestedRuntime) {
     return (
       candidates.find((item) => item.id === "builtin.picoclaw-worker") ||
@@ -1822,6 +1835,9 @@ export function normalizeRuntimeKind(kind: unknown): RuntimeKind {
       return "picoclaw_sandbox";
     case "codex":
       return "codex";
+    case "codex_sandbox":
+    case "codex-sandbox":
+      return "codex_sandbox";
     case "picoclaw_sandbox":
       return "picoclaw_sandbox";
     default:
@@ -1936,7 +1952,9 @@ export function availableManagerRuntimeOptions(bootstrapConfig: RuntimeBootstrap
     : [];
   const gatewayKinds = (configuredKinds.length ? configuredKinds : [DEFAULT_RUNTIME_KIND, "openclaw_sandbox"])
     .map((kind) => normalizeRuntimeKind(kind))
-    .filter((kind, index, array) => kind && kind !== "codex" && array.indexOf(kind) === index);
+    .filter(
+      (kind, index, array) => kind && kind !== "codex" && kind !== "codex_sandbox" && array.indexOf(kind) === index,
+    );
   return RUNTIME_KIND_OPTIONS.filter((option) => gatewayKinds.includes(option.value));
 }
 
@@ -1980,7 +1998,7 @@ export function availableManagerRebuildRuntimeOptions(
   const seen = new Set<string>();
   const push = (kind: unknown) => {
     const normalized = normalizeRuntimeKind(kind);
-    if (!normalized || normalized === "codex" || seen.has(normalized)) {
+    if (!normalized || normalized === "codex" || normalized === "codex_sandbox" || seen.has(normalized)) {
       return;
     }
     seen.add(normalized);
@@ -2036,7 +2054,7 @@ export function agentCreateProgressSteps(runtimeKind: unknown): AgentCreateProgr
       { label: "agentCreateProgressFinishing", target: 96 },
     ];
   }
-  if (kind === "openclaw_sandbox" || kind === DEFAULT_RUNTIME_KIND) {
+  if (kind === "openclaw_sandbox" || kind === "codex_sandbox" || kind === DEFAULT_RUNTIME_KIND) {
     return [
       { label: "agentCreateProgressSandboxConfig", target: 16 },
       { label: "agentCreateProgressImage", target: 42 },
@@ -2090,6 +2108,8 @@ export function formatRuntimeKindLabel(kind: unknown, t: TranslateFn): string {
   switch (runtimeKind) {
     case "openclaw_sandbox":
       return t("runtimeOpenclaw");
+    case "codex_sandbox":
+      return t("runtimeCodexSandbox");
     case "codex":
       return t("runtimeCodexCLI");
     case "picoclaw_sandbox":

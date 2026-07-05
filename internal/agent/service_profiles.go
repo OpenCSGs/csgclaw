@@ -10,6 +10,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/identity"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/codexsandbox"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/utils"
@@ -134,6 +135,9 @@ func gatewayProfileRuntimeRestartRequired(current Agent, next AgentProfile) bool
 	if !isGatewayRuntimeKind(strings.TrimSpace(current.RuntimeKind)) {
 		return false
 	}
+	if strings.TrimSpace(current.RuntimeKind) == RuntimeKindCodexSandbox {
+		return false
+	}
 	previous := normalizeProfileForAgentRuntime(current.AgentProfile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, nil)
 	return !profileRuntimeInputsEqual(previous, next)
 }
@@ -164,10 +168,21 @@ func (s *Service) syncGatewayAfterProfileChange(ctx context.Context, id string, 
 		_, err := s.EnsureManager(ctx, false)
 		return err
 	}
+	if strings.TrimSpace(got.RuntimeKind) == RuntimeKindCodexSandbox && restartRequired {
+		runtimeRunning := isRuntimeRunning(got)
+		if err := s.syncGatewayHostConfigWithRestartFlag(got, runtimeNormalized, !runtimeRunning); err != nil {
+			return err
+		}
+		if runtimeRunning {
+			_, err := s.Recreate(ctx, id)
+			return err
+		}
+		return nil
+	}
 	if gatewayProfileRuntimeRestartRequired(previous, normalized) {
 		return s.syncGatewayHostConfig(got, runtimeNormalized)
 	}
-	if restartRequired {
+	if restartRequired && isRuntimeRunning(got) {
 		_, err := s.Recreate(ctx, id)
 		return err
 	}
@@ -175,6 +190,10 @@ func (s *Service) syncGatewayAfterProfileChange(ctx context.Context, id string, 
 }
 
 func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
+	return s.syncGatewayHostConfigWithRestartFlag(got, profile, true)
+}
+
+func (s *Service) syncGatewayHostConfigWithRestartFlag(got Agent, profile AgentProfile, clearEnvRestartRequired bool) error {
 	if s == nil {
 		return nil
 	}
@@ -195,7 +214,20 @@ func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
 		if _, err := openclawsandbox.EnsureConfig(agentHome, participantID, got.ID, s.server, modelCfg, resolveManagerBaseURL, feishuProvider); err != nil {
 			return fmt.Errorf("sync gateway openclaw config: %w", err)
 		}
+	case RuntimeKindCodexSandbox:
+		agentHome, err := s.agentHomeDir(got.ID)
+		if err != nil {
+			return err
+		}
+		feishuProvider := s.currentFeishuProviderForRuntime(RuntimeKindCodexSandbox)
+		if _, err := codexsandbox.EnsureConfig(agentHome, participantID, got.ID, s.server, modelCfg, resolveManagerBaseURL, feishuProvider); err != nil {
+			return fmt.Errorf("sync gateway codex sandbox config: %w", err)
+		}
 	default:
+		return nil
+	}
+
+	if !clearEnvRestartRequired {
 		return nil
 	}
 

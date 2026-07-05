@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/runtime"
 )
 
 const remoteTestManifest = `name = "gitlab-assistant"
@@ -159,6 +160,48 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 		if got := string(data); got != want {
 			t.Fatalf("%s = %q, want %q", name, got, want)
 		}
+	}
+}
+
+func TestRemoteStoreMapsHubRuntimeKindAlias(t *testing.T) {
+	t.Parallel()
+
+	manifest := `name = "gitlab-assistant"
+role = "worker"
+description = "GitLab assistant"
+runtime_kind = "openclaw"
+version = "2026.6.16.0"
+
+[image]
+ref = "registry.example.com/openclaw-glab:2026.6.16.0"
+`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"name":           "gitlab-assistant",
+					"path":           "Agentic/gitlab-assistant",
+					"default_branch": "main",
+				},
+			})
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/blob/agent.toml":
+			assertQueryValue(t, r.URL, "ref", "main")
+			writeRemoteBlob(t, w, "agent.toml", []byte(manifest))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	store := NewRemoteStore(srv.URL, "")
+	item, err := store.Get(context.Background(), "gitlab-assistant")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got, want := item.RuntimeKind, runtime.NameOpenClaw; got != want {
+		t.Fatalf("Get().RuntimeKind = %q, want %q", got, want)
 	}
 }
 

@@ -168,6 +168,10 @@ func loadManifestFS(srcFS fs.FS, manifestPath, label string) (string, templateMa
 	if err := toml.Unmarshal(data, &manifest); err != nil {
 		return "", templateManifest{}, fmt.Errorf("decode %s manifest %q: %w", label, id, err)
 	}
+	manifest, err = normalizeTemplateManifest(manifest)
+	if err != nil {
+		return "", templateManifest{}, fmt.Errorf("validate %s manifest %q: %w", label, id, err)
+	}
 	if err := validateManifest(manifest); err != nil {
 		return "", templateManifest{}, fmt.Errorf("validate %s manifest %q: %w", label, id, err)
 	}

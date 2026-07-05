@@ -28,6 +28,7 @@ import (
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
 	codexruntime "csgclaw/internal/runtime/codex"
+	"csgclaw/internal/runtime/codexsandbox"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/sandbox"
@@ -51,7 +52,10 @@ func init() {
 		if err := runtimewiring.WithPicoClawSandboxRuntime(nil)(s); err != nil {
 			return err
 		}
-		return runtimewiring.WithOpenClawSandboxRuntime(nil)(s)
+		if err := runtimewiring.WithOpenClawSandboxRuntime(nil)(s); err != nil {
+			return err
+		}
+		return runtimewiring.WithCodexSandboxRuntime(nil)(s)
 	})
 	_ = codexruntime.TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
 		return nil
@@ -91,6 +95,13 @@ func (f fakeCompatRuntime) Layout(agentHome string) agentruntime.Layout {
 			WorkspaceRoot: workspace,
 			SkillsRoot:    filepath.Join(workspace, "skills"),
 			HostLogPaths:  []string{openclawsandbox.HostGatewayLogPath(agentHome)},
+		}
+	case agent.RuntimeKindCodexSandbox:
+		workspace := filepath.Join(codexsandbox.Root(agentHome), codexsandbox.HostWorkspaceDir)
+		return agentruntime.Layout{
+			WorkspaceRoot: workspace,
+			SkillsRoot:    filepath.Join(workspace, "skills"),
+			HostLogPaths:  []string{codexsandbox.HostGatewayLogPath(agentHome)},
 		}
 	case agent.RuntimeKindCodex:
 		return agentruntime.Layout{
@@ -380,6 +391,27 @@ func TestBootstrapConfigIncludesBuiltinOpenClawRuntimeDefaultImage(t *testing.T)
 	if !strings.Contains(openclawImage, "/opencsghq/openclaw:") {
 		t.Fatalf("RuntimeDefaultImages[%q] = %q, want builtin OpenClaw image", agent.RuntimeNameOpenClaw, openclawImage)
 	}
+	codexSandboxImage := got.RuntimeDefaultImages[agent.RuntimeKindCodexSandbox]
+	if codexSandboxImage == "" {
+		t.Fatalf("RuntimeDefaultImages[%q] = empty; defaults=%#v", agent.RuntimeKindCodexSandbox, got.RuntimeDefaultImages)
+	}
+	if !strings.Contains(codexSandboxImage, "/opencsghq/csgclaw-codex-sandbox:") {
+		t.Fatalf("RuntimeDefaultImages[%q] = %q, want builtin Codex Sandbox image", agent.RuntimeKindCodexSandbox, codexSandboxImage)
+	}
+}
+
+func TestBootstrapConfigIncludesCodexSandboxWorkerChoice(t *testing.T) {
+	got := bootstrapConfigView(context.Background(), config.Config{}, nil, nil)
+
+	for _, choice := range got.WorkerRuntimeChoices {
+		if choice.Name == agent.RuntimeNameCodex && choice.SandboxEnabled {
+			if choice.Label != "Codex Sandbox" || !choice.Installed {
+				t.Fatalf("codex sandbox choice = %#v, want installed Codex Sandbox", choice)
+			}
+			return
+		}
+	}
+	t.Fatalf("WorkerRuntimeChoices = %#v, want codex sandbox choice", got.WorkerRuntimeChoices)
 }
 
 func TestHandleAgentIncludesRuntimeOptionSchemas(t *testing.T) {
@@ -2121,6 +2153,28 @@ func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 	}
 	if got.Spec.Instructions != "follow AGENTS" {
 		t.Fatalf("Spec.Instructions = %q, want %q", got.Spec.Instructions, "follow AGENTS")
+	}
+}
+
+func TestAgentCreateRequestFromJSONIncludesProfile(t *testing.T) {
+	var req apitypes.CreateAgentRequest
+	if err := json.Unmarshal([]byte(`{"name":"alice","runtime_kind":"codex_sandbox","from_template":"local.codex","profile":"codex.gpt-5.5"}`), &req); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+
+	got := agentCreateRequestFromAPI(req)
+
+	if got.Spec.Name != "alice" {
+		t.Fatalf("Spec.Name = %q, want %q", got.Spec.Name, "alice")
+	}
+	if got.Spec.RuntimeKind != agent.RuntimeKindCodexSandbox {
+		t.Fatalf("Spec.RuntimeKind = %q, want %q", got.Spec.RuntimeKind, agent.RuntimeKindCodexSandbox)
+	}
+	if got.Spec.FromTemplate != "local.codex" {
+		t.Fatalf("Spec.FromTemplate = %q, want %q", got.Spec.FromTemplate, "local.codex")
+	}
+	if got.Spec.Profile != "codex.gpt-5.5" {
+		t.Fatalf("Spec.Profile = %q, want %q", got.Spec.Profile, "codex.gpt-5.5")
 	}
 }
 

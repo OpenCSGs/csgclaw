@@ -3,6 +3,7 @@ package template
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/runtime"
@@ -55,6 +56,69 @@ default = "https://gitlab.example.com"
 	}
 	if got.ImageEnv[1].Name != "GITLAB_URL" || got.ImageEnv[1].Default != "https://gitlab.example.com" {
 		t.Fatalf("ImageEnv[1] = %#v, want GITLAB_URL default url", got.ImageEnv[1])
+	}
+}
+
+func TestLoadManifestNestedRuntimeKindAlias(t *testing.T) {
+	registryRoot := t.TempDir()
+	manifestPath := filepath.Join(registryRoot, "templates", "gitlab-assistant", "agent.toml")
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	manifest := `
+name = "gitlab-assistant"
+description = "GitLab assistant"
+role = "worker"
+
+[runtime]
+kind = "openclaw"
+
+[image]
+ref = "openclaw:test"
+`
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	store := NewLocalStore(registryRoot)
+	got, err := store.Get(t.Context(), "gitlab-assistant")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got.RuntimeKind != runtime.NameOpenClaw {
+		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, runtime.NameOpenClaw)
+	}
+}
+
+func TestLoadManifestRejectsRuntimeKindConflict(t *testing.T) {
+	registryRoot := t.TempDir()
+	manifestPath := filepath.Join(registryRoot, "templates", "gitlab-assistant", "agent.toml")
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	manifest := `
+name = "gitlab-assistant"
+role = "worker"
+runtime_kind = "picoclaw_sandbox"
+
+[runtime]
+kind = "openclaw"
+
+[image]
+ref = "openclaw:test"
+`
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	store := NewLocalStore(registryRoot)
+	_, err := store.Get(t.Context(), "gitlab-assistant")
+	if err == nil {
+		t.Fatal("Get() error = nil, want runtime kind conflict")
+	}
+	want := `runtime_kind "picoclaw_sandbox" conflicts with runtime.kind "openclaw"`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("Get() error = %v, want %q", err, want)
 	}
 }
 

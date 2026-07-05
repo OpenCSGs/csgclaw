@@ -1853,7 +1853,7 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		return Agent{}, fmt.Errorf("runtime_kind is required")
 	case !sandboxed && runtimeName != RuntimeNameCodex:
 		return Agent{}, fmt.Errorf("runtime_name %q requires sandbox_enabled=true", runtimeName)
-	case sandboxed && runtimeName != RuntimeNameOpenClaw && runtimeName != RuntimeNamePicoClaw:
+	case sandboxed && runtimeName != RuntimeNameOpenClaw && runtimeName != RuntimeNamePicoClaw && runtimeName != RuntimeNameCodex:
 		return Agent{}, fmt.Errorf("runtime_name %q is not supported with sandbox_enabled=true", runtimeName)
 	}
 	if !sandboxed {

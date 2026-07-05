@@ -1,7 +1,4 @@
-import {
-  BOT_TYPE_NORMAL,
-  DEFAULT_RUNTIME_KIND,
-} from "@/shared/constants/agents";
+import { BOT_TYPE_NORMAL, DEFAULT_RUNTIME_KIND } from "@/shared/constants/agents";
 import { useEffect, useRef, useState, type SetStateAction } from "react";
 import {
   AgentCreateProgress,
@@ -301,12 +298,8 @@ export function AgentProfileModal({
           <section className="profile-section agent-identity-section">
             {!isNotificationContext ? (
               <div className="profile-section-heading">
-                <div className="profile-section-title">
-                  {t("profileBasics")}
-                </div>
-                <p className="profile-section-description">
-                  {t("profileBasicsDescription")}
-                </p>
+                <div className="profile-section-title">{t("profileBasics")}</div>
+                <p className="profile-section-description">{t("profileBasicsDescription")}</p>
               </div>
             ) : null}
             <div className="agent-section-form">
@@ -369,7 +362,9 @@ export function AgentProfileModal({
                       <textarea
                         className="compact-textarea"
                         value={agentDraft.description}
-                        onInput={(event) => onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })}
+                        onInput={(event) =>
+                          onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })
+                        }
                       />
                     </label>
                   </div>
@@ -385,6 +380,16 @@ export function AgentProfileModal({
               </div>
               <div className="agent-section-form">
                 <div className="profile-grid profile-grid-compact agent-basics-grid">
+                  <label className="field span-2 agent-name-field">
+                    {requiredFieldLabel(t("agentName"))}
+                    <input
+                      value={agentDraft.name}
+                      required
+                      aria-required="true"
+                      onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}
+                      placeholder={t("agentNamePlaceholder")}
+                    />
+                  </label>
                   <label className="field span-2">
                     <span>{t("templateLabel")}</span>
                     <Select
@@ -400,11 +405,13 @@ export function AgentProfileModal({
                         );
                       }}
                       triggerProps={{ "aria-label": t("templateLabel") }}
-                      options={workerTemplates.filter((item) => item.id).map((item) => ({
-                        value: item.id || "",
-                        label: item.name || item.id || "",
-                        description: String(item.description || "").trim() || undefined,
-                      }))}
+                      options={workerTemplates
+                        .filter((item) => item.id)
+                        .map((item) => ({
+                          value: item.id || "",
+                          label: item.name || item.id || "",
+                          description: String(item.description || "").trim() || undefined,
+                        }))}
                     />
                     <small className="field-hint">{t("templateHelp")}</small>
                   </label>

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -58,6 +59,16 @@ func TestAgentRuntimeConfigRoundTrip(t *testing.T) {
 	item.SetRuntimeConfig(agentruntime.RuntimeConfig{Name: RuntimeNamePicoClaw, Sandboxed: true})
 	if item.RuntimeKind != RuntimeKindPicoClawSandbox || item.RuntimeName != RuntimeNamePicoClaw || !item.SandboxEnabled {
 		t.Fatalf("SetRuntimeConfig() runtime = %q/%q/%t, want %q/%q/%t", item.RuntimeKind, item.RuntimeName, item.SandboxEnabled, RuntimeKindPicoClawSandbox, RuntimeNamePicoClaw, true)
+	}
+}
+
+func TestCreateAgentSpecUnmarshalSupportsLegacyRuntimeKind(t *testing.T) {
+	var got CreateAgentSpec
+	if err := json.Unmarshal([]byte(`{"name":"alice","role":"worker","runtime_kind":"codex_sandbox"}`), &got); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if got.RuntimeKind != RuntimeKindCodexSandbox || got.RuntimeName != RuntimeNameCodex || !got.SandboxEnabled {
+		t.Fatalf("runtime = %q/%q/%t, want %q/%q/true", got.RuntimeKind, got.RuntimeName, got.SandboxEnabled, RuntimeKindCodexSandbox, RuntimeNameCodex)
 	}
 }
 

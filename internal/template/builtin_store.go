@@ -113,6 +113,10 @@ func (s *BuiltinStore) loadManifest(id string) (templateManifest, error) {
 	if err := toml.Unmarshal(data, &manifest); err != nil {
 		return templateManifest{}, fmt.Errorf("decode builtin manifest %q: %w", id, err)
 	}
+	manifest, err = normalizeTemplateManifest(manifest)
+	if err != nil {
+		return templateManifest{}, fmt.Errorf("validate builtin manifest %q: %w", id, err)
+	}
 	if err := validateManifest(manifest); err != nil {
 		return templateManifest{}, fmt.Errorf("validate builtin manifest %q: %w", id, err)
 	}

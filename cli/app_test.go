@@ -2092,7 +2092,7 @@ func TestAgentCreateSubcommandHelpShowsReplaceAndForceFlags(t *testing.T) {
 		"--description string    agent description",
 		"--image string          agent image",
 		"--profile string        agent llm profile",
-		"--runtime string        agent runtime kind (for example: picoclaw_sandbox, openclaw_sandbox, codex)",
+		"--runtime string        agent runtime kind (for example: picoclaw_sandbox, openclaw_sandbox, codex_sandbox, codex)",
 		"--from-template string  hub template to use as creation defaults and workspace overlay",
 	} {
 		if !strings.Contains(got, want) {

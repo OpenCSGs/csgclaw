@@ -192,6 +192,10 @@ func (s *RemoteStore) fetchManifest(ctx context.Context, id, branch string) (tem
 	if err := toml.Unmarshal(data, &manifest); err != nil {
 		return templateManifest{}, fmt.Errorf("decode remote hub manifest %q: %w", id, err)
 	}
+	manifest, err = normalizeTemplateManifest(manifest)
+	if err != nil {
+		return templateManifest{}, fmt.Errorf("validate remote hub manifest %q: %w", id, err)
+	}
 	if err := validateManifest(manifest); err != nil {
 		return templateManifest{}, fmt.Errorf("validate remote hub manifest %q: %w", id, err)
 	}

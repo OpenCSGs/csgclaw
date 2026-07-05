@@ -28,6 +28,7 @@ export const PROVIDERS = PROVIDER_OPTIONS.map((option) => option.value);
 export const RUNTIME_KIND_OPTIONS = [
   { value: "picoclaw_sandbox", label: "picoclaw_sandbox" },
   { value: "openclaw_sandbox", label: "openclaw_sandbox" },
+  { value: "codex_sandbox", label: "codex_sandbox" },
   { value: "codex", label: "codex" },
 ];
 /** Worker create flow only (excludes legacy notifier runtime_kind). */

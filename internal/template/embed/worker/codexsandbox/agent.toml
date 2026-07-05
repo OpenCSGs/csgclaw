@@ -1,0 +1,9 @@
+name = "generic-assistant-codex-sandbox"
+description = "General-purpose assistant powered by Codex in the CSGClaw sandbox."
+role = "worker"
+runtime_kind = "codex_sandbox"
+updated_at = "2026-07-01T00:00:00Z"
+version = "0.1.0"
+
+[image]
+ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/csgclaw-codex-sandbox:20260701"

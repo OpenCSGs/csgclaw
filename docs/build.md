@@ -60,10 +60,12 @@ Manager and worker templates have different embedded workspaces but share one im
 
 | Runtime | Fixed image |
 |---|---|
+| Codex Sandbox | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/csgclaw-codex-sandbox:20260701` |
 | OpenClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260610.2-csgclaw` |
 | PicoClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.10` |
 
-These refs are stored directly in the builtin `agent.toml` files. They have no template `version` field, no generated tag, and no CSGClaw CI image-build workflow.
+These refs are stored directly in the builtin `agent.toml` files. CSGClaw CI does not build these runtime images.
+The Codex Sandbox image material is `docker/codex-sandbox/Dockerfile`.
 
 ## Web UI
 

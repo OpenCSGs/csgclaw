@@ -105,10 +105,10 @@ provider = "boxlite"
 
 Codex and Claude Code profiles are configured in agent state through the Web UI. CSGClaw starts an embedded CLIProxyAPI on a private localhost port at serve time, so static CLIProxy base URLs are not required.
 
-Workers can also select an explicit runtime kind when they are created. The default runtime kind is `picoclaw_sandbox`. To create a sandboxed OpenClaw worker, use `csgclaw agent create --runtime openclaw_sandbox ...`; to create a Codex worker, use `csgclaw agent create --runtime codex ...`. The API accepts the same values through `runtime_kind` on `POST /api/v1/agents`.
+Workers can also select an explicit runtime kind when they are created. The default runtime kind is `picoclaw_sandbox`. To create a sandboxed OpenClaw worker, use `csgclaw agent create --runtime openclaw_sandbox ...`; to create a sandboxed Codex worker, use `csgclaw agent create --runtime codex_sandbox ...`; to create a host-local Codex worker, use `csgclaw agent create --runtime codex ...`. The API accepts the same values through `runtime_kind` on `POST /api/v1/agents`.
 
 Leave `[bootstrap].manager_image_override` empty to use the built-in default manager image. Set it only when you need to override that default.
-The bootstrap manager currently runs on `picoclaw_sandbox`; `openclaw_sandbox` is supported for workers, not as the manager runtime.
+The bootstrap manager currently runs on `picoclaw_sandbox`; `openclaw_sandbox` and `codex_sandbox` are supported for workers, not as the manager runtime.
 
 Auth is also managed locally:
 

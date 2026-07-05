@@ -12,6 +12,7 @@ import (
 const (
 	RuntimeKindPicoClawSandbox = agentruntime.KindPicoClawSandbox
 	RuntimeKindOpenClawSandbox = agentruntime.KindOpenClawSandbox
+	RuntimeKindCodexSandbox    = agentruntime.KindCodexSandbox
 	RuntimeKindCodex           = agentruntime.KindCodex
 	RuntimeNamePicoClaw        = agentruntime.NamePicoClaw
 	RuntimeNameOpenClaw        = agentruntime.NameOpenClaw
@@ -110,7 +111,7 @@ func runtimeIDLookupAliases(runtimeID string) []string {
 
 func isGatewayRuntimeKind(kind string) bool {
 	switch kind {
-	case RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox:
+	case RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox, RuntimeKindCodexSandbox:
 		return true
 	default:
 		return false
@@ -139,7 +140,7 @@ func resolveRuntimeSelection(kind, name string, sandboxEnabled bool) (string, st
 
 func runtimeKindForGatewayRuntime(runtime string) string {
 	switch agentruntime.RuntimeConfigForKind(runtime).LegacyKind() {
-	case RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox:
+	case RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox, RuntimeKindCodexSandbox:
 		return agentruntime.RuntimeConfigForKind(runtime).LegacyKind()
 	default:
 		return ""
