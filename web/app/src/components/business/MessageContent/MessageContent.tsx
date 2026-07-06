@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import { ActionCard } from "./ActionCard";
 import { AgentActivityCard } from "./AgentActivityCard";
+import { LongMessageCollapse } from "./LongMessageCollapse";
 import { renderMarkdown } from "./markdown";
-import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
 import { SlashCommandCard } from "./SlashCommandCard";
 import { parseSlashCommand } from "./slashCommands";
 import { StructuredMessageCard } from "./StructuredMessageCard";
@@ -10,9 +10,20 @@ import { parseStructuredMessage } from "./structuredMessages";
 import type { ActionCardPayload, MessageContentProps } from "./types";
 import { mentionMarkupPattern, escapeHTML } from "./mentions";
 import { parseAgentActivity } from "@/models/agentActivity";
+import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
 import "./MessageContent.css";
 
-export function MessageContent({ content, message, actionBusy, actionError, onAction }: MessageContentProps) {
+export function MessageContent({
+  content,
+  message,
+  actionBusy,
+  actionError,
+  enableLongMessageCollapse = false,
+  longMessageExpanded,
+  onAction,
+  onLongMessageExpandedChange,
+  t,
+}: MessageContentProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const blankTurnPlaceholder = isBlankTurnPlaceholder(content);
   const activity = useMemo(
@@ -31,6 +42,10 @@ export function MessageContent({ content, message, actionBusy, actionError, onAc
   );
 
   useEffect(() => {
+    if (enableLongMessageCollapse && t) {
+      return undefined;
+    }
+
     const container = containerRef.current;
     if (!container) {
       return undefined;
@@ -47,7 +62,7 @@ export function MessageContent({ content, message, actionBusy, actionError, onAc
     return () => {
       cancelled = true;
     };
-  }, [markup]);
+  }, [enableLongMessageCollapse, markup, t]);
 
   if (blankTurnPlaceholder) {
     return (
@@ -86,7 +101,16 @@ export function MessageContent({ content, message, actionBusy, actionError, onAc
     return <StructuredMessageCard data={structured} />;
   }
 
-  return <div ref={containerRef} className="message-content" dangerouslySetInnerHTML={{ __html: markup }} />;
+  return enableLongMessageCollapse && t ? (
+    <LongMessageCollapse
+      expanded={longMessageExpanded}
+      html={markup}
+      onExpandedChange={onLongMessageExpandedChange}
+      t={t}
+    />
+  ) : (
+    <div ref={containerRef} className="message-content" dangerouslySetInnerHTML={{ __html: markup }} />
+  );
 }
 
 function isBlankTurnPlaceholder(content: string | null | undefined): boolean {

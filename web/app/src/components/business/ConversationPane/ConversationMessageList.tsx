@@ -1,4 +1,4 @@
-import { Fragment, memo } from "react";
+import { Fragment, memo, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
@@ -67,6 +67,8 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   onOpenThread,
   onPreviewUser,
 }: ConversationMessageListProps) {
+  const [expandedLongMessages, setExpandedLongMessages] = useState<Record<string, boolean>>({});
+
   return (
     <section ref={messageListRef} className="messages">
       {conversation.messages.length === 0 ? (
@@ -115,6 +117,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
           : avatarFallbackText(user.avatar, user.name, user.id);
         const threadSummary = message.thread;
         const latestThreadReply = threadSummary?.latest_reply;
+        const messageStateKey = longMessageStateKey(conversation, message, index);
         return (
           <Fragment key={message.id || `message-${index}`}>
             {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
@@ -167,7 +170,19 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                     message={message}
                     actionBusy={messageActionBusy}
                     actionError={messageActionError}
+                    enableLongMessageCollapse={own}
+                    longMessageExpanded={own ? expandedLongMessages[messageStateKey] === true : undefined}
                     onAction={onMessageAction}
+                    onLongMessageExpandedChange={
+                      own
+                        ? (expanded) =>
+                            setExpandedLongMessages((current) => ({
+                              ...current,
+                              [messageStateKey]: expanded,
+                            }))
+                        : undefined
+                    }
+                    t={t}
                   />
                 </div>
                 {threadSummary ? (
@@ -199,6 +214,12 @@ export const ConversationMessageList = memo(function ConversationMessageList({
     </section>
   );
 });
+
+function longMessageStateKey(conversation: IMConversation, message: IMMessage, index: number): string {
+  const conversationKey = String(conversation.id || "conversation");
+  const messageKey = String(message.id || `${message.created_at || "message"}:${index}`);
+  return `${conversationKey}:${messageKey}`;
+}
 
 function resolveMessageAgent(
   agents: readonly AgentLike[],

@@ -499,7 +499,7 @@ function ThreadMessage({
           <MessageTimestamp parts={timestampParts} />
         </div>
         <div className="thread-message-bubble">
-          <MessageContent key={`${message.id}:${theme}`} content={message.content} message={message} />
+          <MessageContent key={`${message.id}:${theme}`} content={message.content} message={message} t={t} />
         </div>
       </div>
     </div>

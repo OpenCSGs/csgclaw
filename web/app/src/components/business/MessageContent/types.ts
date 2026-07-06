@@ -1,3 +1,5 @@
+import type { TranslateFn } from "@/models/conversations";
+
 export type MessageLike = {
   id?: string;
   [key: string]: unknown;
@@ -40,6 +42,10 @@ export type MessageContentProps = {
   actionBusy?: string;
   actionError?: MessageActionError | null;
   content?: string | null;
+  enableLongMessageCollapse?: boolean;
+  longMessageExpanded?: boolean;
   message?: MessageLike | null;
+  onLongMessageExpandedChange?: (expanded: boolean) => void;
   onAction?: (action: MessageAction, message?: MessageLike | null) => void;
+  t?: TranslateFn;
 };

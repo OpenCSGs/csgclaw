@@ -9,7 +9,33 @@ import {
   CSGCLAW_NOTIFY_CARD_TYPE,
 } from "@/shared/constants/messages";
 
+const longMessageLabels: Record<string, string> = {
+  messageLongCollapse: "收起",
+  messageLongExpand: "展开全文",
+};
+
+function longMessageT(key: string): string {
+  return longMessageLabels[key] ?? key;
+}
+
+function mockLongMessageLayout() {
+  const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+    const text = (this.textContent || "").replace(/\s+/g, " ").trim();
+    if (!text) {
+      return 0;
+    }
+    return text.length > 100 ? 520 : 120;
+  });
+  return () => {
+    scrollHeightSpy.mockRestore();
+  };
+}
+
 describe("MessageContent", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("renders an animated three-dot indicator for blank turn placeholders", () => {
     render(<MessageContent content={"\u200b"} />);
 
@@ -27,6 +53,120 @@ describe("MessageContent", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("automatically collapses long markdown messages and toggles them in place", async () => {
+    const restoreLayout = mockLongMessageLayout();
+    const user = userEvent.setup();
+    const longText =
+      "今天整理了一下整个Agent系统的设计，包含对话能力、工具调用、MCP支持、资源管理、消息流转、权限控制、任务编排、模型选择、运行时配置与会话状态保持。" +
+      "为了确保这个消息在聊天区域中不会占据太多空间，我们需要默认折叠它，并允许用户按需展开查看完整内容。".repeat(4);
+
+    const { container } = render(<MessageContent content={longText} enableLongMessageCollapse t={longMessageT} />);
+
+    const expandButton = await screen.findByRole("button", { name: "展开全文" });
+    expect(expandButton).toHaveAttribute("aria-expanded", "false");
+    expect(container.querySelector(".long-message-collapse")).toHaveClass("is-collapsed");
+    const content = container.querySelector(".long-message-content") as HTMLElement;
+    const collapsedHeight = Number.parseInt(content.style.maxHeight, 10);
+    expect(collapsedHeight).toBeGreaterThan(0);
+
+    await user.click(expandButton);
+
+    const collapseButton = screen.getByRole("button", { name: "收起" });
+    expect(collapseButton).toHaveAttribute("aria-expanded", "true");
+    expect(container.querySelector(".long-message-collapse")).toHaveClass("is-expanded");
+    const expandedHeight = Number.parseInt(content.style.maxHeight, 10);
+    expect(expandedHeight).toBeGreaterThan(collapsedHeight);
+
+    await user.click(collapseButton);
+
+    expect(screen.getByRole("button", { name: "展开全文" })).toHaveAttribute("aria-expanded", "false");
+    restoreLayout();
+  });
+
+  it("does not collapse image-only markdown messages", async () => {
+    const restoreLayout = mockLongMessageLayout();
+
+    const { container } = render(
+      <MessageContent content={"![](https://example.com/image.png)"} enableLongMessageCollapse t={longMessageT} />,
+    );
+
+    expect(screen.queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
+    expect(container.querySelector("img")).toHaveAttribute("src", "https://example.com/image.png");
+    restoreLayout();
+  });
+
+  it("does not collapse markdown messages that include images", () => {
+    const restoreLayout = mockLongMessageLayout();
+    const content = `这是一条带图片的消息，图片消息不参与长文本折叠规则。\n\n![diagram](https://example.com/image.png)\n\n${"图片说明文字".repeat(40)}`;
+
+    const { container } = render(<MessageContent content={content} enableLongMessageCollapse t={longMessageT} />);
+
+    expect(screen.queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
+    expect(container.querySelector(".long-message-collapse")).toBeNull();
+    expect(container.querySelector("img")).toHaveAttribute("src", "https://example.com/image.png");
+    restoreLayout();
+  });
+
+  it("collapses long code blocks as part of the whole message", async () => {
+    const restoreLayout = mockLongMessageLayout();
+    const code = Array.from({ length: 24 }, (_, index) => `const item${index} = "line ${index}";`).join("\n");
+
+    const { container } = render(
+      <MessageContent content={`代码块需要参与整体折叠：\n\n\`\`\`ts\n${code}\n\`\`\``} enableLongMessageCollapse t={longMessageT} />,
+    );
+
+    expect(await screen.findByRole("button", { name: "展开全文" })).toBeInTheDocument();
+    expect(container.querySelector(".long-message-collapse")).toHaveClass("is-collapsed");
+    expect(container.querySelector("pre")).toBeInTheDocument();
+    restoreLayout();
+  });
+
+  it("does not collapse long messages unless explicitly enabled", () => {
+    const restoreLayout = mockLongMessageLayout();
+    const longText = "收到的长消息默认保持完整展示，只有当前用户自己发送的长文本才需要折叠。".repeat(12);
+
+    const { container } = render(<MessageContent content={longText} t={longMessageT} />);
+
+    expect(screen.queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
+    expect(container.querySelector(".long-message-collapse")).toBeNull();
+    restoreLayout();
+  });
+
+  it("supports externally controlled long message expansion state", async () => {
+    const restoreLayout = mockLongMessageLayout();
+    const user = userEvent.setup();
+    const onExpandedChange = vi.fn();
+    const longText = "用户自己发送的长消息展开状态需要在当前会话内保持。".repeat(12);
+
+    const { container, rerender } = render(
+      <MessageContent
+        content={longText}
+        enableLongMessageCollapse
+        longMessageExpanded={false}
+        onLongMessageExpandedChange={onExpandedChange}
+        t={longMessageT}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "展开全文" }));
+
+    expect(onExpandedChange).toHaveBeenCalledWith(true);
+
+    rerender(
+      <MessageContent
+        content={longText}
+        enableLongMessageCollapse
+        longMessageExpanded
+        onLongMessageExpandedChange={onExpandedChange}
+        t={longMessageT}
+      />,
+    );
+
+    expect(container.querySelector(".long-message-collapse")).toHaveClass("is-expanded");
+    expect(screen.getByRole("button", { name: "收起" })).toHaveAttribute("aria-expanded", "true");
+    restoreLayout();
   });
 
   it("renders canonical slash command prefixes with the prompt outside the XML element", () => {
