@@ -17,6 +17,7 @@ export type CLIProxyAuthStatus = {
 
 export type EnvKeyValueRow = {
   key: string;
+  required?: boolean;
   value: string;
 };
 

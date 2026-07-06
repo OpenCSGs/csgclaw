@@ -51,7 +51,7 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 	if err != nil {
 		return SkillSummary{}, fmt.Errorf("create upload temp dir: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	if err := extractArchive(archive, tempDir); err != nil {
 		return SkillSummary{}, err

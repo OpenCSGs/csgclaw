@@ -73,9 +73,6 @@ func TestDefaultTasksDirUsesDomainSubdirectory(t *testing.T) {
 }
 
 func TestLoadUsesDefaultBootstrapTemplatesWhenSectionIsEmpty(t *testing.T) {
-	restore := stubSandboxProviderExecutablePath(t, filepath.Join(t.TempDir(), "bin", "csgclaw"))
-	defer restore()
-
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `[server]
@@ -720,9 +717,6 @@ models = ["minimax-m2.7"]
 }
 
 func TestLoadRejectsRemovedLegacyBoxLiteProvider(t *testing.T) {
-	restore := stubSandboxProviderExecutablePath(t, filepath.Join(t.TempDir(), "bin", "csgclaw"))
-	defer restore()
-
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `[server]
@@ -753,9 +747,6 @@ models = ["minimax-m2.7"]
 }
 
 func TestLoadReadsDockerSandboxConfig(t *testing.T) {
-	restore := stubSandboxProviderExecutablePath(t, filepath.Join(t.TempDir(), "bin", "csgclaw"))
-	defer restore()
-
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `[server]
@@ -800,7 +791,7 @@ func TestSandboxEffectiveDockerCLIPathDefault(t *testing.T) {
 	}
 }
 
-func TestLoadUsesBundledBoxLiteWhenSandboxProviderUnset(t *testing.T) {
+func TestLoadUsesDockerWhenSandboxProviderUnsetEvenWithBundledBoxLite(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bundle", "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
@@ -809,9 +800,6 @@ func TestLoadUsesBundledBoxLiteWhenSandboxProviderUnset(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(binDir, "boxlite"), []byte(""), 0o755); err != nil {
 		t.Fatalf("WriteFile(boxlite) error = %v", err)
 	}
-	restore := stubSandboxProviderExecutablePath(t, filepath.Join(binDir, "csgclaw"))
-	defer restore()
-
 	path := filepath.Join(dir, "config.toml")
 	content := `[server]
 listen_addr = "127.0.0.1:18080"
@@ -832,7 +820,7 @@ models = ["minimax-m2.7"]
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got, want := cfg.Sandbox.Provider, BoxLiteProvider; got != want {
+	if got, want := cfg.Sandbox.Provider, DockerProvider; got != want {
 		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
 	}
 }
@@ -846,9 +834,6 @@ func TestLoadKeepsExplicitDockerProviderWhenBundledBoxLiteIsPresent(t *testing.T
 	if err := os.WriteFile(filepath.Join(binDir, "boxlite"), []byte(""), 0o755); err != nil {
 		t.Fatalf("WriteFile(boxlite) error = %v", err)
 	}
-	restore := stubSandboxProviderExecutablePath(t, filepath.Join(binDir, "csgclaw"))
-	defer restore()
-
 	path := filepath.Join(dir, "config.toml")
 	content := `[server]
 listen_addr = "127.0.0.1:18080"
@@ -1503,10 +1488,7 @@ models = ["gpt-test"]
 	}
 }
 
-func TestSaveKeepsSandboxProviderUnsetWhenItUsesDynamicDefault(t *testing.T) {
-	restore := stubSandboxProviderExecutablePath(t, filepath.Join(t.TempDir(), "bin", "csgclaw"))
-	defer restore()
-
+func TestSaveKeepsSandboxProviderUnsetWhenItUsesDefault(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `[server]

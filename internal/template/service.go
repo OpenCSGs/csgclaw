@@ -150,7 +150,7 @@ func (s *Service) ListWorkspace(ctx context.Context, id, workspacePath string) (
 		return apitypes.WorkspaceListing{}, err
 	}
 	if normalizeRegistryKind(cfgStore.ref.Kind) != RegistryKindLocal {
-		defer os.RemoveAll(workspace.Path)
+		defer func() { _ = os.RemoveAll(workspace.Path) }()
 	}
 	if strings.TrimSpace(workspace.Path) == "" {
 		if strings.TrimSpace(workspacePath) == "" {
@@ -174,7 +174,7 @@ func (s *Service) ReadWorkspaceFile(ctx context.Context, id, workspacePath strin
 		return apitypes.WorkspaceFile{}, err
 	}
 	if normalizeRegistryKind(cfgStore.ref.Kind) != RegistryKindLocal {
-		defer os.RemoveAll(workspace.Path)
+		defer func() { _ = os.RemoveAll(workspace.Path) }()
 	}
 	if strings.TrimSpace(workspace.Path) == "" {
 		return apitypes.WorkspaceFile{}, ErrWorkspaceDirRequired

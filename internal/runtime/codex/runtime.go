@@ -29,7 +29,6 @@ const (
 	workspaceDirName       = "workspace"
 	homeDirName            = "home"
 	logPollInterval        = 200 * time.Millisecond
-	removeAllRetryAttempts = 12
 	codexProxyProviderName = "proxy"
 	codexModelProviderName = "codex"
 )
@@ -266,12 +265,14 @@ func (r *Runtime) Delete(ctx context.Context, h agentruntime.Handle) error {
 	if runtimeID == "" {
 		return fmt.Errorf("runtime id is required")
 	}
-	_, _ = r.Stop(ctx, h)
+	if _, err := r.Stop(ctx, h); err != nil && !errors.Is(err, sandbox.ErrNotFound) && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("stop runtime before delete: %w", err)
+	}
 	dir, err := r.runtimeDirForHandle(h)
 	if err != nil {
 		return err
 	}
-	if err := r.removeAllWithRetry(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := r.removeAll(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
@@ -939,35 +940,6 @@ func (r *Runtime) removeAll(path string) error {
 	return os.RemoveAll(path)
 }
 
-func (r *Runtime) removeAllWithRetry(path string) error {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return fmt.Errorf("path is required")
-	}
-
-	var lastErr error
-	for attempt := 0; attempt < removeAllRetryAttempts; attempt++ {
-		if err := r.removeAll(path); err == nil || errors.Is(err, os.ErrNotExist) {
-			return nil
-		} else {
-			lastErr = err
-			if !isRetryableRemoveAllError(err) || attempt == removeAllRetryAttempts-1 {
-				return err
-			}
-		}
-		time.Sleep(time.Duration(attempt+1) * 50 * time.Millisecond)
-	}
-	return lastErr
-}
-
-func isRetryableRemoveAllError(err error) bool {
-	if errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EACCES) {
-		return true
-	}
-	lower := strings.ToLower(err.Error())
-	return strings.Contains(lower, "directory not empty") || strings.Contains(lower, "permission denied")
-}
-
 func (r *Runtime) openFile(path string, flag int, mode os.FileMode) (*os.File, error) {
 	if r.deps.OpenFile != nil {
 		return r.deps.OpenFile(path, flag, mode)
@@ -1157,6 +1129,13 @@ func stopProcess(pid int) error {
 	}
 	if err := proc.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return err
+	}
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if !processAlive(pid) {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	return nil
 }

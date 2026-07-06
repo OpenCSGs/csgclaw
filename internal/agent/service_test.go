@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -363,16 +362,19 @@ func (f *fakeInfoInstance) Info(context.Context) (sandbox.Info, error) {
 type fakeLifecycleObserver struct {
 	ensureCalls []Agent
 	stopCalls   []string
+	events      []string
 	ensureErr   error
 }
 
 func (f *fakeLifecycleObserver) EnsureAgent(_ context.Context, a Agent) error {
 	f.ensureCalls = append(f.ensureCalls, a)
+	f.events = append(f.events, "ensure:"+a.ID)
 	return f.ensureErr
 }
 
 func (f *fakeLifecycleObserver) StopAgent(agentID string) {
 	f.stopCalls = append(f.stopCalls, agentID)
+	f.events = append(f.events, "stop:"+agentID)
 }
 
 type cancelOnWrite struct {
@@ -1925,8 +1927,14 @@ func TestRecreateTriggersLifecycleObserver(t *testing.T) {
 	if got.Avatar != "avatar/cartoon-7.png" {
 		t.Fatalf("Recreate().Avatar = %q, want %q", got.Avatar, "avatar/cartoon-7.png")
 	}
+	if len(observer.stopCalls) != 1 || observer.stopCalls[0] != "agent-alice" {
+		t.Fatalf("StopAgent() calls = %+v, want one call for agent-alice", observer.stopCalls)
+	}
 	if len(observer.ensureCalls) != 1 || observer.ensureCalls[0].ID != "agent-alice" {
 		t.Fatalf("EnsureAgent() calls = %+v, want one call for agent-alice", observer.ensureCalls)
+	}
+	if got, want := strings.Join(observer.events, ","), "stop:agent-alice,ensure:agent-alice"; got != want {
+		t.Fatalf("lifecycle events = %q, want %q", got, want)
 	}
 }
 
@@ -3910,7 +3918,7 @@ func TestDeleteRemovesRuntimeCacheByHomeDir(t *testing.T) {
 	}
 }
 
-func TestDeleteRetriesAgentHomeRemovalOnDirectoryNotEmpty(t *testing.T) {
+func TestDeleteReturnsAgentHomeRemovalError(t *testing.T) {
 	rt := &fakeRuntime{}
 	SetTestHooks(func(_ *Service, _ string) (sandbox.Runtime, error) { return rt, nil }, nil)
 	defer ResetTestHooks()
@@ -3952,10 +3960,7 @@ func TestDeleteRetriesAgentHomeRemovalOnDirectoryNotEmpty(t *testing.T) {
 	osRemoveAll = func(path string) error {
 		removeCalls++
 		if path == agentHome && removeCalls == 1 {
-			return &os.PathError{Op: "unlinkat", Path: filepath.Join(agentHome, "boxlite", "images"), Err: syscall.ENOTEMPTY}
-		}
-		if path == agentHome && removeCalls == 2 {
-			return &os.PathError{Op: "unlinkat", Path: filepath.Join(agentHome, "boxlite", "images"), Err: syscall.EACCES}
+			return &os.PathError{Op: "unlinkat", Path: filepath.Join(agentHome, ".codex", "home", "logs_2.sqlite"), Err: errors.New("The process cannot access the file because it is being used by another process.")}
 		}
 		return os.RemoveAll(path)
 	}
@@ -3963,14 +3968,12 @@ func TestDeleteRetriesAgentHomeRemovalOnDirectoryNotEmpty(t *testing.T) {
 		osRemoveAll = origRemoveAll
 	}()
 
-	if err := svc.Delete(context.Background(), "u-alice"); err != nil {
-		t.Fatalf("Delete() error = %v", err)
+	err = svc.Delete(context.Background(), "u-alice")
+	if err == nil || !strings.Contains(err.Error(), "being used by another process") {
+		t.Fatalf("Delete() error = %v, want locked file error", err)
 	}
-	if removeCalls < 3 {
-		t.Fatalf("osRemoveAll() calls = %d, want at least 3", removeCalls)
-	}
-	if _, err := os.Stat(agentHome); !os.IsNotExist(err) {
-		t.Fatalf("agent home still exists after delete: err=%v", err)
+	if removeCalls != 1 {
+		t.Fatalf("osRemoveAll() calls = %d, want 1", removeCalls)
 	}
 }
 

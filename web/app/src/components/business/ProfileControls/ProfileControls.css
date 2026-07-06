@@ -240,6 +240,27 @@
   min-width: 0;
 }
 
+.env-key-cell {
+  position: relative;
+  min-width: 0;
+}
+
+.env-key-cell input {
+  width: 100%;
+}
+
+.env-required-star {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.env-row.required .env-key-cell input {
+  padding-right: 28px;
+}
+
 .env-remove-button {
   border-color: var(--line);
   color: var(--muted);

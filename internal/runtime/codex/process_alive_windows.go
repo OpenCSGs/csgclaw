@@ -3,17 +3,24 @@
 package codex
 
 import (
-	"os"
 	"syscall"
 )
+
+const stillActive = 259
 
 func processAlivePID(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	proc, err := os.FindProcess(pid)
+	handle, err := syscall.OpenProcess(syscall.PROCESS_QUERY_INFORMATION, false, uint32(pid))
 	if err != nil {
 		return false
 	}
-	return proc.Signal(syscall.Signal(0)) == nil
+	defer syscall.CloseHandle(handle)
+
+	var exitCode uint32
+	if err := syscall.GetExitCodeProcess(handle, &exitCode); err != nil {
+		return false
+	}
+	return exitCode == stillActive
 }

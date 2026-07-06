@@ -772,6 +772,7 @@ export const messages = {
     modelLoadFailed: "模型加载失败",
     agentProfileSetupRequired: "待完成配置",
     profileSaveIncompleteError: "请先选择模型，并在 OpenAI API 模式下填写 Base URL 与 API Key。",
+    profileEnvRequiredError: "请填写模板要求的环境变量。",
     profileSetupIncompleteAfterSave: "保存未生效：请补全模型与连接信息后再保存。",
     authConnected: "已连接",
     authMissing: "需要登录",
@@ -1665,6 +1666,7 @@ export const messages = {
     modelLoadFailed: "Failed to load models",
     agentProfileSetupRequired: "Setup required",
     profileSaveIncompleteError: "Select a model first. For OpenAI API, provide Base URL and API Key.",
+    profileEnvRequiredError: "Fill in the environment variables required by the template.",
     profileSetupIncompleteAfterSave:
       "Save did not complete setup. Finish the model and connection details, then save again.",
     authConnected: "Connected",
