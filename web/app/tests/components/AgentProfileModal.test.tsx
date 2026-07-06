@@ -30,7 +30,7 @@ const labels: Record<string, string> = {
   modelProviderModelSearch: "Search models",
   modelProviderNoModels: "No models",
   profileRuntimeOptions: "Runtime Options",
-  profileProvider: "Provider",
+  profileProvider: "Model Provider",
   profileRuntimeKind: "Runtime",
   profileEnv: "Environment",
   profileSandboxEnabled: "Sandbox",

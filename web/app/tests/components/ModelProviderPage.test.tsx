@@ -235,7 +235,7 @@ describe("ModelProviderPage", () => {
     expect(screen.getAllByText("https://ai.space.opencsg.com/v1")).toHaveLength(2);
     expect(container.querySelector(".model-provider-header-avatar")).toHaveAttribute(
       "src",
-      "model-providers/opencsg.png",
+      "model-providers/opencsg.svg",
     );
 
     await user.click(screen.getByRole("button", { name: "Sign in" }));

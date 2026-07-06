@@ -14,6 +14,7 @@ const labels: Record<string, string> = {
   computersSection: "Computers",
   resourcesSkillsEmpty: "No skills",
   resourcesSkillsLabel: "Skills",
+  resourcesModelProvidersSection: "Model Providers",
   resourcesSkillRemoteInstallFailed: "Install failed",
   resourcesSkillRemoteInstallAction: "Install",
   resourcesSkillRemoteInstallTab: "Community install",
@@ -185,7 +186,7 @@ describe("WorkspaceTabPanels", () => {
       (button) => button.textContent,
     );
 
-    expect(groupLabels).toEqual(["Agents1", "modelsSection0", "Human1", "Computers1", "Notifications0", "Teams0"]);
+    expect(groupLabels).toEqual(["Agents1", "Human1", "Computers1", "Notifications0", "Teams0"]);
   });
 
   it("renders hub templates and skills in separate workspace groups", () => {

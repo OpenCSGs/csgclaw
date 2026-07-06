@@ -16,7 +16,7 @@ const labels: Record<string, string> = {
   modelProviderCreateIdentityDescription: "Set a sidebar name.",
   modelProviderCreateIdentityTitle: "Identity",
   modelProviderCreateSubtitle: "Add an OpenAI-compatible API provider.",
-  modelProviderCreateTitle: "Add model provider",
+  modelProviderCreateTitle: "Add OpenAI API",
   modelProviderDisplayName: "Display name",
   modelProviderDuplicateDisplayName: "Display name is already used.",
   modelProviderModelCount: "{count} models",

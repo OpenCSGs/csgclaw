@@ -457,7 +457,7 @@ export function WorkspaceTabPanels({
     return (
       <WorkspaceGroup
         id="models"
-        title={t("modelsSection")}
+        title={t("resourcesModelProvidersSection")}
         count={providers.length}
         collapsed={Boolean(collapsedWorkspaceGroups.models)}
         onToggle={() => onToggleWorkspaceGroup("models")}
