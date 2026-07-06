@@ -136,7 +136,7 @@ func TestExecuteAgentListUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/agents" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
 			}
-				return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}]`), nil
+			return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}]`), nil
 		}),
 	}
 
@@ -158,7 +158,7 @@ func TestExecuteAgentStartUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/agents/u-alice/start" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-alice/start")
 			}
-				return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
+			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
 		}),
 	}
 
@@ -180,7 +180,7 @@ func TestExecuteAgentStopUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/agents/u-alice/stop" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-alice/stop")
 			}
-				return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","role":"worker","status":"stopped","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
+			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","role":"worker","status":"stopped","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
 		}),
 	}
 
@@ -466,14 +466,14 @@ func TestExecuteAgentCreateUsesHTTPClient(t *testing.T) {
 			if payload["profile"] != "cliproxy-codex" {
 				t.Fatalf("payload[profile] = %#v, want %q", payload["profile"], "cliproxy-codex")
 			}
-				if payload["runtime_kind"] != nil {
-					t.Fatalf("payload[runtime_kind] = %#v, want omitted", payload["runtime_kind"])
-				}
-				if payload["runtime_name"] != "codex" {
-					t.Fatalf("payload[runtime_name] = %#v, want %q", payload["runtime_name"], "codex")
-				}
+			if payload["runtime_kind"] != nil {
+				t.Fatalf("payload[runtime_kind] = %#v, want omitted", payload["runtime_kind"])
+			}
+			if payload["runtime_name"] != "codex" {
+				t.Fatalf("payload[runtime_name] = %#v, want %q", payload["runtime_name"], "codex")
+			}
 
-				return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
+			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
 		}),
 	}
 
@@ -580,15 +580,15 @@ func TestExecuteAgentCreateReplaceOverridesExplicitFields(t *testing.T) {
 			if payload["profile"] != "codex-fast" {
 				t.Fatalf("payload[profile] = %#v, want %q", payload["profile"], "codex-fast")
 			}
-				if payload["runtime_kind"] != nil {
-					t.Fatalf("payload[runtime_kind] = %#v, want omitted", payload["runtime_kind"])
-				}
-				if payload["runtime_name"] != "codex" {
-					t.Fatalf("payload[runtime_name] = %#v, want %q", payload["runtime_name"], "codex")
-				}
-				assertStringSliceValue(t, payload["field_mask"], []string{"id", "name", "description", "image", "profile", "runtime"})
+			if payload["runtime_kind"] != nil {
+				t.Fatalf("payload[runtime_kind] = %#v, want omitted", payload["runtime_kind"])
+			}
+			if payload["runtime_name"] != "codex" {
+				t.Fatalf("payload[runtime_name] = %#v, want %q", payload["runtime_name"], "codex")
+			}
+			assertStringSliceValue(t, payload["field_mask"], []string{"id", "name", "description", "image", "profile", "runtime"})
 
-				return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice-v2","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-fast"}`), nil
+			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice-v2","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-fast"}`), nil
 		}),
 	}
 

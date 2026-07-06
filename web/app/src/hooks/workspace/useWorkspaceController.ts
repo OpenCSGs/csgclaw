@@ -22,6 +22,7 @@ import { useWorkspaceHubController } from "./useWorkspaceHubController";
 import { useUpgradeController } from "./useUpgradeController";
 import { useConfigController } from "./useConfigController";
 import { useAuthController } from "./useAuthController";
+import { useConnectorController } from "./useConnectorController";
 import { useAgentController } from "./useAgentController";
 import { useConversationController } from "./useConversationController";
 import { useProfilePreviewController } from "./useProfilePreviewController";
@@ -235,6 +236,7 @@ export function useWorkspaceController() {
     workspaceTab,
   });
   const auth = useAuthController(t);
+  const connectors = useConnectorController(t);
   const { hub, refreshHubTemplates } = useWorkspaceHubController({
     hubLoaded,
     hubTemplates,
@@ -308,6 +310,14 @@ export function useWorkspaceController() {
     agents,
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
+    connectorStatus: connectors.github,
+    connectorBusyAction: connectors.busyAction,
+    connectorError: connectors.error,
+    connectorPending: connectors.pending,
+    onSaveConnectorConfig: connectors.saveGitHubConfig,
+    onConnectConnector: connectors.connectGitHub,
+    onDisconnectConnector: connectors.disconnectGitHub,
+    onManageConnector: connectors.manageGitHub,
     data: displayData,
     locale,
     managerProfile,
@@ -345,6 +355,14 @@ export function useWorkspaceController() {
     autoSelectFallbackConversation: false,
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
+    connectorStatus: connectors.github,
+    connectorBusyAction: connectors.busyAction,
+    connectorError: connectors.error,
+    connectorPending: connectors.pending,
+    onSaveConnectorConfig: connectors.saveGitHubConfig,
+    onConnectConnector: connectors.connectGitHub,
+    onDisconnectConnector: connectors.disconnectGitHub,
+    onManageConnector: connectors.manageGitHub,
     data: displayData,
     locale,
     managerProfile,

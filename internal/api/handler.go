@@ -22,6 +22,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/codexcli"
 	"csgclaw/internal/config"
+	"csgclaw/internal/connectors"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/participant"
@@ -48,6 +49,7 @@ type Handler struct {
 	hub                        *hub.Service
 	teamSvc                    *team.Service
 	agentTaskSvc               *agenttask.Service
+	connectors                 *connectors.Service
 	teamAdapters               *team.AdapterRegistry
 	teamPlanJobsMu             sync.Mutex
 	teamPlanJobs               map[string]struct{}
@@ -699,6 +701,12 @@ func (h *Handler) SetTeamService(svc *team.Service) {
 func (h *Handler) SetAgentTaskService(svc *agenttask.Service) {
 	if h != nil {
 		h.agentTaskSvc = svc
+	}
+}
+
+func (h *Handler) SetConnectorService(svc *connectors.Service) {
+	if h != nil {
+		h.connectors = svc
 	}
 }
 

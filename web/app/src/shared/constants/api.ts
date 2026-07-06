@@ -11,6 +11,12 @@ export const ApiEndpoints = {
   authStatus: `${API_BASE_PATH}/auth/status`,
   authLogin: `${API_BASE_PATH}/auth/login`,
   authLogout: `${API_BASE_PATH}/auth/logout`,
+  connectors: `${API_BASE_PATH}/connectors`,
+  githubConnector: `${API_BASE_PATH}/connectors/github`,
+  githubConnectorAppInstallStart: `${API_BASE_PATH}/connectors/github/app/install/start`,
+  githubConnectorConfig: `${API_BASE_PATH}/connectors/github/config`,
+  githubConnectorOAuthStart: `${API_BASE_PATH}/connectors/github/oauth/start`,
+  githubConnectorDisconnect: `${API_BASE_PATH}/connectors/github/disconnect`,
   notifierRelayWebhookIngress: `${API_BASE_PATH}/webhooks/ingress`,
 } as const;
 
