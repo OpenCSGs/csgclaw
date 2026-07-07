@@ -1254,40 +1254,109 @@
   margin-top: 14px;
 }
 
-.taskViewSwitch {
-  display: inline-flex;
-  width: fit-content;
+.taskCreateTabs {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 14px;
   padding: 3px;
-  gap: 2px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-muted);
 }
 
-.taskViewSwitch button {
-  min-width: 76px;
-  min-height: 30px;
+.taskCreateTabs button {
+  min-height: 32px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
+  padding: 6px 12px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
 
-.taskViewSwitch button[data-active] {
+.taskCreateTabs button[data-active] {
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--gray-950) 10%, transparent);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+}
+
+.taskContentLayout {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  border-top: 1px solid var(--line);
+}
+
+.taskSideList {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 12px;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-muted) 60%, var(--surface));
+}
+
+.taskSideGroup {
+  display: grid;
+  gap: 4px;
+}
+
+.taskSideSectionRow {
+  display: grid;
+  min-height: 36px;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.taskSideSectionRow span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskSideSectionRow strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.taskSideSectionRow[data-active] {
+  background: color-mix(in srgb, var(--primary) 11%, transparent);
+  color: var(--primary);
+}
+
+.taskContentMain {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .scheduledTaskLayout {
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
-  min-height: 520px;
-  border-top: 1px solid var(--line);
+  min-height: 0;
 }
 
 .scheduledTaskList {
@@ -1410,13 +1479,37 @@
   font-size: 14px;
 }
 
+.scheduledTaskRunList {
+  max-height: clamp(96px, 18vh, 180px);
+  overflow-y: auto;
+  padding-right: 4px;
+  border-top: 1px solid var(--line);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--gray-400) 58%, transparent) transparent;
+}
+
+.scheduledTaskRunList::-webkit-scrollbar {
+  width: 5px;
+}
+
+.scheduledTaskRunList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scheduledTaskRunList::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gray-400) 62%, transparent);
+  background-clip: content-box;
+}
+
 .scheduledTaskRunRow {
   display: grid;
   grid-template-columns: minmax(140px, 180px) minmax(80px, 100px) minmax(120px, 1fr);
   gap: 10px;
   align-items: center;
   padding: 10px 0;
-  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   color: var(--muted);
   font-size: 13px;
 }
@@ -1436,9 +1529,112 @@
   cursor: pointer;
 }
 
+.scheduledTaskRunRow button[data-active] {
+  color: var(--primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .scheduledTaskRunRow small {
   grid-column: 1 / -1;
   color: var(--danger);
+}
+
+.generatedTaskDetail {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.generatedTaskDetailHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.generatedTaskDetailHead h3,
+.generatedTaskDetail h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.generatedTaskPanel {
+  display: grid;
+  gap: 14px;
+  min-height: 132px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-muted) 38%, transparent);
+}
+
+.generatedTaskSummary {
+  min-width: 0;
+}
+
+.generatedTaskTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.generatedTaskTitleRow strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.generatedTaskSummary p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.generatedTaskDescription {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.generatedTaskDescription p {
+  margin: 8px 0 0;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.generatedTaskEmpty {
+  min-height: 108px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.generatedTaskDetailGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(240px, 0.8fr);
+  gap: 14px;
+}
+
+.generatedTaskActivity,
+.generatedTaskMeta {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-muted) 58%, transparent);
+}
+
+.generatedTaskMeta {
+  align-self: start;
 }
 
 @media (max-width: 980px) {
@@ -1477,6 +1673,15 @@
 
   .taskCreateForm {
     grid-template-columns: 1fr;
+  }
+
+  .taskContentLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .taskSideList {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
 
   .scheduledTaskLayout {

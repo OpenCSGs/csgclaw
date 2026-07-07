@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { vi } from "vitest";
 import { TasksView } from "@/pages/TasksPage/components";
+import type { AgentLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
+import type { WorkspaceScheduledTask, WorkspaceScheduledTaskRun } from "@/models/scheduledTasks";
 import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
 
 const labels: Record<string, string> = {
@@ -27,6 +29,7 @@ const labels: Record<string, string> = {
   taskOpenExecutionRoomShort: "Room",
   taskParentDetailTitle: "Task detail",
   taskRoomLabel: "Room",
+  taskCreate: "New task",
   taskCreateSubmit: "Create",
   taskCreateSubtitle: "Create a task",
   taskCreateTitle: "New task",
@@ -63,6 +66,47 @@ const labels: Record<string, string> = {
   taskAssignmentPlaceholder: "Choose an assignee",
   taskAssignmentRequired: "Choose an assignee.",
   taskTeamLabel: "Team",
+  scheduledTasksTab: "Scheduled",
+  scheduledTasksEmpty: "No scheduled tasks yet.",
+  scheduledTaskCreate: "New scheduled task",
+  scheduledTaskCreateSubmit: "Save",
+  scheduledTaskCreateTitle: "New scheduled task",
+  scheduledTaskCreateSubtitle: "Create scheduled task",
+  scheduledTaskEdit: "Edit",
+  scheduledTaskDelete: "Delete",
+  scheduledTaskDeleteConfirmMessage: 'Delete scheduled task "{title}"? This action cannot be undone.',
+  scheduledTaskEditTitle: "Edit scheduled task",
+  scheduledTaskEditSubtitle: "Edit scheduled task",
+  scheduledTaskSaveChanges: "Save changes",
+  scheduledTaskAgentLabel: "Agent",
+  scheduledTaskAgentPlaceholder: "Choose an agent",
+  scheduledTaskAgentRequired: "Choose an agent.",
+  scheduledTaskPromptLabel: "Prompt",
+  scheduledTaskPromptPlaceholder: "Prompt sent to the agent",
+  scheduledTaskPromptRequired: "Prompt is required.",
+  scheduledTaskRecurrenceLabel: "Schedule",
+  scheduledTaskRecurrenceOnce: "Does not repeat",
+  scheduledTaskRecurrenceDaily: "Daily",
+  scheduledTaskRecurrenceWeekly: "Weekly",
+  scheduledTaskRecurrenceMonthly: "Monthly",
+  scheduledTaskDateLabel: "Date",
+  scheduledTaskDateRequired: "Choose a date.",
+  scheduledTaskTimeLabel: "Time",
+  scheduledTaskTimeRequired: "Choose a time.",
+  scheduledTaskExpiresLabel: "End date (optional)",
+  scheduledTaskNextRunLabel: "Next run",
+  scheduledTaskLastRunLabel: "Last run",
+  scheduledTaskRunsTitle: "Run history",
+  scheduledTaskRunsEmpty: "No runs yet.",
+  scheduledTaskRunNow: "Run now",
+  scheduledTaskEnable: "Enable",
+  scheduledTaskDisable: "Disable",
+  scheduledTaskCompleted: "Completed",
+  scheduledTaskActiveTask: "Task running",
+  scheduledTaskRunTriggeredStatus: "Triggered",
+  scheduledTaskRunFailedStatus: "Failed",
+  generatedTaskDetailTitle: "Generated task detail",
+  generatedTaskDetailEmpty: "Select a run record to inspect the generated task.",
   cancel: "Cancel",
   close: "Close",
 };
@@ -82,6 +126,9 @@ const t: TranslateFn = (key, params = {}) => {
   }
   if (key === "taskCardUpdatedAt") {
     return `Updated ${params.time}`;
+  }
+  if (key === "scheduledTaskDeleteConfirmMessage") {
+    return `Delete scheduled task "${params.title}"? This action cannot be undone.`;
   }
   if (key.startsWith("taskStatus.")) {
     return key.replace("taskStatus.", "");
@@ -130,6 +177,44 @@ function team(overrides: Partial<WorkspaceTeam> = {}): WorkspaceTeam {
     status: "active",
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function agent(overrides: Partial<AgentLike> = {}): AgentLike {
+  return {
+    id: "agent-1",
+    name: "Worker One",
+    role: "worker",
+    ...overrides,
+  };
+}
+
+function scheduledTask(overrides: Partial<WorkspaceScheduledTask> = {}): WorkspaceScheduledTask {
+  return {
+    id: "scheduled-task-1",
+    title: "Morning report",
+    agent_id: "agent-1",
+    prompt: "Summarize overnight progress",
+    recurrence: "daily",
+    enabled: true,
+    next_run_at: "2026-07-07T09:30:00",
+    last_run_at: "",
+    expires_at: "2026-07-31T23:59:00",
+    created_at: "2026-07-01T00:00:00",
+    updated_at: "2026-07-01T00:00:00",
+    ...overrides,
+  };
+}
+
+function scheduledTaskRun(overrides: Partial<WorkspaceScheduledTaskRun> = {}): WorkspaceScheduledTaskRun {
+  return {
+    id: "scheduled-run-1",
+    scheduled_task_id: "scheduled-task-1",
+    triggered_at: "2026-07-07T10:00:00",
+    status: "triggered",
+    task_id: "task-scheduled-run-1",
+    error: "",
     ...overrides,
   };
 }
@@ -373,6 +458,20 @@ describe("TasksView", () => {
     expect(screen.queryByText("tasksEmpty")).not.toBeInTheDocument();
   });
 
+  it("shows task and scheduled-task creation as tabs in the create dialog", () => {
+    render(<TasksView showCreateTaskModal agents={[agent()]} teams={[team()]} t={t} />);
+
+    expect(screen.getByRole("dialog", { name: "New task" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "New task" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "New scheduled task" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "New scheduled task" }));
+
+    expect(screen.getByRole("dialog", { name: "New scheduled task" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Schedule" })).toBeInTheDocument();
+  });
+
   it("does not show planner as the current worker after a parent task is completed", () => {
     const tasks = [
       task({
@@ -396,5 +495,224 @@ describe("TasksView", () => {
 
     expect(screen.getByRole("dialog", { name: "Build blog" })).toBeInTheDocument();
     expect(screen.queryByTitle("planner done")).not.toBeInTheDocument();
+  });
+
+  it("edits an existing scheduled task from the detail pane", async () => {
+    const onOpenEditScheduledTaskModal = vi.fn();
+    const onEditScheduledTask = vi.fn();
+    const agents = [agent(), agent({ id: "agent-2", name: "Worker Two" })];
+    const item = scheduledTask();
+
+    const view = (
+      <TasksView
+        agents={agents}
+        scheduledTasks={[item]}
+        selectedScheduledTaskID={item.id}
+        activeView="scheduled"
+        onOpenEditScheduledTaskModal={onOpenEditScheduledTaskModal}
+        onEditScheduledTask={onEditScheduledTask}
+        t={t}
+      />
+    );
+
+    const { rerender } = render(view);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(onOpenEditScheduledTaskModal).toHaveBeenCalledWith(item.id);
+
+    rerender(<TasksView {...view.props} editingScheduledTaskID={item.id} />);
+
+    expect(screen.getByRole("dialog", { name: "Edit scheduled task" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Morning report")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Summarize overnight progress")).toBeInTheDocument();
+    expect(screen.getByLabelText("Date")).toHaveValue("2026-07-07");
+    expect(screen.getByLabelText("Time")).toHaveValue("09:30");
+    expect(screen.getByLabelText("End date (optional)")).toHaveValue("2026-07-31");
+
+    fireEvent.input(screen.getByLabelText("Title"), { target: { value: "Updated report" } });
+    fireEvent.input(screen.getByLabelText("Prompt"), { target: { value: "Write the updated report" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Agent" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Worker Two/ }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Schedule" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Weekly" }));
+    fireEvent.input(screen.getByLabelText("Date"), { target: { value: "2026-07-08" } });
+    fireEvent.input(screen.getByLabelText("Time"), { target: { value: "10:15" } });
+    fireEvent.input(screen.getByLabelText("End date (optional)"), { target: { value: "2026-08-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(onEditScheduledTask).toHaveBeenCalledWith(item.id, {
+        title: "Updated report",
+        agent_id: "agent-2",
+        prompt: "Write the updated report",
+        recurrence: "weekly",
+        next_run_at: new Date("2026-07-08T10:15:00").toISOString(),
+        expires_at: new Date("2026-08-01T23:59:00").toISOString(),
+        enabled: true,
+      }),
+    );
+  });
+
+  it("reactivates a completed one-time scheduled task when editing in a new run time", async () => {
+    const onEditScheduledTask = vi.fn();
+    const agents = [agent()];
+    const item = scheduledTask({
+      enabled: false,
+      next_run_at: "",
+      expires_at: "",
+      recurrence: "once",
+    });
+
+    render(
+      <TasksView
+        agents={agents}
+        scheduledTasks={[item]}
+        selectedScheduledTaskID={item.id}
+        editingScheduledTaskID={item.id}
+        onEditScheduledTask={onEditScheduledTask}
+        t={t}
+      />,
+    );
+
+    fireEvent.input(screen.getByLabelText("Date"), { target: { value: "2026-07-08" } });
+    fireEvent.input(screen.getByLabelText("Time"), { target: { value: "10:15" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(onEditScheduledTask).toHaveBeenCalledWith(
+        item.id,
+        expect.objectContaining({
+          next_run_at: new Date("2026-07-08T10:15:00").toISOString(),
+          enabled: true,
+        }),
+      ),
+    );
+  });
+
+  it("allows daily scheduled task edits with only a time", async () => {
+    const onEditScheduledTask = vi.fn();
+    const agents = [agent()];
+    const item = scheduledTask({
+      enabled: false,
+      next_run_at: "",
+      expires_at: "",
+      recurrence: "once",
+    });
+    const now = new Date();
+    const target = new Date(now.getTime() + 5 * 60 * 1000);
+    const targetTime = `${String(target.getHours()).padStart(2, "0")}:${String(target.getMinutes()).padStart(2, "0")}`;
+    const expected = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      target.getHours(),
+      target.getMinutes(),
+      0,
+      0,
+    );
+    if (expected.getTime() <= now.getTime()) {
+      expected.setDate(expected.getDate() + 1);
+    }
+
+    render(
+      <TasksView
+        agents={agents}
+        scheduledTasks={[item]}
+        selectedScheduledTaskID={item.id}
+        editingScheduledTaskID={item.id}
+        onEditScheduledTask={onEditScheduledTask}
+        t={t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Schedule" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Daily" }));
+    fireEvent.input(screen.getByLabelText("Time"), { target: { value: targetTime } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(screen.queryByText("Choose a date.")).not.toBeInTheDocument();
+    expect(onEditScheduledTask).toHaveBeenCalledWith(
+      item.id,
+      expect.objectContaining({
+        recurrence: "daily",
+        next_run_at: expected.toISOString(),
+        enabled: true,
+      }),
+    );
+  });
+
+  it("shows a scheduled run task inline instead of opening the task dialog", () => {
+    const generatedTask = task({
+      id: "task-scheduled-run-1",
+      title: "Generated report",
+      body: "Generated task body",
+      assignment_type: "agent",
+      assignment_id: "agent-1",
+      agent_id: "agent-1",
+      team_id: "",
+      created_by: "scheduler",
+      status: "completed",
+    } as Partial<WorkspaceTask>);
+
+    render(
+      <TasksView
+        activeView="scheduled"
+        tasks={[generatedTask]}
+        scheduledTasks={[scheduledTask()]}
+        scheduledTaskRuns={[scheduledTaskRun()]}
+        selectedScheduledTaskID="scheduled-task-1"
+        t={t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "task-scheduled-run-1" }));
+
+    expect(screen.queryByRole("dialog", { name: "Generated report" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Generated task detail")).toBeInTheDocument();
+    expect(screen.getByText("Generated report")).toBeInTheDocument();
+    expect(screen.getByText("Generated task body")).toBeInTheDocument();
+  });
+
+  it("keeps the generated task detail area reserved before a run is selected", () => {
+    render(
+      <TasksView
+        activeView="scheduled"
+        scheduledTasks={[scheduledTask()]}
+        selectedScheduledTaskID="scheduled-task-1"
+        t={t}
+      />,
+    );
+
+    expect(screen.getByLabelText("Generated task detail")).toBeInTheDocument();
+    expect(screen.getByText("Select a run record to inspect the generated task.")).toBeInTheDocument();
+  });
+
+  it("confirms before deleting a scheduled task", async () => {
+    const onDeleteScheduledTask = vi.fn();
+    const item = scheduledTask();
+
+    render(
+      <TasksView
+        scheduledTasks={[item]}
+        selectedScheduledTaskID={item.id}
+        activeView="scheduled"
+        onDeleteScheduledTask={onDeleteScheduledTask}
+        t={t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(screen.getByRole("dialog", { name: "Delete" })).toBeInTheDocument();
+    expect(
+      screen.getByText('Delete scheduled task "Morning report"? This action cannot be undone.'),
+    ).toBeInTheDocument();
+    expect(onDeleteScheduledTask).not.toHaveBeenCalled();
+
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+
+    await waitFor(() => expect(onDeleteScheduledTask).toHaveBeenCalledWith(item.id));
   });
 });

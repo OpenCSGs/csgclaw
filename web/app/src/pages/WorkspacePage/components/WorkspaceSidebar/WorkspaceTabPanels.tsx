@@ -81,6 +81,7 @@ type WorkspaceTabPanelsProps = Pick<
   | "onSelectHubTemplate"
   | "onSelectModelProvider"
   | "onSelectTask"
+  | "onSelectTaskBoardView"
   | "onSelectTeam"
   | "onSelectThread"
   | "onToggleWorkspaceGroup"
@@ -89,6 +90,8 @@ type WorkspaceTabPanelsProps = Pick<
   | "startingTaskID"
   | "t"
   | "taskCount"
+  | "scheduledTaskCount"
+  | "activeTaskBoardView"
   | "taskItems"
   | "teams"
   | "threadGroups"
@@ -193,6 +196,8 @@ function reorderSection(order: readonly SectionId[], sourceId: SectionId, target
 export function WorkspaceTabPanels({
   workspaceTab,
   taskCount = 0,
+  scheduledTaskCount = 0,
+  activeTaskBoardView = "tasks",
   teams = [],
   channels,
   directMessages,
@@ -229,6 +234,8 @@ export function WorkspaceTabPanels({
   onPreviewAgent,
   onSelectComputer,
   onCreateModelProvider,
+  onSelectTaskBoardView = () => {},
+  onSelectTask,
 }: WorkspaceTabPanelsProps) {
   const [skillUploadOpen, setSkillUploadOpen] = useState(false);
   const resourcesTemplates = hub?.templates ?? [];
@@ -691,9 +698,7 @@ export function WorkspaceTabPanels({
                   <button
                     key={item.id}
                     className={`workspace-row hub-template-row ${
-                      resourcesPaneActive &&
-                      selectedHubTemplateId === item.id &&
-                      selectedHubResourceType === "template"
+                      resourcesPaneActive && selectedHubTemplateId === item.id && selectedHubResourceType === "template"
                         ? "active"
                         : ""
                     }`}
@@ -782,14 +787,41 @@ export function WorkspaceTabPanels({
           <WorkspaceGroup
             id="tasks"
             title={t("tasksTab")}
-            count={taskCount}
+            count={taskCount + scheduledTaskCount}
             collapsed={Boolean(collapsedWorkspaceGroups.tasks)}
             onToggle={() => onToggleWorkspaceGroup("tasks")}
             onAdd={onOpenCreateTask}
             addLabel={t("taskCreate")}
             addIcon={<Plus size={15} strokeWidth={2.2} aria-hidden="true" />}
           >
-            {null}
+            <button
+              type="button"
+              className={`workspace-row workspace-task-section-row ${activeTaskBoardView === "tasks" ? "active" : ""}`}
+              onClick={() => {
+                onSelectTaskBoardView("tasks");
+                onSelectTask();
+              }}
+            >
+              <span className="workspace-row-main">
+                <span className="workspace-row-title truncate">{t("normalTasksTab")}</span>
+              </span>
+              <span className="workspace-row-count">{taskCount}</span>
+            </button>
+            <button
+              type="button"
+              className={`workspace-row workspace-task-section-row ${
+                activeTaskBoardView === "scheduled" ? "active" : ""
+              }`}
+              onClick={() => {
+                onSelectTaskBoardView("scheduled");
+                onSelectTask();
+              }}
+            >
+              <span className="workspace-row-main">
+                <span className="workspace-row-title truncate">{t("scheduledTasksTab")}</span>
+              </span>
+              <span className="workspace-row-count">{scheduledTaskCount}</span>
+            </button>
           </WorkspaceGroup>
         </div>
       ) : (

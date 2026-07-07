@@ -65,6 +65,7 @@ export type WorkspaceSidebarProps = {
   onSelectHubTemplate: (item: HubTemplate | null | undefined) => void;
   onSelectModelProvider?: (item: ModelProvider | null | undefined) => void;
   onSelectTeam: (item: WorkspaceTeam | null | undefined) => void;
+  onSelectTaskBoardView?: (view: "tasks" | "scheduled") => void;
   onSelectTask: (taskID?: string) => void;
   onSelectThread: (conversationID: string, message: IMMessage | null | undefined) => void | Promise<void>;
   onViewTaskDetails: (taskID?: string) => void;
@@ -73,6 +74,8 @@ export type WorkspaceSidebarProps = {
   onWorkspaceTabChange: (tab: WorkspaceTab) => void;
   onLocaleChange: (locale: LocaleCode) => void;
   taskCount: number;
+  scheduledTaskCount?: number;
+  activeTaskBoardView?: "tasks" | "scheduled";
   taskItems: WorkspaceTask[];
   planningTaskID?: string;
   startingTaskID?: string;

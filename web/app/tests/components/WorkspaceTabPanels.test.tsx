@@ -40,6 +40,8 @@ const labels: Record<string, string> = {
   profilePreview: "Profile preview",
   taskCreate: "New task",
   tasksTab: "Tasks",
+  normalTasksTab: "Normal tasks",
+  scheduledTasksTab: "Scheduled",
   teamsSection: "Teams",
 };
 
@@ -238,7 +240,7 @@ describe("WorkspaceTabPanels", () => {
     expect(screen.getByText("demo-skill")).toBeInTheDocument();
   });
 
-  it("keeps the Tasks sidebar group empty while preserving the task count", () => {
+  it("shows Tasks sidebar subcategories while preserving counts", () => {
     const taskItem = {
       id: "task-1",
       assignment_type: "team",
@@ -301,6 +303,7 @@ describe("WorkspaceTabPanels", () => {
         onViewTaskDetails={() => {}}
         t={t}
         taskCount={1}
+        scheduledTaskCount={2}
         taskItems={[taskItem]}
         teams={[]}
         threadGroups={[]}
@@ -311,9 +314,10 @@ describe("WorkspaceTabPanels", () => {
     );
 
     const panel = screen.getByRole("tabpanel", { name: "Tasks" });
-    expect(screen.getByRole("button", { name: /Tasks1/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tasks3/ })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: /Normal tasks1/ })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: /Scheduled2/ })).toBeInTheDocument();
     expect(within(panel).queryByText("Build blog")).not.toBeInTheDocument();
-    expect(panel.querySelector(".workspace-group-items")).toBeEmptyDOMElement();
   });
 
   it("shows remote skills in the upload dialog remote mode", () => {

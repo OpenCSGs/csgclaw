@@ -1019,6 +1019,18 @@
   gap: 4px;
 }
 
+.workspace-task-section-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 36px;
+}
+
+.workspace-row-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .workspace-channel-badge {
   width: 18px;
   height: 18px;
@@ -3014,6 +3026,19 @@
   width: 30px;
   height: 30px;
   border-radius: 8px;
+}
+
+.workspace-task-section-row.workspace-row {
+  min-height: 34px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 5px 8px 5px 24px;
+}
+
+.workspace-task-section-row .workspace-row-title {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 18px;
 }
 
 .workspace-row-title-line {

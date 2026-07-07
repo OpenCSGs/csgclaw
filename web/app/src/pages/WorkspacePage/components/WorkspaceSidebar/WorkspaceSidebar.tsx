@@ -19,6 +19,8 @@ export function WorkspaceSidebar({
   onWorkspaceTabChange,
   showHubNewBadge,
   taskCount,
+  scheduledTaskCount,
+  activeTaskBoardView,
   roomCount,
   channels,
   directMessages,
@@ -45,6 +47,7 @@ export function WorkspaceSidebar({
   onSelectHubTemplate,
   onSelectHub,
   onSelectTask,
+  onSelectTaskBoardView,
   onViewTaskDetails,
   onSelectTeam,
   agentsError,
@@ -123,6 +126,8 @@ export function WorkspaceSidebar({
           <WorkspaceTabPanels
             workspaceTab={workspaceTab}
             taskCount={taskCount}
+            scheduledTaskCount={scheduledTaskCount}
+            activeTaskBoardView={activeTaskBoardView}
             taskItems={taskItems}
             teams={teams}
             planningTaskID={planningTaskID}
@@ -148,6 +153,7 @@ export function WorkspaceSidebar({
             onSelectHubSkill={onSelectHubSkill}
             onSelectHubTemplate={onSelectHubTemplate}
             onSelectTask={onSelectTask}
+            onSelectTaskBoardView={onSelectTaskBoardView}
             onViewTaskDetails={onViewTaskDetails}
             onSelectTeam={onSelectTeam}
             agentsError={agentsError}
