@@ -21,12 +21,14 @@ func TestStoreSaveLoadStatusAndDelete(t *testing.T) {
 			AccessToken: " access-token ",
 		},
 		Account: Account{
-			UserID:     " alice ",
-			UserUUID:   " user-uuid ",
-			Avatar:     " https://example.test/avatar.png ",
-			BaseURL:    " https://hub.example.test/ ",
-			PortalURL:  " https://hub.example.test/welcome ",
-			LoggedInAt: loggedInAt,
+			UserID:         " alice ",
+			UserUUID:       " user-uuid ",
+			Name:           " Alice Zhang ",
+			Avatar:         " https://example.test/avatar.png ",
+			OpenCSGBaseURL: " https://opencsg.example.test/ ",
+			BaseURL:        " https://hub.example.test/ ",
+			PortalURL:      " https://hub.example.test/welcome ",
+			LoggedInAt:     loggedInAt,
 		},
 		LastRefresh: loggedInAt,
 	})
@@ -34,6 +36,7 @@ func TestStoreSaveLoadStatusAndDelete(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 	if err := store.SaveCSGHubProviderCredentials(CSGHubProviderCredentials{
+		AIGatewayBaseURL:       " https://gateway.example.test ",
 		AIGatewayBuiltinAPIKey: " gk_api-key ",
 	}); err != nil {
 		t.Fatalf("SaveCSGHubProviderCredentials() error = %v", err)
@@ -105,6 +108,12 @@ func TestStoreSaveLoadStatusAndDelete(t *testing.T) {
 	if !status.Authenticated || status.UserID != "alice" || status.UserUUID != "user-uuid" {
 		t.Fatalf("status = %+v, want authenticated alice", status)
 	}
+	if status.Name != "Alice Zhang" {
+		t.Fatalf("status.Name = %q", status.Name)
+	}
+	if status.OpenCSGBaseURL != "https://opencsg.example.test" || status.AIGatewayBaseURL != "https://gateway.example.test/v1" {
+		t.Fatalf("status environment = %+v", status)
+	}
 	raw, err := json.Marshal(status)
 	if err != nil {
 		t.Fatalf("marshal status: %v", err)
@@ -140,7 +149,7 @@ func TestStoreSaveLoadStatusAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AIGatewayCredentials() error = %v", err)
 	}
-	if !ok || aiBaseURL != DefaultAIGatewayBaseURL || aiKey != "gk_api-key" {
+	if !ok || aiBaseURL != "https://gateway.example.test/v1" || aiKey != "gk_api-key" {
 		t.Fatalf("AIGatewayCredentials() = %q, %q, %v", aiBaseURL, aiKey, ok)
 	}
 
@@ -227,6 +236,7 @@ func TestEnsureAIGatewayCredentialsFetchesAndCachesBuiltinAPIKey(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 	if err := store.SaveCSGHubProviderCredentials(CSGHubProviderCredentials{
+		AIGatewayBaseURL:       "https://custom-gateway.example.test",
 		AIGatewayBuiltinAPIKey: "non-builtin-key",
 	}); err != nil {
 		t.Fatalf("SaveCSGHubProviderCredentials() error = %v", err)
@@ -236,7 +246,7 @@ func TestEnsureAIGatewayCredentialsFetchesAndCachesBuiltinAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureAIGatewayCredentials() error = %v", err)
 	}
-	if !ok || baseURL != "https://gateway.example.test/v1" || apiKey != "gk_builtin" {
+	if !ok || baseURL != "https://custom-gateway.example.test/v1" || apiKey != "gk_builtin" {
 		t.Fatalf("EnsureAIGatewayCredentials() = %q, %q, %v", baseURL, apiKey, ok)
 	}
 	if !sawBuiltin {
@@ -248,6 +258,9 @@ func TestEnsureAIGatewayCredentialsFetchesAndCachesBuiltinAPIKey(t *testing.T) {
 	}
 	if credentials.AIGatewayBuiltinAPIKey != "gk_builtin" {
 		t.Fatalf("stored AIGatewayBuiltinAPIKey = %q, want builtin key", credentials.AIGatewayBuiltinAPIKey)
+	}
+	if credentials.AIGatewayBaseURL != "https://custom-gateway.example.test/v1" {
+		t.Fatalf("stored AIGatewayBaseURL = %q", credentials.AIGatewayBaseURL)
 	}
 }
 
@@ -265,6 +278,7 @@ func TestDefaultStorePersistsOpenCSGAuthInRootState(t *testing.T) {
 		Account: Account{
 			UserID:     " alice ",
 			UserUUID:   " user-uuid ",
+			Name:       " Alice Zhang ",
 			Avatar:     " https://example.test/avatar.png ",
 			BaseURL:    " https://hub.example.test/ ",
 			PortalURL:  " https://hub.example.test/welcome ",
@@ -275,6 +289,7 @@ func TestDefaultStorePersistsOpenCSGAuthInRootState(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 	if err := store.SaveCSGHubProviderCredentials(CSGHubProviderCredentials{
+		AIGatewayBaseURL:       " https://aigateway.opencsg-stg.com ",
 		AIGatewayBuiltinAPIKey: " gk_api-key ",
 	}); err != nil {
 		t.Fatalf("SaveCSGHubProviderCredentials() error = %v", err)
@@ -303,18 +318,21 @@ func TestDefaultStorePersistsOpenCSGAuthInRootState(t *testing.T) {
 	if tokens["access_token"] != "access-token" {
 		t.Fatalf("tokens.access_token = %v, want access-token", tokens["access_token"])
 	}
-	if account["user_id"] != "alice" || account["base_url"] != "https://hub.example.test" {
+	if account["user_id"] != "alice" || account["name"] != "Alice Zhang" || account["base_url"] != "https://hub.example.test" {
 		t.Fatalf("account = %#v, want normalized alice account", account)
 	}
 	if openCSG["ai_gateway_builtin_api_key"] != "gk_api-key" {
 		t.Fatalf("ai gateway key = %v, want gk_api-key", openCSG["ai_gateway_builtin_api_key"])
+	}
+	if openCSG["ai_gateway_base_url"] != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("ai gateway base url = %v, want stg gateway", openCSG["ai_gateway_base_url"])
 	}
 
 	record, ok, err := store.Load()
 	if err != nil || !ok {
 		t.Fatalf("Load() = %+v, %v, %v", record, ok, err)
 	}
-	if record.Tokens.AccessToken != "access-token" || record.Account.UserID != "alice" {
+	if record.Tokens.AccessToken != "access-token" || record.Account.UserID != "alice" || record.Account.Name != "Alice Zhang" {
 		t.Fatalf("record = %+v, want normalized root-state record", record)
 	}
 	credentials, ok, err := store.LoadCSGHubProviderCredentials()
@@ -324,9 +342,15 @@ func TestDefaultStorePersistsOpenCSGAuthInRootState(t *testing.T) {
 	if credentials.AIGatewayBuiltinAPIKey != "gk_api-key" {
 		t.Fatalf("AIGatewayBuiltinAPIKey = %q, want gk_api-key", credentials.AIGatewayBuiltinAPIKey)
 	}
+	if credentials.AIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("AIGatewayBaseURL = %q, want stg gateway", credentials.AIGatewayBaseURL)
+	}
 	status, err := store.Status()
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
+	}
+	if status.AIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("status.AIGatewayBaseURL = %q, want stg gateway", status.AIGatewayBaseURL)
 	}
 	statusRaw, err := json.Marshal(status)
 	if err != nil {

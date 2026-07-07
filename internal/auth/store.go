@@ -33,26 +33,32 @@ type Tokens struct {
 }
 
 type Account struct {
-	UserID     string    `json:"user_id"`
-	UserUUID   string    `json:"user_uuid"`
-	Avatar     string    `json:"avatar"`
-	BaseURL    string    `json:"base_url"`
-	PortalURL  string    `json:"portal_url"`
-	LoggedInAt time.Time `json:"logged_in_at"`
+	UserID         string    `json:"user_id"`
+	UserUUID       string    `json:"user_uuid"`
+	Name           string    `json:"name,omitempty"`
+	Avatar         string    `json:"avatar"`
+	OpenCSGBaseURL string    `json:"opencsg_base_url,omitempty"`
+	BaseURL        string    `json:"base_url"`
+	PortalURL      string    `json:"portal_url"`
+	LoggedInAt     time.Time `json:"logged_in_at"`
 }
 
 type CSGHubProviderCredentials struct {
+	AIGatewayBaseURL       string `json:"ai_gateway_base_url,omitempty"`
 	AIGatewayBuiltinAPIKey string `json:"ai_gateway_builtin_api_key"`
 }
 
 type Status struct {
-	Authenticated bool       `json:"authenticated"`
-	UserID        string     `json:"user_id,omitempty"`
-	UserUUID      string     `json:"user_uuid,omitempty"`
-	Avatar        string     `json:"avatar,omitempty"`
-	BaseURL       string     `json:"base_url,omitempty"`
-	PortalURL     string     `json:"portal_url,omitempty"`
-	LoggedInAt    *time.Time `json:"logged_in_at,omitempty"`
+	Authenticated    bool       `json:"authenticated"`
+	UserID           string     `json:"user_id,omitempty"`
+	UserUUID         string     `json:"user_uuid,omitempty"`
+	Name             string     `json:"name,omitempty"`
+	Avatar           string     `json:"avatar,omitempty"`
+	OpenCSGBaseURL   string     `json:"opencsg_base_url,omitempty"`
+	BaseURL          string     `json:"base_url,omitempty"`
+	AIGatewayBaseURL string     `json:"ai_gateway_base_url,omitempty"`
+	PortalURL        string     `json:"portal_url,omitempty"`
+	LoggedInAt       *time.Time `json:"logged_in_at,omitempty"`
 }
 
 type Store struct {
@@ -64,6 +70,7 @@ type openCSGAuthRecord struct {
 	Tokens                 Tokens    `json:"tokens,omitempty"`
 	Account                Account   `json:"account,omitempty"`
 	LastRefresh            time.Time `json:"last_refresh,omitempty"`
+	AIGatewayBaseURL       string    `json:"ai_gateway_base_url,omitempty"`
 	AIGatewayBuiltinAPIKey string    `json:"ai_gateway_builtin_api_key,omitempty"`
 }
 
@@ -227,7 +234,17 @@ func (s Store) Status() (Status, error) {
 	if !ok {
 		return Status{}, nil
 	}
-	return record.Status(), nil
+	status := record.Status()
+	credentials, found, err := s.LoadCSGHubProviderCredentials()
+	if err != nil {
+		return Status{}, err
+	}
+	if found && credentials.AIGatewayBaseURL != "" {
+		status.AIGatewayBaseURL = credentials.AIGatewayBaseURL
+	} else if status.Authenticated {
+		status.AIGatewayBaseURL = AIGatewayBaseURL("")
+	}
+	return status, nil
 }
 
 func (s Store) Credentials() (baseURL, token string, ok bool, err error) {
@@ -251,9 +268,10 @@ func (s Store) LoadCSGHubProviderCredentials() (CSGHubProviderCredentials, bool,
 			return CSGHubProviderCredentials{}, false, err
 		}
 		credentials := normalizeCSGHubProviderCredentials(CSGHubProviderCredentials{
+			AIGatewayBaseURL:       state.AIGatewayBaseURL,
 			AIGatewayBuiltinAPIKey: state.AIGatewayBuiltinAPIKey,
 		})
-		return credentials, credentials.AIGatewayBuiltinAPIKey != "", nil
+		return credentials, credentials.AIGatewayBaseURL != "" || credentials.AIGatewayBuiltinAPIKey != "", nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -276,7 +294,9 @@ func (s Store) SaveCSGHubProviderCredentials(credentials CSGHubProviderCredentia
 	}
 	credentials = normalizeCSGHubProviderCredentials(credentials)
 	if credentials.AIGatewayBuiltinAPIKey == "" {
-		return fmt.Errorf("csghub ai gateway api key is required")
+		if credentials.AIGatewayBaseURL == "" {
+			return fmt.Errorf("csghub ai gateway credentials are required")
+		}
 	}
 	if localstore.IsRootStatePath(path) {
 		authState, _, err := readRootAuthState(path)
@@ -289,6 +309,7 @@ func (s Store) SaveCSGHubProviderCredentials(credentials CSGHubProviderCredentia
 				return fmt.Errorf("decode root opencsg auth: %w", err)
 			}
 		}
+		openCSG.AIGatewayBaseURL = credentials.AIGatewayBaseURL
 		openCSG.AIGatewayBuiltinAPIKey = credentials.AIGatewayBuiltinAPIKey
 		if err := setRootOpenCSGAuth(path, authState, openCSG); err != nil {
 			return fmt.Errorf("write csghub provider auth store: %w", err)
@@ -310,6 +331,9 @@ func (s Store) AIGatewayCredentials() (baseURL, apiKey string, ok bool, err erro
 	if !found {
 		return baseURL, "", false, nil
 	}
+	if credentials.AIGatewayBaseURL != "" {
+		baseURL = credentials.AIGatewayBaseURL
+	}
 	apiKey = strings.TrimSpace(credentials.AIGatewayBuiltinAPIKey)
 	if !isBuiltinAIGatewayAPIKey(apiKey) {
 		apiKey = ""
@@ -323,12 +347,14 @@ func (r Record) Status() Status {
 		return Status{}
 	}
 	status := Status{
-		Authenticated: true,
-		UserID:        r.Account.UserID,
-		UserUUID:      r.Account.UserUUID,
-		Avatar:        r.Account.Avatar,
-		BaseURL:       r.Account.BaseURL,
-		PortalURL:     r.Account.PortalURL,
+		Authenticated:  true,
+		UserID:         r.Account.UserID,
+		UserUUID:       r.Account.UserUUID,
+		Name:           r.Account.Name,
+		Avatar:         r.Account.Avatar,
+		OpenCSGBaseURL: r.Account.OpenCSGBaseURL,
+		BaseURL:        r.Account.BaseURL,
+		PortalURL:      r.Account.PortalURL,
 	}
 	if !r.Account.LoggedInAt.IsZero() {
 		loggedInAt := r.Account.LoggedInAt
@@ -341,7 +367,9 @@ func normalizeRecord(record Record) Record {
 	record.Tokens.AccessToken = strings.TrimSpace(record.Tokens.AccessToken)
 	record.Account.UserID = strings.TrimSpace(record.Account.UserID)
 	record.Account.UserUUID = strings.TrimSpace(record.Account.UserUUID)
+	record.Account.Name = strings.TrimSpace(record.Account.Name)
 	record.Account.Avatar = strings.TrimSpace(record.Account.Avatar)
+	record.Account.OpenCSGBaseURL = strings.TrimRight(strings.TrimSpace(record.Account.OpenCSGBaseURL), "/")
 	record.Account.BaseURL = strings.TrimRight(strings.TrimSpace(record.Account.BaseURL), "/")
 	record.Account.PortalURL = strings.TrimSpace(record.Account.PortalURL)
 	if record.LastRefresh.IsZero() {
@@ -354,6 +382,7 @@ func normalizeRecord(record Record) Record {
 }
 
 func normalizeCSGHubProviderCredentials(credentials CSGHubProviderCredentials) CSGHubProviderCredentials {
+	credentials.AIGatewayBaseURL = normalizeAIGatewayBaseURL(credentials.AIGatewayBaseURL)
 	credentials.AIGatewayBuiltinAPIKey = strings.TrimSpace(credentials.AIGatewayBuiltinAPIKey)
 	return credentials
 }
@@ -411,6 +440,7 @@ func hasOpenCSGAuth(state openCSGAuthRecord) bool {
 		strings.TrimSpace(state.Account.BaseURL) != "" ||
 		strings.TrimSpace(state.Account.UserID) != "" ||
 		strings.TrimSpace(state.Account.UserUUID) != "" ||
+		strings.TrimSpace(state.AIGatewayBaseURL) != "" ||
 		strings.TrimSpace(state.AIGatewayBuiltinAPIKey) != ""
 }
 

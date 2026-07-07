@@ -18,6 +18,9 @@ func (s Store) EnsureAIGatewayCredentials(ctx context.Context, client *http.Clie
 		return "", "", false, err
 	}
 	if found {
+		if credentials.AIGatewayBaseURL != "" {
+			baseURL = credentials.AIGatewayBaseURL
+		}
 		apiKey = strings.TrimSpace(credentials.AIGatewayBuiltinAPIKey)
 		if apiKey != "" && isBuiltinAIGatewayAPIKey(apiKey) {
 			return baseURL, apiKey, baseURL != "", nil
@@ -48,7 +51,10 @@ func (s Store) EnsureAIGatewayCredentials(ctx context.Context, client *http.Clie
 	if err != nil {
 		return baseURL, "", false, err
 	}
-	if err := s.SaveCSGHubProviderCredentials(CSGHubProviderCredentials{AIGatewayBuiltinAPIKey: apiKey}); err != nil {
+	if err := s.SaveCSGHubProviderCredentials(CSGHubProviderCredentials{
+		AIGatewayBaseURL:       baseURL,
+		AIGatewayBuiltinAPIKey: apiKey,
+	}); err != nil {
 		return "", "", false, err
 	}
 	return baseURL, apiKey, baseURL != "" && apiKey != "", nil

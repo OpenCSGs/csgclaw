@@ -10,6 +10,7 @@ import type {
   UsersById,
 } from "@/models/conversations";
 import type { AuthStatus } from "@/models/auth";
+import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { ModelProvider, ModelProviderCatalog } from "@/models/modelProviders";
 import type { SkillSummary } from "@/models/skillhub";
@@ -52,7 +53,7 @@ export type WorkspaceSidebarProps = {
   onExpandSidebar: () => void;
   onOpenUpgrade: () => void;
   onOpenConfigSettings: () => void;
-  onLogin: () => void | Promise<void>;
+  onLogin: (environment?: AuthEnvironmentDraft) => void | Promise<void>;
   onLogout: () => void | Promise<void>;
   onPreviewAgent: (item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) => void;
   onPreviewUser: (user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) => void;

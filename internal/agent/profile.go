@@ -36,6 +36,17 @@ var (
 		}
 		return store.EnsureAIGatewayCredentials(ctx, client)
 	}
+	defaultOpenCSGAIGatewayBaseURL = func() string {
+		store, err := auth.DefaultStore()
+		if err != nil {
+			return auth.AIGatewayBaseURL("")
+		}
+		baseURL, _, _, err := store.AIGatewayCredentials()
+		if err != nil || strings.TrimSpace(baseURL) == "" {
+			return auth.AIGatewayBaseURL("")
+		}
+		return baseURL
+	}
 	listCLIProxyModels = func(ctx context.Context, provider string) ([]string, error) {
 		return cliproxy.Default().ListModels(ctx, provider)
 	}

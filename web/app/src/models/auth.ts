@@ -2,8 +2,11 @@ export type AuthStatus = {
   authenticated: boolean;
   user_id: string;
   user_uuid: string;
+  name?: string;
   avatar: string;
+  opencsg_base_url: string;
   base_url: string;
+  ai_gateway_base_url: string;
   portal_url: string;
   logged_in_at: string;
 };
@@ -17,8 +20,11 @@ export function emptyAuthStatus(): AuthStatus {
     authenticated: false,
     user_id: "",
     user_uuid: "",
+    name: "",
     avatar: "",
+    opencsg_base_url: "",
     base_url: "",
+    ai_gateway_base_url: "",
     portal_url: "",
     logged_in_at: "",
   };
@@ -34,8 +40,11 @@ export function normalizeAuthStatus(source: unknown): AuthStatus {
     authenticated,
     user_id: authenticated ? stringFromUnknown(value.user_id) : "",
     user_uuid: authenticated ? stringFromUnknown(value.user_uuid) : "",
+    name: authenticated ? stringFromUnknown(value.name) : "",
     avatar: authenticated ? stringFromUnknown(value.avatar) : "",
+    opencsg_base_url: authenticated ? normalizeBaseURL(value.opencsg_base_url) : "",
     base_url: authenticated ? normalizeBaseURL(value.base_url) : "",
+    ai_gateway_base_url: authenticated ? normalizeBaseURL(value.ai_gateway_base_url || value.aigateway_base_url) : "",
     portal_url: authenticated ? stringFromUnknown(value.portal_url) : "",
     logged_in_at: authenticated ? stringFromUnknown(value.logged_in_at) : "",
   };

@@ -2384,7 +2384,7 @@
   left: 58px;
   bottom: 0;
   z-index: var(--z-portal-popover);
-  width: min(292px, calc(100vw - 76px));
+  width: min(340px, calc(100vw - 76px));
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
@@ -2580,7 +2580,7 @@
   min-width: 0;
   display: grid;
   gap: 8px;
-  padding: 8px;
+  padding: 8px 9px;
   border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
   border-radius: 10px;
   background: color-mix(in oklab, var(--field) 72%, transparent);
@@ -2594,6 +2594,67 @@
   gap: 8px;
 }
 
+.sidebar-csghub-summary {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+}
+
+.sidebar-csghub-expand {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.sidebar-csghub-expand:hover {
+  background: color-mix(in oklab, var(--primary) 8%, transparent);
+  color: var(--primary-strong);
+}
+
+.sidebar-csghub-expand:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 15%, transparent);
+}
+
+.sidebar-csghub-summary-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-csghub-summary-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition:
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.sidebar-csghub-summary-chevron.is-open {
+  color: var(--primary-strong);
+}
+
+.sidebar-csghub-summary-chevron.is-open {
+  transform: rotate(90deg);
+}
+
 .sidebar-csghub-kicker {
   min-width: 0;
   color: var(--muted);
@@ -2603,7 +2664,26 @@
   letter-spacing: 0;
 }
 
+.sidebar-csghub-env-chip {
+  min-width: 0;
+  max-width: 128px;
+  border: 1px solid color-mix(in oklab, var(--line) 82%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 86%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 740;
+  line-height: 1.2;
+  padding: 2px 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar-csghub-state {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 170px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -2622,6 +2702,13 @@
   content: "";
 }
 
+.sidebar-csghub-state-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar-csghub-state.is-authenticated {
   color: var(--success-700);
 }
@@ -2630,12 +2717,128 @@
   background: var(--success-600);
 }
 
+.sidebar-csghub-env {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-csghub-env-row {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.sidebar-csghub-env-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.sidebar-csghub-env-combo {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 6px;
+  align-items: center;
+}
+
+.sidebar-csghub-env-control {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 0 9px;
+  outline: none;
+}
+
+.sidebar-csghub-env-control:is(select) {
+  cursor: pointer;
+}
+
+.sidebar-csghub-env-control:focus {
+  border-color: color-mix(in oklab, var(--primary) 72%, var(--line));
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 15%, transparent);
+}
+
+.sidebar-csghub-advanced-toggle {
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.sidebar-csghub-advanced-toggle:hover,
+.sidebar-csghub-advanced-toggle.is-open {
+  border-color: color-mix(in oklab, var(--primary) 42%, var(--line));
+  background: color-mix(in oklab, var(--primary) 8%, var(--surface));
+  color: var(--primary-strong);
+}
+
+.sidebar-csghub-advanced-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 15%, transparent);
+}
+
+.sidebar-csghub-advanced-toggle svg:last-child {
+  margin-left: -2px;
+  transition: transform 160ms ease;
+}
+
+.sidebar-csghub-advanced-toggle.is-open svg:last-child {
+  transform: rotate(180deg);
+}
+
+.sidebar-csghub-env-advanced {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding-top: 1px;
+}
+
 .sidebar-csghub-account {
   min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.sidebar-csghub-account-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sidebar-csghub-account.is-disconnected {
+  justify-content: flex-end;
+}
+
+.sidebar-csghub-account.is-disconnected.has-status {
+  justify-content: space-between;
 }
 
 .sidebar-csghub-identity {

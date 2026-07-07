@@ -71,6 +71,12 @@ func TestCheckModelProviderUsesOpenCSGAIGatewayCredentials(t *testing.T) {
 }
 
 func TestModelProviderCatalogExposesOpenCSGKind(t *testing.T) {
+	oldGatewayBaseURL := defaultOpenCSGAIGatewayBaseURL
+	t.Cleanup(func() { defaultOpenCSGAIGatewayBaseURL = oldGatewayBaseURL })
+	defaultOpenCSGAIGatewayBaseURL = func() string {
+		return "https://aigateway.opencsg-stg.com/v1"
+	}
+
 	catalog := ModelProviderCatalogFromLLM(config.LLMConfig{})
 
 	var provider ModelProviderSummary
@@ -85,6 +91,9 @@ func TestModelProviderCatalogExposesOpenCSGKind(t *testing.T) {
 	}
 	if provider.Kind != ModelProviderIDOpenCSG {
 		t.Fatalf("OpenCSG provider kind = %q, want %q", provider.Kind, ModelProviderIDOpenCSG)
+	}
+	if provider.BaseURL != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("OpenCSG provider BaseURL = %q, want stg gateway", provider.BaseURL)
 	}
 }
 

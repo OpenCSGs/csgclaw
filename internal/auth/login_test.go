@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -33,7 +34,9 @@ func TestCompleteCallbackStoresCredentials(t *testing.T) {
 			writeJSON(t, w, map[string]any{
 				"msg": "OK",
 				"data": map[string]any{
-					"avatar": "https://example.test/avatar.png",
+					"username": "alice",
+					"nickname": "Alice Zhang",
+					"avatar":   "https://example.test/avatar.png",
 				},
 			})
 		case "/api/v1/namespaces/user-1/apikeys/builtin":
@@ -66,8 +69,11 @@ func TestCompleteCallbackStoresCredentials(t *testing.T) {
 
 	returnURL := "http://127.0.0.1:18080/#/dms/room-1"
 	redirectURL, err := service.CompleteCallback(context.Background(), url.Values{
-		"jwt_token":  []string{testJWT("alice", "user-1")},
-		"return_url": []string{returnURL},
+		"jwt_token":           []string{testJWT("alice", "user-1")},
+		"return_url":          []string{returnURL},
+		"opencsg_base_url":    []string{"https://opencsg-stg.com/"},
+		"csghub_base_url":     []string{api.URL + "/"},
+		"ai_gateway_base_url": []string{"https://aigateway.opencsg-stg.com"},
 	})
 	if err != nil {
 		t.Fatalf("CompleteCallback() error = %v", err)
@@ -92,8 +98,14 @@ func TestCompleteCallbackStoresCredentials(t *testing.T) {
 	if record.Account.UserID != "alice" || record.Account.UserUUID != "user-1" {
 		t.Fatalf("record user = %q/%q", record.Account.UserID, record.Account.UserUUID)
 	}
+	if record.Account.Name != "Alice Zhang" {
+		t.Fatalf("record user name = %q", record.Account.Name)
+	}
 	if record.Account.BaseURL != api.URL {
 		t.Fatalf("record BaseURL = %q, want %q", record.Account.BaseURL, api.URL)
+	}
+	if record.Account.OpenCSGBaseURL != "https://opencsg-stg.com" {
+		t.Fatalf("record OpenCSGBaseURL = %q", record.Account.OpenCSGBaseURL)
 	}
 	if !record.Account.LoggedInAt.Equal(now) {
 		t.Fatalf("LoggedInAt = %s, want %s", record.Account.LoggedInAt, now)
@@ -108,6 +120,92 @@ func TestCompleteCallbackStoresCredentials(t *testing.T) {
 	if credentials.AIGatewayBuiltinAPIKey != "gk_aigateway-key" {
 		t.Fatalf("AIGatewayBuiltinAPIKey = %q, want gk_aigateway-key", credentials.AIGatewayBuiltinAPIKey)
 	}
+	if credentials.AIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("AIGatewayBaseURL = %q", credentials.AIGatewayBaseURL)
+	}
+}
+
+func TestCompleteCallbackDerivesEnvironmentFromSiteAIGatewayBaseURL(t *testing.T) {
+	var sawTokenRequest bool
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/user/alice/tokens":
+			sawTokenRequest = true
+			writeJSON(t, w, map[string]any{
+				"msg":  "OK",
+				"data": []map[string]any{{"token": "access-token"}},
+			})
+		case "/api/v1/user/alice":
+			writeJSON(t, w, map[string]any{
+				"msg": "OK",
+				"data": map[string]any{
+					"username": "alice",
+					"nickname": "Alice Zhang",
+				},
+			})
+		case "/api/v1/namespaces/user-1/apikeys/builtin":
+			http.Error(w, "not available", http.StatusNotFound)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(api.Close)
+
+	store := newTestStore(t)
+	service := &Service{Store: store, HTTPClient: api.Client()}
+	redirectURL, err := service.CompleteCallback(context.Background(), url.Values{
+		"jwt_token":           []string{testJWT("alice", "user-1")},
+		"ai_gateway_base_url": []string{api.URL + "/aigateway/v1"},
+	})
+	if err != nil {
+		t.Fatalf("CompleteCallback() error = %v", err)
+	}
+	if redirectURL != api.URL {
+		t.Fatalf("callback redirect = %q, want %q", redirectURL, api.URL)
+	}
+	if !sawTokenRequest {
+		t.Fatal("token endpoint was not called on the derived csghub base url")
+	}
+
+	record, ok, err := store.Load()
+	if err != nil || !ok {
+		t.Fatalf("Load() = %+v, %v, %v", record, ok, err)
+	}
+	if record.Account.BaseURL != api.URL {
+		t.Fatalf("record BaseURL = %q, want %q", record.Account.BaseURL, api.URL)
+	}
+	if record.Account.OpenCSGBaseURL != api.URL {
+		t.Fatalf("record OpenCSGBaseURL = %q, want %q", record.Account.OpenCSGBaseURL, api.URL)
+	}
+	if record.Account.Name != "Alice Zhang" {
+		t.Fatalf("record user name = %q", record.Account.Name)
+	}
+	credentials, ok, err := store.LoadCSGHubProviderCredentials()
+	if err != nil || !ok {
+		t.Fatalf("LoadCSGHubProviderCredentials() = %+v, %v, %v", credentials, ok, err)
+	}
+	if credentials.AIGatewayBaseURL != api.URL+"/aigateway/v1" {
+		t.Fatalf("AIGatewayBaseURL = %q", credentials.AIGatewayBaseURL)
+	}
+}
+
+func TestCallbackEnvironmentDerivesStageBaseURLFromAIGatewayHost(t *testing.T) {
+	service := &Service{}
+	env, err := service.callbackEnvironment(url.Values{
+		"ai_gateway_base_url": []string{"https://aigateway.opencsg-stg.com/v1"},
+	})
+	if err != nil {
+		t.Fatalf("callbackEnvironment() error = %v", err)
+	}
+	if env.OpenCSGBaseURL != "https://opencsg-stg.com" {
+		t.Fatalf("OpenCSGBaseURL = %q, want stg site", env.OpenCSGBaseURL)
+	}
+	if env.CSGHubBaseURL != "https://opencsg-stg.com" {
+		t.Fatalf("CSGHubBaseURL = %q, want stg hub", env.CSGHubBaseURL)
+	}
+	if env.AIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("AIGatewayBaseURL = %q, want stg gateway", env.AIGatewayBaseURL)
+	}
 }
 
 func TestLoginUsesOpenCSGSSOCallbackURL(t *testing.T) {
@@ -118,8 +216,11 @@ func TestLoginUsesOpenCSGSSOCallbackURL(t *testing.T) {
 	returnURL := "http://127.0.0.1:18080/#/dms/room-1"
 	callbackURL := "http://127.0.0.1:18080/api/v1/auth/callback"
 	login, err := service.Login(context.Background(), LoginOptions{
-		ReturnURL:   returnURL,
-		CallbackURL: callbackURL,
+		ReturnURL:        returnURL,
+		CallbackURL:      callbackURL,
+		OpenCSGBaseURL:   "https://opencsg-stg.com/",
+		CSGHubBaseURL:    "https://opencsg-stg.com/",
+		AIGatewayBaseURL: "https://aigateway.opencsg-stg.com",
 	})
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
@@ -129,7 +230,7 @@ func TestLoginUsesOpenCSGSSOCallbackURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse LoginURL: %v", err)
 	}
-	if got := parsedLogin.Scheme + "://" + parsedLogin.Host + parsedLogin.Path; got != "https://opencsg.example.test/sso/login" {
+	if got := parsedLogin.Scheme + "://" + parsedLogin.Host + parsedLogin.Path; got != "https://opencsg-stg.com/sso/login" {
 		t.Fatalf("login URL base = %q", got)
 	}
 	redirectURL := parsedLogin.Query().Get("redirect_url")
@@ -143,8 +244,123 @@ func TestLoginUsesOpenCSGSSOCallbackURL(t *testing.T) {
 	if got := parsedRedirect.Scheme + "://" + parsedRedirect.Host + parsedRedirect.Path; got != callbackURL {
 		t.Fatalf("redirect callback = %q, want %q", got, callbackURL)
 	}
-	if got := parsedRedirect.Query().Get("return_url"); got != returnURL {
+	if raw := parsedRedirect.Query().Get(callbackAuthStateParam); raw == "" || strings.Contains(raw, "&") {
+		t.Fatalf("auth_state = %q, want single packed value", raw)
+	}
+	values := loginCallbackStateQuery(t, parsedRedirect)
+	if got := values.Get("return_url"); got != returnURL {
 		t.Fatalf("return_url = %q, want %q", got, returnURL)
+	}
+	if got := values.Get("opencsg_base_url"); got != "https://opencsg-stg.com" {
+		t.Fatalf("opencsg_base_url = %q", got)
+	}
+	if got := values.Get("csghub_base_url"); got != "https://opencsg-stg.com" {
+		t.Fatalf("csghub_base_url = %q", got)
+	}
+	if got := values.Get("ai_gateway_base_url"); got != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("ai_gateway_base_url = %q", got)
+	}
+}
+
+func TestCallbackReadsPackedAuthState(t *testing.T) {
+	returnURL := "http://127.0.0.1:18080/#/dms/room-1783408363036922000"
+	callbackURL := callbackURLWithAuthState("http://127.0.0.1:18080/api/v1/auth/callback", authEnvironment{
+		OpenCSGBaseURL:   "https://opencsg-stg.com",
+		CSGHubBaseURL:    "https://opencsg-stg.com",
+		AIGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1",
+	}, returnURL)
+	parsedCallback, err := url.Parse(callbackURL)
+	if err != nil {
+		t.Fatalf("parse callback URL: %v", err)
+	}
+	values := parsedCallback.Query()
+	values.Set("jwt_token", testJWT("alice", "user-1"))
+	values = callbackValuesWithAuthState(values)
+
+	if got := callbackReturnURL(values); got != returnURL {
+		t.Fatalf("callbackReturnURL() = %q, want %q", got, returnURL)
+	}
+	env, err := (&Service{}).callbackEnvironment(values)
+	if err != nil {
+		t.Fatalf("callbackEnvironment() error = %v", err)
+	}
+	if env.OpenCSGBaseURL != "https://opencsg-stg.com" || env.CSGHubBaseURL != "https://opencsg-stg.com" {
+		t.Fatalf("callback environment base URLs = %q/%q", env.OpenCSGBaseURL, env.CSGHubBaseURL)
+	}
+	if env.AIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("AIGatewayBaseURL = %q", env.AIGatewayBaseURL)
+	}
+}
+
+func TestPackedAuthStateSurvivesUnescapedOAuthState(t *testing.T) {
+	returnURL := "http://127.0.0.1:18080/#/tasks"
+	callbackURL := callbackURLWithAuthState("http://127.0.0.1:18080/api/v1/auth/callback", authEnvironment{
+		OpenCSGBaseURL:   "https://opencsg-stg.com",
+		CSGHubBaseURL:    "https://opencsg-stg.com",
+		AIGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1",
+	}, returnURL)
+	opencsgCallback, err := url.Parse("https://opencsg-stg.com/api/v1/callback/casdoor?code=oauth-code&state=" + callbackURL)
+	if err != nil {
+		t.Fatalf("parse OpenCSG callback URL: %v", err)
+	}
+	state := opencsgCallback.Query().Get("state")
+	if state != callbackURL {
+		t.Fatalf("state = %q, want full callback URL", state)
+	}
+	parsedState, err := url.Parse(state)
+	if err != nil {
+		t.Fatalf("parse state callback URL: %v", err)
+	}
+	values := loginCallbackStateQuery(t, parsedState)
+	if got := values.Get("return_url"); got != returnURL {
+		t.Fatalf("return_url = %q, want %q", got, returnURL)
+	}
+	if got := values.Get("csghub_base_url"); got != "https://opencsg-stg.com" {
+		t.Fatalf("csghub_base_url = %q", got)
+	}
+}
+
+func TestLoginDerivesStageEnvironmentFromOpenCSGBaseURL(t *testing.T) {
+	service := &Service{}
+
+	login, err := service.Login(context.Background(), LoginOptions{
+		CallbackURL:    "http://127.0.0.1:18080/api/v1/auth/callback",
+		OpenCSGBaseURL: "https://opencsg-stg.com",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	values := loginCallbackQuery(t, login.LoginURL)
+	if got := values.Get("opencsg_base_url"); got != "https://opencsg-stg.com" {
+		t.Fatalf("opencsg_base_url = %q", got)
+	}
+	if got := values.Get("csghub_base_url"); got != "https://opencsg-stg.com" {
+		t.Fatalf("csghub_base_url = %q", got)
+	}
+	if got := values.Get("ai_gateway_base_url"); got != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("ai_gateway_base_url = %q", got)
+	}
+}
+
+func TestLoginDerivesCustomEnvironmentFromOpenCSGBaseURL(t *testing.T) {
+	service := &Service{}
+
+	login, err := service.Login(context.Background(), LoginOptions{
+		CallbackURL:    "http://127.0.0.1:18080/api/v1/auth/callback",
+		OpenCSGBaseURL: "https://openeast.opencsg.com/",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	values := loginCallbackQuery(t, login.LoginURL)
+	if got := values.Get("opencsg_base_url"); got != "https://openeast.opencsg.com" {
+		t.Fatalf("opencsg_base_url = %q", got)
+	}
+	if got := values.Get("csghub_base_url"); got != "https://openeast.opencsg.com" {
+		t.Fatalf("csghub_base_url = %q", got)
+	}
+	if got := values.Get("ai_gateway_base_url"); got != "https://openeast.opencsg.com/aigateway/v1" {
+		t.Fatalf("ai_gateway_base_url = %q", got)
 	}
 }
 
@@ -370,6 +586,40 @@ func testJWT(userID, userUUID string) string {
 		panic(err)
 	}
 	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
+}
+
+func loginCallbackQuery(t *testing.T, loginURL string) url.Values {
+	t.Helper()
+	parsedLogin, err := url.Parse(loginURL)
+	if err != nil {
+		t.Fatalf("parse login URL: %v", err)
+	}
+	redirectURL := parsedLogin.Query().Get("redirect_url")
+	if redirectURL == "" {
+		t.Fatal("redirect_url is empty")
+	}
+	parsedRedirect, err := url.Parse(redirectURL)
+	if err != nil {
+		t.Fatalf("parse redirect_url: %v", err)
+	}
+	return loginCallbackStateQuery(t, parsedRedirect)
+}
+
+func loginCallbackStateQuery(t *testing.T, callbackURL *url.URL) url.Values {
+	t.Helper()
+	raw := callbackURL.Query().Get(callbackAuthStateParam)
+	if raw == "" {
+		t.Fatal("auth_state is empty")
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		t.Fatalf("decode auth_state: %v", err)
+	}
+	values, err := url.ParseQuery(string(decoded))
+	if err != nil {
+		t.Fatalf("parse auth_state: %v", err)
+	}
+	return values
 }
 
 func writeJSON(t *testing.T, w http.ResponseWriter, data any) {

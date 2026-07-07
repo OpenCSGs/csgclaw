@@ -838,6 +838,7 @@ func TestMigrateTypedIDsImportsLegacyAuthAndRenamesCLIProxyAuthDir(t *testing.T)
 		"last_refresh": "2026-06-25T07:00:00Z",
 	})
 	writeJSON(t, filepath.Join(root, "auth", "csghub.json"), map[string]any{
+		"ai_gateway_base_url":        "https://aigateway.opencsg-stg.com/v1",
 		"ai_gateway_builtin_api_key": "gk_legacy",
 	})
 	writeFile(t, filepath.Join(root, "auth", "config.yaml"), "legacy config\n")
@@ -907,6 +908,9 @@ func TestMigrateTypedIDsImportsLegacyAuthAndRenamesCLIProxyAuthDir(t *testing.T)
 	}
 	if openCSG["ai_gateway_builtin_api_key"] != "gk_legacy" {
 		t.Fatalf("ai gateway key = %v, want gk_legacy", openCSG["ai_gateway_builtin_api_key"])
+	}
+	if openCSG["ai_gateway_base_url"] != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("ai gateway base url = %v, want stg gateway", openCSG["ai_gateway_base_url"])
 	}
 	if _, ok := rootState["agents"].(map[string]any); !ok {
 		t.Fatalf("existing agents section was not preserved: %#v", rootState)

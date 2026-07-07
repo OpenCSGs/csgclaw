@@ -82,6 +82,7 @@ const (
 	rootAuthSectionName         = "auth"
 	rootOpenCSGAuthKey          = "opencsg"
 	rootCSGHubAuthKey           = "csghub"
+	aiGatewayBaseURLField       = "ai_gateway_base_url"
 	aiGatewayBuiltinAPIKeyField = "ai_gateway_builtin_api_key"
 )
 
@@ -508,7 +509,7 @@ func (m *typedIDMigrator) migrateOpenCSGAuthSection(existingRootState map[string
 	authState := copyMap(stringAnyMap(existingRootState[rootAuthSectionName]))
 	openCSG := copyMap(stringAnyMap(authState[rootOpenCSGAuthKey]))
 	if csgHubState := stringAnyMap(authState[rootCSGHubAuthKey]); len(csgHubState) > 0 {
-		mergeAIGatewayAPIKey(openCSG, csgHubState)
+		mergeAIGatewayCredentials(openCSG, csgHubState)
 		delete(authState, rootCSGHubAuthKey)
 	}
 	legacyRootAuth, err := readJSONMapIfExists(filepath.Join(m.root, legacyRootAuthFileName))
@@ -522,7 +523,7 @@ func (m *typedIDMigrator) migrateOpenCSGAuthSection(existingRootState map[string
 	if err != nil {
 		return nil, err
 	}
-	mergeAIGatewayAPIKey(openCSG, legacyCSGHubAuth)
+	mergeAIGatewayCredentials(openCSG, legacyCSGHubAuth)
 	if len(openCSG) > 0 {
 		authState[rootOpenCSGAuthKey] = openCSG
 	}
@@ -587,15 +588,16 @@ func mergeMissingValues(dst, src map[string]any) {
 	}
 }
 
-func mergeAIGatewayAPIKey(openCSG, source map[string]any) {
+func mergeAIGatewayCredentials(openCSG, source map[string]any) {
 	if openCSG == nil || source == nil {
 		return
 	}
-	value := strings.TrimSpace(stringField(source, aiGatewayBuiltinAPIKeyField))
-	if value == "" || !missingValue(openCSG[aiGatewayBuiltinAPIKeyField]) {
-		return
+	if value := strings.TrimSpace(stringField(source, aiGatewayBaseURLField)); value != "" && missingValue(openCSG[aiGatewayBaseURLField]) {
+		openCSG[aiGatewayBaseURLField] = value
 	}
-	openCSG[aiGatewayBuiltinAPIKeyField] = value
+	if value := strings.TrimSpace(stringField(source, aiGatewayBuiltinAPIKeyField)); value != "" && missingValue(openCSG[aiGatewayBuiltinAPIKeyField]) {
+		openCSG[aiGatewayBuiltinAPIKeyField] = value
+	}
 }
 
 func missingValue(value any) bool {

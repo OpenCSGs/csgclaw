@@ -43,15 +43,26 @@ func TestHandleAuthStatus(t *testing.T) {
 func TestHandleAuthLogin(t *testing.T) {
 	var gotReturnURL string
 	var gotCallbackURL string
+	var gotOpenCSGBaseURL string
+	var gotCSGHubBaseURL string
+	var gotAIGatewayBaseURL string
 	restore := stubAuthLogin(func(_ *http.Request, req authLoginRequest) (auth.LoginResponse, error) {
 		gotReturnURL = req.ReturnURL
 		gotCallbackURL = req.CallbackURL
+		gotOpenCSGBaseURL = req.OpenCSGBaseURL
+		gotCSGHubBaseURL = req.CSGHubBaseURL
+		gotAIGatewayBaseURL = req.AIGatewayBaseURL
 		return auth.LoginResponse{LoginURL: "https://iam.example.test/login"}, nil
 	})
 	defer restore()
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"return_url":"http://127.0.0.1:18080/#/dms/room-1"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{
+		"return_url":"http://127.0.0.1:18080/#/dms/room-1",
+		"opencsg_base_url":"https://opencsg-stg.com",
+		"csghub_base_url":"https://opencsg-stg.com",
+		"ai_gateway_base_url":"https://aigateway.opencsg-stg.com/v1"
+	}`))
 	req.Host = "127.0.0.1:18080"
 	(&Handler{}).Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -69,6 +80,12 @@ func TestHandleAuthLogin(t *testing.T) {
 	}
 	if gotCallbackURL != "http://127.0.0.1:18080/api/v1/auth/callback" {
 		t.Fatalf("callback_url = %q", gotCallbackURL)
+	}
+	if gotOpenCSGBaseURL != "https://opencsg-stg.com" || gotCSGHubBaseURL != "https://opencsg-stg.com" {
+		t.Fatalf("login base urls = %q/%q", gotOpenCSGBaseURL, gotCSGHubBaseURL)
+	}
+	if gotAIGatewayBaseURL != "https://aigateway.opencsg-stg.com/v1" {
+		t.Fatalf("ai_gateway_base_url = %q", gotAIGatewayBaseURL)
 	}
 }
 

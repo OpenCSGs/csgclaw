@@ -16,8 +16,11 @@ import (
 const authCallbackPath = "/api/v1/auth/callback"
 
 type authLoginRequest struct {
-	ReturnURL   string `json:"return_url,omitempty"`
-	CallbackURL string `json:"-"`
+	ReturnURL        string `json:"return_url,omitempty"`
+	OpenCSGBaseURL   string `json:"opencsg_base_url,omitempty"`
+	CSGHubBaseURL    string `json:"csghub_base_url,omitempty"`
+	AIGatewayBaseURL string `json:"ai_gateway_base_url,omitempty"`
+	CallbackURL      string `json:"-"`
 }
 
 var appAuthStatus = func(r *http.Request) (auth.Status, error) {
@@ -26,8 +29,11 @@ var appAuthStatus = func(r *http.Request) (auth.Status, error) {
 
 var appAuthLogin = func(r *http.Request, req authLoginRequest) (auth.LoginResponse, error) {
 	return auth.Default().Login(r.Context(), auth.LoginOptions{
-		ReturnURL:   req.ReturnURL,
-		CallbackURL: req.CallbackURL,
+		ReturnURL:        req.ReturnURL,
+		CallbackURL:      req.CallbackURL,
+		OpenCSGBaseURL:   req.OpenCSGBaseURL,
+		CSGHubBaseURL:    req.CSGHubBaseURL,
+		AIGatewayBaseURL: req.AIGatewayBaseURL,
 	})
 }
 

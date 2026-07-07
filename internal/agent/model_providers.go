@@ -9,7 +9,6 @@ import (
 	"time"
 	"unicode"
 
-	"csgclaw/internal/auth"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelprovider"
 )
@@ -216,7 +215,7 @@ func builtinModelProviderSummary(id string, provider config.ProviderConfig) Mode
 	case ModelProviderIDOpenCSG:
 		summary.Kind = ModelProviderKindOpenCSG
 		summary.DisplayName = "OpenCSG"
-		summary.BaseURL = auth.AIGatewayBaseURL("")
+		summary.BaseURL = defaultOpenCSGAIGatewayBaseURL()
 		summary.APIKeySet = false
 		summary.APIKeyPreview = ""
 	case ModelProviderIDCSGHubLite:
@@ -504,7 +503,7 @@ func ModelProviderConfigForProfile(llm config.LLMConfig, profile AgentProfile) (
 	switch id {
 	case ModelProviderIDOpenCSG:
 		return config.ProviderConfig{
-			BaseURL: auth.AIGatewayBaseURL(""),
+			BaseURL: defaultOpenCSGAIGatewayBaseURL(),
 		}.Resolved(), true
 	case ModelProviderIDCSGHubLite:
 		return config.ProviderConfig{

@@ -6,8 +6,11 @@ describe("auth model", () => {
       authenticated: true,
       user_id: " alice ",
       user_uuid: " user-1 ",
+      name: " Alice Zhang ",
       avatar: " https://example.test/avatar.png ",
+      opencsg_base_url: " https://opencsg.example.test/ ",
       base_url: " https://hub.example.test/ ",
+      ai_gateway_base_url: " https://gateway.example.test/v1/ ",
       portal_url: " https://hub.example.test/portal ",
       logged_in_at: "2026-06-22T09:00:00Z",
       access_token: "secret-token",
@@ -18,8 +21,11 @@ describe("auth model", () => {
       authenticated: true,
       user_id: "alice",
       user_uuid: "user-1",
+      name: "Alice Zhang",
       avatar: "https://example.test/avatar.png",
+      opencsg_base_url: "https://opencsg.example.test",
       base_url: "https://hub.example.test",
+      ai_gateway_base_url: "https://gateway.example.test/v1",
       portal_url: "https://hub.example.test/portal",
       logged_in_at: "2026-06-22T09:00:00Z",
     });
@@ -36,7 +42,9 @@ describe("auth model", () => {
 
     expect(got.authenticated).toBe(false);
     expect(got.user_id).toBe("");
+    expect(got.name).toBe("");
     expect(got.base_url).toBe("");
+    expect(got.ai_gateway_base_url).toBe("");
   });
 
   it("normalizes login response", () => {

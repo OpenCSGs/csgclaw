@@ -4,6 +4,13 @@ import { beginAuthLogin, fetchAuthStatus, logoutAuth } from "@/api/auth";
 import { errorMessage } from "@/api/client";
 import { emptyAuthStatus, isAuthenticated, normalizeAuthStatus, normalizeLoginResponse } from "@/models/auth";
 import type { AuthStatus } from "@/models/auth";
+import {
+  authEnvironmentDisplayLabel,
+  authEnvironmentDraftFromStatus,
+  authEnvironmentLoginPayload,
+  defaultAuthEnvironmentDraft,
+} from "@/models/authEnvironment";
+import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import type { TranslateFn } from "@/models/conversations";
 import { avatarFallbackText } from "@/shared/avatar";
 import { workspaceQueryKeys } from "./workspaceQueries";
@@ -26,7 +33,7 @@ export type AuthController = {
   busy: boolean;
   dismissNotice: () => void;
   error: string;
-  login: () => Promise<void>;
+  login: (environment?: AuthEnvironmentDraft) => Promise<void>;
   logout: () => Promise<void>;
   notice: AuthNotice | null;
   pending: boolean;
@@ -63,28 +70,34 @@ export function useAuthController(t: TranslateFn): AuthController {
     });
   }, [queryClient]);
 
-  const login = useCallback(async () => {
-    if (busyAction) {
-      return;
-    }
-    setBusyAction("login");
-    setAuthError("");
-    try {
-      const loginResp = normalizeLoginResponse(await beginAuthLogin(window.location.href));
-      if (!loginResp.login_url) {
-        throw new Error(t("csghubLoginURLMissing"));
+  const login = useCallback(
+    async (environment?: AuthEnvironmentDraft) => {
+      if (busyAction) {
+        return;
       }
-      markPendingAuthLogin();
-      setLoginPending(true);
-      window.location.assign(loginResp.login_url);
-    } catch (err) {
-      clearPendingAuthLogin();
-      setLoginPending(false);
-      setAuthError(errorMessage(err, t("csghubLoginFailed")));
-    } finally {
-      setBusyAction("");
-    }
-  }, [busyAction, t]);
+      setBusyAction("login");
+      setAuthError("");
+      try {
+        const payload = environment ? authEnvironmentLoginPayload(environment) : undefined;
+        const loginResp = normalizeLoginResponse(
+          payload ? await beginAuthLogin(window.location.href, payload) : await beginAuthLogin(window.location.href),
+        );
+        if (!loginResp.login_url) {
+          throw new Error(t("csghubLoginURLMissing"));
+        }
+        markPendingAuthLogin();
+        setLoginPending(true);
+        window.location.assign(loginResp.login_url);
+      } catch (err) {
+        clearPendingAuthLogin();
+        setLoginPending(false);
+        setAuthError(errorMessage(err, t("csghubLoginFailed")));
+      } finally {
+        setBusyAction("");
+      }
+    },
+    [busyAction, t],
+  );
 
   const logout = useCallback(async () => {
     if (busyAction) {
@@ -98,6 +111,7 @@ export function useAuthController(t: TranslateFn): AuthController {
     try {
       const next = normalizeAuthStatus(await logoutAuth());
       setStatus(next);
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.modelProviders() });
       clearPendingAuthLogin();
       setAuthNotice({
         id: `auth-logout-complete-${Date.now()}`,
@@ -114,7 +128,7 @@ export function useAuthController(t: TranslateFn): AuthController {
     } finally {
       setBusyAction("");
     }
-  }, [busyAction, setStatus, status.user_id, status.user_uuid, status.avatar, t]);
+  }, [busyAction, queryClient, setStatus, status.user_id, status.user_uuid, status.avatar, t]);
 
   useEffect(() => {
     if (!loginPending) {
@@ -158,6 +172,8 @@ export function useAuthController(t: TranslateFn): AuthController {
       return;
     }
     const user = status.user_id || status.user_uuid || t("csghubSignedIn");
+    const environment = authNoticeEnvironmentLabel(status, t);
+    void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.modelProviders() });
     setLoginPending(false);
     setAuthError("");
     setAuthNotice({
@@ -165,11 +181,11 @@ export function useAuthController(t: TranslateFn): AuthController {
       avatar: status.avatar,
       avatarFallback: avatarFallbackText(status.user_id, status.user_uuid, t("csghubSignedIn")),
       title: t("csghubSignedIn"),
-      message: t("csghubLoginCompleted", { user }),
+      message: environment ? t("csghubLoginEnvironmentCompleted", { user, environment }) : t("csghubLoginCompleted", { user }),
       type: "login",
       tone: "success",
     });
-  }, [status, t]);
+  }, [queryClient, status, t]);
 
   return {
     busy: Boolean(busyAction),
@@ -213,4 +229,11 @@ function consumePendingAuthLogin(): boolean {
   } catch (_) {
     return false;
   }
+}
+
+function authNoticeEnvironmentLabel(status: AuthStatus, t: TranslateFn): string {
+  const customLabel = t("csghubEnvCustom");
+  const label = authEnvironmentDisplayLabel(authEnvironmentDraftFromStatus(status), customLabel);
+  const defaultLabel = authEnvironmentDisplayLabel(defaultAuthEnvironmentDraft(), customLabel);
+  return label && label !== defaultLabel ? label : "";
 }

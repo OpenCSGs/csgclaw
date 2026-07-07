@@ -25,10 +25,18 @@ const labels: Record<string, string> = {
   csghubLoginPendingDetail: "Finish authorization",
   csghubLoginRequired: "Sign in with OpenCSG",
   csghubNotSignedIn: "Not signed in",
+  csghubAdvancedSettings: "Advanced",
+  csghubAIGatewayBaseURL: "AI Gateway URL (defaults to site /aigateway)",
+  csghubAPIBaseURL: "CSGHub API URL (defaults to site)",
+  csghubEnvCustom: "Custom environment",
+  csghubLoginEnvironment: "Environment",
+  csghubOpenCSGBaseURL: "OpenCSG site URL",
   csghubSignIn: "Sign in",
   csghubSigningIn: "Signing in...",
   csghubSignedIn: "Signed in",
   csghubSignOut: "Sign out",
+  csghubSwitchEnvironment: "Switch environment",
+  csghubToggleEnvironmentPanel: "Expand or collapse OpenCSG settings",
 };
 
 function t(key: string, params: Record<string, string | number> = {}): string {
@@ -51,6 +59,10 @@ const updateAvailableStatus: UpgradeStatus = {
 };
 
 describe("SidebarUserButton", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it("keeps the current version visible when upgrade controls are hidden", async () => {
     const user = userEvent.setup();
     const onOpenUpgrade = vi.fn();
@@ -276,10 +288,108 @@ describe("SidebarUserButton", () => {
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
     expect(screen.getByText("OpenCSG")).toBeInTheDocument();
+    expect(screen.queryByText("opencsg.com")).not.toBeInTheDocument();
     expect(screen.getAllByText("Not signed in")).toHaveLength(2);
+    expect(screen.getByRole("menuitem", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.queryByText("Sign in with OpenCSG")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Environment" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Sign in" }));
     expect(onLogin).toHaveBeenCalledTimes(1);
+    expect(onLogin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preset: "prod",
+        opencsgBaseURL: "https://opencsg.com",
+        csgHubBaseURL: "https://hub.opencsg.com",
+        aiGatewayBaseURL: "https://ai.space.opencsg.com/v1",
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Expand or collapse OpenCSG settings" }));
+    expect(screen.getByRole("combobox", { name: "Environment" })).toHaveValue("prod");
+    expect(screen.queryByDisplayValue("https://opencsg.com")).not.toBeInTheDocument();
+  });
+
+  it("passes the selected OpenCSG stg environment to sign-in", async () => {
+    const user = userEvent.setup();
+    const onLogin = vi.fn();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        showUpgradeControls={false}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        onLogin={onLogin}
+        t={t}
+        theme="light"
+        upgradeStatus={updateAvailableStatus}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "Expand or collapse OpenCSG settings" }));
+    await user.selectOptions(screen.getByLabelText("Environment"), "stage");
+    await user.click(screen.getByRole("button", { name: "Expand or collapse OpenCSG settings" }));
+    expect(screen.getByText("opencsg-stg.com")).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Sign in" }));
+
+    expect(onLogin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preset: "stage",
+        opencsgBaseURL: "https://opencsg-stg.com",
+        csgHubBaseURL: "https://opencsg-stg.com",
+        aiGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1",
+      }),
+    );
+  });
+
+  it("derives custom OpenCSG service URLs from the site URL", async () => {
+    const user = userEvent.setup();
+    const onLogin = vi.fn();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        showUpgradeControls={false}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        onLogin={onLogin}
+        t={t}
+        theme="light"
+        upgradeStatus={updateAvailableStatus}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "Expand or collapse OpenCSG settings" }));
+    await user.selectOptions(screen.getByLabelText("Environment"), "custom");
+    await user.type(screen.getByLabelText("OpenCSG site URL"), "https://openeast.opencsg.com");
+
+    expect(screen.queryByLabelText("CSGHub API URL (defaults to site)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("AI Gateway URL (defaults to site /aigateway)")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: "Sign in" }));
+
+    expect(onLogin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preset: "custom",
+        opencsgBaseURL: "https://openeast.opencsg.com",
+        csgHubBaseURL: "https://openeast.opencsg.com",
+        aiGatewayBaseURL: "https://openeast.opencsg.com/aigateway/v1",
+      }),
+    );
+    expect(JSON.parse(window.localStorage.getItem("csgclaw.auth.environment") || "{}")).toMatchObject({
+      preset: "custom",
+      opencsgBaseURL: "https://openeast.opencsg.com",
+      csgHubBaseURL: "https://openeast.opencsg.com",
+      aiGatewayBaseURL: "https://openeast.opencsg.com/aigateway/v1",
+    });
   });
 
   it("shows OpenCSG account metadata and signs out", async () => {
@@ -300,8 +410,11 @@ describe("SidebarUserButton", () => {
           authenticated: true,
           user_id: "alice",
           user_uuid: "user-1",
+          name: "Alice Zhang",
           avatar: "https://example.test/avatar.png",
+          opencsg_base_url: "https://opencsg.example.test",
           base_url: "https://hub.example.test",
+          ai_gateway_base_url: "https://gateway.example.test/v1",
           portal_url: "https://hub.example.test/portal",
           logged_in_at: "2026-06-22T09:00:00Z",
         }}
@@ -313,9 +426,15 @@ describe("SidebarUserButton", () => {
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(screen.getByText("Signed in")).toBeInTheDocument();
-    expect(screen.getByText("alice")).toBeInTheDocument();
-    expect(screen.queryByText("https://hub.example.test")).not.toBeInTheDocument();
+    expect(screen.getByText("Alice Zhang · Signed in")).toBeInTheDocument();
+    expect(screen.getByText("opencsg.example.test")).toBeInTheDocument();
+    expect(screen.getAllByText("Alice Zhang").length).toBeGreaterThan(0);
+    expect(screen.getByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Expand or collapse OpenCSG settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Environment" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Switch environment" })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("https://opencsg.example.test")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("https://hub.example.test")).not.toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
     expect(onLogout).toHaveBeenCalledTimes(1);
   });
