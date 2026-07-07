@@ -47,6 +47,7 @@ import { LAST_CREATED_AGENT_MODEL_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   applyTemplateToDraft,
   advanceAgentProgress,
+  agentDraftMissingRequiredEnv,
   agentDraftWithRuntimeFieldsFromAgent,
   agentPageLLMProfileChanged,
   agentRuntimePollSettled,
@@ -1465,6 +1466,11 @@ export function useAgentController({
     setAgentProgress(isCreate ? startAgentCreateProgress(isNotification ? BOT_TYPE_NOTIFICATION : runtimeKind) : null);
     try {
       const draft = ensureNotifierPullSubscriptionDraft(agentDraft);
+      if (isCreate && !isNotification && agentDraftMissingRequiredEnv(draft)) {
+        setAgentError(t("profileEnvRequiredError"));
+        setAgentProgress(null);
+        return;
+      }
       if (isNotification) {
         const runtimeOptions = draftRuntimeOptionsForSave(draft, { mergeNotifier: true });
         const payload: AgentUpdatePayload = {

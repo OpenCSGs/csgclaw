@@ -63,6 +63,92 @@ func TestAccessLogCapturesExplicitStatus(t *testing.T) {
 	}
 }
 
+func TestAccessLogWarnsAndCapturesErrorDiagnostics(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	handler := accessLog(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "local callback url is required", http.StatusBadRequest)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/connectors/github/oauth/start", strings.NewReader(`{}`))
+	req.RemoteAddr = "127.0.0.1:1234"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Referer", "http://127.0.0.1:18080/settings")
+	req.Header.Set("User-Agent", "test-agent")
+	req.Header.Set("X-Request-ID", "req-123")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	logLine := buf.String()
+	for _, want := range []string{
+		"level=WARN",
+		"status=400",
+		"error=\"local callback url is required\"",
+		"remote_addr=127.0.0.1:1234",
+		"user_agent=test-agent",
+		"referer=http://127.0.0.1:18080/settings",
+		"content_type=application/json",
+		"content_length=2",
+		"request_id=req-123",
+	} {
+		if !strings.Contains(logLine, want) {
+			t.Fatalf("expected %s in log, got %q", want, logLine)
+		}
+	}
+}
+
+func TestAccessLogRedactsSensitiveQueryValues(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	handler := accessLog(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback?jwt_token=secret-token&return_url=%2Fsettings", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	logLine := buf.String()
+	if strings.Contains(logLine, "secret-token") {
+		t.Fatalf("access log leaked sensitive query value: %q", logLine)
+	}
+	if !strings.Contains(logLine, "jwt_token=%5BREDACTED%5D") {
+		t.Fatalf("access log did not redact sensitive query value: %q", logLine)
+	}
+	if !strings.Contains(logLine, "return_url=%2Fsettings") {
+		t.Fatalf("access log should preserve non-sensitive query value: %q", logLine)
+	}
+}
+
+func TestAccessLogRedactsResponseErrorSecrets(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	handler := accessLog(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `upstream failed: api_key="sk-secret" Authorization: Bearer token-secret`, http.StatusBadGateway)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/model-providers/default/check", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	logLine := buf.String()
+	if strings.Contains(logLine, "sk-secret") || strings.Contains(logLine, "token-secret") {
+		t.Fatalf("access log leaked response error secret: %q", logLine)
+	}
+	for _, want := range []string{
+		"level=ERROR",
+		"api_key=\\\"[REDACTED]\\\"",
+		"Authorization: Bearer [REDACTED]",
+	} {
+		if !strings.Contains(logLine, want) {
+			t.Fatalf("expected redacted value %s in log, got %q", want, logLine)
+		}
+	}
+}
+
 func TestAccessLogSkipsAgentPolling(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
@@ -207,6 +293,40 @@ func (w *hijackResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	_ = client.Close()
 	w.hijacked = true
 	return server, bufio.NewReadWriter(bufio.NewReader(server), bufio.NewWriter(server)), nil
+}
+
+func TestAccessLogTerminalSuccessOutputIsConcise(t *testing.T) {
+	origStderr := accessLogStderr
+	origWriter := accessLogWriter
+	origIsTerminalFD := accessLogIsTerminalFD
+	accessLogStderr = os.Stderr
+	var buf bytes.Buffer
+	accessLogWriter = &buf
+	accessLogIsTerminalFD = func(int) bool { return true }
+	defer func() {
+		accessLogStderr = origStderr
+		accessLogWriter = origWriter
+		accessLogIsTerminalFD = origIsTerminalFD
+	}()
+
+	handler := accessLog(slog.New(slog.NewTextHandler(&buf, nil)), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/icons/github.svg", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	req.Header.Set("User-Agent", "test-agent")
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	logLine := buf.String()
+	if !strings.Contains(logLine, "\x1b[36mGET\x1b[0m /icons/github.svg \x1b[32m200\x1b[0m") {
+		t.Fatalf("expected concise colored success log, got %q", logLine)
+	}
+	if strings.Contains(logLine, "remote") || strings.Contains(logLine, "ua") || strings.Contains(logLine, "test-agent") {
+		t.Fatalf("success terminal log should not include verbose request metadata: %q", logLine)
+	}
 }
 
 func TestAccessLogColorsTerminalOutput(t *testing.T) {

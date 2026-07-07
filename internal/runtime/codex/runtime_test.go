@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -702,7 +701,7 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 	}
 }
 
-func TestDeleteRetriesRuntimeDirRemovalOnDirectoryNotEmpty(t *testing.T) {
+func TestDeleteReturnsRuntimeDirRemovalError(t *testing.T) {
 	root := t.TempDir()
 	rt := New(Dependencies{
 		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
@@ -756,22 +755,17 @@ func TestDeleteRetriesRuntimeDirRemovalOnDirectoryNotEmpty(t *testing.T) {
 	rt.deps.RemoveAll = func(path string) error {
 		removeCalls++
 		if path == runtimeDir && removeCalls == 1 {
-			return &os.PathError{Op: "unlinkat", Path: filepath.Join(runtimeDir, "home", "tmp", "plugins-clone", "plugins"), Err: syscall.ENOTEMPTY}
-		}
-		if path == runtimeDir && removeCalls == 2 {
-			return &os.PathError{Op: "unlinkat", Path: filepath.Join(runtimeDir, "home", "tmp", "plugins-clone", "plugins"), Err: syscall.EACCES}
+			return &os.PathError{Op: "unlinkat", Path: filepath.Join(runtimeDir, "home", "logs_2.sqlite"), Err: errors.New("The process cannot access the file because it is being used by another process.")}
 		}
 		return os.RemoveAll(path)
 	}
 
-	if err := rt.Delete(context.Background(), handle); err != nil {
-		t.Fatalf("Delete() error = %v", err)
+	err = rt.Delete(context.Background(), handle)
+	if err == nil || !strings.Contains(err.Error(), "being used by another process") {
+		t.Fatalf("Delete() error = %v, want locked file error", err)
 	}
-	if removeCalls < 3 {
-		t.Fatalf("RemoveAll() calls = %d, want at least 3", removeCalls)
-	}
-	if _, err := os.Stat(runtimeDir); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("runtime dir still exists after delete: err=%v", err)
+	if removeCalls != 1 {
+		t.Fatalf("RemoveAll() calls = %d, want 1", removeCalls)
 	}
 }
 

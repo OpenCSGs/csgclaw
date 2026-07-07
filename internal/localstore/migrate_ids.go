@@ -2496,7 +2496,7 @@ func moveDirContentsWithStableCollisions(src, dst string) error {
 			return err
 		}
 	}
-	return os.Remove(src)
+	return os.RemoveAll(src)
 }
 
 func moveDirEntryWithStableCollisions(src, dst string) error {
@@ -2647,7 +2647,7 @@ func mergeDirs(src, dst string) error {
 			return err
 		}
 	}
-	return os.Remove(src)
+	return os.RemoveAll(src)
 }
 
 func arrayOfMaps(value any) []map[string]any {

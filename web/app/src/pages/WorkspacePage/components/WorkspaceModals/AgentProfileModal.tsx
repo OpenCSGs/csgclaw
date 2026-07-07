@@ -18,6 +18,7 @@ import { Button, Select } from "@/components/ui";
 import { AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import {
   agentRuntimeKind,
+  agentDraftMissingRequiredEnv,
   agentCreateTemplateLocked,
   applyTemplateToDraft,
   composeLegacyRuntimeKind,
@@ -114,6 +115,7 @@ export function AgentProfileModal({
   const isNotificationContext = isNotificationBotDraftContext(agentDraft, editingAgent, createBotKind);
   const isWorkerCreate = agentModalMode === "create" && !isNotificationContext;
   const isTemplateCreate = isWorkerCreate && agentCreateMode === "template";
+  const missingRequiredEnv = isTemplateCreate && agentDraftMissingRequiredEnv(agentDraft);
   const isCustomCreate = isWorkerCreate && agentCreateMode === "custom";
   const templateLocked = agentCreateTemplateLocked(agentDraft, agentModalMode);
   const runtimeOptionSchemas = isNotificationContext
@@ -722,7 +724,7 @@ export function AgentProfileModal({
               (isNotificationContext
                 ? !notifierFormIsComplete(agentDraft, editingAgent)
                 : isTemplateCreate
-                  ? !agentDraft.from_template || !agentDraft.model_provider_id || !agentDraft.model_id
+                  ? !agentDraft.from_template || !agentDraft.model_provider_id || !agentDraft.model_id || missingRequiredEnv
                   : !agentDraft.model_provider_id || !agentDraft.model_id)
             }
             loading={agentBusy}

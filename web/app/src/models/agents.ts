@@ -42,6 +42,7 @@ export type RuntimeOptionSchema = {
 
 export type EnvKeyValueRow = {
   key: string;
+  required?: boolean;
   value: string;
 };
 
@@ -789,7 +790,7 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
   if (normalized === "running" || normalized === "online") {
     return t("online");
   }
-  if (normalized === "offline" || normalized === "stopped") {
+  if (normalized === "offline" || normalized === "stopped" || normalized === "exited") {
     return t("offline");
   }
   if (normalized === "profile_incomplete") {
@@ -1545,8 +1546,21 @@ export function mapImageEnvToRows(contracts: readonly ImageEnvContract[] | null 
   }
   return contracts.map((contract) => ({
     key: String(contract.name || "").trim(),
+    required: Boolean(contract.required),
     value: contract.secret ? "" : String(contract.default ?? ""),
   }));
+}
+
+export function agentDraftMissingRequiredEnv(draft: Pick<AgentDraft, "envRows"> | null | undefined): boolean {
+  return Boolean(
+    draft?.envRows?.some((row) => {
+      const required = Boolean(row?.required);
+      if (!required) {
+        return false;
+      }
+      return !String(row?.value ?? "").trim();
+    }),
+  );
 }
 
 export function envRowsToMap(rows: readonly EnvKeyValueRow[] | null | undefined): Record<string, string> {

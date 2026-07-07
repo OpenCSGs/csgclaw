@@ -214,6 +214,14 @@ export function ConversationPane({
   managerProfileIncomplete,
   authStatuses,
   authBusyProvider,
+  connectorStatus,
+  connectorBusyAction,
+  connectorError,
+  connectorPending,
+  onSaveConnectorConfig,
+  onConnectConnector,
+  onDisconnectConnector,
+  onManageConnector,
   onProviderLogin,
   draftSegments,
   draftText,
@@ -376,6 +384,10 @@ export function ConversationPane({
       <Conversation.Composer
         authBusyProvider={authBusyProvider}
         authStatuses={authStatuses}
+        connectorStatus={connectorStatus}
+        connectorBusyAction={connectorBusyAction}
+        connectorError={connectorError}
+        connectorPending={connectorPending}
         composerDisabled={composerDisabled}
         composerError={composerError}
         draftSegments={draftSegments}
@@ -397,7 +409,11 @@ export function ConversationPane({
         onComposerCompositionEnd={onComposerCompositionEnd}
         onComposerCompositionStart={onComposerCompositionStart}
         onComposerKeyDown={onComposerKeyDown}
+        onConnectConnector={onConnectConnector}
+        onDisconnectConnector={onDisconnectConnector}
+        onManageConnector={onManageConnector}
         onProviderLogin={onProviderLogin}
+        onSaveConnectorConfig={onSaveConnectorConfig}
         onSendMessage={onSendMessage}
         onSyncComposer={onSyncComposer}
       />

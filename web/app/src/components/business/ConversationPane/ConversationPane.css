@@ -538,6 +538,177 @@
   margin-top: 10px;
 }
 
+.composer-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+  margin-top: 8px;
+}
+
+.composer-connector-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.composer-tool-button,
+.btn.composer-tool-button {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.composer-tool-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.composer-actions-row .composer-tip {
+  min-width: 0;
+  margin-top: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-connector-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: var(--z-portal-popover);
+  width: min(360px, calc(100vw - 40px));
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 10px;
+}
+
+.connector-popover-header,
+.connector-provider-row,
+.connector-provider-main {
+  display: flex;
+  align-items: center;
+}
+
+.connector-popover-header {
+  gap: 10px;
+  color: var(--text);
+}
+
+.connector-popover-header strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.connector-provider-row {
+  min-width: 0;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--field);
+}
+
+.connector-provider-main {
+  min-width: 0;
+  gap: 10px;
+}
+
+.connector-provider-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.connector-provider-icon .svg-icon {
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+}
+
+.connector-provider-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.connector-provider-copy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connector-provider-copy span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connector-connect-button,
+.btn.connector-connect-button,
+.connector-provider-actions {
+  flex: 0 0 auto;
+}
+
+.connector-provider-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connector-connected-state {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid color-mix(in oklab, var(--success-700) 28%, var(--line));
+  border-radius: 999px;
+  background: var(--success-50);
+  color: var(--success-700);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+:root[data-theme="dark"] .connector-connected-state {
+  border-color: color-mix(in oklab, var(--success-500) 34%, var(--line));
+  background: color-mix(in oklab, var(--success-500) 14%, transparent);
+  color: color-mix(in oklab, var(--success-500) 86%, var(--text));
+}
+
+.connector-manage-button,
+.btn.connector-manage-button,
+.connector-disconnect-button,
+.btn.connector-disconnect-button {
+  flex: 0 0 auto;
+}
+
+.connector-pending,
+.connector-form-error {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .mention-picker {
   position: absolute;
   z-index: var(--z-portal-popover);

@@ -159,12 +159,9 @@ Official bundles use one of these layouts:
 - `csgclaw/bin/csgclaw` plus `csgclaw/bin/boxlite`
 - `csgclaw/bin/csgclaw` only
 
-If `[sandbox].provider` is omitted or empty, CSGClaw chooses the default dynamically from the installed bundle:
+If `[sandbox].provider` is omitted or empty, CSGClaw defaults to `docker`.
 
-- bundled `boxlite` present: default to `boxlite`
-- bundled `boxlite` absent: default to `docker`
-
-That means a generated config can keep the provider empty to follow the bundle default:
+That means a generated config can keep the provider empty to follow the default:
 
 ```toml
 [sandbox]
@@ -217,8 +214,7 @@ docker_cli_path = "/usr/local/bin/docker"
 
 Current platform expectations:
 
-- Linux amd64, Linux arm64, and macOS arm64 official bundles include `boxlite`, so an empty provider resolves to `boxlite`.
-- macOS amd64 and Windows amd64 official bundles do not include `boxlite`, so an empty provider resolves to `docker`.
+- An empty provider resolves to `docker`.
 - Windows users should have Docker installed and reachable on `PATH`, or set `[sandbox].docker_cli_path` explicitly.
 
 ## Hub Configuration

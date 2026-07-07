@@ -168,7 +168,9 @@ func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error
 		_ = live.stdin.Close()
 	}
 	if live.cmd != nil && live.cmd.Process != nil {
-		_ = stopProcess(live.cmd.Process.Pid)
+		if err := stopProcess(live.cmd.Process.Pid); err != nil {
+			return err
+		}
 	}
 
 	timeout := time.NewTimer(appServerStopTimeout)
@@ -179,7 +181,7 @@ func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timeout.C:
-		return nil
+		return fmt.Errorf("codex app-server stop timeout after %s: runtime_id=%s", appServerStopTimeout, runtimeID)
 	}
 }
 

@@ -693,6 +693,74 @@ describe("AgentProfileModal", () => {
     expect(screen.queryByPlaceholderText("profileEnvKey")).not.toBeInTheDocument();
   });
 
+  it("requires required template env values before creating", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    function TestModal() {
+      const [draft, setDraft] = useState<AgentDraft>({
+        ...agentToDraft(worker),
+        from_template: "custom/gitlab",
+        template_name: "GitLab Assistant",
+        name: "gitlab-assistant",
+        model_provider_id: "codex",
+        model_id: "gpt-5.5",
+        envRows: [{ key: "GITLAB_TOKEN", required: true, value: "" }],
+      });
+      return (
+        <AgentProfileModal
+          t={t}
+          agentModalMode="create"
+          editingAgent={null}
+          agentDraft={draft}
+          onAgentDraftChange={(update) =>
+            setDraft((current) => {
+              const next = typeof update === "function" ? update(current) : update;
+              return next ?? current;
+            })
+          }
+          onAgentModelsReset={vi.fn()}
+          hubTemplates={[
+            {
+              id: "custom/gitlab",
+              name: "GitLab Assistant",
+              role: "worker",
+              runtime_kind: "picoclaw_sandbox",
+              image_env: [{ name: "GITLAB_TOKEN", required: true, secret: true }],
+            },
+          ]}
+          bootstrapConfig={{}}
+          managerAgent={null}
+          agentModels={["gpt-5.5"]}
+          agentModelBusy={false}
+          locale="en"
+          authStatuses={{}}
+          authBusyProvider=""
+          agentCreateBotKind="worker"
+          agentCreateMode="template"
+          onAgentCreateBotKindChange={vi.fn()}
+          notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+          onProviderLogin={vi.fn()}
+          agentError=""
+          agentProgress={null}
+          agentBusy={false}
+          onClose={vi.fn()}
+          onSave={onSave}
+        />
+      );
+    }
+
+    const { container } = render(<TestModal />);
+    const createButton = screen.getByRole("button", { name: "agentCreateSave" });
+
+    expect(container.querySelector(".env-required-star")).toHaveTextContent("*");
+    expect(createButton).toBeDisabled();
+
+    await user.type(screen.getByPlaceholderText("profileEnvValue"), "token");
+
+    expect(createButton).toBeEnabled();
+  });
+
   it("allows toggling sandbox in custom mode and exposes sandbox runtimes", async () => {
     const user = userEvent.setup();
 

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"csgclaw/internal/codexcli"
@@ -52,8 +51,6 @@ var locateCodexCLI = func() (string, error) {
 
 var defaultSandboxProvider sandbox.Provider = unconfiguredSandboxProvider{}
 var testDefaultServiceOption ServiceOption
-
-const removeAllRetryAttempts = 12
 
 var errDefaultTemplateRuntimeMismatch = errors.New("default template runtime mismatch")
 
@@ -770,7 +767,7 @@ func (s *Service) cleanupBootstrapManagerForRecreate(ctx context.Context, rt san
 	if cleanupSkills != nil {
 		defer cleanupSkills()
 	}
-	if err := removeAllWithRetry(managerHome); err != nil {
+	if err := removeAll(managerHome); err != nil {
 		return nil, fmt.Errorf("remove bootstrap manager home: %w", err)
 	}
 	if restoreSkills != nil {
@@ -1501,7 +1498,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if err := removeAllWithRetry(agentHome); err != nil {
+	if err := removeAll(agentHome); err != nil {
 		return fmt.Errorf("remove agent home: %w", err)
 	}
 
@@ -1684,37 +1681,8 @@ func sandboxNameForAgentID(agentID string) string {
 	return agentruntime.SandboxNameForAgentID(canonicalAgentID(agentID))
 }
 
-func removeAllWithRetry(path string) error {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return fmt.Errorf("path is required")
-	}
-
-	var lastErr error
-	for attempt := 0; attempt < removeAllRetryAttempts; attempt++ {
-		if err := osRemoveAll(path); err == nil || os.IsNotExist(err) {
-			return nil
-		} else {
-			lastErr = err
-			// Defensive retry: BoxLite runtime cleanup can briefly lag behind Close(),
-			// so agent home removal may transiently fail with "directory not empty".
-			// If runtime shutdown semantics improve later, prefer fixing that timing
-			// instead of relying on retries here.
-			if !isRetryableRemoveAllError(err) || attempt == removeAllRetryAttempts-1 {
-				return err
-			}
-		}
-		time.Sleep(time.Duration(attempt+1) * 50 * time.Millisecond)
-	}
-	return lastErr
-}
-
-func isRetryableRemoveAllError(err error) bool {
-	if errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EACCES) {
-		return true
-	}
-	lower := strings.ToLower(err.Error())
-	return strings.Contains(lower, "directory not empty") || strings.Contains(lower, "permission denied")
+func removeAll(path string) error {
+	return osRemoveAll(path)
 }
 
 func (s *Service) List() []Agent {

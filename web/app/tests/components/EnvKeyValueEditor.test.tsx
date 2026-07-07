@@ -60,4 +60,16 @@ describe("EnvKeyValueEditor", () => {
     expect(screen.getByPlaceholderText("Key")).toHaveValue("");
     expect(screen.getByPlaceholderText("Value")).toHaveValue("");
   });
+
+  it("marks required template rows and keeps them present", async () => {
+    const { container, user } = renderEditor([{ key: "GITLAB_TOKEN", required: true, value: "" }]);
+
+    expect(container.querySelector(".env-required-star")).toHaveTextContent("*");
+    expect(screen.getByPlaceholderText("Key")).toBeRequired();
+    expect(screen.getByPlaceholderText("Value")).toBeRequired();
+    expect(screen.getByRole("button", { name: "Remove environment variable" })).toBeDisabled();
+
+    await user.type(screen.getByPlaceholderText("Value"), "token");
+    expect(screen.getByPlaceholderText("Value")).toHaveValue("token");
+  });
 });

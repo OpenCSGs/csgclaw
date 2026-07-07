@@ -700,6 +700,8 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 		}
 	}
 
+	s.stopLifecycleAgent(got.ID)
+
 	if testCreateGatewayBoxHook != nil {
 		rt, err := s.ensureRuntime(got.ID)
 		if err != nil {

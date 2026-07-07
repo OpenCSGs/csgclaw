@@ -63,6 +63,7 @@ export const workspaceQueryKeys = {
   cliProxyAuthStatus: (provider: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "cliproxy-auth-status", provider || ""] as const,
   authStatus: () => [WORKSPACE_QUERY_SCOPE, "auth-status"] as const,
+  connectors: () => [WORKSPACE_QUERY_SCOPE, "connectors"] as const,
   appVersion: () => [WORKSPACE_QUERY_SCOPE, "app-version"] as const,
   upgradeStatus: () => [WORKSPACE_QUERY_SCOPE, "upgrade-status"] as const,
 };

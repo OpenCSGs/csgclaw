@@ -12,6 +12,7 @@ import {
   agentDeleteConfirmationMessage,
   agentRuntimePollSettled,
   agentStatusLabel,
+  agentDraftMissingRequiredEnv,
   agentSandboxEnabled,
   agentRuntimeName,
   agentConnectedChannels,
@@ -639,9 +640,15 @@ describe("agent model helpers", () => {
         null,
       )?.envRows,
     ).toEqual([
-      { key: "GITLAB_TOKEN", value: "" },
-      { key: "GITLAB_URL", value: "https://gitlab.example.com" },
+      { key: "GITLAB_TOKEN", required: true, value: "" },
+      { key: "GITLAB_URL", required: false, value: "https://gitlab.example.com" },
     ]);
+    expect(agentDraftMissingRequiredEnv({ envRows: [{ key: "GITLAB_TOKEN", required: true, value: "" }] })).toBe(
+      true,
+    );
+    expect(
+      agentDraftMissingRequiredEnv({ envRows: [{ key: "GITLAB_TOKEN", required: true, value: "token" }] }),
+    ).toBe(false);
   });
 
   it("filters manager rebuild runtime options to gateway runtimes", () => {
@@ -864,6 +871,7 @@ describe("agent model helpers", () => {
   it("maps profile_incomplete status to offline label", () => {
     const t = (key: string) => key;
     expect(agentStatusLabel("profile_incomplete", t)).toBe("offline");
+    expect(agentStatusLabel("exited", t)).toBe("offline");
     expect(agentStatusLabel("running", t)).toBe("online");
   });
 
