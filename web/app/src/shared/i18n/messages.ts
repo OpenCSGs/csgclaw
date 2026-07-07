@@ -1321,7 +1321,7 @@ export const messages = {
     inputPlaceholder: "Type a message and use @ to mention members",
     send: "Send",
     composerTip: "Press Enter to send and Shift + Enter for a new line. Supports rooms, DMs, and @ mentions.",
-    messageLongExpand: "Expand full text",
+    messageLongExpand: "Expand",
     messageLongCollapse: "Collapse",
     profileSetupTitle: "Manager Profile",
     profileSetupSubtitle:

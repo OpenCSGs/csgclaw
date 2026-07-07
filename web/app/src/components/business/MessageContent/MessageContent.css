@@ -182,6 +182,8 @@
 .long-message-collapse {
   position: relative;
   width: 100%;
+  min-inline-size: 96px;
+  padding-bottom: 44px;
 }
 
 .long-message-content {
@@ -196,10 +198,6 @@
   will-change: max-height;
 }
 
-.long-message-collapse.is-collapsed .long-message-content {
-  padding-bottom: 44px;
-}
-
 .message-bubble:has(.long-message-collapse.is-collapsed)::after {
   content: "";
   position: absolute;
@@ -210,19 +208,14 @@
 }
 
 .long-message-actions {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  margin-top: 8px;
-  z-index: 3;
-}
-
-.long-message-collapse.is-collapsed .long-message-actions {
   position: absolute;
   left: 50%;
   bottom: 8px;
+  display: flex;
+  justify-content: center;
   margin-top: 0;
   transform: translateX(-50%);
+  z-index: 3;
 }
 
 .long-message-toggle {

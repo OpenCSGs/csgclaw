@@ -1,12 +1,12 @@
-import { useEffect, useLayoutEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { classNames } from "@/shared/lib/classNames";
 import type { TranslateFn } from "@/models/conversations";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
 
-const COLLAPSE_CHAR_LIMIT = 300;
 const COLLAPSE_MAX_HEIGHT_PX = 200;
 const COLLAPSE_LINE_COUNT = 8;
+const COLLAPSE_HEIGHT_TOLERANCE_PX = 1;
 type LongMessageCollapseProps = {
   expanded?: boolean;
   html: string;
@@ -28,12 +28,15 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
   const contentId = useId();
   const isExpandedControlled = typeof expanded === "boolean";
   const isExpanded = isExpandedControlled ? expanded : internalExpanded;
-  const setExpandedState = (value: boolean) => {
-    if (!isExpandedControlled) {
-      setInternalExpanded(value);
-    }
-    onExpandedChange?.(value);
-  };
+  const setExpandedState = useCallback(
+    (value: boolean) => {
+      if (!isExpandedControlled) {
+        setInternalExpanded(value);
+      }
+      onExpandedChange?.(value);
+    },
+    [isExpandedControlled, onExpandedChange],
+  );
 
   useEffect(() => {
     const container = contentRef.current;
@@ -71,9 +74,12 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
       const nextMetrics = calculateMetrics(element);
       setMetrics((current) => {
         if (nextMetrics.shouldCollapse) {
-          return nextMetrics;
+          return metricsEqual(current, nextMetrics) ? current : nextMetrics;
         }
-        return current?.shouldCollapse ? nextMetrics : null;
+        if (!current?.shouldCollapse) {
+          return current;
+        }
+        return metricsEqual(current, nextMetrics) ? current : nextMetrics;
       });
       if (!nextMetrics.shouldCollapse && isExpanded) {
         setExpandedState(false);
@@ -104,11 +110,15 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
       }
       resizeObserver?.disconnect();
     };
-  }, [html, isExpanded, renderPass]);
+  }, [html, isExpanded, renderPass, setExpandedState]);
 
   if (!metrics?.shouldCollapse) {
     return (
-      <div ref={contentRef} className="message-content long-message-content" dangerouslySetInnerHTML={{ __html: html }} />
+      <div
+        ref={contentRef}
+        className="message-content long-message-content"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     );
   }
 
@@ -137,9 +147,7 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
   const toggleLabel = isExpanded ? t("messageLongCollapse") : t("messageLongExpand");
 
   return (
-    <div
-      className={classNames("long-message-collapse", collapsed && "is-collapsed", isExpanded && "is-expanded")}
-    >
+    <div className={classNames("long-message-collapse", collapsed && "is-collapsed", isExpanded && "is-expanded")}>
       <div
         ref={contentRef}
         id={contentId}
@@ -165,13 +173,14 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
 }
 
 function calculateMetrics(element: HTMLDivElement): LongMessageMetrics {
-  const expandedHeight = Math.ceil(element.scrollHeight);
+  const expandedHeight = measureNaturalExpandedHeight(element);
   const computedStyle = window.getComputedStyle(element);
   const lineHeight = measureLineHeight(computedStyle);
   const collapseHeight = Math.max(1, Math.min(COLLAPSE_MAX_HEIGHT_PX, Math.ceil(lineHeight * COLLAPSE_LINE_COUNT)));
-  const textLength = normalizedTextLength(element.textContent || "");
   const hasMediaContent = hasImageLikeContent(element);
-  const shouldCollapse = !hasMediaContent && (expandedHeight > collapseHeight || expandedHeight > COLLAPSE_MAX_HEIGHT_PX || textLength > COLLAPSE_CHAR_LIMIT);
+  const shouldCollapse =
+    !hasMediaContent &&
+    expandedHeight > Math.min(collapseHeight, COLLAPSE_MAX_HEIGHT_PX) + COLLAPSE_HEIGHT_TOLERANCE_PX;
 
   return {
     collapseHeight,
@@ -180,12 +189,36 @@ function calculateMetrics(element: HTMLDivElement): LongMessageMetrics {
   };
 }
 
-function hasImageLikeContent(element: HTMLDivElement): boolean {
-  return Boolean(element.querySelector("img, picture, video"));
+function metricsEqual(current: LongMessageMetrics | null, next: LongMessageMetrics): boolean {
+  return (
+    current?.collapseHeight === next.collapseHeight &&
+    current.expandedHeight === next.expandedHeight &&
+    current.shouldCollapse === next.shouldCollapse
+  );
 }
 
-function normalizedTextLength(value: string): number {
-  return value.replace(/\s+/g, " ").trim().length;
+function measureNaturalExpandedHeight(element: HTMLDivElement): number {
+  const previousMaxHeight = element.style.maxHeight;
+  const previousOverflow = element.style.overflow;
+  const previousPaddingBottom = element.style.paddingBottom;
+  const previousTransitionDuration = element.style.transitionDuration;
+
+  element.style.maxHeight = "none";
+  element.style.overflow = "visible";
+  element.style.paddingBottom = "0px";
+  element.style.transitionDuration = "0ms";
+  const expandedHeight = Math.ceil(element.scrollHeight);
+
+  element.style.maxHeight = previousMaxHeight;
+  element.style.overflow = previousOverflow;
+  element.style.paddingBottom = previousPaddingBottom;
+  element.style.transitionDuration = previousTransitionDuration;
+
+  return expandedHeight;
+}
+
+function hasImageLikeContent(element: HTMLDivElement): boolean {
+  return Boolean(element.querySelector("img, picture, video"));
 }
 
 function measureLineHeight(computedStyle: CSSStyleDeclaration): number {
