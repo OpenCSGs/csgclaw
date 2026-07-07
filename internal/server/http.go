@@ -16,6 +16,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/scheduledtask"
 	"csgclaw/internal/team"
 	hub "csgclaw/internal/template"
 	"csgclaw/internal/upgrade"
@@ -33,6 +34,7 @@ type Options struct {
 	LLM               *llm.Service
 	Team              *team.Service
 	AgentTask         *agenttask.Service
+	ScheduledTask     *scheduledtask.Service
 	TeamAdapters      *team.AdapterRegistry
 	Upgrade           *upgrade.Manager
 	ActivityDecider   api.ActivityDecider
@@ -49,6 +51,7 @@ func newHandler(opts Options) *api.Handler {
 	handler.SetHubService(opts.Hub)
 	handler.SetTeamService(opts.Team)
 	handler.SetAgentTaskService(opts.AgentTask)
+	handler.SetScheduledTaskService(opts.ScheduledTask)
 	if opts.TeamAdapters != nil {
 		handler.SetTeamAdapterRegistry(opts.TeamAdapters)
 	}
@@ -94,6 +97,9 @@ func Run(opts Options) error {
 
 	if opts.Upgrade != nil {
 		go opts.Upgrade.Start(opts.Context)
+	}
+	if opts.ScheduledTask != nil {
+		go opts.ScheduledTask.Start(opts.Context)
 	}
 
 	errCh := make(chan error, 1)

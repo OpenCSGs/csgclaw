@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
-import { Bot, ChevronDown, Users, X } from "lucide-react";
+import { Bot, CalendarClock, ChevronDown, Play, Users, X } from "lucide-react";
 import {
   Button,
   type ButtonVariant,
@@ -16,8 +16,15 @@ import {
 } from "@/components/ui";
 import { TaskStatusPill, TaskSubtaskIndicator } from "@/components/business";
 import type { CreateWorkspaceTaskPayload } from "@/api/tasks";
+import type { CreateScheduledTaskPayload } from "@/api/scheduledTasks";
 import type { AgentLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
+import {
+  scheduledTaskRecurrenceLabel,
+  type ScheduledTaskRecurrence,
+  type WorkspaceScheduledTask,
+  type WorkspaceScheduledTaskRun,
+} from "@/models/scheduledTasks";
 import {
   TASK_BOARD_STATUSES,
   displayTaskAssignedAgent,
@@ -62,10 +69,38 @@ type TaskCreateFieldErrors = {
   title?: string;
 };
 
+type ScheduledTaskCreateDraft = {
+  agentID: string;
+  date: string;
+  expiresDate: string;
+  prompt: string;
+  recurrence: ScheduledTaskRecurrence;
+  time: string;
+  title: string;
+};
+
+type ScheduledTaskCreateFieldErrors = {
+  agentID?: string;
+  date?: string;
+  prompt?: string;
+  time?: string;
+  title?: string;
+};
+
 const emptyCreateDraft: TaskCreateDraft = {
   assignee: "",
   title: "",
   description: "",
+};
+
+const emptyScheduledTaskDraft: ScheduledTaskCreateDraft = {
+  agentID: "",
+  date: "",
+  expiresDate: "",
+  prompt: "",
+  recurrence: "once",
+  time: "",
+  title: "",
 };
 
 function truncateTaskTitle(value: string): string {
@@ -137,6 +172,31 @@ function taskAssignmentOptions(teams: readonly WorkspaceTeam[], agents: readonly
   ];
 }
 
+function scheduledTaskAgentOptions(agents: readonly AgentLike[]) {
+  return assignableAgents(agents).map((agent) => ({
+    value: String(agent.id || ""),
+    label: displayAgent(agent),
+    description: String(agent.id || ""),
+  }));
+}
+
+function todayInputValue(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function timeInputValue(now = new Date()): string {
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
+function localDateTimeISO(date: string, time: string): string {
+  const parsed = new Date(`${date}T${time}:00`);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+}
+
+function isTerminalWorkspaceTaskStatus(status: string): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
 type VoidOrPromise = void | Promise<void>;
 
 export type TasksViewProps = {
@@ -146,19 +206,28 @@ export type TasksViewProps = {
   error?: string;
   loading?: boolean;
   onCloseCreateTaskModal?: () => void;
+  onCloseCreateScheduledTaskModal?: () => void;
   onCloseParentTaskDetail?: () => void;
   onCloseTaskDetails?: () => VoidOrPromise;
   onCreateTask?: (payload: CreateWorkspaceTaskPayload) => VoidOrPromise;
+  onCreateScheduledTask?: (payload: CreateScheduledTaskPayload) => VoidOrPromise;
   onOpenConversation?: (roomID: string) => VoidOrPromise;
+  onOpenCreateScheduledTaskModal?: () => void;
   onPlanTask?: (taskID: string) => VoidOrPromise;
   onRefresh?: () => VoidOrPromise;
+  onRunScheduledTask?: (taskID: string) => VoidOrPromise;
+  onSelectScheduledTask?: (taskID: string) => void;
+  onSelectTask?: (taskID?: string) => VoidOrPromise;
   onStartTask?: (taskID: string) => VoidOrPromise;
+  onToggleScheduledTask?: (taskID: string, enabled: boolean) => VoidOrPromise;
   onViewParentDetail?: (taskID: string) => VoidOrPromise;
   parentDetailTaskID?: string;
   planTaskBusy?: boolean;
   planningTaskID?: string;
   selectedTask?: WorkspaceTask | null;
+  selectedScheduledTaskID?: string;
   showCreateTaskModal?: boolean;
+  showCreateScheduledTaskModal?: boolean;
   startTaskBusy?: boolean;
   startingTaskID?: string;
   taskActionError?: string;
@@ -166,6 +235,12 @@ export type TasksViewProps = {
   tasks?: WorkspaceTask[];
   t?: TranslateFn;
   teams?: WorkspaceTeam[];
+  scheduledTasks?: WorkspaceScheduledTask[];
+  scheduledTaskRuns?: WorkspaceScheduledTaskRun[];
+  createScheduledTaskBusy?: boolean;
+  createScheduledTaskError?: string;
+  scheduledTaskActionID?: string;
+  scheduledTaskActionError?: string;
 };
 
 export function TasksView({
@@ -181,19 +256,52 @@ export function TasksView({
   startTaskBusy = false,
   createTaskBusy = false,
   createTaskError = "",
+  createScheduledTaskBusy = false,
+  createScheduledTaskError = "",
   showCreateTaskModal = false,
+  showCreateScheduledTaskModal = false,
+  scheduledTasks = [],
+  scheduledTaskRuns = [],
+  selectedScheduledTaskID = "",
+  scheduledTaskActionID = "",
+  scheduledTaskActionError = "",
   parentDetailTaskID = "",
   planningTaskID = "",
   startingTaskID = "",
   onCloseCreateTaskModal,
+  onCloseCreateScheduledTaskModal,
   onCloseParentTaskDetail,
   onCloseTaskDetails,
   onCreateTask,
+  onCreateScheduledTask,
   onRefresh = () => {},
+  onRunScheduledTask = () => {},
+  onSelectScheduledTask = () => {},
+  onSelectTask = () => {},
+  onToggleScheduledTask = () => {},
+  onOpenCreateScheduledTaskModal,
   onOpenConversation = () => {},
 }: TasksViewProps) {
+  const [activeView, setActiveView] = useState<"tasks" | "scheduled">("tasks");
   const parentTasks = useMemo(() => rootTasks(tasks), [tasks]);
   const assignmentOptions = useMemo(() => taskAssignmentOptions(teams, agents, t), [agents, t, teams]);
+  const scheduledAgentOptions = useMemo(() => scheduledTaskAgentOptions(agents), [agents]);
+  const selectedScheduledTask = useMemo(
+    () => scheduledTasks.find((item) => item.id === selectedScheduledTaskID) ?? scheduledTasks[0] ?? null,
+    [scheduledTasks, selectedScheduledTaskID],
+  );
+  const activeGeneratedTask = useMemo(() => {
+    for (const run of scheduledTaskRuns) {
+      if (!run.task_id) {
+        continue;
+      }
+      const task = tasks.find((item) => item.id === run.task_id);
+      if (task && !isTerminalWorkspaceTaskStatus(task.status)) {
+        return task;
+      }
+    }
+    return null;
+  }, [scheduledTaskRuns, tasks]);
   const [parentDialogTaskID, setParentDialogTaskID] = useState("");
   const dialogStateRootTask = useMemo(
     () => (parentDialogTaskID ? (parentTasks.find((item) => item.id === parentDialogTaskID) ?? null) : null),
@@ -214,6 +322,8 @@ export function TasksView({
   const parentColumns = useMemo(() => boardColumnsForParentTasks(parentTasks), [parentTasks]);
   const [createDraft, setCreateDraft] = useState<TaskCreateDraft>(emptyCreateDraft);
   const [createFieldErrors, setCreateFieldErrors] = useState<TaskCreateFieldErrors>({});
+  const [scheduledDraft, setScheduledDraft] = useState<ScheduledTaskCreateDraft>(emptyScheduledTaskDraft);
+  const [scheduledFieldErrors, setScheduledFieldErrors] = useState<ScheduledTaskCreateFieldErrors>({});
 
   useEffect(() => {
     if (!showCreateTaskModal) {
@@ -222,6 +332,19 @@ export function TasksView({
     setCreateDraft(emptyCreateDraft);
     setCreateFieldErrors({});
   }, [showCreateTaskModal]);
+
+  useEffect(() => {
+    if (!showCreateScheduledTaskModal) {
+      return;
+    }
+    const now = new Date();
+    setScheduledDraft({
+      ...emptyScheduledTaskDraft,
+      date: todayInputValue(now),
+      time: timeInputValue(now),
+    });
+    setScheduledFieldErrors({});
+  }, [showCreateScheduledTaskModal]);
 
   async function submitCreateTask() {
     const title = truncateTaskTitle(createDraft.title.trim());
@@ -267,6 +390,57 @@ export function TasksView({
     });
   }
 
+  async function submitCreateScheduledTask() {
+    const title = truncateTaskTitle(scheduledDraft.title.trim());
+    const prompt = scheduledDraft.prompt.trim();
+    const firstRunAt = localDateTimeISO(scheduledDraft.date, scheduledDraft.time);
+    const nextFieldErrors: ScheduledTaskCreateFieldErrors = {};
+    if (!title) {
+      nextFieldErrors.title = t("taskTitleRequired");
+    }
+    if (!scheduledDraft.agentID) {
+      nextFieldErrors.agentID = t("scheduledTaskAgentRequired");
+    }
+    if (!prompt) {
+      nextFieldErrors.prompt = t("scheduledTaskPromptRequired");
+    }
+    if (!scheduledDraft.date || !firstRunAt) {
+      nextFieldErrors.date = t("scheduledTaskDateRequired");
+    }
+    if (!scheduledDraft.time || !firstRunAt) {
+      nextFieldErrors.time = t("scheduledTaskTimeRequired");
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      setScheduledFieldErrors(nextFieldErrors);
+      return;
+    }
+    setScheduledFieldErrors({});
+    const payload: CreateScheduledTaskPayload = {
+      title,
+      agent_id: scheduledDraft.agentID,
+      prompt,
+      recurrence: scheduledDraft.recurrence,
+      first_run_at: firstRunAt,
+      enabled: true,
+    };
+    if (scheduledDraft.expiresDate) {
+      payload.expires_at = localDateTimeISO(scheduledDraft.expiresDate, "23:59");
+    }
+    await onCreateScheduledTask?.(payload);
+    setActiveView("scheduled");
+  }
+
+  function clearScheduledFieldError(field: keyof ScheduledTaskCreateFieldErrors) {
+    setScheduledFieldErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
   function openRootTaskDetail(task: WorkspaceTask) {
     setParentDialogTaskID(task.id);
   }
@@ -277,11 +451,24 @@ export function TasksView({
     void onCloseTaskDetails?.();
   }
 
+  function openRunTask(taskID: string) {
+    const target = tasks.find((item) => item.id === taskID) ?? null;
+    const rootTask = rootTaskForTask(tasks, target) ?? target;
+    if (rootTask) {
+      setParentDialogTaskID(rootTask.id);
+      return;
+    }
+    void onSelectTask(taskID);
+  }
+
   return (
     <section className={classNames("entity-pane", "tasks-pane", styles.tasksPane)}>
       {error ? <div className="form-error">{error}</div> : null}
       {taskActionError ? (
         <div className={classNames("form-error", styles.tasksActionError)}>{taskActionError}</div>
+      ) : null}
+      {scheduledTaskActionError ? (
+        <div className={classNames("form-error", styles.tasksActionError)}>{scheduledTaskActionError}</div>
       ) : null}
       {!error ? (
         <div className={styles.tasksBoardWorkbench} aria-busy={loading}>
@@ -289,6 +476,26 @@ export function TasksView({
             <div className={classNames(styles.headerRow, styles.justifyEnd, styles.tasksBoardHead)}>
               <div className={styles.tasksBoardHeading}>
                 <h1>{t("mainTaskBoardTitle")}</h1>
+                <div className={styles.taskViewSwitch} role="tablist" aria-label={t("tasksOverview")}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeView === "tasks"}
+                    data-active={activeView === "tasks" ? true : undefined}
+                    onClick={() => setActiveView("tasks")}
+                  >
+                    {t("tasksTab")}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeView === "scheduled"}
+                    data-active={activeView === "scheduled" ? true : undefined}
+                    onClick={() => setActiveView("scheduled")}
+                  >
+                    {t("scheduledTasksTab")}
+                  </button>
+                </div>
               </div>
               <TaskActionStrip
                 t={t}
@@ -301,6 +508,7 @@ export function TasksView({
                 onRefresh={onRefresh}
               />
             </div>
+            {activeView === "tasks" ? (
             <div className={styles.tasksKanbanScroll} role="region" aria-label={t("mainTaskBoardTitle")}>
               <div className={styles.tasksKanban}>
                 {parentColumns.map((column) => (
@@ -339,6 +547,112 @@ export function TasksView({
                 ))}
               </div>
             </div>
+            ) : (
+              <div className={styles.scheduledTaskLayout}>
+                <section className={styles.scheduledTaskList} aria-label={t("scheduledTasksTab")}>
+                  <div className={styles.scheduledTaskListHead}>
+                    <strong>{t("scheduledTasksTab")}</strong>
+                    <Button variant="primary" size="sm" onClick={onOpenCreateScheduledTaskModal}>
+                      {t("scheduledTaskCreate")}
+                    </Button>
+                  </div>
+                  {scheduledTasks.length ? (
+                    scheduledTasks.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={styles.scheduledTaskRow}
+                        data-active={selectedScheduledTask?.id === item.id ? true : undefined}
+                        onClick={() => onSelectScheduledTask(item.id)}
+                      >
+                        <span>
+                          <CalendarClock size={15} aria-hidden="true" />
+                          <strong>{item.title}</strong>
+                        </span>
+                        <small>
+                          {scheduledTaskRecurrenceLabel(item.recurrence, t)} · {formatTaskUpdatedAt(item.next_run_at)}
+                        </small>
+                      </button>
+                    ))
+                  ) : (
+                    <div className={styles.taskBoardEmpty}>{t("scheduledTasksEmpty")}</div>
+                  )}
+                </section>
+                <section className={styles.scheduledTaskDetail} aria-label={t("scheduledTaskDetailTitle")}>
+                  {selectedScheduledTask ? (
+                    <>
+                      <div className={styles.scheduledTaskDetailHead}>
+                        <div>
+                          <h2>{selectedScheduledTask.title}</h2>
+                          <p>{scheduledTaskRecurrenceLabel(selectedScheduledTask.recurrence, t)}</p>
+                        </div>
+                        <div className={styles.scheduledTaskActions}>
+                          {selectedScheduledTask.enabled || selectedScheduledTask.next_run_at ? (
+                            <Button
+                              variant="secondaryGray"
+                              size="sm"
+                              disabled={scheduledTaskActionID === selectedScheduledTask.id}
+                              onClick={() => onToggleScheduledTask(selectedScheduledTask.id, !selectedScheduledTask.enabled)}
+                            >
+                              {selectedScheduledTask.enabled ? t("scheduledTaskDisable") : t("scheduledTaskEnable")}
+                            </Button>
+                          ) : (
+                            <Button variant="secondaryGray" size="sm" disabled>
+                              {t("scheduledTaskCompleted")}
+                            </Button>
+                          )}
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={scheduledTaskActionID === selectedScheduledTask.id || Boolean(activeGeneratedTask)}
+                            onClick={() => onRunScheduledTask(selectedScheduledTask.id)}
+                          >
+                            <Play size={14} aria-hidden="true" />
+                            {activeGeneratedTask ? t("scheduledTaskActiveTask") : t("scheduledTaskRunNow")}
+                          </Button>
+                        </div>
+                      </div>
+                      <dl className={styles.scheduledTaskMeta}>
+                        <div>
+                          <dt>{t("scheduledTaskAgentLabel")}</dt>
+                          <dd>{selectedScheduledTask.agent_id}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("scheduledTaskNextRunLabel")}</dt>
+                          <dd>{formatTaskUpdatedAt(selectedScheduledTask.next_run_at)}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("scheduledTaskLastRunLabel")}</dt>
+                          <dd>{selectedScheduledTask.last_run_at ? formatTaskUpdatedAt(selectedScheduledTask.last_run_at) : "-"}</dd>
+                        </div>
+                      </dl>
+                      <div className={styles.scheduledTaskPrompt}>{selectedScheduledTask.prompt}</div>
+                      <div className={styles.scheduledTaskRuns}>
+                        <h3>{t("scheduledTaskRunsTitle")}</h3>
+                        {scheduledTaskRuns.length ? (
+                          scheduledTaskRuns.map((run) => (
+                            <div key={run.id} className={styles.scheduledTaskRunRow}>
+                              <span>{formatTaskUpdatedAt(run.triggered_at)}</span>
+                              <strong>{run.status === "failed" ? t("scheduledTaskRunFailedStatus") : t("scheduledTaskRunTriggeredStatus")}</strong>
+                          {run.task_id ? (
+                                <button type="button" onClick={() => openRunTask(run.task_id)}>
+                                  {run.task_id}
+                                </button>
+                              ) : null}
+                              {run.error ? <small>{run.error}</small> : null}
+                            </div>
+                          ))
+                        ) : (
+                          <div className={styles.taskBoardEmpty}>{t("scheduledTaskRunsEmpty")}</div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className={styles.taskBoardEmpty}>{t("scheduledTasksEmpty")}</div>
+                  )}
+                </section>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
@@ -429,6 +743,17 @@ export function TasksView({
             ) : null}
           </DialogBody>
           <DialogFooter>
+            <Button
+              variant="secondaryGray"
+              size="md"
+              onClick={() => {
+                onCloseCreateTaskModal?.();
+                onOpenCreateScheduledTaskModal?.();
+              }}
+            >
+              <CalendarClock size={15} aria-hidden="true" />
+              {t("scheduledTaskCreate")}
+            </Button>
             <Button variant="secondaryGray" size="md" onClick={onCloseCreateTaskModal}>
               {t("cancel")}
             </Button>
@@ -441,6 +766,127 @@ export function TasksView({
               onClick={submitCreateTask}
             >
               {t("taskCreateSubmit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
+        open={showCreateScheduledTaskModal}
+        onOpenChange={(open) => (!open ? onCloseCreateScheduledTaskModal?.() : null)}
+      >
+        <DialogContent className={styles.taskCreateDialog}>
+          <DialogHeader>
+            <div>
+              <DialogTitle>{t("scheduledTaskCreateTitle")}</DialogTitle>
+              <DialogDescription>{t("scheduledTaskCreateSubtitle")}</DialogDescription>
+            </div>
+            <TaskDialogCloseButton label={t("close")} />
+          </DialogHeader>
+          <DialogBody>
+            <div className={styles.taskCreateForm}>
+              <label className={classNames("field", styles.taskCreateField)} data-invalid={scheduledFieldErrors.title ? true : undefined}>
+                <span>{t("taskTitleLabel")}</span>
+                <input
+                  value={scheduledDraft.title}
+                  maxLength={TASK_TITLE_MAX_LENGTH}
+                  placeholder={t("taskTitlePlaceholder")}
+                  onInput={(event) => {
+                    setScheduledDraft((current) => ({ ...current, title: event.currentTarget.value }));
+                    clearScheduledFieldError("title");
+                  }}
+                />
+                {scheduledFieldErrors.title ? <span className="form-error">{scheduledFieldErrors.title}</span> : null}
+              </label>
+              <label className={classNames("field", styles.taskCreateField)} data-invalid={scheduledFieldErrors.agentID ? true : undefined}>
+                <span>{t("scheduledTaskAgentLabel")}</span>
+                <Select
+                  value={scheduledDraft.agentID}
+                  onValueChange={(agentID) => {
+                    setScheduledDraft((current) => ({ ...current, agentID }));
+                    clearScheduledFieldError("agentID");
+                  }}
+                  options={scheduledAgentOptions}
+                  placeholder={t("scheduledTaskAgentPlaceholder")}
+                />
+                {scheduledFieldErrors.agentID ? <span className="form-error">{scheduledFieldErrors.agentID}</span> : null}
+              </label>
+              <label className={classNames("field", styles.taskCreateField, styles.span2)} data-invalid={scheduledFieldErrors.prompt ? true : undefined}>
+                <span>{t("scheduledTaskPromptLabel")}</span>
+                <textarea
+                  value={scheduledDraft.prompt}
+                  placeholder={t("scheduledTaskPromptPlaceholder")}
+                  onInput={(event) => {
+                    setScheduledDraft((current) => ({ ...current, prompt: event.currentTarget.value }));
+                    clearScheduledFieldError("prompt");
+                  }}
+                />
+                {scheduledFieldErrors.prompt ? <span className="form-error">{scheduledFieldErrors.prompt}</span> : null}
+              </label>
+              <label className={classNames("field", styles.taskCreateField)}>
+                <span>{t("scheduledTaskRecurrenceLabel")}</span>
+                <Select
+                  value={scheduledDraft.recurrence}
+                  onValueChange={(recurrence) =>
+                    setScheduledDraft((current) => ({ ...current, recurrence: recurrence as ScheduledTaskRecurrence }))
+                  }
+                  options={[
+                    { value: "once", label: t("scheduledTaskRecurrenceOnce") },
+                    { value: "daily", label: t("scheduledTaskRecurrenceDaily") },
+                    { value: "weekly", label: t("scheduledTaskRecurrenceWeekly") },
+                    { value: "monthly", label: t("scheduledTaskRecurrenceMonthly") },
+                  ]}
+                />
+              </label>
+              <label className={classNames("field", styles.taskCreateField)} data-invalid={scheduledFieldErrors.date ? true : undefined}>
+                <span>{t("scheduledTaskDateLabel")}</span>
+                <input
+                  type="date"
+                  value={scheduledDraft.date}
+                  onInput={(event) => {
+                    setScheduledDraft((current) => ({ ...current, date: event.currentTarget.value }));
+                    clearScheduledFieldError("date");
+                  }}
+                />
+                {scheduledFieldErrors.date ? <span className="form-error">{scheduledFieldErrors.date}</span> : null}
+              </label>
+              <label className={classNames("field", styles.taskCreateField)} data-invalid={scheduledFieldErrors.time ? true : undefined}>
+                <span>{t("scheduledTaskTimeLabel")}</span>
+                <input
+                  type="time"
+                  value={scheduledDraft.time}
+                  onInput={(event) => {
+                    setScheduledDraft((current) => ({ ...current, time: event.currentTarget.value }));
+                    clearScheduledFieldError("time");
+                  }}
+                />
+                {scheduledFieldErrors.time ? <span className="form-error">{scheduledFieldErrors.time}</span> : null}
+              </label>
+              <label className={classNames("field", styles.taskCreateField)}>
+                <span>{t("scheduledTaskExpiresLabel")}</span>
+                <input
+                  type="date"
+                  value={scheduledDraft.expiresDate}
+                  onInput={(event) => setScheduledDraft((current) => ({ ...current, expiresDate: event.currentTarget.value }))}
+                />
+              </label>
+            </div>
+            {createScheduledTaskError ? (
+              <div className={classNames("form-error", styles.taskCreateError)}>{createScheduledTaskError}</div>
+            ) : null}
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="secondaryGray" size="md" onClick={onCloseCreateScheduledTaskModal}>
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              loading={createScheduledTaskBusy}
+              loadingLabel={t("scheduledTaskCreating")}
+              disabled={createScheduledTaskBusy}
+              onClick={submitCreateScheduledTask}
+            >
+              {t("scheduledTaskCreateSubmit")}
             </Button>
           </DialogFooter>
         </DialogContent>

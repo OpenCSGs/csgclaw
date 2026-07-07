@@ -410,6 +410,10 @@ func DefaultTasksDir() (string, error) {
 	return DefaultDomainDir("tasks")
 }
 
+func DefaultScheduledTasksDir() (string, error) {
+	return DefaultDomainDir("scheduled-tasks")
+}
+
 func DefaultHubRegistryPath() string {
 	dir, err := DefaultDomainDir(HubDirName)
 	if err != nil {

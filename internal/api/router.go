@@ -172,6 +172,16 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Patch("/", h.updateAgentTask)
 			})
 		})
+		r.Route("/scheduled-tasks", func(r chi.Router) {
+			r.Get("/", h.listScheduledTasks)
+			r.Post("/", h.createScheduledTask)
+			r.Route("/{scheduled_task_id}", func(r chi.Router) {
+				r.Patch("/", h.updateScheduledTask)
+				r.Delete("/", h.deleteScheduledTask)
+				r.Get("/runs", h.listScheduledTaskRuns)
+				r.Post("/run-now", h.runScheduledTaskNow)
+			})
+		})
 		r.Get("/tasks", h.listGlobalTasks)
 	})
 }

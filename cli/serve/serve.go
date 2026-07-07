@@ -44,6 +44,7 @@ import (
 	"csgclaw/internal/participant"
 	runtimecodex "csgclaw/internal/runtime/codex"
 	"csgclaw/internal/sandboxproviders"
+	"csgclaw/internal/scheduledtask"
 	"csgclaw/internal/server"
 	"csgclaw/internal/taskcore"
 	"csgclaw/internal/team"
@@ -60,6 +61,7 @@ var (
 	NewLLMService             = newLLMService
 	NewTeamService            = newTeamService
 	NewAgentTaskService       = newAgentTaskService
+	NewScheduledTaskService   = newScheduledTaskService
 	CheckModelProvider        = checkModelProvider
 	CheckCatalogModelProvider = agent.CheckModelProvider
 	EnsureCLIProxy            = func(ctx context.Context) error {
@@ -599,6 +601,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
+	scheduledTaskSvc, err := NewScheduledTaskService(agentTaskSvc)
+	if err != nil {
+		return err
+	}
 	ensureBootstrapManager := EnsureBootstrapManager
 	startConfiguredAgents := StartConfiguredAgents
 	return RunServer(server.Options{
@@ -613,6 +619,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		LLM:               llmSvc,
 		Team:              teamSvc,
 		AgentTask:         agentTaskSvc,
+		ScheduledTask:     scheduledTaskSvc,
 		TeamAdapters:      teamAdapters,
 		Upgrade:           upgradeManager,
 		ActivityDecider:   channelActivityDecider(codexBridgeMgr),
@@ -1111,6 +1118,18 @@ func newAgentTaskService(agentSvc *agent.Service, imSvc *im.Service, participant
 	}
 	core := taskcore.NewService(taskcore.WithStore(store))
 	return agenttask.NewService(core, imSvc, agentSvc, participantSvc), nil
+}
+
+func newScheduledTaskService(agentTaskSvc *agenttask.Service) (*scheduledtask.Service, error) {
+	dir, err := config.DefaultScheduledTasksDir()
+	if err != nil {
+		return nil, err
+	}
+	store, err := scheduledtask.NewStore(dir)
+	if err != nil {
+		return nil, err
+	}
+	return scheduledtask.NewService(store, agentTaskSvc)
 }
 
 func buildFeishuComponents() (feishu.AgentCredentialProvider, *feishu.Service, error) {

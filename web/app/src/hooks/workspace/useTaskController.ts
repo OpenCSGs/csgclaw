@@ -8,6 +8,14 @@ import {
   planWorkspaceTask,
   startWorkspaceTask,
 } from "@/api/tasks";
+import {
+  createScheduledTask,
+  fetchScheduledTaskRuns,
+  fetchScheduledTasks,
+  runScheduledTaskNow,
+  updateScheduledTask,
+  type CreateScheduledTaskPayload,
+} from "@/api/scheduledTasks";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { ApiError, errorMessage } from "@/api/client";
 import { rootTaskForTask, type WorkspaceTask, rootTasks, shouldPollTransitionalTasks } from "@/models/tasks";
@@ -17,10 +25,12 @@ import type { TranslateFn } from "@/models/conversations";
 import type { NavigatePaneOptions } from "./types";
 
 const TASKS_QUERY_KEY = ["workspace", "tasks"] as const;
+const SCHEDULED_TASKS_QUERY_KEY = ["workspace", "scheduled-tasks"] as const;
 const TASK_BOARD_POLL_DELAY_MS = 3000;
 const TASK_BOARD_POLL_STATUSES = new Set(["pending", "assigned", "in_progress"]);
 const TASK_TAB_REVALIDATE_STALE_MS = 5000;
 const teamEventsQueryKey = (teamID: string) => ["workspace", "team-events", teamID] as const;
+const scheduledTaskRunsQueryKey = (taskID: string) => ["workspace", "scheduled-task-runs", taskID] as const;
 
 type UseTaskControllerArgs = {
   activePane: { type?: string; id?: string };
@@ -39,8 +49,14 @@ export function useTaskController({
 }: UseTaskControllerArgs) {
   const queryClient = useQueryClient();
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+  const [showCreateScheduledTaskModal, setShowCreateScheduledTaskModal] = useState(false);
   const [createTaskBusy, setCreateTaskBusy] = useState(false);
   const [createTaskError, setCreateTaskError] = useState("");
+  const [createScheduledTaskBusy, setCreateScheduledTaskBusy] = useState(false);
+  const [createScheduledTaskError, setCreateScheduledTaskError] = useState("");
+  const [scheduledTaskActionID, setScheduledTaskActionID] = useState("");
+  const [scheduledTaskActionError, setScheduledTaskActionError] = useState("");
+  const [selectedScheduledTaskID, setSelectedScheduledTaskID] = useState("");
   const [planTaskBusy, setPlanTaskBusy] = useState(false);
   const [startTaskBusy, setStartTaskBusy] = useState(false);
   const [planningTaskID, setPlanningTaskID] = useState("");
@@ -52,6 +68,10 @@ export function useTaskController({
     queryKey: TASKS_QUERY_KEY,
     queryFn: fetchGlobalTasks,
   });
+  const scheduledTasksQuery = useQuery({
+    queryKey: SCHEDULED_TASKS_QUERY_KEY,
+    queryFn: fetchScheduledTasks,
+  });
   const { dataUpdatedAt: tasksDataUpdatedAt, isFetching: tasksFetching, refetch: refetchTasks } = tasksQuery;
   const teamsQuery = useQuery({
     queryKey: workspaceQueryKeys.teams(),
@@ -59,6 +79,14 @@ export function useTaskController({
   });
 
   const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
+  const scheduledTasks = useMemo(() => scheduledTasksQuery.data ?? [], [scheduledTasksQuery.data]);
+  const visibleScheduledTaskID = selectedScheduledTaskID || scheduledTasks[0]?.id || "";
+  const scheduledTaskRunsQuery = useQuery({
+    queryKey: scheduledTaskRunsQueryKey(visibleScheduledTaskID),
+    queryFn: () => fetchScheduledTaskRuns(visibleScheduledTaskID),
+    enabled: Boolean(visibleScheduledTaskID),
+  });
+  const scheduledTaskRuns = useMemo(() => scheduledTaskRunsQuery.data ?? [], [scheduledTaskRunsQuery.data]);
   const teams = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data]);
   const parentTasks = useMemo(() => rootTasks(tasks), [tasks]);
   const selectedTaskID = activePane.type === WorkspacePaneTypes.task ? String(activePane.id || "") : "";
@@ -186,6 +214,61 @@ export function useTaskController({
       setCreateTaskError(errorMessage(err, t("taskCreateFailed")));
     } finally {
       setCreateTaskBusy(false);
+    }
+  }
+
+  async function createScheduledTaskDraft(payload: CreateScheduledTaskPayload): Promise<void> {
+    if (createScheduledTaskBusy) {
+      return;
+    }
+    setCreateScheduledTaskBusy(true);
+    setCreateScheduledTaskError("");
+    try {
+      const created = await createScheduledTask(payload);
+      setShowCreateScheduledTaskModal(false);
+      setSelectedScheduledTaskID(created.id);
+      await scheduledTasksQuery.refetch();
+    } catch (err) {
+      setCreateScheduledTaskError(errorMessage(err, t("scheduledTaskCreateFailed")));
+    } finally {
+      setCreateScheduledTaskBusy(false);
+    }
+  }
+
+  async function toggleScheduledTask(taskID: string, enabled: boolean): Promise<void> {
+    if (!taskID) {
+      return;
+    }
+    setScheduledTaskActionID(taskID);
+    setScheduledTaskActionError("");
+    try {
+      await updateScheduledTask(taskID, { enabled });
+      await scheduledTasksQuery.refetch();
+    } catch (err) {
+      setScheduledTaskActionError(errorMessage(err, t("scheduledTaskUpdateFailed")));
+    } finally {
+      setScheduledTaskActionID("");
+    }
+  }
+
+  async function runScheduledTask(taskID: string): Promise<void> {
+    if (!taskID) {
+      return;
+    }
+    setScheduledTaskActionID(taskID);
+    setScheduledTaskActionError("");
+    try {
+      const run = await runScheduledTaskNow(taskID);
+      await scheduledTasksQuery.refetch();
+      await queryClient.invalidateQueries({ queryKey: scheduledTaskRunsQueryKey(taskID) });
+      await tasksQuery.refetch();
+      if (run.task_id) {
+        onSelectTask(run.task_id);
+      }
+    } catch (err) {
+      setScheduledTaskActionError(errorMessage(err, t("scheduledTaskRunFailed")));
+    } finally {
+      setScheduledTaskActionID("");
     }
   }
 
@@ -317,34 +400,57 @@ export function useTaskController({
       setCreateTaskError("");
       setShowCreateTaskModal(true);
     },
+    openCreateScheduledTaskModal: () => {
+      setCreateScheduledTaskError("");
+      setShowCreateScheduledTaskModal(true);
+    },
     taskViewProps: {
       t,
       agents,
       tasks,
       taskEvents,
       teams,
+      scheduledTasks,
+      scheduledTaskRuns,
+      selectedScheduledTaskID: visibleScheduledTaskID,
       selectedTask,
       selectedTaskID,
-      loading: tasksQuery.isLoading,
+      loading: tasksQuery.isLoading || scheduledTasksQuery.isLoading,
       error:
         (tasksQuery.isError ? errorMessage(tasksQuery.error, t("tasksLoadFailed")) : "") ||
+        (scheduledTasksQuery.isError ? errorMessage(scheduledTasksQuery.error, t("scheduledTasksLoadFailed")) : "") ||
         (teamsQuery.isError ? errorMessage(teamsQuery.error, t("teamsLoadFailed")) : ""),
       createTaskBusy,
       createTaskError,
+      createScheduledTaskBusy,
+      createScheduledTaskError,
       planTaskBusy,
       planningTaskID,
       startTaskBusy,
       startingTaskID,
       taskActionError,
+      scheduledTaskActionID,
+      scheduledTaskActionError,
       showCreateTaskModal,
+      showCreateScheduledTaskModal,
       parentDetailTaskID,
       onCloseCreateTaskModal: () => setShowCreateTaskModal(false),
+      onCloseCreateScheduledTaskModal: () => setShowCreateScheduledTaskModal(false),
+      onOpenCreateScheduledTaskModal: () => setShowCreateScheduledTaskModal(true),
       onCloseParentTaskDetail: () => setParentDetailTaskID(""),
       onCreateTask: createTask,
+      onCreateScheduledTask: createScheduledTaskDraft,
       onPlanTask: planTask,
       onStartTask: startTask,
+      onRunScheduledTask: runScheduledTask,
+      onToggleScheduledTask: toggleScheduledTask,
+      onSelectScheduledTask: setSelectedScheduledTaskID,
       onRefresh: () => {
         void tasksQuery.refetch();
+        void scheduledTasksQuery.refetch();
+        if (visibleScheduledTaskID) {
+          void scheduledTaskRunsQuery.refetch();
+        }
         if (activeEventsTeamID) {
           void taskEventsQuery.refetch();
         }

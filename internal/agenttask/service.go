@@ -24,6 +24,7 @@ type Service struct {
 }
 
 type CreateInput struct {
+	ID        string
 	AgentID   string
 	Title     string
 	Body      string
@@ -89,6 +90,7 @@ func (s *Service) CreateAgentTask(ctx context.Context, input CreateInput) (taskc
 
 	assignedTo := s.participantIDForAgentID(agentID)
 	task, err := s.core.CreateRoot(taskcore.CreateRootInput{
+		ID:               strings.TrimSpace(input.ID),
 		AssignmentType:   taskcore.AssignmentTypeAgent,
 		AssignmentID:     agentID,
 		Title:            title,

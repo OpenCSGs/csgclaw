@@ -210,6 +210,49 @@ type PatchAgentTaskRequest struct {
 	Reason  string `json:"reason,omitempty"`
 }
 
+type ScheduledTask struct {
+	ID         string     `json:"id"`
+	Title      string     `json:"title"`
+	AgentID    string     `json:"agent_id"`
+	Prompt     string     `json:"prompt"`
+	Recurrence string     `json:"recurrence"`
+	Enabled    bool       `json:"enabled"`
+	NextRunAt  time.Time  `json:"next_run_at"`
+	LastRunAt  *time.Time `json:"last_run_at,omitempty"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+}
+
+type ScheduledTaskRun struct {
+	ID              string    `json:"id"`
+	ScheduledTaskID string    `json:"scheduled_task_id"`
+	TriggeredAt     time.Time `json:"triggered_at"`
+	Status          string    `json:"status"`
+	TaskID          string    `json:"task_id,omitempty"`
+	Error           string    `json:"error,omitempty"`
+}
+
+type CreateScheduledTaskRequest struct {
+	Title      string     `json:"title"`
+	AgentID    string     `json:"agent_id"`
+	Prompt     string     `json:"prompt"`
+	Recurrence string     `json:"recurrence"`
+	FirstRunAt time.Time  `json:"first_run_at"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	Enabled    *bool      `json:"enabled,omitempty"`
+}
+
+type PatchScheduledTaskRequest struct {
+	Title      *string    `json:"title,omitempty"`
+	AgentID    *string    `json:"agent_id,omitempty"`
+	Prompt     *string    `json:"prompt,omitempty"`
+	Recurrence *string    `json:"recurrence,omitempty"`
+	NextRunAt  *time.Time `json:"next_run_at,omitempty"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	Enabled    *bool      `json:"enabled,omitempty"`
+}
+
 type CreateTeamApprovalRequest struct {
 	TaskID      string `json:"task_id,omitempty"`
 	RequestedBy string `json:"requested_by"`

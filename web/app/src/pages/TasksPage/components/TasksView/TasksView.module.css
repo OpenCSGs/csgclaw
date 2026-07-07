@@ -1254,6 +1254,193 @@
   margin-top: 14px;
 }
 
+.taskViewSwitch {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.taskViewSwitch button {
+  min-width: 76px;
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.taskViewSwitch button[data-active] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--gray-950) 10%, transparent);
+}
+
+.scheduledTaskLayout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  min-height: 520px;
+  border-top: 1px solid var(--line);
+}
+
+.scheduledTaskList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-right: 1px solid var(--line);
+}
+
+.scheduledTaskListHead,
+.scheduledTaskDetailHead,
+.scheduledTaskActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scheduledTaskRow {
+  display: flex;
+  min-height: 64px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.scheduledTaskRow[data-active] {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--line));
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+
+.scheduledTaskRow span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.scheduledTaskRow strong,
+.scheduledTaskRow small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scheduledTaskRow small {
+  color: var(--muted);
+}
+
+.scheduledTaskDetail {
+  padding: 18px;
+  overflow: auto;
+}
+
+.scheduledTaskDetailHead h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 24px;
+}
+
+.scheduledTaskDetailHead p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.scheduledTaskMeta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.scheduledTaskMeta div {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.scheduledTaskMeta dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.scheduledTaskMeta dd {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scheduledTaskPrompt {
+  min-height: 92px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.scheduledTaskRuns {
+  margin-top: 18px;
+}
+
+.scheduledTaskRuns h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.scheduledTaskRunRow {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(80px, 100px) minmax(120px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.scheduledTaskRunRow strong {
+  color: var(--text);
+}
+
+.scheduledTaskRunRow button {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scheduledTaskRunRow small {
+  grid-column: 1 / -1;
+  color: var(--danger);
+}
+
 @media (max-width: 980px) {
   .tasksBoardWorkbench {
     min-height: unset;
@@ -1289,6 +1476,23 @@
   }
 
   .taskCreateForm {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduledTaskLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduledTaskList {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .scheduledTaskMeta {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduledTaskRunRow {
     grid-template-columns: 1fr;
   }
 

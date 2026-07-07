@@ -180,6 +180,30 @@ func (h *Handler) updateAgentTask(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) listGlobalTasks(w http.ResponseWriter, r *http.Request) {
 	h.handleListGlobalTasks(w, r)
 }
+
+func (h *Handler) listScheduledTasks(w http.ResponseWriter, r *http.Request) {
+	h.handleListScheduledTasks(w, r)
+}
+
+func (h *Handler) createScheduledTask(w http.ResponseWriter, r *http.Request) {
+	h.handleCreateScheduledTask(w, r)
+}
+
+func (h *Handler) updateScheduledTask(w http.ResponseWriter, r *http.Request) {
+	h.handleUpdateScheduledTask(w, r)
+}
+
+func (h *Handler) deleteScheduledTask(w http.ResponseWriter, r *http.Request) {
+	h.handleDeleteScheduledTask(w, r)
+}
+
+func (h *Handler) listScheduledTaskRuns(w http.ResponseWriter, r *http.Request) {
+	h.handleListScheduledTaskRuns(w, r)
+}
+
+func (h *Handler) runScheduledTaskNow(w http.ResponseWriter, r *http.Request) {
+	h.handleRunScheduledTaskNow(w, r)
+}
 func (h *Handler) listIMMessages(w http.ResponseWriter, r *http.Request)       { h.handleIMMessages(w, r) }
 func (h *Handler) createIMMessage(w http.ResponseWriter, r *http.Request)      { h.handleIMMessages(w, r) }
 func (h *Handler) listIMConversations(w http.ResponseWriter, r *http.Request)  { h.handleIMRooms(w, r) }
