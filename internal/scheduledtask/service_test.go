@@ -70,6 +70,51 @@ func TestRunNowDoesNotAdvanceSchedule(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsExpirationBeforeFirstRun(t *testing.T) {
+	now := time.Date(2026, 7, 7, 10, 40, 0, 0, time.Local)
+	svc := newTestService(t, now)
+	expiresAt := now.Add(time.Hour)
+	if _, err := svc.Create(CreateInput{
+		Title:      "Daily check",
+		AgentID:    "worker",
+		Prompt:     "Report status.",
+		Recurrence: RecurrenceDaily,
+		FirstRunAt: now.Add(2 * time.Hour),
+		ExpiresAt:  &expiresAt,
+		Enabled:    true,
+	}); err == nil {
+		t.Fatal("Create() error = nil, want expiration validation error")
+	}
+	if got := svc.List(); len(got) != 0 {
+		t.Fatalf("List() len = %d, want 0 after rejected create", len(got))
+	}
+}
+
+func TestUpdateRejectsExpirationBeforeNextRun(t *testing.T) {
+	now := time.Date(2026, 7, 7, 10, 40, 0, 0, time.Local)
+	svc := newTestService(t, now)
+	item, err := svc.Create(CreateInput{
+		Title:      "Daily check",
+		AgentID:    "worker",
+		Prompt:     "Report status.",
+		Recurrence: RecurrenceDaily,
+		FirstRunAt: now.Add(time.Hour),
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	expiresAt := now.Add(30 * time.Minute)
+	expiresAtUpdate := &expiresAt
+	if _, err := svc.Update(UpdateInput{ID: item.ID, ExpiresAt: &expiresAtUpdate}); err == nil {
+		t.Fatal("Update() error = nil, want expiration validation error")
+	}
+	got := svc.List()[0]
+	if got.ExpiresAt != nil {
+		t.Fatalf("ExpiresAt = %v, want unchanged nil after rejected update", got.ExpiresAt)
+	}
+}
+
 func TestUpdateAllowsDisabledCompletedOnceTask(t *testing.T) {
 	now := time.Date(2026, 7, 7, 10, 40, 0, 0, time.Local)
 	svc := newTestService(t, now)
@@ -148,6 +193,82 @@ func TestRunNowRejectsWhenGeneratedTaskIsActive(t *testing.T) {
 	}
 }
 
+func TestCreateDoesNotCommitMemoryStateWhenSaveFails(t *testing.T) {
+	now := time.Date(2026, 7, 7, 10, 40, 0, 0, time.Local)
+	store := &flakyStore{failOnSave: 1}
+	svc, err := NewService(store, nil, WithNowFunc(func() time.Time { return now }))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if _, err := svc.Create(CreateInput{
+		Title:      "Daily check",
+		AgentID:    "worker",
+		Prompt:     "Report status.",
+		Recurrence: RecurrenceDaily,
+		FirstRunAt: now,
+		Enabled:    true,
+	}); err != errFlakyStoreSave {
+		t.Fatalf("Create() error = %v, want %v", err, errFlakyStoreSave)
+	}
+	if got := svc.List(); len(got) != 0 {
+		t.Fatalf("List() len = %d, want 0 after failed save", len(got))
+	}
+}
+
+func TestUpdateDoesNotCommitMemoryStateWhenSaveFails(t *testing.T) {
+	now := time.Date(2026, 7, 7, 10, 40, 0, 0, time.Local)
+	store := &flakyStore{failOnSave: 2}
+	svc, err := NewService(store, nil, WithNowFunc(func() time.Time { return now }))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	item, err := svc.Create(CreateInput{
+		Title:      "Daily check",
+		AgentID:    "worker",
+		Prompt:     "Report status.",
+		Recurrence: RecurrenceDaily,
+		FirstRunAt: now,
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	title := "Updated check"
+	if _, err := svc.Update(UpdateInput{ID: item.ID, Title: &title}); err != errFlakyStoreSave {
+		t.Fatalf("Update() error = %v, want %v", err, errFlakyStoreSave)
+	}
+	got := svc.List()[0]
+	if got.Title != item.Title {
+		t.Fatalf("Title = %q, want unchanged %q after failed save", got.Title, item.Title)
+	}
+}
+
+func TestDeleteDoesNotCommitMemoryStateWhenSaveFails(t *testing.T) {
+	now := time.Date(2026, 7, 7, 10, 40, 0, 0, time.Local)
+	store := &flakyStore{failOnSave: 2}
+	svc, err := NewService(store, nil, WithNowFunc(func() time.Time { return now }))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	item, err := svc.Create(CreateInput{
+		Title:      "Daily check",
+		AgentID:    "worker",
+		Prompt:     "Report status.",
+		Recurrence: RecurrenceDaily,
+		FirstRunAt: now,
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := svc.Delete(item.ID); err != errFlakyStoreSave {
+		t.Fatalf("Delete() error = %v, want %v", err, errFlakyStoreSave)
+	}
+	if got := svc.List(); len(got) != 1 || got[0].ID != item.ID {
+		t.Fatalf("List() = %+v, want original task after failed save", got)
+	}
+}
+
 func TestTriggerDueDoesNotDuplicateWhenFinalSaveFailsAfterTaskCreate(t *testing.T) {
 	now := time.Date(2026, 7, 7, 10, 40, 0, 0, time.Local)
 	store := &flakyStore{failOnSave: 3}
@@ -176,6 +297,13 @@ func TestTriggerDueDoesNotDuplicateWhenFinalSaveFailsAfterTaskCreate(t *testing.
 	}
 	if storedRuns := store.state.Runs; len(storedRuns) != 1 || storedRuns[0].TaskID != runner.tasks[0].ID {
 		t.Fatalf("stored runs = %+v, want pre-saved run with generated task id %q", storedRuns, runner.tasks[0].ID)
+	}
+	got := svc.List()[0]
+	if got.LastRunAt != nil {
+		t.Fatalf("LastRunAt = %v, want nil after failed final save", got.LastRunAt)
+	}
+	if !got.NextRunAt.Equal(item.NextRunAt) {
+		t.Fatalf("NextRunAt = %s, want unchanged %s after failed final save", got.NextRunAt, item.NextRunAt)
 	}
 
 	restarted, err := NewService(store, nil, WithNowFunc(func() time.Time { return now }), WithAgentTaskRunner(runner))

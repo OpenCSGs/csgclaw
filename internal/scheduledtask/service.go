@@ -141,14 +141,19 @@ func (s *Service) Create(input CreateInput) (Task, error) {
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	item.ID = fmt.Sprintf("scheduled-task-%d", s.state.NextTaskID)
-	s.state.NextTaskID++
-	s.state.Tasks = append(s.state.Tasks, item)
-	if err := s.store.Save(s.state); err != nil {
+	if err := validateSchedule(item); err != nil {
 		return Task{}, err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := cloneServiceState(s.state)
+	item.ID = fmt.Sprintf("scheduled-task-%d", next.NextTaskID)
+	next.NextTaskID++
+	next.Tasks = append(next.Tasks, item)
+	if err := s.store.Save(next); err != nil {
+		return Task{}, err
+	}
+	s.state = next
 	return item, nil
 }
 
@@ -196,11 +201,16 @@ func (s *Service) Update(input UpdateInput) (Task, error) {
 	if item.Enabled && item.NextRunAt.IsZero() {
 		return Task{}, fmt.Errorf("next_run_at is required")
 	}
-	item.UpdatedAt = s.now()
-	s.state.Tasks[idx] = item
-	if err := s.store.Save(s.state); err != nil {
+	if err := validateSchedule(item); err != nil {
 		return Task{}, err
 	}
+	item.UpdatedAt = s.now()
+	next := cloneServiceState(s.state)
+	next.Tasks[idx] = item
+	if err := s.store.Save(next); err != nil {
+		return Task{}, err
+	}
+	s.state = next
 	return item, nil
 }
 
@@ -214,10 +224,12 @@ func (s *Service) Delete(id string) error {
 	if idx < 0 {
 		return fmt.Errorf("scheduled task not found")
 	}
-	s.state.Tasks = append(s.state.Tasks[:idx], s.state.Tasks[idx+1:]...)
-	if err := s.store.Save(s.state); err != nil {
+	next := cloneServiceState(s.state)
+	next.Tasks = append(next.Tasks[:idx], next.Tasks[idx+1:]...)
+	if err := s.store.Save(next); err != nil {
 		return err
 	}
+	s.state = next
 	return nil
 }
 
@@ -285,12 +297,14 @@ func (s *Service) trigger(ctx context.Context, item Task, advanceSchedule bool, 
 		Status:          StatusTriggered,
 		TaskID:          taskIDForRunID(fmt.Sprintf("scheduled-run-%d", s.state.NextRunID)),
 	}
-	s.state.NextRunID++
-	s.state.Runs = append(s.state.Runs, run)
-	if err := s.store.Save(s.state); err != nil {
+	next := cloneServiceState(s.state)
+	next.NextRunID++
+	next.Runs = append(next.Runs, run)
+	if err := s.store.Save(next); err != nil {
 		s.mu.Unlock()
 		return Run{}, err
 	}
+	s.state = next
 	s.inFlight[item.ID] = struct{}{}
 	s.mu.Unlock()
 	defer func() {
@@ -322,24 +336,28 @@ func (s *Service) trigger(ctx context.Context, item Task, advanceSchedule bool, 
 	if skipIfActive && run.Status == StatusFailed && s.hasActiveRunLocked(item.ID) {
 		return Run{}, ErrActiveTask
 	}
-	if idx := s.indexLocked(item.ID); idx >= 0 {
-		updated := s.state.Tasks[idx]
+	next = cloneServiceState(s.state)
+	if idx := indexTask(next.Tasks, item.ID); idx >= 0 {
+		updated := next.Tasks[idx]
 		updated.LastRunAt = &now
 		updated.UpdatedAt = now
 		if advanceSchedule {
-			next, ok := nextRunAt(updated, now)
-			updated.NextRunAt = next
-			updated.Enabled = ok && !expired(updated, next)
+			scheduledNext, ok := nextRunAt(updated, now)
+			updated.NextRunAt = scheduledNext
+			updated.Enabled = ok && !expired(updated, scheduledNext)
 		}
-		s.state.Tasks[idx] = updated
+		next.Tasks[idx] = updated
 	}
-	for idx := len(s.state.Runs) - 1; idx >= 0; idx-- {
-		if s.state.Runs[idx].ID == run.ID {
-			s.state.Runs[idx] = run
+	for idx := len(next.Runs) - 1; idx >= 0; idx-- {
+		if next.Runs[idx].ID == run.ID {
+			next.Runs[idx] = run
 			break
 		}
 	}
-	err := s.store.Save(s.state)
+	err := s.store.Save(next)
+	if err == nil {
+		s.state = next
+	}
 	return run, err
 }
 
@@ -384,13 +402,24 @@ func isTerminalTaskStatus(status string) bool {
 }
 
 func (s *Service) indexLocked(id string) int {
+	return indexTask(s.state.Tasks, id)
+}
+
+func indexTask(tasks []Task, id string) int {
 	id = strings.TrimSpace(id)
-	for i, item := range s.state.Tasks {
+	for i, item := range tasks {
 		if item.ID == id {
 			return i
 		}
 	}
 	return -1
+}
+
+func validateSchedule(item Task) error {
+	if item.Enabled && item.ExpiresAt != nil && !item.NextRunAt.IsZero() && item.ExpiresAt.Before(item.NextRunAt) {
+		return fmt.Errorf("expires_at must not be before next_run_at")
+	}
+	return nil
 }
 
 func normalizeRecurrence(value string) string {
@@ -435,6 +464,13 @@ func cloneTime(value *time.Time) *time.Time {
 	}
 	next := *value
 	return &next
+}
+
+func cloneServiceState(input state) state {
+	out := input
+	out.Tasks = append([]Task(nil), input.Tasks...)
+	out.Runs = append([]Run(nil), input.Runs...)
+	return out
 }
 
 func taskIDForRunID(runID string) string {
