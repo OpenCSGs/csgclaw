@@ -1221,7 +1221,7 @@
 }
 
 .taskCreateDialog {
-  width: min(560px, calc(100vw - 40px));
+  width: min(600px, calc(100vw - 40px));
 }
 
 .taskCreateForm {
@@ -1255,33 +1255,42 @@
 }
 
 .taskCreateTabs {
-  display: inline-grid;
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-  margin-bottom: 14px;
-  padding: 3px;
+  width: 100%;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-muted);
 }
 
 .taskCreateTabs button {
-  min-height: 32px;
-  border: 0;
+  min-height: 40px;
+  border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  padding: 6px 12px;
+  padding: 8px 14px;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .taskCreateTabs button[data-active] {
-  background: var(--surface);
+  border-color: var(--brand-600);
+  background: var(--brand-25);
+  color: var(--brand-600);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .taskCreateTabs button[data-active] {
+  border-color: rgba(101, 132, 248, 0.72);
+  background: rgba(77, 106, 214, 0.2);
   color: var(--text);
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
 }
 
 .taskContentLayout {

@@ -78,7 +78,7 @@ const labels: Record<string, string> = {
   scheduledTaskEditTitle: "Edit scheduled task",
   scheduledTaskEditSubtitle: "Edit scheduled task",
   scheduledTaskSaveChanges: "Save changes",
-  scheduledTaskAgentLabel: "Agent",
+  scheduledTaskAgentLabel: "Assign to",
   scheduledTaskAgentPlaceholder: "Choose an agent",
   scheduledTaskAgentRequired: "Choose an agent.",
   scheduledTaskPromptLabel: "Prompt",
@@ -532,7 +532,7 @@ describe("TasksView", () => {
 
     fireEvent.input(screen.getByLabelText("Title"), { target: { value: "Updated report" } });
     fireEvent.input(screen.getByLabelText("Prompt"), { target: { value: "Write the updated report" } });
-    fireEvent.click(screen.getByRole("combobox", { name: "Agent" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Assign to" }));
     fireEvent.click(await screen.findByRole("option", { name: /Worker Two/ }));
     fireEvent.click(screen.getByRole("combobox", { name: "Schedule" }));
     fireEvent.click(await screen.findByRole("option", { name: "Weekly" }));
