@@ -1,0 +1,6 @@
+name = "manager-codex"
+description = "Built-in Codex manager template"
+role = "manager"
+runtime_kind = "codex"
+version = "0.1.0"
+updated_at = "2026-07-08T00:00:00Z"

@@ -10,7 +10,6 @@ from typing import Iterable
 from .config import (
     CACHE_STATE_DIR_NAME,
     LEGACY_CACHE_STATE_DIR_NAME,
-    LEGACY_STATE_DIR_NAME,
     STATE_DIR_ENV,
     STATE_DIR_NAME,
 )
@@ -18,10 +17,6 @@ from .config import (
 
 def _safe_registration_id(registration_id: str) -> str:
     return "".join(ch for ch in registration_id if ch.isalnum() or ch in "-_")
-
-
-def _workspace_dir(name: str) -> Path:
-    return Path("~/.openclaw/workspace").expanduser() / name
 
 
 def _cache_dir(name: str) -> Path:
@@ -44,9 +39,9 @@ def default_state_dir() -> Path:
     override = os.environ.get(STATE_DIR_ENV)
     if override:
         return Path(override).expanduser()
-    openclaw_workspace = Path("~/.openclaw/workspace").expanduser()
-    if openclaw_workspace.exists() or Path("~/.openclaw").expanduser().exists():
-        return _workspace_dir(STATE_DIR_NAME)
+    codex_home = os.environ.get("CODEX_HOME")
+    if codex_home:
+        return Path(codex_home).expanduser() / STATE_DIR_NAME
     return _cache_dir(CACHE_STATE_DIR_NAME)
 
 
@@ -67,8 +62,6 @@ def state_paths(args, registration_id: str) -> Iterable[Path]:
     for directory in _dedupe(
         [
             default_state_dir(),
-            _workspace_dir(STATE_DIR_NAME),
-            _workspace_dir(LEGACY_STATE_DIR_NAME),
             _cache_dir(CACHE_STATE_DIR_NAME),
             _cache_dir(LEGACY_CACHE_STATE_DIR_NAME),
         ]

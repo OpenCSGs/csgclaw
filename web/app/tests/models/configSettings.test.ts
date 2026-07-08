@@ -22,7 +22,7 @@ describe("configSettings model", () => {
       supported_sandbox_providers: ["boxlite", "docker", "csghub"],
       hub_local_path: "/tmp/hub",
       hub_official_url: "https://hub.example.com/",
-      default_manager_template: "builtin.picoclaw-manager",
+      default_manager_template: "builtin.manager-codex",
       default_worker_template: "builtin.picoclaw-worker",
     });
     expect(got?.access_token_set).toBe(true);
@@ -47,7 +47,7 @@ describe("configSettings model", () => {
         sandbox_provider: "boxlite",
         hub_local_path: "/tmp/hub",
         hub_official_url: "https://hub.opencsg.com",
-        default_manager_template: "builtin.picoclaw-manager",
+        default_manager_template: "builtin.manager-codex",
         default_worker_template: "builtin.picoclaw-worker",
       })!,
     );
@@ -59,7 +59,7 @@ describe("configSettings model", () => {
       sandbox_provider: "boxlite",
       hub_local_path: "/tmp/hub",
       hub_official_url: "https://hub.opencsg.com",
-      default_manager_template: "builtin.picoclaw-manager",
+      default_manager_template: "builtin.manager-codex",
       default_worker_template: "builtin.picoclaw-worker",
     });
   });
@@ -73,7 +73,7 @@ describe("configSettings model", () => {
         sandbox_provider: "boxlite",
         hub_local_path: "/tmp/hub",
         hub_official_url: "https://hub.opencsg.com/",
-        default_manager_template: "builtin.picoclaw-manager",
+        default_manager_template: "builtin.manager-codex",
         default_worker_template: "builtin.picoclaw-worker",
       })!,
     );
@@ -92,7 +92,7 @@ describe("configSettings model", () => {
         sandbox_provider: "boxlite",
         hub_local_path: "/tmp/hub",
         hub_official_url: "https://hub.opencsg.com",
-        default_manager_template: "builtin.picoclaw-manager",
+        default_manager_template: "builtin.manager-codex",
         default_worker_template: "builtin.picoclaw-worker",
       })!,
     );
@@ -104,25 +104,31 @@ describe("configSettings model", () => {
   it("filters hub templates by role", () => {
     const options = configTemplateOptions(
       [
-        { id: "builtin.picoclaw-manager", name: "Manager", role: "manager", runtime_kind: "picoclaw_sandbox" },
+        { id: "builtin.manager-codex", name: "Manager", role: "manager", runtime_kind: "codex" },
         { id: "builtin.picoclaw-worker", name: "Worker", role: "worker", runtime_kind: "picoclaw_sandbox" },
       ],
       "manager",
-      "builtin.picoclaw-manager",
+      "builtin.manager-codex",
     );
-    expect(options).toEqual([{ value: "builtin.picoclaw-manager", label: "Manager" }]);
+    expect(options).toEqual([{ value: "builtin.manager-codex", label: "Manager" }]);
   });
 
   it("filters bootstrap templates by runtime_kind", () => {
     expect(
       isValidConfigBootstrapTemplate(
-        { id: "builtin.picoclaw-manager", role: "manager", runtime_kind: "picoclaw_sandbox" },
+        { id: "builtin.manager-codex", role: "manager", runtime_kind: "picoclaw_sandbox" },
+        "manager",
+      ),
+    ).toBe(false);
+    expect(
+      isValidConfigBootstrapTemplate(
+        { id: "builtin.manager-codex", role: "manager", runtime_kind: "codex" },
         "manager",
       ),
     ).toBe(true);
     expect(
       isValidConfigBootstrapTemplate(
-        { id: "builtin.openclaw-manager", role: "manager", runtime_kind: "openclaw_sandbox" },
+        { id: "builtin.manager-codex", role: "manager", runtime_kind: "openclaw_sandbox" },
         "manager",
       ),
     ).toBe(false);

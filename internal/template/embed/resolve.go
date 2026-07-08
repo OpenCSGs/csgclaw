@@ -24,22 +24,16 @@ type BuiltinTemplate struct {
 
 var builtinTemplates = []BuiltinTemplate{
 	{
-		ID:          "openclaw-manager",
-		RuntimeKind: runtimepkg.KindOpenClawSandbox,
+		ID:          "manager-codex",
+		RuntimeKind: runtimepkg.KindCodex,
 		Role:        roleManager,
-		Root:        OpenClawManagerRoot,
+		Root:        CodexManagerRoot,
 	},
 	{
 		ID:          "openclaw-worker",
 		RuntimeKind: runtimepkg.KindOpenClawSandbox,
 		Role:        roleWorker,
 		Root:        OpenClawWorkerRoot,
-	},
-	{
-		ID:          "picoclaw-manager",
-		RuntimeKind: runtimepkg.KindPicoClawSandbox,
-		Role:        roleManager,
-		Root:        PicoClawManagerRoot,
 	},
 	{
 		ID:          "picoclaw-worker",

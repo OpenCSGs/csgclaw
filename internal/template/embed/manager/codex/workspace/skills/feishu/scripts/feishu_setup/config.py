@@ -25,6 +25,5 @@ MANAGER_GROUP_SCOPES = [
 
 STATE_DIR_ENV = "CSGCLAW_FEISHU_SETUP_STATE_DIR"
 STATE_DIR_NAME = ".feishu"
-LEGACY_STATE_DIR_NAME = ".feishu-channel-setup"
 CACHE_STATE_DIR_NAME = "csgclaw-feishu"
 LEGACY_CACHE_STATE_DIR_NAME = "csgclaw-feishu-channel-setup"

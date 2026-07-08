@@ -111,8 +111,8 @@ csgclaw-cli team approval resolve --team <team_id> --approval <approval_id> --st
 
 ## Working Rules
 
-- For any team task that creates, inspects, or updates a project, use `~/.picoclaw/workspace/projects/{name}` as the shared project directory. Check there first before creating a new project path.
-- Keep project artifacts, notes, and generated files under the same `~/.picoclaw/workspace/projects/{name}` tree so managers and workers can inspect the same content.
+- For any team task that creates, inspects, or updates a project, use `./projects/{name}` under the active Codex workspace as the shared project directory. Check there first before creating a new project path.
+- Keep project artifacts, notes, and generated files under the same `./projects/{name}` tree so managers and workers can inspect the same content.
 - Default to one top-level main task for each user-visible goal, then add execution items as child tasks.
 - In the same batch, prefer `id_ref` + `parent_ref` to build the hierarchy clearly.
 - Add `depends_on_refs` when testing, QA, review, validation, or release checks must wait for implementation work.

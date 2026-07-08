@@ -6030,7 +6030,7 @@ func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
 		t.Fatal("Recreate().AgentProfile.EnvRestartRequired = true, want false")
 	}
 
-	wantBuiltIn, err := templateembed.FS().Open(templateembed.WorkspacePath(templateembed.PicoClawManagerRoot) + "/skills/agent-teams/SKILL.md")
+	wantBuiltIn, err := templateembed.FS().Open(templateembed.WorkspacePath(templateembed.CodexManagerRoot) + "/skills/agent-teams/SKILL.md")
 	if err != nil {
 		t.Fatalf("open embedded agent-teams skill: %v", err)
 	}
@@ -7925,12 +7925,8 @@ func TestGatewayProvisionRequestBuildsOpenClawWorkerAssets(t *testing.T) {
 	if gateway.WorkspaceTemplate != templateembed.OpenClawWorkerRoot {
 		t.Fatalf("Gateway.WorkspaceTemplate(worker) = %q, want %q", gateway.WorkspaceTemplate, templateembed.OpenClawWorkerRoot)
 	}
-	managerGateway, err := svc.gatewayProvisionRequest(RuntimeKindOpenClawSandbox, ManagerName, ManagerUserID)
-	if err != nil {
-		t.Fatalf("gatewayProvisionRequest(manager) error = %v", err)
-	}
-	if managerGateway.WorkspaceTemplate != templateembed.OpenClawManagerRoot {
-		t.Fatalf("Gateway.WorkspaceTemplate(manager) = %q, want %q", managerGateway.WorkspaceTemplate, templateembed.OpenClawManagerRoot)
+	if _, err := svc.gatewayProvisionRequest(RuntimeKindOpenClawSandbox, ManagerName, ManagerUserID); err == nil {
+		t.Fatal("gatewayProvisionRequest(manager) error = nil, want sandbox manager template rejected")
 	}
 	rt := openclawsandbox.New(sandboxgateway.Dependencies{})
 	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
@@ -8008,7 +8004,7 @@ func TestGatewayProvisionRequestUsesDockerHostAliasForImplicitAdvertiseURL(t *te
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	gateway, err := svc.gatewayProvisionRequest(RuntimeKindPicoClawSandbox, ManagerName, ManagerUserID)
+	gateway, err := svc.gatewayProvisionRequest(RuntimeKindPicoClawSandbox, "alice", "u-worker-1")
 	if err != nil {
 		t.Fatalf("gatewayProvisionRequest() error = %v", err)
 	}

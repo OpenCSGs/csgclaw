@@ -13,9 +13,8 @@ func TestLookupBuiltin(t *testing.T) {
 		role        string
 		root        string
 	}{
-		{id: "openclaw-manager", runtimeKind: runtime.KindOpenClawSandbox, role: roleManager, root: OpenClawManagerRoot},
+		{id: "manager-codex", runtimeKind: runtime.KindCodex, role: roleManager, root: CodexManagerRoot},
 		{id: "openclaw-worker", runtimeKind: runtime.KindOpenClawSandbox, role: roleWorker, root: OpenClawWorkerRoot},
-		{id: "picoclaw-manager", runtimeKind: runtime.KindPicoClawSandbox, role: roleManager, root: PicoClawManagerRoot},
 		{id: "picoclaw-worker", runtimeKind: runtime.KindPicoClawSandbox, role: roleWorker, root: PicoClawWorkerRoot},
 	}
 

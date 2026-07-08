@@ -41,6 +41,10 @@ def manager_group_permission_url(domain: str, app_id: str) -> str:
     return f"{base}/app/{quoted_app_id}/auth?q={quoted_scopes}&op_from=openapi&token_type=tenant"
 
 
+def script_command() -> str:
+    return 'python "$CODEX_HOME/skills/feishu/scripts/feishu_register.py"'
+
+
 def resolve_manager_app_id(args: argparse.Namespace, state: dict, result: dict) -> str:
     if state.get("agent_id") == "u-manager":
         return str(result.get("app_id") or "").strip()
@@ -213,7 +217,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         "interval": begin["interval"],
         "expires_in": min(begin["expire_in"], args.timeout),
         "state_path": str(state_path(args, registration_id)),
-        "next": f"python /home/picoclaw/.picoclaw/workspace/skills/feishu/scripts/feishu_register.py finalize --registration-id {registration_id}",
+        "next": f"{script_command()} finalize --registration-id {registration_id}",
         "next_tool_timeout_seconds": API_REQUEST_TIMEOUT,
     }
     if args.json:
@@ -231,7 +235,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         print()
         print("After the user confirms, run:")
         print(output["next"])
-        print(f"Use a tool timeout of at least {API_REQUEST_TIMEOUT} seconds for finalize when creating worker boxes.")
+        print(f"Use a tool timeout of at least {API_REQUEST_TIMEOUT} seconds for finalize when creating worker runtimes.")
     return 0
 
 
@@ -245,7 +249,7 @@ def cmd_poll(args: argparse.Namespace) -> int:
                     "status": "confirmed",
                     "agent_id": state["agent_id"],
                     "credentials": "available",
-                    "next": f"python /home/picoclaw/.picoclaw/workspace/skills/feishu/scripts/feishu_register.py finalize --registration-id {state['registration_id']}",
+                    "next": f"{script_command()} finalize --registration-id {state['registration_id']}",
                     "next_tool_timeout_seconds": API_REQUEST_TIMEOUT,
                 },
                 ensure_ascii=False,
@@ -330,7 +334,7 @@ def cmd_recreate_agent(args: argparse.Namespace) -> int:
 
 
 def add_common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--state-dir", default="", help="State directory; default is ~/.picoclaw/workspace/.feishu or ~/.cache/csgclaw-feishu")
+    p.add_argument("--state-dir", default="", help="State directory; default is $CODEX_HOME/.feishu or ~/.cache/csgclaw-feishu")
 
 
 def add_api_common(p: argparse.ArgumentParser) -> None:

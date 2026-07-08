@@ -604,10 +604,10 @@ describe("AgentProfileModal", () => {
         onAgentModelsReset={vi.fn()}
         hubTemplates={[
           {
-            id: "builtin.picoclaw-manager",
+            id: "builtin.manager-codex",
             name: "Manager",
             role: "manager",
-            runtime_kind: "picoclaw_sandbox",
+            runtime_kind: "codex",
             description: "Coordinates workers.",
           },
           {

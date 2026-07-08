@@ -201,7 +201,7 @@ advertise_base_url = ""
 access_token = "your_access_token"
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
@@ -291,7 +291,7 @@ advertise_base_url = ""
 access_token = "your_access_token"
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
@@ -367,7 +367,7 @@ advertise_base_url = ""
 access_token = "your_access_token"
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
@@ -612,7 +612,7 @@ models = ["gpt-test"]
 	defer restore()
 	EnsureIMBootstrapState = func(string) error { return nil }
 	CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
-		if got, want := cfg.Bootstrap.DefaultManagerTemplate, "builtin.picoclaw-manager"; got != want {
+		if got, want := cfg.Bootstrap.DefaultManagerTemplate, "builtin.manager-codex"; got != want {
 			t.Fatalf("cfg.Bootstrap.DefaultManagerTemplate = %q, want %q", got, want)
 		}
 		if got, want := cfg.Bootstrap.DefaultWorkerTemplate, "local.review-worker"; got != want {
@@ -631,7 +631,7 @@ models = ["gpt-test"]
 	}
 	content := string(data)
 	for _, want := range []string{
-		`default_manager_template = "builtin.picoclaw-manager"`,
+		`default_manager_template = "builtin.manager-codex"`,
 		`default_worker_template = "local.review-worker"`,
 	} {
 		if !strings.Contains(content, want) {
@@ -676,7 +676,7 @@ access_token = "your_access_token"
 		`no_auth = false`,
 		`show_upgrade = true`,
 		`[bootstrap]`,
-		`default_manager_template = "builtin.picoclaw-manager"`,
+		`default_manager_template = "builtin.manager-codex"`,
 		`default_worker_template = "builtin.picoclaw-worker"`,
 		`[sandbox]`,
 		`provider = ""`,
@@ -704,7 +704,7 @@ access_token = "custom-token"
 no_auth = false
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
@@ -775,7 +775,7 @@ access_token = "custom-token"
 no_auth = false
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]

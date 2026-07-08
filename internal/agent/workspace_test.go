@@ -17,14 +17,9 @@ func TestRuntimeTemplateFSEmbedsCompleteTemplateUnits(t *testing.T) {
 		workspaceDoc string
 	}{
 		{
-			name:         "openclaw manager",
-			manifestPath: "manager/openclaw/agent.toml",
-			workspaceDoc: "manager/openclaw/workspace/AGENTS.md",
-		},
-		{
-			name:         "picoclaw manager",
-			manifestPath: "manager/picoclaw/agent.toml",
-			workspaceDoc: "manager/picoclaw/workspace/AGENT.md",
+			name:         "codex manager",
+			manifestPath: "manager/codex/agent.toml",
+			workspaceDoc: "manager/codex/workspace/AGENTS.md",
 		},
 		{
 			name:         "picoclaw worker",
@@ -99,8 +94,9 @@ func TestResolveRuntimeTemplateRoot(t *testing.T) {
 		want        string
 		wantErr     bool
 	}{
-		{name: "openclaw manager", runtimeKind: RuntimeKindOpenClawSandbox, role: RoleManager, want: templateembed.OpenClawManagerRoot},
-		{name: "picoclaw manager", runtimeKind: RuntimeKindPicoClawSandbox, role: RoleManager, want: templateembed.PicoClawManagerRoot},
+		{name: "codex manager", runtimeKind: RuntimeKindCodex, role: RoleManager, want: templateembed.CodexManagerRoot},
+		{name: "openclaw manager", runtimeKind: RuntimeKindOpenClawSandbox, role: RoleManager, wantErr: true},
+		{name: "picoclaw manager", runtimeKind: RuntimeKindPicoClawSandbox, role: RoleManager, wantErr: true},
 		{name: "picoclaw worker", runtimeKind: RuntimeKindPicoClawSandbox, role: RoleWorker, want: templateembed.PicoClawWorkerRoot},
 		{name: "openclaw worker", runtimeKind: RuntimeKindOpenClawSandbox, role: RoleWorker, want: templateembed.OpenClawWorkerRoot},
 		{name: "unknown runtime", runtimeKind: "missing", role: RoleWorker, wantErr: true},

@@ -509,7 +509,7 @@ describe("agent model helpers", () => {
 
   it("selects runtime-specific templates and images", () => {
     const templates = [
-      { id: "builtin.picoclaw-manager", name: "picoclaw-manager", role: "manager", runtime_kind: "picoclaw_sandbox" },
+      { id: "builtin.manager-codex", name: "manager-codex", role: "manager", runtime_kind: "codex" },
       { id: "custom/worker", name: "custom-worker", runtime_kind: "picoclaw_sandbox" },
       { id: "builtin.openclaw-worker", name: "openclaw-worker", runtime_kind: "openclaw_sandbox" },
       { id: "builtin.picoclaw-worker", name: "picoclaw-worker", runtime_kind: "picoclaw_sandbox" },
@@ -599,7 +599,7 @@ describe("agent model helpers", () => {
 
   it("excludes manager templates from worker template choices", () => {
     const templates = [
-      { id: "builtin.picoclaw-manager", name: "picoclaw-manager", role: "manager", runtime_kind: "picoclaw_sandbox" },
+      { id: "builtin.manager-codex", name: "manager-codex", role: "manager", runtime_kind: "codex" },
       { id: "builtin.picoclaw-worker", name: "picoclaw-worker", role: "worker", runtime_kind: "picoclaw_sandbox" },
       { id: "custom/roleless", name: "roleless", runtime_kind: "picoclaw_sandbox" },
     ];
@@ -712,16 +712,10 @@ describe("agent model helpers", () => {
   it("keeps manager rebuild runtime and image fixed to Codex", () => {
     const variants = collectManagerTemplateVariants([
       {
-        id: "builtin.picoclaw-manager",
+        id: "builtin.manager-codex",
         role: "manager",
-        runtime_kind: "picoclaw_sandbox",
-        image: "picoclaw:manager",
-      },
-      {
-        id: "builtin.openclaw-manager",
-        role: "manager",
-        runtime_kind: "openclaw_sandbox",
-        image: "openclaw:manager",
+        runtime_kind: "codex",
+        image: "",
       },
       {
         id: "builtin.openclaw-worker",
@@ -730,17 +724,14 @@ describe("agent model helpers", () => {
         image: "openclaw:worker",
       },
       {
-        id: "duplicate.openclaw-manager",
+        id: "duplicate.manager-codex",
         role: "manager",
-        runtime_kind: "openclaw_sandbox",
-        image: "openclaw:manager",
+        runtime_kind: "codex",
+        image: "",
       },
     ]);
 
-    expect(variants).toEqual([
-      { runtimeKind: "picoclaw_sandbox", image: "picoclaw:manager" },
-      { runtimeKind: "openclaw_sandbox", image: "openclaw:manager" },
-    ]);
+    expect(variants).toEqual([{ runtimeKind: "codex", image: "" }]);
     expect(
       availableManagerRebuildRuntimeOptions(
         variants,

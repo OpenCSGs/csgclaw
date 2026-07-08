@@ -16,9 +16,9 @@ describe("hub API", () => {
   it("uses single-id paths for namespaced template detail requests", async () => {
     const fetchMock = mockFetch();
 
-    await fetchHubTemplate("builtin.openclaw-manager");
+    await fetchHubTemplate("builtin.manager-codex");
 
-    expect(fetchMock).toHaveBeenCalledWith("api/v1/hub/templates/builtin.openclaw-manager", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("api/v1/hub/templates/builtin.manager-codex", expect.any(Object));
   });
 
   it("uses single-id paths for template delete requests", async () => {
@@ -35,10 +35,10 @@ describe("hub API", () => {
   it("uses single-id paths for namespaced workspace file requests", async () => {
     const fetchMock = mockFetch();
 
-    await fetchHubWorkspaceFile("builtin.openclaw-manager", "skills/custom/SKILL.md");
+    await fetchHubWorkspaceFile("builtin.manager-codex", "skills/custom/SKILL.md");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "api/v1/hub/templates/builtin.openclaw-manager/workspace/file?path=skills%2Fcustom%2FSKILL.md",
+      "api/v1/hub/templates/builtin.manager-codex/workspace/file?path=skills%2Fcustom%2FSKILL.md",
       expect.any(Object),
     );
   });

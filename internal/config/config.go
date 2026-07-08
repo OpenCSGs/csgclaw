@@ -55,7 +55,7 @@ type BootstrapConfig struct {
 }
 
 func (c BootstrapConfig) ResolvedDefaultManagerTemplate() string {
-	if template := normalizeBootstrapTemplateRef(c.DefaultManagerTemplate); template != "" {
+	if template := normalizeManagerBootstrapTemplateRef(c.DefaultManagerTemplate); template != "" {
 		return template
 	}
 	return DefaultBootstrapManagerTemplate
@@ -314,7 +314,7 @@ const (
 	DefaultOfficialHubRegistryName  = "official"
 	LegacyOfficialHubRegistryURL    = "https://csgclaw.opencsg.com"
 	DefaultOfficialHubRegistryURL   = "https://hub.opencsg.com"
-	DefaultBootstrapManagerTemplate = "builtin.picoclaw-manager"
+	DefaultBootstrapManagerTemplate = "builtin.manager-codex"
 	DefaultBootstrapWorkerTemplate  = "builtin.picoclaw-worker"
 	HubRegistryKindBuiltin          = "builtin"
 	HubRegistryKindLocal            = "local"
@@ -543,9 +543,9 @@ func Load(path string) (Config, error) {
 			switch key {
 			case "default_manager_template":
 				raw := parseRawStringValue(rawValue)
-				cfg.raw.bootstrap.DefaultManagerTemplate = normalizeBootstrapTemplateRef(raw)
+				cfg.raw.bootstrap.DefaultManagerTemplate = normalizeManagerBootstrapTemplateRef(raw)
 				cfg.raw.bootstrapMeta.LegacyManagerTemplateSlash = bootstrapTemplateRefUsesLegacySlash(raw)
-				cfg.Bootstrap.DefaultManagerTemplate = normalizeBootstrapTemplateRef(value)
+				cfg.Bootstrap.DefaultManagerTemplate = normalizeManagerBootstrapTemplateRef(value)
 			case "default_worker_template":
 				raw := parseRawStringValue(rawValue)
 				cfg.raw.bootstrap.DefaultWorkerTemplate = normalizeBootstrapTemplateRef(raw)
@@ -1207,7 +1207,7 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 		out.server.AccessToken = c.Server.AccessToken
 	}
 	if c.raw.bootstrap.DefaultManagerTemplate != "" {
-		out.bootstrap.DefaultManagerTemplate = normalizeBootstrapTemplateRef(c.Bootstrap.DefaultManagerTemplate)
+		out.bootstrap.DefaultManagerTemplate = normalizeManagerBootstrapTemplateRef(c.Bootstrap.DefaultManagerTemplate)
 	}
 	if c.raw.bootstrap.DefaultWorkerTemplate != "" {
 		out.bootstrap.DefaultWorkerTemplate = normalizeBootstrapTemplateRef(c.Bootstrap.DefaultWorkerTemplate)
@@ -1309,6 +1309,16 @@ func normalizeBootstrapTemplateRef(value string) string {
 	}
 	left, right, _ := strings.Cut(value, "/")
 	return strings.TrimSpace(left) + "." + strings.TrimSpace(right)
+}
+
+func normalizeManagerBootstrapTemplateRef(value string) string {
+	value = normalizeBootstrapTemplateRef(value)
+	switch value {
+	case "builtin.picoclaw-manager", "builtin.openclaw-manager":
+		return DefaultBootstrapManagerTemplate
+	default:
+		return value
+	}
 }
 
 func bootstrapTemplateRefUsesLegacySlash(value string) bool {

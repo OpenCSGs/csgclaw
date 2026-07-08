@@ -1591,10 +1591,10 @@ func TestHandleAgentLogsReloadsStateBeforeStreaming(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	agentSvc, statePath := mustNewSeededServiceWithPath(t, []agent.Agent{
-		{ID: "u-manager", Name: "manager", BoxID: "box-old", Role: agent.RoleManager, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
+		{ID: "u-alice", Name: "alice", BoxID: "box-old", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
 	})
 	if err := writeSeededAgents(statePath, []agent.Agent{
-		{ID: "u-manager", Name: "manager", BoxID: "box-new", Role: agent.RoleManager, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
+		{ID: "u-alice", Name: "alice", BoxID: "box-new", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
 	}); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
@@ -1602,7 +1602,7 @@ func TestHandleAgentLogsReloadsStateBeforeStreaming(t *testing.T) {
 	var gotBoxID string
 	agent.TestOnlySetGetBoxHook(func(_ *agent.Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
 		gotBoxID = idOrName
-		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "manager"}), nil
+		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice"}), nil
 	})
 	agent.TestOnlySetRunBoxCommandHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance, _ string, _ []string, w io.Writer) (int, error) {
 		_, _ = io.WriteString(w, "line-1\n")
@@ -1614,7 +1614,7 @@ func TestHandleAgentLogsReloadsStateBeforeStreaming(t *testing.T) {
 	}()
 
 	srv := &Handler{svc: agentSvc}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager/logs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice/logs", nil)
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -6471,7 +6471,9 @@ func normalizeSeededAgents(agents []agent.Agent) []agent.Agent {
 			continue
 		}
 		switch strings.TrimSpace(out[i].Role) {
-		case agent.RoleManager, agent.RoleWorker:
+		case agent.RoleManager:
+			out[i].RuntimeKind = agent.RuntimeKindCodex
+		case agent.RoleWorker:
 			out[i].RuntimeKind = agent.RuntimeKindPicoClawSandbox
 			if strings.TrimSpace(out[i].Image) == "" {
 				out[i].Image = "manager-image:test"

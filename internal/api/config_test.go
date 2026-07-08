@@ -114,7 +114,7 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 		SandboxProvider:        "docker",
 		HubLocalPath:           "/tmp/team-hub",
 		HubOfficialURL:         "https://hub.example.com/",
-		DefaultManagerTemplate: "builtin.picoclaw-manager",
+		DefaultManagerTemplate: "builtin.manager-codex",
 		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
 	})
 	if err != nil {
@@ -233,7 +233,7 @@ func TestHandleServerConfigRejectsInvalidBootstrapBeforeSave(t *testing.T) {
 		AdvertiseBaseURL:       "http://192.168.1.10:19080",
 		ShowUpgrade:            false,
 		SandboxProvider:        "docker",
-		DefaultManagerTemplate: "builtin.openclaw-manager",
+		DefaultManagerTemplate: "builtin.manager-codex",
 		DefaultWorkerTemplate:  "missing.worker-template",
 	})
 	if err != nil {
@@ -277,7 +277,7 @@ func TestHandleServerConfigValidatesBootstrapWithHubBeforeSave(t *testing.T) {
 		AdvertiseBaseURL:       "http://192.168.1.10:19080",
 		ShowUpgrade:            false,
 		SandboxProvider:        "docker",
-		DefaultManagerTemplate: "builtin.picoclaw-manager",
+		DefaultManagerTemplate: "builtin.manager-codex",
 		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
 	})
 	if err != nil {

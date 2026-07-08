@@ -1,13 +1,13 @@
 ---
 name: agent-creator
-description: Mandatory skill for provisioning any new CSGClaw agent-backed participant or worker. Use immediately when the user asks to create, add, set up, or provision an agent, robot, worker, or user-facing "bot" (including GitLab, frontend, QA, or other specialized workers), when dispatch needs a missing worker, or when asking which hub template fits. Always template list + match + template get + participant create --type agent --bind create --from-template with --env for secrets. Never run participant create --bind create without --from-template for a new worker. Do NOT use for task dispatch to existing workers.
+description: Mandatory skill for provisioning any new CSGClaw agent-backed participant or worker. Use immediately when the user asks to create, add, set up, or provision an agent, robot, worker, or user-facing "bot" (including GitLab, frontend, backend, QA, or other specialized workers), when dispatch needs a missing worker, or when asking which hub template fits. Always template list + match + template get + participant create --type agent --bind create --from-template with --env for secrets. Never run participant create --bind create without --from-template for a new worker. Do NOT use for task dispatch to existing workers.
 ---
 
 # Agent Creator
 
 Guide users through hub template selection and agent creation. This skill owns **all new worker provisioning**.
 
-Use `basics` only after create for room membership or non-task IM mentions. Use `csgclaw-cli task create` after the worker exists and the user wants one-worker task handoff. Use `agent-teams` for multi-worker task handoff.
+Use the managed CSGClaw rules in `AGENTS.md` after create for room membership or non-task IM mentions. Use `csgclaw-cli task create` after the worker exists and the user wants one-worker task handoff. Use `agent-teams` for multi-worker task handoff.
 
 ## Routing Gate (mandatory)
 
@@ -18,14 +18,14 @@ Before running **any** `csgclaw-cli participant create --type agent --bind creat
 3. Run `csgclaw-cli --output json template get <template-id>`.
 4. Create with `--from-template` and required `--env` values.
 
-If dispatch or any other skill says "create a worker", that means **this skill**, not `basics`.
+If dispatch or the managed CSGClaw rules say "create a worker", that means **this skill**, not the general room/member/message rules.
 
 ## When to Use
 
 Use this skill when:
 
 - the user asks to create, add, set up, or provision an agent, robot, worker, or user-facing "bot"
-- the user names a capability (GitLab, frontend, QA, review, etc.) and needs a matching worker
+- the user names a capability (GitLab, frontend, backend, QA, review, etc.) and needs a matching worker
 - `participant list` shows no suitable available worker for the required capability
 - dispatch needs a new worker (pause dispatch, complete provisioning here, then resume with `csgclaw-cli task create` for one worker or `agent-teams` for multiple workers)
 
@@ -41,7 +41,7 @@ Never run a bare worker create like:
 
 ```bash
 # FORBIDDEN for new workers
-csgclaw-cli participant create --type agent --bind create --name gitlab-worker --role worker --runtime openclaw_sandbox
+csgclaw-cli participant create --type agent --bind create --name gitlab-worker --role worker
 ```
 
 Never tell the worker secrets in chat instead of `--env`.
@@ -74,8 +74,8 @@ csgclaw-cli participant create --type agent --bind create \
   --env GITLAB_TOKEN=<user-provided> \
 ```
 
-10. Report participant id, template id, and env status. Use `basics` for `member create` if the user wants the worker in the room. Do **not** auto-dispatch unless asked.
-11. If creation fails with a container/BoxLite name conflict for the requested worker name, stop and report that the host has a stale runtime with that exact name. Do **not** silently rename `dev` to `dev-worker` or `dev-feishu`; that changes the user's requested identity and breaks the later Feishu bind.
+10. Report participant id, template id, and env status. Use the managed CSGClaw rules in `AGENTS.md` for `member create` if the user wants the worker in the room. Do **not** auto-dispatch unless asked.
+11. If creation fails with a runtime name conflict for the requested worker name, stop and report that the host has a stale runtime with that exact name. Do **not** silently rename `dev` to `dev-worker` or `dev-feishu`; that changes the user's requested identity and breaks the later Feishu bind.
 
 ## Commands
 

@@ -202,7 +202,7 @@ func TestListContinuesWhenRegistryFails(t *testing.T) {
 		},
 	}, map[string]Store{
 		"builtin": stubStore{
-			listResult: []Template{{ID: "picoclaw-manager", Name: "picoclaw-manager"}},
+			listResult: []Template{{ID: "manager-codex", Name: "manager-codex"}},
 		},
 		config.DefaultOfficialHubRegistryName: stubStore{listErr: errors.New("network down")},
 	})
@@ -214,7 +214,7 @@ func TestListContinuesWhenRegistryFails(t *testing.T) {
 	if got, want := len(items), 1; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
-	if got, want := items[0].ID, "builtin.picoclaw-manager"; got != want {
+	if got, want := items[0].ID, "builtin.manager-codex"; got != want {
 		t.Fatalf("List()[0].ID = %q, want %q", got, want)
 	}
 }

@@ -8,85 +8,54 @@ import (
 )
 
 func TestManagerBasicsRoomCreationKeepsRequesterAsCreator(t *testing.T) {
-	tests := []struct {
-		name string
-		root string
-	}{
-		{name: "picoclaw", root: PicoClawManagerRoot},
-		{name: "openclaw", root: OpenClawManagerRoot},
+	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, WorkspaceDirName, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read codex manager instructions: %v", err)
 	}
+	instructions := string(data)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := fs.ReadFile(FS(), path.Join(tt.root, WorkspaceDirName, "skills/basics/SKILL.md"))
-			if err != nil {
-				t.Fatalf("read basics skill: %v", err)
-			}
-			skill := string(data)
-
-			for _, want := range []string{
-				"csgclaw-cli room create --title test-room --creator-id admin --member-ids manager,<worker-participant-id> --channel csgclaw",
-				"Resolve worker participant IDs with `participant list` before using them.",
-				"preserve the requester as `--creator-id`",
-				"include `manager` plus the requested participants in `--member-ids`",
-				"Do not use `manager` as the creator just because the manager runs the CLI command.",
-				"a display name such as `dev` or `qa` is not necessarily a valid participant ID.",
-				"csgclaw-cli task create --agent-id <worker-agent-id>",
-				"For single-worker task assignments, use `csgclaw-cli task create` instead of manual room messages.",
-			} {
-				if !strings.Contains(skill, want) {
-					t.Fatalf("basics skill missing requester creator guidance %q", want)
-				}
-			}
-			if strings.Contains(skill, "--creator-id manager") {
-				t.Fatalf("basics skill still teaches manager as room creator:\n%s", skill)
-			}
-			if strings.Contains(skill, "--member-ids manager,dev") {
-				t.Fatalf("basics skill still teaches sample dev as a literal participant ID:\n%s", skill)
-			}
-			for _, notWant := range []string{
-				"Minimal handoff flow:",
-				"with `--mention-id` and the task body",
-				"Please implement the login page changes we discussed.",
-			} {
-				if strings.Contains(skill, notWant) {
-					t.Fatalf("basics skill still teaches manual task dispatch %q:\n%s", notWant, skill)
-				}
-			}
-		})
+	for _, want := range []string{
+		"CSGClaw Codex Manager",
+		"csgclaw-cli room create --title test-room --creator-id admin --member-ids manager,<worker-participant-id> --channel csgclaw",
+		"Resolve worker participant IDs with `participant list` before using them.",
+		"preserve the requester as `--creator-id`",
+		"include `manager` plus the requested participants in `--member-ids`",
+		"Do not use `manager` as the creator just because the manager runs the CLI command.",
+		"a display name such as `dev` or `qa` is not necessarily a valid participant ID.",
+	} {
+		if !strings.Contains(instructions, want) {
+			t.Fatalf("codex manager instructions missing room guidance %q", want)
+		}
+	}
+	if strings.Contains(instructions, "skills/basics") {
+		t.Fatalf("codex manager instructions still reference basics skill:\n%s", instructions)
+	}
+	if strings.Contains(instructions, "--creator-id manager") {
+		t.Fatalf("codex manager instructions still teach manager as room creator:\n%s", instructions)
+	}
+	if strings.Contains(instructions, "--member-ids manager,dev") {
+		t.Fatalf("codex manager instructions still teach sample dev as a literal participant ID:\n%s", instructions)
 	}
 }
 
 func TestManagerInstructionsPreferAgentTasksForSingleWorkerDispatch(t *testing.T) {
-	tests := []struct {
-		name string
-		root string
-		file string
-	}{
-		{name: "picoclaw", root: PicoClawManagerRoot, file: "AGENT.md"},
-		{name: "openclaw", root: OpenClawManagerRoot, file: "AGENTS.md"},
+	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, WorkspaceDirName, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read codex manager instructions: %v", err)
 	}
+	instructions := string(data)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := fs.ReadFile(FS(), path.Join(tt.root, WorkspaceDirName, tt.file))
-			if err != nil {
-				t.Fatalf("read manager instructions: %v", err)
-			}
-			instructions := string(data)
-			for _, want := range []string{
-				"Single-worker task assignment second",
-				"csgclaw-cli task create --agent-id <worker_agent_id>",
-				"Do not use `basics` to create a room or send a manual assignment message",
-			} {
-				if !strings.Contains(instructions, want) {
-					t.Fatalf("manager instructions missing task API dispatch guidance %q", want)
-				}
-			}
-			if strings.Contains(instructions, "Dispatch means waking a worker with a real IM mention") {
-				t.Fatalf("manager instructions still define dispatch as manual IM mention:\n%s", instructions)
-			}
-		})
+	for _, want := range []string{
+		"Single-worker task assignment second",
+		"csgclaw-cli task create --agent-id <worker_agent_id>",
+		"Do not create a room or send a manual assignment message for this path.",
+	} {
+		if !strings.Contains(instructions, want) {
+			t.Fatalf("codex manager instructions missing task API dispatch guidance %q", want)
+		}
+	}
+	if strings.Contains(instructions, "Dispatch means waking a worker with a real IM mention") {
+		t.Fatalf("codex manager instructions still define dispatch as manual IM mention:\n%s", instructions)
 	}
 }
 
@@ -121,38 +90,26 @@ func TestWorkerInstructionsMentionDirectAgentTaskCLI(t *testing.T) {
 }
 
 func TestManagerFeishuSkillRoomCreationKeepsRequesterAsCreator(t *testing.T) {
-	tests := []struct {
-		name string
-		root string
-	}{
-		{name: "picoclaw", root: PicoClawManagerRoot},
-		{name: "openclaw", root: OpenClawManagerRoot},
+	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, WorkspaceDirName, "skills/feishu/SKILL.md"))
+	if err != nil {
+		t.Fatalf("read codex manager feishu skill: %v", err)
 	}
+	skill := string(data)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := fs.ReadFile(FS(), path.Join(tt.root, WorkspaceDirName, "skills/feishu/SKILL.md"))
-			if err != nil {
-				t.Fatalf("read feishu skill: %v", err)
-			}
-			skill := string(data)
-
-			for _, want := range []string{
-				"csgclaw-cli room create --title worker-group --creator-id admin --member-ids manager,<worker-participant-id> --channel feishu",
-				"keep the human requester as `--creator-id`",
-				"Include `manager` plus the requested worker participant IDs in `--member-ids`",
-				"replace `<worker-participant-id>` with IDs from `participant list`",
-			} {
-				if !strings.Contains(skill, want) {
-					t.Fatalf("feishu skill missing requester creator guidance %q", want)
-				}
-			}
-			if strings.Contains(skill, "--creator-id manager") {
-				t.Fatalf("feishu skill still teaches manager as room creator:\n%s", skill)
-			}
-			if strings.Contains(skill, "--member-ids manager,dev") {
-				t.Fatalf("feishu skill still teaches sample dev as a literal participant ID:\n%s", skill)
-			}
-		})
+	for _, want := range []string{
+		"csgclaw-cli room create --title worker-group --creator-id admin --member-ids manager,<worker-participant-id> --channel feishu",
+		"keep the human requester as `--creator-id`",
+		"Include `manager` plus the requested worker participant IDs in `--member-ids`",
+		"replace `<worker-participant-id>` with IDs from `participant list`",
+	} {
+		if !strings.Contains(skill, want) {
+			t.Fatalf("feishu skill missing requester creator guidance %q", want)
+		}
+	}
+	if strings.Contains(skill, "--creator-id manager") {
+		t.Fatalf("feishu skill still teaches manager as room creator:\n%s", skill)
+	}
+	if strings.Contains(skill, "--member-ids manager,dev") {
+		t.Fatalf("feishu skill still teaches sample dev as a literal participant ID:\n%s", skill)
 	}
 }
