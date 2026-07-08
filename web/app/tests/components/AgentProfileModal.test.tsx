@@ -929,6 +929,7 @@ describe("AgentProfileModal", () => {
             {
               id: "opencsg-aigateway",
               kind: "openai_compatible",
+              preset: "custom",
               display_name: "OpenCSG AIGateway",
               builtin: false,
               base_url: "https://aigateway.opencsg.com/v1",
@@ -942,6 +943,7 @@ describe("AgentProfileModal", () => {
             {
               id: "opencsg-aigateway",
               kind: "openai_compatible",
+              preset: "custom",
               display_name: "OpenCSG AIGateway",
               builtin: false,
               base_url: "https://aigateway.opencsg.com/v1",
@@ -1002,6 +1004,7 @@ describe("AgentProfileModal", () => {
             {
               id: "opencsg-aigateway",
               kind: "openai_compatible",
+              preset: "custom",
               display_name: "OpenCSG AIGateway",
               builtin: false,
               base_url: "https://aigateway.opencsg.com/v1",
@@ -1015,6 +1018,7 @@ describe("AgentProfileModal", () => {
             {
               id: "opencsg-aigateway",
               kind: "openai_compatible",
+              preset: "custom",
               display_name: "OpenCSG AIGateway",
               builtin: false,
               base_url: "https://aigateway.opencsg.com/v1",

@@ -271,6 +271,7 @@ type rawBootstrapConfigMeta struct {
 
 type rawProviderConfig struct {
 	DisplayName     string
+	Preset          string
 	BaseURL         string
 	APIKey          string
 	HeadersJSON     string
@@ -650,6 +651,9 @@ func Load(path string) (Config, error) {
 				case "display_name":
 					rawProvider.DisplayName = parseRawStringValue(rawValue)
 					provider.DisplayName = value
+				case "preset":
+					rawProvider.Preset = parseRawStringValue(rawValue)
+					provider.Preset = value
 				case "base_url":
 					rawProvider.BaseURL = parseRawStringValue(rawValue)
 					provider.BaseURL = value
@@ -1280,6 +1284,9 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 		loadedProvider := rawProviderConfig{}
 		if rawProvider.DisplayName != "" {
 			loadedProvider.DisplayName = provider.DisplayName
+		}
+		if rawProvider.Preset != "" {
+			loadedProvider.Preset = provider.Preset
 		}
 		if rawProvider.BaseURL != "" {
 			loadedProvider.BaseURL = provider.BaseURL

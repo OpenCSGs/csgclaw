@@ -4,6 +4,7 @@ import { normalizeModelProviderCatalog, type ModelProvider, type ModelProviderCa
 export type ModelProviderPayload = {
   id?: string;
   display_name?: string;
+  preset?: string;
   base_url?: string;
   api_key?: string;
   headers?: Record<string, unknown>;

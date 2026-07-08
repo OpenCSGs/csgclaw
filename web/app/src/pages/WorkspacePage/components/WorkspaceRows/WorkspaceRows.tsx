@@ -27,6 +27,8 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { DragEvent, ReactNode } from "react";
 import type { AgentLike } from "@/models/agents";
 import type {
@@ -57,6 +59,98 @@ export type WorkspaceGroupProps = {
   onToggle: () => void;
   title: string;
 };
+
+function WorkspaceAddAction({
+  icon,
+  label,
+  onAdd,
+}: {
+  icon: ReactNode;
+  label: string;
+  onAdd: () => void;
+}) {
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const tooltipId = useId();
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function updatePosition() {
+      const trigger = triggerRef.current;
+      if (!trigger) {
+        return;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+      const gap = 10;
+      const tooltipWidth = 180;
+      const tooltipHeight = 32;
+      const margin = 12;
+      const fitsRight = rect.right + gap + tooltipWidth <= window.innerWidth - margin;
+      const left = fitsRight
+        ? rect.right + gap
+        : Math.max(margin, rect.left - gap - tooltipWidth);
+      const top = Math.min(
+        window.innerHeight - tooltipHeight - margin,
+        Math.max(margin, rect.top + rect.height / 2 - tooltipHeight / 2),
+      );
+
+      setPosition({ left, top });
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        variant="ghost"
+        className="workspace-add-button"
+        draggable={false}
+        aria-label={label}
+        aria-describedby={open ? tooltipId : undefined}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onDragStart={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onAdd();
+        }}
+      >
+        <span className="icon-button-mark" aria-hidden="true">
+          {icon}
+        </span>
+      </Button>
+      {open
+        ? createPortal(
+            <div
+              id={tooltipId}
+              className="workspace-add-tooltip"
+              role="tooltip"
+              style={{ left: `${position.left}px`, top: `${position.top}px` }}
+            >
+              {label}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
 
 export function WorkspaceGroup({
   id,
@@ -103,25 +197,8 @@ export function WorkspaceGroup({
             <small>{count}</small>
           </span>
         </button>
-        <div className="workspace-group-actions" data-tooltip={onAdd ? addLabel || title : undefined}>
-          {onAdd ? (
-            <Button
-              variant="ghost"
-              className="workspace-add-button"
-              draggable={false}
-              aria-label={addLabel || title}
-              onDragStart={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onAdd?.();
-              }}
-            >
-              <span className="icon-button-mark" aria-hidden="true">
-                {addIcon || <RoomPlusIcon />}
-              </span>
-            </Button>
-          ) : null}
+        <div className="workspace-group-actions">
+          {onAdd ? <WorkspaceAddAction icon={addIcon || <RoomPlusIcon />} label={addLabel || title} onAdd={onAdd} /> : null}
         </div>
       </div>
       {collapsed ? null : (

@@ -1,4 +1,9 @@
 import type { ProviderName } from "@/models/agents";
+import {
+  modelProviderPresetMeta,
+  normalizeModelProviderPreset,
+  type ModelProviderPreset,
+} from "@/models/modelProviderPresets";
 
 export const BUILTIN_MODEL_PROVIDER_IDS = ["opencsg", "csghub-lite", "codex", "claude_code"] as const;
 const MODEL_PROVIDER_AVATARS: Record<string, string> = {
@@ -7,6 +12,9 @@ const MODEL_PROVIDER_AVATARS: Record<string, string> = {
   codex: "model-providers/codex.svg",
   claude_code: "model-providers/claude-code.svg",
   openai: "model-providers/openai-api.svg",
+  zhipu: "model-providers/zhipu.svg",
+  deepseek: "model-providers/deepseek.svg",
+  custom: "model-providers/customize.svg",
 };
 
 const builtinRank = new Map<string, number>(BUILTIN_MODEL_PROVIDER_IDS.map((id, index) => [id, index]));
@@ -17,6 +25,7 @@ export type ModelProvider = {
   id: string;
   kind: string;
   display_name: string;
+  preset: ModelProviderPreset;
   builtin: boolean;
   base_url?: string;
   api_key_set?: boolean;
@@ -80,6 +89,7 @@ function normalizeModelProvider(raw: unknown): ModelProvider {
     id,
     kind,
     display_name: displayName,
+    preset: normalizeModelProviderPreset(record.preset ?? inferModelProviderPreset(id, record.base_url)),
     builtin: Boolean(record.builtin) || builtinRank.has(id),
     base_url: String(record.base_url ?? "").trim() || undefined,
     api_key_set: Boolean(record.api_key_set),
@@ -112,11 +122,23 @@ export function normalizeModelProviderID(value: unknown): string {
   if (raw === "claude-code" || raw === "claude") {
     return "claude_code";
   }
-  return raw
-    .replace(/[\s./:]+/g, "-")
-    .replace(/[^a-z0-9_-]+/g, "-")
+  const normalized = Array.from(raw)
+    .map((char) => {
+      if (/[\p{L}\p{N}]/u.test(char)) {
+        return char;
+      }
+      if (char === "_" || char === "-") {
+        return char;
+      }
+      if (/[\s./:]/u.test(char)) {
+        return "-";
+      }
+      return "-";
+    })
+    .join("")
     .replace(/-{2,}/g, "-")
     .replace(/^[-_]+|[-_]+$/g, "");
+  return normalized;
 }
 
 export function providerIDForProvider(provider: ProviderName | null | undefined): string {
@@ -284,7 +306,13 @@ export function parseModelProviderModelsText(value: string): string[] {
   return models;
 }
 
-export function modelProviderAvatarPath(provider: Pick<ModelProvider, "id" | "builtin"> | string): string {
+export function modelProviderAvatarPath(provider: Pick<ModelProvider, "id" | "builtin" | "preset"> | string): string {
+  if (typeof provider !== "string" && !provider.builtin) {
+    const presetAvatar = modelProviderPresetMeta(provider.preset).avatar;
+    if (presetAvatar) {
+      return presetAvatar;
+    }
+  }
   const id = normalizeModelProviderID(typeof provider === "string" ? provider : provider.id);
   return MODEL_PROVIDER_AVATARS[id] || MODEL_PROVIDER_AVATARS.openai;
 }
@@ -337,4 +365,21 @@ function normalizeModelIDs(raw: unknown): string[] {
     models.push(modelID);
   }
   return models;
+}
+
+function inferModelProviderPreset(id: unknown, baseURL: unknown): ModelProviderPreset {
+  const normalizedID = normalizeModelProviderID(id);
+  if (normalizedID === "openai") {
+    return "openai";
+  }
+  const url = String(baseURL ?? "")
+    .trim()
+    .toLowerCase();
+  if (url.includes("bigmodel.cn") || url.includes("zhipu")) {
+    return "zhipu";
+  }
+  if (url.includes("deepseek.com")) {
+    return "deepseek";
+  }
+  return "custom";
 }

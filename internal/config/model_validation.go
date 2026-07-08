@@ -14,6 +14,7 @@ const (
 
 type ProviderConfig struct {
 	DisplayName     string            `json:"display_name,omitempty"`
+	Preset          string            `json:"preset,omitempty"`
 	BaseURL         string            `json:"base_url,omitempty"`
 	APIKey          string            `json:"api_key,omitempty"`
 	Headers         map[string]string `json:"headers,omitempty"`
@@ -116,6 +117,7 @@ func (c SandboxConfig) Validate() error {
 func (c ProviderConfig) Resolved() ProviderConfig {
 	out := c
 	out.DisplayName = strings.TrimSpace(out.DisplayName)
+	out.Preset = strings.ToLower(strings.TrimSpace(out.Preset))
 	out.BaseURL = strings.TrimRight(strings.TrimSpace(out.BaseURL), "/")
 	out.APIKey = strings.TrimSpace(out.APIKey)
 	out.Headers = normalizeHeaderMap(out.Headers)

@@ -50,6 +50,7 @@ function createCatalog(providerOverrides: Record<string, unknown> = {}) {
       {
         id: "openai",
         kind: "openai_compatible",
+        preset: "openai",
         display_name: "OpenAI API",
         base_url: "https://api.openai.com/v1",
         api_key_set: true,
@@ -111,6 +112,7 @@ describe("ModelProviderPage", () => {
     vi.mocked(updateModelProvider).mockResolvedValue({
       id: "openai",
       kind: "openai_compatible",
+      preset: "openai",
       builtin: false,
       display_name: "OpenAI API",
       base_url: "https://api.openai.com/v1",
@@ -206,6 +208,7 @@ describe("ModelProviderPage", () => {
           {
             id: "opencsg",
             kind: "csghub",
+            preset: "opencsg",
             display_name: "OpenCSG",
             builtin: true,
             base_url: "https://ai.space.opencsg.com/v1",

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2 } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
-import { ModelProviderModelList } from "@/components/business/ProfileControls";
+import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
 import { Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
@@ -355,18 +355,16 @@ export function ModelProviderPage() {
                       placeholder="https://api.openai.com/v1"
                     />
                   </label>
-                  <label className="field">
-                    <span>{t("profileAPIKey")}</span>
-                    <input
-                      value={draft.apiKey}
-                      type="password"
-                      placeholder={provider.api_key_set ? provider.api_key_preview || "••••" : ""}
-                      onInput={(event) => {
-                        const value = event.currentTarget.value;
-                        setDraft((current) => ({ ...current, apiKey: value }));
-                      }}
-                    />
-                  </label>
+                  <APIKeyField
+                    t={t}
+                    value={draft.apiKey}
+                    profile={provider}
+                    unchangedHint={t("modelProviderStoredAPIKeyHint")}
+                    onInput={(event) => {
+                      const value = event.currentTarget.value;
+                      setDraft((current) => ({ ...current, apiKey: value }));
+                    }}
+                  />
                 </>
               ) : null}
             </div>

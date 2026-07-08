@@ -89,7 +89,7 @@ describe("model provider catalog helpers", () => {
         label: "Codex / gpt-5.5",
         providerID: "codex",
         providerDisplayName: "Codex",
-        providerAvatar: "model-providers/codex.png",
+        providerAvatar: "model-providers/codex.svg",
         modelID: "gpt-5.5",
         builtin: true,
       },
@@ -107,10 +107,42 @@ describe("model provider catalog helpers", () => {
       display_name: "OpenCSG",
     });
     expect(modelProviderOptionsFromCatalog(catalog)[0]).toMatchObject({
-      providerAvatar: "model-providers/opencsg.png",
+      providerAvatar: "model-providers/opencsg.svg",
       providerID: "opencsg",
       value: "opencsg.deepseek-v4",
     });
+  });
+
+  it("keeps unicode custom provider ids visible in the catalog", () => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [
+        {
+          id: "智谱",
+          display_name: "智谱",
+          base_url: "https://open.bigmodel.cn/api/paas/v4",
+          models: ["glm-5.2"],
+        },
+      ],
+    });
+
+    expect(catalog.providers).toHaveLength(1);
+    expect(catalog.providers[0]).toMatchObject({
+      id: "智谱",
+      display_name: "智谱",
+      preset: "zhipu",
+    });
+  });
+
+  it("infers custom provider presets from persisted metadata and base URLs", () => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [
+        { id: "team-openai", display_name: "Team OpenAI", preset: "openai", models: [] },
+        { id: "team-zhipu", display_name: "Team Zhipu", base_url: "https://open.bigmodel.cn/api/paas/v4", models: [] },
+        { id: "team-custom", display_name: "Team Custom", base_url: "https://proxy.internal/v1", models: [] },
+      ],
+    });
+
+    expect(catalog.providers.map((provider) => provider.preset)).toEqual(["custom", "openai", "zhipu"]);
   });
 
   it("maps provider statuses to sidebar dot tones", () => {
@@ -151,7 +183,7 @@ describe("model provider catalog helpers", () => {
         label: "Codex / gpt-5.5",
         providerID: "codex",
         providerDisplayName: "Codex",
-        providerAvatar: "model-providers/codex.png",
+        providerAvatar: "model-providers/codex.svg",
         modelID: "gpt-5.5",
         builtin: true,
       },

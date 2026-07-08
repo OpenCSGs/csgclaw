@@ -15,6 +15,7 @@ import (
 type modelProviderRequest struct {
 	ID              string            `json:"id,omitempty"`
 	DisplayName     string            `json:"display_name,omitempty"`
+	Preset          string            `json:"preset,omitempty"`
 	BaseURL         string            `json:"base_url,omitempty"`
 	APIKey          string            `json:"api_key,omitempty"`
 	Headers         map[string]string `json:"headers,omitempty"`
@@ -65,7 +66,7 @@ func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.DisplayName) == "" {
-		req.DisplayName = "OpenAI API"
+		req.DisplayName = defaultModelProviderDisplayName(req.Preset)
 	}
 	if err := agent.ValidateUniqueModelProviderDisplayName(cfg.Models, "", req.DisplayName); err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
@@ -209,6 +210,9 @@ func providerConfigFromRequest(existing config.ProviderConfig, req modelProvider
 	if strings.TrimSpace(req.DisplayName) != "" {
 		out.DisplayName = strings.TrimSpace(req.DisplayName)
 	}
+	if strings.TrimSpace(req.Preset) != "" {
+		out.Preset = strings.ToLower(strings.TrimSpace(req.Preset))
+	}
 	if strings.TrimSpace(req.BaseURL) != "" {
 		out.BaseURL = strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
 	}
@@ -225,6 +229,19 @@ func providerConfigFromRequest(existing config.ProviderConfig, req modelProvider
 		out.ReasoningEffort = strings.TrimSpace(req.ReasoningEffort)
 	}
 	return out
+}
+
+func defaultModelProviderDisplayName(preset string) string {
+	switch strings.ToLower(strings.TrimSpace(preset)) {
+	case "zhipu":
+		return "Zhipu API"
+	case "deepseek":
+		return "DeepSeek API"
+	case "custom":
+		return "Custom API"
+	default:
+		return "OpenAI API"
+	}
 }
 
 func (h *Handler) saveModelProvidersConfig(path string, cfg config.Config) error {

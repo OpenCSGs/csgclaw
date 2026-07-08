@@ -35,8 +35,8 @@
 .create-model-provider-modal {
   display: flex;
   flex-direction: column;
-  width: min(760px, 100%);
-  max-height: min(760px, calc(100dvh - 40px));
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(760px, calc(100dvh - 32px));
   overflow: hidden;
   padding: 0;
 }
@@ -45,15 +45,15 @@
   align-items: flex-start;
   flex: 0 0 auto;
   min-height: auto;
-  padding: 18px 28px 16px;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in oklab, var(--panel) 94%, transparent);
+  padding: 0 0 20px;
+  border-bottom: 0;
+  background: transparent;
 }
 
 .create-model-provider-modal .modal-header > div:first-child {
   display: grid;
   flex: 1 1 auto;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -61,18 +61,27 @@
   color: var(--text);
   font-size: 18px;
   font-weight: 600;
-  line-height: 28px;
+  line-height: 26px;
+}
+
+.create-model-provider-subtitle {
+  max-width: 440px;
+  color: var(--muted);
+  font-size: var(--text-sm-size);
+  line-height: 1.5;
 }
 
 .create-model-provider-body {
   display: grid;
   flex: 1 1 auto;
-  gap: 16px;
+  gap: 12px;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   margin: 0;
-  padding: 18px 28px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
@@ -105,46 +114,116 @@
 
 .create-model-provider-section {
   display: grid;
-  gap: 14px;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: color-mix(in oklab, var(--field) 74%, transparent);
-  box-shadow: var(--shadow-xs);
+  gap: 12px;
 }
 
 .create-model-provider-section-heading {
   display: grid;
-  gap: 3px;
+  gap: 4px;
 }
 
 .create-model-provider-section-heading > div {
   color: var(--text);
-  font-size: 15px;
-  font-weight: 740;
-  letter-spacing: 0;
+  font: var(--text-sm-medium);
   line-height: 20px;
 }
 
 .create-model-provider-section-heading p {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 540;
-  line-height: 17px;
+  font-size: var(--text-sm-size);
+  line-height: 1.5;
+}
+
+.create-model-provider-section-form {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.create-model-provider-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.create-model-provider-check-status {
+  font-size: var(--text-xs-size);
+  line-height: var(--text-xs-line-height);
+}
+
+.create-model-provider-check-status.success {
+  color: var(--success-700);
+}
+
+.create-model-provider-check-status.warning {
+  color: var(--error-600);
+}
+
+.create-model-provider-secret-row {
+  position: relative;
+  display: grid;
+}
+
+.create-model-provider-secret-input {
+  padding-right: 72px;
+}
+
+.create-model-provider-secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.create-model-provider-secret-toggle:hover,
+.create-model-provider-secret-toggle:focus-visible {
+  background: color-mix(in srgb, var(--gray-100) 88%, transparent);
+  outline: none;
+}
+
+.create-model-provider-secret-toggle img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+:root[data-theme="dark"] .create-model-provider-secret-toggle:hover,
+:root[data-theme="dark"] .create-model-provider-secret-toggle:focus-visible {
+  background: color-mix(in srgb, var(--white) 10%, transparent);
+}
+
+.create-model-provider-model-status.warning {
+  color: var(--error-600);
 }
 
 .create-model-provider-identity {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
-  gap: 14px;
+  gap: 12px;
   align-items: start;
 }
 
 .create-model-provider-avatar-field {
   display: grid;
   grid-template-rows: 22px 44px;
-  gap: 8px;
+  gap: 6px;
 }
 
 .create-model-provider-avatar {
@@ -154,9 +233,8 @@
   height: 44px;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-  box-shadow: var(--shadow-xs);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 
 .create-model-provider-avatar img {
@@ -168,7 +246,7 @@
 .create-model-provider-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .create-model-provider-span-2 {
@@ -176,7 +254,8 @@
 }
 
 .create-model-provider-modal .field input,
-.create-model-provider-modal .field textarea {
+.create-model-provider-modal .field textarea,
+.create-model-provider-modal .field select {
   min-height: 44px;
   font-size: 14px;
 }
@@ -206,10 +285,10 @@
 
 .create-model-provider-modal .form-error {
   margin: 0;
-  border-color: color-mix(in oklab, var(--error-700) 34%, var(--line));
-  background: color-mix(in oklab, var(--error-500) 11%, var(--panel));
-  color: var(--error-500);
-  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.create-model-provider-modal .form-warning {
   overflow-wrap: anywhere;
 }
 
@@ -217,11 +296,11 @@
   display: flex;
   flex: 0 0 auto;
   justify-content: flex-end;
-  gap: 10px;
+  gap: var(--space-2);
   margin: 0;
-  padding: 18px 28px;
-  border-top: 1px solid var(--line);
-  background: color-mix(in oklab, var(--panel) 94%, transparent);
+  padding: 20px 0 0;
+  border-top: 0;
+  background: transparent;
 }
 
 .create-room-modal {

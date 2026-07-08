@@ -28,6 +28,11 @@ const (
 	ModelProviderStatusUnknown   = "unknown"
 	ModelProviderStatusConnected = "connected"
 	ModelProviderStatusFailed    = "failed"
+
+	ModelProviderPresetOpenAI   = "openai"
+	ModelProviderPresetZhipu    = "zhipu"
+	ModelProviderPresetDeepSeek = "deepseek"
+	ModelProviderPresetCustom   = "custom"
 )
 
 var builtinModelProviderIDs = []string{
@@ -45,6 +50,7 @@ type ModelProviderSummary struct {
 	ID              string            `json:"id"`
 	Kind            string            `json:"kind"`
 	DisplayName     string            `json:"display_name"`
+	Preset          string            `json:"preset,omitempty"`
 	Builtin         bool              `json:"builtin"`
 	BaseURL         string            `json:"base_url,omitempty"`
 	APIKey          string            `json:"api_key,omitempty"`
@@ -205,6 +211,7 @@ func builtinModelProviderSummary(id string, provider config.ProviderConfig) Mode
 	provider = provider.Resolved()
 	summary := ModelProviderSummary{
 		ID:            id,
+		Preset:        id,
 		Builtin:       true,
 		Models:        append([]string(nil), provider.Models...),
 		Status:        ModelProviderStatusUnknown,
@@ -264,6 +271,7 @@ func customProviderSummary(id string, provider config.ProviderConfig) ModelProvi
 		ID:              id,
 		Kind:            ModelProviderKindOpenAICompatible,
 		DisplayName:     displayName,
+		Preset:          effectiveModelProviderPreset(id, provider),
 		Builtin:         false,
 		BaseURL:         provider.BaseURL,
 		APIKeySet:       strings.TrimSpace(provider.APIKey) != "",
@@ -274,6 +282,25 @@ func customProviderSummary(id string, provider config.ProviderConfig) ModelProvi
 		Status:          providerStatusOrUnknown(provider.Status),
 		Message:         provider.Message,
 		LastCheckedAt:   provider.LastCheckedAt,
+	}
+}
+
+func effectiveModelProviderPreset(id string, provider config.ProviderConfig) string {
+	if preset := strings.ToLower(strings.TrimSpace(provider.Preset)); preset != "" {
+		return preset
+	}
+	switch NormalizeModelProviderID(id) {
+	case "openai":
+		return ModelProviderPresetOpenAI
+	}
+	baseURL := strings.ToLower(strings.TrimSpace(provider.BaseURL))
+	switch {
+	case strings.Contains(baseURL, "bigmodel.cn"), strings.Contains(baseURL, "zhipu"):
+		return ModelProviderPresetZhipu
+	case strings.Contains(baseURL, "deepseek.com"):
+		return ModelProviderPresetDeepSeek
+	default:
+		return ModelProviderPresetCustom
 	}
 }
 

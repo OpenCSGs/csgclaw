@@ -15,8 +15,10 @@ const labels: Record<string, string> = {
   modelProviderCreateConnectionTitle: "Connection",
   modelProviderCreateIdentityDescription: "Set a sidebar name.",
   modelProviderCreateIdentityTitle: "Identity",
-  modelProviderCreateSubtitle: "Add an OpenAI-compatible API provider.",
-  modelProviderCreateTitle: "Add OpenAI API",
+  modelProviderCreatePresetDescription: "Choose a provider preset to prefill the endpoint and display name.",
+  modelProviderCreatePresetTitle: "Type",
+  modelProviderCreateSubtitle: "Add a reusable model API provider.",
+  modelProviderCreateTitle: "Add model provider",
   modelProviderDisplayName: "Display name",
   modelProviderDuplicateDisplayName: "Display name is already used.",
   modelProviderModelCount: "{count} models",
@@ -24,6 +26,11 @@ const labels: Record<string, string> = {
   modelProviderModelsHint: "Optional models.",
   modelProviderModelSearch: "Search models",
   modelProviderNoModels: "No models",
+  modelProviderPreset: "Provider preset",
+  modelProviderPresetCustom: "Custom",
+  modelProviderPresetDeepSeek: "DeepSeek",
+  modelProviderPresetOpenAI: "OpenAI",
+  modelProviderPresetZhipu: "Zhipu",
   profileAPIKey: "API Key",
   profileAPIKeyNewPlaceholder: "sk-...",
   profileBaseURL: "Base URL",
@@ -38,6 +45,7 @@ describe("CreateModelProviderModal", () => {
 
     expect(screen.getByLabelText(/Display name/)).toHaveValue("");
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    expect(screen.getByLabelText(/Provider preset/)).toHaveValue("openai");
     expect(screen.getByLabelText(/Base URL/)).toHaveValue("https://api.openai.com/v1");
     expect(screen.getByLabelText(/API Key/)).toHaveValue("");
     expect(screen.getByLabelText(/API Key/)).toHaveAttribute("type", "text");
@@ -78,6 +86,7 @@ describe("CreateModelProviderModal", () => {
       base_url: "http://127.0.0.1:4000/v1",
       display_name: "Team API",
       models: ["gpt-4.1", "gpt-4.1-mini"],
+      preset: "openai",
     });
   });
 
@@ -129,7 +138,19 @@ describe("CreateModelProviderModal", () => {
       base_url: "http://127.0.0.1:4000/v1",
       display_name: "Team API",
       models: [],
+      preset: "openai",
     });
+  });
+
+  it("switches preset defaults before the user enters connection details", async () => {
+    const user = userEvent.setup();
+
+    render(<CreateModelProviderModal busy={false} modelProviders={null} onClose={vi.fn()} onCreate={vi.fn()} t={t} />);
+
+    await user.selectOptions(screen.getByLabelText(/Provider preset/), "zhipu");
+
+    expect(screen.getByLabelText(/Base URL/)).toHaveValue("https://open.bigmodel.cn/api/paas/v4");
+    expect(screen.getByLabelText(/Display name/)).toHaveAttribute("placeholder", "Zhipu API");
   });
 
   it("renders failed provider checks as red form errors", async () => {
@@ -178,6 +199,6 @@ describe("CreateModelProviderModal", () => {
 
     expect(header).toContainElement(error);
     expect(body).not.toContainElement(error);
-    expect(error.previousElementSibling).toHaveClass("modal-title");
+    expect(error.previousElementSibling).toHaveClass("create-model-provider-subtitle");
   });
 });

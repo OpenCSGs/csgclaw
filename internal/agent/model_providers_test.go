@@ -92,8 +92,34 @@ func TestModelProviderCatalogExposesOpenCSGKind(t *testing.T) {
 	if provider.Kind != ModelProviderIDOpenCSG {
 		t.Fatalf("OpenCSG provider kind = %q, want %q", provider.Kind, ModelProviderIDOpenCSG)
 	}
+	if provider.Preset != ModelProviderIDOpenCSG {
+		t.Fatalf("OpenCSG provider preset = %q, want %q", provider.Preset, ModelProviderIDOpenCSG)
+	}
 	if provider.BaseURL != "https://aigateway.opencsg-stg.com/v1" {
 		t.Fatalf("OpenCSG provider BaseURL = %q, want stg gateway", provider.BaseURL)
+	}
+}
+
+func TestModelProviderCatalogInfersPresetForLegacyCustomProvider(t *testing.T) {
+	catalog := ModelProviderCatalogFromLLM(config.LLMConfig{
+		Providers: map[string]config.ProviderConfig{
+			"legacy-zhipu": {
+				DisplayName: "Legacy Zhipu",
+				BaseURL:     "https://open.bigmodel.cn/api/paas/v4",
+				Models:      []string{"glm-4.5"},
+			},
+		},
+	})
+
+	var provider ModelProviderSummary
+	for _, item := range catalog.Providers {
+		if item.ID == "legacy-zhipu" {
+			provider = item
+			break
+		}
+	}
+	if provider.Preset != ModelProviderPresetZhipu {
+		t.Fatalf("legacy custom provider preset = %q, want %q", provider.Preset, ModelProviderPresetZhipu)
 	}
 }
 

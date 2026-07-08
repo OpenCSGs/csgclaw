@@ -623,7 +623,7 @@ export function useWorkspaceController() {
     setCreateModelProviderBusy(true);
     setCreateModelProviderError("");
     try {
-      const created = await createModelProvider({ ...payload, id: "openai" });
+      const created = await createModelProvider(payload);
       if (created.id && payload.base_url && (payload.api_key || created.api_key_set)) {
         try {
           await checkModelProvider(created.id, payload);

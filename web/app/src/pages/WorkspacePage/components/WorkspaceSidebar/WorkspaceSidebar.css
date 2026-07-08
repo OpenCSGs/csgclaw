@@ -3445,6 +3445,8 @@
   min-height: 28px;
   padding: 0 2px;
   border-radius: 6px;
+  position: relative;
+  overflow: visible;
 }
 
 .workspace-group-toggle {
@@ -3499,33 +3501,9 @@
 }
 
 .workspace-group-actions {
+  display: inline-flex;
   opacity: 1;
   transition: opacity 120ms ease;
-}
-
-.workspace-group-actions[data-tooltip] {
-  position: relative;
-  display: inline-flex;
-}
-
-.workspace-group-actions[data-tooltip]::after {
-  top: 50%;
-  right: calc(100% + 8px);
-  left: auto;
-  width: max-content;
-  min-width: max-content;
-  max-width: 180px;
-  padding: 5px 8px;
-  border-color: transparent;
-  border-radius: 6px;
-  background: var(--portal-gray-900);
-  color: var(--portal-white);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-50%);
-}
-
-.workspace-group-actions[data-tooltip]:focus-within::after {
-  opacity: 1;
 }
 
 .workspace-group:hover .workspace-group-actions,
@@ -3566,6 +3544,30 @@
 .workspace-add-button .icon-button-mark {
   width: 15px;
   height: 15px;
+}
+
+.workspace-add-tooltip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  max-width: 180px;
+  padding: 5px 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--gray-700);
+  box-shadow: var(--shadow-sm);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+:root[data-theme="dark"] .workspace-add-tooltip {
+  border-color: color-mix(in srgb, var(--white) 12%, transparent);
+  background: var(--gray-900);
+  color: var(--white);
 }
 
 .workspace-row {

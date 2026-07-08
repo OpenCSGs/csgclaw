@@ -21,6 +21,7 @@ type modelProviderTestResponse struct {
 		ID          string   `json:"id"`
 		Kind        string   `json:"kind"`
 		DisplayName string   `json:"display_name"`
+		Preset      string   `json:"preset"`
 		Builtin     bool     `json:"builtin"`
 		BaseURL     string   `json:"base_url"`
 		APIKey      string   `json:"api_key"`
@@ -80,6 +81,9 @@ models = ["gpt-test"]
 	if got.Providers[0].Kind != "opencsg" {
 		t.Fatalf("opencsg kind = %q, want opencsg", got.Providers[0].Kind)
 	}
+	if got.Providers[4].Preset != "openai" {
+		t.Fatalf("custom provider preset = %q, want openai", got.Providers[4].Preset)
+	}
 	if got.Providers[4].APIKey != "" {
 		t.Fatalf("custom provider leaked api_key = %q", got.Providers[4].APIKey)
 	}
@@ -108,6 +112,7 @@ func TestModelProviderCatalogCreateCheckAndSaveCustomProvider(t *testing.T) {
 	createBody := strings.NewReader(`{
 		"id":"openai",
 		"display_name":"Team OpenAI",
+		"preset":"openai",
 		"base_url":"` + upstream.URL + `/v1",
 		"api_key":"sk-live",
 		"headers":{"X-CSG-Trace":"dev"},
@@ -148,6 +153,9 @@ func TestModelProviderCatalogCreateCheckAndSaveCustomProvider(t *testing.T) {
 	}
 	if got := cfgAfterCheck.Models.Providers["openai"].Status; got != agent.ModelProviderStatusConnected {
 		t.Fatalf("status after check = %q, want connected", got)
+	}
+	if got := cfgAfterCheck.Models.Providers["openai"].Preset; got != "openai" {
+		t.Fatalf("preset after check = %q, want openai", got)
 	}
 
 	rec = httptest.NewRecorder()
