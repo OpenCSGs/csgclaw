@@ -31,7 +31,6 @@ import {
   displayTaskAssignmentTarget,
   displayTaskClaimedAgent,
   displayTaskRoomTitle,
-  displayTaskWorker,
   displayTeam,
   formatTaskUpdatedAt,
   formatTaskUpdatedRelative,
@@ -178,6 +177,25 @@ function scheduledTaskAgentOptions(agents: readonly AgentLike[]) {
     label: displayAgent(agent),
     description: String(agent.id || ""),
   }));
+}
+
+function agentNameLookup(agents: readonly AgentLike[]): ReadonlyMap<string, string> {
+  const lookup = new Map<string, string>();
+  agents.forEach((agent) => {
+    const name = displayAgent(agent);
+    const ids = [agent.id, agent.user_id].map((value) => String(value || "").trim()).filter(Boolean);
+    ids.forEach((id) => {
+      if (name && !lookup.has(id)) {
+        lookup.set(id, name);
+      }
+    });
+  });
+  return lookup;
+}
+
+function displayAgentByID(agentID: string, lookup: ReadonlyMap<string, string>): string {
+  const id = String(agentID || "").trim();
+  return id ? lookup.get(id) || id : "";
 }
 
 function todayInputValue(now = new Date()): string {
@@ -370,6 +388,7 @@ export function TasksView({
   const parentTasks = useMemo(() => rootTasks(taskBoardTasks), [taskBoardTasks]);
   const assignmentOptions = useMemo(() => taskAssignmentOptions(teams, agents, t), [agents, t, teams]);
   const scheduledAgentOptions = useMemo(() => scheduledTaskAgentOptions(agents), [agents]);
+  const agentNames = useMemo(() => agentNameLookup(agents), [agents]);
   const selectedScheduledTask = useMemo(
     () => scheduledTasks.find((item) => item.id === selectedScheduledTaskID) ?? scheduledTasks[0] ?? null,
     [scheduledTasks, selectedScheduledTaskID],
@@ -701,6 +720,7 @@ export function TasksView({
                                     key={task.id}
                                     task={task}
                                     children={children}
+                                    agentNames={agentNames}
                                     phase={phase}
                                     t={t}
                                     onSelect={() => openRootTaskDetail(task)}
@@ -803,7 +823,9 @@ export function TasksView({
                           <dl className={styles.scheduledTaskMeta}>
                             <div>
                               <dt>{t("scheduledTaskAgentLabel")}</dt>
-                              <dd>{selectedScheduledTask.agent_id}</dd>
+                              <dd title={selectedScheduledTask.agent_id}>
+                                {displayAgentByID(selectedScheduledTask.agent_id, agentNames)}
+                              </dd>
                             </div>
                             <div>
                               <dt>{t("scheduledTaskNextRunLabel")}</dt>
@@ -851,6 +873,7 @@ export function TasksView({
                           <GeneratedTaskInlineDetail
                             task={selectedGeneratedTask}
                             childTasks={selectedGeneratedChildTasks}
+                            agentNames={agentNames}
                             teams={teams}
                             taskEvents={taskEvents}
                             t={t}
@@ -874,6 +897,7 @@ export function TasksView({
         task={parentDialogTask}
         childCount={parentDialogChildTasks.length}
         childTasks={parentDialogChildTasks}
+        agentNames={agentNames}
         teams={teams}
         taskEvents={taskEvents}
         open={Boolean(parentDialogTask)}
@@ -1369,6 +1393,7 @@ function taskBoardStatusProgress(status: string): number {
 }
 
 type ParentTaskBoardCardProps = {
+  agentNames: ReadonlyMap<string, string>;
   children: WorkspaceTask[];
   onSelect: () => void;
   phase: TaskSidebarPhase;
@@ -1376,12 +1401,12 @@ type ParentTaskBoardCardProps = {
   task: WorkspaceTask;
 };
 
-function ParentTaskBoardCard({ task, children, phase, t, onSelect }: ParentTaskBoardCardProps) {
+function ParentTaskBoardCard({ task, children, agentNames, phase, t, onSelect }: ParentTaskBoardCardProps) {
   const description = task.body || task.plan_summary || task.result || task.error || t("tasksDetailPlaceholder");
-  const activeWorker = taskActiveWorker(task, children, t);
+  const activeWorker = taskActiveWorker(task, children, t, agentNames);
   const updatedRelative = formatTaskUpdatedRelative(task.updated_at, document.documentElement.lang);
   const updatedLabel = updatedRelative === "-" ? "" : t("taskCardUpdatedAt", { time: updatedRelative });
-  const assignmentTarget = displayTaskAssignmentTarget(task);
+  const assignmentTarget = displayTaskAssignmentTargetName(task, agentNames);
 
   return (
     <button
@@ -1424,6 +1449,7 @@ function ParentTaskBoardCard({ task, children, phase, t, onSelect }: ParentTaskB
 }
 
 type TaskDetailDialogProps = {
+  agentNames: ReadonlyMap<string, string>;
   childCount?: number;
   childTasks?: WorkspaceTask[];
   onClose?: () => void;
@@ -1437,6 +1463,7 @@ type TaskDetailDialogProps = {
 };
 
 type GeneratedTaskInlineDetailProps = {
+  agentNames: ReadonlyMap<string, string>;
   childTasks?: WorkspaceTask[];
   onOpenConversation: (roomID: string) => VoidOrPromise;
   t: TranslateFn;
@@ -1448,6 +1475,7 @@ type GeneratedTaskInlineDetailProps = {
 function GeneratedTaskInlineDetail({
   t,
   task,
+  agentNames,
   childTasks = [],
   teams = [],
   taskEvents = [],
@@ -1468,8 +1496,8 @@ function GeneratedTaskInlineDetail({
     [childTasks, detailEvents, isParentDetail, locale, t, task],
   );
   const metaTags = useMemo(
-    () => (task ? taskMetaTags(task, childTasks.length, t, locale) : []),
-    [childTasks.length, locale, t, task],
+    () => (task ? taskMetaTags(task, childTasks.length, t, locale, agentNames) : []),
+    [agentNames, childTasks.length, locale, t, task],
   );
   const detailRoomID = useMemo(
     () => (task ? taskExecutionRoomID(task, childTasks, teams) : ""),
@@ -1504,7 +1532,12 @@ function GeneratedTaskInlineDetail({
               <section className={classNames(styles.detailBlock, styles.generatedTaskActivity)}>
                 <h4>{t("taskActivityLabel")}</h4>
                 {isParentDetail ? (
-                  <TaskGroupedActivityTimeline groups={timelineGroups} emptyLabel={t("taskActivityEmpty")} t={t} />
+                  <TaskGroupedActivityTimeline
+                    groups={timelineGroups}
+                    agentNames={agentNames}
+                    emptyLabel={t("taskActivityEmpty")}
+                    t={t}
+                  />
                 ) : (
                   <TaskActivityTimeline entries={timelineEntries} emptyLabel={t("taskActivityEmpty")} />
                 )}
@@ -1531,6 +1564,7 @@ function TaskDetailDialog({
   t,
   title = "",
   task,
+  agentNames,
   childCount = undefined,
   childTasks = [],
   teams = [],
@@ -1555,16 +1589,16 @@ function TaskDetailDialog({
     [childTasks, detailEvents, isParentDetail, locale, t, task],
   );
   const metaTags = useMemo(
-    () => (task ? taskMetaTags(task, childCount, t, locale) : []),
-    [childCount, locale, t, task],
+    () => (task ? taskMetaTags(task, childCount, t, locale, agentNames) : []),
+    [agentNames, childCount, locale, t, task],
   );
   const detailRoomID = useMemo(
     () => (task ? taskExecutionRoomID(task, childTasks, teams) : ""),
     [childTasks, task, teams],
   );
   const activeWorker = useMemo(
-    () => (task && isParentDetail ? taskActiveWorker(task, childTasks, t) : null),
-    [childTasks, isParentDetail, t, task],
+    () => (task && isParentDetail ? taskActiveWorker(task, childTasks, t, agentNames) : null),
+    [agentNames, childTasks, isParentDetail, t, task],
   );
 
   return (
@@ -1599,7 +1633,12 @@ function TaskDetailDialog({
                   <section className={classNames(styles.detailBlock, styles.taskDetailActivityBlock)}>
                     <h3>{t("taskActivityLabel")}</h3>
                     {isParentDetail ? (
-                      <TaskGroupedActivityTimeline groups={timelineGroups} emptyLabel={t("taskActivityEmpty")} t={t} />
+                      <TaskGroupedActivityTimeline
+                        groups={timelineGroups}
+                        agentNames={agentNames}
+                        emptyLabel={t("taskActivityEmpty")}
+                        t={t}
+                      />
                     ) : (
                       <TaskActivityTimeline entries={timelineEntries} emptyLabel={t("taskActivityEmpty")} />
                     )}
@@ -1686,9 +1725,11 @@ type TaskMetaTagItem = {
 
 function TaskGroupedActivityTimeline({
   groups,
+  agentNames,
   emptyLabel,
   t,
 }: {
+  agentNames: ReadonlyMap<string, string>;
   emptyLabel: string;
   groups: TaskTimelineGroup[];
   t: TranslateFn;
@@ -1765,7 +1806,7 @@ function TaskGroupedActivityTimeline({
                   const expanded = expandedTaskIDs.has(group.task.id);
                   const entryCount = group.entries.length;
                   const latestEntry = group.entries[entryCount - 1];
-                  const assignee = displayTaskWorker(group.task) || t("taskAssigneeUnassigned");
+                  const assignee = displayTaskWorkerName(group.task, agentNames) || t("taskAssigneeUnassigned");
                   return (
                     <section key={`child-${group.task.id}`} className={styles.taskChildActivityItem}>
                       <button
@@ -1917,17 +1958,18 @@ function taskActiveWorker(
   task: WorkspaceTask,
   childTasks: readonly WorkspaceTask[],
   t: TranslateFn,
+  agentNames: ReadonlyMap<string, string>,
 ): TaskActiveWorker | null {
   const activeChild = childTasks
     .filter((child) => !isTerminalTaskStatus(child.status))
-    .filter((child) => taskWorkerName(child))
+    .filter((child) => taskWorkerName(child, agentNames))
     .sort(
       (left, right) =>
         activeWorkerStatusRank(left.status) - activeWorkerStatusRank(right.status) ||
         right.updated_at.localeCompare(left.updated_at),
     )[0];
   if (activeChild) {
-    const workerName = taskWorkerName(activeChild);
+    const workerName = taskWorkerName(activeChild, agentNames);
     if (!workerName) {
       return null;
     }
@@ -1937,7 +1979,7 @@ function taskActiveWorker(
       tone: "working",
     };
   }
-  const parentWorkerName = taskWorkerName(task);
+  const parentWorkerName = taskWorkerName(task, agentNames);
   if (parentWorkerName && !isTerminalTaskStatus(task.status)) {
     return { name: parentWorkerName, label: t("taskActiveWorkerWorking"), tone: "working" };
   }
@@ -1957,9 +1999,29 @@ function activeWorkerStatusRank(status: string): number {
   return 3;
 }
 
-function taskWorkerName(task: WorkspaceTask): string {
-  const name = displayTaskWorker(task);
+function taskWorkerName(task: WorkspaceTask, agentNames: ReadonlyMap<string, string>): string {
+  const name = displayTaskWorkerName(task, agentNames);
   return isDisplayableWorkerName(name) ? name : "";
+}
+
+function displayTaskAssignedAgentName(task: WorkspaceTask, agentNames: ReadonlyMap<string, string>): string {
+  const assignedID = task.assigned_to || (task.assignment_type === "agent" ? task.assignment_id : "");
+  return task.assigned_to_agent_name || displayAgentByID(assignedID, agentNames);
+}
+
+function displayTaskClaimedAgentName(task: WorkspaceTask, agentNames: ReadonlyMap<string, string>): string {
+  return task.claimed_by_agent_name || displayAgentByID(task.claimed_by, agentNames);
+}
+
+function displayTaskWorkerName(task: WorkspaceTask, agentNames: ReadonlyMap<string, string>): string {
+  return displayTaskClaimedAgentName(task, agentNames) || displayTaskAssignedAgentName(task, agentNames);
+}
+
+function displayTaskAssignmentTargetName(task: WorkspaceTask, agentNames: ReadonlyMap<string, string>): string {
+  if (task.parent_id || task.assignment_type === "agent") {
+    return displayTaskAssignedAgentName(task, agentNames);
+  }
+  return displayTaskAssignmentTarget(task);
 }
 
 function isDisplayableWorkerName(name: string): boolean {
@@ -2014,6 +2076,7 @@ function taskMetaTags(
   childCount: number | undefined,
   t: TranslateFn,
   locale: string,
+  agentNames: ReadonlyMap<string, string>,
 ): TaskMetaTagItem[] {
   const tags: TaskMetaTagItem[] = [];
   const addTag = (key: string, label: string, value: ReactNode) => {
@@ -2030,12 +2093,12 @@ function taskMetaTags(
     addTag("children", t("taskChildrenLabel"), String(childCount));
   }
 
-  const claimedBy = displayTaskClaimedAgent(task);
+  const claimedBy = displayTaskClaimedAgentName(task, agentNames);
   if (task.parent_id || task.assignment_type === "agent") {
     addTag("claimed_by", t("taskClaimedByLabel"), claimedBy);
   }
   addTag("parent", t("taskParentLabel"), task.parent_id);
-  const assignmentTarget = displayTaskAssignmentTarget(task);
+  const assignmentTarget = displayTaskAssignmentTargetName(task, agentNames);
   if (!claimedBy || assignmentTarget !== claimedBy) {
     addTag("assignment", t("taskAssignmentLabel"), assignmentTarget);
   }
