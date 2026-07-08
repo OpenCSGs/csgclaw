@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createWorkspaceTask,
@@ -34,6 +34,8 @@ const TASK_BOARD_POLL_STATUSES = new Set(["pending", "assigned", "in_progress"])
 const TASK_TAB_REVALIDATE_STALE_MS = 5000;
 const teamEventsQueryKey = (teamID: string) => ["workspace", "team-events", teamID] as const;
 const scheduledTaskRunsQueryKey = (taskID: string) => ["workspace", "scheduled-task-runs", taskID] as const;
+const scheduledTaskRunsAllQueryKey = (taskIDsKey: string) =>
+  ["workspace", "scheduled-task-runs-all", taskIDsKey] as const;
 export type TaskBoardView = "tasks" | "scheduled";
 
 type UseTaskControllerArgs = {
@@ -79,7 +81,9 @@ export function useTaskController({
   const scheduledTasksQuery = useQuery({
     queryKey: SCHEDULED_TASKS_QUERY_KEY,
     queryFn: fetchScheduledTasks,
+    refetchInterval: taskBoardView === "scheduled" ? TASK_BOARD_POLL_DELAY_MS : false,
   });
+  const { refetch: refetchScheduledTasks } = scheduledTasksQuery;
   const { dataUpdatedAt: tasksDataUpdatedAt, isFetching: tasksFetching, refetch: refetchTasks } = tasksQuery;
   const teamsQuery = useQuery({
     queryKey: workspaceQueryKeys.teams(),
@@ -89,19 +93,22 @@ export function useTaskController({
   const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const scheduledTasks = useMemo(() => scheduledTasksQuery.data ?? [], [scheduledTasksQuery.data]);
   const visibleScheduledTaskID = selectedScheduledTaskID || scheduledTasks[0]?.id || "";
+  const scheduledTaskIDsKey = useMemo(() => scheduledTaskIDsCacheKey(scheduledTasks), [scheduledTasks]);
   const scheduledTaskRunsQuery = useQuery({
     queryKey: scheduledTaskRunsQueryKey(visibleScheduledTaskID),
     queryFn: () => fetchScheduledTaskRuns(visibleScheduledTaskID),
     enabled: Boolean(visibleScheduledTaskID),
+    refetchInterval: taskBoardView === "scheduled" && visibleScheduledTaskID ? TASK_BOARD_POLL_DELAY_MS : false,
   });
   const scheduledTaskRuns = useMemo(() => scheduledTaskRunsQuery.data ?? [], [scheduledTaskRunsQuery.data]);
   const scheduledTaskRunQueries = useQuery({
-    queryKey: ["workspace", "scheduled-task-runs-all", scheduledTasks.map((item) => item.id).join("|")],
+    queryKey: scheduledTaskRunsAllQueryKey(scheduledTaskIDsKey),
     queryFn: async () => {
       const runs = await Promise.all(scheduledTasks.map((item) => fetchScheduledTaskRuns(item.id)));
       return runs.flat();
     },
     enabled: scheduledTasks.length > 0,
+    refetchInterval: taskBoardView === "scheduled" && scheduledTasks.length > 0 ? TASK_BOARD_POLL_DELAY_MS : false,
   });
   const allScheduledTaskRuns = useMemo(
     () => mergeScheduledTaskRuns(scheduledTaskRuns, scheduledTaskRunQueries.data ?? []),
@@ -143,6 +150,22 @@ export function useTaskController({
     refetchInterval: shouldPollActiveTaskBoard ? TASK_BOARD_POLL_DELAY_MS : false,
   });
   const taskEvents = useMemo(() => taskEventsQuery.data ?? [], [taskEventsQuery.data]);
+  const refreshScheduledTaskState = useCallback(async () => {
+    const taskResult = await refetchScheduledTasks();
+    const nextScheduledTasks = taskResult.data ?? scheduledTasks;
+    const nextTaskIDsKey = scheduledTaskIDsCacheKey(nextScheduledTasks);
+    const nextRuns = nextScheduledTasks.length
+      ? (await Promise.all(nextScheduledTasks.map((item) => fetchScheduledTaskRuns(item.id)))).flat()
+      : [];
+    queryClient.setQueryData<WorkspaceScheduledTaskRun[]>(scheduledTaskRunsAllQueryKey(nextTaskIDsKey), nextRuns);
+    const nextVisibleScheduledTaskID = selectedScheduledTaskID || nextScheduledTasks[0]?.id || "";
+    if (nextVisibleScheduledTaskID) {
+      queryClient.setQueryData<WorkspaceScheduledTaskRun[]>(
+        scheduledTaskRunsQueryKey(nextVisibleScheduledTaskID),
+        nextRuns.filter((run) => run.scheduled_task_id === nextVisibleScheduledTaskID),
+      );
+    }
+  }, [queryClient, refetchScheduledTasks, scheduledTasks, selectedScheduledTaskID]);
 
   useEffect(() => {
     if (activePane.type !== WorkspacePaneTypes.task || tasksFetching) {
@@ -180,6 +203,7 @@ export function useTaskController({
         queryClient.setQueryData<WorkspaceTask[]>(TASKS_QUERY_KEY, (current) =>
           mergeWorkspaceTaskList(current ?? [], nextTasks),
         );
+        await refreshScheduledTaskState();
       } catch {
         return;
       }
@@ -194,7 +218,7 @@ export function useTaskController({
         window.clearTimeout(timer);
       }
     };
-  }, [queryClient, shouldPollTasks]);
+  }, [queryClient, refreshScheduledTaskState, shouldPollTasks]);
 
   function taskById(taskId: string) {
     return tasks.find((item) => item.id === taskId) ?? null;
@@ -603,6 +627,10 @@ function mergeScheduledTaskRuns(
     }
   });
   return Array.from(byID.values()).sort((left, right) => right.triggered_at.localeCompare(left.triggered_at));
+}
+
+function scheduledTaskIDsCacheKey(tasks: readonly { id: string }[]): string {
+  return tasks.map((item) => item.id).join("|");
 }
 
 function workspaceTasksEqual(left: WorkspaceTask, right: WorkspaceTask): boolean {
