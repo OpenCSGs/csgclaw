@@ -563,11 +563,7 @@ export function useTaskController({
       onSelectScheduledTask: setSelectedScheduledTaskID,
       onRefresh: () => {
         void tasksQuery.refetch();
-        void scheduledTasksQuery.refetch();
-        void scheduledTaskRunQueries.refetch();
-        if (visibleScheduledTaskID) {
-          void scheduledTaskRunsQuery.refetch();
-        }
+        void refreshScheduledTaskState();
         if (activeEventsTeamID) {
           void taskEventsQuery.refetch();
         }
