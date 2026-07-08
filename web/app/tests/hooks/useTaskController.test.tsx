@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { fetchGlobalTasks, fetchTeamEvents, fetchTeams } from "@/api/tasks";
-import { fetchScheduledTaskRuns, fetchScheduledTasks } from "@/api/scheduledTasks";
+import { fetchScheduledTaskRuns, fetchScheduledTasks, runScheduledTaskNow } from "@/api/scheduledTasks";
 import { useTaskController } from "@/hooks/workspace/useTaskController";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
@@ -26,6 +26,7 @@ vi.mock("@/api/scheduledTasks", async () => {
     ...actual,
     fetchScheduledTasks: vi.fn(async () => []),
     fetchScheduledTaskRuns: vi.fn(async () => []),
+    runScheduledTaskNow: vi.fn(),
   };
 });
 
@@ -134,11 +135,13 @@ describe("useTaskController", () => {
     vi.mocked(fetchTeams).mockReset();
     vi.mocked(fetchScheduledTasks).mockReset();
     vi.mocked(fetchScheduledTaskRuns).mockReset();
+    vi.mocked(runScheduledTaskNow).mockReset();
     vi.mocked(fetchGlobalTasks).mockResolvedValue([]);
     vi.mocked(fetchTeamEvents).mockResolvedValue([]);
     vi.mocked(fetchTeams).mockResolvedValue([]);
     vi.mocked(fetchScheduledTasks).mockResolvedValue([]);
     vi.mocked(fetchScheduledTaskRuns).mockResolvedValue([]);
+    vi.mocked(runScheduledTaskNow).mockResolvedValue(scheduledRun());
   });
 
   it("refetches stale cached tasks when the tasks pane becomes active", async () => {
@@ -276,5 +279,30 @@ describe("useTaskController", () => {
     await waitFor(() => {
       expect(result.current.taskViewProps.tasks).toEqual([generatedTask]);
     });
+  });
+
+  it("shows a localized message when a scheduled task has already been triggered", async () => {
+    const queryClient = createQueryClient();
+    const item = scheduledTask();
+    vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
+    vi.mocked(runScheduledTaskNow).mockRejectedValue({
+      status: 409,
+      message: "scheduled task already has an active generated task",
+    });
+
+    const { result } = renderTaskController(queryClient, {
+      type: WorkspacePaneTypes.task,
+      id: "",
+    });
+
+    await waitFor(() => {
+      expect(result.current.taskViewProps.scheduledTasks).toEqual([item]);
+    });
+
+    await act(async () => {
+      await result.current.taskViewProps.onRunScheduledTask(item.id);
+    });
+
+    expect(result.current.taskViewProps.scheduledTaskActionError).toBe("scheduledTaskAlreadyTriggered");
   });
 });

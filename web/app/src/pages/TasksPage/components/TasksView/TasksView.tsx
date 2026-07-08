@@ -397,17 +397,17 @@ export function TasksView({
     () => scheduledTasks.find((item) => item.id === editingScheduledTaskID) ?? null,
     [editingScheduledTaskID, scheduledTasks],
   );
-  const activeGeneratedTask = useMemo(() => {
+  const hasActiveGeneratedTask = useMemo(() => {
     for (const run of scheduledTaskRuns) {
-      if (!run.task_id) {
+      if (!run.task_id || run.status === "failed") {
         continue;
       }
       const task = tasks.find((item) => item.id === run.task_id);
-      if (task && !isTerminalWorkspaceTaskStatus(task.status)) {
-        return task;
+      if (!task || !isTerminalWorkspaceTaskStatus(task.status)) {
+        return true;
       }
     }
-    return null;
+    return false;
   }, [scheduledTaskRuns, tasks]);
   const [parentDialogTaskID, setParentDialogTaskID] = useState("");
   const dialogStateRootTask = useMemo(
@@ -810,13 +810,11 @@ export function TasksView({
                               <Button
                                 variant="primary"
                                 size="sm"
-                                disabled={
-                                  scheduledTaskActionID === selectedScheduledTask.id || Boolean(activeGeneratedTask)
-                                }
+                                disabled={scheduledTaskActionID === selectedScheduledTask.id || hasActiveGeneratedTask}
                                 onClick={() => onRunScheduledTask(selectedScheduledTask.id)}
                               >
                                 <Play size={14} aria-hidden="true" />
-                                {activeGeneratedTask ? t("scheduledTaskActiveTask") : t("scheduledTaskRunNow")}
+                                {hasActiveGeneratedTask ? t("scheduledTaskActiveTask") : t("scheduledTaskRunNow")}
                               </Button>
                             </div>
                           </div>

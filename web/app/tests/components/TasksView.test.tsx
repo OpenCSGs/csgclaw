@@ -756,6 +756,20 @@ describe("TasksView", () => {
     expect(screen.getByText("Select a run record to inspect the generated task.")).toBeInTheDocument();
   });
 
+  it("disables run now as soon as a scheduled run is triggered", () => {
+    render(
+      <TasksView
+        activeView="scheduled"
+        scheduledTasks={[scheduledTask()]}
+        scheduledTaskRuns={[scheduledTaskRun()]}
+        selectedScheduledTaskID="scheduled-task-1"
+        t={t}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Task running/ })).toBeDisabled();
+  });
+
   it("confirms before deleting a scheduled task", async () => {
     const onDeleteScheduledTask = vi.fn();
     const item = scheduledTask();

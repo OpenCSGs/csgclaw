@@ -19,7 +19,7 @@ import {
   type UpdateScheduledTaskPayload,
 } from "@/api/scheduledTasks";
 import { WorkspacePaneTypes } from "@/models/routing";
-import { ApiError, errorMessage } from "@/api/client";
+import { errorMessage, type ApiError } from "@/api/client";
 import { rootTaskForTask, type WorkspaceTask, rootTasks, shouldPollTransitionalTasks } from "@/models/tasks";
 import type { WorkspaceScheduledTaskRun } from "@/models/scheduledTasks";
 import { workspaceQueryKeys } from "./workspaceQueries";
@@ -385,7 +385,11 @@ export function useTaskController({
         onSelectTask(run.task_id);
       }
     } catch (err) {
-      setScheduledTaskActionError(errorMessage(err, t("scheduledTaskRunFailed")));
+      setScheduledTaskActionError(
+        isScheduledTaskAlreadyTriggeredError(err)
+          ? t("scheduledTaskAlreadyTriggered")
+          : errorMessage(err, t("scheduledTaskRunFailed")),
+      );
     } finally {
       setScheduledTaskActionID("");
     }
@@ -614,6 +618,15 @@ function shouldAutoPlanForStartError(error: unknown): boolean {
     return false;
   }
   return message.includes("no subtasks") || message.includes("has no subtasks");
+}
+
+function isScheduledTaskAlreadyTriggeredError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const status = "status" in error ? (error as ApiError).status : 0;
+  const message = "message" in error ? String((error as ApiError).message || "").toLowerCase() : "";
+  return status === 409 || message.includes("scheduled task already has an active generated task");
 }
 
 function shouldPollTaskBoard(tasks: readonly WorkspaceTask[], root: WorkspaceTask | null): boolean {
