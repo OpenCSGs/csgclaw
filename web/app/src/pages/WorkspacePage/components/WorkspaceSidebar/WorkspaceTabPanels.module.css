@@ -1,0 +1,86 @@
+.panel {
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+
+.flatPanel {
+  min-height: 0;
+}
+
+.empty {
+  margin: 0 0 0 26px;
+  padding: 3px 0 5px;
+  color: var(--gray-500);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.providerDivider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--gray-100);
+}
+
+.templateSourceBadge {
+  max-width: 88px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--gray-700);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.templateSourceBadgeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  flex: 0 0 auto;
+}
+
+.modelProviderRow,
+.teamRow,
+.hubTemplateRow,
+.hubSkillRow,
+.taskSectionRow {
+  text-decoration: none;
+}
+
+.hubTemplateRow {
+  grid-template-columns: 32px minmax(0, 1fr) max-content;
+}
+
+.hubSkillRow {
+  grid-template-columns: 32px minmax(0, 1fr);
+}
+
+.taskSectionRow {
+  grid-template-columns: minmax(0, 1fr) max-content;
+  min-height: 38px;
+}
+
+:global(:root[data-theme="dark"]) .empty {
+  color: var(--gray-500);
+}
+
+:global(:root[data-theme="dark"]) .providerDivider {
+  background: var(--gray-700);
+}
+
+:global(:root[data-theme="dark"]) .templateSourceBadge {
+  border-color: var(--gray-700);
+  background: var(--panel-strong);
+  color: var(--gray-300);
+}

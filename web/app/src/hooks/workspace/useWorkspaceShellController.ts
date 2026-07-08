@@ -8,6 +8,7 @@ import {
   THEME_STORAGE_KEY,
   WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY,
 } from "@/shared/storage/keys";
+import { resolveThemeMode } from "@/shared/theme/theme";
 import { WorkspacePaneTypes, WorkspaceTabs, workspaceTabForPane } from "@/models/routing";
 import type { WorkspaceTab } from "@/models/routing";
 import type { UseWorkspaceShellControllerArgs, WorkspaceShellController } from "./types";
@@ -34,6 +35,32 @@ function writeHubNewBadgeSeen() {
   }
 }
 
+function currentWorkspaceLabelForPane(
+  activePane: UseWorkspaceShellControllerArgs["activePane"],
+  t: UseWorkspaceShellControllerArgs["t"],
+) {
+  switch (activePane.type) {
+    case WorkspacePaneTypes.agent:
+      return t("agentOverview");
+    case WorkspacePaneTypes.notifications:
+      return t("notificationsSection");
+    case WorkspacePaneTypes.human:
+      return t("humanDetailTitle");
+    case WorkspacePaneTypes.team:
+      return t("teamOverview");
+    case WorkspacePaneTypes.computer:
+      return t("computerOverview");
+    case WorkspacePaneTypes.hub:
+      return t("resourcesOverview");
+    case WorkspacePaneTypes.task:
+      return t("tasksOverview");
+    case WorkspacePaneTypes.settings:
+      return t("settings");
+    default:
+      return t("conversationOverview");
+  }
+}
+
 export function useWorkspaceShellController({
   activeConversationId,
   activePane,
@@ -54,26 +81,16 @@ export function useWorkspaceShellController({
   workspaceTab,
 }: UseWorkspaceShellControllerArgs): WorkspaceShellController {
   const [showHubNewBadge, setShowHubNewBadge] = useState(() => !readHubNewBadgeSeen());
-  const currentWorkspaceLabel =
-    activePane.type === WorkspacePaneTypes.agent
-      ? t("agentOverview")
-      : activePane.type === WorkspacePaneTypes.human
-        ? t("humanDetailTitle")
-        : activePane.type === WorkspacePaneTypes.team
-          ? t("teamOverview")
-          : activePane.type === WorkspacePaneTypes.computer
-            ? t("computerOverview")
-            : activePane.type === WorkspacePaneTypes.hub
-              ? t("resourcesOverview")
-              : activePane.type === WorkspacePaneTypes.task
-                ? t("tasksOverview")
-                : t("conversationOverview");
+  const currentWorkspaceLabel = currentWorkspaceLabelForPane(activePane, t);
   const resolvedWorkspaceTab = useMemo(
     () => workspaceTab ?? workspaceTabForPane(activePane),
     [activePane, workspaceTab],
   );
 
   useEffect(() => {
+    if (activePane.type === WorkspacePaneTypes.settings) {
+      return;
+    }
     const routeTab = workspaceTabForPane(activePane);
     if (routeTab === WorkspaceTabs.messages) {
       if (workspaceTab !== WorkspaceTabs.messages && workspaceTab !== WorkspaceTabs.threads) {
@@ -94,10 +111,23 @@ export function useWorkspaceShellController({
   }, [locale]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
+    function applyTheme() {
+      const resolvedTheme = resolveThemeMode(theme);
+      document.documentElement.dataset.theme = resolvedTheme;
+      document.documentElement.style.colorScheme = resolvedTheme;
+      initializeMermaidTheme(resolvedTheme);
+    }
+
+    applyTheme();
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    initializeMermaidTheme(theme);
+
+    if (theme !== "system" || typeof window.matchMedia !== "function") {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    mediaQuery.addEventListener("change", applyTheme);
+    return () => mediaQuery.removeEventListener("change", applyTheme);
   }, [theme]);
 
   useEffect(() => {
@@ -122,7 +152,7 @@ export function useWorkspaceShellController({
 
   function selectWorkspaceTab(tab: WorkspaceTab) {
     setIsSidebarCollapsed(false);
-    if (tab === resolvedWorkspaceTab) {
+    if (activePane.type !== WorkspacePaneTypes.settings && tab === resolvedWorkspaceTab) {
       return;
     }
     setWorkspaceTab(tab);
@@ -157,7 +187,11 @@ export function useWorkspaceShellController({
   return {
     currentWorkspaceLabel,
     showHubNewBadge,
-    shellClassName: `app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`,
+    shellClassName: `app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${
+      activePane.type === WorkspacePaneTypes.task || activePane.type === WorkspacePaneTypes.settings
+        ? "sidebar-no-context"
+        : "sidebar-has-context"
+    }`,
     workspaceTab: resolvedWorkspaceTab,
     selectWorkspaceTab,
     toggleWorkspaceGroup,

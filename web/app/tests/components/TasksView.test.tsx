@@ -460,6 +460,38 @@ describe("TasksView", () => {
     expect(screen.queryByText("tasksEmpty")).not.toBeInTheDocument();
   });
 
+  it("uses the active task view for the toolbar create action", () => {
+    const onOpenCreateTaskModal = vi.fn();
+    const onOpenCreateScheduledTaskModal = vi.fn();
+
+    const { rerender } = render(
+      <TasksView
+        onOpenCreateTaskModal={onOpenCreateTaskModal}
+        onOpenCreateScheduledTaskModal={onOpenCreateScheduledTaskModal}
+        t={t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "New task" }));
+
+    expect(onOpenCreateTaskModal).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "New scheduled task" })).not.toBeInTheDocument();
+
+    rerender(
+      <TasksView
+        activeView="scheduled"
+        onOpenCreateTaskModal={onOpenCreateTaskModal}
+        onOpenCreateScheduledTaskModal={onOpenCreateScheduledTaskModal}
+        t={t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "New scheduled task" }));
+
+    expect(onOpenCreateScheduledTaskModal).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "New task" })).not.toBeInTheDocument();
+  });
+
   it("shows task and scheduled-task creation as tabs in the create dialog", () => {
     render(<TasksView showCreateTaskModal agents={[agent()]} teams={[team()]} t={t} />);
 

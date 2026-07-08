@@ -1,21 +1,31 @@
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { IconButton } from "@/components/ui";
+import { classNames } from "@/shared/lib/classNames";
+import styles from "./SidebarRailControlButton.module.css";
 
 type SidebarRailControlButtonProps = {
+  className?: string;
   label: string;
+  markClassName?: string;
   mode: "collapse" | "expand";
   onClick?: () => void;
 };
 
-export function SidebarRailControlButton({ label, mode, onClick }: SidebarRailControlButtonProps) {
+export function SidebarRailControlButton({
+  className,
+  label,
+  markClassName,
+  mode,
+  onClick,
+}: SidebarRailControlButtonProps) {
   const Icon = mode === "expand" ? PanelLeftOpen : PanelLeftClose;
 
   return (
     <IconButton
-      className="sidebar-rail-control-button"
-      icon={<Icon size={20} strokeWidth={2} />}
+      className={classNames(styles.button, className)}
+      icon={<Icon size={20} strokeWidth={1.75} />}
       label={label}
-      markClassName="sidebar-rail-control-mark"
+      markClassName={classNames(styles.mark, markClassName)}
       onClick={onClick}
       size="md"
       title=""

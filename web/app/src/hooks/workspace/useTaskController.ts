@@ -567,7 +567,14 @@ export function useTaskController({
       parentDetailTaskID,
       onCloseCreateTaskModal: () => setShowCreateTaskModal(false),
       onCloseEditScheduledTaskModal: () => setEditingScheduledTaskID(""),
+      onOpenCreateTaskModal: () => {
+        setCreateTaskError("");
+        setCreateScheduledTaskError("");
+        setCreateTaskModalView("tasks");
+        setShowCreateTaskModal(true);
+      },
       onOpenCreateScheduledTaskModal: () => {
+        setCreateTaskError("");
         setCreateScheduledTaskError("");
         setCreateTaskModalView("scheduled");
         setShowCreateTaskModal(true);

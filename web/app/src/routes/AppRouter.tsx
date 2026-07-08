@@ -14,6 +14,7 @@ const HumanPage = lazy(() => import("@/pages/HumanPage").then((module) => ({ def
 const ModelProviderPage = lazy(() =>
   import("@/pages/ModelProviderPage/ModelProviderPage").then((module) => ({ default: module.ModelProviderPage })),
 );
+const SettingsPage = lazy(() => import("@/pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const TeamPage = lazy(() => import("@/pages/TeamPage").then((module) => ({ default: module.TeamPage })));
 const TasksPage = lazy(() => import("@/pages/TasksPage").then((module) => ({ default: module.TasksPage })));
 
@@ -32,12 +33,14 @@ const routes: RouteObject[] = [
     children: [
       { index: true, element: routeElement(ConversationPage) },
       { path: "computer", element: routeElement(ComputerPage) },
+      { path: "notifications", element: routeElement(AgentPage) },
       { path: "agents/:agentId", element: routeElement(AgentPage) },
       { path: "agent/:agentId", element: routeElement(AgentPage) },
       { path: "models/:providerId", element: routeElement(ModelProviderPage) },
       { path: "model/:providerId", element: routeElement(ModelProviderPage) },
       { path: "humans/:humanId", element: routeElement(HumanPage) },
       { path: "human/:humanId", element: routeElement(HumanPage) },
+      { path: "teams", element: routeElement(TeamPage) },
       { path: "teams/:teamId", element: routeElement(TeamPage) },
       { path: "team/:teamId", element: routeElement(TeamPage) },
       { path: "resources", element: routeElement(HubPage) },
@@ -46,6 +49,7 @@ const routes: RouteObject[] = [
       { path: "skills/:skillName", element: routeElement(HubPage) },
       { path: "tasks", element: routeElement(TasksPage) },
       { path: "tasks/:taskId", element: routeElement(TasksPage) },
+      { path: "settings", element: routeElement(SettingsPage) },
       { path: "rooms/:conversationId", element: routeElement(ConversationPage) },
       { path: "room/:conversationId", element: routeElement(ConversationPage) },
       { path: "channels/:conversationId", element: routeElement(ConversationPage) },

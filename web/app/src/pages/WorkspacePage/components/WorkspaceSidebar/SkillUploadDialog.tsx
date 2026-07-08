@@ -13,6 +13,8 @@ import {
 } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import { hasSkillName, remoteSkillInstallName } from "@/models/skillhub";
+import { classNames } from "@/shared/lib/classNames";
+import styles from "./SkillUploadDialog.module.css";
 import type { SkillSummary } from "@/models/skillhub";
 
 type RemoteSkillInstallOptions = {
@@ -162,15 +164,15 @@ export function SkillUploadDialog({
 
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="hub-skill-upload-dialog">
+      <DialogContent className={styles.dialog}>
         <DialogHeader>
           <div>
             <DialogTitle>{t("resourcesSkillUpload")}</DialogTitle>
             <DialogDescription>{t("resourcesSkillUploadSubtitle")}</DialogDescription>
           </div>
         </DialogHeader>
-        <DialogBody className="hub-skill-upload-body">
-          <div className="hub-skill-upload-mode" role="tablist" aria-label={t("resourcesSkillUpload")}>
+        <DialogBody className={styles.body}>
+          <div className={styles.mode} role="tablist" aria-label={t("resourcesSkillUpload")}>
             <Button
               active={mode === "zip"}
               aria-selected={mode === "zip"}
@@ -198,9 +200,11 @@ export function SkillUploadDialog({
             <>
               <button
                 type="button"
-                className={`hub-skill-upload-dropzone ${dragOver ? "drag-over" : ""} ${
-                  localError || error ? "error" : ""
-                }`}
+                className={classNames(
+                  styles.dropzone,
+                  dragOver && styles.dragOver,
+                  (localError || error) && styles.dropzoneError,
+                )}
                 onClick={() => inputRef.current?.click()}
                 onDragEnter={(event) => {
                   event.preventDefault();
@@ -216,17 +220,17 @@ export function SkillUploadDialog({
                 }}
                 onDrop={handleDrop}
               >
-                <span className="hub-skill-upload-icon" aria-hidden="true">
+                <span className={styles.uploadIcon} aria-hidden="true">
                   <UploadCloud size={20} strokeWidth={1.8} />
                 </span>
-                <span className="hub-skill-upload-copy">
+                <span className={styles.uploadCopy}>
                   <strong>{t("resourcesSkillUploadDropTitle")}</strong>
                   <small>{selectedFile ? selectedFile.name : t("resourcesSkillUploadDropHint")}</small>
                 </span>
               </button>
               <input
                 ref={inputRef}
-                className="hub-skill-upload-input"
+                className={styles.fileInput}
                 type="file"
                 accept=".zip,application/zip"
                 onChange={handleFileChange}
@@ -234,8 +238,8 @@ export function SkillUploadDialog({
               {localError || error ? <div className="form-error">{localError || error}</div> : null}
             </>
           ) : (
-            <div className="hub-skill-remote-panel" role="tabpanel">
-              <label className="hub-skill-remote-search">
+            <div className={styles.remotePanel} role="tabpanel">
+              <label className={styles.remoteSearch}>
                 <TextInput
                   type="search"
                   aria-label={t("resourcesSkillRemoteSearchPlaceholder")}
@@ -245,7 +249,7 @@ export function SkillUploadDialog({
                 />
               </label>
               {remoteSkillsError ? (
-                <div className="hub-skill-remote-state">
+                <div className={styles.remoteState}>
                   <span>{remoteSkillsError}</span>
                   {onRefreshRemoteSkills ? (
                     <Button size="sm" variant="secondaryGray" onClick={() => void onRefreshRemoteSkills()}>
@@ -255,30 +259,30 @@ export function SkillUploadDialog({
                   ) : null}
                 </div>
               ) : remoteSkillsLoading && !remoteSkills.length ? (
-                <div className="hub-skill-remote-state">{t("resourcesSkillRemoteSkillsLoading")}</div>
+                <div className={styles.remoteState}>{t("resourcesSkillRemoteSkillsLoading")}</div>
               ) : remoteSkills.length ? (
                 <>
-                  <div className="hub-skill-remote-list" onScroll={handleRemoteListScroll}>
+                  <div className={styles.remoteList} onScroll={handleRemoteListScroll}>
                     {remoteSkills.map((item) => {
                       const installKey = item.remotePath || item.name;
                       const installed = hasSkillName(installedSkills, remoteSkillInstallName(item));
                       const description = item.description || item.remotePath || item.name;
                       const rowContent = (
                         <>
-                          <span className="hub-skill-remote-icon" aria-hidden="true">
+                          <span className={styles.remoteIcon} aria-hidden="true">
                             <FileCode2 size={16} strokeWidth={2} />
                           </span>
-                          <span className="hub-skill-remote-main">
-                            <span className="hub-skill-remote-title truncate">{item.name}</span>
-                            <span className="hub-skill-remote-meta truncate">{description}</span>
+                          <span className={styles.remoteMain}>
+                            <span className={classNames(styles.remoteTitle, "truncate")}>{item.name}</span>
+                            <span className={classNames(styles.remoteMeta, "truncate")}>{description}</span>
                           </span>
                         </>
                       );
                       return (
-                        <div className="hub-skill-remote-row" key={installKey} title={description}>
+                        <div className={styles.remoteRow} key={installKey} title={description}>
                           {item.remoteURL ? (
                             <a
-                              className="hub-skill-remote-link"
+                              className={styles.remoteLink}
                               href={item.remoteURL}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -286,7 +290,7 @@ export function SkillUploadDialog({
                               {rowContent}
                             </a>
                           ) : (
-                            <span className="hub-skill-remote-link">{rowContent}</span>
+                            <span className={styles.remoteLink}>{rowContent}</span>
                           )}
                           <Button
                             size="sm"
@@ -305,17 +309,17 @@ export function SkillUploadDialog({
                       );
                     })}
                     {remoteSkillsLoadingMore ? (
-                      <div className="hub-skill-remote-list-state">{t("resourcesSkillRemoteSkillsLoading")}</div>
+                      <div className={styles.remoteListState}>{t("resourcesSkillRemoteSkillsLoading")}</div>
                     ) : null}
                   </div>
                   {remoteInstallError ? <div className="form-error">{remoteInstallError}</div> : null}
                 </>
               ) : (
-                <div className="hub-skill-remote-state">{t("resourcesSkillRemoteSkillsEmpty")}</div>
+                <div className={styles.remoteState}>{t("resourcesSkillRemoteSkillsEmpty")}</div>
               )}
             </div>
           )}
-          <div className="hub-skill-upload-actions">
+          <div className={styles.actions}>
             <Button variant="secondaryGray" size="md" onClick={() => onOpenChange(false)} disabled={busy}>
               {t("close")}
             </Button>

@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, ExternalLink, LogIn, LogOut, Settings, SlidersHorizontal } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  LogIn,
+  LogOut,
+  Monitor,
+  Settings,
+  SlidersHorizontal,
+} from "lucide-react";
 import { Button } from "@/components/ui";
 import { MoonIcon, SunIcon } from "@/components/ui/Icons";
 import { isAuthenticated } from "@/models/auth";
@@ -11,7 +20,6 @@ import {
   authEnvironmentDraftFromStatus,
   authEnvironmentLoginReady,
   defaultAuthEnvironmentDraft,
-  normalizeAuthEnvironmentDraft,
   resolveAuthEnvironmentDraft,
 } from "@/models/authEnvironment";
 import type { AuthEnvironmentDraft, AuthEnvironmentPresetID } from "@/models/authEnvironment";
@@ -25,9 +33,13 @@ import {
   upgradeErrorMessage,
 } from "@/models/upgradeStatus";
 import { classNames } from "@/shared/lib/classNames";
+import { readStoredAuthEnvironmentDraft, writeStoredAuthEnvironmentDraft } from "@/shared/storage/authEnvironment";
 import type { ThemeMode } from "@/shared/theme/theme";
+import styles from "./SidebarUserButton.module.css";
 
 type SidebarUserButtonProps = {
+  active?: boolean;
+  presentation?: "icon" | "row";
   theme: ThemeMode;
   onThemeChange?: (theme: ThemeMode) => void;
   locale: LocaleCode;
@@ -41,6 +53,7 @@ type SidebarUserButtonProps = {
   showUpgradeControls?: boolean;
   onOpenUpgrade?: () => void;
   onOpenConfigSettings?: () => void;
+  onOpenSettings?: () => void;
   authStatus?: AuthStatus | null;
   authBusy?: boolean;
   authPending?: boolean;
@@ -50,9 +63,9 @@ type SidebarUserButtonProps = {
   t: TranslateFn;
 };
 
-const AUTH_ENVIRONMENT_STORAGE_KEY = "csgclaw.auth.environment";
-
 export function SidebarUserButton({
+  active = false,
+  presentation = "icon",
   theme,
   onThemeChange,
   locale,
@@ -66,6 +79,7 @@ export function SidebarUserButton({
   showUpgradeControls = true,
   onOpenUpgrade,
   onOpenConfigSettings,
+  onOpenSettings,
   authStatus = null,
   authBusy = false,
   authPending = false,
@@ -132,6 +146,15 @@ export function SidebarUserButton({
   function handleOpenConfigSettings() {
     setOpen(false);
     onOpenConfigSettings?.();
+  }
+
+  function handlePrimaryClick() {
+    if (onOpenSettings) {
+      setOpen(false);
+      onOpenSettings();
+      return;
+    }
+    setOpen((value) => !value);
   }
 
   function handleAuthEnvironmentPresetChange(preset: AuthEnvironmentPresetID) {
@@ -209,25 +232,40 @@ export function SidebarUserButton({
   }, [accountAuthenticated, authStatus]);
 
   return (
-    <div ref={rootRef} className="sidebar-user-menu-root">
+    <div ref={rootRef} className={classNames(styles.root, presentation === "row" ? styles.rootRow : styles.rootIcon)}>
       <button
         type="button"
-        className="sidebar-user-button"
+        className={classNames(
+          styles.button,
+          presentation === "row" ? styles.buttonRow : styles.buttonIcon,
+          active && styles.active,
+        )}
         aria-label={t("settings")}
-        aria-expanded={open}
+        aria-current={active ? "page" : undefined}
+        aria-expanded={onOpenSettings ? undefined : open}
         title={t("settings")}
-        onClick={() => setOpen((value) => !value)}
+        onClick={handlePrimaryClick}
       >
-        <span className="sidebar-settings-mark" aria-hidden="true">
-          <Settings size={22} strokeWidth={2} />
+        <span className={styles.settingsMark} aria-hidden="true">
+          <Settings size={24} strokeWidth={1.55} />
         </span>
-        {upgradeAttention ? <span className="sidebar-settings-alert-dot" aria-hidden="true"></span> : null}
+        {presentation === "row" ? <span className={styles.buttonLabel}>{t("settings")}</span> : null}
+        {upgradeAttention ? <span className={styles.alertDot} aria-hidden="true"></span> : null}
       </button>
       {open ? (
-        <div className="sidebar-user-menu" role="menu" aria-label={t("settings")}>
-          <div className="sidebar-menu-group">
-            <span className="sidebar-menu-label">{t("appearanceSettings")}</span>
-            <div className="sidebar-menu-segmented" role="group" aria-label={t("themeSwitcher")}>
+        <div className={styles.menu} role="menu" aria-label={t("settings")}>
+          <div className={styles.group}>
+            <span className={styles.menuLabel}>{t("appearanceSettings")}</span>
+            <div className={styles.segmented} role="group" aria-label={t("themeSwitcher")}>
+              <Button
+                variant="ghost"
+                active={theme === "system"}
+                aria-label={t("themeSystem")}
+                aria-pressed={theme === "system"}
+                onClick={() => onThemeChange?.("system")}
+              >
+                <Monitor size={16} strokeWidth={2} aria-hidden="true" />
+              </Button>
               <Button
                 variant="ghost"
                 active={theme === "light"}
@@ -235,7 +273,7 @@ export function SidebarUserButton({
                 aria-pressed={theme === "light"}
                 onClick={() => onThemeChange?.("light")}
               >
-                <span className="sidebar-menu-icon" aria-hidden="true">
+                <span className={styles.menuIcon} aria-hidden="true">
                   <SunIcon />
                 </span>
               </Button>
@@ -246,12 +284,16 @@ export function SidebarUserButton({
                 aria-pressed={theme === "dark"}
                 onClick={() => onThemeChange?.("dark")}
               >
-                <span className="sidebar-menu-icon" aria-hidden="true">
+                <span className={styles.menuIcon} aria-hidden="true">
                   <MoonIcon />
                 </span>
               </Button>
             </div>
-            <div className="sidebar-menu-segmented text-segmented" role="group" aria-label={t("languageSwitcher")}>
+            <div
+              className={classNames(styles.segmented, styles.textSegmented)}
+              role="group"
+              aria-label={t("languageSwitcher")}
+            >
               <Button
                 variant="ghost"
                 active={locale === "zh"}
@@ -270,46 +312,44 @@ export function SidebarUserButton({
               </Button>
             </div>
           </div>
-          <div className="sidebar-menu-divider"></div>
-          <div className="sidebar-csghub-panel">
-            <div className="sidebar-csghub-summary">
+          <div className={styles.divider}></div>
+          <div className={styles.csghubPanel}>
+            <div className={styles.csghubSummary}>
               {!accountAuthenticated ? (
                 <button
                   type="button"
-                  className="sidebar-csghub-expand"
+                  className={styles.csghubExpand}
                   aria-expanded={accountPanelOpen}
                   aria-label={t("csghubToggleEnvironmentPanel")}
                   title={t("csghubToggleEnvironmentPanel")}
                   onClick={() => setAccountPanelOpen((value) => !value)}
                 >
                   <ChevronRight
-                    className={classNames("sidebar-csghub-summary-chevron", accountPanelOpen && "is-open")}
+                    className={classNames(styles.summaryChevron, accountPanelOpen && styles.open)}
                     size={15}
                     strokeWidth={2.3}
                     aria-hidden="true"
                   />
                 </button>
               ) : null}
-              <span className="sidebar-csghub-summary-main">
-                <span className="sidebar-csghub-kicker">{t("csghubAccount")}</span>
-                {showAuthEnvironmentLabel ? (
-                  <span className="sidebar-csghub-env-chip">{authEnvironmentLabel}</span>
-                ) : null}
+              <span className={styles.summaryMain}>
+                <span className={styles.kicker}>{t("csghubAccount")}</span>
+                {showAuthEnvironmentLabel ? <span className={styles.envChip}>{authEnvironmentLabel}</span> : null}
               </span>
               <span
-                className={classNames("sidebar-csghub-state", accountAuthenticated && "is-authenticated")}
+                className={classNames(styles.state, accountAuthenticated && styles.authenticated)}
                 title={accountSummaryLabel}
               >
-                <span className="sidebar-csghub-state-text">{accountSummaryLabel}</span>
+                <span className={styles.stateText}>{accountSummaryLabel}</span>
               </span>
             </div>
             {!accountAuthenticated && accountPanelOpen ? (
-              <div className="sidebar-csghub-env">
-                <label className="sidebar-csghub-env-row">
-                  <span className="sidebar-csghub-env-label">{t("csghubLoginEnvironment")}</span>
-                  <span className="sidebar-csghub-env-combo">
+              <div className={styles.env}>
+                <label className={styles.envRow}>
+                  <span className={styles.envLabel}>{t("csghubLoginEnvironment")}</span>
+                  <span className={styles.envCombo}>
                     <select
-                      className="sidebar-csghub-env-control"
+                      className={styles.envControl}
                       value={authEnvironmentDraft.preset}
                       onChange={(event) =>
                         handleAuthEnvironmentPresetChange(event.currentTarget.value as AuthEnvironmentPresetID)
@@ -324,7 +364,10 @@ export function SidebarUserButton({
                     </select>
                     <button
                       type="button"
-                      className={classNames("sidebar-csghub-advanced-toggle", showAuthEnvironmentAdvanced && "is-open")}
+                      className={classNames(
+                        styles.advancedToggle,
+                        showAuthEnvironmentAdvanced && styles.advancedToggleOpen,
+                      )}
                       aria-label={t("csghubAdvancedSettings")}
                       title={t("csghubAdvancedSettings")}
                       aria-expanded={showAuthEnvironmentAdvanced}
@@ -336,11 +379,11 @@ export function SidebarUserButton({
                   </span>
                 </label>
                 {showAuthEnvironmentAdvanced ? (
-                  <div className="sidebar-csghub-env-advanced">
-                    <label className="sidebar-csghub-env-row">
-                      <span className="sidebar-csghub-env-label">{t("csghubOpenCSGBaseURL")}</span>
+                  <div className={styles.envAdvanced}>
+                    <label className={styles.envRow}>
+                      <span className={styles.envLabel}>{t("csghubOpenCSGBaseURL")}</span>
                       <input
-                        className="sidebar-csghub-env-control"
+                        className={styles.envControl}
                         value={authEnvironmentDraft.opencsgBaseURL}
                         placeholder="https://openeast.opencsg.com"
                         onChange={(event) => handleAuthEnvironmentInputChange(event.currentTarget.value)}
@@ -351,9 +394,9 @@ export function SidebarUserButton({
               </div>
             ) : null}
             {accountAuthenticated ? (
-              <div className="sidebar-csghub-account">
-                <span className="sidebar-csghub-identity">
-                  <span className="sidebar-csghub-avatar" aria-hidden="true">
+              <div className={styles.account}>
+                <span className={styles.identity}>
+                  <span className={styles.avatar} aria-hidden="true">
                     {authStatus?.avatar ? (
                       <img src={authStatus.avatar} alt="" />
                     ) : (
@@ -362,11 +405,11 @@ export function SidebarUserButton({
                   </span>
                   <strong>{accountDisplayName}</strong>
                 </span>
-                <span className="sidebar-csghub-account-actions">
+                <span className={styles.accountActions}>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="sidebar-csghub-action"
+                    className={styles.action}
                     disabled={authBusy}
                     role="menuitem"
                     onClick={() => onLogout?.()}
@@ -377,14 +420,14 @@ export function SidebarUserButton({
                 </span>
               </div>
             ) : (
-              <div className="sidebar-csghub-account is-disconnected has-status">
-                <span className="sidebar-csghub-status">
+              <div className={classNames(styles.account, styles.disconnected, styles.hasStatus)}>
+                <span className={styles.status}>
                   {authPending ? t("csghubLoginPendingDetail") : t("csghubNotSignedIn")}
                 </span>
                 <Button
                   variant="secondaryColor"
                   size="sm"
-                  className="sidebar-csghub-action"
+                  className={styles.action}
                   disabled={authActionDisabled}
                   role="menuitem"
                   onClick={handleLogin}
@@ -394,42 +437,42 @@ export function SidebarUserButton({
                 </Button>
               </div>
             )}
-            {authError ? <div className="sidebar-csghub-error">{authError}</div> : null}
+            {authError ? <div className={styles.error}>{authError}</div> : null}
           </div>
-          <div className="sidebar-menu-divider"></div>
-          <button type="button" className="sidebar-menu-row" role="menuitem" onClick={handleOpenConfigSettings}>
+          <div className={styles.divider}></div>
+          <button type="button" className={styles.menuRow} role="menuitem" onClick={handleOpenConfigSettings}>
             {t("configSettingsMenu")}
           </button>
-          <div className="sidebar-menu-divider"></div>
-          <div className="sidebar-version-panel">
-            <div className="sidebar-version-heading">
-              <span className="sidebar-menu-label">{t("versionInfo")}</span>
+          <div className={styles.divider}></div>
+          <div className={styles.versionPanel}>
+            <div className={styles.versionHeading}>
+              <span className={styles.menuLabel}>{t("versionInfo")}</span>
               {localBuild ? (
-                <span className="sidebar-version-status">{t("upgradeLocalBuild")}</span>
+                <span className={styles.versionStatus}>{t("upgradeLocalBuild")}</span>
               ) : upgradeAttention && upgradeView ? (
                 <Button
                   variant={upgradePhase === "done" ? "secondaryColor" : "secondaryGray"}
                   size="sm"
                   className={classNames(
-                    "sidebar-version-action",
-                    upgradeView.running && "is-running",
-                    upgradePhase === "done" && "is-done",
+                    styles.versionAction,
+                    upgradeView.running && styles.running,
+                    upgradePhase === "done" && styles.done,
                   )}
                   onClick={handleOpenUpgrade}
                 >
-                  <span className="sidebar-upgrade-menu-dot" aria-hidden="true"></span>
+                  <span className={styles.upgradeDot} aria-hidden="true"></span>
                   <span>{upgradeView.actionLabel}</span>
                 </Button>
               ) : null}
             </div>
             {localBuild ? null : (
-              <strong className="sidebar-version-value">
+              <strong className={styles.versionValue}>
                 {upgradeView ? upgradeView.versionLabel : formatSidebarVersionLabel(currentVersion)}
               </strong>
             )}
-            {upgradeView?.issue ? <div className="sidebar-version-error">{upgradeView.issue}</div> : null}
+            {upgradeView?.issue ? <div className={styles.versionError}>{upgradeView.issue}</div> : null}
             <a
-              className="sidebar-feedback-link"
+              className={styles.feedbackLink}
               href={feedbackURL}
               target="_blank"
               rel="noreferrer"
@@ -452,24 +495,6 @@ function initialsForAccount(name: string): string {
     return "CS";
   }
   return cleaned.slice(0, 2).toUpperCase();
-}
-
-function readStoredAuthEnvironmentDraft(): AuthEnvironmentDraft {
-  try {
-    return normalizeAuthEnvironmentDraft(
-      JSON.parse(window.localStorage.getItem(AUTH_ENVIRONMENT_STORAGE_KEY) || "null"),
-    );
-  } catch (_) {
-    return defaultAuthEnvironmentDraft();
-  }
-}
-
-function writeStoredAuthEnvironmentDraft(draft: AuthEnvironmentDraft) {
-  try {
-    window.localStorage.setItem(AUTH_ENVIRONMENT_STORAGE_KEY, JSON.stringify(resolveAuthEnvironmentDraft(draft)));
-  } catch (_) {
-    // Local storage can be unavailable in restricted browser contexts.
-  }
 }
 
 function upgradeMenuActionText({

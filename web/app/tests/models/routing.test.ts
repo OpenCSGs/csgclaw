@@ -4,6 +4,7 @@ import {
   WorkspaceTabs,
   paneFromLocation,
   pathForPane,
+  workspaceHasContextSidebar,
   workspaceTabForPane,
 } from "@/models/routing";
 
@@ -29,13 +30,13 @@ describe("task routing", () => {
     expect(pathForPane({ type: WorkspacePaneTypes.human, id: "u-admin" })).toBe("/humans/u-admin");
   });
 
-  it("parses model provider routes as agent-tab model panes", () => {
+  it("parses model provider routes as resource-tab model panes", () => {
     expect(paneFromLocation("/models/csghub-lite")).toEqual({
       type: WorkspacePaneTypes.modelProvider,
       id: "csghub-lite",
     });
     expect(pathForPane({ type: WorkspacePaneTypes.modelProvider, id: "openai" })).toBe("/models/openai");
-    expect(workspaceTabForPane({ type: WorkspacePaneTypes.modelProvider, id: "openai" })).toBe(WorkspaceTabs.agents);
+    expect(workspaceTabForPane({ type: WorkspacePaneTypes.modelProvider, id: "openai" })).toBe(WorkspaceTabs.hub);
   });
 
   it("parses the tasks route as a task pane", () => {
@@ -45,6 +46,11 @@ describe("task routing", () => {
   it("builds the tasks route from a task pane", () => {
     expect(pathForPane({ type: WorkspacePaneTypes.task, id: "task-7" })).toBe("/tasks/task-7");
     expect(pathForPane({ type: WorkspacePaneTypes.task })).toBe("/tasks");
+  });
+
+  it("parses and builds the settings route as an independent page", () => {
+    expect(paneFromLocation("/settings")).toEqual({ type: WorkspacePaneTypes.settings, id: "" });
+    expect(pathForPane({ type: WorkspacePaneTypes.settings })).toBe("/settings");
   });
 
   it("parses hub resource routes as hub panes", () => {
@@ -85,5 +91,11 @@ describe("task routing", () => {
     expect(workspaceTabForPane({ type: WorkspacePaneTypes.hub, id: DefaultWorkspacePaneIds.hub })).toBe(
       WorkspaceTabs.hub,
     );
+  });
+
+  it("hides the contextual sidebar on full-width workspace pages", () => {
+    expect(workspaceHasContextSidebar({ type: WorkspacePaneTypes.conversation, id: "" })).toBe(true);
+    expect(workspaceHasContextSidebar({ type: WorkspacePaneTypes.task, id: "" })).toBe(false);
+    expect(workspaceHasContextSidebar({ type: WorkspacePaneTypes.settings, id: "" })).toBe(false);
   });
 });

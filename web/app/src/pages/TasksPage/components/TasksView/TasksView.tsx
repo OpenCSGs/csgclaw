@@ -300,6 +300,8 @@ export type TasksViewProps = {
   onDeleteScheduledTask?: (taskID: string) => VoidOrPromise;
   onEditScheduledTask?: (taskID: string, payload: UpdateScheduledTaskPayload) => VoidOrPromise;
   onOpenConversation?: (roomID: string) => VoidOrPromise;
+  onOpenCreateTaskModal?: () => VoidOrPromise;
+  onOpenCreateScheduledTaskModal?: () => VoidOrPromise;
   onOpenEditScheduledTaskModal?: (taskID: string) => void;
   onPlanTask?: (taskID: string) => VoidOrPromise;
   onRefresh?: () => VoidOrPromise;
@@ -376,6 +378,8 @@ export function TasksView({
   onCreateScheduledTask,
   onDeleteScheduledTask,
   onEditScheduledTask,
+  onOpenCreateTaskModal,
+  onOpenCreateScheduledTaskModal,
   onRefresh = () => {},
   onRunScheduledTask = () => {},
   onSelectScheduledTask = () => {},
@@ -684,6 +688,8 @@ export function TasksView({
                 canStartTask={false}
                 planTaskBusy={planTaskBusy}
                 startTaskBusy={startTaskBusy}
+                onCreateTask={activeView === "tasks" ? onOpenCreateTaskModal : undefined}
+                onCreateScheduledTask={activeView === "scheduled" ? onOpenCreateScheduledTaskModal : undefined}
                 onRefresh={onRefresh}
               />
             </div>

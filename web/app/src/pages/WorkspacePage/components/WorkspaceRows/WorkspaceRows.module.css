@@ -1,0 +1,478 @@
+.group {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  display: grid;
+  gap: 2px;
+}
+
+.flat {
+  gap: 0;
+}
+
+.groupHead {
+  min-height: 40px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sortable .groupHead {
+  cursor: grab;
+}
+
+.sortable .groupHead:active {
+  cursor: grabbing;
+}
+
+.sortable .groupHead:hover,
+.dragOver .groupHead {
+  background: var(--gray-50);
+}
+
+.dragging {
+  opacity: 0.72;
+}
+
+.groupToggle {
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #344054;
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.groupToggle:hover,
+.groupToggle:hover .groupTitle,
+.groupToggle:hover .groupTitle span {
+  color: #101828;
+}
+
+.groupToggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(77, 106, 214, 0.16);
+}
+
+.groupArrow {
+  width: 14px;
+  height: 14px;
+  color: var(--gray-500);
+  display: inline-flex;
+  flex: 0 0 auto;
+  transition: transform 140ms ease;
+}
+
+.groupArrow svg {
+  width: 14px;
+  height: 14px;
+}
+
+.collapsed .groupArrow {
+  transform: rotate(-90deg);
+}
+
+.groupTitle {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #344054;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 24px;
+  text-transform: none;
+}
+
+.groupTitle span {
+  min-width: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.groupTitle small {
+  min-width: 16px;
+  color: #667085;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  text-align: left;
+}
+
+.groupActions {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  opacity: 1;
+  transition: opacity 120ms ease;
+}
+
+.groupActions[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
+  width: max-content;
+  min-width: max-content;
+  max-width: 180px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--portal-gray-900);
+  color: var(--portal-white);
+  box-shadow: var(--shadow-sm);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+}
+
+.groupActions[data-tooltip]:hover::after,
+.groupActions[data-tooltip]:focus-within::after {
+  opacity: 1;
+}
+
+.addButton {
+  position: relative;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #344054;
+  box-shadow: none;
+}
+
+.addButton:hover:not(:disabled),
+.addButton:focus-visible {
+  background: #f9fafb;
+  color: #101828;
+  transform: none;
+}
+
+.addButton :global(.icon-button-mark) {
+  width: 15px;
+  height: 15px;
+}
+
+.groupItems {
+  padding: 4px 8px 8px;
+  display: grid;
+  gap: 3px;
+}
+
+.flat .groupItems {
+  padding: 8px 8px 16px;
+}
+
+.row {
+  width: 100%;
+  min-height: 50px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #344054;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  box-shadow: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.row:hover,
+.active {
+  background: #f9fafb;
+  color: #101828;
+  box-shadow: none;
+}
+
+.warn {
+  color: var(--warning-700);
+}
+
+.icon,
+.agentRow .icon,
+.computerRow .icon {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gray-500);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.icon svg,
+.icon :global(.svg-icon) {
+  width: 16px;
+  height: 16px;
+}
+
+.icon img {
+  width: 28px;
+  height: 28px;
+  display: block;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.avatarIcon {
+  background: var(--gray-100);
+  color: var(--gray-700);
+  font-weight: var(--avatar-default-weight);
+}
+
+.clickableIcon {
+  cursor: pointer;
+}
+
+.clickableIcon:hover,
+.clickableIcon:focus-visible {
+  box-shadow: 0 0 0 3px rgba(77, 106, 214, 0.16);
+  outline: none;
+}
+
+.main {
+  min-width: 0;
+  display: grid;
+  gap: 0;
+}
+
+.titleLine {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.title,
+.conversationRow .title,
+.agentRow .title,
+.computerRow .title {
+  min-width: 0;
+  color: currentColor;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.meta,
+.agentRow .meta,
+.computerRow .meta {
+  min-width: 0;
+  color: #475467;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+}
+
+.badges {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.badges:empty {
+  display: none;
+}
+
+.channelBadge {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.channelBadge img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.miniBadge {
+  max-width: 112px;
+  min-height: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gray-100);
+  color: var(--gray-700);
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.miniBadgeWarn {
+  background: var(--warning-50);
+  color: var(--warning-700);
+}
+
+.time {
+  color: #667085;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--gray-400);
+  flex: 0 0 auto;
+}
+
+.online {
+  background: var(--success-600);
+}
+
+.warning {
+  background: var(--warning-500);
+}
+
+.neutral {
+  background: var(--gray-400);
+}
+
+.rowCount {
+  min-width: 22px;
+  color: var(--gray-500);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: right;
+}
+
+.agentRow,
+.computerRow {
+  min-height: 52px;
+}
+
+.humanRow,
+.threadRow,
+.feishuChannelBadge {
+  text-decoration: none;
+}
+
+.agentRow {
+  grid-template-columns: 32px minmax(0, 1fr) max-content;
+}
+
+.conversationRow {
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+}
+
+.taskRow {
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+
+:global(:root[data-theme="dark"]) .sortable .groupHead:hover,
+:global(:root[data-theme="dark"]) .dragOver .groupHead,
+:global(:root[data-theme="dark"]) .row:hover,
+:global(:root[data-theme="dark"]) .active {
+  background: var(--panel-strong);
+  color: var(--gray-100);
+}
+
+:global(:root[data-theme="dark"]) .groupToggle,
+:global(:root[data-theme="dark"]) .groupTitle,
+:global(:root[data-theme="dark"]) .groupTitle span {
+  color: var(--gray-300);
+}
+
+:global(:root[data-theme="dark"]) .groupTitle small,
+:global(:root[data-theme="dark"]) .groupToggle:hover .groupTitle small {
+  color: var(--gray-500);
+}
+
+:global(:root[data-theme="dark"]) .groupToggle:hover,
+:global(:root[data-theme="dark"]) .groupToggle:hover .groupTitle,
+:global(:root[data-theme="dark"]) .groupToggle:hover .groupTitle span {
+  color: var(--gray-100);
+}
+
+:global(:root[data-theme="dark"]) .row {
+  color: var(--gray-300);
+}
+
+:global(:root[data-theme="dark"]) .icon {
+  color: var(--gray-400);
+}
+
+:global(:root[data-theme="dark"]) .avatarIcon {
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
+}
+
+:global(:root[data-theme="dark"]) .meta,
+:global(:root[data-theme="dark"]) .agentRow .meta,
+:global(:root[data-theme="dark"]) .computerRow .meta,
+:global(:root[data-theme="dark"]) .time {
+  color: var(--gray-500);
+}
+
+:global(:root[data-theme="dark"]) .addButton:hover:not(:disabled),
+:global(:root[data-theme="dark"]) .addButton:focus-visible {
+  background: rgba(208, 213, 221, 0.1);
+  color: var(--gray-200);
+}
+
+@media (max-width: 720px) {
+  .groupTitle,
+  .groupTitle span {
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .groupTitle small {
+    font-size: 12px;
+    line-height: 18px;
+  }
+}

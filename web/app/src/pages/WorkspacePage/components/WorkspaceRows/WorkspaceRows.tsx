@@ -27,6 +27,8 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
+import { classNames } from "@/shared/lib/classNames";
+import styles from "./WorkspaceRows.module.css";
 import type { DragEvent, ReactNode } from "react";
 import type { AgentLike } from "@/models/agents";
 import type {
@@ -55,6 +57,7 @@ export type WorkspaceGroupProps = {
   onDragStart?: (event: DragEvent<HTMLElement>) => void;
   onDrop?: (event: DragEvent<HTMLElement>) => void;
   onToggle: () => void;
+  presentation?: "group" | "flat";
   title: string;
 };
 
@@ -74,58 +77,69 @@ export function WorkspaceGroup({
   onDragOver,
   onDragStart,
   onDrop,
+  presentation = "group",
   children,
 }: WorkspaceGroupProps) {
   const itemsID = `workspace-group-items-${id || String(title).toLowerCase().replace(/\s+/g, "-")}`;
   const draggable = Boolean(onDragStart);
+  const flat = presentation === "flat";
+  const itemsCollapsed = flat ? false : collapsed;
   return (
     <section
-      className={`workspace-group ${collapsed ? "collapsed" : ""} ${draggable ? "workspace-group-sortable" : ""} ${
-        dragging ? "dragging" : ""
-      } ${dragOver ? "drag-over" : ""}`.trim()}
+      className={classNames(
+        styles.group,
+        flat && styles.flat,
+        itemsCollapsed && styles.collapsed,
+        draggable && !flat && styles.sortable,
+        dragging && styles.dragging,
+        dragOver && styles.dragOver,
+      )}
+      data-workspace-section={id}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="workspace-group-head" draggable={draggable} onDragEnd={onDragEnd} onDragStart={onDragStart}>
-        <button
-          className="workspace-group-toggle"
-          type="button"
-          aria-expanded={!collapsed}
-          aria-controls={itemsID}
-          onClick={onToggle}
-        >
-          <span className="workspace-group-arrow" aria-hidden="true">
-            <ChevronIcon />
-          </span>
-          <span className="workspace-group-title">
-            <span>{title}</span>
-            <small>{count}</small>
-          </span>
-        </button>
-        <div className="workspace-group-actions" data-tooltip={onAdd ? addLabel || title : undefined}>
-          {onAdd ? (
-            <Button
-              variant="ghost"
-              className="workspace-add-button"
-              draggable={false}
-              aria-label={addLabel || title}
-              onDragStart={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onAdd?.();
-              }}
-            >
-              <span className="icon-button-mark" aria-hidden="true">
-                {addIcon || <RoomPlusIcon />}
-              </span>
-            </Button>
-          ) : null}
+      {flat ? null : (
+        <div className={styles.groupHead} draggable={draggable} onDragEnd={onDragEnd} onDragStart={onDragStart}>
+          <button
+            className={styles.groupToggle}
+            type="button"
+            aria-expanded={!itemsCollapsed}
+            aria-controls={itemsID}
+            onClick={onToggle}
+          >
+            <span className={styles.groupArrow} aria-hidden="true">
+              <ChevronIcon />
+            </span>
+            <span className={styles.groupTitle}>
+              <span>{title}</span>
+              <small>{count}</small>
+            </span>
+          </button>
+          <div className={styles.groupActions} data-tooltip={onAdd ? addLabel || title : undefined}>
+            {onAdd ? (
+              <Button
+                variant="ghost"
+                className={styles.addButton}
+                draggable={false}
+                aria-label={addLabel || title}
+                onDragStart={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onAdd?.();
+                }}
+              >
+                <span className="icon-button-mark" aria-hidden="true">
+                  {addIcon || <RoomPlusIcon />}
+                </span>
+              </Button>
+            ) : null}
+          </div>
         </div>
-      </div>
-      {collapsed ? null : (
-        <div id={itemsID} className="workspace-group-items">
+      )}
+      {itemsCollapsed ? null : (
+        <div id={itemsID} className={styles.groupItems}>
           {children}
         </div>
       )}
@@ -142,15 +156,15 @@ export type WorkspaceComputerRowProps = {
 
 export function WorkspaceComputerRow({ title, active, subtitle, onSelect }: WorkspaceComputerRowProps) {
   return (
-    <button className={`workspace-row computer-row ${active ? "active" : ""}`} onClick={onSelect}>
-      <span className="workspace-row-icon">
+    <button className={classNames(styles.row, styles.computerRow, active && styles.active)} onClick={onSelect}>
+      <span className={styles.icon}>
         <ComputerIcon />
       </span>
-      <span className="workspace-row-main">
-        <span className="workspace-row-title truncate">{title}</span>
-        <span className="workspace-row-meta truncate">{subtitle}</span>
+      <span className={styles.main}>
+        <span className={classNames(styles.title, "truncate")}>{title}</span>
+        <span className={classNames(styles.meta, "truncate")}>{subtitle}</span>
       </span>
-      <span className="workspace-status-dot online" aria-hidden="true"></span>
+      <span className={classNames(styles.statusDot, styles.online)} aria-hidden="true"></span>
     </button>
   );
 }
@@ -169,9 +183,9 @@ export function WorkspaceHumanRow({ user, active, t, onPreview, onSelect }: Work
   const feishuConnected = hasConnectedHumanChannel(user, "feishu");
 
   return (
-    <button className={`workspace-row human-nav-row ${active ? "active" : ""}`} onClick={() => onSelect(user)}>
+    <button className={classNames(styles.row, styles.humanRow, active && styles.active)} onClick={() => onSelect(user)}>
       <span
-        className="workspace-row-icon avatar-icon workspace-row-icon-clickable"
+        className={classNames(styles.icon, styles.avatarIcon, styles.clickableIcon)}
         role="button"
         tabIndex={0}
         aria-label={`${t("profilePreview")} ${displayName}`}
@@ -189,16 +203,16 @@ export function WorkspaceHumanRow({ user, active, t, onPreview, onSelect }: Work
       >
         <AgentAvatarContent avatar={user.avatar} fallback={avatarFallbackText(user.avatar, displayName, user.id)} />
       </span>
-      <span className="workspace-row-main">
-        <span className="workspace-row-title truncate">{displayName}</span>
-        <span className="workspace-row-meta truncate">
+      <span className={styles.main}>
+        <span className={classNames(styles.title, "truncate")}>{displayName}</span>
+        <span className={classNames(styles.meta, "truncate")}>
           {user.id} · {role}
         </span>
       </span>
-      <span className="workspace-row-badges">
+      <span className={styles.badges}>
         {feishuConnected ? (
           <span
-            className="workspace-channel-badge feishu-channel-badge"
+            className={classNames(styles.channelBadge, styles.feishuChannelBadge)}
             aria-label={t("feishuConnected")}
             title={t("feishuConnected")}
           >
@@ -239,11 +253,11 @@ export function WorkspaceAgentRow({
     : `${formatProviderLabel(provider)} · ${agentModelID(item)}`;
   return (
     <button
-      className={`workspace-row agent-nav-row ${active ? "active" : ""} ${incomplete ? "warn" : ""}`.trim()}
+      className={classNames(styles.row, styles.agentRow, active && styles.active, incomplete && styles.warn)}
       onClick={() => onSelect(item)}
     >
       <span
-        className="workspace-row-icon workspace-row-icon-clickable"
+        className={classNames(styles.icon, styles.clickableIcon)}
         role="button"
         tabIndex={0}
         aria-label={`${t("profilePreview")} ${item.name}`}
@@ -261,26 +275,32 @@ export function WorkspaceAgentRow({
       >
         <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.id)} />
       </span>
-      <span className="workspace-row-main">
-        <span className="workspace-row-title-line">
-          <span className="workspace-row-title truncate">{item.name}</span>
-          <span className={`workspace-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
+      <span className={styles.main}>
+        <span className={styles.titleLine}>
+          <span className={classNames(styles.title, "truncate")}>{item.name}</span>
+          <span className={classNames(styles.statusDot, running && styles.online)} aria-hidden="true"></span>
         </span>
-        <span className="workspace-row-meta truncate">{meta}</span>
+        <span className={classNames(styles.meta, "truncate")}>{meta}</span>
       </span>
-      <span className="workspace-row-badges">
+      <span className={styles.badges}>
         {feishuConnected ? (
           <span
-            className="workspace-channel-badge feishu-channel-badge"
+            className={classNames(styles.channelBadge, styles.feishuChannelBadge)}
             aria-label={t("feishuConnected")}
             title={t("feishuConnected")}
           >
             <img src="icons/feishu.png" alt="" />
           </span>
         ) : null}
-        {incomplete ? <span className="mini-badge warn">{t("profileIncompleteBadge")}</span> : null}
-        {upgradeNeeded ? <span className="mini-badge warn">{t("profileUpgradeRequired")}</span> : null}
-        {restartNeeded ? <span className="mini-badge warn">{t("profileRestartRequired")}</span> : null}
+        {incomplete ? (
+          <span className={classNames(styles.miniBadge, styles.miniBadgeWarn)}>{t("profileIncompleteBadge")}</span>
+        ) : null}
+        {upgradeNeeded ? (
+          <span className={classNames(styles.miniBadge, styles.miniBadgeWarn)}>{t("profileUpgradeRequired")}</span>
+        ) : null}
+        {restartNeeded ? (
+          <span className={classNames(styles.miniBadge, styles.miniBadgeWarn)}>{t("profileRestartRequired")}</span>
+        ) : null}
       </span>
     </button>
   );
@@ -321,11 +341,11 @@ export function WorkspaceConversationRow({
   const preview = formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t);
   return (
     <button
-      className={`workspace-row conversation-nav-row ${active ? "active" : ""}`}
+      className={classNames(styles.row, styles.conversationRow, active && styles.active)}
       onClick={() => onSelect(conversation.id)}
     >
       <span
-        className={`workspace-row-icon ${isDirect ? "avatar-icon workspace-row-icon-clickable" : ""}`}
+        className={classNames(styles.icon, isDirect && styles.avatarIcon, isDirect && styles.clickableIcon)}
         role={isDirect ? "button" : undefined}
         tabIndex={isDirect ? 0 : undefined}
         aria-label={isDirect && displayUser ? `${t("profilePreview")} ${displayUser.name}` : undefined}
@@ -355,18 +375,21 @@ export function WorkspaceConversationRow({
           <RoomAvatar members={roomAvatarMembers} count={conversation.members.length} />
         )}
       </span>
-      <span className="workspace-row-main">
-        <span className="workspace-row-title-line">
-          <span className="workspace-row-title truncate">{title}</span>
+      <span className={styles.main}>
+        <span className={styles.titleLine}>
+          <span className={classNames(styles.title, "truncate")}>{title}</span>
           {directAgent ? (
-            <span className={`workspace-status-dot ${directAgentRunning ? "online" : ""}`} aria-hidden="true"></span>
+            <span
+              className={classNames(styles.statusDot, directAgentRunning && styles.online)}
+              aria-hidden="true"
+            ></span>
           ) : null}
         </span>
-        <span className="workspace-row-meta truncate">
+        <span className={classNames(styles.meta, "truncate")}>
           <MessagePreviewText content={preview} />
         </span>
       </span>
-      <span className="workspace-row-time">{formatTime(lastMessage?.created_at, locale)}</span>
+      <span className={styles.time}>{formatTime(lastMessage?.created_at, locale)}</span>
     </button>
   );
 }
@@ -394,18 +417,18 @@ export function WorkspaceThreadRow({ conversation, thread, active, locale, t, on
 
   return (
     <button
-      className={`workspace-row thread-nav-row ${active ? "active" : ""}`}
+      className={classNames(styles.row, styles.threadRow, active && styles.active)}
       title={title}
       onClick={() => onSelect(conversation.id, root)}
     >
-      <span className="workspace-row-icon">
+      <span className={styles.icon}>
         <RoomsIcon />
       </span>
-      <span className="workspace-row-main">
-        <span className="workspace-row-title truncate" title={title}>
+      <span className={styles.main}>
+        <span className={classNames(styles.title, "truncate")} title={title}>
           <MessagePreviewText content={title} />
         </span>
-        <span className="workspace-row-meta truncate">
+        <span className={classNames(styles.meta, "truncate")}>
           {latestReply ? (
             <>
               <span>{`${t("latestThreadReply")}: `}</span>
@@ -416,7 +439,7 @@ export function WorkspaceThreadRow({ conversation, thread, active, locale, t, on
           )}
         </span>
       </span>
-      <span className="workspace-row-time">{formatTime(updatedAt, locale)}</span>
+      <span className={styles.time}>{formatTime(updatedAt, locale)}</span>
     </button>
   );
 }

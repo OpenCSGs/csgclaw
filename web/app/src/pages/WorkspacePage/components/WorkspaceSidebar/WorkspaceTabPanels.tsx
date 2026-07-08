@@ -7,8 +7,12 @@ import { modelProviderAvatarPath, providerStatusTone, type ModelProvider } from 
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { displayTeam } from "@/models/tasks";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
+import { classNames } from "@/shared/lib/classNames";
 import { WORKSPACE_SECTION_ORDER_STORAGE_KEY } from "@/shared/storage/keys";
 import { SkillUploadDialog } from "./SkillUploadDialog";
+import { WorkspaceContextSectionIds } from "./types";
+import styles from "./WorkspaceTabPanels.module.css";
+import rowStyles from "../WorkspaceRows/WorkspaceRows.module.css";
 import {
   WorkspaceAgentRow,
   WorkspaceComputerRow,
@@ -17,21 +21,26 @@ import {
   WorkspaceHumanRow,
   WorkspaceThreadRow,
 } from "../WorkspaceRows";
-import type { WorkspaceSidebarProps } from "./types";
+import type { WorkspaceContextSectionId, WorkspaceSidebarProps } from "./types";
 
 const MessageSectionIds = {
-  rooms: "rooms",
-  directMessages: "direct-messages",
-  threads: "threads",
+  rooms: WorkspaceContextSectionIds.rooms,
+  directMessages: WorkspaceContextSectionIds.directMessages,
+  threads: WorkspaceContextSectionIds.threads,
 } as const;
 
 const AgentSectionIds = {
-  models: "models",
-  agents: "agents",
-  humans: "humans",
-  teams: "teams",
-  notifications: "notifications",
-  computers: "computers",
+  agents: WorkspaceContextSectionIds.agents,
+  humans: WorkspaceContextSectionIds.humans,
+  teams: WorkspaceContextSectionIds.teams,
+  notifications: WorkspaceContextSectionIds.notifications,
+  computers: WorkspaceContextSectionIds.computers,
+} as const;
+
+const HubSectionIds = {
+  templates: WorkspaceContextSectionIds.hubTemplates,
+  skills: WorkspaceContextSectionIds.hubSkills,
+  models: WorkspaceContextSectionIds.models,
 } as const;
 
 const SectionPanels = {
@@ -42,6 +51,7 @@ const SectionPanels = {
 
 type MessageSectionId = (typeof MessageSectionIds)[keyof typeof MessageSectionIds];
 type AgentSectionId = (typeof AgentSectionIds)[keyof typeof AgentSectionIds];
+type HubSectionId = (typeof HubSectionIds)[keyof typeof HubSectionIds];
 type OrderedSectionPanel = typeof SectionPanels.messages | typeof SectionPanels.agents;
 type SectionId = MessageSectionId | AgentSectionId;
 type SectionOrders = Record<OrderedSectionPanel, SectionId[]>;
@@ -69,6 +79,7 @@ type WorkspaceTabPanelsProps = Pick<
   | "onCreateModelProvider"
   | "onCreateNotificationParticipant"
   | "onCreateRoom"
+  | "onOpenCreateScheduledTask"
   | "onOpenCreateTask"
   | "onOpenCreateTeam"
   | "onPreviewAgent"
@@ -98,7 +109,12 @@ type WorkspaceTabPanelsProps = Pick<
   | "usersById"
   | "workerAgentItems"
   | "workspaceTab"
->;
+> & {
+  contextQuery?: string;
+  contextSectionId?: WorkspaceContextSectionId;
+  onSkillUploadOpenChange?: (open: boolean) => void;
+  skillUploadOpen?: boolean;
+};
 
 const LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS: readonly (readonly MessageSectionId[])[] = [
   [MessageSectionIds.rooms, MessageSectionIds.directMessages, MessageSectionIds.threads],
@@ -107,7 +123,6 @@ const LEGACY_DEFAULT_MESSAGE_SECTION_ORDERS: readonly (readonly MessageSectionId
 const LEGACY_DEFAULT_AGENT_SECTION_ORDERS: readonly (readonly AgentSectionId[])[] = [
   [AgentSectionIds.agents, AgentSectionIds.teams, AgentSectionIds.computers, AgentSectionIds.notifications],
   [
-    AgentSectionIds.models,
     AgentSectionIds.agents,
     AgentSectionIds.humans,
     AgentSectionIds.computers,
@@ -193,7 +208,24 @@ function reorderSection(order: readonly SectionId[], sourceId: SectionId, target
   return next;
 }
 
+function normalizeSearchQuery(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function matchesSearch(query: string, ...values: unknown[]) {
+  if (!query) {
+    return true;
+  }
+  return values.some((value) =>
+    String(value ?? "")
+      .toLocaleLowerCase()
+      .includes(query),
+  );
+}
+
 export function WorkspaceTabPanels({
+  contextQuery = "",
+  contextSectionId,
   workspaceTab,
   taskCount = 0,
   scheduledTaskCount = 0,
@@ -215,6 +247,7 @@ export function WorkspaceTabPanels({
   onCreateNotificationParticipant,
   onOpenCreateTeam,
   onOpenCreateTask,
+  onOpenCreateScheduledTask,
   hub,
   onSelectHubTemplate,
   onSelectTeam,
@@ -236,8 +269,13 @@ export function WorkspaceTabPanels({
   onCreateModelProvider,
   onSelectTaskBoardView = () => {},
   onSelectTask,
+  onSkillUploadOpenChange,
+  skillUploadOpen,
 }: WorkspaceTabPanelsProps) {
-  const [skillUploadOpen, setSkillUploadOpen] = useState(false);
+  const [internalSkillUploadOpen, setInternalSkillUploadOpen] = useState(false);
+  const resolvedSkillUploadOpen = skillUploadOpen ?? internalSkillUploadOpen;
+  const setResolvedSkillUploadOpen = onSkillUploadOpenChange ?? setInternalSkillUploadOpen;
+  const normalizedContextQuery = normalizeSearchQuery(contextQuery);
   const resourcesTemplates = hub?.templates ?? [];
   const resourcesSkills = hub?.skills ?? [];
   const resourcesError = hub?.listError ?? "";
@@ -321,11 +359,92 @@ export function WorkspaceTabPanels({
     );
   }
 
-  function renderThreadRows() {
-    if (!threadGroups.length) {
-      return <div className="workspace-empty">{t("noThreads")}</div>;
+  function conversationMatchesQuery(conversation: (typeof channels)[number]): boolean {
+    if (!normalizedContextQuery) {
+      return true;
     }
-    return threadGroups.map((group) =>
+    const displayUser = isDirectConversation(conversation)
+      ? resolveConversationUser(conversation, currentUserID, usersById)
+      : null;
+    return matchesSearch(
+      normalizedContextQuery,
+      conversation.id,
+      conversation.title,
+      displayUser?.id,
+      displayUser?.name,
+    );
+  }
+
+  function threadMatchesQuery(
+    group: (typeof threadGroups)[number],
+    thread: (typeof threadGroups)[number]["threads"][number],
+  ) {
+    if (!normalizedContextQuery) {
+      return true;
+    }
+    const rootID = thread.summary?.root_id || thread.root?.id;
+    return (
+      conversationMatchesQuery(group.conversation) ||
+      matchesSearch(
+        normalizedContextQuery,
+        rootID,
+        thread.root?.content,
+        thread.summary?.context_summary?.root_excerpt,
+        thread.summary?.latest_reply?.content,
+      )
+    );
+  }
+
+  function agentMatchesQuery(item: (typeof agentItems)[number]) {
+    const profile = typeof item.profile === "object" ? item.profile : null;
+    return matchesSearch(
+      normalizedContextQuery,
+      item.id,
+      item.name,
+      item.role,
+      profile?.model_provider_id,
+      profile?.model_id,
+    );
+  }
+
+  function userMatchesQuery(user: NonNullable<ReturnType<typeof usersById.get>>) {
+    return matchesSearch(normalizedContextQuery, user.id, user.name, user.role);
+  }
+
+  function teamMatchesQuery(team: (typeof teams)[number]) {
+    return matchesSearch(normalizedContextQuery, team.id, displayTeam(team), team.status);
+  }
+
+  function templateMatchesQuery(item: (typeof resourcesTemplates)[number]) {
+    return matchesSearch(normalizedContextQuery, item.id, item.name, item.description, item.source?.name, item.role);
+  }
+
+  function skillMatchesQuery(item: (typeof resourcesSkills)[number]) {
+    return matchesSearch(normalizedContextQuery, item.name, item.description);
+  }
+
+  function modelProviderMatchesQuery(provider: ModelProvider) {
+    return matchesSearch(
+      normalizedContextQuery,
+      provider.id,
+      provider.display_name,
+      provider.kind,
+      provider.message,
+      provider.models.join(" "),
+    );
+  }
+
+  function renderThreadRows() {
+    const matchingThreadGroups = threadGroups
+      .map((group) => ({
+        ...group,
+        threads: group.threads.filter((thread) => threadMatchesQuery(group, thread)),
+      }))
+      .filter((group) => group.threads.length || conversationMatchesQuery(group.conversation));
+    if (!matchingThreadGroups.length) {
+      return <div className={styles.empty}>{t("noThreads")}</div>;
+    }
+    return matchingThreadGroups.map((group) =>
       group.threads.map((thread) => {
         const rootID = thread.summary?.root_id || thread.root?.id;
         return (
@@ -349,6 +468,7 @@ export function WorkspaceTabPanels({
 
   function renderMessageSection(id: SectionId) {
     if (id === MessageSectionIds.rooms) {
+      const visibleChannels = channels.filter(conversationMatchesQuery);
       return (
         <WorkspaceGroup
           key={id}
@@ -361,8 +481,8 @@ export function WorkspaceTabPanels({
           addLabel={t("createRoom")}
           {...sectionDragProps(SectionPanels.messages, id)}
         >
-          {channels.length ? (
-            channels.map((conversation) => (
+          {visibleChannels.length ? (
+            visibleChannels.map((conversation) => (
               <WorkspaceConversationRow
                 key={conversation.id}
                 conversation={conversation}
@@ -376,12 +496,13 @@ export function WorkspaceTabPanels({
               />
             ))
           ) : (
-            <div className="workspace-empty">{t("noChannels")}</div>
+            <div className={styles.empty}>{t("noChannels")}</div>
           )}
         </WorkspaceGroup>
       );
     }
     if (id === MessageSectionIds.directMessages) {
+      const visibleDirectMessages = directMessages.filter(conversationMatchesQuery);
       return (
         <WorkspaceGroup
           key={id}
@@ -392,8 +513,8 @@ export function WorkspaceTabPanels({
           onToggle={() => onToggleWorkspaceGroup("direct-messages")}
           {...sectionDragProps(SectionPanels.messages, id)}
         >
-          {directMessages.length ? (
-            directMessages.map((conversation) => (
+          {visibleDirectMessages.length ? (
+            visibleDirectMessages.map((conversation) => (
               <WorkspaceConversationRow
                 key={conversation.id}
                 agents={agentItems}
@@ -408,7 +529,7 @@ export function WorkspaceTabPanels({
               />
             ))
           ) : (
-            <div className="workspace-empty">{t("noDirectMessages")}</div>
+            <div className={styles.empty}>{t("noDirectMessages")}</div>
           )}
         </WorkspaceGroup>
       );
@@ -438,67 +559,75 @@ export function WorkspaceTabPanels({
     return (
       <button
         key={provider.id}
-        className={`workspace-row model-provider-row ${
-          activePane.type === WorkspacePaneTypes.modelProvider && activePane.id === provider.id ? "active" : ""
-        }`}
+        className={classNames(
+          rowStyles.row,
+          styles.modelProviderRow,
+          activePane.type === WorkspacePaneTypes.modelProvider && activePane.id === provider.id && rowStyles.active,
+        )}
         onClick={() => onSelectModelProvider(provider)}
       >
-        <span className="workspace-row-icon">
+        <span className={rowStyles.icon}>
           <img src={modelProviderAvatarPath(provider)} alt="" aria-hidden="true" />
         </span>
-        <span className="workspace-row-main">
-          <span className="workspace-row-title-line">
-            <span className="workspace-row-title truncate">{provider.display_name || provider.id}</span>
-            <span className={`workspace-status-dot ${tone}`} aria-hidden="true"></span>
+        <span className={rowStyles.main}>
+          <span className={rowStyles.titleLine}>
+            <span className={classNames(rowStyles.title, "truncate")}>{provider.display_name || provider.id}</span>
+            <span className={classNames(rowStyles.statusDot, rowStyles[tone])} aria-hidden="true"></span>
           </span>
-          <span className="workspace-row-meta truncate">{metaParts.join(" · ") || provider.kind}</span>
+          <span className={classNames(rowStyles.meta, "truncate")}>{metaParts.join(" · ") || provider.kind}</span>
         </span>
       </button>
     );
   }
 
-  function renderModelProviderSection() {
+  function renderModelProviderSection(presentation: "group" | "flat" = "group") {
     const providers = modelProviders?.providers ?? [];
-    const builtins = modelProviders?.builtinProviders ?? [];
-    const custom = modelProviders?.customProviders ?? [];
+    const builtins = (modelProviders?.builtinProviders ?? []).filter(modelProviderMatchesQuery);
+    const custom = (modelProviders?.customProviders ?? []).filter(modelProviderMatchesQuery);
+    const visibleProviderCount = builtins.length + custom.length;
+    const flat = presentation === "flat";
     return (
       <WorkspaceGroup
         id="models"
         title={t("resourcesModelProvidersSection")}
         count={providers.length}
-        collapsed={Boolean(collapsedWorkspaceGroups.models)}
+        collapsed={flat ? false : Boolean(collapsedWorkspaceGroups.models)}
         onToggle={() => onToggleWorkspaceGroup("models")}
         onAdd={onCreateModelProvider}
         addLabel={t("modelProviderAdd")}
         addIcon={<Plus aria-hidden="true" size={16} />}
+        presentation={presentation}
       >
-        {!modelProvidersLoaded ? <div className="workspace-empty">{t("profileLoadingModels")}</div> : null}
+        {!modelProvidersLoaded ? <div className={styles.empty}>{t("profileLoadingModels")}</div> : null}
         {modelProvidersLoaded && builtins.map(renderModelProviderRow)}
-        {modelProvidersLoaded && custom.length ? <div className="workspace-provider-divider" /> : null}
+        {modelProvidersLoaded && custom.length ? <div className={styles.providerDivider} /> : null}
         {modelProvidersLoaded && custom.map(renderModelProviderRow)}
+        {modelProvidersLoaded && !visibleProviderCount ? (
+          <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
+        ) : null}
       </WorkspaceGroup>
     );
   }
 
-  function renderAgentSection(id: SectionId) {
-    if (id === AgentSectionIds.models) {
-      return null;
-    }
+  function renderAgentSection(id: SectionId, presentation: "group" | "flat" = "group") {
+    const flat = presentation === "flat";
     if (id === AgentSectionIds.agents) {
+      const visibleWorkerAgents = workerAgentItems.filter(agentMatchesQuery);
       return (
         <WorkspaceGroup
           key={id}
           id="agents"
           title={t("computerAgentsSection")}
           count={workerAgentItems.length}
-          collapsed={Boolean(collapsedWorkspaceGroups.agents)}
+          collapsed={flat ? false : Boolean(collapsedWorkspaceGroups.agents)}
           onToggle={() => onToggleWorkspaceGroup("agents")}
           onAdd={onCreateAgent}
           addLabel={t("createAgent")}
-          {...sectionDragProps(SectionPanels.agents, id)}
+          presentation={presentation}
+          {...(flat ? {} : sectionDragProps(SectionPanels.agents, id))}
         >
-          {workerAgentItems.length ? (
-            workerAgentItems.map((item) => (
+          {visibleWorkerAgents.length ? (
+            visibleWorkerAgents.map((item) => (
               <WorkspaceAgentRow
                 key={item.id}
                 item={item}
@@ -509,96 +638,113 @@ export function WorkspaceTabPanels({
               />
             ))
           ) : (
-            <div className="workspace-empty">{t("noAgents")}</div>
+            <div className={styles.empty}>
+              {workerAgentItems.length ? t("workspaceSearchNoResults") : t("noAgents")}
+            </div>
           )}
         </WorkspaceGroup>
       );
     }
     if (id === AgentSectionIds.humans) {
       const currentUser = usersById.get(currentUserID);
-      const humanUsers = currentUser ? [currentUser] : [];
+      const humanUsers = (currentUser ? [currentUser] : []).filter(userMatchesQuery);
       return (
         <WorkspaceGroup
           key={id}
           id="humans"
           title={t("humanSection")}
           count={humanUsers.length}
-          collapsed={Boolean(collapsedWorkspaceGroups.humans)}
+          collapsed={flat ? false : Boolean(collapsedWorkspaceGroups.humans)}
           onToggle={() => onToggleWorkspaceGroup("humans")}
-          {...sectionDragProps(SectionPanels.agents, id)}
+          presentation={presentation}
+          {...(flat ? {} : sectionDragProps(SectionPanels.agents, id))}
         >
-          {humanUsers.map((user) => (
-            <WorkspaceHumanRow
-              key={user.id}
-              user={user}
-              active={activePane.type === WorkspacePaneTypes.human && activePane.id === user.id}
-              t={t}
-              onSelect={onSelectHuman}
-              onPreview={onPreviewUser}
-            />
-          ))}
+          {humanUsers.length ? (
+            humanUsers.map((user) => (
+              <WorkspaceHumanRow
+                key={user.id}
+                user={user}
+                active={activePane.type === WorkspacePaneTypes.human && activePane.id === user.id}
+                t={t}
+                onSelect={onSelectHuman}
+                onPreview={onPreviewUser}
+              />
+            ))
+          ) : (
+            <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
+          )}
         </WorkspaceGroup>
       );
     }
     if (id === AgentSectionIds.notifications) {
+      const visibleNotificationAgents = notificationAgentItems.filter(agentMatchesQuery);
       return (
         <WorkspaceGroup
           key={id}
           id="notifications"
           title={t("notificationsSection")}
           count={notificationAgentItems.length}
-          collapsed={Boolean(collapsedWorkspaceGroups.notifications)}
+          collapsed={flat ? false : Boolean(collapsedWorkspaceGroups.notifications)}
           onToggle={() => onToggleWorkspaceGroup("notifications")}
           onAdd={onCreateNotificationParticipant}
           addLabel={t("createNotificationBot")}
-          {...sectionDragProps(SectionPanels.agents, id)}
+          presentation={presentation}
+          {...(flat ? {} : sectionDragProps(SectionPanels.agents, id))}
         >
-          {notificationAgentItems.length
-            ? notificationAgentItems.map((item) => (
-                <WorkspaceAgentRow
-                  key={item.id}
-                  item={item}
-                  active={activePane.type === WorkspacePaneTypes.agent && activePane.id === item.id}
-                  t={t}
-                  onSelect={onSelectAgent}
-                  onPreview={onPreviewAgent}
-                  notification
-                />
-              ))
-            : null}
+          {visibleNotificationAgents.length ? (
+            visibleNotificationAgents.map((item) => (
+              <WorkspaceAgentRow
+                key={item.id}
+                item={item}
+                active={activePane.type === WorkspacePaneTypes.agent && activePane.id === item.id}
+                t={t}
+                onSelect={onSelectAgent}
+                onPreview={onPreviewAgent}
+                notification
+              />
+            ))
+          ) : notificationAgentItems.length ? (
+            <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
+          ) : (
+            <div className={styles.empty}>{t("noNotificationBots")}</div>
+          )}
         </WorkspaceGroup>
       );
     }
     if (id === AgentSectionIds.teams) {
+      const visibleTeams = teams.filter(teamMatchesQuery);
       return (
         <WorkspaceGroup
           key={id}
           id="teams"
           title={t("teamsSection")}
           count={teams.length}
-          collapsed={Boolean(collapsedWorkspaceGroups.teams)}
+          collapsed={flat ? false : Boolean(collapsedWorkspaceGroups.teams)}
           onToggle={() => onToggleWorkspaceGroup("teams")}
           onAdd={onOpenCreateTeam}
           addLabel={t("teamCreate")}
-          {...sectionDragProps(SectionPanels.agents, id)}
+          presentation={presentation}
+          {...(flat ? {} : sectionDragProps(SectionPanels.agents, id))}
         >
-          {teams.length ? (
-            teams.map((team) => {
+          {visibleTeams.length ? (
+            visibleTeams.map((team) => {
               const memberCount = team.member_agent_ids.length + (team.lead_agent_id ? 1 : 0);
               return (
                 <button
                   key={team.id}
-                  className={`workspace-row team-nav-row ${
-                    activePane.type === WorkspacePaneTypes.team && activePane.id === team.id ? "active" : ""
-                  }`}
+                  className={classNames(
+                    rowStyles.row,
+                    styles.teamRow,
+                    activePane.type === WorkspacePaneTypes.team && activePane.id === team.id && rowStyles.active,
+                  )}
                   onClick={() => onSelectTeam?.(team)}
                 >
-                  <span className="workspace-row-icon">
+                  <span className={rowStyles.icon}>
                     <UsersIcon />
                   </span>
-                  <span className="workspace-row-main">
-                    <span className="workspace-row-title truncate">{displayTeam(team)}</span>
-                    <span className="workspace-row-meta truncate">
+                  <span className={rowStyles.main}>
+                    <span className={classNames(rowStyles.title, "truncate")}>{displayTeam(team)}</span>
+                    <span className={classNames(rowStyles.meta, "truncate")}>
                       {t("teamMembersCount", { count: memberCount })} · {team.status}
                     </span>
                   </span>
@@ -606,227 +752,374 @@ export function WorkspaceTabPanels({
               );
             })
           ) : (
-            <div className="workspace-empty">{t("noTeams")}</div>
+            <div className={styles.empty}>{teams.length ? t("workspaceSearchNoResults") : t("noTeams")}</div>
           )}
         </WorkspaceGroup>
       );
     }
+    const computerVisible = matchesSearch(
+      normalizedContextQuery,
+      t("localComputer"),
+      t("computersSection"),
+      t("computerAgentsSection"),
+    );
     return (
       <WorkspaceGroup
         key={id}
         id="computers"
         title={t("computersSection")}
         count={1}
-        collapsed={Boolean(collapsedWorkspaceGroups.computers)}
+        collapsed={flat ? false : Boolean(collapsedWorkspaceGroups.computers)}
         onToggle={() => onToggleWorkspaceGroup("computers")}
-        {...sectionDragProps(SectionPanels.agents, id)}
+        presentation={presentation}
+        {...(flat ? {} : sectionDragProps(SectionPanels.agents, id))}
       >
-        <WorkspaceComputerRow
-          title={t("localComputer")}
-          active={activePane.type === WorkspacePaneTypes.computer}
-          subtitle={`${t("computerAgentsSection")} ${agentItems.length}`}
-          onSelect={onSelectComputer}
-        />
+        {computerVisible ? (
+          <WorkspaceComputerRow
+            title={t("localComputer")}
+            active={activePane.type === WorkspacePaneTypes.computer}
+            subtitle={`${t("computerAgentsSection")} ${agentItems.length}`}
+            onSelect={onSelectComputer}
+          />
+        ) : (
+          <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
+        )}
       </WorkspaceGroup>
     );
   }
 
+  function renderHubTemplateSection(presentation: "group" | "flat" = "group") {
+    const flat = presentation === "flat";
+    const visibleTemplates = resourcesTemplates.filter(templateMatchesQuery);
+    const renderedTemplates = flat ? visibleTemplates : visibleTemplates.slice(0, 6);
+    return (
+      <WorkspaceGroup
+        id="hub-templates"
+        title={t("resourcesTemplatesSection")}
+        count={resourcesTemplates.length}
+        collapsed={flat ? false : Boolean(collapsedWorkspaceGroups["hub-templates"])}
+        onToggle={() => onToggleWorkspaceGroup("hub-templates")}
+        presentation={presentation}
+      >
+        {resourcesError ? (
+          <div className={styles.empty}>{resourcesError}</div>
+        ) : resourcesLoaded && resourcesTemplates.length === 0 && resourcesSkills.length === 0 ? (
+          <div className={styles.empty}>{t("resourcesEmpty")}</div>
+        ) : resourcesLoaded && resourcesTemplates.length > 0 && !visibleTemplates.length ? (
+          <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
+        ) : (
+          renderedTemplates.map((item) => (
+            <button
+              key={item.id}
+              className={classNames(
+                rowStyles.row,
+                styles.hubTemplateRow,
+                resourcesPaneActive &&
+                  selectedHubTemplateId === item.id &&
+                  selectedHubResourceType === "template" &&
+                  rowStyles.active,
+              )}
+              onClick={() => onSelectHubTemplate(item)}
+            >
+              <span className={rowStyles.icon}>
+                <ModelsIcon />
+              </span>
+              <span className={rowStyles.main}>
+                <span className={classNames(rowStyles.title, "truncate")}>{item.name || item.id}</span>
+                <span className={classNames(rowStyles.meta, "truncate")}>
+                  {item.description || item.source?.name || item.id}
+                </span>
+              </span>
+              <span className={styles.templateSourceBadge}>
+                <span className={styles.templateSourceBadgeDot} aria-hidden="true"></span>
+                {localizeTemplateSourceTag(item.source?.name, locale)}
+              </span>
+            </button>
+          ))
+        )}
+      </WorkspaceGroup>
+    );
+  }
+
+  function renderHubSkillSection(presentation: "group" | "flat" = "group") {
+    const flat = presentation === "flat";
+    const visibleSkills = resourcesSkills.filter(skillMatchesQuery);
+    return (
+      <WorkspaceGroup
+        id="hub-skills"
+        title={t("resourcesSkillsLabel")}
+        count={resourcesSkills.length}
+        collapsed={flat ? false : Boolean(collapsedWorkspaceGroups["hub-skills"])}
+        onToggle={() => onToggleWorkspaceGroup("hub-skills")}
+        onAdd={() => setResolvedSkillUploadOpen(true)}
+        addLabel={t("resourcesSkillUpload")}
+        addIcon={<Plus size={15} strokeWidth={2.2} aria-hidden="true" />}
+        presentation={presentation}
+      >
+        {visibleSkills.length ? (
+          visibleSkills.map((item) => (
+            <button
+              key={item.name}
+              className={classNames(
+                rowStyles.row,
+                styles.hubTemplateRow,
+                styles.hubSkillRow,
+                resourcesPaneActive &&
+                  selectedHubSkillName === item.name &&
+                  selectedHubResourceType === "skill" &&
+                  rowStyles.active,
+              )}
+              onClick={() => onSelectHubSkill(item)}
+            >
+              <span className={rowStyles.icon}>
+                <FileCode2 size={16} strokeWidth={2} aria-hidden="true" />
+              </span>
+              <span className={rowStyles.main}>
+                <span className={classNames(rowStyles.title, "truncate")}>{item.name}</span>
+                <span className={classNames(rowStyles.meta, "truncate")}>{item.description || item.name}</span>
+              </span>
+            </button>
+          ))
+        ) : resourcesSkillsError ? (
+          <div className={styles.empty}>{resourcesSkillsError}</div>
+        ) : resourcesSkills.length ? (
+          <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
+        ) : flat || (resourcesLoaded && resourcesTemplates.length === 0) ? (
+          <div className={styles.empty}>{t("resourcesSkillsEmpty")}</div>
+        ) : null}
+      </WorkspaceGroup>
+    );
+  }
+
+  function renderSkillUploadDialog() {
+    return (
+      <SkillUploadDialog
+        open={resolvedSkillUploadOpen}
+        onOpenChange={setResolvedSkillUploadOpen}
+        onSubmit={(file) => hub?.uploadSkill?.(file)}
+        busy={resourcesUploadBusy}
+        error={resourcesUploadError}
+        installedSkills={resourcesSkills}
+        onInstallRemoteSkill={hub?.installRemoteSkill}
+        onLoadMoreRemoteSkills={hub?.loadMoreRemoteSkills}
+        remoteInstallBusy={hub?.remoteInstallBusy || ""}
+        remoteInstallError={hub?.remoteInstallError || ""}
+        remoteSkillsHasMore={Boolean(hub?.remoteSkillsHasMore)}
+        remoteSkills={hub?.remoteSkills ?? []}
+        remoteSkillsLoading={Boolean(hub?.remoteSkillsLoading)}
+        remoteSkillsLoadingMore={Boolean(hub?.remoteSkillsLoadingMore)}
+        remoteSkillsSearch={hub?.remoteSkillsSearch || ""}
+        remoteSkillsError={hub?.remoteSkillsError || ""}
+        onRefreshRemoteSkills={hub?.refetchRemoteSkills}
+        onRemoteSkillsSearchChange={hub?.setRemoteSkillsSearch}
+        onRemoteVisibleChange={hub?.setRemoteSkillsEnabled}
+        t={t}
+      />
+    );
+  }
+
+  function renderContextSectionPanel(sectionId: WorkspaceContextSectionId) {
+    if (isAgentSectionId(sectionId)) {
+      return (
+        <div
+          className={classNames(styles.panel, styles.flatPanel)}
+          role="tabpanel"
+          aria-label={contextSectionLabel(sectionId)}
+        >
+          {renderAgentSection(sectionId, "flat")}
+        </div>
+      );
+    }
+    if (isHubSectionId(sectionId)) {
+      return (
+        <div
+          className={classNames(styles.panel, styles.flatPanel)}
+          role="tabpanel"
+          aria-label={contextSectionLabel(sectionId)}
+        >
+          {sectionId === HubSectionIds.templates ? renderHubTemplateSection("flat") : null}
+          {sectionId === HubSectionIds.skills ? renderHubSkillSection("flat") : null}
+          {sectionId === HubSectionIds.models ? renderModelProviderSection("flat") : null}
+          {renderSkillUploadDialog()}
+        </div>
+      );
+    }
+    return null;
+  }
+
+  function isAgentSectionId(value: WorkspaceContextSectionId): value is AgentSectionId {
+    return (
+      value === AgentSectionIds.agents ||
+      value === AgentSectionIds.humans ||
+      value === AgentSectionIds.notifications ||
+      value === AgentSectionIds.teams ||
+      value === AgentSectionIds.computers
+    );
+  }
+
+  function isHubSectionId(value: WorkspaceContextSectionId): value is HubSectionId {
+    return value === HubSectionIds.templates || value === HubSectionIds.skills || value === HubSectionIds.models;
+  }
+
+  function contextSectionLabel(sectionId: WorkspaceContextSectionId) {
+    if (sectionId === AgentSectionIds.agents) {
+      return t("computerAgentsSection");
+    }
+    if (sectionId === AgentSectionIds.humans) {
+      return t("humanSection");
+    }
+    if (sectionId === AgentSectionIds.notifications) {
+      return t("notificationsSection");
+    }
+    if (sectionId === AgentSectionIds.teams) {
+      return t("teamsSection");
+    }
+    if (sectionId === AgentSectionIds.computers) {
+      return t("computersSection");
+    }
+    if (sectionId === HubSectionIds.templates) {
+      return t("resourcesTemplatesSection");
+    }
+    if (sectionId === HubSectionIds.skills) {
+      return t("resourcesSkillsLabel");
+    }
+    if (sectionId === HubSectionIds.models) {
+      return t("resourcesModelProvidersSection");
+    }
+    return t("messagesTab");
+  }
+
+  const contextPanel = contextSectionId ? renderContextSectionPanel(contextSectionId) : null;
+
   return (
     <>
-      {workspaceTab === WorkspaceTabs.messages ? (
-        <div className="workspace-tab-panel" role="tabpanel" aria-label={t("messagesTab")}>
+      {contextPanel ? (
+        contextPanel
+      ) : workspaceTab === WorkspaceTabs.messages ? (
+        <div className={styles.panel} role="tabpanel" aria-label={t("messagesTab")}>
           {sectionOrders.messages.map(renderMessageSection)}
         </div>
       ) : workspaceTab === WorkspaceTabs.threads ? (
-        <div className="workspace-tab-panel" role="tabpanel" aria-label={t("threadsTab")}>
+        <div className={styles.panel} role="tabpanel" aria-label={t("threadsTab")}>
           {threadGroups.length ? (
-            threadGroups.map((group) => {
-              const displayUser = isDirectConversation(group.conversation)
-                ? resolveConversationUser(group.conversation, currentUserID, usersById)
-                : null;
-              const groupTitle = displayUser?.name || group.conversation.title || "";
-              return (
-                <WorkspaceGroup
-                  key={group.conversation.id}
-                  id={`threads-${group.conversation.id}`}
-                  title={groupTitle}
-                  count={group.threads.length}
-                  collapsed={Boolean(collapsedWorkspaceGroups[`threads-${group.conversation.id}`])}
-                  onToggle={() => onToggleWorkspaceGroup(`threads-${group.conversation.id}`)}
-                >
-                  {group.threads.map((thread) => {
-                    const rootID = thread.summary?.root_id || thread.root?.id;
-                    return (
-                      <WorkspaceThreadRow
-                        key={`${group.conversation.id}:${rootID}`}
-                        conversation={group.conversation}
-                        thread={thread}
-                        active={
-                          activePane.type === WorkspacePaneTypes.conversation &&
-                          activePane.id === group.conversation.id &&
-                          activeThreadRootID === rootID
-                        }
-                        locale={locale}
-                        t={t}
-                        onSelect={onSelectThread}
-                      />
-                    );
-                  })}
-                </WorkspaceGroup>
-              );
-            })
+            threadGroups
+              .map((group) => ({
+                ...group,
+                threads: group.threads.filter((thread) => threadMatchesQuery(group, thread)),
+              }))
+              .filter((group) => group.threads.length || conversationMatchesQuery(group.conversation))
+              .map((group) => {
+                const displayUser = isDirectConversation(group.conversation)
+                  ? resolveConversationUser(group.conversation, currentUserID, usersById)
+                  : null;
+                const groupTitle = displayUser?.name || group.conversation.title || "";
+                return (
+                  <WorkspaceGroup
+                    key={group.conversation.id}
+                    id={`threads-${group.conversation.id}`}
+                    title={groupTitle}
+                    count={group.threads.length}
+                    collapsed={Boolean(collapsedWorkspaceGroups[`threads-${group.conversation.id}`])}
+                    onToggle={() => onToggleWorkspaceGroup(`threads-${group.conversation.id}`)}
+                  >
+                    {group.threads.map((thread) => {
+                      const rootID = thread.summary?.root_id || thread.root?.id;
+                      return (
+                        <WorkspaceThreadRow
+                          key={`${group.conversation.id}:${rootID}`}
+                          conversation={group.conversation}
+                          thread={thread}
+                          active={
+                            activePane.type === WorkspacePaneTypes.conversation &&
+                            activePane.id === group.conversation.id &&
+                            activeThreadRootID === rootID
+                          }
+                          locale={locale}
+                          t={t}
+                          onSelect={onSelectThread}
+                        />
+                      );
+                    })}
+                  </WorkspaceGroup>
+                );
+              })
           ) : (
-            <div className="workspace-empty">{t("noThreads")}</div>
+            <div className={styles.empty}>{t("noThreads")}</div>
           )}
         </div>
       ) : workspaceTab === WorkspaceTabs.hub ? (
-        <div className="workspace-tab-panel" role="tabpanel" aria-label={t("resourcesTab")}>
-          <WorkspaceGroup
-            id="hub-templates"
-            title={t("resourcesTemplatesSection")}
-            count={resourcesTemplates.length}
-            collapsed={Boolean(collapsedWorkspaceGroups["hub-templates"])}
-            onToggle={() => onToggleWorkspaceGroup("hub-templates")}
-          >
-            {resourcesError ? (
-              <div className="workspace-empty">{resourcesError}</div>
-            ) : resourcesLoaded && resourcesTemplates.length === 0 && resourcesSkills.length === 0 ? (
-              <div className="workspace-empty">{t("resourcesEmpty")}</div>
-            ) : (
-              <>
-                {resourcesTemplates.slice(0, 6).map((item) => (
-                  <button
-                    key={item.id}
-                    className={`workspace-row hub-template-row ${
-                      resourcesPaneActive && selectedHubTemplateId === item.id && selectedHubResourceType === "template"
-                        ? "active"
-                        : ""
-                    }`}
-                    onClick={() => onSelectHubTemplate(item)}
-                  >
-                    <span className="workspace-row-icon">
-                      <ModelsIcon />
-                    </span>
-                    <span className="workspace-row-main">
-                      <span className="workspace-row-title truncate">{item.name || item.id}</span>
-                      <span className="workspace-row-meta truncate">
-                        {item.description || item.source?.name || item.id}
-                      </span>
-                    </span>
-                    <span className="mini-badge template-source-badge">
-                      <span className="template-source-badge-dot" aria-hidden="true"></span>
-                      {localizeTemplateSourceTag(item.source?.name, locale)}
-                    </span>
-                  </button>
-                ))}
-              </>
-            )}
-          </WorkspaceGroup>
-          <WorkspaceGroup
-            id="hub-skills"
-            title={t("resourcesSkillsLabel")}
-            count={resourcesSkills.length}
-            collapsed={Boolean(collapsedWorkspaceGroups["hub-skills"])}
-            onToggle={() => onToggleWorkspaceGroup("hub-skills")}
-            onAdd={() => setSkillUploadOpen(true)}
-            addLabel={t("resourcesSkillUpload")}
-            addIcon={<Plus size={15} strokeWidth={2.2} aria-hidden="true" />}
-          >
-            {resourcesSkills.length ? (
-              resourcesSkills.map((item) => (
-                <button
-                  key={item.name}
-                  className={`workspace-row hub-template-row hub-skill-row ${
-                    resourcesPaneActive && selectedHubSkillName === item.name && selectedHubResourceType === "skill"
-                      ? "active"
-                      : ""
-                  }`}
-                  onClick={() => onSelectHubSkill(item)}
-                >
-                  <span className="workspace-row-icon">
-                    <FileCode2 size={16} strokeWidth={2} aria-hidden="true" />
-                  </span>
-                  <span className="workspace-row-main">
-                    <span className="workspace-row-title truncate">{item.name}</span>
-                    <span className="workspace-row-meta truncate">{item.description || item.name}</span>
-                  </span>
-                </button>
-              ))
-            ) : resourcesSkillsError ? (
-              <div className="workspace-empty">{resourcesSkillsError}</div>
-            ) : resourcesLoaded && resourcesTemplates.length === 0 ? (
-              <div className="workspace-empty">{t("resourcesSkillsEmpty")}</div>
-            ) : null}
-          </WorkspaceGroup>
+        <div className={styles.panel} role="tabpanel" aria-label={t("resourcesTab")}>
+          {renderHubTemplateSection()}
+          {renderHubSkillSection()}
           {renderModelProviderSection()}
-          <SkillUploadDialog
-            open={skillUploadOpen}
-            onOpenChange={setSkillUploadOpen}
-            onSubmit={(file) => hub?.uploadSkill?.(file)}
-            busy={resourcesUploadBusy}
-            error={resourcesUploadError}
-            installedSkills={resourcesSkills}
-            onInstallRemoteSkill={hub?.installRemoteSkill}
-            onLoadMoreRemoteSkills={hub?.loadMoreRemoteSkills}
-            remoteInstallBusy={hub?.remoteInstallBusy || ""}
-            remoteInstallError={hub?.remoteInstallError || ""}
-            remoteSkillsHasMore={Boolean(hub?.remoteSkillsHasMore)}
-            remoteSkills={hub?.remoteSkills ?? []}
-            remoteSkillsLoading={Boolean(hub?.remoteSkillsLoading)}
-            remoteSkillsLoadingMore={Boolean(hub?.remoteSkillsLoadingMore)}
-            remoteSkillsSearch={hub?.remoteSkillsSearch || ""}
-            remoteSkillsError={hub?.remoteSkillsError || ""}
-            onRefreshRemoteSkills={hub?.refetchRemoteSkills}
-            onRemoteSkillsSearchChange={hub?.setRemoteSkillsSearch}
-            onRemoteVisibleChange={hub?.setRemoteSkillsEnabled}
-            t={t}
-          />
+          {renderSkillUploadDialog()}
         </div>
       ) : workspaceTab === WorkspaceTabs.tasks ? (
-        <div className="workspace-tab-panel" role="tabpanel" aria-label={t("tasksTab")}>
+        <div className={styles.panel} role="tabpanel" aria-label={t("tasksTab")}>
           <WorkspaceGroup
             id="tasks"
             title={t("tasksTab")}
             count={taskCount + scheduledTaskCount}
             collapsed={Boolean(collapsedWorkspaceGroups.tasks)}
             onToggle={() => onToggleWorkspaceGroup("tasks")}
-            onAdd={onOpenCreateTask}
-            addLabel={t("taskCreate")}
+            onAdd={
+              activeTaskBoardView === "scheduled" && onOpenCreateScheduledTask
+                ? onOpenCreateScheduledTask
+                : onOpenCreateTask
+            }
+            addLabel={
+              activeTaskBoardView === "scheduled" && onOpenCreateScheduledTask
+                ? t("scheduledTaskCreate")
+                : t("taskCreate")
+            }
             addIcon={<Plus size={15} strokeWidth={2.2} aria-hidden="true" />}
           >
-            <button
-              type="button"
-              className={`workspace-row workspace-task-section-row ${activeTaskBoardView === "tasks" ? "active" : ""}`}
-              onClick={() => {
-                onSelectTaskBoardView("tasks");
-                onSelectTask();
-              }}
-            >
-              <span className="workspace-row-main">
-                <span className="workspace-row-title truncate">{t("normalTasksTab")}</span>
-              </span>
-              <span className="workspace-row-count">{taskCount}</span>
-            </button>
-            <button
-              type="button"
-              className={`workspace-row workspace-task-section-row ${
-                activeTaskBoardView === "scheduled" ? "active" : ""
-              }`}
-              onClick={() => {
-                onSelectTaskBoardView("scheduled");
-                onSelectTask();
-              }}
-            >
-              <span className="workspace-row-main">
-                <span className="workspace-row-title truncate">{t("scheduledTasksTab")}</span>
-              </span>
-              <span className="workspace-row-count">{scheduledTaskCount}</span>
-            </button>
+            {matchesSearch(normalizedContextQuery, t("normalTasksTab")) ? (
+              <button
+                type="button"
+                className={classNames(
+                  rowStyles.row,
+                  styles.taskSectionRow,
+                  activeTaskBoardView === "tasks" && rowStyles.active,
+                )}
+                onClick={() => {
+                  onSelectTaskBoardView("tasks");
+                  onSelectTask();
+                }}
+              >
+                <span className={rowStyles.main}>
+                  <span className={classNames(rowStyles.title, "truncate")}>{t("normalTasksTab")}</span>
+                </span>
+                <span className={rowStyles.rowCount}>{taskCount}</span>
+              </button>
+            ) : null}
+            {matchesSearch(normalizedContextQuery, t("scheduledTasksTab")) ? (
+              <button
+                type="button"
+                className={classNames(
+                  rowStyles.row,
+                  styles.taskSectionRow,
+                  activeTaskBoardView === "scheduled" && rowStyles.active,
+                )}
+                onClick={() => {
+                  onSelectTaskBoardView("scheduled");
+                  onSelectTask();
+                }}
+              >
+                <span className={rowStyles.main}>
+                  <span className={classNames(rowStyles.title, "truncate")}>{t("scheduledTasksTab")}</span>
+                </span>
+                <span className={rowStyles.rowCount}>{scheduledTaskCount}</span>
+              </button>
+            ) : null}
+            {!matchesSearch(normalizedContextQuery, t("normalTasksTab"), t("scheduledTasksTab")) ? (
+              <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
+            ) : null}
           </WorkspaceGroup>
         </div>
       ) : (
-        <div className="workspace-tab-panel" role="tabpanel" aria-label={t("agentsTab")}>
-          {sectionOrders.agents.map(renderAgentSection)}
+        <div className={styles.panel} role="tabpanel" aria-label={t("agentsTab")}>
+          {sectionOrders.agents.map((sectionId) => renderAgentSection(sectionId))}
         </div>
       )}
       {agentsError ? <div className="form-error agent-error">{agentsError}</div> : null}
