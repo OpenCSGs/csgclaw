@@ -285,6 +285,8 @@
   font-size: 13px;
   line-height: 1.55;
   text-align: center;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .message-row.own {

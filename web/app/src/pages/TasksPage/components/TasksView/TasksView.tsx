@@ -193,9 +193,10 @@ function agentNameLookup(agents: readonly AgentLike[]): ReadonlyMap<string, stri
   return lookup;
 }
 
-function displayAgentByID(agentID: string, lookup: ReadonlyMap<string, string>): string {
+function displayAgentByID(agentID: string, lookup: ReadonlyMap<string, string>, fallbackName?: string): string {
   const id = String(agentID || "").trim();
-  return id ? lookup.get(id) || id : "";
+  const name = String(fallbackName || "").trim();
+  return id ? name || lookup.get(id) || id : name;
 }
 
 function todayInputValue(now = new Date()): string {
@@ -276,6 +277,17 @@ function scheduledTaskRunTimeChanged(current: string, next: string): boolean {
     return current !== next;
   }
   return currentTime !== nextTime;
+}
+
+function scheduledTaskRunErrorLabel(error: string, t: TranslateFn): string {
+  const message = String(error || "").trim();
+  if (!message) {
+    return "";
+  }
+  if (/^agent\s+"[^"]+"\s+not found$/i.test(message) || /^agent\s+not found$/i.test(message)) {
+    return t("scheduledTaskRunAgentMissingError");
+  }
+  return message;
 }
 
 function isTerminalWorkspaceTaskStatus(status: string): boolean {
@@ -822,7 +834,11 @@ export function TasksView({
                             <div>
                               <dt>{t("scheduledTaskAgentLabel")}</dt>
                               <dd title={selectedScheduledTask.agent_id}>
-                                {displayAgentByID(selectedScheduledTask.agent_id, agentNames)}
+                                {displayAgentByID(
+                                  selectedScheduledTask.agent_id,
+                                  agentNames,
+                                  selectedScheduledTask.agent_name,
+                                )}
                               </dd>
                             </div>
                             <div>
@@ -860,7 +876,9 @@ export function TasksView({
                                         {run.task_id}
                                       </button>
                                     ) : null}
-                                    {run.error ? <small>{run.error}</small> : null}
+                                    {run.error ? (
+                                      <small title={run.error}>{scheduledTaskRunErrorLabel(run.error, t)}</small>
+                                    ) : null}
                                   </div>
                                 ))}
                               </div>

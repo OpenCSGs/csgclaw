@@ -30,7 +30,7 @@ import type { NavigatePaneOptions } from "./types";
 const TASKS_QUERY_KEY = ["workspace", "tasks"] as const;
 const SCHEDULED_TASKS_QUERY_KEY = ["workspace", "scheduled-tasks"] as const;
 const TASK_BOARD_POLL_DELAY_MS = 3000;
-const TASK_BOARD_POLL_STATUSES = new Set(["pending", "assigned", "in_progress"]);
+const TASK_BOARD_POLL_STATUSES = new Set(["pending", "assigned", "in_progress", "running"]);
 const TASK_TAB_REVALIDATE_STALE_MS = 5000;
 const teamEventsQueryKey = (teamID: string) => ["workspace", "team-events", teamID] as const;
 const scheduledTaskRunsQueryKey = (taskID: string) => ["workspace", "scheduled-task-runs", taskID] as const;
@@ -76,7 +76,6 @@ export function useTaskController({
   const [taskActionError, setTaskActionError] = useState("");
   const [parentDetailTaskID, setParentDetailTaskID] = useState("");
   const lastTaskTabRevalidateAttemptAt = useRef(0);
-  const lastScheduledGeneratedTasksRefreshKey = useRef("");
   const tasksQuery = useQuery({
     queryKey: TASKS_QUERY_KEY,
     queryFn: fetchGlobalTasks,
@@ -148,9 +147,18 @@ export function useTaskController({
         ? selectedTask.team_id
         : "";
   const shouldPollActiveTaskBoard = useMemo(() => shouldPollTaskBoard(tasks, activeRootTask), [activeRootTask, tasks]);
+  const shouldPollScheduledGeneratedTasks = useMemo(
+    () =>
+      Array.from(scheduledGeneratedTaskIDs).some((taskID) => {
+        const task = tasks.find((item) => item.id === taskID) ?? null;
+        const root = rootTaskForTask(tasks, task);
+        return shouldPollTaskBoard(tasks, root);
+      }),
+    [scheduledGeneratedTaskIDs, tasks],
+  );
   const shouldPollTasks = useMemo(
-    () => shouldPollActiveTaskBoard || shouldPollTransitionalTasks(tasks),
-    [shouldPollActiveTaskBoard, tasks],
+    () => shouldPollActiveTaskBoard || shouldPollScheduledGeneratedTasks || shouldPollTransitionalTasks(tasks),
+    [shouldPollActiveTaskBoard, shouldPollScheduledGeneratedTasks, tasks],
   );
   const taskEventsQuery = useQuery({
     queryKey: teamEventsQueryKey(activeEventsTeamID),
@@ -231,18 +239,22 @@ export function useTaskController({
 
   useEffect(() => {
     if (taskBoardView !== "scheduled") {
-      return;
+      return undefined;
     }
     if (missingScheduledGeneratedTaskIDs.length === 0) {
-      lastScheduledGeneratedTasksRefreshKey.current = "";
-      return;
+      return undefined;
     }
-    const refreshKey = missingScheduledGeneratedTaskIDs.join("\n");
-    if (lastScheduledGeneratedTasksRefreshKey.current === refreshKey) {
-      return;
-    }
-    lastScheduledGeneratedTasksRefreshKey.current = refreshKey;
-    void refetchTasks();
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (cancelled) {
+        return;
+      }
+      await refetchTasks();
+    }, TASK_BOARD_POLL_DELAY_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [missingScheduledGeneratedTaskIDs, refetchTasks, taskBoardView]);
 
   function taskById(taskId: string) {
@@ -378,9 +390,20 @@ export function useTaskController({
     setScheduledTaskActionError("");
     try {
       const run = await runScheduledTaskNow(taskID);
-      await scheduledTasksQuery.refetch();
-      await queryClient.invalidateQueries({ queryKey: scheduledTaskRunsQueryKey(taskID) });
-      await tasksQuery.refetch();
+      queryClient.setQueryData<WorkspaceScheduledTaskRun[]>(scheduledTaskRunsQueryKey(taskID), (current = []) =>
+        mergeScheduledTaskRuns([run], current),
+      );
+      queryClient.setQueryData<WorkspaceScheduledTaskRun[]>(
+        scheduledTaskRunsAllQueryKey(scheduledTaskIDsCacheKey(scheduledTasks)),
+        (current = []) => mergeScheduledTaskRuns([run], current),
+      );
+      await refreshScheduledTaskState();
+      const taskResult = await tasksQuery.refetch();
+      if (taskResult.data) {
+        queryClient.setQueryData<WorkspaceTask[]>(TASKS_QUERY_KEY, (current) =>
+          mergeWorkspaceTaskList(current ?? [], taskResult.data ?? []),
+        );
+      }
       if (run.task_id) {
         onSelectTask(run.task_id);
       }

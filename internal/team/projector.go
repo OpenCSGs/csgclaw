@@ -353,16 +353,7 @@ func renderTaskAssignmentEventTitle(taskID, title string) string {
 }
 
 func compactTaskAssignmentTitle(title string) string {
-	const maxRunes = 5
-	title = strings.Join(strings.Fields(strings.TrimSpace(title)), " ")
-	if title == "" {
-		return ""
-	}
-	runes := []rune(title)
-	if len(runes) <= maxRunes {
-		return title
-	}
-	return string(runes[:maxRunes]) + "..."
+	return strings.Join(strings.Fields(strings.TrimSpace(title)), " ")
 }
 
 func renderTitleSuffix(title string) string {

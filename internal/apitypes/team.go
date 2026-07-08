@@ -214,6 +214,7 @@ type ScheduledTask struct {
 	ID         string     `json:"id"`
 	Title      string     `json:"title"`
 	AgentID    string     `json:"agent_id"`
+	AgentName  string     `json:"agent_name,omitempty"`
 	Prompt     string     `json:"prompt"`
 	Recurrence string     `json:"recurrence"`
 	Enabled    bool       `json:"enabled"`

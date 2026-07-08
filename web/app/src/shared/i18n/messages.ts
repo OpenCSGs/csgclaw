@@ -413,6 +413,7 @@ export const messages = {
     scheduledTaskCompleted: "已完成",
     scheduledTaskRunTriggeredStatus: "已触发",
     scheduledTaskRunFailedStatus: "失败",
+    scheduledTaskRunAgentMissingError: "指派的 Agent 已删除或不存在，请重新选择 Agent 后再运行。",
     taskAssigneeUnassigned: "暂不指定",
     taskKindLabel: "类型",
     taskKindParent: "任务",
@@ -1357,6 +1358,8 @@ export const messages = {
     scheduledTaskCompleted: "Completed",
     scheduledTaskRunTriggeredStatus: "Triggered",
     scheduledTaskRunFailedStatus: "Failed",
+    scheduledTaskRunAgentMissingError:
+      "The assigned agent was deleted or no longer exists. Choose another agent before running again.",
     taskAssigneeUnassigned: "Unassigned",
     taskKindLabel: "Kind",
     taskKindParent: "Task",
