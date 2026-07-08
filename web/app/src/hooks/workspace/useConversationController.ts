@@ -303,6 +303,7 @@ export function activityWorkingParticipantsForConversation(
     }
 
     if (target && !isToolCallMessage(message)) {
+      activeToolKeysByParticipantID.delete(target.id);
       activeLegacyCommandCountsByParticipantID.delete(target.id);
     }
   });

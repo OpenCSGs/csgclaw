@@ -27,6 +27,8 @@ const labels: Record<string, string> = {
   taskNoDependencies: "No dependencies",
   taskOpenExecutionRoom: "Open execution room",
   taskOpenExecutionRoomShort: "Room",
+  taskOpenConversation: "View history",
+  taskConversationAgentDeleted: "Cannot open history: the corresponding agent was deleted.",
   taskParentDetailTitle: "Task detail",
   taskRoomLabel: "Room",
   taskCreate: "New task",
@@ -590,6 +592,41 @@ describe("TasksView", () => {
     );
   });
 
+  it("reactivates a disabled scheduled task when editing to a new run time", async () => {
+    const onEditScheduledTask = vi.fn();
+    const agents = [agent()];
+    const item = scheduledTask({
+      enabled: false,
+      next_run_at: "2026-07-07T09:30:00Z",
+      expires_at: "",
+      recurrence: "daily",
+    });
+
+    render(
+      <TasksView
+        agents={agents}
+        scheduledTasks={[item]}
+        selectedScheduledTaskID={item.id}
+        editingScheduledTaskID={item.id}
+        onEditScheduledTask={onEditScheduledTask}
+        t={t}
+      />,
+    );
+
+    fireEvent.input(screen.getByLabelText("Time"), { target: { value: "10:15" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(onEditScheduledTask).toHaveBeenCalledWith(
+        item.id,
+        expect.objectContaining({
+          next_run_at: new Date("2026-07-07T10:15:00").toISOString(),
+          enabled: true,
+        }),
+      ),
+    );
+  });
+
   it("allows daily scheduled task edits with only a time", async () => {
     const onEditScheduledTask = vi.fn();
     const agents = [agent()];
@@ -672,6 +709,37 @@ describe("TasksView", () => {
     expect(screen.getByLabelText("Generated task detail")).toBeInTheDocument();
     expect(screen.getByText("Generated report")).toBeInTheDocument();
     expect(screen.getByText("Generated task body")).toBeInTheDocument();
+  });
+
+  it("warns instead of navigating when a scheduled run room no longer exists", () => {
+    const onOpenConversation = vi.fn();
+    const generatedTask = task({
+      id: "task-scheduled-run-1",
+      title: "Generated report",
+      assignment_type: "agent",
+      assignment_id: "agent-1",
+      agent_id: "agent-1",
+      room_id: "room-deleted-agent",
+      status: "completed",
+    } as Partial<WorkspaceTask>);
+
+    render(
+      <TasksView
+        activeView="scheduled"
+        tasks={[generatedTask]}
+        rooms={[]}
+        scheduledTasks={[scheduledTask()]}
+        scheduledTaskRuns={[scheduledTaskRun()]}
+        selectedScheduledTaskID="scheduled-task-1"
+        onOpenConversation={onOpenConversation}
+        t={t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View history" }));
+
+    expect(onOpenConversation).not.toHaveBeenCalled();
+    expect(screen.getByText("Cannot open history: the corresponding agent was deleted.")).toBeInTheDocument();
   });
 
   it("keeps the generated task detail area reserved before a run is selected", () => {

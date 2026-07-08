@@ -24,7 +24,7 @@ import { rootTaskForTask, type WorkspaceTask, rootTasks, shouldPollTransitionalT
 import type { WorkspaceScheduledTaskRun } from "@/models/scheduledTasks";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import type { AgentLike } from "@/models/agents";
-import type { TranslateFn } from "@/models/conversations";
+import type { IMConversation, TranslateFn } from "@/models/conversations";
 import type { NavigatePaneOptions } from "./types";
 
 const TASKS_QUERY_KEY = ["workspace", "tasks"] as const;
@@ -41,6 +41,7 @@ export type TaskBoardView = "tasks" | "scheduled";
 type UseTaskControllerArgs = {
   activePane: { type?: string; id?: string };
   agents: AgentLike[];
+  rooms?: readonly Pick<IMConversation, "id">[];
   t: TranslateFn;
   onSelectConversation: (id: string) => void;
   onSelectTask: (taskID?: string, options?: NavigatePaneOptions) => void;
@@ -49,6 +50,7 @@ type UseTaskControllerArgs = {
 export function useTaskController({
   activePane,
   agents,
+  rooms,
   t,
   onSelectConversation,
   onSelectTask,
@@ -536,6 +538,7 @@ export function useTaskController({
       taskActionError,
       scheduledTaskActionID,
       scheduledTaskActionError,
+      rooms,
       showCreateTaskModal,
       editingScheduledTaskID,
       parentDetailTaskID,

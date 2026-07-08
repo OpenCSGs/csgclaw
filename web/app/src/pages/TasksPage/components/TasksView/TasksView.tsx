@@ -18,7 +18,7 @@ import { TaskStatusPill, TaskSubtaskIndicator } from "@/components/business";
 import type { CreateWorkspaceTaskPayload } from "@/api/tasks";
 import type { CreateScheduledTaskPayload, UpdateScheduledTaskPayload } from "@/api/scheduledTasks";
 import type { AgentLike } from "@/models/agents";
-import type { TranslateFn } from "@/models/conversations";
+import type { IMConversation, TranslateFn } from "@/models/conversations";
 import {
   scheduledTaskRecurrenceLabel,
   type ScheduledTaskRecurrence,
@@ -248,6 +248,18 @@ function scheduledTaskDraftFromTask(task: WorkspaceScheduledTask): ScheduledTask
   };
 }
 
+function scheduledTaskRunTimeChanged(current: string, next: string): boolean {
+  if (!current || !next) {
+    return current !== next;
+  }
+  const currentTime = new Date(current).getTime();
+  const nextTime = new Date(next).getTime();
+  if (Number.isNaN(currentTime) || Number.isNaN(nextTime)) {
+    return current !== next;
+  }
+  return currentTime !== nextTime;
+}
+
 function isTerminalWorkspaceTaskStatus(status: string): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
 }
@@ -282,6 +294,7 @@ export type TasksViewProps = {
   parentDetailTaskID?: string;
   planTaskBusy?: boolean;
   planningTaskID?: string;
+  rooms?: readonly Pick<IMConversation, "id">[];
   selectedTask?: WorkspaceTask | null;
   selectedScheduledTaskID?: string;
   showCreateTaskModal?: boolean;
@@ -336,6 +349,7 @@ export function TasksView({
   parentDetailTaskID = "",
   planningTaskID = "",
   startingTaskID = "",
+  rooms,
   onCloseCreateTaskModal,
   onCloseEditScheduledTaskModal,
   onCloseParentTaskDetail,
@@ -410,6 +424,8 @@ export function TasksView({
     () => (selectedGeneratedTask ? taskChildren(tasks, selectedGeneratedTask.id) : []),
     [selectedGeneratedTask, tasks],
   );
+  const [conversationOpenError, setConversationOpenError] = useState("");
+  const availableRoomIDs = useMemo(() => (rooms ? new Set(rooms.map((room) => room.id)) : null), [rooms]);
 
   useEffect(() => {
     if (!showCreateTaskModal) {
@@ -550,7 +566,9 @@ export function TasksView({
       return;
     }
     setEditScheduledFieldErrors({});
-    const shouldReactivateCompletedTask = !editingScheduledTask.enabled && !editingScheduledTask.next_run_at;
+    const nextRunChanged = scheduledTaskRunTimeChanged(editingScheduledTask.next_run_at, result.nextRunAt);
+    const shouldReactivateEditedSchedule =
+      !editingScheduledTask.enabled && (!editingScheduledTask.next_run_at || nextRunChanged);
     await onEditScheduledTask?.(editingScheduledTask.id, {
       title: result.title,
       agent_id: editScheduledDraft.agentID,
@@ -558,7 +576,7 @@ export function TasksView({
       recurrence: editScheduledDraft.recurrence,
       next_run_at: result.nextRunAt,
       expires_at: editScheduledDraft.expiresDate ? localDateTimeISO(editScheduledDraft.expiresDate, "23:59") : null,
-      enabled: shouldReactivateCompletedTask ? true : editingScheduledTask.enabled,
+      enabled: shouldReactivateEditedSchedule ? true : editingScheduledTask.enabled,
     });
   }
 
@@ -596,6 +614,20 @@ export function TasksView({
 
   function openRunTask(taskID: string) {
     setSelectedGeneratedTaskID(taskID);
+    setConversationOpenError("");
+  }
+
+  function openTaskConversation(roomID: string) {
+    const normalizedRoomID = String(roomID || "").trim();
+    if (!normalizedRoomID) {
+      return;
+    }
+    if (availableRoomIDs && !availableRoomIDs.has(normalizedRoomID)) {
+      setConversationOpenError(t("taskConversationAgentDeleted"));
+      return;
+    }
+    setConversationOpenError("");
+    void onOpenConversation(normalizedRoomID);
   }
 
   async function confirmDeleteScheduledTask() {
@@ -614,6 +646,9 @@ export function TasksView({
       ) : null}
       {scheduledTaskActionError ? (
         <div className={classNames("form-error", styles.tasksActionError)}>{scheduledTaskActionError}</div>
+      ) : null}
+      {conversationOpenError ? (
+        <div className={classNames("form-error", styles.tasksActionError)}>{conversationOpenError}</div>
       ) : null}
       {!error ? (
         <div className={styles.tasksBoardWorkbench} aria-busy={loading}>
@@ -819,7 +854,7 @@ export function TasksView({
                             teams={teams}
                             taskEvents={taskEvents}
                             t={t}
-                            onOpenConversation={onOpenConversation}
+                            onOpenConversation={openTaskConversation}
                           />
                         </>
                       ) : (
@@ -843,7 +878,7 @@ export function TasksView({
         taskEvents={taskEvents}
         open={Boolean(parentDialogTask)}
         onClose={closeRootTaskDetail}
-        onOpenConversation={onOpenConversation}
+        onOpenConversation={openTaskConversation}
       />
       <DialogRoot open={showCreateTaskModal} onOpenChange={(open) => (!open ? onCloseCreateTaskModal?.() : null)}>
         <DialogContent className={styles.taskCreateDialog}>

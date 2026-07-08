@@ -468,6 +468,7 @@ export function useWorkspaceController() {
   const task = useTaskController({
     activePane,
     agents: agent.agentItems,
+    rooms,
     t,
     onSelectConversation: selectConversation,
     onSelectTask: selectTasks,

@@ -81,6 +81,22 @@ describe("activityWorkingParticipantsForConversation", () => {
     expect(participants).toEqual([]);
   });
 
+  it("clears a structured tool when the agent sends a runtime error reply", () => {
+    const participants = activityWorkingParticipantsForConversation(
+      conversationWithMessages([
+        toolActivityMessage("running"),
+        agentTextMessage(
+          "Runtime error: unsupported_feature:input.web_search_call (type=invalid_request_error, code=unsupported_feature)",
+        ),
+      ]),
+      "user-admin",
+      agents,
+      usersById,
+    );
+
+    expect(participants).toEqual([]);
+  });
+
   it("keeps an agent working after a PicoClaw legacy tool message without status", () => {
     const participants = activityWorkingParticipantsForConversation(
       conversationWithMessages([legacyToolMessage({ command: "run node inline script" })]),

@@ -421,6 +421,7 @@ export const messages = {
     taskShowChildren: "查看 {count} 个子任务",
     taskHideChildren: "收起子任务",
     taskOpenConversation: "查看记录",
+    taskConversationAgentDeleted: "无法打开记录：对应 Agent 已删除，执行房间不存在。",
     taskOpenConversationShort: "记录",
     taskOpenExecutionRoom: "打开执行房间",
     taskOpenExecutionRoomShort: "房间",
@@ -1363,6 +1364,8 @@ export const messages = {
     taskShowChildren: "Show {count} child tasks",
     taskHideChildren: "Hide child tasks",
     taskOpenConversation: "View history",
+    taskConversationAgentDeleted:
+      "Cannot open history: the corresponding agent was deleted and the execution room no longer exists.",
     taskOpenConversationShort: "History",
     taskOpenExecutionRoom: "Open execution room",
     taskOpenExecutionRoomShort: "Room",
