@@ -47,6 +47,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     logAgent,
     managerProfile,
     managerProfileIncomplete,
+    managerRuntimeUnavailable,
     memberMenuRef,
     mentionCandidates,
     mentionIndex,
@@ -108,7 +109,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
   const logAgentID = logAgent?.id || "";
   const logAgentName = logAgent?.name || conversation.title || "";
-  const composerDisabled = Boolean(managerProfileIncomplete);
+  const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
+  const composerDisabled = Boolean(managerRuntimeUnavailable || managerProfileIncomplete);
   const floatingConversationMessages = conversation.messages.filter((message) => !isManagerBootstrapNotice(message));
   const floatingVisibleMessages = visibleMessages.filter((message) => !isManagerBootstrapNotice(message));
   const floatingConversation =
@@ -237,6 +239,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         authBusyProvider={authBusyProvider}
         authStatuses={authStatuses}
         composerDisabled={composerDisabled}
+        composerDisabledReason={composerDisabledReason}
         composerError={composerError}
         draftSegments={draftSegments}
         draftText={draftText}

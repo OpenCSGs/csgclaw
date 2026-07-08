@@ -30,6 +30,7 @@ export type ConversationComposerProps = {
   connectorPending?: boolean;
   connectorStatus?: ConnectorStatus;
   composerDisabled: boolean;
+  composerDisabledReason?: string;
   composerError: string;
   draftSegments: ComposerSegment[];
   draftText: string;
@@ -67,6 +68,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   connectorPending = false,
   connectorStatus,
   composerDisabled,
+  composerDisabledReason = "",
   composerError,
   draftSegments,
   draftText,
@@ -127,7 +129,7 @@ export const ConversationComposer = memo(function ConversationComposer({
         <div className="composer-input-wrap">
           {draftSegments.length === 0 ? (
             <div className="composer-placeholder" aria-hidden="true">
-              {composerDisabled ? t("profileIncomplete") : t("inputPlaceholder")}
+              {composerDisabled ? composerDisabledReason || t("profileIncomplete") : t("inputPlaceholder")}
             </div>
           ) : null}
           <div

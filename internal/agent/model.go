@@ -16,6 +16,8 @@ const (
 	RoleManager = "manager"
 )
 
+const StatusRuntimeUnavailable = "runtime_unavailable"
+
 type Agent struct {
 	ID               string                   `json:"id"`
 	Name             string                   `json:"name"`
@@ -363,30 +365,43 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 }
 
 type UpdateRequest struct {
-	Name           *string         `json:"name,omitempty"`
-	Description    *string         `json:"description,omitempty"`
-	Instructions   *string         `json:"instructions,omitempty"`
-	Image          *string         `json:"image,omitempty"`
-	Avatar         *string         `json:"-"`
-	Profile        *string         `json:"profile,omitempty"`
-	RuntimeOptions *map[string]any `json:"runtime_options,omitempty"`
-	AgentProfile   *AgentProfile   `json:"agent_profile,omitempty"`
-	FieldMask      []string        `json:"field_mask,omitempty"`
+	Name                      *string         `json:"name,omitempty"`
+	Description               *string         `json:"description,omitempty"`
+	Instructions              *string         `json:"instructions,omitempty"`
+	Image                     *string         `json:"image,omitempty"`
+	Avatar                    *string         `json:"-"`
+	Profile                   *string         `json:"profile,omitempty"`
+	RuntimeKind               string          `json:"-"`
+	RuntimeName               string          `json:"-"`
+	SandboxEnabled            *bool           `json:"-"`
+	RuntimeSelectionRequested bool            `json:"-"`
+	RuntimeOptions            *map[string]any `json:"runtime_options,omitempty"`
+	AgentProfile              *AgentProfile   `json:"agent_profile,omitempty"`
+	FieldMask                 []string        `json:"field_mask,omitempty"`
 }
 
 func (r *UpdateRequest) UnmarshalJSON(data []byte) error {
+	type runtimeUpdateJSON struct {
+		Kind           string         `json:"kind,omitempty"`
+		Name           string         `json:"name,omitempty"`
+		SandboxEnabled *bool          `json:"sandbox_enabled,omitempty"`
+		Options        map[string]any `json:"options,omitempty"`
+	}
 	type updateRequestJSON struct {
-		Name           *string         `json:"name,omitempty"`
-		Description    *string         `json:"description,omitempty"`
-		Instructions   *string         `json:"instructions,omitempty"`
-		Image          *string         `json:"image,omitempty"`
-		Avatar         *string         `json:"-"`
-		ModelConfig    json.RawMessage `json:"model_config,omitempty"`
-		Profile        json.RawMessage `json:"profile,omitempty"`
-		Runtime        *RuntimeRecord  `json:"runtime,omitempty"`
-		RuntimeOptions *map[string]any `json:"runtime_options,omitempty"`
-		AgentProfile   *AgentProfile   `json:"agent_profile,omitempty"`
-		FieldMask      []string        `json:"field_mask,omitempty"`
+		Name           *string            `json:"name,omitempty"`
+		Description    *string            `json:"description,omitempty"`
+		Instructions   *string            `json:"instructions,omitempty"`
+		Image          *string            `json:"image,omitempty"`
+		Avatar         *string            `json:"-"`
+		RuntimeKind    string             `json:"runtime_kind,omitempty"`
+		RuntimeName    string             `json:"runtime_name,omitempty"`
+		SandboxEnabled *bool              `json:"sandbox_enabled,omitempty"`
+		ModelConfig    json.RawMessage    `json:"model_config,omitempty"`
+		Profile        json.RawMessage    `json:"profile,omitempty"`
+		Runtime        *runtimeUpdateJSON `json:"runtime,omitempty"`
+		RuntimeOptions *map[string]any    `json:"runtime_options,omitempty"`
+		AgentProfile   *AgentProfile      `json:"agent_profile,omitempty"`
+		FieldMask      []string           `json:"field_mask,omitempty"`
 	}
 	var decoded updateRequestJSON
 	if err := json.Unmarshal(data, &decoded); err != nil {
@@ -397,6 +412,9 @@ func (r *UpdateRequest) UnmarshalJSON(data []byte) error {
 		Description:    decoded.Description,
 		Instructions:   decoded.Instructions,
 		Image:          decoded.Image,
+		RuntimeKind:    strings.TrimSpace(decoded.RuntimeKind),
+		RuntimeName:    strings.TrimSpace(decoded.RuntimeName),
+		SandboxEnabled: decoded.SandboxEnabled,
 		RuntimeOptions: decoded.RuntimeOptions,
 		AgentProfile:   decoded.AgentProfile,
 		FieldMask:      append([]string(nil), decoded.FieldMask...),
@@ -421,15 +439,43 @@ func (r *UpdateRequest) UnmarshalJSON(data []byte) error {
 			profileField = "profile"
 		}
 	}
-	if decoded.Runtime != nil && len(decoded.Runtime.Options) > 0 {
-		options := utils.CloneAnyMap(decoded.Runtime.Options)
-		out.RuntimeOptions = &options
+	if decoded.Runtime != nil {
+		if strings.TrimSpace(out.RuntimeKind) == "" {
+			out.RuntimeKind = strings.TrimSpace(decoded.Runtime.Kind)
+		}
+		if strings.TrimSpace(out.RuntimeName) == "" {
+			out.RuntimeName = strings.TrimSpace(decoded.Runtime.Name)
+		}
+		if out.SandboxEnabled == nil {
+			out.SandboxEnabled = decoded.Runtime.SandboxEnabled
+		}
+		if len(decoded.Runtime.Options) > 0 {
+			options := utils.CloneAnyMap(decoded.Runtime.Options)
+			out.RuntimeOptions = &options
+		}
 	}
+	rawRuntimeSelectionRequested := strings.TrimSpace(out.RuntimeKind) != "" ||
+		strings.TrimSpace(out.RuntimeName) != "" ||
+		out.SandboxEnabled != nil
+	out.RuntimeSelectionRequested = rawRuntimeSelectionRequested && updateFieldMaskRequestsRuntimeSelection(out.FieldMask)
 	if len(out.FieldMask) > 0 {
 		out.FieldMask = normalizeCompactUpdateFieldMask(out.FieldMask, profileField, decoded.Runtime != nil)
 	}
 	*r = out
 	return nil
+}
+
+func updateFieldMaskRequestsRuntimeSelection(fieldMask []string) bool {
+	if len(fieldMask) == 0 {
+		return true
+	}
+	for _, field := range fieldMask {
+		switch strings.ToLower(strings.TrimSpace(field)) {
+		case "runtime", "runtime_kind", "runtime_name", "sandbox_enabled":
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeCompactUpdateFieldMask(fieldMask []string, profileField string, hasRuntime bool) []string {

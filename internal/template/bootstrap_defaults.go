@@ -21,21 +21,12 @@ type BootstrapDefaults struct {
 func ResolveBootstrapDefaults(ctx context.Context, bootstrap config.BootstrapConfig, svc *Service) (BootstrapDefaults, error) {
 	defaults := BootstrapDefaults{
 		ManagerTemplateRef: bootstrap.ResolvedDefaultManagerTemplate(),
+		ManagerRuntimeKind: runtime.KindCodex,
 		WorkerTemplateRef:  bootstrap.ResolvedDefaultWorkerTemplate(),
 	}
 	if svc == nil {
 		return BootstrapDefaults{}, fmt.Errorf("hub service is required to resolve bootstrap templates")
 	}
-
-	manager, err := svc.Get(ctx, defaults.ManagerTemplateRef)
-	if err != nil {
-		return BootstrapDefaults{}, fmt.Errorf("resolve bootstrap manager template %q: %w", defaults.ManagerTemplateRef, err)
-	}
-	defaults.ManagerRuntimeKind = manager.RuntimeKind
-	if templateLegacyRuntimeKind(defaults.ManagerRuntimeKind) != runtime.KindPicoClawSandbox {
-		return BootstrapDefaults{}, fmt.Errorf("bootstrap manager template %q uses unsupported runtime_kind %q (use %q)", defaults.ManagerTemplateRef, manager.RuntimeKind, runtime.KindPicoClawSandbox)
-	}
-	defaults.ManagerImage = strings.TrimSpace(manager.Image)
 
 	worker, err := svc.Get(ctx, defaults.WorkerTemplateRef)
 	if err != nil {

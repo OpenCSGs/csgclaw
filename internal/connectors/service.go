@@ -231,11 +231,12 @@ func (s *Service) Disconnect(ctx context.Context, provider string) (Status, erro
 	return s.Status(ctx, provider, "")
 }
 
-func (s *Service) Credential(_ context.Context, provider string) (Credential, error) {
+func (s *Service) Credential(ctx context.Context, provider string) (Credential, error) {
 	if err := validateProvider(provider); err != nil {
 		return Credential{}, err
 	}
-	state, ok, err := s.store().LoadGitHub()
+	store := s.store()
+	state, ok, err := store.LoadGitHub()
 	if err != nil {
 		return Credential{}, err
 	}
@@ -243,12 +244,58 @@ func (s *Service) Credential(_ context.Context, provider string) (Credential, er
 		return Credential{}, fmt.Errorf("github connector is not connected")
 	}
 	token := normalizeToken(state.Token)
+	if token == nil || strings.TrimSpace(token.AccessToken) == "" {
+		return Credential{}, fmt.Errorf("github connector is not connected")
+	}
+	validToken := *token
+	if s.tokenExpired(validToken) {
+		refreshed, err := s.refreshStoredGitHubToken(ctx, store, state, validToken)
+		if err != nil {
+			return Credential{}, fmt.Errorf("github connector credential is invalid or expired; reconnect GitHub: %w", err)
+		}
+		validToken = refreshed
+	} else if _, err := s.fetchGitHubAccount(ctx, validToken); err != nil {
+		refreshed, refreshErr := s.refreshStoredGitHubToken(ctx, store, state, validToken)
+		if refreshErr != nil {
+			return Credential{}, fmt.Errorf("github connector credential is invalid or expired; reconnect GitHub: %w", err)
+		}
+		validToken = refreshed
+	}
 	return Credential{
 		Provider:    ProviderGitHub,
-		AccessToken: token.AccessToken,
-		TokenType:   token.TokenType,
-		Scopes:      cloneStrings(token.Scopes),
+		AccessToken: validToken.AccessToken,
+		TokenType:   validToken.TokenType,
+		Scopes:      cloneStrings(validToken.Scopes),
 	}, nil
+}
+
+func (s *Service) refreshStoredGitHubToken(ctx context.Context, store Store, state State, token Token) (Token, error) {
+	refreshToken := strings.TrimSpace(token.RefreshToken)
+	if refreshToken == "" {
+		return Token{}, fmt.Errorf("refresh token is not available")
+	}
+	if !token.RefreshTokenExpiresAt.IsZero() && !s.now().Before(token.RefreshTokenExpiresAt) {
+		return Token{}, fmt.Errorf("refresh token is expired")
+	}
+	config := s.githubOAuthConfig(state.Config)
+	if config.ClientID == "" || config.ClientSecret == "" {
+		return Token{}, fmt.Errorf("github oauth app is not configured")
+	}
+	refreshed, err := s.refreshGitHubToken(ctx, config, refreshToken)
+	if err != nil {
+		return Token{}, err
+	}
+	account, err := s.fetchGitHubAccount(ctx, refreshed)
+	if err != nil {
+		return Token{}, err
+	}
+	state.Token = &refreshed
+	state.Account = &account
+	state.UpdatedAt = s.now()
+	if err := store.SaveGitHub(state); err != nil {
+		return Token{}, err
+	}
+	return refreshed, nil
 }
 
 func (s *Service) StartGitHubAppInstall(_ context.Context, provider string) (AppInstallStartResponse, error) {
@@ -311,33 +358,86 @@ func (s *Service) exchangeCode(ctx context.Context, config Config, pending Pendi
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	var resp struct {
-		AccessToken string `json:"access_token"`
-		TokenType   string `json:"token_type"`
-		Scope       string `json:"scope"`
-		Error       string `json:"error"`
-		Description string `json:"error_description"`
-	}
+	var resp githubTokenResponse
 	if err := s.doJSON(req, &resp); err != nil {
 		return Token{}, fmt.Errorf("exchange github oauth code: %w", err)
 	}
+	token, err := s.tokenFromResponse(resp)
+	if err != nil {
+		return Token{}, fmt.Errorf("exchange github oauth code: %w", err)
+	}
+	return token, nil
+}
+
+func (s *Service) refreshGitHubToken(ctx context.Context, config Config, refreshToken string) (Token, error) {
+	form := url.Values{}
+	form.Set("client_id", config.ClientID)
+	form.Set("client_secret", config.ClientSecret)
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", strings.TrimSpace(refreshToken))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoints().TokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return Token{}, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	var resp githubTokenResponse
+	if err := s.doJSON(req, &resp); err != nil {
+		return Token{}, fmt.Errorf("refresh github oauth token: %w", err)
+	}
+	token, err := s.tokenFromResponse(resp)
+	if err != nil {
+		return Token{}, fmt.Errorf("refresh github oauth token: %w", err)
+	}
+	return token, nil
+}
+
+type githubTokenResponse struct {
+	AccessToken           string `json:"access_token"`
+	TokenType             string `json:"token_type"`
+	Scope                 string `json:"scope"`
+	RefreshToken          string `json:"refresh_token"`
+	ExpiresIn             int    `json:"expires_in"`
+	RefreshTokenExpiresIn int    `json:"refresh_token_expires_in"`
+	Error                 string `json:"error"`
+	Description           string `json:"error_description"`
+}
+
+func (s *Service) tokenFromResponse(resp githubTokenResponse) (Token, error) {
 	if resp.Error != "" {
 		msg := strings.TrimSpace(resp.Description)
 		if msg == "" {
 			msg = resp.Error
 		}
-		return Token{}, fmt.Errorf("exchange github oauth code: %s", msg)
+		return Token{}, fmt.Errorf("%s", msg)
 	}
+	now := s.now()
 	token := Token{
-		AccessToken: resp.AccessToken,
-		TokenType:   resp.TokenType,
-		Scopes:      splitScopes(resp.Scope),
+		AccessToken:  resp.AccessToken,
+		TokenType:    resp.TokenType,
+		Scopes:       splitScopes(resp.Scope),
+		RefreshToken: resp.RefreshToken,
+	}
+	if resp.ExpiresIn > 0 {
+		token.ExpiresAt = now.Add(time.Duration(resp.ExpiresIn) * time.Second).UTC()
+	}
+	if resp.RefreshTokenExpiresIn > 0 {
+		token.RefreshTokenExpiresAt = now.Add(time.Duration(resp.RefreshTokenExpiresIn) * time.Second).UTC()
 	}
 	token = *normalizeToken(&token)
 	if token.AccessToken == "" {
-		return Token{}, fmt.Errorf("exchange github oauth code: access token not found")
+		return Token{}, fmt.Errorf("access token not found")
 	}
 	return token, nil
+}
+
+func (s *Service) tokenExpired(token Token) bool {
+	if token.ExpiresAt.IsZero() {
+		return false
+	}
+	return !s.now().Before(token.ExpiresAt)
 }
 
 func (s *Service) fetchGitHubAccount(ctx context.Context, token Token) (Account, error) {

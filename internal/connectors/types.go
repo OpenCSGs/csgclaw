@@ -24,9 +24,12 @@ type PendingAuth struct {
 }
 
 type Token struct {
-	AccessToken string   `json:"access_token,omitempty"`
-	TokenType   string   `json:"token_type,omitempty"`
-	Scopes      []string `json:"scopes,omitempty"`
+	AccessToken           string    `json:"access_token,omitempty"`
+	TokenType             string    `json:"token_type,omitempty"`
+	Scopes                []string  `json:"scopes,omitempty"`
+	RefreshToken          string    `json:"refresh_token,omitempty"`
+	ExpiresAt             time.Time `json:"expires_at,omitempty"`
+	RefreshTokenExpiresAt time.Time `json:"refresh_token_expires_at,omitempty"`
 }
 
 type Account struct {
@@ -162,11 +165,14 @@ func normalizeToken(token *Token) *Token {
 	out := *token
 	out.AccessToken = strings.TrimSpace(out.AccessToken)
 	out.TokenType = strings.TrimSpace(out.TokenType)
+	out.RefreshToken = strings.TrimSpace(out.RefreshToken)
 	if out.TokenType == "" && out.AccessToken != "" {
 		out.TokenType = "bearer"
 	}
 	out.Scopes = normalizeScopes(out.Scopes)
-	if out.AccessToken == "" && out.TokenType == "" && len(out.Scopes) == 0 {
+	out.ExpiresAt = out.ExpiresAt.UTC()
+	out.RefreshTokenExpiresAt = out.RefreshTokenExpiresAt.UTC()
+	if out.AccessToken == "" && out.TokenType == "" && len(out.Scopes) == 0 && out.RefreshToken == "" {
 		return nil
 	}
 	return &out

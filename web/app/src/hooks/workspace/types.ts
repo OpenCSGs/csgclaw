@@ -204,6 +204,7 @@ export type UseConversationControllerArgs = {
   locale: LocaleCode;
   managerProfile: AgentProfileLike | null;
   managerProfileIncomplete: boolean | null;
+  managerRuntimeUnavailable?: boolean | null;
   messageActionBusy: string;
   messageActionError: MessageActionError;
   messageListActive?: boolean;

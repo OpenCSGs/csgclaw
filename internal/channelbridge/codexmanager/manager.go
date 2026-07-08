@@ -528,7 +528,7 @@ func bindingForAgent(a agent.Agent, sessionID string) codexbridge.Binding {
 }
 
 func shouldStartCodexBridge(a agent.Agent) bool {
-	if !strings.EqualFold(strings.TrimSpace(a.Role), agent.RoleWorker) {
+	if !isCodexBridgeRole(a.Role) {
 		return false
 	}
 	if !strings.EqualFold(strings.TrimSpace(a.RuntimeKind), agent.RuntimeKindCodex) {
@@ -541,7 +541,7 @@ func shouldStartCodexBridge(a agent.Agent) bool {
 }
 
 func shouldRestoreCodexBridgeOnStartup(a agent.Agent) bool {
-	if !strings.EqualFold(strings.TrimSpace(a.Role), agent.RoleWorker) {
+	if !isCodexBridgeRole(a.Role) {
 		return false
 	}
 	if !strings.EqualFold(strings.TrimSpace(a.RuntimeKind), agent.RuntimeKindCodex) {
@@ -551,6 +551,11 @@ func shouldRestoreCodexBridgeOnStartup(a agent.Agent) bool {
 		return false
 	}
 	return !strings.EqualFold(strings.TrimSpace(a.Status), string(agentruntime.StateStopped))
+}
+
+func isCodexBridgeRole(role string) bool {
+	role = strings.TrimSpace(role)
+	return strings.EqualFold(role, agent.RoleWorker) || strings.EqualFold(role, agent.RoleManager)
 }
 
 type ensureGate struct {

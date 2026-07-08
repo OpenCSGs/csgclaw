@@ -8,9 +8,10 @@ const labels: Record<string, string> = {
   close: "Close",
   managerRebuildAction: "Recreate",
   managerRebuildBusy: "Recreating...",
-  managerRebuildSubtitle: "Choose runtime.",
+  managerRebuildSubtitle: "Manager runs on Codex CLI.",
   managerRebuildTitle: "Recreate Manager",
   profileRuntimeKind: "Runtime",
+  runtimeCodexCLI: "Codex CLI",
   runtimeOpenclaw: "OpenClaw",
   runtimePicoclaw: "PicoClaw",
 };
@@ -20,19 +21,18 @@ function t(key: string): string {
 }
 
 describe("ManagerRebuildModal", () => {
-  it("lets users choose manager runtime and shows the resolved image without image selection", async () => {
+  it("shows a fixed Codex runtime with no runtime or image selection", async () => {
     const user = userEvent.setup();
     const onRuntimeKindChange = vi.fn();
     const onClose = vi.fn();
     const onConfirm = vi.fn();
-    const managerImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8";
 
     const { container } = render(
       <ManagerRebuildModal
         t={t}
-        runtimeOptions={[{ value: "picoclaw_sandbox" }, { value: "openclaw_sandbox" }]}
-        runtimeKind="picoclaw_sandbox"
-        image={managerImage}
+        runtimeOptions={[{ value: "codex" }]}
+        runtimeKind="codex"
+        image=""
         busy={false}
         error=""
         onRuntimeKindChange={onRuntimeKindChange}
@@ -42,27 +42,17 @@ describe("ManagerRebuildModal", () => {
     );
 
     expect(screen.getByText("Recreate Manager")).toBeInTheDocument();
-    const runtimeSelect = screen.getByRole("combobox", { name: "Runtime" });
-
-    expect(runtimeSelect).toHaveTextContent("PicoClaw");
+    expect(screen.queryByRole("combobox", { name: "Runtime" })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Image" })).not.toBeInTheDocument();
-    const imageDisplay = container.querySelector(".manager-rebuild-image-readonly");
-    expect(imageDisplay).toHaveAttribute("title", managerImage);
-    const selectedImageLabel = imageDisplay?.querySelector(".manager-rebuild-image-option");
-    expect(selectedImageLabel).toBeInTheDocument();
-    expect(selectedImageLabel?.querySelector(".manager-rebuild-image-name")).toHaveTextContent("picoclaw");
-    expect(selectedImageLabel?.querySelector(".manager-rebuild-image-tag")).toHaveTextContent(":2026.6.8");
-    expect(selectedImageLabel?.querySelector(".manager-rebuild-image-context")).toHaveTextContent(
-      "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq",
+    expect(container.querySelector(".manager-rebuild-runtime-field .manager-rebuild-image-readonly")).toHaveTextContent(
+      "Codex CLI",
     );
-    expect(screen.queryByRole("option", { name: managerImage })).not.toBeInTheDocument();
-
-    await user.click(runtimeSelect);
-    await user.click(await screen.findByRole("option", { name: "OpenClaw" }));
-    expect(onRuntimeKindChange).toHaveBeenCalledWith("openclaw_sandbox");
+    expect(screen.getByText("Uses the manager image by default")).toBeInTheDocument();
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Recreate" }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onRuntimeKindChange).not.toHaveBeenCalled();
 
     const backdrop = container.querySelector(".modal-backdrop");
     expect(backdrop).toBeInstanceOf(HTMLElement);
@@ -71,5 +61,32 @@ describe("ManagerRebuildModal", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Close" })[0]);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks rebuild while Codex CLI is unavailable", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+
+    render(
+      <ManagerRebuildModal
+        t={t}
+        runtimeOptions={[{ value: "codex" }]}
+        runtimeKind="codex"
+        image=""
+        busy={false}
+        error=""
+        runtimeWarning="Install Codex CLI first."
+        onRuntimeKindChange={vi.fn()}
+        onClose={vi.fn()}
+        onConfirm={onConfirm}
+      />,
+    );
+
+    expect(screen.getByText("Install Codex CLI first.")).toBeInTheDocument();
+    const submit = screen.getByRole("button", { name: "Recreate" });
+    expect(submit).toBeDisabled();
+
+    await user.click(submit);
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });

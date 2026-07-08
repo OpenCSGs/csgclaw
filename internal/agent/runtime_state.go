@@ -126,7 +126,11 @@ func (s *Service) gatewayRuntimeKind() string {
 }
 
 func (s *Service) runtimeProfileForAgent(a Agent) agentruntime.Profile {
-	return s.runtimeProfileForKind(strings.TrimSpace(a.RuntimeKind), a.ID, a.Name, a.Description, a.AgentProfile)
+	return s.runtimeProfileForAgentWithProfile(a, a.AgentProfile)
+}
+
+func (s *Service) runtimeProfileForAgentWithProfile(a Agent, profile AgentProfile) agentruntime.Profile {
+	return s.runtimeProfileForKind(strings.TrimSpace(a.RuntimeKind), a.ID, a.Name, a.Description, profile)
 }
 
 func (s *Service) runtimeProfileForKind(runtimeKind, agentID, fallbackName, fallbackDescription string, profile AgentProfile) agentruntime.Profile {

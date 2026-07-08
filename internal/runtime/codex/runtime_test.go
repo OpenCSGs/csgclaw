@@ -342,6 +342,35 @@ func TestRefreshCodexHomeAgentsFileCreatesManagedFileWhenMissing(t *testing.T) {
 	}
 }
 
+func TestRefreshCodexHomeAgentsFileAddsManagerConnectorRules(t *testing.T) {
+	root := t.TempDir()
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{ID: agent.ManagerUserID, Name: agent.ManagerName, RuntimeID: h.RuntimeID, Instructions: "Stay focused."}, nil
+	})
+
+	if err := rt.RefreshCodexHomeAgentsFile(context.Background(), agentruntime.Handle{RuntimeID: "rt-agent-manager"}); err != nil {
+		t.Fatalf("RefreshCodexHomeAgentsFile() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(root, "agent-manager", ".codex", "home", "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read manager AGENTS.md: %v", err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		"GitHub Connector Access",
+		"/api/v1/agents/agent-manager/connectors/github/credential",
+		"`access_token`",
+		"Do not rely on connector tokens from environment variables",
+		"external Codex GitHub app connector",
+		"reconnect the CSGClaw GitHub OAuth connector",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("manager AGENTS.md missing %q in %q", want, text)
+		}
+	}
+}
+
 func TestDecodeRuntimeOptionsNormalizesLocalWorkspaceDir(t *testing.T) {
 	got, err := DecodeRuntimeOptions(map[string]any{
 		"local_workspace_dir": "  /tmp/project  ",

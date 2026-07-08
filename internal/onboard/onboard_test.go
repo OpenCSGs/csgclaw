@@ -12,8 +12,6 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
-	"csgclaw/internal/sandbox"
-	"csgclaw/internal/sandbox/sandboxtest"
 )
 
 func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
@@ -99,22 +97,6 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 
 func TestCreateManagerParticipantBootstrapsAdminParticipant(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	rt := sandboxtest.NewRuntime()
-	agent.SetTestHooks(
-		func(*agent.Service, string) (sandbox.Runtime, error) {
-			return rt, nil
-		},
-		func(*agent.Service, context.Context, sandbox.Runtime, string, string, string, agent.AgentProfile) (sandbox.Instance, sandbox.Info, error) {
-			info := sandbox.Info{
-				ID:    "box-manager",
-				Name:  agent.ManagerName,
-				State: sandbox.StateRunning,
-			}
-			inst := sandboxtest.NewInstance(info)
-			return inst, info, nil
-		},
-	)
-	t.Cleanup(agent.ResetTestHooks)
 
 	dir := t.TempDir()
 	agentsPath := filepath.Join(dir, "agents.json")
@@ -123,7 +105,8 @@ func TestCreateManagerParticipantBootstrapsAdminParticipant(t *testing.T) {
 		t.Fatalf("EnsureBootstrapState() error = %v", err)
 	}
 
-	if _, err := createManagerParticipant(context.Background(), agentsPath, imStatePath, defaultConfig()); err != nil {
+	ctx := context.WithValue(context.Background(), noAuthDetectContextKey{}, true)
+	if _, err := createManagerParticipant(ctx, agentsPath, imStatePath, defaultConfig()); err != nil {
 		t.Fatalf("createManagerParticipant() error = %v", err)
 	}
 

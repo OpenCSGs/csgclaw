@@ -23,6 +23,7 @@ import (
 
 	"csgclaw/cli/command"
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentmanager"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/api"
 	"csgclaw/internal/apitypes"
@@ -36,6 +37,7 @@ import (
 	"csgclaw/internal/channelbridge/codexmanager"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
+	"csgclaw/internal/connectors"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/localstore"
@@ -607,6 +609,13 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	}
 	ensureBootstrapManager := EnsureBootstrapManager
 	startConfiguredAgents := StartConfiguredAgents
+	agentManagerSvc, err := newAgentManagerService(svc, ensureBootstrapManager)
+	if err != nil {
+		return err
+	}
+	if agentManagerSvc != nil {
+		defer agentManagerSvc.Close()
+	}
 	return RunServer(server.Options{
 		ListenAddr:        cfg.Server.ListenAddr,
 		Service:           svc,
@@ -644,7 +653,11 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 				}()
 			}
 			go func() {
-				if err := ensureBootstrapManager(ctx, svc); err != nil {
+				if agentManagerSvc != nil {
+					if err := agentManagerSvc.Start(ctx); err != nil {
+						slog.Warn("bootstrap manager failed to start", "error", err)
+					}
+				} else if err := ensureBootstrapManager(ctx, svc); err != nil {
 					slog.Warn("bootstrap manager failed to start", "error", err)
 				}
 				if err := startConfiguredAgents(ctx, svc); err != nil {
@@ -996,13 +1009,58 @@ func newAgentService(cfg config.Config, feishuProvider feishu.AgentCredentialPro
 		runtimewiring.WithPicoClawSandboxRuntime(feishuProvider),
 		runtimewiring.WithOpenClawSandboxRuntime(feishuProvider),
 		runtimewiring.WithCodexRuntime(),
-		agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 	)
+	switch bootstrapDefaults.ManagerRuntimeKind {
+	case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
+		opts = append(opts, agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind))
+	}
 	if hubSvc != nil {
 		opts = append(opts, agent.WithHubService(hubSvc))
 	}
 	return agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, bootstrapDefaults.ManagerImage, agentsPath, opts...)
+}
+
+type bootstrapManagerAgentService struct {
+	svc    *agent.Service
+	ensure func(context.Context, *agent.Service) error
+}
+
+func (s bootstrapManagerAgentService) EnsureManager(ctx context.Context, _ bool) (agent.Agent, error) {
+	if s.svc == nil {
+		return agent.Agent{}, nil
+	}
+	ensure := s.ensure
+	if ensure == nil {
+		ensure = EnsureBootstrapManager
+	}
+	if err := ensure(ctx, s.svc); err != nil {
+		return agent.Agent{}, err
+	}
+	manager, ok := s.svc.Agent(agent.ManagerUserID)
+	if !ok {
+		return agent.Agent{}, nil
+	}
+	return manager, nil
+}
+
+func newAgentManagerService(svc *agent.Service, ensure func(context.Context, *agent.Service) error) (*agentmanager.Service, error) {
+	if svc == nil {
+		return nil, nil
+	}
+	credentialProvider, err := newManagerConnectorCredentialProvider()
+	if err != nil {
+		return nil, err
+	}
+	return agentmanager.NewService(bootstrapManagerAgentService{svc: svc, ensure: ensure}, credentialProvider), nil
+}
+
+func newManagerConnectorCredentialProvider() (*agentmanager.ConnectorServiceCredentialProvider, error) {
+	connectorStore, err := connectors.DefaultStore()
+	if err != nil {
+		return nil, err
+	}
+	return agentmanager.NewConnectorServiceCredentialProvider(connectors.NewService(connectorStore), agentmanager.DefaultConnectorGrantPolicy{}), nil
 }
 
 func newAgentTemplateHubService(cfg config.HubConfig) (*hub.Service, error) {

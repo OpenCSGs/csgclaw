@@ -775,7 +775,7 @@ func (r *Runtime) refreshCodexHomeAgentsFile(h agentruntime.Handle, codexHomeDir
 		return err
 	}
 	path := filepath.Join(codexHomeDir, "AGENTS.md")
-	block := agent.RenderAgentsInstructionsBlock(agentRef.Instructions)
+	block := agent.RenderRuntimeAgentsInstructionsBlock(agentRef.ID, agentRef.Instructions)
 	current, err := r.readFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read codex home AGENTS.md %s: %w", path, err)

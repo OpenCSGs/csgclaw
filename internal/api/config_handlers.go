@@ -85,9 +85,12 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 			managerChanged := cfg.Bootstrap.ResolvedDefaultManagerTemplate() != previousManager
 			workerChanged := cfg.Bootstrap.ResolvedDefaultWorkerTemplate() != previousWorker
 			if managerChanged || workerChanged {
-				if err := h.svc.SetGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind, bootstrapDefaults.ManagerImage); err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
+				switch bootstrapDefaults.ManagerRuntimeKind {
+				case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
+					if err := h.svc.SetGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind, bootstrapDefaults.ManagerImage); err != nil {
+						http.Error(w, err.Error(), http.StatusBadRequest)
+						return
+					}
 				}
 			}
 		}

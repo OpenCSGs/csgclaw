@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"csgclaw/internal/agentmanager"
 	"csgclaw/internal/connectors"
 )
 
@@ -221,6 +222,47 @@ func (h *Handler) handleGitHubConnectorCredential(w http.ResponseWriter, r *http
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, credential)
+}
+
+func (h *Handler) handleAgentConnectorCredential(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if h == nil || h.svc == nil {
+		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	agentID := pathValue(r, "id")
+	provider := pathValue(r, "provider")
+	got, ok := h.svc.Agent(agentID)
+	if !ok {
+		http.Error(w, fmt.Sprintf("agent %q not found", agentID), http.StatusNotFound)
+		return
+	}
+	connectorSvc, ok := h.requireConnectorService(w)
+	if !ok {
+		return
+	}
+	credentialProvider := agentmanager.NewConnectorServiceCredentialProvider(connectorSvc, agentmanager.DefaultConnectorGrantPolicy{})
+	lease, err := credentialProvider.ManagedCredentialLease(r.Context(), agentmanager.AgentConnectorRef{
+		AgentID:   got.ID,
+		AgentRole: got.Role,
+	}, provider)
+	if err != nil {
+		if errors.Is(err, agentmanager.ErrConnectorCredentialAccessDenied) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, lease)
 }
 
 func (h *Handler) requireConnectorService(w http.ResponseWriter) (*connectors.Service, bool) {

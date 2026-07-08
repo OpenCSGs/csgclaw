@@ -61,6 +61,25 @@ function renderComposer(props: Partial<ConversationComposerProps> = {}): ReturnT
 }
 
 describe("ConversationComposer connectors", () => {
+  it("blocks message entry with the provided manager runtime warning", async () => {
+    const user = userEvent.setup();
+    const onSendMessage = vi.fn();
+    renderComposer({
+      composerDisabled: true,
+      composerDisabledReason: "Install Codex CLI first.",
+      draftText: "hello",
+      onSendMessage,
+    });
+
+    expect(screen.getByText("Install Codex CLI first.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Message")).toHaveAttribute("contenteditable", "false");
+    const sendButton = screen.getByRole("button", { name: "Send" });
+    expect(sendButton).toBeDisabled();
+
+    await user.click(sendButton);
+    expect(onSendMessage).not.toHaveBeenCalled();
+  });
+
   it("opens a Manus-style connector dropdown from the top-level connector icon", async () => {
     const user = userEvent.setup();
     renderComposer({

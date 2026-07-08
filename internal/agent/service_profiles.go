@@ -242,6 +242,12 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		s.mu.Unlock()
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
+	if isManagerAgent(current) {
+		if err := validateManagerUpdateRuntimeSpec(req); err != nil {
+			s.mu.Unlock()
+			return Agent{}, err
+		}
+	}
 	previous := current
 	runtimeKind := strings.TrimSpace(current.RuntimeKind)
 	runtimeRunning := isRuntimeRunning(current)
@@ -428,6 +434,24 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 		}
 	}
 	return updated, nil
+}
+
+func validateManagerUpdateRuntimeSpec(req UpdateRequest) error {
+	if !req.RuntimeSelectionRequested {
+		return nil
+	}
+	sandboxEnabled := false
+	if req.SandboxEnabled != nil {
+		sandboxEnabled = *req.SandboxEnabled
+	}
+	cfg, err := agentruntime.RuntimeConfigFromSelection(req.RuntimeKind, req.RuntimeName, sandboxEnabled)
+	if err != nil {
+		return err
+	}
+	if cfg.LegacyKind() == RuntimeKindCodex && cfg.Name == RuntimeNameCodex && !cfg.Sandboxed {
+		return nil
+	}
+	return fmt.Errorf("manager runtime is fixed to codex")
 }
 
 func (s *Service) ListModelsForRequest(ctx context.Context, req ProfileModelRequest) ([]string, error) {
@@ -673,6 +697,9 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 	got, ok := s.Agent(id)
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
+	}
+	if isManagerAgent(got) {
+		return s.EnsureManager(ctx, true)
 	}
 	got.ID = canonicalAgentID(got.ID)
 	got.RuntimeID = normalizeRuntimeID(got.RuntimeID, got.ID)
