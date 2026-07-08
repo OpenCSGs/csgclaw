@@ -239,4 +239,42 @@ describe("useTaskController", () => {
       vi.useRealTimers();
     }
   });
+
+  it("refetches tasks when a scheduled run references a missing generated task", async () => {
+    const queryClient = createQueryClient();
+    const item = scheduledTask();
+    const run = scheduledRun();
+    const generatedTask = task({
+      id: run.task_id,
+      assignment_type: "agent",
+      assignment_id: item.agent_id,
+      team_id: "",
+      created_by: "scheduler",
+      status: "assigned",
+    });
+    vi.mocked(fetchGlobalTasks).mockResolvedValueOnce([]).mockResolvedValueOnce([generatedTask]);
+    vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
+    vi.mocked(fetchScheduledTaskRuns).mockResolvedValue([run]);
+
+    const { result } = renderTaskController(queryClient, {
+      type: WorkspacePaneTypes.task,
+      id: "",
+    });
+
+    await waitFor(() => {
+      expect(result.current.taskViewProps.scheduledTaskRuns).toEqual([run]);
+    });
+    expect(fetchGlobalTasks).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      result.current.taskViewProps.onSelectTaskBoardView("scheduled");
+    });
+
+    await waitFor(() => {
+      expect(fetchGlobalTasks).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(result.current.taskViewProps.tasks).toEqual([generatedTask]);
+    });
+  });
 });

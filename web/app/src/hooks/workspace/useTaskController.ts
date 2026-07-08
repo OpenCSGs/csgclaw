@@ -76,6 +76,7 @@ export function useTaskController({
   const [taskActionError, setTaskActionError] = useState("");
   const [parentDetailTaskID, setParentDetailTaskID] = useState("");
   const lastTaskTabRevalidateAttemptAt = useRef(0);
+  const lastScheduledGeneratedTasksRefreshKey = useRef("");
   const tasksQuery = useQuery({
     queryKey: TASKS_QUERY_KEY,
     queryFn: fetchGlobalTasks,
@@ -120,6 +121,12 @@ export function useTaskController({
     () => new Set(allScheduledTaskRuns.map((run) => run.task_id).filter(Boolean)),
     [allScheduledTaskRuns],
   );
+  const missingScheduledGeneratedTaskIDs = useMemo(() => {
+    const taskIDs = new Set(tasks.map((task) => task.id));
+    return Array.from(scheduledGeneratedTaskIDs)
+      .filter((taskID) => !taskIDs.has(taskID))
+      .sort();
+  }, [scheduledGeneratedTaskIDs, tasks]);
   const boardTasks = useMemo(
     () =>
       tasks.filter((task) => {
@@ -221,6 +228,22 @@ export function useTaskController({
       }
     };
   }, [queryClient, refreshScheduledTaskState, shouldPollTasks]);
+
+  useEffect(() => {
+    if (taskBoardView !== "scheduled") {
+      return;
+    }
+    if (missingScheduledGeneratedTaskIDs.length === 0) {
+      lastScheduledGeneratedTasksRefreshKey.current = "";
+      return;
+    }
+    const refreshKey = missingScheduledGeneratedTaskIDs.join("\n");
+    if (lastScheduledGeneratedTasksRefreshKey.current === refreshKey) {
+      return;
+    }
+    lastScheduledGeneratedTasksRefreshKey.current = refreshKey;
+    void refetchTasks();
+  }, [missingScheduledGeneratedTaskIDs, refetchTasks, taskBoardView]);
 
   function taskById(taskId: string) {
     return tasks.find((item) => item.id === taskId) ?? null;
