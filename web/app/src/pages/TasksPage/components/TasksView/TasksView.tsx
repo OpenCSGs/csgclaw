@@ -463,6 +463,10 @@ export function TasksView({
   const availableRoomIDs = useMemo(() => (rooms ? new Set(rooms.map((room) => room.id)) : null), [rooms]);
 
   useEffect(() => {
+    setConversationOpenError("");
+  }, [activeView, selectedScheduledTask?.id]);
+
+  useEffect(() => {
     if (!showCreateTaskModal) {
       return;
     }
@@ -639,12 +643,19 @@ export function TasksView({
 
   function openRootTaskDetail(task: WorkspaceTask) {
     setParentDialogTaskID(task.id);
+    setConversationOpenError("");
   }
 
   function closeRootTaskDetail() {
     setParentDialogTaskID("");
+    setConversationOpenError("");
     onCloseParentTaskDetail?.();
     void onCloseTaskDetails?.();
+  }
+
+  function selectScheduledTask(taskID: string) {
+    setConversationOpenError("");
+    onSelectScheduledTask(taskID);
   }
 
   function openRunTask(taskID: string) {
@@ -766,7 +777,7 @@ export function TasksView({
                             type="button"
                             className={styles.scheduledTaskRow}
                             data-active={selectedScheduledTask?.id === item.id ? true : undefined}
-                            onClick={() => onSelectScheduledTask(item.id)}
+                            onClick={() => selectScheduledTask(item.id)}
                           >
                             <span>
                               <CalendarClock size={15} aria-hidden="true" />

@@ -207,7 +207,7 @@ describe("useTaskController", () => {
     expect(fetchGlobalTasks).toHaveBeenCalledTimes(1);
   });
 
-  it("refreshes scheduled task state while background task polling is active", async () => {
+  it("refreshes scheduled task state while background task polling is active in the scheduled view", async () => {
     vi.useFakeTimers();
     try {
       const queryClient = createQueryClient();
@@ -226,6 +226,12 @@ describe("useTaskController", () => {
       await vi.waitFor(() => {
         expect(result.current.taskViewProps.tasks).toHaveLength(1);
       });
+      await act(async () => {
+        result.current.taskViewProps.onSelectTaskBoardView("scheduled");
+      });
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTaskRuns).toEqual([nextRun]);
+      });
       vi.mocked(fetchScheduledTasks).mockClear();
       vi.mocked(fetchScheduledTaskRuns).mockClear();
 
@@ -243,42 +249,226 @@ describe("useTaskController", () => {
     }
   });
 
+  it("does not refresh scheduled task state during background task polling outside the scheduled view", async () => {
+    vi.useFakeTimers();
+    try {
+      const queryClient = createQueryClient();
+      const activeTask = task({ status: "in_progress" });
+      const item = scheduledTask();
+      const run = scheduledRun();
+      vi.mocked(fetchGlobalTasks).mockResolvedValue([activeTask]);
+      vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
+      vi.mocked(fetchScheduledTaskRuns).mockResolvedValue([run]);
+
+      const { result } = renderTaskController(queryClient, {
+        type: WorkspacePaneTypes.task,
+        id: activeTask.id,
+      });
+
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.tasks).toHaveLength(1);
+      });
+      vi.mocked(fetchScheduledTasks).mockClear();
+      vi.mocked(fetchScheduledTaskRuns).mockClear();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+
+      expect(fetchScheduledTasks).not.toHaveBeenCalled();
+      expect(fetchScheduledTaskRuns).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops scheduled run polling after the generated task is complete", async () => {
+    vi.useFakeTimers();
+    try {
+      const queryClient = createQueryClient();
+      const item = scheduledTask();
+      const run = scheduledRun();
+      const generatedTask = task({
+        id: run.task_id,
+        assignment_type: "agent",
+        assignment_id: item.agent_id,
+        team_id: "",
+        created_by: "scheduler",
+        status: "completed",
+      });
+      vi.mocked(fetchGlobalTasks).mockResolvedValue([generatedTask]);
+      vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
+      vi.mocked(fetchScheduledTaskRuns).mockResolvedValue([run]);
+
+      const { result } = renderTaskController(queryClient, {
+        type: WorkspacePaneTypes.task,
+        id: "",
+      });
+
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTasks).toEqual([item]);
+      });
+      await act(async () => {
+        result.current.taskViewProps.onSelectTaskBoardView("scheduled");
+      });
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTaskRuns).toEqual([run]);
+      });
+      vi.mocked(fetchScheduledTaskRuns).mockClear();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+
+      expect(fetchScheduledTaskRuns).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps scheduled run polling while the generated task is active", async () => {
+    vi.useFakeTimers();
+    try {
+      const queryClient = createQueryClient();
+      const item = scheduledTask();
+      const run = scheduledRun();
+      const generatedTask = task({
+        id: run.task_id,
+        assignment_type: "agent",
+        assignment_id: item.agent_id,
+        team_id: "",
+        created_by: "scheduler",
+        status: "in_progress",
+      });
+      vi.mocked(fetchGlobalTasks).mockResolvedValue([generatedTask]);
+      vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
+      vi.mocked(fetchScheduledTaskRuns).mockResolvedValue([run]);
+
+      const { result } = renderTaskController(queryClient, {
+        type: WorkspacePaneTypes.task,
+        id: "",
+      });
+
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTasks).toEqual([item]);
+      });
+      await act(async () => {
+        result.current.taskViewProps.onSelectTaskBoardView("scheduled");
+      });
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTaskRuns).toEqual([run]);
+      });
+      vi.mocked(fetchScheduledTaskRuns).mockClear();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+
+      await vi.waitFor(() => {
+        expect(fetchScheduledTaskRuns).toHaveBeenCalled();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops scheduled run polling after leaving the scheduled task view", async () => {
+    vi.useFakeTimers();
+    try {
+      const queryClient = createQueryClient();
+      const item = scheduledTask();
+      const run = scheduledRun();
+      const generatedTask = task({
+        id: run.task_id,
+        assignment_type: "agent",
+        assignment_id: item.agent_id,
+        team_id: "",
+        created_by: "scheduler",
+        status: "in_progress",
+      });
+      vi.mocked(fetchGlobalTasks).mockResolvedValue([generatedTask]);
+      vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
+      vi.mocked(fetchScheduledTaskRuns).mockResolvedValue([run]);
+
+      const { result, rerender } = renderTaskController(queryClient, {
+        type: WorkspacePaneTypes.task,
+        id: "",
+      });
+
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTasks).toEqual([item]);
+      });
+      await act(async () => {
+        result.current.taskViewProps.onSelectTaskBoardView("scheduled");
+      });
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTaskRuns).toEqual([run]);
+      });
+
+      await act(async () => {
+        rerender({ pane: { type: WorkspacePaneTypes.conversation, id: "room-1" } });
+      });
+      vi.mocked(fetchScheduledTaskRuns).mockClear();
+      vi.mocked(fetchScheduledTasks).mockClear();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+
+      expect(fetchScheduledTaskRuns).not.toHaveBeenCalled();
+      expect(fetchScheduledTasks).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("refetches tasks when a scheduled run references a missing generated task", async () => {
-    const queryClient = createQueryClient();
-    const item = scheduledTask();
-    const run = scheduledRun();
-    const generatedTask = task({
-      id: run.task_id,
-      assignment_type: "agent",
-      assignment_id: item.agent_id,
-      team_id: "",
-      created_by: "scheduler",
-      status: "assigned",
-    });
-    vi.mocked(fetchGlobalTasks).mockResolvedValueOnce([]).mockResolvedValueOnce([generatedTask]);
-    vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
-    vi.mocked(fetchScheduledTaskRuns).mockResolvedValue([run]);
+    vi.useFakeTimers();
+    try {
+      const queryClient = createQueryClient();
+      const item = scheduledTask();
+      const run = scheduledRun();
+      const generatedTask = task({
+        id: run.task_id,
+        assignment_type: "agent",
+        assignment_id: item.agent_id,
+        team_id: "",
+        created_by: "scheduler",
+        status: "assigned",
+      });
+      vi.mocked(fetchGlobalTasks).mockResolvedValueOnce([]).mockResolvedValueOnce([generatedTask]);
+      vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
+      vi.mocked(fetchScheduledTaskRuns).mockResolvedValue([run]);
 
-    const { result } = renderTaskController(queryClient, {
-      type: WorkspacePaneTypes.task,
-      id: "",
-    });
+      const { result } = renderTaskController(queryClient, {
+        type: WorkspacePaneTypes.task,
+        id: "",
+      });
 
-    await waitFor(() => {
-      expect(result.current.taskViewProps.scheduledTaskRuns).toEqual([run]);
-    });
-    expect(fetchGlobalTasks).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTasks).toEqual([item]);
+      });
+      expect(fetchGlobalTasks).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      result.current.taskViewProps.onSelectTaskBoardView("scheduled");
-    });
+      await act(async () => {
+        result.current.taskViewProps.onSelectTaskBoardView("scheduled");
+      });
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTaskRuns).toEqual([run]);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
 
-    await waitFor(() => {
-      expect(fetchGlobalTasks).toHaveBeenCalledTimes(2);
-    });
-    await waitFor(() => {
-      expect(result.current.taskViewProps.tasks).toEqual([generatedTask]);
-    });
+      await vi.waitFor(() => {
+        expect(fetchGlobalTasks).toHaveBeenCalledTimes(2);
+      });
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.tasks).toEqual([generatedTask]);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows a localized message when a scheduled task has already been triggered", async () => {

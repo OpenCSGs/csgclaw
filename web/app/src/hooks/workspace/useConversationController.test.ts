@@ -42,6 +42,14 @@ function agentTextMessage(content: string): IMMessage {
   };
 }
 
+function agentPlaceholderMessage(): IMMessage {
+  return {
+    id: "agent-placeholder",
+    sender_id: "pt-dev",
+    content: "\u200b",
+  };
+}
+
 function conversationWithMessages(messages: IMMessage[]): IMConversation {
   return {
     id: "room-1",
@@ -95,6 +103,17 @@ describe("activityWorkingParticipantsForConversation", () => {
     );
 
     expect(participants).toEqual([]);
+  });
+
+  it("keeps a structured tool active after the agent turn placeholder arrives", () => {
+    const participants = activityWorkingParticipantsForConversation(
+      conversationWithMessages([toolActivityMessage("running"), agentPlaceholderMessage()]),
+      "user-admin",
+      agents,
+      usersById,
+    );
+
+    expect(participants).toEqual([{ id: "pt-dev", name: "dev" }]);
   });
 
   it("keeps an agent working after a PicoClaw legacy tool message without status", () => {

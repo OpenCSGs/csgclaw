@@ -95,6 +95,7 @@ type WorkingParticipantsByConversationId = Record<string, ConversationWorkingPar
 
 const MESSAGE_WORKING_TIMEOUT_MS = 120_000;
 const WORKING_PARTICIPANT_KEY_SEPARATOR = "\u0000";
+const PARTICIPANT_ACTIVITY_TURN_PLACEHOLDER = "\u200b";
 
 function clearThreadDraftsForConversation(current: DraftsByThreadKey, conversationID: string): DraftsByThreadKey {
   const prefix = `${conversationID}:`;
@@ -123,6 +124,10 @@ function conversationHasLocalIdentity(
 
 function workingParticipantKey(conversationID: string, participantID: string): string {
   return `${conversationID}${WORKING_PARTICIPANT_KEY_SEPARATOR}${participantID}`;
+}
+
+function isParticipantActivityTurnPlaceholder(message: IMMessage | null | undefined): boolean {
+  return String(message?.content || "") === PARTICIPANT_ACTIVITY_TURN_PLACEHOLDER;
 }
 
 function participantIDFromWorkingKey(conversationID: string, key: string): string {
@@ -208,7 +213,7 @@ function derivedMessageWorkingParticipants(
   const repliedTargetIDs = new Set<string>();
   for (let index = conversation.messages.length - 1; index >= 0; index -= 1) {
     const message = conversation.messages[index];
-    if (isThreadReply(message) || isToolCallMessage(message)) {
+    if (isThreadReply(message) || isToolCallMessage(message) || isParticipantActivityTurnPlaceholder(message)) {
       continue;
     }
 
@@ -302,7 +307,7 @@ export function activityWorkingParticipantsForConversation(
       return;
     }
 
-    if (target && !isToolCallMessage(message)) {
+    if (target && !isToolCallMessage(message) && !isParticipantActivityTurnPlaceholder(message)) {
       activeToolKeysByParticipantID.delete(target.id);
       activeLegacyCommandCountsByParticipantID.delete(target.id);
     }
@@ -734,7 +739,7 @@ export function useConversationController({
         if (threadMessageKey(payload.room_id, payload.message) === activeThreadKeyRef.current) {
           setActiveThreadView((current) => appendReplyToThreadView(current, payload.message) ?? null);
         }
-        if (!isToolCallMessage(payload.message)) {
+        if (!isToolCallMessage(payload.message) && !isParticipantActivityTurnPlaceholder(payload.message)) {
           clearMessageWorkingParticipants(payload.room_id, payload.message.sender_id);
         }
       }
