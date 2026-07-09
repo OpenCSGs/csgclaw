@@ -88,6 +88,51 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	}
 }
 
+func TestCreateCSGClawAgentParticipantViaAPIRequiresAgentBinding(t *testing.T) {
+	agentSvc, _ := mustNewSeededServiceWithPath(t, nil)
+	imSvc := im.NewService()
+	participantSvc := participant.NewService(
+		participant.NewMemoryStore(nil),
+		participant.WithAgentService(agentSvc),
+		participant.WithIMService(imSvc),
+	)
+	srv := &Handler{
+		svc:         agentSvc,
+		im:          imSvc,
+		participant: participantSvc,
+	}
+
+	body := `{
+		"id": "gitlab-worker",
+		"type": "agent",
+		"name": "gitlab-worker",
+		"channel_user": {
+			"ref": "gitlab-worker",
+			"kind": "local_user_id"
+		}
+	}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(body))
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "agent_binding.mode") {
+		t.Fatalf("body = %s, want agent_binding.mode validation", rec.Body.String())
+	}
+	if got := participantSvc.List(participant.ListOptions{Channel: participant.ChannelCSGClaw}); len(got) != 0 {
+		t.Fatalf("participants = %+v, want none after missing agent binding", got)
+	}
+	if _, ok := imSvc.User("user-gitlab-worker"); ok {
+		t.Fatal("channel user was created despite missing agent binding")
+	}
+	if _, ok := agentSvc.Agent("agent-gitlab-worker"); ok {
+		t.Fatal("agent was created despite missing agent binding")
+	}
+}
+
 func TestCreateCSGClawAgentParticipantViaAPIReturnsConflictForDuplicateAgentName(t *testing.T) {
 	agentSvc, _ := mustNewSeededServiceWithPath(t, []agent.Agent{{
 		ID:          "u-existing",

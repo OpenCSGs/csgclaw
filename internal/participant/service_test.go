@@ -146,6 +146,126 @@ func TestCreateAgentParticipantCanReuseExistingAgentWithDifferentParticipantID(t
 	}
 }
 
+func TestCreateCSGClawAgentParticipantRequiresAgentBinding(t *testing.T) {
+	imSvc := im.NewService()
+	store := NewMemoryStore(nil)
+	svc := NewService(store, WithIMService(imSvc))
+
+	_, err := svc.Create(context.Background(), CreateRequest{
+		ID:      "gitlab-worker",
+		Channel: ChannelCSGClaw,
+		Type:    TypeAgent,
+		Name:    "gitlab-worker",
+	})
+	if err == nil {
+		t.Fatal("Create() error = nil, want validation error")
+	}
+	if !strings.Contains(err.Error(), "agent_binding.mode") {
+		t.Fatalf("Create() error = %v, want agent_binding.mode validation", err)
+	}
+	if got := store.List(ListOptions{Channel: ChannelCSGClaw}); len(got) != 0 {
+		t.Fatalf("participants = %+v, want none after missing agent binding", got)
+	}
+	if _, ok := store.Get(ChannelCSGClaw, "pt-gitlab-worker"); ok {
+		t.Fatal("participant was saved despite missing agent binding")
+	}
+	if _, ok := imSvc.User("user-gitlab-worker"); ok {
+		t.Fatal("channel user was created despite missing agent binding")
+	}
+}
+
+func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testing.T) {
+	agentSvc := mustNewAgentService(t)
+	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
+		Spec: agent.CreateAgentSpec{
+			ID:          "agent-qa",
+			Name:        "qa",
+			Role:        agent.RoleWorker,
+			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			Image:       "agent-image:test",
+		},
+	}); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: im.AdminUserID,
+		Users: []im.User{
+			{ID: im.AdminUserID, Name: "admin", Role: "admin"},
+			{ID: "user-gitlab-worker", Name: "gitlab-worker", Role: "worker"},
+			{ID: "user-stale-worker", Name: "stale-worker", Role: "worker"},
+			{ID: "user-qa", Name: "qa", Role: "worker"},
+			{ID: im.ManagerUserID, Name: agent.ManagerName, Role: agent.RoleManager},
+		},
+	})
+	store := NewMemoryStore([]Participant{
+		{
+			ID:              "pt-gitlab-worker",
+			Channel:         ChannelCSGClaw,
+			Type:            TypeAgent,
+			Name:            "gitlab-worker",
+			ChannelUserRef:  "user-gitlab-worker",
+			ChannelUserKind: ChannelUserKindLocalUserID,
+		},
+		{
+			ID:              "pt-stale-worker",
+			Channel:         ChannelCSGClaw,
+			Type:            TypeAgent,
+			Name:            "stale-worker",
+			ChannelUserRef:  "user-stale-worker",
+			ChannelUserKind: ChannelUserKindLocalUserID,
+			AgentID:         "agent-stale-worker",
+		},
+		{
+			ID:              "pt-qa",
+			Channel:         ChannelCSGClaw,
+			Type:            TypeAgent,
+			Name:            "qa",
+			ChannelUserRef:  "user-qa",
+			ChannelUserKind: ChannelUserKindLocalUserID,
+			AgentID:         "agent-qa",
+		},
+		{
+			ID:              agent.ManagerParticipantID,
+			Channel:         ChannelCSGClaw,
+			Type:            TypeAgent,
+			Name:            agent.ManagerName,
+			ChannelUserRef:  im.ManagerUserID,
+			ChannelUserKind: ChannelUserKindLocalUserID,
+		},
+	})
+	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+
+	deleted, err := svc.RepairDanglingCSGClawAgentParticipants()
+	if err != nil {
+		t.Fatalf("RepairDanglingCSGClawAgentParticipants() error = %v", err)
+	}
+	if len(deleted) != 2 {
+		t.Fatalf("deleted = %+v, want two dangling worker shells", deleted)
+	}
+	for _, id := range []string{"pt-gitlab-worker", "pt-stale-worker"} {
+		if _, ok := store.Get(ChannelCSGClaw, id); ok {
+			t.Fatalf("participant %q still exists after repair", id)
+		}
+	}
+	if _, ok := store.Get(ChannelCSGClaw, "pt-qa"); !ok {
+		t.Fatal("valid worker participant was deleted")
+	}
+	if _, ok := store.Get(ChannelCSGClaw, agent.ManagerParticipantID); !ok {
+		t.Fatal("manager participant was deleted")
+	}
+	for _, id := range []string{"user-gitlab-worker", "user-stale-worker"} {
+		if _, ok := imSvc.User(id); ok {
+			t.Fatalf("dangling user %q still exists after repair", id)
+		}
+	}
+	if _, ok := imSvc.User("user-qa"); !ok {
+		t.Fatal("valid worker user was deleted")
+	}
+	if _, ok := imSvc.User(im.ManagerUserID); !ok {
+		t.Fatal("manager user was deleted")
+	}
+}
+
 func TestCreateFeishuBotParticipantStoresChannelAppConfigWithoutOpenID(t *testing.T) {
 	svc := NewService(NewMemoryStore(nil))
 

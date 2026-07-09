@@ -678,6 +678,48 @@ func TestCreateWorkerRejectsInvalidRuntime(t *testing.T) {
 	}
 }
 
+func TestCreateWorkerRejectsCodexModelProviderWhenCodexCLIMissing(t *testing.T) {
+	origLocateCodexCLI := locateCodexCLI
+	locateCodexCLI = func() (string, error) { return "", fmt.Errorf("codex missing") }
+	t.Cleanup(func() {
+		locateCodexCLI = origLocateCodexCLI
+	})
+	SetTestHooks(
+		func(_ *Service, _ string) (sandbox.Runtime, error) {
+			t.Fatal("ensureRuntime() should not be used when Codex provider is unavailable")
+			return nil, nil
+		},
+		func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string, _ string, _ string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+			t.Fatal("createGatewayBox() should not be used when Codex provider is unavailable")
+			return nil, sandbox.Info{}, nil
+		},
+	)
+	defer ResetTestHooks()
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.CreateWorker(context.Background(), CreateAgentSpec{
+		Name:        "alice",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Image:       "worker-image:1",
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			ModelProviderID: ModelProviderIDCodex,
+			ModelID:         "gpt-5.5",
+			ProfileComplete: true,
+		},
+	})
+	if err == nil {
+		t.Fatal("CreateWorker() error = nil, want Codex CLI missing error")
+	}
+	if !strings.Contains(err.Error(), "codex model provider requires Codex CLI") {
+		t.Fatalf("CreateWorker() error = %q, want Codex provider availability error", err)
+	}
+}
+
 func TestCreateWorkerUsesCodexRuntimeWhenRequested(t *testing.T) {
 	SetTestHooks(
 		func(_ *Service, _ string) (sandbox.Runtime, error) {
@@ -1243,6 +1285,49 @@ func TestUpdateAgentProfileCodexRuntimeFallbackRestartsActiveBridge(t *testing.T
 	}
 	if started.AgentProfile.EnvRestartRequired {
 		t.Fatal("Start().AgentProfile.EnvRestartRequired = true, want false after recreate")
+	}
+}
+
+func TestUpdateAgentProfileRejectsCodexModelProviderWhenCodexCLIMissing(t *testing.T) {
+	origLocateCodexCLI := locateCodexCLI
+	locateCodexCLI = func() (string, error) { return "", fmt.Errorf("codex missing") }
+	t.Cleanup(func() {
+		locateCodexCLI = origLocateCodexCLI
+	})
+
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	currentProfile := AgentProfile{
+		Name:            "dev",
+		Provider:        ProviderCSGHubLite,
+		ModelID:         "qwen3",
+		ProfileComplete: true,
+	}
+	svc.agents["u-dev"] = Agent{
+		ID:              "u-dev",
+		Name:            "dev",
+		RuntimeID:       "rt-u-dev",
+		RuntimeKind:     RuntimeKindPicoClawSandbox,
+		Image:           "worker-image:1",
+		Role:            RoleWorker,
+		Status:          string(agentruntime.StateStopped),
+		Profile:         profileSelector(currentProfile),
+		AgentProfile:    currentProfile,
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 5, 18, 9, 0, 0, 0, time.UTC),
+	}
+
+	_, err = svc.UpdateAgentProfile("u-dev", AgentProfile{
+		ModelProviderID: ModelProviderIDCodex,
+		ModelID:         "gpt-5.5",
+	})
+	if err == nil {
+		t.Fatal("UpdateAgentProfile() error = nil, want Codex CLI missing error")
+	}
+	if !strings.Contains(err.Error(), "codex model provider requires Codex CLI") {
+		t.Fatalf("UpdateAgentProfile() error = %q, want Codex provider availability error", err)
 	}
 }
 

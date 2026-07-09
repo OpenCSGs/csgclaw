@@ -1143,11 +1143,17 @@ func newParticipantService(agentSvc *agent.Service, imSvc *im.Service) (*partici
 	if err != nil {
 		return nil, err
 	}
-	return participant.NewService(
+	participantSvc := participant.NewService(
 		store,
 		participant.WithAgentService(agentSvc),
 		participant.WithIMService(imSvc),
-	), nil
+	)
+	if deleted, err := participantSvc.RepairDanglingCSGClawAgentParticipants(); err != nil {
+		return nil, err
+	} else if len(deleted) > 0 {
+		slog.Info("removed dangling CSGClaw agent participants", "count", len(deleted))
+	}
+	return participantSvc, nil
 }
 
 func newTeamService(imSvc *im.Service, feishuSvc *feishu.Service, participantSvc *participant.Service) (*team.Service, *team.AdapterRegistry, error) {

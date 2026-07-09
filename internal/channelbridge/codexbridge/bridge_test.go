@@ -1243,13 +1243,12 @@ func TestServiceWorkerOutlivesStartContext(t *testing.T) {
 	}
 }
 
-func TestServiceQueuesWhileBusy(t *testing.T) {
+func TestServiceSuppressesSupersededTurnWhileBusy(t *testing.T) {
 	t.Parallel()
 
-	stream := make(chan BotEvent, 2)
+	stream := make(chan BotEvent, 1)
 	errs := make(chan error)
 	stream <- BotEvent{MessageID: "m-1", RoomID: "room-1", Text: "first"}
-	stream <- BotEvent{MessageID: "m-2", RoomID: "room-1", Text: "second"}
 	close(errs)
 
 	sink := runtimecodex.NewEventSink()
@@ -1270,6 +1269,14 @@ func TestServiceQueuesWhileBusy(t *testing.T) {
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+				sink.Publish(runtimecodex.SessionEvent{
+					RuntimeID:  handle.RuntimeID,
+					SessionID:  req.SessionID,
+					Kind:       runtimecodex.SessionEventToolCallStart,
+					ToolCallID: "tool-stale",
+					ToolTitle:  "Run shell command",
+					ToolStatus: "started",
+				})
 			}
 			sink.Publish(runtimecodex.SessionEvent{
 				RuntimeID: handle.RuntimeID,
@@ -1300,7 +1307,19 @@ func TestServiceQueuesWhileBusy(t *testing.T) {
 		t.Fatal("first prompt did not start")
 	}
 
-	time.Sleep(150 * time.Millisecond)
+	stream <- BotEvent{MessageID: "m-2", RoomID: "room-1", Text: "second"}
+	waitFor(t, func() bool {
+		svc.mu.Lock()
+		w := svc.workers["u-codex"]
+		svc.mu.Unlock()
+		if w == nil {
+			return false
+		}
+		w.mu.Lock()
+		latest := w.latest["room-1"]
+		w.mu.Unlock()
+		return latest == "room-1:m-2"
+	})
 	if got := prompter.texts(); !slices.Equal(got, []string{"first"}) {
 		t.Fatalf("prompt order before release = %v, want [first]", got)
 	}
@@ -1308,8 +1327,13 @@ func TestServiceQueuesWhileBusy(t *testing.T) {
 	close(firstRelease)
 	waitFor(t, func() bool {
 		return slices.Equal(prompter.texts(), []string{"first", "second"}) &&
-			slices.Equal(client.sentTexts(), []string{"reply:first", "reply:second"})
+			slices.Equal(client.sentTexts(), []string{"reply:second"})
 	})
+	records := client.sentRecords()
+	if len(records) != 1 {
+		t.Fatalf("sent records = %+v, want only latest final", records)
+	}
+	assertCodexFinalMetadata(t, records[0], "m-2")
 }
 
 func TestServiceFlushesAfterPromptSettlesWithoutTerminalEvent(t *testing.T) {

@@ -1,6 +1,6 @@
 ---
 name: agent-creator
-description: Mandatory skill for provisioning any new CSGClaw agent-backed participant or worker. Use immediately when the user asks to create, add, set up, or provision an agent, robot, worker, or user-facing "bot" (including GitLab, frontend, backend, QA, or other specialized workers), when dispatch needs a missing worker, or when asking which hub template fits. Always template list + match + template get + participant create --type agent --bind create --from-template with --env for secrets. Never run participant create --bind create without --from-template for a new worker. Do NOT use for task dispatch to existing workers.
+description: Mandatory skill for provisioning any new CSGClaw agent-backed participant or worker. Use immediately when the user asks to create, add, set up, or provision an agent, robot, worker, or user-facing "bot" (including GitLab, frontend, backend, QA, or other specialized workers), when dispatch needs a missing worker, or when asking which hub template fits. Always template list + match + template get + participant create --type agent --bind create --from-template with --env for secrets. Never create a CSGClaw worker with --type agent unless it binds a real Agent. Never run participant create --bind create without --from-template for a new worker. Do NOT use for task dispatch to existing workers.
 ---
 
 # Agent Creator
@@ -37,12 +37,12 @@ Do **not** use this skill when:
 
 ## Forbidden
 
-Never run a bare worker create like:
+Never run `participant create --type agent` for a new CSGClaw worker without `--bind create` or `--bind reuse`.
 
-```bash
-# FORBIDDEN for new workers
-csgclaw-cli participant create --type agent --bind create --name gitlab-worker --role worker
-```
+Never omit `--from-template` when using `--bind create` for a new worker.
+
+Never create a CSGClaw worker as a participant-only shell.
+That produces a private-chat identity without a runnable Agent.
 
 Never tell the worker secrets in chat instead of `--env`.
 
@@ -90,7 +90,7 @@ Template env vars with `default` are injected by the server; pass `--env` only f
 
 ## Operating Rules
 
-- `--from-template` is **required** for every new worker created through this skill.
+- `--bind create` and `--from-template` are **required** for every new worker created through this skill.
 - For normal workers, pass `--id`, `--agent-id`, `--channel-user-ref`, and `--channel-user-kind`; do not rely on generated IDs.
 - Prefer `csgclaw-cli` over ad hoc HTTP.
 - Put global flags (`--output json`, `--endpoint`, `--token`) **before** the subcommand, e.g. `csgclaw-cli --output json template list` (not after `template list`).

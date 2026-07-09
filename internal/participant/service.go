@@ -520,6 +520,46 @@ func (s *Service) DeleteAgent(ctx context.Context, agentID string) ([]apitypes.P
 	return deleted, nil
 }
 
+func (s *Service) RepairDanglingCSGClawAgentParticipants() ([]apitypes.Participant, error) {
+	if s == nil || s.store == nil {
+		return nil, fmt.Errorf("participant store is required")
+	}
+	if s.agents == nil {
+		return nil, nil
+	}
+
+	deleted := []apitypes.Participant{}
+	for _, item := range s.store.List(ListOptions{Channel: ChannelCSGClaw, Type: TypeAgent}) {
+		if isManagerParticipant(item) {
+			continue
+		}
+		agentID := strings.TrimSpace(item.AgentID)
+		if agentID != "" {
+			if _, ok := s.agents.Agent(agentID); ok {
+				continue
+			}
+		}
+		removed, ok, err := s.store.Delete(item.Channel, item.ID)
+		if err != nil {
+			return deleted, err
+		}
+		if !ok {
+			continue
+		}
+		deleted = append(deleted, removed)
+		if err := s.deleteUnreferencedCSGClawAgentUser(removed); err != nil {
+			return deleted, err
+		}
+	}
+	return deleted, nil
+}
+
+func isManagerParticipant(item apitypes.Participant) bool {
+	return strings.TrimSpace(item.ID) == agent.ManagerParticipantID ||
+		strings.TrimSpace(item.AgentID) == agent.ManagerUserID ||
+		strings.TrimSpace(item.ChannelUserRef) == im.ManagerUserID
+}
+
 func (s *Service) getByID(channel, id string) (apitypes.Participant, string, bool) {
 	if s == nil || s.store == nil {
 		return apitypes.Participant{}, "", false
@@ -654,6 +694,9 @@ func (s *Service) normalizeCreateRequest(req CreateRequest) (normalizedCreateReq
 				return normalizedCreateRequest{}, fmt.Errorf("agent_binding.agent_id is required for reuse")
 			}
 		case BindingModeNone:
+			if channel == ChannelCSGClaw {
+				return normalizedCreateRequest{}, fmt.Errorf("csgclaw agent participants require agent_binding.mode %q or %q", BindingModeCreate, BindingModeReuse)
+			}
 		default:
 			return normalizedCreateRequest{}, fmt.Errorf("agent_binding.mode must be one of %q, %q, or %q", BindingModeCreate, BindingModeReuse, BindingModeNone)
 		}

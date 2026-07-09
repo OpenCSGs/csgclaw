@@ -63,6 +63,10 @@ export type ModelProviderSelectOption = {
   value: string;
 };
 
+export type AgentModelProviderAvailability = {
+  codexAvailable?: boolean;
+};
+
 type RawCatalog = {
   providers?: unknown;
 };
@@ -220,6 +224,33 @@ export function modelProviderOptionsFromCatalog(
     }
   }
   return options;
+}
+
+export function modelProviderCatalogForAgentAvailability(
+  catalog: ModelProviderCatalog | null | undefined,
+  availability: AgentModelProviderAvailability = {},
+): ModelProviderCatalog | null {
+  if (!catalog) {
+    return null;
+  }
+  const providers = (catalog.providers ?? []).filter((provider) =>
+    modelProviderAvailableForAgent(provider.id, availability),
+  );
+  return {
+    providers,
+    builtinProviders: providers.filter((provider) => provider.builtin),
+    customProviders: providers.filter((provider) => !provider.builtin),
+  };
+}
+
+export function modelProviderAvailableForAgent(
+  providerID: string,
+  availability: AgentModelProviderAvailability = {},
+): boolean {
+  if (normalizeModelProviderID(providerID) === "codex" && availability.codexAvailable === false) {
+    return false;
+  }
+  return true;
 }
 
 export function modelProviderSelectOptionsFromCatalog(

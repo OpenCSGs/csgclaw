@@ -29,7 +29,7 @@ import { createTeamRequest, fetchTeams } from "@/api/tasks";
 import { useAgentController } from "@/hooks/workspace/useAgentController";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
-import type { AgentLike, AgentProfileLike } from "@/models/agents";
+import type { AgentLike, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
 import type { IMConversation, IMData, TranslateFn } from "@/models/conversations";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
@@ -181,6 +181,7 @@ function useAgentControllerHarness(
     managerProfile?: AgentProfileLike | null;
     modelProviders?: ModelProviderCatalog | null;
     modelProvidersLoaded?: boolean;
+    bootstrapConfig?: RuntimeBootstrapConfig | null;
     t?: TranslateFn;
   } = {},
 ) {
@@ -221,7 +222,7 @@ function useAgentControllerHarness(
       isError: false,
       isFetched: true,
     } as UseQueryResult<AgentLike[]>,
-    bootstrapConfig: null,
+    bootstrapConfig: options.bootstrapConfig ?? null,
     data,
     hubTemplates: [],
     locale: "en",
@@ -1486,12 +1487,9 @@ describe("useAgentController", () => {
       role: "worker",
     };
 
-    const { result } = renderHook(
-      () => useAgentControllerHarness({ agents: [oldAgent, existingWorker] }).controller,
-      {
-        wrapper: createWrapper(),
-      },
-    );
+    const { result } = renderHook(() => useAgentControllerHarness({ agents: [oldAgent, existingWorker] }).controller, {
+      wrapper: createWrapper(),
+    });
 
     await act(async () => {
       await result.current.computerViewProps.onCreateAgent();
@@ -1551,12 +1549,9 @@ describe("useAgentController", () => {
       role: "worker",
     };
 
-    const { result } = renderHook(
-      () => useAgentControllerHarness({ agents: [oldAgent, existingWorker] }).controller,
-      {
-        wrapper: createWrapper(),
-      },
-    );
+    const { result } = renderHook(() => useAgentControllerHarness({ agents: [oldAgent, existingWorker] }).controller, {
+      wrapper: createWrapper(),
+    });
 
     await act(async () => {
       await result.current.computerViewProps.onCreateAgent();
@@ -1639,6 +1634,62 @@ describe("useAgentController", () => {
       provider: "codex",
       model_provider_id: "codex",
       model_id: "gpt-5.5",
+    });
+  });
+
+  it("does not offer Codex model provider for agent creation when Codex CLI is unavailable", async () => {
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValueOnce({
+      provider: "codex",
+      model_provider_id: "codex",
+      model_id: "gpt-5.5",
+      profile_complete: true,
+    });
+    const modelProviders = normalizeModelProviderCatalog({
+      providers: [
+        {
+          id: "codex",
+          kind: "codex",
+          builtin: true,
+          display_name: "Codex",
+          models: ["gpt-5.5"],
+        },
+        {
+          id: "opencsg",
+          kind: "opencsg",
+          builtin: true,
+          display_name: "OpenCSG",
+          models: ["deepseek-v4"],
+        },
+      ],
+    });
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          bootstrapConfig: {
+            manager_runtime: {
+              name: "codex",
+              label: "Codex CLI",
+              installed: false,
+            },
+          },
+          modelProviders,
+          modelProvidersLoaded: true,
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+
+    await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
+    expect(result.current.agentProfileModalProps?.agentModelOptions.map((option) => option.providerID)).not.toContain(
+      "codex",
+    );
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      provider: "csghub",
+      model_provider_id: "opencsg",
+      model_id: "deepseek-v4",
     });
   });
 });

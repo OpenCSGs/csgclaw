@@ -196,6 +196,9 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 		participant.WithAgentService(agentSvc),
 		participant.WithIMService(imSvc),
 	)
+	if _, err := participantSvc.RepairDanglingCSGClawAgentParticipants(); err != nil {
+		return participant.Participant{}, err
+	}
 	if _, err := participantSvc.EnsureBootstrapAdmin(ctx); err != nil {
 		return participant.Participant{}, err
 	}

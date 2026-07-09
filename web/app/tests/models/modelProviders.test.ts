@@ -1,5 +1,6 @@
 import {
   modelProviderDisplayNameExists,
+  modelProviderCatalogForAgentAvailability,
   modelProviderOptionsFromCatalog,
   modelProviderSelectOptionsFromCatalog,
   normalizeModelProviderCatalog,
@@ -94,6 +95,33 @@ describe("model provider catalog helpers", () => {
         builtin: true,
       },
     ]);
+  });
+
+  it("filters Codex from agent provider choices when Codex CLI is unavailable", () => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [
+        {
+          id: "codex",
+          kind: "codex",
+          builtin: true,
+          display_name: "Codex",
+          models: ["gpt-5.5"],
+        },
+        {
+          id: "opencsg",
+          kind: "opencsg",
+          builtin: true,
+          display_name: "OpenCSG",
+          models: ["deepseek-v4"],
+        },
+      ],
+    });
+
+    const filtered = modelProviderCatalogForAgentAvailability(catalog, { codexAvailable: false });
+
+    expect(filtered?.providers.map((provider) => provider.id)).toEqual(["opencsg"]);
+    expect(modelProviderOptionsFromCatalog(filtered).map((option) => option.providerID)).toEqual(["opencsg"]);
+    expect(modelProviderSelectOptionsFromCatalog(filtered).map((option) => option.id)).toEqual(["opencsg"]);
   });
 
   it("maps OpenCSG aliases and avatar as a built-in provider", () => {

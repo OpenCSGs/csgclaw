@@ -567,6 +567,9 @@ func (s *Service) validateRuntimeConfig(ctx context.Context, runtimeKind string,
 	if s == nil {
 		return fmt.Errorf("agent service is required")
 	}
+	if err := validateRuntimeProfileAvailability(current); err != nil {
+		return err
+	}
 	runtimeKind = strings.TrimSpace(runtimeKind)
 	if runtimeKind == "" {
 		return nil
@@ -580,6 +583,16 @@ func (s *Service) validateRuntimeConfig(ctx context.Context, runtimeKind string,
 		return nil
 	}
 	return controller.ValidateConfig(ctx, current)
+}
+
+func validateRuntimeProfileAvailability(current agentruntime.RuntimeConfigSnapshot) error {
+	if normalizeProfileProvider(current.Profile.Provider) != ProviderCodex {
+		return nil
+	}
+	if _, err := locateCodexCLI(); err != nil {
+		return fmt.Errorf("codex model provider requires Codex CLI: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) runtimeConfigRestartRequired(runtimeKind string, change agentruntime.RuntimeConfigChange) (bool, error) {

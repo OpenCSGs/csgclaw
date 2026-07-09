@@ -98,7 +98,11 @@ import type {
 import { isDirectConversation, localIdentitiesMatch, upsertUserInData } from "@/models/conversations";
 import { displayTeam } from "@/models/tasks";
 import type { WorkspaceTeam } from "@/models/tasks";
-import { modelProviderOptionsFromCatalog, providerNameForProviderID } from "@/models/modelProviders";
+import {
+  modelProviderCatalogForAgentAvailability,
+  modelProviderOptionsFromCatalog,
+  providerNameForProviderID,
+} from "@/models/modelProviders";
 import type { ModelProviderOption } from "@/models/modelProviders";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace } from "@/models/slashCommands";
@@ -355,10 +359,10 @@ function draftWithModelProviderFallback(draft: AgentDraft, options: readonly Mod
   }
   const providerID = String(draft.model_provider_id || "").trim();
   const modelID = String(draft.model_id || "").trim();
-  if (providerID && modelID) {
+  if (providerID && modelID && options.some((item) => item.providerID === providerID && item.modelID === modelID)) {
     return draft;
   }
-  const option = options.find((item) => {
+  let option = options.find((item) => {
     if (!item.providerID || !item.modelID) {
       return false;
     }
@@ -371,14 +375,16 @@ function draftWithModelProviderFallback(draft: AgentDraft, options: readonly Mod
     return true;
   });
   if (!option) {
+    option = options.find((item) => item.providerID && item.modelID);
+  }
+  if (!option) {
     return draft;
   }
-  const nextProviderID = providerID || option.providerID;
   return {
     ...draft,
-    provider: providerNameForProviderID(nextProviderID),
-    model_provider_id: nextProviderID,
-    model_id: modelID || option.modelID,
+    provider: providerNameForProviderID(option.providerID),
+    model_provider_id: option.providerID,
+    model_id: option.modelID,
   };
 }
 
@@ -633,8 +639,19 @@ export function useAgentController({
     queryFn: fetchTeams,
   });
 
-  const agentModelOptions = useMemo(() => modelProviderOptionsFromCatalog(modelProviders), [modelProviders]);
-  const agentPageModelOptions = useMemo(() => modelProviderOptionsFromCatalog(modelProviders), [modelProviders]);
+  const codexModelProviderAvailable = bootstrapConfig?.manager_runtime?.installed !== false;
+  const agentModelProviders = useMemo(
+    () =>
+      modelProviderCatalogForAgentAvailability(modelProviders, {
+        codexAvailable: codexModelProviderAvailable,
+      }),
+    [codexModelProviderAvailable, modelProviders],
+  );
+  const agentModelOptions = useMemo(() => modelProviderOptionsFromCatalog(agentModelProviders), [agentModelProviders]);
+  const agentPageModelOptions = useMemo(
+    () => modelProviderOptionsFromCatalog(agentModelProviders),
+    [agentModelProviders],
+  );
   const agentModelBusy = Boolean(showAgentModal && !modelProvidersLoaded);
   const agentPageModelBusy = Boolean(selectedAgentForPage && !modelProvidersLoaded);
   const agentPageModelError = "";
@@ -2086,7 +2103,7 @@ export function useAgentController({
       hasUnsavedChanges: agentPageHasUnsavedChanges,
       models: agentPageModelOptions.map((option) => option.modelID),
       modelOptions: agentPageModelOptions,
-      modelProviders,
+      modelProviders: agentModelProviders,
       modelBusy: agentPageModelBusy,
       modelError: agentPageModelError,
       saving: agentPageBusy,
@@ -2158,7 +2175,7 @@ export function useAgentController({
             managerAgent,
             agentModels: agentModelOptions.map((option) => option.modelID),
             agentModelOptions,
-            modelProviders,
+            modelProviders: agentModelProviders,
             agentModelBusy,
             authStatuses: cliproxyAuthStatuses,
             authBusyProvider: cliproxyAuthBusy,

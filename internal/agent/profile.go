@@ -285,7 +285,6 @@ func apiKeyPreview(apiKey string) string {
 	const (
 		minPreviewRunes = 9
 		prefixRunes     = 4
-		suffixRunes     = 4
 	)
 
 	apiKey = strings.TrimSpace(apiKey)
@@ -296,7 +295,7 @@ func apiKeyPreview(apiKey string) string {
 	if len(runes) < minPreviewRunes {
 		return ""
 	}
-	return string(runes[:prefixRunes]) + "...." + string(runes[len(runes)-suffixRunes:])
+	return string(runes[:prefixRunes]) + "..."
 }
 
 func RedactedProfileView(profile AgentProfile, detection []ProfileDetectionResult) AgentProfileView {

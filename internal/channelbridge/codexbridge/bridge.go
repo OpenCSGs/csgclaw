@@ -116,6 +116,7 @@ func (s *Service) StartBot(ctx context.Context, binding Binding) error {
 		queue:       make(chan BotEvent, s.queueSize),
 		queued:      make(map[string]struct{}),
 		contextSent: make(map[string]struct{}),
+		latest:      make(map[string]string),
 		seen:        newRecentSet(s.seenWindow),
 		cancel:      cancel,
 		done:        make(chan struct{}),
@@ -184,6 +185,7 @@ type worker struct {
 	mu          sync.Mutex
 	processing  string
 	lastEvent   string
+	latest      map[string]string
 	contextSent map[string]struct{}
 }
 
@@ -201,7 +203,18 @@ func (w *worker) run(ctx context.Context) {
 			return
 		case evt := <-w.queue:
 			w.beginProcessing(eventDedupKey(evt))
-			_ = w.handleEvent(ctx, evt, eventCh)
+			if !w.isSuperseded(evt) {
+				_ = w.handleEvent(ctx, evt, eventCh)
+			} else {
+				slog.Debug("codex bridge skipped superseded message",
+					"bot_id", w.binding.BotID,
+					"runtime_id", w.binding.RuntimeID,
+					"channel", strings.TrimSpace(evt.Channel),
+					"room_id", strings.TrimSpace(evt.RoomID),
+					"message_id", strings.TrimSpace(evt.MessageID),
+					"thread_root_id", strings.TrimSpace(evt.ThreadRootID),
+				)
+			}
 			w.finishProcessing(eventDedupKey(evt))
 		}
 	}
@@ -311,6 +324,18 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 	}
 	flushTurn := func() (string, error) {
 		cleanupProcessingReaction(ctx)
+		if w.isSuperseded(evt) {
+			slog.Debug("codex bridge suppressed superseded turn final",
+				"bot_id", w.binding.BotID,
+				"runtime_id", w.binding.RuntimeID,
+				"session_id", sessionID,
+				"channel", strings.TrimSpace(evt.Channel),
+				"room_id", strings.TrimSpace(evt.RoomID),
+				"message_id", strings.TrimSpace(evt.MessageID),
+				"thread_root_id", strings.TrimSpace(evt.ThreadRootID),
+			)
+			return "", nil
+		}
 		if generatedRootID != "" && len(renderer.FinalMessages()) == 0 {
 			return w.flushTurnWithEmptyCompletion(ctx, evt.RoomID, generatedRootID, renderer, nil)
 		}
@@ -348,6 +373,9 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 	handleRuntimeEvent := func(event runtimecodex.SessionEvent) (bool, error) {
 		if !matchesSession(event, w.binding.RuntimeID, sessionID) {
 			return false, nil
+		}
+		if w.isSuperseded(evt) {
+			return isTerminalEvent(event.Kind), nil
 		}
 		if commentaryText, ok := codexCommentaryText(event); ok {
 			slog.Debug("codex bridge captured commentary payload",
@@ -404,6 +432,10 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 			}
 		case result := <-promptDone:
 			promptReturned = true
+			if w.isSuperseded(evt) {
+				cleanupProcessingReaction(ctx)
+				return nil
+			}
 			if result.err != nil {
 				renderer.SetPromptError(result.err.Error())
 				_, err := flushTurn()
@@ -811,6 +843,7 @@ func (w *worker) accept(evt BotEvent) bool {
 	if key == "" {
 		return true
 	}
+	scope := conversationKey(evt)
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -824,7 +857,23 @@ func (w *worker) accept(evt BotEvent) bool {
 		return false
 	}
 	w.queued[key] = struct{}{}
+	if scope != "" {
+		w.latest[scope] = key
+	}
 	return true
+}
+
+func (w *worker) isSuperseded(evt BotEvent) bool {
+	key := eventDedupKey(evt)
+	scope := conversationKey(evt)
+	if key == "" || scope == "" {
+		return false
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	latest := strings.TrimSpace(w.latest[scope])
+	return latest != "" && latest != key
 }
 
 func (w *worker) beginProcessing(messageID string) {

@@ -37,6 +37,7 @@ Prefer local Manager skills over external discovery.
 
 If the user wants to create, add, set up, or provision an agent, robot, bot, or worker, read `skills/agent-creator/SKILL.md` immediately.
 This includes capability-specific workers such as GitLab, frontend, backend, QA, review, or Feishu-connected workers.
+Never run `participant create --type agent` for a new CSGClaw worker unless it binds a real Agent with `--bind create` or `--bind reuse`.
 Never run `participant create --bind create` without `--from-template` for a new worker.
 
 ### Single-worker task assignment second

@@ -214,6 +214,38 @@ describe("useConversationController", () => {
     expect(result.current.conversationViewProps.workingParticipants).toEqual([]);
   });
 
+  it("keeps a sent direct message working participant past the local timeout until the agent replies", async () => {
+    vi.useFakeTimers();
+    try {
+      apiMocks.sendMessageRequest.mockResolvedValue({
+        id: "msg-user",
+        content: "hi",
+        created_at: "2026-06-16T10:00:00Z",
+        sender_id: "u-admin",
+      });
+      const { result } = renderConversationController();
+      const editor = document.createElement("div");
+      editor.textContent = "hi";
+
+      act(() => {
+        result.current.conversationViewProps.editorRef.current = editor;
+        result.current.conversationViewProps.onSyncComposer();
+      });
+
+      await act(async () => {
+        await result.current.conversationViewProps.onSendMessage();
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(121_000);
+      });
+
+      expect(result.current.conversationViewProps.workingParticipants).toEqual([{ id: "u-demo", name: "demo" }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("derives working participants from recent pending direct-message history after refresh", () => {
     const { result } = renderConversationController({
       data: dataWithMessages([

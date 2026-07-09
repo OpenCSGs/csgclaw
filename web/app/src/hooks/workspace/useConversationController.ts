@@ -94,7 +94,6 @@ type OpenCreateRoomOptions = {
 type WorkingParticipantsByConversationId = Record<string, ConversationWorkingParticipant[]>;
 
 const MESSAGE_WORKING_TIMEOUT_MS = 120_000;
-const WORKING_PARTICIPANT_KEY_SEPARATOR = "\u0000";
 const PARTICIPANT_ACTIVITY_TURN_PLACEHOLDER = "\u200b";
 
 function clearThreadDraftsForConversation(current: DraftsByThreadKey, conversationID: string): DraftsByThreadKey {
@@ -122,17 +121,8 @@ function conversationHasLocalIdentity(
   return (conversation?.members || []).some((memberID) => localIdentitiesMatch(memberID, id));
 }
 
-function workingParticipantKey(conversationID: string, participantID: string): string {
-  return `${conversationID}${WORKING_PARTICIPANT_KEY_SEPARATOR}${participantID}`;
-}
-
 function isParticipantActivityTurnPlaceholder(message: IMMessage | null | undefined): boolean {
   return String(message?.content || "") === PARTICIPANT_ACTIVITY_TURN_PLACEHOLDER;
-}
-
-function participantIDFromWorkingKey(conversationID: string, key: string): string {
-  const prefix = `${conversationID}${WORKING_PARTICIPANT_KEY_SEPARATOR}`;
-  return key.startsWith(prefix) ? key.slice(prefix.length) : "";
 }
 
 function agentTargetsForConversation(
@@ -460,7 +450,6 @@ export function useConversationController({
   const memberMenuRef = useRef<HTMLDivElement | null>(null);
   const channelToolsRef = useRef<HTMLDivElement | null>(null);
   const activeThreadKeyRef = useRef("");
-  const messageWorkingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   const usersById = useMemo(() => buildUsersById(data?.users), [data]);
   const activeConversation = useMemo(
@@ -642,18 +631,6 @@ export function useConversationController({
         return;
       }
       const senderID = String(participantID || "").trim();
-      const keyPrefix = `${roomID}${WORKING_PARTICIPANT_KEY_SEPARATOR}`;
-      messageWorkingTimersRef.current.forEach((timer, key) => {
-        if (!key.startsWith(keyPrefix)) {
-          return;
-        }
-        const workingParticipantID = participantIDFromWorkingKey(roomID, key);
-        if (senderID && !localIdentitiesMatch(workingParticipantID, senderID)) {
-          return;
-        }
-        clearTimeout(timer);
-        messageWorkingTimersRef.current.delete(key);
-      });
 
       setMessageWorkingByConversationId((current) => {
         const currentParticipants = current[roomID] ?? [];
@@ -708,20 +685,8 @@ export function useConversationController({
           [roomID]: Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name)),
         };
       });
-
-      nextParticipants.forEach((participant) => {
-        const key = workingParticipantKey(roomID, participant.id);
-        const currentTimer = messageWorkingTimersRef.current.get(key);
-        if (currentTimer) {
-          clearTimeout(currentTimer);
-        }
-        const timer = setTimeout(() => {
-          clearMessageWorkingParticipants(roomID, participant.id);
-        }, MESSAGE_WORKING_TIMEOUT_MS);
-        messageWorkingTimersRef.current.set(key, timer);
-      });
     },
-    [clearMessageWorkingParticipants],
+    [],
   );
 
   useEffect(() => {
@@ -746,14 +711,6 @@ export function useConversationController({
     },
     [clearMessageWorkingParticipants],
   );
-
-  useEffect(() => {
-    const timers = messageWorkingTimersRef.current;
-    return () => {
-      timers.forEach((timer) => clearTimeout(timer));
-      timers.clear();
-    };
-  }, []);
 
   useEffect(() => {
     setMentionIndex(0);
