@@ -21,7 +21,7 @@ import {
 import { WorkspacePaneTypes } from "@/models/routing";
 import { errorMessage, type ApiError } from "@/api/client";
 import { rootTaskForTask, type WorkspaceTask, rootTasks, shouldPollTransitionalTasks } from "@/models/tasks";
-import type { WorkspaceScheduledTaskRun } from "@/models/scheduledTasks";
+import type { WorkspaceScheduledTask, WorkspaceScheduledTaskRun } from "@/models/scheduledTasks";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
@@ -96,7 +96,7 @@ export function useTaskController({
   const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const scheduledTasks = useMemo(() => scheduledTasksQuery.data ?? [], [scheduledTasksQuery.data]);
   const visibleScheduledTaskID = selectedScheduledTaskID || scheduledTasks[0]?.id || "";
-  const scheduledTaskIDsKey = useMemo(() => scheduledTaskIDsCacheKey(scheduledTasks), [scheduledTasks]);
+  const scheduledTaskRunsCacheKey = useMemo(() => scheduledTaskRunsMetadataCacheKey(scheduledTasks), [scheduledTasks]);
   const scheduledTaskRunsQuery = useQuery({
     queryKey: scheduledTaskRunsQueryKey(visibleScheduledTaskID),
     queryFn: () => fetchScheduledTaskRuns(visibleScheduledTaskID),
@@ -104,7 +104,7 @@ export function useTaskController({
   });
   const scheduledTaskRuns = useMemo(() => scheduledTaskRunsQuery.data ?? [], [scheduledTaskRunsQuery.data]);
   const scheduledTaskRunQueries = useQuery({
-    queryKey: scheduledTaskRunsAllQueryKey(scheduledTaskIDsKey),
+    queryKey: scheduledTaskRunsAllQueryKey(scheduledTaskRunsCacheKey),
     queryFn: async () => {
       const runs = await Promise.all(scheduledTasks.map((item) => fetchScheduledTaskRuns(item.id)));
       return runs.flat();
@@ -118,6 +118,10 @@ export function useTaskController({
   const allScheduledTaskRuns = useMemo(
     () => mergeScheduledTaskRuns(scheduledTaskRuns, scheduledTaskRunQueries.data ?? []),
     [scheduledTaskRuns, scheduledTaskRunQueries.data],
+  );
+  const visibleScheduledTaskRuns = useMemo(
+    () => allScheduledTaskRuns.filter((run) => run.scheduled_task_id === visibleScheduledTaskID),
+    [allScheduledTaskRuns, visibleScheduledTaskID],
   );
   const scheduledGeneratedTaskIDs = useMemo(
     () => new Set(allScheduledTaskRuns.map((run) => run.task_id).filter(Boolean)),
@@ -174,11 +178,11 @@ export function useTaskController({
   const refreshScheduledTaskState = useCallback(async () => {
     const taskResult = await refetchScheduledTasks();
     const nextScheduledTasks = taskResult.data ?? scheduledTasks;
-    const nextTaskIDsKey = scheduledTaskIDsCacheKey(nextScheduledTasks);
+    const nextRunsCacheKey = scheduledTaskRunsMetadataCacheKey(nextScheduledTasks);
     const nextRuns = nextScheduledTasks.length
       ? (await Promise.all(nextScheduledTasks.map((item) => fetchScheduledTaskRuns(item.id)))).flat()
       : [];
-    queryClient.setQueryData<WorkspaceScheduledTaskRun[]>(scheduledTaskRunsAllQueryKey(nextTaskIDsKey), nextRuns);
+    queryClient.setQueryData<WorkspaceScheduledTaskRun[]>(scheduledTaskRunsAllQueryKey(nextRunsCacheKey), nextRuns);
     const nextVisibleScheduledTaskID = selectedScheduledTaskID || nextScheduledTasks[0]?.id || "";
     if (nextVisibleScheduledTaskID) {
       queryClient.setQueryData<WorkspaceScheduledTaskRun[]>(
@@ -397,7 +401,7 @@ export function useTaskController({
         mergeScheduledTaskRuns([run], current),
       );
       queryClient.setQueryData<WorkspaceScheduledTaskRun[]>(
-        scheduledTaskRunsAllQueryKey(scheduledTaskIDsCacheKey(scheduledTasks)),
+        scheduledTaskRunsAllQueryKey(scheduledTaskRunsMetadataCacheKey(scheduledTasks)),
         (current = []) => mergeScheduledTaskRuns([run], current),
       );
       await refreshScheduledTaskState();
@@ -567,7 +571,7 @@ export function useTaskController({
       taskEvents,
       teams,
       scheduledTasks,
-      scheduledTaskRuns,
+      scheduledTaskRuns: visibleScheduledTaskRuns,
       selectedScheduledTaskID: visibleScheduledTaskID,
       activeView: taskBoardView,
       createTaskModalView,
@@ -725,8 +729,10 @@ function mergeScheduledTaskRuns(
   return Array.from(byID.values()).sort((left, right) => right.triggered_at.localeCompare(left.triggered_at));
 }
 
-function scheduledTaskIDsCacheKey(tasks: readonly { id: string }[]): string {
-  return tasks.map((item) => item.id).join("|");
+function scheduledTaskRunsMetadataCacheKey(tasks: readonly WorkspaceScheduledTask[]): string {
+  return tasks
+    .map((item) => [item.id, item.last_run_at, item.updated_at, item.next_run_at, item.enabled ? "1" : "0"].join(":"))
+    .join("|");
 }
 
 function workspaceTasksEqual(left: WorkspaceTask, right: WorkspaceTask): boolean {

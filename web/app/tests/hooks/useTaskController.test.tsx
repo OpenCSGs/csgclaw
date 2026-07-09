@@ -326,6 +326,51 @@ describe("useTaskController", () => {
     }
   });
 
+  it("refetches scheduled runs when scheduled task metadata changes", async () => {
+    vi.useFakeTimers();
+    try {
+      const queryClient = createQueryClient();
+      const item = scheduledTask({ last_run_at: "" });
+      const updatedItem = scheduledTask({ last_run_at: "2026-07-08T09:00:00Z" });
+      const run = scheduledRun();
+      vi.mocked(fetchGlobalTasks).mockResolvedValue([]);
+      vi.mocked(fetchScheduledTasks).mockResolvedValueOnce([item]).mockResolvedValue([updatedItem]);
+      vi.mocked(fetchScheduledTaskRuns).mockResolvedValueOnce([]).mockResolvedValue([run]);
+
+      const { result } = renderTaskController(queryClient, {
+        type: WorkspacePaneTypes.task,
+        id: "",
+      });
+
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTasks).toEqual([item]);
+      });
+      await act(async () => {
+        result.current.taskViewProps.onSelectTaskBoardView("scheduled");
+      });
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTaskRuns).toEqual([]);
+      });
+      vi.mocked(fetchScheduledTaskRuns).mockClear();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTasks).toEqual([updatedItem]);
+      });
+      await vi.waitFor(() => {
+        expect(fetchScheduledTaskRuns).toHaveBeenCalledWith(updatedItem.id);
+      });
+      await vi.waitFor(() => {
+        expect(result.current.taskViewProps.scheduledTaskRuns).toEqual([run]);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps scheduled run polling while the generated task is active", async () => {
     vi.useFakeTimers();
     try {
