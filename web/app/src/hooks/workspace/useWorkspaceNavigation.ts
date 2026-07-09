@@ -52,6 +52,22 @@ export function useWorkspaceNavigation({
     [navigatePane, rooms],
   );
 
+  const selectTeamSection = useCallback(
+    (options: NavigatePaneOptions = {}) => {
+      const next: WorkspacePane = { type: WorkspacePaneTypes.team, id: "" };
+      navigatePane(next, rooms, options);
+    },
+    [navigatePane, rooms],
+  );
+
+  const selectNotificationSection = useCallback(
+    (options: NavigatePaneOptions = {}) => {
+      const next: WorkspacePane = { type: WorkspacePaneTypes.notifications, id: "" };
+      navigatePane(next, rooms, options);
+    },
+    [navigatePane, rooms],
+  );
+
   const selectModelProvider = useCallback(
     (item: { id?: string | null } | null | undefined, options: NavigatePaneOptions = {}) => {
       if (!item?.id) {
@@ -85,6 +101,14 @@ export function useWorkspaceNavigation({
   const selectHub = useCallback(
     (options: NavigatePaneOptions = {}) => {
       const next: WorkspacePane = { type: WorkspacePaneTypes.hub, id: DefaultWorkspacePaneIds.hub };
+      navigatePane(next, rooms, options);
+    },
+    [navigatePane, rooms],
+  );
+
+  const selectSettings = useCallback(
+    (options: NavigatePaneOptions = {}) => {
+      const next: WorkspacePane = { type: WorkspacePaneTypes.settings, id: "" };
       navigatePane(next, rooms, options);
     },
     [navigatePane, rooms],
@@ -126,8 +150,11 @@ export function useWorkspaceNavigation({
     selectHuman,
     selectModelProvider,
     selectTeam,
+    selectTeamSection,
+    selectNotificationSection,
     selectComputer,
     selectHub,
+    selectSettings,
     selectTasks,
   };
 }

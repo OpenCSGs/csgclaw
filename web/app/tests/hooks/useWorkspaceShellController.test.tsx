@@ -93,6 +93,47 @@ describe("useWorkspaceShellController", () => {
     });
   });
 
+  it("navigates from settings when selecting the preserved messages tab", async () => {
+    const selectConversation = vi.fn();
+
+    function SettingsShellHarness() {
+      const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(WorkspaceTabs.messages);
+      const shell = useWorkspaceShellController({
+        activeConversationId: "room-1",
+        activePane: { type: WorkspacePaneTypes.settings, id: "" },
+        collapsedWorkspaceGroups: {},
+        isSidebarCollapsed: false,
+        locale: "en",
+        navigatePane: vi.fn(),
+        rooms,
+        selectComputer: vi.fn(),
+        selectConversation,
+        selectHub: vi.fn(),
+        selectTasks: vi.fn(),
+        setCollapsedWorkspaceGroups: vi.fn(),
+        setIsSidebarCollapsed: vi.fn(),
+        setWorkspaceTab,
+        t,
+        theme: "dark",
+        workspaceTab,
+      });
+
+      return (
+        <button type="button" onClick={() => shell.selectWorkspaceTab(WorkspaceTabs.messages)}>
+          Messages
+        </button>
+      );
+    }
+
+    render(<SettingsShellHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Messages" }));
+
+    await waitFor(() => {
+      expect(selectConversation).toHaveBeenCalledWith("room-1");
+    });
+  });
+
   it("expands the sidebar before selecting a workspace tab", async () => {
     render(<ShellHarness />);
 

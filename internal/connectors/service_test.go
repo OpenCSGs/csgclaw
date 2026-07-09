@@ -14,7 +14,7 @@ import (
 
 func TestServiceConfigStartCallbackCredentialAndDisconnect(t *testing.T) {
 	var sawTokenExchange bool
-	var sawUserFetch bool
+	var sawUserFetch int
 	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/login/oauth/access_token":
@@ -52,7 +52,7 @@ func TestServiceConfigStartCallbackCredentialAndDisconnect(t *testing.T) {
 			if got := r.Header.Get("Authorization"); got != "Bearer gh-token" {
 				t.Fatalf("user Authorization = %q", got)
 			}
-			sawUserFetch = true
+			sawUserFetch++
 			writeJSONResponse(t, w, map[string]any{
 				"login":      "octocat",
 				"id":         1,
@@ -133,8 +133,8 @@ func TestServiceConfigStartCallbackCredentialAndDisconnect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompleteOAuth() error = %v", err)
 	}
-	if !sawTokenExchange || !sawUserFetch {
-		t.Fatalf("token exchange=%v user fetch=%v, want both", sawTokenExchange, sawUserFetch)
+	if !sawTokenExchange || sawUserFetch != 1 {
+		t.Fatalf("token exchange=%v user fetch=%d, want exchange and one user fetch", sawTokenExchange, sawUserFetch)
 	}
 	if !callbackStatus.Connected || callbackStatus.Account == nil || callbackStatus.Account.Login != "octocat" {
 		t.Fatalf("callback status = %+v", callbackStatus)
@@ -150,6 +150,9 @@ func TestServiceConfigStartCallbackCredentialAndDisconnect(t *testing.T) {
 	if credential.AccessToken != "gh-token" || credential.TokenType != "bearer" {
 		t.Fatalf("credential = %+v", credential)
 	}
+	if sawUserFetch != 2 {
+		t.Fatalf("Credential() validation user fetch count = %d, want 2", sawUserFetch)
+	}
 
 	disconnected, err := service.Disconnect(context.Background(), ProviderGitHub)
 	if err != nil {
@@ -160,6 +163,152 @@ func TestServiceConfigStartCallbackCredentialAndDisconnect(t *testing.T) {
 	}
 	if _, err := service.Credential(context.Background(), ProviderGitHub); err == nil {
 		t.Fatal("Credential() error = nil after disconnect")
+	}
+}
+
+func TestServiceCredentialRejectsInvalidGitHubTokenWithoutLeakingIt(t *testing.T) {
+	const invalidToken = "gho_invalid_secret"
+	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/user":
+			if got := r.Header.Get("Authorization"); got != "Bearer "+invalidToken {
+				t.Fatalf("user Authorization = %q", got)
+			}
+			http.Error(w, `{"message":"Bad credentials"}`, http.StatusUnauthorized)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(github.Close)
+
+	store := NewStore(filepath.Join(t.TempDir(), "state.json"))
+	if err := store.SaveGitHub(State{
+		Token: &Token{
+			AccessToken: invalidToken,
+			TokenType:   "bearer",
+			Scopes:      []string{"repo"},
+		},
+		Account: &Account{Login: "octocat", ID: 1},
+	}); err != nil {
+		t.Fatalf("SaveGitHub() error = %v", err)
+	}
+	service := NewService(store)
+	service.HTTPClient = github.Client()
+	service.Endpoints = Endpoints{APIBaseURL: github.URL}
+
+	_, err := service.Credential(context.Background(), ProviderGitHub)
+	if err == nil {
+		t.Fatal("Credential() error = nil, want invalid token error")
+	}
+	if !strings.Contains(err.Error(), "reconnect GitHub") {
+		t.Fatalf("Credential() error = %v, want reconnect guidance", err)
+	}
+	if strings.Contains(err.Error(), invalidToken) {
+		t.Fatalf("Credential() error leaked token: %v", err)
+	}
+}
+
+func TestServiceCredentialRefreshesExpiredGitHubAppUserToken(t *testing.T) {
+	now := time.Date(2026, 7, 7, 10, 0, 0, 0, time.UTC)
+	var sawRefresh bool
+	var sawUserFetch bool
+	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/login/oauth/access_token":
+			if r.Method != http.MethodPost {
+				t.Fatalf("refresh method = %s, want POST", r.Method)
+			}
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm() error = %v", err)
+			}
+			if got := r.Form.Get("grant_type"); got != "refresh_token" {
+				t.Fatalf("grant_type = %q, want refresh_token", got)
+			}
+			if got := r.Form.Get("client_id"); got != "client-id" {
+				t.Fatalf("client_id = %q, want client-id", got)
+			}
+			if got := r.Form.Get("client_secret"); got != "client-secret" {
+				t.Fatalf("client_secret = %q, want client-secret", got)
+			}
+			if got := r.Form.Get("refresh_token"); got != "old-refresh" {
+				t.Fatalf("refresh_token = %q, want old-refresh", got)
+			}
+			sawRefresh = true
+			writeJSONResponse(t, w, map[string]any{
+				"access_token":             "new-access",
+				"token_type":               "bearer",
+				"scope":                    "repo,read:user",
+				"refresh_token":            "new-refresh",
+				"expires_in":               28800,
+				"refresh_token_expires_in": 15897600,
+			})
+		case "/user":
+			if got := r.Header.Get("Authorization"); got != "Bearer new-access" {
+				t.Fatalf("user Authorization = %q, want refreshed token", got)
+			}
+			sawUserFetch = true
+			writeJSONResponse(t, w, map[string]any{
+				"login": "octocat",
+				"id":    1,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(github.Close)
+
+	store := NewStore(filepath.Join(t.TempDir(), "state.json"))
+	if err := store.SaveGitHub(State{
+		Config: Config{
+			ClientID:     "client-id",
+			ClientSecret: "client-secret",
+		},
+		Token: &Token{
+			AccessToken:           "old-access",
+			TokenType:             "bearer",
+			Scopes:                []string{"repo"},
+			RefreshToken:          "old-refresh",
+			ExpiresAt:             now.Add(-time.Minute),
+			RefreshTokenExpiresAt: now.Add(24 * time.Hour),
+		},
+		Account: &Account{Login: "octocat", ID: 1},
+	}); err != nil {
+		t.Fatalf("SaveGitHub() error = %v", err)
+	}
+	service := NewService(store)
+	service.HTTPClient = github.Client()
+	service.Endpoints = Endpoints{
+		TokenURL:   github.URL + "/login/oauth/access_token",
+		APIBaseURL: github.URL,
+	}
+	service.Now = func() time.Time { return now }
+
+	credential, err := service.Credential(context.Background(), ProviderGitHub)
+	if err != nil {
+		t.Fatalf("Credential() error = %v", err)
+	}
+	if credential.AccessToken != "new-access" {
+		t.Fatalf("Credential().AccessToken = %q, want refreshed token", credential.AccessToken)
+	}
+	if !sawRefresh || !sawUserFetch {
+		t.Fatalf("refresh=%v user fetch=%v, want both", sawRefresh, sawUserFetch)
+	}
+
+	state, ok, err := store.LoadGitHub()
+	if err != nil {
+		t.Fatalf("LoadGitHub() error = %v", err)
+	}
+	if !ok || state.Token == nil {
+		t.Fatalf("stored state missing token: ok=%v state=%+v", ok, state)
+	}
+	if state.Token.AccessToken != "new-access" || state.Token.RefreshToken != "new-refresh" {
+		t.Fatalf("stored token = %+v, want refreshed access and refresh tokens", state.Token)
+	}
+	if state.Token.ExpiresAt.IsZero() || !state.Token.ExpiresAt.After(now) {
+		t.Fatalf("stored token ExpiresAt = %v, want future expiry", state.Token.ExpiresAt)
+	}
+	if state.Token.RefreshTokenExpiresAt.IsZero() || !state.Token.RefreshTokenExpiresAt.After(now) {
+		t.Fatalf("stored token RefreshTokenExpiresAt = %v, want future expiry", state.Token.RefreshTokenExpiresAt)
 	}
 }
 

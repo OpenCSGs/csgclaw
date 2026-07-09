@@ -107,6 +107,8 @@ const labels: Record<string, string> = {
   scheduledTaskActiveTask: "Task running",
   scheduledTaskRunTriggeredStatus: "Triggered",
   scheduledTaskRunFailedStatus: "Failed",
+  scheduledTaskRunAgentMissingError:
+    "The assigned agent was deleted or no longer exists. Choose another agent before running again.",
   generatedTaskDetailTitle: "Generated task detail",
   generatedTaskDetailEmpty: "Select a run record to inspect the generated task.",
   cancel: "Cancel",
@@ -460,6 +462,38 @@ describe("TasksView", () => {
     expect(screen.queryByText("tasksEmpty")).not.toBeInTheDocument();
   });
 
+  it("uses the active task view for the toolbar create action", () => {
+    const onOpenCreateTaskModal = vi.fn();
+    const onOpenCreateScheduledTaskModal = vi.fn();
+
+    const { rerender } = render(
+      <TasksView
+        onOpenCreateTaskModal={onOpenCreateTaskModal}
+        onOpenCreateScheduledTaskModal={onOpenCreateScheduledTaskModal}
+        t={t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "New task" }));
+
+    expect(onOpenCreateTaskModal).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "New scheduled task" })).not.toBeInTheDocument();
+
+    rerender(
+      <TasksView
+        activeView="scheduled"
+        onOpenCreateTaskModal={onOpenCreateTaskModal}
+        onOpenCreateScheduledTaskModal={onOpenCreateScheduledTaskModal}
+        t={t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "New scheduled task" }));
+
+    expect(onOpenCreateScheduledTaskModal).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "New task" })).not.toBeInTheDocument();
+  });
+
   it("shows task and scheduled-task creation as tabs in the create dialog", () => {
     render(<TasksView showCreateTaskModal agents={[agent()]} teams={[team()]} t={t} />);
 
@@ -754,6 +788,43 @@ describe("TasksView", () => {
 
     expect(screen.getByLabelText("Generated task detail")).toBeInTheDocument();
     expect(screen.getByText("Select a run record to inspect the generated task.")).toBeInTheDocument();
+  });
+
+  it("disables run now as soon as a scheduled run is triggered", () => {
+    render(
+      <TasksView
+        activeView="scheduled"
+        scheduledTasks={[scheduledTask()]}
+        scheduledTaskRuns={[scheduledTaskRun()]}
+        selectedScheduledTaskID="scheduled-task-1"
+        t={t}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Task running/ })).toBeDisabled();
+  });
+
+  it("localizes deleted-agent scheduled run errors", () => {
+    render(
+      <TasksView
+        activeView="scheduled"
+        scheduledTasks={[scheduledTask()]}
+        scheduledTaskRuns={[
+          scheduledTaskRun({
+            error: 'agent "agent-uh4x2l" not found',
+            status: "failed",
+            task_id: "",
+          }),
+        ]}
+        selectedScheduledTaskID="scheduled-task-1"
+        t={t}
+      />,
+    );
+
+    expect(
+      screen.getByText("The assigned agent was deleted or no longer exists. Choose another agent before running again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('agent "agent-uh4x2l" not found')).not.toBeInTheDocument();
   });
 
   it("confirms before deleting a scheduled task", async () => {

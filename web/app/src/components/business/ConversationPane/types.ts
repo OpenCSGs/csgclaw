@@ -49,6 +49,7 @@ export type ConversationPaneProps = {
   logAgent?: AgentLike | null;
   managerProfile?: AgentProfileLike | null;
   managerProfileIncomplete?: boolean | null;
+  managerRuntimeUnavailable?: boolean | null;
   memberMenuRef: RefObject<HTMLDivElement | null>;
   mentionCandidates: MentionPickerUser[];
   mentionIndex: number;

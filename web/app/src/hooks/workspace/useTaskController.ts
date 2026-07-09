@@ -19,7 +19,7 @@ import {
   type UpdateScheduledTaskPayload,
 } from "@/api/scheduledTasks";
 import { WorkspacePaneTypes } from "@/models/routing";
-import { ApiError, errorMessage } from "@/api/client";
+import { errorMessage, type ApiError } from "@/api/client";
 import { rootTaskForTask, type WorkspaceTask, rootTasks, shouldPollTransitionalTasks } from "@/models/tasks";
 import type { WorkspaceScheduledTaskRun } from "@/models/scheduledTasks";
 import { workspaceQueryKeys } from "./workspaceQueries";
@@ -30,7 +30,7 @@ import type { NavigatePaneOptions } from "./types";
 const TASKS_QUERY_KEY = ["workspace", "tasks"] as const;
 const SCHEDULED_TASKS_QUERY_KEY = ["workspace", "scheduled-tasks"] as const;
 const TASK_BOARD_POLL_DELAY_MS = 3000;
-const TASK_BOARD_POLL_STATUSES = new Set(["pending", "assigned", "in_progress"]);
+const TASK_BOARD_POLL_STATUSES = new Set(["pending", "assigned", "in_progress", "running"]);
 const TASK_TAB_REVALIDATE_STALE_MS = 5000;
 const teamEventsQueryKey = (teamID: string) => ["workspace", "team-events", teamID] as const;
 const scheduledTaskRunsQueryKey = (taskID: string) => ["workspace", "scheduled-task-runs", taskID] as const;
@@ -120,6 +120,12 @@ export function useTaskController({
     () => new Set(allScheduledTaskRuns.map((run) => run.task_id).filter(Boolean)),
     [allScheduledTaskRuns],
   );
+  const missingScheduledGeneratedTaskIDs = useMemo(() => {
+    const taskIDs = new Set(tasks.map((task) => task.id));
+    return Array.from(scheduledGeneratedTaskIDs)
+      .filter((taskID) => !taskIDs.has(taskID))
+      .sort();
+  }, [scheduledGeneratedTaskIDs, tasks]);
   const boardTasks = useMemo(
     () =>
       tasks.filter((task) => {
@@ -141,9 +147,18 @@ export function useTaskController({
         ? selectedTask.team_id
         : "";
   const shouldPollActiveTaskBoard = useMemo(() => shouldPollTaskBoard(tasks, activeRootTask), [activeRootTask, tasks]);
+  const shouldPollScheduledGeneratedTasks = useMemo(
+    () =>
+      Array.from(scheduledGeneratedTaskIDs).some((taskID) => {
+        const task = tasks.find((item) => item.id === taskID) ?? null;
+        const root = rootTaskForTask(tasks, task);
+        return shouldPollTaskBoard(tasks, root);
+      }),
+    [scheduledGeneratedTaskIDs, tasks],
+  );
   const shouldPollTasks = useMemo(
-    () => shouldPollActiveTaskBoard || shouldPollTransitionalTasks(tasks),
-    [shouldPollActiveTaskBoard, tasks],
+    () => shouldPollActiveTaskBoard || shouldPollScheduledGeneratedTasks || shouldPollTransitionalTasks(tasks),
+    [shouldPollActiveTaskBoard, shouldPollScheduledGeneratedTasks, tasks],
   );
   const taskEventsQuery = useQuery({
     queryKey: teamEventsQueryKey(activeEventsTeamID),
@@ -221,6 +236,26 @@ export function useTaskController({
       }
     };
   }, [queryClient, refreshScheduledTaskState, shouldPollTasks]);
+
+  useEffect(() => {
+    if (taskBoardView !== "scheduled") {
+      return undefined;
+    }
+    if (missingScheduledGeneratedTaskIDs.length === 0) {
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (cancelled) {
+        return;
+      }
+      await refetchTasks();
+    }, TASK_BOARD_POLL_DELAY_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [missingScheduledGeneratedTaskIDs, refetchTasks, taskBoardView]);
 
   function taskById(taskId: string) {
     return tasks.find((item) => item.id === taskId) ?? null;
@@ -355,14 +390,29 @@ export function useTaskController({
     setScheduledTaskActionError("");
     try {
       const run = await runScheduledTaskNow(taskID);
-      await scheduledTasksQuery.refetch();
-      await queryClient.invalidateQueries({ queryKey: scheduledTaskRunsQueryKey(taskID) });
-      await tasksQuery.refetch();
+      queryClient.setQueryData<WorkspaceScheduledTaskRun[]>(scheduledTaskRunsQueryKey(taskID), (current = []) =>
+        mergeScheduledTaskRuns([run], current),
+      );
+      queryClient.setQueryData<WorkspaceScheduledTaskRun[]>(
+        scheduledTaskRunsAllQueryKey(scheduledTaskIDsCacheKey(scheduledTasks)),
+        (current = []) => mergeScheduledTaskRuns([run], current),
+      );
+      await refreshScheduledTaskState();
+      const taskResult = await tasksQuery.refetch();
+      if (taskResult.data) {
+        queryClient.setQueryData<WorkspaceTask[]>(TASKS_QUERY_KEY, (current) =>
+          mergeWorkspaceTaskList(current ?? [], taskResult.data ?? []),
+        );
+      }
       if (run.task_id) {
         onSelectTask(run.task_id);
       }
     } catch (err) {
-      setScheduledTaskActionError(errorMessage(err, t("scheduledTaskRunFailed")));
+      setScheduledTaskActionError(
+        isScheduledTaskAlreadyTriggeredError(err)
+          ? t("scheduledTaskAlreadyTriggered")
+          : errorMessage(err, t("scheduledTaskRunFailed")),
+      );
     } finally {
       setScheduledTaskActionID("");
     }
@@ -544,7 +594,14 @@ export function useTaskController({
       parentDetailTaskID,
       onCloseCreateTaskModal: () => setShowCreateTaskModal(false),
       onCloseEditScheduledTaskModal: () => setEditingScheduledTaskID(""),
+      onOpenCreateTaskModal: () => {
+        setCreateTaskError("");
+        setCreateScheduledTaskError("");
+        setCreateTaskModalView("tasks");
+        setShowCreateTaskModal(true);
+      },
       onOpenCreateScheduledTaskModal: () => {
+        setCreateTaskError("");
         setCreateScheduledTaskError("");
         setCreateTaskModalView("scheduled");
         setShowCreateTaskModal(true);
@@ -591,6 +648,15 @@ function shouldAutoPlanForStartError(error: unknown): boolean {
     return false;
   }
   return message.includes("no subtasks") || message.includes("has no subtasks");
+}
+
+function isScheduledTaskAlreadyTriggeredError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const status = "status" in error ? (error as ApiError).status : 0;
+  const message = "message" in error ? String((error as ApiError).message || "").toLowerCase() : "";
+  return status === 409 || message.includes("scheduled task already has an active generated task");
 }
 
 function shouldPollTaskBoard(tasks: readonly WorkspaceTask[], root: WorkspaceTask | null): boolean {

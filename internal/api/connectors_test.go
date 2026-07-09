@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/agent"
+	"csgclaw/internal/config"
 	"csgclaw/internal/connectors"
+	agentruntime "csgclaw/internal/runtime"
 )
 
 func TestConnectorGitHubOAuthAPIFlowAndCredentialAuth(t *testing.T) {
@@ -156,6 +160,177 @@ func TestConnectorGitHubOAuthAPIFlowAndCredentialAuth(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "gh-token") {
 		t.Fatalf("credential body = %s, want access token", rec.Body.String())
+	}
+}
+
+func TestAgentConnectorCredentialAPIReturnsDynamicManagerLease(t *testing.T) {
+	var sawTokenExchange bool
+	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/login/oauth/access_token":
+			sawTokenExchange = true
+			writeJSON(w, http.StatusOK, map[string]any{
+				"access_token": "gh-token",
+				"token_type":   "bearer",
+				"scope":        "repo,read:user,user:email",
+			})
+		case "/user":
+			if got := r.Header.Get("Authorization"); got != "Bearer gh-token" {
+				t.Fatalf("user Authorization = %q", got)
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"login": "octocat",
+				"id":    1,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(github.Close)
+
+	connectorSvc := connectors.NewService(connectors.NewStore(filepath.Join(t.TempDir(), "state.json")))
+	connectorSvc.HTTPClient = github.Client()
+	connectorSvc.Endpoints = connectors.Endpoints{
+		AuthorizeURL: github.URL + "/login/oauth/authorize",
+		TokenURL:     github.URL + "/login/oauth/access_token",
+		APIBaseURL:   github.URL,
+	}
+	connectorSvc.GenerateOAuthState = func() (connectors.OAuthState, error) {
+		return connectors.OAuthState{State: "state-value", CodeVerifier: "verifier"}, nil
+	}
+
+	var specs []agentruntime.Spec
+	var deleteCalls int
+	agentSvc, err := agent.NewService(
+		config.ModelConfig{
+			Provider: config.ProviderLLMAPI,
+			BaseURL:  "http://127.0.0.1:4000",
+			APIKey:   "sk-test",
+			ModelID:  "model-1",
+		},
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "server-token"},
+		"",
+		filepath.Join(t.TempDir(), "agents.json"),
+		agent.WithRuntime(fakeCompatRuntime{
+			kind: agent.RuntimeKindCodex,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				specs = append(specs, spec)
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-manager-session"}, nil
+			},
+			del: func(_ context.Context, h agentruntime.Handle) error {
+				deleteCalls++
+				return nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("agent.NewService() error = %v", err)
+	}
+	if _, err := agentSvc.EnsureManager(context.Background(), false); err != nil {
+		t.Fatalf("initial EnsureManager() error = %v", err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("initial runtime specs = %d, want 1", len(specs))
+	}
+	if got := specs[0].Profile.Env["GITHUB_TOKEN"]; got != "" {
+		t.Fatalf("initial manager GITHUB_TOKEN = %q, want empty before OAuth", got)
+	}
+	worker, err := agentSvc.CreateWorker(context.Background(), agent.CreateAgentSpec{
+		ID:          "agent-worker",
+		Name:        "worker",
+		RuntimeKind: agent.RuntimeKindCodex,
+		AgentProfile: agent.AgentProfile{
+			Name:            "worker",
+			Provider:        agent.ProviderAPI,
+			BaseURL:         "https://api.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "gpt-4.1",
+			ProfileComplete: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
+	}
+	if worker.Role != agent.RoleWorker {
+		t.Fatalf("worker role = %q, want worker", worker.Role)
+	}
+
+	handler := &Handler{svc: agentSvc, serverAccessToken: "server-token"}
+	handler.SetConnectorService(connectorSvc)
+	routes := handler.Routes()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/connectors/github/config", strings.NewReader(`{"client_id":"client-id","client_secret":"client-secret"}`))
+	req.Host = "127.0.0.1:18080"
+	routes.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("config status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/connectors/github/oauth/start", strings.NewReader(`{"return_url":"http://127.0.0.1:18080/#/workspace"}`))
+	req.Host = "127.0.0.1:18080"
+	routes.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("start status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/connectors/github/oauth/callback?code=oauth-code&state=state-value", nil)
+	routes.ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("callback status = %d, want 302: %s", rec.Code, rec.Body.String())
+	}
+	if !sawTokenExchange {
+		t.Fatal("token exchange was not called")
+	}
+	if len(specs) != 2 {
+		t.Fatalf("runtime specs = %d, want manager plus worker only", len(specs))
+	}
+	if deleteCalls != 0 {
+		t.Fatalf("manager runtime delete calls = %d, want no refresh after OAuth", deleteCalls)
+	}
+	for i, spec := range specs {
+		if got := spec.Profile.Env["GITHUB_TOKEN"]; got != "" {
+			t.Fatalf("runtime spec %d GITHUB_TOKEN = %q, want empty", i, got)
+		}
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-manager/connectors/github/credential", nil)
+	req.Header.Set("Authorization", "Bearer server-token")
+	routes.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("manager credential status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); !strings.Contains(got, "no-store") {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	var lease struct {
+		Provider    string              `json:"provider"`
+		AccessToken string              `json:"access_token"`
+		TokenType   string              `json:"token_type"`
+		Account     *connectors.Account `json:"account"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&lease); err != nil {
+		t.Fatalf("decode manager credential lease: %v", err)
+	}
+	if lease.Provider != connectors.ProviderGitHub || lease.AccessToken != "gh-token" || lease.TokenType != "bearer" {
+		t.Fatalf("manager credential lease = %+v, want github bearer token", lease)
+	}
+	if lease.Account == nil || lease.Account.Login != "octocat" {
+		t.Fatalf("manager credential account = %+v, want octocat", lease.Account)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-worker/connectors/github/credential", nil)
+	req.Header.Set("Authorization", "Bearer server-token")
+	routes.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("worker credential status = %d, want 403: %s", rec.Code, rec.Body.String())
 	}
 }
 

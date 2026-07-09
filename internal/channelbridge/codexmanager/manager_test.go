@@ -42,7 +42,7 @@ func TestShouldStartCodexBridge(t *testing.T) {
 			},
 		},
 		{
-			name: "manager is excluded",
+			name: "running codex manager with complete profile",
 			agent: agent.Agent{
 				ID:              agent.ManagerUserID,
 				Role:            agent.RoleManager,
@@ -50,6 +50,7 @@ func TestShouldStartCodexBridge(t *testing.T) {
 				Status:          string(agentruntime.StateRunning),
 				ProfileComplete: true,
 			},
+			want: true,
 		},
 		{
 			name: "non-codex worker is excluded",
@@ -117,12 +118,40 @@ func TestShouldRestoreCodexBridgeOnStartup(t *testing.T) {
 				ProfileComplete: true,
 			},
 		},
+		{
+			name: "running codex manager is restored",
+			agent: agent.Agent{
+				ID:              agent.ManagerUserID,
+				Role:            agent.RoleManager,
+				RuntimeKind:     agent.RuntimeKindCodex,
+				Status:          string(agentruntime.StateRunning),
+				ProfileComplete: true,
+			},
+			want: true,
+		},
 	}
 
 	for _, tc := range cases {
 		if got := shouldRestoreCodexBridgeOnStartup(tc.agent); got != tc.want {
 			t.Fatalf("%s: shouldRestoreCodexBridgeOnStartup() = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestBindingForAgentUsesManagerParticipantID(t *testing.T) {
+	binding := bindingForAgent(agent.Agent{
+		ID:          agent.ManagerUserID,
+		Name:        agent.ManagerName,
+		RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID:   "rt-agent-manager",
+		Role:        agent.RoleManager,
+	}, "sess-manager")
+
+	if binding.BotID != agent.ManagerParticipantID {
+		t.Fatalf("BotID = %q, want %q", binding.BotID, agent.ManagerParticipantID)
+	}
+	if binding.RuntimeID != "rt-agent-manager" || binding.SessionID != "sess-manager" {
+		t.Fatalf("binding runtime/session = %q/%q, want rt-agent-manager/sess-manager", binding.RuntimeID, binding.SessionID)
 	}
 }
 

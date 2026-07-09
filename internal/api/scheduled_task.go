@@ -27,9 +27,10 @@ func (h *Handler) handleListScheduledTasks(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	items := svc.List()
+	presenter := h.newTeamIdentityPresenter()
 	resp := make([]apitypes.ScheduledTask, 0, len(items))
 	for _, item := range items {
-		resp = append(resp, apiScheduledTask(item))
+		resp = append(resp, apiScheduledTask(item, presenter))
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -61,7 +62,7 @@ func (h *Handler) handleCreateScheduledTask(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, http.StatusCreated, apiScheduledTask(item))
+	writeJSON(w, http.StatusCreated, apiScheduledTask(item, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleUpdateScheduledTask(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +89,7 @@ func (h *Handler) handleUpdateScheduledTask(w http.ResponseWriter, r *http.Reque
 		writeScheduledTaskError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, apiScheduledTask(item))
+	writeJSON(w, http.StatusOK, apiScheduledTask(item, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleDeleteScheduledTask(w http.ResponseWriter, r *http.Request) {
@@ -141,11 +142,12 @@ func writeScheduledTaskError(w http.ResponseWriter, err error) {
 	http.Error(w, err.Error(), http.StatusBadRequest)
 }
 
-func apiScheduledTask(item scheduledtask.Task) apitypes.ScheduledTask {
+func apiScheduledTask(item scheduledtask.Task, presenter teamIdentityPresenter) apitypes.ScheduledTask {
 	return apitypes.ScheduledTask{
 		ID:         item.ID,
 		Title:      item.Title,
 		AgentID:    item.AgentID,
+		AgentName:  presenter.displayAgentName(item.AgentID),
 		Prompt:     item.Prompt,
 		Recurrence: item.Recurrence,
 		Enabled:    item.Enabled,

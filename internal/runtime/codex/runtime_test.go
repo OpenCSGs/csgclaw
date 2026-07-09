@@ -342,6 +342,35 @@ func TestRefreshCodexHomeAgentsFileCreatesManagedFileWhenMissing(t *testing.T) {
 	}
 }
 
+func TestRefreshCodexHomeAgentsFileAddsManagerConnectorRules(t *testing.T) {
+	root := t.TempDir()
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{ID: agent.ManagerUserID, Name: agent.ManagerName, RuntimeID: h.RuntimeID, Instructions: "Stay focused."}, nil
+	})
+
+	if err := rt.RefreshCodexHomeAgentsFile(context.Background(), agentruntime.Handle{RuntimeID: "rt-agent-manager"}); err != nil {
+		t.Fatalf("RefreshCodexHomeAgentsFile() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(root, "agent-manager", ".codex", "home", "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read manager AGENTS.md: %v", err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		"GitHub Connector Access",
+		"/api/v1/agents/agent-manager/connectors/github/credential",
+		"`access_token`",
+		"Do not rely on connector tokens from environment variables",
+		"external Codex GitHub app connector",
+		"reconnect the CSGClaw GitHub OAuth connector",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("manager AGENTS.md missing %q in %q", want, text)
+		}
+	}
+}
+
 func TestDecodeRuntimeOptionsNormalizesLocalWorkspaceDir(t *testing.T) {
 	got, err := DecodeRuntimeOptions(map[string]any{
 		"local_workspace_dir": "  /tmp/project  ",
@@ -1255,6 +1284,140 @@ func TestRuntimeCreateRefreshesCodexSkillsFromHost(t *testing.T) {
 	assertRuntimeSkillFile(t, filepath.Join(runtimeSkillsRoot, "fresh", "SKILL.md"), "# Fresh\n", 0o644)
 	if _, err := os.Stat(filepath.Join(runtimeSkillsRoot, "stale", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("stale runtime skill should be removed, stat err = %v", err)
+	}
+}
+
+func TestRuntimeCreateInstallsManagerTemplate(t *testing.T) {
+	root := t.TempDir()
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{
+			ID:        agent.ManagerUserID,
+			Name:      agent.ManagerName,
+			RuntimeID: h.RuntimeID,
+		}, nil
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-" + agent.ManagerUserID,
+		AgentID:   agent.ManagerUserID,
+		AgentName: agent.ManagerName,
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	skillsRoot := filepath.Join(root, agent.ManagerUserID, ".codex", "home", "skills")
+	for _, name := range []string{"agent-creator", "agent-teams", "feishu"} {
+		if _, err := os.Stat(filepath.Join(skillsRoot, name, "SKILL.md")); err != nil {
+			t.Fatalf("manager template skill %q missing: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(skillsRoot, "basics", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("basics skill stat error = %v, want not installed by manager template", err)
+	}
+
+	agentsRaw, err := os.ReadFile(filepath.Join(root, agent.ManagerUserID, ".codex", "home", "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read manager AGENTS.md: %v", err)
+	}
+	if !strings.Contains(string(agentsRaw), "CSGClaw Codex Manager") {
+		t.Fatalf("manager AGENTS.md missing codex manager template content:\n%s", string(agentsRaw))
+	}
+
+	feishuRaw, err := os.ReadFile(filepath.Join(skillsRoot, "feishu", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read feishu manager skill: %v", err)
+	}
+	if strings.Contains(string(feishuRaw), "/home/picoclaw") {
+		t.Fatalf("feishu manager skill contains PicoClaw absolute path:\n%s", string(feishuRaw))
+	}
+
+	teamsRaw, err := os.ReadFile(filepath.Join(skillsRoot, "agent-teams", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read agent-teams manager skill: %v", err)
+	}
+	if strings.Contains(string(teamsRaw), "~/.picoclaw") {
+		t.Fatalf("agent-teams manager skill contains PicoClaw workspace path:\n%s", string(teamsRaw))
+	}
+}
+
+func TestRuntimeCreateDoesNotInstallManagerTemplateForWorker(t *testing.T) {
+	root := t.TempDir()
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{
+			ID:        "agent-alice",
+			Name:      "alice",
+			RuntimeID: h.RuntimeID,
+		}, nil
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-agent-alice",
+		AgentID:   "agent-alice",
+		AgentName: "alice",
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	skillsRoot := filepath.Join(root, "agent-alice", ".codex", "home", "skills")
+	for _, name := range []string{"agent-creator", "agent-teams", "feishu"} {
+		if _, err := os.Stat(filepath.Join(skillsRoot, name, "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("worker manager-only skill %q stat error = %v, want not installed", name, err)
+		}
+	}
+
+	if raw, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md")); err == nil {
+		if strings.Contains(string(raw), "CSGClaw Codex Manager") {
+			t.Fatalf("worker AGENTS.md contains manager template content:\n%s", string(raw))
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("read worker AGENTS.md: %v", err)
+	}
+}
+
+func TestRuntimeCreateOverlaysManagerTemplateAfterHostSkills(t *testing.T) {
+	root := t.TempDir()
+	hostCodexHome := filepath.Join(t.TempDir(), "shared-codex-home")
+	t.Setenv("CODEX_HOME", hostCodexHome)
+	hostSkillsRoot := filepath.Join(hostCodexHome, "skills")
+	if err := os.MkdirAll(filepath.Join(hostSkillsRoot, "agent-creator"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostSkillsRoot, "agent-creator", "SKILL.md"), []byte("# Host Agent Creator\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{
+			ID:        agent.ManagerUserID,
+			Name:      agent.ManagerName,
+			RuntimeID: h.RuntimeID,
+		}, nil
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-" + agent.ManagerUserID,
+		AgentID:   agent.ManagerUserID,
+		AgentName: agent.ManagerName,
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(root, agent.ManagerUserID, ".codex", "home", "skills", "agent-creator", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read agent-creator manager skill: %v", err)
+	}
+	text := string(raw)
+	if strings.Contains(text, "# Host Agent Creator") {
+		t.Fatalf("host agent-creator skill was not overwritten:\n%s", text)
+	}
+	if !strings.Contains(text, "Mandatory skill for provisioning any new CSGClaw agent-backed participant or worker") {
+		t.Fatalf("agent-creator manager skill missing template content:\n%s", text)
 	}
 }
 

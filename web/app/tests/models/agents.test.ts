@@ -509,7 +509,7 @@ describe("agent model helpers", () => {
 
   it("selects runtime-specific templates and images", () => {
     const templates = [
-      { id: "builtin.picoclaw-manager", name: "picoclaw-manager", role: "manager", runtime_kind: "picoclaw_sandbox" },
+      { id: "builtin.manager-codex", name: "manager-codex", role: "manager", runtime_kind: "codex" },
       { id: "custom/worker", name: "custom-worker", runtime_kind: "picoclaw_sandbox" },
       { id: "builtin.openclaw-worker", name: "openclaw-worker", runtime_kind: "openclaw_sandbox" },
       { id: "builtin.picoclaw-worker", name: "picoclaw-worker", runtime_kind: "picoclaw_sandbox" },
@@ -599,7 +599,7 @@ describe("agent model helpers", () => {
 
   it("excludes manager templates from worker template choices", () => {
     const templates = [
-      { id: "builtin.picoclaw-manager", name: "picoclaw-manager", role: "manager", runtime_kind: "picoclaw_sandbox" },
+      { id: "builtin.manager-codex", name: "manager-codex", role: "manager", runtime_kind: "codex" },
       { id: "builtin.picoclaw-worker", name: "picoclaw-worker", role: "worker", runtime_kind: "picoclaw_sandbox" },
       { id: "custom/roleless", name: "roleless", runtime_kind: "picoclaw_sandbox" },
     ];
@@ -643,25 +643,20 @@ describe("agent model helpers", () => {
       { key: "GITLAB_TOKEN", required: true, value: "" },
       { key: "GITLAB_URL", required: false, value: "https://gitlab.example.com" },
     ]);
-    expect(agentDraftMissingRequiredEnv({ envRows: [{ key: "GITLAB_TOKEN", required: true, value: "" }] })).toBe(
-      true,
+    expect(agentDraftMissingRequiredEnv({ envRows: [{ key: "GITLAB_TOKEN", required: true, value: "" }] })).toBe(true);
+    expect(agentDraftMissingRequiredEnv({ envRows: [{ key: "GITLAB_TOKEN", required: true, value: "token" }] })).toBe(
+      false,
     );
-    expect(
-      agentDraftMissingRequiredEnv({ envRows: [{ key: "GITLAB_TOKEN", required: true, value: "token" }] }),
-    ).toBe(false);
   });
 
-  it("filters manager rebuild runtime options to gateway runtimes", () => {
+  it("uses Codex as the only manager runtime option", () => {
     expect(
       availableManagerRuntimeOptions({
         supported_runtime_kinds: ["picoclaw_sandbox", "openclaw_sandbox", "codex", "notifier", "picoclaw_sandbox"],
       }).map((option) => option.value),
-    ).toEqual(["picoclaw_sandbox", "openclaw_sandbox"]);
+    ).toEqual(["codex"]);
 
-    expect(availableManagerRuntimeOptions(null).map((option) => option.value)).toEqual([
-      "picoclaw_sandbox",
-      "openclaw_sandbox",
-    ]);
+    expect(availableManagerRuntimeOptions(null).map((option) => option.value)).toEqual(["codex"]);
   });
 
   it("prefers a user-set avatar over the agent avatar when available", () => {
@@ -714,19 +709,13 @@ describe("agent model helpers", () => {
     expect(selectUnusedAgentAvatar(sources)).toBe(availableAvatar);
   });
 
-  it("uses manager template variants for manager rebuild runtime and default image", () => {
+  it("keeps manager rebuild runtime and image fixed to Codex", () => {
     const variants = collectManagerTemplateVariants([
       {
-        id: "builtin.picoclaw-manager",
+        id: "builtin.manager-codex",
         role: "manager",
-        runtime_kind: "picoclaw_sandbox",
-        image: "picoclaw:manager",
-      },
-      {
-        id: "builtin.openclaw-manager",
-        role: "manager",
-        runtime_kind: "openclaw_sandbox",
-        image: "openclaw:manager",
+        runtime_kind: "codex",
+        image: "",
       },
       {
         id: "builtin.openclaw-worker",
@@ -735,39 +724,33 @@ describe("agent model helpers", () => {
         image: "openclaw:worker",
       },
       {
-        id: "duplicate.openclaw-manager",
+        id: "duplicate.manager-codex",
         role: "manager",
-        runtime_kind: "openclaw_sandbox",
-        image: "openclaw:manager",
+        runtime_kind: "codex",
+        image: "",
       },
     ]);
 
-    expect(variants).toEqual([
-      { runtimeKind: "picoclaw_sandbox", image: "picoclaw:manager" },
-      { runtimeKind: "openclaw_sandbox", image: "openclaw:manager" },
-    ]);
+    expect(variants).toEqual([{ runtimeKind: "codex", image: "" }]);
     expect(
       availableManagerRebuildRuntimeOptions(
         variants,
         { supported_runtime_kinds: ["codex", "picoclaw_sandbox"] },
         "custom_sandbox",
       ).map((option) => option.value),
-    ).toEqual(["custom_sandbox", "picoclaw_sandbox", "openclaw_sandbox"]);
+    ).toEqual(["codex"]);
     expect(
       defaultManagerRebuildImageForRuntime(
         variants,
-        "picoclaw_sandbox",
+        "codex",
         { runtime_default_images: { picoclaw_sandbox: "picoclaw:latest" } },
         "picoclaw:old",
       ),
-    ).toBe("picoclaw:manager");
-    expect(defaultManagerRebuildImageForRuntime(variants, "openclaw_sandbox", null, "fallback:manager")).toBe(
-      "openclaw:manager",
-    );
+    ).toBe("");
     expect(
       defaultManagerRebuildImageForRuntime(
         [],
-        "picoclaw_sandbox",
+        "codex",
         {
           effective_manager_image: "picoclaw:effective-manager",
           runtime_default_images: { picoclaw_sandbox: "picoclaw:worker" },
@@ -775,10 +758,7 @@ describe("agent model helpers", () => {
         },
         "fallback:manager",
       ),
-    ).toBe("picoclaw:effective-manager");
-    expect(defaultManagerRebuildImageForRuntime([], "openclaw_sandbox", null, "fallback:manager")).toBe(
-      "fallback:manager",
-    );
+    ).toBe("");
   });
 
   it("normalizes runtime and auth provider labels", () => {

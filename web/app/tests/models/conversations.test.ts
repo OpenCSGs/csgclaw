@@ -87,13 +87,13 @@ describe("conversation model helpers", () => {
     const usersById = new Map([["user-dev", { id: "user-dev", name: "dev" }]]);
     const message = {
       content: "Task task-2 assigned to you.\n\nClaim it with: csgclaw-cli task claim --task task-2",
-      event: { actor_id: "user-manager", key: "task_assigned", target_ids: ["user-dev"], title: "task-2 [查询成...]" },
+      event: { actor_id: "user-manager", key: "task_assigned", target_ids: ["user-dev"], title: "task-2 [查询成都天气]" },
       kind: "event",
       sender_id: "user-manager",
     };
 
-    expect(formatEventMessage(message, usersById, "en")).toBe("task-2 [查询成...] assigned to dev");
-    expect(formatEventMessage(message, usersById, "zh")).toBe("task-2 [查询成...] 指派给 dev");
+    expect(formatEventMessage(message, usersById, "en")).toBe("task-2 [查询成都天气] assigned to dev");
+    expect(formatEventMessage(message, usersById, "zh")).toBe("task-2 [查询成都天气] 指派给 dev");
   });
 
   it("uses message content or conversation subtitle for previews", () => {

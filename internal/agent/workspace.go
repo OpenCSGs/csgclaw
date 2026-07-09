@@ -19,18 +19,17 @@ var (
 	ErrWorkspaceSymlinkDenied = errors.New("workspace symlinks are not supported")
 )
 
-// managerGatewayMatch reports whether a gateway run should use the PicoClaw manager template,
+// managerGatewayMatch reports whether a request targets the built-in manager,
 // by agent name and bot id.
 func managerGatewayMatch(name, botID string) bool {
 	return strings.EqualFold(strings.TrimSpace(name), ManagerName) || strings.TrimSpace(botID) == ManagerUserID
 }
 
 func workspaceTemplateForAgent(name, botID string) (string, error) {
-	role := RoleWorker
 	if managerGatewayMatch(name, botID) {
-		role = RoleManager
+		return templateembed.Resolve(RuntimeKindCodex, RoleManager)
 	}
-	return templateembed.Resolve(RuntimeKindPicoClawSandbox, role)
+	return templateembed.Resolve(RuntimeKindPicoClawSandbox, RoleWorker)
 }
 
 func resolveRuntimeTemplateRoot(runtimeKind, role string) (string, error) {

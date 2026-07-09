@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
+import { workspaceHasContextSidebar } from "@/models/routing";
 import { SIDEBAR_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import { AppLayout, AppLayoutLoading, AppLayoutMain, AppLayoutOverlays, AppLayoutShell } from "@/components/ui";
+import { classNames } from "@/shared/lib/classNames";
 import { WorkspaceMainPanel } from "../WorkspaceMainPanel";
 import { WorkspaceOverlays } from "../WorkspaceOverlays";
 import { WorkspaceSidebar } from "../WorkspaceSidebar";
-import { WorkspaceTopBar } from "./WorkspaceTopBar";
+import styles from "./WorkspaceLayout.module.css";
 import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 
 const SidebarWidth = {
-  default: 352,
-  max: 520,
-  min: 292,
+  collapsedPrimary: 80,
+  default: 600,
+  max: 720,
+  min: 560,
+  primary: 300,
   step: 16,
 } as const;
 
@@ -35,44 +39,22 @@ export function WorkspaceLayout() {
     pointerX: 0,
     width: SidebarWidth.default,
   });
+  const resizePointerIdRef = useRef<number | null>(null);
   const sidebarProps = controller.ready ? controller.sidebarProps : null;
   const isSidebarCollapsed = sidebarProps?.isSidebarCollapsed ?? false;
+  const showSidebarContext = controller.ready && workspaceHasContextSidebar(controller.activePane);
+  const contextSidebarWidth = showSidebarContext ? Math.max(0, sidebarWidth - SidebarWidth.primary) : 0;
+  const primarySidebarWidth = isSidebarCollapsed ? SidebarWidth.collapsedPrimary : SidebarWidth.primary;
+  const visibleSidebarWidth = showSidebarContext ? primarySidebarWidth + contextSidebarWidth : primarySidebarWidth;
 
   useEffect(() => {
-    if (!isSidebarCollapsed) {
+    if (showSidebarContext) {
       window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
     }
-  }, [isSidebarCollapsed, sidebarWidth]);
-
-  useEffect(() => {
-    if (!isSidebarResizing) {
-      return undefined;
-    }
-
-    function handlePointerMove(event: PointerEvent) {
-      const delta = event.clientX - resizeStartRef.current.pointerX;
-      setSidebarWidth(clampSidebarWidth(resizeStartRef.current.width + delta));
-    }
-
-    function handlePointerUp() {
-      setIsSidebarResizing(false);
-    }
-
-    document.documentElement.classList.add("workspace-sidebar-is-resizing");
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-
-    return () => {
-      document.documentElement.classList.remove("workspace-sidebar-is-resizing");
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-    };
-  }, [isSidebarResizing]);
+  }, [showSidebarContext, sidebarWidth]);
 
   function handleSidebarResizeStart(event: ReactPointerEvent<HTMLDivElement>) {
-    if (isSidebarCollapsed) {
+    if (!showSidebarContext || event.button !== 0) {
       return;
     }
     event.preventDefault();
@@ -80,11 +62,34 @@ export function WorkspaceLayout() {
       pointerX: event.clientX,
       width: sidebarWidth,
     };
+    resizePointerIdRef.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
     setIsSidebarResizing(true);
   }
 
+  function handleSidebarResizeMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (resizePointerIdRef.current !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    const delta = event.clientX - resizeStartRef.current.pointerX;
+    const nextWidth = clampSidebarWidth(resizeStartRef.current.width + delta);
+    setSidebarWidth((current) => (current === nextWidth ? current : nextWidth));
+  }
+
+  function endSidebarResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (resizePointerIdRef.current !== event.pointerId) {
+      return;
+    }
+    resizePointerIdRef.current = null;
+    setIsSidebarResizing(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
   function handleSidebarResizeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (isSidebarCollapsed) {
+    if (!showSidebarContext) {
       return;
     }
 
@@ -104,39 +109,35 @@ export function WorkspaceLayout() {
   }
 
   const baseShellClassName = controller.ready ? controller.shellClassName : "";
-  const shellClassName = `${baseShellClassName} ${isSidebarResizing ? "sidebar-resizing" : ""}`.trim();
+  const shellClassName = classNames(baseShellClassName, isSidebarResizing && styles.sidebarResizing);
   const shellStyle = {
-    "--sidebar-expanded-width": `${sidebarWidth}px`,
-    ...(isSidebarCollapsed ? {} : { "--sidebar-slot-width": `${sidebarWidth}px` }),
+    "--sidebar-expanded-width": `${showSidebarContext ? sidebarWidth : SidebarWidth.primary}px`,
+    "--sidebar-slot-width": `${visibleSidebarWidth}px`,
   } as CSSProperties;
 
   return (
     <AppLayout ready={controller.ready} loadingFallback={<AppLayoutLoading>{controller.loadingText}</AppLayoutLoading>}>
       <AppLayoutShell className={shellClassName} style={shellStyle}>
-        <div className="workspace-sidebar-shell">
-          {sidebarProps ? (
-            <WorkspaceTopBar
-              isSidebarCollapsed={isSidebarCollapsed}
-              onCollapseSidebar={sidebarProps.onCollapseSidebar}
-              onExpandSidebar={sidebarProps.onExpandSidebar}
-              collapseSidebarLabel={sidebarProps.t("collapseSidebar")}
-              expandSidebarLabel={sidebarProps.t("expandSidebar")}
-            />
-          ) : null}
-          {sidebarProps ? <WorkspaceSidebar {...sidebarProps} /> : null}
-        </div>
-        {controller.ready ? (
+        <div className={styles.sidebarShell}>{sidebarProps ? <WorkspaceSidebar {...sidebarProps} /> : null}</div>
+        {controller.ready && showSidebarContext ? (
           <div
-            className="workspace-sidebar-resizer"
+            className={styles.sidebarResizer}
             role="separator"
             aria-label="Resize sidebar"
             aria-orientation="vertical"
             aria-valuemin={SidebarWidth.min}
             aria-valuemax={SidebarWidth.max}
             aria-valuenow={sidebarWidth}
-            tabIndex={isSidebarCollapsed ? -1 : 0}
+            tabIndex={0}
             onKeyDown={handleSidebarResizeKeyDown}
             onPointerDown={handleSidebarResizeStart}
+            onPointerMove={handleSidebarResizeMove}
+            onPointerUp={endSidebarResize}
+            onPointerCancel={endSidebarResize}
+            onLostPointerCapture={() => {
+              resizePointerIdRef.current = null;
+              setIsSidebarResizing(false);
+            }}
           />
         ) : null}
         <AppLayoutMain>

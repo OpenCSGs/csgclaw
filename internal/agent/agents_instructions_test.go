@@ -99,3 +99,27 @@ func TestRenderAgentsInstructionsBlockWithInstructions(t *testing.T) {
 		t.Fatalf("RenderAgentsInstructionsBlock() end marker count = %d, want 1", strings.Count(got, agentsInstructionsBlockEnd))
 	}
 }
+
+func TestRenderRuntimeAgentsInstructionsBlockAddsManagerConnectorRulesOnlyForManager(t *testing.T) {
+	manager := RenderRuntimeAgentsInstructionsBlock(ManagerUserID, "Stay concise.")
+	if !strings.Contains(manager, "# Managed Runtime Instructions") {
+		t.Fatalf("manager runtime instructions missing managed section: %q", manager)
+	}
+	for _, want := range []string{
+		"GitHub Connector Access",
+		"/api/v1/agents/agent-manager/connectors/github/credential",
+		"`access_token`",
+		"Do not rely on connector tokens from environment variables",
+		"Do not treat an empty result from an external Codex GitHub app connector as proof",
+		"reconnect the CSGClaw GitHub OAuth connector",
+	} {
+		if !strings.Contains(manager, want) {
+			t.Fatalf("manager runtime instructions missing %q in %q", want, manager)
+		}
+	}
+
+	worker := RenderRuntimeAgentsInstructionsBlock("agent-worker", "Stay concise.")
+	if strings.Contains(worker, "GitHub Connector Access") || strings.Contains(worker, "`GITHUB_TOKEN`") {
+		t.Fatalf("worker runtime instructions include manager connector guidance: %q", worker)
+	}
+}

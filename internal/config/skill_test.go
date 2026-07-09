@@ -41,7 +41,7 @@ token = "${SKILL_TOKEN}"
 non_suspicious_only = false
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [models]
@@ -84,7 +84,7 @@ base_url = "https://claw.legacy.example"
 token = "${CLAWHUB_TOKEN}"
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [models]

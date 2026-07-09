@@ -300,6 +300,7 @@ func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
 		agentName     string
 		role          string
 		participantID string
+		wantRecreate  bool
 	}{
 		{
 			name:          "worker",
@@ -307,6 +308,7 @@ func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
 			agentName:     "dev",
 			role:          agent.RoleWorker,
 			participantID: "pt-dev",
+			wantRecreate:  true,
 		},
 		{
 			name:          "manager",
@@ -314,6 +316,7 @@ func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
 			agentName:     "manager",
 			role:          agent.RoleManager,
 			participantID: "pt-manager",
+			wantRecreate:  false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -361,8 +364,12 @@ func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
 			if _, ok := participantSvc.Get(participant.ChannelFeishu, tc.participantID); ok {
 				t.Fatalf("participant feishu:%s still exists after delete", tc.participantID)
 			}
-			if len(recreated) != 1 || recreated[0] != tc.agentID {
-				t.Fatalf("recreated = %#v, want only %q", recreated, tc.agentID)
+			if tc.wantRecreate {
+				if len(recreated) != 1 || recreated[0] != tc.agentID {
+					t.Fatalf("recreated = %#v, want only %q", recreated, tc.agentID)
+				}
+			} else if len(recreated) != 0 {
+				t.Fatalf("recreated = %#v, want none for codex manager", recreated)
 			}
 			got, ok := agentSvc.Agent(tc.agentID)
 			if !ok {

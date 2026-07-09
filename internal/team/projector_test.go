@@ -218,8 +218,8 @@ func TestProjectorRenderTaskLifecycleMessages(t *testing.T) {
 	if execMessages[1].Kind != im.MessageKindEvent || execMessages[1].Event == nil || execMessages[1].Event.Key != "task_assigned" {
 		t.Fatalf("dispatch projection event = kind %q payload %+v, want task_assigned event", execMessages[1].Kind, execMessages[1].Event)
 	}
-	if execMessages[1].Event.Title != "task-15 [Imple...]" || len(execMessages[1].Event.TargetIDs) != 1 || execMessages[1].Event.TargetIDs[0] != "user-backend-dev" {
-		t.Fatalf("dispatch projection event = %+v, want compact title and backend-dev target", execMessages[1].Event)
+	if execMessages[1].Event.Title != "task-15 [Implement API]" || len(execMessages[1].Event.TargetIDs) != 1 || execMessages[1].Event.TargetIDs[0] != "user-backend-dev" {
+		t.Fatalf("dispatch projection event = %+v, want full title and backend-dev target", execMessages[1].Event)
 	}
 	if !strings.Contains(execMessages[1].Content, "dispatched task-15") || strings.Contains(execMessages[1].Content, "dispatched task-15 to") || !strings.Contains(execMessages[1].Content, "claim --team team-5 --task task-15 --participant-id backend-dev") {
 		t.Fatalf("dispatch projection = %q, want @mention task dispatch with claim command", execMessages[1].Content)

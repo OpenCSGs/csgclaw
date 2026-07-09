@@ -160,10 +160,14 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 	opts = append(opts,
 		runtimewiring.WithPicoClawSandboxRuntime(nil),
 		runtimewiring.WithOpenClawSandboxRuntime(nil),
-		agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind),
+		runtimewiring.WithCodexRuntime(),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 		agent.WithHubService(hubSvc),
 	)
+	switch bootstrapDefaults.ManagerRuntimeKind {
+	case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
+		opts = append(opts, agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind))
+	}
 	if noAuthDetectFromContext(ctx) {
 		opts = append(opts, agent.WithStartupProfileDetectionDisabled())
 	}

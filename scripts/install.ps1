@@ -101,10 +101,24 @@ function Write-LauncherCmd {
         [string]$TargetExePath
     )
 
-    $escapedTarget = $TargetExePath.Replace('%', '%%')
+    $targetExpression = $TargetExePath
+    $launcherDir = Split-Path -Parent $Path
+    $appHomeFull = [System.IO.Path]::GetFullPath($AppHome).TrimEnd('\')
+    $defaultInstallDirFull = [System.IO.Path]::GetFullPath((Join-Path $AppHome "bin")).TrimEnd('\')
+    $launcherDirFull = [System.IO.Path]::GetFullPath($launcherDir).TrimEnd('\')
+    $targetFull = [System.IO.Path]::GetFullPath($TargetExePath)
+    $appHomePrefix = "$appHomeFull\"
+
+    if (($launcherDirFull -ieq $defaultInstallDirFull) -and $targetFull.StartsWith($appHomePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $relativeTarget = $targetFull.Substring($appHomePrefix.Length)
+        $targetExpression = "%~dp0..\$relativeTarget"
+    } else {
+        $targetExpression = $targetExpression.Replace('%', '%%')
+    }
+
     $content = @(
         "@echo off",
-        "`"$escapedTarget`" %*"
+        "`"$targetExpression`" %*"
     ) -join "`r`n"
     Set-Content -LiteralPath $Path -Value $content -Encoding ASCII
 }

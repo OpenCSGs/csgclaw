@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 	"csgclaw/internal/codexmodel"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
+	templateembed "csgclaw/internal/template/embed"
 )
 
 const (
@@ -417,6 +419,9 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
+	if err := r.seedManagerTemplate(spec.AgentID, spec.CodexHomeDir); err != nil {
+		return nil, err
+	}
 	if err := r.refreshCodexHomeAgentsFile(agentruntime.Handle{RuntimeID: runtimeID}, spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
@@ -499,6 +504,9 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		return nil, err
 	}
 	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
+		return nil, err
+	}
+	if err := r.seedManagerTemplate(spec.AgentID, spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
 	if err := r.refreshCodexHomeAgentsFile(agentruntime.Handle{RuntimeID: runtimeID}, spec.CodexHomeDir); err != nil {
@@ -626,6 +634,55 @@ func (r *Runtime) seedCodexHomeSkills(runtimeCodexHome string) error {
 		return fmt.Errorf("seed runtime codex skills %s: %w", targetRoot, err)
 	}
 	return nil
+}
+
+func (r *Runtime) seedManagerTemplate(agentID, runtimeCodexHome string) error {
+	if canonicalRuntimeAgentID(agentID) != agent.ManagerUserID {
+		return nil
+	}
+	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
+	if runtimeCodexHome == "" {
+		return fmt.Errorf("codex home dir is required")
+	}
+
+	skillNames, err := managerTemplateSkillNames()
+	if err != nil {
+		return err
+	}
+	for _, name := range append(skillNames, "basics") {
+		if err := r.removeAll(filepath.Join(runtimeCodexHome, "skills", name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove manager codex template skill %q: %w", name, err)
+		}
+	}
+
+	srcRoot := templateembed.WorkspacePath(templateembed.CodexManagerRoot)
+	if err := r.copyEmbeddedDir(templateembed.FS(), srcRoot, runtimeCodexHome); err != nil {
+		return fmt.Errorf("seed manager codex template %s: %w", runtimeCodexHome, err)
+	}
+	return nil
+}
+
+func managerTemplateSkillNames() ([]string, error) {
+	skillsRoot := pathpkg.Join(templateembed.WorkspacePath(templateembed.CodexManagerRoot), "skills")
+	entries, err := fs.ReadDir(templateembed.FS(), skillsRoot)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read manager codex template skills: %w", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name())
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names, nil
 }
 
 func (r *Runtime) writeModelCatalog(runtimeCodexHome string, profile agentruntime.Profile) error {
@@ -775,7 +832,7 @@ func (r *Runtime) refreshCodexHomeAgentsFile(h agentruntime.Handle, codexHomeDir
 		return err
 	}
 	path := filepath.Join(codexHomeDir, "AGENTS.md")
-	block := agent.RenderAgentsInstructionsBlock(agentRef.Instructions)
+	block := agent.RenderRuntimeAgentsInstructionsBlock(agentRef.ID, agentRef.Instructions)
 	current, err := r.readFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read codex home AGENTS.md %s: %w", path, err)
@@ -987,6 +1044,58 @@ func (r *Runtime) copyDir(srcRoot, dstRoot string) error {
 		return err
 	}
 	return nil
+}
+
+func (r *Runtime) copyEmbeddedDir(source fs.FS, srcRoot, dstRoot string) error {
+	srcRoot = pathpkg.Clean(strings.TrimSpace(srcRoot))
+	dstRoot = strings.TrimSpace(dstRoot)
+	if source == nil || srcRoot == "" || srcRoot == "." || dstRoot == "" {
+		return fmt.Errorf("source and destination roots are required")
+	}
+	return fs.WalkDir(source, srcRoot, func(srcPath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel := "."
+		if srcPath != srcRoot {
+			rel = strings.TrimPrefix(srcPath, srcRoot+"/")
+		}
+		dstPath := dstRoot
+		if rel != "." {
+			dstPath = filepath.Join(dstRoot, filepath.FromSlash(rel))
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return r.mkdirAll(dstPath, writableEmbeddedDirMode(info.Mode()))
+		}
+		data, err := fs.ReadFile(source, srcPath)
+		if err != nil {
+			return err
+		}
+		if err := r.mkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+			return err
+		}
+		return r.writeFile(dstPath, data, writableEmbeddedFileMode(info.Mode()))
+	})
+}
+
+func writableEmbeddedDirMode(mode os.FileMode) os.FileMode {
+	mode &= os.ModePerm
+	if mode == 0 {
+		return 0o755
+	}
+	return mode | 0o700
+}
+
+func writableEmbeddedFileMode(mode os.FileMode) os.FileMode {
+	mode &= os.ModePerm
+	if mode == 0 {
+		return 0o644
+	}
+	return mode | 0o600
 }
 
 func hostCodexAuthPath() (string, error) {

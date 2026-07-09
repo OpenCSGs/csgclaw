@@ -384,12 +384,25 @@ export type RuntimeBootstrapConfig = {
   advertise_base_url?: string | null;
   default_worker_template?: string | null;
   effective_manager_image?: string | null;
+  manager_runtime?: ManagerRuntimeLike | null;
   runtime_default_images?: unknown;
   runtime_kind?: string | null;
   worker_runtime_choices?: RuntimeChoiceLike[] | null;
   runtime_option_schemas?: Record<string, RuntimeOptionSchema[]> | null;
   show_upgrade?: boolean | null;
   supported_runtime_kinds?: unknown;
+};
+
+export type ManagerRuntimeLike = {
+  name?: RuntimeName | null;
+  label?: string | null;
+  sandbox_enabled?: boolean | null;
+  installed?: boolean | null;
+  path?: string | null;
+  os?: string | null;
+  docs_url?: string | null;
+  install_guidance?: string | null;
+  message?: string | null;
 };
 
 export type RuntimeChoiceLike = {
@@ -1944,14 +1957,8 @@ export function defaultWorkerImageForRuntime(
   return String(fallbackImage ?? "").trim();
 }
 
-export function availableManagerRuntimeOptions(bootstrapConfig: RuntimeBootstrapConfig | null | undefined) {
-  const configuredKinds = Array.isArray(bootstrapConfig?.supported_runtime_kinds)
-    ? bootstrapConfig.supported_runtime_kinds
-    : [];
-  const gatewayKinds = (configuredKinds.length ? configuredKinds : [DEFAULT_RUNTIME_KIND, "openclaw_sandbox"])
-    .map((kind) => normalizeRuntimeKind(kind))
-    .filter((kind, index, array) => kind && kind !== "codex" && array.indexOf(kind) === index);
-  return RUNTIME_KIND_OPTIONS.filter((option) => gatewayKinds.includes(option.value));
+export function availableManagerRuntimeOptions(_bootstrapConfig: RuntimeBootstrapConfig | null | undefined) {
+  return RUNTIME_KIND_OPTIONS.filter((option) => option.value === "codex");
 }
 
 export function collectManagerTemplateVariants(
@@ -1986,31 +1993,23 @@ export function collectManagerTemplateVariants(
 }
 
 export function availableManagerRebuildRuntimeOptions(
-  variants: readonly ManagerTemplateVariant[] | null | undefined,
-  bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
-  currentRuntimeKind = "",
+  _variants: readonly ManagerTemplateVariant[] | null | undefined,
+  _bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
+  _currentRuntimeKind = "",
 ) {
   const values: RuntimeKind[] = [];
   const seen = new Set<string>();
   const push = (kind: unknown) => {
     const normalized = normalizeRuntimeKind(kind);
-    if (!normalized || normalized === "codex" || seen.has(normalized)) {
+    if (!normalized || normalized !== "codex" || seen.has(normalized)) {
       return;
     }
     seen.add(normalized);
     values.push(normalized);
   };
-  push(currentRuntimeKind);
-  if (Array.isArray(variants)) {
-    for (const item of variants) {
-      push(item?.runtimeKind);
-    }
-  }
-  for (const item of availableManagerRuntimeOptions(bootstrapConfig)) {
-    push(item?.value);
-  }
+  push("codex");
   if (!values.length) {
-    push(DEFAULT_RUNTIME_KIND);
+    push("codex");
   }
   return values.map((value) => ({ value, label: value }));
 }
@@ -2021,7 +2020,10 @@ export function defaultManagerRebuildImageForRuntime(
   bootstrapConfig: RuntimeBootstrapConfig | null | undefined,
   fallbackImage = "",
 ): string {
-  const selectedRuntime = normalizeRuntimeKind(runtimeKind);
+  const selectedRuntime = normalizeRuntimeKind(runtimeKind) || "codex";
+  if (selectedRuntime === "codex") {
+    return "";
+  }
   if (Array.isArray(variants)) {
     for (const item of variants) {
       if (selectedRuntime && normalizeRuntimeKind(item?.runtimeKind) !== selectedRuntime) {

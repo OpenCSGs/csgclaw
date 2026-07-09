@@ -76,6 +76,15 @@ export async function fetchWorkspaceBootstrapConfig(): Promise<RuntimeBootstrapC
   const payload = await fetchBootstrapConfig();
   return {
     ...payload,
+    manager_runtime:
+      payload.manager_runtime && typeof payload.manager_runtime === "object"
+        ? {
+            ...payload.manager_runtime,
+            name: normalizeRuntimeKind(payload.manager_runtime.name),
+            sandbox_enabled: false,
+            installed: payload.manager_runtime.installed !== false,
+          }
+        : null,
     runtime_kind: normalizeRuntimeKind(payload.runtime_kind),
     supported_runtime_kinds: Array.isArray(payload.supported_runtime_kinds)
       ? payload.supported_runtime_kinds

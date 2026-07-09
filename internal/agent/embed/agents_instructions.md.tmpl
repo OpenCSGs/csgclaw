@@ -6,6 +6,12 @@
 {{ .Instructions }}
 
 {{end}}
+{{if .HasManagedInstructions}}
+# Managed Runtime Instructions
+
+{{ .ManagedInstructions }}
+
+{{end}}
 # CSGClaw Rules
 
 ### Scope

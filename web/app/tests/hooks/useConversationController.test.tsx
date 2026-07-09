@@ -43,12 +43,27 @@ const directConversation: IMConversation = {
   title: "demo",
 };
 
-function createScrollableMessageList(scrollHeight: number, clientHeight: number): HTMLElement {
+type ScrollableMessageList = HTMLElement & {
+  setScrollHeight: (value: number) => void;
+};
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(() => resolve());
+      return;
+    }
+    window.setTimeout(resolve, 0);
+  });
+}
+
+function createScrollableMessageList(scrollHeight: number, clientHeight: number): ScrollableMessageList {
   const element = document.createElement("section");
+  let scrollHeightValue = scrollHeight;
   let scrollTop = 0;
   Object.defineProperties(element, {
     clientHeight: { configurable: true, get: () => clientHeight },
-    scrollHeight: { configurable: true, get: () => scrollHeight },
+    scrollHeight: { configurable: true, get: () => scrollHeightValue },
     scrollTop: {
       configurable: true,
       get: () => scrollTop,
@@ -57,7 +72,11 @@ function createScrollableMessageList(scrollHeight: number, clientHeight: number)
       },
     },
   });
-  return element;
+  return Object.assign(element, {
+    setScrollHeight(value: number) {
+      scrollHeightValue = value;
+    },
+  });
 }
 
 function dataWithMessages(messages: IMMessage[]): IMData {
@@ -281,6 +300,147 @@ describe("useConversationController", () => {
     });
 
     await waitFor(() => expect(messageList.scrollTop).toBe(1120));
+  });
+
+  it("keeps an active message list pinned when an existing visible message changes", async () => {
+    const firstMessage: IMMessage = {
+      id: "msg-1",
+      content: "loading",
+      created_at: "2026-06-16T10:00:00Z",
+      sender_id: "u-demo",
+    };
+    const initialData = dataWithMessages([firstMessage]);
+    const { result, rerender } = renderConversationController({
+      data: initialData,
+      messageListActive: false,
+    });
+    const messageList = createScrollableMessageList(900, 240);
+    result.current.conversationViewProps.messageListRef.current = messageList;
+    rerender({ data: initialData, messageListActive: true });
+
+    messageList.setScrollHeight(1120);
+    rerender({
+      data: dataWithMessages([{ ...firstMessage, content: "final answer with more rendered content" }]),
+      messageListActive: true,
+    });
+
+    await waitFor(() => expect(messageList.scrollTop).toBe(1120));
+  });
+
+  it("does not follow incoming messages when the user has scrolled away from the bottom", async () => {
+    const firstMessage: IMMessage = {
+      id: "msg-1",
+      content: "hello",
+      created_at: "2026-06-16T10:00:00Z",
+      sender_id: "u-admin",
+    };
+    const secondMessage: IMMessage = {
+      id: "msg-2",
+      content: "reply",
+      created_at: "2026-06-16T10:01:00Z",
+      sender_id: "u-demo",
+    };
+    const initialData = dataWithMessages([firstMessage]);
+    const { result, rerender } = renderConversationController({
+      data: initialData,
+      messageListActive: false,
+    });
+    const messageList = createScrollableMessageList(900, 240);
+    result.current.conversationViewProps.messageListRef.current = messageList;
+    rerender({ data: initialData, messageListActive: true });
+    await nextAnimationFrame();
+
+    act(() => {
+      messageList.scrollTop = 120;
+      messageList.dispatchEvent(new Event("scroll"));
+    });
+    await act(async () => {
+      await nextAnimationFrame();
+    });
+
+    messageList.setScrollHeight(1120);
+    rerender({
+      data: dataWithMessages([firstMessage, secondMessage]),
+      messageListActive: true,
+    });
+    await act(async () => {
+      await nextAnimationFrame();
+    });
+
+    expect(messageList.scrollTop).toBe(120);
+  });
+
+  it("follows an outgoing message even when the user has scrolled away from the bottom", async () => {
+    const firstMessage: IMMessage = {
+      id: "msg-1",
+      content: "hello",
+      created_at: "2026-06-16T10:00:00Z",
+      sender_id: "u-demo",
+    };
+    const initialData = dataWithMessages([firstMessage]);
+    apiMocks.sendMessageRequest.mockResolvedValue({
+      id: "msg-user",
+      content: "my reply",
+      created_at: "2026-06-16T10:01:00Z",
+      sender_id: "u-admin",
+    });
+    const { result, rerender } = renderConversationController({
+      data: initialData,
+      messageListActive: false,
+    });
+    const messageList = createScrollableMessageList(900, 240);
+    result.current.conversationViewProps.messageListRef.current = messageList;
+    rerender({ data: initialData, messageListActive: true });
+    await nextAnimationFrame();
+
+    act(() => {
+      messageList.scrollTop = 120;
+      messageList.dispatchEvent(new Event("scroll"));
+    });
+    await act(async () => {
+      await nextAnimationFrame();
+    });
+    messageList.setScrollHeight(1120);
+
+    const editor = document.createElement("div");
+    editor.textContent = "my reply";
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    await waitFor(() => expect(messageList.scrollTop).toBe(1120));
+  });
+
+  it("keeps a single message-list scroll listener across data rerenders", () => {
+    const firstMessage: IMMessage = {
+      id: "msg-1",
+      content: "hello",
+      created_at: "2026-06-16T10:00:00Z",
+      sender_id: "u-admin",
+    };
+    const secondMessage: IMMessage = {
+      id: "msg-2",
+      content: "reply",
+      created_at: "2026-06-16T10:01:00Z",
+      sender_id: "u-demo",
+    };
+    const initialData = dataWithMessages([firstMessage]);
+    const { result, rerender } = renderConversationController({
+      data: initialData,
+      messageListActive: false,
+    });
+    const messageList = createScrollableMessageList(900, 240);
+    const addEventListenerSpy = vi.spyOn(messageList, "addEventListener");
+    result.current.conversationViewProps.messageListRef.current = messageList;
+
+    rerender({ data: initialData, messageListActive: true });
+    rerender({ data: dataWithMessages([firstMessage, secondMessage]), messageListActive: true });
+
+    expect(addEventListenerSpy.mock.calls.filter(([event]) => event === "scroll")).toHaveLength(1);
   });
 
   it("does not open its own IM event subscription", () => {

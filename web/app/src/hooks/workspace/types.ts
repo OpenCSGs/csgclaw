@@ -41,8 +41,11 @@ export type WorkspaceNavigationController = {
   selectConversation: (id: string, options?: NavigatePaneOptions) => void;
   selectHuman: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
   selectHub: (options?: NavigatePaneOptions) => void;
+  selectNotificationSection: (options?: NavigatePaneOptions) => void;
+  selectSettings: (options?: NavigatePaneOptions) => void;
   selectModelProvider: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
   selectTeam: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
+  selectTeamSection: (options?: NavigatePaneOptions) => void;
   selectTasks: (taskID?: string, options?: NavigatePaneOptions) => void;
 };
 
@@ -204,6 +207,7 @@ export type UseConversationControllerArgs = {
   locale: LocaleCode;
   managerProfile: AgentProfileLike | null;
   managerProfileIncomplete: boolean | null;
+  managerRuntimeUnavailable?: boolean | null;
   messageActionBusy: string;
   messageActionError: MessageActionError;
   messageListActive?: boolean;

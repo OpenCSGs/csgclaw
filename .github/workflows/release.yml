@@ -132,8 +132,13 @@ jobs:
             exit 1
           fi
           for manifest in "${manifests[@]}"; do
-            grep '^ref = ' "${manifest}"
-            if grep -q '^ref = ""' "${manifest}"; then
+            runtime_kind="$(awk -F ' *= *' '$1 == "runtime_kind" { gsub(/"/, "", $2); print $2; exit }' "${manifest}")"
+            case "${runtime_kind}" in
+              openclaw|picoclaw) ;;
+              *) continue ;;
+            esac
+
+            if ! grep -Eq '^ref = "[^"]+"' "${manifest}"; then
               echo "missing image ref in ${manifest}" >&2
               exit 1
             fi

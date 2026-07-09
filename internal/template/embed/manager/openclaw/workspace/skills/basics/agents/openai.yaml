@@ -1,4 +1,0 @@
-interface:
-  display_name: "CSGClaw CLI Basics"
-  short_description: "Basic CSGClaw CLI room/participant/member operations"
-  default_prompt: "Use $basics to handle basic CSGClaw CLI room, Feishu group, participant, member, and non-task message operations. For assigning work to one worker, use csgclaw-cli task create instead."

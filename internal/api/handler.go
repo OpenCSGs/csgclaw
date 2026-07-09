@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	goruntime "runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -111,6 +112,7 @@ type bootstrapConfigResponse struct {
 	DefaultManagerTemplate string                                        `json:"default_manager_template"`
 	DefaultWorkerTemplate  string                                        `json:"default_worker_template"`
 	RuntimeKind            string                                        `json:"runtime_kind"`
+	ManagerRuntime         managerRuntimeResponse                        `json:"manager_runtime"`
 	ShowUpgrade            bool                                          `json:"show_upgrade"`
 	EffectiveManagerImage  string                                        `json:"effective_manager_image"`
 	AdvertiseBaseURL       string                                        `json:"advertise_base_url,omitempty"`
@@ -126,6 +128,18 @@ type workerRuntimeChoiceResponse struct {
 	SandboxEnabled bool   `json:"sandbox_enabled"`
 	Installed      bool   `json:"installed"`
 	Message        string `json:"message,omitempty"`
+}
+
+type managerRuntimeResponse struct {
+	Name            string `json:"name"`
+	Label           string `json:"label"`
+	SandboxEnabled  bool   `json:"sandbox_enabled"`
+	Installed       bool   `json:"installed"`
+	Path            string `json:"path,omitempty"`
+	OS              string `json:"os"`
+	DocsURL         string `json:"docs_url"`
+	InstallGuidance string `json:"install_guidance,omitempty"`
+	Message         string `json:"message,omitempty"`
 }
 
 type updateBootstrapConfigRequest struct {
@@ -353,9 +367,12 @@ func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) 
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
 				}
-				if err := h.svc.SetGatewayRuntime(defaults.ManagerRuntimeKind, defaults.ManagerImage); err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
+				switch defaults.ManagerRuntimeKind {
+				case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
+					if err := h.svc.SetGatewayRuntime(defaults.ManagerRuntimeKind, defaults.ManagerImage); err != nil {
+						http.Error(w, err.Error(), http.StatusBadRequest)
+						return
+					}
 				}
 			}
 		}
@@ -473,6 +490,7 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 		DefaultWorkerTemplate:  cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
 		ShowUpgrade:            cfg.Server.ShowUpgrade,
 		AdvertiseBaseURL:       config.ResolveAdvertiseBaseURL(cfg.Server),
+		ManagerRuntime:         managerRuntimeReadiness(),
 		SupportedRuntimeKinds: []string{
 			agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind(),
 			agentruntime.RuntimeConfigForKind(agent.RuntimeKindOpenClawSandbox).Kind(),
@@ -497,6 +515,38 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 	}
 	fillBuiltinWorkerRuntimeDefaultImages(ctx, &resp, hubSvc)
 	return resp
+}
+
+func managerRuntimeReadiness() managerRuntimeResponse {
+	resp := managerRuntimeResponse{
+		Name:            agent.RuntimeNameCodex,
+		Label:           "Codex CLI",
+		SandboxEnabled:  false,
+		Installed:       true,
+		OS:              goruntime.GOOS,
+		DocsURL:         "https://developers.openai.com/codex",
+		InstallGuidance: codexInstallGuidance(goruntime.GOOS),
+	}
+	if path, err := locateCodexCLI(); err == nil {
+		resp.Path = path
+		return resp
+	}
+	resp.Installed = false
+	resp.Message = "Codex CLI not installed"
+	return resp
+}
+
+func codexInstallGuidance(goos string) string {
+	switch strings.ToLower(strings.TrimSpace(goos)) {
+	case "darwin":
+		return "Install the Codex CLI for macOS, or set CSGCLAW_CODEX_PATH to the codex binary."
+	case "windows":
+		return "Install the Codex CLI for Windows, or set CSGCLAW_CODEX_PATH to codex.exe."
+	case "linux":
+		return "Install the Codex CLI for Linux, or set CSGCLAW_CODEX_PATH to the codex binary."
+	default:
+		return "Install the Codex CLI, or set CSGCLAW_CODEX_PATH to the codex binary."
+	}
 }
 
 func workerRuntimeChoices() []workerRuntimeChoiceResponse {
@@ -1246,7 +1296,11 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 	}
 	prof := agentProfileFromAPI(profileReq)
 	runtimeName := strings.TrimSpace(req.Runtime.Name)
+	runtimeKind := strings.TrimSpace(req.Runtime.Kind)
 	sandboxEnabled := req.Runtime.SandboxEnabled
+	if runtimeKind == "" {
+		runtimeKind = strings.TrimSpace(req.RuntimeKind)
+	}
 	if runtimeName == "" {
 		runtimeName = req.RuntimeName
 		sandboxEnabled = req.SandboxEnabled
@@ -1262,6 +1316,7 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 			Description:    req.Description,
 			Instructions:   req.Instructions,
 			Image:          req.Image,
+			RuntimeKind:    runtimeKind,
 			RuntimeName:    runtimeName,
 			SandboxEnabled: sandboxEnabled,
 			FromTemplate:   req.FromTemplate,

@@ -227,7 +227,7 @@ CSGClaw 可以从一个或多个 hub registry 读取 agent 模板。registry 配
 [hub]
 default_registry = "builtin"
 default_publish_registry = "local"
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [[hub.registries]]

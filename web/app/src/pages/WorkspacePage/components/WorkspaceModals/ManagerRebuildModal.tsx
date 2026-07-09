@@ -1,5 +1,5 @@
 import { AgentCreateProgress, type AgentCreateProgressProps } from "@/components/business/ProfileControls";
-import { Button, Select } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 import { ModalCloseButton } from "./ModalCloseButton";
@@ -18,6 +18,7 @@ export type ManagerRebuildModalProps = {
   busy?: boolean;
   error?: string;
   image?: string;
+  runtimeWarning?: string;
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
   onRuntimeKindChange: (runtimeKind: string) => void;
@@ -32,15 +33,16 @@ export function ManagerRebuildModal({
   runtimeOptions,
   runtimeKind,
   image,
+  runtimeWarning = "",
   busy = false,
   error = "",
   progress = null,
-  onRuntimeKindChange,
   onClose,
   onConfirm,
 }: ManagerRebuildModalProps) {
-  const selectedRuntimeKind = normalizeRuntimeKind(runtimeKind) || runtimeOptions[0]?.value || "picoclaw_sandbox";
+  const selectedRuntimeKind = normalizeRuntimeKind(runtimeKind) || runtimeOptions[0]?.value || "codex";
   const selectedImage = String(image ?? "").trim();
+  const runtimeLabel = formatRuntimeKindLabel(selectedRuntimeKind, t);
   return (
     <div className="modal-backdrop">
       <div className="modal-card profile-modal manager-rebuild-modal" onClick={(event) => event.stopPropagation()}>
@@ -54,21 +56,10 @@ export function ManagerRebuildModal({
         <div className="profile-editor-shell">
           <section className="profile-section">
             <div className="profile-grid profile-grid-compact manager-rebuild-grid">
-              <label className="field manager-rebuild-runtime-field">
+              <div className="field manager-rebuild-runtime-field">
                 <span>{t("profileRuntimeKind")}</span>
-                <Select
-                  value={selectedRuntimeKind}
-                  onValueChange={(value) => {
-                    const nextRuntimeKind = normalizeRuntimeKind(value);
-                    onRuntimeKindChange(nextRuntimeKind);
-                  }}
-                  triggerProps={{ "aria-label": t("profileRuntimeKind") }}
-                  options={runtimeOptions.map((option) => ({
-                    value: option.value,
-                    label: formatRuntimeKindLabel(option.value, t),
-                  }))}
-                />
-              </label>
+                <div className="manager-rebuild-image-select manager-rebuild-image-readonly">{runtimeLabel}</div>
+              </div>
               <label className="field manager-rebuild-image-field">
                 <span>{t("agentImage")}</span>
                 <div className="manager-rebuild-image-select manager-rebuild-image-readonly" title={selectedImage}>
@@ -81,6 +72,7 @@ export function ManagerRebuildModal({
               </label>
             </div>
           </section>
+          {runtimeWarning ? <div className="form-error">{runtimeWarning}</div> : null}
           {error ? <div className="form-error">{error}</div> : null}
           <AgentCreateProgress progress={progress} t={t} />
           <div className="modal-actions">
@@ -91,7 +83,7 @@ export function ManagerRebuildModal({
               className="manager-rebuild-submit"
               variant="primary"
               size="md"
-              disabled={busy}
+              disabled={busy || Boolean(runtimeWarning)}
               loading={busy}
               loadingLabel={t("managerRebuildBusy")}
               onClick={onConfirm}

@@ -62,7 +62,7 @@ func ApplyUserSettings(cfg Config, settings UserSettings) (Config, error) {
 	cfg.Server.ShowUpgrade = settings.ShowUpgrade
 	cfg.Sandbox.Provider = strings.TrimSpace(settings.SandboxProvider)
 	cfg.Hub = applyHubUserSettings(cfg.Hub, settings)
-	cfg.Bootstrap.DefaultManagerTemplate = normalizeBootstrapTemplateRef(settings.DefaultManagerTemplate)
+	cfg.Bootstrap.DefaultManagerTemplate = normalizeManagerBootstrapTemplateRef(settings.DefaultManagerTemplate)
 	cfg.Bootstrap.DefaultWorkerTemplate = normalizeBootstrapTemplateRef(settings.DefaultWorkerTemplate)
 
 	if err := validateUserSettings(cfg); err != nil {

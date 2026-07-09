@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/config"
@@ -88,6 +89,83 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 		t.Fatalf("stat workspace projects mountpoint: %v", err)
 	} else if !info.IsDir() {
 		t.Fatalf("workspace projects mountpoint is not a directory")
+	}
+}
+
+func TestProvisionWritesInstructionsToWorkspaceAgentsFile(t *testing.T) {
+	agentHome := t.TempDir()
+	projectsRoot := t.TempDir()
+	rt := New(Dependencies{})
+
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID:    "rt-1",
+		AgentID:      "u-alice",
+		AgentName:    "alice",
+		Instructions: "Only answer contract template questions.",
+		Gateway: &agentruntime.GatewayProvision{
+			ModelFallback:     "fallback-model",
+			Server:            config.ServerConfig{AdvertiseBaseURL: "http://127.0.0.1:18080", AccessToken: "shared-token"},
+			ManagerBaseURL:    "http://127.0.0.1:18080",
+			AgentHome:         agentHome,
+			ProjectsRoot:      projectsRoot,
+			WorkspaceTemplate: templateembed.OpenClawWorkerRoot,
+		},
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(workspaceRoot(agentHome), "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("ReadFile(AGENTS.md) error = %v", err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "Only answer contract template questions.") {
+		t.Fatalf("AGENTS.md = %q, want provisioned instructions", text)
+	}
+	if !strings.Contains(text, workspaceInstructionsBlockStart) || !strings.Contains(text, workspaceInstructionsBlockEnd) {
+		t.Fatalf("AGENTS.md = %q, want managed instructions markers", text)
+	}
+}
+
+func TestReconcileConfigRefreshesWorkspaceInstructions(t *testing.T) {
+	agentHome := t.TempDir()
+	workspace := workspaceRoot(agentHome)
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("MkdirAll(workspace) error = %v", err)
+	}
+	agentsPath := filepath.Join(workspace, "AGENTS.md")
+	if err := os.WriteFile(agentsPath, []byte("# Existing Rules\n\nKeep this.\n\n"+renderWorkspaceInstructionsBlock("Old instructions.")), 0o644); err != nil {
+		t.Fatalf("WriteFile(AGENTS.md) error = %v", err)
+	}
+	rt := New(Dependencies{
+		AgentHome: func(string) (string, error) {
+			return agentHome, nil
+		},
+		ResolveAgent: func(agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{ID: "u-alice", Name: "alice", Instructions: "New instructions."}, nil
+		},
+	})
+
+	if err := rt.ReconcileConfig(context.Background(), agentruntime.Handle{RuntimeID: "rt-1"}, agentruntime.RuntimeConfigChange{}); err != nil {
+		t.Fatalf("ReconcileConfig() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(AGENTS.md) error = %v", err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "Keep this.") {
+		t.Fatalf("AGENTS.md = %q, want existing content preserved", text)
+	}
+	if strings.Contains(text, "Old instructions.") {
+		t.Fatalf("AGENTS.md = %q, want stale instructions removed", text)
+	}
+	if !strings.Contains(text, "New instructions.") {
+		t.Fatalf("AGENTS.md = %q, want new instructions", text)
+	}
+	if strings.Count(text, workspaceInstructionsBlockStart) != 1 {
+		t.Fatalf("AGENTS.md marker count = %d, want 1", strings.Count(text, workspaceInstructionsBlockStart))
 	}
 }
 

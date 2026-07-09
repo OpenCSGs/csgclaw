@@ -47,11 +47,17 @@ type fakeCompatRuntime struct {
 }
 
 func init() {
+	codexPath := filepath.Join(os.TempDir(), "csgclaw-test-codex")
+	_ = os.WriteFile(codexPath, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	_ = os.Setenv("CSGCLAW_CODEX_PATH", codexPath)
 	_ = agent.TestOnlySetDefaultServiceOption(func(s *agent.Service) error {
 		if err := runtimewiring.WithPicoClawSandboxRuntime(nil)(s); err != nil {
 			return err
 		}
-		return runtimewiring.WithOpenClawSandboxRuntime(nil)(s)
+		if err := runtimewiring.WithOpenClawSandboxRuntime(nil)(s); err != nil {
+			return err
+		}
+		return agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex})(s)
 	})
 	_ = codexruntime.TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
 		return nil
@@ -316,6 +322,49 @@ func TestBootstrapConfigViewUsesServerUpgradeVisibility(t *testing.T) {
 				t.Fatalf("ShowUpgrade = %t, want %t", got.ShowUpgrade, tt.showUpgrade)
 			}
 		})
+	}
+}
+
+func TestBootstrapConfigViewIncludesManagerCodexRuntimeReadiness(t *testing.T) {
+	origLocateCodexCLI := locateCodexCLI
+	locateCodexCLI = func() (string, error) { return "/usr/local/bin/codex", nil }
+	t.Cleanup(func() {
+		locateCodexCLI = origLocateCodexCLI
+	})
+
+	got := bootstrapConfigView(context.Background(), config.Config{}, nil, nil)
+
+	if got.ManagerRuntime.Name != agent.RuntimeNameCodex {
+		t.Fatalf("ManagerRuntime.Name = %q, want %q", got.ManagerRuntime.Name, agent.RuntimeNameCodex)
+	}
+	if got.ManagerRuntime.Label != "Codex CLI" || got.ManagerRuntime.SandboxEnabled {
+		t.Fatalf("ManagerRuntime label/sandbox = %q/%t, want Codex CLI/false", got.ManagerRuntime.Label, got.ManagerRuntime.SandboxEnabled)
+	}
+	if !got.ManagerRuntime.Installed {
+		t.Fatalf("ManagerRuntime.Installed = false, want true: %+v", got.ManagerRuntime)
+	}
+	if got.ManagerRuntime.OS == "" || got.ManagerRuntime.DocsURL == "" {
+		t.Fatalf("ManagerRuntime OS/docs_url missing: %+v", got.ManagerRuntime)
+	}
+}
+
+func TestBootstrapConfigViewReportsMissingManagerCodexCLI(t *testing.T) {
+	origLocateCodexCLI := locateCodexCLI
+	locateCodexCLI = func() (string, error) { return "", errors.New("codex missing") }
+	t.Cleanup(func() {
+		locateCodexCLI = origLocateCodexCLI
+	})
+
+	got := bootstrapConfigView(context.Background(), config.Config{}, nil, nil)
+
+	if got.ManagerRuntime.Installed {
+		t.Fatalf("ManagerRuntime.Installed = true, want false: %+v", got.ManagerRuntime)
+	}
+	if !strings.Contains(strings.ToLower(got.ManagerRuntime.Message), "codex") {
+		t.Fatalf("ManagerRuntime.Message = %q, want codex warning", got.ManagerRuntime.Message)
+	}
+	if got.ManagerRuntime.InstallGuidance == "" || got.ManagerRuntime.DocsURL == "" || got.ManagerRuntime.OS == "" {
+		t.Fatalf("ManagerRuntime missing install metadata: %+v", got.ManagerRuntime)
 	}
 }
 
@@ -1199,6 +1248,7 @@ func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
 }
 
 func TestHandleManagerUpgradeUsesDefaultTemplateVersionWhenLocalImageListIsStale(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager image upgrades are obsolete")
 	t.Setenv("HOME", t.TempDir())
 	provider := sandboxtest.NewProvider()
 	provider.Images = []string{
@@ -1541,10 +1591,10 @@ func TestHandleAgentLogsReloadsStateBeforeStreaming(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	agentSvc, statePath := mustNewSeededServiceWithPath(t, []agent.Agent{
-		{ID: "u-manager", Name: "manager", BoxID: "box-old", Role: agent.RoleManager, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
+		{ID: "u-alice", Name: "alice", BoxID: "box-old", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
 	})
 	if err := writeSeededAgents(statePath, []agent.Agent{
-		{ID: "u-manager", Name: "manager", BoxID: "box-new", Role: agent.RoleManager, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
+		{ID: "u-alice", Name: "alice", BoxID: "box-new", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
 	}); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
@@ -1552,7 +1602,7 @@ func TestHandleAgentLogsReloadsStateBeforeStreaming(t *testing.T) {
 	var gotBoxID string
 	agent.TestOnlySetGetBoxHook(func(_ *agent.Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
 		gotBoxID = idOrName
-		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "manager"}), nil
+		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice"}), nil
 	})
 	agent.TestOnlySetRunBoxCommandHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance, _ string, _ []string, w io.Writer) (int, error) {
 		_, _ = io.WriteString(w, "line-1\n")
@@ -1564,7 +1614,7 @@ func TestHandleAgentLogsReloadsStateBeforeStreaming(t *testing.T) {
 	}()
 
 	srv := &Handler{svc: agentSvc}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager/logs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice/logs", nil)
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -2024,6 +2074,25 @@ func TestHandleAgentsCreateManagerUsesBootstrapManager(t *testing.T) {
 	}
 	if got.ID != agent.ManagerUserID || got.Name != agent.ManagerName || got.Role != agent.RoleManager {
 		t.Fatalf("agent = %+v, want bootstrapped manager", got)
+	}
+}
+
+func TestHandleAgentsCreateManagerRejectsNonCodexRuntime(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	svc := mustNewService(t)
+	srv := &Handler{svc: svc}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"manager","name":"manager","runtime_kind":"openclaw_sandbox"}`))
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "manager runtime is fixed to codex") {
+		t.Fatalf("body = %q, want fixed codex runtime rejection", rec.Body.String())
 	}
 }
 
@@ -3495,7 +3564,64 @@ func TestHandleAgentsCreateReplaceManagerUsesUnifiedServiceEntry(t *testing.T) {
 	}
 }
 
+func TestHandleAgentsCreateReplaceManagerRejectsNonCodexRuntime(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	svc := mustNewService(t)
+	if _, err := svc.Create(context.Background(), agent.CreateRequest{
+		Spec: agent.CreateAgentSpec{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+		},
+	}); err != nil {
+		t.Fatalf("seed Create() error = %v", err)
+	}
+
+	srv := &Handler{svc: svc}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"runtime_name":"openclaw","sandbox_enabled":true}`))
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "manager runtime is fixed to codex") {
+		t.Fatalf("body = %q, want fixed codex runtime rejection", rec.Body.String())
+	}
+}
+
+func TestHandleAgentsPatchManagerRejectsNonCodexRuntime(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	svc := mustNewService(t)
+	if _, err := svc.Create(context.Background(), agent.CreateRequest{
+		Spec: agent.CreateAgentSpec{
+			ID:   agent.ManagerUserID,
+			Name: agent.ManagerName,
+		},
+	}); err != nil {
+		t.Fatalf("seed Create() error = %v", err)
+	}
+
+	srv := &Handler{svc: svc}
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-manager", strings.NewReader(`{"runtime":{"name":"openclaw","sandbox_enabled":true}}`))
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "manager runtime is fixed to codex") {
+		t.Fatalf("body = %q, want fixed codex runtime rejection", rec.Body.String())
+	}
+}
+
 func TestHandleAgentsCreateReplaceManagerIgnoresImageAndUsesRuntimeTemplate(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager image replacement is obsolete")
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
@@ -6345,7 +6471,9 @@ func normalizeSeededAgents(agents []agent.Agent) []agent.Agent {
 			continue
 		}
 		switch strings.TrimSpace(out[i].Role) {
-		case agent.RoleManager, agent.RoleWorker:
+		case agent.RoleManager:
+			out[i].RuntimeKind = agent.RuntimeKindCodex
+		case agent.RoleWorker:
 			out[i].RuntimeKind = agent.RuntimeKindPicoClawSandbox
 			if strings.TrimSpace(out[i].Image) == "" {
 				out[i].Image = "manager-image:test"

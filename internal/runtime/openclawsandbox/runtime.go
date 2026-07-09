@@ -97,6 +97,9 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 	if err != nil {
 		return err
 	}
+	if err := refreshWorkspaceAgentsFile(filepath.Join(prepared.WorkspaceLayout.WorkspaceHostPath, "AGENTS.md"), req.Instructions); err != nil {
+		return err
+	}
 	r.RememberPreparedGatewayProvision(req.AgentID, prepared)
 	return nil
 }

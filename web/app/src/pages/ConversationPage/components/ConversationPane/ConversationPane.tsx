@@ -212,6 +212,7 @@ export function ConversationPane({
   onSetThreadSlashIndex = (_index) => {},
   managerProfile,
   managerProfileIncomplete,
+  managerRuntimeUnavailable,
   authStatuses,
   authBusyProvider,
   connectorStatus,
@@ -259,7 +260,8 @@ export function ConversationPane({
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
   const logAgentID = logAgent?.id || "";
   const logAgentName = logAgent?.name || conversation.title || "";
-  const composerDisabled = Boolean(managerProfileIncomplete);
+  const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
+  const composerDisabled = Boolean(managerRuntimeUnavailable || managerProfileIncomplete);
 
   useConversationDraftEditorSync(editorRef, draftSegments);
 
@@ -389,6 +391,7 @@ export function ConversationPane({
         connectorError={connectorError}
         connectorPending={connectorPending}
         composerDisabled={composerDisabled}
+        composerDisabledReason={composerDisabledReason}
         composerError={composerError}
         draftSegments={draftSegments}
         draftText={draftText}

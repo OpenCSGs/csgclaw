@@ -47,6 +47,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 					r.Get("/responses", h.getAgentLLMResponsesWebsocket)
 					r.Get("/v1/responses", h.getAgentLLMResponsesWebsocket)
 				})
+				r.Post("/connectors/{provider}/credential", h.handleAgentConnectorCredential)
 				r.Post("/recreate", h.recreateAgent)
 				r.Post("/upgrade", h.upgradeAgent)
 			})

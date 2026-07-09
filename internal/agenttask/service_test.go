@@ -49,8 +49,8 @@ func TestCreateAgentTaskBindsDirectRoomAndSendsInitialMessage(t *testing.T) {
 	if last.Kind != im.MessageKindEvent || last.Event == nil || last.Event.Key != "task_assigned" {
 		t.Fatalf("initial message event = kind %q payload %+v, want task_assigned event", last.Kind, last.Event)
 	}
-	if last.Event.Title != "task-1 [Fix f...]" || len(last.Event.TargetIDs) != 1 || last.Event.TargetIDs[0] != "user-dev" {
-		t.Fatalf("initial message event = %+v, want compact task title and user-dev target", last.Event)
+	if last.Event.Title != "task-1 [Fix flaky test]" || len(last.Event.TargetIDs) != 1 || last.Event.TargetIDs[0] != "user-dev" {
+		t.Fatalf("initial message event = %+v, want full task title and user-dev target", last.Event)
 	}
 	if !strings.Contains(last.Content, task.ID) || !strings.Contains(last.Content, "Fix flaky test") {
 		t.Fatalf("initial message content = %q, want task id and title", last.Content)

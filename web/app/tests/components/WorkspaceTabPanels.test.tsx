@@ -41,6 +41,7 @@ const labels: Record<string, string> = {
   taskCreate: "New task",
   tasksTab: "Tasks",
   normalTasksTab: "Normal tasks",
+  scheduledTaskCreate: "New scheduled task",
   scheduledTasksTab: "Scheduled",
   teamsSection: "Teams",
 };
@@ -174,7 +175,7 @@ describe("WorkspaceTabPanels", () => {
   it("marks the current human row active when the human pane is selected", () => {
     const { panel } = renderAgentsPanel({ activePane: { type: WorkspacePaneTypes.human, id: "u-admin" } });
 
-    expect(within(panel).getByText("admin").closest("button")).toHaveClass("active");
+    expect(within(panel).getByText("admin").closest("button")?.className).toContain("active");
   });
 
   it("moves older default agent section order to the current Models and Human placement", () => {
@@ -184,9 +185,9 @@ describe("WorkspaceTabPanels", () => {
     );
 
     const { container } = renderAgentsPanel();
-    const groupLabels = Array.from(container.querySelectorAll<HTMLButtonElement>(".workspace-group-toggle")).map(
-      (button) => button.textContent,
-    );
+    const groupLabels = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[aria-controls^="workspace-group-items-"]'),
+    ).map((button) => button.textContent);
 
     expect(groupLabels).toEqual(["Agents1", "Human1", "Computers1", "Notifications0", "Teams0"]);
   });
@@ -241,6 +242,7 @@ describe("WorkspaceTabPanels", () => {
   });
 
   it("shows Tasks sidebar subcategories while preserving counts", () => {
+    const onOpenCreateScheduledTask = vi.fn();
     const taskItem = {
       id: "task-1",
       assignment_type: "team",
@@ -286,6 +288,7 @@ describe("WorkspaceTabPanels", () => {
         onCreateAgent={() => {}}
         onCreateNotificationParticipant={() => {}}
         onCreateRoom={() => {}}
+        onOpenCreateScheduledTask={onOpenCreateScheduledTask}
         onOpenCreateTask={() => {}}
         onOpenCreateTeam={() => {}}
         onPreviewAgent={() => {}}
@@ -302,6 +305,7 @@ describe("WorkspaceTabPanels", () => {
         onToggleWorkspaceGroup={() => {}}
         onViewTaskDetails={() => {}}
         t={t}
+        activeTaskBoardView="scheduled"
         taskCount={1}
         scheduledTaskCount={2}
         taskItems={[taskItem]}
@@ -318,6 +322,9 @@ describe("WorkspaceTabPanels", () => {
     expect(within(panel).getByRole("button", { name: /Normal tasks1/ })).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: /Scheduled2/ })).toBeInTheDocument();
     expect(within(panel).queryByText("Build blog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "New scheduled task" }));
+    expect(onOpenCreateScheduledTask).toHaveBeenCalledTimes(1);
   });
 
   it("shows remote skills in the upload dialog remote mode", () => {
@@ -408,7 +415,10 @@ describe("WorkspaceTabPanels", () => {
     });
     expect(setRemoteSkillsSearch).toHaveBeenCalledWith("sa");
 
-    const remoteList = document.querySelector<HTMLDivElement>(".hub-skill-remote-list");
+    const remoteList = Array.from(document.querySelectorAll<HTMLDivElement>("[class]")).find((element) => {
+      const className = element.getAttribute("class") || "";
+      return className.includes("remoteList") && !className.includes("remoteListState");
+    });
     if (!remoteList) {
       throw new Error("Expected the remote skill list to render");
     }

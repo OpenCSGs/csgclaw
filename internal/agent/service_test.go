@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +29,21 @@ import (
 )
 
 func init() {
-	testDefaultServiceOption = withTestPicoClawSandboxRuntime()
+	locateCodexCLI = func() (string, error) { return "/usr/local/bin/codex", nil }
+	testDefaultServiceOption = func(s *Service) error {
+		if err := withTestPicoClawSandboxRuntime()(s); err != nil {
+			return err
+		}
+		return WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-" + spec.AgentName}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		})(s)
+	}
 }
 
 func TestMain(m *testing.M) {
@@ -2114,8 +2129,8 @@ func TestBoxLiteProviderGatewayLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureManager() error = %v", err)
 	}
-	if manager.BoxID != "box-csgclaw-agent-manager" || manager.Status != string(sandbox.StateRunning) {
-		t.Fatalf("EnsureManager() = %+v, want running box-csgclaw-agent-manager", manager)
+	if manager.RuntimeKind != RuntimeKindCodex || manager.BoxID != "codex-manager" || manager.Status != string(agentruntime.StateRunning) {
+		t.Fatalf("EnsureManager() = %+v, want running codex manager", manager)
 	}
 
 	worker, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
@@ -2163,7 +2178,7 @@ func TestBoxLiteProviderGatewayLifecycle(t *testing.T) {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
-	if got, want := countBoxliteCLICommand(runner.requests, "run"), 2; got != want {
+	if got, want := countBoxliteCLICommand(runner.requests, "run"), 1; got != want {
 		t.Fatalf("run command count = %d, want %d", got, want)
 	}
 	if got, want := countBoxliteCLICommand(runner.requests, "start"), 0; got != want {
@@ -2182,6 +2197,299 @@ func TestBoxLiteProviderGatewayLifecycle(t *testing.T) {
 		if len(req.Args) > 2 && req.Args[2] == "run" && !containsAny(req.Args, "/bin/sh", "/usr/local/bin/picoclaw") {
 			t.Fatalf("boxlite-cli run args missing gateway command: %q", req.Args)
 		}
+	}
+}
+
+func TestEnsureBootstrapManagerUsesCodexRuntimeWithoutConnectorTokenEnv(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	origLocateCodexCLI := locateCodexCLI
+	locateCodexCLI = func() (string, error) { return "/usr/local/bin/codex", nil }
+	t.Cleanup(func() {
+		locateCodexCLI = origLocateCodexCLI
+	})
+
+	var gotSpec agentruntime.Spec
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "server-token"},
+		"",
+		filepath.Join(homeDir, "agents.json"),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				gotSpec = spec
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-manager-session"}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	if err := svc.EnsureBootstrapManager(context.Background(), false); err != nil {
+		t.Fatalf("EnsureBootstrapManager() error = %v", err)
+	}
+	manager, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("manager agent not saved")
+	}
+	if manager.ID != ManagerUserID || manager.Role != RoleManager {
+		t.Fatalf("manager identity = %q/%q, want %q/%q", manager.ID, manager.Role, ManagerUserID, RoleManager)
+	}
+	if manager.RuntimeKind != RuntimeKindCodex || manager.RuntimeName != RuntimeNameCodex || manager.SandboxEnabled {
+		t.Fatalf("manager runtime = kind %q name %q sandbox %t, want codex/codex/false", manager.RuntimeKind, manager.RuntimeName, manager.SandboxEnabled)
+	}
+	if manager.Image != "" {
+		t.Fatalf("manager image = %q, want empty for codex runtime", manager.Image)
+	}
+	if manager.BoxID != "codex-manager-session" || manager.Status != string(agentruntime.StateRunning) {
+		t.Fatalf("manager runtime state = %q/%q, want codex-manager-session/running", manager.BoxID, manager.Status)
+	}
+	if gotSpec.AgentID != ManagerUserID || gotSpec.Image != "" {
+		t.Fatalf("runtime spec agent/image = %q/%q, want %q/empty", gotSpec.AgentID, gotSpec.Image, ManagerUserID)
+	}
+	if _, ok := gotSpec.Profile.Env["GITHUB_TOKEN"]; ok {
+		t.Fatal("runtime profile env contains GITHUB_TOKEN")
+	}
+	if _, ok := manager.AgentProfile.Env["GITHUB_TOKEN"]; ok {
+		t.Fatal("manager persisted profile env contains GITHUB_TOKEN")
+	}
+	if _, ok := manager.RuntimeOptions["GITHUB_TOKEN"]; ok {
+		t.Fatal("manager runtime options contain GITHUB_TOKEN")
+	}
+}
+
+func TestEnsureBootstrapManagerRecordsMissingCodexCLIWithoutRuntimeStart(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	origLocateCodexCLI := locateCodexCLI
+	locateCodexCLI = func() (string, error) { return "", fmt.Errorf("codex missing") }
+	t.Cleanup(func() {
+		locateCodexCLI = origLocateCodexCLI
+	})
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "server-token"},
+		"",
+		filepath.Join(homeDir, "agents.json"),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			new: func(context.Context, agentruntime.Spec) (agentruntime.Handle, error) {
+				t.Fatal("codex runtime should not start when Codex CLI is missing")
+				return agentruntime.Handle{}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	if err := svc.EnsureBootstrapManager(context.Background(), false); err != nil {
+		t.Fatalf("EnsureBootstrapManager() error = %v", err)
+	}
+	manager, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("manager agent not saved")
+	}
+	if manager.RuntimeKind != RuntimeKindCodex || manager.RuntimeName != RuntimeNameCodex || manager.SandboxEnabled {
+		t.Fatalf("manager runtime = kind %q name %q sandbox %t, want codex/codex/false", manager.RuntimeKind, manager.RuntimeName, manager.SandboxEnabled)
+	}
+	if manager.Status != "runtime_unavailable" {
+		t.Fatalf("manager status = %q, want runtime_unavailable", manager.Status)
+	}
+	if manager.BoxID != "" {
+		t.Fatalf("manager BoxID = %q, want empty when runtime is unavailable", manager.BoxID)
+	}
+}
+
+func TestEnsureBootstrapManagerRemovesOrphanLegacySandboxWhenAlreadyCodex(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	ResetTestHooks()
+	t.Cleanup(ResetTestHooks)
+
+	var removed []string
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		removed = append(removed, idOrName)
+		if idOrName == "csgclaw-agent-manager" {
+			return nil
+		}
+		return fmt.Errorf("%w: missing", sandbox.ErrNotFound)
+	}
+
+	statePath := filepath.Join(homeDir, "agents.json")
+	data, err := json.Marshal(persistedState{
+		Agents: []persistedAgent{
+			{
+				ID:          ManagerUserID,
+				Name:        ManagerName,
+				RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+				RuntimeKind: RuntimeKindCodex,
+				Role:        RoleManager,
+				BoxID:       "codex-session-existing",
+				CreatedAt:   time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+				AgentProfile: AgentProfile{
+					Name:            ManagerName,
+					Provider:        ProviderCodex,
+					ModelID:         "gpt-5.5",
+					ProfileComplete: true,
+				},
+				ProfileComplete: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(statePath, data, 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "server-token"},
+		"",
+		statePath,
+		WithSandboxProvider(fakeProvider{}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	if err := svc.EnsureBootstrapManager(context.Background(), false); err != nil {
+		t.Fatalf("EnsureBootstrapManager() error = %v", err)
+	}
+	if !slices.Contains(removed, "csgclaw-agent-manager") {
+		t.Fatalf("removed boxes = %#v, want csgclaw-agent-manager", removed)
+	}
+	if slices.Contains(removed, "codex-session-existing") {
+		t.Fatalf("removed boxes = %#v, should not target persisted Codex session id", removed)
+	}
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent(manager) ok=false")
+	}
+	if got.RuntimeKind != RuntimeKindCodex || got.BoxID != "codex-session-new" {
+		t.Fatalf("manager runtime = %q/%q, want codex/codex-session-new", got.RuntimeKind, got.BoxID)
+	}
+}
+
+func TestEnsureBootstrapManagerRemovesStoredLegacySandboxBeforeCodexMigration(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	ResetTestHooks()
+	t.Cleanup(ResetTestHooks)
+
+	var removed []string
+	testForceRemoveBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, idOrName string) error {
+		removed = append(removed, idOrName)
+		return nil
+	}
+
+	statePath := filepath.Join(homeDir, "agents.json")
+	data, err := json.Marshal(persistedState{
+		Agents: []persistedAgent{
+			{
+				ID:          ManagerUserID,
+				Name:        "custom-manager",
+				RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+				RuntimeKind: RuntimeKindPicoClawSandbox,
+				Role:        RoleManager,
+				BoxID:       "legacy-box-id",
+				CreatedAt:   time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+				AgentProfile: AgentProfile{
+					Name:            "custom-manager",
+					Provider:        ProviderAPI,
+					BaseURL:         "https://api.manager.example/v1",
+					APIKey:          "manager-key",
+					ModelID:         "manager-model",
+					ProfileComplete: true,
+				},
+				ProfileComplete: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(statePath, data, 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "server-token"},
+		"",
+		statePath,
+		WithSandboxProvider(fakeProvider{}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	if err := svc.EnsureBootstrapManager(context.Background(), false); err != nil {
+		t.Fatalf("EnsureBootstrapManager() error = %v", err)
+	}
+	if len(removed) < 3 || removed[0] != "legacy-box-id" {
+		t.Fatalf("removed boxes = %#v, want legacy-box-id first", removed)
+	}
+	if !slices.Contains(removed, "csgclaw-agent-manager") {
+		t.Fatalf("removed boxes = %#v, want csgclaw-agent-manager", removed)
+	}
+	got, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent(manager) ok=false")
+	}
+	if got.RuntimeKind != RuntimeKindCodex || got.RuntimeName != RuntimeNameCodex || got.SandboxEnabled {
+		t.Fatalf("manager runtime = %q/%q sandbox %t, want codex/codex/false", got.RuntimeKind, got.RuntimeName, got.SandboxEnabled)
+	}
+	if got.Name != "custom-manager" {
+		t.Fatalf("manager name = %q, want custom-manager", got.Name)
+	}
+}
+
+func TestEnsureManagerRejectsNonCodexRuntimeOverride(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"",
+		filepath.Join(homeDir, "agents.json"),
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.ensureManager(context.Background(), true, "picoclaw:latest", RuntimeKindPicoClawSandbox)
+	if err == nil {
+		t.Fatal("ensureManager() error = nil, want non-codex runtime rejection")
+	}
+	if !strings.Contains(err.Error(), "manager runtime is fixed to codex") {
+		t.Fatalf("ensureManager() error = %v, want fixed codex runtime rejection", err)
 	}
 }
 
@@ -2563,6 +2871,7 @@ func TestUpdateManagerNamePersistsToRootState(t *testing.T) {
 }
 
 func TestCreateReplaceManagerIgnoresRequestedImageAndUsesDefault(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager image replacement is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -2623,6 +2932,7 @@ func TestCreateReplaceManagerIgnoresRequestedImageAndUsesDefault(t *testing.T) {
 }
 
 func TestCreateReplaceManagerPreservesRenamedManager(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager replacement is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -2683,6 +2993,7 @@ func TestCreateReplaceManagerPreservesRenamedManager(t *testing.T) {
 }
 
 func TestCreateReplaceManagerClearsEnvRestartRequired(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager replacement is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -2757,6 +3068,7 @@ func TestCreateReplaceManagerClearsEnvRestartRequired(t *testing.T) {
 }
 
 func TestCreateReplaceManagerReprovisionsWorkspaceAfterHomeRemoval(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager workspace reprovisioning is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -2836,6 +3148,7 @@ func TestCreateReplaceManagerReprovisionsWorkspaceAfterHomeRemoval(t *testing.T)
 }
 
 func TestCreateReplaceManagerWithoutRequestedImageUsesManagerDefault(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager default image replacement is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -2893,6 +3206,7 @@ func TestCreateReplaceManagerWithoutRequestedImageUsesManagerDefault(t *testing.
 }
 
 func TestCreateReplaceManagerSwitchesRuntimeKindRequiresImage(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager runtime switching is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -2958,6 +3272,7 @@ func TestCreateReplaceManagerSwitchesRuntimeKindRequiresImage(t *testing.T) {
 }
 
 func TestCreateReplaceManagerSwitchesRuntimeKindUsesEmbeddedRuntimeImage(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager runtime switching is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -3052,6 +3367,7 @@ func TestCreateReplaceManagerSwitchesRuntimeKindUsesEmbeddedRuntimeImage(t *test
 }
 
 func TestCreateReplaceManagerWithStaleSubmittedImageUsesLatestDefaultTemplate(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager image upgrade is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -5654,6 +5970,7 @@ func TestUpgradeUsesBuiltinWorkerImageForAgentRuntimeWhenDefaultWorkerTemplateDi
 }
 
 func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager built-in skill refresh is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
@@ -5713,7 +6030,7 @@ func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
 		t.Fatal("Recreate().AgentProfile.EnvRestartRequired = true, want false")
 	}
 
-	wantBuiltIn, err := templateembed.FS().Open(templateembed.WorkspacePath(templateembed.PicoClawManagerRoot) + "/skills/agent-teams/SKILL.md")
+	wantBuiltIn, err := templateembed.FS().Open(templateembed.WorkspacePath(templateembed.CodexManagerRoot) + "/skills/agent-teams/SKILL.md")
 	if err != nil {
 		t.Fatalf("open embedded agent-teams skill: %v", err)
 	}
@@ -6513,6 +6830,7 @@ func TestCreateUsesRequestedImageOrManagerFallback(t *testing.T) {
 }
 
 func TestEnsureBootstrapStateForceRecreatePrefersStoredManagerBoxID(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager box cleanup is obsolete")
 	t.Setenv("HOME", t.TempDir())
 
 	SetTestHooks(
@@ -6582,6 +6900,7 @@ func TestEnsureBootstrapStateForceRecreatePrefersStoredManagerBoxID(t *testing.T
 }
 
 func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager home reset is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	dir := t.TempDir()
@@ -6689,6 +7008,7 @@ func TestEnsureBootstrapStateForceRecreateResetsManagerHomeBeforeCreate(t *testi
 }
 
 func TestEnsureBootstrapStateClosesManagerBoxHandleAfterCreate(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager box handles are obsolete")
 	t.Setenv("HOME", t.TempDir())
 
 	rt := &fakeRuntime{}
@@ -6745,6 +7065,7 @@ func TestEnsureBootstrapStateClosesManagerBoxHandleAfterCreate(t *testing.T) {
 }
 
 func TestEnsureBootstrapStateReusesStoredManagerBoxIDWithoutForce(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager box reuse is obsolete")
 	t.Setenv("HOME", t.TempDir())
 
 	SetTestHooks(nil, nil)
@@ -6806,6 +7127,7 @@ func TestEnsureBootstrapStateReusesStoredManagerBoxIDWithoutForce(t *testing.T) 
 }
 
 func TestEnsureBootstrapStateRecreatesLegacyNamedManagerBoxWithoutForce(t *testing.T) {
+	t.Skip("manager is Codex-only; legacy sandbox manager box migration is obsolete")
 	t.Setenv("HOME", t.TempDir())
 
 	SetTestHooks(nil, nil)
@@ -6906,6 +7228,7 @@ func TestEnsureBootstrapStateRecreatesLegacyNamedManagerBoxWithoutForce(t *testi
 }
 
 func TestEnsureBootstrapStateRecreatesManagerWithLegacyPicoClawBridgeConfig(t *testing.T) {
+	t.Skip("manager is Codex-only; legacy PicoClaw manager bridge config migration is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	statePath := filepath.Join(t.TempDir(), "agents.json")
@@ -7019,6 +7342,7 @@ func TestEnsureBootstrapStateRecreatesManagerWithLegacyPicoClawBridgeConfig(t *t
 }
 
 func TestEnsureBootstrapManagerDoesNotRemoveExistingBoxWhenMigrationProvisionFails(t *testing.T) {
+	t.Skip("manager is Codex-only; sandbox manager migration failure behavior is obsolete")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -7121,33 +7445,6 @@ func TestEnsureBootstrapManagerUsesStoredManagerProfileWhenDefaultModelIsInvalid
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	SetTestHooks(nil, nil)
-	defer ResetTestHooks()
-
-	primaryRT := &fakeRuntime{}
-	testEnsureRuntimeAtHomeHook = func(_ *Service, home string) (sandbox.Runtime, error) {
-		return primaryRT, nil
-	}
-	testGetBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, _ string) (sandbox.Instance, error) {
-		return nil, fmt.Errorf("%w: missing", sandbox.ErrNotFound)
-	}
-	testCreateGatewayBoxHook = func(_ *Service, _ context.Context, _ sandbox.Runtime, image, name, botID string, _ AgentProfile) (sandbox.Instance, sandbox.Info, error) {
-		if image != "manager-image:test" || name != ManagerName || botID != ManagerUserID {
-			t.Fatalf("createGatewayBox() got image=%q name=%q botID=%q", image, name, botID)
-		}
-		return &fakeInfoInstance{info: sandbox.Info{
-				ID:        "box-new",
-				Name:      ManagerName,
-				State:     sandbox.StateRunning,
-				CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
-			}}, sandbox.Info{
-				ID:        "box-new",
-				Name:      ManagerName,
-				State:     sandbox.StateRunning,
-				CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
-			}, nil
-	}
-
 	statePath := filepath.Join(t.TempDir(), "agents.json")
 	data, err := json.Marshal(persistedState{
 		Agents: []persistedAgent{
@@ -7194,10 +7491,16 @@ func TestEnsureBootstrapManagerUsesStoredManagerProfileWhenDefaultModelIsInvalid
 		"manager-image:test",
 		statePath,
 		WithRuntime(fakeAgentRuntime{
-			kind: RuntimeKindPicoClawSandbox,
+			kind: RuntimeKindCodex,
 			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
 				provisionedModel = req.Profile.ModelID
 				return nil
+			},
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
 			},
 		}),
 	)
@@ -7622,12 +7925,8 @@ func TestGatewayProvisionRequestBuildsOpenClawWorkerAssets(t *testing.T) {
 	if gateway.WorkspaceTemplate != templateembed.OpenClawWorkerRoot {
 		t.Fatalf("Gateway.WorkspaceTemplate(worker) = %q, want %q", gateway.WorkspaceTemplate, templateembed.OpenClawWorkerRoot)
 	}
-	managerGateway, err := svc.gatewayProvisionRequest(RuntimeKindOpenClawSandbox, ManagerName, ManagerUserID)
-	if err != nil {
-		t.Fatalf("gatewayProvisionRequest(manager) error = %v", err)
-	}
-	if managerGateway.WorkspaceTemplate != templateembed.OpenClawManagerRoot {
-		t.Fatalf("Gateway.WorkspaceTemplate(manager) = %q, want %q", managerGateway.WorkspaceTemplate, templateembed.OpenClawManagerRoot)
+	if _, err := svc.gatewayProvisionRequest(RuntimeKindOpenClawSandbox, ManagerName, ManagerUserID); err == nil {
+		t.Fatal("gatewayProvisionRequest(manager) error = nil, want sandbox manager template rejected")
 	}
 	rt := openclawsandbox.New(sandboxgateway.Dependencies{})
 	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
@@ -7705,7 +8004,7 @@ func TestGatewayProvisionRequestUsesDockerHostAliasForImplicitAdvertiseURL(t *te
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	gateway, err := svc.gatewayProvisionRequest(RuntimeKindPicoClawSandbox, ManagerName, ManagerUserID)
+	gateway, err := svc.gatewayProvisionRequest(RuntimeKindPicoClawSandbox, "alice", "u-worker-1")
 	if err != nil {
 		t.Fatalf("gatewayProvisionRequest() error = %v", err)
 	}
@@ -8206,6 +8505,7 @@ func withTestSandboxRuntimeHost(host PicoClawRuntimeHost, provider feishu.AgentC
 	return func(s *Service) error {
 		return WithRuntime(newRuntime(sandboxgateway.Dependencies{
 			FeishuProvider: provider,
+			AgentHome:      host.AgentHome,
 			EnsureRuntime:  host.EnsureRuntime,
 			RuntimeHome:    host.RuntimeHome,
 			CloseRuntime:   host.CloseRuntime,
@@ -8230,10 +8530,11 @@ func withTestSandboxRuntimeHost(host PicoClawRuntimeHost, provider feishu.AgentC
 					return sandboxgateway.AgentRef{}, err
 				}
 				return sandboxgateway.AgentRef{
-					ID:        got.ID,
-					Name:      got.Name,
-					RuntimeID: got.RuntimeID,
-					BoxID:     got.BoxID,
+					ID:           got.ID,
+					Name:         got.Name,
+					RuntimeID:    got.RuntimeID,
+					BoxID:        got.BoxID,
+					Instructions: got.Instructions,
 				}, nil
 			},
 			SyncHandle: host.SyncHandle,

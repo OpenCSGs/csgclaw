@@ -51,7 +51,7 @@ export type ConfigTemplateOption = {
   value: string;
 };
 
-const BOOTSTRAP_MANAGER_RUNTIME = "picoclaw_sandbox";
+const BOOTSTRAP_MANAGER_RUNTIME = "codex";
 
 export function isValidConfigBootstrapTemplate(
   template: HubTemplate | null | undefined,

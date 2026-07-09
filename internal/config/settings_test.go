@@ -46,7 +46,7 @@ func TestApplyUserSettingsUpdatesExposedFields(t *testing.T) {
 		SandboxProvider:        DockerProvider,
 		HubLocalPath:           "/new/hub",
 		HubOfficialURL:         "https://hub.example.com/",
-		DefaultManagerTemplate: "builtin.picoclaw-manager",
+		DefaultManagerTemplate: "builtin.manager-codex",
 		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
 	})
 	if err != nil {

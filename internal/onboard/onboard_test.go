@@ -12,8 +12,6 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
-	"csgclaw/internal/sandbox"
-	"csgclaw/internal/sandbox/sandboxtest"
 )
 
 func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
@@ -99,22 +97,6 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 
 func TestCreateManagerParticipantBootstrapsAdminParticipant(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	rt := sandboxtest.NewRuntime()
-	agent.SetTestHooks(
-		func(*agent.Service, string) (sandbox.Runtime, error) {
-			return rt, nil
-		},
-		func(*agent.Service, context.Context, sandbox.Runtime, string, string, string, agent.AgentProfile) (sandbox.Instance, sandbox.Info, error) {
-			info := sandbox.Info{
-				ID:    "box-manager",
-				Name:  agent.ManagerName,
-				State: sandbox.StateRunning,
-			}
-			inst := sandboxtest.NewInstance(info)
-			return inst, info, nil
-		},
-	)
-	t.Cleanup(agent.ResetTestHooks)
 
 	dir := t.TempDir()
 	agentsPath := filepath.Join(dir, "agents.json")
@@ -123,7 +105,8 @@ func TestCreateManagerParticipantBootstrapsAdminParticipant(t *testing.T) {
 		t.Fatalf("EnsureBootstrapState() error = %v", err)
 	}
 
-	if _, err := createManagerParticipant(context.Background(), agentsPath, imStatePath, defaultConfig()); err != nil {
+	ctx := context.WithValue(context.Background(), noAuthDetectContextKey{}, true)
+	if _, err := createManagerParticipant(ctx, agentsPath, imStatePath, defaultConfig()); err != nil {
 		t.Fatalf("createManagerParticipant() error = %v", err)
 	}
 
@@ -218,7 +201,7 @@ advertise_base_url = ""
 access_token = "your_access_token"
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
@@ -308,7 +291,7 @@ advertise_base_url = ""
 access_token = "your_access_token"
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
@@ -384,7 +367,7 @@ advertise_base_url = ""
 access_token = "your_access_token"
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
@@ -629,7 +612,7 @@ models = ["gpt-test"]
 	defer restore()
 	EnsureIMBootstrapState = func(string) error { return nil }
 	CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
-		if got, want := cfg.Bootstrap.DefaultManagerTemplate, "builtin.picoclaw-manager"; got != want {
+		if got, want := cfg.Bootstrap.DefaultManagerTemplate, "builtin.manager-codex"; got != want {
 			t.Fatalf("cfg.Bootstrap.DefaultManagerTemplate = %q, want %q", got, want)
 		}
 		if got, want := cfg.Bootstrap.DefaultWorkerTemplate, "local.review-worker"; got != want {
@@ -648,7 +631,7 @@ models = ["gpt-test"]
 	}
 	content := string(data)
 	for _, want := range []string{
-		`default_manager_template = "builtin.picoclaw-manager"`,
+		`default_manager_template = "builtin.manager-codex"`,
 		`default_worker_template = "local.review-worker"`,
 	} {
 		if !strings.Contains(content, want) {
@@ -693,7 +676,7 @@ access_token = "your_access_token"
 		`no_auth = false`,
 		`show_upgrade = true`,
 		`[bootstrap]`,
-		`default_manager_template = "builtin.picoclaw-manager"`,
+		`default_manager_template = "builtin.manager-codex"`,
 		`default_worker_template = "builtin.picoclaw-worker"`,
 		`[sandbox]`,
 		`provider = ""`,
@@ -721,7 +704,7 @@ access_token = "custom-token"
 no_auth = false
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
@@ -792,7 +775,7 @@ access_token = "custom-token"
 no_auth = false
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]

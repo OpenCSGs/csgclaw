@@ -1,0 +1,548 @@
+.slot {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+  background: var(--white);
+}
+
+.noContextSidebar {
+  width: var(--sidebar-slot-width, var(--workspace-primary-sidebar-width));
+}
+
+.primarySidebar {
+  position: absolute;
+  z-index: 3;
+  inset: 0 auto 0 0;
+  width: var(--workspace-primary-sidebar-width);
+  min-width: var(--workspace-primary-sidebar-width);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-right: 1px solid #eaecf0;
+  background: var(--white);
+  color: #344054;
+  overflow: hidden;
+  transition:
+    width 180ms ease,
+    min-width 180ms ease;
+}
+
+.primarySidebarCollapsed {
+  width: var(--workspace-primary-sidebar-collapsed-width);
+  min-width: var(--workspace-primary-sidebar-collapsed-width);
+}
+
+.primarySidebarCollapsed .primaryNavigationWrap {
+  width: 100%;
+}
+
+.primaryNavigationWrap {
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.primaryHeader {
+  flex: 0 0 auto;
+  min-height: 64px;
+  padding: 16px 20px 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.primaryHeaderCollapsed {
+  width: 100%;
+  min-height: 80px;
+  padding: 16px;
+  justify-content: center;
+}
+
+.logo {
+  width: 106px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.logoImage {
+  width: 106px;
+  height: 32px;
+  display: block;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.logoDark,
+.logoMarkDark {
+  display: none;
+}
+
+.logoMarkButton {
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  margin-inline: auto;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #344054;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.logoMarkButton:hover,
+.logoMarkButton:focus-visible {
+  background: transparent;
+  outline: none;
+}
+
+.logoMarkImage {
+  width: 32px;
+  height: 32px;
+  display: block;
+  object-fit: contain;
+}
+
+.primaryHeaderCollapsed .logoMarkImage {
+  transform: translateX(16px);
+}
+
+.primaryHeaderControl {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 6px;
+  border-radius: 8px;
+  color: #344054;
+}
+
+.primaryHeaderControlMark,
+.primaryHeaderControlMark svg {
+  width: 20px;
+  height: 20px;
+}
+
+.primaryNav {
+  min-height: 0;
+  padding: 16px;
+  border-top: 1px solid #eaecf0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+}
+
+.primaryNavCollapsed {
+  width: 100%;
+  padding: 0 16px 16px;
+  border-top: 0;
+  gap: 8px;
+  align-items: center;
+  overflow-x: hidden;
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+}
+
+.primaryNavCollapsed::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.primaryNavSection,
+.primarySectionItems,
+.primaryCollapsedItems {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.primaryCollapsedItems {
+  width: 48px;
+  margin-inline: auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.primaryGroupLabel {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  color: #667085;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+}
+
+.primaryNavRow {
+  position: relative;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #344054;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  text-align: left;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.primaryNavRow:hover,
+.primaryNavRow:focus-visible,
+.active {
+  background: #f9fafb;
+  color: #101828;
+  outline: none;
+}
+
+.iconOnly {
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  margin-inline: auto;
+  padding: 12px;
+  border-radius: 8px;
+  justify-content: center;
+}
+
+.primaryNavIcon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  color: currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.primaryNavIcon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.primaryNavLabel {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.primaryNavBadge {
+  min-width: 24px;
+  height: 22px;
+  padding: 1px 8px;
+  border: 1px solid #eaecf0;
+  border-radius: 999px;
+  background: #f9fafb;
+  color: #667085;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.iconOnly .primaryNavBadge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.primaryFooter {
+  flex: 0 0 auto;
+  margin: 0 16px;
+  padding: 24px 0 32px;
+  border-top: 1px solid #eaecf0;
+}
+
+.primaryFooterCollapsed {
+  width: 48px;
+  margin: 0 auto;
+  padding: 0 0 24px;
+  border-top: 0;
+}
+
+.mainColumn {
+  position: absolute;
+  z-index: 2;
+  inset: 0 0 0 var(--workspace-current-primary-sidebar-width);
+  width: var(--workspace-context-sidebar-width);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #eaecf0;
+  background: var(--white);
+  box-shadow: none;
+  transform: translateX(0);
+  visibility: visible;
+  overflow: hidden;
+}
+
+.contextHeader {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 124px;
+  border-bottom: 1px solid #eaecf0;
+  background: var(--white);
+  display: flex;
+  flex-direction: column;
+}
+
+.contextTitleRow {
+  min-height: 68px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contextTitleWrap {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.contextTitle {
+  min-width: 0;
+  color: #101828;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.contextBadge {
+  height: 22px;
+  min-width: 32px;
+  padding: 1px 8px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #f9fafb;
+  color: #344054;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.contextBadge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #17b26a;
+}
+
+.contextAction {
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #344054;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.contextAction:hover,
+.contextAction:focus-visible {
+  background: #f9fafb;
+  outline: none;
+}
+
+.contextSearch {
+  box-sizing: border-box;
+  height: var(--input-height-md);
+  margin: 0 16px 12px;
+  padding: 10px 14px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: var(--white);
+  color: #667085;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.contextSearch svg {
+  flex: 0 0 auto;
+}
+
+:global(:root body) .contextSearch .contextSearchInput {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #101828;
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 24px;
+  letter-spacing: 0;
+}
+
+:global(:root body) .contextSearch .contextSearchInput:hover,
+:global(:root body) .contextSearch .contextSearchInput:focus {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:global(:root body) .contextSearch .contextSearchInput::placeholder {
+  color: #667085;
+  opacity: 1;
+}
+
+:global(:root body) .contextSearch .contextSearchInput::-webkit-search-decoration,
+:global(:root body) .contextSearch .contextSearchInput::-webkit-search-cancel-button,
+:global(:root body) .contextSearch .contextSearchInput::-webkit-search-results-button,
+:global(:root body) .contextSearch .contextSearchInput::-webkit-search-results-decoration {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.contextNav {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 0 16px;
+  gap: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+:global(:root[data-theme="dark"]) .slot,
+:global(:root[data-theme="dark"]) .primarySidebar,
+:global(:root[data-theme="dark"]) .mainColumn,
+:global(:root[data-theme="dark"]) .contextHeader,
+:global(:root[data-theme="dark"]) .contextSearch {
+  border-color: var(--gray-700);
+  background: var(--surface);
+}
+
+:global(:root[data-theme="dark"]) .logoLight,
+:global(:root[data-theme="dark"]) .logoMarkLight {
+  display: none;
+}
+
+:global(:root[data-theme="dark"]) .logoDark,
+:global(:root[data-theme="dark"]) .logoMarkDark {
+  display: block;
+}
+
+:global(:root[data-theme="dark"]) .primaryGroupLabel,
+:global(:root[data-theme="dark"]) .primaryNavBadge,
+:global(:root[data-theme="dark"]) .contextSearch,
+:global(:root[data-theme="dark"]) .contextSearchInput::placeholder {
+  color: var(--gray-400);
+}
+
+:global(:root[data-theme="dark"]) .primaryNavRow,
+:global(:root[data-theme="dark"]) .primaryHeaderControl,
+:global(:root[data-theme="dark"]) .logoMarkButton,
+:global(:root[data-theme="dark"]) .contextTitle,
+:global(:root[data-theme="dark"]) .contextAction,
+:global(:root[data-theme="dark"]) .contextSearchInput {
+  color: var(--gray-100);
+}
+
+:global(:root[data-theme="dark"] body) .contextSearch .contextSearchInput.contextSearchInput {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--gray-100);
+}
+
+:global(:root[data-theme="dark"] body) .contextSearch .contextSearchInput.contextSearchInput:hover,
+:global(:root[data-theme="dark"] body) .contextSearch .contextSearchInput.contextSearchInput:focus {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"] body) .contextSearch .contextSearchInput.contextSearchInput::placeholder {
+  color: var(--gray-400);
+}
+
+:global(:root[data-theme="dark"]) .primaryNavRow:hover,
+:global(:root[data-theme="dark"]) .primaryNavRow:focus-visible,
+:global(:root[data-theme="dark"]) .active,
+:global(:root[data-theme="dark"]) .logoMarkButton:hover,
+:global(:root[data-theme="dark"]) .logoMarkButton:focus-visible,
+:global(:root[data-theme="dark"]) .contextAction:hover,
+:global(:root[data-theme="dark"]) .contextAction:focus-visible {
+  background: var(--panel-strong);
+  color: var(--white);
+}
+
+@media (max-width: 720px) {
+  .primarySidebar {
+    width: min(300px, 48vw);
+    min-width: min(300px, 48vw);
+  }
+
+  .mainColumn {
+    left: var(--workspace-current-primary-sidebar-width);
+    width: calc(100vw - var(--workspace-current-primary-sidebar-width));
+  }
+
+  .primaryGroupLabel,
+  .primaryNavRow {
+    font-size: 14px;
+    line-height: 22px;
+  }
+
+  .contextNav {
+    padding: 12px 10px 14px;
+  }
+}

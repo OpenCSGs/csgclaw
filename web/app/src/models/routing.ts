@@ -7,12 +7,14 @@ type ValueOf<T> = T[keyof T];
 export const WorkspacePaneTypes = {
   conversation: "conversation",
   agent: "agent",
+  notifications: "notifications",
   human: "human",
   team: "team",
   computer: "computer",
   modelProvider: "model_provider",
   hub: "hub",
   task: "task",
+  settings: "settings",
 } as const;
 
 export type WorkspacePaneType = ValueOf<typeof WorkspacePaneTypes>;
@@ -44,6 +46,7 @@ export const WorkspaceRouteSegments = {
   computer: "computer",
   agents: "agents",
   agent: "agent",
+  notifications: "notifications",
   humans: "humans",
   human: "human",
   teams: "teams",
@@ -63,6 +66,7 @@ export const WorkspaceRouteSegments = {
   room: "room",
   conversations: "conversations",
   conversation: "conversation",
+  settings: "settings",
 } as const;
 
 const agentRouteSegments = new Set<string>([WorkspaceRouteSegments.agents, WorkspaceRouteSegments.agent]);
@@ -113,14 +117,20 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
       ? { type: WorkspacePaneTypes.agent, id }
       : { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
   }
+  if (section === WorkspaceRouteSegments.notifications) {
+    return { type: WorkspacePaneTypes.notifications, id: "" };
+  }
   if (humanRouteSegments.has(section)) {
     return id
       ? { type: WorkspacePaneTypes.human, id }
       : { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
   }
   if (teamRouteSegments.has(section)) {
-    return id
-      ? { type: WorkspacePaneTypes.team, id }
+    if (id) {
+      return { type: WorkspacePaneTypes.team, id };
+    }
+    return section === WorkspaceRouteSegments.teams
+      ? { type: WorkspacePaneTypes.team, id: "" }
       : { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
   }
   if (modelRouteSegments.has(section)) {
@@ -144,6 +154,9 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
   if (section === WorkspaceRouteSegments.tasks) {
     return { type: WorkspacePaneTypes.task, id };
   }
+  if (section === WorkspaceRouteSegments.settings) {
+    return { type: WorkspacePaneTypes.settings, id: "" };
+  }
   if (conversationRouteSegments.has(section)) {
     return id ? { type: WorkspacePaneTypes.conversation, id } : { type: WorkspacePaneTypes.conversation, id: "" };
   }
@@ -160,11 +173,16 @@ export function pathForPane(
   if (pane.type === WorkspacePaneTypes.agent && pane.id) {
     return `/${WorkspaceRouteSegments.agents}/${encodeURIComponent(pane.id)}`;
   }
+  if (pane.type === WorkspacePaneTypes.notifications) {
+    return `/${WorkspaceRouteSegments.notifications}`;
+  }
   if (pane.type === WorkspacePaneTypes.human && pane.id) {
     return `/${WorkspaceRouteSegments.humans}/${encodeURIComponent(pane.id)}`;
   }
-  if (pane.type === WorkspacePaneTypes.team && pane.id) {
-    return `/${WorkspaceRouteSegments.teams}/${encodeURIComponent(pane.id)}`;
+  if (pane.type === WorkspacePaneTypes.team) {
+    return pane.id
+      ? `/${WorkspaceRouteSegments.teams}/${encodeURIComponent(pane.id)}`
+      : `/${WorkspaceRouteSegments.teams}`;
   }
   if (pane.type === WorkspacePaneTypes.modelProvider && pane.id) {
     return `/${WorkspaceRouteSegments.models}/${encodeURIComponent(pane.id)}`;
@@ -183,6 +201,9 @@ export function pathForPane(
       return `/${WorkspaceRouteSegments.tasks}/${encodeURIComponent(pane.id)}`;
     }
     return `/${WorkspaceRouteSegments.tasks}`;
+  }
+  if (pane.type === WorkspacePaneTypes.settings) {
+    return `/${WorkspaceRouteSegments.settings}`;
   }
   if (pane.type === WorkspacePaneTypes.conversation && pane.id) {
     const room = rooms.find((item) => item.id === pane.id);
@@ -210,6 +231,7 @@ export function workspaceTabForPane(pane: WorkspacePane | null | undefined): Wor
   }
   if (
     pane?.type === WorkspacePaneTypes.agent ||
+    pane?.type === WorkspacePaneTypes.notifications ||
     pane?.type === WorkspacePaneTypes.human ||
     pane?.type === WorkspacePaneTypes.team ||
     pane?.type === WorkspacePaneTypes.computer
@@ -217,6 +239,10 @@ export function workspaceTabForPane(pane: WorkspacePane | null | undefined): Wor
     return WorkspaceTabs.agents;
   }
   return WorkspaceTabs.messages;
+}
+
+export function workspaceHasContextSidebar(pane: WorkspacePane | null | undefined): boolean {
+  return pane?.type !== WorkspacePaneTypes.task && pane?.type !== WorkspacePaneTypes.settings;
 }
 
 export function readCollapsedWorkspaceGroups(): CollapsedWorkspaceGroups {

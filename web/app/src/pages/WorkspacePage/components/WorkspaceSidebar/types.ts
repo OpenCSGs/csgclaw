@@ -20,6 +20,26 @@ import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import type { ThemeMode } from "@/shared/theme/theme";
 import type { WorkspaceHubController } from "@/hooks/workspace/useWorkspaceHubController";
 
+type ValueOf<T> = T[keyof T];
+
+export const WorkspaceContextSectionIds = {
+  messages: "messages",
+  rooms: "rooms",
+  directMessages: "direct-messages",
+  threads: "threads",
+  agents: "agents",
+  humans: "humans",
+  computers: "computers",
+  notifications: "notifications",
+  teams: "teams",
+  hubTemplates: "hub-templates",
+  hubSkills: "hub-skills",
+  models: "models",
+  tasks: "tasks",
+} as const;
+
+export type WorkspaceContextSectionId = ValueOf<typeof WorkspaceContextSectionIds>;
+
 export type WorkspaceSidebarProps = {
   activePane: WorkspacePane;
   activeThreadRootID: string;
@@ -48,11 +68,13 @@ export type WorkspaceSidebarProps = {
   onCreateTeam: (payload: CreateTeamPayload) => Promise<void>;
   onOpenCreateTeam: () => void | Promise<void>;
   onOpenCreateTask: () => void | Promise<void>;
+  onOpenCreateScheduledTask?: () => void | Promise<void>;
   onCreateNotificationParticipant: () => void | Promise<void>;
   onCreateRoom: () => void;
   onExpandSidebar: () => void;
   onOpenUpgrade: () => void;
   onOpenConfigSettings: () => void;
+  onOpenSettings: () => void;
   onLogin: (environment?: AuthEnvironmentDraft) => void | Promise<void>;
   onLogout: () => void | Promise<void>;
   onPreviewAgent: (item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) => void;
@@ -65,7 +87,9 @@ export type WorkspaceSidebarProps = {
   onSelectHubSkill: (item: SkillSummary | null | undefined) => void;
   onSelectHubTemplate: (item: HubTemplate | null | undefined) => void;
   onSelectModelProvider?: (item: ModelProvider | null | undefined) => void;
+  onSelectNotificationSection: () => void;
   onSelectTeam: (item: WorkspaceTeam | null | undefined) => void;
+  onSelectTeamSection: () => void;
   onSelectTaskBoardView?: (view: "tasks" | "scheduled") => void;
   onSelectTask: (taskID?: string) => void;
   onSelectThread: (conversationID: string, message: IMMessage | null | undefined) => void | Promise<void>;

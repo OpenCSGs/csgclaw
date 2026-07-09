@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { errorMessage } from "@/api/client";
 import {
@@ -62,11 +62,11 @@ import {
 import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace, type SlashSkillOption } from "@/models/slashCommands";
 import { localizeError } from "@/shared/i18n";
 import { AgentActivityKinds, AgentActivityMsgTypes } from "@/shared/constants/messages";
-import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView, UsersById } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import type { UseConversationControllerArgs } from "./types";
+import { messageListScrollKey, useMessageListAutoScroll } from "./useMessageListAutoScroll";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 
 const slashSkillOptionsCache = new Map<string, SlashSkillOption[]>();
@@ -382,15 +382,6 @@ function mergeWorkingParticipants(
   return Array.from(byID.values()).sort((left, right) => left.name.localeCompare(right.name));
 }
 
-function scrollMessageListToBottom(el: HTMLElement, behavior: "auto" | "smooth" = "auto"): void {
-  const top = el.scrollHeight;
-  if (behavior === "smooth" && typeof el.scrollTo === "function") {
-    el.scrollTo({ top, behavior: "smooth" });
-    return;
-  }
-  el.scrollTop = top;
-}
-
 export function useConversationController({
   activeConversationId,
   activePane,
@@ -406,6 +397,7 @@ export function useConversationController({
   locale,
   managerProfile,
   managerProfileIncomplete,
+  managerRuntimeUnavailable = false,
   navigatePane,
   onMessageAction,
   onConnectConnector,
@@ -462,8 +454,6 @@ export function useConversationController({
   const messageListRef = useRef<HTMLElement | null>(null);
   const memberMenuRef = useRef<HTMLDivElement | null>(null);
   const channelToolsRef = useRef<HTMLDivElement | null>(null);
-  const shouldAutoScrollRef = useRef(true);
-  const autoScrollConversationRef = useRef(activeConversationId);
   const activeThreadKeyRef = useRef("");
   const messageWorkingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
@@ -483,6 +473,7 @@ export function useConversationController({
       return showToolCalls || !isToolCallMessage(message);
     });
   }, [activeConversation, showToolCalls]);
+  const visibleMessageScrollKey = useMemo(() => messageListScrollKey(visibleMessages), [visibleMessages]);
   const channels = useMemo(() => rooms.filter((room) => !isDirectConversation(room)), [rooms]);
   const directMessages = useMemo(() => rooms.filter((room) => isDirectConversation(room)), [rooms]);
   const threadGroups = useMemo(
@@ -958,57 +949,12 @@ export function useConversationController({
     preferredFallbackConversationId,
   ]);
 
-  useEffect(() => {
-    if (!messageListActive) {
-      return;
-    }
-    const el = messageListRef.current;
-    if (!el) {
-      return;
-    }
-    const updateAutoScrollState = () => {
-      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      shouldAutoScrollRef.current = distanceFromBottom <= MESSAGE_LIST_BOTTOM_THRESHOLD;
-    };
-    updateAutoScrollState();
-    el.addEventListener("scroll", updateAutoScrollState);
-    return () => el.removeEventListener("scroll", updateAutoScrollState);
-  }, [activeConversationId, messageListActive, selectedConversationID]);
-
-  useLayoutEffect(() => {
-    if (!messageListActive) {
-      return;
-    }
-    if (activePane.type !== WorkspacePaneTypes.conversation) {
-      return;
-    }
-    if (!selectedConversationID) {
-      return;
-    }
-    const el = messageListRef.current;
-    if (!el) {
-      return;
-    }
-    autoScrollConversationRef.current = activeConversationId;
-    scrollMessageListToBottom(el);
-    shouldAutoScrollRef.current = true;
-  }, [activePane.type, activeConversationId, messageListActive, selectedConversationID]);
-
-  useEffect(() => {
-    if (!messageListActive) {
-      return;
-    }
-    const el = messageListRef.current;
-    if (autoScrollConversationRef.current !== activeConversationId) {
-      autoScrollConversationRef.current = activeConversationId;
-      shouldAutoScrollRef.current = false;
-      return;
-    }
-    if (!el || !shouldAutoScrollRef.current) {
-      return;
-    }
-    scrollMessageListToBottom(el, "smooth");
-  }, [visibleMessages.length, activeConversationId, messageListActive]);
+  const messageListAutoScroll = useMessageListAutoScroll({
+    active: messageListActive && activePane.type === WorkspacePaneTypes.conversation && Boolean(selectedConversationID),
+    conversationId: activeConversationId,
+    messageListRef,
+    visibleMessagesKey: visibleMessageScrollKey,
+  });
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -1039,6 +985,10 @@ export function useConversationController({
   }, [activeConversationId, showCreateRoom, showInvite]);
 
   async function sendMessage(): Promise<void> {
+    if (managerRuntimeUnavailable) {
+      setComposerError(t("managerCodexMissingWarning"));
+      return;
+    }
     if (managerProfileIncomplete) {
       setComposerError(t("profileIncomplete"));
       return;
@@ -1069,6 +1019,7 @@ export function useConversationController({
         content,
       });
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
+      messageListAutoScroll.follow("smooth");
       markMessageWorkingParticipants(activeConversation.id, workingTargets);
       clearComposer();
     } catch (err) {
@@ -1117,6 +1068,10 @@ export function useConversationController({
   }
 
   async function sendThreadReply(): Promise<void> {
+    if (managerRuntimeUnavailable) {
+      setThreadError(t("managerCodexMissingWarning"));
+      return;
+    }
     if (managerProfileIncomplete) {
       setThreadError(t("profileIncomplete"));
       return;
@@ -1565,6 +1520,7 @@ export function useConversationController({
       onApplySlashCandidate: applySlashCandidate,
       managerProfile,
       managerProfileIncomplete,
+      managerRuntimeUnavailable,
       authStatuses,
       authBusyProvider,
       connectorStatus,

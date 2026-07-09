@@ -28,6 +28,7 @@ type ProvisionRequest struct {
 	AgentID          string
 	ParticipantID    string
 	AgentName        string
+	Instructions     string
 	Profile          Profile
 	WorkspaceOverlay string
 	Gateway          *GatewayProvision

@@ -24,6 +24,7 @@ func withSandboxRuntimeHost(host agent.PicoClawRuntimeHost, feishuProvider feish
 			FeishuProvider:      feishuProvider,
 			SandboxProviderName: host.SandboxProviderName,
 			SandboxToolsDir:     sandboxToolsDir,
+			AgentHome:           host.AgentHome,
 			EnsureRuntime:       host.EnsureRuntime,
 			RuntimeHome:         host.RuntimeHome,
 			CloseRuntime:        host.CloseRuntime,
@@ -48,10 +49,11 @@ func withSandboxRuntimeHost(host agent.PicoClawRuntimeHost, feishuProvider feish
 					return sandboxgateway.AgentRef{}, err
 				}
 				return sandboxgateway.AgentRef{
-					ID:        got.ID,
-					Name:      got.Name,
-					RuntimeID: strings.TrimSpace(got.RuntimeID),
-					BoxID:     got.BoxID,
+					ID:           got.ID,
+					Name:         got.Name,
+					RuntimeID:    strings.TrimSpace(got.RuntimeID),
+					BoxID:        got.BoxID,
+					Instructions: got.Instructions,
 				}, nil
 			},
 			SyncHandle:      host.SyncHandle,

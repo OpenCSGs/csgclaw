@@ -1,0 +1,9 @@
+.button {
+  color: inherit;
+}
+
+.mark,
+.mark svg {
+  width: 20px;
+  height: 20px;
+}

@@ -227,7 +227,7 @@ When `[hub]` is omitted, CSGClaw enables three registries by default: `builtin` 
 [hub]
 default_registry = "builtin"
 default_publish_registry = "local"
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [[hub.registries]]

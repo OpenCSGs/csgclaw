@@ -20,10 +20,11 @@ import (
 )
 
 type AgentRef struct {
-	ID        string
-	Name      string
-	RuntimeID string
-	BoxID     string
+	ID           string
+	Name         string
+	RuntimeID    string
+	BoxID        string
+	Instructions string
 }
 
 type WorkspaceLayout struct {
@@ -40,6 +41,7 @@ type Dependencies struct {
 
 	SandboxProviderName func() string
 	SandboxToolsDir     func() (string, error)
+	AgentHome           func(agentID string) (string, error)
 	EnsureRuntime       func(agentID string) (sandbox.Runtime, error)
 	RuntimeHome         func(agentID string) (string, error)
 	CloseRuntime        func(homeDir string, rt sandbox.Runtime) error
@@ -571,6 +573,34 @@ func (r *Runtime) preparedGatewayProvision(agentID string) (PreparedGatewayProvi
 	return prepared, nil
 }
 
+func (r *Runtime) PreparedGatewayProvisionForHandle(h agentruntime.Handle) (PreparedGatewayProvision, error) {
+	got, err := r.ResolveAgentForHandle(h)
+	if err != nil {
+		return PreparedGatewayProvision{}, err
+	}
+	return r.preparedGatewayProvision(got.ID)
+}
+
+func (r *Runtime) ResolveAgentForHandle(h agentruntime.Handle) (AgentRef, error) {
+	if r == nil {
+		return AgentRef{}, fmt.Errorf("runtime is required")
+	}
+	if r.deps.ResolveAgent == nil {
+		return AgentRef{}, fmt.Errorf("runtime agent resolver is required")
+	}
+	return r.deps.ResolveAgent(h)
+}
+
+func (r *Runtime) AgentHomeForAgentID(agentID string) (string, error) {
+	if r == nil {
+		return "", fmt.Errorf("runtime is required")
+	}
+	if r.deps.AgentHome == nil {
+		return "", fmt.Errorf("runtime agent home resolver is required")
+	}
+	return r.deps.AgentHome(strings.TrimSpace(agentID))
+}
+
 func (r *Runtime) GatewayLogPath() string {
 	return r.gatewayLogPath()
 }
@@ -643,6 +673,14 @@ func (r *Runtime) openSandboxRuntime(agentID string) (sandbox.Runtime, string, e
 		return nil, "", err
 	}
 	return rt, runtimeHome, nil
+}
+
+func (r *Runtime) AgentHomeForHandle(h agentruntime.Handle) (string, error) {
+	got, err := r.ResolveAgentForHandle(h)
+	if err != nil {
+		return "", err
+	}
+	return r.AgentHomeForAgentID(got.ID)
 }
 
 func (r *Runtime) openBoxForHandle(ctx context.Context, h agentruntime.Handle) (sandbox.Instance, func(), error) {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/participant"
 	"csgclaw/internal/scheduledtask"
 )
 
@@ -70,5 +71,59 @@ func TestScheduledTaskPatchCanClearExpiresAt(t *testing.T) {
 	}
 	if cleared.ExpiresAt != nil {
 		t.Fatalf("cleared ExpiresAt = %v, want nil", cleared.ExpiresAt)
+	}
+}
+
+func TestScheduledTasksReturnAgentName(t *testing.T) {
+	store, err := scheduledtask.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	svc, err := scheduledtask.NewService(store, nil)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:      "pt-gitlab",
+		Channel: participant.ChannelCSGClaw,
+		Type:    participant.TypeAgent,
+		Name:    "gitlab",
+		AgentID: "agent-acwxvj",
+	}}))
+	h := &Handler{participant: participantSvc}
+	h.SetScheduledTaskService(svc)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/scheduled-tasks", strings.NewReader(`{
+		"title":"Daily check",
+		"agent_id":"agent-acwxvj",
+		"prompt":"Report status.",
+		"recurrence":"daily",
+		"first_run_at":"2026-07-07T10:40:00+08:00"
+	}`))
+	createRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d: %s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+	var created apitypes.ScheduledTask
+	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.AgentName != "gitlab" {
+		t.Fatalf("created AgentName = %q, want gitlab", created.AgentName)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/scheduled-tasks", nil)
+	listRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d: %s", listRec.Code, http.StatusOK, listRec.Body.String())
+	}
+	var listed []apitypes.ScheduledTask
+	if err := json.NewDecoder(listRec.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 || listed[0].AgentName != "gitlab" {
+		t.Fatalf("listed tasks = %+v, want agent_name gitlab", listed)
 	}
 }

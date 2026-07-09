@@ -114,7 +114,7 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 		SandboxProvider:        "docker",
 		HubLocalPath:           "/tmp/team-hub",
 		HubOfficialURL:         "https://hub.example.com/",
-		DefaultManagerTemplate: "builtin.picoclaw-manager",
+		DefaultManagerTemplate: "builtin.manager-codex",
 		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
 	})
 	if err != nil {
@@ -233,8 +233,8 @@ func TestHandleServerConfigRejectsInvalidBootstrapBeforeSave(t *testing.T) {
 		AdvertiseBaseURL:       "http://192.168.1.10:19080",
 		ShowUpgrade:            false,
 		SandboxProvider:        "docker",
-		DefaultManagerTemplate: "builtin.openclaw-manager",
-		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
+		DefaultManagerTemplate: "builtin.manager-codex",
+		DefaultWorkerTemplate:  "missing.worker-template",
 	})
 	if err != nil {
 		t.Fatalf("marshal PUT body: %v", err)
@@ -245,8 +245,8 @@ func TestHandleServerConfigRejectsInvalidBootstrapBeforeSave(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("PUT config status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "unsupported runtime_kind") {
-		t.Fatalf("body = %q, want bootstrap runtime validation error", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "resolve bootstrap worker template") {
+		t.Fatalf("body = %q, want bootstrap worker template validation error", rec.Body.String())
 	}
 
 	data, err := os.ReadFile(configPath)
@@ -277,7 +277,7 @@ func TestHandleServerConfigValidatesBootstrapWithHubBeforeSave(t *testing.T) {
 		AdvertiseBaseURL:       "http://192.168.1.10:19080",
 		ShowUpgrade:            false,
 		SandboxProvider:        "docker",
-		DefaultManagerTemplate: "builtin.picoclaw-manager",
+		DefaultManagerTemplate: "builtin.manager-codex",
 		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
 	})
 	if err != nil {

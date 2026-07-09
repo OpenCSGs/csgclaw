@@ -340,11 +340,11 @@ func TestEnsureAgentWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 		}
 	}
 
-	managerTemplate, err := resolveRuntimeTemplateRoot(RuntimeKindPicoClawSandbox, RoleManager)
+	managerTemplate, err := resolveRuntimeTemplateRoot(RuntimeKindCodex, RoleManager)
 	if err != nil {
 		t.Fatalf("resolveRuntimeTemplateRoot(manager) error = %v", err)
 	}
-	managerRoot, err := testBuiltinWorkspaceRoot("manager", RuntimeKindPicoClawSandbox)
+	managerRoot, err := testBuiltinWorkspaceRoot("manager", RuntimeKindCodex)
 	if err != nil {
 		t.Fatalf("testBuiltinWorkspaceRoot(manager) error = %v", err)
 	}

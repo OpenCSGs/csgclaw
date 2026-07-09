@@ -1,4 +1,0 @@
-interface:
-  display_name: "Agent Creator"
-  short_description: "Mandatory hub-template worker provisioning"
-  default_prompt: "Use $agent-creator before any new worker create. Template list, template get, then participant create --type agent --bind create --from-template with --env."

@@ -210,7 +210,11 @@ function splitAgentNameSuffix(name: string): { baseName: string; nextIndex: numb
 
 function nextAvailableAgentName(name: string, existingNames: Iterable<string>): string {
   const normalizedExisting = new Set(
-    Array.from(existingNames, (item) => String(item || "").trim().toLowerCase()).filter(Boolean),
+    Array.from(existingNames, (item) =>
+      String(item || "")
+        .trim()
+        .toLowerCase(),
+    ).filter(Boolean),
   );
   const trimmed = String(name || "").trim();
   if (!trimmed) {
@@ -421,7 +425,7 @@ export function useAgentController({
   const [showAgentModal, setShowAgentModal] = useState(false);
   const [showManagerRebuildModal, setShowManagerRebuildModal] = useState(false);
   const [managerRebuildError, setManagerRebuildError] = useState("");
-  const [managerRebuildRuntimeKind, setManagerRebuildRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
+  const [managerRebuildRuntimeKind, setManagerRebuildRuntimeKind] = useState<RuntimeKind>("codex");
   const [managerRebuildImage, setManagerRebuildImage] = useState("");
   const [agentModalMode, setAgentModalMode] = useState<AgentModalMode>("create");
   const [agentCreateBotKind, setAgentCreateBotKind] = useState(BOT_CREATE_KIND_WORKER);
@@ -466,6 +470,14 @@ export function useAgentController({
     ({ currentLocation, nextLocation }) =>
       agentPageHasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname,
   );
+  const managerRuntimeUnavailable = bootstrapConfig?.manager_runtime?.installed === false;
+  const managerRuntimeWarning = managerRuntimeUnavailable
+    ? String(
+        bootstrapConfig?.manager_runtime?.message ||
+          bootstrapConfig?.manager_runtime?.install_guidance ||
+          t("managerCodexMissingWarning"),
+      )
+    : "";
   const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
   const usersById = useMemo(() => {
     const result = new Map<string, IMUser>();
@@ -543,16 +555,15 @@ export function useAgentController({
       name: selectedAgentForPage.name || "",
       description: selectedAgentForPage.description || "",
       instructions: selectedAgentForPage.instructions || "",
-      profile: modelProviderID ? profileSelectorFromDraft({ model_provider_id: modelProviderID, model_id: modelID }) : "",
-      profile_complete:
-        selectedAgentForPage.profile_complete ?? profile?.profile_complete ?? null,
+      profile: modelProviderID
+        ? profileSelectorFromDraft({ model_provider_id: modelProviderID, model_id: modelID })
+        : "",
+      profile_complete: selectedAgentForPage.profile_complete ?? profile?.profile_complete ?? null,
       provider: selectedAgentForPage.provider || profile?.provider || "",
       model_provider_id: modelProviderID,
       model_id: modelID,
-      reasoning_effort:
-        selectedAgentForPage.reasoning_effort || profile?.reasoning_effort || "",
-      enable_fast_mode:
-        selectedAgentForPage.enable_fast_mode ?? profile?.enable_fast_mode ?? false,
+      reasoning_effort: selectedAgentForPage.reasoning_effort || profile?.reasoning_effort || "",
+      enable_fast_mode: selectedAgentForPage.enable_fast_mode ?? profile?.enable_fast_mode ?? false,
     });
   }, [selectedAgentForPage]);
   const selectedFeishuPendingRegistration = useMemo(() => {
@@ -817,7 +828,7 @@ export function useAgentController({
     const initialRuntimeKind = normalizeRuntimeKind(
       item?.runtime_kind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind || managerRebuildRuntimeKind,
     );
-    const fallbackRuntimeKind = managerRuntimeOptions[0]?.value || DEFAULT_RUNTIME_KIND;
+    const fallbackRuntimeKind = managerRuntimeOptions[0]?.value || "codex";
     const resolvedRuntimeKind = managerRuntimeOptions.some((option) => option.value === initialRuntimeKind)
       ? initialRuntimeKind
       : fallbackRuntimeKind;
@@ -849,11 +860,15 @@ export function useAgentController({
   }
 
   async function requestManagerRebuild(options: ManagerRebuildOptions = {}): Promise<void> {
+    if (managerRuntimeUnavailable) {
+      throw new Error(managerRuntimeWarning || t("managerCodexMissingWarning"));
+    }
     const runtimeKind = normalizeRuntimeKind(
       options.runtimeKind ||
         managerAgent?.runtime_kind ||
         bootstrapConfig?.runtime_kind ||
-        managerRuntimeOptions[0]?.value,
+        managerRuntimeOptions[0]?.value ||
+        "codex",
     );
     const rebuiltAgent = await createManagerAgentRequest({
       runtime_kind: runtimeKind,
@@ -871,7 +886,8 @@ export function useAgentController({
       options.runtimeKind ||
         managerAgent?.runtime_kind ||
         bootstrapConfig?.runtime_kind ||
-        managerRuntimeOptions[0]?.value,
+        managerRuntimeOptions[0]?.value ||
+        "codex",
     );
     setAgentProgress(startAgentCreateProgress(runtimeKind));
     try {
@@ -896,7 +912,7 @@ export function useAgentController({
       return;
     }
     const selectedRuntimeKind = normalizeRuntimeKind(
-      managerRebuildRuntimeKind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind,
+      managerRebuildRuntimeKind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind || "codex",
     );
     setMessageActionError({ key: "", message: "" });
     const rebuilt = await rebuildManagerFromBrowser({ runtimeKind: selectedRuntimeKind });
@@ -2039,6 +2055,7 @@ export function useAgentController({
     loginCLIProxyProvider,
     managerAgent,
     managerProfileIncomplete,
+    managerRuntimeUnavailable,
     messageActionBusy,
     messageActionError,
     openAgentDirectMessage,
@@ -2160,6 +2177,7 @@ export function useAgentController({
           runtimeOptions: managerRuntimeOptions,
           runtimeKind: managerRebuildRuntimeKind,
           image: managerRebuildImage,
+          runtimeWarning: managerRuntimeWarning,
           busy: agentActionBusy === `${MANAGER_AGENT_ID}:recreate`,
           error: managerRebuildError,
           progress: agentProgress,

@@ -437,7 +437,7 @@ default_registry = "team"
 default_publish_registry = "local"
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.openclaw-worker"
 
 [[hub.registries]]
@@ -479,7 +479,7 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Hub.DefaultPublishRegistry, "local"; got != want {
 		t.Fatalf("cfg.Hub.DefaultPublishRegistry = %q, want %q", got, want)
 	}
-	if got, want := cfg.Bootstrap.ResolvedDefaultManagerTemplate(), "builtin.picoclaw-manager"; got != want {
+	if got, want := cfg.Bootstrap.ResolvedDefaultManagerTemplate(), "builtin.manager-codex"; got != want {
 		t.Fatalf("cfg.Bootstrap.ResolvedDefaultManagerTemplate() = %q, want %q", got, want)
 	}
 	if got, want := cfg.Bootstrap.ResolvedDefaultWorkerTemplate(), "builtin.openclaw-worker"; got != want {
@@ -519,7 +519,7 @@ func TestLoadLegacyOfficialHubRegistryURLAndSaveMigratesIt(t *testing.T) {
 listen_addr = "127.0.0.1:18080"
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [[hub.registries]]
@@ -567,7 +567,7 @@ func TestLoadCustomRemoteHubRegistryURLAndSavePreservesIt(t *testing.T) {
 listen_addr = "127.0.0.1:18080"
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [[hub.registries]]
@@ -630,7 +630,7 @@ models = ["gpt-test"]
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got, want := cfg.Bootstrap.DefaultManagerTemplate, "builtin.picoclaw-manager"; got != want {
+	if got, want := cfg.Bootstrap.DefaultManagerTemplate, "builtin.manager-codex"; got != want {
 		t.Fatalf("cfg.Bootstrap.DefaultManagerTemplate = %q, want %q", got, want)
 	}
 	if got, want := cfg.Bootstrap.DefaultWorkerTemplate, "local.review-worker"; got != want {
@@ -650,7 +650,7 @@ models = ["gpt-test"]
 		t.Fatalf("saved config should not contain legacy slash template refs:\n%s", saved)
 	}
 	for _, want := range []string{
-		`default_manager_template = "builtin.picoclaw-manager"`,
+		`default_manager_template = "builtin.manager-codex"`,
 		`default_worker_template = "local.review-worker"`,
 	} {
 		if !strings.Contains(saved, want) {
@@ -1222,7 +1222,7 @@ func TestSaveFormatsTopLevelSectionsWithoutExtraWhitespace(t *testing.T) {
 		Models: models,
 		LLM:    models,
 		Bootstrap: BootstrapConfig{
-			DefaultManagerTemplate: "builtin.picoclaw-manager",
+			DefaultManagerTemplate: "builtin.manager-codex",
 			DefaultWorkerTemplate:  "builtin.picoclaw-worker",
 		},
 		Sandbox: SandboxConfig{
@@ -1249,7 +1249,7 @@ no_auth = true
 show_upgrade = true
 
 [bootstrap]
-default_manager_template = "builtin.picoclaw-manager"
+default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.picoclaw-worker"
 
 [sandbox]
@@ -1318,7 +1318,7 @@ func TestSaveWritesHubConfig(t *testing.T) {
 			},
 		},
 		Bootstrap: BootstrapConfig{
-			DefaultManagerTemplate: "builtin.picoclaw-manager",
+			DefaultManagerTemplate: "builtin.manager-codex",
 			DefaultWorkerTemplate:  "builtin.openclaw-worker",
 		},
 		Models: SingleProfileLLM(ModelConfig{
@@ -1339,7 +1339,7 @@ func TestSaveWritesHubConfig(t *testing.T) {
 	content := string(data)
 	for _, want := range []string{
 		"[bootstrap]",
-		`default_manager_template = "builtin.picoclaw-manager"`,
+		`default_manager_template = "builtin.manager-codex"`,
 		`default_worker_template = "builtin.openclaw-worker"`,
 		"[hub]",
 		`default_registry = "builtin"`,
@@ -1647,7 +1647,7 @@ func TestSavePreservesEnvPlaceholdersAfterLoad(t *testing.T) {
 	t.Setenv("IP", "1.2.3.4")
 	t.Setenv("PORT", "18080")
 	t.Setenv("ACCESS_TOKEN", "your_access_token")
-	t.Setenv("MANAGER_TEMPLATE", "builtin.picoclaw-manager")
+	t.Setenv("MANAGER_TEMPLATE", "builtin.manager-codex")
 	t.Setenv("WORKER_TEMPLATE", "builtin.openclaw-worker")
 	t.Setenv("SANDBOX_PROVIDER", BoxLiteProvider)
 	t.Setenv("HUB_DEFAULT_REGISTRY", "team")
