@@ -4,7 +4,7 @@
   gap: 14px;
   justify-items: center;
   padding: 24px 32px 28px;
-  background: linear-gradient(180deg, var(--white) 0, var(--white) 138px, transparent 138px), var(--gray-25);
+  background: var(--bg);
 }
 
 .contentWidth {
@@ -114,7 +114,7 @@
 }
 
 .teamDetailSummary {
-  align-self: start;
+  align-self: stretch;
   overflow: hidden;
 }
 
@@ -421,7 +421,28 @@
 }
 
 :root[data-theme="dark"] .teamDetailPane {
-  background: linear-gradient(180deg, var(--panel) 0, var(--panel) 138px, transparent 138px), var(--bg);
+  background: var(--bg);
+}
+
+:root[data-theme="dark"] .teamDetailHeader,
+:root[data-theme="dark"] .panelSurface {
+  background: var(--panel);
+}
+
+:root[data-theme="dark"] .listRow {
+  background: var(--surface);
+}
+
+:root[data-theme="dark"] .teamProfileBlock p,
+:root[data-theme="dark"] .teamDetailPanelHead p,
+:root[data-theme="dark"] .teamMemberMain > span:last-child,
+:root[data-theme="dark"] .teamTaskMain > span,
+:root[data-theme="dark"] .teamDetailFields .teamDetailField .teamDetailLabel {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .teamDetailFields .teamDetailField .teamDetailValue {
+  color: var(--text);
 }
 
 @media (max-width: 1100px) {

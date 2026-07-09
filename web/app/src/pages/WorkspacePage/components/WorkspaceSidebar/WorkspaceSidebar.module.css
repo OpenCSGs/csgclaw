@@ -328,7 +328,7 @@
   flex: 0 0 auto;
   min-width: 0;
   min-height: 124px;
-  border-bottom: 1px solid #eaecf0;
+  border-bottom: 0;
   background: var(--white);
   display: flex;
   flex-direction: column;
@@ -477,8 +477,13 @@
 :global(:root[data-theme="dark"]) .mainColumn,
 :global(:root[data-theme="dark"]) .contextHeader,
 :global(:root[data-theme="dark"]) .contextSearch {
-  border-color: var(--gray-700);
+  border-color: var(--line);
   background: var(--surface);
+}
+
+:global(:root[data-theme="dark"]) .primaryNav,
+:global(:root[data-theme="dark"]) .primaryFooter {
+  border-color: var(--line);
 }
 
 :global(:root[data-theme="dark"]) .logoLight,
@@ -534,6 +539,22 @@
 :global(:root[data-theme="dark"]) .contextAction:focus-visible {
   background: var(--panel-strong);
   color: var(--white);
+}
+
+:global(:root[data-theme="dark"]) .primaryNavBadge {
+  border-color: color-mix(in srgb, var(--line) 78%, transparent);
+  background: color-mix(in srgb, var(--gray-800) 80%, var(--surface));
+  color: var(--gray-300);
+}
+
+:global(:root[data-theme="dark"]) .contextBadge {
+  border-color: color-mix(in srgb, var(--success-600) 36%, var(--line));
+  background: color-mix(in srgb, var(--success-600) 14%, var(--surface));
+  color: var(--gray-200);
+}
+
+:global(:root[data-theme="dark"]) .contextBadge::before {
+  background: var(--success-500);
 }
 
 @media (max-width: 720px) {

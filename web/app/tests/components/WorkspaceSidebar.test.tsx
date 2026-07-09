@@ -188,6 +188,76 @@ describe("WorkspaceSidebar", () => {
     expect(onToggleWorkspaceGroup).toHaveBeenCalledWith("models");
   });
 
+  it("shows counts for every resource navigation item", () => {
+    renderSidebar({
+      hub: {
+        loaded: true,
+        listError: "",
+        selectedHubResourceType: "template",
+        selectedHubSkillName: "",
+        selectedHubTemplateId: "",
+        skills: [
+          { name: "shell", description: "Shell helpers" },
+          { name: "review", description: "Review helpers" },
+          { name: "ship", description: "Release helpers" },
+        ],
+        skillsError: "",
+        templates: [
+          { id: "worker-template", name: "Worker Template", role: "worker" },
+          { id: "manager-template", name: "Manager Template", role: "manager" },
+        ],
+        uploadBusy: false,
+        uploadError: "",
+      } as unknown as WorkspaceSidebarProps["hub"],
+      modelProviders: {
+        builtinProviders: [],
+        customProviders: [],
+        providers: [
+          {
+            builtin: true,
+            display_name: "OpenAI",
+            id: "openai",
+            kind: "openai",
+            models: ["gpt-4.1"],
+            preset: "openai",
+            status: "connected",
+          },
+          {
+            builtin: true,
+            display_name: "Claude Code",
+            id: "claude-code",
+            kind: "anthropic",
+            models: ["claude-sonnet-4"],
+            preset: "custom",
+            status: "connected",
+          },
+          {
+            builtin: false,
+            display_name: "Local",
+            id: "local",
+            kind: "openai-compatible",
+            models: ["local-model"],
+            preset: "custom",
+            status: "connected",
+          },
+          {
+            builtin: false,
+            display_name: "Test",
+            id: "test",
+            kind: "openai-compatible",
+            models: [],
+            preset: "custom",
+            status: "disconnected",
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Templates" })).toHaveTextContent("2");
+    expect(screen.getByRole("button", { name: "Skills" })).toHaveTextContent("3");
+    expect(screen.getByRole("button", { name: "Model Providers" })).toHaveTextContent("4");
+  });
+
   it("keeps the contextual sidebar visible when the primary rail is collapsed", () => {
     renderSidebar({ isSidebarCollapsed: true });
 

@@ -1,16 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
-  LogIn,
-  LogOut,
-  Monitor,
-  Settings,
-  SlidersHorizontal,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, LogIn, LogOut, Monitor, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui";
-import { MoonIcon, SunIcon } from "@/components/ui/Icons";
+import { MoonIcon, SidebarGearIcon, SunIcon } from "@/components/ui/Icons";
 import { isAuthenticated } from "@/models/auth";
 import type { AuthStatus } from "@/models/auth";
 import {
@@ -247,7 +238,7 @@ export function SidebarUserButton({
         onClick={handlePrimaryClick}
       >
         <span className={styles.settingsMark} aria-hidden="true">
-          <Settings size={24} strokeWidth={1.55} />
+          <SidebarGearIcon size={24} />
         </span>
         {presentation === "row" ? <span className={styles.buttonLabel}>{t("settings")}</span> : null}
         {upgradeAttention ? <span className={styles.alertDot} aria-hidden="true"></span> : null}

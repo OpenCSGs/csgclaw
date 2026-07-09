@@ -645,6 +645,10 @@
   flex: 0 0 auto;
 }
 
+:global(:root[data-theme="dark"]) .button {
+  color: var(--gray-100);
+}
+
 :global(:root[data-theme="dark"]) .button:hover:not(:disabled),
 :global(:root[data-theme="dark"]) .button:focus-visible,
 :global(:root[data-theme="dark"]) .active {

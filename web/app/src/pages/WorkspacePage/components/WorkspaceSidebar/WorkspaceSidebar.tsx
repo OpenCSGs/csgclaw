@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Search } from "lucide-react";
 import {
-  AlertTriangle,
-  Bot,
-  Box,
-  Laptop,
-  ListChecks,
-  MessageSquareText,
-  PanelsTopLeft,
-  Plus,
-  Puzzle,
-  Search,
-  Timer,
-  UserRound,
-  UsersRound,
-} from "lucide-react";
+  SidebarAlertTriangleIcon,
+  SidebarBoxIcon,
+  SidebarGrid07Icon,
+  SidebarLaptopIcon,
+  SidebarListUnordered4Icon,
+  SidebarMessageIcon,
+  SidebarPuzzlePiece02Icon,
+  SidebarRobotIcon,
+  SidebarTimer2Icon,
+  SidebarUserIcon,
+  SidebarUsersIcon,
+} from "@/components/ui/Icons";
 import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
 import { LogoMark, LogoWordmark } from "./WorkspaceSidebarBrand";
@@ -25,9 +24,9 @@ import { classNames } from "@/shared/lib/classNames";
 import styles from "./WorkspaceSidebar.module.css";
 import type { PrimaryNavigationItem, PrimaryNavigationSection } from "./WorkspacePrimaryNavigation";
 import type { WorkspaceContextSectionId, WorkspaceSidebarProps } from "./types";
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType } from "react";
 
-type LucideIcon = ComponentType<SVGProps<SVGSVGElement> & { size?: number; strokeWidth?: number }>;
+type SidebarNavigationIcon = ComponentType<{ size?: number | string }>;
 
 export function WorkspaceSidebar({
   isSidebarCollapsed,
@@ -150,7 +149,7 @@ export function WorkspaceSidebar({
               activePane.type !== WorkspacePaneTypes.settings &&
               activeContextSectionId === WorkspaceContextSectionIds.messages,
             groupId: WorkspaceContextSectionIds.messages,
-            icon: navigationIcon(MessageSquareText),
+            icon: navigationIcon(SidebarMessageIcon),
             id: "messages",
             label: t("messagesTab"),
             onSelect: () => onWorkspaceTabChange(WorkspaceTabs.messages),
@@ -164,7 +163,7 @@ export function WorkspaceSidebar({
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.agents,
             groupId: WorkspaceContextSectionIds.agents,
-            icon: navigationIcon(Bot),
+            icon: navigationIcon(SidebarRobotIcon),
             id: "agents",
             label: t("computerAgentsSection"),
             onSelect: () => {
@@ -176,7 +175,7 @@ export function WorkspaceSidebar({
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.humans,
             groupId: WorkspaceContextSectionIds.humans,
-            icon: navigationIcon(UserRound),
+            icon: navigationIcon(SidebarUserIcon),
             id: "humans",
             label: t("humanSection"),
             onSelect: () => {
@@ -188,7 +187,7 @@ export function WorkspaceSidebar({
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.computers,
             groupId: WorkspaceContextSectionIds.computers,
-            icon: navigationIcon(Laptop),
+            icon: navigationIcon(SidebarLaptopIcon),
             id: "computers",
             label: t("computersSection"),
             onSelect: onSelectComputer,
@@ -196,7 +195,7 @@ export function WorkspaceSidebar({
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.notifications,
             groupId: WorkspaceContextSectionIds.notifications,
-            icon: navigationIcon(AlertTriangle),
+            icon: navigationIcon(SidebarAlertTriangleIcon),
             id: "notifications",
             label: t("notificationsSection"),
             onSelect: () => {
@@ -210,7 +209,7 @@ export function WorkspaceSidebar({
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.teams,
             groupId: WorkspaceContextSectionIds.teams,
-            icon: navigationIcon(UsersRound),
+            icon: navigationIcon(SidebarUsersIcon),
             id: "teams",
             label: t("teamsSection"),
             onSelect: () => {
@@ -230,7 +229,7 @@ export function WorkspaceSidebar({
           {
             active: activePane.type === WorkspacePaneTypes.task && activeTaskBoardView !== "scheduled",
             groupId: WorkspaceContextSectionIds.tasks,
-            icon: navigationIcon(ListChecks),
+            icon: navigationIcon(SidebarListUnordered4Icon),
             id: "tasks",
             label: t("tasksTab"),
             onSelect: () => {
@@ -241,7 +240,7 @@ export function WorkspaceSidebar({
           {
             active: activePane.type === WorkspacePaneTypes.task && activeTaskBoardView === "scheduled",
             groupId: WorkspaceContextSectionIds.tasks,
-            icon: navigationIcon(Timer),
+            icon: navigationIcon(SidebarTimer2Icon),
             id: "scheduled-tasks",
             label: t("scheduledTasksTab"),
             onSelect: () => {
@@ -257,8 +256,9 @@ export function WorkspaceSidebar({
         items: [
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.hubTemplates,
+            badge: badgeCount(hub?.templates.length),
             groupId: WorkspaceContextSectionIds.hubTemplates,
-            icon: navigationIcon(PanelsTopLeft),
+            icon: navigationIcon(SidebarGrid07Icon),
             id: "templates",
             label: t("resourcesTemplatesSection"),
             onSelect: () => {
@@ -271,9 +271,9 @@ export function WorkspaceSidebar({
           },
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.hubSkills,
-            badge: hub?.skills.length || undefined,
+            badge: badgeCount(hub?.skills.length),
             groupId: WorkspaceContextSectionIds.hubSkills,
-            icon: navigationIcon(Puzzle),
+            icon: navigationIcon(SidebarPuzzlePiece02Icon),
             id: "skills",
             label: t("resourcesSkillsLabel"),
             onSelect: () => {
@@ -286,8 +286,9 @@ export function WorkspaceSidebar({
           },
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.models,
+            badge: badgeCount(modelProviders?.providers.length),
             groupId: WorkspaceContextSectionIds.models,
-            icon: navigationIcon(Box),
+            icon: navigationIcon(SidebarBoxIcon),
             id: "models",
             label: t("resourcesModelProvidersSection"),
             onSelect: () => {
@@ -312,7 +313,9 @@ export function WorkspaceSidebar({
       firstNotificationAgent,
       firstTeam,
       firstWorkerAgent,
+      hub?.templates.length,
       hub?.skills.length,
+      modelProviders?.providers.length,
       onSelectAgent,
       onSelectComputer,
       onSelectHub,
@@ -522,8 +525,12 @@ export function WorkspaceSidebar({
   );
 }
 
-function navigationIcon(Icon: LucideIcon) {
-  return <Icon size={24} strokeWidth={1.55} />;
+function navigationIcon(Icon: SidebarNavigationIcon) {
+  return <Icon size={24} />;
+}
+
+function badgeCount(count: number | null | undefined) {
+  return typeof count === "number" ? count : undefined;
 }
 
 function contextSectionIdForPane({
