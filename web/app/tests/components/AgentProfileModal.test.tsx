@@ -279,12 +279,12 @@ describe("AgentProfileModal", () => {
     function TestModal() {
       const [draft, setDraft] = useState<AgentDraft>({
         ...agentToDraft(worker),
-        from_template: "builtin.picoclaw-worker",
-        template_name: "PicoClaw Worker",
-        name: "PicoClaw Worker",
-        runtime_name: "picoclaw",
+        from_template: "builtin.openclaw-worker",
+        template_name: "OpenClaw Worker",
+        name: "OpenClaw Worker",
+        runtime_name: "openclaw",
         sandbox_enabled: true,
-        runtime_kind: "picoclaw_sandbox",
+        runtime_kind: "openclaw_sandbox",
       });
       const [mode, setMode] = useState<"template" | "custom">("template");
       return (
@@ -302,10 +302,10 @@ describe("AgentProfileModal", () => {
           onAgentModelsReset={vi.fn()}
           hubTemplates={[
             {
-              id: "builtin.picoclaw-worker",
-              name: "PicoClaw Worker",
+              id: "builtin.openclaw-worker",
+              name: "OpenClaw Worker",
               role: "worker",
-              runtime_kind: "picoclaw_sandbox",
+              runtime_kind: "openclaw_sandbox",
               description: "Handles coding tasks.",
               image_env: [{ name: "OPENAI_API_KEY", secret: true }],
             },
@@ -313,7 +313,7 @@ describe("AgentProfileModal", () => {
           bootstrapConfig={{
             worker_runtime_choices: [
               { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
-              { name: "picoclaw", sandbox_enabled: true, installed: true, label: "PicoClaw" },
+              { name: "openclaw", sandbox_enabled: true, installed: true, label: "OpenClaw" },
             ],
           }}
           managerAgent={null}
@@ -616,9 +616,16 @@ describe("AgentProfileModal", () => {
           },
           {
             id: "builtin.picoclaw-worker",
-            name: "Worker",
+            name: "PicoClaw Worker",
             role: "worker",
             runtime_kind: "picoclaw_sandbox",
+            description: "Legacy sandbox template.",
+          },
+          {
+            id: "builtin.openclaw-worker",
+            name: "OpenClaw Worker",
+            role: "worker",
+            runtime_kind: "openclaw_sandbox",
             description: "Handles coding tasks.",
           },
         ]}
@@ -643,14 +650,16 @@ describe("AgentProfileModal", () => {
     );
 
     await user.click(screen.getByRole("combobox", { name: "Template" }));
-    expect(screen.getByRole("option", { name: "Worker" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "OpenClaw Worker" })).toBeInTheDocument();
     expect(screen.getByText("Handles coding tasks.")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "PicoClaw Worker" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Manager" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "No template" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Legacy sandbox template.")).not.toBeInTheDocument();
     expect(screen.queryByText("Coordinates workers.")).not.toBeInTheDocument();
   });
 
-  it("defaults template create to PicoClaw even when a Codex worker template exists", async () => {
+  it("defaults template create to OpenClaw and excludes PicoClaw templates", async () => {
     function TestModal() {
       const [draft, setDraft] = useState<AgentDraft>({
         ...agentToDraft(worker),
@@ -688,10 +697,18 @@ describe("AgentProfileModal", () => {
               runtime_kind: "picoclaw_sandbox",
               description: "Sandbox template.",
             },
+            {
+              id: "builtin.openclaw-worker",
+              name: "OpenClaw Worker",
+              role: "worker",
+              runtime_kind: "openclaw_sandbox",
+              description: "OpenClaw sandbox template.",
+            },
           ]}
           bootstrapConfig={{
             worker_runtime_choices: [
               { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
+              { name: "openclaw", sandbox_enabled: true, installed: true, label: "OpenClaw" },
               { name: "picoclaw", sandbox_enabled: true, installed: true, label: "PicoClaw" },
             ],
           }}
@@ -717,7 +734,9 @@ describe("AgentProfileModal", () => {
 
     render(<TestModal />);
 
-    expect(await screen.findByRole("combobox", { name: "Template" })).toHaveTextContent("PicoClaw Worker");
+    expect(await screen.findByRole("combobox", { name: "Template" })).toHaveTextContent("OpenClaw Worker");
+    await userEvent.setup().click(screen.getByRole("combobox", { name: "Template" }));
+    expect(screen.queryByRole("option", { name: "PicoClaw Worker" })).not.toBeInTheDocument();
   });
 
   it("warns when the selected sandbox runtime is unavailable", () => {
@@ -861,7 +880,7 @@ describe("AgentProfileModal", () => {
               id: "custom/gitlab",
               name: "GitLab Assistant",
               role: "worker",
-              runtime_kind: "picoclaw_sandbox",
+              runtime_kind: "openclaw_sandbox",
               image_env: [{ name: "GITLAB_TOKEN", required: true, secret: true }],
             },
           ]}
@@ -897,7 +916,7 @@ describe("AgentProfileModal", () => {
     expect(createButton).toBeEnabled();
   });
 
-  it("allows toggling sandbox in custom mode and exposes sandbox runtimes", async () => {
+  it("allows toggling sandbox in custom mode and exposes only OpenClaw sandbox runtime", async () => {
     const user = userEvent.setup();
 
     function TestModal() {
@@ -959,7 +978,7 @@ describe("AgentProfileModal", () => {
     expect(screen.getByText("Enabled")).toBeInTheDocument();
     await user.click(screen.getByRole("combobox", { name: "Runtime" }));
     expect(screen.getByRole("option", { name: "OpenClaw" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "PicoClaw" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "PicoClaw" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Codex CLI" })).not.toBeInTheDocument();
   });
 

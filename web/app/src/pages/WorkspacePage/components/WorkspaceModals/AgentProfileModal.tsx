@@ -144,7 +144,9 @@ export function AgentProfileModal({
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
   const selectedProviderModels = selectedProvider?.models ?? [];
   const selectedModelValue = agentDraft.model_id || "";
-  const workerTemplates = workerSelectableTemplates(hubTemplates);
+  const workerTemplates = workerSelectableTemplates(hubTemplates).filter(
+    (item) => normalizeRuntimeKind(item.runtime_kind) !== "picoclaw_sandbox",
+  );
   const selectedWorkerTemplate = workerTemplates.find((item) => item.id === agentDraft.from_template) ?? null;
   const sandboxEnabled = Boolean(agentDraft.sandbox_enabled);
   const runtimeChoices = Array.isArray(bootstrapConfig?.worker_runtime_choices)
@@ -153,11 +155,13 @@ export function AgentProfileModal({
   const codexChoice = runtimeChoices.find(
     (item) => !item?.sandbox_enabled && normalizeRuntimeName(item?.name) === "codex",
   );
-  const sandboxRuntimeChoices = runtimeChoices.filter((item) => item?.sandbox_enabled);
+  const sandboxRuntimeChoices = runtimeChoices.filter(
+    (item) => item?.sandbox_enabled && normalizeRuntimeName(item?.name) !== "picoclaw",
+  );
   const defaultSandboxRuntimeName =
-    normalizeRuntimeName(sandboxRuntimeChoices.find((item) => normalizeRuntimeName(item?.name) === "picoclaw")?.name) ||
-    normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "picoclaw");
-  const defaultSandboxRuntimeKind = composeLegacyRuntimeKind(defaultSandboxRuntimeName, true) || DEFAULT_RUNTIME_KIND;
+    normalizeRuntimeName(sandboxRuntimeChoices.find((item) => normalizeRuntimeName(item?.name) === "openclaw")?.name) ||
+    normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "openclaw");
+  const defaultSandboxRuntimeKind = composeLegacyRuntimeKind(defaultSandboxRuntimeName, true) || "openclaw_sandbox";
   const selectedRuntimeName = normalizeRuntimeName(
     agentDraft.runtime_name || (sandboxEnabled ? defaultSandboxRuntimeName : "codex"),
   );
@@ -276,9 +280,9 @@ export function AgentProfileModal({
     onAgentCreateModeChange(nextMode);
     if (nextMode === "template") {
       const nextTemplate = normalizeTemplateSelection(
-        hubTemplates.find((item) => item.id === lastTemplateIDRef.current) ||
-          hubTemplates.find((item) => item.id === agentDraft.from_template) ||
-          pickDefaultAgentTemplate(hubTemplates, defaultSandboxRuntimeKind, bootstrapConfig) ||
+        workerTemplates.find((item) => item.id === lastTemplateIDRef.current) ||
+          workerTemplates.find((item) => item.id === agentDraft.from_template) ||
+          pickDefaultAgentTemplate(workerTemplates, defaultSandboxRuntimeKind, bootstrapConfig) ||
           null,
       );
       onAgentDraftChange((current) =>
@@ -294,7 +298,7 @@ export function AgentProfileModal({
       return;
     }
     const nextTemplate = normalizeTemplateSelection(
-      pickDefaultAgentTemplate(hubTemplates, defaultSandboxRuntimeKind, bootstrapConfig),
+      pickDefaultAgentTemplate(workerTemplates, defaultSandboxRuntimeKind, bootstrapConfig),
     );
     if (!nextTemplate) {
       return;
@@ -428,7 +432,7 @@ export function AgentProfileModal({
                       value={agentDraft.from_template || ""}
                       onValueChange={(value) => {
                         const nextTemplate = normalizeTemplateSelection(
-                          hubTemplates.find((item) => item.id === value) || null,
+                          workerTemplates.find((item) => item.id === value) || null,
                         );
                         onAgentDraftChange((current) =>
                           current
@@ -535,17 +539,17 @@ export function AgentProfileModal({
                         ) : (
                           <Select
                             value={
-                              selectedRuntimeName || normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "picoclaw")
+                              selectedRuntimeName || normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "openclaw")
                             }
                             onValueChange={(value) => {
                               const runtimeName = normalizeRuntimeName(value);
                               const runtimeKind = composeLegacyRuntimeKind(runtimeName, true) || DEFAULT_RUNTIME_KIND;
                               const currentTemplate = normalizeTemplateSelection(
-                                hubTemplates.find((item) => item.id === agentDraft.from_template) || null,
+                                workerTemplates.find((item) => item.id === agentDraft.from_template) || null,
                               );
                               const nextTemplate = templateMatchesRuntime(currentTemplate, runtimeKind)
                                 ? currentTemplate
-                                : pickDefaultAgentTemplate(hubTemplates, runtimeKind, bootstrapConfig);
+                                : pickDefaultAgentTemplate(workerTemplates, runtimeKind, bootstrapConfig);
                               let nextDraft: AgentDraft = {
                                 ...agentDraft,
                                 bot_type: BOT_TYPE_NORMAL,

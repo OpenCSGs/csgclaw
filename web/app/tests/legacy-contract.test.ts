@@ -61,10 +61,10 @@ describe("legacy UI contract", () => {
     expect(source).toContain('return "官方";');
     expect(source).toContain("localizeTemplateSourceTag(item.source?.name, locale)");
     expect(source).toContain("localizeTemplateSourceTag(selectedTemplate.source?.name, locale)");
-    expect(source).toContain("pickDefaultAgentTemplate(hubTemplates, defaultSandboxRuntimeKind, bootstrapConfig)");
+    expect(source).toContain("pickDefaultAgentTemplate(workerTemplates, defaultSandboxRuntimeKind, bootstrapConfig)");
     expect(source).toContain('applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || "")');
     expect(source).toContain("function templateMatchesRuntime(template, runtimeKind)");
-    expect(source).toContain("pickDefaultAgentTemplate(hubTemplates, runtimeKind, bootstrapConfig)");
+    expect(source).toContain("pickDefaultAgentTemplate(workerTemplates, runtimeKind, bootstrapConfig)");
   });
 
   it("keeps channel-scoped participant and notification frontend contracts", () => {
