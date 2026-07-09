@@ -85,6 +85,15 @@
   line-height: 1;
 }
 
+.field-warning {
+  display: block;
+  margin-top: 4px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .auth-status-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

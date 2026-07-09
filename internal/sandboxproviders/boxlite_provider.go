@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"csgclaw/internal/config"
@@ -38,7 +37,7 @@ func StatPathForTest(fn func(string) (os.FileInfo, error)) func() {
 func init() {
 	Register(config.BoxLiteProvider, func(cfg config.SandboxConfig) (sandbox.Provider, error) {
 		resolvedPath := boxlitecli.ResolvePath("")
-		if err := ensureBoxLiteAvailable(resolvedPath); err != nil {
+		if err := Availability(config.SandboxConfig{Provider: config.BoxLiteProvider}); err != nil {
 			return nil, err
 		}
 
@@ -56,12 +55,7 @@ func ensureBoxLiteAvailable(resolvedPath string) error {
 		return fmt.Errorf("sandbox provider %q is configured, but the boxlite executable path is empty", config.BoxLiteProvider)
 	}
 
-	if filepath.Base(resolvedPath) != resolvedPath {
-		if _, err := statPath(resolvedPath); err == nil {
-			return nil
-		}
-	}
-	if _, err := lookPath(resolvedPath); err == nil {
+	if executablePathExists(resolvedPath) {
 		return nil
 	}
 

@@ -30,6 +30,12 @@ var builtinTemplates = []BuiltinTemplate{
 		Root:        CodexManagerRoot,
 	},
 	{
+		ID:          "codex-worker",
+		RuntimeKind: runtimepkg.KindCodex,
+		Role:        roleWorker,
+		Root:        CodexWorkerRoot,
+	},
+	{
 		ID:          "openclaw-worker",
 		RuntimeKind: runtimepkg.KindOpenClawSandbox,
 		Role:        roleWorker,

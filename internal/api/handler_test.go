@@ -32,6 +32,7 @@ import (
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/sandboxtest"
+	"csgclaw/internal/sandboxproviders"
 	skillsystem "csgclaw/internal/skill/system"
 	hub "csgclaw/internal/template"
 )
@@ -365,6 +366,31 @@ func TestBootstrapConfigViewReportsMissingManagerCodexCLI(t *testing.T) {
 	}
 	if got.ManagerRuntime.InstallGuidance == "" || got.ManagerRuntime.DocsURL == "" || got.ManagerRuntime.OS == "" {
 		t.Fatalf("ManagerRuntime missing install metadata: %+v", got.ManagerRuntime)
+	}
+}
+
+func TestBootstrapConfigViewReportsUnavailableSandboxRuntimeChoices(t *testing.T) {
+	t.Cleanup(sandboxproviders.LookPathForTest(func(string) (string, error) {
+		return "", os.ErrNotExist
+	}))
+	t.Cleanup(sandboxproviders.StatPathForTest(func(string) (os.FileInfo, error) {
+		return nil, os.ErrNotExist
+	}))
+
+	got := bootstrapConfigView(context.Background(), config.Config{
+		Sandbox: config.SandboxConfig{Provider: config.BoxLiteProvider},
+	}, nil, nil)
+
+	for _, choice := range got.WorkerRuntimeChoices {
+		if !choice.SandboxEnabled {
+			continue
+		}
+		if choice.Installed {
+			t.Fatalf("sandbox choice %q Installed = true, want false: %+v", choice.Name, choice)
+		}
+		if !strings.Contains(strings.ToLower(choice.Message), "boxlite") {
+			t.Fatalf("sandbox choice %q Message = %q, want boxlite warning", choice.Name, choice.Message)
+		}
 	}
 }
 

@@ -65,6 +65,7 @@ func TestWorkerInstructionsMentionDirectAgentTaskCLI(t *testing.T) {
 		root string
 		file string
 	}{
+		{name: "codex", root: CodexWorkerRoot, file: "AGENTS.md"},
 		{name: "picoclaw", root: PicoClawWorkerRoot, file: "AGENT.md"},
 		{name: "openclaw", root: OpenClawWorkerRoot, file: "AGENTS.md"},
 	}

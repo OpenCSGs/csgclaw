@@ -17,6 +17,7 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/codexmodel"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/sandboxgateway"
 	"csgclaw/internal/sandbox"
 	templateembed "csgclaw/internal/template/embed"
 )
@@ -133,6 +134,7 @@ type Runtime struct {
 
 var (
 	_ agentruntime.Runtime                     = (*Runtime)(nil)
+	_ agentruntime.Provisioner                 = (*Runtime)(nil)
 	_ agentruntime.LogStreamer                 = (*Runtime)(nil)
 	_ agentruntime.ConversationStarter         = (*Runtime)(nil)
 	_ agentruntime.RuntimeOptionSchemaProvider = (*Runtime)(nil)
@@ -210,6 +212,34 @@ func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime
 		RuntimeID: strings.TrimSpace(spec.RuntimeID),
 		HandleID:  strings.TrimSpace(session.SessionID),
 	}, nil
+}
+
+func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest) error {
+	if r == nil {
+		return nil
+	}
+	agentID := canonicalRuntimeAgentID(req.AgentID)
+	if strings.TrimSpace(agentID) == "" {
+		return fmt.Errorf("runtime agent id is required")
+	}
+	if r.deps.AgentHome == nil {
+		return fmt.Errorf("agent home resolver is required")
+	}
+	agentHome, err := r.deps.AgentHome(agentID)
+	if err != nil {
+		return err
+	}
+	layout := r.Layout(agentHome)
+	templateRoot := codexWorkspaceTemplateRoot(agentID)
+	if err := sandboxgateway.EnsureEmbeddedWorkspace(templateRoot, layout.WorkspaceRoot); err != nil {
+		return fmt.Errorf("seed codex workspace template for agent %q: %w", req.AgentName, err)
+	}
+	if overlayRoot := strings.TrimSpace(req.WorkspaceOverlay); overlayRoot != "" {
+		if err := sandboxgateway.OverlayWorkspaceTree(overlayRoot, layout.WorkspaceRoot); err != nil {
+			return fmt.Errorf("overlay codex workspace for agent %q: %w", req.AgentName, err)
+		}
+	}
+	return nil
 }
 
 func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntime.State, error) {
@@ -419,6 +449,9 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
+	if err := r.seedCodexHomeWorkspaceSkills(spec.WorkspaceDir, spec.CodexHomeDir); err != nil {
+		return nil, err
+	}
 	if err := r.seedManagerTemplate(spec.AgentID, spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
@@ -504,6 +537,9 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		return nil, err
 	}
 	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
+		return nil, err
+	}
+	if err := r.seedCodexHomeWorkspaceSkills(spec.WorkspaceDir, spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
 	if err := r.seedManagerTemplate(spec.AgentID, spec.CodexHomeDir); err != nil {
@@ -634,6 +670,48 @@ func (r *Runtime) seedCodexHomeSkills(runtimeCodexHome string) error {
 		return fmt.Errorf("seed runtime codex skills %s: %w", targetRoot, err)
 	}
 	return nil
+}
+
+func (r *Runtime) seedCodexHomeWorkspaceSkills(workspaceDir, runtimeCodexHome string) error {
+	workspaceDir = strings.TrimSpace(workspaceDir)
+	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
+	if workspaceDir == "" || runtimeCodexHome == "" {
+		return nil
+	}
+	sourceRoot := filepath.Join(workspaceDir, "skills")
+	entries, err := os.ReadDir(sourceRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read codex workspace skills %s: %w", sourceRoot, err)
+	}
+	targetRoot := filepath.Join(runtimeCodexHome, "skills")
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name())
+		if name == "" {
+			continue
+		}
+		source := filepath.Join(sourceRoot, name)
+		target := filepath.Join(targetRoot, name)
+		if err := r.removeAll(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove codex workspace skill %q: %w", name, err)
+		}
+		if err := r.copyDir(source, target); err != nil {
+			return fmt.Errorf("seed codex workspace skill %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func codexWorkspaceTemplateRoot(agentID string) string {
+	if canonicalRuntimeAgentID(agentID) == agent.ManagerUserID {
+		return templateembed.CodexManagerRoot
+	}
+	return templateembed.CodexWorkerRoot
 }
 
 func (r *Runtime) seedManagerTemplate(agentID, runtimeCodexHome string) error {

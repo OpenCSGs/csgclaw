@@ -1380,6 +1380,89 @@ func TestRuntimeCreateDoesNotInstallManagerTemplateForWorker(t *testing.T) {
 	}
 }
 
+func TestRuntimeProvisionSeedsCodexWorkerTemplateSkills(t *testing.T) {
+	root := t.TempDir()
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{
+			ID:        "agent-alice",
+			Name:      "alice",
+			RuntimeID: h.RuntimeID,
+		}, nil
+	})
+
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID: "rt-agent-alice",
+		AgentID:   "agent-alice",
+		AgentName: "alice",
+		Profile:   agentruntime.Profile{ModelID: "gpt-5.5"},
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-agent-alice",
+		AgentID:   "agent-alice",
+		AgentName: "alice",
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	workspaceRoot := filepath.Join(root, "agent-alice", ".codex", "workspace")
+	if _, err := os.Stat(filepath.Join(workspaceRoot, "AGENTS.md")); err != nil {
+		t.Fatalf("worker workspace AGENTS.md missing: %v", err)
+	}
+	skillPath := filepath.Join(root, "agent-alice", ".codex", "home", "skills", "agent-teams", "SKILL.md")
+	raw, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatalf("read worker template skill: %v", err)
+	}
+	if !strings.Contains(string(raw), "agent-teams") {
+		t.Fatalf("worker template skill missing expected content:\n%s", string(raw))
+	}
+}
+
+func TestRuntimeProvisionSyncsCodexOverlaySkills(t *testing.T) {
+	root := t.TempDir()
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+	overlayRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(overlayRoot, "skills", "custom"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overlayRoot, "skills", "custom", "SKILL.md"), []byte("# Custom\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{
+			ID:        "agent-alice",
+			Name:      "alice",
+			RuntimeID: h.RuntimeID,
+		}, nil
+	})
+
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID:        "rt-agent-alice",
+		AgentID:          "agent-alice",
+		AgentName:        "alice",
+		WorkspaceOverlay: overlayRoot,
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-agent-alice",
+		AgentID:   "agent-alice",
+		AgentName: "alice",
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	assertRuntimeSkillFile(t, filepath.Join(root, "agent-alice", ".codex", "workspace", "skills", "custom", "SKILL.md"), "# Custom\n", 0o644)
+	assertRuntimeSkillFile(t, filepath.Join(root, "agent-alice", ".codex", "home", "skills", "custom", "SKILL.md"), "# Custom\n", 0o644)
+}
+
 func TestRuntimeCreateOverlaysManagerTemplateAfterHostSkills(t *testing.T) {
 	root := t.TempDir()
 	hostCodexHome := filepath.Join(t.TempDir(), "shared-codex-home")

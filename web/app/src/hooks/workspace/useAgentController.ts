@@ -1121,16 +1121,14 @@ export function useAgentController({
     const codexAvailable = runtimeChoices.some(
       (item) => !item?.sandbox_enabled && normalizeRuntimeName(item?.name) === "codex" && item?.installed !== false,
     );
+    const preferredSandboxRuntimeName =
+      normalizeRuntimeName(
+        runtimeChoices.find((item) => item?.sandbox_enabled && normalizeRuntimeName(item?.name) === "picoclaw")?.name,
+      ) || normalizeRuntimeName(runtimeChoices.find((item) => item?.sandbox_enabled)?.name || "picoclaw");
     let preferredRuntimeKind =
-      normalizeRuntimeKind(bootstrapConfig?.runtime_kind || managerAgent?.runtime_kind || "") || DEFAULT_RUNTIME_KIND;
-    if (preferredRuntimeKind === "codex" && !codexAvailable) {
-      preferredRuntimeKind =
-        normalizeRuntimeKind(
-          composeLegacyRuntimeKind(
-            normalizeRuntimeName(runtimeChoices.find((item) => item?.sandbox_enabled)?.name || "picoclaw"),
-            true,
-          ),
-        ) || DEFAULT_RUNTIME_KIND;
+      normalizeRuntimeKind(composeLegacyRuntimeKind(preferredSandboxRuntimeName, true)) || DEFAULT_RUNTIME_KIND;
+    if (!runtimeChoices.length && !codexAvailable) {
+      preferredRuntimeKind = DEFAULT_RUNTIME_KIND;
     }
     const selectedTemplate =
       template === undefined

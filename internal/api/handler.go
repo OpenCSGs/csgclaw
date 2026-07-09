@@ -498,7 +498,7 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 		},
 		RuntimeDefaultImages: map[string]string{},
 		RuntimeOptionSchemas: runtimeOptionSchemas,
-		WorkerRuntimeChoices: workerRuntimeChoices(),
+		WorkerRuntimeChoices: workerRuntimeChoices(cfg),
 	}
 	defaults, err := hub.ResolveBootstrapDefaults(ctx, cfg.Bootstrap, hubSvc)
 	if err != nil {
@@ -549,7 +549,13 @@ func codexInstallGuidance(goos string) string {
 	}
 }
 
-func workerRuntimeChoices() []workerRuntimeChoiceResponse {
+func workerRuntimeChoices(cfg config.Config) []workerRuntimeChoiceResponse {
+	sandboxInstalled := true
+	sandboxMessage := ""
+	if err := sandboxproviders.Availability(cfg.Sandbox); err != nil {
+		sandboxInstalled = false
+		sandboxMessage = err.Error()
+	}
 	choices := []workerRuntimeChoiceResponse{
 		{
 			Name:           agent.RuntimeNameCodex,
@@ -561,13 +567,15 @@ func workerRuntimeChoices() []workerRuntimeChoiceResponse {
 			Name:           agent.RuntimeNameOpenClaw,
 			Label:          "OpenClaw",
 			SandboxEnabled: true,
-			Installed:      true,
+			Installed:      sandboxInstalled,
+			Message:        sandboxMessage,
 		},
 		{
 			Name:           agent.RuntimeNamePicoClaw,
 			Label:          "PicoClaw",
 			SandboxEnabled: true,
-			Installed:      true,
+			Installed:      sandboxInstalled,
+			Message:        sandboxMessage,
 		},
 	}
 	if _, err := locateCodexCLI(); err != nil {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	goruntime "runtime"
 	"strings"
 	"testing"
 	"unsafe"
@@ -16,6 +17,9 @@ import (
 )
 
 func TestBoxLiteProviderFactoryUsesDefaultResolvedPath(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("boxlite is not supported on Windows")
+	}
 	restore := stubBoxLiteAvailability(t, func(path string) (string, error) {
 		return path, nil
 	}, func(path string) (os.FileInfo, error) {
@@ -65,12 +69,18 @@ func TestBoxLiteProviderFactoryErrorsWhenBundledAndPATHFallbackAreUnavailable(t 
 	if err == nil {
 		t.Fatal("factory() error = nil, want actionable boxlite availability error")
 	}
-	for _, want := range []string{
-		`sandbox provider "boxlite" is configured`,
-		`no bundled boxlite binary was found`,
-		`"boxlite" is not available on PATH`,
-		`Switch [sandbox].provider to "docker"`,
-	} {
+	wants := []string{
+		`sandbox provider "boxlite"`,
+		`"docker"`,
+	}
+	if goruntime.GOOS != "windows" {
+		wants = append(wants,
+			`no bundled boxlite binary was found`,
+			`"boxlite" is not available on PATH`,
+			`Switch [sandbox].provider to "docker"`,
+		)
+	}
+	for _, want := range wants {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("factory() error = %q, want substring %q", err, want)
 		}
@@ -78,6 +88,9 @@ func TestBoxLiteProviderFactoryErrorsWhenBundledAndPATHFallbackAreUnavailable(t 
 }
 
 func TestBoxLiteProviderFactoryAcceptsBundledBinaryWithoutPATHLookup(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("boxlite is not supported on Windows")
+	}
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
