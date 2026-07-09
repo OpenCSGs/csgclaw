@@ -223,8 +223,8 @@
 }
 
 .textSegmentButton {
-  min-width: 52px;
-  padding: 0 16px;
+  min-width: 104px;
+  padding: 0 18px;
 }
 
 .segmentButton:last-child,

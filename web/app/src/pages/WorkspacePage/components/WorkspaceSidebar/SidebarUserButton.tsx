@@ -300,7 +300,7 @@ export function SidebarUserButton({
                 aria-pressed={locale === "zh"}
                 onClick={() => onLocaleChange?.("zh")}
               >
-                中
+                {t("languageOptionZh")}
               </Button>
               <Button
                 variant="ghost"
@@ -308,7 +308,7 @@ export function SidebarUserButton({
                 aria-pressed={locale === "en"}
                 onClick={() => onLocaleChange?.("en")}
               >
-                EN
+                {t("languageOptionEn")}
               </Button>
             </div>
           </div>

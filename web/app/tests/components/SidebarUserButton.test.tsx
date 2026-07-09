@@ -5,6 +5,8 @@ import type { UpgradeStatus } from "@/models/upgradeStatus";
 
 const labels: Record<string, string> = {
   appearanceSettings: "Appearance",
+  languageOptionEn: "English",
+  languageOptionZh: "简体中文",
   languageSwitcher: "Language",
   settings: "Settings",
   themeDark: "Dark",
@@ -61,6 +63,36 @@ const updateAvailableStatus: UpgradeStatus = {
 describe("SidebarUserButton", () => {
   beforeEach(() => {
     window.localStorage.clear();
+  });
+
+  it("uses full language option labels", async () => {
+    const user = userEvent.setup();
+    const onLocaleChange = vi.fn();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        showUpgradeControls={false}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={onLocaleChange}
+        onThemeChange={() => {}}
+        t={t}
+        theme="light"
+        upgradeStatus={updateAvailableStatus}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByRole("button", { name: "简体中文" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "English" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "ZH" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "EN" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "简体中文" }));
+    expect(onLocaleChange).toHaveBeenLastCalledWith("zh");
   });
 
   it("keeps the current version visible when upgrade controls are hidden", async () => {

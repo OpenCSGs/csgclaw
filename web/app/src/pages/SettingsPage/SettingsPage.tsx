@@ -242,7 +242,7 @@ export function SettingsPage() {
                   aria-pressed={sidebar.locale === "zh"}
                   onClick={() => sidebar.onLocaleChange("zh")}
                 >
-                  ZH
+                  {sidebar.t("languageOptionZh")}
                 </button>
                 <button
                   type="button"
@@ -250,7 +250,7 @@ export function SettingsPage() {
                   aria-pressed={sidebar.locale === "en"}
                   onClick={() => sidebar.onLocaleChange("en")}
                 >
-                  EN
+                  {sidebar.t("languageOptionEn")}
                 </button>
               </div>
             </div>
