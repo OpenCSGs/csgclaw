@@ -57,7 +57,7 @@ export function useTaskController({
 }: UseTaskControllerArgs) {
   const queryClient = useQueryClient();
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
-  const [createTaskModalView, setCreateTaskModalView] = useState<TaskBoardView>("tasks");
+  const [showCreateScheduledTaskModal, setShowCreateScheduledTaskModal] = useState(false);
   const [taskBoardView, setTaskBoardView] = useState<TaskBoardView>("tasks");
   const [editingScheduledTaskID, setEditingScheduledTaskID] = useState("");
   const [createTaskBusy, setCreateTaskBusy] = useState(false);
@@ -325,7 +325,7 @@ export function useTaskController({
     setCreateScheduledTaskError("");
     try {
       const created = await createScheduledTask(payload);
-      setShowCreateTaskModal(false);
+      setShowCreateScheduledTaskModal(false);
       setTaskBoardView("scheduled");
       setSelectedScheduledTaskID(created.id);
       await scheduledTasksQuery.refetch();
@@ -554,14 +554,13 @@ export function useTaskController({
     openParentTaskDetail,
     openCreateTaskModal: () => {
       setCreateTaskError("");
-      setCreateScheduledTaskError("");
-      setCreateTaskModalView("tasks");
+      setShowCreateScheduledTaskModal(false);
       setShowCreateTaskModal(true);
     },
     openCreateScheduledTaskModal: () => {
       setCreateScheduledTaskError("");
-      setCreateTaskModalView("scheduled");
-      setShowCreateTaskModal(true);
+      setShowCreateTaskModal(false);
+      setShowCreateScheduledTaskModal(true);
     },
     taskViewProps: {
       t,
@@ -574,7 +573,6 @@ export function useTaskController({
       scheduledTaskRuns: visibleScheduledTaskRuns,
       selectedScheduledTaskID: visibleScheduledTaskID,
       activeView: taskBoardView,
-      createTaskModalView,
       selectedTask,
       selectedTaskID,
       loading: tasksQuery.isLoading || scheduledTasksQuery.isLoading,
@@ -597,21 +595,21 @@ export function useTaskController({
       scheduledTaskActionError,
       rooms,
       showCreateTaskModal,
+      showCreateScheduledTaskModal,
       editingScheduledTaskID,
       parentDetailTaskID,
       onCloseCreateTaskModal: () => setShowCreateTaskModal(false),
+      onCloseCreateScheduledTaskModal: () => setShowCreateScheduledTaskModal(false),
       onCloseEditScheduledTaskModal: () => setEditingScheduledTaskID(""),
       onOpenCreateTaskModal: () => {
         setCreateTaskError("");
-        setCreateScheduledTaskError("");
-        setCreateTaskModalView("tasks");
+        setShowCreateScheduledTaskModal(false);
         setShowCreateTaskModal(true);
       },
       onOpenCreateScheduledTaskModal: () => {
-        setCreateTaskError("");
         setCreateScheduledTaskError("");
-        setCreateTaskModalView("scheduled");
-        setShowCreateTaskModal(true);
+        setShowCreateTaskModal(false);
+        setShowCreateScheduledTaskModal(true);
       },
       onSelectTaskBoardView: setTaskBoardView,
       onOpenEditScheduledTaskModal: (taskID: string) => {

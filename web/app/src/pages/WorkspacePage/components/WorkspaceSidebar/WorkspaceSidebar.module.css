@@ -26,6 +26,7 @@
   border-right: 1px solid #eaecf0;
   background: var(--white);
   color: #344054;
+  font-family: var(--font-family-text);
   overflow: hidden;
   transition:
     width 180ms ease,
@@ -35,6 +36,10 @@
 .primarySidebarCollapsed {
   width: var(--workspace-primary-sidebar-collapsed-width);
   min-width: var(--workspace-primary-sidebar-collapsed-width);
+}
+
+:global(.workspace-primary-sidebar-resizing) .primarySidebar {
+  transition: none;
 }
 
 .primarySidebarCollapsed .primaryNavigationWrap {
@@ -187,9 +192,9 @@
   min-height: 40px;
   padding: 8px 12px;
   color: #667085;
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 24px;
+  font-size: 14px;
+  font-weight: var(--font-weight-normal);
+  line-height: 22px;
 }
 
 .primaryNavRow {
@@ -206,9 +211,9 @@
   gap: 12px;
   cursor: pointer;
   font: inherit;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
+  font-size: 14px;
+  font-weight: var(--font-weight-normal);
+  line-height: 22px;
   text-align: left;
   transition:
     background 140ms ease,
@@ -216,10 +221,15 @@
 }
 
 .primaryNavRow:hover,
-.primaryNavRow:focus-visible,
-.active {
+.primaryNavRow:focus-visible {
   background: #f9fafb;
   color: #101828;
+  outline: none;
+}
+
+.active {
+  background: #f9fafb;
+  color: #344054;
   outline: none;
 }
 
@@ -252,6 +262,7 @@
 .primaryNavLabel {
   min-width: 0;
   flex: 1 1 auto;
+  font-weight: var(--font-weight-medium);
 }
 
 .primaryNavBadge {
@@ -342,8 +353,8 @@
 .contextTitle {
   min-width: 0;
   color: #101828;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 500;
   line-height: 28px;
 }
 
@@ -527,8 +538,8 @@
 
 @media (max-width: 720px) {
   .primarySidebar {
-    width: min(300px, 48vw);
-    min-width: min(300px, 48vw);
+    width: min(var(--workspace-primary-sidebar-width), 48vw);
+    min-width: min(var(--workspace-primary-sidebar-width), 48vw);
   }
 
   .mainColumn {

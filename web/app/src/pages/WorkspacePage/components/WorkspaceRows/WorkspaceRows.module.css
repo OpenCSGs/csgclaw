@@ -90,10 +90,10 @@
   align-items: center;
   gap: 6px;
   color: #344054;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   letter-spacing: 0;
-  line-height: 24px;
+  line-height: 22px;
   text-transform: none;
 }
 
@@ -370,9 +370,9 @@
 
 .time {
   color: #667085;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 22px;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 18px;
   white-space: nowrap;
 }
 

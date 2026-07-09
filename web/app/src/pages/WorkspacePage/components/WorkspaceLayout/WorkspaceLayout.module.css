@@ -1,5 +1,5 @@
 :global(.app-shell) {
-  --workspace-primary-sidebar-width: 300px;
+  --workspace-primary-sidebar-width: 240px;
   --workspace-primary-sidebar-collapsed-width: 80px;
   --workspace-current-primary-sidebar-width: var(--workspace-primary-sidebar-width);
   --workspace-context-sidebar-width: max(
@@ -34,6 +34,15 @@
   z-index: var(--z-page-popover);
 }
 
+.primarySidebarResizer {
+  position: absolute;
+  z-index: var(--z-page-overlay);
+  inset: 0 auto 0 calc(var(--workspace-current-primary-sidebar-width) - 12px);
+  width: 24px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
 .sidebarResizer,
 :global(.chat-panel) {
   grid-row: 1;
@@ -51,6 +60,7 @@
   touch-action: none;
 }
 
+.primarySidebarResizer::before,
 .sidebarResizer::before {
   content: "";
   position: absolute;
@@ -63,6 +73,9 @@
     box-shadow 140ms ease;
 }
 
+.primarySidebarResizer:hover::before,
+.primarySidebarResizer:focus-visible::before,
+.primarySidebarResizing .primarySidebarResizer::before,
 .sidebarResizer:hover::before,
 .sidebarResizer:focus-visible::before,
 .sidebarResizing .sidebarResizer::before {
@@ -70,19 +83,23 @@
   box-shadow: 0 0 0 2px rgba(102, 112, 133, 0.08);
 }
 
+.primarySidebarResizer:focus-visible,
 .sidebarResizer:focus-visible {
   outline: none;
 }
 
+.primarySidebarResizing,
 .sidebarResizing {
   cursor: col-resize;
   user-select: none;
 }
 
+.primarySidebarResizing.primarySidebarResizing,
 .sidebarResizing.sidebarResizing {
   transition: none;
 }
 
+.primarySidebarResizing *,
 .sidebarResizing * {
   cursor: col-resize;
   user-select: none;
@@ -92,10 +109,14 @@
   display: none;
 }
 
+:global(:root[data-theme="dark"]) .primarySidebarResizer::before,
 :global(:root[data-theme="dark"]) .sidebarResizer::before {
   background: rgba(208, 213, 221, 0.18);
 }
 
+:global(:root[data-theme="dark"]) .primarySidebarResizer:hover::before,
+:global(:root[data-theme="dark"]) .primarySidebarResizer:focus-visible::before,
+:global(:root[data-theme="dark"]) .primarySidebarResizing .primarySidebarResizer::before,
 :global(:root[data-theme="dark"]) .sidebarResizer:hover::before,
 :global(:root[data-theme="dark"]) .sidebarResizer:focus-visible::before,
 :global(:root[data-theme="dark"]) .sidebarResizing .sidebarResizer::before {
@@ -115,6 +136,10 @@
   }
 
   .sidebarResizer {
+    display: none;
+  }
+
+  .primarySidebarResizer {
     display: none;
   }
 }

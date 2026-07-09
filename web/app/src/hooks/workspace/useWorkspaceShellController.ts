@@ -74,7 +74,6 @@ export function useWorkspaceShellController({
   selectHub,
   selectTasks,
   setCollapsedWorkspaceGroups,
-  setIsSidebarCollapsed,
   setWorkspaceTab,
   t,
   theme,
@@ -151,7 +150,6 @@ export function useWorkspaceShellController({
   }, [activePane.type, dismissHubNewBadge, showHubNewBadge]);
 
   function selectWorkspaceTab(tab: WorkspaceTab) {
-    setIsSidebarCollapsed(false);
     if (activePane.type !== WorkspacePaneTypes.settings && tab === resolvedWorkspaceTab) {
       return;
     }

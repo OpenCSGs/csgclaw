@@ -1,26 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { workspaceHasContextSidebar } from "@/models/routing";
-import { SIDEBAR_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
+import { PRIMARY_SIDEBAR_WIDTH_STORAGE_KEY, SIDEBAR_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import { AppLayout, AppLayoutLoading, AppLayoutMain, AppLayoutOverlays, AppLayoutShell } from "@/components/ui";
 import { classNames } from "@/shared/lib/classNames";
 import { WorkspaceMainPanel } from "../WorkspaceMainPanel";
 import { WorkspaceOverlays } from "../WorkspaceOverlays";
 import { WorkspaceSidebar } from "../WorkspaceSidebar";
+import {
+  SidebarWidth,
+  clampPrimarySidebarWidth,
+  normalizeStoredPrimarySidebarWidth,
+  workspacePrimarySidebarLabels,
+  workspacePrimarySidebarWidth,
+  workspacePrimarySidebarWidthBounds,
+  workspaceSidebarWidthBounds,
+} from "./sidebarDimensions";
 import styles from "./WorkspaceLayout.module.css";
 import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 
-const SidebarWidth = {
-  collapsedPrimary: 80,
-  default: 600,
-  max: 720,
-  min: 560,
-  primary: 300,
-  step: 16,
-} as const;
-
-function clampSidebarWidth(value: number) {
-  return Math.min(SidebarWidth.max, Math.max(SidebarWidth.min, Math.round(value)));
+function clampSidebarWidth(value: number, bounds: { max: number; min: number }) {
+  return Math.min(bounds.max, Math.max(bounds.min, Math.round(value)));
 }
 
 function readSidebarWidth() {
@@ -28,30 +28,72 @@ function readSidebarWidth() {
     return SidebarWidth.default;
   }
   const stored = Number(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
-  return Number.isFinite(stored) ? clampSidebarWidth(stored) : SidebarWidth.default;
+  return Number.isFinite(stored) ? Math.round(stored) : SidebarWidth.default;
+}
+
+function readPrimarySidebarWidthOverride() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return normalizeStoredPrimarySidebarWidth(window.localStorage.getItem(PRIMARY_SIDEBAR_WIDTH_STORAGE_KEY));
 }
 
 export function WorkspaceLayout() {
   const controller = useWorkspaceControllerContext();
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
+  const [primarySidebarWidthOverride, setPrimarySidebarWidthOverride] = useState<number | null>(
+    readPrimarySidebarWidthOverride,
+  );
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
+  const [isPrimarySidebarResizing, setIsPrimarySidebarResizing] = useState(false);
   const resizeStartRef = useRef<{ pointerX: number; width: number }>({
     pointerX: 0,
     width: SidebarWidth.default,
   });
+  const primaryResizeStartRef = useRef<{ pointerX: number; width: number }>({
+    pointerX: 0,
+    width: SidebarWidth.primaryFallback,
+  });
   const resizePointerIdRef = useRef<number | null>(null);
+  const primaryResizePointerIdRef = useRef<number | null>(null);
   const sidebarProps = controller.ready ? controller.sidebarProps : null;
   const isSidebarCollapsed = sidebarProps?.isSidebarCollapsed ?? false;
   const showSidebarContext = controller.ready && workspaceHasContextSidebar(controller.activePane);
-  const contextSidebarWidth = showSidebarContext ? Math.max(0, sidebarWidth - SidebarWidth.primary) : 0;
-  const primarySidebarWidth = isSidebarCollapsed ? SidebarWidth.collapsedPrimary : SidebarWidth.primary;
-  const visibleSidebarWidth = showSidebarContext ? primarySidebarWidth + contextSidebarWidth : primarySidebarWidth;
+  const autoPrimarySidebarWidth = useMemo(
+    () =>
+      sidebarProps
+        ? workspacePrimarySidebarWidth(workspacePrimarySidebarLabels(sidebarProps.t))
+        : SidebarWidth.primaryFallback,
+    [sidebarProps],
+  );
+  const primarySidebarWidthBounds = useMemo(() => workspacePrimarySidebarWidthBounds(), []);
+  const primarySidebarExpandedWidth = primarySidebarWidthOverride ?? autoPrimarySidebarWidth;
+  const sidebarWidthBounds = useMemo(() => workspaceSidebarWidthBounds(), []);
+  const expandedSidebarWidth = clampSidebarWidth(sidebarWidth, sidebarWidthBounds);
+  const contextSidebarWidth = showSidebarContext ? Math.max(0, expandedSidebarWidth - primarySidebarExpandedWidth) : 0;
+  const primarySidebarVisibleWidth = isSidebarCollapsed ? SidebarWidth.collapsedPrimary : primarySidebarExpandedWidth;
+  const visibleSidebarWidth = showSidebarContext
+    ? primarySidebarVisibleWidth + contextSidebarWidth
+    : primarySidebarVisibleWidth;
+
+  useEffect(() => {
+    setSidebarWidth((current) => {
+      const next = clampSidebarWidth(current, sidebarWidthBounds);
+      return next === current ? current : next;
+    });
+  }, [sidebarWidthBounds]);
 
   useEffect(() => {
     if (showSidebarContext) {
-      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(expandedSidebarWidth));
     }
-  }, [showSidebarContext, sidebarWidth]);
+  }, [expandedSidebarWidth, showSidebarContext]);
+
+  function setPrimarySidebarUserWidth(width: number) {
+    const nextWidth = clampPrimarySidebarWidth(width);
+    setPrimarySidebarWidthOverride((current) => (current === nextWidth ? current : nextWidth));
+    window.localStorage.setItem(PRIMARY_SIDEBAR_WIDTH_STORAGE_KEY, String(nextWidth));
+  }
 
   function handleSidebarResizeStart(event: ReactPointerEvent<HTMLDivElement>) {
     if (!showSidebarContext || event.button !== 0) {
@@ -60,7 +102,7 @@ export function WorkspaceLayout() {
     event.preventDefault();
     resizeStartRef.current = {
       pointerX: event.clientX,
-      width: sidebarWidth,
+      width: expandedSidebarWidth,
     };
     resizePointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -73,7 +115,7 @@ export function WorkspaceLayout() {
     }
     event.preventDefault();
     const delta = event.clientX - resizeStartRef.current.pointerX;
-    const nextWidth = clampSidebarWidth(resizeStartRef.current.width + delta);
+    const nextWidth = clampSidebarWidth(resizeStartRef.current.width + delta, sidebarWidthBounds);
     setSidebarWidth((current) => (current === nextWidth ? current : nextWidth));
   }
 
@@ -88,6 +130,40 @@ export function WorkspaceLayout() {
     }
   }
 
+  function handlePrimarySidebarResizeStart(event: ReactPointerEvent<HTMLDivElement>) {
+    if (isSidebarCollapsed || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    primaryResizeStartRef.current = {
+      pointerX: event.clientX,
+      width: primarySidebarExpandedWidth,
+    };
+    primaryResizePointerIdRef.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsPrimarySidebarResizing(true);
+  }
+
+  function handlePrimarySidebarResizeMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (primaryResizePointerIdRef.current !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    const delta = event.clientX - primaryResizeStartRef.current.pointerX;
+    setPrimarySidebarUserWidth(primaryResizeStartRef.current.width + delta);
+  }
+
+  function endPrimarySidebarResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (primaryResizePointerIdRef.current !== event.pointerId) {
+      return;
+    }
+    primaryResizePointerIdRef.current = null;
+    setIsPrimarySidebarResizing(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
   function handleSidebarResizeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (!showSidebarContext) {
       return;
@@ -96,38 +172,87 @@ export function WorkspaceLayout() {
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       event.preventDefault();
       const direction = event.key === "ArrowLeft" ? -1 : 1;
-      setSidebarWidth((current) => clampSidebarWidth(current + direction * SidebarWidth.step));
+      setSidebarWidth((current) => clampSidebarWidth(current + direction * SidebarWidth.step, sidebarWidthBounds));
     }
     if (event.key === "Home") {
       event.preventDefault();
-      setSidebarWidth(SidebarWidth.min);
+      setSidebarWidth(sidebarWidthBounds.min);
     }
     if (event.key === "End") {
       event.preventDefault();
-      setSidebarWidth(SidebarWidth.max);
+      setSidebarWidth(sidebarWidthBounds.max);
+    }
+  }
+
+  function handlePrimarySidebarResizeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (isSidebarCollapsed) {
+      return;
+    }
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      const direction = event.key === "ArrowLeft" ? -1 : 1;
+      setPrimarySidebarUserWidth(primarySidebarExpandedWidth + direction * SidebarWidth.step);
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      setPrimarySidebarUserWidth(primarySidebarWidthBounds.min);
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      setPrimarySidebarUserWidth(primarySidebarWidthBounds.max);
     }
   }
 
   const baseShellClassName = controller.ready ? controller.shellClassName : "";
-  const shellClassName = classNames(baseShellClassName, isSidebarResizing && styles.sidebarResizing);
+  const shellClassName = classNames(
+    baseShellClassName,
+    isSidebarResizing && styles.sidebarResizing,
+    isPrimarySidebarResizing && styles.primarySidebarResizing,
+    isPrimarySidebarResizing && "workspace-primary-sidebar-resizing",
+  );
   const shellStyle = {
-    "--sidebar-expanded-width": `${showSidebarContext ? sidebarWidth : SidebarWidth.primary}px`,
+    "--workspace-primary-sidebar-width": `${primarySidebarExpandedWidth}px`,
+    "--sidebar-expanded-width": `${showSidebarContext ? expandedSidebarWidth : primarySidebarExpandedWidth}px`,
     "--sidebar-slot-width": `${visibleSidebarWidth}px`,
   } as CSSProperties;
 
   return (
     <AppLayout ready={controller.ready} loadingFallback={<AppLayoutLoading>{controller.loadingText}</AppLayoutLoading>}>
       <AppLayoutShell className={shellClassName} style={shellStyle}>
-        <div className={styles.sidebarShell}>{sidebarProps ? <WorkspaceSidebar {...sidebarProps} /> : null}</div>
+        <div className={styles.sidebarShell}>
+          {sidebarProps ? <WorkspaceSidebar {...sidebarProps} /> : null}
+          {controller.ready && !isSidebarCollapsed ? (
+            <div
+              className={styles.primarySidebarResizer}
+              role="separator"
+              aria-label="Resize primary sidebar"
+              aria-orientation="vertical"
+              aria-valuemin={primarySidebarWidthBounds.min}
+              aria-valuemax={primarySidebarWidthBounds.max}
+              aria-valuenow={primarySidebarExpandedWidth}
+              tabIndex={0}
+              onKeyDown={handlePrimarySidebarResizeKeyDown}
+              onPointerDown={handlePrimarySidebarResizeStart}
+              onPointerMove={handlePrimarySidebarResizeMove}
+              onPointerUp={endPrimarySidebarResize}
+              onPointerCancel={endPrimarySidebarResize}
+              onLostPointerCapture={() => {
+                primaryResizePointerIdRef.current = null;
+                setIsPrimarySidebarResizing(false);
+              }}
+            />
+          ) : null}
+        </div>
         {controller.ready && showSidebarContext ? (
           <div
             className={styles.sidebarResizer}
             role="separator"
             aria-label="Resize sidebar"
             aria-orientation="vertical"
-            aria-valuemin={SidebarWidth.min}
-            aria-valuemax={SidebarWidth.max}
-            aria-valuenow={sidebarWidth}
+            aria-valuemin={sidebarWidthBounds.min}
+            aria-valuemax={sidebarWidthBounds.max}
+            aria-valuenow={expandedSidebarWidth}
             tabIndex={0}
             onKeyDown={handleSidebarResizeKeyDown}
             onPointerDown={handleSidebarResizeStart}

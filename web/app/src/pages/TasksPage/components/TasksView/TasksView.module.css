@@ -1254,45 +1254,6 @@
   margin-top: 14px;
 }
 
-.taskCreateTabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  width: 100%;
-  gap: 6px;
-  margin-bottom: 16px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-muted);
-}
-
-.taskCreateTabs button {
-  min-height: 40px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  padding: 8px 14px;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.taskCreateTabs button[data-active] {
-  border-color: var(--brand-600);
-  background: var(--brand-25);
-  color: var(--brand-600);
-  box-shadow: none;
-}
-
-:root[data-theme="dark"] .taskCreateTabs button[data-active] {
-  border-color: rgba(101, 132, 248, 0.72);
-  background: rgba(77, 106, 214, 0.2);
-  color: var(--text);
-}
-
 .taskContentLayout {
   display: flex;
   flex: 1 1 auto;

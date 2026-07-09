@@ -1,18 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ComponentProps, Dispatch, ReactNode, SetStateAction } from "react";
-import { Bot, CalendarClock, ChevronDown, Pencil, Play, Trash2, Users, X } from "lucide-react";
+import type { ComponentProps, ReactNode } from "react";
+import { Bot, CalendarClock, ChevronDown, Pencil, Play, Trash2, Users } from "lucide-react";
 import {
   Button,
   type ButtonVariant,
   DialogBody,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogRoot,
   DialogTitle,
-  Select,
 } from "@/components/ui";
 import { TaskStatusPill, TaskSubtaskIndicator } from "@/components/business";
 import type { CreateWorkspaceTaskPayload } from "@/api/tasks";
@@ -21,7 +19,6 @@ import type { AgentLike } from "@/models/agents";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import {
   scheduledTaskRecurrenceLabel,
-  type ScheduledTaskRecurrence,
   type WorkspaceScheduledTask,
   type WorkspaceScheduledTaskRun,
 } from "@/models/scheduledTasks";
@@ -43,9 +40,19 @@ import {
 } from "@/models/tasks";
 import type { TaskSidebarPhase, WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
 import { classNames } from "@/shared/lib/classNames";
+import { ScheduledTaskCreateDialog } from "./ScheduledTaskCreateDialog";
+import { ScheduledTaskFormFields } from "./ScheduledTaskFormFields";
+import { TaskCreateDialog } from "./TaskCreateDialog";
+import { TaskDialogCloseButton } from "./TaskDialogCloseButton";
+import {
+  TASK_TITLE_MAX_LENGTH,
+  type ScheduledTaskFormDraft,
+  type ScheduledTaskFormFieldErrors,
+  type TaskCreateDraft,
+  type TaskCreateFieldErrors,
+} from "./taskDialogTypes";
 import styles from "./TasksView.module.css";
 
-const TASK_TITLE_MAX_LENGTH = 80;
 const EMPTY_AGENTS: AgentLike[] = [];
 
 function moduleSuffixStyle(prefix: string, suffix: string | undefined): string {
@@ -56,35 +63,6 @@ function moduleSuffixStyle(prefix: string, suffix: string | undefined): string {
   const key = `${prefix}${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
   return styles[key] ?? "";
 }
-
-type TaskCreateDraft = {
-  assignee: string;
-  title: string;
-  description: string;
-};
-
-type TaskCreateFieldErrors = {
-  assignment?: string;
-  title?: string;
-};
-
-type ScheduledTaskFormDraft = {
-  agentID: string;
-  date: string;
-  expiresDate: string;
-  prompt: string;
-  recurrence: ScheduledTaskRecurrence;
-  time: string;
-  title: string;
-};
-
-type ScheduledTaskFormFieldErrors = {
-  agentID?: string;
-  date?: string;
-  prompt?: string;
-  time?: string;
-  title?: string;
-};
 
 const emptyCreateDraft: TaskCreateDraft = {
   assignee: "",
@@ -303,6 +281,7 @@ export type TasksViewProps = {
   createTaskError?: string;
   error?: string;
   loading?: boolean;
+  onCloseCreateScheduledTaskModal?: () => void;
   onCloseCreateTaskModal?: () => void;
   onCloseEditScheduledTaskModal?: () => void;
   onCloseParentTaskDetail?: () => void;
@@ -330,6 +309,7 @@ export type TasksViewProps = {
   selectedTask?: WorkspaceTask | null;
   selectedScheduledTaskID?: string;
   showCreateTaskModal?: boolean;
+  showCreateScheduledTaskModal?: boolean;
   editingScheduledTaskID?: string;
   startTaskBusy?: boolean;
   startingTaskID?: string;
@@ -338,7 +318,6 @@ export type TasksViewProps = {
   taskBoardTasks?: WorkspaceTask[];
   tasks?: WorkspaceTask[];
   activeView?: TaskBoardView;
-  createTaskModalView?: TaskBoardView;
   t?: TranslateFn;
   teams?: WorkspaceTeam[];
   scheduledTasks?: WorkspaceScheduledTask[];
@@ -370,8 +349,8 @@ export function TasksView({
   editScheduledTaskBusy = false,
   editScheduledTaskError = "",
   showCreateTaskModal = false,
+  showCreateScheduledTaskModal = false,
   activeView = "tasks",
-  createTaskModalView = "tasks",
   editingScheduledTaskID = "",
   scheduledTasks = [],
   scheduledTaskRuns = [],
@@ -382,6 +361,7 @@ export function TasksView({
   planningTaskID = "",
   startingTaskID = "",
   rooms,
+  onCloseCreateScheduledTaskModal,
   onCloseCreateTaskModal,
   onCloseEditScheduledTaskModal,
   onCloseParentTaskDetail,
@@ -400,7 +380,6 @@ export function TasksView({
   onOpenEditScheduledTaskModal,
   onOpenConversation = () => {},
 }: TasksViewProps) {
-  const [activeCreateView, setActiveCreateView] = useState<TaskBoardView>(createTaskModalView);
   const parentTasks = useMemo(() => rootTasks(taskBoardTasks), [taskBoardTasks]);
   const assignmentOptions = useMemo(() => taskAssignmentOptions(teams, agents, t), [agents, t, teams]);
   const scheduledAgentOptions = useMemo(() => scheduledTaskAgentOptions(agents), [agents]);
@@ -470,13 +449,12 @@ export function TasksView({
     if (!showCreateTaskModal) {
       return;
     }
-    setActiveCreateView(createTaskModalView);
     setCreateDraft(emptyCreateDraft);
     setCreateFieldErrors({});
-  }, [createTaskModalView, showCreateTaskModal]);
+  }, [showCreateTaskModal]);
 
   useEffect(() => {
-    if (!showCreateTaskModal || activeCreateView !== "scheduled") {
+    if (!showCreateScheduledTaskModal) {
       return;
     }
     const now = new Date();
@@ -486,7 +464,7 @@ export function TasksView({
       time: timeInputValue(now),
     });
     setScheduledFieldErrors({});
-  }, [activeCreateView, showCreateTaskModal]);
+  }, [showCreateScheduledTaskModal]);
 
   useEffect(() => {
     if (!editingScheduledTask) {
@@ -937,135 +915,32 @@ export function TasksView({
         onClose={closeRootTaskDetail}
         onOpenConversation={openTaskConversation}
       />
-      <DialogRoot open={showCreateTaskModal} onOpenChange={(open) => (!open ? onCloseCreateTaskModal?.() : null)}>
-        <DialogContent className={styles.taskCreateDialog}>
-          <DialogHeader>
-            <div>
-              <DialogTitle>
-                {activeCreateView === "scheduled" ? t("scheduledTaskCreateTitle") : t("taskCreateTitle")}
-              </DialogTitle>
-              <DialogDescription>
-                {activeCreateView === "scheduled" ? t("scheduledTaskCreateSubtitle") : t("taskCreateSubtitle")}
-              </DialogDescription>
-            </div>
-            <TaskDialogCloseButton label={t("close")} />
-          </DialogHeader>
-          <DialogBody>
-            <div className={styles.taskCreateTabs} role="tablist" aria-label={t("tasksActionsLabel")}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeCreateView === "tasks"}
-                data-active={activeCreateView === "tasks" ? true : undefined}
-                onClick={() => setActiveCreateView("tasks")}
-              >
-                {t("taskCreate")}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeCreateView === "scheduled"}
-                data-active={activeCreateView === "scheduled" ? true : undefined}
-                onClick={() => setActiveCreateView("scheduled")}
-              >
-                {t("scheduledTaskCreate")}
-              </button>
-            </div>
-            {activeCreateView === "tasks" ? (
-              <div className={classNames(styles.taskCreateForm, styles.taskCreateFormCompact)}>
-                <label
-                  className={classNames("field", styles.taskCreateField)}
-                  data-invalid={createFieldErrors.title ? true : undefined}
-                >
-                  <span>{t("taskTitleLabel")}</span>
-                  <input
-                    value={createDraft.title}
-                    maxLength={TASK_TITLE_MAX_LENGTH}
-                    aria-describedby={createFieldErrors.title ? "task-create-title-error" : undefined}
-                    aria-invalid={createFieldErrors.title ? true : undefined}
-                    onInput={(event) => {
-                      setCreateDraft((current) => ({ ...current, title: event.currentTarget.value }));
-                      clearCreateFieldError("title");
-                    }}
-                    placeholder={t("taskTitlePlaceholder")}
-                  />
-                  {createFieldErrors.title ? (
-                    <span id="task-create-title-error" className="form-error" role="alert">
-                      {createFieldErrors.title}
-                    </span>
-                  ) : null}
-                </label>
-                <label className={classNames("field", styles.taskCreateField)}>
-                  <span>{t("taskDescriptionLabel")}</span>
-                  <textarea
-                    value={createDraft.description}
-                    aria-label={t("taskDescriptionLabel")}
-                    onInput={(event) => {
-                      setCreateDraft((current) => ({ ...current, description: event.currentTarget.value }));
-                    }}
-                    placeholder={t("taskDescriptionPlaceholder")}
-                  />
-                </label>
-                <label
-                  className={classNames("field", styles.taskCreateField)}
-                  data-invalid={createFieldErrors.assignment ? true : undefined}
-                >
-                  <span>{t("taskAssignmentLabel")}</span>
-                  <Select
-                    value={createDraft.assignee}
-                    onValueChange={(assignee) => {
-                      setCreateDraft((current) => ({ ...current, assignee }));
-                      clearCreateFieldError("assignment");
-                    }}
-                    triggerProps={{
-                      "aria-describedby": createFieldErrors.assignment ? "task-create-assignment-error" : undefined,
-                      "aria-invalid": createFieldErrors.assignment ? true : undefined,
-                      "aria-label": t("taskAssignmentLabel"),
-                    }}
-                    options={assignmentOptions}
-                    placeholder={t("taskAssignmentPlaceholder")}
-                  />
-                  {createFieldErrors.assignment ? (
-                    <span id="task-create-assignment-error" className="form-error" role="alert">
-                      {createFieldErrors.assignment}
-                    </span>
-                  ) : null}
-                </label>
-              </div>
-            ) : (
-              <ScheduledTaskFormFields
-                draft={scheduledDraft}
-                errors={scheduledFieldErrors}
-                scheduledAgentOptions={scheduledAgentOptions}
-                t={t}
-                onChange={setScheduledDraft}
-                onClearError={clearScheduledFieldError}
-              />
-            )}
-            {activeCreateView === "tasks" && createTaskError ? (
-              <div className={classNames("form-error", styles.taskCreateError)}>{createTaskError}</div>
-            ) : null}
-            {activeCreateView === "scheduled" && createScheduledTaskError ? (
-              <div className={classNames("form-error", styles.taskCreateError)}>{createScheduledTaskError}</div>
-            ) : null}
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="secondaryGray" size="md" onClick={onCloseCreateTaskModal}>
-              {t("cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              loading={activeCreateView === "scheduled" ? createScheduledTaskBusy : createTaskBusy}
-              loadingLabel={activeCreateView === "scheduled" ? t("scheduledTaskCreating") : t("taskCreating")}
-              disabled={activeCreateView === "scheduled" ? createScheduledTaskBusy : createTaskBusy}
-              onClick={activeCreateView === "scheduled" ? submitCreateScheduledTask : submitCreateTask}
-            >
-              {activeCreateView === "scheduled" ? t("scheduledTaskCreateSubmit") : t("taskCreateSubmit")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </DialogRoot>
+      <TaskCreateDialog
+        assignmentOptions={assignmentOptions}
+        busy={createTaskBusy}
+        draft={createDraft}
+        error={createTaskError}
+        errors={createFieldErrors}
+        open={showCreateTaskModal}
+        t={t}
+        onChange={setCreateDraft}
+        onClearError={clearCreateFieldError}
+        onClose={onCloseCreateTaskModal}
+        onSubmit={submitCreateTask}
+      />
+      <ScheduledTaskCreateDialog
+        busy={createScheduledTaskBusy}
+        draft={scheduledDraft}
+        error={createScheduledTaskError}
+        errors={scheduledFieldErrors}
+        open={showCreateScheduledTaskModal}
+        scheduledAgentOptions={scheduledAgentOptions}
+        t={t}
+        onChange={setScheduledDraft}
+        onClearError={clearScheduledFieldError}
+        onClose={onCloseCreateScheduledTaskModal}
+        onSubmit={submitCreateScheduledTask}
+      />
       <DialogRoot
         open={Boolean(editingScheduledTask)}
         onOpenChange={(open) => (!open ? onCloseEditScheduledTaskModal?.() : null)}
@@ -1147,119 +1022,6 @@ export function TasksView({
         </DialogContent>
       </DialogRoot>
     </section>
-  );
-}
-
-type ScheduledTaskFormFieldsProps = {
-  draft: ScheduledTaskFormDraft;
-  errors: ScheduledTaskFormFieldErrors;
-  onChange: Dispatch<SetStateAction<ScheduledTaskFormDraft>>;
-  onClearError: (field: keyof ScheduledTaskFormFieldErrors) => void;
-  scheduledAgentOptions: ReturnType<typeof scheduledTaskAgentOptions>;
-  t: TranslateFn;
-};
-
-function ScheduledTaskFormFields({
-  draft,
-  errors,
-  scheduledAgentOptions,
-  t,
-  onChange,
-  onClearError,
-}: ScheduledTaskFormFieldsProps) {
-  return (
-    <div className={styles.taskCreateForm}>
-      <label className={classNames("field", styles.taskCreateField)} data-invalid={errors.title ? true : undefined}>
-        <span>{t("taskTitleLabel")}</span>
-        <input
-          value={draft.title}
-          maxLength={TASK_TITLE_MAX_LENGTH}
-          placeholder={t("taskTitlePlaceholder")}
-          onInput={(event) => {
-            onChange((current) => ({ ...current, title: event.currentTarget.value }));
-            onClearError("title");
-          }}
-        />
-        {errors.title ? <span className="form-error">{errors.title}</span> : null}
-      </label>
-      <label className={classNames("field", styles.taskCreateField)} data-invalid={errors.agentID ? true : undefined}>
-        <span>{t("scheduledTaskAgentLabel")}</span>
-        <Select
-          value={draft.agentID}
-          onValueChange={(agentID) => {
-            onChange((current) => ({ ...current, agentID }));
-            onClearError("agentID");
-          }}
-          options={scheduledAgentOptions}
-          placeholder={t("scheduledTaskAgentPlaceholder")}
-          triggerProps={{ "aria-label": t("scheduledTaskAgentLabel") }}
-        />
-        {errors.agentID ? <span className="form-error">{errors.agentID}</span> : null}
-      </label>
-      <label
-        className={classNames("field", styles.taskCreateField, styles.span2)}
-        data-invalid={errors.prompt ? true : undefined}
-      >
-        <span>{t("scheduledTaskPromptLabel")}</span>
-        <textarea
-          value={draft.prompt}
-          placeholder={t("scheduledTaskPromptPlaceholder")}
-          onInput={(event) => {
-            onChange((current) => ({ ...current, prompt: event.currentTarget.value }));
-            onClearError("prompt");
-          }}
-        />
-        {errors.prompt ? <span className="form-error">{errors.prompt}</span> : null}
-      </label>
-      <label className={classNames("field", styles.taskCreateField)}>
-        <span>{t("scheduledTaskRecurrenceLabel")}</span>
-        <Select
-          value={draft.recurrence}
-          onValueChange={(recurrence) =>
-            onChange((current) => ({ ...current, recurrence: recurrence as ScheduledTaskRecurrence }))
-          }
-          options={[
-            { value: "once", label: t("scheduledTaskRecurrenceOnce") },
-            { value: "daily", label: t("scheduledTaskRecurrenceDaily") },
-            { value: "weekly", label: t("scheduledTaskRecurrenceWeekly") },
-            { value: "monthly", label: t("scheduledTaskRecurrenceMonthly") },
-          ]}
-          triggerProps={{ "aria-label": t("scheduledTaskRecurrenceLabel") }}
-        />
-      </label>
-      <label className={classNames("field", styles.taskCreateField)} data-invalid={errors.date ? true : undefined}>
-        <span>{t("scheduledTaskDateLabel")}</span>
-        <input
-          type="date"
-          value={draft.date}
-          onInput={(event) => {
-            onChange((current) => ({ ...current, date: event.currentTarget.value }));
-            onClearError("date");
-          }}
-        />
-        {errors.date ? <span className="form-error">{errors.date}</span> : null}
-      </label>
-      <label className={classNames("field", styles.taskCreateField)} data-invalid={errors.time ? true : undefined}>
-        <span>{t("scheduledTaskTimeLabel")}</span>
-        <input
-          type="time"
-          value={draft.time}
-          onInput={(event) => {
-            onChange((current) => ({ ...current, time: event.currentTarget.value }));
-            onClearError("time");
-          }}
-        />
-        {errors.time ? <span className="form-error">{errors.time}</span> : null}
-      </label>
-      <label className={classNames("field", styles.taskCreateField)}>
-        <span>{t("scheduledTaskExpiresLabel")}</span>
-        <input
-          type="date"
-          value={draft.expiresDate}
-          onInput={(event) => onChange((current) => ({ ...current, expiresDate: event.currentTarget.value }))}
-        />
-      </label>
-    </div>
   );
 }
 
@@ -1700,16 +1462,6 @@ function TaskDetailDialog({
         ) : null}
       </DialogContent>
     </DialogRoot>
-  );
-}
-
-function TaskDialogCloseButton({ label }: { label: string }) {
-  return (
-    <DialogClose asChild>
-      <button type="button" className={styles.taskDialogCloseBtn} aria-label={label} title={label}>
-        <X size={18} strokeWidth={1.75} aria-hidden="true" />
-      </button>
-    </DialogClose>
   );
 }
 

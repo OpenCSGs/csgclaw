@@ -494,18 +494,27 @@ describe("TasksView", () => {
     expect(screen.queryByRole("button", { name: "New task" })).not.toBeInTheDocument();
   });
 
-  it("shows task and scheduled-task creation as tabs in the create dialog", () => {
+  it("shows only the task form in the task create dialog", () => {
     render(<TasksView showCreateTaskModal agents={[agent()]} teams={[team()]} t={t} />);
 
     expect(screen.getByRole("dialog", { name: "New task" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "New task" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "New scheduled task" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "New scheduled task" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Title")).toBeInTheDocument();
+    expect(screen.getByLabelText("Description")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Assign to" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Prompt")).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole("tab", { name: "New scheduled task" }));
+  it("shows only the scheduled-task form in the scheduled create dialog", () => {
+    render(<TasksView showCreateScheduledTaskModal agents={[agent()]} teams={[team()]} t={t} />);
 
     expect(screen.getByRole("dialog", { name: "New scheduled task" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "New task" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Schedule" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Description")).not.toBeInTheDocument();
   });
 
   it("does not show planner as the current worker after a parent task is completed", () => {
@@ -822,7 +831,9 @@ describe("TasksView", () => {
     );
 
     expect(
-      screen.getByText("The assigned agent was deleted or no longer exists. Choose another agent before running again."),
+      screen.getByText(
+        "The assigned agent was deleted or no longer exists. Choose another agent before running again.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText('agent "agent-uh4x2l" not found')).not.toBeInTheDocument();
   });

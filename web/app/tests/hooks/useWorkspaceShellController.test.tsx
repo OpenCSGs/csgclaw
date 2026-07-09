@@ -134,14 +134,12 @@ describe("useWorkspaceShellController", () => {
     });
   });
 
-  it("expands the sidebar before selecting a workspace tab", async () => {
+  it("keeps the sidebar collapse state when selecting a workspace tab", async () => {
     render(<ShellHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "Messages" }));
 
-    await waitFor(() => {
-      expect(setIsSidebarCollapsed).toHaveBeenCalledWith(false);
-    });
+    expect(setIsSidebarCollapsed).not.toHaveBeenCalled();
   });
 
   it("marks the hub badge as seen after selecting the hub tab", async () => {
