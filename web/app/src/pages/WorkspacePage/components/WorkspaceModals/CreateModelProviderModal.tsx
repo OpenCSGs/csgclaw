@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ModelProviderCheckResult, ModelProviderPayload } from "@/api/modelProviders";
 import { ModelProviderModelList } from "@/components/business/ProfileControls";
-import { Button } from "@/components/ui";
+import { Button, Select } from "@/components/ui";
 import {
   MODEL_PROVIDER_PRESETS,
   modelProviderPresetMeta,
@@ -235,12 +235,17 @@ export function CreateModelProviderModal({
             <div className="create-model-provider-section-form">
               <label className="field">
                 {requiredLabel(t("modelProviderPreset"))}
-                <select value={preset} onChange={(event) => handlePresetChange(event.currentTarget.value)}>
-                  <option value="openai">{t("modelProviderPresetOpenAI")}</option>
-                  <option value="zhipu">{t("modelProviderPresetZhipu")}</option>
-                  <option value="deepseek">{t("modelProviderPresetDeepSeek")}</option>
-                  <option value="custom">{t("modelProviderPresetCustom")}</option>
-                </select>
+                <Select
+                  value={preset}
+                  onValueChange={handlePresetChange}
+                  triggerProps={{ "aria-label": t("modelProviderPreset"), "aria-required": true }}
+                  options={[
+                    { value: "openai", label: t("modelProviderPresetOpenAI") },
+                    { value: "zhipu", label: t("modelProviderPresetZhipu") },
+                    { value: "deepseek", label: t("modelProviderPresetDeepSeek") },
+                    { value: "custom", label: t("modelProviderPresetCustom") },
+                  ]}
+                />
               </label>
             </div>
           </section>

@@ -260,6 +260,11 @@
   font-size: 14px;
 }
 
+.create-model-provider-modal .field .csg-select-trigger {
+  min-height: 44px;
+  font-size: 14px;
+}
+
 .create-model-provider-modal .field .model-provider-model-search input {
   min-height: 38px;
   padding: 0;
