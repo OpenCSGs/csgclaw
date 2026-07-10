@@ -32,6 +32,8 @@ const (
 	workspaceDirName       = "workspace"
 	homeDirName            = "home"
 	logPollInterval        = 200 * time.Millisecond
+	runtimeDirRemoveDelay  = 100 * time.Millisecond
+	runtimeDirRemoveTries  = 6
 	codexProxyProviderName = "proxy"
 	codexModelProviderName = "codex"
 )
@@ -304,7 +306,7 @@ func (r *Runtime) Delete(ctx context.Context, h agentruntime.Handle) error {
 	if err != nil {
 		return err
 	}
-	if err := r.removeAll(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := r.removeRuntimeDir(ctx, dir); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
@@ -1073,6 +1075,34 @@ func (r *Runtime) removeAll(path string) error {
 		return r.deps.RemoveAll(path)
 	}
 	return os.RemoveAll(path)
+}
+
+func (r *Runtime) removeRuntimeDir(ctx context.Context, path string) error {
+	var err error
+	for attempt := 0; attempt < runtimeDirRemoveTries; attempt++ {
+		err = r.removeAll(path)
+		if err == nil || errors.Is(err, os.ErrNotExist) || !isTransientRuntimeDirRemoveError(err) {
+			return err
+		}
+		if attempt == runtimeDirRemoveTries-1 {
+			break
+		}
+		timer := time.NewTimer(runtimeDirRemoveDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return err
+}
+
+func isTransientRuntimeDirRemoveError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "being used by another process") ||
+		strings.Contains(msg, "the process cannot access the file") ||
+		strings.Contains(msg, "access is denied")
 }
 
 func (r *Runtime) openFile(path string, flag int, mode os.FileMode) (*os.File, error) {

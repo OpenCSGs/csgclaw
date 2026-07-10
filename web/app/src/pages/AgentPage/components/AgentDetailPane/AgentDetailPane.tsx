@@ -448,7 +448,7 @@ export function AgentDetailPane({
             >
               {t("openDM")}
             </Button>
-            {onUpgrade ? (
+            {onUpgrade && upgradeNeeded ? (
               <Button
                 variant="primary"
                 size="md"

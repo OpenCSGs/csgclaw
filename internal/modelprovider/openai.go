@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -65,22 +64,7 @@ func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseUR
 		client = &http.Client{Timeout: 2 * time.Second}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, openAIModelsURL(baseURL), nil)
-	if err != nil {
-		return nil, fmt.Errorf("build models request: %w", err)
-	}
-	if apiKey = strings.TrimSpace(apiKey); apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
-	for key, value := range headers {
-		key = strings.TrimSpace(key)
-		if key == "" || strings.EqualFold(key, "authorization") || strings.EqualFold(key, "content-type") {
-			continue
-		}
-		req.Header.Set(key, value)
-	}
-
-	resp, err := client.Do(req)
+	resp, err := requestOpenAIModels(ctx, client, baseURL+"/models", apiKey, headers)
 	if err != nil {
 		return nil, fmt.Errorf("request models from %s: %w", baseURL, err)
 	}
@@ -113,21 +97,22 @@ func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseUR
 	return models, nil
 }
 
-func openAIModelsURL(baseURL string) string {
-	modelsURL := baseURL + "/models"
-	if !strings.Contains(strings.ToLower(modelsURL), "opencsg") {
-		return modelsURL
-	}
-	// Temporary OpenCSG AIGateway pagination workaround. Remove this after
-	// OpenCSG AIGateway returns the full model list without pagination.
-	parsed, err := url.Parse(modelsURL)
+func requestOpenAIModels(ctx context.Context, client *http.Client, modelsURL, apiKey string, headers map[string]string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
 	if err != nil {
-		return modelsURL
+		return nil, fmt.Errorf("build models request: %w", err)
 	}
-	query := parsed.Query()
-	query.Set("per", "100")
-	parsed.RawQuery = query.Encode()
-	return parsed.String()
+	if apiKey = strings.TrimSpace(apiKey); apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	for key, value := range headers {
+		key = strings.TrimSpace(key)
+		if key == "" || strings.EqualFold(key, "authorization") || strings.EqualFold(key, "content-type") {
+			continue
+		}
+		req.Header.Set(key, value)
+	}
+	return client.Do(req)
 }
 
 func CheckResponsesAPI(ctx context.Context, baseURL, apiKey, modelID string, headers map[string]string) error {

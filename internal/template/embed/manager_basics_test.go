@@ -59,6 +59,25 @@ func TestManagerInstructionsPreferAgentTasksForSingleWorkerDispatch(t *testing.T
 	}
 }
 
+func TestManagerAgentTeamsUsesUTF8SafeTaskCreation(t *testing.T) {
+	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, WorkspaceDirName, "skills/agent-teams/SKILL.md"))
+	if err != nil {
+		t.Fatalf("read codex manager agent-teams skill: %v", err)
+	}
+	skill := string(data)
+
+	for _, want := range []string{
+		`--title "<task_title>" --body "<goal/context>"`,
+		"prefer `--title` and `--body` instead of writing `tasks.json`",
+		"UTF-8",
+		"Do not use `echo ... > tasks.json`",
+	} {
+		if !strings.Contains(skill, want) {
+			t.Fatalf("agent-teams skill missing UTF-8-safe task creation guidance %q", want)
+		}
+	}
+}
+
 func TestWorkerInstructionsMentionDirectAgentTaskCLI(t *testing.T) {
 	tests := []struct {
 		name string

@@ -104,7 +104,7 @@ describe("agent action visibility", () => {
 
     expect(screen.getByText("Recreate required")).toBeInTheDocument();
     expect(screen.getByText("Complete")).toHaveClass("ready");
-    expect(screen.getByRole("button", { name: "Upgrade", hidden: true })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Upgrade", hidden: true })).not.toBeInTheDocument();
   });
 
   it("shows an upgrade warning when only the agent image is outdated", () => {
@@ -128,12 +128,12 @@ describe("agent action visibility", () => {
     expect(screen.queryByText("Recreate required")).not.toBeInTheDocument();
   });
 
-  it("shows upgrade and recreate for worker rows even when lifecycle actions are hidden", async () => {
+  it("shows upgrade and recreate for outdated worker rows even when lifecycle actions are hidden", async () => {
     const user = userEvent.setup();
     const onUpgrade = vi.fn();
     render(
       <AgentRow
-        item={worker}
+        item={{ ...worker, image_upgrade_required: true }}
         t={t}
         activeRoom={null}
         busyKey=""
@@ -153,12 +153,12 @@ describe("agent action visibility", () => {
     expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
   });
 
-  it("shows upgrade and recreate for worker detail panes even when lifecycle actions are hidden", async () => {
+  it("shows upgrade and recreate for outdated worker detail panes even when lifecycle actions are hidden", async () => {
     const user = userEvent.setup();
     const onUpgrade = vi.fn();
     render(
       <AgentDetailPane
-        item={worker}
+        item={{ ...worker, image_upgrade_required: true }}
         t={t}
         activeRoom={null}
         busyKey=""
@@ -525,7 +525,7 @@ describe("agent action visibility", () => {
     expect(screen.getByRole("button", { name: "Open Feishu" })).toBeInTheDocument();
   });
 
-  it("keeps upgrade action visible in worker detail panes when backend marks an agent restart required", () => {
+  it("hides upgrade action in worker detail panes when only recreate is required", () => {
     render(
       <AgentDetailPane
         item={{ ...worker, env_restart_required: true }}
@@ -556,7 +556,7 @@ describe("agent action visibility", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Upgrade" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Upgrade" })).not.toBeInTheDocument();
     expect(screen.getByText("Recreate required")).toBeInTheDocument();
   });
 
@@ -627,7 +627,43 @@ describe("agent action visibility", () => {
     );
 
     expect(screen.getByText("Upgrade required")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upgrade" })).toBeInTheDocument();
     expect(screen.queryByText("Recreate required")).not.toBeInTheDocument();
+  });
+
+  it("hides upgrade controls for codex agents without images", () => {
+    render(
+      <AgentDetailPane
+        item={{ ...worker, runtime_kind: "codex", image_upgrade_required: true }}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={null}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onUpgrade={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Upgrade required")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Upgrade" })).not.toBeInTheDocument();
   });
 
   it("trusts complete notifier profile state when gating recreate in detail panes", async () => {

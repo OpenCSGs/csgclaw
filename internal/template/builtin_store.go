@@ -78,7 +78,7 @@ func (s *BuiltinStore) FetchWorkspace(_ context.Context, id string) (WorkspaceRe
 		return WorkspaceRef{}, nil
 	}
 	root := s.workspacePath(id)
-	tmpDir, err := os.MkdirTemp("", "csgclaw-hub-builtin-*")
+	tmpDir, err := mkdirHubWorkspaceTemp("csgclaw-hub-builtin-*")
 	if err != nil {
 		return WorkspaceRef{}, fmt.Errorf("create builtin hub workspace temp dir: %w", err)
 	}

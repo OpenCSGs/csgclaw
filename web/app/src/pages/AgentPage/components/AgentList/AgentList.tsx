@@ -184,7 +184,7 @@ export function AgentRow({
         ) : null}
         {!isNotification ? (
           <>
-            {onUpgrade ? (
+            {onUpgrade && upgradeNeeded ? (
               <Button
                 className="agent-action-text"
                 disabled={busyKey.startsWith(busyPrefix) || incomplete}

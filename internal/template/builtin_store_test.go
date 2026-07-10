@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/config"
@@ -87,6 +89,27 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Fatal("FetchWorkspace() copied empty AGENT.md")
+	}
+}
+
+func TestMkdirHubWorkspaceTempFallsBackToSlashTmpWhenEnvTempRootIsMissing(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("slash-tmp fallback is only meaningful on Unix-like hosts")
+	}
+
+	missingRoot := filepath.Join(t.TempDir(), "missing")
+	t.Setenv("TMPDIR", missingRoot)
+	t.Setenv("TMP", "")
+	t.Setenv("TEMP", "")
+
+	dir, err := mkdirHubWorkspaceTemp("csgclaw-hub-test-*")
+	if err != nil {
+		t.Fatalf("mkdirHubWorkspaceTemp() error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	if got, wantPrefix := filepath.Clean(dir), filepath.Clean(fallbackTempRoot)+string(os.PathSeparator); !strings.HasPrefix(got, wantPrefix) {
+		t.Fatalf("mkdirHubWorkspaceTemp() = %q, want under %q", dir, fallbackTempRoot)
 	}
 }
 

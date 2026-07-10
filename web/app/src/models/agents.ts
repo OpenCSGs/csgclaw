@@ -1779,6 +1779,9 @@ export function agentRuntimePollSettled(item: AgentLike | null | undefined): boo
 }
 
 export function isAgentUpgradeNeeded(item: AgentLike | null | undefined): boolean {
+  if (agentRuntimeKind(item) === "codex") {
+    return false;
+  }
   const profile = agentProfileConfig(item);
   return Boolean(item?.image_upgrade_required || profile?.image_upgrade_required);
 }

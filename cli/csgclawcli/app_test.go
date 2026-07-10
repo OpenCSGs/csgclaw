@@ -255,6 +255,65 @@ func TestExecuteTeamTaskListUsesHTTPClient(t *testing.T) {
 	}
 }
 
+func TestExecuteTeamTaskCreateBatchFromTitlePreservesUnicode(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodPost {
+				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
+			}
+			if req.URL.String() != "http://example.test/api/v1/teams/team-1/tasks/batch" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/teams/team-1/tasks/batch")
+			}
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode request body: %v", err)
+			}
+			tasks, ok := payload["tasks"].([]any)
+			if !ok || len(tasks) != 1 {
+				t.Fatalf("tasks = %v, want one task; payload=%v", payload["tasks"], payload)
+			}
+			task, ok := tasks[0].(map[string]any)
+			if !ok {
+				t.Fatalf("task = %v, want object", tasks[0])
+			}
+			for key, want := range map[string]string{
+				"created_by":        "manager",
+				"execution_channel": "csgclaw",
+			} {
+				if payload[key] != want {
+					t.Fatalf("%s = %v, want %q; payload=%v", key, payload[key], want, payload)
+				}
+			}
+			for key, want := range map[string]string{
+				"title": "开发坦克小游戏",
+				"body":  "由 QA 验证",
+			} {
+				if task[key] != want {
+					t.Fatalf("%s = %v, want %q; task=%v", key, task[key], want, task)
+				}
+				if strings.Contains(fmt.Sprint(task[key]), "?") {
+					t.Fatalf("%s was corrupted: %v", key, task[key])
+				}
+			}
+			return jsonResponse(http.StatusCreated, `{"tasks":[{"id":"task-1","team_id":"team-1","title":"开发坦克小游戏","body":"由 QA 验证","status":"pending","created_by":"manager","created_at":"2026-05-30T00:00:00Z","updated_at":"2026-05-30T00:00:00Z"}]}`), nil
+		}),
+	}
+
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "team", "task", "create-batch", "--team", "team-1", "--created-by", "manager", "--execution-channel", "csgclaw", "--title", "开发坦克小游戏", "--body", "由 QA 验证"}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "开发坦克小游戏") {
+		t.Fatalf("stdout = %q, want rendered unicode title", stdout.String())
+	}
+}
+
 func TestExecuteTaskListUsesGlobalTasksRoute(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{

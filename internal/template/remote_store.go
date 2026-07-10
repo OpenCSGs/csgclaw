@@ -209,7 +209,7 @@ func (s *RemoteStore) FetchWorkspace(ctx context.Context, id string) (WorkspaceR
 		return WorkspaceRef{}, err
 	}
 
-	tmpDir, err := os.MkdirTemp("", "csgclaw-hub-remote-*")
+	tmpDir, err := mkdirHubWorkspaceTemp("csgclaw-hub-remote-*")
 	if err != nil {
 		return WorkspaceRef{}, fmt.Errorf("create remote hub workspace temp dir: %w", err)
 	}

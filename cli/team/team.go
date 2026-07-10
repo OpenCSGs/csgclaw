@@ -56,7 +56,7 @@ func (c cmd) usage(run *command.Context) {
 		"list                        List teams",
 		"create                      Create a reusable agent team",
 		"task list                   List tasks for a team",
-		"task create-batch           Create tasks from a JSON file",
+		"task create-batch           Create tasks from JSON or direct flags",
 		"task plan                   Plan child tasks for a parent task",
 		"task start                  Start a parent task and dispatch ready subtasks",
 		"task claim-next             Claim the next available task",
@@ -112,7 +112,7 @@ func (c cmd) runTask(ctx context.Context, run *command.Context, args []string, g
 	if len(args) == 0 || command.IsHelpArg(args[0]) {
 		run.UsageCommandGroup(subcommandGroup("team task", "Manage team tasks."), run.Program+" team task <subcommand> [flags]", []string{
 			"list                        List tasks for a team",
-			"create-batch                Create tasks from a JSON file",
+			"create-batch                Create tasks from JSON or direct flags",
 			"plan                        Plan child tasks for a parent task",
 			"start                       Start a parent task and dispatch ready subtasks",
 			"assign                      Reassign a task to a worker",
@@ -164,11 +164,14 @@ func (c cmd) runTaskList(ctx context.Context, run *command.Context, args []strin
 }
 
 func (c cmd) runTaskCreateBatch(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("team task create-batch", run.Program+" team task create-batch --team <id> --created-by <participant> --file <tasks.json>", "Create a batch of tasks from a JSON file.")
+	fs := run.NewFlagSet("team task create-batch", run.Program+" team task create-batch --team <id> --created-by <participant> (--file <tasks.json> | --title <title>)", "Create tasks from a JSON file or direct single-task flags.")
 	teamID := fs.String("team", "", "team id")
 	createdBy := fs.String("created-by", "", "creator participant id")
 	executionChannel := fs.String("execution-channel", teampkg.DefaultExecutionChannel, "execution channel: csgclaw or feishu")
 	filePath := fs.String("file", "", "path to tasks JSON file")
+	idRef := fs.String("id-ref", "", "single task id_ref")
+	title := fs.String("title", "", "single task title")
+	body := fs.String("body", "", "single task body")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -181,16 +184,27 @@ func (c cmd) runTaskCreateBatch(ctx context.Context, run *command.Context, args 
 	if *createdBy == "" {
 		return fmt.Errorf("created_by is required")
 	}
-	if *filePath == "" {
-		return fmt.Errorf("file is required")
-	}
-	data, err := os.ReadFile(*filePath)
-	if err != nil {
-		return err
-	}
 	var req apitypes.CreateTeamTasksBatchRequest
-	if err := json.Unmarshal(data, &req); err != nil {
-		return fmt.Errorf("decode batch file: %w", err)
+	if *filePath != "" {
+		if *idRef != "" || *title != "" || *body != "" {
+			return fmt.Errorf("file cannot be combined with id-ref, title, or body")
+		}
+		data, err := os.ReadFile(*filePath)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(data, &req); err != nil {
+			return fmt.Errorf("decode batch file: %w", err)
+		}
+	} else {
+		if *title == "" {
+			return fmt.Errorf("file or title is required")
+		}
+		req.Tasks = []apitypes.CreateTeamBatchTaskRequest{{
+			IDRef: *idRef,
+			Title: *title,
+			Body:  *body,
+		}}
 	}
 	req.CreatedBy = *createdBy
 	req.ExecutionChannel = *executionChannel

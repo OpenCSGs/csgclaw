@@ -12,6 +12,37 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 )
 
+const fallbackTempRoot = "/tmp"
+
+func mkdirHubWorkspaceTemp(pattern string) (string, error) {
+	dir, err := os.MkdirTemp("", pattern)
+	if err == nil {
+		return dir, nil
+	}
+
+	tempRoot := os.TempDir()
+	if !tempRootMissing(tempRoot) || filepath.Clean(tempRoot) == filepath.Clean(fallbackTempRoot) {
+		return "", err
+	}
+	fallbackInfo, statErr := os.Stat(fallbackTempRoot)
+	if statErr != nil || !fallbackInfo.IsDir() {
+		return "", err
+	}
+	dir, fallbackErr := os.MkdirTemp(fallbackTempRoot, pattern)
+	if fallbackErr != nil {
+		return "", fmt.Errorf("%w; fallback temp dir %q failed: %v", err, fallbackTempRoot, fallbackErr)
+	}
+	return dir, nil
+}
+
+func tempRootMissing(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return os.IsNotExist(err)
+}
+
 func copyWorkspaceTree(srcRoot, dstRoot string) error {
 	srcRoot = strings.TrimSpace(srcRoot)
 	if srcRoot == "" {

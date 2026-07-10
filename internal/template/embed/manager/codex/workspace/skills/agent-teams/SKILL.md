@@ -17,7 +17,7 @@ For executable multi-worker work:
 2. Resolve the current channel context. Use `csgclaw` by default; use `feishu` when the user request came from Feishu.
 3. Ensure selected workers have participant bindings in that execution channel. If a required worker is missing or unavailable, use `agent-creator` first, then return here after provisioning finishes.
 4. Ensure a team member pool exists (`team create` or reuse an existing `team_id`).
-5. Create one main task (`team task create-batch --execution-channel <channel>`) for the user-visible goal. This creates the execution room for the main task.
+5. Create one main task (`team task create-batch --execution-channel <channel> --title ... --body ...`) for the user-visible goal. This creates the execution room for the main task.
 6. Plan and start it with `team task plan --start`; this uses the server planner, creates child tasks, creates dependencies, and dispatches ready child tasks.
 7. Use `team task start` only when the parent already has subtasks but is not started yet. When `create-batch` creates a parent and runnable subtasks in the same batch, the server auto-starts the parent and projects dispatches.
 8. Verify dispatch through `team task list` or recent room messages when reporting success.
@@ -48,6 +48,12 @@ Create one or more tasks:
 
 ```bash
 csgclaw-cli team task create-batch --team <team_id> --created-by <manager_participant_id> --execution-channel <csgclaw|feishu> --file <tasks.json>
+```
+
+Create the default single main task:
+
+```bash
+csgclaw-cli team task create-batch --team <team_id> --created-by <manager_participant_id> --execution-channel <csgclaw|feishu> --title "<task_title>" --body "<goal/context>"
 ```
 
 Start an existing parent task after subtasks are attached:
@@ -114,7 +120,9 @@ csgclaw-cli team approval resolve --team <team_id> --approval <approval_id> --st
 - For any team task that creates, inspects, or updates a project, use `./projects/{name}` under the active Codex workspace as the shared project directory. Check there first before creating a new project path.
 - Keep project artifacts, notes, and generated files under the same `./projects/{name}` tree so managers and workers can inspect the same content.
 - Default to one top-level main task for each user-visible goal, then add execution items as child tasks.
+- For the default single main task, prefer `--title` and `--body` instead of writing `tasks.json`. On Windows this avoids shell codepage corruption of non-ASCII task names.
 - In the same batch, prefer `id_ref` + `parent_ref` to build the hierarchy clearly.
+- When a JSON batch is needed for multiple tasks or dependencies, write it as UTF-8 with a UTF-8-aware tool. Do not use `echo ... > tasks.json`, `cmd` redirection, or shell text redirection that may use the Windows active code page.
 - Add `depends_on_refs` when testing, QA, review, validation, or release checks must wait for implementation work.
 - Use task dependencies for sequential handoff; do not write or ask workers to update tracker files.
 - Use `parent_id` only when attaching a child task to an already-existing main task.

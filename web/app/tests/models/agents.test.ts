@@ -50,6 +50,7 @@ import {
   runtimeOptionSchemasForAgent,
   localizedRuntimeOptionLabel,
   localizedRuntimeOptionDescription,
+  isAgentUpgradeNeeded,
   shouldWaitForManagerRuntimeAfterProfileSave,
   workerSelectableTemplates,
 } from "@/models/agents";
@@ -182,6 +183,26 @@ describe("agent model helpers", () => {
       },
       { id: "u-alice", image: "registry.example/worker:2026.06.03" },
     ]);
+  });
+
+  it("does not mark codex agents as upgradeable even when an image flag is present", () => {
+    expect(
+      isAgentUpgradeNeeded({
+        id: "worker-codex",
+        runtime_kind: "codex",
+        image_upgrade_required: true,
+        agent_profile: {
+          image_upgrade_required: true,
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isAgentUpgradeNeeded({
+        id: "worker-picoclaw",
+        runtime_kind: "picoclaw_sandbox",
+        image_upgrade_required: true,
+      }),
+    ).toBe(true);
   });
 
   it("syncs readonly runtime fields from a fresh action response into the agent page draft", () => {

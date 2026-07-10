@@ -17,7 +17,7 @@ func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return fn(req)
 }
 
-func TestListOpenAIModelsWithClientAddsPageSizeForOpenCSG(t *testing.T) {
+func TestListOpenAIModelsWithClientDoesNotAddPageSizeForOpenCSG(t *testing.T) {
 	var gotURL string
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		gotURL = req.URL.String()
@@ -37,7 +37,7 @@ func TestListOpenAIModelsWithClientAddsPageSizeForOpenCSG(t *testing.T) {
 	if got, want := strings.Join(models, ","), "Qwen/Qwen3"; got != want {
 		t.Fatalf("models = %v, want %s", models, want)
 	}
-	if got, want := gotURL, "https://aigateway.opencsg.com/v1/models?per=100"; got != want {
+	if got, want := gotURL, "https://aigateway.opencsg.com/v1/models"; got != want {
 		t.Fatalf("request URL = %q, want %q", got, want)
 	}
 }
