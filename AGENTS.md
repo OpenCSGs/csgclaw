@@ -55,8 +55,8 @@ make release
 
 - Use Conventional Commits for commit messages and PR titles.
 - Codex-generated commit messages must use the `.github/workflows/pr-message.yml` title format: `<type>[optional scope][optional !]: <description>` with an allowed lower-case type such as `feat`, `fix`, `docs`, `test`, `ci`, or `chore`.
-- Keep PR bodies compatible with `.github/workflows/pr-message.yml`: use concise GitHub Markdown, and do not include `Co-authored-by:` trailers or unresolved conflict markers.
-- Keep PR bodies short and focused on summary, validation, impact, related issues, and notes.
+- Keep PR bodies compatible with `.github/workflows/pr-message.yml`: use concise GitHub Markdown with a single `## Summary` section followed by `- ` bullets only, and do not include validation logs, environment dumps, `Co-authored-by:` trailers, or unresolved conflict markers.
+- Prefer the repo pull request template and keep the body limited to the user-facing change summary that should appear in the squash-merge description.
 - Check PR CI before requesting review or merge.
 
 ## Verification

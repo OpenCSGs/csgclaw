@@ -74,6 +74,34 @@ jobs:
               return;
             }
 
+            if (!body) {
+              core.setFailed(
+                [
+                  "Invalid PR body.",
+                  "",
+                  "Expected PR body format:",
+                  "  ## Summary",
+                  "  - concise user-facing change",
+                  "  - concise user-facing change",
+                ].join("\n")
+              );
+              return;
+            }
+
+            if (/^## Validation\b/im.test(body)) {
+              core.setFailed(
+                'Invalid PR body: do not include a "## Validation" section.'
+              );
+              return;
+            }
+
+            if (/^PATH=/m.test(body)) {
+              core.setFailed(
+                "Invalid PR body: do not include environment variable dumps."
+              );
+              return;
+            }
+
             const conflictMarkerRe =
               /^<{7}(?: .*)?$[\s\S]*^={7}$[\s\S]*^>{7}(?: .*)?$/m;
 
@@ -84,6 +112,25 @@ jobs:
                   "",
                   "The body appears to contain unresolved merge conflict markers.",
                   "Please resolve the conflict markers before opening or updating the PR.",
+                ].join("\n")
+              );
+              return;
+            }
+
+            const summaryOnlyRe = /^## Summary\n(?:- \S.*(?:\n|$))+$/;
+
+            if (!summaryOnlyRe.test(body)) {
+              core.setFailed(
+                [
+                  "Invalid PR body.",
+                  "",
+                  "Expected PR body format:",
+                  "  ## Summary",
+                  "  - concise user-facing change",
+                  "  - concise user-facing change",
+                  "",
+                  "Do not include extra sections such as Validation, Impact, Notes,",
+                  "environment dumps, or trailers.",
                 ].join("\n")
               );
               return;
