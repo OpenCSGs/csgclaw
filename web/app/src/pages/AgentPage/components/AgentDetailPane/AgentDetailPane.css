@@ -745,6 +745,36 @@
   background: color-mix(in srgb, var(--panel-strong) 84%, black);
 }
 
+:root[data-theme="dark"] .agent-activity-timeline-segment.message {
+  background: color-mix(in oklab, var(--success-500) 30%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.message.selected {
+  background: color-mix(in oklab, var(--success-400) 54%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.exec_command {
+  background: color-mix(in oklab, var(--brand-500) 34%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.exec_command.selected {
+  background: color-mix(in oklab, var(--brand-400) 58%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.other {
+  background: color-mix(in oklab, var(--gray-400) 26%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.other.selected {
+  background: color-mix(in oklab, var(--gray-300) 44%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-type-badge.message {
+  background: color-mix(in oklab, var(--success-600) 34%, var(--panel-soft));
+  color: color-mix(in oklab, var(--success-100) 88%, var(--text));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--success-400) 22%, transparent);
+}
+
 :root[data-theme="dark"] .agent-activity-type-badge.exec_command {
   background: color-mix(in oklab, var(--brand-600) 28%, transparent);
   color: color-mix(in oklab, var(--brand-300) 92%, var(--text));
@@ -753,6 +783,20 @@
 :root[data-theme="dark"] .agent-activity-type-badge.other {
   background: color-mix(in srgb, var(--gray-300) 16%, transparent);
   color: color-mix(in oklab, var(--muted) 70%, var(--text));
+}
+
+:root[data-theme="dark"] .agent-activity-row-summary {
+  color: color-mix(in oklab, var(--text) 78%, var(--muted));
+}
+
+:root[data-theme="dark"] .agent-activity-row-chevron {
+  color: color-mix(in oklab, var(--muted) 82%, var(--text));
+}
+
+:root[data-theme="dark"] .agent-activity-row-room,
+:root[data-theme="dark"] .agent-activity-row-seq,
+:root[data-theme="dark"] .agent-activity-row-time {
+  color: color-mix(in oklab, var(--muted) 82%, var(--text));
 }
 
 :root[data-theme="dark"] .agent-activity-tool-section + .agent-activity-tool-section {

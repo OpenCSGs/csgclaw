@@ -120,6 +120,7 @@ function renderThreadPane({
   showToolCalls = false,
   mentionCandidates = [],
   mentionIndex = 0,
+  visibleMessages,
   memberActionBusyID = "",
   memberActionError = "",
   onClearMemberActionError = vi.fn(),
@@ -132,6 +133,7 @@ function renderThreadPane({
   conversationMembers?: IMUser[];
   isDirect?: boolean;
   messages?: IMConversation["messages"];
+  visibleMessages?: IMConversation["messages"];
   mentionCandidates?: IMUser[];
   mentionIndex?: number;
   onClearRoomMessages?: (id: string) => void;
@@ -242,7 +244,7 @@ function renderThreadPane({
         threadLoading={false}
         onThreadDraftChange={setThreadDraftSegments}
         usersById={usersByIdOverride}
-        visibleMessages={timelineMessages}
+        visibleMessages={visibleMessages ?? timelineMessages}
       />
     );
   }
@@ -251,6 +253,27 @@ function renderThreadPane({
 }
 
 describe("ConversationPane", () => {
+  it("shows visible and total message counts when some messages are filtered", () => {
+    const messages = [
+      {
+        content: "visible answer",
+        created_at: "2026-05-25T08:13:00Z",
+        id: "msg-visible",
+        sender_id: "u-manager",
+      },
+      {
+        content: toolActivityContent("hidden command"),
+        created_at: "2026-05-25T08:14:00Z",
+        id: "msg-hidden-tool",
+        sender_id: "u-manager",
+      },
+    ];
+
+    renderThreadPane({ messages, visibleMessages: [messages[0]] });
+
+    expect(screen.getByText("1/2")).toBeInTheDocument();
+  });
+
   it("previews human message avatars on hover without opening details on click", async () => {
     const user = userEvent.setup();
     const onCancelProfilePreviewClose = vi.fn();

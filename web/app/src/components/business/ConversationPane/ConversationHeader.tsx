@@ -29,6 +29,7 @@ export type ConversationHeaderProps = {
   onToggleMemberList?: BooleanStateSetter;
   onToggleToolCalls: BooleanStateSetter;
   selectedMessageCount: number;
+  selectedVisibleMessageCount?: number;
   showChannelTools: boolean;
   showInviteAction: boolean;
   showMemberList?: boolean;
@@ -48,6 +49,7 @@ export const ConversationHeader = memo(function ConversationHeader({
   logModalOpen,
   memberMenuRef,
   selectedMessageCount,
+  selectedVisibleMessageCount,
   showChannelTools,
   showInviteAction,
   showMemberList = false,
@@ -63,6 +65,10 @@ export const ConversationHeader = memo(function ConversationHeader({
   onToggleMemberList,
   onToggleToolCalls,
 }: ConversationHeaderProps) {
+  const visibleCount = selectedVisibleMessageCount ?? selectedMessageCount;
+  const messageCountLabel =
+    visibleCount === selectedMessageCount ? String(selectedMessageCount) : `${visibleCount}/${selectedMessageCount}`;
+
   return (
     <header className="chat-header">
       <div className="chat-header-main">
@@ -71,7 +77,7 @@ export const ConversationHeader = memo(function ConversationHeader({
             <div className="chat-title-group">
               <div className="chat-kicker">
                 <span>{isDirectConversation(conversation) ? t("directMessagesSection") : t("conversationLabel")}</span>
-                <strong>{selectedMessageCount}</strong>
+                <strong title={messageCountLabel}>{messageCountLabel}</strong>
               </div>
               <div className="chat-title truncate">{conversation.title}</div>
               {showMemberListAction ? (

@@ -215,6 +215,7 @@ export function ConversationPane({
         logAgent={logAgent}
         logModalOpen={logModalOpen}
         selectedMessageCount={selectedMessageCount}
+        selectedVisibleMessageCount={visibleMessages.length}
         showChannelTools={showChannelTools}
         showInviteAction={true}
         showMemberListAction={false}

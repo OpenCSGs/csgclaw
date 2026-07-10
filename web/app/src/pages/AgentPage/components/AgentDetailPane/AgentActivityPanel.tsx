@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownNarrowWide, ArrowUpNarrowWide, ChevronRight, Clock, Filter, RefreshCw } from "lucide-react";
 import { fetchMessagesRequest } from "@/api/im";
 import { errorMessage } from "@/api/client";
@@ -13,17 +13,19 @@ import {
   type TranslateFn,
 } from "@/models/conversations";
 import {
-  agentActivityToolMergeKey,
+  agentActivityMessageToolMergeKey,
+  agentActivityToolMergeKeys,
   type AgentActivityCommand,
   type AgentActivityKind,
-  isTerminalAgentActivityTool,
   parseAgentActivity,
   parseMessageActivityCommand,
+  parsePlainAgentCommand,
   statusLabel,
   type AgentActivityPayload,
   type AgentActivityTool,
 } from "@/models/agentActivity";
 import { AgentActivityKinds, AgentActivityMsgTypes } from "@/shared/constants/messages";
+import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import {
   Button,
   DropdownMenuCheckboxItem,
@@ -42,12 +44,12 @@ type AgentActivityPanelProps = {
   t: TranslateFn;
 };
 
-type AgentActivityRoomMessages = {
+export type AgentActivityRoomMessages = {
   messages: IMMessage[];
   room: IMConversation;
 };
 
-type AgentActivityEntry = {
+export type AgentActivityEntry = {
   activity: AgentActivityPayload | null;
   command: AgentActivityCommand | null;
   createdAt: string;
@@ -69,30 +71,34 @@ type AgentActivityFilterOption = {
   tone: AgentActivityKind;
 };
 
+const duplicateCommandWindowMs = 10_000;
+
 export function AgentActivityPanel({ item, locale, rooms = [], t }: AgentActivityPanelProps) {
+  const queryClient = useQueryClient();
   const [sortMode, setSortMode] = useState<AgentActivitySortMode>("newest_first");
   const [selectedFilters, setSelectedFilters] = useState<Set<string>>(() => new Set());
   const [selectedEntryID, setSelectedEntryID] = useState<string | null>(null);
   const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
   const latestVisibleEntryIDRef = useRef<string | null>(null);
+  const liveMessagesRef = useRef<Map<string, IMMessage[]>>(new Map());
   const agentIdentity = useMemo(() => agentIdentityValues(item), [item]);
   const activityRooms = useMemo(
     () => rooms.filter((room) => room.members.some((memberID) => identityMatches(memberID, agentIdentity))),
     [agentIdentity, rooms],
   );
-  const roomSignature = useMemo(
-    () =>
-      activityRooms
-        .map((room) => {
-          const latest = room.messages.at(-1);
-          const latestThread = room.threads?.at(-1);
-          return [room.id, latest?.id || "", latest?.created_at || "", latestThread?.root_message_id || ""].join(":");
-        })
-        .join("|"),
-    [activityRooms],
+  const activityRoomIDSignature = useMemo(() => stableRoomIDs(activityRooms).join("\n"), [activityRooms]);
+  const activityRoomIDs = useMemo(
+    () => (activityRoomIDSignature ? activityRoomIDSignature.split("\n") : []),
+    [activityRoomIDSignature],
+  );
+  const activityRoomIDSet = useMemo(() => new Set(activityRoomIDs), [activityRoomIDs]);
+  const activityRoomsByID = useMemo(() => new Map(activityRooms.map((room) => [room.id, room])), [activityRooms]);
+  const activityQueryKey = useMemo(
+    () => ["agent-activity", item.id || "", activityRoomIDs] as const,
+    [activityRoomIDs, item.id],
   );
   const query = useQuery({
-    queryKey: ["agent-activity", item.id || "", roomSignature],
+    queryKey: activityQueryKey,
     queryFn: async (): Promise<AgentActivityRoomMessages[]> => {
       const pairs = await Promise.all(
         activityRooms.map(async (room) => ({
@@ -105,6 +111,50 @@ export function AgentActivityPanel({ item, locale, rooms = [], t }: AgentActivit
     enabled: activityRooms.length > 0,
     staleTime: 2_000,
   });
+
+  const mergeMessageIntoActivityCache = useCallback(
+    (roomID: string | null | undefined, message: IMMessage | null | undefined, options?: { remember?: boolean }) => {
+      const normalizedRoomID = String(roomID || "").trim();
+      if (!normalizedRoomID || !message || !activityRoomIDSet.has(normalizedRoomID)) {
+        return false;
+      }
+      const room = activityRoomsByID.get(normalizedRoomID);
+      if (!room || !identityMatches(message.sender_id, agentIdentity)) {
+        return false;
+      }
+      if (options?.remember) {
+        rememberLiveActivityMessage(liveMessagesRef.current, normalizedRoomID, message);
+      }
+      queryClient.setQueryData<AgentActivityRoomMessages[]>(activityQueryKey, (current) =>
+        current ? mergeActivityMessageIntoCache(current, room, message) : current,
+      );
+      return true;
+    },
+    [activityQueryKey, activityRoomIDSet, activityRoomsByID, agentIdentity, queryClient],
+  );
+
+  useEffect(() => {
+    if (!activityRoomIDs.length) {
+      return undefined;
+    }
+    return subscribeIMEvents((payload) => {
+      if (payload.type !== "message.created" || !payload.message) {
+        return;
+      }
+      mergeMessageIntoActivityCache(payload.room_id, payload.message, { remember: true });
+    });
+  }, [activityRoomIDs.length, mergeMessageIntoActivityCache]);
+
+  useEffect(() => {
+    if (!query.data) {
+      return;
+    }
+    queryClient.setQueryData<AgentActivityRoomMessages[]>(activityQueryKey, (current) =>
+      current
+        ? mergeActivityMessagesIntoCache(current, activityRooms, agentIdentity, liveMessagesRef.current)
+        : current,
+    );
+  }, [activityQueryKey, activityRooms, agentIdentity, query.data, queryClient]);
 
   const entries = useMemo(() => activityEntriesFromRooms(query.data ?? [], agentIdentity), [agentIdentity, query.data]);
   const filterOptions = useMemo(() => activityFilterOptions(entries, t), [entries, t]);
@@ -253,6 +303,118 @@ export function AgentActivityPanel({ item, locale, rooms = [], t }: AgentActivit
   );
 }
 
+function stableRoomIDs(rooms: readonly IMConversation[]): string[] {
+  return Array.from(new Set(rooms.map((room) => String(room.id || "").trim()).filter(Boolean))).sort();
+}
+
+function mergeActivityMessagesIntoCache(
+  current: readonly AgentActivityRoomMessages[],
+  rooms: readonly IMConversation[],
+  agentIdentity: readonly string[],
+  liveMessages: ReadonlyMap<string, readonly IMMessage[]>,
+): AgentActivityRoomMessages[] {
+  let next = current;
+  for (const room of rooms) {
+    for (const message of room.messages) {
+      if (identityMatches(message.sender_id, agentIdentity)) {
+        next = mergeActivityMessageIntoCache(next, room, message);
+      }
+    }
+    for (const message of liveMessages.get(room.id) ?? []) {
+      if (identityMatches(message.sender_id, agentIdentity)) {
+        next = mergeActivityMessageIntoCache(next, room, message);
+      }
+    }
+  }
+  return next as AgentActivityRoomMessages[];
+}
+
+function mergeActivityMessageIntoCache(
+  current: readonly AgentActivityRoomMessages[],
+  room: IMConversation,
+  message: IMMessage,
+): AgentActivityRoomMessages[] {
+  const roomIndex = current.findIndex((item) => item.room.id === room.id);
+  if (roomIndex < 0) {
+    return [{ room, messages: [message] }, ...current];
+  }
+  const roomMessages = current[roomIndex]?.messages ?? [];
+  const mergedMessages = upsertActivityMessage(roomMessages, message);
+  if (mergedMessages === roomMessages) {
+    return current as AgentActivityRoomMessages[];
+  }
+  return current.map((item, index) =>
+    index === roomIndex ? { room: { ...item.room, ...room }, messages: mergedMessages } : item,
+  );
+}
+
+function upsertActivityMessage(messages: readonly IMMessage[], message: IMMessage): IMMessage[] {
+  const nextKey = activityMessageMergeKey(message);
+  const existingIndex = messages.findIndex((item) => activityMessageMergeKey(item) === nextKey);
+  if (existingIndex >= 0) {
+    if (activityMessagesEquivalent(messages[existingIndex], message)) {
+      return messages as IMMessage[];
+    }
+    const next = messages.map((item, index) => (index === existingIndex ? message : item));
+    return sortActivityMessages(next);
+  }
+  return sortActivityMessages([...messages, message]);
+}
+
+function activityMessagesEquivalent(left: IMMessage | undefined, right: IMMessage): boolean {
+  if (!left) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+  return (
+    activityMessageMergeKey(left) === activityMessageMergeKey(right) &&
+    String(left.content || "") === String(right.content || "") &&
+    String(left.created_at || "") === String(right.created_at || "") &&
+    String(left.sender_id || "") === String(right.sender_id || "") &&
+    String(left.relates_to?.rel_type || "") === String(right.relates_to?.rel_type || "") &&
+    String(left.relates_to?.event_id || "") === String(right.relates_to?.event_id || "") &&
+    JSON.stringify(left.metadata ?? null) === JSON.stringify(right.metadata ?? null)
+  );
+}
+
+function sortActivityMessages(messages: readonly IMMessage[]): IMMessage[] {
+  return messages
+    .map((message, index) => ({ index, message }))
+    .sort((left, right) => {
+      const timeDelta = activityTime(left.message.created_at || "") - activityTime(right.message.created_at || "");
+      if (timeDelta !== 0) {
+        return timeDelta;
+      }
+      return left.index - right.index;
+    })
+    .map((item) => item.message);
+}
+
+function activityMessageMergeKey(message: IMMessage): string {
+  const id = String(message.id || "").trim();
+  if (id) {
+    return `id:${id}`;
+  }
+  return [
+    "fallback",
+    String(message.sender_id || ""),
+    String(message.created_at || ""),
+    String(message.content || ""),
+    String(message.relates_to?.rel_type || ""),
+    String(message.relates_to?.event_id || ""),
+  ].join(":");
+}
+
+function rememberLiveActivityMessage(liveMessages: Map<string, IMMessage[]>, roomID: string, message: IMMessage): void {
+  const messages = liveMessages.get(roomID) ?? [];
+  const merged = upsertActivityMessage(messages, message);
+  if (merged !== messages) {
+    liveMessages.set(roomID, merged);
+  }
+}
+
 function agentIdentityValues(item: AgentLike): string[] {
   const out: string[] = [];
   const push = (value: unknown) => {
@@ -273,20 +435,22 @@ function agentIdentityValues(item: AgentLike): string[] {
   return out;
 }
 
-function activityEntriesFromRooms(
+// eslint-disable-next-line react-refresh/only-export-components -- exported for focused activity-merge regression tests.
+export function activityEntriesFromRooms(
   rooms: readonly AgentActivityRoomMessages[],
   agentIdentity: readonly string[],
 ): AgentActivityEntry[] {
   const entries: AgentActivityEntry[] = [];
   rooms.forEach(({ room, messages }) => {
     const pendingCommands = new Map<string, AgentActivityEntry[]>();
-    const pendingTools = new Map<string, AgentActivityEntry>();
+    const semanticCommandEntries = new Map<string, AgentActivityEntry>();
+    const toolEntries = new Map<string, AgentActivityEntry>();
     messages.forEach((message) => {
       if (!identityMatches(message.sender_id, agentIdentity)) {
         return;
       }
       const activity = parseAgentActivity(message.content);
-      const plainCommand = activity ? null : parseMessageActivityCommand(message);
+      const plainCommand = activity ? null : parseActivityCommand(message);
       const body = String(message.content || "")
         .replace(/\u200b/g, "")
         .trim();
@@ -294,12 +458,22 @@ function activityEntriesFromRooms(
         return;
       }
       if (activity?.content.msgtype === AgentActivityMsgTypes.tool && activity.content.tool) {
-        const toolKey = agentActivityToolMergeKey(activity.content.tool);
-        const existing = toolKey ? pendingTools.get(toolKey) : undefined;
-        if (existing?.activity) {
-          existing.activity = mergeToolActivity(existing.activity, activity);
-          if (isTerminalAgentActivityTool(activity.content.tool)) {
-            pendingTools.delete(toolKey);
+        const toolKeys = activityToolMergeKeys(activity.content.tool, message);
+        const semanticCommandKey = activityToolSemanticCommandKey(activity.content.tool, message);
+        const stableEntries = mappedActivityEntries(toolEntries, toolKeys);
+        const semanticEntry =
+          toolKeys.length === 0 && semanticCommandKey ? semanticCommandEntries.get(semanticCommandKey) : undefined;
+        const existing = coalesceActivityEntries(
+          entries,
+          stableEntries.length ? stableEntries : semanticEntry ? [semanticEntry] : [],
+          toolEntries,
+          semanticCommandEntries,
+        );
+        if (existing) {
+          mergeToolActivityIntoEntry(existing, activity, message);
+          registerActivityEntry(toolEntries, toolKeys, existing);
+          if (semanticCommandKey) {
+            semanticCommandEntries.set(semanticCommandKey, existing);
           }
           return;
         }
@@ -316,25 +490,45 @@ function activityEntriesFromRooms(
           type: "activity",
         };
         entries.push(entry);
-        if (toolKey && !isTerminalAgentActivityTool(activity.content.tool)) {
-          pendingTools.set(toolKey, entry);
+        registerActivityEntry(toolEntries, toolKeys, entry);
+        if (semanticCommandKey) {
+          semanticCommandEntries.set(semanticCommandKey, entry);
         }
         return;
       }
       if (plainCommand) {
-        if (plainCommand.output) {
-          const pending = pendingCommands.get(plainCommand.signature);
-          const startEntry = pending?.shift();
+        const stableToolKey = scopedActivityToolMergeKey(message, agentActivityMessageToolMergeKey(message));
+        const commandKey = activityCommandMergeKey(plainCommand);
+        const semanticCommandKey = openClawRequestCommandMergeKey(message, plainCommand.command);
+        const stableEntry = stableToolKey ? toolEntries.get(stableToolKey) : undefined;
+        const semanticEntry =
+          !stableToolKey && semanticCommandKey ? semanticCommandEntries.get(semanticCommandKey) : undefined;
+        const existing = stableEntry ?? semanticEntry;
+        if (existing) {
+          mergePlainCommandIntoEntry(existing, plainCommand, message);
+          if (stableToolKey) {
+            toolEntries.set(stableToolKey, existing);
+          }
+          return;
+        }
+        if (!stableToolKey && plainCommand.output) {
+          const pending = pendingCommands.get(commandKey);
+          const pendingIndex = pending ? pendingCommandMatchIndex(pending, message) : -1;
+          const startEntry = pendingIndex >= 0 ? pending?.splice(pendingIndex, 1)[0] : undefined;
           if (startEntry?.command) {
-            startEntry.command = {
-              ...startEntry.command,
-              output: plainCommand.output,
-            };
+            mergePlainCommandIntoEntry(startEntry, plainCommand, message);
+            if (semanticCommandKey) {
+              semanticCommandEntries.set(semanticCommandKey, startEntry);
+            }
             if (pending && pending.length === 0) {
-              pendingCommands.delete(plainCommand.signature);
+              pendingCommands.delete(commandKey);
             }
             return;
           }
+        }
+        const pending = pendingCommands.get(commandKey) ?? [];
+        if (!plainCommand.output && pending.some((entry) => isDuplicateCommandStart(entry, plainCommand, message))) {
+          return;
         }
         const entry: AgentActivityEntry = {
           activity: null,
@@ -349,10 +543,15 @@ function activityEntriesFromRooms(
           type: "message",
         };
         entries.push(entry);
-        if (!plainCommand.output) {
-          const pending = pendingCommands.get(plainCommand.signature) ?? [];
+        if (stableToolKey) {
+          toolEntries.set(stableToolKey, entry);
+        }
+        if (semanticCommandKey) {
+          semanticCommandEntries.set(semanticCommandKey, entry);
+        }
+        if (!stableToolKey && !plainCommand.output) {
           pending.push(entry);
-          pendingCommands.set(plainCommand.signature, pending);
+          pendingCommands.set(commandKey, pending);
         }
         return;
       }
@@ -387,6 +586,10 @@ function mergeToolActivity(base: AgentActivityPayload, next: AgentActivityPayloa
   if (!baseTool || !nextTool) {
     return next;
   }
+  const baseHasOutput = hasActivityToolExplicitOutput(baseTool);
+  const nextHasOutput = hasActivityToolExplicitOutput(nextTool);
+  const baseTerminal = isTerminalActivityTool(baseTool);
+  const nextTerminal = isTerminalActivityTool(nextTool);
   return {
     ...base,
     content: {
@@ -403,13 +606,314 @@ function mergeToolActivity(base: AgentActivityPayload, next: AgentActivityPayloa
         input_summary: firstNonEmpty(nextTool.input_summary, baseTool.input_summary),
         item_id: firstNonEmpty(nextTool.item_id, baseTool.item_id),
         output: nextTool.output ?? baseTool.output,
-        output_summary: firstNonEmpty(nextTool.output_summary, baseTool.output_summary),
-        phase: firstNonEmpty(nextTool.phase, baseTool.phase),
-        status: firstNonEmpty(nextTool.status, baseTool.status),
+        output_summary: nextHasOutput
+          ? firstNonEmpty(nextTool.output_summary, baseTool.output_summary)
+          : baseHasOutput
+            ? firstNonEmpty(baseTool.output_summary, nextTool.output_summary)
+            : firstNonEmpty(nextTool.output_summary, baseTool.output_summary),
+        phase: baseTerminal && !nextTerminal ? baseTool.phase : firstNonEmpty(nextTool.phase, baseTool.phase),
+        status: baseTerminal && !nextTerminal ? baseTool.status : firstNonEmpty(nextTool.status, baseTool.status),
         tool_call_id: firstNonEmpty(nextTool.tool_call_id, baseTool.tool_call_id),
       },
     },
   };
+}
+
+function mergeToolActivityIntoEntry(
+  entry: AgentActivityEntry,
+  activity: AgentActivityPayload,
+  message: IMMessage,
+): void {
+  const previousCommand = entry.command;
+  const previousMessage = entry.message;
+  entry.message = message;
+  if (entry.activity) {
+    entry.activity = mergeToolActivity(entry.activity, activity);
+  } else {
+    entry.activity = activity;
+    entry.command = null;
+    entry.kind = activityKind(activity);
+    entry.type = "activity";
+  }
+  if (previousCommand) {
+    mergePlainCommandIntoEntry(entry, previousCommand, previousMessage);
+  }
+}
+
+function mappedActivityEntries(
+  entries: ReadonlyMap<string, AgentActivityEntry>,
+  keys: readonly string[],
+): AgentActivityEntry[] {
+  const matches: AgentActivityEntry[] = [];
+  for (const key of keys) {
+    const entry = entries.get(key);
+    if (entry && !matches.includes(entry)) {
+      matches.push(entry);
+    }
+  }
+  return matches;
+}
+
+function activityToolMergeKeys(tool: AgentActivityTool, message: IMMessage): string[] {
+  return agentActivityToolMergeKeys(tool).map((key) => scopedActivityToolMergeKey(message, key));
+}
+
+function scopedActivityToolMergeKey(message: IMMessage, key: string): string {
+  const requestID = openClawRequestID(message);
+  return requestID && key ? `openclaw-request:${requestID}:${key}` : key;
+}
+
+function registerActivityEntry(
+  entries: Map<string, AgentActivityEntry>,
+  keys: readonly string[],
+  entry: AgentActivityEntry,
+): void {
+  keys.forEach((key) => entries.set(key, entry));
+}
+
+function coalesceActivityEntries(
+  entries: AgentActivityEntry[],
+  matches: readonly AgentActivityEntry[],
+  toolEntries: Map<string, AgentActivityEntry>,
+  semanticCommandEntries: Map<string, AgentActivityEntry>,
+): AgentActivityEntry | undefined {
+  if (matches.length === 0) {
+    return undefined;
+  }
+  const ordered = [...matches].sort((left, right) => entries.indexOf(left) - entries.indexOf(right));
+  const target = ordered[0];
+  if (!target) {
+    return undefined;
+  }
+  for (const duplicate of ordered.slice(1)) {
+    mergeActivityEntryIntoEntry(target, duplicate);
+    const duplicateIndex = entries.indexOf(duplicate);
+    if (duplicateIndex >= 0) {
+      entries.splice(duplicateIndex, 1);
+    }
+    replaceMappedActivityEntry(toolEntries, duplicate, target);
+    replaceMappedActivityEntry(semanticCommandEntries, duplicate, target);
+  }
+  return target;
+}
+
+function mergeActivityEntryIntoEntry(target: AgentActivityEntry, source: AgentActivityEntry): void {
+  if (source.activity) {
+    mergeToolActivityIntoEntry(target, source.activity, source.message);
+  }
+  if (source.command) {
+    mergePlainCommandIntoEntry(target, source.command, source.message);
+  }
+}
+
+function replaceMappedActivityEntry(
+  entries: Map<string, AgentActivityEntry>,
+  previous: AgentActivityEntry,
+  next: AgentActivityEntry,
+): void {
+  entries.forEach((entry, key) => {
+    if (entry === previous) {
+      entries.set(key, next);
+    }
+  });
+}
+
+function hasActivityToolExplicitOutput(tool: AgentActivityTool): boolean {
+  return tool.output !== undefined;
+}
+
+function isTerminalActivityTool(tool: AgentActivityTool): boolean {
+  const phase = String(tool.phase || "")
+    .trim()
+    .toLowerCase();
+  const status = String(tool.status || "")
+    .trim()
+    .toLowerCase();
+  return (
+    phase === "end" ||
+    ["completed", "done", "failed", "blocked", "canceled", "cancelled", "success", "succeeded"].includes(status)
+  );
+}
+
+function mergePlainCommandIntoEntry(
+  entry: AgentActivityEntry,
+  command: AgentActivityCommand,
+  message: IMMessage,
+): void {
+  const normalizedCommand = normalizeCommandText(command.command);
+  const output = firstNonEmpty(command.output);
+  if (entry.activity?.content.msgtype === AgentActivityMsgTypes.tool && entry.activity.content.tool) {
+    const tool = entry.activity.content.tool;
+    entry.activity = {
+      ...entry.activity,
+      content: {
+        ...entry.activity.content,
+        body: firstNonEmpty(output, entry.activity.content.body),
+        tool: {
+          ...tool,
+          command: firstNonEmpty(tool.command, normalizedCommand),
+          output: output || tool.output,
+          output_summary: firstNonEmpty(output, tool.output_summary),
+          phase: output ? "end" : tool.phase,
+          status: output ? "completed" : tool.status,
+        },
+      },
+    };
+    if (output) {
+      entry.message = message;
+    }
+    return;
+  }
+  if (entry.command) {
+    entry.command = {
+      ...entry.command,
+      command: firstNonEmpty(entry.command.command, normalizedCommand),
+      output: firstNonEmpty(output, entry.command.output) || undefined,
+    };
+    if (output) {
+      entry.message = message;
+    }
+  }
+}
+
+function activityToolSemanticCommandKey(tool: AgentActivityTool, message: IMMessage): string {
+  return openClawRequestCommandMergeKey(message, activityToolCommandForMerge(tool));
+}
+
+function activityToolCommandForMerge(tool: AgentActivityTool): string {
+  const kind = normalizeCommandSignature(tool.kind || "");
+  return normalizeCommandText(
+    firstNonEmpty(
+      summaryValue(tool.input_summary, "command", "cmd"),
+      summaryValue(tool.input, "command", "cmd"),
+      summaryText(tool.input_summary),
+      summaryText(tool.input),
+      tool.command,
+      toolTitleCommandForMerge(tool.title, kind),
+    ),
+  );
+}
+
+function toolTitleCommandForMerge(title: string, kind: string): string {
+  const text = title.trim();
+  if (!text) {
+    return "";
+  }
+  if ((kind === "command" || kind === "exec" || kind === "bash") && text.toLowerCase().startsWith(`${kind} `)) {
+    return text.slice(kind.length + 1).trim();
+  }
+  return /^command\s+/i.test(text) ? text : "";
+}
+
+function parseActivityCommand(message: IMMessage): AgentActivityCommand | null {
+  const command = parseMessageActivityCommand(message) ?? parsePlainOpenClawProgressCommand(message.content);
+  return command ? normalizeActivityCommand(command) : null;
+}
+
+function parsePlainOpenClawProgressCommand(content: unknown): AgentActivityCommand | null {
+  if (typeof content !== "string" || !isOpenClawProgressMarker(content)) {
+    return null;
+  }
+  return parsePlainAgentCommand(content);
+}
+
+function isOpenClawProgressMarker(content: string): boolean {
+  return /^(?:🛠️?|🔎|📄|📖|🧠|✍️?|🩹|📩)\s*/u.test(content.replace(/\u200b/g, "").trim());
+}
+
+function normalizeActivityCommand(command: AgentActivityCommand): AgentActivityCommand {
+  const normalizedCommand = normalizeCommandText(command.command);
+  if (normalizedCommand === command.command) {
+    return command;
+  }
+  return {
+    ...command,
+    command: normalizedCommand,
+    signature: command.signature.startsWith("openclaw-tool:")
+      ? command.signature
+      : normalizeCommandSignature(normalizedCommand),
+    title: commandTitleFromText(normalizedCommand),
+  };
+}
+
+function isDuplicateCommandStart(
+  entry: AgentActivityEntry,
+  command: AgentActivityCommand,
+  message: IMMessage,
+): boolean {
+  if (!entry.command || entry.command.output || command.output) {
+    return false;
+  }
+  if (activityCommandMergeKey(entry.command) !== activityCommandMergeKey(command)) {
+    return false;
+  }
+  const entryRequestID = openClawRequestID(entry.message);
+  const messageRequestID = openClawRequestID(message);
+  if (entryRequestID && messageRequestID) {
+    return entryRequestID === messageRequestID;
+  }
+  return Math.abs(activityTime(entry.createdAt) - activityTime(message.created_at || "")) <= duplicateCommandWindowMs;
+}
+
+function activityCommandMergeKey(command: AgentActivityCommand): string {
+  return command.signature.startsWith("openclaw-tool:")
+    ? normalizeCommandSignature(command.command)
+    : normalizeCommandSignature(command.signature || command.command);
+}
+
+function normalizeCommandText(command: string): string {
+  return command.replace(/^command\s+(.+)$/i, "$1").trim();
+}
+
+function normalizeCommandSignature(command: string): string {
+  return normalizeCommandText(command).replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function pendingCommandMatchIndex(pending: readonly AgentActivityEntry[], message: IMMessage): number {
+  if (pending.length === 0) {
+    return -1;
+  }
+  const messageRequestID = openClawRequestID(message);
+  if (messageRequestID) {
+    const requestIndex = pending.findIndex((entry) => openClawRequestID(entry.message) === messageRequestID);
+    if (requestIndex >= 0) {
+      return requestIndex;
+    }
+  }
+  return 0;
+}
+
+function openClawRequestCommandMergeKey(message: IMMessage, command: string): string {
+  const requestID = openClawRequestID(message);
+  const commandKey = normalizeCommandSignature(command);
+  return requestID && commandKey ? `openclaw-request:${requestID}:command:${commandKey}` : "";
+}
+
+function openClawRequestID(message: IMMessage | null | undefined): string {
+  const metadata = isRecord(message?.metadata) ? message.metadata : undefined;
+  const openclaw = isRecord(metadata?.openclaw) ? metadata.openclaw : undefined;
+  const deliveryInfo = isRecord(openclaw?.delivery_info)
+    ? openclaw.delivery_info
+    : isRecord(openclaw?.deliveryInfo)
+      ? openclaw.deliveryInfo
+      : undefined;
+  return firstNonEmpty(
+    openclaw?.request_id,
+    openclaw?.requestId,
+    openclaw?.source_message_id,
+    openclaw?.sourceMessageId,
+    deliveryInfo?.request_id,
+    deliveryInfo?.requestId,
+  );
+}
+
+function commandTitleFromText(command: string): string {
+  const colon = command.indexOf(":");
+  if (colon > 0 && colon <= 32) {
+    return command.slice(0, colon).trim();
+  }
+  const words = command.split(/\s+/).slice(0, 2).join(" ").trim();
+  return words || AgentActivityKinds.execCommand;
 }
 
 function activityKind(activity: AgentActivityPayload | null): AgentActivityKind {
@@ -808,15 +1312,7 @@ function activityRowView(entry: AgentActivityEntry, t: TranslateFn) {
   if (activity?.content.msgtype === AgentActivityMsgTypes.action) {
     return {
       defaultExpanded: false,
-      detail: (
-        <MessageContent
-          content={entry.message.content}
-          message={entry.message}
-          actionBusy=""
-          actionError={{ key: "", message: "" }}
-          onAction={() => undefined}
-        />
-      ),
+      detail: <ActivityMessageDetail message={entry.message} t={t} />,
       label: AgentActivityKinds.other,
       summary: activity.content.action
         ? `${activity.content.action.title} · ${statusLabel(activity.content.action.status)}`
@@ -835,9 +1331,13 @@ function activityRowView(entry: AgentActivityEntry, t: TranslateFn) {
     };
   }
 
+  const messageText = String(entry.message.content || "")
+    .replace(/\u200b/g, "")
+    .trim();
+
   return {
     defaultExpanded: false,
-    detail: null,
+    detail: messageText ? <ActivityMessageDetail message={entry.message} t={t} /> : null,
     label: AgentActivityKinds.message,
     summary: summarizeReply(entry.message.content),
     tone: AgentActivityKinds.message,
@@ -902,11 +1402,29 @@ function PlainDetail({ value }: { value: string }) {
   return <pre className="agent-activity-plain-detail">{value}</pre>;
 }
 
+function ActivityMessageDetail({ message, t }: { message: IMMessage; t: TranslateFn }) {
+  return (
+    <MessageContent
+      content={message.content}
+      message={message}
+      actionBusy=""
+      actionError={{ key: "", message: "" }}
+      onAction={() => undefined}
+      t={t}
+    />
+  );
+}
+
 function toolCommandSummary(tool: AgentActivityTool): string {
-  return firstNonEmpty(
-    tool.command,
-    summaryValue(tool.input_summary, "command", "cmd"),
-    summaryValue(tool.input, "command", "cmd"),
+  return normalizeCommandText(
+    firstNonEmpty(
+      summaryValue(tool.input_summary, "command", "cmd"),
+      summaryValue(tool.input, "command", "cmd"),
+      summaryText(tool.input_summary),
+      summaryText(tool.input),
+      tool.command,
+      toolTitleCommandForMerge(tool.title, normalizeCommandSignature(tool.kind || "")),
+    ),
   );
 }
 
