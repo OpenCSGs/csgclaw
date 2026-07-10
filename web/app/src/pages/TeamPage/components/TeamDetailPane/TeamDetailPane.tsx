@@ -1,21 +1,24 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { AgentAvatarContent, RoomAvatar } from "@/components/business";
 import { ListChecks, Trash2, UserPlus, Users } from "lucide-react";
 import { TaskSubtaskIndicator } from "@/components/business";
 import { Button } from "@/components/ui";
-import { AgentIcon, UsersIcon } from "@/components/ui/Icons";
 import { isAgentRunning } from "@/models/agents";
 import type { AgentLike } from "@/models/agents";
 import type { IMUser, TranslateFn, UsersById } from "@/models/conversations";
 import {
   displayTeam,
   formatTaskUpdatedAt,
+  resolveTeamAvatarMembers,
   resolveTaskSidebarPhase,
   rootTasks,
   taskChildren,
+  teamMemberIDs,
   teamStatusLabel,
 } from "@/models/tasks";
 import type { WorkspaceTask, WorkspaceTeam } from "@/models/tasks";
+import { avatarFallbackText } from "@/shared/avatar";
 import { classNames } from "@/shared/lib/classNames";
 import styles from "./TeamDetailPane.module.css";
 
@@ -67,6 +70,7 @@ export function TeamDetailPane({
 
   const memberIDs = teamMemberIDs(team);
   const members = memberIDs.map((memberID) => memberDisplay(memberID, agents, usersById, team.lead_agent_id));
+  const avatarMembers = resolveTeamAvatarMembers(team, agents);
   const parentTasks = rootTasks(tasks);
   const locale = document.documentElement.lang || "en";
 
@@ -74,7 +78,7 @@ export function TeamDetailPane({
     <section className={classNames("entity-pane", "team-detail-pane", styles.teamDetailPane)}>
       <header className={classNames("entity-header", styles.contentWidth, styles.teamDetailHeader)}>
         <div className={classNames("entity-avatar", styles.teamDetailAvatar)}>
-          <UsersIcon />
+          <RoomAvatar ariaLabel={displayTeam(team)} count={memberIDs.length} members={avatarMembers} size={48} />
         </div>
         <div className={classNames("entity-heading", styles.teamDetailHeading)}>
           <div className={classNames("entity-title-row", styles.teamDetailTitleRow)}>
@@ -121,7 +125,7 @@ export function TeamDetailPane({
         <aside className={classNames(styles.panelSurface, styles.teamDetailSummary)}>
           <div className={styles.teamProfileBlock}>
             <div className={styles.teamProfileIcon}>
-              <Users size={34} aria-hidden="true" />
+              <RoomAvatar ariaLabel={displayTeam(team)} count={memberIDs.length} members={avatarMembers} size={76} />
             </div>
             <div>
               <h2>{displayTeam(team)}</h2>
@@ -289,7 +293,14 @@ function MemberRowContent({ member, t }: { member: TeamMemberDisplay; t: Transla
   return (
     <>
       <span className={classNames(styles.teamMemberAvatar, member.agent && styles.agent)}>
-        {member.agent ? <AgentIcon /> : member.initials}
+        {member.agent ? (
+          <AgentAvatarContent
+            avatar={member.agent.avatar}
+            fallback={avatarFallbackText(member.agent.avatar, member.agent.name, member.agent.id)}
+          />
+        ) : (
+          member.initials
+        )}
       </span>
       <span className={classNames(styles.rowMain, styles.teamMemberMain)}>
         <span className={styles.teamMemberTitleLine}>
@@ -303,18 +314,6 @@ function MemberRowContent({ member, t }: { member: TeamMemberDisplay; t: Transla
       </span>
     </>
   );
-}
-
-function teamMemberIDs(team: WorkspaceTeam): string[] {
-  const ids = new Set(team.member_agent_ids ?? []);
-  if (team.lead_agent_id) {
-    // The lead agent ID (e.g., "u-manager") may differ from the room participant ID
-    // (e.g., "manager"). Remove the participant ID form to avoid double-counting.
-    const altID = team.lead_agent_id.startsWith("u-") ? team.lead_agent_id.slice(2) : "u-" + team.lead_agent_id;
-    ids.delete(altID);
-    ids.add(team.lead_agent_id);
-  }
-  return Array.from(ids);
 }
 
 function memberDisplay(

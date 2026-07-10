@@ -58,6 +58,10 @@
   text-decoration: none;
 }
 
+.teamRow {
+  padding: 12px;
+}
+
 .modelProviderIconShell {
   background: var(--white);
 }
@@ -98,4 +102,14 @@
 
 :global(:root[data-theme="dark"]) .modelProviderIconShell {
   background: var(--white);
+}
+
+:global(:root[data-theme="dark"]) .teamRow:global(.active) {
+  background: var(--gray-800);
+  color: var(--white);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .teamRow:global(.active) * {
+  color: var(--white);
 }
