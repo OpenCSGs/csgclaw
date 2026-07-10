@@ -1812,7 +1812,6 @@
 .app-shell {
   position: relative;
   z-index: 1;
-  transition: grid-template-columns 200ms ease-out;
 }
 
 .sidebar,

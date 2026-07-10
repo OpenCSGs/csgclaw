@@ -8,13 +8,12 @@
   color: var(--gray-700);
 }
 
-.header,
 .content {
   width: 100%;
-  max-width: 1296px;
 }
 
 .header {
+  width: 100%;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--gray-200);
 }
@@ -57,6 +56,12 @@
 
 .row:last-child {
   margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.rowNoDivider {
+  margin-bottom: 8px;
   padding-bottom: 0;
   border-bottom: 0;
 }
@@ -183,6 +188,7 @@
   font-size: 14px;
   font-weight: 400;
   line-height: 22px;
+  text-align: right;
 }
 
 .environmentValue,
@@ -392,6 +398,7 @@
 
 :root[data-theme="dark"] .header h1,
 :root[data-theme="dark"] .rowIntro h2,
+:root[data-theme="dark"] .accountIdentity,
 :root[data-theme="dark"] .controlLabel,
 :root[data-theme="dark"] .versionValue span,
 :root[data-theme="dark"] .environmentAdvanced {
@@ -418,6 +425,11 @@
   color: var(--gray-100);
 }
 
+:root[data-theme="dark"] .segmented {
+  border-color: var(--gray-600);
+  background: var(--gray-900);
+}
+
 :root[data-theme="dark"] .environmentSelectContent {
   border-color: var(--gray-700);
   background: var(--panel-strong);
@@ -425,7 +437,9 @@
 
 :root[data-theme="dark"] .segmentButton,
 :root[data-theme="dark"] .textSegmentButton {
-  border-color: var(--gray-700);
+  border-color: var(--gray-600);
+  background: var(--gray-900);
+  color: var(--gray-500);
 }
 
 :root[data-theme="dark"] .segmentButton:hover,
@@ -433,7 +447,11 @@
 :root[data-theme="dark"] .textSegmentButton:hover,
 :root[data-theme="dark"] .textSegmentButton:focus-visible,
 :root[data-theme="dark"] .segmentButton.active,
-:root[data-theme="dark"] .textSegmentButton.active,
+:root[data-theme="dark"] .textSegmentButton.active {
+  background: var(--gray-700);
+  color: var(--gray-100);
+}
+
 :root[data-theme="dark"] .advancedToggle:hover,
 :root[data-theme="dark"] .advancedToggle:focus-visible,
 :root[data-theme="dark"] .advancedToggle.open,

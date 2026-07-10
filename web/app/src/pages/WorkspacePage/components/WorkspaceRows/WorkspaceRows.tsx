@@ -119,6 +119,8 @@ function WorkspaceAddAction({
       <Button
         ref={triggerRef}
         variant="ghost"
+        size="sm"
+        iconOnly
         className={styles.addButton}
         draggable={false}
         aria-label={label}

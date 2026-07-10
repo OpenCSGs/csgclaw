@@ -156,6 +156,7 @@
   min-width: 28px;
   height: 28px;
   min-height: 28px;
+  padding: 6px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -166,13 +167,15 @@
 .addButton:hover:not(:disabled),
 .addButton:focus-visible {
   background: #f9fafb;
-  color: #101828;
+  color: #344054;
+  box-shadow: none;
   transform: none;
 }
 
 .addButton :global(.icon-button-mark) {
   width: 15px;
   height: 15px;
+  color: currentColor;
 }
 
 .addTooltip {
@@ -478,8 +481,20 @@
 
 :global(:root[data-theme="dark"]) .addButton:hover:not(:disabled),
 :global(:root[data-theme="dark"]) .addButton:focus-visible {
-  background: rgba(208, 213, 221, 0.1);
-  color: var(--gray-200);
+  border-color: color-mix(in srgb, var(--gray-300) 28%, transparent);
+  background: color-mix(in srgb, var(--gray-800) 78%, var(--gray-blue-900));
+  color: var(--gray-25);
+}
+
+:global(:root[data-theme="dark"]) .addButton {
+  border: 1px solid color-mix(in srgb, var(--gray-300) 18%, transparent);
+  background: var(--gray-800);
+  color: var(--gray-25);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .addButton :global(.icon-button-mark) {
+  color: var(--gray-25);
 }
 
 :global(:root[data-theme="dark"]) .addTooltip {

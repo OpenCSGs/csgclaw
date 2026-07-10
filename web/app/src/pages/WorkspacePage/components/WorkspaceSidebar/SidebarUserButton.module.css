@@ -34,7 +34,7 @@
   border-radius: 6px;
   justify-content: flex-start;
   gap: 12px;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 24px;
 }
@@ -60,8 +60,8 @@
 }
 
 .settingsMark {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -74,8 +74,8 @@
 }
 
 .settingsMark svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 .buttonLabel {
@@ -118,6 +118,17 @@
   left: calc(100% + 12px);
   bottom: 0;
   width: min(340px, calc(100vw - 332px));
+}
+
+:global(:root[data-theme="dark"]) .button {
+  color: var(--gray-100);
+}
+
+:global(:root[data-theme="dark"]) .button:hover:not(:disabled),
+:global(:root[data-theme="dark"]) .button:focus-visible,
+:global(:root[data-theme="dark"]) .active {
+  background: var(--panel-strong);
+  color: var(--white);
 }
 
 .menuLabel {

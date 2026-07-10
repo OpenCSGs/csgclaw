@@ -64,10 +64,18 @@
 }
 
 .primaryHeaderCollapsed {
+  position: relative;
   width: 100%;
   min-height: 80px;
   padding: 16px;
   justify-content: center;
+}
+
+.primaryHeaderCollapsed .logoMarkSlot {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  margin-inline: 0;
+  transform: translate(-50%, -50%);
 }
 
 .logo {
@@ -92,13 +100,27 @@
   display: none;
 }
 
-.logoMarkButton {
-  width: 48px;
-  min-width: 48px;
-  height: 48px;
-  min-height: 48px;
+.logoMarkSlot {
+  position: relative;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
   margin-inline: auto;
-  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logoMarkButton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  min-width: 100%;
+  height: 100%;
+  min-height: 100%;
+  padding: 0;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -109,10 +131,43 @@
   cursor: pointer;
 }
 
+.logoMarkExpandIcon {
+  position: absolute;
+  z-index: 3;
+  inset: 50% auto auto 50%;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.9);
+  pointer-events: none;
+}
+
 .logoMarkButton:hover,
 .logoMarkButton:focus-visible {
-  background: transparent;
+  background: #f9fafb;
   outline: none;
+}
+
+.logoMarkButton:hover .logoMarkExpandIcon,
+.logoMarkButton:focus-visible .logoMarkExpandIcon {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.logoMarkVisual {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 .logoMarkImage {
@@ -122,8 +177,14 @@
   object-fit: contain;
 }
 
-.primaryHeaderCollapsed .logoMarkImage {
-  transform: translateX(16px);
+.logoMarkDark {
+  display: none;
+}
+
+.logoMarkButton:hover + .logoMarkVisual,
+.logoMarkButton:focus-visible + .logoMarkVisual {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.96);
 }
 
 .primaryHeaderControl {
@@ -149,7 +210,7 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 4px;
+  gap: 16px;
   overflow-y: auto;
   scrollbar-gutter: auto;
 }
@@ -177,7 +238,14 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+
+.primaryNavSection {
   gap: 4px;
+}
+
+.primarySectionItems {
+  gap: 0;
 }
 
 .primaryCollapsedItems {
@@ -189,12 +257,12 @@
 
 .primaryGroupLabel {
   width: 100%;
-  min-height: 40px;
-  padding: 8px 12px;
+  min-height: 0;
+  padding: 0 12px;
   color: #667085;
-  font-size: 14px;
-  font-weight: var(--font-weight-normal);
-  line-height: 22px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
 }
 
 .primaryNavRow {
@@ -212,8 +280,8 @@
   cursor: pointer;
   font: inherit;
   font-size: 14px;
-  font-weight: var(--font-weight-normal);
-  line-height: 22px;
+  font-weight: 500;
+  line-height: 24px;
   text-align: left;
   transition:
     background 140ms ease,
@@ -245,8 +313,8 @@
 }
 
 .primaryNavIcon {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
   color: currentColor;
   display: inline-flex;
@@ -255,8 +323,17 @@
 }
 
 .primaryNavIcon svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
+}
+
+.primaryNavIconMask {
+  width: 20px;
+  height: 20px;
+  background: currentColor;
+  display: block;
+  -webkit-mask: var(--workspace-nav-icon-url) center / contain no-repeat;
+  mask: var(--workspace-nav-icon-url) center / contain no-repeat;
 }
 
 .primaryNavLabel {
@@ -291,6 +368,23 @@
   padding: 0 5px;
   font-size: 10px;
   line-height: 16px;
+}
+
+.primaryNavTooltip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--gray-700);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-50%);
+  box-shadow: none;
 }
 
 .primaryFooter {
@@ -384,6 +478,7 @@
 }
 
 .contextAction {
+  position: relative;
   width: 28px;
   height: 28px;
   padding: 6px;
@@ -401,6 +496,31 @@
 .contextAction:focus-visible {
   background: #f9fafb;
   outline: none;
+}
+
+.contextAction[data-tooltip]::after {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: var(--z-tooltip);
+  padding: 6px 8px;
+  border: 1px solid #eaecf0;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 8px 16px rgb(16 24 40 / 12%);
+  color: #344054;
+  content: attr(data-tooltip);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.contextAction[data-tooltip]:hover::after,
+.contextAction[data-tooltip]:focus-visible::after {
+  opacity: 1;
 }
 
 .contextSearch {
@@ -512,6 +632,16 @@
   color: var(--gray-100);
 }
 
+:global(:root[data-theme="dark"]) .contextBadge {
+  border-color: var(--gray-600);
+  background: var(--gray-900);
+  color: var(--gray-300);
+}
+
+:global(:root[data-theme="dark"]) .contextBadge::before {
+  background: var(--success-400);
+}
+
 :global(:root[data-theme="dark"] body) .contextSearch .contextSearchInput.contextSearchInput {
   border: 0;
   background: transparent;
@@ -532,19 +662,48 @@
 
 :global(:root[data-theme="dark"]) .primaryNavRow:hover,
 :global(:root[data-theme="dark"]) .primaryNavRow:focus-visible,
-:global(:root[data-theme="dark"]) .active,
 :global(:root[data-theme="dark"]) .logoMarkButton:hover,
-:global(:root[data-theme="dark"]) .logoMarkButton:focus-visible,
+:global(:root[data-theme="dark"]) .logoMarkButton:focus-visible {
+  background: color-mix(in srgb, var(--gray-800) 72%, var(--surface));
+  color: var(--white);
+}
+
+:global(:root[data-theme="dark"]) .active {
+  background: var(--gray-800);
+  color: var(--white);
+}
+
+:global(:root[data-theme="dark"]) .contextAction {
+  border: 1px solid color-mix(in srgb, var(--gray-300) 18%, transparent);
+  background: var(--gray-800);
+  color: var(--gray-25);
+  box-shadow: none;
+}
+
 :global(:root[data-theme="dark"]) .contextAction:hover,
 :global(:root[data-theme="dark"]) .contextAction:focus-visible {
-  background: var(--panel-strong);
-  color: var(--white);
+  border-color: color-mix(in srgb, var(--gray-300) 28%, transparent);
+  background: color-mix(in srgb, var(--gray-800) 78%, var(--gray-blue-900));
+  color: var(--gray-25);
+}
+
+:global(:root[data-theme="dark"]) .contextAction[data-tooltip]::after {
+  border-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
+  background: var(--gray-800);
+  box-shadow: 0 12px 24px rgb(0 0 0 / 28%);
+  color: var(--gray-25);
 }
 
 :global(:root[data-theme="dark"]) .primaryNavBadge {
   border-color: color-mix(in srgb, var(--line) 78%, transparent);
   background: color-mix(in srgb, var(--gray-800) 80%, var(--surface));
   color: var(--gray-300);
+}
+
+:global(:root[data-theme="dark"]) .primaryNavTooltip {
+  border-color: var(--gray-700);
+  background: var(--gray-900);
+  color: var(--white);
 }
 
 :global(:root[data-theme="dark"]) .contextBadge {
@@ -568,10 +727,16 @@
     width: calc(100vw - var(--workspace-current-primary-sidebar-width));
   }
 
-  .primaryGroupLabel,
+  .primaryNavRow {
+    line-height: 22px;
+  }
+
+  .primaryGroupLabel {
+    font-size: 12px;
+  }
+
   .primaryNavRow {
     font-size: 14px;
-    line-height: 22px;
   }
 
   .contextNav {

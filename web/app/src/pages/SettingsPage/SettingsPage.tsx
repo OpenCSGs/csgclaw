@@ -122,6 +122,7 @@ export function SettingsPage() {
 
       <div className={styles.content}>
         <SettingsRow
+          className={styles.rowNoDivider}
           title={sidebar.t("settingsCommunityAccount")}
           description={sidebar.t("settingsCommunityAccountDescription")}
           contentClassName={styles.accountContent}
@@ -294,17 +295,19 @@ export function SettingsPage() {
 
 function SettingsRow({
   children,
+  className,
   contentClassName,
   description,
   title,
 }: {
   children: ReactNode;
+  className?: string;
   contentClassName?: string;
   description: string;
   title: string;
 }) {
   return (
-    <section className={styles.row}>
+    <section className={classNames(styles.row, className)}>
       <div className={styles.rowIntro}>
         <h2>{title}</h2>
         <p>{description}</p>

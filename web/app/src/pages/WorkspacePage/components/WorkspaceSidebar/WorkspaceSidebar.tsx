@@ -1,18 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search } from "lucide-react";
-import {
-  SidebarAlertTriangleIcon,
-  SidebarBoxIcon,
-  SidebarGrid07Icon,
-  SidebarLaptopIcon,
-  SidebarListUnordered4Icon,
-  SidebarMessageIcon,
-  SidebarPuzzlePiece02Icon,
-  SidebarRobotIcon,
-  SidebarTimer2Icon,
-  SidebarUserIcon,
-  SidebarUsersIcon,
-} from "@/components/ui/Icons";
+import { PanelLeftOpen, Plus, Search } from "lucide-react";
 import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
 import { LogoMark, LogoWordmark } from "./WorkspaceSidebarBrand";
@@ -24,9 +11,25 @@ import { classNames } from "@/shared/lib/classNames";
 import styles from "./WorkspaceSidebar.module.css";
 import type { PrimaryNavigationItem, PrimaryNavigationSection } from "./WorkspacePrimaryNavigation";
 import type { WorkspaceContextSectionId, WorkspaceSidebarProps } from "./types";
-import type { ComponentType } from "react";
+import type { CSSProperties } from "react";
 
-type SidebarNavigationIcon = ComponentType<{ size?: number | string }>;
+type NavigationIconStyle = CSSProperties & {
+  "--workspace-nav-icon-url": string;
+};
+
+const WORKSPACE_NAVIGATION_ICONS = {
+  agents: "icons/workspace-agents.svg",
+  computers: "icons/workspace-computers.svg",
+  humans: "icons/workspace-humans.svg",
+  messages: "icons/workspace-messages.svg",
+  models: "icons/workspace-models.svg",
+  notifications: "icons/workspace-notifications.svg",
+  scheduledTasks: "icons/workspace-scheduled-tasks.svg",
+  skills: "icons/workspace-skills.svg",
+  tasks: "icons/workspace-tasks.svg",
+  teams: "icons/workspace-teams.svg",
+  templates: "icons/workspace-templates.svg",
+} as const;
 
 export function WorkspaceSidebar({
   isSidebarCollapsed,
@@ -149,7 +152,7 @@ export function WorkspaceSidebar({
               activePane.type !== WorkspacePaneTypes.settings &&
               activeContextSectionId === WorkspaceContextSectionIds.messages,
             groupId: WorkspaceContextSectionIds.messages,
-            icon: navigationIcon(SidebarMessageIcon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.messages),
             id: "messages",
             label: t("messagesTab"),
             onSelect: () => onWorkspaceTabChange(WorkspaceTabs.messages),
@@ -163,7 +166,7 @@ export function WorkspaceSidebar({
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.agents,
             groupId: WorkspaceContextSectionIds.agents,
-            icon: navigationIcon(SidebarRobotIcon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.agents),
             id: "agents",
             label: t("computerAgentsSection"),
             onSelect: () => {
@@ -175,7 +178,7 @@ export function WorkspaceSidebar({
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.humans,
             groupId: WorkspaceContextSectionIds.humans,
-            icon: navigationIcon(SidebarUserIcon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.humans),
             id: "humans",
             label: t("humanSection"),
             onSelect: () => {
@@ -187,7 +190,7 @@ export function WorkspaceSidebar({
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.computers,
             groupId: WorkspaceContextSectionIds.computers,
-            icon: navigationIcon(SidebarLaptopIcon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.computers),
             id: "computers",
             label: t("computersSection"),
             onSelect: onSelectComputer,
@@ -195,7 +198,7 @@ export function WorkspaceSidebar({
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.notifications,
             groupId: WorkspaceContextSectionIds.notifications,
-            icon: navigationIcon(SidebarAlertTriangleIcon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.notifications),
             id: "notifications",
             label: t("notificationsSection"),
             onSelect: () => {
@@ -209,7 +212,7 @@ export function WorkspaceSidebar({
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.teams,
             groupId: WorkspaceContextSectionIds.teams,
-            icon: navigationIcon(SidebarUsersIcon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.teams),
             id: "teams",
             label: t("teamsSection"),
             onSelect: () => {
@@ -229,7 +232,7 @@ export function WorkspaceSidebar({
           {
             active: activePane.type === WorkspacePaneTypes.task && activeTaskBoardView !== "scheduled",
             groupId: WorkspaceContextSectionIds.tasks,
-            icon: navigationIcon(SidebarListUnordered4Icon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.tasks),
             id: "tasks",
             label: t("tasksTab"),
             onSelect: () => {
@@ -240,7 +243,7 @@ export function WorkspaceSidebar({
           {
             active: activePane.type === WorkspacePaneTypes.task && activeTaskBoardView === "scheduled",
             groupId: WorkspaceContextSectionIds.tasks,
-            icon: navigationIcon(SidebarTimer2Icon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.scheduledTasks),
             id: "scheduled-tasks",
             label: t("scheduledTasksTab"),
             onSelect: () => {
@@ -258,7 +261,7 @@ export function WorkspaceSidebar({
             active: activeContextSectionId === WorkspaceContextSectionIds.hubTemplates,
             badge: badgeCount(hub?.templates.length),
             groupId: WorkspaceContextSectionIds.hubTemplates,
-            icon: navigationIcon(SidebarGrid07Icon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.templates),
             id: "templates",
             label: t("resourcesTemplatesSection"),
             onSelect: () => {
@@ -273,7 +276,7 @@ export function WorkspaceSidebar({
             active: activeContextSectionId === WorkspaceContextSectionIds.hubSkills,
             badge: badgeCount(hub?.skills.length),
             groupId: WorkspaceContextSectionIds.hubSkills,
-            icon: navigationIcon(SidebarPuzzlePiece02Icon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.skills),
             id: "skills",
             label: t("resourcesSkillsLabel"),
             onSelect: () => {
@@ -288,7 +291,7 @@ export function WorkspaceSidebar({
             active: activeContextSectionId === WorkspaceContextSectionIds.models,
             badge: badgeCount(modelProviders?.providers.length),
             groupId: WorkspaceContextSectionIds.models,
-            icon: navigationIcon(SidebarBoxIcon),
+            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.models),
             id: "models",
             label: t("resourcesModelProvidersSection"),
             onSelect: () => {
@@ -376,15 +379,22 @@ export function WorkspaceSidebar({
         <div className={styles.primaryNavigationWrap}>
           <div className={classNames(styles.primaryHeader, isSidebarCollapsed && styles.primaryHeaderCollapsed)}>
             {isSidebarCollapsed ? (
-              <button
-                type="button"
-                className={styles.logoMarkButton}
-                aria-label={t("expandSidebar")}
-                title={t("expandSidebar")}
-                onClick={onExpandSidebar}
-              >
-                <LogoMark />
-              </button>
+              <span className={styles.logoMarkSlot}>
+                <button
+                  type="button"
+                  className={styles.logoMarkButton}
+                  aria-label={t("expandSidebar")}
+                  title={t("expandSidebar")}
+                  onClick={onExpandSidebar}
+                >
+                  <span className={styles.logoMarkExpandIcon} aria-hidden="true">
+                    <PanelLeftOpen size={20} strokeWidth={1.75} />
+                  </span>
+                </button>
+                <span className={styles.logoMarkVisual} aria-hidden="true">
+                  <LogoMark />
+                </span>
+              </span>
             ) : (
               <>
                 <LogoWordmark />
@@ -445,7 +455,7 @@ export function WorkspaceSidebar({
                   type="button"
                   className={styles.contextAction}
                   aria-label={contextCreateAction.label}
-                  title={contextCreateAction.label}
+                  data-tooltip={contextCreateAction.label}
                   onClick={contextCreateAction.onClick}
                 >
                   <Plus size={16} strokeWidth={2.2} aria-hidden="true" />
@@ -525,8 +535,14 @@ export function WorkspaceSidebar({
   );
 }
 
-function navigationIcon(Icon: SidebarNavigationIcon) {
-  return <Icon size={24} />;
+function navigationIcon(path: string) {
+  return (
+    <span
+      className={styles.primaryNavIconMask}
+      style={{ "--workspace-nav-icon-url": `url("${path}")` } as NavigationIconStyle}
+      aria-hidden="true"
+    />
+  );
 }
 
 function badgeCount(count: number | null | undefined) {
@@ -597,6 +613,9 @@ function defaultContextSectionIdForTab(workspaceTab: WorkspaceSidebarProps["work
 }
 
 function contextTitleForSection(sectionId: WorkspaceContextSectionId, fallback: string, t: WorkspaceSidebarProps["t"]) {
+  if (sectionId === WorkspaceContextSectionIds.messages) {
+    return t("messagesTab");
+  }
   if (sectionId === WorkspaceContextSectionIds.agents) {
     return t("agentOverview");
   }
