@@ -1,5 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PanelLeftOpen, Plus, Search } from "lucide-react";
+import {
+  SidebarAlertTriangleIcon,
+  SidebarBoxIcon,
+  SidebarGrid07Icon,
+  SidebarLaptopIcon,
+  SidebarListUnordered4Icon,
+  SidebarMessageIcon,
+  SidebarPuzzlePiece02Icon,
+  SidebarRobotIcon,
+  SidebarTimer2Icon,
+  SidebarUserIcon,
+  SidebarUsersIcon,
+} from "@/components/ui/Icons";
 import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
 import { LogoMark, LogoWordmark } from "./WorkspaceSidebarBrand";
@@ -11,24 +24,22 @@ import { classNames } from "@/shared/lib/classNames";
 import styles from "./WorkspaceSidebar.module.css";
 import type { PrimaryNavigationItem, PrimaryNavigationSection } from "./WorkspacePrimaryNavigation";
 import type { WorkspaceContextSectionId, WorkspaceSidebarProps } from "./types";
-import type { CSSProperties } from "react";
+import type { ComponentType } from "react";
 
-type NavigationIconStyle = CSSProperties & {
-  "--workspace-nav-icon-url": string;
-};
+type SidebarNavigationIcon = ComponentType<{ size?: number | string }>;
 
 const WORKSPACE_NAVIGATION_ICONS = {
-  agents: "icons/workspace-agents.svg",
-  computers: "icons/workspace-computers.svg",
-  humans: "icons/workspace-humans.svg",
-  messages: "icons/workspace-messages.svg",
-  models: "icons/workspace-models.svg",
-  notifications: "icons/workspace-notifications.svg",
-  scheduledTasks: "icons/workspace-scheduled-tasks.svg",
-  skills: "icons/workspace-skills.svg",
-  tasks: "icons/workspace-tasks.svg",
-  teams: "icons/workspace-teams.svg",
-  templates: "icons/workspace-templates.svg",
+  agents: SidebarRobotIcon,
+  computers: SidebarLaptopIcon,
+  humans: SidebarUserIcon,
+  messages: SidebarMessageIcon,
+  models: SidebarBoxIcon,
+  notifications: SidebarAlertTriangleIcon,
+  scheduledTasks: SidebarTimer2Icon,
+  skills: SidebarPuzzlePiece02Icon,
+  tasks: SidebarListUnordered4Icon,
+  teams: SidebarUsersIcon,
+  templates: SidebarGrid07Icon,
 } as const;
 
 export function WorkspaceSidebar({
@@ -535,13 +546,11 @@ export function WorkspaceSidebar({
   );
 }
 
-function navigationIcon(path: string) {
+function navigationIcon(Icon: SidebarNavigationIcon) {
   return (
-    <span
-      className={styles.primaryNavIconMask}
-      style={{ "--workspace-nav-icon-url": `url("${path}")` } as NavigationIconStyle}
-      aria-hidden="true"
-    />
+    <span aria-hidden="true">
+      <Icon size={20} />
+    </span>
   );
 }
 

@@ -327,15 +327,6 @@
   height: 20px;
 }
 
-.primaryNavIconMask {
-  width: 20px;
-  height: 20px;
-  background: currentColor;
-  display: block;
-  -webkit-mask: var(--workspace-nav-icon-url) center / contain no-repeat;
-  mask: var(--workspace-nav-icon-url) center / contain no-repeat;
-}
-
 .primaryNavLabel {
   min-width: 0;
   flex: 1 1 auto;
