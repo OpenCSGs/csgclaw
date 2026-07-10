@@ -801,6 +801,55 @@ func TestDeleteRetriesTransientRuntimeDirRemovalError(t *testing.T) {
 	}
 }
 
+func TestRemoveRuntimeDirRetriesLockedPluginCloneFetchHead(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "agent-alice", ".codex")
+	fetchHeadPath := filepath.Join(runtimeDir, "home", ".tmp", "plugins-clone-tHtJ6o", ".git", "FETCH_HEAD")
+	if err := os.MkdirAll(filepath.Dir(fetchHeadPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(plugin clone git dir) error = %v", err)
+	}
+	if err := os.WriteFile(fetchHeadPath, []byte("ref"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile(FETCH_HEAD) error = %v", err)
+	}
+
+	origInitialDelay := runtimeDirRemoveInitialDelay
+	origMaxDelay := runtimeDirRemoveMaxDelay
+	origTries := runtimeDirRemoveTries
+	runtimeDirRemoveInitialDelay = time.Millisecond
+	runtimeDirRemoveMaxDelay = time.Millisecond
+	runtimeDirRemoveTries = 6
+	t.Cleanup(func() {
+		runtimeDirRemoveInitialDelay = origInitialDelay
+		runtimeDirRemoveMaxDelay = origMaxDelay
+		runtimeDirRemoveTries = origTries
+	})
+
+	var removeCalls int
+	rt := New(Dependencies{
+		RemoveAll: func(path string) error {
+			removeCalls++
+			if path == runtimeDir && removeCalls < 4 {
+				return &os.PathError{
+					Op:   "unlinkat",
+					Path: fetchHeadPath,
+					Err:  errors.New("The process cannot access the file because it is being used by another process."),
+				}
+			}
+			return os.RemoveAll(path)
+		},
+	})
+
+	if err := rt.removeRuntimeDir(context.Background(), runtimeDir); err != nil {
+		t.Fatalf("removeRuntimeDir() error = %v", err)
+	}
+	if removeCalls != 4 {
+		t.Fatalf("RemoveAll() calls = %d, want 4", removeCalls)
+	}
+	if _, err := os.Stat(runtimeDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runtime dir stat error = %v, want not exist", err)
+	}
+}
+
 func TestRuntimeInfoNotFound(t *testing.T) {
 	t.Parallel()
 

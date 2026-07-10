@@ -10,3 +10,7 @@ func processAlivePID(pid int) bool {
 	}
 	return syscall.Kill(pid, 0) == nil
 }
+
+func stopProcessTree(pid int) error {
+	return nil
+}

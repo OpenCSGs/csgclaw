@@ -32,10 +32,14 @@ const (
 	workspaceDirName       = "workspace"
 	homeDirName            = "home"
 	logPollInterval        = 200 * time.Millisecond
-	runtimeDirRemoveDelay  = 100 * time.Millisecond
-	runtimeDirRemoveTries  = 6
 	codexProxyProviderName = "proxy"
 	codexModelProviderName = "codex"
+)
+
+var (
+	runtimeDirRemoveInitialDelay = 100 * time.Millisecond
+	runtimeDirRemoveMaxDelay     = 1 * time.Second
+	runtimeDirRemoveTries        = 15
 )
 
 type AgentRef struct {
@@ -1087,7 +1091,11 @@ func (r *Runtime) removeRuntimeDir(ctx context.Context, path string) error {
 		if attempt == runtimeDirRemoveTries-1 {
 			break
 		}
-		timer := time.NewTimer(runtimeDirRemoveDelay)
+		delay := runtimeDirRemoveInitialDelay << attempt
+		if delay > runtimeDirRemoveMaxDelay {
+			delay = runtimeDirRemoveMaxDelay
+		}
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -1338,6 +1346,14 @@ func stopProcess(pid int) error {
 	}
 	_ = proc.Signal(os.Interrupt)
 	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if !processAlive(pid) {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	_ = stopProcessTree(pid)
+	deadline = time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		if !processAlive(pid) {
 			return nil
