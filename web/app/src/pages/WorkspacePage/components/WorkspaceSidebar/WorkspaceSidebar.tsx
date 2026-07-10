@@ -547,11 +547,7 @@ export function WorkspaceSidebar({
 }
 
 function navigationIcon(Icon: SidebarNavigationIcon) {
-  return (
-    <span aria-hidden="true">
-      <Icon size={20} />
-    </span>
-  );
+  return <Icon size={20} />;
 }
 
 function badgeCount(count: number | null | undefined) {
