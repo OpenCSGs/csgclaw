@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/codexcli"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
 )
@@ -1020,8 +1021,16 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 	root := t.TempDir()
 	hostHome := t.TempDir()
 	t.Setenv("HOME", hostHome)
+	initialBinary := filepath.Join(t.TempDir(), "initial-codex")
+	explicitBinary := filepath.Join(t.TempDir(), "explicit-codex")
+	for _, path := range []string{initialBinary, explicitBinary} {
+		if err := os.WriteFile(path, []byte("codex"), 0o755); err != nil {
+			t.Fatalf("write test codex binary %s: %v", path, err)
+		}
+	}
+	t.Setenv(codexcli.EnvBinaryPath, initialBinary)
 	deps := Dependencies{
-		BinaryProvider: fakeBinaryProvider{path: "codex"},
+		BinaryProvider: codexcli.Provider{},
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},
@@ -1076,6 +1085,7 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 		t.Fatalf("write legacy session metadata: %v", err)
 	}
 
+	t.Setenv(codexcli.EnvBinaryPath, explicitBinary)
 	reloaded := New(deps)
 	manager := reloaded.SessionManager()
 	session, err := manager.Session(SessionHandle{RuntimeID: "rt-u-alice"})
@@ -1084,6 +1094,9 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 	}
 	if session.SessionID != "resumed-thread" {
 		t.Fatalf("hydrated session id = %q, want resumed-thread", session.SessionID)
+	}
+	if session.BinaryPath != explicitBinary {
+		t.Fatalf("hydrated binary path = %q, want explicit override %q", session.BinaryPath, explicitBinary)
 	}
 	if want := filepath.Join(root, "agent-alice", ".codex", "workspace"); session.WorkspaceDir != want {
 		t.Fatalf("hydrated workspace dir = %q, want %q", session.WorkspaceDir, want)

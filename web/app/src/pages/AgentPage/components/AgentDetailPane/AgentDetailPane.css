@@ -529,6 +529,8 @@
 }
 
 .agent-activity-list {
+  --agent-activity-type-column-width: 128px;
+
   display: block;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -558,7 +560,9 @@
 
 .agent-activity-row-main {
   display: grid;
-  grid-template-columns: 104px minmax(0, 1fr) minmax(80px, 0.14fr) max-content max-content;
+  grid-template-columns:
+    var(--agent-activity-type-column-width) minmax(0, 1fr) minmax(80px, 0.14fr)
+    max-content max-content;
   align-items: center;
   gap: 12px;
   min-height: 42px;
@@ -567,8 +571,8 @@
 
 .agent-activity-type-badge {
   display: inline-flex;
-  width: 104px;
-  max-width: 104px;
+  width: var(--agent-activity-type-column-width);
+  max-width: var(--agent-activity-type-column-width);
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -665,7 +669,7 @@
 }
 
 .agent-activity-row-detail {
-  margin: 0 12px 12px 128px;
+  margin: 0 12px 12px calc(var(--agent-activity-type-column-width) + 24px);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--gray-50);
@@ -726,6 +730,10 @@
 
 :root[data-theme="dark"] .agent-activity-row {
   border-bottom-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
+}
+
+:root[data-theme="dark"] .agent-activity-row:hover {
+  background: color-mix(in srgb, var(--gray-800) 72%, var(--panel));
 }
 
 :root[data-theme="dark"] .agent-activity-row.selected {

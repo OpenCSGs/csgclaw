@@ -63,15 +63,7 @@ export type WorkspaceGroupProps = {
   title: string;
 };
 
-function WorkspaceAddAction({
-  icon,
-  label,
-  onAdd,
-}: {
-  icon: ReactNode;
-  label: string;
-  onAdd: () => void;
-}) {
+function WorkspaceAddAction({ icon, label, onAdd }: { icon: ReactNode; label: string; onAdd: () => void }) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const tooltipId = useId();
   const [open, setOpen] = useState(false);
@@ -94,9 +86,7 @@ function WorkspaceAddAction({
       const tooltipHeight = 32;
       const margin = 12;
       const fitsRight = rect.right + gap + tooltipWidth <= window.innerWidth - margin;
-      const left = fitsRight
-        ? rect.right + gap
-        : Math.max(margin, rect.left - gap - tooltipWidth);
+      const left = fitsRight ? rect.right + gap : Math.max(margin, rect.left - gap - tooltipWidth);
       const top = Math.min(
         window.innerHeight - tooltipHeight - margin,
         Math.max(margin, rect.top + rect.height / 2 - tooltipHeight / 2),

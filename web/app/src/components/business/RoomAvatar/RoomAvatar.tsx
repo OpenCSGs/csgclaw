@@ -1,10 +1,8 @@
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
-import { localIdentitiesMatch, resolveUserByLocalIdentity } from "@/models/conversations";
-import type { IMConversation, IMUser, UsersById } from "@/models/conversations";
+import type { RoomAvatarMember } from "./roomAvatarMembers";
 import "./RoomAvatar.css";
 
-type RoomAvatarMember = Pick<IMUser, "accent_hex" | "avatar" | "id" | "name">;
 type RoomAvatarSlot = RoomAvatarMember & { placeholder?: boolean };
 
 type RoomAvatarProps = {
@@ -51,23 +49,6 @@ function buildAvatarTiles(memberCount: number): Array<{ sizeClass: string; varia
     { sizeClass: "room-avatar-tile--quarter room-avatar-tile--bottom-left", variant: "bottom-left" },
     { sizeClass: "room-avatar-tile--quarter room-avatar-tile--bottom-right", variant: "bottom-right" },
   ];
-}
-
-export function resolveRoomAvatarMembers(
-  conversation: IMConversation | null | undefined,
-  usersById: UsersById,
-  currentUserID?: string | null,
-): RoomAvatarMember[] {
-  return (conversation?.members || [])
-    .filter((memberID) => !localIdentitiesMatch(memberID, currentUserID))
-    .map((memberID) => resolveUserByLocalIdentity(memberID, usersById))
-    .filter((member): member is IMUser => Boolean(member))
-    .map((member) => ({
-      id: member.id,
-      name: member.name || member.id,
-      avatar: member.avatar,
-      accent_hex: member.accent_hex,
-    }));
 }
 
 export function RoomAvatar({ ariaLabel, count, members, size = 32, showCountBadge = true }: RoomAvatarProps) {

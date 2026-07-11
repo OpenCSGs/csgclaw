@@ -1,5 +1,5 @@
 import { BOT_TYPE_NORMAL, DEFAULT_RUNTIME_KIND } from "@/shared/constants/agents";
-import { useEffect, useRef, useState, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import {
   AgentCreateProgress,
   type AgentCreateProgressProps,
@@ -144,8 +144,12 @@ export function AgentProfileModal({
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
   const selectedProviderModels = selectedProvider?.models ?? [];
   const selectedModelValue = agentDraft.model_id || "";
-  const workerTemplates = workerSelectableTemplates(hubTemplates).filter(
-    (item) => normalizeRuntimeKind(item.runtime_kind) !== "picoclaw_sandbox",
+  const workerTemplates = useMemo(
+    () =>
+      workerSelectableTemplates(hubTemplates).filter(
+        (item) => normalizeRuntimeKind(item.runtime_kind) !== "picoclaw_sandbox",
+      ),
+    [hubTemplates],
   );
   const selectedWorkerTemplate = workerTemplates.find((item) => item.id === agentDraft.from_template) ?? null;
   const sandboxEnabled = Boolean(agentDraft.sandbox_enabled);
@@ -312,11 +316,10 @@ export function AgentProfileModal({
     agentDraft.from_template,
     bootstrapConfig,
     defaultSandboxRuntimeKind,
-    hubTemplates,
     isTemplateCreate,
     managerAgent?.image,
     onAgentDraftChange,
-    workerTemplates.length,
+    workerTemplates,
   ]);
 
   return (

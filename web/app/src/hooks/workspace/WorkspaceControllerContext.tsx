@@ -1,10 +1,8 @@
-import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
-import type { useWorkspaceController } from "./useWorkspaceController";
+import { WorkspaceControllerContext } from "./workspaceControllerContextValue";
+import type { WorkspaceController } from "./workspaceControllerContextValue";
 
-export type WorkspaceController = ReturnType<typeof useWorkspaceController>;
-
-const WorkspaceControllerContext = createContext<WorkspaceController | null>(null);
+export type { WorkspaceController } from "./workspaceControllerContextValue";
 
 export function WorkspaceControllerProvider({
   controller,
@@ -14,12 +12,4 @@ export function WorkspaceControllerProvider({
   controller: WorkspaceController;
 }) {
   return <WorkspaceControllerContext.Provider value={controller}>{children}</WorkspaceControllerContext.Provider>;
-}
-
-export function useWorkspaceControllerContext(): WorkspaceController {
-  const controller = useContext(WorkspaceControllerContext);
-  if (!controller) {
-    throw new Error("Workspace controller is not available.");
-  }
-  return controller;
 }

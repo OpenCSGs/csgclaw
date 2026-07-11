@@ -520,12 +520,16 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 			return nil, err
 		}
 	}
+	binaryPath, err := r.ensureBinary(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve codex binary: %w", err)
+	}
 
 	spec := SessionSpec{
 		RuntimeID:    runtimeID,
 		AgentID:      agentID,
 		AgentName:    firstNonEmpty(agentRef.Name, meta.AgentName),
-		BinaryPath:   strings.TrimSpace(meta.BinaryPath),
+		BinaryPath:   binaryPath,
 		RuntimeDir:   dirs.Root,
 		WorkspaceDir: workspaceDir,
 		HomeDir:      r.hostSessionHomeDir(dirs.Home),

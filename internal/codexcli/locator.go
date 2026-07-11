@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"csgclaw/internal/config"
 )
 
 const (
@@ -15,6 +17,7 @@ const (
 
 	EnvBinaryPath          = "CSGCLAW_CODEX_PATH"
 	EnvLegacyACPBinaryPath = "CSGCLAW_CODEX_ACP_PATH"
+	ManagedBinDirName      = "bin"
 )
 
 type Provider struct {
@@ -28,6 +31,7 @@ func (p Provider) Ensure(_ context.Context) (string, error) {
 type Locator struct {
 	ExplicitPath string
 	GOOS         string
+	ManagedPath  string
 
 	LookPath func(string) (string, error)
 	Stat     func(string) (os.FileInfo, error)
@@ -36,19 +40,23 @@ type Locator struct {
 func (l Locator) Locate() (string, error) {
 	explicit := strings.TrimSpace(l.resolvedExplicitPath())
 	if explicit != "" {
-		if path, ok, err := l.windowsPowerShellShimTarget(explicit); err != nil {
+		if path, ok, err := l.windowsShimTarget(explicit); err != nil {
 			return "", err
 		} else if ok {
 			return path, nil
 		}
-		path, ok, err := l.executablePath(explicit)
-		if err != nil {
-			return "", err
+		if !l.isWindowsCommandShim(explicit) {
+			path, ok, err := l.executablePath(explicit)
+			if err != nil {
+				return "", err
+			}
+			if ok {
+				return path, nil
+			}
+			return "", fmt.Errorf("codex binary %s: %w", explicit, os.ErrNotExist)
 		}
-		if ok {
-			return path, nil
-		}
-		return "", fmt.Errorf("codex binary %s: %w", explicit, os.ErrNotExist)
+		// Batch shims cannot be passed directly to CreateProcess. Continue to a
+		// native PATH or managed executable so startup installation can recover.
 	}
 	if lookPath := l.lookPath(); lookPath != nil {
 		for _, name := range l.binaryNames() {
@@ -65,6 +73,19 @@ func (l Locator) Locate() (string, error) {
 			}
 		}
 	}
+	managedPath, err := l.resolvedManagedPath()
+	if err != nil {
+		return "", err
+	}
+	if managedPath != "" {
+		path, ok, err := l.executablePath(managedPath)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return path, nil
+		}
+	}
 	return "", fmt.Errorf("codex binary not found; install Codex CLI or set %s: %w", EnvBinaryPath, os.ErrNotExist)
 }
 
@@ -76,6 +97,25 @@ func (l Locator) resolvedExplicitPath() string {
 		return path
 	}
 	return strings.TrimSpace(os.Getenv(EnvLegacyACPBinaryPath))
+}
+
+func (l Locator) resolvedManagedPath() (string, error) {
+	if path := strings.TrimSpace(l.ManagedPath); path != "" {
+		return path, nil
+	}
+	return DefaultManagedPath(l.resolvedGOOS())
+}
+
+func DefaultManagedPath(goos string) (string, error) {
+	dir, err := config.DefaultDomainDir(ManagedBinDirName)
+	if err != nil {
+		return "", err
+	}
+	name := BinaryName
+	if strings.EqualFold(strings.TrimSpace(goos), "windows") {
+		name += ".exe"
+	}
+	return filepath.Join(dir, name), nil
 }
 
 func (l Locator) executablePath(path string) (string, bool, error) {
@@ -90,8 +130,8 @@ func (l Locator) executablePath(path string) (string, bool, error) {
 		return "", false, nil
 	}
 	if l.isWindows() {
-		if strings.EqualFold(filepath.Ext(path), ".ps1") {
-			return "", false, fmt.Errorf("codex binary %s is a PowerShell shim; set %s to the matching codex.cmd or codex.exe file", path, EnvBinaryPath)
+		if !strings.EqualFold(filepath.Ext(path), ".exe") {
+			return "", false, fmt.Errorf("codex binary %s is a script shim; set %s to a native codex.exe file", path, EnvBinaryPath)
 		}
 		return path, true, nil
 	}
@@ -101,21 +141,28 @@ func (l Locator) executablePath(path string) (string, bool, error) {
 	return path, true, nil
 }
 
-func (l Locator) windowsPowerShellShimTarget(path string) (string, bool, error) {
-	if !l.isWindows() || !strings.EqualFold(filepath.Ext(path), ".ps1") {
+func (l Locator) windowsShimTarget(path string) (string, bool, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	if !l.isWindows() || (ext != ".ps1" && ext != ".cmd" && ext != ".bat") {
 		return "", false, nil
 	}
 	base := strings.TrimSuffix(path, filepath.Ext(path))
-	for _, candidate := range []string{base + ".cmd", base + ".exe", base + ".bat"} {
-		resolved, ok, err := l.executablePath(candidate)
-		if err != nil {
-			return "", false, err
-		}
-		if ok {
-			return resolved, true, nil
-		}
+	resolved, ok, err := l.executablePath(base + ".exe")
+	if err != nil {
+		return "", false, err
+	}
+	if ok {
+		return resolved, true, nil
 	}
 	return "", false, nil
+}
+
+func (l Locator) isWindowsCommandShim(path string) bool {
+	if !l.isWindows() {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".cmd" || ext == ".bat"
 }
 
 func (l Locator) lookPath() func(string) (string, error) {
@@ -134,17 +181,20 @@ func (l Locator) stat(path string) (os.FileInfo, error) {
 
 func (l Locator) binaryNames() []string {
 	if l.isWindows() {
-		return []string{BinaryName + ".cmd", BinaryName + ".exe", BinaryName + ".bat", BinaryName}
+		return []string{BinaryName + ".exe"}
 	}
 	return []string{BinaryName}
 }
 
 func (l Locator) isWindows() bool {
-	goos := strings.TrimSpace(l.GOOS)
-	if goos == "" {
-		goos = runtime.GOOS
+	return l.resolvedGOOS() == "windows"
+}
+
+func (l Locator) resolvedGOOS() string {
+	if goos := strings.TrimSpace(l.GOOS); goos != "" {
+		return strings.ToLower(goos)
 	}
-	return goos == "windows"
+	return runtime.GOOS
 }
 
 func AppServerArgs() []string {

@@ -234,8 +234,12 @@ export function useWorkspaceHubSelection({
     remoteSkillsEnabled && officialSkillsQuery.error
       ? errorMessage(officialSkillsQuery.error, t("resourcesSkillRemoteSkillsLoadFailed"))
       : "";
-  const skillTreeError = skillTreeQuery.error ? errorMessage(skillTreeQuery.error, t("resourcesSkillFilesLoadFailed")) : "";
-  const skillFileError = skillFileQuery.error ? errorMessage(skillFileQuery.error, t("resourcesSkillFileLoadFailed")) : "";
+  const skillTreeError = skillTreeQuery.error
+    ? errorMessage(skillTreeQuery.error, t("resourcesSkillFilesLoadFailed"))
+    : "";
+  const skillFileError = skillFileQuery.error
+    ? errorMessage(skillFileQuery.error, t("resourcesSkillFileLoadFailed"))
+    : "";
 
   const retry = useCallback(async () => {
     if (refreshTemplates) {

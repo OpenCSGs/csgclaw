@@ -16,6 +16,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/scheduledtask"
 	"csgclaw/internal/team"
 	hub "csgclaw/internal/template"
@@ -35,6 +36,7 @@ type Options struct {
 	Team              *team.Service
 	AgentTask         *agenttask.Service
 	ScheduledTask     *scheduledtask.Service
+	AgentRuntimes     *runtimecatalog.Service
 	TeamAdapters      *team.AdapterRegistry
 	Upgrade           *upgrade.Manager
 	ActivityDecider   api.ActivityDecider
@@ -52,6 +54,7 @@ func newHandler(opts Options) *api.Handler {
 	handler.SetTeamService(opts.Team)
 	handler.SetAgentTaskService(opts.AgentTask)
 	handler.SetScheduledTaskService(opts.ScheduledTask)
+	handler.SetAgentRuntimeService(opts.AgentRuntimes)
 	if opts.TeamAdapters != nil {
 		handler.SetTeamAdapterRegistry(opts.TeamAdapters)
 	}

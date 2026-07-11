@@ -48,7 +48,7 @@ type fakeCompatRuntime struct {
 }
 
 func init() {
-	codexPath := filepath.Join(os.TempDir(), "csgclaw-test-codex")
+	codexPath := filepath.Join(os.TempDir(), "csgclaw-test-codex.exe")
 	_ = os.WriteFile(codexPath, []byte("#!/bin/sh\nexit 0\n"), 0o755)
 	_ = os.Setenv("CSGCLAW_CODEX_PATH", codexPath)
 	_ = agent.TestOnlySetDefaultServiceOption(func(s *agent.Service) error {

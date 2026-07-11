@@ -1,11 +1,16 @@
 package serve
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,17 +21,25 @@ import (
 	"csgclaw/cli/command"
 	"csgclaw/internal/agent"
 	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/codexcli"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	internalonboard "csgclaw/internal/onboard"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/server"
 	"csgclaw/internal/upgrade"
 	appversion "csgclaw/internal/version"
 )
+
+func init() {
+	codexPath := filepath.Join(os.TempDir(), "csgclaw-serve-test-codex.exe")
+	_ = os.WriteFile(codexPath, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	_ = os.Setenv("CSGCLAW_CODEX_PATH", codexPath)
+}
 
 func TestValidateServeInstallationRejectsReleaseOutsideBundle(t *testing.T) {
 	originalVersion := appversion.Version
@@ -1027,6 +1040,255 @@ func TestServeForegroundEnsuresBootstrapManagerBeforeConfiguredAgents(t *testing
 	}
 }
 
+func TestServeForegroundAutoInstallsCodexBeforeManager(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+
+	target := filepath.Join(t.TempDir(), "bin", "codex")
+	t.Setenv(codexcli.EnvBinaryPath, target)
+	binaryPayload := serveTestMachOBinary("arm64")
+	payload := serveTestCodexArchive(t, "codex-aarch64-apple-darwin", string(binaryPayload))
+	downloadStarted := make(chan struct{})
+	releaseDownload := make(chan struct{})
+	downloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/macos/arm64" || r.URL.Query().Get("package") != "codex-cli" {
+			t.Errorf("download URL = %s, want /macos/arm64?package=codex-cli", r.URL.String())
+		}
+		close(downloadStarted)
+		<-releaseDownload
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer downloadServer.Close()
+	installer := codexcli.NewInstaller(codexcli.InstallerOptions{
+		BaseURL: downloadServer.URL,
+		GOOS:    "darwin",
+		GOARCH:  "arm64",
+	})
+	runtimeService := runtimecatalog.NewService(
+		runtimecatalog.WithCodexInstaller(installer),
+		runtimecatalog.WithPlatform("darwin", "arm64"),
+	)
+	originalNewAgentRuntimeService := NewAgentRuntimeService
+	NewAgentRuntimeService = func() *runtimecatalog.Service { return runtimeService }
+	t.Cleanup(func() { NewAgentRuntimeService = originalNewAgentRuntimeService })
+
+	managerStarted := make(chan struct{})
+	EnsureBootstrapManager = func(context.Context, *agent.Service) error {
+		path, err := (codexcli.Locator{}).Locate()
+		if err != nil {
+			return fmt.Errorf("locate Codex before manager startup: %w", err)
+		}
+		if path != target {
+			return fmt.Errorf("Codex path before manager startup = %q, want %q", path, target)
+		}
+		close(managerStarted)
+		return nil
+	}
+	RunServer = func(opts server.Options) error {
+		if opts.AgentRuntimes != runtimeService {
+			return fmt.Errorf("AgentRuntimes = %p, want shared service %p", opts.AgentRuntimes, runtimeService)
+		}
+		if opts.OnReady == nil {
+			return errors.New("OnReady is nil")
+		}
+		opts.OnReady(nil, nil)
+		return nil
+	}
+
+	if err := serveForeground(context.Background(), testContext(), config.Config{Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"}}, "json"); err != nil {
+		t.Fatalf("serveForeground() error = %v", err)
+	}
+	select {
+	case <-downloadStarted:
+	case <-time.After(time.Second):
+		t.Fatal("Codex auto-install did not start")
+	}
+	select {
+	case <-managerStarted:
+		t.Fatal("manager started before Codex installation completed")
+	default:
+	}
+	close(releaseDownload)
+	select {
+	case <-managerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("manager did not start after Codex installation completed")
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", target, err)
+	}
+	if !bytes.Equal(data, binaryPayload) {
+		t.Fatalf("installed Codex does not match the validated fixture")
+	}
+}
+
+func TestServeRunSkipsCodexAutoInstallWhenDisabled(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	target := filepath.Join(home, ".csgclaw", "bin", "codex")
+	t.Setenv(codexcli.EnvBinaryPath, target)
+	downloadAttempted := make(chan struct{}, 1)
+	downloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case downloadAttempted <- struct{}{}:
+		default:
+		}
+		http.Error(w, "unexpected download", http.StatusInternalServerError)
+	}))
+	defer downloadServer.Close()
+	installer := codexcli.NewInstaller(codexcli.InstallerOptions{
+		BaseURL: downloadServer.URL,
+		GOOS:    "linux",
+		GOARCH:  "amd64",
+	})
+	runtimeService := runtimecatalog.NewService(
+		runtimecatalog.WithCodexInstaller(installer),
+		runtimecatalog.WithPlatform("linux", "amd64"),
+	)
+	originalNewAgentRuntimeService := NewAgentRuntimeService
+	NewAgentRuntimeService = func() *runtimecatalog.Service { return runtimeService }
+	t.Cleanup(func() { NewAgentRuntimeService = originalNewAgentRuntimeService })
+
+	managerStarted := make(chan struct{})
+	EnsureBootstrapManager = func(context.Context, *agent.Service) error {
+		close(managerStarted)
+		return nil
+	}
+	RunServer = func(opts server.Options) error {
+		if opts.AgentRuntimes != runtimeService {
+			return fmt.Errorf("AgentRuntimes = %p, want shared service %p", opts.AgentRuntimes, runtimeService)
+		}
+		if opts.OnReady == nil {
+			return errors.New("OnReady is nil")
+		}
+		opts.OnReady(nil, nil)
+		return nil
+	}
+
+	configPath := filepath.Join(home, "config.toml")
+	if err := (config.Config{
+		Server:  config.ServerConfig{ListenAddr: "127.0.0.1:18080"},
+		Sandbox: config.SandboxConfig{Provider: config.DefaultSandboxProvider},
+	}).Save(configPath); err != nil {
+		t.Fatalf("Save(config) error = %v", err)
+	}
+	if err := NewServeCmd().Run(context.Background(), testContext(), []string{"--no-codex-auto-install"}, command.GlobalOptions{
+		Config: configPath,
+		Output: "json",
+	}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	select {
+	case <-managerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("manager did not start when Codex auto-install was disabled")
+	}
+	select {
+	case <-downloadAttempted:
+		t.Fatal("Codex download was attempted with --no-codex-auto-install")
+	default:
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Stat(%q) error = %v, want missing Codex binary", target, err)
+	}
+}
+
+func TestBackgroundServeArgsForwardsCodexAutoInstallFlag(t *testing.T) {
+	got := backgroundServeArgs("/tmp/config.toml", "/tmp/server.pid", "debug", serveOptions{
+		NoBrowser:          true,
+		NoAuthDetect:       true,
+		NoCodexAutoInstall: true,
+	})
+	want := []string{
+		"_serve", "--pid", "/tmp/server.pid",
+		"--config", "/tmp/config.toml",
+		"--log-level", "debug",
+		"--no-browser",
+		"--no-auth-detect",
+		"--no-codex-auto-install",
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("backgroundServeArgs() = %v, want %v", got, want)
+	}
+}
+
+func TestServeForegroundContinuesStartupAfterCodexInstallFailure(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+
+	t.Setenv(codexcli.EnvBinaryPath, filepath.Join(t.TempDir(), "missing-codex"))
+	downloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+	}))
+	defer downloadServer.Close()
+	installer := codexcli.NewInstaller(codexcli.InstallerOptions{
+		BaseURL: downloadServer.URL,
+		GOOS:    "linux",
+		GOARCH:  "amd64",
+	})
+	originalNewAgentRuntimeService := NewAgentRuntimeService
+	NewAgentRuntimeService = func() *runtimecatalog.Service {
+		return runtimecatalog.NewService(runtimecatalog.WithCodexInstaller(installer))
+	}
+	t.Cleanup(func() { NewAgentRuntimeService = originalNewAgentRuntimeService })
+
+	managerStarted := make(chan struct{})
+	EnsureBootstrapManager = func(context.Context, *agent.Service) error {
+		close(managerStarted)
+		return nil
+	}
+	RunServer = func(opts server.Options) error {
+		opts.OnReady(nil, nil)
+		return nil
+	}
+
+	if err := serveForeground(context.Background(), testContext(), config.Config{Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"}}, "json"); err != nil {
+		t.Fatalf("serveForeground() error = %v", err)
+	}
+	select {
+	case <-managerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("manager startup did not continue after Codex install failure")
+	}
+}
+
+func serveTestCodexArchive(t *testing.T, name, body string) []byte {
+	t.Helper()
+	var compressed bytes.Buffer
+	gzipWriter := gzip.NewWriter(&compressed)
+	tarWriter := tar.NewWriter(gzipWriter)
+	header := &tar.Header{Name: name, Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg}
+	if err := tarWriter.WriteHeader(header); err != nil {
+		t.Fatalf("WriteHeader() error = %v", err)
+	}
+	if _, err := tarWriter.Write([]byte(body)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatalf("tar Close() error = %v", err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatalf("gzip Close() error = %v", err)
+	}
+	return compressed.Bytes()
+}
+
+func serveTestMachOBinary(arch string) []byte {
+	data := make([]byte, 32)
+	copy(data[:4], []byte{0xcf, 0xfa, 0xed, 0xfe})
+	cpuType := uint32(0x01000007)
+	if arch == "arm64" {
+		cpuType = 0x0100000c
+	}
+	binary.LittleEndian.PutUint32(data[4:8], cpuType)
+	return data
+}
+
 func TestServeForegroundPassesConfigPathToServer(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
@@ -1520,7 +1782,7 @@ func TestNewAgentServiceRegistersCodexRuntime(t *testing.T) {
 
 	svc, err := newAgentService(config.Config{
 		Sandbox: config.SandboxConfig{
-			Provider: config.DefaultSandboxProvider,
+			Provider: config.BoxLiteProvider,
 		},
 	}, nil)
 	if err != nil {

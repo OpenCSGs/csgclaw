@@ -559,15 +559,44 @@ function agentAvatarUserIDs(item: AgentLike | null | undefined): string[] {
     }
     out.push(id);
   };
-  push(item?.user_id);
+  const pushWithCanonicalUser = (value: unknown) => {
+    push(value);
+    let suffix = String(value ?? "").trim();
+    if (!suffix) {
+      return;
+    }
+    while (true) {
+      const next = suffix.replace(/^(?:user-|agent-|pt-|u-)/, "");
+      if (next === suffix) {
+        break;
+      }
+      suffix = next;
+    }
+    if (suffix) {
+      push(`user-${suffix}`);
+    }
+  };
+  pushWithCanonicalUser(item?.user_id);
   const participant = item?.participants?.find(
     (candidate) => String(candidate?.channel || "").trim() === "csgclaw" && String(candidate?.id || "").trim(),
   );
-  push(participant?.user_id);
-  push(participant?.channel_user_ref);
-  push(resolveAgentChannelUserID(item));
-  push(item?.id);
+  pushWithCanonicalUser(participant?.user_id);
+  pushWithCanonicalUser(participant?.channel_user_ref);
+  pushWithCanonicalUser(resolveAgentChannelUserID(item));
+  pushWithCanonicalUser(item?.id);
   return out;
+}
+
+export function resolveAgentAvatarUserID(
+  agent: AgentLike | null | undefined,
+  usersById?: Map<string, AvatarLikeUser> | null,
+): string {
+  for (const userID of agentAvatarUserIDs(agent)) {
+    if (usersById?.has(userID)) {
+      return userID;
+    }
+  }
+  return resolveAgentChannelUserID(agent);
 }
 
 export function feishuAgentParticipant(

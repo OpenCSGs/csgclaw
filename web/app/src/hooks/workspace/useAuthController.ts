@@ -181,7 +181,9 @@ export function useAuthController(t: TranslateFn): AuthController {
       avatar: status.avatar,
       avatarFallback: avatarFallbackText(status.user_id, status.user_uuid, t("csghubSignedIn")),
       title: t("csghubSignedIn"),
-      message: environment ? t("csghubLoginEnvironmentCompleted", { user, environment }) : t("csghubLoginCompleted", { user }),
+      message: environment
+        ? t("csghubLoginEnvironmentCompleted", { user, environment })
+        : t("csghubLoginCompleted", { user }),
       type: "login",
       tone: "success",
     });

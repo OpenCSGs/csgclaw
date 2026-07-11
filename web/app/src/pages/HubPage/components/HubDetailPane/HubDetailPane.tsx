@@ -281,9 +281,7 @@ export function HubDetailPane({
                 <div className="hub-inspector-field">
                   <span>{t("resourcesRuntimeLabel")}</span>
                   <strong>
-                    {selectedTemplate.runtime_kind
-                      ? formatRuntimeKindLabel(selectedTemplate.runtime_kind, t)
-                      : "-"}
+                    {selectedTemplate.runtime_kind ? formatRuntimeKindLabel(selectedTemplate.runtime_kind, t) : "-"}
                   </strong>
                 </div>
                 <div className="hub-inspector-field">

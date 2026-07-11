@@ -32,6 +32,7 @@ const WORKSPACE_QUERY_SCOPE = "workspace";
 export const workspaceQueryKeys = {
   bootstrap: () => [WORKSPACE_QUERY_SCOPE, "bootstrap"] as const,
   bootstrapConfig: () => [WORKSPACE_QUERY_SCOPE, "bootstrap-config"] as const,
+  agentRuntimes: () => [WORKSPACE_QUERY_SCOPE, "agent-runtimes"] as const,
   managerProfile: () => [WORKSPACE_QUERY_SCOPE, "manager-profile"] as const,
   agents: () => [WORKSPACE_QUERY_SCOPE, "agents"] as const,
   teams: () => [WORKSPACE_QUERY_SCOPE, "teams"] as const,

@@ -78,6 +78,7 @@ import {
   partitionWorkspaceAgentItems,
   pickDefaultAgentTemplate,
   resolveAgentAvatarSource,
+  resolveAgentAvatarUserID,
   normalizeRuntimeKind,
   profileSelectorFromDraft,
   providerNeedsAuth,
@@ -147,6 +148,8 @@ const FEISHU_REGISTRATION_DEFAULT_POLL_SECONDS = 3;
 const FEISHU_REGISTRATION_MIN_POLL_SECONDS = 1;
 const FEISHU_REGISTRATION_MAX_POLL_SECONDS = 30;
 const AGENT_CREATE_NAME_RETRY_LIMIT = 20;
+const noopRefreshWorkspaceModelProviders = async (): Promise<null> => null;
+const noopSelectModelProvider = (): void => undefined;
 
 function feishuActionKey(agentID: string, action: FeishuActionKind): string {
   return `${agentID}:${FEISHU_CHANNEL_ACTION}:${action}`;
@@ -414,13 +417,13 @@ export function useAgentController({
   refreshWorkspaceBootstrap,
   refreshWorkspaceBootstrapConfig,
   refreshWorkspaceManagerProfile,
-  refreshWorkspaceModelProviders = async () => null,
+  refreshWorkspaceModelProviders = noopRefreshWorkspaceModelProviders,
   rooms,
   selectAgent,
   selectComputer,
   selectConversation,
   selectHub,
-  selectModelProvider = () => {},
+  selectModelProvider = noopSelectModelProvider,
   setAgentsData,
   setBootstrapData,
   setSelectedHubTemplateId,
@@ -504,7 +507,7 @@ export function useAgentController({
     item: AgentLike | null | undefined,
     avatar: string | null | undefined,
   ): Promise<void> {
-    const userID = resolveAgentChannelUserID(item);
+    const userID = resolveAgentAvatarUserID(item, usersById);
     const nextAvatar = String(avatar || "").trim();
     if (!userID || !nextAvatar) {
       return;
@@ -573,6 +576,8 @@ export function useAgentController({
       enable_fast_mode: selectedAgentForPage.enable_fast_mode ?? profile?.enable_fast_mode ?? false,
     });
   }, [selectedAgentForPage]);
+  const selectedAgentForPageRef = useRef(selectedAgentForPage);
+  selectedAgentForPageRef.current = selectedAgentForPage;
   const selectedFeishuPendingRegistration = useMemo(() => {
     const agentID = String(selectedAgentForPage?.id || "").trim();
     if (!agentID) {
@@ -662,6 +667,66 @@ export function useAgentController({
   const resetAgentPageModels = useCallback(() => {
     void refreshWorkspaceModelProviders();
   }, [refreshWorkspaceModelProviders]);
+  const fetchAgentWithProfile = useCallback(async (item: AgentLike | null | undefined): Promise<AgentWithProfile> => {
+    const id = String(item?.id ?? "").trim();
+    if (!id) {
+      return { agent: item || {}, profile: item?.agent_profile };
+    }
+    let agent: AgentLike = item || {};
+    const [fetchedAgent, fetchedProfile] = await Promise.all([
+      Promise.resolve(fetchAgent(id)).catch(() => null),
+      Promise.resolve(fetchAgentProfile(id)).catch(() => null),
+    ]);
+    if (fetchedAgent) {
+      agent = { ...agent, ...fetchedAgent };
+    }
+    const profile = fetchedProfile ?? agent?.agent_profile;
+    return { agent, profile };
+  }, []);
+  const agentDraftFromItem = useCallback(
+    async (item: AgentLike): Promise<AgentDraft> => {
+      if (isNotificationBotAgent(item)) {
+        return ensureNotifierPullSubscriptionDraft(agentToDraft(item));
+      }
+      const { agent, profile } = await fetchAgentWithProfile(item);
+      const base = agentToDraft({ ...agent, agent_profile: profile });
+      const runtimeKind = normalizeRuntimeKind(agent?.runtime_kind || item?.runtime_kind || base.runtime_kind);
+      return ensureNotifierPullSubscriptionDraft({
+        ...base,
+        runtime_kind: runtimeKind || base.runtime_kind,
+        bot_type: BOT_TYPE_NORMAL,
+      });
+    },
+    [fetchAgentWithProfile],
+  );
+  const loadAgentPageDraft = useCallback(
+    async (item: AgentLike | null | undefined, loadSeq: number): Promise<void> => {
+      if (!item?.id) {
+        return;
+      }
+      const requestID = agentPageDraftRequestRef.current + 1;
+      agentPageDraftRequestRef.current = requestID;
+      setAgentPageError("");
+      resetAgentPageModels();
+      const fallbackDraft = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
+      setAgentPageDraft(fallbackDraft);
+      setAgentPageSavedDraft(fallbackDraft);
+      try {
+        const draft = await agentDraftFromItem(item);
+        if (agentPageDraftLoadSeqRef.current !== loadSeq || agentPageDraftRequestRef.current !== requestID) {
+          return;
+        }
+        setAgentPageDraft(draft);
+        setAgentPageSavedDraft(draft);
+      } catch (err) {
+        if (agentPageDraftLoadSeqRef.current !== loadSeq || agentPageDraftRequestRef.current !== requestID) {
+          return;
+        }
+        setAgentPageError(errorMessage(err, t("agentActionFailed")));
+      }
+    },
+    [agentDraftFromItem, resetAgentPageModels, t],
+  );
   const { cliproxyAuthStatuses, setCLIProxyAuthStatus } = useCLIProxyAuthStatuses(
     [
       managerProfile?.provider,
@@ -793,7 +858,8 @@ export function useAgentController({
   }, [skillsAgentID]);
 
   useEffect(() => {
-    if (!selectedAgentForPage) {
+    const selectedAgent = selectedAgentForPageRef.current;
+    if (!selectedAgent) {
       agentPageDraftLoadSeqRef.current += 1;
       setAgentPageDraft(null);
       setAgentPageSavedDraft(null);
@@ -806,11 +872,11 @@ export function useAgentController({
     }
     const loadSeq = agentPageDraftLoadSeqRef.current + 1;
     agentPageDraftLoadSeqRef.current = loadSeq;
-    const draft = ensureNotifierPullSubscriptionDraft(agentToDraft(selectedAgentForPage));
+    const draft = ensureNotifierPullSubscriptionDraft(agentToDraft(selectedAgent));
     setAgentPageDraft(draft);
     setAgentPageSavedDraft(draft);
-    void loadAgentPageDraft(selectedAgentForPage, loadSeq);
-  }, [agentPageHasUnsavedChanges, selectedAgentForPage?.id, selectedAgentForPageDraftSignature]);
+    void loadAgentPageDraft(selectedAgent, loadSeq);
+  }, [agentPageHasUnsavedChanges, loadAgentPageDraft, selectedAgentForPage?.id, selectedAgentForPageDraftSignature]);
 
   async function refreshManagerProfile(): Promise<void> {
     await refreshWorkspaceManagerProfile();
@@ -1074,37 +1140,6 @@ export function useAgentController({
     await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(id) });
   }
 
-  async function fetchAgentWithProfile(item: AgentLike | null | undefined): Promise<AgentWithProfile> {
-    const id = String(item?.id ?? "").trim();
-    if (!id) {
-      return { agent: item || {}, profile: item?.agent_profile };
-    }
-    let agent: AgentLike = item || {};
-    const [fetchedAgent, fetchedProfile] = await Promise.all([
-      Promise.resolve(fetchAgent(id)).catch(() => null),
-      Promise.resolve(fetchAgentProfile(id)).catch(() => null),
-    ]);
-    if (fetchedAgent) {
-      agent = { ...agent, ...fetchedAgent };
-    }
-    const profile = fetchedProfile ?? agent?.agent_profile;
-    return { agent, profile };
-  }
-
-  async function agentDraftFromItem(item: AgentLike): Promise<AgentDraft> {
-    if (isNotificationBotAgent(item)) {
-      return ensureNotifierPullSubscriptionDraft(agentToDraft(item));
-    }
-    const { agent, profile } = await fetchAgentWithProfile(item);
-    const base = agentToDraft({ ...agent, agent_profile: profile });
-    const runtimeKind = normalizeRuntimeKind(agent?.runtime_kind || item?.runtime_kind || base.runtime_kind);
-    return ensureNotifierPullSubscriptionDraft({
-      ...base,
-      runtime_kind: runtimeKind || base.runtime_kind,
-      bot_type: BOT_TYPE_NORMAL,
-    });
-  }
-
   async function openCreateNotificationParticipantModal(): Promise<void> {
     setAgentModalMode("create");
     setAgentCreateBotKind(BOT_CREATE_KIND_NOTIFICATION);
@@ -1246,32 +1281,6 @@ export function useAgentController({
     }
   }
 
-  async function loadAgentPageDraft(item: AgentLike | null | undefined, loadSeq: number): Promise<void> {
-    if (!item?.id) {
-      return;
-    }
-    const requestID = agentPageDraftRequestRef.current + 1;
-    agentPageDraftRequestRef.current = requestID;
-    setAgentPageError("");
-    resetAgentPageModels();
-    const fallbackDraft = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
-    setAgentPageDraft(fallbackDraft);
-    setAgentPageSavedDraft(fallbackDraft);
-    try {
-      const draft = await agentDraftFromItem(item);
-      if (agentPageDraftLoadSeqRef.current !== loadSeq || agentPageDraftRequestRef.current !== requestID) {
-        return;
-      }
-      setAgentPageDraft(draft);
-      setAgentPageSavedDraft(draft);
-    } catch (err) {
-      if (agentPageDraftLoadSeqRef.current !== loadSeq || agentPageDraftRequestRef.current !== requestID) {
-        return;
-      }
-      setAgentPageError(errorMessage(err, t("agentActionFailed")));
-    }
-  }
-
   function normalizeDraftForCompare(draft: AgentDraft | null | undefined): AgentDraft | null {
     if (!draft) {
       return null;
@@ -1366,10 +1375,11 @@ export function useAgentController({
           payload.runtime_options = runtimeOptions;
         }
         const saved = await patchNotificationBotRequest(selectedAgentForPage.id, payload);
+        await saveLinkedAgentUserAvatar(selectedAgentForPage, draft.avatar);
         await refreshAgents();
         await refreshWorkspaceBootstrap();
         await refreshAgentSkills(saved.id || selectedAgentForPage.id);
-        const savedDraft = agentToDraft(saved);
+        const savedDraft = agentToDraft({ ...saved, avatar: draft.avatar });
         setAgentPageDraft(savedDraft);
         setAgentPageSavedDraft(savedDraft);
         return;
@@ -1404,7 +1414,7 @@ export function useAgentController({
           await refreshManagerProfile();
         }
         await refreshAgentSkills(savedMetaOnly.id || selectedAgentForPage.id);
-        const nextDraft = await agentDraftFromItem(savedMetaOnly);
+        const nextDraft = await agentDraftFromItem({ ...savedMetaOnly, avatar: draft.avatar });
         setAgentPageDraft(nextDraft);
         setAgentPageSavedDraft(nextDraft);
         return;
@@ -1420,8 +1430,9 @@ export function useAgentController({
       const saved = await updateAgentRequest(selectedAgentForPage.id, payload);
       await saveLinkedAgentUserAvatar(selectedAgentForPage, draft.avatar);
       if (canApplyAgentPageProfileSaveImmediately(saved, profileChanged, runtimeOptionsChanged)) {
-        applyAgentListUpdate(saved);
-        const savedDraft = agentToDraft(saved);
+        const savedWithAvatar = { ...saved, avatar: draft.avatar };
+        applyAgentListUpdate(savedWithAvatar);
+        const savedDraft = agentToDraft(savedWithAvatar);
         setAgentPageDraft(savedDraft);
         setAgentPageSavedDraft(savedDraft);
         return;
@@ -1435,7 +1446,7 @@ export function useAgentController({
         await refreshManagerProfile();
       }
       await refreshAgentSkills(saved.id || selectedAgentForPage.id);
-      const savedDraft = await agentDraftFromItem(saved);
+      const savedDraft = await agentDraftFromItem({ ...saved, avatar: draft.avatar });
       setAgentPageDraft(savedDraft);
       setAgentPageSavedDraft(savedDraft);
       if (

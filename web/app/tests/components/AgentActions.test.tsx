@@ -344,7 +344,7 @@ describe("agent action visibility", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Channels" }));
-    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Channels" })).toBeInTheDocument();
     expect(screen.getByText("Manage external channels.")).toBeInTheDocument();
     expect(document.querySelector(".agent-channel-icon img")).toHaveAttribute("src", "icons/feishu.png");
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
@@ -912,7 +912,7 @@ describe("agent action visibility", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "skills" }));
+    await user.click(screen.getByRole("button", { name: /^skills/ }));
     await user.click(screen.getByRole("button", { name: "Add skill" }));
     expect(screen.getByText("Candidates come from global skills.")).toBeInTheDocument();
     expect(screen.getByText("Beta candidate")).toBeInTheDocument();
@@ -964,7 +964,7 @@ describe("agent action visibility", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "skills" }));
+    await user.click(screen.getByRole("button", { name: /^skills/ }));
     await user.click(screen.getAllByRole("button", { name: "Delete" })[0]);
     expect(screen.getByText('Delete skill "alpha" from this agent?')).toBeInTheDocument();
 
@@ -1181,15 +1181,21 @@ describe("agent action visibility", () => {
 
     const navigation = screen.getByRole("navigation", { name: "Profile sections" });
     const tabs = within(navigation).getAllByRole("button");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Profile", "Activity", "Channels", "Instructions", "skills"]);
+    expect(tabs.map((tab) => tab.firstElementChild?.textContent)).toEqual([
+      "Profile",
+      "Activity",
+      "Instructions",
+      "skills",
+      "Channels",
+    ]);
     expect(tabs[0]).toHaveAttribute("aria-current", "location");
     expect(screen.getByText("Request options")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Channels" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Channels" })).not.toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("button", { name: "Channels" }));
 
     expect(within(navigation).getByRole("button", { name: "Channels" })).toHaveAttribute("aria-current", "location");
-    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Channels" })).toBeInTheDocument();
     expect(screen.queryByText("Request options")).not.toBeInTheDocument();
   });
 
@@ -1222,6 +1228,6 @@ describe("agent action visibility", () => {
     render(<AgentDetailPane {...props} />);
 
     expect(screen.getByRole("button", { name: "Channels" })).toHaveAttribute("aria-current", "location");
-    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Channels" })).toBeInTheDocument();
   });
 });

@@ -156,8 +156,14 @@
   color: var(--text);
 }
 
-:root[data-theme="dark"] .csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-secondary-gray:hover:not(:disabled),
-:root[data-theme="dark"] .csg-dialog-content.agent-delete-dialog .agent-delete-actions .btn-secondary-gray:focus-visible {
+:root[data-theme="dark"]
+  .csg-dialog-content.agent-delete-dialog
+  .agent-delete-actions
+  .btn-secondary-gray:hover:not(:disabled),
+:root[data-theme="dark"]
+  .csg-dialog-content.agent-delete-dialog
+  .agent-delete-actions
+  .btn-secondary-gray:focus-visible {
   border-color: color-mix(in oklab, var(--line) 80%, transparent);
   background: color-mix(in oklab, var(--panel) 80%, #020617 20%);
   color: var(--text);

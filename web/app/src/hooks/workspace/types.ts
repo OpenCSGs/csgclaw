@@ -267,6 +267,4 @@ export type UseAgentControllerArgs = {
 
 export type AgentDetailSidePanelProps = AgentDetailPaneProps & {
   onClose: () => void;
-  onResize?: (width: number) => void;
-  width?: number;
 };

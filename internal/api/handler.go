@@ -28,6 +28,7 @@ import (
 	"csgclaw/internal/llm"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/scheduledtask"
@@ -53,6 +54,7 @@ type Handler struct {
 	agentTaskSvc               *agenttask.Service
 	scheduledTaskSvc           *scheduledtask.Service
 	connectors                 *connectors.Service
+	agentRuntimes              *runtimecatalog.Service
 	teamAdapters               *team.AdapterRegistry
 	teamPlanJobsMu             sync.Mutex
 	teamPlanJobs               map[string]struct{}
@@ -773,6 +775,12 @@ func (h *Handler) SetScheduledTaskService(svc *scheduledtask.Service) {
 func (h *Handler) SetConnectorService(svc *connectors.Service) {
 	if h != nil {
 		h.connectors = svc
+	}
+}
+
+func (h *Handler) SetAgentRuntimeService(svc *runtimecatalog.Service) {
+	if h != nil {
+		h.agentRuntimes = svc
 	}
 }
 

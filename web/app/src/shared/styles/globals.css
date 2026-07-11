@@ -9,6 +9,29 @@
   box-sizing: border-box;
 }
 
+:root {
+  --app-ui-viewport-height: 100dvh;
+}
+
+@supports (zoom: 80%) {
+  :root {
+    --app-ui-viewport-height: 125dvh;
+    --text-xs-size: 13px;
+    --text-sm-size: 15px;
+    --text-md-size: 17px;
+    --text-lg-size: 19px;
+    --text-xl-size: 21px;
+    --text-2xl-size: 25px;
+    --text-3xl-size: 31px;
+    --text-4xl-size: 37px;
+    --text-5xl-size: 49px;
+    --text-6xl-size: 61px;
+    --text-7xl-size: 73px;
+    font-size-adjust: 0.65;
+    zoom: 80%;
+  }
+}
+
 html,
 body,
 #root {
@@ -26,8 +49,9 @@ html[data-theme="light"] {
 
 body {
   margin: 0;
-  min-height: 100dvh;
+  min-height: var(--app-ui-viewport-height);
   color: var(--text);
+  font-size: var(--text-md-size);
   font-family: var(--font-sans);
   overflow: hidden;
   background: var(--bg);
@@ -37,7 +61,7 @@ body {
 }
 
 #root {
-  min-height: 100%;
+  min-height: var(--app-ui-viewport-height);
 }
 
 .truncate {

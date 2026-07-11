@@ -40,7 +40,7 @@ describe("ProfileControls", () => {
 
     expect(screen.getByLabelText("API key")).toHaveValue("");
     expect(screen.getByLabelText("API key")).not.toHaveAttribute("placeholder", "Enter API key");
-    expect(container.querySelector(".api-key-mask-prefix")).toHaveTextContent("sk-test");
+    expect(container.querySelector(".api-key-mask")).toHaveTextContent("sk-test...");
 
     await user.type(screen.getByLabelText("API key"), "new-secret");
 

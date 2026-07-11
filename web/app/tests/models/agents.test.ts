@@ -723,6 +723,30 @@ describe("agent model helpers", () => {
     ).toBe("avatar/3D-5.png");
   });
 
+  it("resolves migrated agent avatars from canonical IM users without a local participant", () => {
+    const usersById = new Map([["user-zoyz2k", { id: "user-zoyz2k", avatar: "avatar/3D-3.png", name: "dev" }]]);
+
+    expect(
+      resolveAgentAvatarSource(
+        {
+          id: "agent-zoyz2k",
+          name: "dev",
+          role: "worker",
+          participants: [
+            {
+              agent_id: "agent-zoyz2k",
+              channel: "feishu",
+              channel_user_kind: "app_id",
+              id: "pt-zoyz2k-5905c292",
+              type: "agent",
+            },
+          ],
+        },
+        usersById,
+      ),
+    ).toBe("avatar/3D-3.png");
+  });
+
   it("selects a built-in avatar that is not already used", () => {
     const availableAvatar = AGENT_AVATAR_OPTIONS.at(-1)?.value || "";
     const sources = AGENT_AVATAR_OPTIONS.slice(0, -1).map((option) => ({ avatar: option.value }));

@@ -1,6 +1,4 @@
-import { X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import {
@@ -9,164 +7,33 @@ import {
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
 import { AgentView } from "@/pages/AgentPage/components";
-import { IconButton } from "@/components/ui";
+import { DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
 import { getConversationDescription, isDirectConversation } from "@/models/conversations";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
 
-const AGENT_DETAIL_PANEL_DEFAULT_WIDTH = 760;
-const AGENT_DETAIL_PANEL_MIN_WIDTH = 520;
-const AGENT_DETAIL_PANEL_MAX_WIDTH = 1120;
-const AGENT_DETAIL_PANEL_MIN_MAIN_WIDTH = 360;
-const AGENT_DETAIL_PANEL_KEYBOARD_STEP = 24;
-const AGENT_DETAIL_PANEL_KEYBOARD_LARGE_STEP = 80;
-
-function clampAgentDetailPanelWidth(width: number, containerWidth = 0): number {
-  const maxByContainer =
-    containerWidth > 0
-      ? Math.max(AGENT_DETAIL_PANEL_MIN_WIDTH, containerWidth - AGENT_DETAIL_PANEL_MIN_MAIN_WIDTH)
-      : AGENT_DETAIL_PANEL_MAX_WIDTH;
-  const maxWidth = Math.min(AGENT_DETAIL_PANEL_MAX_WIDTH, maxByContainer);
-  if (!Number.isFinite(width)) {
-    return AGENT_DETAIL_PANEL_DEFAULT_WIDTH;
-  }
-  return Math.min(maxWidth, Math.max(AGENT_DETAIL_PANEL_MIN_WIDTH, Math.round(width)));
-}
-
-function AgentDetailSidePanel({
-  onClose,
-  onResize,
-  width = AGENT_DETAIL_PANEL_DEFAULT_WIDTH,
-  ...props
-}: AgentDetailSidePanelProps) {
-  const panelRef = useRef<HTMLElement | null>(null);
-  const dragRef = useRef<{ containerWidth: number; panelRight: number; pointerID: number } | null>(null);
-  const [resizing, setResizing] = useState(false);
-
-  const resolveContainerWidth = useCallback(() => {
-    const panel = panelRef.current;
-    const parent = panel?.closest(".chat-panel");
-    const parentWidth = parent instanceof HTMLElement ? parent.getBoundingClientRect().width : 0;
-    return parentWidth > 0 ? parentWidth : window.innerWidth;
-  }, []);
-
-  const resizeTo = useCallback(
-    (nextWidth: number, containerWidth = resolveContainerWidth()) => {
-      onResize?.(clampAgentDetailPanelWidth(nextWidth, containerWidth));
-    },
-    [onResize, resolveContainerWidth],
-  );
-
-  useEffect(() => {
-    if (!resizing) {
-      return undefined;
-    }
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    return () => {
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-    };
-  }, [resizing]);
-
-  function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    const panel = panelRef.current;
-    if (!panel) {
-      return;
-    }
-    const panelRect = panel.getBoundingClientRect();
-    const containerWidth = resolveContainerWidth();
-    dragRef.current = {
-      containerWidth,
-      panelRight: panelRect.right,
-      pointerID: event.pointerId,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.preventDefault();
-    setResizing(true);
-  }
-
-  function handleResizePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerID !== event.pointerId) {
-      return;
-    }
-    resizeTo(drag.panelRight - event.clientX, drag.containerWidth);
-  }
-
-  function finishResize(event: ReactPointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerID !== event.pointerId) {
-      return;
-    }
-    dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    setResizing(false);
-  }
-
-  function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    const step = event.shiftKey ? AGENT_DETAIL_PANEL_KEYBOARD_LARGE_STEP : AGENT_DETAIL_PANEL_KEYBOARD_STEP;
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      resizeTo(width + step);
-      return;
-    }
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      resizeTo(width - step);
-      return;
-    }
-    if (event.key === "Home") {
-      event.preventDefault();
-      resizeTo(AGENT_DETAIL_PANEL_MIN_WIDTH);
-      return;
-    }
-    if (event.key === "End") {
-      event.preventDefault();
-      resizeTo(AGENT_DETAIL_PANEL_MAX_WIDTH);
-    }
-  }
-
+function AgentDetailSidePanel({ onClose, ...props }: AgentDetailSidePanelProps) {
   return (
-    <aside
-      ref={panelRef}
-      className={`agent-detail-side-panel ${resizing ? "is-resizing" : ""}`.trim()}
-      aria-label={props.t("agentDetailPanel")}
-    >
-      <div
-        className="agent-detail-resize-handle"
-        role="separator"
-        aria-label={props.t("resizeAgentDetailPanel")}
-        aria-orientation="vertical"
-        aria-valuemin={AGENT_DETAIL_PANEL_MIN_WIDTH}
-        aria-valuemax={AGENT_DETAIL_PANEL_MAX_WIDTH}
-        aria-valuenow={Math.round(width)}
-        tabIndex={0}
-        onKeyDown={handleResizeKeyDown}
-        onPointerCancel={finishResize}
-        onPointerDown={handleResizePointerDown}
-        onPointerMove={handleResizePointerMove}
-        onPointerUp={finishResize}
-      />
-      <div className="agent-detail-side-panel-bar">
-        <span className="thread-panel-kicker">{props.t("agentDetailPanel")}</span>
-        <IconButton
-          className="modal-close"
-          icon={<X size={20} strokeWidth={2} />}
-          label={props.t("close")}
-          markClassName="modal-close-icon"
-          onClick={onClose}
-          variant="tertiaryGray"
-        />
-      </div>
-      <div className="agent-detail-side-panel-body">
-        <AgentView {...props} />
-      </div>
-    </aside>
+    <DialogRoot open onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent
+        aria-describedby={undefined}
+        aria-modal="true"
+        className="agent-detail-side-panel"
+        overlayClassName="agent-detail-drawer-backdrop"
+      >
+        <div className="agent-detail-side-panel-bar">
+          <DialogCloseButton
+            className="agent-detail-side-panel-close"
+            label={props.t("close")}
+            variant="tertiaryGray"
+          />
+          <DialogTitle className="agent-detail-side-panel-title">{props.t("agentDetailPanel")}</DialogTitle>
+        </div>
+        <div className="agent-detail-side-panel-body">
+          <AgentView {...props} />
+        </div>
+      </DialogContent>
+    </DialogRoot>
   );
 }
 

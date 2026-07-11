@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, createModelProvider, type ModelProviderPayload } from "@/api/modelProviders";
@@ -33,17 +32,6 @@ import type { AgentLike } from "@/models/agents";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { IMConversation, IMData, IMUser } from "@/models/conversations";
 import type { SkillSummary } from "@/models/skillhub";
-
-const DEFAULT_AGENT_DETAIL_PANEL_WIDTH = 760;
-const MIN_AGENT_DETAIL_PANEL_WIDTH = 520;
-const MAX_AGENT_DETAIL_PANEL_WIDTH = 1120;
-
-function clampAgentDetailPanelWidth(width: number): number {
-  if (!Number.isFinite(width)) {
-    return DEFAULT_AGENT_DETAIL_PANEL_WIDTH;
-  }
-  return Math.min(MAX_AGENT_DETAIL_PANEL_WIDTH, Math.max(MIN_AGENT_DETAIL_PANEL_WIDTH, Math.round(width)));
-}
 
 function isBootstrapAdminUser(user: IMUser | null | undefined) {
   return user?.id === "u-admin" || String(user?.name ?? "").toLowerCase() === "admin";
@@ -194,9 +182,7 @@ export function useWorkspaceController() {
   const activePane = useMemo(() => paneFromLocation(location.pathname), [location.pathname]);
   const rooms = useMemo(() => displayData?.rooms ?? [], [displayData]);
   const [conversationProfileDetailAgentID, setConversationProfileDetailAgentID] = useState("");
-  const [conversationAgentDetailPanelWidth, setConversationAgentDetailPanelWidth] = useState(
-    DEFAULT_AGENT_DETAIL_PANEL_WIDTH,
-  );
+  const conversationProfileDetailTriggerRef = useRef<HTMLElement | null>(null);
   const loadingError = bootstrapQuery.isError ? t("loadingFailed") : "";
   const {
     navigatePane,
@@ -293,16 +279,28 @@ export function useWorkspaceController() {
     setSelectedHubTemplateId,
     t,
   });
-  const closeConversationAgentDetail = useCallback(() => {
-    if (!conversationProfileDetailAgentID) {
+  const closeConversationAgentDetail = useCallback(
+    (restoreFocus = true) => {
+      if (!conversationProfileDetailAgentID) {
+        return true;
+      }
+      if (agent.agentViewProps.hasUnsavedChanges && !window.confirm(t("agentUnsavedChangesWarning"))) {
+        return false;
+      }
+      const trigger = conversationProfileDetailTriggerRef.current;
+      conversationProfileDetailTriggerRef.current = null;
+      setConversationProfileDetailAgentID("");
+      if (restoreFocus && trigger) {
+        window.setTimeout(() => {
+          if (trigger.isConnected) {
+            trigger.focus();
+          }
+        }, 0);
+      }
       return true;
-    }
-    if (agent.agentViewProps.hasUnsavedChanges && !window.confirm(t("agentUnsavedChangesWarning"))) {
-      return false;
-    }
-    setConversationProfileDetailAgentID("");
-    return true;
-  }, [agent.agentViewProps.hasUnsavedChanges, conversationProfileDetailAgentID, t]);
+    },
+    [agent.agentViewProps.hasUnsavedChanges, conversationProfileDetailAgentID, t],
+  );
   const managerDirectConversation = useMemo(
     () => resolveManagerDirectConversation(rooms, displayData?.current_user_id ?? "", agent.managerAgent),
     [agent.managerAgent, displayData?.current_user_id, rooms],
@@ -390,18 +388,20 @@ export function useWorkspaceController() {
   });
   const closeThreadPanel = conversation.conversationViewProps.onCloseThread;
   const openConversationAgentDetail = useCallback(
-    (item: AgentLike | null | undefined) => {
+    (item: AgentLike | null | undefined, trigger?: HTMLElement | null) => {
       const agentID = String(item?.id || "").trim();
       if (!agentID) {
         return false;
       }
       if (conversationProfileDetailAgentID && conversationProfileDetailAgentID !== agentID) {
-        const closed = closeConversationAgentDetail();
+        const closed = closeConversationAgentDetail(false);
         if (!closed) {
           return false;
         }
       }
       closeThreadPanel();
+      conversationProfileDetailTriggerRef.current =
+        trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
       setConversationProfileDetailAgentID(agentID);
       return true;
     },
@@ -431,8 +431,8 @@ export function useWorkspaceController() {
   });
   const closeProfilePreview = profilePreview.closeProfilePreview;
   const openConversationAgentDetailFromAvatar = useCallback(
-    (item: AgentLike | null | undefined) => {
-      const opened = openConversationAgentDetail(item);
+    (item: AgentLike | null | undefined, trigger: HTMLElement) => {
+      const opened = openConversationAgentDetail(item, trigger);
       if (!opened) {
         return;
       }
@@ -596,25 +596,31 @@ export function useWorkspaceController() {
       }
     : null;
 
-  function selectHubTemplate(item: HubTemplate | null | undefined) {
-    if (!item?.id) {
-      selectHub();
-      return;
-    }
-    setSelectedHubResourceType("template");
-    setSelectedHubTemplateId(item.id);
-    navigatePane({ type: WorkspacePaneTypes.hub, id: item.id, resourceType: "template" }, rooms);
-  }
+  const selectHubTemplate = useCallback(
+    (item: HubTemplate | null | undefined) => {
+      if (!item?.id) {
+        selectHub();
+        return;
+      }
+      setSelectedHubResourceType("template");
+      setSelectedHubTemplateId(item.id);
+      navigatePane({ type: WorkspacePaneTypes.hub, id: item.id, resourceType: "template" }, rooms);
+    },
+    [navigatePane, rooms, selectHub, setSelectedHubResourceType, setSelectedHubTemplateId],
+  );
 
-  function selectHubSkill(item: SkillSummary | null | undefined) {
-    if (!item?.name) {
-      selectHub();
-      return;
-    }
-    setSelectedHubResourceType("skill");
-    setSelectedHubSkillName(item.name);
-    navigatePane({ type: WorkspacePaneTypes.hub, id: item.name, resourceType: "skill" }, rooms);
-  }
+  const selectHubSkill = useCallback(
+    (item: SkillSummary | null | undefined) => {
+      if (!item?.name) {
+        selectHub();
+        return;
+      }
+      setSelectedHubResourceType("skill");
+      setSelectedHubSkillName(item.name);
+      navigatePane({ type: WorkspacePaneTypes.hub, id: item.name, resourceType: "skill" }, rooms);
+    },
+    [navigatePane, rooms, selectHub, setSelectedHubResourceType, setSelectedHubSkillName],
+  );
 
   function openCreateModelProviderModal() {
     setCreateModelProviderError("");
@@ -680,9 +686,7 @@ export function useWorkspaceController() {
       ready: false,
       loadingText: loadingError || t("loading"),
       activePane,
-      mainPanelHasAgentDetail: false,
       mainPanelHasThread: false,
-      mainPanelStyle: undefined,
       modelProviders,
       modelProvidersLoaded,
       refreshWorkspaceModelProviders,
@@ -697,28 +701,16 @@ export function useWorkspaceController() {
           activeRoom: conversation.activeChannel,
           item: agent.agentViewProps.item,
           onClose: closeConversationAgentDetail,
-          onResize: (width: number) => setConversationAgentDetailPanelWidth(clampAgentDetailPanelWidth(width)),
-          width: conversationAgentDetailPanelWidth,
         }
       : null;
-  const mainPanelHasAgentDetail = Boolean(conversationAgentDetailPanelProps && conversation.selectedConversation);
-  const mainPanelHasSidePanel = Boolean(
-    (conversation.activeThreadRootID || conversationAgentDetailPanelProps) && conversation.selectedConversation,
-  );
-  const mainPanelStyle: CSSProperties | undefined = mainPanelHasAgentDetail
-    ? ({
-        "--agent-detail-panel-width": `${conversationAgentDetailPanelWidth}px`,
-      } as CSSProperties)
-    : undefined;
+  const mainPanelHasThread = Boolean(conversation.activeThreadRootID && conversation.selectedConversation);
 
   return {
     ready: true,
     loadingText: "",
     t,
     shellClassName: shell.shellClassName,
-    mainPanelHasThread: mainPanelHasSidePanel,
-    mainPanelHasAgentDetail,
-    mainPanelStyle,
+    mainPanelHasThread,
     activePane,
     modelProviders,
     modelProvidersLoaded,

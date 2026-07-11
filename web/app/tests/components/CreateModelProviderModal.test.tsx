@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CreateModelProviderModal } from "@/pages/WorkspacePage/components/WorkspaceModals";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
@@ -10,6 +10,7 @@ const labels: Record<string, string> = {
   modelProviderAPIKeyHint: "Stored locally.",
   modelProviderAvatar: "Avatar",
   modelProviderBaseURLRequired: "Base URL is required.",
+  modelProviderCheck: "Check",
   modelProviderCreateAction: "Create",
   modelProviderCreateConnectionDescription: "Save the endpoint, key, and model list.",
   modelProviderCreateConnectionTitle: "Connection",
@@ -26,6 +27,7 @@ const labels: Record<string, string> = {
   modelProviderModelsHint: "Optional models.",
   modelProviderModelSearch: "Search models",
   modelProviderNoModels: "No models",
+  modelProviderNotChecked: "Not checked",
   modelProviderPreset: "Provider preset",
   modelProviderPresetCustom: "Custom",
   modelProviderPresetDeepSeek: "DeepSeek",
@@ -45,12 +47,13 @@ describe("CreateModelProviderModal", () => {
 
     expect(screen.getByLabelText(/Display name/)).toHaveValue("");
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
-    expect(screen.getByLabelText(/Provider preset/)).toHaveValue("openai");
+    expect(screen.getByRole("combobox", { name: "Provider preset" })).toHaveTextContent("OpenAI");
     expect(screen.getByLabelText(/Base URL/)).toHaveValue("https://api.openai.com/v1");
     expect(screen.getByLabelText(/API Key/)).toHaveValue("");
-    expect(screen.getByLabelText(/API Key/)).toHaveAttribute("type", "text");
-    expect(screen.getByRole("list", { name: "Models" })).toBeInTheDocument();
-    expect(screen.getByText("No models")).toBeInTheDocument();
+    expect(screen.getByLabelText(/API Key/)).toHaveAttribute("type", "password");
+    const modelList = screen.getByRole("list", { name: "Models" });
+    expect(modelList).toBeInTheDocument();
+    expect(within(modelList).getByText("Not checked")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Models" })).not.toBeInTheDocument();
   });
 
@@ -78,7 +81,8 @@ describe("CreateModelProviderModal", () => {
     await user.clear(screen.getByLabelText(/Base URL/));
     await user.type(screen.getByLabelText(/Base URL/), "http://127.0.0.1:4000/v1");
     await user.type(screen.getByLabelText(/API Key/), "sk-test");
-    await waitFor(() => expect(screen.getByText("gpt-4.1-mini")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Check" }));
+    expect(await screen.findByText("gpt-4.1-mini")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(onCreate).toHaveBeenCalledWith({
@@ -106,7 +110,7 @@ describe("CreateModelProviderModal", () => {
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
   });
 
-  it("auto-loads models after entering endpoint and API key", async () => {
+  it("loads models after an explicit connection check", async () => {
     const user = userEvent.setup();
     const onCheckAccess = vi.fn().mockResolvedValue({
       id: "openai-draft",
@@ -130,7 +134,8 @@ describe("CreateModelProviderModal", () => {
     await user.type(screen.getByLabelText(/Base URL/), "http://127.0.0.1:4000/v1");
     await user.type(screen.getByLabelText(/API Key/), "sk-test");
 
-    await waitFor(() => expect(screen.getByText("gpt-4.1-mini")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Check" }));
+    expect(await screen.findByText("gpt-4.1-mini")).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Models" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Models" })).not.toBeInTheDocument();
     expect(onCheckAccess).toHaveBeenCalledWith({
@@ -147,36 +152,14 @@ describe("CreateModelProviderModal", () => {
 
     render(<CreateModelProviderModal busy={false} modelProviders={null} onClose={vi.fn()} onCreate={vi.fn()} t={t} />);
 
-    await user.selectOptions(screen.getByLabelText(/Provider preset/), "zhipu");
+    await user.click(screen.getByRole("combobox", { name: "Provider preset" }));
+    await user.click(screen.getByRole("option", { name: "Zhipu" }));
 
     expect(screen.getByLabelText(/Base URL/)).toHaveValue("https://open.bigmodel.cn/api/paas/v4");
     expect(screen.getByLabelText(/Display name/)).toHaveAttribute("placeholder", "Zhipu API");
   });
 
-  it("renders failed provider checks as red form errors", async () => {
-    const user = userEvent.setup();
-    const onCheckAccess = vi.fn().mockRejectedValue(new Error("status 401 Unauthorized"));
-
-    render(
-      <CreateModelProviderModal
-        busy={false}
-        modelProviders={null}
-        onCheckAccess={onCheckAccess}
-        onClose={vi.fn()}
-        onCreate={vi.fn()}
-        t={t}
-      />,
-    );
-
-    await user.type(screen.getByLabelText(/API Key/), "bad-key");
-
-    const error = await screen.findByText("status 401 Unauthorized");
-    expect(error).toHaveClass("form-error");
-    expect(error).toHaveClass("create-model-provider-check-error");
-    expect(error).not.toHaveClass("form-warning");
-  });
-
-  it("keeps failed provider checks visible below the modal title", async () => {
+  it("renders failed provider checks as inline warnings", async () => {
     const user = userEvent.setup();
     const onCheckAccess = vi.fn().mockRejectedValue(new Error("status 401 Unauthorized"));
 
@@ -192,13 +175,39 @@ describe("CreateModelProviderModal", () => {
     );
 
     await user.type(screen.getByLabelText(/API Key/), "bad-key");
+    await user.click(screen.getByRole("button", { name: "Check" }));
 
-    const error = await screen.findByText("status 401 Unauthorized");
+    await screen.findAllByText("status 401 Unauthorized");
+    const warning = container.querySelector(".create-model-provider-check-status.warning");
+    expect(warning).toHaveTextContent("status 401 Unauthorized");
+    expect(warning).not.toHaveClass("form-error");
+  });
+
+  it("keeps failed provider checks visible in the connection section", async () => {
+    const user = userEvent.setup();
+    const onCheckAccess = vi.fn().mockRejectedValue(new Error("status 401 Unauthorized"));
+
+    const { container } = render(
+      <CreateModelProviderModal
+        busy={false}
+        modelProviders={null}
+        onCheckAccess={onCheckAccess}
+        onClose={vi.fn()}
+        onCreate={vi.fn()}
+        t={t}
+      />,
+    );
+
+    await user.type(screen.getByLabelText(/API Key/), "bad-key");
+    await user.click(screen.getByRole("button", { name: "Check" }));
+
+    await screen.findAllByText("status 401 Unauthorized");
+    const warning = container.querySelector(".create-model-provider-check-status.warning");
     const header = container.querySelector(".create-model-provider-modal .modal-header");
     const body = container.querySelector(".create-model-provider-body");
 
-    expect(header).toContainElement(error);
-    expect(body).not.toContainElement(error);
-    expect(error.previousElementSibling).toHaveClass("create-model-provider-subtitle");
+    expect(header).not.toContainElement(warning as HTMLElement);
+    expect(body).toContainElement(warning as HTMLElement);
+    expect(warning?.closest(".create-model-provider-check-row")).toBeInTheDocument();
   });
 });

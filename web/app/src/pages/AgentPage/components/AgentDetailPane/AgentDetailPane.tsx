@@ -1184,7 +1184,7 @@ function AgentChannelsSection({
     <section
       id="agent-profile-channels"
       className="profile-section agent-channels-section agent-profile-scroll-target"
-      aria-labelledby="agent-channels-title"
+      aria-label={t("agentChannelsTitle")}
     >
       <div className="profile-section-heading">
         <p className="profile-section-description">{t("agentChannelsDescription")}</p>

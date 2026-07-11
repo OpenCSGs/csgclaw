@@ -1249,7 +1249,6 @@ func TestServiceSuppressesSupersededTurnWhileBusy(t *testing.T) {
 	stream := make(chan BotEvent, 1)
 	errs := make(chan error)
 	stream <- BotEvent{MessageID: "m-1", RoomID: "room-1", Text: "first"}
-	close(errs)
 
 	sink := runtimecodex.NewEventSink()
 	firstRelease := make(chan struct{})

@@ -567,7 +567,12 @@ export function WorkspaceTabPanels({
         onClick={() => onSelectModelProvider(provider)}
       >
         <span className={classNames(rowStyles.icon, styles.modelProviderIconShell)}>
-          <img className={styles.modelProviderIconImage} src={modelProviderAvatarPath(provider)} alt="" aria-hidden="true" />
+          <img
+            className={styles.modelProviderIconImage}
+            src={modelProviderAvatarPath(provider)}
+            alt=""
+            aria-hidden="true"
+          />
         </span>
         <span className={rowStyles.main}>
           <span className={rowStyles.titleLine}>
