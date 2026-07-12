@@ -23,6 +23,8 @@ const (
 	DefaultDownloadBaseURL = "https://csgclaw.opencsg.com/codex-cli/latest"
 	EnvDownloadBaseURL     = "CSGCLAW_CODEX_DOWNLOAD_BASE_URL"
 	defaultInstallTimeout  = 15 * time.Minute
+	defaultInstallAttempts = 3
+	installRetryBaseDelay  = 100 * time.Millisecond
 	maxDownloadSize        = int64(512 << 20)
 	maxBinarySize          = int64(512 << 20)
 	maxArchiveExpandedSize = int64(768 << 20)
@@ -80,6 +82,31 @@ type downloadPlatform struct {
 	archiveBinary string
 }
 
+type retryableInstallError struct {
+	err error
+}
+
+func (e *retryableInstallError) Error() string {
+	return e.err.Error()
+}
+
+func (e *retryableInstallError) Unwrap() error {
+	return e.err
+}
+
+type downloadReader struct {
+	reader io.Reader
+	err    error
+}
+
+func (r *downloadReader) Read(buffer []byte) (int, error) {
+	read, err := r.reader.Read(buffer)
+	if err != nil && !errors.Is(err, io.EOF) {
+		r.err = err
+	}
+	return read, err
+}
+
 func NewInstaller(opts InstallerOptions) *Installer {
 	goos := strings.ToLower(strings.TrimSpace(opts.GOOS))
 	if goos == "" {
@@ -98,7 +125,7 @@ func NewInstaller(opts InstallerOptions) *Installer {
 	}
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: defaultInstallTimeout}
+		client = defaultHTTPClient(goos)
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(opts.BaseURL), "/")
 	if baseURL == "" {
@@ -115,6 +142,17 @@ func NewInstaller(opts InstallerOptions) *Installer {
 		goarch:     goarch,
 		targetPath: strings.TrimSpace(opts.TargetPath),
 	}
+}
+
+func defaultHTTPClient(goos string) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if strings.EqualFold(strings.TrimSpace(goos), "windows") {
+		protocols := new(http.Protocols)
+		protocols.SetHTTP1(true)
+		transport.Protocols = protocols
+		transport.ForceAttemptHTTP2 = false
+	}
+	return &http.Client{Timeout: defaultInstallTimeout, Transport: transport}
 }
 
 func (i *Installer) Status() InstallStatus {
@@ -199,7 +237,23 @@ func (i *Installer) install(ctx context.Context) (InstallStatus, error) {
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return InstallStatus{}, fmt.Errorf("create Codex install directory: %w", err)
 	}
+	for attempt := 1; attempt <= defaultInstallAttempts; attempt++ {
+		status, err := i.installAttempt(ctx, platform, downloadURL, targetPath)
+		if err == nil {
+			return status, nil
+		}
+		var retryable *retryableInstallError
+		if !errors.As(err, &retryable) || attempt == defaultInstallAttempts {
+			return InstallStatus{}, err
+		}
+		if err := waitForInstallRetry(ctx, attempt); err != nil {
+			return InstallStatus{}, fmt.Errorf("retry Codex CLI download: %w", err)
+		}
+	}
+	return InstallStatus{}, errors.New("install Codex CLI: exhausted download attempts")
+}
 
+func (i *Installer) installAttempt(ctx context.Context, platform downloadPlatform, downloadURL, targetPath string) (InstallStatus, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return InstallStatus{}, fmt.Errorf("create Codex download request: %w", err)
@@ -208,16 +262,26 @@ func (i *Installer) install(ctx context.Context) (InstallStatus, error) {
 	req.Header.Set("User-Agent", "csgclaw-codex-installer")
 	resp, err := i.httpClient.Do(req)
 	if err != nil {
-		return InstallStatus{}, fmt.Errorf("download Codex CLI: %w", err)
+		err = fmt.Errorf("download Codex CLI: %w", err)
+		if ctx.Err() == nil {
+			err = &retryableInstallError{err: err}
+		}
+		return InstallStatus{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		message, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		detail := strings.TrimSpace(string(message))
+		var err error
 		if detail != "" {
-			return InstallStatus{}, fmt.Errorf("download Codex CLI: server returned %s: %s", resp.Status, detail)
+			err = fmt.Errorf("download Codex CLI: server returned %s: %s", resp.Status, detail)
+		} else {
+			err = fmt.Errorf("download Codex CLI: server returned %s", resp.Status)
 		}
-		return InstallStatus{}, fmt.Errorf("download Codex CLI: server returned %s", resp.Status)
+		if retryableHTTPStatus(resp.StatusCode) {
+			err = &retryableInstallError{err: err}
+		}
+		return InstallStatus{}, err
 	}
 	if resp.ContentLength > maxDownloadSize {
 		return InstallStatus{}, fmt.Errorf("download Codex CLI: package size %d exceeds limit %d", resp.ContentLength, maxDownloadSize)
@@ -235,13 +299,17 @@ func (i *Installer) install(ctx context.Context) (InstallStatus, error) {
 		}
 	}()
 
-	limited := &io.LimitedReader{R: resp.Body, N: maxDownloadSize + 1}
+	body := &downloadReader{reader: resp.Body}
+	limited := &io.LimitedReader{R: body, N: maxDownloadSize + 1}
 	if i.goos == "windows" {
 		err = installWindowsBinary(temp, limited)
 	} else {
 		err = installUnixArchive(temp, limited, platform.archiveBinary)
 	}
 	if err != nil {
+		if body.err != nil {
+			err = &retryableInstallError{err: err}
+		}
 		return InstallStatus{}, err
 	}
 	if err := validatePlatformBinary(temp, i.goos, i.goarch); err != nil {
@@ -269,6 +337,25 @@ func (i *Installer) install(ctx context.Context) (InstallStatus, error) {
 		return InstallStatus{}, fmt.Errorf("verify installed Codex binary: %w", err)
 	}
 	return InstallStatus{State: InstallStateInstalled, Installed: true, Path: installedPath}, nil
+}
+
+func retryableHTTPStatus(status int) bool {
+	return status == http.StatusRequestTimeout ||
+		status == http.StatusTooEarly ||
+		status == http.StatusTooManyRequests ||
+		status >= http.StatusInternalServerError && status < 600
+}
+
+func waitForInstallRetry(ctx context.Context, attempt int) error {
+	delay := installRetryBaseDelay << (attempt - 1)
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func installWindowsBinary(dst *os.File, src io.Reader) error {

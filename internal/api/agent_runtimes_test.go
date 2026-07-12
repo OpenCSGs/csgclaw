@@ -1,15 +1,14 @@
 package api
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync/atomic"
 	"testing"
 
@@ -46,51 +45,49 @@ func TestAgentRuntimesListUsesCodexPathEnvironment(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeInstallE2ERetriesFailedDownload(t *testing.T) {
-	target := filepath.Join(t.TempDir(), "bin", "codex")
+func TestAgentRuntimeInstallE2ERetriesInterruptedWindowsDownload(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "bin", "codex.exe")
 	t.Setenv(codexcli.EnvBinaryPath, target)
-	binaryPayload := apiTestMachOBinary("arm64")
-	payload := apiTestCodexArchive(t, "codex-aarch64-apple-darwin", string(binaryPayload))
+	binaryPayload := apiTestPEBinary("amd64")
 	var downloads atomic.Int32
 	downloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/macos/arm64" || r.URL.Query().Get("package") != "codex-cli" {
-			t.Errorf("download URL = %s, want /macos/arm64?package=codex-cli", r.URL.String())
+		if r.URL.Path != "/windows/amd64" || r.URL.Query().Get("package") != "codex-cli" {
+			t.Errorf("download URL = %s, want /windows/amd64?package=codex-cli", r.URL.String())
 		}
 		if downloads.Add(1) == 1 {
-			http.Error(w, "temporary upstream failure", http.StatusBadGateway)
+			hijacker, ok := w.(http.Hijacker)
+			if !ok {
+				t.Fatal("download response does not support connection hijacking")
+			}
+			connection, buffered, err := hijacker.Hijack()
+			if err != nil {
+				t.Errorf("Hijack() error = %v", err)
+				return
+			}
+			defer connection.Close()
+			_, _ = buffered.WriteString("HTTP/1.1 200 OK\r\nContent-Length: " + strconv.Itoa(len(binaryPayload)) + "\r\n\r\n")
+			_, _ = buffered.Write(binaryPayload[:len(binaryPayload)/2])
+			_ = buffered.Flush()
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(payload)
+		_, _ = w.Write(binaryPayload)
 	}))
 	defer downloadServer.Close()
 	installer := codexcli.NewInstaller(codexcli.InstallerOptions{
 		BaseURL: downloadServer.URL,
-		GOOS:    "darwin",
-		GOARCH:  "arm64",
+		GOOS:    "windows",
+		GOARCH:  "amd64",
 	})
 	handler := &Handler{}
 	handler.SetAgentRuntimeService(runtimecatalog.NewService(
 		runtimecatalog.WithCodexInstaller(installer),
-		runtimecatalog.WithPlatform("darwin", "arm64"),
+		runtimecatalog.WithPlatform("windows", "amd64"),
 	))
 	server := httptest.NewServer(handler.Routes())
 	defer server.Close()
 
 	response := agentRuntimeRequest(t, server.Client(), http.MethodPost, server.URL+"/api/v1/agent-runtimes/codex/install")
-	if response.StatusCode != http.StatusBadGateway {
-		t.Fatalf("first POST status = %d, want 502; body=%s", response.StatusCode, readTestResponse(t, response))
-	}
-	_ = readTestResponse(t, response)
-
-	response = agentRuntimeRequest(t, server.Client(), http.MethodGet, server.URL+"/api/v1/agent-runtimes")
-	var afterFailure []runtimecatalog.Runtime
-	decodeTestJSON(t, response, &afterFailure)
-	if got := afterFailure[0]; got.Status != string(codexcli.InstallStateFailed) || got.Message == "" {
-		t.Fatalf("Codex after failure = %+v, want failed with message", got)
-	}
-
-	response = agentRuntimeRequest(t, server.Client(), http.MethodPost, server.URL+"/api/v1/agent-runtimes/codex/install")
 	var installed runtimecatalog.Runtime
 	decodeTestJSON(t, response, &installed)
 	if !installed.Installed || installed.Path != target || installed.Status != string(codexcli.InstallStateInstalled) {
@@ -137,35 +134,16 @@ func TestAgentRuntimeInstallRejectsClaudeCodeAndUnknownRuntime(t *testing.T) {
 	}
 }
 
-func apiTestCodexArchive(t *testing.T, name, body string) []byte {
-	t.Helper()
-	var compressed bytes.Buffer
-	gzipWriter := gzip.NewWriter(&compressed)
-	tarWriter := tar.NewWriter(gzipWriter)
-	header := &tar.Header{Name: name, Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg}
-	if err := tarWriter.WriteHeader(header); err != nil {
-		t.Fatalf("WriteHeader() error = %v", err)
-	}
-	if _, err := tarWriter.Write([]byte(body)); err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-	if err := tarWriter.Close(); err != nil {
-		t.Fatalf("tar Close() error = %v", err)
-	}
-	if err := gzipWriter.Close(); err != nil {
-		t.Fatalf("gzip Close() error = %v", err)
-	}
-	return compressed.Bytes()
-}
-
-func apiTestMachOBinary(arch string) []byte {
-	data := make([]byte, 32)
-	copy(data[:4], []byte{0xcf, 0xfa, 0xed, 0xfe})
-	cpuType := uint32(0x01000007)
+func apiTestPEBinary(arch string) []byte {
+	data := make([]byte, 128)
+	copy(data[:2], "MZ")
+	binary.LittleEndian.PutUint32(data[0x3c:0x40], 0x40)
+	copy(data[0x40:0x44], "PE\x00\x00")
+	machine := uint16(0x8664)
 	if arch == "arm64" {
-		cpuType = 0x0100000c
+		machine = 0xaa64
 	}
-	binary.LittleEndian.PutUint32(data[4:8], cpuType)
+	binary.LittleEndian.PutUint16(data[0x44:0x46], machine)
 	return data
 }
 

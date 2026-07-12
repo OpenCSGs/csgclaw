@@ -258,7 +258,7 @@ func TestInstallerEnsureCoalescesConcurrentDownloads(t *testing.T) {
 	}
 }
 
-func TestInstallerEnsureCanRetryAfterDownloadFailure(t *testing.T) {
+func TestInstallerEnsureAutomaticallyRetriesTemporaryDownloadFailure(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "codex")
 	t.Setenv(EnvBinaryPath, target)
 	payload := unixCodexArchive(t, []archiveEntry{{name: "codex-x86_64-unknown-linux-musl", body: string(testELFBinary("amd64"))}})
@@ -274,8 +274,33 @@ func TestInstallerEnsureCanRetryAfterDownloadFailure(t *testing.T) {
 	defer server.Close()
 	installer := NewInstaller(InstallerOptions{BaseURL: server.URL, GOOS: "linux", GOARCH: "amd64"})
 
+	status, err := installer.Ensure(context.Background())
+	if err != nil || !status.Installed {
+		t.Fatalf("Ensure() = %+v, %v; want installed after automatic retry", status, err)
+	}
+	if got := requests.Load(); got != 2 {
+		t.Fatalf("download requests = %d, want 2", got)
+	}
+}
+
+func TestInstallerEnsureCanRetryAfterAutomaticRetriesAreExhausted(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "codex")
+	t.Setenv(EnvBinaryPath, target)
+	payload := unixCodexArchive(t, []archiveEntry{{name: "codex-x86_64-unknown-linux-musl", body: string(testELFBinary("amd64"))}})
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) <= defaultInstallAttempts {
+			http.Error(w, "temporary failure", http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+	installer := NewInstaller(InstallerOptions{BaseURL: server.URL, GOOS: "linux", GOARCH: "amd64"})
+
 	if status, err := installer.Ensure(context.Background()); err == nil || status.State != InstallStateFailed {
-		t.Fatalf("first Ensure() = %+v, %v; want failed", status, err)
+		t.Fatalf("first Ensure() = %+v, %v; want failed after automatic retries", status, err)
 	}
 	if status := installer.Status(); status.State != InstallStateFailed || status.Message == "" {
 		t.Fatalf("Status() = %+v, want retryable failure", status)
@@ -284,8 +309,46 @@ func TestInstallerEnsureCanRetryAfterDownloadFailure(t *testing.T) {
 	if err != nil || !status.Installed {
 		t.Fatalf("second Ensure() = %+v, %v; want installed", status, err)
 	}
-	if got := requests.Load(); got != 2 {
-		t.Fatalf("download requests = %d, want 2", got)
+	if got := requests.Load(); got != defaultInstallAttempts+1 {
+		t.Fatalf("download requests = %d, want %d", got, defaultInstallAttempts+1)
+	}
+}
+
+func TestInstallerDefaultHTTPClientUsesPlatformProtocol(t *testing.T) {
+	for _, test := range []struct {
+		goos         string
+		wantProtocol string
+	}{
+		{goos: "windows", wantProtocol: "HTTP/1.1"},
+		{goos: "darwin", wantProtocol: "HTTP/2.0"},
+		{goos: "linux", wantProtocol: "HTTP/2.0"},
+	} {
+		t.Run(test.goos, func(t *testing.T) {
+			negotiatedProtocol := make(chan string, 1)
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				negotiatedProtocol <- r.Proto
+				w.WriteHeader(http.StatusOK)
+			}))
+			server.EnableHTTP2 = true
+			server.StartTLS()
+			defer server.Close()
+
+			installer := NewInstaller(InstallerOptions{GOOS: test.goos})
+			transport, ok := installer.httpClient.Transport.(*http.Transport)
+			if !ok {
+				t.Fatalf("HTTP transport = %T, want *http.Transport", installer.httpClient.Transport)
+			}
+			serverTransport := server.Client().Transport.(*http.Transport)
+			transport.TLSClientConfig = serverTransport.TLSClientConfig.Clone()
+			response, err := installer.httpClient.Get(server.URL)
+			if err != nil {
+				t.Fatalf("GET error = %v", err)
+			}
+			_ = response.Body.Close()
+			if got := <-negotiatedProtocol; got != test.wantProtocol {
+				t.Fatalf("negotiated protocol = %q, want %s", got, test.wantProtocol)
+			}
+		})
 	}
 }
 
