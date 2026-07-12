@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -233,23 +234,68 @@ func (i *Installer) install(ctx context.Context) (InstallStatus, error) {
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return InstallStatus{}, fmt.Errorf("create Codex install directory: %w", err)
 	}
+	started := time.Now()
+	logURL := downloadLogURL(downloadURL)
+	slog.InfoContext(ctx, "Codex CLI download started",
+		"url", logURL,
+		"os", i.goos,
+		"arch", i.goarch,
+		"target_path", targetPath,
+		"max_attempts", defaultInstallAttempts,
+	)
 	for attempt := 1; attempt <= defaultInstallAttempts; attempt++ {
-		status, err := i.installAttempt(ctx, platform, downloadURL, targetPath)
+		attemptStarted := time.Now()
+		slog.InfoContext(ctx, "Codex CLI download attempt started",
+			"url", logURL,
+			"attempt", attempt,
+			"max_attempts", defaultInstallAttempts,
+		)
+		status, err := i.installAttempt(ctx, platform, downloadURL, targetPath, attempt)
 		if err == nil {
+			slog.InfoContext(ctx, "Codex CLI download completed",
+				"url", logURL,
+				"attempt", attempt,
+				"duration", time.Since(started),
+				"installed_path", status.Path,
+			)
 			return status, nil
 		}
 		var retryable *retryableInstallError
 		if !errors.As(err, &retryable) || attempt == defaultInstallAttempts {
+			slog.InfoContext(ctx, "Codex CLI download failed",
+				"url", logURL,
+				"attempt", attempt,
+				"max_attempts", defaultInstallAttempts,
+				"attempt_duration", time.Since(attemptStarted),
+				"duration", time.Since(started),
+				"error", err,
+			)
 			return InstallStatus{}, err
 		}
+		retryDelay := installRetryDelay(attempt)
+		slog.InfoContext(ctx, "Codex CLI download attempt failed; retrying",
+			"url", logURL,
+			"attempt", attempt,
+			"max_attempts", defaultInstallAttempts,
+			"attempt_duration", time.Since(attemptStarted),
+			"retry_in", retryDelay,
+			"error", err,
+		)
 		if err := waitForInstallRetry(ctx, attempt); err != nil {
+			slog.InfoContext(ctx, "Codex CLI download retry canceled",
+				"url", logURL,
+				"attempt", attempt,
+				"duration", time.Since(started),
+				"error", err,
+			)
 			return InstallStatus{}, fmt.Errorf("retry Codex CLI download: %w", err)
 		}
 	}
 	return InstallStatus{}, errors.New("install Codex CLI: exhausted download attempts")
 }
 
-func (i *Installer) installAttempt(ctx context.Context, platform downloadPlatform, downloadURL, targetPath string) (InstallStatus, error) {
+func (i *Installer) installAttempt(ctx context.Context, platform downloadPlatform, downloadURL, targetPath string, attempt int) (InstallStatus, error) {
+	requestStarted := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return InstallStatus{}, fmt.Errorf("create Codex download request: %w", err)
@@ -259,12 +305,27 @@ func (i *Installer) installAttempt(ctx context.Context, platform downloadPlatfor
 	resp, err := i.httpClient.Do(req)
 	if err != nil {
 		err = fmt.Errorf("download Codex CLI: %w", err)
+		slog.InfoContext(ctx, "Codex CLI download request failed",
+			"url", downloadLogURL(downloadURL),
+			"attempt", attempt,
+			"duration", time.Since(requestStarted),
+			"error", err,
+		)
 		if ctx.Err() == nil {
 			err = &retryableInstallError{err: err}
 		}
 		return InstallStatus{}, err
 	}
 	defer resp.Body.Close()
+	slog.InfoContext(ctx, "Codex CLI download response received",
+		"url", downloadLogURL(downloadURL),
+		"attempt", attempt,
+		"status", resp.StatusCode,
+		"protocol", resp.Proto,
+		"content_length", resp.ContentLength,
+		"accept_ranges", resp.Header.Get("Accept-Ranges"),
+		"duration", time.Since(requestStarted),
+	)
 	if resp.StatusCode != http.StatusOK {
 		message, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		detail := strings.TrimSpace(string(message))
@@ -303,6 +364,14 @@ func (i *Installer) installAttempt(ctx context.Context, platform downloadPlatfor
 		err = installUnixArchive(temp, limited, platform.archiveBinary)
 	}
 	if err != nil {
+		downloaded := maxDownloadSize + 1 - limited.N
+		slog.InfoContext(ctx, "Codex CLI download body failed",
+			"url", downloadLogURL(downloadURL),
+			"attempt", attempt,
+			"bytes", downloaded,
+			"duration", time.Since(requestStarted),
+			"error", err,
+		)
 		if body.err != nil {
 			err = &retryableInstallError{err: err}
 		}
@@ -314,6 +383,12 @@ func (i *Installer) installAttempt(ctx context.Context, platform downloadPlatfor
 	if limited.N <= 0 {
 		return InstallStatus{}, fmt.Errorf("download Codex CLI: package exceeds limit %d", maxDownloadSize)
 	}
+	slog.InfoContext(ctx, "Codex CLI download body completed",
+		"url", downloadLogURL(downloadURL),
+		"attempt", attempt,
+		"bytes", maxDownloadSize+1-limited.N,
+		"duration", time.Since(requestStarted),
+	)
 	if err := temp.Chmod(0o755); err != nil {
 		return InstallStatus{}, fmt.Errorf("make Codex binary executable: %w", err)
 	}
@@ -342,8 +417,23 @@ func retryableHTTPStatus(status int) bool {
 		status >= http.StatusInternalServerError && status < 600
 }
 
+func downloadLogURL(value string) string {
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return ""
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+func installRetryDelay(attempt int) time.Duration {
+	return installRetryBaseDelay << (attempt - 1)
+}
+
 func waitForInstallRetry(ctx context.Context, attempt int) error {
-	delay := installRetryBaseDelay << (attempt - 1)
+	delay := installRetryDelay(attempt)
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {

@@ -8,10 +8,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -259,6 +261,11 @@ func TestInstallerEnsureCoalescesConcurrentDownloads(t *testing.T) {
 }
 
 func TestInstallerEnsureAutomaticallyRetriesTemporaryDownloadFailure(t *testing.T) {
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+
 	target := filepath.Join(t.TempDir(), "codex")
 	t.Setenv(EnvBinaryPath, target)
 	payload := unixCodexArchive(t, []archiveEntry{{name: "codex-x86_64-unknown-linux-musl", body: string(testELFBinary("amd64"))}})
@@ -280,6 +287,20 @@ func TestInstallerEnsureAutomaticallyRetriesTemporaryDownloadFailure(t *testing.
 	}
 	if got := requests.Load(); got != 2 {
 		t.Fatalf("download requests = %d, want 2", got)
+	}
+	for _, expected := range []string{
+		"Codex CLI download started",
+		"Codex CLI download attempt started",
+		"Codex CLI download response received",
+		"status=502",
+		"Codex CLI download attempt failed; retrying",
+		"retry_in=100ms",
+		"Codex CLI download body completed",
+		"Codex CLI download completed",
+	} {
+		if !strings.Contains(logs.String(), expected) {
+			t.Fatalf("download logs missing %q:\n%s", expected, logs.String())
+		}
 	}
 }
 
@@ -349,6 +370,14 @@ func TestInstallerDefaultHTTPClientNegotiatesHTTP2OnEveryPlatform(t *testing.T) 
 				t.Fatalf("negotiated protocol = %q, want %s", got, test.wantProtocol)
 			}
 		})
+	}
+}
+
+func TestDownloadLogURLRedactsCredentialsAndQuery(t *testing.T) {
+	got := downloadLogURL("https://user:secret@example.test/codex-cli/latest/windows/amd64?package=codex-cli&token=secret#fragment")
+	want := "https://example.test/codex-cli/latest/windows/amd64"
+	if got != want {
+		t.Fatalf("downloadLogURL() = %q, want %q", got, want)
 	}
 }
 
