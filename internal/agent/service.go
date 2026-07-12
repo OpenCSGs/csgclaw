@@ -1829,10 +1829,19 @@ func removeAll(path string) error {
 }
 
 func (s *Service) List() []Agent {
+	return s.ListContext(context.Background())
+}
+
+// ListContext returns the persisted agent registry with best-effort live runtime status.
+// Runtime status probes must honor ctx so API callers can remain responsive when a
+// sandbox runtime is unavailable or contended.
+func (s *Service) ListContext(ctx context.Context) []Agent {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	s.mu.RLock()
 	agents := sortedAgentsFromMap(s.agents)
 	s.mu.RUnlock()
-	ctx := context.Background()
 	for idx := range agents {
 		agents[idx] = s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, agents[idx]))
 	}

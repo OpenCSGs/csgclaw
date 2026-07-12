@@ -5014,6 +5014,48 @@ func TestListKeepsLastKnownStatusWhenHydrationFails(t *testing.T) {
 	}
 }
 
+func TestListContextStopsBlockedRuntimeStatusHydration(t *testing.T) {
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			info: func(ctx context.Context, _ agentruntime.Handle) (agentruntime.Info, error) {
+				<-ctx.Done()
+				return agentruntime.Info{}, ctx.Err()
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["agent-alice"] = Agent{
+		ID:          "agent-alice",
+		Name:        "alice",
+		Role:        RoleWorker,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Status:      string(sandbox.StateRunning),
+		CreatedAt:   time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	got := svc.ListContext(ctx)
+
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("ListContext() took %v after cancellation", elapsed)
+	}
+	if len(got) != 1 {
+		t.Fatalf("ListContext() len = %d, want 1", len(got))
+	}
+	if got[0].Status != string(sandbox.StateRunning) {
+		t.Fatalf("ListContext()[0].Status = %q, want running", got[0].Status)
+	}
+}
+
 func TestIsSandboxRuntimeContentionRecognizesBoxLiteLockErrors(t *testing.T) {
 	cases := []struct {
 		name string

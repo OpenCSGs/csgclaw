@@ -77,7 +77,10 @@ type Handler struct {
 	participantActivityTurns   map[string]participantActivityTurn
 }
 
-const createOperationTimeout = 10 * time.Minute
+const (
+	createOperationTimeout = 10 * time.Minute
+	agentListStatusTimeout = 2 * time.Second
+)
 
 var sseHeartbeatInterval = 15 * time.Second
 var locateCodexCLI = func() (string, error) {
@@ -916,7 +919,9 @@ func (h *Handler) handleAgents(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, h.presentAgentsForRequest(r, h.svc.List()))
+		ctx, cancel := context.WithTimeout(r.Context(), agentListStatusTimeout)
+		defer cancel()
+		writeJSON(w, http.StatusOK, h.presentAgentsForRequest(r, h.svc.ListContext(ctx)))
 	case http.MethodPost:
 		h.handleCreateAgentWorker(w, r)
 	default:
