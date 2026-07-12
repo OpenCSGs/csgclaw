@@ -125,7 +125,7 @@ func NewInstaller(opts InstallerOptions) *Installer {
 	}
 	client := opts.HTTPClient
 	if client == nil {
-		client = defaultHTTPClient(goos)
+		client = defaultHTTPClient()
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(opts.BaseURL), "/")
 	if baseURL == "" {
@@ -144,15 +144,11 @@ func NewInstaller(opts InstallerOptions) *Installer {
 	}
 }
 
-func defaultHTTPClient(goos string) *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	if strings.EqualFold(strings.TrimSpace(goos), "windows") {
-		protocols := new(http.Protocols)
-		protocols.SetHTTP1(true)
-		transport.Protocols = protocols
-		transport.ForceAttemptHTTP2 = false
+func defaultHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout:   defaultInstallTimeout,
+		Transport: http.DefaultTransport.(*http.Transport).Clone(),
 	}
-	return &http.Client{Timeout: defaultInstallTimeout, Transport: transport}
 }
 
 func (i *Installer) Status() InstallStatus {

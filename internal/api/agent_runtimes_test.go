@@ -50,34 +50,36 @@ func TestAgentRuntimeInstallE2ERetriesInterruptedWindowsDownload(t *testing.T) {
 	t.Setenv(codexcli.EnvBinaryPath, target)
 	binaryPayload := apiTestPEBinary("amd64")
 	var downloads atomic.Int32
-	downloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	downloadServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/windows/amd64" || r.URL.Query().Get("package") != "codex-cli" {
 			t.Errorf("download URL = %s, want /windows/amd64?package=codex-cli", r.URL.String())
 		}
+		if r.Proto != "HTTP/2.0" {
+			t.Errorf("download protocol = %s, want HTTP/2.0", r.Proto)
+		}
 		if downloads.Add(1) == 1 {
-			hijacker, ok := w.(http.Hijacker)
+			flusher, ok := w.(http.Flusher)
 			if !ok {
-				t.Fatal("download response does not support connection hijacking")
-			}
-			connection, buffered, err := hijacker.Hijack()
-			if err != nil {
-				t.Errorf("Hijack() error = %v", err)
+				t.Error("download response does not support flushing")
 				return
 			}
-			defer connection.Close()
-			_, _ = buffered.WriteString("HTTP/1.1 200 OK\r\nContent-Length: " + strconv.Itoa(len(binaryPayload)) + "\r\n\r\n")
-			_, _ = buffered.Write(binaryPayload[:len(binaryPayload)/2])
-			_ = buffered.Flush()
-			return
+			w.Header().Set("Content-Length", strconv.Itoa(len(binaryPayload)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(binaryPayload[:len(binaryPayload)/2])
+			flusher.Flush()
+			panic(http.ErrAbortHandler)
 		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(binaryPayload)
 	}))
+	downloadServer.EnableHTTP2 = true
+	downloadServer.StartTLS()
 	defer downloadServer.Close()
 	installer := codexcli.NewInstaller(codexcli.InstallerOptions{
-		BaseURL: downloadServer.URL,
-		GOOS:    "windows",
-		GOARCH:  "amd64",
+		HTTPClient: downloadServer.Client(),
+		BaseURL:    downloadServer.URL,
+		GOOS:       "windows",
+		GOARCH:     "amd64",
 	})
 	handler := &Handler{}
 	handler.SetAgentRuntimeService(runtimecatalog.NewService(

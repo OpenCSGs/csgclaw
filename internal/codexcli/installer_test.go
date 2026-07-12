@@ -314,12 +314,12 @@ func TestInstallerEnsureCanRetryAfterAutomaticRetriesAreExhausted(t *testing.T) 
 	}
 }
 
-func TestInstallerDefaultHTTPClientUsesPlatformProtocol(t *testing.T) {
+func TestInstallerDefaultHTTPClientNegotiatesHTTP2OnEveryPlatform(t *testing.T) {
 	for _, test := range []struct {
 		goos         string
 		wantProtocol string
 	}{
-		{goos: "windows", wantProtocol: "HTTP/1.1"},
+		{goos: "windows", wantProtocol: "HTTP/2.0"},
 		{goos: "darwin", wantProtocol: "HTTP/2.0"},
 		{goos: "linux", wantProtocol: "HTTP/2.0"},
 	} {
