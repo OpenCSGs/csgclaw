@@ -128,8 +128,7 @@ For complete Codex worker profiles, CSGClaw writes `~/.csgclaw/agents/<agent-nam
 When a worker uses the Codex runtime, CSGClaw launches the local `codex` CLI with `codex app-server --listen stdio://`. You can override the binary lookup with:
 
 - `CSGCLAW_CODEX_PATH` to point at a preinstalled `codex` binary.
-  On Windows, point it at a native `codex.exe`.
-  A legacy npm `codex.cmd` or `codex.bat` value makes CSGClaw look for a sibling native executable, then fall back to the CSGClaw-managed `codex.exe`; `codex.ps1` is not supported.
+  On Windows, native `codex.exe` and npm's `codex.cmd`/`codex.bat` shims are supported; `codex.ps1` is not. CSGClaw launches command shims through `cmd.exe` and prefers a sibling native executable when one exists.
 - `CSGCLAW_CODEX_ACP_PATH` as a temporary compatibility fallback to the same `codex` binary path during migration
 
 ## OpenClaw Runtime

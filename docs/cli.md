@@ -377,8 +377,7 @@ Notes:
 
 - `--runtime codex` requires a local `codex` CLI that supports `app-server --listen stdio://`.
 - Binary lookup uses `PATH` by default and can be overridden with `CSGCLAW_CODEX_PATH`.
-  On Windows, use a native `codex.exe` rather than the PowerShell `codex.ps1` shim.
-  Legacy `codex.cmd` and `codex.bat` values fall back to a sibling or CSGClaw-managed native executable.
+  On Windows, native `codex.exe` and npm's `codex.cmd`/`codex.bat` shims are supported; the PowerShell `codex.ps1` shim is not.
 
 ### `csgclaw user`
 

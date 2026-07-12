@@ -45,18 +45,18 @@ func (l Locator) Locate() (string, error) {
 		} else if ok {
 			return path, nil
 		}
+		path, ok, err := l.executablePath(explicit)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return path, nil
+		}
 		if !l.isWindowsCommandShim(explicit) {
-			path, ok, err := l.executablePath(explicit)
-			if err != nil {
-				return "", err
-			}
-			if ok {
-				return path, nil
-			}
 			return "", fmt.Errorf("codex binary %s: %w", explicit, os.ErrNotExist)
 		}
-		// Batch shims cannot be passed directly to CreateProcess. Continue to a
-		// native PATH or managed executable so startup installation can recover.
+		// A missing command shim can still recover through PATH or the managed
+		// native executable installed by CSGClaw.
 	}
 	if lookPath := l.lookPath(); lookPath != nil {
 		for _, name := range l.binaryNames() {
@@ -130,10 +130,14 @@ func (l Locator) executablePath(path string) (string, bool, error) {
 		return "", false, nil
 	}
 	if l.isWindows() {
-		if !strings.EqualFold(filepath.Ext(path), ".exe") {
-			return "", false, fmt.Errorf("codex binary %s is a script shim; set %s to a native codex.exe file", path, EnvBinaryPath)
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".exe", ".cmd", ".bat":
+			return path, true, nil
+		case ".ps1":
+			return "", false, fmt.Errorf("codex binary %s is a PowerShell shim; set %s to codex.cmd, codex.bat, or codex.exe", path, EnvBinaryPath)
+		default:
+			return "", false, fmt.Errorf("codex binary %s is not a supported Windows executable; set %s to codex.cmd, codex.bat, or codex.exe", path, EnvBinaryPath)
 		}
-		return path, true, nil
 	}
 	if info.Mode()&0o111 == 0 {
 		return "", false, nil
@@ -181,7 +185,7 @@ func (l Locator) stat(path string) (os.FileInfo, error) {
 
 func (l Locator) binaryNames() []string {
 	if l.isWindows() {
-		return []string{BinaryName + ".exe"}
+		return []string{BinaryName + ".exe", BinaryName + ".cmd", BinaryName + ".bat"}
 	}
 	return []string{BinaryName}
 }

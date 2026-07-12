@@ -2,6 +2,7 @@ package codexcli
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,7 +160,7 @@ func TestLocatorWindowsPathLookupUsesNativeExecutable(t *testing.T) {
 	}
 }
 
-func TestLocatorWindowsPathLookupIgnoresScriptShims(t *testing.T) {
+func TestLocatorWindowsPathLookupPrefersNativeExecutable(t *testing.T) {
 	dir := t.TempDir()
 	_ = writeExecutable(t, filepath.Join(dir, "bin", "codex.cmd"), "@echo off\n")
 	exeBinary := writeExecutable(t, filepath.Join(dir, "bin", "codex.exe"), "")
@@ -185,6 +186,34 @@ func TestLocatorWindowsPathLookupIgnoresScriptShims(t *testing.T) {
 	}
 	if len(names) != 1 || names[0] != "codex.exe" {
 		t.Fatalf("LookPath names = %+v, want [codex.exe]", names)
+	}
+}
+
+func TestLocatorWindowsPathLookupFallsBackToCommandShim(t *testing.T) {
+	dir := t.TempDir()
+	cmdBinary := writeExecutable(t, filepath.Join(dir, "bin", "codex.cmd"), "@echo off\n")
+	var names []string
+
+	locator := Locator{
+		GOOS: "windows",
+		LookPath: func(name string) (string, error) {
+			names = append(names, name)
+			if name == "codex.cmd" {
+				return cmdBinary, nil
+			}
+			return "", os.ErrNotExist
+		},
+	}
+
+	got, err := locator.Locate()
+	if err != nil {
+		t.Fatalf("Locate() error = %v", err)
+	}
+	if got != cmdBinary {
+		t.Fatalf("Locate() = %q, want %q", got, cmdBinary)
+	}
+	if want := []string{"codex.exe", "codex.cmd"}; fmt.Sprint(names) != fmt.Sprint(want) {
+		t.Fatalf("LookPath names = %+v, want %+v", names, want)
 	}
 }
 
@@ -224,14 +253,36 @@ func TestLocatorWindowsExplicitPowerShellShimReportsUnsupportedWhenNoSibling(t *
 	if err == nil {
 		t.Fatal("Locate() error = nil, want unsupported PowerShell shim error")
 	}
-	if !strings.Contains(err.Error(), "script shim") || !strings.Contains(err.Error(), "codex.exe") {
-		t.Fatalf("Locate() error = %v, want native executable guidance", err)
+	if !strings.Contains(err.Error(), "PowerShell shim") || !strings.Contains(err.Error(), "codex.cmd") {
+		t.Fatalf("Locate() error = %v, want command shim guidance", err)
 	}
 }
 
-func TestLocatorWindowsExplicitCommandShimFallsBackToManagedNativeExecutable(t *testing.T) {
+func TestLocatorWindowsExplicitCommandShimIsSupported(t *testing.T) {
 	dir := t.TempDir()
 	cmdPath := writeExecutable(t, filepath.Join(dir, "codex.cmd"), "@echo off\n")
+	managedPath := writeExecutable(t, filepath.Join(dir, "managed", "codex.exe"), "")
+
+	got, err := (Locator{
+		GOOS:         "windows",
+		ExplicitPath: cmdPath,
+		ManagedPath:  managedPath,
+		LookPath: func(string) (string, error) {
+			t.Fatal("LookPath should not be called for an existing explicit command shim")
+			return "", nil
+		},
+	}).Locate()
+	if err != nil {
+		t.Fatalf("Locate() error = %v", err)
+	}
+	if got != cmdPath {
+		t.Fatalf("Locate() = %q, want %q", got, cmdPath)
+	}
+}
+
+func TestLocatorWindowsMissingExplicitCommandShimFallsBackToManagedNativeExecutable(t *testing.T) {
+	dir := t.TempDir()
+	cmdPath := filepath.Join(dir, "missing", "codex.cmd")
 	managedPath := writeExecutable(t, filepath.Join(dir, "managed", "codex.exe"), "")
 
 	got, err := (Locator{

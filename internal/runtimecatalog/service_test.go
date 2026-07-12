@@ -44,6 +44,31 @@ func TestServiceListReportsMissingCodexFromEnvOverride(t *testing.T) {
 	}
 }
 
+func TestServiceListReportsWindowsCommandShimAsInstalled(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "npm", "codex.cmd")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(target, []byte("@echo off\r\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	installer := codexcli.NewInstaller(codexcli.InstallerOptions{
+		Locator: codexcli.Locator{GOOS: "windows", ExplicitPath: target},
+		GOOS:    "windows",
+		GOARCH:  "amd64",
+		BaseURL: "https://unused.invalid",
+	})
+	service := NewService(
+		WithCodexInstaller(installer),
+		WithPlatform("windows", "amd64"),
+	)
+
+	got := service.List()[0]
+	if !got.Installed || got.Status != string(codexcli.InstallStateInstalled) || got.Path != target {
+		t.Fatalf("Codex runtime = %+v, want installed command shim at %q", got, target)
+	}
+}
+
 func TestServiceInstallRejectsUnsupportedAndUnknownRuntimes(t *testing.T) {
 	service := NewService()
 	if _, err := service.Install(context.Background(), RuntimeClaudeCode); !errors.Is(err, ErrInstallUnsupported) {

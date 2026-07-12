@@ -550,7 +550,7 @@ func codexInstallGuidance(goos string) string {
 	case "darwin":
 		return "Install the Codex CLI for macOS, or set CSGCLAW_CODEX_PATH to the codex binary."
 	case "windows":
-		return "Install the Codex CLI for Windows, or set CSGCLAW_CODEX_PATH to codex.exe."
+		return "Install the Codex CLI for Windows, or set CSGCLAW_CODEX_PATH to codex.exe or the npm codex.cmd shim."
 	case "linux":
 		return "Install the Codex CLI for Linux, or set CSGCLAW_CODEX_PATH to the codex binary."
 	default:

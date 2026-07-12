@@ -897,9 +897,9 @@ func TestAppServerEventAdapterProtocolDetectionAndSubagentFilter(t *testing.T) {
 func withAppServerHelperCommand(t *testing.T, mode string) {
 	t.Helper()
 	original := appServerCommandContext
-	appServerCommandContext = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+	appServerCommandContext = func(ctx context.Context, _ string) (*exec.Cmd, error) {
 		args := []string{"-test.run=TestAppServerManagerHelperProcess", "--", mode}
-		return exec.CommandContext(ctx, os.Args[0], args...)
+		return exec.CommandContext(ctx, os.Args[0], args...), nil
 	}
 	t.Cleanup(func() { appServerCommandContext = original })
 }

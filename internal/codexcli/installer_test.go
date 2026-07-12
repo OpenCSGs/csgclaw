@@ -133,9 +133,52 @@ func TestInstallerEnsureInstallsWindowsExecutable(t *testing.T) {
 	assertFileContent(t, target, string(testPEBinary("arm64")))
 }
 
-func TestInstallerEnsureUsesManagedExecutableForWindowsCommandShim(t *testing.T) {
+func TestInstallerEnsureUsesExistingWindowsCommandShim(t *testing.T) {
 	dir := t.TempDir()
 	shimPath := writeExecutable(t, filepath.Join(dir, "npm", "codex.cmd"), "@echo off\n")
+	managedPath := filepath.Join(dir, "managed", "codex.exe")
+	t.Setenv(EnvBinaryPath, shimPath)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.URL.Path != "/windows/amd64" || r.URL.Query().Get("package") != "codex-cli" {
+			t.Errorf("request URL = %s, want /windows/amd64?package=codex-cli", r.URL.String())
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(testPEBinary("amd64"))
+	}))
+	defer server.Close()
+
+	installer := NewInstaller(InstallerOptions{
+		Locator: Locator{
+			ManagedPath: managedPath,
+			LookPath: func(string) (string, error) {
+				return "", os.ErrNotExist
+			},
+		},
+		BaseURL: server.URL,
+		GOOS:    "windows",
+		GOARCH:  "amd64",
+	})
+	status, err := installer.Ensure(context.Background())
+	if err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if !status.Installed || status.Path != shimPath {
+		t.Fatalf("Ensure() status = %+v, want installed command shim at %q", status, shimPath)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("download requests = %d, want 0", got)
+	}
+	if _, statErr := os.Stat(managedPath); !os.IsNotExist(statErr) {
+		t.Fatalf("Stat(%q) error = %v, want no managed executable", managedPath, statErr)
+	}
+	assertFileContent(t, shimPath, "@echo off\n")
+}
+
+func TestInstallerEnsureUsesManagedExecutableForMissingWindowsCommandShim(t *testing.T) {
+	dir := t.TempDir()
+	shimPath := filepath.Join(dir, "npm", "codex.cmd")
 	managedPath := filepath.Join(dir, "managed", "codex.exe")
 	t.Setenv(EnvBinaryPath, shimPath)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -163,10 +206,9 @@ func TestInstallerEnsureUsesManagedExecutableForWindowsCommandShim(t *testing.T)
 		t.Fatalf("Ensure() error = %v", err)
 	}
 	if !status.Installed || status.Path != managedPath {
-		t.Fatalf("Ensure() status = %+v, want installed at %q", status, managedPath)
+		t.Fatalf("Ensure() status = %+v, want managed executable at %q", status, managedPath)
 	}
 	assertFileContent(t, managedPath, string(testPEBinary("amd64")))
-	assertFileContent(t, shimPath, "@echo off\n")
 }
 
 func TestInstallerEnsureCoalescesConcurrentDownloads(t *testing.T) {
