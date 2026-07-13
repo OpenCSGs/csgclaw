@@ -6,19 +6,17 @@ function readSource(path: string): string {
 }
 
 describe("default app scale", () => {
-  it("renders the full UI at 80 percent while preserving the scaled viewport height", () => {
+  it("renders the full UI at normal viewport scale", () => {
     const globals = readSource("src/shared/styles/globals.css");
     const workspace = readSource("src/pages/WorkspacePage/components/WorkspaceComponents.css");
     const workspaceLayout = readSource("src/pages/WorkspacePage/components/WorkspaceLayout/WorkspaceLayout.module.css");
     const settings = readSource("src/pages/SettingsPage/SettingsPage.module.css");
 
-    expect(globals).toContain("@supports (zoom: 80%)");
-    expect(globals).toContain("--app-ui-viewport-height: 125dvh;");
-    expect(globals).toContain("--text-xs-size: 13px;");
-    expect(globals).toContain("--text-sm-size: 15px;");
-    expect(globals).toContain("--text-md-size: 17px;");
-    expect(globals).toContain("font-size-adjust: 0.65;");
-    expect(globals).toContain("zoom: 80%;");
+    expect(globals).toContain("--app-ui-viewport-height: 100dvh;");
+    expect(globals).not.toContain("@supports (zoom: 80%)");
+    expect(globals).not.toContain("--app-ui-viewport-height: 125dvh;");
+    expect(globals).not.toContain("font-size-adjust: 0.65;");
+    expect(globals).not.toContain("zoom: 80%;");
     expect(globals).toContain("font-size: var(--text-md-size);");
     expect(globals).toContain("font-family: var(--font-sans);");
     expect(workspace).toContain("height: var(--app-ui-viewport-height);");

@@ -23,35 +23,27 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function rootZoomScale(): number {
-  const zoom = Number.parseFloat(window.getComputedStyle(document.documentElement).zoom);
-  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
-}
-
 function profilePreviewStyle(anchorRect: ProfilePreviewAnchorRect | null | undefined, cardHeight?: number | null) {
-  const scale = rootZoomScale();
   const offset = 12;
   const viewportPadding = 16;
-  const width = Math.min(360, (window.innerWidth - viewportPadding * 2) / scale);
-  const visualWidth = width * scale;
-  const maxLeft = Math.max(viewportPadding, window.innerWidth - viewportPadding - visualWidth);
-  const visualCardHeight = cardHeight ?? 420 * scale;
-  const visibleHeight = Math.min(visualCardHeight, window.innerHeight - viewportPadding * 2);
+  const width = Math.min(360, window.innerWidth - viewportPadding * 2);
+  const maxLeft = Math.max(viewportPadding, window.innerWidth - viewportPadding - width);
+  const visibleHeight = Math.min(cardHeight ?? 420, window.innerHeight - viewportPadding * 2);
   const maxTop = Math.max(viewportPadding, window.innerHeight - viewportPadding - visibleHeight);
 
   if (!anchorRect) {
     return {
-      top: `${viewportPadding / scale}px`,
-      left: `${viewportPadding / scale}px`,
+      top: `${viewportPadding}px`,
+      left: `${viewportPadding}px`,
       width: `${width}px`,
     };
   }
 
-  const hasRoomRight = anchorRect.right + offset + visualWidth <= window.innerWidth - viewportPadding;
-  const preferredLeft = hasRoomRight ? anchorRect.right + offset : anchorRect.left - visualWidth - offset;
+  const hasRoomRight = anchorRect.right + offset + width <= window.innerWidth - viewportPadding;
+  const preferredLeft = hasRoomRight ? anchorRect.right + offset : anchorRect.left - width - offset;
   const left = clamp(preferredLeft, viewportPadding, maxLeft);
   const top = clamp(anchorRect.top - 12, viewportPadding, maxTop);
-  return { top: `${top / scale}px`, left: `${left / scale}px`, width: `${width}px` };
+  return { top: `${top}px`, left: `${left}px`, width: `${width}px` };
 }
 
 export function ProfilePreviewPopover({

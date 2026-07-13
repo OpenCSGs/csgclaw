@@ -1,6 +1,7 @@
 import { classNames } from "@/shared/lib/classNames";
 import styles from "./WorkspaceSidebar.module.css";
 import { useCallback, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CSSProperties, ReactNode } from "react";
 import type { WorkspaceContextSectionId } from "./types";
 
@@ -101,11 +102,14 @@ function PrimaryNavigationButton({
       {typeof item.badge === "number" ? (
         <span className={styles.primaryNavBadge}>{formatBadge(item.badge)}</span>
       ) : null}
-      {collapsed && tooltipStyle ? (
-        <span id={tooltipId} className={styles.primaryNavTooltip} role="tooltip" style={tooltipStyle}>
-          {item.label}
-        </span>
-      ) : null}
+      {collapsed && tooltipStyle
+        ? createPortal(
+            <span id={tooltipId} className={styles.primaryNavTooltip} role="tooltip" style={tooltipStyle}>
+              {item.label}
+            </span>,
+            document.body,
+          )
+        : null}
     </button>
   );
 }

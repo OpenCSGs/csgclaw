@@ -34,12 +34,10 @@ function t(key: string): string {
 }
 
 describe("ProfilePreviewPopover", () => {
-  it("keeps the preview outside its anchor when the page is zoomed", () => {
-    const previousZoom = document.documentElement.style.zoom;
-    document.documentElement.style.zoom = "0.8";
+  it("keeps the preview outside its anchor in normal viewport coordinates", () => {
     const anchorRect = { top: 120, right: 502, bottom: 152, left: 470 };
 
-    const view = render(
+    render(
       <ProfilePreviewPopover
         previewRef={createRef<HTMLElement>()}
         agent={{ id: "agent-1", name: "Builder", role: "worker", status: "running" }}
@@ -52,19 +50,13 @@ describe("ProfilePreviewPopover", () => {
       />,
     );
 
-    try {
-      const preview = screen.getByRole("dialog", { name: "Profile preview" });
-      const scale = 0.8;
-      const visualLeft = Number.parseFloat(preview.style.left) * scale;
-      const visualTop = Number.parseFloat(preview.style.top) * scale;
+    const preview = screen.getByRole("dialog", { name: "Profile preview" });
+    const left = Number.parseFloat(preview.style.left);
+    const top = Number.parseFloat(preview.style.top);
 
-      expect(visualLeft).toBe(anchorRect.right + 12);
-      expect(visualTop).toBe(anchorRect.top - 12);
-      expect(visualLeft).toBeGreaterThan(anchorRect.right);
-    } finally {
-      view.unmount();
-      document.documentElement.style.zoom = previousZoom;
-    }
+    expect(left).toBe(anchorRect.right + 12);
+    expect(top).toBe(anchorRect.top - 12);
+    expect(left).toBeGreaterThan(anchorRect.right);
   });
 
   it("shows compact agent runtime/provider/model fields with reasoning in model", () => {
