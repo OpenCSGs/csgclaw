@@ -202,24 +202,6 @@
   color: currentColor;
 }
 
-.addTooltip {
-  position: fixed;
-  z-index: var(--z-tooltip);
-  max-width: 180px;
-  padding: 5px 8px;
-  border: 1px solid var(--gray-200);
-  border-radius: 6px;
-  background: var(--white);
-  color: var(--gray-700);
-  box-shadow: var(--shadow-sm);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
 .groupItems {
   padding: 4px 8px 8px;
   display: grid;
@@ -474,35 +456,12 @@
 
 :global(:root[data-theme="dark"]) .sortable .groupHead:hover,
 :global(:root[data-theme="dark"]) .dragOver .groupHead,
-:global(:root[data-theme="dark"]) .row:hover,
-:global(:root[data-theme="dark"]) .active {
-  background: var(--panel-strong);
+:global(:root[data-theme="dark"]) .row:hover {
+  background: var(--panel-soft);
   color: var(--gray-100);
 }
 
-:global(:root[data-theme="dark"]) .conversationRow.active,
-:global(:root[data-theme="dark"]) .active.conversationRow {
-  background: var(--gray-800);
-  color: var(--white);
-  box-shadow: none;
-}
-
-:global(:root[data-theme="dark"]) .agentRow.active,
-:global(:root[data-theme="dark"]) .active.agentRow {
-  background: var(--gray-800);
-  color: var(--white);
-  box-shadow: none;
-}
-
-:global(:root[data-theme="dark"]) .humanRow.active,
-:global(:root[data-theme="dark"]) .active.humanRow {
-  background: var(--gray-800);
-  color: var(--white);
-  box-shadow: none;
-}
-
-:global(:root[data-theme="dark"]) .computerRow.active,
-:global(:root[data-theme="dark"]) .active.computerRow {
+:global(:root[data-theme="dark"]) .row.active {
   background: var(--gray-800);
   color: var(--white);
   box-shadow: none;
@@ -581,12 +540,6 @@
 
 :global(:root[data-theme="dark"]) .addButton :global(.icon-button-mark) {
   color: var(--gray-25);
-}
-
-:global(:root[data-theme="dark"]) .addTooltip {
-  border-color: color-mix(in srgb, var(--white) 12%, transparent);
-  background: var(--gray-900);
-  color: var(--white);
 }
 
 @media (max-width: 720px) {

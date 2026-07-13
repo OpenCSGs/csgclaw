@@ -381,7 +381,6 @@ export function WorkspaceSidebar({
     activeContextSectionId,
     onCreateAgent,
     onCreateNotificationParticipant,
-    onCreateRoom,
     onCreateModelProvider,
     onOpenCreateTeam,
     onOpenCreateTask,
@@ -739,7 +738,6 @@ function contextCreateActionForSection({
   hub,
   onCreateAgent,
   onCreateNotificationParticipant,
-  onCreateRoom,
   onCreateModelProvider,
   onOpenCreateTeam,
   onOpenCreateTask,
@@ -751,7 +749,6 @@ function contextCreateActionForSection({
   | "onCreateAgent"
   | "onCreateModelProvider"
   | "onCreateNotificationParticipant"
-  | "onCreateRoom"
   | "onOpenCreateScheduledTask"
   | "onOpenCreateTask"
   | "onOpenCreateTeam"
@@ -762,12 +759,6 @@ function contextCreateActionForSection({
   hub: WorkspaceSidebarProps["hub"];
   setSkillUploadOpen: (open: boolean) => void;
 }) {
-  if (activeContextSectionId === WorkspaceContextSectionIds.messages) {
-    return {
-      label: t("createRoom"),
-      onClick: onCreateRoom,
-    };
-  }
   if (activeContextSectionId === WorkspaceContextSectionIds.agents) {
     return {
       label: t("createAgent"),

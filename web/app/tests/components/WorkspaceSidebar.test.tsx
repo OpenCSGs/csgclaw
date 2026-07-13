@@ -15,6 +15,7 @@ const labels: Record<string, string> = {
   computerOverview: "Computer overview",
   computersSection: "Computers",
   configSettingsMenu: "Configuration",
+  createRoom: "Create room",
   directMessagesSection: "Direct messages",
   expandSidebar: "Expand sidebar",
   humanSection: "Human",
@@ -169,6 +170,24 @@ function renderSidebar(overrides: Partial<WorkspaceSidebarProps> = {}) {
 }
 
 describe("WorkspaceSidebar", () => {
+  it("keeps room creation only in the Rooms section", () => {
+    const onCreateRoom = vi.fn();
+
+    renderSidebar({
+      activePane: { type: WorkspacePaneTypes.conversation, id: "" },
+      currentWorkspaceLabel: "Messages",
+      onCreateRoom,
+      workspaceTab: WorkspaceTabs.messages,
+    });
+
+    const createRoomButtons = screen.getAllByRole("button", { name: "Create room" });
+    expect(createRoomButtons).toHaveLength(1);
+    expect(createRoomButtons[0].parentElement).toHaveAttribute("data-tooltip", "Create room");
+
+    fireEvent.click(createRoomButtons[0]);
+    expect(onCreateRoom).toHaveBeenCalledTimes(1);
+  });
+
   it("selects the MCP resource type when the MCP list is empty", () => {
     const onSelectMCPServer = vi.fn();
 
