@@ -642,7 +642,7 @@ export const messages = {
     composerTip: "Enter 发送，Shift + Enter 换行。支持房间、私信和 @ 提及。",
     profileSetupTitle: "配置 Manager Profile",
     profileSetupSubtitle: "自动检测没有找到可用模型。请完成 Manager 的运行配置后再开始对话。",
-    profileProvider: "服务商",
+    profileProvider: "模型提供方",
     profileModelProvider: "模型提供方",
     profileModel: "模型",
     profileBaseURL: "接口地址",
