@@ -1195,6 +1195,7 @@ function AgentModelPanel({
                   });
                 }}
                 triggerProps={{ "aria-label": t("profileModelProvider"), "aria-required": true }}
+                contentProps={{ side: "bottom", align: "start", avoidCollisions: false }}
                 options={[
                   { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileProviderSelect") },
                   ...providerOptions.map((option) => ({

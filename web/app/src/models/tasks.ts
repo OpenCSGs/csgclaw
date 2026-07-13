@@ -1,3 +1,5 @@
+import type { AgentLike } from "@/models/agents";
+
 export type WorkspaceTask = {
   id: string;
   assignment_type: string;
@@ -301,6 +303,28 @@ export function taskUsesExecutionRoom(
 
 export function displayTeam(team: WorkspaceTeam): string {
   return team.title || team.id;
+}
+
+export function teamMemberIDs(team: WorkspaceTeam): string[] {
+  const ids = new Set(team.member_agent_ids ?? []);
+  if (team.lead_agent_id) {
+    const altID = team.lead_agent_id.startsWith("u-") ? team.lead_agent_id.slice(2) : "u-" + team.lead_agent_id;
+    ids.delete(altID);
+    ids.add(team.lead_agent_id);
+  }
+  return Array.from(ids);
+}
+
+export function resolveTeamAvatarMembers(team: WorkspaceTeam, agents: readonly AgentLike[]) {
+  return teamMemberIDs(team).map((memberID) => {
+    const agent = agents.find((item) => item.id === memberID);
+    return {
+      id: memberID,
+      name: agent?.name || memberID,
+      avatar: agent?.avatar || "",
+      accent_hex: undefined,
+    };
+  });
 }
 
 type TranslateFn = (key: string) => string;

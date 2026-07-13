@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
 import { FileCode2, Plus, Server } from "lucide-react";
-import { ModelsIcon, UsersIcon } from "@/components/ui/Icons";
+import { RoomAvatar } from "@/components/business";
+import { ModelsIcon } from "@/components/ui/Icons";
 import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
 import { modelProviderAvatarPath, providerStatusTone, type ModelProvider } from "@/models/modelProviders";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
-import { displayTeam } from "@/models/tasks";
+import { displayTeam, resolveTeamAvatarMembers, teamMemberIDs } from "@/models/tasks";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { classNames } from "@/shared/lib/classNames";
 import { WORKSPACE_SECTION_ORDER_STORAGE_KEY } from "@/shared/storage/keys";
@@ -743,7 +744,9 @@ export function WorkspaceTabPanels({
         >
           {visibleTeams.length ? (
             visibleTeams.map((team) => {
-              const memberCount = team.member_agent_ids.length + (team.lead_agent_id ? 1 : 0);
+              const memberIDs = teamMemberIDs(team);
+              const memberCount = memberIDs.length;
+              const avatarMembers = resolveTeamAvatarMembers(team, agentItems);
               return (
                 <button
                   key={team.id}
@@ -755,7 +758,7 @@ export function WorkspaceTabPanels({
                   onClick={() => onSelectTeam?.(team)}
                 >
                   <span className={rowStyles.icon}>
-                    <UsersIcon />
+                    <RoomAvatar ariaLabel={displayTeam(team)} count={memberCount} members={avatarMembers} />
                   </span>
                   <span className={rowStyles.main}>
                     <span className={classNames(rowStyles.title, "truncate")}>{displayTeam(team)}</span>

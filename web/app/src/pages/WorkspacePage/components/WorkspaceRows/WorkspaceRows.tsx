@@ -346,10 +346,10 @@ export function WorkspaceConversationRow({
     : avatarFallbackText(displayUser?.avatar, displayUser?.name, displayUser?.id);
   const title = isDirect && displayUser ? displayUser.name : conversation.title;
   const roomAvatarMembers = resolveRoomAvatarMembers(conversation, usersById, currentUserID);
-  const preview = formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t);
+  const preview = isDirect ? "" : formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t);
   return (
     <button
-      className={classNames(styles.row, styles.conversationRow, active && styles.active)}
+      className={classNames(styles.row, styles.conversationRow, isDirect && styles.directConversationRow, active && styles.active)}
       onClick={() => onSelect(conversation.id)}
     >
       <span
@@ -393,9 +393,11 @@ export function WorkspaceConversationRow({
             ></span>
           ) : null}
         </span>
-        <span className={classNames(styles.meta, "truncate")}>
-          <MessagePreviewText content={preview} />
-        </span>
+        {isDirect ? null : (
+          <span className={classNames(styles.meta, "truncate")}>
+            <MessagePreviewText content={preview} />
+          </span>
+        )}
       </span>
       <span className={styles.time}>{formatTime(lastMessage?.created_at, locale)}</span>
     </button>

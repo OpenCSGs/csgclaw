@@ -208,7 +208,7 @@ export function CreateModelProviderModal({
         : checkState === "empty"
           ? t("modelProviderCheckEmpty")
           : checkState === "error"
-            ? autoCheckWarning || t("modelProviderCheckFailed")
+            ? ""
             : t("modelProviderNotChecked");
 
   return (
@@ -321,10 +321,12 @@ export function CreateModelProviderModal({
                 </label>
                 {onCheckAccess ? (
                   <div className="field create-model-provider-span-2">
-                    <div className="create-model-provider-check-row">
-                      <Button variant="secondaryGray" size="sm" disabled={checkDisabled} onClick={handleCheckAccess}>
-                        {autoCheckBusy ? t("profileLoadingModels") : t("modelProviderCheck")}
-                      </Button>
+                    <div className="create-model-provider-check-block">
+                      <div className="create-model-provider-check-row">
+                        <Button variant="secondaryGray" size="sm" disabled={checkDisabled} onClick={handleCheckAccess}>
+                          {autoCheckBusy ? t("profileLoadingModels") : t("modelProviderCheck")}
+                        </Button>
+                      </div>
                       {autoCheckMessage ? (
                         <span className="create-model-provider-check-status success">{autoCheckMessage}</span>
                       ) : null}
@@ -346,11 +348,9 @@ export function CreateModelProviderModal({
                     models={modelList}
                     searchLabel={t("modelProviderModelSearch")}
                   />
-                  <small
-                    className={`field-hint create-model-provider-model-status ${checkState === "error" ? "warning" : ""}`.trim()}
-                  >
-                    {modelStatusHint}
-                  </small>
+                  {modelStatusHint ? (
+                    <small className="field-hint create-model-provider-model-status">{modelStatusHint}</small>
+                  ) : null}
                 </div>
               </div>
             </div>

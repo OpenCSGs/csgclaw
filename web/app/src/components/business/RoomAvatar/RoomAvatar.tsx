@@ -9,7 +9,7 @@ type RoomAvatarProps = {
   ariaLabel?: string;
   count?: number;
   members: RoomAvatarMember[];
-  size?: 32 | 48;
+  size?: number;
   showCountBadge?: boolean;
 };
 

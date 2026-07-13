@@ -426,11 +426,25 @@
 }
 
 .agentRow {
+  padding: 12px;
   grid-template-columns: 32px minmax(0, 1fr) max-content;
 }
 
+.humanRow {
+  padding: 12px;
+}
+
+.computerRow {
+  padding: 12px;
+}
+
 .conversationRow {
+  padding: 12px;
   grid-template-columns: 32px minmax(0, 1fr) auto;
+}
+
+.directConversationRow {
+  align-items: center;
 }
 
 .taskRow {
@@ -495,6 +509,19 @@
 :global(:root[data-theme="dark"]) .computerRow .meta,
 :global(:root[data-theme="dark"]) .time {
   color: var(--gray-500);
+}
+
+:global(:root[data-theme="dark"]) .conversationRow.active .meta,
+:global(:root[data-theme="dark"]) .active.conversationRow .meta,
+:global(:root[data-theme="dark"]) .agentRow.active .meta,
+:global(:root[data-theme="dark"]) .active.agentRow .meta,
+:global(:root[data-theme="dark"]) .humanRow.active .meta,
+:global(:root[data-theme="dark"]) .active.humanRow .meta,
+:global(:root[data-theme="dark"]) .computerRow.active .meta,
+:global(:root[data-theme="dark"]) .active.computerRow .meta,
+:global(:root[data-theme="dark"]) .conversationRow.active .time,
+:global(:root[data-theme="dark"]) .active.conversationRow .time {
+  color: var(--white);
 }
 
 :global(:root[data-theme="dark"]) .addButton:hover:not(:disabled),
