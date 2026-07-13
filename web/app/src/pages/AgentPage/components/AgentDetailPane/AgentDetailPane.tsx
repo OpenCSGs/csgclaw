@@ -1178,7 +1178,7 @@ function AgentModelPanel({
         <div className="agent-page-form-content agent-model-form-content">
           <div className="profile-runtime-grid agent-model-config-grid">
             <label className="field">
-              {requiredFieldLabel(t("profileProvider"))}
+              {requiredFieldLabel(t("profileModelProvider"))}
               <Select
                 value={selectedProviderID}
                 required
@@ -1194,7 +1194,7 @@ function AgentModelPanel({
                     model_id: nextProvider.models[0] || "",
                   });
                 }}
-                triggerProps={{ "aria-label": t("profileProvider"), "aria-required": true }}
+                triggerProps={{ "aria-label": t("profileModelProvider"), "aria-required": true }}
                 options={[
                   { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileProviderSelect") },
                   ...providerOptions.map((option) => ({
