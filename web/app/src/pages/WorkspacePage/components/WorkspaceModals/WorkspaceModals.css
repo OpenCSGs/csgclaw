@@ -145,6 +145,12 @@
   box-shadow: none;
 }
 
+.create-model-provider-check-block {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
 .create-model-provider-check-row {
   display: flex;
   align-items: center;
