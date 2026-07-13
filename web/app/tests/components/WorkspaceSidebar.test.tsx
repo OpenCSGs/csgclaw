@@ -314,6 +314,42 @@ describe("WorkspaceSidebar", () => {
     expect(contextAside).not.toHaveAttribute("inert");
   });
 
+  it("aligns collapsed navigation tooltips with their buttons when the page is zoomed", () => {
+    const previousZoom = document.documentElement.style.zoom;
+    document.documentElement.style.zoom = "0.8";
+    const view = renderSidebar({ isSidebarCollapsed: true });
+    const button = screen.getByRole("button", { name: "Model Providers" });
+    const buttonRect = {
+      bottom: 328,
+      height: 48,
+      left: 16,
+      right: 64,
+      top: 280,
+      width: 48,
+      x: 16,
+      y: 280,
+      toJSON: () => ({}),
+    };
+    const rectSpy = vi.spyOn(button, "getBoundingClientRect").mockReturnValue(buttonRect);
+
+    try {
+      fireEvent.mouseEnter(button);
+
+      const tooltip = screen.getByRole("tooltip");
+      const scale = 0.8;
+      const visualLeft = Number.parseFloat(tooltip.style.left) * scale;
+      const visualTop = Number.parseFloat(tooltip.style.top) * scale;
+
+      expect(visualLeft).toBe(buttonRect.right + 10);
+      expect(visualTop).toBe(buttonRect.top + buttonRect.height / 2);
+      expect(button).toHaveAttribute("aria-describedby", tooltip.id);
+    } finally {
+      rectSpy.mockRestore();
+      view.unmount();
+      document.documentElement.style.zoom = previousZoom;
+    }
+  });
+
   it("opens the scheduled task view from the task navigation", () => {
     const onSelectTask = vi.fn();
     const onSelectTaskBoardView = vi.fn();

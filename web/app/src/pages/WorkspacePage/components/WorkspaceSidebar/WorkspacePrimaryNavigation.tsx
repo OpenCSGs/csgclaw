@@ -1,4 +1,5 @@
 import { classNames } from "@/shared/lib/classNames";
+import { rootZoomScale } from "@/shared/lib/appScale";
 import styles from "./WorkspaceSidebar.module.css";
 import { useCallback, useId, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
@@ -71,9 +72,10 @@ function PrimaryNavigationButton({
       return;
     }
     const rect = buttonRef.current.getBoundingClientRect();
+    const scale = rootZoomScale();
     setTooltipStyle({
-      left: rect.right + 10,
-      top: rect.top + rect.height / 2,
+      left: (rect.right + 10) / scale,
+      top: (rect.top + rect.height / 2) / scale,
     });
   }, [collapsed]);
 

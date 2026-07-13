@@ -5,6 +5,7 @@ import { ProfilePreviewContent, type ProfilePreviewAnchorRect } from "@/componen
 import { IconButton } from "@/components/ui";
 import type { AgentLike } from "@/models/agents";
 import type { IMUser, TranslateFn } from "@/models/conversations";
+import { rootZoomScale } from "@/shared/lib/appScale";
 
 export type ProfilePreviewPopoverProps = {
   agent: AgentLike | null;
@@ -21,11 +22,6 @@ export type ProfilePreviewPopoverProps = {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function rootZoomScale(): number {
-  const zoom = Number.parseFloat(window.getComputedStyle(document.documentElement).zoom);
-  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
 }
 
 function profilePreviewStyle(anchorRect: ProfilePreviewAnchorRect | null | undefined, cardHeight?: number | null) {
