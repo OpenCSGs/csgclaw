@@ -56,6 +56,7 @@ const labels: Record<string, string> = {
   profileAdvanced: "Advanced",
   profileFastMode: "Fast mode",
   profileModel: "Model",
+  profileModelProvider: "Model provider",
   profileModelSection: "Model",
   profileProvider: "Provider",
   profileReasoning: "Reasoning",
@@ -271,6 +272,58 @@ describe("agent action visibility", () => {
 
     await user.tab();
     expect(screen.getByRole("button", { name: "Edit name" })).toHaveTextContent("测试工程师");
+  });
+
+  it("keeps the provider dropdown below its trigger", async () => {
+    const user = userEvent.setup();
+    const draft = {
+      ...agentToDraft(worker),
+      model_provider_id: "codex",
+      model_id: "gpt-test",
+    };
+
+    render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={draft}
+        savedDraft={draft}
+        modelOptions={[
+          {
+            value: "codex.gpt-test",
+            label: "Codex / gpt-test",
+            providerID: "codex",
+            providerDisplayName: "Codex",
+            providerAvatar: "model-providers/codex.svg",
+            modelID: "gpt-test",
+          },
+        ]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Model provider" }));
+
+    expect(screen.getByRole("listbox")).toHaveAttribute("data-side", "bottom");
   });
 
   it("renders the builtin manager name as fixed text in edit mode", () => {
@@ -800,7 +853,7 @@ describe("agent action visibility", () => {
 
     const navigation = screen.getByRole("navigation", { name: "Profile sections" });
     expect(within(navigation).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-current", "location");
-    expect(screen.getByText("Provider")).toBeInTheDocument();
+    expect(screen.getByText("Model provider")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("reply in Chinese")).not.toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("button", { name: "Instructions" }));

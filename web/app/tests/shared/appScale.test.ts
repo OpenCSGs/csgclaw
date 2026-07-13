@@ -13,12 +13,15 @@ describe("default app scale", () => {
     const settings = readSource("src/pages/SettingsPage/SettingsPage.module.css");
 
     expect(globals).toContain("@supports (zoom: 80%)");
+    expect(globals).toContain("--app-ui-floating-layer-scale: 125%;");
     expect(globals).toContain("--app-ui-viewport-height: 125dvh;");
     expect(globals).toContain("--text-xs-size: 13px;");
     expect(globals).toContain("--text-sm-size: 15px;");
     expect(globals).toContain("--text-md-size: 17px;");
     expect(globals).toContain("font-size-adjust: 0.65;");
     expect(globals).toContain("zoom: 80%;");
+    expect(globals).toContain("[data-radix-popper-content-wrapper]");
+    expect(globals).toContain("zoom: var(--app-ui-floating-layer-scale);");
     expect(globals).toContain("font-size: var(--text-md-size);");
     expect(globals).toContain("font-family: var(--font-sans);");
     expect(workspace).toContain("height: var(--app-ui-viewport-height);");

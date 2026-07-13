@@ -10,11 +10,13 @@
 }
 
 :root {
+  --app-ui-floating-layer-scale: 1;
   --app-ui-viewport-height: 100dvh;
 }
 
 @supports (zoom: 80%) {
   :root {
+    --app-ui-floating-layer-scale: 125%;
     --app-ui-viewport-height: 125dvh;
     --text-xs-size: 13px;
     --text-sm-size: 15px;
@@ -30,6 +32,11 @@
     font-size-adjust: 0.65;
     zoom: 80%;
   }
+}
+
+/* Radix positions poppers in visual viewport coordinates, so cancel the root zoom on its positioning wrapper. */
+[data-radix-popper-content-wrapper] {
+  zoom: var(--app-ui-floating-layer-scale);
 }
 
 html,
