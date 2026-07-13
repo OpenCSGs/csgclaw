@@ -2952,6 +2952,21 @@ button[disabled],
   color: var(--success-700);
 }
 
+.workspace-status-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 999px;
+  background: var(--muted);
+  opacity: 0.55;
+}
+
+.workspace-status-dot.online {
+  background: currentColor;
+  opacity: 1;
+  box-shadow: 0 0 0 3px rgba(18, 183, 106, 0.14);
+}
+
 .mini-badge.warn,
 .agent-badge.warn {
   color: var(--warning-700);
