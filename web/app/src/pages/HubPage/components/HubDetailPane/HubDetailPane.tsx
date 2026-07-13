@@ -1,12 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { FileCode2 } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { json } from "@codemirror/lang-json";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { linter } from "@codemirror/lint";
+import type { Diagnostic } from "@codemirror/lint";
+import { EditorState, type Extension } from "@codemirror/state";
+import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
+import { tags } from "@lezer/highlight";
+import { FileCode2, Server, Trash2 } from "lucide-react";
 import { formatRuntimeKindLabel } from "@/models/agents";
 import { formatHubDateTime, isDeletableHubTemplate } from "@/models/hubWorkspace";
+import { formatMCPServerDocument, mcpServerDescription, mcpServerPayloadFromDocument } from "@/models/mcp";
+import type { MCPServerPayload } from "@/models/mcp";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { ModelsIcon } from "@/components/ui/Icons";
 import {
   Button,
+  DialogBody,
   DialogCloseButton,
   DialogContent,
   DialogDescription,
@@ -17,6 +29,7 @@ import {
 } from "@/components/ui";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
+import type { MCPServer } from "@/models/mcp";
 import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
@@ -30,14 +43,27 @@ type HubDetailPaneHub = {
     error: string;
     loaded: boolean;
     onDeleteSkill?: (item: SkillSummary | null | undefined) => Promise<boolean> | boolean;
+    onCreateMCP?: (payload: MCPServerPayload) => Promise<boolean> | boolean;
+    onDeleteMCP?: (item: MCPServer | null | undefined) => Promise<boolean> | boolean;
     onDeleteTemplate?: (item: HubTemplate | null | undefined) => unknown;
+    onSelectMCP?: (name: string | null | undefined) => void;
+    onUpdateMCP?: (currentName: string, payload: MCPServerPayload) => Promise<boolean> | boolean;
     onRetry: () => void | Promise<void>;
     onSelectSkill?: (name: string | null | undefined) => void;
     onSelectSkillFile?: (path: string) => void;
     onSelectTemplate?: (item: HubTemplate | null | undefined) => void;
     onSelectWorkspaceFile: (workspacePath: string) => void;
     onToggleWorkspaceDir?: (workspacePath: string) => void | Promise<void>;
-    selectedResourceType?: "skill" | "template";
+    mcpServers?: readonly MCPServer[];
+    mcpStateError?: string;
+    mcpStateLoading?: boolean;
+    mcpMutationBusy?: boolean;
+    mcpMutationError?: string;
+    mcpCreateDialogOpen?: boolean;
+    onMCPCreateDialogOpenChange?: (open: boolean) => void;
+    selectedMCPServer?: MCPServer | null;
+    selectedMCPServerName?: string;
+    selectedResourceType?: "mcp" | "skill" | "template";
     selectedSkill: SkillSummary | null;
     selectedSkillPath: string;
     selectedTemplate: HubTemplate | null;
@@ -66,9 +92,20 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   error: "",
   loaded: false,
   onRetry: () => {},
+  mcpServers: [],
+  mcpStateError: "",
+  mcpStateLoading: false,
+  mcpMutationBusy: false,
+  mcpMutationError: "",
+  mcpCreateDialogOpen: false,
+  selectedMCPServer: null,
+  selectedMCPServerName: "",
   onSelectSkillFile: () => {},
   onSelectWorkspaceFile: () => {},
   onToggleWorkspaceDir: () => {},
+  onCreateMCP: () => false,
+  onDeleteMCP: () => false,
+  onUpdateMCP: () => false,
   selectedResourceType: "template",
   selectedSkill: null,
   selectedSkillPath: "",
@@ -91,6 +128,231 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   workspaceTreeLoading: false,
   loadingWorkspaceDirs: new Set(),
 };
+
+const DEFAULT_MCP_SERVER_DOCUMENT =
+  '{\n  "mcpServers": {\n    "filesystem": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${workspace}"],\n      "startup_timeout_sec": 60\n    }\n  }\n}';
+
+const jsonEditorTheme = EditorView.theme({
+  "&": {
+    backgroundColor: "transparent",
+    color: "var(--text)",
+    fontFamily: "var(--font-mono)",
+    fontSize: "12px",
+  },
+  "&.cm-focused": {
+    outline: "none",
+  },
+  ".cm-scroller": {
+    fontFamily: "var(--font-mono)",
+    lineHeight: "1.6",
+    minHeight: "var(--hub-json-editor-min-height, 220px)",
+  },
+  ".cm-content": {
+    caretColor: "var(--text)",
+    padding: "14px 0",
+  },
+  ".cm-line": {
+    padding: "0 14px",
+  },
+  ".cm-gutters": {
+    backgroundColor: "transparent",
+    borderRight: "1px solid color-mix(in oklab, var(--line) 70%, transparent)",
+    color: "var(--gray-500)",
+    paddingLeft: "4px",
+  },
+  ".cm-activeLine": {
+    backgroundColor: "color-mix(in oklab, var(--brand-600) 7%, transparent)",
+  },
+  ".cm-activeLineGutter": {
+    backgroundColor: "color-mix(in oklab, var(--brand-600) 7%, transparent)",
+    color: "var(--gray-700)",
+  },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+    backgroundColor: "color-mix(in oklab, var(--brand-600) 24%, transparent)",
+  },
+  ".cm-lintRange-error": {
+    textDecoration: "underline wavy var(--error-600)",
+    textDecorationSkipInk: "none",
+  },
+  ".cm-tooltip": {
+    border: "1px solid var(--line)",
+    borderRadius: "var(--radius-md)",
+    backgroundColor: "var(--surface)",
+    color: "var(--text)",
+    boxShadow: "var(--shadow-lg)",
+    fontFamily: "var(--font-sans)",
+    fontSize: "12px",
+  },
+});
+
+const jsonHighlightStyle = HighlightStyle.define([
+  { tag: tags.propertyName, color: "var(--brand-700)" },
+  { tag: tags.string, color: "var(--success-700)" },
+  { tag: tags.number, color: "var(--warning-700)" },
+  { tag: tags.bool, color: "var(--error-600)" },
+  { tag: tags.null, color: "var(--error-600)" },
+  { tag: tags.punctuation, color: "var(--gray-500)" },
+]);
+
+function jsonSyntaxLinter(view: EditorView): Diagnostic[] {
+  const source = view.state.doc.toString();
+  try {
+    JSON.parse(source);
+    return [];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid JSON";
+    const positionMatch = /position\s+(\d+)/i.exec(message);
+    const parsedPosition = positionMatch ? Number(positionMatch[1]) : source.length;
+    if (source.length === 0) {
+      return [
+        {
+          from: 0,
+          message,
+          severity: "error",
+          to: 0,
+        },
+      ];
+    }
+    const position = Number.isFinite(parsedPosition) ? Math.max(0, Math.min(source.length, parsedPosition)) : 0;
+    const from = Math.max(0, Math.min(source.length, position || source.length) - 1);
+    const to = Math.min(source.length, Math.max(from + 1, position + 1));
+    return [
+      {
+        from,
+        message,
+        severity: "error",
+        to,
+      },
+    ];
+  }
+}
+
+const jsonEditorExtensions: Extension[] = [
+  lineNumbers(),
+  highlightActiveLineGutter(),
+  highlightActiveLine(),
+  history(),
+  json(),
+  syntaxHighlighting(jsonHighlightStyle),
+  linter(jsonSyntaxLinter, { delay: 250 }),
+  keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
+  EditorState.tabSize.of(2),
+  EditorView.lineWrapping,
+  jsonEditorTheme,
+];
+
+type MCPServerDocumentParseResult =
+  | {
+      kind: "valid";
+      payload: MCPServerPayload;
+    }
+  | {
+      kind: "structure" | "syntax";
+      message: string;
+    };
+
+function parseMCPServerDocument(value: string, t: TranslateFn): MCPServerDocumentParseResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return { kind: "syntax", message: t("resourcesMCPServerDocumentInvalid") };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { kind: "structure", message: t("resourcesMCPServerDocumentObjectRequired") };
+  }
+  const payload = mcpServerPayloadFromDocument(parsed);
+  if (!payload) {
+    return { kind: "structure", message: t("resourcesMCPServerDocumentInvalidShape") };
+  }
+  return { kind: "valid", payload };
+}
+
+function JSONConfigEditor({
+  hideLabel = false,
+  invalid = false,
+  label,
+  minRows = 12,
+  onChange,
+  value,
+}: {
+  hideLabel?: boolean;
+  invalid?: boolean;
+  label: string;
+  minRows?: number;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  const editorId = useId();
+  const editorParentRef = useRef<HTMLDivElement | null>(null);
+  const editorViewRef = useRef<EditorView | null>(null);
+  const initialValueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  const minHeight = `${Math.max(minRows, 6) * 19.2 + 28}px`;
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    if (!editorParentRef.current) {
+      return;
+    }
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: initialValueRef.current,
+        extensions: [
+          ...jsonEditorExtensions,
+          EditorView.contentAttributes.of({
+            "aria-label": label,
+            id: editorId,
+          }),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              onChangeRef.current(update.state.doc.toString());
+            }
+          }),
+        ],
+      }),
+      parent: editorParentRef.current,
+    });
+    editorViewRef.current = view;
+    return () => {
+      editorViewRef.current = null;
+      view.destroy();
+    };
+  }, [editorId, label]);
+
+  useEffect(() => {
+    const view = editorViewRef.current;
+    if (!view) {
+      return;
+    }
+    const current = view.state.doc.toString();
+    if (current === value) {
+      return;
+    }
+    view.dispatch({
+      changes: {
+        from: 0,
+        insert: value,
+        to: current.length,
+      },
+    });
+  }, [value]);
+
+  return (
+    <div
+      className={`hub-json-editor${invalid ? " is-invalid" : ""}`}
+      style={{ "--hub-json-editor-min-height": minHeight } as CSSProperties}
+    >
+      <label className={`hub-json-editor-label${hideLabel ? " sr-only" : ""}`} htmlFor={editorId}>
+        {label}
+      </label>
+      <div className="hub-json-editor-shell" ref={editorParentRef} aria-invalid={invalid || undefined} />
+    </div>
+  );
+}
 
 function HubPreviewEmptyIcon() {
   return (
@@ -135,10 +397,12 @@ export function HubDetailPane({
   const {
     templates,
     skills,
+    mcpServers = [],
     selectedTemplate,
     selectedTemplateId,
     selectedSkill,
     selectedSkillPath,
+    selectedMCPServer,
     selectedResourceType = "template",
     loaded,
     error,
@@ -152,6 +416,11 @@ export function HubDetailPane({
     skillFile,
     skillFileLoading,
     skillFileError,
+    mcpStateError = "",
+    mcpStateLoading = false,
+    mcpMutationBusy = false,
+    mcpMutationError = "",
+    mcpCreateDialogOpen = false,
     onSelectWorkspaceFile,
     onToggleWorkspaceDir,
     workspaceEntries = EMPTY_WORKSPACE_ENTRIES,
@@ -159,7 +428,11 @@ export function HubDetailPane({
     loadingWorkspaceDirs,
     onSelectSkillFile,
     onDeleteSkill,
+    onCreateMCP,
+    onDeleteMCP,
     onDeleteTemplate,
+    onMCPCreateDialogOpenChange,
+    onUpdateMCP,
     deleteBusy = false,
     skillDeleteBusy = false,
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
@@ -167,20 +440,46 @@ export function HubDetailPane({
   const canDeleteSkill = Boolean(selectedSkill && !isReadonlySkill(selectedSkill));
   const skillEntries = skillTree?.entries ?? EMPTY_WORKSPACE_ENTRIES;
   const activeResourceType = useMemo(() => {
-    if (selectedResourceType === "skill" && skills.length) {
+    if (selectedResourceType === "mcp") {
+      return "mcp";
+    }
+    if (selectedResourceType === "skill") {
       return "skill";
     }
     if (templates.length) {
       return "template";
     }
+    if (mcpServers.length) {
+      return "mcp";
+    }
     if (skills.length) {
       return "skill";
     }
     return "template";
-  }, [selectedResourceType, skills.length, templates.length]);
+  }, [mcpServers.length, selectedResourceType, skills.length, templates.length]);
   const [isInspectorScrolling, setIsInspectorScrolling] = useState(false);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
+  const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
+  const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
+  const [mcpDetailDocument, setMCPDetailDocument] = useState("");
+  const [mcpDetailError, setMCPDetailError] = useState("");
+  const [mcpFormError, setMCPFormError] = useState("");
   const inspectorScrollTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (mcpCreateDialogOpen) {
+      setMCPDraftDocument(DEFAULT_MCP_SERVER_DOCUMENT);
+      setMCPFormError("");
+    }
+  }, [mcpCreateDialogOpen]);
+  useEffect(() => {
+    if (!selectedMCPServer) {
+      setMCPDetailDocument("");
+      setMCPDetailError("");
+      return;
+    }
+    setMCPDetailDocument(formatMCPServerDocument(selectedMCPServer.name, selectedMCPServer.config));
+    setMCPDetailError("");
+  }, [selectedMCPServer]);
   useEffect(
     () => () => {
       if (inspectorScrollTimerRef.current) {
@@ -208,12 +507,63 @@ export function HubDetailPane({
     }
   }
 
+  async function handleSaveMCP() {
+    const result = parseMCPServerDocument(mcpDraftDocument, t);
+    if (result.kind !== "valid") {
+      setMCPFormError(result.kind === "structure" ? result.message : "");
+      return;
+    }
+    const saved = await onCreateMCP?.(result.payload);
+    if (saved) {
+      closeMCPFormDialog();
+    }
+  }
+
+  async function handleSaveMCPDetail() {
+    if (!selectedMCPServer) {
+      return;
+    }
+    const result = parseMCPServerDocument(mcpDetailDocument, t);
+    if (result.kind !== "valid") {
+      setMCPDetailError(result.kind === "structure" ? result.message : "");
+      return;
+    }
+    const saved = await onUpdateMCP?.(selectedMCPServer.name, result.payload);
+    if (saved) {
+      setMCPDetailError("");
+    }
+  }
+
+  async function handleDeleteMCPConfirm() {
+    const deleted = await onDeleteMCP?.(selectedMCPServer);
+    if (deleted) {
+      setMCPDeleteDialogOpen(false);
+    }
+  }
+
+  function handleMCPDraftDocumentChange(value: string) {
+    setMCPDraftDocument(value);
+    const result = parseMCPServerDocument(value, t);
+    setMCPFormError(result.kind === "structure" ? result.message : "");
+  }
+
+  function handleMCPDetailDocumentChange(value: string) {
+    setMCPDetailDocument(value);
+    const result = parseMCPServerDocument(value, t);
+    setMCPDetailError(result.kind === "structure" ? result.message : "");
+  }
+
+  function closeMCPFormDialog() {
+    setMCPFormError("");
+    onMCPCreateDialogOpenChange?.(false);
+  }
+
   return (
     <section className="entity-pane hub-detail-pane">
       {error ? <div className="form-error">{error}</div> : null}
       {!loaded && !error ? (
         <div className="workspace-empty">{t("resourcesLoading")}</div>
-      ) : templates.length === 0 && skills.length === 0 ? (
+      ) : templates.length === 0 && skills.length === 0 && mcpServers.length === 0 ? (
         <div className="empty-state shell-empty-state hub-empty-state">
           <span className="rich-empty-mark" aria-hidden="true">
             *
@@ -281,9 +631,7 @@ export function HubDetailPane({
                 <div className="hub-inspector-field">
                   <span>{t("resourcesRuntimeLabel")}</span>
                   <strong>
-                    {selectedTemplate.runtime_kind
-                      ? formatRuntimeKindLabel(selectedTemplate.runtime_kind, t)
-                      : "-"}
+                    {selectedTemplate.runtime_kind ? formatRuntimeKindLabel(selectedTemplate.runtime_kind, t) : "-"}
                   </strong>
                 </div>
                 <div className="hub-inspector-field">
@@ -393,12 +741,72 @@ export function HubDetailPane({
                 </div>
               </div>
             </>
+          ) : activeResourceType === "mcp" && selectedMCPServer ? (
+            <>
+              <div className="hub-inspector-hero">
+                <div className="hub-inspector-hero-row">
+                  <div className="hub-inspector-brand">
+                    <div className="hub-inspector-copy">
+                      <div className="hub-inspector-title-row">
+                        <span className="hub-inspector-title-icon" aria-hidden="true">
+                          <Server size={18} strokeWidth={2} />
+                        </span>
+                        <h2>{selectedMCPServer.name}</h2>
+                      </div>
+                      <p>
+                        {selectedMCPServer.description ||
+                          mcpServerDescription(selectedMCPServer.config) ||
+                          selectedMCPServer.name}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="hub-template-actions">
+                    <Button variant="primary" size="md" loading={mcpMutationBusy} onClick={handleSaveMCPDetail}>
+                      {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
+                    </Button>
+                    <Button
+                      variant="outlineDanger"
+                      size="md"
+                      disabled={mcpMutationBusy}
+                      onClick={() => setMCPDeleteDialogOpen(true)}
+                    >
+                      <Trash2 size={16} strokeWidth={2} />
+                      <span>{t("resourcesMCPDelete")}</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {mcpStateError || mcpMutationError ? (
+                <div className="form-error">{mcpStateError || mcpMutationError}</div>
+              ) : null}
+              {mcpStateLoading ? <div className="workspace-empty">{t("resourcesMCPLoading")}</div> : null}
+
+              <div className="hub-workspace-block mcp-server-document-block">
+                <JSONConfigEditor
+                  label={t("resourcesMCPServerDocumentLabel")}
+                  value={mcpDetailDocument}
+                  onChange={handleMCPDetailDocumentChange}
+                  invalid={Boolean(mcpDetailError)}
+                  minRows={12}
+                />
+                {mcpDetailError ? <div className="form-error hub-json-editor-error">{mcpDetailError}</div> : null}
+              </div>
+            </>
           ) : (
             <div className="empty-state shell-empty-state hub-empty-state">
               <span className="rich-empty-mark" aria-hidden="true">
                 *
               </span>
-              <strong>{templates.length || skills.length ? t("resourcesLoading") : t("resourcesEmpty")}</strong>
+              <strong>
+                {activeResourceType === "mcp"
+                  ? t("resourcesMCPEmpty")
+                  : activeResourceType === "skill"
+                    ? t("resourcesSkillsEmpty")
+                    : templates.length || skills.length || mcpServers.length
+                      ? t("resourcesLoading")
+                      : t("resourcesEmpty")}
+              </strong>
             </div>
           )}
         </div>
@@ -424,6 +832,76 @@ export function HubDetailPane({
               {t("cancel")}
             </Button>
             <Button variant="danger" size="sm" loading={skillDeleteBusy} onClick={handleDeleteSkillConfirm}>
+              {t("resourcesDeleteSkillConfirmAction")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
+        open={mcpCreateDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setMCPDraftDocument(DEFAULT_MCP_SERVER_DOCUMENT);
+            setMCPFormError("");
+            onMCPCreateDialogOpenChange?.(true);
+          } else {
+            closeMCPFormDialog();
+          }
+        }}
+      >
+        <DialogContent className="mcp-dialog">
+          <DialogHeader className="hub-skill-delete-dialog-header">
+            <div className="hub-skill-delete-dialog-copy">
+              <DialogTitle>{t("resourcesMCPCreateTitle")}</DialogTitle>
+              <DialogDescription>{t("resourcesMCPFormDescription")}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <DialogBody className="mcp-form">
+            <JSONConfigEditor
+              hideLabel
+              label={t("resourcesMCPServerDocumentJSONLabel")}
+              value={mcpDraftDocument}
+              onChange={handleMCPDraftDocumentChange}
+              invalid={Boolean(mcpFormError)}
+              minRows={12}
+            />
+            {mcpFormError || mcpMutationError ? (
+              <div className="form-error hub-json-editor-error">{mcpFormError || mcpMutationError}</div>
+            ) : null}
+          </DialogBody>
+          <DialogFooter className="hub-skill-delete-dialog-actions">
+            <Button variant="secondaryGray" size="sm" disabled={mcpMutationBusy} onClick={closeMCPFormDialog}>
+              {t("cancel")}
+            </Button>
+            <Button variant="primary" size="sm" loading={mcpMutationBusy} onClick={handleSaveMCP}>
+              {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot open={mcpDeleteDialogOpen} onOpenChange={setMCPDeleteDialogOpen}>
+        <DialogContent className="hub-skill-delete-dialog">
+          <DialogHeader className="hub-skill-delete-dialog-header">
+            <div className="hub-skill-delete-dialog-copy">
+              <DialogTitle>{t("resourcesMCPDelete")}</DialogTitle>
+              <DialogDescription>
+                {t("resourcesMCPDeleteConfirmMessage", { name: selectedMCPServer?.name || "" })}
+              </DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          {mcpMutationError ? <div className="form-error">{mcpMutationError}</div> : null}
+          <DialogFooter className="hub-skill-delete-dialog-actions">
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              disabled={mcpMutationBusy}
+              onClick={() => setMCPDeleteDialogOpen(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button variant="danger" size="sm" loading={mcpMutationBusy} onClick={handleDeleteMCPConfirm}>
               {t("resourcesDeleteSkillConfirmAction")}
             </Button>
           </DialogFooter>

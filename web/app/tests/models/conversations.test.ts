@@ -87,7 +87,12 @@ describe("conversation model helpers", () => {
     const usersById = new Map([["user-dev", { id: "user-dev", name: "dev" }]]);
     const message = {
       content: "Task task-2 assigned to you.\n\nClaim it with: csgclaw-cli task claim --task task-2",
-      event: { actor_id: "user-manager", key: "task_assigned", target_ids: ["user-dev"], title: "task-2 [查询成都天气]" },
+      event: {
+        actor_id: "user-manager",
+        key: "task_assigned",
+        target_ids: ["user-dev"],
+        title: "task-2 [查询成都天气]",
+      },
       kind: "event",
       sender_id: "user-manager",
     };

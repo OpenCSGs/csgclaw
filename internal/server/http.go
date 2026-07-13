@@ -15,7 +15,9 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/mcp"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/scheduledtask"
 	"csgclaw/internal/team"
 	hub "csgclaw/internal/template"
@@ -26,6 +28,7 @@ type Options struct {
 	ListenAddr        string
 	Service           *agent.Service
 	Hub               *hub.Service
+	MCP               *mcp.Service
 	Participant       *participant.Service
 	IM                *im.Service
 	IMBus             *im.Bus
@@ -35,6 +38,7 @@ type Options struct {
 	Team              *team.Service
 	AgentTask         *agenttask.Service
 	ScheduledTask     *scheduledtask.Service
+	AgentRuntimes     *runtimecatalog.Service
 	TeamAdapters      *team.AdapterRegistry
 	Upgrade           *upgrade.Manager
 	ActivityDecider   api.ActivityDecider
@@ -49,9 +53,11 @@ func newHandler(opts Options) *api.Handler {
 	handler := api.NewHandlerWithAuth(opts.Service, opts.IM, opts.IMBus, opts.ParticipantBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
 	handler.SetParticipantService(opts.Participant)
 	handler.SetHubService(opts.Hub)
+	handler.SetMCPService(opts.MCP)
 	handler.SetTeamService(opts.Team)
 	handler.SetAgentTaskService(opts.AgentTask)
 	handler.SetScheduledTaskService(opts.ScheduledTask)
+	handler.SetAgentRuntimeService(opts.AgentRuntimes)
 	if opts.TeamAdapters != nil {
 		handler.SetTeamAdapterRegistry(opts.TeamAdapters)
 	}

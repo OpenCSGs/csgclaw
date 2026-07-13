@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -60,6 +62,54 @@ func (r *Runtime) RestartRequired(change agentruntime.RuntimeConfigChange) (bool
 func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, change agentruntime.RuntimeConfigChange) error {
 	_ = change
 	return r.RefreshCodexHomeAgentsFile(ctx, h)
+}
+
+func (r *Runtime) ValidateMCPServers(_ context.Context, current agentruntime.MCPServersSnapshot) error {
+	return agentruntime.ValidateMCPServers(current.Servers)
+}
+
+func (r *Runtime) MCPServersRestartRequired(change agentruntime.MCPServersChange) (bool, error) {
+	return agentruntime.MCPServersNeedsRestart(change.Previous.Servers, change.Current.Servers)
+}
+
+func (r *Runtime) ReconcileMCPServers(_ context.Context, h agentruntime.Handle, _ agentruntime.MCPServersChange) error {
+	agentRef, err := r.resolveAgent(h)
+	if err != nil {
+		return err
+	}
+	codexHomeDir, err := r.resolveCodexHomeDir(agentRef.ID)
+	if err != nil {
+		return err
+	}
+	workspaceDir, err := r.resolveWorkspaceDir(agentRef.ID, agentRef.RuntimeOptions)
+	if err != nil {
+		return err
+	}
+	return r.seedCodexHomeConfig(codexHomeDir, workspaceDir, agentRef.Profile.Normalized(), agentRef.MCPServers)
+}
+
+func (r *Runtime) ListMCPServers(_ context.Context, h agentruntime.Handle, _ agentruntime.MCPServersSnapshot) (agentruntime.MCPServersSnapshot, error) {
+	agentRef, err := r.resolveAgent(h)
+	if err != nil {
+		return agentruntime.MCPServersSnapshot{}, err
+	}
+	codexHomeDir, err := r.resolveCodexHomeDir(agentRef.ID)
+	if err != nil {
+		return agentruntime.MCPServersSnapshot{}, err
+	}
+	configPath := filepath.Join(codexHomeDir, configFileName)
+	raw, err := r.readFile(configPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return agentruntime.MCPServersSnapshot{}, nil
+		}
+		return agentruntime.MCPServersSnapshot{}, fmt.Errorf("read runtime codex mcp config %s: %w", configPath, err)
+	}
+	config, err := parseCodexMCPServers(string(raw))
+	if err != nil {
+		return agentruntime.MCPServersSnapshot{}, err
+	}
+	return agentruntime.MCPServersSnapshot{Servers: config}, nil
 }
 
 type responsesProbeTargetConfig struct {

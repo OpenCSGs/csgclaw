@@ -529,6 +529,8 @@
 }
 
 .agent-activity-list {
+  --agent-activity-type-column-width: 128px;
+
   display: block;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -558,7 +560,9 @@
 
 .agent-activity-row-main {
   display: grid;
-  grid-template-columns: 104px minmax(0, 1fr) minmax(80px, 0.14fr) max-content max-content;
+  grid-template-columns:
+    var(--agent-activity-type-column-width) minmax(0, 1fr) minmax(80px, 0.14fr)
+    max-content max-content;
   align-items: center;
   gap: 12px;
   min-height: 42px;
@@ -567,8 +571,8 @@
 
 .agent-activity-type-badge {
   display: inline-flex;
-  width: 104px;
-  max-width: 104px;
+  width: var(--agent-activity-type-column-width);
+  max-width: var(--agent-activity-type-column-width);
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -665,7 +669,7 @@
 }
 
 .agent-activity-row-detail {
-  margin: 0 12px 12px 128px;
+  margin: 0 12px 12px calc(var(--agent-activity-type-column-width) + 24px);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--gray-50);
@@ -728,6 +732,10 @@
   border-bottom-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
 }
 
+:root[data-theme="dark"] .agent-activity-row:hover {
+  background: color-mix(in srgb, var(--gray-800) 72%, var(--panel));
+}
+
 :root[data-theme="dark"] .agent-activity-row.selected {
   background: color-mix(in oklab, var(--brand-600) 14%, var(--panel));
 }
@@ -735,6 +743,36 @@
 :root[data-theme="dark"] .agent-activity-row-detail {
   border-color: color-mix(in srgb, var(--gray-300) 18%, transparent);
   background: color-mix(in srgb, var(--panel-strong) 84%, black);
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.message {
+  background: color-mix(in oklab, var(--success-500) 30%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.message.selected {
+  background: color-mix(in oklab, var(--success-400) 54%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.exec_command {
+  background: color-mix(in oklab, var(--brand-500) 34%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.exec_command.selected {
+  background: color-mix(in oklab, var(--brand-400) 58%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.other {
+  background: color-mix(in oklab, var(--gray-400) 26%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-timeline-segment.other.selected {
+  background: color-mix(in oklab, var(--gray-300) 44%, var(--panel-soft));
+}
+
+:root[data-theme="dark"] .agent-activity-type-badge.message {
+  background: color-mix(in oklab, var(--success-600) 34%, var(--panel-soft));
+  color: color-mix(in oklab, var(--success-100) 88%, var(--text));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--success-400) 22%, transparent);
 }
 
 :root[data-theme="dark"] .agent-activity-type-badge.exec_command {
@@ -745,6 +783,20 @@
 :root[data-theme="dark"] .agent-activity-type-badge.other {
   background: color-mix(in srgb, var(--gray-300) 16%, transparent);
   color: color-mix(in oklab, var(--muted) 70%, var(--text));
+}
+
+:root[data-theme="dark"] .agent-activity-row-summary {
+  color: color-mix(in oklab, var(--text) 78%, var(--muted));
+}
+
+:root[data-theme="dark"] .agent-activity-row-chevron {
+  color: color-mix(in oklab, var(--muted) 82%, var(--text));
+}
+
+:root[data-theme="dark"] .agent-activity-row-room,
+:root[data-theme="dark"] .agent-activity-row-seq,
+:root[data-theme="dark"] .agent-activity-row-time {
+  color: color-mix(in oklab, var(--muted) 82%, var(--text));
 }
 
 :root[data-theme="dark"] .agent-activity-tool-section + .agent-activity-tool-section {
@@ -1101,6 +1153,50 @@
   gap: var(--space-3);
 }
 
+.agent-skills-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-skills-title-copy {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--gray-800);
+  font-size: var(--text-sm-size);
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.agent-skills-title-copy > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-section-count-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 22px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  background: var(--gray-50);
+  color: var(--gray-600);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
 .agent-detail-pane .agent-skills-section-heading {
   display: flex;
   align-items: flex-start;
@@ -1162,6 +1258,7 @@
   position: static;
   opacity: 1;
   pointer-events: auto;
+  border-radius: var(--radius-md);
 }
 
 .agent-skill-icon-button {
@@ -1185,6 +1282,11 @@
 }
 
 .agent-skill-name {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
   color: var(--gray-700);
   font-size: var(--text-sm-size);
@@ -1192,6 +1294,17 @@
   line-height: 22px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-skill-name svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.agent-skill-name span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .agent-skill-description {
@@ -1203,6 +1316,11 @@
   line-height: 22px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-mcp-card .agent-skill-description {
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 .agent-skills-empty {
@@ -1747,6 +1865,16 @@
   border-color: var(--line);
   background: var(--panel);
   box-shadow: none;
+}
+
+:root[data-theme="dark"] .agent-skills-title-copy {
+  color: var(--gray-200);
+}
+
+:root[data-theme="dark"] .agent-section-count-badge {
+  border-color: rgba(208, 213, 221, 0.16);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-300);
 }
 
 :root[data-theme="dark"] .agent-skill-card {

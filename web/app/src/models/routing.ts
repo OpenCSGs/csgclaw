@@ -57,6 +57,7 @@ export const WorkspaceRouteSegments = {
   hub: "hub",
   templates: "templates",
   skills: "skills",
+  mcpServers: "mcp-servers",
   tasks: "tasks",
   channels: "channels",
   channel: "channel",
@@ -87,7 +88,7 @@ const conversationRouteSegments = new Set<string>([
 export type WorkspacePane = {
   type: WorkspacePaneType;
   id?: string;
-  resourceType?: "skill" | "template";
+  resourceType?: "mcp" | "skill" | "template";
 };
 
 export type CollapsedWorkspaceGroups = Record<string, boolean>;
@@ -151,6 +152,11 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
       ? { type: WorkspacePaneTypes.hub, id, resourceType: "skill" }
       : { type: WorkspacePaneTypes.hub, id: DefaultWorkspacePaneIds.hub };
   }
+  if (section === WorkspaceRouteSegments.mcpServers) {
+    return id
+      ? { type: WorkspacePaneTypes.hub, id, resourceType: "mcp" }
+      : { type: WorkspacePaneTypes.hub, id: DefaultWorkspacePaneIds.hub };
+  }
   if (section === WorkspaceRouteSegments.tasks) {
     return { type: WorkspacePaneTypes.task, id };
   }
@@ -193,6 +199,9 @@ export function pathForPane(
     }
     if (pane.resourceType === "skill" && pane.id) {
       return `/${WorkspaceRouteSegments.skills}/${encodeURIComponent(pane.id)}`;
+    }
+    if (pane.resourceType === "mcp" && pane.id) {
+      return `/${WorkspaceRouteSegments.mcpServers}/${encodeURIComponent(pane.id)}`;
     }
     return `/${WorkspaceRouteSegments.resources}`;
   }

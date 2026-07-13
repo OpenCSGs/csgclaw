@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PanelLeftOpen, Plus, Search } from "lucide-react";
+import { PanelLeftOpen, Plus, Search, Server } from "lucide-react";
 import {
   SidebarAlertTriangleIcon,
   SidebarBoxIcon,
@@ -22,10 +22,10 @@ import { WorkspaceContextSectionIds } from "./types";
 import { WorkspacePaneTypes, WorkspaceTabs, workspaceHasContextSidebar } from "@/models/routing";
 import { classNames } from "@/shared/lib/classNames";
 import styles from "./WorkspaceSidebar.module.css";
-import type { PrimaryNavigationItem, PrimaryNavigationSection } from "./WorkspacePrimaryNavigation";
-import type { WorkspaceContextSectionId, WorkspaceSidebarProps } from "./types";
 import type { ComponentType } from "react";
 
+import type { PrimaryNavigationItem, PrimaryNavigationSection } from "./WorkspacePrimaryNavigation";
+import type { WorkspaceContextSectionId, WorkspaceSidebarProps } from "./types";
 type SidebarNavigationIcon = ComponentType<{ size?: number | string }>;
 
 const WORKSPACE_NAVIGATION_ICONS = {
@@ -82,6 +82,7 @@ export function WorkspaceSidebar({
   onOpenCreateTask,
   onOpenCreateScheduledTask,
   hub,
+  onSelectMCPServer,
   onSelectHubSkill,
   onSelectHubTemplate,
   onSelectHub,
@@ -127,6 +128,7 @@ export function WorkspaceSidebar({
   const firstNotificationAgent = notificationAgentItems[0] ?? null;
   const firstTeam = teams[0] ?? null;
   const firstHubTemplate = hub?.templates[0] ?? null;
+  const firstMCPServer = hub?.mcpServers?.[0] ?? null;
   const firstHubSkill = hub?.skills[0] ?? null;
   const firstModelProvider = modelProviders?.providers[0] ?? null;
   const notificationAgentIds = useMemo(
@@ -299,6 +301,21 @@ export function WorkspaceSidebar({
             },
           },
           {
+            active: activeContextSectionId === WorkspaceContextSectionIds.mcpServers,
+            badge: badgeCount(hub?.mcpServers?.length),
+            groupId: WorkspaceContextSectionIds.mcpServers,
+            icon: navigationIcon(Server),
+            id: "mcp-servers",
+            label: t("resourcesMCPLabel"),
+            onSelect: () => {
+              if (onSelectMCPServer) {
+                onSelectMCPServer(firstMCPServer);
+                return;
+              }
+              onSelectHub();
+            },
+          },
+          {
             active: activeContextSectionId === WorkspaceContextSectionIds.models,
             badge: badgeCount(modelProviders?.providers.length),
             groupId: WorkspaceContextSectionIds.models,
@@ -321,18 +338,21 @@ export function WorkspaceSidebar({
       activePane.type,
       activeTaskBoardView,
       currentUser,
+      firstMCPServer,
       firstHubSkill,
       firstHubTemplate,
       firstModelProvider,
       firstNotificationAgent,
       firstTeam,
       firstWorkerAgent,
+      hub?.mcpServers?.length,
       hub?.templates.length,
       hub?.skills.length,
       modelProviders?.providers.length,
       onSelectAgent,
       onSelectComputer,
       onSelectHub,
+      onSelectMCPServer,
       onSelectHubSkill,
       onSelectHubTemplate,
       onSelectHuman,
@@ -366,6 +386,7 @@ export function WorkspaceSidebar({
     onOpenCreateTeam,
     onOpenCreateTask,
     onOpenCreateScheduledTask,
+    hub,
     setSkillUploadOpen,
     t,
     activeTaskBoardView,
@@ -516,6 +537,7 @@ export function WorkspaceSidebar({
               onOpenCreateTask={onOpenCreateTask}
               onOpenCreateScheduledTask={onOpenCreateScheduledTask}
               hub={hub}
+              onSelectMCPServer={onSelectMCPServer}
               onSelectHubSkill={onSelectHubSkill}
               onSelectHubTemplate={onSelectHubTemplate}
               onSelectTask={onSelectTask}
@@ -575,6 +597,9 @@ function contextSectionIdForPane({
   if (activePane.type === WorkspacePaneTypes.hub) {
     if (activePane.resourceType === "skill") {
       return WorkspaceContextSectionIds.hubSkills;
+    }
+    if (activePane.resourceType === "mcp") {
+      return WorkspaceContextSectionIds.mcpServers;
     }
     if (activePane.resourceType === "template") {
       return WorkspaceContextSectionIds.hubTemplates;
@@ -639,6 +664,9 @@ function contextTitleForSection(sectionId: WorkspaceContextSectionId, fallback: 
   if (sectionId === WorkspaceContextSectionIds.hubTemplates) {
     return t("resourcesTemplatesSection");
   }
+  if (sectionId === WorkspaceContextSectionIds.mcpServers) {
+    return t("resourcesMCPLabel");
+  }
   if (sectionId === WorkspaceContextSectionIds.hubSkills) {
     return t("resourcesSkillsLabel");
   }
@@ -690,6 +718,9 @@ function contextBadgeCountForSection({
   if (activeContextSectionId === WorkspaceContextSectionIds.hubTemplates) {
     return hub?.templates.length ?? 0;
   }
+  if (activeContextSectionId === WorkspaceContextSectionIds.mcpServers) {
+    return hub?.mcpServers?.length ?? 0;
+  }
   if (activeContextSectionId === WorkspaceContextSectionIds.hubSkills) {
     return hub?.skills.length ?? 0;
   }
@@ -705,6 +736,7 @@ function contextBadgeCountForSection({
 function contextCreateActionForSection({
   activeTaskBoardView,
   activeContextSectionId,
+  hub,
   onCreateAgent,
   onCreateNotificationParticipant,
   onCreateRoom,
@@ -727,6 +759,7 @@ function contextCreateActionForSection({
 > & {
   activeTaskBoardView?: "tasks" | "scheduled";
   activeContextSectionId: WorkspaceContextSectionId;
+  hub: WorkspaceSidebarProps["hub"];
   setSkillUploadOpen: (open: boolean) => void;
 }) {
   if (activeContextSectionId === WorkspaceContextSectionIds.messages) {
@@ -769,6 +802,12 @@ function contextCreateActionForSection({
     return {
       label: t("resourcesSkillUpload"),
       onClick: () => setSkillUploadOpen(true),
+    };
+  }
+  if (activeContextSectionId === WorkspaceContextSectionIds.mcpServers && hub?.openCreateMCPDialog) {
+    return {
+      label: t("resourcesMCPAdd"),
+      onClick: hub.openCreateMCPDialog,
     };
   }
   if (activeContextSectionId === WorkspaceContextSectionIds.models && onCreateModelProvider) {

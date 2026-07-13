@@ -55,3 +55,21 @@ func TestCreateAgentRequestUnmarshalJSONSupportsBareSandboxRuntimeKind(t *testin
 		t.Fatal("SandboxEnabled = false, want true")
 	}
 }
+
+func TestCreateAgentRequestMarshalJSONPreservesExplicitEmptyMCPServers(t *testing.T) {
+	data, err := json.Marshal(CreateAgentRequest{
+		Name:          "alice",
+		MCPServers:    map[string]any{},
+		MCPServersSet: true,
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if got := string(fields["mcpServers"]); got != "{}" {
+		t.Fatalf("mcpServers = %s, want {}", got)
+	}
+}

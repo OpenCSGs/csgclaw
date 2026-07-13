@@ -19,6 +19,8 @@ import (
 	"csgclaw/internal/sandbox/hostuser"
 )
 
+var ErrPreparedGatewayProvisionNotAvailable = errors.New("gateway provision is not available")
+
 type AgentRef struct {
 	ID           string
 	Name         string
@@ -568,7 +570,7 @@ func (r *Runtime) preparedGatewayProvision(agentID string) (PreparedGatewayProvi
 	defer r.mu.RUnlock()
 	prepared, ok := r.prepared[agentID]
 	if !ok {
-		return PreparedGatewayProvision{}, fmt.Errorf("gateway provision for agent %q is not available; call Provision first", agentID)
+		return PreparedGatewayProvision{}, fmt.Errorf("%w for agent %q; call Provision first", ErrPreparedGatewayProvisionNotAvailable, agentID)
 	}
 	return prepared, nil
 }

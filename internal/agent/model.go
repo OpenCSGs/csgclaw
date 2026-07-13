@@ -31,6 +31,7 @@ type Agent struct {
 	Avatar           string                   `json:"avatar,omitempty"`
 	BoxID            string                   `json:"box_id,omitempty"`
 	RuntimeOptions   map[string]any           `json:"runtime_options,omitempty"`
+	MCPServers       map[string]any           `json:"mcpServers,omitempty"`
 	Role             string                   `json:"role"`
 	Status           string                   `json:"status"`
 	CreatedAt        time.Time                `json:"created_at"`
@@ -83,6 +84,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		Avatar           string                   `json:"avatar,omitempty"`
 		BoxID            string                   `json:"box_id,omitempty"`
 		RuntimeOptions   map[string]any           `json:"runtime_options,omitempty"`
+		MCPServers       map[string]any           `json:"mcpServers,omitempty"`
 		Role             string                   `json:"role"`
 		Status           string                   `json:"status"`
 		CreatedAt        time.Time                `json:"created_at"`
@@ -109,6 +111,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		Avatar:           decoded.Avatar,
 		BoxID:            decoded.BoxID,
 		RuntimeOptions:   utils.CloneAnyMap(decoded.RuntimeOptions),
+		MCPServers:       cloneMCPServers(decoded.MCPServers),
 		Role:             decoded.Role,
 		Status:           decoded.Status,
 		CreatedAt:        decoded.CreatedAt,
@@ -189,6 +192,8 @@ type CreateAgentSpec struct {
 	UpdatedAt      time.Time      `json:"updated_at,omitempty"`
 	Profile        string         `json:"profile,omitempty"`
 	RuntimeOptions map[string]any `json:"runtime_options,omitempty"`
+	MCPServers     map[string]any `json:"mcpServers,omitempty"`
+	MCPServersSet  bool           `json:"-"`
 	AgentProfile   AgentProfile   `json:"agent_profile,omitempty"`
 }
 
@@ -223,14 +228,23 @@ func (s CreateAgentSpec) MarshalJSON() ([]byte, error) {
 			SandboxEnabled bool           `json:"sandbox_enabled,omitempty"`
 			Options        map[string]any `json:"options,omitempty"`
 		} `json:"runtime,omitempty"`
-		FromTemplate   string         `json:"from_template,omitempty"`
-		Role           string         `json:"role,omitempty"`
-		Status         string         `json:"status,omitempty"`
-		CreatedAt      time.Time      `json:"created_at,omitempty"`
-		UpdatedAt      time.Time      `json:"updated_at,omitempty"`
-		Profile        string         `json:"profile,omitempty"`
-		RuntimeOptions map[string]any `json:"runtime_options,omitempty"`
-		AgentProfile   AgentProfile   `json:"agent_profile,omitempty"`
+		FromTemplate   string          `json:"from_template,omitempty"`
+		Role           string          `json:"role,omitempty"`
+		Status         string          `json:"status,omitempty"`
+		CreatedAt      time.Time       `json:"created_at,omitempty"`
+		UpdatedAt      time.Time       `json:"updated_at,omitempty"`
+		Profile        string          `json:"profile,omitempty"`
+		RuntimeOptions map[string]any  `json:"runtime_options,omitempty"`
+		MCPServers     json.RawMessage `json:"mcpServers,omitempty"`
+		AgentProfile   AgentProfile    `json:"agent_profile,omitempty"`
+	}
+	var mcpServers json.RawMessage
+	if s.MCPServersSet || s.MCPServers != nil {
+		encoded, err := json.Marshal(cloneMCPServers(s.MCPServers))
+		if err != nil {
+			return nil, err
+		}
+		mcpServers = encoded
 	}
 	runtimeName := strings.TrimSpace(s.RuntimeName)
 	sandboxEnabled := s.SandboxEnabled
@@ -272,6 +286,7 @@ func (s CreateAgentSpec) MarshalJSON() ([]byte, error) {
 		UpdatedAt:      s.UpdatedAt,
 		Profile:        s.Profile,
 		RuntimeOptions: utils.CloneAnyMap(s.RuntimeOptions),
+		MCPServers:     mcpServers,
 		AgentProfile:   cloneProfile(s.AgentProfile),
 	})
 }
@@ -295,6 +310,7 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 		ModelConfig    json.RawMessage `json:"model_config,omitempty"`
 		Profile        json.RawMessage `json:"profile,omitempty"`
 		RuntimeOptions map[string]any  `json:"runtime_options,omitempty"`
+		MCPServers     map[string]any  `json:"mcpServers,omitempty"`
 		AgentProfile   AgentProfile    `json:"agent_profile,omitempty"`
 	}
 	var decoded createAgentSpecJSON
@@ -314,7 +330,14 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 		CreatedAt:      decoded.CreatedAt,
 		UpdatedAt:      decoded.UpdatedAt,
 		RuntimeOptions: utils.CloneAnyMap(decoded.RuntimeOptions),
+		MCPServers:     cloneMCPServers(decoded.MCPServers),
 		AgentProfile:   cloneProfile(decoded.AgentProfile),
+	}
+	var rawFields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &rawFields); err == nil {
+		if _, ok := rawFields["mcpServers"]; ok {
+			out.MCPServersSet = true
+		}
 	}
 	if decoded.SandboxEnabled != nil {
 		out.SandboxEnabled = *decoded.SandboxEnabled
@@ -376,6 +399,8 @@ type UpdateRequest struct {
 	SandboxEnabled            *bool           `json:"-"`
 	RuntimeSelectionRequested bool            `json:"-"`
 	RuntimeOptions            *map[string]any `json:"runtime_options,omitempty"`
+	MCPServers                *map[string]any `json:"mcpServers,omitempty"`
+	MCPServersSet             bool            `json:"-"`
 	AgentProfile              *AgentProfile   `json:"agent_profile,omitempty"`
 	FieldMask                 []string        `json:"field_mask,omitempty"`
 }
@@ -400,6 +425,7 @@ func (r *UpdateRequest) UnmarshalJSON(data []byte) error {
 		Profile        json.RawMessage    `json:"profile,omitempty"`
 		Runtime        *runtimeUpdateJSON `json:"runtime,omitempty"`
 		RuntimeOptions *map[string]any    `json:"runtime_options,omitempty"`
+		MCPServers     *map[string]any    `json:"mcpServers,omitempty"`
 		AgentProfile   *AgentProfile      `json:"agent_profile,omitempty"`
 		FieldMask      []string           `json:"field_mask,omitempty"`
 	}
@@ -416,8 +442,22 @@ func (r *UpdateRequest) UnmarshalJSON(data []byte) error {
 		RuntimeName:    strings.TrimSpace(decoded.RuntimeName),
 		SandboxEnabled: decoded.SandboxEnabled,
 		RuntimeOptions: decoded.RuntimeOptions,
+		MCPServers:     decoded.MCPServers,
 		AgentProfile:   decoded.AgentProfile,
 		FieldMask:      append([]string(nil), decoded.FieldMask...),
+	}
+	var rawFields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &rawFields); err == nil {
+		if raw, ok := rawFields["mcpServers"]; ok {
+			out.MCPServersSet = true
+			if string(raw) != "null" {
+				var cfg map[string]any
+				if err := json.Unmarshal(raw, &cfg); err != nil {
+					return err
+				}
+				out.MCPServers = &cfg
+			}
+		}
 	}
 	profileField := ""
 	profilePayload := decoded.ModelConfig
@@ -583,5 +623,6 @@ func cloneAgent(src *Agent) *Agent {
 	dst.AgentProfile = cloneProfile(src.AgentProfile)
 	dst.DetectionResults = append([]ProfileDetectionResult(nil), src.DetectionResults...)
 	dst.RuntimeOptions = utils.CloneAnyMap(src.RuntimeOptions)
+	dst.MCPServers = cloneMCPServers(src.MCPServers)
 	return &dst
 }

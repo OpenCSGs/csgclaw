@@ -115,6 +115,30 @@
   text-align: left;
 }
 
+.countBadge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  background: var(--gray-50);
+  color: var(--gray-600);
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.groupToggle:hover .countBadge {
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
+}
+
 .groupActions {
   position: relative;
   display: inline-flex;
@@ -499,6 +523,13 @@
 :global(:root[data-theme="dark"]) .groupToggle:hover .groupTitle,
 :global(:root[data-theme="dark"]) .groupToggle:hover .groupTitle span {
   color: var(--gray-100);
+}
+
+:global(:root[data-theme="dark"]) .countBadge,
+:global(:root[data-theme="dark"]) .groupToggle:hover .countBadge {
+  border-color: rgba(208, 213, 221, 0.16);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-300);
 }
 
 :global(:root[data-theme="dark"]) .row {

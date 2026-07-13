@@ -202,6 +202,11 @@
   box-shadow: 0 0 0 1px oklch(0.69 0.15 194 / 0.18);
 }
 
+.mcp-card.active {
+  border-color: color-mix(in oklab, var(--success-600) 64%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--success-600) 22%, transparent);
+}
+
 .hub-template-card-body,
 .hub-inspector-copy {
   min-width: 0;
@@ -259,6 +264,61 @@
   color: var(--muted);
   font-size: 14px;
   line-height: 1.55;
+}
+
+.mcp-server-document-block {
+  gap: 10px;
+}
+
+.hub-json-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.hub-json-editor-label {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.hub-json-editor-shell {
+  width: 100%;
+  min-height: 220px;
+  overflow: auto;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--gray-50) 76%, var(--surface));
+}
+
+.hub-json-editor-shell:focus-within {
+  border-color: color-mix(in oklab, var(--success-600) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--success-600) 16%, transparent);
+}
+
+.hub-json-editor.is-invalid .hub-json-editor-shell {
+  border-color: color-mix(in oklab, var(--error-600) 58%, var(--line));
+}
+
+.hub-json-editor-error {
+  min-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-dialog {
+  max-width: 680px;
+}
+
+.mcp-form {
+  display: grid;
+  gap: 14px;
 }
 
 .hub-template-card-meta {

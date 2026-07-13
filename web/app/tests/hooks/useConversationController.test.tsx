@@ -191,6 +191,7 @@ describe("useConversationController", () => {
           id: "msg-tool",
           content: '📄 Web Fetch: from https://example.com {"url":"https://example.com"}',
           created_at: "2026-06-16T10:00:10Z",
+          metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
           sender_id: "u-demo",
         },
       });
@@ -259,6 +260,7 @@ describe("useConversationController", () => {
           id: "msg-tool",
           content: '📄 Web Fetch: from https://example.com {"url":"https://example.com"}',
           created_at: new Date().toISOString(),
+          metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
           sender_id: "u-demo",
         },
       ]),

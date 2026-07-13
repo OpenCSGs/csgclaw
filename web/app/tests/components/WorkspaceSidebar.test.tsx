@@ -27,6 +27,7 @@ const labels: Record<string, string> = {
   notificationsSection: "Notifications",
   resourcesModelProvidersSection: "Model Providers",
   resourcesSkillsLabel: "Skills",
+  resourcesMCPLabel: "MCP",
   resourcesTab: "Resources",
   resourcesTemplatesSection: "Templates",
   scheduledTasksTab: "Scheduled",
@@ -168,6 +169,31 @@ function renderSidebar(overrides: Partial<WorkspaceSidebarProps> = {}) {
 }
 
 describe("WorkspaceSidebar", () => {
+  it("selects the MCP resource type when the MCP list is empty", () => {
+    const onSelectMCPServer = vi.fn();
+
+    renderSidebar({
+      hub: {
+        loaded: true,
+        listError: "",
+        mcpServers: [],
+        selectedHubResourceType: "skill",
+        selectedHubSkillName: "shell",
+        selectedHubTemplateId: "",
+        skills: [{ name: "shell", description: "Shell helpers" }],
+        skillsError: "",
+        templates: [],
+        uploadBusy: false,
+        uploadError: "",
+      } as unknown as WorkspaceSidebarProps["hub"],
+      onSelectMCPServer,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "MCP" }));
+
+    expect(onSelectMCPServer).toHaveBeenCalledWith(null);
+  });
+
   it("uses primary resource navigation to show the selected resource list", () => {
     const onToggleWorkspaceGroup = vi.fn();
     const onSelectModelProvider = vi.fn();

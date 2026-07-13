@@ -1,8 +1,8 @@
 .app-shell {
   display: grid;
   grid-template-columns: minmax(0, var(--sidebar-slot-width)) minmax(0, 1fr);
-  min-height: 100dvh;
-  height: 100dvh;
+  min-height: var(--app-ui-viewport-height);
+  height: var(--app-ui-viewport-height);
   overflow: hidden;
 }
 
@@ -3206,9 +3206,9 @@ select,
 :root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly,
 :root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly:hover,
 :root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly:focus-within,
-:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly:has(
-    input:checked
-  ) {
+:root[data-theme="dark"]
+  .profile-section
+  .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly:has(input:checked) {
   border-color: var(--line);
   background: var(--surface);
   color: var(--text);
@@ -3666,6 +3666,7 @@ select,
 .computer-detail-pane {
   --computer-page-content-width: min(100%, 1520px);
 
+  min-width: 0;
   min-height: 100%;
   gap: 16px;
   justify-items: center;
@@ -4133,6 +4134,10 @@ select,
 }
 
 @media (max-width: 900px) {
+  .computer-detail-pane {
+    padding: 18px;
+  }
+
   .computer-summary-strip {
     grid-template-columns: repeat(2, minmax(0, 170px));
   }
@@ -4145,6 +4150,7 @@ select,
 }
 
 @media (max-width: 640px) {
+  .computer-detail-pane,
   .human-detail-pane {
     padding: 18px;
   }

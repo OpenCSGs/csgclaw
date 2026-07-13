@@ -7,9 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const RootStateFileName = "state.json"
+
+var rootStateMu sync.Mutex
 
 func IsRootStatePath(path string) bool {
 	path = strings.TrimSpace(path)
@@ -21,6 +24,9 @@ func IsRootStatePath(path string) bool {
 }
 
 func ReadSection(path, section string, target any) (bool, error) {
+	rootStateMu.Lock()
+	defer rootStateMu.Unlock()
+
 	path = strings.TrimSpace(path)
 	section = strings.TrimSpace(section)
 	if path == "" || section == "" {
@@ -48,6 +54,9 @@ func ReadSection(path, section string, target any) (bool, error) {
 }
 
 func WriteSection(path, section string, value any) error {
+	rootStateMu.Lock()
+	defer rootStateMu.Unlock()
+
 	path = strings.TrimSpace(path)
 	section = strings.TrimSpace(section)
 	if path == "" {

@@ -378,6 +378,70 @@ func TestAppServerManagerPromptNoProgressTimeout(t *testing.T) {
 	}
 }
 
+func TestAppServerManagerMCPToolCallCountsAsProgress(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-mcp-progress-hangs")
+	originalSemantic := appServerSemanticInactivityTimeout
+	originalNoProgress := appServerFirstTurnNoProgressTimeout
+	appServerSemanticInactivityTimeout = 100 * time.Millisecond
+	appServerFirstTurnNoProgressTimeout = 25 * time.Millisecond
+	t.Cleanup(func() {
+		appServerSemanticInactivityTimeout = originalSemantic
+		appServerFirstTurnNoProgressTimeout = originalNoProgress
+	})
+
+	dir := t.TempDir()
+	spec := testAppServerSessionSpec(dir)
+	sink := &recordingSink{}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+	session, err := manager.Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	_, err = manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+		SessionID: session.SessionID,
+		Prompt:    []PromptContentBlock{TextBlock("hang after mcp progress")},
+	})
+	if err == nil ||
+		!strings.Contains(err.Error(), "codex semantic inactivity timeout") ||
+		strings.Contains(err.Error(), "codex app-server no progress timeout") {
+		t.Fatalf("Prompt() error = %v, want semantic timeout after MCP progress", err)
+	}
+
+	events := sink.snapshot()
+	if len(events) < 2 {
+		t.Fatalf("events = %#v, want MCP tool event and prompt failure", events)
+	}
+	if events[0].Kind != SessionEventToolCallStart ||
+		events[0].ToolKind != "mcp_tool_call" ||
+		events[0].ToolCallID != "call-mcp" {
+		t.Fatalf("events[0] = %#v, want MCP tool start", events[0])
+	}
+	if events[len(events)-1].Kind != SessionEventPromptFailed ||
+		!strings.Contains(events[len(events)-1].Error, "codex semantic inactivity timeout") {
+		t.Fatalf("last event = %#v, want semantic timeout failure", events[len(events)-1])
+	}
+}
+
+func TestAppServerItemIsProgressIncludesInteractiveToolItems(t *testing.T) {
+	for _, itemType := range []string{
+		"agentMessage",
+		"commandExecution",
+		"fileChange",
+		"mcpToolCall",
+		"dynamicToolCall",
+		"webSearch",
+	} {
+		if !appServerItemIsProgress(itemType) {
+			t.Fatalf("appServerItemIsProgress(%q) = false, want true", itemType)
+		}
+	}
+	if appServerItemIsProgress("reasoning") {
+		t.Fatalf("appServerItemIsProgress(reasoning) = true, want false")
+	}
+}
+
 func TestAppServerManagerDefaultNoProgressTimeoutIsFastFail(t *testing.T) {
 	if appServerFirstTurnNoProgressTimeout <= 0 {
 		t.Fatalf("appServerFirstTurnNoProgressTimeout = %s, want positive fast-fail timeout", appServerFirstTurnNoProgressTimeout)
@@ -833,9 +897,9 @@ func TestAppServerEventAdapterProtocolDetectionAndSubagentFilter(t *testing.T) {
 func withAppServerHelperCommand(t *testing.T, mode string) {
 	t.Helper()
 	original := appServerCommandContext
-	appServerCommandContext = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+	appServerCommandContext = func(ctx context.Context, _ string) (*exec.Cmd, error) {
 		args := []string{"-test.run=TestAppServerManagerHelperProcess", "--", mode}
-		return exec.CommandContext(ctx, os.Args[0], args...)
+		return exec.CommandContext(ctx, os.Args[0], args...), nil
 	}
 	t.Cleanup(func() { appServerCommandContext = original })
 }
@@ -1103,6 +1167,29 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			case "turn/start":
 				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-hang"}})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-hang"}), true
+			default:
+				return nil, false
+			}
+		})
+	case "prompt-mcp-progress-hangs":
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "turn/start":
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-mcp-hang"}})
+				writeRPCNotification(t, "item/started", map[string]any{
+					"threadId": "main-thread",
+					"item": map[string]any{
+						"id":        "call-mcp",
+						"type":      "mcpToolCall",
+						"server":    "grafana_opencsg_stg_readonly",
+						"tool":      "query_loki_logs",
+						"arguments": map[string]any{},
+						"status":    "in_progress",
+					},
+				})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-mcp-hang"}), true
 			default:
 				return nil, false
 			}

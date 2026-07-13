@@ -15,3 +15,16 @@ if (!HTMLElement.prototype.releasePointerCapture) {
 if (!HTMLElement.prototype.scrollIntoView) {
   HTMLElement.prototype.scrollIntoView = () => undefined;
 }
+
+if (typeof Range !== "undefined" && !Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = () =>
+    ({
+      item: () => null,
+      length: 0,
+      [Symbol.iterator]: function* () {},
+    }) as DOMRectList;
+}
+
+if (typeof Range !== "undefined" && !Range.prototype.getBoundingClientRect) {
+  Range.prototype.getBoundingClientRect = () => new DOMRect(0, 0, 0, 0);
+}

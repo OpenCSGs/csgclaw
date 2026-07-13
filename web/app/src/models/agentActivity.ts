@@ -260,7 +260,51 @@ export function statusLabel(status: string): string {
 }
 
 export function agentActivityToolMergeKey(tool: AgentActivityTool | null | undefined): string {
-  return firstNonEmpty(tool?.id, tool?.item_id, tool?.tool_call_id);
+  return agentActivityToolMergeKeys(tool)[0] ?? "";
+}
+
+export function agentActivityToolMergeKeys(tool: AgentActivityTool | null | undefined): string[] {
+  const keys: string[] = [];
+  const add = (value: string) => {
+    if (value && !keys.includes(value)) {
+      keys.push(value);
+    }
+  };
+  const addItemID = (value: unknown, options?: { ambiguous?: boolean }) => {
+    const id = stringValue(value);
+    if (!id) {
+      return;
+    }
+    add(normalizeToolItemMergeKey(id));
+    if (options?.ambiguous) {
+      add(`tool_call:${stripToolItemPrefix(id)}`);
+    }
+  };
+
+  // item_id is the canonical lifecycle identifier. id is retained as an alias
+  // because older producers used it for either an item id or a tool-call id.
+  addItemID(tool?.item_id);
+  addItemID(tool?.id, { ambiguous: true });
+  const toolCallID = stringValue(tool?.tool_call_id);
+  if (toolCallID) {
+    add(`tool_call:${stripToolItemPrefix(toolCallID)}`);
+  }
+  return keys;
+}
+
+export function agentActivityMessageToolMergeKey(message: IMMessage | null | undefined): string {
+  const toolCallID = openClawToolCallID(message);
+  return toolCallID ? `tool_call:${stripToolItemPrefix(toolCallID)}` : "";
+}
+
+function normalizeToolItemMergeKey(value: unknown): string {
+  const id = stringValue(value);
+  const stripped = stripToolItemPrefix(id);
+  return stripped !== id ? `tool_call:${stripped}` : id;
+}
+
+function stripToolItemPrefix(value: string): string {
+  return value.replace(/^(?:tool|command|patch):/i, "").trim();
 }
 
 export function isTerminalAgentActivityTool(tool: AgentActivityTool | null | undefined): boolean {

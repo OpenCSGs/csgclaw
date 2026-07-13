@@ -1,11 +1,12 @@
 import { BOT_TYPE_NORMAL, DEFAULT_RUNTIME_KIND } from "@/shared/constants/agents";
-import { useEffect, useRef, useState, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import {
   AgentCreateProgress,
   type AgentCreateProgressProps,
   EnvKeyValueEditor,
   FieldHelpTooltip,
   isBlank,
+  MCPServersPanel,
   ModelOptionLabel,
   NotifierControls,
   requiredFieldLabel,
@@ -28,6 +29,7 @@ import {
   pickDefaultAgentTemplate,
   defaultWorkerImageForRuntime,
   runtimeOptionSchemasForAgent,
+  supportsMCPServers,
   templateMatchesRuntime,
   workerSelectableTemplates,
 } from "@/models/agents";
@@ -106,6 +108,7 @@ export function AgentProfileModal({
   onSave,
 }: AgentProfileModalProps) {
   const [isEditorScrolling, setIsEditorScrolling] = useState(false);
+  const [mcpServersInvalid, setMCPServersInvalid] = useState(false);
   const editorScrollTimerRef = useRef<number | null>(null);
   const lastTemplateIDRef = useRef("");
   const createBotKind = agentModalMode === "create" ? agentCreateBotKind : undefined;
@@ -115,6 +118,7 @@ export function AgentProfileModal({
   const missingRequiredEnv = isTemplateCreate && agentDraftMissingRequiredEnv(agentDraft);
   const isCustomCreate = isWorkerCreate && agentCreateMode === "custom";
   const templateLocked = agentCreateTemplateLocked(agentDraft, agentModalMode);
+  const showMCPServers = !isNotificationContext && supportsMCPServers(agentDraft.runtime_kind);
   const runtimeOptionSchemas = isNotificationContext
     ? []
     : runtimeOptionSchemasForAgent(
@@ -144,8 +148,12 @@ export function AgentProfileModal({
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
   const selectedProviderModels = selectedProvider?.models ?? [];
   const selectedModelValue = agentDraft.model_id || "";
-  const workerTemplates = workerSelectableTemplates(hubTemplates).filter(
-    (item) => normalizeRuntimeKind(item.runtime_kind) !== "picoclaw_sandbox",
+  const workerTemplates = useMemo(
+    () =>
+      workerSelectableTemplates(hubTemplates).filter(
+        (item) => normalizeRuntimeKind(item.runtime_kind) !== "picoclaw_sandbox",
+      ),
+    [hubTemplates],
   );
   const selectedWorkerTemplate = workerTemplates.find((item) => item.id === agentDraft.from_template) ?? null;
   const sandboxEnabled = Boolean(agentDraft.sandbox_enabled);
@@ -262,6 +270,12 @@ export function AgentProfileModal({
     [],
   );
 
+  useEffect(() => {
+    if (!showMCPServers) {
+      setMCPServersInvalid(false);
+    }
+  }, [showMCPServers]);
+
   function onEditorShellScroll() {
     setIsEditorScrolling(true);
     if (editorScrollTimerRef.current) {
@@ -285,9 +299,12 @@ export function AgentProfileModal({
           pickDefaultAgentTemplate(workerTemplates, defaultSandboxRuntimeKind, bootstrapConfig) ||
           null,
       );
-      onAgentDraftChange((current) =>
-        current ? applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || "") : current,
-      );
+      onAgentDraftChange((current) => {
+        const next = current
+          ? applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || "")
+          : current;
+        return next;
+      });
       return;
     }
     onAgentDraftChange((current) => (current ? defaultCustomWorkerDraft(current) : current));
@@ -312,11 +329,10 @@ export function AgentProfileModal({
     agentDraft.from_template,
     bootstrapConfig,
     defaultSandboxRuntimeKind,
-    hubTemplates,
     isTemplateCreate,
     managerAgent?.image,
     onAgentDraftChange,
-    workerTemplates.length,
+    workerTemplates,
   ]);
 
   return (
@@ -599,6 +615,14 @@ export function AgentProfileModal({
                       embedded
                     />
                   ) : null}
+                  {showMCPServers ? (
+                    <MCPServersPanel
+                      draft={agentDraft}
+                      t={t}
+                      onDraftChange={onAgentDraftChange}
+                      onInvalidChange={setMCPServersInvalid}
+                    />
+                  ) : null}
                 </div>
               </div>
             </section>
@@ -769,6 +793,7 @@ export function AgentProfileModal({
             size="md"
             disabled={
               agentBusy ||
+              mcpServersInvalid ||
               isBlank(agentDraft.name) ||
               (isNotificationContext
                 ? !notifierFormIsComplete(agentDraft, editingAgent)

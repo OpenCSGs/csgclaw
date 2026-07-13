@@ -8,6 +8,7 @@ import type { MessageAction, MessageActionError, MessageLike } from "@/component
 import type { AgentLike, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
 import type { IMConversation, IMData, IMUser, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
+import type { MCPServer } from "@/models/mcp";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { CollapsedWorkspaceGroups, WorkspacePane, WorkspaceTab } from "@/models/routing";
 import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
@@ -241,12 +242,16 @@ export type UseAgentControllerArgs = {
   agentsQuery: UseQueryResult<AgentLike[]>;
   bootstrapConfig: RuntimeBootstrapConfig | null;
   data: IMData | null;
+  catalogMCPServers?: MCPServer[];
+  catalogMCPServersError?: string;
+  catalogMCPServersLoading?: boolean;
   hubTemplates: HubTemplate[];
   locale: LocaleCode;
   managerProfile: AgentProfileLike | null;
   modelProviders?: ModelProviderCatalog | null;
   modelProvidersLoaded?: boolean;
   profileDetailAgentID?: string;
+  refreshMCPServers?: () => Promise<unknown>;
   refreshHubTemplates: () => Promise<void>;
   refreshWorkspaceAgents: (options?: FetchAgentsOptions) => Promise<AgentLike[]>;
   refreshWorkspaceBootstrap: () => Promise<IMData | null>;
@@ -267,6 +272,4 @@ export type UseAgentControllerArgs = {
 
 export type AgentDetailSidePanelProps = AgentDetailPaneProps & {
   onClose: () => void;
-  onResize?: (width: number) => void;
-  width?: number;
 };

@@ -26,8 +26,10 @@ import (
 	"csgclaw/internal/connectors"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/mcp"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/scheduledtask"
@@ -49,10 +51,12 @@ type Handler struct {
 	feishu                     *feishu.Service
 	llm                        *llm.Service
 	hub                        *hub.Service
+	mcp                        *mcp.Service
 	teamSvc                    *team.Service
 	agentTaskSvc               *agenttask.Service
 	scheduledTaskSvc           *scheduledtask.Service
 	connectors                 *connectors.Service
+	agentRuntimes              *runtimecatalog.Service
 	teamAdapters               *team.AdapterRegistry
 	teamPlanJobsMu             sync.Mutex
 	teamPlanJobs               map[string]struct{}
@@ -73,7 +77,10 @@ type Handler struct {
 	participantActivityTurns   map[string]participantActivityTurn
 }
 
-const createOperationTimeout = 10 * time.Minute
+const (
+	createOperationTimeout = 10 * time.Minute
+	agentListStatusTimeout = 2 * time.Second
+)
 
 var sseHeartbeatInterval = 15 * time.Second
 var locateCodexCLI = func() (string, error) {
@@ -167,6 +174,7 @@ type agentResponse struct {
 	Profile              string                             `json:"-"`
 	ProfileConfig        apitypes.AgentProfile              `json:"model_config,omitempty"`
 	RuntimeOptions       map[string]any                     `json:"-"`
+	MCPServers           map[string]any                     `json:"mcpServers,omitempty"`
 	RuntimeOptionSchemas []agentruntime.RuntimeOptionSchema `json:"-"`
 	AgentProfile         agent.AgentProfileView             `json:"-"`
 	ProfileComplete      bool                               `json:"-"`
@@ -201,6 +209,7 @@ func (r *agentResponse) UnmarshalJSON(data []byte) error {
 		Profile:          apiAgent.Profile,
 		ProfileConfig:    apiAgent.ProfileConfig,
 		RuntimeOptions:   apiAgent.Runtime.Options,
+		MCPServers:       sanitizeMCPServersResponse(apiAgent.MCPServers),
 		AgentProfile:     agentProfileViewFromAPI(apiAgent.ProfileConfig),
 		UserID:           apiAgent.UserID,
 		UserName:         apiAgent.UserName,
@@ -541,7 +550,7 @@ func codexInstallGuidance(goos string) string {
 	case "darwin":
 		return "Install the Codex CLI for macOS, or set CSGCLAW_CODEX_PATH to the codex binary."
 	case "windows":
-		return "Install the Codex CLI for Windows, or set CSGCLAW_CODEX_PATH to codex.exe."
+		return "Install the Codex CLI for Windows, or set CSGCLAW_CODEX_PATH to codex.exe or the npm codex.cmd shim."
 	case "linux":
 		return "Install the Codex CLI for Linux, or set CSGCLAW_CODEX_PATH to the codex binary."
 	default:
@@ -752,6 +761,12 @@ func (h *Handler) SetHubService(svc *hub.Service) {
 	h.hub = svc
 }
 
+func (h *Handler) SetMCPService(svc *mcp.Service) {
+	if h != nil {
+		h.mcp = svc
+	}
+}
+
 func (h *Handler) SetTeamService(svc *team.Service) {
 	if h != nil {
 		h.teamSvc = svc
@@ -773,6 +788,12 @@ func (h *Handler) SetScheduledTaskService(svc *scheduledtask.Service) {
 func (h *Handler) SetConnectorService(svc *connectors.Service) {
 	if h != nil {
 		h.connectors = svc
+	}
+}
+
+func (h *Handler) SetAgentRuntimeService(svc *runtimecatalog.Service) {
+	if h != nil {
+		h.agentRuntimes = svc
 	}
 }
 
@@ -898,7 +919,9 @@ func (h *Handler) handleAgents(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, h.presentAgentsForRequest(r, h.svc.List()))
+		ctx, cancel := context.WithTimeout(r.Context(), agentListStatusTimeout)
+		defer cancel()
+		writeJSON(w, http.StatusOK, h.presentAgentsForRequest(r, h.svc.ListContext(ctx)))
 	case http.MethodPost:
 		h.handleCreateAgentWorker(w, r)
 	default:
@@ -1317,6 +1340,10 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 	if len(runtimeOptions) == 0 {
 		runtimeOptions = utils.CloneAnyMapShallowNestedStringMaps(req.RuntimeOptions)
 	}
+	mcpServers := utils.CloneAnyMapShallowNestedStringMaps(req.MCPServers)
+	if req.MCPServers != nil && mcpServers == nil {
+		mcpServers = map[string]any{}
+	}
 	return agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:             req.ID,
@@ -1334,6 +1361,8 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 			UpdatedAt:      req.CreatedAt,
 			Profile:        req.Profile,
 			RuntimeOptions: runtimeOptions,
+			MCPServers:     mcpServers,
+			MCPServersSet:  req.MCPServersSet,
 			AgentProfile:   prof,
 		},
 		Replace:   req.Replace,
@@ -2783,11 +2812,66 @@ func presentAgent(item agent.Agent) agentResponse {
 		UpdatedAt:        item.UpdatedAt,
 		Profile:          item.Profile,
 		RuntimeOptions:   runtimeOptions,
+		MCPServers:       sanitizeMCPServersResponse(item.MCPServers),
 		ProfileConfig:    profile,
 		AgentProfile:     av,
 		ProfileComplete:  item.ProfileComplete,
 		DetectionResults: append([]agent.ProfileDetectionResult(nil), item.DetectionResults...),
 	}
+}
+
+func sanitizeMCPServersResponse(servers map[string]any) map[string]any {
+	servers = utils.CloneAnyMap(servers)
+	if len(servers) == 0 {
+		return nil
+	}
+	sanitizedServers := make(map[string]any, len(servers))
+	for name, rawServer := range servers {
+		server, ok := rawServer.(map[string]any)
+		if !ok {
+			sanitizedServers[name] = rawServer
+			continue
+		}
+		server = utils.CloneAnyMap(server)
+		if env, ok := sanitizeMCPSecretValues(server["env"]); ok {
+			server = utils.OverlayAnyMap(server, map[string]any{
+				"env": env,
+			})
+		}
+		if headers, ok := sanitizeMCPSecretValues(server["headers"]); ok {
+			server = utils.OverlayAnyMap(server, map[string]any{
+				"headers": headers,
+			})
+		}
+		sanitizedServers[name] = server
+	}
+	return sanitizedServers
+}
+
+func sanitizeMCPSecretValues(raw any) (map[string]any, bool) {
+	var keys []string
+	switch values := raw.(type) {
+	case map[string]any:
+		keys = make([]string, 0, len(values))
+		for key := range values {
+			keys = append(keys, key)
+		}
+	case map[string]string:
+		keys = make([]string, 0, len(values))
+		for key := range values {
+			keys = append(keys, key)
+		}
+	default:
+		return nil, false
+	}
+	if len(keys) == 0 {
+		return nil, true
+	}
+	out := make(map[string]any, len(keys))
+	for _, key := range keys {
+		out[key] = participant.RedactedSecretValue
+	}
+	return out, true
 }
 
 func profileResponseFromAgentView(view agent.AgentProfileView) apitypes.AgentProfile {

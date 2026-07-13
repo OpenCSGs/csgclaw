@@ -5,6 +5,7 @@ export const ApiEndpoints = {
   version: `${API_BASE_PATH}/version`,
   upgradeStatus: `${API_BASE_PATH}/upgrade/status`,
   upgradeApply: `${API_BASE_PATH}/upgrade/apply`,
+  agentRuntimes: `${API_BASE_PATH}/agent-runtimes`,
   serverConfig: `${API_BASE_PATH}/server/config`,
   serverRestart: `${API_BASE_PATH}/server/restart`,
   serverRestartStatus: `${API_BASE_PATH}/server/restart/status`,

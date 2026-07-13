@@ -13,6 +13,8 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
+import { AgentRuntimeSection } from "../AgentRuntimeSection";
+import type { AgentRuntimeSectionProps } from "../AgentRuntimeSection";
 
 type VoidOrPromise = void | Promise<void>;
 
@@ -24,6 +26,7 @@ export type ComputerDetailPaneProps = {
   onCreateAgent?: () => VoidOrPromise;
   onSelectAgent?: (item: AgentLike) => void;
   onStartAgent?: (item: AgentLike) => VoidOrPromise;
+  runtimeSectionProps?: AgentRuntimeSectionProps;
   t?: TranslateFn;
 };
 
@@ -35,6 +38,7 @@ export function ComputerDetailPane({
   onSelectAgent = () => {},
   onCreateAgent = () => {},
   onStartAgent = () => {},
+  runtimeSectionProps,
   t = (key) => key,
 }: ComputerDetailPaneProps) {
   const runningAgents = agents.filter(isAgentRunning);
@@ -72,6 +76,7 @@ export function ComputerDetailPane({
           </div>
         </div>
       </section>
+      {runtimeSectionProps ? <AgentRuntimeSection {...runtimeSectionProps} /> : null}
       <section className="computer-agent-panel">
         <div className="section-header-inline">
           <div className="section-label">{t("computerAgentsSection")}</div>

@@ -29,13 +29,6 @@
   grid-template-columns: minmax(0, 1fr) minmax(320px, 29vw);
 }
 
-.chat-panel.has-agent-detail-panel {
-  grid-template-columns: minmax(320px, 1fr) minmax(
-      520px,
-      min(var(--agent-detail-panel-width, 760px), calc(100% - 360px))
-    );
-}
-
 .chat-panel.has-thread-panel > .chat-header,
 .chat-panel.has-thread-panel > .messages,
 .chat-panel.has-thread-panel > .composer {
@@ -43,8 +36,7 @@
   min-width: 0;
 }
 
-.chat-panel.has-thread-panel > .thread-panel,
-.chat-panel.has-thread-panel > .agent-detail-side-panel {
+.chat-panel.has-thread-panel > .thread-panel {
   grid-column: 2;
   grid-row: 1 / 4;
 }
@@ -179,68 +171,66 @@
   z-index: 3;
 }
 
-.agent-detail-side-panel {
-  position: relative;
+.agent-detail-drawer-backdrop {
+  z-index: var(--z-page-overlay);
+  background: color-mix(in srgb, var(--gray-900) 24%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.csg-dialog-content.agent-detail-side-panel {
+  position: fixed;
+  z-index: calc(var(--z-page-overlay) + 1);
+  inset: 12px 12px 12px auto;
+  width: min(1120px, calc(100vw - 32px));
+  max-height: none;
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  border-left: 1px solid var(--line);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
   background: var(--surface);
-  box-shadow: -12px 0 28px oklch(0.08 0.01 248 / 0.18);
-  z-index: 3;
-}
-
-.agent-detail-resize-handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -6px;
-  z-index: 5;
-  width: 12px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.agent-detail-resize-handle::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 5px;
-  width: 2px;
-  background: transparent;
-  transition:
-    background 140ms ease,
-    box-shadow 140ms ease;
-}
-
-.agent-detail-resize-handle:hover::after,
-.agent-detail-resize-handle:focus-visible::after,
-.agent-detail-side-panel.is-resizing .agent-detail-resize-handle::after {
-  background: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-soft);
-}
-
-.agent-detail-resize-handle:focus-visible {
-  outline: 0;
+  box-shadow:
+    -24px 0 64px color-mix(in srgb, var(--gray-900) 20%, transparent),
+    var(--shadow);
+  outline: none;
+  transform: none;
 }
 
 .agent-detail-side-panel-bar {
   min-width: 0;
-  min-height: 48px;
-  padding: 8px 12px 8px 16px;
+  min-height: 56px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--line);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
+  background: color-mix(in srgb, var(--surface) 94%, var(--panel-strong) 6%);
+}
+
+.agent-detail-side-panel-close {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+}
+
+.agent-detail-side-panel-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-detail-side-panel-body {
+  container: agent-detail-drawer / inline-size;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -263,6 +253,24 @@
 .agent-detail-side-panel .agent-detail-pane .entity-toolbar {
   grid-column: 1 / -1;
   justify-content: flex-start;
+}
+
+@container agent-detail-drawer (max-width: 1040px) {
+  .agent-detail-side-panel .agent-detail-pane .profile-runtime-grid,
+  .agent-detail-side-panel .agent-detail-pane .profile-grid-compact,
+  .agent-detail-side-panel .agent-detail-pane .profile-api-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container agent-detail-drawer (max-width: 680px) {
+  .agent-detail-side-panel .agent-detail-pane .profile-runtime-grid,
+  .agent-detail-side-panel .agent-detail-pane .profile-grid-compact,
+  .agent-detail-side-panel .agent-detail-pane .profile-api-grid,
+  .agent-detail-side-panel .agent-detail-pane .profile-advanced-grid,
+  .agent-detail-side-panel .agent-detail-pane .agent-workspace-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .thread-panel-header {
@@ -468,42 +476,34 @@ button.thread-message-avatar:focus-visible {
   background: rgba(15, 23, 42, 0.3);
 }
 
-@media (max-width: 1180px) {
-  .chat-panel.has-agent-detail-panel {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .chat-panel.has-agent-detail-panel > .agent-detail-side-panel {
-    position: absolute;
-    inset: 0 0 0 auto;
-    width: min(var(--agent-detail-panel-width, 760px), 100%);
-    grid-column: auto;
-    grid-row: auto;
-  }
-}
-
 @media (max-width: 960px) {
   .chat-panel.has-thread-panel {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .chat-panel.has-thread-panel > .thread-panel,
-  .chat-panel.has-thread-panel > .agent-detail-side-panel {
+  .chat-panel.has-thread-panel > .thread-panel {
     position: absolute;
     inset: 0 0 0 auto;
     width: min(420px, 100%);
     grid-column: auto;
     grid-row: auto;
   }
-
-  .agent-detail-side-panel .agent-detail-pane .entity-header {
-    grid-template-columns: 48px minmax(0, 1fr);
-  }
 }
 
 @media (max-width: 720px) {
-  .chat-panel.has-thread-panel > .thread-panel,
-  .chat-panel.has-thread-panel > .agent-detail-side-panel {
+  .chat-panel.has-thread-panel > .thread-panel {
     width: 100%;
+  }
+
+  .csg-dialog-content.agent-detail-side-panel {
+    inset: 0;
+    width: 100%;
+    border-width: 0;
+    border-radius: 0;
+  }
+
+  .agent-detail-side-panel .agent-detail-pane {
+    padding-right: 12px;
+    padding-left: 12px;
   }
 }

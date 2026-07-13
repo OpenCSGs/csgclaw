@@ -32,10 +32,14 @@ const (
 	workspaceDirName       = "workspace"
 	homeDirName            = "home"
 	logPollInterval        = 200 * time.Millisecond
-	runtimeDirRemoveDelay  = 100 * time.Millisecond
-	runtimeDirRemoveTries  = 6
 	codexProxyProviderName = "proxy"
 	codexModelProviderName = "codex"
+)
+
+var (
+	runtimeDirRemoveInitialDelay = 100 * time.Millisecond
+	runtimeDirRemoveMaxDelay     = 1 * time.Second
+	runtimeDirRemoveTries        = 15
 )
 
 type AgentRef struct {
@@ -45,6 +49,7 @@ type AgentRef struct {
 	HandleID       string
 	Instructions   string
 	RuntimeOptions map[string]any
+	MCPServers     map[string]any
 	Profile        agentruntime.Profile
 }
 
@@ -141,6 +146,9 @@ var (
 	_ agentruntime.ConversationStarter         = (*Runtime)(nil)
 	_ agentruntime.RuntimeOptionSchemaProvider = (*Runtime)(nil)
 	_ agentruntime.RuntimeConfigController     = (*Runtime)(nil)
+	_ agentruntime.MCPServersController        = (*Runtime)(nil)
+	_ agentruntime.MCPServersReconciler        = (*Runtime)(nil)
+	_ agentruntime.MCPServersListController    = (*Runtime)(nil)
 )
 
 func New(deps Dependencies) *Runtime {
@@ -445,7 +453,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	if err := r.seedCodexHomeAuth(spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.Profile); err != nil {
+	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.MCPServers); err != nil {
 		return nil, err
 	}
 	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
@@ -516,12 +524,16 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 			return nil, err
 		}
 	}
+	binaryPath, err := r.ensureBinary(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve codex binary: %w", err)
+	}
 
 	spec := SessionSpec{
 		RuntimeID:    runtimeID,
 		AgentID:      agentID,
 		AgentName:    firstNonEmpty(agentRef.Name, meta.AgentName),
-		BinaryPath:   strings.TrimSpace(meta.BinaryPath),
+		BinaryPath:   binaryPath,
 		RuntimeDir:   dirs.Root,
 		WorkspaceDir: workspaceDir,
 		HomeDir:      r.hostSessionHomeDir(dirs.Home),
@@ -535,7 +547,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if err := r.seedCodexHomeAuth(spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.Profile); err != nil {
+	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.MCPServers); err != nil {
 		return nil, err
 	}
 	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
@@ -609,10 +621,13 @@ func (r *Runtime) seedCodexHomeAuth(runtimeCodexHome string) error {
 	return nil
 }
 
-func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome string, profile agentruntime.Profile) error {
+func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, profile agentruntime.Profile, mcpServers map[string]any) error {
 	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
 	if runtimeCodexHome == "" {
 		return fmt.Errorf("codex home dir is required")
+	}
+	if err := agentruntime.ValidateMCPServers(mcpServers); err != nil {
+		return err
 	}
 	configPath := filepath.Join(runtimeCodexHome, configFileName)
 	profile = profile.Normalized()
@@ -635,7 +650,7 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome string, profile agentrunt
 		}
 	}
 
-	rendered := configureCodexHomeConfig(string(configRaw), profile)
+	rendered := configureCodexHomeConfigWithWorkspace(string(configRaw), profile, mcpServers, workspaceDir)
 	if err := r.writeFile(configPath, []byte(rendered), 0o600); err != nil {
 		return fmt.Errorf("write runtime codex config %s: %w", configPath, err)
 	}
@@ -1087,7 +1102,11 @@ func (r *Runtime) removeRuntimeDir(ctx context.Context, path string) error {
 		if attempt == runtimeDirRemoveTries-1 {
 			break
 		}
-		timer := time.NewTimer(runtimeDirRemoveDelay)
+		delay := runtimeDirRemoveInitialDelay << attempt
+		if delay > runtimeDirRemoveMaxDelay {
+			delay = runtimeDirRemoveMaxDelay
+		}
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -1338,6 +1357,14 @@ func stopProcess(pid int) error {
 	}
 	_ = proc.Signal(os.Interrupt)
 	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if !processAlive(pid) {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	_ = stopProcessTree(pid)
+	deadline = time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		if !processAlive(pid) {
 			return nil

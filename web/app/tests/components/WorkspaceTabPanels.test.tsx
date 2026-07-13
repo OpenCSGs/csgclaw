@@ -12,6 +12,9 @@ const labels: Record<string, string> = {
   agentsTab: "Agents",
   computerAgentsSection: "Agents",
   computersSection: "Computers",
+  resourcesMCPAdd: "Add MCP",
+  resourcesMCPEmpty: "No MCP servers",
+  resourcesMCPLabel: "MCP",
   resourcesSkillsEmpty: "No skills",
   resourcesSkillsLabel: "Skills",
   resourcesModelProvidersSection: "Model Providers",
@@ -67,7 +70,20 @@ const hub: WorkspaceSidebarProps["hub"] = {
   loaded: true,
   selectedHubTemplateId: "",
   selectedHubResourceType: "skill",
+  selectedMCPServerName: "filesystem",
   selectedHubSkillName: "demo-skill",
+  mcpServers: [
+    {
+      name: "filesystem",
+      config: { command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem"] },
+      description: "npx -y @modelcontextprotocol/server-filesystem",
+    },
+    {
+      name: "github",
+      config: { url: "https://github.example/mcp" },
+      description: "https://github.example/mcp",
+    },
+  ],
   remoteSkills: [{ name: "agent-builder", description: "Build agents", remotePath: "AIWizards/agent-builder" }],
   remoteSkillsError: "",
   remoteSkillsLoading: false,
@@ -192,7 +208,8 @@ describe("WorkspaceTabPanels", () => {
     expect(groupLabels).toEqual(["Agents1", "Human1", "Computers1", "Notifications0", "Teams0"]);
   });
 
-  it("renders hub templates and skills in separate workspace groups", () => {
+  it("renders hub templates, MCP servers, and skills in separate workspace groups", () => {
+    const onSelectMCPServer = vi.fn();
     render(
       <WorkspaceTabPanels
         activePane={{ type: WorkspacePaneTypes.hub, id: "hub" }}
@@ -217,6 +234,7 @@ describe("WorkspaceTabPanels", () => {
         onSelectComputer={() => {}}
         onSelectConversation={() => {}}
         onSelectHuman={() => {}}
+        onSelectMCPServer={onSelectMCPServer}
         onSelectHubSkill={() => {}}
         onSelectHubTemplate={() => {}}
         onSelectTask={() => {}}
@@ -236,9 +254,16 @@ describe("WorkspaceTabPanels", () => {
     );
 
     expect(screen.getByRole("button", { name: /Templates1/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /MCP2/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Skills1/ })).toBeInTheDocument();
     expect(screen.getByText("demo-template")).toBeInTheDocument();
+    expect(screen.getByText("filesystem")).toBeInTheDocument();
+    expect(screen.getByText("github")).toBeInTheDocument();
     expect(screen.getByText("demo-skill")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /github/ }));
+
+    expect(onSelectMCPServer).toHaveBeenCalledWith(expect.objectContaining({ name: "github" }));
   });
 
   it("shows Tasks sidebar subcategories while preserving counts", () => {

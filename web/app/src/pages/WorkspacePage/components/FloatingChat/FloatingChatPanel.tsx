@@ -203,6 +203,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         logModalOpen={logModalOpen}
         memberMenuRef={memberMenuRef}
         selectedMessageCount={selectedMessageCount}
+        selectedVisibleMessageCount={floatingVisibleMessages.length}
         showChannelTools={showChannelTools}
         showInviteAction={false}
         showMemberList={showMemberList}

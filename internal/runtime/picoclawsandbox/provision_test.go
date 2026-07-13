@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -59,6 +60,66 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 		t.Fatalf("stat workspace projects mountpoint: %v", err)
 	} else if !info.IsDir() {
 		t.Fatalf("workspace projects mountpoint is not a directory")
+	}
+}
+
+func TestReconcileMCPServersWritesProvisionedGatewayConfig(t *testing.T) {
+	agentHome := t.TempDir()
+	projectsRoot := t.TempDir()
+	rt := New(Dependencies{
+		AgentHome: func(string) (string, error) {
+			return agentHome, nil
+		},
+		ResolveAgent: func(agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{ID: "u-alice", Name: "alice"}, nil
+		},
+	})
+
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID: "rt-1",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+		Profile:   agentruntime.Profile{},
+		MCPServers: map[string]any{
+			"context7": map[string]any{"command": "uvx", "args": []any{"context7-mcp"}},
+		},
+		Gateway: &agentruntime.GatewayProvision{
+			ModelFallback:     "fallback-model",
+			Server:            config.ServerConfig{AdvertiseBaseURL: "http://127.0.0.1:18080", AccessToken: "shared-token"},
+			ManagerBaseURL:    "http://127.0.0.1:18080",
+			AgentHome:         agentHome,
+			ProjectsRoot:      projectsRoot,
+			WorkspaceTemplate: templateembed.PicoClawWorkerRoot,
+		},
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+
+	if err := rt.ReconcileMCPServers(context.Background(), agentruntime.Handle{RuntimeID: "rt-1", HandleID: "box-1"}, agentruntime.MCPServersChange{
+		Current: agentruntime.MCPServersSnapshot{Servers: map[string]any{
+			"filesystem": map[string]any{"command": "npx", "args": []any{"-y", "@modelcontextprotocol/server-filesystem", "${workspace}"}},
+		}},
+	}); err != nil {
+		t.Fatalf("ReconcileMCPServers() error = %v", err)
+	}
+
+	snapshot, err := readPicoClawMCPServers(filepath.Join(Root(agentHome), HostConfig))
+	if err != nil {
+		t.Fatalf("readPicoClawMCPServers() error = %v", err)
+	}
+	servers, err := agentruntime.NormalizeMCPServers(snapshot.Servers)
+	if err != nil {
+		t.Fatalf("NormalizeMCPServers() error = %v", err)
+	}
+	if _, ok := servers["context7"]; ok {
+		t.Fatalf("reconciled picoclaw config kept stale context7 server: %#v", servers)
+	}
+	filesystem := servers["filesystem"].(map[string]any)
+	if got, want := filesystem["command"], "npx"; got != want {
+		t.Fatalf("filesystem.command = %#v, want %q", got, want)
+	}
+	if got, want := filesystem["args"], []any{"-y", "@modelcontextprotocol/server-filesystem", BoxWorkspaceDir}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("filesystem.args = %#v, want %#v", got, want)
 	}
 }
 

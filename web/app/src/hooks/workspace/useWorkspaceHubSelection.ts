@@ -6,6 +6,7 @@ import { hasSkillName, isOfficialSkill, isPersonalSkill } from "@/models/skillhu
 import { flattenWorkspaceDirectoryListings } from "@/models/workspace";
 import type { WorkspaceDirectoryListings } from "@/models/workspace";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
+import { useWorkspaceMCPSelection } from "./useWorkspaceMCPSelection";
 import {
   workspaceQueryKeys,
   useWorkspaceHubTemplateQuery,
@@ -37,6 +38,8 @@ export function useWorkspaceHubSelection({
   const setSelectedHubSkillName = useWorkspaceUiStore((state) => state.setSelectedHubSkillName);
   const selectedHubSkillPath = useWorkspaceUiStore((state) => state.selectedHubSkillPath);
   const setSelectedHubSkillPath = useWorkspaceUiStore((state) => state.setSelectedHubSkillPath);
+  const selectedMCPServerName = useWorkspaceUiStore((state) => state.selectedMCPServerName);
+  const setSelectedMCPServerName = useWorkspaceUiStore((state) => state.setSelectedMCPServerName);
   const selectedHubResourceType = useWorkspaceUiStore((state) => state.selectedHubResourceType);
   const setSelectedHubResourceType = useWorkspaceUiStore((state) => state.setSelectedHubResourceType);
   const [remoteSkillsEnabled, setRemoteSkillsEnabled] = useState(false);
@@ -117,16 +120,6 @@ export function useWorkspaceHubSelection({
       setSelectedHubSkillPath("");
     }
   }, [selectedHubSkillName, setSelectedHubSkillPath]);
-
-  useEffect(() => {
-    if (selectedHubResourceType === "skill" && !skills.length && resourcesTemplates.length) {
-      setSelectedHubResourceType("template");
-      return;
-    }
-    if (selectedHubResourceType === "template" && !resourcesTemplates.length && skills.length) {
-      setSelectedHubResourceType("skill");
-    }
-  }, [resourcesTemplates.length, selectedHubResourceType, setSelectedHubResourceType, skills.length]);
 
   const hubTemplateDetailQuery = useWorkspaceHubTemplateQuery(selectedHubTemplateId);
   const hubWorkspaceQuery = useWorkspaceHubWorkspaceQuery(selectedHubTemplateId);
@@ -234,8 +227,35 @@ export function useWorkspaceHubSelection({
     remoteSkillsEnabled && officialSkillsQuery.error
       ? errorMessage(officialSkillsQuery.error, t("resourcesSkillRemoteSkillsLoadFailed"))
       : "";
-  const skillTreeError = skillTreeQuery.error ? errorMessage(skillTreeQuery.error, t("resourcesSkillFilesLoadFailed")) : "";
-  const skillFileError = skillFileQuery.error ? errorMessage(skillFileQuery.error, t("resourcesSkillFileLoadFailed")) : "";
+  const skillTreeError = skillTreeQuery.error
+    ? errorMessage(skillTreeQuery.error, t("resourcesSkillFilesLoadFailed"))
+    : "";
+  const skillFileError = skillFileQuery.error
+    ? errorMessage(skillFileQuery.error, t("resourcesSkillFileLoadFailed"))
+    : "";
+  const {
+    createMCPServer,
+    deleteMCPServer,
+    mcpServers,
+    mcpServersFetching,
+    mcpCreateDialogOpen,
+    mcpMutationBusy,
+    mcpMutationError,
+    mcpStateError,
+    openCreateMCPDialog,
+    refetchMCPServers,
+    selectedMCPServer,
+    setMCPCreateDialogOpen,
+    updateMCPServer,
+  } = useWorkspaceMCPSelection({
+    selectedMCPServerName,
+    selectedHubResourceType,
+    setSelectedMCPServerName,
+    setSelectedHubResourceType,
+    skillCount: skills.length,
+    t,
+    templateCount: resourcesTemplates.length,
+  });
 
   const retry = useCallback(async () => {
     if (refreshTemplates) {
@@ -249,9 +269,11 @@ export function useWorkspaceHubSelection({
     if (selectedHubSkillName) {
       await refetchSkillTree();
     }
+    await refetchMCPServers();
   }, [
     refetchHubTemplateDetail,
     refetchHubWorkspace,
+    refetchMCPServers,
     refetchSkillTree,
     refetchSkills,
     refreshTemplates,
@@ -277,7 +299,20 @@ export function useWorkspaceHubSelection({
     loaded,
     listError,
     skillsError,
-    error: listError || detailError || workspaceTreeError || skillsError || skillTreeError,
+    mcpServers,
+    mcpStateError,
+    mcpMutationBusy,
+    mcpMutationError,
+    mcpCreateDialogOpen,
+    openCreateMCPDialog,
+    setMCPCreateDialogOpen,
+    error:
+      listError ||
+      detailError ||
+      workspaceTreeError ||
+      skillsError ||
+      skillTreeError ||
+      (selectedHubResourceType === "mcp" ? mcpStateError : ""),
     selectedHubTemplateId,
     setSelectedHubTemplateId,
     selectedHubTemplate,
@@ -288,6 +323,9 @@ export function useWorkspaceHubSelection({
     selectedHubSkillView: selectedHubSkill,
     selectedHubSkillPath,
     setSelectedHubSkillPath,
+    selectedMCPServerName,
+    setSelectedMCPServerName,
+    selectedMCPServer,
     selectedHubResourceType,
     setSelectedHubResourceType,
     hubTemplateDetail: hubTemplateDetailQuery.data ?? null,
@@ -306,6 +344,9 @@ export function useWorkspaceHubSelection({
     hubWorkspaceFileLoading: hubWorkspaceFileQuery.isFetching,
     hubWorkspaceFileError: workspaceFileError,
     refetchHubWorkspaceFile: hubWorkspaceFileQuery.refetch,
+    mcpServersLoading: mcpServersFetching,
+    mcpServersError: mcpStateError,
+    refetchMCPServers,
     skillTree: skillTreeQuery.data ?? null,
     skillTreeLoading: skillTreeQuery.isFetching,
     skillTreeError,
@@ -319,14 +360,29 @@ export function useWorkspaceHubSelection({
     detailPaneProps: {
       templates: resourcesTemplates,
       skills,
+      mcpServers,
       selectedTemplate: selectedHubTemplateView,
       selectedTemplateId: selectedHubTemplateId,
       selectedSkill: selectedHubSkill,
       selectedSkillName: selectedHubSkillName,
       selectedSkillPath: selectedHubSkillPath,
+      selectedMCPServer,
+      selectedMCPServerName,
+      mcpMutationBusy,
+      mcpMutationError,
+      mcpCreateDialogOpen,
+      onMCPCreateDialogOpenChange: setMCPCreateDialogOpen,
       selectedResourceType: selectedHubResourceType,
       loaded,
-      error: listError || detailError || workspaceTreeError || skillsError || skillTreeError,
+      mcpStateError,
+      mcpStateLoading: mcpServersFetching,
+      error:
+        listError ||
+        detailError ||
+        workspaceTreeError ||
+        skillsError ||
+        skillTreeError ||
+        (selectedHubResourceType === "mcp" ? mcpStateError : ""),
       workspaceEntries,
       workspaceTreeLoading: hubWorkspaceQuery.isFetching,
       loadingWorkspaceDirs,
@@ -354,6 +410,16 @@ export function useWorkspaceHubSelection({
           setSelectedHubSkillName(value);
         }
       },
+      onSelectMCP: (name: string | null | undefined) => {
+        const value = String(name || "").trim();
+        if (value) {
+          setSelectedHubResourceType("mcp");
+          setSelectedMCPServerName(value);
+        }
+      },
+      onCreateMCP: createMCPServer,
+      onUpdateMCP: updateMCPServer,
+      onDeleteMCP: deleteMCPServer,
       onSelectWorkspaceFile: selectWorkspaceFile,
       onToggleWorkspaceDir: loadWorkspaceDirectory,
       onSelectSkillFile: selectSkillFile,

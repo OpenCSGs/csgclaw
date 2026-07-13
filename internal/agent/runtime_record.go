@@ -181,13 +181,14 @@ func runtimeRecordForAgent(a Agent) RuntimeRecord {
 	if a.CreatedAt.IsZero() {
 		createdAt = time.Time{}
 	}
+	runtimeOptions := a.RuntimeOptions
 	return normalizeRuntimeRecord(RuntimeRecord{
 		ID:        normalizeRuntimeID(a.RuntimeID, a.ID),
 		Kind:      a.RuntimeConfig().LegacyKind(),
 		State:     agentruntime.State(strings.TrimSpace(a.Status)),
 		AgentIDs:  []string{strings.TrimSpace(a.ID)},
 		SandboxID: strings.TrimSpace(a.BoxID),
-		Options:   a.RuntimeOptions,
+		Options:   runtimeOptions,
 		CreatedAt: createdAt,
 	})
 }

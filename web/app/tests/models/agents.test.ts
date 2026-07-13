@@ -31,12 +31,14 @@ import {
   mergeAgentIntoList,
   isNotificationBotAgent,
   mapToEnvRows,
+  mcpServersText,
   partitionWorkspaceAgentItems,
   notifierComputedPullRoutes,
   notifierFormIsComplete,
   notifierThirdPartyRelayWebhookURL,
   normalizeAuthProviderName,
   normalizeRuntimeKind,
+  parseMCPServersText,
   notificationPushWebhookPathForBot,
   parseJSONMap,
   pickDefaultAgentTemplate,
@@ -48,9 +50,12 @@ import {
   resolveAgentAvatarSource,
   runtimeImageForKind,
   runtimeOptionSchemasForAgent,
+  setMCPServers,
   localizedRuntimeOptionLabel,
   localizedRuntimeOptionDescription,
   isAgentUpgradeNeeded,
+  draftMCPServersForSave,
+  supportsMCPServers,
   shouldWaitForManagerRuntimeAfterProfileSave,
   workerSelectableTemplates,
 } from "@/models/agents";
@@ -528,6 +533,43 @@ describe("agent model helpers", () => {
     ).toBe("Leave empty to use the default agent workspace.");
   });
 
+  it("parses and saves MCP servers as a direct map", () => {
+    const parsed = parseMCPServersText('{"context7":{"command":"npx","args":["-y"]}}');
+
+    expect(parsed).toEqual({
+      ok: true,
+      value: {
+        context7: {
+          command: "npx",
+          args: ["-y"],
+        },
+      },
+    });
+    expect(parseMCPServersText("")).toEqual({ ok: true, value: null });
+    expect(parseMCPServersText("[1]")).toEqual({ ok: false, error: "object_required" });
+    expect(parseMCPServersText("{")).toEqual({ ok: false, error: "invalid_json" });
+    expect(supportsMCPServers("openclaw_sandbox")).toBe(true);
+    expect(supportsMCPServers("picoclaw_sandbox")).toBe(true);
+    expect(supportsMCPServers("codex")).toBe(true);
+
+    const mcpServers = setMCPServers({ context7: { command: "npx" } });
+    expect(mcpServers).toEqual({
+      context7: {
+        command: "npx",
+      },
+    });
+    expect(mcpServersText(mcpServers)).toContain('"context7"');
+    expect(draftMCPServersForSave({ mcpServers })).toEqual(mcpServers);
+    expect(mcpServersText({})).toBe("{}");
+    expect(draftMCPServersForSave({ mcpServers: undefined })).toBeUndefined();
+    expect(draftMCPServersForSave({ mcpServers: null })).toBeNull();
+    expect(draftMCPServersForSave({ mcpServers: {} })).toEqual({});
+    expect(draftRuntimeOptionsForSave({ runtime_options: { local_workspace_dir: "/tmp/project" } })).toEqual({
+      local_workspace_dir: "/tmp/project",
+    });
+    expect(setMCPServers(null)).toBeNull();
+  });
+
   it("selects runtime-specific templates and images", () => {
     const templates = [
       { id: "builtin.manager-codex", name: "manager-codex", role: "manager", runtime_kind: "codex" },
@@ -721,6 +763,30 @@ describe("agent model helpers", () => {
         usersById,
       ),
     ).toBe("avatar/3D-5.png");
+  });
+
+  it("resolves migrated agent avatars from canonical IM users without a local participant", () => {
+    const usersById = new Map([["user-zoyz2k", { id: "user-zoyz2k", avatar: "avatar/3D-3.png", name: "dev" }]]);
+
+    expect(
+      resolveAgentAvatarSource(
+        {
+          id: "agent-zoyz2k",
+          name: "dev",
+          role: "worker",
+          participants: [
+            {
+              agent_id: "agent-zoyz2k",
+              channel: "feishu",
+              channel_user_kind: "app_id",
+              id: "pt-zoyz2k-5905c292",
+              type: "agent",
+            },
+          ],
+        },
+        usersById,
+      ),
+    ).toBe("avatar/3D-3.png");
   });
 
   it("selects a built-in avatar that is not already used", () => {

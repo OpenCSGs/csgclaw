@@ -434,7 +434,12 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 			promptReturned = true
 			if w.isSuperseded(evt) {
 				cleanupProcessingReaction(ctx)
-				return nil
+				// Prompt completion is published through the event sink before the
+				// Prompt call returns, but buffered sink consumption is asynchronous.
+				// Drain that terminal event before the next queued turn starts so
+				// stale output cannot be mistaken for the newer turn.
+				settleTimer.Reset(w.service.promptSettle)
+				continue
 			}
 			if result.err != nil {
 				renderer.SetPromptError(result.err.Error())
@@ -470,6 +475,10 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 					default:
 					}
 					break
+				}
+				if w.isSuperseded(evt) {
+					cleanupProcessingReaction(ctx)
+					return nil
 				}
 				if generatedRootID == "" && len(renderer.FinalMessages()) == 0 {
 					settleTimer.Reset(w.service.promptSettle)

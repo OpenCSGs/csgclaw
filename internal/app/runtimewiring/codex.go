@@ -37,6 +37,7 @@ func WithCodexRuntime() agent.ServiceOption {
 					HandleID:       strings.TrimSpace(got.BoxID),
 					Instructions:   got.Instructions,
 					RuntimeOptions: got.RuntimeOptions,
+					MCPServers:     got.MCPServers,
 					Profile:        profile,
 				}, nil
 			},

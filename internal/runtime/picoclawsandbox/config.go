@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
+	agentruntime "csgclaw/internal/runtime"
 )
 
 //go:embed defaults/picoclaw-config.json
@@ -49,12 +51,16 @@ func WorkspaceConfigRoot(agentHome string) string {
 }
 
 func EnsureConfig(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProviders ...feishu.AgentCredentialProvider) (string, error) {
+	return EnsureConfigWithMCPServers(agentHome, participantID, agentID, server, model, nil, resolveBaseURL, feishuProviders...)
+}
+
+func EnsureConfigWithMCPServers(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, mcpServers map[string]any, resolveBaseURL BaseURLResolver, feishuProviders ...feishu.AgentCredentialProvider) (string, error) {
 	hostRoot := Root(agentHome)
 	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create picoclaw config dir: %w", err)
 	}
 
-	data, err := RenderConfig(participantID, agentID, server, model, resolveBaseURL, feishuProviders...)
+	data, err := RenderConfigWithMCPServers(participantID, agentID, server, model, mcpServers, resolveBaseURL, feishuProviders...)
 	if err != nil {
 		return "", err
 	}
@@ -71,6 +77,10 @@ func EnsureConfig(agentHome, participantID, agentID string, server config.Server
 }
 
 func RenderConfig(participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProviders ...feishu.AgentCredentialProvider) ([]byte, error) {
+	return RenderConfigWithMCPServers(participantID, agentID, server, model, nil, resolveBaseURL, feishuProviders...)
+}
+
+func RenderConfigWithMCPServers(participantID, agentID string, server config.ServerConfig, model config.ModelConfig, mcpServers map[string]any, resolveBaseURL BaseURLResolver, feishuProviders ...feishu.AgentCredentialProvider) ([]byte, error) {
 	participantID = strings.TrimSpace(participantID)
 	agentID = strings.TrimSpace(agentID)
 	if participantID == "" {
@@ -93,12 +103,88 @@ func RenderConfig(participantID, agentID string, server config.ServerConfig, mod
 	if err := updateFeishuChannel(cfg, agentID, firstFeishuProvider(feishuProviders)); err != nil {
 		return nil, err
 	}
+	if err := updatePicoClawMCP(cfg, mcpServers); err != nil {
+		return nil, err
+	}
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode manager picoclaw config: %w", err)
 	}
 	return data, nil
+}
+
+func updatePicoClawMCP(cfg map[string]any, mcpServers map[string]any) error {
+	servers, err := agentruntime.NormalizeMCPServers(mcpServers)
+	if err != nil {
+		return err
+	}
+	tools, ok := cfg["tools"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("embedded manager picoclaw config is missing tools")
+	}
+	mcpRoot, _ := tools["mcp"].(map[string]any)
+	if mcpRoot == nil {
+		mcpRoot = map[string]any{}
+		tools["mcp"] = mcpRoot
+	}
+	if servers == nil {
+		mcpRoot["enabled"] = false
+		delete(mcpRoot, "servers")
+		return nil
+	}
+	mcpRoot["enabled"] = true
+	mcpRoot["servers"] = resolvePicoClawMCPWorkspaceServers(servers, BoxWorkspaceDir)
+	return nil
+}
+
+func resolvePicoClawMCPWorkspaceServers(servers map[string]any, workspaceGuestPath string) map[string]any {
+	workspaceGuestPath = strings.TrimSpace(workspaceGuestPath)
+	if workspaceGuestPath == "" {
+		return servers
+	}
+	out := make(map[string]any, len(servers))
+	for name, rawEntry := range servers {
+		entry, ok := rawEntry.(map[string]any)
+		if !ok {
+			out[name] = rawEntry
+			continue
+		}
+		next := make(map[string]any, len(entry))
+		for key, value := range entry {
+			next[key] = value
+		}
+		if args, ok := next["args"].([]any); ok {
+			next["args"] = resolvePicoClawMCPWorkspaceArgs(args, workspaceGuestPath)
+		}
+		out[name] = next
+	}
+	return out
+}
+
+func resolvePicoClawMCPWorkspaceArgs(args []any, workspaceGuestPath string) []any {
+	out := make([]any, len(args))
+	for idx, arg := range args {
+		text, ok := arg.(string)
+		if !ok {
+			out[idx] = arg
+			continue
+		}
+		out[idx] = resolvePicoClawMCPWorkspaceArg(text, workspaceGuestPath)
+	}
+	return out
+}
+
+func resolvePicoClawMCPWorkspaceArg(arg, workspaceGuestPath string) string {
+	for _, placeholder := range []string{"${workspace}", "${workspaceDir}", "{workspace}", "{workspaceDir}"} {
+		if arg == placeholder {
+			return workspaceGuestPath
+		}
+		if strings.HasPrefix(arg, placeholder+"/") {
+			return path.Join(workspaceGuestPath, strings.TrimPrefix(arg, placeholder+"/"))
+		}
+	}
+	return arg
 }
 
 func updateFeishuChannel(cfg map[string]any, agentID string, provider feishu.AgentCredentialProvider) error {

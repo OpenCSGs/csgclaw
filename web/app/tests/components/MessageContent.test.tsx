@@ -19,7 +19,9 @@ function longMessageT(key: string): string {
 }
 
 function mockLongMessageLayout() {
-  const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+  const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
     const text = (this.textContent || "").replace(/\s+/g, " ").trim();
     if (!text) {
       return 0;
@@ -114,7 +116,11 @@ describe("MessageContent", () => {
     const code = Array.from({ length: 24 }, (_, index) => `const item${index} = "line ${index}";`).join("\n");
 
     const { container } = render(
-      <MessageContent content={`代码块需要参与整体折叠：\n\n\`\`\`ts\n${code}\n\`\`\``} enableLongMessageCollapse t={longMessageT} />,
+      <MessageContent
+        content={`代码块需要参与整体折叠：\n\n\`\`\`ts\n${code}\n\`\`\``}
+        enableLongMessageCollapse
+        t={longMessageT}
+      />,
     );
 
     expect(await screen.findByRole("button", { name: "展开全文" })).toBeInTheDocument();

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
-import { FileCode2, Plus } from "lucide-react";
+import { FileCode2, Plus, Server } from "lucide-react";
 import { RoomAvatar } from "@/components/business";
 import { ModelsIcon } from "@/components/ui/Icons";
 import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
@@ -40,6 +40,7 @@ const AgentSectionIds = {
 
 const HubSectionIds = {
   templates: WorkspaceContextSectionIds.hubTemplates,
+  mcpServers: WorkspaceContextSectionIds.mcpServers,
   skills: WorkspaceContextSectionIds.hubSkills,
   models: WorkspaceContextSectionIds.models,
 } as const;
@@ -89,6 +90,7 @@ type WorkspaceTabPanelsProps = Pick<
   | "onSelectComputer"
   | "onSelectConversation"
   | "onSelectHuman"
+  | "onSelectMCPServer"
   | "onSelectHubSkill"
   | "onSelectHubTemplate"
   | "onSelectModelProvider"
@@ -257,6 +259,7 @@ export function WorkspaceTabPanels({
   onSelectThread,
   onPreviewUser,
   onSelectHuman,
+  onSelectMCPServer = () => {},
   onSelectHubSkill,
   agentItems,
   modelProviders = null,
@@ -279,12 +282,15 @@ export function WorkspaceTabPanels({
   const normalizedContextQuery = normalizeSearchQuery(contextQuery);
   const resourcesTemplates = hub?.templates ?? [];
   const resourcesSkills = hub?.skills ?? [];
+  const resourcesMCPServers = hub?.mcpServers ?? [];
   const resourcesError = hub?.listError ?? "";
   const resourcesSkillsError = hub?.skillsError ?? "";
+  const resourcesMCPError = hub?.mcpStateError ?? "";
   const resourcesUploadBusy = hub?.uploadBusy ?? false;
   const resourcesUploadError = hub?.uploadError ?? "";
   const resourcesLoaded = hub?.loaded ?? false;
   const selectedHubResourceType = hub?.selectedHubResourceType ?? "template";
+  const selectedMCPServerName = hub?.selectedMCPServerName ?? "";
   const selectedHubSkillName = hub?.selectedHubSkillName ?? "";
   const selectedHubTemplateId = hub?.selectedHubTemplateId ?? "";
   const resourcesPaneActive = activePane.type === WorkspacePaneTypes.hub;
@@ -421,6 +427,10 @@ export function WorkspaceTabPanels({
   }
 
   function skillMatchesQuery(item: (typeof resourcesSkills)[number]) {
+    return matchesSearch(normalizedContextQuery, item.name, item.description);
+  }
+
+  function mcpServerMatchesQuery(item: (typeof resourcesMCPServers)[number]) {
     return matchesSearch(normalizedContextQuery, item.name, item.description);
   }
 
@@ -568,7 +578,12 @@ export function WorkspaceTabPanels({
         onClick={() => onSelectModelProvider(provider)}
       >
         <span className={classNames(rowStyles.icon, styles.modelProviderIconShell)}>
-          <img className={styles.modelProviderIconImage} src={modelProviderAvatarPath(provider)} alt="" aria-hidden="true" />
+          <img
+            className={styles.modelProviderIconImage}
+            src={modelProviderAvatarPath(provider)}
+            alt=""
+            aria-hidden="true"
+          />
         </span>
         <span className={rowStyles.main}>
           <span className={rowStyles.titleLine}>
@@ -806,7 +821,10 @@ export function WorkspaceTabPanels({
       >
         {resourcesError ? (
           <div className={styles.empty}>{resourcesError}</div>
-        ) : resourcesLoaded && resourcesTemplates.length === 0 && resourcesSkills.length === 0 ? (
+        ) : resourcesLoaded &&
+          resourcesTemplates.length === 0 &&
+          resourcesMCPServers.length === 0 &&
+          resourcesSkills.length === 0 ? (
           <div className={styles.empty}>{t("resourcesEmpty")}</div>
         ) : resourcesLoaded && resourcesTemplates.length > 0 && !visibleTemplates.length ? (
           <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
@@ -840,6 +858,58 @@ export function WorkspaceTabPanels({
             </button>
           ))
         )}
+      </WorkspaceGroup>
+    );
+  }
+
+  function renderMCPSection(presentation: "group" | "flat" = "group") {
+    const flat = presentation === "flat";
+    const visibleMCPServers = resourcesMCPServers.filter(mcpServerMatchesQuery);
+    return (
+      <WorkspaceGroup
+        id="mcp-servers"
+        title={t("resourcesMCPLabel")}
+        count={resourcesMCPServers.length}
+        collapsed={flat ? false : Boolean(collapsedWorkspaceGroups["mcp-servers"])}
+        onToggle={() => onToggleWorkspaceGroup("mcp-servers")}
+        onAdd={() => {
+          onSelectMCPServer(null);
+          hub?.openCreateMCPDialog?.();
+        }}
+        addLabel={t("resourcesMCPAdd")}
+        addIcon={<Plus size={15} strokeWidth={2.2} aria-hidden="true" />}
+        presentation={presentation}
+      >
+        {visibleMCPServers.length ? (
+          visibleMCPServers.map((item) => (
+            <button
+              key={item.name}
+              className={classNames(
+                rowStyles.row,
+                styles.hubTemplateRow,
+                resourcesPaneActive &&
+                  selectedMCPServerName === item.name &&
+                  selectedHubResourceType === "mcp" &&
+                  rowStyles.active,
+              )}
+              onClick={() => onSelectMCPServer(item)}
+            >
+              <span className={rowStyles.icon}>
+                <Server size={16} strokeWidth={2} aria-hidden="true" />
+              </span>
+              <span className={rowStyles.main}>
+                <span className={classNames(rowStyles.title, "truncate")}>{item.name}</span>
+                <span className={classNames(rowStyles.meta, "truncate")}>{item.description || item.name}</span>
+              </span>
+            </button>
+          ))
+        ) : resourcesMCPError ? (
+          <div className={styles.empty}>{resourcesMCPError}</div>
+        ) : resourcesMCPServers.length ? (
+          <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
+        ) : flat || (resourcesLoaded && resourcesMCPServers.length === 0) ? (
+          <div className={styles.empty}>{t("resourcesMCPEmpty")}</div>
+        ) : null}
       </WorkspaceGroup>
     );
   }
@@ -887,7 +957,7 @@ export function WorkspaceTabPanels({
           <div className={styles.empty}>{resourcesSkillsError}</div>
         ) : resourcesSkills.length ? (
           <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
-        ) : flat || (resourcesLoaded && resourcesTemplates.length === 0) ? (
+        ) : flat || (resourcesLoaded && resourcesSkills.length === 0) ? (
           <div className={styles.empty}>{t("resourcesSkillsEmpty")}</div>
         ) : null}
       </WorkspaceGroup>
@@ -941,6 +1011,7 @@ export function WorkspaceTabPanels({
           aria-label={contextSectionLabel(sectionId)}
         >
           {sectionId === HubSectionIds.templates ? renderHubTemplateSection("flat") : null}
+          {sectionId === HubSectionIds.mcpServers ? renderMCPSection("flat") : null}
           {sectionId === HubSectionIds.skills ? renderHubSkillSection("flat") : null}
           {sectionId === HubSectionIds.models ? renderModelProviderSection("flat") : null}
           {renderSkillUploadDialog()}
@@ -961,7 +1032,12 @@ export function WorkspaceTabPanels({
   }
 
   function isHubSectionId(value: WorkspaceContextSectionId): value is HubSectionId {
-    return value === HubSectionIds.templates || value === HubSectionIds.skills || value === HubSectionIds.models;
+    return (
+      value === HubSectionIds.templates ||
+      value === HubSectionIds.mcpServers ||
+      value === HubSectionIds.skills ||
+      value === HubSectionIds.models
+    );
   }
 
   function contextSectionLabel(sectionId: WorkspaceContextSectionId) {
@@ -982,6 +1058,9 @@ export function WorkspaceTabPanels({
     }
     if (sectionId === HubSectionIds.templates) {
       return t("resourcesTemplatesSection");
+    }
+    if (sectionId === HubSectionIds.mcpServers) {
+      return t("resourcesMCPLabel");
     }
     if (sectionId === HubSectionIds.skills) {
       return t("resourcesSkillsLabel");
@@ -1054,6 +1133,7 @@ export function WorkspaceTabPanels({
         <div className={styles.panel} role="tabpanel" aria-label={t("resourcesTab")}>
           {renderHubTemplateSection()}
           {renderHubSkillSection()}
+          {renderMCPSection()}
           {renderModelProviderSection()}
           {renderSkillUploadDialog()}
         </div>

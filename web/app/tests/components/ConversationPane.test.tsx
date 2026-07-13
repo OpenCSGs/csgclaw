@@ -1,5 +1,5 @@
 import { createRef, useRef, useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConversationPane } from "@/pages/ConversationPage/components/ConversationPane";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
@@ -120,6 +120,7 @@ function renderThreadPane({
   showToolCalls = false,
   mentionCandidates = [],
   mentionIndex = 0,
+  visibleMessages,
   memberActionBusyID = "",
   memberActionError = "",
   onClearMemberActionError = vi.fn(),
@@ -132,6 +133,7 @@ function renderThreadPane({
   conversationMembers?: IMUser[];
   isDirect?: boolean;
   messages?: IMConversation["messages"];
+  visibleMessages?: IMConversation["messages"];
   mentionCandidates?: IMUser[];
   mentionIndex?: number;
   onClearRoomMessages?: (id: string) => void;
@@ -242,7 +244,7 @@ function renderThreadPane({
         threadLoading={false}
         onThreadDraftChange={setThreadDraftSegments}
         usersById={usersByIdOverride}
-        visibleMessages={timelineMessages}
+        visibleMessages={visibleMessages ?? timelineMessages}
       />
     );
   }
@@ -251,6 +253,27 @@ function renderThreadPane({
 }
 
 describe("ConversationPane", () => {
+  it("shows visible and total message counts when some messages are filtered", () => {
+    const messages = [
+      {
+        content: "visible answer",
+        created_at: "2026-05-25T08:13:00Z",
+        id: "msg-visible",
+        sender_id: "u-manager",
+      },
+      {
+        content: toolActivityContent("hidden command"),
+        created_at: "2026-05-25T08:14:00Z",
+        id: "msg-hidden-tool",
+        sender_id: "u-manager",
+      },
+    ];
+
+    renderThreadPane({ messages, visibleMessages: [messages[0]] });
+
+    expect(screen.getByText("1/2")).toBeInTheDocument();
+  });
+
   it("previews human message avatars on hover without opening details on click", async () => {
     const user = userEvent.setup();
     const onCancelProfilePreviewClose = vi.fn();
@@ -335,44 +358,43 @@ describe("ConversationPane", () => {
     );
   });
 
-  it("resizes the agent detail side panel from the separator", async () => {
+  it("renders agent details as a modal drawer with keyboard dismissal", async () => {
     const user = userEvent.setup();
-    const onResize = vi.fn();
-    const originalInnerWidth = window.innerWidth;
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1400 });
-
-    try {
-      renderThreadPane({
-        agentDetailPanelProps: {
-          item: {
-            id: "u-manager",
-            name: "manager",
-            role: "worker",
-          },
-          t,
-          width: 760,
-          onClose: vi.fn(),
-          onDelete: vi.fn(),
-          onInvite: vi.fn(),
-          onOpenDM: vi.fn(),
-          onRecreate: vi.fn(),
-          onResize,
-          onStart: vi.fn(),
-          onStop: vi.fn(),
+    const onClose = vi.fn();
+    const { container } = renderThreadPane({
+      agentDetailPanelProps: {
+        item: {
+          id: "u-manager",
+          name: "manager",
+          role: "worker",
         },
-      });
+        t,
+        onClose,
+        onDelete: vi.fn(),
+        onInvite: vi.fn(),
+        onOpenDM: vi.fn(),
+        onRecreate: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+      },
+    });
 
-      const separator = screen.getByRole("separator", { name: "resizeAgentDetailPanel" });
-      separator.focus();
+    const dialog = screen.getByRole("dialog", { name: "agentDetailPanel" });
+    const closeButton = within(dialog).getByRole("button", { name: /close/i });
+    const backdrop = document.querySelector(".agent-detail-drawer-backdrop");
 
-      await user.keyboard("{ArrowLeft}");
-      expect(onResize).toHaveBeenCalledWith(784);
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(container).not.toContainElement(dialog);
+    expect(backdrop).toBeInTheDocument();
+    expect(dialog.querySelector(".agent-detail-side-panel-bar")?.firstElementChild).toBe(closeButton);
+    await waitFor(() => expect(closeButton).toHaveFocus());
 
-      await user.keyboard("{ArrowRight}");
-      expect(onResize).toHaveBeenLastCalledWith(736);
-    } finally {
-      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalInnerWidth });
-    }
+    await user.click(closeButton);
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    onClose.mockClear();
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the caret at the end after slash text is tokenized in the main composer", async () => {

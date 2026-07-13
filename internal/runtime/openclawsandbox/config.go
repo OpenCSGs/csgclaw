@@ -49,11 +49,15 @@ func HostGatewayLogPath(agentHome string) string {
 }
 
 func EnsureConfig(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.AgentCredentialProvider) (string, error) {
+	return EnsureConfigWithMCPServers(agentHome, participantID, agentID, server, model, nil, resolveBaseURL, feishuProvider)
+}
+
+func EnsureConfigWithMCPServers(agentHome, participantID, agentID string, server config.ServerConfig, model config.ModelConfig, mcpServers map[string]any, resolveBaseURL BaseURLResolver, feishuProvider feishu.AgentCredentialProvider) (string, error) {
 	hostRoot := Root(agentHome)
 	if err := os.MkdirAll(hostRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create openclaw config dir: %w", err)
 	}
-	data, err := renderConfig(participantID, agentID, server, model, resolveBaseURL, feishuProvider)
+	data, err := renderConfigWithMCPServers(participantID, agentID, server, model, mcpServers, resolveBaseURL, feishuProvider)
 	if err != nil {
 		return "", err
 	}
@@ -143,6 +147,10 @@ func updateOpenClawWorkspaceDefault(cfg map[string]any, workspace string) {
 	defaults["workspace"] = workspace
 }
 func renderConfig(participantID, agentID string, server config.ServerConfig, model config.ModelConfig, resolveBaseURL BaseURLResolver, feishuProvider feishu.AgentCredentialProvider) ([]byte, error) {
+	return renderConfigWithMCPServers(participantID, agentID, server, model, nil, resolveBaseURL, feishuProvider)
+}
+
+func renderConfigWithMCPServers(participantID, agentID string, server config.ServerConfig, model config.ModelConfig, mcpServers map[string]any, resolveBaseURL BaseURLResolver, feishuProvider feishu.AgentCredentialProvider) ([]byte, error) {
 	participantID = strings.TrimSpace(participantID)
 	agentID = strings.TrimSpace(agentID)
 	if participantID == "" {
@@ -168,6 +176,9 @@ func renderConfig(participantID, agentID string, server config.ServerConfig, mod
 		return nil, err
 	}
 	updateOpenClawWorkspaceDefault(cfg, workspaceGuestPathForGOOS(goruntime.GOOS))
+	if err := updateOpenClawMCP(cfg, mcpServers); err != nil {
+		return nil, err
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode openclaw config: %w", err)

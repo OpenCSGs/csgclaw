@@ -213,6 +213,12 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
   "created_at": "2026-05-16T08:00:00Z",
   "profile": "api.gpt-5.4",
   "runtime_options": {},
+  "mcpServers": {
+    "workspace-filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+    }
+  },
   "agent_profile": {
     "provider": "api",
     "base_url": "https://api.example.com/v1",
@@ -231,6 +237,8 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 
 - `agent_profile` 中不会返回真实 `api_key`
 - `runtime_options` 会经过 API 侧脱敏处理
+- `mcpServers` 是 server 名称到 server 配置的直接映射；通用 Agent 响应会
+  脱敏各 server 的 `env` 与 `headers` 中的密钥值
 - `profile` 是服务端归一化后的选择器，例如 `api.gpt-5.4`
 - `detection_results` 用于展示默认 profile 探测结果
 
@@ -259,6 +267,7 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 - `created_at`
 - `profile`
 - `runtime_options`
+- `mcpServers`
 - `agent_profile`
 
 请求体示例：
@@ -287,6 +296,34 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 - `field_mask` 用于替换时只覆盖指定字段
 - `agent_profile.api_key` 只在写入时使用，读取时会被脱敏
 
+OpenClaw、PicoClaw 和 Codex CLI agent 通过顶层 `mcpServers` 字段配置 MCP server。该字段的值是所有已支持 runtime 共用的、从 server 名称到 server 配置的直接映射：
+
+```json
+{
+  "name": "alice",
+  "runtime_kind": "openclaw_sandbox",
+  "mcpServers": {
+    "workspace-filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/home/node/.openclaw/workspace"
+      ]
+    }
+  },
+  "profile": "api.gpt-5.4"
+}
+```
+
+各 runtime adapter 的映射关系：
+
+- OpenClaw：`mcpServers` -> `openclaw.json` 的 `mcp.servers`
+- PicoClaw：`mcpServers` -> PicoClaw 配置的 `tools.mcp.servers`
+- Codex CLI：`mcpServers` -> 隔离 Codex home `config.toml` 中由 CSGClaw 管理的 `[mcp_servers."<name>"]` 块
+
+注意：MCP command 在目标 runtime 环境内执行，filesystem server 的目录参数也必须是该 runtime 可见路径。`runtime_options` 中的 MCP 形态值（包括 `mcp` 与 `mcpServers`）会被拒绝；请使用顶层 `mcpServers` 字段。
+
 ### `GET /api/v1/agents/{id}`
 
 获取单个 agent。
@@ -303,6 +340,7 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 - `description`
 - `image`
 - `runtime_options`
+- `mcpServers`
 - `agent_profile`
 
 请求体示例：
@@ -319,8 +357,52 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 说明：
 
 - 省略的字段不会修改
+- `runtime_options` 一旦提交就是整体替换
+- `mcpServers` 一旦提交就是整个映射替换；传 `null` 可清除 CSGClaw 托管的 server 集合
+- OpenClaw、PicoClaw 或 Codex CLI agent 的 MCP server 变更可能触发该 agent runtime recreate，使原生配置生效
 - `agent_profile.api_key` 如果传空，服务端会保留原有密钥
 - 如果 `agent_profile.env` 发生变化，响应中的 `env_restart_required` 可能为 `true`
+
+### Agent MCP server 接口
+
+#### `GET /api/v1/agents/{id}/mcp-servers`
+
+返回 Agent 的 MCP server 配置。`servers` 是从 server 名称到 server 配置的直接原始映射。与通用 Agent 响应不同，这个接口不会脱敏已配置的 token。
+
+```json
+{
+  "agent_id": "u-alice",
+  "runtime_kind": "openclaw_sandbox",
+  "servers": {
+    "context7": {
+      "command": "uvx",
+      "args": ["context7-mcp"],
+      "env": { "CONTEXT7_API_KEY": "secret" }
+    }
+  }
+}
+```
+
+#### `POST /api/v1/agents/{id}/mcp-servers:batchAdd`
+
+接收 `{ "names": ["..."] }`，将 MCP catalog 中同名 server 的定义合并到该 Agent 托管的 MCP server。响应与 `GET` 一样。
+
+#### `POST /api/v1/agents/{id}/mcp-servers:batchDelete`
+
+接收 `{ "names": ["..."] }`，从该 Agent 托管的 MCP server 中移除同名 server。响应与 `GET` 一样。
+
+### MCP server catalog
+
+可复用的 MCP server catalog 保持在 `/api/v1/mcp-servers`：
+
+- `GET /api/v1/mcp-servers`：列出 catalog server
+- `POST /api/v1/mcp-servers`：创建 catalog server
+- `PUT /api/v1/mcp-servers/{name}`：替换一个 catalog server
+- `DELETE /api/v1/mcp-servers/{name}`：删除一个 catalog server
+
+catalog 的列表和变更响应以 `mcpServers` 作为直接 server 映射。创建或替换单个
+catalog 条目时使用 `{ "name": "...", "config": { ... } }`，其中 `config`
+就是该条目的 server 配置。
 
 ### `DELETE /api/v1/agents/{id}`
 

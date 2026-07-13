@@ -39,6 +39,12 @@ export type DeleteBotOptions = {
   deleteAgent?: boolean;
 };
 
+export type AgentMCPServersView = {
+  agent_id?: string | null;
+  runtime_kind?: string | null;
+  servers?: JSONRecord | null;
+};
+
 export type AgentUpdatePayload = {
   agent_profile?: JSONRecord;
   description?: string;
@@ -46,6 +52,7 @@ export type AgentUpdatePayload = {
   instructions?: string;
   image?: string;
   model_config?: JSONRecord;
+  mcpServers?: JSONRecord | null;
   name?: string;
   profile?: JSONRecord | string;
   runtime?: { name?: RuntimeName; sandbox_enabled?: boolean; options?: JSONRecord };
@@ -173,6 +180,21 @@ export function fetchAgentSkillsFile(agentID: string, skillsPath: string): Promi
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/skills/file?${params.toString()}`);
 }
 
+export function fetchAgentMCPServers(agentID: string): Promise<AgentMCPServersView> {
+  return get(`api/v1/agents/${encodeURIComponent(agentID)}/mcp-servers`);
+}
+
+export function batchAddAgentMCPServersRequest(agentID: string, serverNames: string[]): Promise<AgentMCPServersView> {
+  return post(`api/v1/agents/${encodeURIComponent(agentID)}/mcp-servers:batchAdd`, { names: serverNames });
+}
+
+export function batchDeleteAgentMCPServersRequest(
+  agentID: string,
+  serverNames: string[],
+): Promise<AgentMCPServersView> {
+  return post(`api/v1/agents/${encodeURIComponent(agentID)}/mcp-servers:batchDelete`, { names: serverNames });
+}
+
 export function batchAddAgentSkillsRequest(agentID: string, skillNames: string[]): Promise<void> {
   return post(`api/v1/agents/${encodeURIComponent(agentID)}/skills:batchAdd`, { names: skillNames });
 }
@@ -287,6 +309,7 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
         },
         runtime_name: runtimeSelection.runtime_name,
         sandbox_enabled: runtimeSelection.sandbox_enabled,
+        mcpServers: payload.mcpServers,
         from_template: payload.from_template,
         model_config: payload.agent_profile,
       },

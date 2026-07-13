@@ -1,0 +1,372 @@
+.panel {
+  width: var(--computer-page-content-width);
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.header {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 720;
+  line-height: 22px;
+}
+
+.header p {
+  margin: 4px 0 0;
+  max-width: 52rem;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.refreshing {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  position: relative;
+  min-width: 0;
+  min-height: 208px;
+  display: grid;
+  grid-template-rows: auto minmax(32px, 1fr) auto;
+  gap: 15px;
+  padding: 18px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--surface) 84%, var(--panel-soft));
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  opacity: 0.78;
+}
+
+.codexCard::before {
+  background: linear-gradient(90deg, var(--brand-400), var(--violet-400));
+}
+
+.claudeCard::before {
+  background: linear-gradient(90deg, var(--warning-400), var(--orange-400));
+}
+
+.cardHeader {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--muted);
+  box-shadow: var(--shadow-xs);
+}
+
+.logo img {
+  width: 29px;
+  height: 29px;
+  display: block;
+  object-fit: contain;
+}
+
+.identity {
+  min-width: 0;
+}
+
+.identity h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 720;
+  line-height: 20px;
+}
+
+.identity p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.status {
+  min-height: 27px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--field);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+.status.success {
+  border-color: color-mix(in oklab, var(--success-700) 28%, var(--line));
+  background: var(--success-50);
+  color: var(--success-700);
+}
+
+.status.progress {
+  border-color: color-mix(in oklab, var(--brand-600) 28%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 9%, var(--surface));
+  color: var(--brand-700);
+}
+
+.status.danger {
+  border-color: color-mix(in oklab, var(--error-600) 28%, var(--line));
+  background: var(--error-50);
+  color: var(--error-700);
+}
+
+.cardBody {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.pathRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--field);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.pathRow code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtimeError {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in oklab, var(--error-600) 26%, var(--line));
+  border-radius: 9px;
+  background: var(--error-50);
+  color: var(--error-700);
+  font-size: 12px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.runtimeError svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.cardFooter {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.installButton {
+  flex: 0 0 auto;
+  border-radius: 8px;
+  gap: 7px;
+}
+
+.loadingState,
+.emptyState {
+  min-height: 138px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--field);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.loadError {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--error-600) 26%, var(--line));
+  border-radius: 10px;
+  background: var(--error-50);
+  color: var(--error-700);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.loadErrorMessage {
+  min-width: 0;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.loadErrorMessage svg {
+  flex: 0 0 auto;
+}
+
+.spinner {
+  animation: runtimeSpinner 720ms linear infinite;
+}
+
+@keyframes runtimeSpinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+:global(:root[data-theme="dark"]) .panel {
+  background: var(--panel);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .card,
+:global(:root[data-theme="dark"]) .logo,
+:global(:root[data-theme="dark"]) .loadingState,
+:global(:root[data-theme="dark"]) .emptyState {
+  background: var(--panel-strong);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .status.success {
+  border-color: color-mix(in oklab, var(--success-500) 34%, var(--line));
+  background: color-mix(in oklab, var(--success-500) 14%, transparent);
+  color: color-mix(in oklab, var(--success-500) 86%, var(--text));
+}
+
+:global(:root[data-theme="dark"]) .status.progress {
+  border-color: color-mix(in oklab, var(--brand-400) 36%, var(--line));
+  background: color-mix(in oklab, var(--brand-400) 14%, transparent);
+  color: color-mix(in oklab, var(--brand-300) 88%, var(--text));
+}
+
+:global(:root[data-theme="dark"]) .status.danger,
+:global(:root[data-theme="dark"]) .runtimeError,
+:global(:root[data-theme="dark"]) .loadError {
+  border-color: color-mix(in oklab, var(--error-500) 34%, var(--line));
+  background: color-mix(in oklab, var(--error-500) 13%, transparent);
+  color: color-mix(in oklab, var(--error-400) 88%, var(--text));
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cardHeader {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .logo {
+    width: 42px;
+    height: 42px;
+  }
+
+  .status {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 640px) {
+  .panel {
+    padding: 16px;
+  }
+
+  .header,
+  .loadError,
+  .cardFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .refreshing {
+    align-self: flex-start;
+  }
+
+  .card {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .installButton {
+    width: 100%;
+  }
+}

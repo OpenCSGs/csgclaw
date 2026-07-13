@@ -4,6 +4,7 @@ import {
   openClawDeliveryKind,
   parseAgentActivity,
   parseLegacyToolActivityCommand,
+  parseMessageActivityCommand,
   parsePlainAgentCommand,
 } from "@/models/agentActivity";
 import { renderSlashCommandPreviewText } from "@/models/slashCommands";
@@ -297,7 +298,7 @@ export function isToolCallMessage(messageOrContent: IMMessage | unknown): boolea
     if (openClawDeliveryKind(messageOrContent)) {
       return false;
     }
-    return isNonMessageActivityContent(messageOrContent.content);
+    return Boolean(parseMessageActivityCommand(messageOrContent));
   }
   return isNonMessageActivityContent(messageOrContent);
 }

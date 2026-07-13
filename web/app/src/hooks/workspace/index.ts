@@ -7,6 +7,7 @@ export * from "./useProfilePreviewController";
 export * from "./useProfileModelOptions";
 export * from "./useUpgradeController";
 export * from "./useWorkspaceController";
+export * from "./useWorkspaceControllerContext";
 export * from "./useWorkspaceData";
 export * from "./useWorkspaceHubController";
 export * from "./useWorkspaceHubSelection";

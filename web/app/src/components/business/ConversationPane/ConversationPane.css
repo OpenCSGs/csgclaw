@@ -611,6 +611,7 @@
 
 .connector-provider-row {
   min-width: 0;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
   min-height: 54px;
@@ -620,6 +621,7 @@
 }
 
 .connector-provider-main {
+  flex: 1 1 120px;
   min-width: 0;
   gap: 10px;
 }
@@ -674,8 +676,11 @@
 }
 
 .connector-provider-actions {
+  max-width: 100%;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 

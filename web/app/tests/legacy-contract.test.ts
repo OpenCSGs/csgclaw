@@ -134,6 +134,20 @@ describe("legacy UI contract", () => {
     expect(styles).toContain("width: 6px;");
   });
 
+  it("keeps the full exec_command activity label visible", () => {
+    const activityListRule = styleRule(".agent-activity-list");
+    const activityRowRule = styleRule(".agent-activity-row-main");
+    const activityBadgeRule = styleRule(".agent-activity-type-badge");
+
+    expect(activityListRule).toContain("--agent-activity-type-column-width: 128px;");
+    expect(activityRowRule).toContain("var(--agent-activity-type-column-width)");
+    expect(activityBadgeRule).toContain("width: var(--agent-activity-type-column-width);");
+    expect(activityBadgeRule).toContain("max-width: var(--agent-activity-type-column-width);");
+    expect(styles).toMatch(
+      /:root\[data-theme="dark"\] \.agent-activity-row:hover\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--gray-800\) 72%, var\(--panel\)\);/,
+    );
+  });
+
   it("keeps the mention picker scrollbar slim", () => {
     expect(styles).toMatch(/\.mention-picker\s*\{[\s\S]*scrollbar-width:\s*thin;/);
     expect(styles).toMatch(/\.mention-picker\s*\{[\s\S]*z-index:\s*var\(--z-portal-popover\);/);
@@ -152,11 +166,13 @@ describe("legacy UI contract", () => {
   });
 
   it("keeps the model provider page scrollable inside the fixed workspace panel", () => {
+    const panelRule = styleRule(".chat-panel:has(> .model-provider-page)");
     const pageRule = styleRule(".model-provider-page");
     const modelListRule = styleRule(".model-provider-model-list");
 
-    expect(pageRule).toMatch(/(?:^|[;\s])height:\s*100%;/);
-    expect(pageRule).toContain("min-height: 0;");
+    expect(panelRule).toContain("grid-template-rows: minmax(0, 1fr);");
+    expect(pageRule).toContain("height: auto;");
+    expect(pageRule).toContain("min-height: 100%;");
     expect(pageRule).toContain("overflow-x: hidden;");
     expect(pageRule).toContain("overflow-y: auto;");
     expect(modelListRule).toContain("scrollbar-width: thin;");
@@ -168,8 +184,8 @@ describe("legacy UI contract", () => {
     expect(source).toContain(
       "const directAgent = isDirect && displayUser ? agents.find((item) => agentMatchesUser(item, displayUser)) : null;",
     );
-    expect(source).toContain('className={`workspace-status-dot ${directAgentRunning ? "online" : ""}`}');
-    expect(source).toMatch(/directMessages\.map[\s\S]*agents=\{agentItems\}/);
+    expect(source).toContain("className={classNames(styles.statusDot, directAgentRunning && styles.online)}");
+    expect(source).toMatch(/visibleDirectMessages\.map[\s\S]*agents=\{agentItems\}/);
     expect(source).toContain("const messageAgent = resolveMessageAgent(agents, user, message.sender_id);");
     expect(source).toContain("return agentMatchesUser(item, { ...user, id: senderIdentity, user_id: user.id });");
     expect(source).toContain('className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`}');

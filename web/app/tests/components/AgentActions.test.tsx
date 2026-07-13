@@ -23,7 +23,8 @@ const labels: Record<string, string> = {
   agentMoreActions: "More",
   agentProfileSectionNavLabel: "Profile sections",
   agentProfileTab: "Profile",
-  agentProfileSkillsTab: "skills",
+  agentProfileSkillsTab: "Skills",
+  agentProfileMCPTab: "MCP",
   agentSaved: "Saved",
   agentSaveChanges: "Save changes",
   agentUpdateSave: "Save",
@@ -34,6 +35,12 @@ const labels: Record<string, string> = {
   agentSkillAddEmpty: "No skills are available to add.",
   agentDeleteSkill: "Delete",
   agentDeleteSkillConfirmMessage: 'Delete skill "alpha" from this agent?',
+  agentMCPAdd: "Add MCP",
+  agentMCPAddSubtitle: "Candidates come from Hub.",
+  agentMCPAddEmpty: "No MCP servers are available to add.",
+  agentMCPEmpty: "No MCP servers installed yet.",
+  agentDeleteMCP: "Delete",
+  agentDeleteMCPConfirmMessage: 'Delete MCP server "{name}" from this agent?',
   feishuChannelName: "Feishu",
   feishuConnect: "Connect Feishu",
   feishuReconnect: "Reconnect Feishu",
@@ -59,6 +66,14 @@ const labels: Record<string, string> = {
   profileRuntimeKind: "Runtime",
   profileRuntimeSection: "Runtime environment",
   close: "Close",
+  profileMCPServers: "MCP Servers",
+  profileMCPServersHint: 'Enter MCP servers as {"server-name": {...}}.',
+  profileMCPServersHubHint: "Install MCP servers from Hub.",
+  profileMCPServersPlaceholder: '{\n  "context7": {}\n}',
+  profileMCPServersUseExample: "Use example",
+  profileMCPServersClear: "Clear servers",
+  profileMCPServersInvalidJSON: "Enter a valid JSON object.",
+  profileMCPServersObjectRequired: "MCP servers must be a JSON object.",
   agentName: "Name",
   agentDescription: "Description",
   agentImage: "Image",
@@ -344,7 +359,7 @@ describe("agent action visibility", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Channels" }));
-    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Channels" })).toBeInTheDocument();
     expect(screen.getByText("Manage external channels.")).toBeInTheDocument();
     expect(document.querySelector(".agent-channel-icon img")).toHaveAttribute("src", "icons/feishu.png");
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
@@ -835,6 +850,157 @@ describe("agent action visibility", () => {
     expect(screen.queryByLabelText("Image")).not.toBeInTheDocument();
   });
 
+  it("installs MCP servers from hub candidates in the detail MCP tab", async () => {
+    const user = userEvent.setup();
+    const onInstallMCPServers = vi.fn(() => true);
+    const onDeleteMCPServer = vi.fn(() => true);
+    const item = {
+      ...worker,
+      runtime_kind: "openclaw_sandbox",
+      runtime_options: {
+        local_workspace_dir: "/tmp/project",
+      },
+      mcpServers: {
+        existing: {
+          command: "node",
+        },
+      },
+    };
+    const existingMCP = {
+      name: "existing",
+      config: {
+        command: "node",
+      },
+      description: "node",
+    };
+    const context7MCP = {
+      name: "context7",
+      config: {
+        command: "npx",
+      },
+      description: "npx",
+    };
+
+    render(
+      <AgentDetailPane
+        item={item}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={agentToDraft(item)}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        workspaceSupported
+        mcpServers={[existingMCP]}
+        mcpCandidates={[context7MCP]}
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onInstallMCPServers={onInstallMCPServers}
+        onDeleteMCPServer={onDeleteMCPServer}
+      />,
+    );
+
+    expect(screen.queryByLabelText("MCP Servers")).not.toBeInTheDocument();
+    const navigation = screen.getByRole("navigation", { name: "Profile sections" });
+    expect(
+      within(navigation)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Profile", "Activity", "Instructions", "Skills0", "Channels", "MCP"]);
+
+    await user.click(within(navigation).getByRole("button", { name: "MCP" }));
+
+    expect(screen.getByText("existing")).toBeInTheDocument();
+    expect(screen.getByText("node")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add MCP" }));
+    await user.click(screen.getByLabelText(/context7/));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Add MCP" }));
+
+    expect(onInstallMCPServers).toHaveBeenCalledWith(["context7"]);
+
+    const existingCard = screen.getByText("existing").closest("article");
+    expect(existingCard).not.toBeNull();
+    await user.click(within(existingCard as HTMLElement).getByRole("button", { name: "Delete" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+
+    expect(onDeleteMCPServer).toHaveBeenCalledWith(existingMCP);
+  });
+
+  it("keeps agent MCP server management separate from the profile editor", async () => {
+    const user = userEvent.setup();
+    const item = {
+      ...worker,
+      runtime_kind: "openclaw_sandbox",
+      runtime_options: {},
+      mcpServers: {
+        existing: {
+          command: "node",
+        },
+      },
+    };
+    const draft = agentToDraft(item);
+
+    render(
+      <AgentDetailPane
+        item={item}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={draft}
+        savedDraft={draft}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError=""
+        authStatuses={{}}
+        authBusyProvider=""
+        workspaceSupported
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    const navigation = screen.getByRole("navigation", { name: "Profile sections" });
+    await user.click(within(navigation).getByRole("button", { name: "MCP" }));
+
+    expect(screen.queryByLabelText("MCP Servers")).not.toBeInTheDocument();
+    expect(screen.getByText("No MCP servers installed yet.")).toBeInTheDocument();
+    expect(screen.queryByText("Enter a valid JSON object.")).not.toBeInTheDocument();
+
+    await user.click(within(navigation).getByRole("button", { name: "Profile" }));
+    expect(screen.getByText("Saved")).toBeInTheDocument();
+
+    await user.click(within(navigation).getByRole("button", { name: "MCP" }));
+    expect(screen.queryByLabelText("MCP Servers")).not.toBeInTheDocument();
+  });
+
   it("shows a saved status instead of a save button when the draft is unchanged", () => {
     const draft = agentToDraft(worker);
     render(
@@ -912,7 +1078,7 @@ describe("agent action visibility", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "skills" }));
+    await user.click(screen.getByRole("button", { name: /^skills/i }));
     await user.click(screen.getByRole("button", { name: "Add skill" }));
     expect(screen.getByText("Candidates come from global skills.")).toBeInTheDocument();
     expect(screen.getByText("Beta candidate")).toBeInTheDocument();
@@ -964,7 +1130,7 @@ describe("agent action visibility", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "skills" }));
+    await user.click(screen.getByRole("button", { name: /^skills/i }));
     await user.click(screen.getAllByRole("button", { name: "Delete" })[0]);
     expect(screen.getByText('Delete skill "alpha" from this agent?')).toBeInTheDocument();
 
@@ -1181,15 +1347,22 @@ describe("agent action visibility", () => {
 
     const navigation = screen.getByRole("navigation", { name: "Profile sections" });
     const tabs = within(navigation).getAllByRole("button");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Profile", "Activity", "Channels", "Instructions", "skills"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Profile",
+      "Activity",
+      "Instructions",
+      "Skills0",
+      "Channels",
+      "MCP",
+    ]);
     expect(tabs[0]).toHaveAttribute("aria-current", "location");
     expect(screen.getByText("Request options")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Channels" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Channels" })).not.toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("button", { name: "Channels" }));
 
     expect(within(navigation).getByRole("button", { name: "Channels" })).toHaveAttribute("aria-current", "location");
-    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Channels" })).toBeInTheDocument();
     expect(screen.queryByText("Request options")).not.toBeInTheDocument();
   });
 
@@ -1222,6 +1395,6 @@ describe("agent action visibility", () => {
     render(<AgentDetailPane {...props} />);
 
     expect(screen.getByRole("button", { name: "Channels" })).toHaveAttribute("aria-current", "location");
-    expect(screen.getByRole("heading", { name: "Channels" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Channels" })).toBeInTheDocument();
   });
 });

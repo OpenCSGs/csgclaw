@@ -24,7 +24,7 @@ var (
 	appServerFirstTurnNoProgressTimeout = 90 * time.Second
 )
 
-var appServerCommandContext = exec.CommandContext
+var appServerCommandContext = codexcli.AppServerCommandContext
 
 type appServerManager struct {
 	deps      managerDeps
@@ -60,12 +60,17 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		return nil, fmt.Errorf("open stderr log %s: %w", spec.StderrPath, err)
 	}
 
-	args := codexcli.AppServerArgs()
-	cmd := appServerCommandContext(ctx, spec.BinaryPath, args...)
+	cmd, err := appServerCommandContext(ctx, spec.BinaryPath)
+	if err != nil {
+		_ = stderrFile.Close()
+		return nil, fmt.Errorf("prepare codex app-server command: %w", err)
+	}
 	cmd.Dir = spec.WorkspaceDir
 	cmd.Env = buildSessionEnv(spec)
 	cmd.Stderr = stderrFile
-	cmd.SysProcAttr = newSessionSysProcAttr()
+	if sysProcAttr := newSessionSysProcAttr(); sysProcAttr != nil {
+		cmd.SysProcAttr = sysProcAttr
+	}
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

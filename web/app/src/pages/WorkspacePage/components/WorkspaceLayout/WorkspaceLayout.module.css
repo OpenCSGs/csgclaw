@@ -26,7 +26,7 @@
   grid-column: 1;
   grid-row: 1;
   width: 100%;
-  height: 100dvh;
+  height: var(--app-ui-viewport-height);
   min-width: 0;
   min-height: 0;
   overflow: visible;
@@ -54,7 +54,7 @@
   grid-column: 1;
   justify-self: end;
   width: 24px;
-  height: 100dvh;
+  height: var(--app-ui-viewport-height);
   margin-right: -12px;
   cursor: col-resize;
   touch-action: none;
@@ -153,7 +153,7 @@
   :global(.app-shell:not(.sidebar-collapsed)) .sidebarShell {
     grid-column: 1;
     grid-row: 1;
-    height: 100dvh;
+    height: var(--app-ui-viewport-height);
   }
 
   :global(.app-shell:not(.sidebar-collapsed)) :global(.chat-panel) {

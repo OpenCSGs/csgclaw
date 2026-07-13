@@ -662,7 +662,7 @@ func appServerNotificationTurnID(params map[string]any) string {
 
 func appServerItemIsProgress(itemType string) bool {
 	switch strings.TrimSpace(itemType) {
-	case "agentMessage", "commandExecution", "fileChange":
+	case "agentMessage", "commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall", "webSearch":
 		return true
 	default:
 		return false

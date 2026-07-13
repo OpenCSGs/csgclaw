@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   Plus,
   RefreshCw,
+  Server,
   Trash2,
   Unlink2,
 } from "lucide-react";
@@ -43,6 +44,7 @@ import {
   isManagerAgent,
   isNotifierRuntimeDraftOnAgentPage,
   runtimeOptionSchemasForAgent,
+  supportsMCPServers,
 } from "@/models/agents";
 import type { AgentDraft, AgentLike } from "@/models/agents";
 import {
@@ -55,6 +57,7 @@ import {
 } from "@/models/modelProviders";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import type { LocaleCode } from "@/models/conversations";
+import type { MCPServer } from "@/models/mcp";
 import { skillSourceBadgeName } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
 import type { SlashSkillOption } from "@/models/slashCommands";
@@ -81,7 +84,7 @@ import { AgentActivityPanel } from "./AgentActivityPanel";
 type VoidOrPromise = void | Promise<void>;
 type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
 type AgentNoticeTone = "info" | "warning" | "success";
-const AGENT_PROFILE_TAB_IDS = ["profile", "activity", "channels", "instructions", "skills"] as const;
+const AGENT_PROFILE_TAB_IDS = ["profile", "activity", "channels", "instructions", "skills", "mcp"] as const;
 type AgentProfileTabID = (typeof AGENT_PROFILE_TAB_IDS)[number];
 type UpdateAgentDraft = (patch: Partial<AgentDraft>) => void;
 type RuntimeOptionSchemaList = ReturnType<typeof runtimeOptionSchemasForAgent>;
@@ -143,6 +146,14 @@ export type AgentDetailPaneProps = {
   skillCandidatesLoading?: boolean;
   skillDeleteBusy?: boolean;
   skillDeleteError?: string;
+  mcpCandidates?: MCPServer[];
+  mcpCandidatesError?: string;
+  mcpCandidatesLoading?: boolean;
+  mcpServers?: MCPServer[];
+  mcpAddBusy?: boolean;
+  mcpAddError?: string;
+  mcpDeleteBusy?: boolean;
+  mcpDeleteError?: string;
   skills?: SlashSkillOption[];
   skillsError?: string;
   skillsLoading?: boolean;
@@ -150,6 +161,9 @@ export type AgentDetailPaneProps = {
   workspaceSupported?: boolean;
   onAddSkills?: (skillNames: string[]) => Promise<boolean> | boolean;
   onDeleteSkill?: (skill: SlashSkillOption | string) => Promise<boolean> | boolean;
+  onInstallMCPServers?: (serverNames: string[]) => Promise<boolean> | boolean;
+  onDeleteMCPServer?: (server: MCPServer | string) => Promise<boolean> | boolean;
+  onRetryMCPServers?: () => void | Promise<unknown>;
 };
 
 export function AgentDetailPane({
@@ -186,6 +200,14 @@ export function AgentDetailPane({
   skillAddError = "",
   skillDeleteBusy = false,
   skillDeleteError = "",
+  mcpCandidates = [],
+  mcpCandidatesError = "",
+  mcpCandidatesLoading = false,
+  mcpServers = [],
+  mcpAddBusy = false,
+  mcpAddError = "",
+  mcpDeleteBusy = false,
+  mcpDeleteError = "",
   workspaceSupported = false,
   onDraftChange,
   onSave,
@@ -201,6 +223,9 @@ export function AgentDetailPane({
   onOpenDM,
   onAddSkills,
   onDeleteSkill,
+  onInstallMCPServers,
+  onDeleteMCPServer,
+  onRetryMCPServers,
 }: AgentDetailPaneProps) {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -209,6 +234,10 @@ export function AgentDetailPane({
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
   const [skillPendingDelete, setSkillPendingDelete] = useState<SlashSkillOption | null>(null);
+  const [addMCPDialogOpen, setAddMCPDialogOpen] = useState(false);
+  const [selectedMCPServerNames, setSelectedMCPServerNames] = useState<string[]>([]);
+  const [deleteMCPDialogOpen, setDeleteMCPDialogOpen] = useState(false);
+  const [mcpPendingDelete, setMCPPendingDelete] = useState<MCPServer | null>(null);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const isManager = isManagerAgent(item);
@@ -251,6 +280,9 @@ export function AgentDetailPane({
   const selectedProviderModels = selectedProvider?.models ?? [];
   const selectedModelValue = draft?.model_id || "";
   const isNotifierDraft = Boolean(draft && isNotifierRuntimeDraftOnAgentPage(draft, item));
+  const showMCPServers = Boolean(
+    draft && !isNotifierDraft && supportsMCPServers(draft.runtime_kind || item.runtime_kind),
+  );
   const profileTabs = useMemo(
     () =>
       draft
@@ -262,9 +294,10 @@ export function AgentDetailPane({
               ? [{ id: "skills" as const, label: t("agentProfileSkillsTab"), count: skills.length }]
               : []),
             ...(!isNotificationBotAgent(item) ? [{ id: "channels" as const, label: t("agentChannelsTitle") }] : []),
+            ...(showMCPServers ? [{ id: "mcp" as const, label: t("agentProfileMCPTab") }] : []),
           ]
         : [],
-    [draft, isNotifierDraft, item, skills.length, t, workspaceSupported],
+    [draft, isNotifierDraft, item, showMCPServers, skills.length, t, workspaceSupported],
   );
   const visibleActiveProfileTab = profileTabs.some((tab) => tab.id === activeProfileTab)
     ? activeProfileTab
@@ -304,6 +337,20 @@ export function AgentDetailPane({
     }
   }, [addSkillsDialogOpen]);
 
+  useEffect(() => {
+    if (!addMCPDialogOpen) {
+      setSelectedMCPServerNames([]);
+    }
+  }, [addMCPDialogOpen]);
+
+  useEffect(() => {
+    if (!showMCPServers) {
+      setAddMCPDialogOpen(false);
+      setDeleteMCPDialogOpen(false);
+      setMCPPendingDelete(null);
+    }
+  }, [showMCPServers]);
+
   async function handleAddSkillsConfirm(): Promise<void> {
     if (!selectedSkillNames.length) {
       return;
@@ -322,6 +369,27 @@ export function AgentDetailPane({
     if (deleted) {
       setDeleteSkillDialogOpen(false);
       setSkillPendingDelete(null);
+    }
+  }
+
+  async function handleAddMCPConfirm(): Promise<void> {
+    if (!selectedMCPServerNames.length) {
+      return;
+    }
+    const installed = await onInstallMCPServers?.(selectedMCPServerNames);
+    if (installed) {
+      setAddMCPDialogOpen(false);
+    }
+  }
+
+  async function handleDeleteMCPConfirm(): Promise<void> {
+    if (!mcpPendingDelete) {
+      return;
+    }
+    const deleted = await onDeleteMCPServer?.(mcpPendingDelete);
+    if (deleted) {
+      setDeleteMCPDialogOpen(false);
+      setMCPPendingDelete(null);
     }
   }
 
@@ -635,6 +703,22 @@ export function AgentDetailPane({
                 }}
               />
             ) : null}
+
+            {showMCPServers && visibleActiveProfileTab === "mcp" ? (
+              <AgentMCPPanel
+                addBusy={mcpAddBusy}
+                addError={mcpAddError}
+                deleteBusy={mcpDeleteBusy}
+                deleteError={mcpDeleteError}
+                servers={mcpServers}
+                t={t}
+                onOpenAddMCP={() => setAddMCPDialogOpen(true)}
+                onRequestDeleteMCP={(server) => {
+                  setMCPPendingDelete(server);
+                  setDeleteMCPDialogOpen(true);
+                }}
+              />
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -751,6 +835,132 @@ export function AgentDetailPane({
           </div>
         </DialogContent>
       </DialogRoot>
+      <DialogRoot open={addMCPDialogOpen} onOpenChange={setAddMCPDialogOpen}>
+        <DialogContent className="agent-skills-dialog agent-mcp-dialog">
+          <DialogHeader className="agent-skills-dialog-header">
+            <div className="agent-skills-dialog-copy">
+              <DialogTitle>{t("agentMCPAdd")}</DialogTitle>
+              <DialogDescription>{t("agentMCPAddSubtitle")}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <div className="agent-skills-dialog-body">
+            {mcpAddError ? <div className="form-error">{mcpAddError}</div> : null}
+            {mcpCandidatesError ? (
+              <div className="form-error">
+                <span>{mcpCandidatesError}</span>
+                {onRetryMCPServers ? (
+                  <Button
+                    variant="secondaryGray"
+                    size="sm"
+                    disabled={mcpCandidatesLoading}
+                    onClick={() => {
+                      void onRetryMCPServers();
+                    }}
+                  >
+                    {t("retry")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : mcpCandidatesLoading && !mcpCandidates.length ? (
+              <div className="agent-skills-empty">{t("resourcesMCPLoading")}</div>
+            ) : !mcpCandidates.length ? (
+              <div className="agent-skills-empty">{t("agentMCPAddEmpty")}</div>
+            ) : (
+              <div className="agent-skill-candidates-list" role="list">
+                {mcpCandidates.map((server) => {
+                  const checked = selectedMCPServerNames.includes(server.name);
+                  return (
+                    <label key={server.name} className={`agent-skill-candidate ${checked ? "selected" : ""}`.trim()}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          const nextChecked = event.currentTarget.checked;
+                          setSelectedMCPServerNames((current) =>
+                            nextChecked ? [...current, server.name] : current.filter((name) => name !== server.name),
+                          );
+                        }}
+                      />
+                      <span className="agent-skill-candidate-copy">
+                        <span className="agent-skill-name">{server.name}</span>
+                        <span className="agent-skill-description">{server.description || "-"}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className="agent-skills-dialog-actions">
+            <Button variant="secondaryGray" size="sm" onClick={() => setAddMCPDialogOpen(false)}>
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={mcpAddBusy}
+              loadingLabel={t("agentMCPAdd")}
+              disabled={
+                !selectedMCPServerNames.length ||
+                mcpAddBusy ||
+                Boolean(mcpCandidatesError) ||
+                (mcpCandidatesLoading && !mcpCandidates.length)
+              }
+              onClick={handleAddMCPConfirm}
+            >
+              {t("agentMCPAdd")}
+            </Button>
+          </div>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
+        open={deleteMCPDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteMCPDialogOpen(open);
+          if (!open) {
+            setMCPPendingDelete(null);
+          }
+        }}
+      >
+        <DialogContent
+          className="agent-skills-dialog agent-skill-delete-dialog"
+          overlayClassName="agent-skill-delete-backdrop"
+        >
+          <DialogHeader className="agent-skills-dialog-header">
+            <div className="agent-skills-dialog-copy">
+              <DialogTitle>{t("agentDeleteMCP")}</DialogTitle>
+              <DialogDescription>
+                {t("agentDeleteMCPConfirmMessage", { name: mcpPendingDelete?.name || "" })}
+              </DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          {mcpDeleteError ? <div className="form-error">{mcpDeleteError}</div> : null}
+          <div className="agent-skills-dialog-actions">
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              onClick={() => {
+                setDeleteMCPDialogOpen(false);
+                setMCPPendingDelete(null);
+              }}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={mcpDeleteBusy}
+              loadingLabel={t("agentDeleteMCP")}
+              disabled={mcpDeleteBusy}
+              onClick={handleDeleteMCPConfirm}
+            >
+              {t("agentDeleteMCP")}
+            </Button>
+          </div>
+        </DialogContent>
+      </DialogRoot>
     </section>
   );
 }
@@ -844,6 +1054,90 @@ function AgentRuntimePanel({
               onDraftChange={onDraftChange || (() => {})}
               embedded
             />
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type AgentMCPPanelProps = {
+  addBusy: boolean;
+  addError: string;
+  deleteBusy: boolean;
+  deleteError: string;
+  onOpenAddMCP: () => void;
+  onRequestDeleteMCP: (server: MCPServer) => void;
+  servers: readonly MCPServer[];
+  t: TranslateFn;
+};
+
+function AgentMCPPanel({
+  addBusy,
+  addError,
+  deleteBusy,
+  deleteError,
+  onOpenAddMCP,
+  onRequestDeleteMCP,
+  servers,
+  t,
+}: AgentMCPPanelProps) {
+  return (
+    <section
+      id="agent-profile-mcp"
+      className="profile-section agent-skills-section agent-mcp-section agent-profile-scroll-target"
+    >
+      <div className="profile-section-heading">
+        <div className="profile-section-title">{t("profileMCPServers")}</div>
+        <p className="profile-section-description">{t("profileMCPServersHubHint")}</p>
+      </div>
+      <div className="agent-section-form">
+        <div className="agent-page-form-content agent-skills-form-content">
+          <div className="agent-skills-title">
+            <div className="agent-skills-title-copy">
+              <span>{t("profileMCPServers")}</span>
+              <small className="agent-section-count-badge">{servers.length}</small>
+            </div>
+            <Button
+              className="agent-skill-add-button"
+              variant="secondaryGray"
+              size="sm"
+              aria-label={t("agentMCPAdd")}
+              title={t("agentMCPAdd")}
+              disabled={addBusy}
+              onClick={onOpenAddMCP}
+            >
+              <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
+            </Button>
+          </div>
+          {addError ? <div className="form-error">{addError}</div> : null}
+          {deleteError ? <div className="form-error">{deleteError}</div> : null}
+          {!servers.length ? <div className="agent-skills-empty">{t("agentMCPEmpty")}</div> : null}
+          {servers.length ? (
+            <div className="agent-skills-list">
+              {servers.map((server) => (
+                <article key={server.name} className="agent-skill-card agent-mcp-card">
+                  <div className="agent-skill-card-header">
+                    <div className="agent-skill-name">
+                      <Server aria-hidden="true" size={14} strokeWidth={2} />
+                      <span>{server.name}</span>
+                    </div>
+                    <Button
+                      className="agent-skill-icon-button"
+                      variant="outlineDanger"
+                      size="sm"
+                      aria-label={t("agentDeleteMCP")}
+                      title={t("agentDeleteMCP")}
+                      disabled={deleteBusy}
+                      onClick={() => onRequestDeleteMCP(server)}
+                    >
+                      <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                    </Button>
+                  </div>
+                  <p className="agent-skill-description">{server.description || "-"}</p>
+                </article>
+              ))}
+            </div>
           ) : null}
         </div>
       </div>
@@ -1021,7 +1315,7 @@ function AgentInstructionsPanel({ draft, t, updateDraft }: AgentInstructionsPane
     >
       <div className="profile-grid-compact">
         <label className="field span-2">
-          <span className="sr-only">{t("agentInstructions")}</span>
+          <span>{t("agentInstructions")}</span>
           <textarea
             className="compact-textarea"
             value={draft.instructions || ""}
@@ -1063,48 +1357,59 @@ function AgentSkillsPanel({
 }: AgentSkillsPanelProps) {
   return (
     <section id="agent-profile-skills" className="profile-section agent-skills-section agent-profile-scroll-target">
-      <div className="profile-section-heading agent-skills-section-heading">
+      <div className="profile-section-heading">
+        <div className="profile-section-title">{t("agentSkillsTitle")}</div>
         <p className="profile-section-description">{t("agentSkillsDescription")}</p>
-        <Button
-          className="agent-skill-add-button"
-          variant="secondaryGray"
-          size="sm"
-          aria-label={t("agentSkillAdd")}
-          title={t("agentSkillAdd")}
-          disabled={skillCandidatesLoading || skillAddBusy}
-          onClick={onOpenAddSkills}
-        >
-          <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
-        </Button>
       </div>
-      {skillsError ? <div className="form-error">{skillsError}</div> : null}
-      {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
-      {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
-      {skillsLoading ? <div className="agent-skills-empty">{t("agentSkillsLoading")}</div> : null}
-      {!skillsLoading && !skills.length ? <div className="agent-skills-empty">{t("agentSkillsEmpty")}</div> : null}
-      {!skillsLoading && skills.length ? (
-        <div className="agent-skills-list">
-          {skills.map((skill) => (
-            <article key={skill.name} className="agent-skill-card">
-              <div className="agent-skill-card-header">
-                <div className="agent-skill-name">{skill.name}</div>
-                <Button
-                  className="agent-skill-icon-button"
-                  variant="outlineDanger"
-                  size="sm"
-                  aria-label={t("agentDeleteSkill")}
-                  title={t("agentDeleteSkill")}
-                  disabled={skillDeleteBusy}
-                  onClick={() => onRequestDeleteSkill(skill)}
-                >
-                  <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
-                </Button>
-              </div>
-              <p className="agent-skill-description">{skill.description || "-"}</p>
-            </article>
-          ))}
+      <div className="agent-section-form">
+        <div className="agent-page-form-content agent-skills-form-content">
+          <div className="agent-skills-title">
+            <div className="agent-skills-title-copy">
+              <span>{t("agentSkillsTitle")}</span>
+              <small className="agent-section-count-badge">{skills.length}</small>
+            </div>
+            <Button
+              className="agent-skill-add-button"
+              variant="secondaryGray"
+              size="sm"
+              aria-label={t("agentSkillAdd")}
+              title={t("agentSkillAdd")}
+              disabled={skillCandidatesLoading || skillAddBusy}
+              onClick={onOpenAddSkills}
+            >
+              <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
+            </Button>
+          </div>
+          {skillsError ? <div className="form-error">{skillsError}</div> : null}
+          {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
+          {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
+          {skillsLoading ? <div className="agent-skills-empty">{t("agentSkillsLoading")}</div> : null}
+          {!skillsLoading && !skills.length ? <div className="agent-skills-empty">{t("agentSkillsEmpty")}</div> : null}
+          {!skillsLoading && skills.length ? (
+            <div className="agent-skills-list">
+              {skills.map((skill) => (
+                <article key={skill.name} className="agent-skill-card">
+                  <div className="agent-skill-card-header">
+                    <div className="agent-skill-name">{skill.name}</div>
+                    <Button
+                      className="agent-skill-icon-button"
+                      variant="outlineDanger"
+                      size="sm"
+                      aria-label={t("agentDeleteSkill")}
+                      title={t("agentDeleteSkill")}
+                      disabled={skillDeleteBusy}
+                      onClick={() => onRequestDeleteSkill(skill)}
+                    >
+                      <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                    </Button>
+                  </div>
+                  <p className="agent-skill-description">{skill.description || "-"}</p>
+                </article>
+              ))}
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </section>
   );
 }
@@ -1184,9 +1489,12 @@ function AgentChannelsSection({
     <section
       id="agent-profile-channels"
       className="profile-section agent-channels-section agent-profile-scroll-target"
-      aria-labelledby="agent-channels-title"
+      aria-label={t("agentChannelsTitle")}
     >
       <div className="profile-section-heading">
+        <h2 id="agent-channels-title" className="profile-section-title agent-channels-title">
+          {t("agentChannelsTitle")}
+        </h2>
         <p className="profile-section-description">{t("agentChannelsDescription")}</p>
       </div>
       <div className="agent-channel-row">

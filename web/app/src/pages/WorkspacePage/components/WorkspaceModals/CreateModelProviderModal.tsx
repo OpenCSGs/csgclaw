@@ -272,7 +272,9 @@ export function CreateModelProviderModal({
                     onInput={(event) => setDisplayName(event.currentTarget.value)}
                     placeholder={presetMeta.defaultDisplayName}
                   />
-                  {duplicateName ? <small className="form-error">{t("modelProviderDuplicateDisplayName")}</small> : null}
+                  {duplicateName ? (
+                    <small className="form-error">{t("modelProviderDuplicateDisplayName")}</small>
+                  ) : null}
                 </label>
               </div>
             </div>
@@ -312,11 +314,7 @@ export function CreateModelProviderModal({
                       aria-pressed={apiKeyVisible}
                       onClick={() => setAPIKeyVisible((current) => !current)}
                     >
-                      <img
-                        src={apiKeyVisible ? "icons/eye-off.svg" : "icons/eye.svg"}
-                        alt=""
-                        aria-hidden="true"
-                      />
+                      <img src={apiKeyVisible ? "icons/eye-off.svg" : "icons/eye.svg"} alt="" aria-hidden="true" />
                     </button>
                   </div>
                   <small className="field-hint">{t("modelProviderAPIKeyHint")}</small>
@@ -364,7 +362,13 @@ export function CreateModelProviderModal({
           <Button variant="secondaryGray" size="md" disabled={busy || autoCheckBusy} onClick={requestClose}>
             {t("cancel")}
           </Button>
-          <Button variant="primary" size="md" loading={busy} disabled={saveDisabled || autoCheckBusy} onClick={handleCreate}>
+          <Button
+            variant="primary"
+            size="md"
+            loading={busy}
+            disabled={saveDisabled || autoCheckBusy}
+            onClick={handleCreate}
+          >
             {t("modelProviderCreateAction")}
           </Button>
         </div>

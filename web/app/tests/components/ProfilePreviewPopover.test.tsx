@@ -34,6 +34,39 @@ function t(key: string): string {
 }
 
 describe("ProfilePreviewPopover", () => {
+  it("keeps the preview outside its anchor when the page is zoomed", () => {
+    const previousZoom = document.documentElement.style.zoom;
+    document.documentElement.style.zoom = "0.8";
+    const anchorRect = { top: 120, right: 502, bottom: 152, left: 470 };
+
+    const view = render(
+      <ProfilePreviewPopover
+        previewRef={createRef<HTMLElement>()}
+        agent={{ id: "agent-1", name: "Builder", role: "worker", status: "running" }}
+        user={{ id: "u-builder" }}
+        anchorRect={anchorRect}
+        t={t}
+        onClose={vi.fn()}
+        onOpenAgent={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    try {
+      const preview = screen.getByRole("dialog", { name: "Profile preview" });
+      const scale = 0.8;
+      const visualLeft = Number.parseFloat(preview.style.left) * scale;
+      const visualTop = Number.parseFloat(preview.style.top) * scale;
+
+      expect(visualLeft).toBe(anchorRect.right + 12);
+      expect(visualTop).toBe(anchorRect.top - 12);
+      expect(visualLeft).toBeGreaterThan(anchorRect.right);
+    } finally {
+      view.unmount();
+      document.documentElement.style.zoom = previousZoom;
+    }
+  });
+
   it("shows compact agent runtime/provider/model fields with reasoning in model", () => {
     render(
       <ProfilePreviewPopover

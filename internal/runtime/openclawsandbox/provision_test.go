@@ -26,10 +26,13 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 	rt := New(Dependencies{})
 
 	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
-		RuntimeID:        "rt-1",
-		AgentID:          "u-alice",
-		AgentName:        "alice",
-		Profile:          agentruntime.Profile{},
+		RuntimeID: "rt-1",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+		Profile:   agentruntime.Profile{},
+		MCPServers: map[string]any{
+			"context7": map[string]any{"command": "uvx", "args": []any{"context7-mcp"}},
+		},
 		WorkspaceOverlay: overlayRoot,
 		Gateway: &agentruntime.GatewayProvision{
 			ModelFallback:     "fallback-model",
@@ -45,6 +48,20 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(agentHome, HostDir, HostConfig)); err != nil {
 		t.Fatalf("stat openclaw config: %v", err)
+	}
+	configRaw, err := os.ReadFile(filepath.Join(agentHome, HostDir, HostConfig))
+	if err != nil {
+		t.Fatalf("ReadFile(openclaw config) error = %v", err)
+	}
+	var configData map[string]any
+	if err := json.Unmarshal(configRaw, &configData); err != nil {
+		t.Fatalf("json.Unmarshal(openclaw config) error = %v", err)
+	}
+	mcp := configData["mcp"].(map[string]any)
+	servers := mcp["servers"].(map[string]any)
+	context7 := servers["context7"].(map[string]any)
+	if got, want := context7["command"], "uvx"; got != want {
+		t.Fatalf("openclaw config mcp.servers.context7.command = %#v, want %q", got, want)
 	}
 	if _, err := os.Stat(filepath.Join(agentHome, HostDir, HostExecApproval)); err != nil {
 		t.Fatalf("stat openclaw approvals: %v", err)

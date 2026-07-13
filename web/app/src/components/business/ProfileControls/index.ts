@@ -6,6 +6,7 @@ export * from "./CLIProxyAuthControl";
 export * from "./ClipboardCopyButton";
 export * from "./EnvKeyValueEditor";
 export * from "./FieldHelpTooltip";
+export * from "./MCPServersPanel";
 export * from "./ModelProviderModelList";
 export * from "./ModelOptionLabel";
 export * from "./NotifierControls";

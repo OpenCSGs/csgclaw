@@ -61,7 +61,9 @@ export function APIKeyField({
           spellCheck={false}
         />
         {showStoredMask ? (
-          <div className="api-key-mask" aria-hidden="true">{preview || "••••••••"}</div>
+          <div className="api-key-mask" aria-hidden="true">
+            {preview || "••••••••"}
+          </div>
         ) : null}
       </div>
       {stored && unchangedHint ? <small className="field-hint">{unchangedHint}</small> : null}

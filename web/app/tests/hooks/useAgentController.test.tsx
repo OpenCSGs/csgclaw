@@ -3,6 +3,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
+  batchAddAgentMCPServersRequest,
+  batchDeleteAgentMCPServersRequest,
   batchAddAgentSkillsRequest,
   createBotRequest,
   createNotificationBotRequest,
@@ -10,11 +12,13 @@ import {
   deleteAgentSkillRequest,
   deleteBotRequest,
   fetchAgent,
+  fetchAgentMCPServers,
   fetchAgentProfile,
   fetchAgentProfileDefaults,
   fetchAgentProfileModels,
   fetchAgentSkills,
   fetchAgentSkillsFile,
+  patchNotificationBotRequest,
   fetchAgentWorkspace,
   deleteFeishuParticipantRequest,
   finalizeFeishuRegistrationRequest,
@@ -31,6 +35,7 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
 import type { AgentLike, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
 import type { IMConversation, IMData, TranslateFn } from "@/models/conversations";
+import type { MCPServer } from "@/models/mcp";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { ApiError } from "@/api/client";
@@ -61,6 +66,8 @@ vi.mock("@/api/agents", async () => {
   const actual = await vi.importActual<typeof import("@/api/agents")>("@/api/agents");
   return {
     ...actual,
+    batchAddAgentMCPServersRequest: vi.fn(),
+    batchDeleteAgentMCPServersRequest: vi.fn(),
     batchAddAgentSkillsRequest: vi.fn(),
     createBotRequest: vi.fn(),
     createNotificationBotRequest: vi.fn(),
@@ -68,11 +75,13 @@ vi.mock("@/api/agents", async () => {
     deleteAgentSkillRequest: vi.fn(),
     deleteBotRequest: vi.fn(),
     fetchAgent: vi.fn(),
+    fetchAgentMCPServers: vi.fn(),
     fetchAgentProfile: vi.fn(),
     fetchAgentProfileDefaults: vi.fn(),
     fetchAgentProfileModels: vi.fn(),
     fetchAgentSkills: vi.fn(),
     fetchAgentSkillsFile: vi.fn(),
+    patchNotificationBotRequest: vi.fn(),
     fetchAgentWorkspace: vi.fn(),
     deleteFeishuParticipantRequest: vi.fn(),
     finalizeFeishuRegistrationRequest: vi.fn(),
@@ -178,10 +187,14 @@ function useAgentControllerHarness(
     activePane?: WorkspacePane;
     agents?: AgentLike[];
     data?: IMData | null;
+    catalogMCPServers?: MCPServer[];
+    catalogMCPServersError?: string;
+    catalogMCPServersLoading?: boolean;
     managerProfile?: AgentProfileLike | null;
     modelProviders?: ModelProviderCatalog | null;
     modelProvidersLoaded?: boolean;
     bootstrapConfig?: RuntimeBootstrapConfig | null;
+    refreshMCPServers?: () => Promise<unknown>;
     t?: TranslateFn;
   } = {},
 ) {
@@ -199,7 +212,7 @@ function useAgentControllerHarness(
   const selectAgent = selectAgentRef.current;
   const selectConversationRef = useRef(vi.fn());
   const selectConversation = selectConversationRef.current;
-  const data = options.data ?? null;
+  const [data, setData] = useState<IMData | null>(() => options.data ?? null);
 
   useEffect(() => {
     if (options.agents) {
@@ -224,11 +237,15 @@ function useAgentControllerHarness(
     } as UseQueryResult<AgentLike[]>,
     bootstrapConfig: options.bootstrapConfig ?? null,
     data,
+    catalogMCPServers: options.catalogMCPServers ?? [],
+    catalogMCPServersError: options.catalogMCPServersError ?? "",
+    catalogMCPServersLoading: options.catalogMCPServersLoading ?? false,
     hubTemplates: [],
     locale: "en",
     managerProfile: options.managerProfile ?? null,
     modelProviders: options.modelProviders ?? null,
     modelProvidersLoaded: options.modelProvidersLoaded ?? false,
+    refreshMCPServers: options.refreshMCPServers ?? vi.fn(async () => null),
     refreshHubTemplates: vi.fn(async () => undefined),
     refreshWorkspaceAgents,
     refreshWorkspaceBootstrap,
@@ -242,7 +259,9 @@ function useAgentControllerHarness(
     setAgentsData: (value: AgentLike[] | ((current: AgentLike[]) => AgentLike[])) => {
       setAgents((current) => (typeof value === "function" ? value(current) : value));
     },
-    setBootstrapData: vi.fn(),
+    setBootstrapData: (value) => {
+      setData((current) => (typeof value === "function" ? value(current) : value));
+    },
     setSelectedHubTemplateId: vi.fn(),
     t: options.t ?? t,
   });
@@ -260,6 +279,8 @@ function useAgentControllerHarness(
 
 describe("useAgentController", () => {
   beforeEach(() => {
+    vi.mocked(batchAddAgentMCPServersRequest).mockReset();
+    vi.mocked(batchDeleteAgentMCPServersRequest).mockReset();
     vi.mocked(fetchAgent).mockReset();
     vi.mocked(fetchAgentProfile).mockReset();
     vi.mocked(fetchAgentProfileDefaults).mockReset();
@@ -270,10 +291,12 @@ describe("useAgentController", () => {
     vi.mocked(deleteAgentRequest).mockReset();
     vi.mocked(deleteAgentSkillRequest).mockReset();
     vi.mocked(deleteBotRequest).mockReset();
+    vi.mocked(fetchAgentMCPServers).mockReset();
     vi.mocked(fetchAgentWorkspace).mockReset();
     vi.mocked(createUserRequest).mockReset();
     vi.mocked(fetchAgentSkills).mockReset();
     vi.mocked(fetchAgentSkillsFile).mockReset();
+    vi.mocked(patchNotificationBotRequest).mockReset();
     vi.mocked(fetchSkills).mockReset();
     vi.mocked(deleteFeishuParticipantRequest).mockReset();
     vi.mocked(finalizeFeishuRegistrationRequest).mockReset();
@@ -314,10 +337,22 @@ describe("useAgentController", () => {
     vi.mocked(deleteAgentRequest).mockResolvedValue(undefined);
     vi.mocked(deleteAgentSkillRequest).mockResolvedValue(undefined);
     vi.mocked(deleteBotRequest).mockResolvedValue(undefined);
+    vi.mocked(fetchAgentMCPServers).mockResolvedValue({
+      agent_id: "u-manager",
+      runtime_kind: "picoclaw_sandbox",
+      servers: null,
+    });
     vi.mocked(fetchAgentWorkspace).mockResolvedValue({ entries: [] });
     vi.mocked(createUserRequest).mockResolvedValue({ id: "u-worker", name: "worker" });
     vi.mocked(fetchAgentSkills).mockResolvedValue({ entries: [] });
     vi.mocked(fetchAgentSkillsFile).mockResolvedValue({ content: "", path: "SKILL.md", size: 0 });
+    vi.mocked(patchNotificationBotRequest).mockImplementation(async (_agentID, payload) => ({
+      bot_type: "notification",
+      id: "pt-notifier",
+      name: String(payload.name || "notifier"),
+      type: "notification",
+      user_id: "user-notifier",
+    }));
     vi.mocked(fetchSkills).mockResolvedValue([
       { name: "alpha", description: "Alpha skill" },
       { name: "beta", description: "Beta skill" },
@@ -351,6 +386,19 @@ describe("useAgentController", () => {
       config_saved: true,
       participant_id: "dev",
       status: "configured",
+    });
+    vi.mocked(batchAddAgentMCPServersRequest).mockImplementation(async (agentID, serverNames) => {
+      const servers = Object.fromEntries(serverNames.map((name) => [name, { command: "uvx", args: [`${name}-mcp`] }]));
+      return {
+        agent_id: agentID,
+        runtime_kind: "picoclaw_sandbox",
+        servers,
+      };
+    });
+    vi.mocked(batchDeleteAgentMCPServersRequest).mockResolvedValue({
+      agent_id: "u-manager",
+      runtime_kind: "picoclaw_sandbox",
+      servers: {},
     });
     vi.mocked(updateAgentRequest).mockResolvedValue(latestAgent);
     vi.mocked(patchCsgclawUserRequest).mockImplementation(async (userID, payload) => ({
@@ -574,6 +622,74 @@ describe("useAgentController", () => {
     );
   });
 
+  it("initializes the profile modal MCP editor from the dedicated desired server map", async () => {
+    const workerAgent: AgentLike = {
+      id: "u-worker",
+      image: oldImage,
+      instructions: "reply briefly",
+      mcpServers: {
+        context7: {
+          command: "npx",
+          env: { CONTEXT7_API_KEY: "present" },
+        },
+      },
+      model_id: "gpt-test",
+      name: "worker",
+      profile_complete: true,
+      provider: "codex",
+      role: "worker",
+      runtime_kind: "picoclaw_sandbox",
+      status: "running",
+    };
+    const desiredMCPServers = {
+      context7: {
+        command: "npx",
+        env: { CONTEXT7_API_KEY: "actual-token" },
+      },
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(workerAgent);
+    vi.mocked(fetchAgentMCPServers).mockResolvedValue({
+      agent_id: "u-worker",
+      runtime_kind: "picoclaw_sandbox",
+      servers: desiredMCPServers,
+    });
+    vi.mocked(updateAgentRequest).mockResolvedValue({ ...workerAgent, name: "renamed worker" });
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
+          agents: [workerAgent],
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.openEditAgentModal(workerAgent);
+    });
+
+    await waitFor(() =>
+      expect(result.current.agentProfileModalProps?.agentDraft.mcpServers).toEqual(desiredMCPServers),
+    );
+
+    act(() => {
+      const draft = result.current.agentProfileModalProps?.agentDraft;
+      result.current.agentProfileModalProps?.onAgentDraftChange({
+        ...draft!,
+        name: "renamed worker",
+      });
+    });
+
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+
+    const payload = vi.mocked(updateAgentRequest).mock.calls.at(-1)?.[1];
+    expect(payload).toBeDefined();
+    expect(payload).not.toHaveProperty("mcpServers");
+  });
+
   it("reloads the selected agent draft when the same routed agent gains profile fields and there are no unsaved edits", async () => {
     const partialAgent: AgentLike = {
       id: "u-worker",
@@ -713,6 +829,203 @@ describe("useAgentController", () => {
     await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(2));
     expect(result.current.agentViewProps.skillDeleteError).toBe("");
     expect(result.current.agentViewProps.skills).toEqual([]);
+  });
+
+  it("deletes an MCP server through the backend MCP management endpoint", async () => {
+    vi.mocked(fetchAgentMCPServers).mockResolvedValueOnce({
+      agent_id: "u-manager",
+      runtime_kind: "codex",
+      servers: {
+        catalog: { command: "npx", args: ["catalog-mcp"] },
+        manual: { command: "uvx", args: ["manual-mcp"] },
+      },
+    });
+    vi.mocked(batchDeleteAgentMCPServersRequest).mockResolvedValueOnce({
+      agent_id: "u-manager",
+      runtime_kind: "codex",
+      servers: {
+        catalog: { command: "npx", args: ["catalog-mcp"] },
+      },
+    });
+
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(result.current.agentViewProps.mcpServers.map((server) => server.name)).toEqual(["catalog", "manual"]),
+    );
+
+    await act(async () => {
+      await result.current.agentViewProps.onDeleteMCPServer?.("manual");
+    });
+
+    expect(batchDeleteAgentMCPServersRequest).toHaveBeenCalledWith("u-manager", ["manual"]);
+    expect(result.current.agentViewProps.mcpDeleteError).toBe("");
+  });
+
+  it("uses the single backend MCP server map for display, candidates, and deletion", async () => {
+    vi.mocked(fetchAgentMCPServers).mockResolvedValueOnce({
+      agent_id: "u-manager",
+      runtime_kind: "codex",
+      servers: {
+        catalog: { command: "npx", args: ["catalog-mcp"] },
+        manual: { command: "uvx", args: ["manual-mcp"] },
+        native: { command: "npx", args: ["native-mcp"] },
+      },
+    });
+    vi.mocked(batchDeleteAgentMCPServersRequest).mockResolvedValueOnce({
+      agent_id: "u-manager",
+      runtime_kind: "codex",
+      servers: {
+        catalog: { command: "npx", args: ["catalog-mcp"] },
+        native: { command: "npx", args: ["native-mcp"] },
+      },
+    });
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          catalogMCPServers: [
+            { name: "catalog", description: "Catalog", config: { command: "npx" } },
+            { name: "manual", description: "Manual", config: { command: "uvx" } },
+            { name: "native", description: "Native", config: { command: "npx" } },
+          ],
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(result.current.agentViewProps.mcpServers.map((server) => server.name)).toEqual([
+        "catalog",
+        "manual",
+        "native",
+      ]),
+    );
+    expect(result.current.agentViewProps.mcpCandidates).toEqual([]);
+
+    await act(async () => {
+      await result.current.agentViewProps.onDeleteMCPServer?.({ name: "manual" });
+    });
+
+    expect(batchDeleteAgentMCPServersRequest).toHaveBeenCalledWith("u-manager", ["manual"]);
+    expect(result.current.agentViewProps.mcpDeleteError).toBe("");
+  });
+
+  it("filters catalog MCP candidates by the backend MCP server map", async () => {
+    vi.mocked(fetchAgentMCPServers).mockResolvedValueOnce({
+      agent_id: "u-manager",
+      runtime_kind: "codex",
+      servers: {
+        manual: { command: "uvx", env: { MCP_TOKEN: "secret" } },
+      },
+    });
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          catalogMCPServers: [
+            { name: "context7", description: "Context7", config: { command: "npx" } },
+            { name: "manual", description: "Manual", config: { command: "uvx" } },
+          ],
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(result.current.agentViewProps.mcpServers.map((server) => server.name)).toEqual(["manual"]),
+    );
+    expect(result.current.agentViewProps.mcpCandidates.map((server) => server.name)).toEqual(["context7"]);
+  });
+
+  it("renders the backend MCP server map when the runtime state is unavailable", async () => {
+    vi.mocked(fetchAgentMCPServers).mockResolvedValueOnce({
+      agent_id: "u-manager",
+      runtime_kind: "codex",
+      servers: {
+        manual: { command: "uvx" },
+      },
+    });
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          catalogMCPServers: [{ name: "manual", description: "Manual", config: { command: "uvx" } }],
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(result.current.agentViewProps.mcpServers.map((server) => server.name)).toEqual(["manual"]),
+    );
+    expect(result.current.agentViewProps.mcpCandidates).toEqual([]);
+  });
+
+  it("installs MCP catalog servers through the agent MCP server endpoint", async () => {
+    const installedView = {
+      agent_id: "u-manager",
+      runtime_kind: "picoclaw_sandbox",
+      servers: {
+        context7: { command: "uvx", args: ["context7-mcp"] },
+      },
+    };
+    vi.mocked(fetchAgentMCPServers)
+      .mockResolvedValueOnce({
+        agent_id: "u-manager",
+        runtime_kind: "picoclaw_sandbox",
+        servers: null,
+      })
+      .mockResolvedValue(installedView);
+    vi.mocked(batchAddAgentMCPServersRequest).mockResolvedValueOnce(installedView);
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          catalogMCPServers: [{ name: "context7", description: "Context7", config: { command: "uvx" } }],
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(result.current.agentViewProps.mcpCandidates.map((server) => server.name)).toEqual(["context7"]),
+    );
+
+    await act(async () => {
+      await result.current.agentViewProps.onInstallMCPServers?.(["context7"]);
+    });
+
+    expect(batchAddAgentMCPServersRequest).toHaveBeenCalledWith("u-manager", ["context7"]);
+    expect(batchDeleteAgentMCPServersRequest).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(result.current.agentViewProps.mcpServers.map((server) => server.name)).toEqual(["context7"]),
+    );
+    expect(result.current.agentViewProps.mcpAddError).toBe("");
+  });
+
+  it("asks the backend to delete the last MCP server", async () => {
+    vi.mocked(fetchAgentMCPServers).mockResolvedValueOnce({
+      agent_id: "u-manager",
+      runtime_kind: "codex",
+      servers: {
+        manual: { command: "uvx", args: ["manual-mcp"] },
+      },
+    });
+    vi.mocked(batchDeleteAgentMCPServersRequest).mockResolvedValueOnce({
+      agent_id: "u-manager",
+      runtime_kind: "codex",
+      servers: {},
+    });
+
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(result.current.agentViewProps.mcpServers.map((server) => server.name)).toEqual(["manual"]),
+    );
+
+    await act(async () => {
+      await result.current.agentViewProps.onDeleteMCPServer?.({ name: "manual" });
+    });
+
+    expect(batchDeleteAgentMCPServersRequest).toHaveBeenCalledWith("u-manager", ["manual"]);
+    expect(result.current.agentViewProps.mcpDeleteError).toBe("");
   });
 
   it("routes incomplete manager profile setup to the manager agent page", async () => {
@@ -1002,6 +1315,12 @@ describe("useAgentController", () => {
   });
 
   it("clears expired Feishu pending registration from localStorage on load", async () => {
+    const workerAgent: AgentLike = {
+      ...oldAgent,
+      id: "u-dev",
+      name: "dev",
+      role: "worker",
+    };
     window.localStorage.setItem(
       feishuRegistrationStorageKey,
       JSON.stringify({
@@ -1019,7 +1338,7 @@ describe("useAgentController", () => {
       () =>
         useAgentControllerHarness({
           activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
-          agents: [{ ...oldAgent, id: "u-dev", name: "dev", role: "worker" }],
+          agents: [workerAgent],
         }).controller,
       { wrapper: createWrapper() },
     );
@@ -1457,6 +1776,69 @@ describe("useAgentController", () => {
     expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-worker", { avatar: selectedAvatar });
   });
 
+  it("keeps a migrated worker avatar after saving through its canonical IM user", async () => {
+    const originalAvatar = "avatar/3D-3.png";
+    const nextAvatar = "avatar/cartoon-2.png";
+    const workerAgent: AgentLike = {
+      agent_profile: profile,
+      id: "agent-zoyz2k",
+      image: oldImage,
+      name: "dev",
+      participants: [
+        {
+          agent_id: "agent-zoyz2k",
+          channel: "feishu",
+          channel_user_kind: "app_id",
+          id: "pt-zoyz2k-5905c292",
+          type: "agent",
+        },
+      ],
+      profile_complete: true,
+      role: "worker",
+      runtime_kind: "codex",
+      status: "running",
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(workerAgent);
+    vi.mocked(updateAgentRequest).mockResolvedValue(workerAgent);
+    vi.mocked(patchCsgclawUserRequest).mockResolvedValue({
+      avatar: nextAvatar,
+      id: "user-zoyz2k",
+      name: "dev",
+    });
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "agent-zoyz2k" },
+          agents: [workerAgent],
+          data: {
+            current_user_id: "user-admin",
+            rooms: [],
+            users: [{ avatar: originalAvatar, id: "user-zoyz2k", name: "dev" }],
+          },
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.agentViewProps.draft?.avatar).toBe(originalAvatar));
+
+    act(() => {
+      result.current.agentViewProps.onDraftChange?.({
+        ...result.current.agentViewProps.draft!,
+        avatar: nextAvatar,
+      });
+    });
+
+    await act(async () => {
+      await result.current.agentViewProps.onSave?.();
+    });
+
+    expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-zoyz2k", { avatar: nextAvatar });
+    expect(result.current.agentViewProps.draft?.avatar).toBe(nextAvatar);
+    expect(result.current.agentItems.find((agent) => agent.id === workerAgent.id)?.avatar).toBe(nextAvatar);
+  });
+
   it("retries template worker creation with a suffixed name when the template name already exists", async () => {
     const duplicateError: ApiError = {
       status: 409,
@@ -1601,6 +1983,60 @@ describe("useAgentController", () => {
     const createPayload = vi.mocked(createNotificationBotRequest).mock.calls[0]?.[0];
     expect(createPayload).not.toHaveProperty("avatar");
     expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-notifier", { avatar: selectedAvatar });
+  });
+
+  it("saves an existing notification avatar through its linked CSGClaw user", async () => {
+    const originalAvatar = "avatar/3D-4.png";
+    const nextAvatar = "avatar/cartoon-4.png";
+    const notificationAgent: AgentLike = {
+      bot_type: "notification",
+      id: "pt-notifier",
+      name: "notifier",
+      role: "worker",
+      runtime_kind: "notifier",
+      runtime_options: {
+        notifier: {
+          delivery_mode: "webhook",
+          webhook_token: "configured",
+        },
+      },
+      type: "notification",
+      user_id: "user-notifier",
+    };
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "pt-notifier" },
+          agents: [notificationAgent],
+          data: {
+            current_user_id: "user-admin",
+            rooms: [],
+            users: [{ avatar: originalAvatar, id: "user-notifier", name: "notifier" }],
+          },
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.agentViewProps.draft?.avatar).toBe(originalAvatar));
+
+    act(() => {
+      result.current.agentViewProps.onDraftChange?.({
+        ...result.current.agentViewProps.draft!,
+        avatar: nextAvatar,
+      });
+    });
+
+    await act(async () => {
+      await result.current.agentViewProps.onSave?.();
+    });
+
+    expect(patchNotificationBotRequest).toHaveBeenCalledWith(
+      "pt-notifier",
+      expect.objectContaining({ name: "notifier" }),
+    );
+    expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-notifier", { avatar: nextAvatar });
+    expect(result.current.agentViewProps.draft?.avatar).toBe(nextAvatar);
   });
 
   it("initializes create agent drafts from the first available model provider when defaults are empty", async () => {

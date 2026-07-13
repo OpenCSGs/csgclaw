@@ -31,7 +31,10 @@ export function normalizeScheduledTaskList(input: unknown): WorkspaceScheduledTa
   return input
     .map(normalizeScheduledTask)
     .filter((item): item is WorkspaceScheduledTask => Boolean(item))
-    .sort((left, right) => left.next_run_at.localeCompare(right.next_run_at) || left.created_at.localeCompare(right.created_at));
+    .sort(
+      (left, right) =>
+        left.next_run_at.localeCompare(right.next_run_at) || left.created_at.localeCompare(right.created_at),
+    );
 }
 
 export function normalizeScheduledTaskRunList(input: unknown): WorkspaceScheduledTaskRun[] {
