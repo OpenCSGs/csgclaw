@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PanelLeftOpen, Plus, Search, Server } from "lucide-react";
+import { PanelLeftOpen, Plus, Search } from "lucide-react";
 import {
   SidebarAlertTriangleIcon,
   SidebarBoxIcon,
   SidebarGrid07Icon,
   SidebarLaptopIcon,
   SidebarListUnordered4Icon,
+  SidebarMcpIcon,
   SidebarMessageIcon,
   SidebarPuzzlePiece02Icon,
   SidebarRobotIcon,
@@ -304,7 +305,7 @@ export function WorkspaceSidebar({
             active: activeContextSectionId === WorkspaceContextSectionIds.mcpServers,
             badge: badgeCount(hub?.mcpServers?.length),
             groupId: WorkspaceContextSectionIds.mcpServers,
-            icon: navigationIcon(Server),
+            icon: navigationIcon(SidebarMcpIcon),
             id: "mcp-servers",
             label: t("resourcesMCPLabel"),
             onSelect: () => {

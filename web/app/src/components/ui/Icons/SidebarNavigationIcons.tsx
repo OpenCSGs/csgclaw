@@ -166,6 +166,32 @@ export function SidebarPuzzlePiece02Icon({ size, ...props }: SidebarNavigationIc
   );
 }
 
+export function SidebarMcpIcon({ size, ...props }: SidebarNavigationIconProps) {
+  const resolvedSize = iconSize(size, 16);
+  return (
+    <svg width={resolvedSize} height={resolvedSize} viewBox="0 0 16 16" fill="none" {...props}>
+      <path
+        d="M1.85339 7.54013L7.96123 1.43229C8.80459 0.588975 10.1719 0.588975 11.0152 1.43229C11.8585 2.2756 11.8585 3.64289 11.0152 4.48621L6.40246 9.09892"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.46606 9.03509L11.0151 4.48601C11.8585 3.64269 13.2258 3.64269 14.0691 4.48601L14.1009 4.51781C14.9442 5.36113 14.9442 6.72842 14.1009 7.57173L8.57689 13.0957C8.29578 13.3769 8.29578 13.8326 8.57689 14.1137L9.71113 15.248"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.48812 2.95898L4.97086 7.47624C4.12755 8.31953 4.12755 9.68681 4.97086 10.5302C5.81418 11.3734 7.18146 11.3734 8.02478 10.5302L12.542 6.0129"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function SidebarBoxIcon({ size, ...props }: SidebarNavigationIconProps) {
   const resolvedSize = iconSize(size, 24);
   return (
