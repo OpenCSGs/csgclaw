@@ -106,7 +106,10 @@ export function ComputerDetailPane({
                       · {agentModelID(item)}
                     </small>
                   </span>
-                  <span className={`workspace-status-dot ${isAgentRunning(item) ? "online" : ""}`}></span>
+                  <span
+                    className={`workspace-status-dot ${isAgentRunning(item) ? "online" : ""}`}
+                    aria-hidden="true"
+                  ></span>
                 </button>
                 {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
                   <Button
