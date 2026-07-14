@@ -32,6 +32,7 @@ export function HumanDetailPane({
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const skipDescriptionAutosaveRef = useRef(false);
 
   useEffect(() => {
     setDescriptionDraft(String(user?.description || ""));
@@ -61,9 +62,18 @@ export function HumanDetailPane({
   const currentDescription = String(user.description || "");
   const descriptionChanged = descriptionDraft.trim() !== currentDescription.trim();
   const saveDescriptionIfChanged = (description: string) => {
+    if (skipDescriptionAutosaveRef.current) {
+      skipDescriptionAutosaveRef.current = false;
+      return;
+    }
     if (!descriptionBusy && description.trim() !== currentDescription.trim()) {
       void onDescriptionSave(description);
     }
+  };
+  const cancelDescriptionEdit = () => {
+    skipDescriptionAutosaveRef.current = true;
+    setDescriptionDraft(currentDescription);
+    setIsEditingDescription(false);
   };
 
   return (
@@ -103,6 +113,7 @@ export function HumanDetailPane({
                     onKeyDown={(event) => {
                       if (event.key === "Escape") {
                         event.preventDefault();
+                        cancelDescriptionEdit();
                         event.currentTarget.blur();
                       }
                     }}

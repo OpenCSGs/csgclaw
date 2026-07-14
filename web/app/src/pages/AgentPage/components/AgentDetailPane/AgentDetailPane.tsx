@@ -243,6 +243,7 @@ export function AgentDetailPane({
   const [mcpPendingDelete, setMCPPendingDelete] = useState<MCPServer | null>(null);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const skipMetadataAutosaveRef = useRef(false);
   const isManager = isManagerAgent(item);
   const canEditAgentName = Boolean(draft && !isManager);
   const running = isAgentRunning(item);
@@ -260,10 +261,24 @@ export function AgentDetailPane({
   const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
   const updateDraft = (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
   const saveMetadataPatch = (patch: AgentMetadataSavePatch) => {
+    if (skipMetadataAutosaveRef.current) {
+      skipMetadataAutosaveRef.current = false;
+      return;
+    }
     if (!onMetadataSave || saving) {
       return;
     }
     void onMetadataSave(patch);
+  };
+  const cancelNameEdit = () => {
+    skipMetadataAutosaveRef.current = true;
+    updateDraft({ name: savedDraft?.name ?? item.name ?? "" });
+    setIsEditingName(false);
+  };
+  const cancelDescriptionEdit = () => {
+    skipMetadataAutosaveRef.current = true;
+    updateDraft({ description: savedDraft?.description ?? item.description ?? "" });
+    setIsEditingDescription(false);
   };
   const runtimeOptionSchemas = runtimeOptionSchemasForAgent(draft?.runtime_kind || runtimeKind, item);
   const fallbackProviderID = String(draft?.model_provider_id || "").trim();
@@ -443,7 +458,11 @@ export function AgentDetailPane({
                       }}
                       onInput={(event) => updateDraft({ name: event.currentTarget.value })}
                       onKeyDown={(event) => {
-                        if (event.key === "Escape" || event.key === "Enter") {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelNameEdit();
+                          event.currentTarget.blur();
+                        } else if (event.key === "Enter") {
                           event.preventDefault();
                           event.currentTarget.blur();
                         }
@@ -499,6 +518,7 @@ export function AgentDetailPane({
                     onKeyDown={(event) => {
                       if (event.key === "Escape") {
                         event.preventDefault();
+                        cancelDescriptionEdit();
                         event.currentTarget.blur();
                       }
                     }}
