@@ -82,30 +82,6 @@
   padding: 16px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.create-model-provider-body::-webkit-scrollbar {
-  width: 8px;
-  height: 0;
-}
-
-.create-model-provider-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.create-model-provider-body::-webkit-scrollbar-thumb {
-  background-color: transparent;
-  border-radius: 6px;
-}
-
-.create-model-provider-body.is-scrolling {
-  scrollbar-color: var(--gray-400) transparent;
-}
-
-.create-model-provider-body.is-scrolling::-webkit-scrollbar-thumb {
-  background-color: var(--gray-400);
 }
 
 .create-model-provider-body .field {
@@ -660,29 +636,6 @@
   min-height: 0;
   padding: 0;
   overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.invite-members-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.invite-members-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.invite-members-content::-webkit-scrollbar-thumb {
-  background-color: transparent;
-  border-radius: var(--radius-base);
-}
-
-.invite-members-content.is-scrolling {
-  scrollbar-color: var(--gray-400) transparent;
-}
-
-.invite-members-content.is-scrolling::-webkit-scrollbar-thumb {
-  background-color: var(--gray-400);
 }
 
 .invite-members-content .field {
@@ -1769,30 +1722,6 @@
   padding: 16px 0;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.profile-modal.agent-modal .profile-editor-shell::-webkit-scrollbar {
-  width: 8px;
-  height: 0;
-}
-
-.profile-modal.agent-modal .profile-editor-shell::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.profile-modal.agent-modal .profile-editor-shell::-webkit-scrollbar-thumb {
-  background-color: transparent;
-  border-radius: 6px;
-}
-
-.profile-modal.agent-modal .profile-editor-shell.is-scrolling {
-  scrollbar-color: var(--gray-400) transparent;
-}
-
-.profile-modal.agent-modal .profile-editor-shell.is-scrolling::-webkit-scrollbar-thumb {
-  background-color: var(--gray-400);
 }
 
 .profile-modal.agent-modal .profile-section {
@@ -2362,24 +2291,6 @@
   max-height: 136px;
   overflow-y: auto;
   padding-right: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) transparent;
-}
-
-.modal-card .profile-advanced-grid .env-editor::-webkit-scrollbar,
-.profile-section .profile-advanced-grid .env-editor::-webkit-scrollbar {
-  width: 6px;
-}
-
-.modal-card .profile-advanced-grid .env-editor::-webkit-scrollbar-track,
-.profile-section .profile-advanced-grid .env-editor::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.modal-card .profile-advanced-grid .env-editor::-webkit-scrollbar-thumb,
-.profile-section .profile-advanced-grid .env-editor::-webkit-scrollbar-thumb {
-  border-radius: var(--radius-full);
-  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .modal-card .profile-advanced-grid .env-row,

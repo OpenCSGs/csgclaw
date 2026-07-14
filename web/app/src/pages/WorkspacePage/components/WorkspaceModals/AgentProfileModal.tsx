@@ -107,9 +107,7 @@ export function AgentProfileModal({
   onClose,
   onSave,
 }: AgentProfileModalProps) {
-  const [isEditorScrolling, setIsEditorScrolling] = useState(false);
   const [mcpServersInvalid, setMCPServersInvalid] = useState(false);
-  const editorScrollTimerRef = useRef<number | null>(null);
   const lastTemplateIDRef = useRef("");
   const createBotKind = agentModalMode === "create" ? agentCreateBotKind : undefined;
   const isNotificationContext = isNotificationBotDraftContext(agentDraft, editingAgent, createBotKind);
@@ -261,31 +259,11 @@ export function AgentProfileModal({
     onAgentModelsReset();
   }
 
-  useEffect(
-    () => () => {
-      if (editorScrollTimerRef.current) {
-        window.clearTimeout(editorScrollTimerRef.current);
-      }
-    },
-    [],
-  );
-
   useEffect(() => {
     if (!showMCPServers) {
       setMCPServersInvalid(false);
     }
   }, [showMCPServers]);
-
-  function onEditorShellScroll() {
-    setIsEditorScrolling(true);
-    if (editorScrollTimerRef.current) {
-      window.clearTimeout(editorScrollTimerRef.current);
-    }
-    editorScrollTimerRef.current = window.setTimeout(() => {
-      setIsEditorScrolling(false);
-      editorScrollTimerRef.current = null;
-    }, 700);
-  }
 
   function switchCreateMode(nextMode: AgentCreateMode) {
     if (!isWorkerCreate || nextMode === agentCreateMode) {
@@ -353,10 +331,7 @@ export function AgentProfileModal({
           </div>
           <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
-        <div
-          className={`profile-editor-shell${isEditorScrolling ? " is-scrolling" : ""}`}
-          onScroll={onEditorShellScroll}
-        >
+        <div className="profile-editor-shell">
           <section className="profile-section agent-identity-section">
             {!isNotificationContext ? (
               <div className="profile-section-heading">

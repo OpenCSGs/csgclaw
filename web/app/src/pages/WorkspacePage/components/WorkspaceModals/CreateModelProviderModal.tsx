@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ModelProviderCheckResult, ModelProviderPayload } from "@/api/modelProviders";
 import { ModelProviderModelList } from "@/components/business/ProfileControls";
 import { Button, Select } from "@/components/ui";
@@ -61,8 +61,6 @@ export function CreateModelProviderModal({
   const [autoCheckMessage, setAutoCheckMessage] = useState("");
   const [autoCheckWarning, setAutoCheckWarning] = useState("");
   const [checkState, setCheckState] = useState<"idle" | "checking" | "success" | "empty" | "error">("idle");
-  const [isBodyScrolling, setIsBodyScrolling] = useState(false);
-  const bodyScrollTimerRef = useRef<number | null>(null);
   const trimmedName = displayName.trim();
   const trimmedBaseURL = baseURL.trim();
   const trimmedAPIKey = apiKey.trim();
@@ -90,15 +88,6 @@ export function CreateModelProviderModal({
     setAutoCheckWarning("");
     setCheckState("idle");
   }, [initialPresetMeta.defaultBaseURL]);
-
-  useEffect(
-    () => () => {
-      if (bodyScrollTimerRef.current) {
-        window.clearTimeout(bodyScrollTimerRef.current);
-      }
-    },
-    [],
-  );
 
   useEffect(() => {
     setAutoCheckMessage("");
@@ -189,17 +178,6 @@ export function CreateModelProviderModal({
     setCheckState("idle");
   }
 
-  function onBodyScroll() {
-    setIsBodyScrolling(true);
-    if (bodyScrollTimerRef.current) {
-      window.clearTimeout(bodyScrollTimerRef.current);
-    }
-    bodyScrollTimerRef.current = window.setTimeout(() => {
-      setIsBodyScrolling(false);
-      bodyScrollTimerRef.current = null;
-    }, 700);
-  }
-
   const modelStatusHint =
     checkState === "checking"
       ? t("profileLoadingModels")
@@ -226,7 +204,7 @@ export function CreateModelProviderModal({
           </div>
           <ModalCloseButton label={t("close")} onClose={requestClose} />
         </div>
-        <div className={`create-model-provider-body${isBodyScrolling ? " is-scrolling" : ""}`} onScroll={onBodyScroll}>
+        <div className="create-model-provider-body">
           <section className="create-model-provider-section">
             <div className="create-model-provider-section-heading">
               <div>{t("modelProviderCreatePresetTitle")}</div>

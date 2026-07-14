@@ -584,35 +584,6 @@
   scrollbar-gutter: stable;
 }
 
-.contextNav::-webkit-scrollbar {
-  width: 6px;
-}
-
-.contextNav::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.contextNav::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: transparent;
-  transition: background-color 160ms ease;
-}
-
-.contextNav.scrollbarScrolling::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--muted) 44%, transparent);
-}
-
-@supports not selector(::-webkit-scrollbar) {
-  .contextNav {
-    scrollbar-color: transparent transparent;
-    scrollbar-width: thin;
-  }
-
-  .contextNav.scrollbarScrolling {
-    scrollbar-color: color-mix(in srgb, var(--muted) 58%, transparent) transparent;
-  }
-}
-
 :global(:root[data-theme="dark"]) .slot,
 :global(:root[data-theme="dark"]) .primarySidebar,
 :global(:root[data-theme="dark"]) .mainColumn,

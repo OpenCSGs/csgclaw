@@ -1791,21 +1791,6 @@
   max-height: 142px;
   overflow-y: auto;
   padding-right: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) transparent;
-}
-
-.agent-detail-pane .profile-env-field .env-editor::-webkit-scrollbar {
-  width: 6px;
-}
-
-.agent-detail-pane .profile-env-field .env-editor::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.agent-detail-pane .profile-env-field .env-editor::-webkit-scrollbar-thumb {
-  border-radius: var(--radius-full);
-  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .agent-detail-pane .agent-workspace-section {

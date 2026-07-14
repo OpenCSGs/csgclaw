@@ -9,6 +9,37 @@
   box-sizing: border-box;
 }
 
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color 160ms ease;
+}
+
+*[data-scrollbar-active="true"]::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 44%, transparent);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: thin;
+  }
+
+  *[data-scrollbar-active="true"] {
+    scrollbar-color: color-mix(in srgb, var(--muted) 58%, transparent) transparent;
+  }
+}
+
 :root {
   --app-ui-viewport-height: 100dvh;
 }
