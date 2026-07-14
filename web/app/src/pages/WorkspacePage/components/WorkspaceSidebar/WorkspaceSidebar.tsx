@@ -272,7 +272,6 @@ export function WorkspaceSidebar({
         items: [
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.hubTemplates,
-            badge: badgeCount(hub?.templates.length),
             groupId: WorkspaceContextSectionIds.hubTemplates,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.templates),
             id: "templates",
@@ -287,7 +286,6 @@ export function WorkspaceSidebar({
           },
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.hubSkills,
-            badge: badgeCount(hub?.skills.length),
             groupId: WorkspaceContextSectionIds.hubSkills,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.skills),
             id: "skills",
@@ -302,7 +300,6 @@ export function WorkspaceSidebar({
           },
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.mcpServers,
-            badge: badgeCount(hub?.mcpServers?.length),
             groupId: WorkspaceContextSectionIds.mcpServers,
             icon: navigationIcon(Server),
             id: "mcp-servers",
@@ -317,7 +314,6 @@ export function WorkspaceSidebar({
           },
           {
             active: activeContextSectionId === WorkspaceContextSectionIds.models,
-            badge: badgeCount(modelProviders?.providers.length),
             groupId: WorkspaceContextSectionIds.models,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.models),
             id: "models",
@@ -345,10 +341,6 @@ export function WorkspaceSidebar({
       firstNotificationAgent,
       firstTeam,
       firstWorkerAgent,
-      hub?.mcpServers?.length,
-      hub?.templates.length,
-      hub?.skills.length,
-      modelProviders?.providers.length,
       onSelectAgent,
       onSelectComputer,
       onSelectHub,
@@ -569,10 +561,6 @@ export function WorkspaceSidebar({
 
 function navigationIcon(Icon: SidebarNavigationIcon) {
   return <Icon size={20} />;
-}
-
-function badgeCount(count: number | null | undefined) {
-  return typeof count === "number" ? count : undefined;
 }
 
 function contextSectionIdForPane({
