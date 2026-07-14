@@ -22,6 +22,10 @@ type User = apitypes.User
 
 type Message = apitypes.Message
 
+type MessageAttachment = apitypes.MessageAttachment
+
+type MessageAttachmentUpload = apitypes.MessageAttachmentUpload
+
 type Mention = apitypes.Mention
 
 type EventPayload = apitypes.EventPayload
@@ -78,13 +82,14 @@ type ThreadListOptions struct {
 }
 
 type DeliverMessageRequest struct {
-	RoomID       string         `json:"room_id"`
-	SenderID     string         `json:"sender_id,omitempty"`
-	MentionID    string         `json:"mention_id,omitempty"`
-	Content      string         `json:"text"`
-	MessageID    string         `json:"message_id,omitempty"`
-	ThreadRootID string         `json:"thread_root_id,omitempty"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
+	RoomID       string                    `json:"room_id"`
+	SenderID     string                    `json:"sender_id,omitempty"`
+	MentionID    string                    `json:"mention_id,omitempty"`
+	Content      string                    `json:"text"`
+	MessageID    string                    `json:"message_id,omitempty"`
+	ThreadRootID string                    `json:"thread_root_id,omitempty"`
+	Metadata     map[string]any            `json:"metadata,omitempty"`
+	Attachments  []MessageAttachmentUpload `json:"attachments,omitempty"`
 }
 
 type DeliverEventRequest struct {
@@ -353,6 +358,20 @@ func ensureBootstrapDirs(path string) error {
 	if err := os.MkdirAll(threadsDir, 0o755); err != nil {
 		return fmt.Errorf("create im threads dir: %w", err)
 	}
+	assetsDir := filepath.Join(filepath.Dir(path), assetsDirName)
+	objectsDir := filepath.Join(assetsDir, assetObjectsDirName)
+	if err := os.MkdirAll(objectsDir, 0o700); err != nil {
+		return fmt.Errorf("create im attachment objects dir: %w", err)
+	}
+	blobsDir := filepath.Join(assetsDir, assetBlobsDirName, "sha256")
+	if err := os.MkdirAll(blobsDir, 0o700); err != nil {
+		return fmt.Errorf("create im attachment blobs dir: %w", err)
+	}
+	for _, privateDir := range []string{assetsDir, objectsDir, filepath.Join(assetsDir, assetBlobsDirName), blobsDir} {
+		if err := os.Chmod(privateDir, 0o700); err != nil {
+			return fmt.Errorf("set private im attachment directory permissions: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -491,6 +510,9 @@ func savePersistedBootstrap(statePath string, state Bootstrap) (persistedBootstr
 		return persistedBootstrap{}, err
 	}
 	if err := cleanupThreadFiles(statePath, rooms); err != nil {
+		return persistedBootstrap{}, err
+	}
+	if err := cleanupAssetFilesForState(statePath, state.Rooms); err != nil {
 		return persistedBootstrap{}, err
 	}
 	return persisted, nil
@@ -1726,7 +1748,7 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	if senderID == "" {
 		return Message{}, fmt.Errorf("sender_id is required")
 	}
-	if content == "" {
+	if content == "" && len(req.Attachments) == 0 {
 		return Message{}, fmt.Errorf("content is required")
 	}
 
@@ -1758,6 +1780,11 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	message := s.newMessage("", senderID, MessageKindMessage, content)
 	message.Metadata = utils.CloneAnyMap(req.Metadata)
 	message.RelatesTo = relatesTo
+	attachments, err := s.storeMessageAttachmentsLocked(roomID, message.ID, senderID, req.Attachments)
+	if err != nil {
+		return Message{}, err
+	}
+	message.Attachments = attachments
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
 		return Message{}, err
@@ -1773,7 +1800,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	if roomID == "" {
 		return Message{}, fmt.Errorf("room_id is required")
 	}
-	if content == "" {
+	if content == "" && len(req.Attachments) == 0 {
 		return Message{}, fmt.Errorf("text is required")
 	}
 	if senderID == "" {
@@ -1811,6 +1838,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	message := s.newMessage(req.MessageID, senderID, MessageKindMessage, content)
 	message.Metadata = utils.CloneAnyMap(req.Metadata)
 	message.RelatesTo = relatesTo
+	replaceIndex := -1
 	if strings.TrimSpace(req.MessageID) != "" {
 		for idx := range room.Messages {
 			if room.Messages[idx].ID != message.ID {
@@ -1819,16 +1847,25 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 			if room.Messages[idx].SenderID != senderID {
 				return Message{}, fmt.Errorf("message id %q already exists for another sender", message.ID)
 			}
-			message.CreatedAt = room.Messages[idx].CreatedAt
-			room.Messages[idx] = message
-			s.rebuildThreadStatesLocked(room)
-			if err := s.saveLocked(); err != nil {
-				return Message{}, err
-			}
-			presented := s.presentMessageLocked(*room, message, "")
-			s.publishMessageCreatedLocked(roomID, senderID, presented)
-			return presented, nil
+			replaceIndex = idx
+			break
 		}
+	}
+	attachments, err := s.storeMessageAttachmentsLocked(roomID, message.ID, senderID, req.Attachments)
+	if err != nil {
+		return Message{}, err
+	}
+	message.Attachments = attachments
+	if replaceIndex >= 0 {
+		message.CreatedAt = room.Messages[replaceIndex].CreatedAt
+		room.Messages[replaceIndex] = message
+		s.rebuildThreadStatesLocked(room)
+		if err := s.saveLocked(); err != nil {
+			return Message{}, err
+		}
+		presented := s.presentMessageLocked(*room, message, "")
+		s.publishMessageCreatedLocked(roomID, senderID, presented)
+		return presented, nil
 	}
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
@@ -2460,6 +2497,7 @@ func cloneMessages(messages []Message) []Message {
 func cloneMessage(message Message) Message {
 	cloned := message
 	cloned.Mentions = append([]Mention(nil), message.Mentions...)
+	cloned.Attachments = cloneMessageAttachments(message.Attachments)
 	cloned.Event = cloneEventPayload(message.Event)
 	if message.RelatesTo != nil {
 		rel := *message.RelatesTo
@@ -2470,6 +2508,13 @@ func cloneMessage(message Message) Message {
 		cloned.Thread = &summary
 	}
 	return cloned
+}
+
+func cloneMessageAttachments(attachments []MessageAttachment) []MessageAttachment {
+	if len(attachments) == 0 {
+		return nil
+	}
+	return append([]MessageAttachment(nil), attachments...)
 }
 
 func cloneEventPayload(event *EventPayload) *EventPayload {
@@ -3000,7 +3045,11 @@ func (s *Service) saveRoomLocked(room Room) error {
 	if err := saveRoomMessagesForState(s.statePath, room); err != nil {
 		return err
 	}
-	return writePersistedBootstrap(s.statePath, persistedBootstrapFromState(s.bootstrapLocked()))
+	state := s.bootstrapLocked()
+	if err := cleanupAssetFilesForState(s.statePath, state.Rooms); err != nil {
+		return err
+	}
+	return writePersistedBootstrap(s.statePath, persistedBootstrapFromState(state))
 }
 
 func (s *Service) replaceState(state Bootstrap) {

@@ -450,7 +450,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	if err := r.mkdirAll(spec.WorkspaceDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create codex workspace dir %s: %w", spec.WorkspaceDir, err)
 	}
-	if err := r.seedCodexHomeAuth(spec.CodexHomeDir); err != nil {
+	if err := r.seedCodexHomeAuth(spec.CodexHomeDir, spec.Profile); err != nil {
 		return nil, err
 	}
 	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.MCPServers); err != nil {
@@ -544,7 +544,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if err := r.mkdirAll(spec.WorkspaceDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create codex workspace dir %s: %w", spec.WorkspaceDir, err)
 	}
-	if err := r.seedCodexHomeAuth(spec.CodexHomeDir); err != nil {
+	if err := r.seedCodexHomeAuth(spec.CodexHomeDir, spec.Profile); err != nil {
 		return nil, err
 	}
 	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.MCPServers); err != nil {
@@ -591,13 +591,20 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func (r *Runtime) seedCodexHomeAuth(runtimeCodexHome string) error {
+func (r *Runtime) seedCodexHomeAuth(runtimeCodexHome string, profile agentruntime.Profile) error {
 	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
 	if runtimeCodexHome == "" {
 		return fmt.Errorf("codex home dir is required")
 	}
 
 	runtimeAuthPath := filepath.Join(runtimeCodexHome, "auth.json")
+	profile = profile.Normalized()
+	if profile.BaseURL != "" && profile.APIKey != "" {
+		if err := r.removeAll(runtimeAuthPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove runtime codex auth %s: %w", runtimeAuthPath, err)
+		}
+		return nil
+	}
 	if _, err := r.readFile(runtimeAuthPath); err == nil {
 		return nil
 	} else if !errors.Is(err, os.ErrNotExist) {

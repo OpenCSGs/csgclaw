@@ -814,7 +814,7 @@ func (w *worker) sessionID(ctx context.Context, evt BotEvent) (string, error) {
 }
 
 func (w *worker) promptText(evt BotEvent) string {
-	text := strings.TrimSpace(evt.Text)
+	text := joinHiddenContexts(strings.TrimSpace(evt.Text), formatAttachmentManifest(evt.Attachments))
 	key := conversationKey(evt)
 
 	contextText := joinHiddenContexts(
@@ -964,7 +964,7 @@ func joinHiddenContexts(values ...string) string {
 
 func formatHiddenChannelContext(binding Binding, evt BotEvent) string {
 	channel := strings.TrimSpace(evt.Channel)
-	if channel == "" || strings.EqualFold(channel, localChannel) {
+	if channel == "" {
 		return ""
 	}
 	roomID := strings.TrimSpace(evt.RoomID)
@@ -1004,7 +1004,8 @@ func formatHiddenThreadContext(context *BotThreadContext) string {
 	}
 	for _, message := range context.Context {
 		content := strings.Join(strings.Fields(strings.TrimSpace(message.Content)), " ")
-		if content == "" {
+		attachments := formatInlineAttachmentSummary(message.Attachments)
+		if content == "" && attachments == "" {
 			continue
 		}
 		b.WriteString("- ")
@@ -1020,9 +1021,87 @@ func formatHiddenThreadContext(context *BotThreadContext) string {
 			b.WriteString("[root] ")
 		}
 		b.WriteString(content)
+		if attachments != "" {
+			if content != "" {
+				b.WriteByte(' ')
+			}
+			b.WriteString(attachments)
+		}
 		b.WriteByte('\n')
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func formatAttachmentManifest(attachments []MessageAttachment) string {
+	if len(attachments) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Attached files:\n")
+	for _, attachment := range attachments {
+		name := strings.TrimSpace(attachment.Name)
+		if name == "" {
+			name = strings.TrimSpace(attachment.ID)
+		}
+		if name == "" {
+			name = "attachment"
+		}
+		b.WriteString("- ")
+		b.WriteString(name)
+		if mediaType := strings.TrimSpace(attachment.MediaType); mediaType != "" {
+			b.WriteString(" (")
+			b.WriteString(mediaType)
+			if attachment.SizeBytes > 0 {
+				b.WriteString(", ")
+				b.WriteString(formatAttachmentBytes(attachment.SizeBytes))
+			}
+			b.WriteString(")")
+		} else if attachment.SizeBytes > 0 {
+			b.WriteString(" (")
+			b.WriteString(formatAttachmentBytes(attachment.SizeBytes))
+			b.WriteString(")")
+		}
+		if path := strings.TrimSpace(attachment.WorkspacePath); path != "" {
+			b.WriteString(" workspace_path=")
+			b.WriteString(path)
+		}
+		if url := strings.TrimSpace(attachment.DownloadURL); url != "" {
+			b.WriteString(" download_url=")
+			b.WriteString(url)
+		}
+		b.WriteByte('\n')
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func formatInlineAttachmentSummary(attachments []MessageAttachment) string {
+	if len(attachments) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(attachments))
+	for _, attachment := range attachments {
+		name := strings.TrimSpace(attachment.Name)
+		if name == "" {
+			name = strings.TrimSpace(attachment.ID)
+		}
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return "[attachments]"
+	}
+	return "[attachments: " + strings.Join(names, ", ") + "]"
+}
+
+func formatAttachmentBytes(size int64) string {
+	if size < 1024 {
+		return fmt.Sprintf("%d B", size)
+	}
+	if size < 1024*1024 {
+		return fmt.Sprintf("%.1f KiB", float64(size)/1024)
+	}
+	return fmt.Sprintf("%.1f MiB", float64(size)/(1024*1024))
 }
 
 func eventDedupKey(evt BotEvent) string {

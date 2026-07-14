@@ -869,6 +869,72 @@ func TestHandleAgentsListExposesLinkedLocalUser(t *testing.T) {
 	}
 }
 
+func TestHandleAgentResponsesExposeLinkedLocalUserWithoutCSGClawParticipant(t *testing.T) {
+	svc := mustNewSeededService(t, []agent.Agent{
+		{ID: "agent-dahym7", Name: "qa", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
+	})
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: im.AdminUserID,
+		Users: []im.User{
+			{ID: im.AdminUserID, Name: "admin", Role: "admin"},
+			{ID: "user-dahym7", Name: "qa", Role: agent.RoleWorker, Avatar: "avatar/3D-5.png"},
+		},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              "pt-dahym7-feishu",
+		Channel:         participant.ChannelFeishu,
+		Type:            participant.TypeAgent,
+		Name:            "qa",
+		AgentID:         "agent-dahym7",
+		ChannelUserKind: participant.ChannelUserKindAppID,
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}))
+
+	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc}
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		listResult bool
+	}{
+		{name: "list", method: http.MethodGet, path: "/api/v1/agents?include_participants=true", listResult: true},
+		{name: "get", method: http.MethodGet, path: "/api/v1/agents/agent-dahym7?include_participants=true"},
+		{name: "patch", method: http.MethodPatch, path: "/api/v1/agents/agent-dahym7", body: `{"description":"updated"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			srv.Routes().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+			}
+			var got apitypes.Agent
+			if tt.listResult {
+				var items []apitypes.Agent
+				if err := json.NewDecoder(rec.Body).Decode(&items); err != nil {
+					t.Fatalf("decode response: %v", err)
+				}
+				if len(items) != 1 {
+					t.Fatalf("len(agents) = %d, want 1; body=%s", len(items), rec.Body.String())
+				}
+				got = items[0]
+			} else if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if got.UserID != "user-dahym7" || got.UserName != "qa" {
+				t.Fatalf("agent user = %q/%q, want user-dahym7/qa; body=%s", got.UserID, got.UserName, rec.Body.String())
+			}
+			if tt.method == http.MethodGet && (len(got.Participants) != 1 || got.Participants[0].Channel != participant.ChannelFeishu) {
+				t.Fatalf("participants = %+v, want only the existing Feishu participant", got.Participants)
+			}
+		})
+	}
+}
+
 func TestHandleAgentsListHydratesStatusFromSandboxInfo(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -122,10 +123,68 @@ func (h *Handler) enqueueParticipantMessageEventForBridgeTarget(room im.Room, se
 	}
 	deliveryRoom := roomForParticipantBridgeTarget(room, target)
 	deliveryMessage := messageForParticipantBridgeTarget(message, target)
+	deliveryMessage.Attachments = h.materializeAttachmentsForParticipant(deliveryMessage.Attachments, deliveryRoom.ID, deliveryMessage.ID, target.bridgeID)
+	deliveryRoom = h.materializeThreadContextAttachmentsForParticipant(deliveryRoom, deliveryMessage, target.bridgeID)
 	if strings.TrimSpace(text) != "" {
 		return h.participantBridge.EnqueueMessageEventWithText(deliveryRoom, sender, deliveryMessage, target.bridgeID, text)
 	}
 	return h.participantBridge.EnqueueMessageEvent(deliveryRoom, sender, deliveryMessage, target.bridgeID)
+}
+
+func (h *Handler) materializeThreadContextAttachmentsForParticipant(room im.Room, message im.Message, bridgeID string) im.Room {
+	if message.RelatesTo == nil || message.RelatesTo.RelType != im.RelationTypeThread {
+		return room
+	}
+	rootID := strings.TrimSpace(message.RelatesTo.EventID)
+	if rootID == "" {
+		return room
+	}
+	out := room
+	out.Threads = append([]im.ThreadState(nil), room.Threads...)
+	for threadIndex := range out.Threads {
+		if strings.TrimSpace(out.Threads[threadIndex].RootMessageID) != rootID {
+			continue
+		}
+		out.Threads[threadIndex].Context = append([]im.Message(nil), out.Threads[threadIndex].Context...)
+		for messageIndex := range out.Threads[threadIndex].Context {
+			contextMessage := &out.Threads[threadIndex].Context[messageIndex]
+			contextMessage.Attachments = h.materializeAttachmentsForParticipant(
+				contextMessage.Attachments,
+				room.ID,
+				contextMessage.ID,
+				bridgeID,
+			)
+		}
+		break
+	}
+	return out
+}
+
+func (h *Handler) materializeAttachmentsForParticipant(attachments []im.MessageAttachment, roomID, messageID, bridgeID string) []im.MessageAttachment {
+	if len(attachments) == 0 || h == nil || h.im == nil || h.svc == nil {
+		return append([]im.MessageAttachment(nil), attachments...)
+	}
+	agentID := h.runtimeAgentIDForBridgeID(bridgeID)
+	if strings.TrimSpace(agentID) == "" {
+		return append([]im.MessageAttachment(nil), attachments...)
+	}
+	workspaceRoot, err := h.svc.WorkspaceRoot(agentID)
+	if err != nil {
+		slog.Warn("resolve attachment workspace failed", "agent_id", agentID, "participant_id", bridgeID, "error", err)
+		return append([]im.MessageAttachment(nil), attachments...)
+	}
+	relativeDir := filepath.ToSlash(filepath.Join(".csgclaw", "attachments", roomID, messageID))
+	out := make([]im.MessageAttachment, 0, len(attachments))
+	for _, attachment := range attachments {
+		materialized, err := h.im.MaterializeAttachment(attachment.ID, workspaceRoot, relativeDir)
+		if err != nil {
+			slog.Warn("materialize attachment failed", "attachment_id", attachment.ID, "agent_id", agentID, "error", err)
+			out = append(out, attachment)
+			continue
+		}
+		out = append(out, materialized)
+	}
+	return out
 }
 
 func (h *Handler) participantBridgeTargetsForRoom(room im.Room) []participantBridgeTarget {
@@ -616,9 +675,9 @@ func (h *Handler) handleParticipantSendMessage(w http.ResponseWriter, r *http.Re
 		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	var req im.ParticipantSendMessageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+	req, err := parseParticipantSendMessageHTTP(w, r)
+	if err != nil {
+		writeMessagePayloadError(w, err)
 		return
 	}
 	roomID := req.ResolvedRoomID()
@@ -643,6 +702,7 @@ func (h *Handler) handleParticipantSendMessage(w http.ResponseWriter, r *http.Re
 		MessageID:    messageID,
 		ThreadRootID: threadRootID,
 		Metadata:     req.Metadata,
+		Attachments:  req.Attachments,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

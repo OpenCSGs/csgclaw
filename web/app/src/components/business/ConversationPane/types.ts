@@ -2,6 +2,7 @@ import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetState
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
+import type { AttachmentDraft } from "@/models/attachments";
 import type { ComposerMentionUser, ComposerSegment } from "@/models/composer";
 import type { ConnectorConfigDraft, ConnectorStatus } from "@/models/connectors";
 import type {
@@ -43,6 +44,7 @@ export type ConversationPaneProps = {
   currentUserID?: string;
   draftSegments: ComposerSegment[];
   draftText: string;
+  attachmentDrafts?: AttachmentDraft[];
   editorRef: RefObject<HTMLDivElement | null>;
   inviteActionLabel: string;
   locale: LocaleCode;
@@ -62,6 +64,8 @@ export type ConversationPaneProps = {
   onApplyMention: (user: MentionPickerUser) => void;
   onApplySlashCandidate?: (name: string) => void;
   onApplyThreadSlashCandidate?: (name: string) => void;
+  onAddAttachments?: (files: File[]) => void;
+  onAddThreadAttachments?: (files: File[]) => void;
   onClearRoomMessages?: (id: string) => VoidOrPromise;
   onClearMemberActionError?: () => void;
   onCloseThread: () => void;
@@ -78,6 +82,8 @@ export type ConversationPaneProps = {
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
   onRemoveMember?: (memberID: string) => VoidOrPromise;
+  onRemoveAttachment?: (id: string) => void;
+  onRemoveThreadAttachment?: (id: string) => void;
   onCancelProfilePreviewClose?: () => void;
   onCloseProfilePreview?: () => void;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
@@ -102,6 +108,7 @@ export type ConversationPaneProps = {
   t: TranslateFn;
   theme: ThemeMode;
   threadDraftSegments: ComposerSegment[];
+  threadAttachmentDrafts?: AttachmentDraft[];
   threadError: string;
   threadLoading: boolean;
   threadSlashCandidates?: SlashPickerCandidate[];

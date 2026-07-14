@@ -177,7 +177,11 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	itemType := appServerString(item, "type")
 	itemID := appServerString(item, "id")
 	activity := strings.Trim(strings.TrimPrefix(method, "item/")+":"+itemType+":"+itemID, ":")
-	live.notifyAppServerTurn(threadID, appServerTurnResult{activity: activity, progress: appServerItemIsProgress(itemType)})
+	live.notifyAppServerTurn(threadID, appServerTurnResult{
+		activity:          activity,
+		progress:          appServerItemIsProgress(itemType),
+		assistantActivity: appServerItemSignalsAssistantActivity(itemType),
+	})
 
 	switch {
 	case method == "item/started" && itemType == "commandExecution":
@@ -667,6 +671,11 @@ func appServerItemIsProgress(itemType string) bool {
 	default:
 		return false
 	}
+}
+
+func appServerItemSignalsAssistantActivity(itemType string) bool {
+	itemType = strings.TrimSpace(itemType)
+	return itemType != "" && itemType != "userMessage"
 }
 
 func appServerToolStatus(item map[string]any, fallback string) string {

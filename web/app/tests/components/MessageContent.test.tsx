@@ -47,6 +47,13 @@ describe("MessageContent", () => {
     expect(screen.queryByText("\u200b")).not.toBeInTheDocument();
   });
 
+  it("does not treat an empty attachment-only message body as a working placeholder", () => {
+    const { container } = render(<MessageContent content="" />);
+
+    expect(screen.queryByLabelText("Waiting for response")).not.toBeInTheDocument();
+    expect(container.querySelector(".message-content")).toBeEmptyDOMElement();
+  });
+
   it("renders sanitized markdown links with safe external-link attributes", () => {
     render(<MessageContent content={'Open [docs](https://example.com/docs)<script>alert("xss")</script>'} />);
 

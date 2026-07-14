@@ -326,13 +326,13 @@ export function CreateModelProviderModal({
                         <Button variant="secondaryGray" size="sm" disabled={checkDisabled} onClick={handleCheckAccess}>
                           {autoCheckBusy ? t("profileLoadingModels") : t("modelProviderCheck")}
                         </Button>
+                        {autoCheckMessage ? (
+                          <span className="create-model-provider-check-status success">{autoCheckMessage}</span>
+                        ) : null}
+                        {autoCheckWarning ? (
+                          <span className="create-model-provider-check-status warning">{autoCheckWarning}</span>
+                        ) : null}
                       </div>
-                      {autoCheckMessage ? (
-                        <span className="create-model-provider-check-status success">{autoCheckMessage}</span>
-                      ) : null}
-                      {autoCheckWarning ? (
-                        <span className="create-model-provider-check-status warning">{autoCheckWarning}</span>
-                      ) : null}
                     </div>
                     {!trimmedBaseURL || !trimmedAPIKey ? (
                       <small className="field-hint">{t("modelProviderCheckRequiresConnection")}</small>

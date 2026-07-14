@@ -1,17 +1,26 @@
 package channelbridge
 
-import "context"
+import (
+	"context"
+
+	"csgclaw/internal/apitypes"
+)
+
+type MessageAttachment = apitypes.MessageAttachment
+
+type MessageAttachmentUpload = apitypes.MessageAttachmentUpload
 
 type BotEvent struct {
-	Channel       string            `json:"channel,omitempty"`
-	ParticipantID string            `json:"participant_id,omitempty"`
-	MessageID     string            `json:"message_id"`
-	RoomID        string            `json:"room_id"`
-	ChatType      string            `json:"chat_type"`
-	Text          string            `json:"text"`
-	Mentions      []string          `json:"mentions,omitempty"`
-	ThreadRootID  string            `json:"thread_root_id,omitempty"`
-	ThreadContext *BotThreadContext `json:"thread_context,omitempty"`
+	Channel       string              `json:"channel,omitempty"`
+	ParticipantID string              `json:"participant_id,omitempty"`
+	MessageID     string              `json:"message_id"`
+	RoomID        string              `json:"room_id"`
+	ChatType      string              `json:"chat_type"`
+	Text          string              `json:"text"`
+	Attachments   []MessageAttachment `json:"attachments,omitempty"`
+	Mentions      []string            `json:"mentions,omitempty"`
+	ThreadRootID  string              `json:"thread_root_id,omitempty"`
+	ThreadContext *BotThreadContext   `json:"thread_context,omitempty"`
 }
 
 type BotThreadContext struct {
@@ -21,10 +30,11 @@ type BotThreadContext struct {
 }
 
 type BotThreadContextMessage struct {
-	ID        string `json:"id,omitempty"`
-	SenderID  string `json:"sender_id,omitempty"`
-	Content   string `json:"content,omitempty"`
-	CreatedAt string `json:"created_at,omitempty"`
+	ID          string              `json:"id,omitempty"`
+	SenderID    string              `json:"sender_id,omitempty"`
+	Content     string              `json:"content,omitempty"`
+	CreatedAt   string              `json:"created_at,omitempty"`
+	Attachments []MessageAttachment `json:"attachments,omitempty"`
 }
 
 type BotThreadContextSummary struct {
@@ -35,10 +45,11 @@ type BotThreadContextSummary struct {
 }
 
 type SendMessageRequest struct {
-	RoomID       string         `json:"room_id"`
-	Text         string         `json:"text"`
-	ThreadRootID string         `json:"thread_root_id,omitempty"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
+	RoomID       string                    `json:"room_id"`
+	Text         string                    `json:"text"`
+	ThreadRootID string                    `json:"thread_root_id,omitempty"`
+	Metadata     map[string]any            `json:"metadata,omitempty"`
+	Attachments  []MessageAttachmentUpload `json:"attachments,omitempty"`
 }
 
 type SendMessageResponse struct {

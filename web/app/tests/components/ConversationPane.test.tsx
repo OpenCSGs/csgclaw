@@ -253,6 +253,25 @@ function renderThreadPane({
 }
 
 describe("ConversationPane", () => {
+  it("hides legacy zero-reply thread summaries from the timeline", () => {
+    const { container } = renderThreadPane({
+      messages: [
+        {
+          content: "No reply yet",
+          created_at: "2026-07-14T09:29:00Z",
+          id: "msg-root",
+          sender_id: "u-manager",
+          thread: {
+            reply_count: 0,
+            root_id: "msg-root",
+          },
+        },
+      ],
+    });
+
+    expect(container.querySelector(".messages .message-thread-actions")).not.toBeInTheDocument();
+  });
+
   it("shows visible and total message counts when some messages are filtered", () => {
     const messages = [
       {

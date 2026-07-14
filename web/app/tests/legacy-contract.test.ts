@@ -114,6 +114,9 @@ describe("legacy UI contract", () => {
     expect(source).not.toContain('className="thread-context"');
     expect(source).not.toContain('t("threadContext")');
     expect(styles).toContain(".message-row:hover .message-hover-actions");
+    expect(styles).toMatch(/\.message-hover-actions\s*\{[\s\S]*top:\s*calc\(100% \+ 2px\);/);
+    expect(styles).toMatch(/\.thread-message-actions\s*\{[\s\S]*top:\s*calc\(100% \+ 2px\);/);
+    expect(styles).not.toContain("bottom: -15px");
     expect(styles).toContain("[data-tooltip]:hover::after");
     expect(source).toContain("message-thread-actions has-thread-summary");
     expect(source).toContain("const threadBodyRef = useRef<HTMLDivElement | null>(null);");

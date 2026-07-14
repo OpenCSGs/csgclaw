@@ -346,10 +346,17 @@ export function WorkspaceConversationRow({
     : avatarFallbackText(displayUser?.avatar, displayUser?.name, displayUser?.id);
   const title = isDirect && displayUser ? displayUser.name : conversation.title;
   const roomAvatarMembers = resolveRoomAvatarMembers(conversation, usersById, currentUserID);
-  const preview = isDirect ? "" : formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t);
+  const preview = isDirect
+    ? ""
+    : formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t);
   return (
     <button
-      className={classNames(styles.row, styles.conversationRow, isDirect && styles.directConversationRow, active && styles.active)}
+      className={classNames(
+        styles.row,
+        styles.conversationRow,
+        isDirect && styles.directConversationRow,
+        active && styles.active,
+      )}
       onClick={() => onSelect(conversation.id)}
     >
       <span

@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strings"
 	"time"
@@ -16,6 +19,8 @@ import (
 )
 
 type BotEvent = channelbridge.BotEvent
+type MessageAttachment = channelbridge.MessageAttachment
+type MessageAttachmentUpload = channelbridge.MessageAttachmentUpload
 type BotThreadContext = channelbridge.BotThreadContext
 type BotThreadContextMessage = channelbridge.BotThreadContextMessage
 type BotThreadContextSummary = channelbridge.BotThreadContextSummary
@@ -85,15 +90,15 @@ func (c *HTTPClient) StreamEvents(ctx context.Context, botID, lastEventID string
 }
 
 func (c *HTTPClient) SendMessage(ctx context.Context, botID string, req SendMessageRequest) (SendMessageResponse, error) {
-	payload, err := json.Marshal(req)
-	if err != nil {
-		return SendMessageResponse{}, fmt.Errorf("marshal send message request: %w", err)
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.participantBridgeURL(botID, "/messages"), bytes.NewReader(payload))
+	body, contentType, err := encodeSendMessageRequest(req)
 	if err != nil {
 		return SendMessageResponse{}, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.participantBridgeURL(botID, "/messages"), body)
+	if err != nil {
+		return SendMessageResponse{}, err
+	}
+	httpReq.Header.Set("Content-Type", contentType)
 	if token := strings.TrimSpace(c.Token); token != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -112,6 +117,59 @@ func (c *HTTPClient) SendMessage(ctx context.Context, botID string, req SendMess
 		return SendMessageResponse{}, fmt.Errorf("decode send message response: %w", err)
 	}
 	return sendResp, nil
+}
+
+func encodeSendMessageRequest(req SendMessageRequest) (io.Reader, string, error) {
+	if len(req.Attachments) == 0 {
+		payload, err := json.Marshal(req)
+		if err != nil {
+			return nil, "", fmt.Errorf("marshal send message request: %w", err)
+		}
+		return bytes.NewReader(payload), "application/json", nil
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	payloadReq := req
+	payloadReq.Attachments = nil
+	payload, err := json.Marshal(payloadReq)
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal send message request: %w", err)
+	}
+	payloadPart, err := writer.CreateFormField("payload")
+	if err != nil {
+		return nil, "", fmt.Errorf("create send message payload part: %w", err)
+	}
+	if _, err := payloadPart.Write(payload); err != nil {
+		return nil, "", fmt.Errorf("write send message payload part: %w", err)
+	}
+	for _, attachment := range req.Attachments {
+		name := strings.TrimSpace(attachment.Name)
+		if name == "" {
+			name = "attachment"
+		}
+		header := make(textproto.MIMEHeader)
+		header.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{
+			"name":     "files",
+			"filename": name,
+		}))
+		mediaType := strings.TrimSpace(attachment.MediaType)
+		if mediaType == "" {
+			mediaType = "application/octet-stream"
+		}
+		header.Set("Content-Type", mediaType)
+		part, err := writer.CreatePart(header)
+		if err != nil {
+			return nil, "", fmt.Errorf("create send message attachment part: %w", err)
+		}
+		if _, err := part.Write(attachment.Data); err != nil {
+			return nil, "", fmt.Errorf("write send message attachment part: %w", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, "", fmt.Errorf("close send message multipart body: %w", err)
+	}
+	return bytes.NewReader(body.Bytes()), writer.FormDataContentType(), nil
 }
 
 func (c *HTTPClient) participantBridgeURL(participantID, suffix string) string {

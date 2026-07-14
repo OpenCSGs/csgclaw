@@ -13,6 +13,7 @@ import {
   isEventMessage,
   localIdentitiesMatch,
   resolveUserByLocalIdentity,
+  threadHasReplies,
   type IMConversation,
   type IMMessage,
   type IMUser,
@@ -23,6 +24,8 @@ import {
 import { avatarFallbackText } from "@/shared/avatar";
 import type { ThemeMode } from "@/shared/theme/theme";
 import { MessageTimestamp, MessageTimeDivider } from "./MessageTime";
+import { MessageAttachments } from "./ConversationAttachments";
+import { ConversationMessageActions } from "./ConversationMessageActions";
 import { shouldShowMessageDateDivider } from "./messageTimeUtils";
 import type { VoidOrPromise } from "./types";
 
@@ -115,7 +118,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
         const messageAvatarFallback = messageAgent
           ? resolveAgentAvatarFallback(messageAgent, usersById)
           : avatarFallbackText(user.avatar, user.name, user.id);
-        const threadSummary = message.thread;
+        const threadSummary = threadHasReplies(message.thread) ? message.thread : null;
         const latestThreadReply = threadSummary?.latest_reply;
         const messageStateKey = longMessageStateKey(conversation, message, index);
         return (
@@ -145,46 +148,35 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                 ) : null}
               </button>
               <div className="message-card">
-                <div className="message-hover-actions">
-                  <button
-                    type="button"
-                    className="thread-hover-button"
-                    aria-label={t("replyInThread")}
-                    data-tooltip={t("replyInThread")}
-                    data-tooltip-side="top"
-                    onClick={() => onOpenThread(message)}
-                  >
-                    <span className="thread-hover-icon" aria-hidden="true">
-                      {IconImage("rooms")}
-                    </span>
-                  </button>
-                </div>
                 <div className="message-meta">
                   <span className="message-author">{user.name}</span>
                   <MessageTimestamp parts={timestampParts} />
                 </div>
-                <div className="message-bubble">
-                  <MessageContent
-                    key={`${message.id}:${theme}`}
-                    content={message.content}
-                    message={message}
-                    actionBusy={messageActionBusy}
-                    actionError={messageActionError}
-                    enableLongMessageCollapse={own}
-                    longMessageExpanded={own ? expandedLongMessages[messageStateKey] === true : undefined}
-                    onAction={onMessageAction}
-                    onLongMessageExpandedChange={
-                      own
-                        ? (expanded) =>
-                            setExpandedLongMessages((current) => ({
-                              ...current,
-                              [messageStateKey]: expanded,
-                            }))
-                        : undefined
-                    }
-                    t={t}
-                  />
-                </div>
+                {message.content ? (
+                  <div className="message-bubble">
+                    <MessageContent
+                      key={`${message.id}:${theme}`}
+                      content={message.content}
+                      message={message}
+                      actionBusy={messageActionBusy}
+                      actionError={messageActionError}
+                      enableLongMessageCollapse={own}
+                      longMessageExpanded={own ? expandedLongMessages[messageStateKey] === true : undefined}
+                      onAction={onMessageAction}
+                      onLongMessageExpandedChange={
+                        own
+                          ? (expanded) =>
+                              setExpandedLongMessages((current) => ({
+                                ...current,
+                                [messageStateKey]: expanded,
+                              }))
+                          : undefined
+                      }
+                      t={t}
+                    />
+                  </div>
+                ) : null}
+                <MessageAttachments attachments={message.attachments} t={t} />
                 {threadSummary ? (
                   <div className="message-thread-actions has-thread-summary">
                     <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
@@ -195,7 +187,11 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                       <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
                         <span>{t("latestThreadReply")}</span>
                         <strong className="truncate">
-                          <MessagePreviewText content={latestThreadReply.content} />
+                          <MessagePreviewText
+                            content={
+                              latestThreadReply.content || latestThreadReply.attachments?.[0]?.name || t("attachment")
+                            }
+                          />
                         </strong>
                       </button>
                     ) : (
@@ -206,6 +202,12 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                     )}
                   </div>
                 ) : null}
+                <ConversationMessageActions
+                  className="message-hover-actions"
+                  content={message.content}
+                  onOpenThread={() => onOpenThread(message)}
+                  t={t}
+                />
               </div>
             </div>
           </Fragment>

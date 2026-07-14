@@ -1,8 +1,9 @@
 import { createRef } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConversationComposer } from "@/components/business/ConversationPane/ConversationComposer";
 import type { ConversationComposerProps } from "@/components/business/ConversationPane/ConversationComposer";
+import { createAttachmentDrafts } from "@/models/attachments";
 import { emptyGitHubConnectorStatus } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
 
@@ -21,8 +22,13 @@ const t: TranslateFn = (key) => {
     connectorSave: "Save",
     connectorScopes: "Scopes",
     connectorSetUp: "Set up",
-    composerTip: "Press Enter to send",
+    composerAdd: "Add",
+    composerFiles: "Files",
+    composerConnectors: "Connectors",
     inputPlaceholder: "Message",
+    addAttachment: "Add attachment",
+    attachments: "Attachments",
+    removeAttachment: "Remove attachment",
     send: "Send",
   };
   return labels[key] ?? key;
@@ -80,7 +86,7 @@ describe("ConversationComposer connectors", () => {
     expect(onSendMessage).not.toHaveBeenCalled();
   });
 
-  it("opens a Manus-style connector dropdown from the top-level connector icon", async () => {
+  it("opens the add menu with files and connectors sections", async () => {
     const user = userEvent.setup();
     renderComposer({
       connectorStatus: {
@@ -91,14 +97,15 @@ describe("ConversationComposer connectors", () => {
       },
     });
 
-    const button = screen.getByRole("button", { name: "Manage connectors" });
-    expect(button).toHaveClass("composer-tool-button");
-    expect(button).not.toHaveClass("composer-github-button");
+    const button = screen.getByRole("button", { name: "Add" });
+    expect(button).toHaveClass("composer-add-button");
 
     await user.click(button);
 
-    const dialog = screen.getByRole("dialog", { name: "Manage connectors" });
+    const dialog = screen.getByRole("dialog", { name: "Add" });
     expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText("Files")).toBeInTheDocument();
+    expect(within(dialog).getByText("Connectors")).toBeInTheDocument();
     expect(screen.getByText("GitHub")).toBeInTheDocument();
     expect(screen.getByText("Not connected")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Connect" })).toBeInTheDocument();
@@ -107,16 +114,84 @@ describe("ConversationComposer connectors", () => {
     expect(screen.queryByText("Set up")).not.toBeInTheDocument();
   });
 
-  it("places the composer hint to the right of the GitHub connector button", () => {
+  it("places the add and send controls in one composer toolbar", () => {
     const { container } = renderComposer();
 
-    const row = container.querySelector(".composer-actions-row");
+    const row = container.querySelector(".composer-toolbar");
     expect(row).toBeInTheDocument();
-    expect(row?.children[0]).toHaveClass("composer-connector-menu");
-    expect(row?.children[1]).toHaveClass("composer-tip");
-    expect(screen.getByRole("button", { name: "Manage connectors" })).toBeInTheDocument();
-    expect(row).toHaveTextContent("Press Enter to send");
-    expect(container.querySelector("footer > .composer-tip")).not.toBeInTheDocument();
+    expect(within(row as HTMLElement).getByRole("button", { name: "Add" })).toHaveClass("composer-add-button");
+    expect(within(row as HTMLElement).getByRole("button", { name: "Send" })).toHaveClass("composer-send-button");
+    expect(container.querySelector(".composer-tip")).not.toBeInTheDocument();
+  });
+
+  it("opens the file picker from the Files menu item", async () => {
+    const user = userEvent.setup();
+    const inputClick = vi.spyOn(HTMLInputElement.prototype, "click");
+    renderComposer();
+
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("button", { name: "Files" }));
+
+    expect(inputClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog", { name: "Add" })).not.toBeInTheDocument();
+    inputClick.mockRestore();
+  });
+
+  it("allows sending an attachment-only draft", async () => {
+    const user = userEvent.setup();
+    const onSendMessage = vi.fn();
+    const onRemoveAttachment = vi.fn();
+    const attachmentDrafts = createAttachmentDrafts([new File(["hello"], "note.txt", { type: "text/plain" })]);
+    renderComposer({
+      attachmentDrafts,
+      draftText: "",
+      onRemoveAttachment,
+      onSendMessage,
+    });
+
+    expect(screen.getByText("note.txt")).toBeInTheDocument();
+    const sendButton = screen.getByRole("button", { name: "Send" });
+    expect(sendButton).not.toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Remove attachment" }));
+    expect(onRemoveAttachment).toHaveBeenCalledWith(attachmentDrafts[0].id);
+    await user.click(sendButton);
+    expect(onSendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts files from the picker, paste, and drag and drop", async () => {
+    const user = userEvent.setup();
+    const onAddAttachments = vi.fn();
+    const { container } = renderComposer({ onAddAttachments });
+    const pickerFile = new File(["picker"], "picker.txt", { type: "text/plain" });
+    const pastedFile = new File(["image"], "pasted.png", { type: "image/png" });
+    const droppedFile = new File(["drop"], "dropped.pdf", { type: "application/pdf" });
+
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    await user.upload(input!, pickerFile);
+
+    const editor = screen.getByLabelText("Message");
+    fireEvent.paste(editor, {
+      clipboardData: {
+        files: [pastedFile],
+        getData: () => "",
+        items: [],
+      },
+    });
+
+    const composerBox = container.querySelector<HTMLElement>(".composer-box");
+    expect(composerBox).not.toBeNull();
+    fireEvent.drop(composerBox!, {
+      dataTransfer: {
+        files: [droppedFile],
+        items: [],
+      },
+    });
+
+    expect(onAddAttachments).toHaveBeenNthCalledWith(1, [pickerFile]);
+    expect(onAddAttachments).toHaveBeenNthCalledWith(2, [pastedFile]);
+    expect(onAddAttachments).toHaveBeenNthCalledWith(3, [droppedFile]);
   });
 
   it("starts GitHub authorization from the dropdown row connect action", async () => {
@@ -134,7 +209,7 @@ describe("ConversationComposer connectors", () => {
       onConnectConnector,
     });
 
-    await user.click(screen.getByRole("button", { name: "Manage connectors" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
     await user.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(onConnectConnector).toHaveBeenCalledTimes(1);
@@ -166,7 +241,7 @@ describe("ConversationComposer connectors", () => {
       onManageConnector,
     });
 
-    await user.click(screen.getByRole("button", { name: "Manage connectors" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
 
     expect(screen.getByText("octocat")).toBeInTheDocument();
     const connectedState = screen.getByText("Connected");

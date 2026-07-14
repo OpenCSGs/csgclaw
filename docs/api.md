@@ -886,6 +886,32 @@ Notes:
 - `relates_to.rel_type` currently supports `m.thread`; the root must be a
   top-level message in the same room
 - A thread reply also publishes `thread.updated`
+- To send attachments, use `multipart/form-data` with a `payload` JSON part containing the same fields and one or more `files` parts.
+- Attachment-only messages are valid when at least one file is present.
+- Each returned message can include `attachments` with `id`, `name`, `kind`, `media_type`, `size_bytes`, `sha256`, `created_at`, `download_url`, optional `preview_url`, optional image dimensions, and optional `workspace_path` for agent-facing deliveries.
+
+Multipart example:
+
+```text
+payload={"room_id":"room-1","sender_id":"manager","content":""}
+files=@diagram.png;type=image/png
+```
+
+### `GET /api/v1/attachments/{id}`
+
+Downloads a stored chat attachment by attachment ID.
+
+The `download_url` returned in attachment metadata includes an attachment-scoped capability token and can be used directly by browsers and agents.
+
+Callers may instead request the bare path with the configured server Bearer token.
+
+The endpoint serves the original bytes with the stored media type and `X-Content-Type-Options: nosniff`.
+
+Treat the capability URL as a secret and avoid sharing it outside the room context.
+
+Image attachments are served inline.
+
+Other file attachments are served with attachment disposition.
 
 ### `POST /api/v1/rooms/{id}/threads`
 
@@ -1112,6 +1138,10 @@ thread was started. Runtime/LLM bridges use it as prompt context; it is not a li
 of thread replies. PicoClaw-native clients can use `context.topic_id` as the
 same thread/session identifier.
 
+Events can include an `attachments` array with the same message attachment metadata returned by the message APIs.
+
+For CSGClaw agents, the server also attempts to copy each attachment into the target agent workspace and sets `workspace_path` when that copy succeeds.
+
 ### `POST /api/v1/channels/csgclaw/participants/{id}/messages`
 
 Sends a message as the specified local CSGClaw participant.
@@ -1131,6 +1161,10 @@ identifiers. When one is present, the participant response is sent as a reply in
 that IM thread. When all are omitted, the response is sent as a top-level room/DM
 message; the server does not infer a thread from the participant's most recent room
 event.
+
+This endpoint also accepts the same multipart attachment format as `POST /api/v1/messages`.
+
+Use a `payload` JSON part for the participant message fields and one or more `files` parts for generated files.
 
 PicoClaw outbound message shape is also accepted:
 

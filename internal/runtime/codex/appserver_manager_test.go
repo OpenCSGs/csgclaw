@@ -365,16 +365,47 @@ func TestAppServerManagerPromptNoProgressTimeout(t *testing.T) {
 		Prompt:    []PromptContentBlock{TextBlock("hang")},
 	})
 	if err == nil ||
-		!strings.Contains(err.Error(), "codex app-server no progress timeout") ||
-		!strings.Contains(err.Error(), "runtime_id=runtime-1") ||
-		!strings.Contains(err.Error(), "thread_id=main-thread") ||
-		!strings.Contains(err.Error(), "turn_id=turn-hang") ||
-		!strings.Contains(err.Error(), "stderr_tail=still working") {
-		t.Fatalf("Prompt() error = %v, want no-progress diagnostic", err)
+		!strings.Contains(err.Error(), "Codex stopped responding after 25ms") ||
+		!strings.Contains(err.Error(), "turn was canceled") ||
+		strings.Contains(err.Error(), "stderr_tail") ||
+		strings.Contains(err.Error(), "runtime_id") {
+		t.Fatalf("Prompt() error = %v, want concise canceled-turn message", err)
 	}
 	events := sink.snapshot()
 	if len(events) != 1 || events[0].Kind != SessionEventPromptFailed {
 		t.Fatalf("events = %#v, want one prompt failed event", events)
+	}
+}
+
+func TestAppServerManagerReasoningCountsAsInitialActivity(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-delayed-reasoning")
+	originalSemantic := appServerSemanticInactivityTimeout
+	originalNoProgress := appServerFirstTurnNoProgressTimeout
+	appServerSemanticInactivityTimeout = 100 * time.Millisecond
+	appServerFirstTurnNoProgressTimeout = 40 * time.Millisecond
+	t.Cleanup(func() {
+		appServerSemanticInactivityTimeout = originalSemantic
+		appServerFirstTurnNoProgressTimeout = originalNoProgress
+	})
+
+	dir := t.TempDir()
+	spec := testAppServerSessionSpec(dir)
+	manager := newAppServerManager(testAppServerManagerDeps())
+	session, err := manager.Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	resp, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+		SessionID: session.SessionID,
+		Prompt:    []PromptContentBlock{TextBlock("think before answering")},
+	})
+	if err != nil {
+		t.Fatalf("Prompt() error = %v", err)
+	}
+	if resp.StopReason != StopReasonEndTurn {
+		t.Fatalf("StopReason = %q, want %q", resp.StopReason, StopReasonEndTurn)
 	}
 }
 
@@ -404,9 +435,9 @@ func TestAppServerManagerMCPToolCallCountsAsProgress(t *testing.T) {
 		Prompt:    []PromptContentBlock{TextBlock("hang after mcp progress")},
 	})
 	if err == nil ||
-		!strings.Contains(err.Error(), "codex semantic inactivity timeout") ||
-		strings.Contains(err.Error(), "codex app-server no progress timeout") {
-		t.Fatalf("Prompt() error = %v, want semantic timeout after MCP progress", err)
+		!strings.Contains(err.Error(), "Codex stopped responding after 100ms") ||
+		!strings.Contains(err.Error(), "turn was canceled") {
+		t.Fatalf("Prompt() error = %v, want canceled turn after inactivity", err)
 	}
 
 	events := sink.snapshot()
@@ -419,7 +450,7 @@ func TestAppServerManagerMCPToolCallCountsAsProgress(t *testing.T) {
 		t.Fatalf("events[0] = %#v, want MCP tool start", events[0])
 	}
 	if events[len(events)-1].Kind != SessionEventPromptFailed ||
-		!strings.Contains(events[len(events)-1].Error, "codex semantic inactivity timeout") {
+		!strings.Contains(events[len(events)-1].Error, "Codex stopped responding after 100ms") {
 		t.Fatalf("last event = %#v, want semantic timeout failure", events[len(events)-1])
 	}
 }
@@ -439,6 +470,12 @@ func TestAppServerItemIsProgressIncludesInteractiveToolItems(t *testing.T) {
 	}
 	if appServerItemIsProgress("reasoning") {
 		t.Fatalf("appServerItemIsProgress(reasoning) = true, want false")
+	}
+	if !appServerItemSignalsAssistantActivity("reasoning") {
+		t.Fatal("appServerItemSignalsAssistantActivity(reasoning) = false, want true")
+	}
+	if appServerItemSignalsAssistantActivity("userMessage") {
+		t.Fatal("appServerItemSignalsAssistantActivity(userMessage) = true, want false")
 	}
 }
 
@@ -1167,6 +1204,41 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			case "turn/start":
 				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-hang"}})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-hang"}), true
+			case "turn/interrupt":
+				assertTurnInterruptParams(t, msg, "main-thread", "turn-hang")
+				writeRPCNotification(t, "turn/completed", map[string]any{
+					"threadId": "main-thread",
+					"turn":     map[string]any{"id": "turn-hang", "status": "interrupted"},
+				})
+				return rpcResult(msg["id"], map[string]any{}), true
+			default:
+				return nil, false
+			}
+		})
+	case "prompt-delayed-reasoning":
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "turn/start":
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-reasoning"}})
+				go func() {
+					time.Sleep(20 * time.Millisecond)
+					writeRPCNotification(t, "item/started", map[string]any{
+						"threadId": "main-thread",
+						"item":     map[string]any{"id": "reasoning-1", "type": "reasoning"},
+					})
+					time.Sleep(50 * time.Millisecond)
+					writeRPCNotification(t, "item/completed", map[string]any{
+						"threadId": "main-thread",
+						"item":     map[string]any{"id": "message-1", "type": "agentMessage", "text": "done"},
+					})
+					writeRPCNotification(t, "turn/completed", map[string]any{
+						"threadId": "main-thread",
+						"turn":     map[string]any{"id": "turn-reasoning", "status": "completed"},
+					})
+				}()
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-reasoning"}), true
 			default:
 				return nil, false
 			}
@@ -1190,6 +1262,13 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 					},
 				})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-mcp-hang"}), true
+			case "turn/interrupt":
+				assertTurnInterruptParams(t, msg, "main-thread", "turn-mcp-hang")
+				writeRPCNotification(t, "turn/completed", map[string]any{
+					"threadId": "main-thread",
+					"turn":     map[string]any{"id": "turn-mcp-hang", "status": "interrupted"},
+				})
+				return rpcResult(msg["id"], map[string]any{}), true
 			default:
 				return nil, false
 			}
@@ -1398,6 +1477,20 @@ func assertTurnStartParams(t *testing.T, msg map[string]any, wantThreadID string
 	block, _ := input[0].(map[string]any)
 	if block["type"] != "text" || block["text"] != wantPrompt {
 		t.Fatalf("turn/start input block = %#v, want text prompt", block)
+	}
+}
+
+func assertTurnInterruptParams(t *testing.T, msg map[string]any, wantThreadID, wantTurnID string) {
+	t.Helper()
+	params, _ := msg["params"].(map[string]any)
+	if params == nil {
+		t.Fatalf("turn/interrupt params = %#v, want object", msg["params"])
+	}
+	if got := params["threadId"]; got != wantThreadID {
+		t.Fatalf("turn/interrupt threadId = %#v, want %q", got, wantThreadID)
+	}
+	if got := params["turnId"]; got != wantTurnID {
+		t.Fatalf("turn/interrupt turnId = %#v, want %q", got, wantTurnID)
 	}
 }
 

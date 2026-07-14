@@ -41,6 +41,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     currentUserID = "",
     draftSegments,
     draftText,
+    attachmentDrafts,
     editorRef,
     inviteActionLabel,
     locale,
@@ -58,6 +59,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onApplyMention,
     onApplySlashCandidate = (_name) => {},
     onApplyThreadSlashCandidate = (_name) => {},
+    onAddAttachments,
+    onAddThreadAttachments,
     onClearRoomMessages = (_id) => {},
     onCloseThread,
     onComposerCompositionEnd,
@@ -70,6 +73,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onOpenThread,
     onPreviewUser,
     onProviderLogin,
+    onRemoveAttachment,
+    onRemoveThreadAttachment,
     onSendMessage,
     onSendThreadReply,
     onSetThreadSlashIndex = (_index) => {},
@@ -89,6 +94,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     t,
     theme,
     threadDraftSegments,
+    threadAttachmentDrafts,
     threadError,
     threadLoading,
     threadSlashCandidates = [],
@@ -169,6 +175,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
       loading={threadLoading}
       error={threadError}
       draftSegments={threadDraftSegments}
+      attachmentDrafts={threadAttachmentDrafts}
       disabled={composerDisabled}
       usersById={usersById}
       locale={locale}
@@ -177,6 +184,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
       t={t}
       onClose={onCloseThread}
       onDraftChange={onThreadDraftChange}
+      onAddAttachments={onAddThreadAttachments}
+      onRemoveAttachment={onRemoveThreadAttachment}
       threadSlashCandidates={threadSlashCandidates}
       threadSlashIndex={threadSlashIndex}
       threadSlashPickerLoading={threadSlashPickerLoading}
@@ -244,6 +253,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         composerError={composerError}
         draftSegments={draftSegments}
         draftText={draftText}
+        attachmentDrafts={attachmentDrafts}
         editorRef={editorRef}
         managerProfile={managerProfile}
         managerProvider={managerProvider}
@@ -258,11 +268,13 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         workingParticipants={workingParticipants}
         onApplyMention={onApplyMention}
         onApplySlashCandidate={onApplySlashCandidate}
+        onAddAttachments={onAddAttachments}
         onComposerCompositionEnd={onComposerCompositionEnd}
         onComposerCompositionStart={onComposerCompositionStart}
         onComposerKeyDown={onComposerKeyDown}
         onProviderLogin={onProviderLogin}
         onSendMessage={onSendMessage}
+        onRemoveAttachment={onRemoveAttachment}
         onSyncComposer={onSyncComposer}
       />
       <DialogRoot

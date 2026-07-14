@@ -43,6 +43,8 @@ type ComposerTextQueryContext = {
 
 type ComposerCaretDirection = "backward" | "forward";
 
+const composerCaretAnchorSelector = '[data-composer-caret-anchor="true"]';
+
 type ComposerKeyboardLikeEvent = {
   isComposing?: boolean;
   key?: string;
@@ -193,6 +195,9 @@ export function collectComposerSegments(node: Node, segments: ComposerSegment[])
     }
     if (element.dataset?.composerSlashToken) {
       segments.push({ type: "slash", text: element.textContent ?? "" });
+      return;
+    }
+    if (element.dataset?.composerCaretAnchor) {
       return;
     }
     if (element.tagName === "BR") {
@@ -557,15 +562,50 @@ export function insertComposerLineBreak(root: HTMLElement | null | undefined): v
     return;
   }
   range.deleteContents();
+
+  const trailingRange = document.createRange();
+  trailingRange.setStart(range.startContainer, range.startOffset);
+  trailingRange.setEnd(root, root.childNodes.length);
+  const insertsAtEnd = !hasComposerContent(trailingRange.cloneContents());
+
+  root.querySelectorAll(composerCaretAnchorSelector).forEach((anchor) => anchor.remove());
+
   const br = document.createElement("br");
-  const spacer = document.createTextNode("");
   range.insertNode(br);
-  br.after(spacer);
+
   const nextRange = document.createRange();
-  nextRange.setStart(spacer, 0);
+  if (insertsAtEnd) {
+    const caretAnchor = document.createElement("br");
+    caretAnchor.dataset.composerCaretAnchor = "true";
+    br.after(caretAnchor);
+    nextRange.setStartBefore(caretAnchor);
+  } else {
+    const spacer = document.createTextNode("");
+    br.after(spacer);
+    nextRange.setStart(spacer, 0);
+  }
   nextRange.collapse(true);
   selection.removeAllRanges();
   selection.addRange(nextRange);
+}
+
+function hasComposerContent(node: Node): boolean {
+  return Array.from(node.childNodes).some((child) => {
+    if (child.nodeType === Node.TEXT_NODE) {
+      return Boolean(child.textContent);
+    }
+    if (child.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+    const element = child as HTMLElement;
+    if (element.dataset?.composerCaretAnchor) {
+      return false;
+    }
+    if (element.tagName === "BR" || element.dataset?.userId || element.dataset?.composerSlashToken) {
+      return true;
+    }
+    return hasComposerContent(element);
+  });
 }
 
 export function insertPlainTextAtSelection(text: string): void {

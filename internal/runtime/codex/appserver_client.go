@@ -300,6 +300,12 @@ func (c *appServerClient) logDebug(msg string, args ...any) {
 	}
 }
 
+func (c *appServerClient) logError(msg string, args ...any) {
+	if c != nil && c.logger != nil {
+		c.logger.Error(msg, args...)
+	}
+}
+
 func decodeAppServerNumericID(raw json.RawMessage) (int64, error) {
 	var id int64
 	if err := json.Unmarshal(raw, &id); err == nil {

@@ -186,6 +186,77 @@ func TestPublishMessageEventIncludesThreadRootAndContext(t *testing.T) {
 	}
 }
 
+func TestPublishMessageEventIncludesAttachments(t *testing.T) {
+	bridge := NewParticipantBridge("")
+	events, cancel := bridge.Subscribe("u-bot")
+	defer cancel()
+
+	attachment := MessageAttachment{
+		ID:            "att-1",
+		Name:          "diagram.png",
+		Kind:          "image",
+		MediaType:     "image/png",
+		SizeBytes:     42,
+		SHA256:        "abc123",
+		DownloadURL:   "/api/v1/attachments/att-1",
+		WorkspacePath: ".csgclaw/attachments/room-group/msg-1/att-1-diagram.png",
+	}
+	root := Message{
+		ID:          "msg-root",
+		SenderID:    "u-admin",
+		Content:     "root context",
+		CreatedAt:   time.Now().UTC(),
+		Attachments: []MessageAttachment{attachment},
+	}
+	reply := Message{
+		ID:        "msg-1",
+		SenderID:  "u-admin",
+		Content:   "see attached",
+		CreatedAt: time.Now().UTC().Add(time.Second),
+		Attachments: []MessageAttachment{{
+			ID:          "att-2",
+			Name:        "notes.txt",
+			Kind:        "file",
+			MediaType:   "text/plain",
+			SizeBytes:   12,
+			SHA256:      "def456",
+			DownloadURL: "/api/v1/attachments/att-2",
+		}},
+		RelatesTo: &MessageRelation{
+			RelType: RelationTypeThread,
+			EventID: root.ID,
+		},
+	}
+	room := Room{
+		ID:       "room-group",
+		IsDirect: false,
+		Members:  []string{"u-admin", "u-bot"},
+		Messages: []Message{root, reply},
+		Threads: []ThreadState{{
+			RootMessageID: root.ID,
+			Context:       []Message{root},
+		}},
+	}
+	sender := User{ID: "u-admin", Name: "Admin"}
+
+	bridge.PublishMessageEvent(room, sender, reply)
+
+	select {
+	case evt := <-events:
+		if len(evt.Attachments) != 1 || evt.Attachments[0].ID != "att-2" {
+			t.Fatalf("Attachments = %+v, want reply attachment", evt.Attachments)
+		}
+		if evt.ThreadContext == nil || len(evt.ThreadContext.Context) != 1 {
+			t.Fatalf("ThreadContext = %+v, want root context", evt.ThreadContext)
+		}
+		if len(evt.ThreadContext.Context[0].Attachments) != 1 || evt.ThreadContext.Context[0].Attachments[0].ID != "att-1" {
+			t.Fatalf("ThreadContext.Context attachments = %+v, want root attachment", evt.ThreadContext.Context[0].Attachments)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("PublishMessageEvent() timed out waiting for event")
+	}
+}
+
 func TestPublishMessageEventNormalizesPlainThreadMentionForPicoClaw(t *testing.T) {
 	bridge := NewParticipantBridge("")
 	events, cancel := bridge.Subscribe("u-qa")

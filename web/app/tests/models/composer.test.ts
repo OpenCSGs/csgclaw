@@ -5,6 +5,8 @@ import {
   getCollapsedSelectionTextOffset,
   getMentionCandidates,
   createSlashTokenElement,
+  insertComposerLineBreak,
+  insertPlainTextAtSelection,
   isComposerKeyboardEventComposing,
   normalizeComposerSegments,
   normalizeTextMentions,
@@ -55,6 +57,48 @@ describe("composer model helpers", () => {
       { type: "text", text: " welcome" },
     ]);
     expect(segmentsToPlainText(parseComposerSegments(root))).toBe("Hello\n@Alice welcome");
+  });
+
+  it("inserts a visible trailing line break with one Shift+Enter action", () => {
+    const root = createComposerRoot();
+    const text = document.createTextNode("first");
+    root.append(text);
+    placeCaret(text);
+
+    insertComposerLineBreak(root);
+
+    expect(root.querySelectorAll("br:not([data-composer-caret-anchor])")).toHaveLength(1);
+    expect(root.querySelectorAll('[data-composer-caret-anchor="true"]')).toHaveLength(1);
+    insertPlainTextAtSelection("second");
+    expect(parseComposerSegments(root)).toEqual([{ type: "text", text: "first\nsecond" }]);
+  });
+
+  it("keeps repeated trailing line breaks distinct without accumulating caret anchors", () => {
+    const root = createComposerRoot();
+    const text = document.createTextNode("first");
+    root.append(text);
+    placeCaret(text);
+
+    insertComposerLineBreak(root);
+    insertComposerLineBreak(root);
+
+    expect(root.querySelectorAll("br:not([data-composer-caret-anchor])")).toHaveLength(2);
+    expect(root.querySelectorAll('[data-composer-caret-anchor="true"]')).toHaveLength(1);
+    insertPlainTextAtSelection("third");
+    expect(parseComposerSegments(root)).toEqual([{ type: "text", text: "first\n\nthird" }]);
+  });
+
+  it("inserts one line break in the middle of existing text", () => {
+    const root = createComposerRoot();
+    const text = document.createTextNode("firstsecond");
+    root.append(text);
+    placeCaret(text, 5);
+
+    insertComposerLineBreak(root);
+    insertPlainTextAtSelection("middle");
+
+    expect(root.querySelector("[data-composer-caret-anchor]")).toBeNull();
+    expect(parseComposerSegments(root)).toEqual([{ type: "text", text: "first\nmiddlesecond" }]);
   });
 
   it("normalizes adjacent text segments and trims trailing line breaks", () => {
