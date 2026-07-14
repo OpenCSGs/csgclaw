@@ -1,7 +1,6 @@
 import { Check, CheckCircle2, Edit3, Link2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AgentAvatarPicker } from "@/components/business/AgentAvatar";
-import { Button } from "@/components/ui";
 import { localizeRole } from "@/shared/i18n";
 import { feishuHumanParticipant } from "@/models/conversations";
 import type { IMUser, LocaleCode, TranslateFn } from "@/models/conversations";
@@ -61,6 +60,11 @@ export function HumanDetailPane({
   const online = user.is_online !== false;
   const currentDescription = String(user.description || "");
   const descriptionChanged = descriptionDraft.trim() !== currentDescription.trim();
+  const saveDescriptionIfChanged = (description: string) => {
+    if (!descriptionBusy && description.trim() !== currentDescription.trim()) {
+      void onDescriptionSave(description);
+    }
+  };
 
   return (
     <section className="entity-pane human-detail-pane">
@@ -91,7 +95,10 @@ export function HumanDetailPane({
                     value={descriptionDraft}
                     rows={4}
                     disabled={descriptionBusy}
-                    onBlur={() => setIsEditingDescription(false)}
+                    onBlur={(event) => {
+                      setIsEditingDescription(false);
+                      saveDescriptionIfChanged(event.currentTarget.value);
+                    }}
                     onChange={(event) => setDescriptionDraft(event.currentTarget.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Escape") {
@@ -141,24 +148,16 @@ export function HumanDetailPane({
             ) : null}
           </div>
           <div className="entity-toolbar human-detail-toolbar">
-            {descriptionChanged || descriptionBusy ? (
-              <Button
-                variant="primary"
-                size="md"
-                type="button"
-                loading={descriptionBusy}
-                loadingLabel={t("agentSavingChanges")}
-                disabled={!descriptionChanged || descriptionBusy}
-                onClick={() => void onDescriptionSave(descriptionDraft)}
-              >
-                {t("agentSaveChanges")}
-              </Button>
-            ) : (
+            {descriptionBusy ? (
+              <span className="human-save-status" role="status">
+                {t("agentSavingChanges")}
+              </span>
+            ) : !descriptionChanged ? (
               <span className="human-save-status" role="status">
                 <Check aria-hidden="true" size={16} strokeWidth={2.5} />
                 {t("agentSaved")}
               </span>
-            )}
+            ) : null}
           </div>
         </div>
       </header>

@@ -1396,6 +1396,67 @@ export function useAgentController({
     );
   }
 
+  async function saveAgentPageMetadata(patch: Pick<Partial<AgentDraft>, "description" | "name">): Promise<void> {
+    const agentID = String(selectedAgentForPage?.id ?? "").trim();
+    if (!agentID || !agentPageDraft || agentPageBusy) {
+      return;
+    }
+    const payload: AgentUpdatePayload = {};
+    const isManagerDraft =
+      isManagerAgent(selectedAgentForPage) ||
+      agentPageDraft.agent_id === MANAGER_AGENT_ID ||
+      agentPageDraft.role === MANAGER_AGENT_ROLE;
+    if (patch.name !== undefined && !isManagerDraft) {
+      const name = String(patch.name ?? "");
+      if (!name.trim()) {
+        setAgentPageError(t("profileSaveIncompleteError"));
+        return;
+      }
+      if (name !== String(agentPageSavedDraft?.name ?? "")) {
+        payload.name = name;
+      }
+    }
+    if (patch.description !== undefined) {
+      const description = String(patch.description ?? "");
+      if (description !== String(agentPageSavedDraft?.description ?? "")) {
+        payload.description = description;
+      }
+    }
+    if (!Object.keys(payload).length) {
+      return;
+    }
+    setAgentPageBusy(true);
+    setAgentPageError("");
+    try {
+      const saved = await updateAgentRequest(agentID, payload);
+      setAgentsData((current) => mergeAgentIntoList(current, saved));
+      setAgentPageDraft((current) => {
+        if (!current || String(current.agent_id ?? "").trim() !== agentID) {
+          return current;
+        }
+        return {
+          ...current,
+          ...(payload.name !== undefined ? { name: saved.name || "" } : {}),
+          ...(payload.description !== undefined ? { description: saved.description || "" } : {}),
+        };
+      });
+      setAgentPageSavedDraft((current) => {
+        if (!current || String(current.agent_id ?? "").trim() !== agentID) {
+          return current;
+        }
+        return {
+          ...current,
+          ...(payload.name !== undefined ? { name: saved.name || "" } : {}),
+          ...(payload.description !== undefined ? { description: saved.description || "" } : {}),
+        };
+      });
+    } catch (err) {
+      setAgentPageError(errorMessage(err, t("agentActionFailed")));
+    } finally {
+      setAgentPageBusy(false);
+    }
+  }
+
   async function saveAgentPage(): Promise<void> {
     const draftToSave = agentPageDraft;
     if (!draftToSave || !selectedAgentForPage?.id) {
@@ -2285,6 +2346,7 @@ export function useAgentController({
       workspaceSupported: Boolean(selectedAgentForPage),
       onDraftChange: setAgentPageDraft,
       onSave: saveAgentPage,
+      onMetadataSave: saveAgentPageMetadata,
       onPublish: publishAgentPage,
       onProviderLogin: loginCLIProxyProvider,
       onStart: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),
