@@ -1210,19 +1210,21 @@
 }
 
 .profile-runtime-grid.agent-model-config-grid {
-  grid-template-columns: minmax(180px, 1.05fr) minmax(240px, 1.4fr) minmax(150px, 0.9fr) minmax(190px, 0.9fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
 }
 
 .profile-runtime-grid.agent-model-config-grid > .field {
   display: grid;
-  grid-template-rows: 22px 60px;
   gap: 7px;
+  min-width: 0;
 }
 
 .profile-runtime-grid.agent-model-config-grid .csg-select-trigger,
 .profile-runtime-grid.agent-model-config-grid .agent-fast-mode-toggle {
-  height: 60px;
-  min-height: 60px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .profile-runtime-grid.agent-model-config-grid .csg-select-trigger {
@@ -1647,8 +1649,8 @@
 
 .profile-modal.agent-modal .agent-model-config-grid .agent-fast-mode-field .compact-toggle-row {
   align-items: center;
-  height: 60px;
-  min-height: 60px;
+  padding-block: 10px;
+  box-shadow: var(--input-shadow);
 }
 
 .profile-modal.agent-modal .agent-fast-mode-field input[type="checkbox"] {
@@ -1700,10 +1702,8 @@
 .profile-modal.agent-modal .agent-fast-mode-help {
   flex: 1 1 auto;
   min-width: 0;
-  color: var(--gray-600);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 20px;
+  color: var(--input-text);
+  font: var(--text-md-normal);
   overflow-wrap: anywhere;
   white-space: normal;
 }
@@ -2212,6 +2212,32 @@
   border-color: var(--input-border);
   background: var(--input-background);
   color: var(--input-text);
+}
+
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle,
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle:hover,
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle:focus-within,
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle:has(input:checked) {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
 }
 
 :root[data-theme="dark"] .profile-modal.agent-modal .agent-sandbox-toggle.readonly,

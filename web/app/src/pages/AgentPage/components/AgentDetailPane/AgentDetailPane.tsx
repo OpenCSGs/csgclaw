@@ -238,8 +238,10 @@ export function AgentDetailPane({
   const [selectedMCPServerNames, setSelectedMCPServerNames] = useState<string[]>([]);
   const [deleteMCPDialogOpen, setDeleteMCPDialogOpen] = useState(false);
   const [mcpPendingDelete, setMCPPendingDelete] = useState<MCPServer | null>(null);
+  const [isProfileScrolling, setIsProfileScrolling] = useState(false);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const profileScrollTimerRef = useRef<number | null>(null);
   const isManager = isManagerAgent(item);
   const canEditAgentName = Boolean(draft && !isManager);
   const running = isAgentRunning(item);
@@ -350,6 +352,26 @@ export function AgentDetailPane({
       setMCPPendingDelete(null);
     }
   }, [showMCPServers]);
+
+  useEffect(
+    () => () => {
+      if (profileScrollTimerRef.current) {
+        window.clearTimeout(profileScrollTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  function onProfileScroll() {
+    setIsProfileScrolling(true);
+    if (profileScrollTimerRef.current) {
+      window.clearTimeout(profileScrollTimerRef.current);
+    }
+    profileScrollTimerRef.current = window.setTimeout(() => {
+      setIsProfileScrolling(false);
+      profileScrollTimerRef.current = null;
+    }, 700);
+  }
 
   async function handleAddSkillsConfirm(): Promise<void> {
     if (!selectedSkillNames.length) {
@@ -599,7 +621,10 @@ export function AgentDetailPane({
           </nav>
         ) : null}
       </div>
-      <div className="agent-profile-scroll-region">
+      <div
+        className={`agent-profile-scroll-region${isProfileScrolling ? " is-scrolling" : ""}`}
+        onScroll={onProfileScroll}
+      >
         {!draft ? (
           <>
             <div className="entity-grid">
@@ -1168,6 +1193,7 @@ function AgentModelPanel({
   t,
   updateDraft,
 }: AgentModelPanelProps) {
+  const selectedProviderOption = providerOptions.find((option) => option.id === selectedProviderID);
   return (
     <section id="agent-profile-model" className="profile-section agent-profile-scroll-target">
       <div className="profile-section-heading">
@@ -1182,6 +1208,14 @@ function AgentModelPanel({
               <Select
                 value={selectedProviderID}
                 required
+                selectedLabel={
+                  selectedProviderOption ? (
+                    <ModelOptionLabel
+                      avatar={selectedProviderOption.avatar}
+                      model={selectedProviderOption.displayName}
+                    />
+                  ) : undefined
+                }
                 onValueChange={(value) => {
                   const nextProvider = providerOptions.find((option) => option.id === value);
                   if (!nextProvider) {

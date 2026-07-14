@@ -43,6 +43,29 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.agent-profile-scroll-region::-webkit-scrollbar {
+  width: 8px;
+}
+
+.agent-profile-scroll-region::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agent-profile-scroll-region::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 6px;
+}
+
+.agent-profile-scroll-region.is-scrolling {
+  scrollbar-color: var(--gray-400) transparent;
+}
+
+.agent-profile-scroll-region.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: var(--gray-400);
 }
 
 .agent-profile-scroll-region .profile-editor-shell.agent-page-editor {
@@ -1636,20 +1659,22 @@
 }
 
 .agent-detail-pane .agent-model-config-grid {
-  grid-template-columns: minmax(220px, 1.05fr) minmax(320px, 1.5fr) minmax(190px, 0.9fr) minmax(220px, 0.85fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
   align-items: start;
 }
 
 .agent-detail-pane .agent-model-config-grid > .field {
   display: grid;
-  grid-template-rows: 24px 64px;
   gap: 8px;
+  min-width: 0;
 }
 
 .agent-detail-pane .agent-model-config-grid .csg-select-trigger,
 .agent-detail-pane .agent-model-config-grid .agent-fast-mode-toggle {
-  height: 64px;
-  min-height: 64px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .agent-detail-pane .agent-model-config-grid .csg-select-trigger {
@@ -1660,6 +1685,13 @@
   display: flex;
   min-width: 0;
   align-items: center;
+}
+
+.agent-detail-pane .agent-model-config-grid .csg-select-value,
+.agent-detail-pane .agent-model-config-grid .csg-select-value > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-detail-pane .field input,
@@ -1720,6 +1752,11 @@
   padding: 10px 14px;
 }
 
+.agent-detail-pane .agent-model-config-grid .agent-fast-mode-field .compact-toggle-row {
+  padding: 10px 14px;
+  box-shadow: var(--input-shadow);
+}
+
 .agent-detail-pane .agent-fast-mode-toggle input[type="checkbox"] {
   appearance: none;
   display: grid;
@@ -1763,11 +1800,13 @@
 }
 
 .agent-detail-pane .agent-fast-mode-help {
+  display: block;
   min-width: 0;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 620;
-  line-height: 20px;
+  overflow: hidden;
+  color: var(--input-text);
+  font: var(--text-md-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-detail-pane .profile-section .field textarea.compact-textarea {
@@ -1930,6 +1969,32 @@
   border-color: var(--input-border);
   background: var(--input-background);
   color: var(--input-text);
+}
+
+:root[data-theme="dark"]
+  .agent-detail-pane
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle,
+:root[data-theme="dark"]
+  .agent-detail-pane
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle:hover,
+:root[data-theme="dark"]
+  .agent-detail-pane
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle:focus-within,
+:root[data-theme="dark"]
+  .agent-detail-pane
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle:has(input:checked) {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
 }
 
 :root[data-theme="dark"] .agent-detail-pane .agent-fast-mode-help {

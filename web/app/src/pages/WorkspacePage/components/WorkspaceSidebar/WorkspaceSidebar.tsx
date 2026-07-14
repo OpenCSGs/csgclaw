@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PanelLeftOpen, Plus, Search } from "lucide-react";
 import {
   SidebarAlertTriangleIcon,
@@ -132,6 +132,8 @@ export function WorkspaceSidebar({
   const firstMCPServer = hub?.mcpServers?.[0] ?? null;
   const firstHubSkill = hub?.skills[0] ?? null;
   const firstModelProvider = modelProviders?.providers[0] ?? null;
+  const isSettingsPane = activePane.type === WorkspacePaneTypes.settings;
+  const isPrimaryNavigationActive = useCallback((active: boolean) => !isSettingsPane && active, [isSettingsPane]);
   const notificationAgentIds = useMemo(
     () => new Set(notificationAgentItems.map((item) => item.id).filter((id): id is string => Boolean(id))),
     [notificationAgentItems],
@@ -162,9 +164,7 @@ export function WorkspaceSidebar({
         label: t("messagesTab"),
         items: [
           {
-            active:
-              activePane.type !== WorkspacePaneTypes.settings &&
-              activeContextSectionId === WorkspaceContextSectionIds.messages,
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.messages),
             groupId: WorkspaceContextSectionIds.messages,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.messages),
             id: "messages",
@@ -178,7 +178,7 @@ export function WorkspaceSidebar({
         label: t("agentsTab"),
         items: [
           {
-            active: activeContextSectionId === WorkspaceContextSectionIds.agents,
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.agents),
             groupId: WorkspaceContextSectionIds.agents,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.agents),
             id: "agents",
@@ -190,7 +190,7 @@ export function WorkspaceSidebar({
             },
           },
           {
-            active: activeContextSectionId === WorkspaceContextSectionIds.humans,
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.humans),
             groupId: WorkspaceContextSectionIds.humans,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.humans),
             id: "humans",
@@ -202,7 +202,7 @@ export function WorkspaceSidebar({
             },
           },
           {
-            active: activeContextSectionId === WorkspaceContextSectionIds.computers,
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.computers),
             groupId: WorkspaceContextSectionIds.computers,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.computers),
             id: "computers",
@@ -210,7 +210,7 @@ export function WorkspaceSidebar({
             onSelect: onSelectComputer,
           },
           {
-            active: activeContextSectionId === WorkspaceContextSectionIds.notifications,
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.notifications),
             groupId: WorkspaceContextSectionIds.notifications,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.notifications),
             id: "notifications",
@@ -224,7 +224,7 @@ export function WorkspaceSidebar({
             },
           },
           {
-            active: activeContextSectionId === WorkspaceContextSectionIds.teams,
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.teams),
             groupId: WorkspaceContextSectionIds.teams,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.teams),
             id: "teams",
@@ -244,7 +244,9 @@ export function WorkspaceSidebar({
         label: t("tasksTab"),
         items: [
           {
-            active: activePane.type === WorkspacePaneTypes.task && activeTaskBoardView !== "scheduled",
+            active: isPrimaryNavigationActive(
+              activePane.type === WorkspacePaneTypes.task && activeTaskBoardView !== "scheduled",
+            ),
             groupId: WorkspaceContextSectionIds.tasks,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.tasks),
             id: "tasks",
@@ -255,7 +257,9 @@ export function WorkspaceSidebar({
             },
           },
           {
-            active: activePane.type === WorkspacePaneTypes.task && activeTaskBoardView === "scheduled",
+            active: isPrimaryNavigationActive(
+              activePane.type === WorkspacePaneTypes.task && activeTaskBoardView === "scheduled",
+            ),
             groupId: WorkspaceContextSectionIds.tasks,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.scheduledTasks),
             id: "scheduled-tasks",
@@ -272,7 +276,7 @@ export function WorkspaceSidebar({
         label: t("resourcesTab"),
         items: [
           {
-            active: activeContextSectionId === WorkspaceContextSectionIds.hubTemplates,
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.hubTemplates),
             groupId: WorkspaceContextSectionIds.hubTemplates,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.templates),
             id: "templates",
@@ -286,7 +290,7 @@ export function WorkspaceSidebar({
             },
           },
           {
-            active: activeContextSectionId === WorkspaceContextSectionIds.hubSkills,
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.hubSkills),
             groupId: WorkspaceContextSectionIds.hubSkills,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.skills),
             id: "skills",
@@ -300,7 +304,7 @@ export function WorkspaceSidebar({
             },
           },
           {
-            active: activeContextSectionId === WorkspaceContextSectionIds.mcpServers,
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.mcpServers),
             groupId: WorkspaceContextSectionIds.mcpServers,
             icon: navigationIcon(SidebarMcpIcon),
             id: "mcp-servers",
@@ -314,7 +318,7 @@ export function WorkspaceSidebar({
             },
           },
           {
-            active: activeContextSectionId === WorkspaceContextSectionIds.models,
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.models),
             groupId: WorkspaceContextSectionIds.models,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.models),
             id: "models",
@@ -356,6 +360,7 @@ export function WorkspaceSidebar({
       onSelectTeam,
       onSelectTeamSection,
       onWorkspaceTabChange,
+      isPrimaryNavigationActive,
       t,
     ],
   );
@@ -440,7 +445,7 @@ export function WorkspaceSidebar({
         </div>
         <div className={classNames(styles.primaryFooter, isSidebarCollapsed && styles.primaryFooterCollapsed)}>
           <SidebarUserButton
-            active={activePane.type === WorkspacePaneTypes.settings}
+            active={isSettingsPane}
             presentation={isSidebarCollapsed ? "icon" : "row"}
             theme={theme}
             onThemeChange={onThemeChange}

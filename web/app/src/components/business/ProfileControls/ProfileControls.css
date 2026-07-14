@@ -177,16 +177,16 @@
 }
 
 .model-option-label {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  display: inline-flex;
   align-items: center;
   gap: 9px;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
 }
 
 .model-option-label.no-avatar {
-  grid-template-columns: minmax(0, 1fr);
   gap: 0;
 }
 
@@ -194,7 +194,19 @@
   display: block;
 }
 
+.csg-select-trigger .csg-select-value > .model-option-label.single-line {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.csg-select-trigger .csg-select-value > .model-option-label.single-line .model-option-copy {
+  display: block;
+  min-width: 0;
+}
+
 .model-option-avatar {
+  flex: 0 0 24px;
   width: 24px;
   height: 24px;
   display: block;
@@ -205,14 +217,19 @@
 }
 
 .model-option-copy {
+  flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
   display: grid;
   gap: 1px;
+  overflow: hidden;
 }
 
 .model-option-model,
 .model-option-provider {
+  display: block;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

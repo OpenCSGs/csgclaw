@@ -651,6 +651,11 @@ export function AgentProfileModal({
                         <Select
                           value={selectedProviderID}
                           required
+                          selectedLabel={
+                            selectedProvider ? (
+                              <ModelOptionLabel avatar={selectedProvider.avatar} model={selectedProvider.displayName} />
+                            ) : undefined
+                          }
                           onValueChange={(value) => {
                             const nextProvider = providerOptions.find((option) => option.id === value);
                             if (!nextProvider) {

@@ -667,6 +667,10 @@
   color: var(--white);
 }
 
+:global(:root[data-theme="dark"]) .active {
+  background: var(--gray-800);
+}
+
 :global(:root[data-theme="dark"]) .alertDot {
   box-shadow: 0 0 0 3px var(--surface);
 }
