@@ -29,6 +29,8 @@ import type { PrimaryNavigationItem, PrimaryNavigationSection } from "./Workspac
 import type { WorkspaceContextSectionId, WorkspaceSidebarProps } from "./types";
 type SidebarNavigationIcon = ComponentType<{ size?: number | string }>;
 
+const SCROLLBAR_HIDE_DELAY_MS = 700;
+
 const WORKSPACE_NAVIGATION_ICONS = {
   agents: SidebarRobotIcon,
   computers: SidebarLaptopIcon,
@@ -121,8 +123,10 @@ export function WorkspaceSidebar({
   startingTaskID = "",
 }: WorkspaceSidebarProps) {
   const [contextQuery, setContextQuery] = useState("");
+  const [isContextNavScrolling, setIsContextNavScrolling] = useState(false);
   const [skillUploadOpen, setSkillUploadOpen] = useState(false);
   const contextNavRef = useRef<HTMLElement | null>(null);
+  const contextNavScrollTimerRef = useRef<number | null>(null);
   const currentUser = usersById.get(currentUserID);
   const hasContextSidebar = workspaceHasContextSidebar(activePane);
   const firstWorkerAgent = workerAgentItems[0] ?? agentItems[0] ?? null;
@@ -154,6 +158,15 @@ export function WorkspaceSidebar({
       setActiveContextSectionId(routeContextSectionId);
     }
   }, [routeContextSectionId]);
+
+  useEffect(
+    () => () => {
+      if (contextNavScrollTimerRef.current !== null) {
+        window.clearTimeout(contextNavScrollTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const primaryNavigationSections = useMemo<PrimaryNavigationSection[]>(
     () => [
@@ -394,6 +407,17 @@ export function WorkspaceSidebar({
     scheduleSectionScroll(() => contextNavRef.current, item.groupId);
   }
 
+  function handleContextNavScroll() {
+    setIsContextNavScrolling(true);
+    if (contextNavScrollTimerRef.current !== null) {
+      window.clearTimeout(contextNavScrollTimerRef.current);
+    }
+    contextNavScrollTimerRef.current = window.setTimeout(() => {
+      setIsContextNavScrolling(false);
+      contextNavScrollTimerRef.current = null;
+    }, SCROLLBAR_HIDE_DELAY_MS);
+  }
+
   return (
     <div className={classNames(styles.slot, !hasContextSidebar && styles.noContextSidebar)}>
       <aside
@@ -498,7 +522,12 @@ export function WorkspaceSidebar({
               />
             </label>
           </div>
-          <nav ref={contextNavRef} className={styles.contextNav} aria-label="Workspace">
+          <nav
+            ref={contextNavRef}
+            className={classNames(styles.contextNav, isContextNavScrolling && styles.scrollbarScrolling)}
+            aria-label="Workspace"
+            onScroll={handleContextNavScroll}
+          >
             <WorkspaceTabPanels
               contextQuery={contextQuery}
               contextSectionId={activeContextSectionId}

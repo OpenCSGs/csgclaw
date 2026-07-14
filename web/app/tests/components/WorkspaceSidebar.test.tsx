@@ -1,9 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { emptyAuthStatus } from "@/models/auth";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { WorkspaceSidebar } from "@/pages/WorkspacePage/components/WorkspaceSidebar";
 import type { WorkspaceSidebarProps } from "@/pages/WorkspacePage/components/WorkspaceSidebar/types";
 import type { TranslateFn } from "@/models/conversations";
+
+const SCROLLBAR_HIDE_DELAY_MS = 700;
 
 const labels: Record<string, string> = {
   activeNow: "active",
@@ -170,6 +172,26 @@ function renderSidebar(overrides: Partial<WorkspaceSidebarProps> = {}) {
 }
 
 describe("WorkspaceSidebar", () => {
+  it("only reveals the context scrollbar while the user is scrolling", () => {
+    vi.useFakeTimers();
+
+    try {
+      renderSidebar();
+      const workspaceNavigation = screen.getAllByRole("navigation", { name: "Workspace" }).at(-1);
+
+      expect(workspaceNavigation).toBeDefined();
+      expect(workspaceNavigation?.className).not.toContain("scrollbarScrolling");
+
+      fireEvent.scroll(workspaceNavigation as HTMLElement);
+      expect(workspaceNavigation?.className).toContain("scrollbarScrolling");
+
+      act(() => vi.advanceTimersByTime(SCROLLBAR_HIDE_DELAY_MS));
+      expect(workspaceNavigation?.className).not.toContain("scrollbarScrolling");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps room creation only in the Rooms section", () => {
     const onCreateRoom = vi.fn();
 
