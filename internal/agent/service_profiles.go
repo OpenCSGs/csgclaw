@@ -40,6 +40,15 @@ func updateIncludesMCPServers(req UpdateRequest) bool {
 	return ok
 }
 
+func updateIncludesRuntimeOptions(req UpdateRequest) bool {
+	fieldMask := normalizeUpdateFieldMask(req.FieldMask)
+	if len(fieldMask) == 0 {
+		return req.RuntimeOptions != nil
+	}
+	_, ok := fieldMask["runtime_options"]
+	return ok
+}
+
 func (s *Service) AgentProfileView(id string) (AgentProfileView, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -268,7 +277,7 @@ func (s *Service) update(ctx context.Context, id string, req UpdateRequest) (Age
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
 	if isManagerAgent(current) {
-		if err := validateManagerUpdateRuntimeSpec(req); err != nil {
+		if err := validateManagerUpdateRuntimeConfig(req); err != nil {
 			s.mu.Unlock()
 			return Agent{}, err
 		}
@@ -672,7 +681,10 @@ func runtimeMCPServerConfigFromCatalog(name string, raw any) (map[string]any, er
 	return serverConfig, nil
 }
 
-func validateManagerUpdateRuntimeSpec(req UpdateRequest) error {
+func validateManagerUpdateRuntimeConfig(req UpdateRequest) error {
+	if updateIncludesRuntimeOptions(req) {
+		return fmt.Errorf("manager runtime options are managed automatically")
+	}
 	if !req.RuntimeSelectionRequested {
 		return nil
 	}

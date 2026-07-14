@@ -511,6 +511,33 @@ describe("agent model helpers", () => {
       },
     ]);
     expect(
+      runtimeOptionSchemasForAgent(
+        "codex",
+        {
+          id: "agent-manager",
+          role: "manager",
+          runtime: {
+            option_schemas: [
+              {
+                path: "local_workspace_dir",
+                label: "Local Workspace Dir",
+              },
+            ],
+          },
+        },
+        {
+          runtime_option_schemas: {
+            codex: [
+              {
+                path: "local_workspace_dir",
+                label: "Local Workspace Dir",
+              },
+            ],
+          },
+        },
+      ),
+    ).toEqual([]);
+    expect(
       localizedRuntimeOptionLabel(
         {
           path: "local_workspace_dir",

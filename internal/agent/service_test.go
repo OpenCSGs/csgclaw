@@ -1601,6 +1601,48 @@ func TestUpdateRuntimeOptionsSyncsCodexWorkspaceAgentsFile(t *testing.T) {
 	}
 }
 
+func TestUpdateManagerRejectsRuntimeOptions(t *testing.T) {
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:          ManagerUserID,
+		Name:        ManagerName,
+		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind: RuntimeKindCodex,
+		Role:        RoleManager,
+		Status:      string(agentruntime.StateStopped),
+		CreatedAt:   time.Date(2026, 5, 18, 9, 0, 0, 0, time.UTC),
+	}
+
+	nextRuntimeOptions := map[string]any{"local_workspace_dir": "/tmp/manager"}
+	for name, req := range map[string]UpdateRequest{
+		"value":      {RuntimeOptions: &nextRuntimeOptions},
+		"field mask": {FieldMask: []string{"runtime_options"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := svc.Update(context.Background(), ManagerUserID, req)
+			if err == nil || !strings.Contains(err.Error(), "manager runtime options are managed automatically") {
+				t.Fatalf("Update() error = %v, want managed runtime options error", err)
+			}
+		})
+	}
+	manager, ok := svc.Agent(ManagerUserID)
+	if !ok {
+		t.Fatal("Agent(manager) ok = false, want true")
+	}
+	if manager.RuntimeOptions != nil {
+		t.Fatalf("manager RuntimeOptions = %#v, want nil", manager.RuntimeOptions)
+	}
+}
+
 func TestUpdateCodexLocalWorkspaceDirMarksRunningRuntimeForRestart(t *testing.T) {
 	observer := &fakeLifecycleObserver{}
 	svc, err := NewService(

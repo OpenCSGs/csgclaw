@@ -1510,6 +1510,9 @@ export function runtimeOptionSchemasForAgent(
   item?: AgentLike | null,
   bootstrapConfig?: RuntimeBootstrapConfig | null,
 ): RuntimeOptionSchema[] {
+  if (isManagerAgent(item)) {
+    return [];
+  }
   const fromRuntime = normalizeRuntimeOptionSchemas(item?.runtime?.option_schemas);
   if (fromRuntime.length > 0) {
     return fromRuntime;

@@ -576,6 +576,75 @@ func TestHandleAgentIncludesRuntimeOptionSchemas(t *testing.T) {
 	}
 }
 
+func TestHandleManagerOmitsRuntimeOptionSchemas(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	if err := writeSeededAgents(statePath, []agent.Agent{
+		{
+			ID:          agent.ManagerUserID,
+			Name:        agent.ManagerName,
+			RuntimeID:   "rt-agent-manager",
+			RuntimeKind: agent.RuntimeKindCodex,
+			Role:        agent.RoleManager,
+			Status:      string(agentruntime.StateRunning),
+			CreatedAt:   time.Date(2026, 6, 13, 8, 0, 0, 0, time.UTC),
+		},
+	}); err != nil {
+		t.Fatalf("writeSeededAgents() error = %v", err)
+	}
+	svc, err := agent.NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		statePath,
+		agent.WithRuntime(fakeCompatRuntime{
+			kind: agent.RuntimeKindCodex,
+			schemas: []agentruntime.RuntimeOptionSchema{
+				{
+					Key:   "local_workspace_dir",
+					Path:  "local_workspace_dir",
+					Label: "Local Workspace Dir",
+					Type:  "directory",
+				},
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	srv := &Handler{svc: svc}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+agent.ManagerUserID, nil)
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got agentResponse
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(got.RuntimeOptionSchemas) != 0 || len(got.Runtime.OptionSchemas) != 0 {
+		t.Fatalf("manager runtime option schemas = %#v / %#v, want none", got.RuntimeOptionSchemas, got.Runtime.OptionSchemas)
+	}
+
+	patchRec := httptest.NewRecorder()
+	patchReq := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/agents/"+agent.ManagerUserID,
+		strings.NewReader(`{"runtime_options":{"local_workspace_dir":"/tmp/manager"}}`),
+	)
+	patchReq.Header.Set("Content-Type", "application/json")
+	srv.Routes().ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH status = %d, want %d; body=%s", patchRec.Code, http.StatusBadRequest, patchRec.Body.String())
+	}
+	if !strings.Contains(patchRec.Body.String(), "manager runtime options are managed automatically") {
+		t.Fatalf("PATCH body = %q, want managed runtime options error", patchRec.Body.String())
+	}
+}
+
 func TestHandleFeishuRoomsMembers(t *testing.T) {
 	feishuSvc := feishu.NewServiceWithCreateChatAndAddMembers(
 		map[string]feishu.AppConfig{

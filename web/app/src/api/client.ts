@@ -82,7 +82,7 @@ export async function requestText(path: string, options: ApiRequestOptions = {})
   return response.text();
 }
 
-function resolveRequestPath(path: string): string {
+export function resolveRequestPath(path: string): string {
   const value = String(path || "").trim();
   if (!value || value.startsWith("#") || value.startsWith("//") || absoluteURLPattern.test(value)) {
     return value;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FileText, X } from "lucide-react";
+import { resolveRequestPath } from "@/api/client";
 import { Button } from "@/components/ui";
 import {
   formatAttachmentSize,
@@ -84,24 +85,28 @@ export function MessageAttachments({
     <div className="message-attachments">
       {images.length > 0 ? (
         <div className="message-attachment-grid">
-          {images.map((attachment) => (
-            <a
-              key={attachment.id}
-              className="message-image-attachment"
-              href={attachment.download_url}
-              target="_blank"
-              rel="noreferrer"
-              title={attachment.name}
-            >
-              <img
-                src={attachment.preview_url || attachment.download_url}
-                alt={attachment.name}
-                decoding="async"
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
-            </a>
-          ))}
+          {images.map((attachment) => {
+            const downloadURL = resolveRequestPath(attachment.download_url);
+            const previewURL = resolveRequestPath(attachment.preview_url || attachment.download_url);
+            return (
+              <a
+                key={attachment.id}
+                className="message-image-attachment"
+                href={downloadURL}
+                target="_blank"
+                rel="noreferrer"
+                title={attachment.name}
+              >
+                <img
+                  src={previewURL}
+                  alt={attachment.name}
+                  decoding="async"
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                />
+              </a>
+            );
+          })}
         </div>
       ) : null}
       {files.length > 0 ? (
@@ -110,7 +115,7 @@ export function MessageAttachments({
             <a
               key={attachment.id}
               className="message-file-attachment"
-              href={attachment.download_url}
+              href={resolveRequestPath(attachment.download_url)}
               download
               referrerPolicy="no-referrer"
               title={attachment.name}

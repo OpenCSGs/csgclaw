@@ -6,7 +6,10 @@ import type { TranslateFn } from "@/models/conversations";
 const t: TranslateFn = (key) => (key === "attachment" ? "Attachment" : key);
 
 describe("MessageAttachments", () => {
-  it("renders capability-backed image previews and file downloads", () => {
+  it("renders capability-backed attachments relative to the application base path", () => {
+    const base = document.createElement("base");
+    base.href = "/v1/sandboxes/csgship-test/";
+    document.head.prepend(base);
     const attachments: MessageAttachment[] = [
       {
         id: "att-image",
@@ -31,15 +34,21 @@ describe("MessageAttachments", () => {
       },
     ];
 
-    render(<MessageAttachments attachments={attachments} t={t} />);
+    try {
+      render(<MessageAttachments attachments={attachments} t={t} />);
 
-    const image = screen.getByRole("img", { name: "diagram.png" });
-    expect(image).toHaveAttribute("src", "/api/v1/attachments/att-image?token=image-token");
-    expect(image).toHaveAttribute("loading", "lazy");
-    expect(image).toHaveAttribute("referrerpolicy", "no-referrer");
+      const image = screen.getByRole("img", { name: "diagram.png" }) as HTMLImageElement;
+      expect(image).toHaveAttribute("src", "api/v1/attachments/att-image?token=image-token");
+      expect(new URL(image.src).pathname).toBe("/v1/sandboxes/csgship-test/api/v1/attachments/att-image");
+      expect(image).toHaveAttribute("loading", "lazy");
+      expect(image).toHaveAttribute("referrerpolicy", "no-referrer");
 
-    const file = screen.getByRole("link", { name: /report\.txt/ });
-    expect(file).toHaveAttribute("href", "/api/v1/attachments/att-file?token=file-token");
-    expect(file).toHaveAttribute("download");
+      const file = screen.getByRole("link", { name: /report\.txt/ }) as HTMLAnchorElement;
+      expect(file).toHaveAttribute("href", "api/v1/attachments/att-file?token=file-token");
+      expect(new URL(file.href).pathname).toBe("/v1/sandboxes/csgship-test/api/v1/attachments/att-file");
+      expect(file).toHaveAttribute("download");
+    } finally {
+      base.remove();
+    }
   });
 });

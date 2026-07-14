@@ -2548,7 +2548,9 @@ func (h *Handler) backfillAgentLocalUser(resp *agentResponse) {
 
 func (h *Handler) presentAgentResponse(item agent.Agent) agentResponse {
 	resp := presentAgent(item)
-	resp.RuntimeOptionSchemas = h.runtimeOptionSchemasForKind(item.RuntimeKind)
+	if item.ID != agent.ManagerUserID && item.Role != agent.RoleManager {
+		resp.RuntimeOptionSchemas = h.runtimeOptionSchemasForKind(item.RuntimeKind)
+	}
 	resp.Runtime.OptionSchemas = runtimeOptionSchemasForAPI(resp.RuntimeOptionSchemas)
 	return resp
 }
