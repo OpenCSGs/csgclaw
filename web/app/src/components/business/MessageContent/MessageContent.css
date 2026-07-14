@@ -221,7 +221,14 @@
 .long-message-toggle {
   position: relative;
   z-index: 4;
+  color: #2f384c;
   box-shadow: var(--shadow-soft);
+}
+
+.long-message-toggle-icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
 }
 
 :root[data-theme="dark"] .message-bubble:has(.long-message-collapse.is-collapsed)::after {

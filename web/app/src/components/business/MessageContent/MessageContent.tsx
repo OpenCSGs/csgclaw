@@ -42,7 +42,7 @@ export function MessageContent({
   );
 
   useEffect(() => {
-    if (enableLongMessageCollapse && t) {
+    if (enableLongMessageCollapse) {
       return undefined;
     }
 
@@ -62,7 +62,7 @@ export function MessageContent({
     return () => {
       cancelled = true;
     };
-  }, [enableLongMessageCollapse, markup, t]);
+  }, [enableLongMessageCollapse, markup]);
 
   if (blankTurnPlaceholder) {
     return (

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui";
+import { LongMessageCollapseIcon, LongMessageExpandIcon } from "@/components/ui/Icons";
 import { classNames } from "@/shared/lib/classNames";
 import type { TranslateFn } from "@/models/conversations";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
@@ -73,6 +74,14 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
     const measure = () => {
       const nextMetrics = calculateMetrics(element);
       setMetrics((current) => {
+        if (
+          current?.shouldCollapse &&
+          nextMetrics.shouldCollapse &&
+          !isExpanded &&
+          current.collapseHeight === nextMetrics.collapseHeight
+        ) {
+          return current;
+        }
         if (nextMetrics.shouldCollapse) {
           return metricsEqual(current, nextMetrics) ? current : nextMetrics;
         }
@@ -145,6 +154,7 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
     transitionDuration: "0ms",
   } as const;
   const toggleLabel = isExpanded ? t("messageLongCollapse") : t("messageLongExpand");
+  const ToggleIcon = isExpanded ? LongMessageCollapseIcon : LongMessageExpandIcon;
 
   return (
     <div className={classNames("long-message-collapse", collapsed && "is-collapsed", isExpanded && "is-expanded")}>
@@ -165,7 +175,8 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
           className="long-message-toggle"
           onClick={toggleExpanded}
         >
-          {toggleLabel}
+          <ToggleIcon className="long-message-toggle-icon" aria-hidden="true" />
+          <span>{toggleLabel}</span>
         </Button>
       </div>
     </div>
@@ -192,29 +203,13 @@ function calculateMetrics(element: HTMLDivElement): LongMessageMetrics {
 function metricsEqual(current: LongMessageMetrics | null, next: LongMessageMetrics): boolean {
   return (
     current?.collapseHeight === next.collapseHeight &&
-    current.expandedHeight === next.expandedHeight &&
+    Math.abs(current.expandedHeight - next.expandedHeight) <= COLLAPSE_HEIGHT_TOLERANCE_PX &&
     current.shouldCollapse === next.shouldCollapse
   );
 }
 
 function measureNaturalExpandedHeight(element: HTMLDivElement): number {
-  const previousMaxHeight = element.style.maxHeight;
-  const previousOverflow = element.style.overflow;
-  const previousPaddingBottom = element.style.paddingBottom;
-  const previousTransitionDuration = element.style.transitionDuration;
-
-  element.style.maxHeight = "none";
-  element.style.overflow = "visible";
-  element.style.paddingBottom = "0px";
-  element.style.transitionDuration = "0ms";
-  const expandedHeight = Math.ceil(element.scrollHeight);
-
-  element.style.maxHeight = previousMaxHeight;
-  element.style.overflow = previousOverflow;
-  element.style.paddingBottom = previousPaddingBottom;
-  element.style.transitionDuration = previousTransitionDuration;
-
-  return expandedHeight;
+  return Math.ceil(element.scrollHeight);
 }
 
 function hasImageLikeContent(element: HTMLDivElement): boolean {

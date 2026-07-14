@@ -114,4 +114,25 @@ describe("LongMessageCollapse", () => {
     expect(screen.queryByRole("button", { name: "Expand" })).toBeNull();
     expect(document.querySelector(".long-message-collapse")).toBeNull();
   });
+
+  it("keeps collapsed height stable while content grows and expands to the latest height", async () => {
+    naturalContentHeight = naturalNineLineHeight;
+    const user = userEvent.setup();
+    const { rerender } = render(<LongMessageCollapse html="<p>initial long content</p>" t={t} />);
+
+    const content = document.querySelector<HTMLElement>(".long-message-content");
+    expect(content).not.toBeNull();
+    expect(content?.style.maxHeight).toBe(`${lineHeight * 8}px`);
+
+    naturalContentHeight = lineHeight * 12;
+    rerender(<LongMessageCollapse html="<p>initial long content with more streamed text</p>" t={t} />);
+
+    expect(screen.getByRole("button", { name: "Expand" })).toBeTruthy();
+    expect(content?.style.maxHeight).toBe(`${lineHeight * 8}px`);
+
+    await user.click(screen.getByRole("button", { name: "Expand" }));
+
+    expect(screen.getByRole("button", { name: "Collapse" })).toBeTruthy();
+    expect(content?.style.maxHeight).toBe(`${lineHeight * 12}px`);
+  });
 });
