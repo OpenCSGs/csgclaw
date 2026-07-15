@@ -12,7 +12,7 @@ import {
   isNotificationBotAgent,
 } from "@/models/agents";
 import { AgentIcon, PlayIcon, StopIcon, TrashIcon, WrenchIcon } from "@/components/ui/Icons";
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { providerNameForProviderID } from "@/models/modelProviders";
@@ -66,11 +66,13 @@ export function AgentSection({
             {title} {items.length}
           </div>
         </div>
-        <Button className="agent-add-button" aria-label={t("createAgent")} title={t("createAgent")} onClick={onCreate}>
-          <span aria-hidden="true">
-            <AgentIcon />
-          </span>
-        </Button>
+        <Tooltip content={t("createAgent")}>
+          <Button className="agent-add-button" aria-label={t("createAgent")} onClick={onCreate}>
+            <span aria-hidden="true">
+              <AgentIcon />
+            </span>
+          </Button>
+        </Tooltip>
       </div>
       <div className="agent-list">
         {items.length ? (
@@ -159,27 +161,27 @@ export function AgentRow({
         </div>
       </div>
       <div className="agent-actions">
-        <Button
-          className="agent-icon-button"
-          aria-label={t("editProfile")}
-          title={t("editProfile")}
-          onClick={() => onEdit(item)}
-        >
-          <span aria-hidden="true">
-            <WrenchIcon />
-          </span>
-        </Button>
+        <Tooltip content={t("editProfile")}>
+          <Button className="agent-icon-button" aria-label={t("editProfile")} onClick={() => onEdit(item)}>
+            <span aria-hidden="true">
+              <WrenchIcon />
+            </span>
+          </Button>
+        </Tooltip>
         {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
           <>
-            <Button
-              className="agent-icon-button"
-              aria-label={running ? t("agentStop") : t("agentStart")}
-              title={running ? t("agentStop") : t("agentStart")}
-              disabled={busyKey.startsWith(busyPrefix) || incomplete}
-              onClick={() => (running ? onStop(item) : onStart(item))}
-            >
-              <span aria-hidden="true">{running ? <StopIcon /> : <PlayIcon />}</span>
-            </Button>
+            <Tooltip content={running ? t("agentStop") : t("agentStart")}>
+              <span>
+                <Button
+                  className="agent-icon-button"
+                  aria-label={running ? t("agentStop") : t("agentStart")}
+                  disabled={busyKey.startsWith(busyPrefix) || incomplete}
+                  onClick={() => (running ? onStop(item) : onStart(item))}
+                >
+                  <span aria-hidden="true">{running ? <StopIcon /> : <PlayIcon />}</span>
+                </Button>
+              </span>
+            </Tooltip>
           </>
         ) : null}
         {!isNotification ? (
@@ -213,18 +215,21 @@ export function AgentRow({
           </Button>
         ) : null}
         {!isManager ? (
-          <Button
-            variant="outlineDanger"
-            className="agent-icon-button danger"
-            aria-label={t("agentDelete")}
-            title={t("agentDelete")}
-            disabled={busyKey.startsWith(busyPrefix)}
-            onClick={() => onDelete(item)}
-          >
-            <span aria-hidden="true">
-              <TrashIcon />
+          <Tooltip content={t("agentDelete")}>
+            <span>
+              <Button
+                variant="outlineDanger"
+                className="agent-icon-button danger"
+                aria-label={t("agentDelete")}
+                disabled={busyKey.startsWith(busyPrefix)}
+                onClick={() => onDelete(item)}
+              >
+                <span aria-hidden="true">
+                  <TrashIcon />
+                </span>
+              </Button>
             </span>
-          </Button>
+          </Tooltip>
         ) : null}
       </div>
     </div>

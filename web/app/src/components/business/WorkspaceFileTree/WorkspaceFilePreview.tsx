@@ -86,17 +86,18 @@ export function WorkspaceFilePreview({
             <div className="workspace-preview-file-actions">
               <span className="workspace-preview-file-meta">{fileMeta}</span>
               {!file.binary ? (
-                <Button
-                  iconOnly
-                  aria-label={previewText}
-                  title={previewText}
-                  className="workspace-preview-open-button"
-                  size="sm"
-                  variant="tertiaryGray"
-                  onClick={() => setDialogOpen(true)}
-                >
-                  <FileSearch size={16} strokeWidth={2} aria-hidden="true" />
-                </Button>
+                <Tooltip content={previewText}>
+                  <Button
+                    iconOnly
+                    aria-label={previewText}
+                    className="workspace-preview-open-button"
+                    size="sm"
+                    variant="tertiaryGray"
+                    onClick={() => setDialogOpen(true)}
+                  >
+                    <FileSearch size={16} strokeWidth={2} aria-hidden="true" />
+                  </Button>
+                </Tooltip>
               ) : null}
             </div>
           </div>
@@ -118,30 +119,32 @@ export function WorkspaceFilePreview({
                   <div className="workspace-preview-dialog-actions">
                     {markdownFile ? (
                       <div className="workspace-preview-mode-switch" role="tablist" aria-label={viewToggleLabel}>
-                        <Button
-                          role="tab"
-                          aria-selected={activeDialogMode === "preview"}
-                          active={activeDialogMode === "preview"}
-                          className="workspace-preview-mode-button"
-                          size="sm"
-                          title={previewText}
-                          variant="tertiaryGray"
-                          onClick={() => setDialogMode("preview")}
-                        >
-                          {previewText}
-                        </Button>
-                        <Button
-                          role="tab"
-                          aria-selected={activeDialogMode === "code"}
-                          active={activeDialogMode === "code"}
-                          className="workspace-preview-mode-button"
-                          size="sm"
-                          title={codeText}
-                          variant="tertiaryGray"
-                          onClick={() => setDialogMode("code")}
-                        >
-                          {codeText}
-                        </Button>
+                        <Tooltip content={previewText}>
+                          <Button
+                            role="tab"
+                            aria-selected={activeDialogMode === "preview"}
+                            active={activeDialogMode === "preview"}
+                            className="workspace-preview-mode-button"
+                            size="sm"
+                            variant="tertiaryGray"
+                            onClick={() => setDialogMode("preview")}
+                          >
+                            {previewText}
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={codeText}>
+                          <Button
+                            role="tab"
+                            aria-selected={activeDialogMode === "code"}
+                            active={activeDialogMode === "code"}
+                            className="workspace-preview-mode-button"
+                            size="sm"
+                            variant="tertiaryGray"
+                            onClick={() => setDialogMode("code")}
+                          >
+                            {codeText}
+                          </Button>
+                        </Tooltip>
                       </div>
                     ) : null}
                     <Tooltip content={closeText}>

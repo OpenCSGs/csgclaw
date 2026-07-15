@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import { HubIcon, RoomsIcon, TaskIcon, UsersIcon } from "@/components/ui/Icons";
 import { WorkspaceTabs } from "@/models/routing";
 import type { WorkspaceSidebarProps } from "./types";
@@ -30,84 +30,88 @@ export function WorkspaceTabBar({
       aria-label="Workspace sections"
       aria-orientation={rail ? "vertical" : undefined}
     >
-      <Button
-        className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
-        active={workspaceTab === WorkspaceTabs.messages}
-        role="tab"
-        aria-selected={workspaceTab === WorkspaceTabs.messages}
-        aria-label={t("messagesTab")}
-        title={t("messagesTab")}
-        onClick={() => onWorkspaceTabChange(WorkspaceTabs.messages)}
-      >
-        <span className="workspace-tab-icon" aria-hidden="true">
-          <RoomsIcon />
-        </span>
-        {!rail ? (
-          <span className="workspace-tab-copy">
-            <strong>{t("messagesTab")}</strong>
-            <small>{roomCount}</small>
+      <Tooltip content={t("messagesTab")}>
+        <Button
+          className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
+          active={workspaceTab === WorkspaceTabs.messages}
+          role="tab"
+          aria-selected={workspaceTab === WorkspaceTabs.messages}
+          aria-label={t("messagesTab")}
+          onClick={() => onWorkspaceTabChange(WorkspaceTabs.messages)}
+        >
+          <span className="workspace-tab-icon" aria-hidden="true">
+            <RoomsIcon />
           </span>
-        ) : null}
-      </Button>
-      <Button
-        className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
-        active={workspaceTab === WorkspaceTabs.agents}
-        role="tab"
-        aria-selected={workspaceTab === WorkspaceTabs.agents}
-        aria-label={t("agentsTab")}
-        title={t("agentsTab")}
-        onClick={() => onWorkspaceTabChange(WorkspaceTabs.agents)}
-      >
-        <span className="workspace-tab-icon" aria-hidden="true">
-          <UsersIcon />
-        </span>
-        {!rail ? (
-          <span className="workspace-tab-copy">
-            <strong>{t("agentsTab")}</strong>
-            <small>{agentCount}</small>
+          {!rail ? (
+            <span className="workspace-tab-copy">
+              <strong>{t("messagesTab")}</strong>
+              <small>{roomCount}</small>
+            </span>
+          ) : null}
+        </Button>
+      </Tooltip>
+      <Tooltip content={t("agentsTab")}>
+        <Button
+          className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
+          active={workspaceTab === WorkspaceTabs.agents}
+          role="tab"
+          aria-selected={workspaceTab === WorkspaceTabs.agents}
+          aria-label={t("agentsTab")}
+          onClick={() => onWorkspaceTabChange(WorkspaceTabs.agents)}
+        >
+          <span className="workspace-tab-icon" aria-hidden="true">
+            <UsersIcon />
           </span>
-        ) : null}
-      </Button>
-      <Button
-        className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
-        active={workspaceTab === WorkspaceTabs.tasks}
-        role="tab"
-        aria-selected={workspaceTab === WorkspaceTabs.tasks}
-        aria-label={t("tasksTab")}
-        title={t("tasksTab")}
-        onClick={() => onWorkspaceTabChange(WorkspaceTabs.tasks)}
-      >
-        <span className="workspace-tab-icon" aria-hidden="true">
-          <TaskIcon />
-        </span>
-        {!rail ? (
-          <span className="workspace-tab-copy">
-            <strong>{t("tasksTab")}</strong>
-            <small>{taskCount}</small>
+          {!rail ? (
+            <span className="workspace-tab-copy">
+              <strong>{t("agentsTab")}</strong>
+              <small>{agentCount}</small>
+            </span>
+          ) : null}
+        </Button>
+      </Tooltip>
+      <Tooltip content={t("tasksTab")}>
+        <Button
+          className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
+          active={workspaceTab === WorkspaceTabs.tasks}
+          role="tab"
+          aria-selected={workspaceTab === WorkspaceTabs.tasks}
+          aria-label={t("tasksTab")}
+          onClick={() => onWorkspaceTabChange(WorkspaceTabs.tasks)}
+        >
+          <span className="workspace-tab-icon" aria-hidden="true">
+            <TaskIcon />
           </span>
-        ) : null}
-      </Button>
-      <Button
-        className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
-        active={workspaceTab === WorkspaceTabs.hub}
-        role="tab"
-        aria-selected={workspaceTab === WorkspaceTabs.hub}
-        aria-label={t("resourcesTab")}
-        title={t("resourcesTab")}
-        onClick={() => onSelectHub()}
-      >
-        <span className="workspace-tab-icon" aria-hidden="true">
-          <HubIcon />
-        </span>
-        {rail && showHubNewBadge ? (
-          <span className="workspace-tab-rail-new" aria-hidden="true"></span>
-        ) : !rail ? (
-          <span className="workspace-tab-copy">
-            <strong>{t("resourcesTab")}</strong>
-            {showHubNewBadge ? <span className="workspace-tab-badge">{t("newBadge")}</span> : null}
+          {!rail ? (
+            <span className="workspace-tab-copy">
+              <strong>{t("tasksTab")}</strong>
+              <small>{taskCount}</small>
+            </span>
+          ) : null}
+        </Button>
+      </Tooltip>
+      <Tooltip content={t("resourcesTab")}>
+        <Button
+          className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
+          active={workspaceTab === WorkspaceTabs.hub}
+          role="tab"
+          aria-selected={workspaceTab === WorkspaceTabs.hub}
+          aria-label={t("resourcesTab")}
+          onClick={() => onSelectHub()}
+        >
+          <span className="workspace-tab-icon" aria-hidden="true">
+            <HubIcon />
           </span>
-        ) : null}
-      </Button>
+          {rail && showHubNewBadge ? (
+            <span className="workspace-tab-rail-new" aria-hidden="true"></span>
+          ) : !rail ? (
+            <span className="workspace-tab-copy">
+              <strong>{t("resourcesTab")}</strong>
+              {showHubNewBadge ? <span className="workspace-tab-badge">{t("newBadge")}</span> : null}
+            </span>
+          ) : null}
+        </Button>
+      </Tooltip>
     </div>
   );
 }

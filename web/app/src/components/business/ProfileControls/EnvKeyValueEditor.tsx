@@ -1,4 +1,4 @@
-import { Button, TextInput } from "@/components/ui";
+import { Button, TextInput, Tooltip } from "@/components/ui";
 import { classNames } from "@/shared/lib/classNames";
 import type { EnvKeyValueRow, Translator } from "./types";
 
@@ -42,16 +42,19 @@ export function EnvKeyValueEditor({ rows = [], t, onChange }: EnvKeyValueEditorP
             aria-required={row.required ? "true" : undefined}
             onInput={(event) => update(index, { value: event.currentTarget.value })}
           />
-          <Button
-            variant="ghost"
-            className="env-remove-button"
-            aria-label={t("profileEnvRemove")}
-            title={t("profileEnvRemove")}
-            disabled={row.required}
-            onClick={() => remove(index)}
-          >
-            ×
-          </Button>
+          <Tooltip content={t("profileEnvRemove")}>
+            <span>
+              <Button
+                variant="ghost"
+                className="env-remove-button"
+                aria-label={t("profileEnvRemove")}
+                disabled={row.required}
+                onClick={() => remove(index)}
+              >
+                ×
+              </Button>
+            </span>
+          </Tooltip>
         </div>
       ))}
       <Button className="secondary-button env-add-button" onClick={() => onChange([...items, { key: "", value: "" }])}>

@@ -5,12 +5,14 @@ import { classNames } from "@/shared/lib/classNames";
 
 export type TooltipRootProps = ComponentPropsWithoutRef<typeof RadixTooltip.Root>;
 
-export function TooltipRoot({ delayDuration = 250, ...props }: TooltipRootProps) {
-  return (
-    <RadixTooltip.Provider delayDuration={delayDuration}>
-      <RadixTooltip.Root {...props} />
-    </RadixTooltip.Provider>
-  );
+export type TooltipProviderProps = ComponentPropsWithoutRef<typeof RadixTooltip.Provider>;
+
+export function TooltipProvider({ delayDuration = 250, ...props }: TooltipProviderProps) {
+  return <RadixTooltip.Provider delayDuration={delayDuration} {...props} />;
+}
+
+export function TooltipRoot(props: TooltipRootProps) {
+  return <RadixTooltip.Root {...props} />;
 }
 
 export type TooltipTriggerProps = ComponentPropsWithoutRef<typeof RadixTooltip.Trigger>;

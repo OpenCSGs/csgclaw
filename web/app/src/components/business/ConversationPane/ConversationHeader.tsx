@@ -84,22 +84,23 @@ export const ConversationHeader = memo(function ConversationHeader({
               <div className="chat-title truncate">{conversation.title}</div>
               {showMemberListAction ? (
                 <div ref={memberMenuRef} className="header-menu">
-                  <Button
-                    className="member-badge-button"
-                    active={showMemberList}
-                    aria-label={t("membersTitle")}
-                    aria-pressed={showMemberList}
-                    title={t("membersTitle")}
-                    onClick={() => {
-                      onToggleMemberList?.((value) => !value);
-                      onToggleChannelTools(false);
-                    }}
-                  >
-                    <span className="icon-button-mark" aria-hidden="true">
-                      <UsersIcon />
-                    </span>
-                    <span className="member-badge-count">{conversationMembers.length}</span>
-                  </Button>
+                  <Tooltip content={t("membersTitle")}>
+                    <Button
+                      className="member-badge-button"
+                      active={showMemberList}
+                      aria-label={t("membersTitle")}
+                      aria-pressed={showMemberList}
+                      onClick={() => {
+                        onToggleMemberList?.((value) => !value);
+                        onToggleChannelTools(false);
+                      }}
+                    >
+                      <span className="icon-button-mark" aria-hidden="true">
+                        <UsersIcon />
+                      </span>
+                      <span className="member-badge-count">{conversationMembers.length}</span>
+                    </Button>
+                  </Tooltip>
                   {showMemberList ? (
                     <div className="header-popover members-popover">
                       <div className="header-popover-title">{t("membersTitle")}</div>

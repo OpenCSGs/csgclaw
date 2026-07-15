@@ -1124,16 +1124,22 @@ type TaskToolbarButtonProps = {
 
 function TaskToolbarButton({ label, title = label, variant = "secondaryGray", ...props }: TaskToolbarButtonProps) {
   return (
-    <Button
-      className={classNames(styles.taskToolbarButton, variant === "secondaryGray" && styles.taskToolbarButtonSecondary)}
-      aria-label={title}
-      title={title}
-      size="sm"
-      variant={variant}
-      {...props}
-    >
-      {label}
-    </Button>
+    <Tooltip content={title}>
+      <span>
+        <Button
+          className={classNames(
+            styles.taskToolbarButton,
+            variant === "secondaryGray" && styles.taskToolbarButtonSecondary,
+          )}
+          aria-label={title}
+          size="sm"
+          variant={variant}
+          {...props}
+        >
+          {label}
+        </Button>
+      </span>
+    </Tooltip>
   );
 }
 
